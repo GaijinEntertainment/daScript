@@ -104,6 +104,8 @@ test('setup-mode serve wires already-present towers into the fresh config', asyn
     const doc = withAsrPresent(withVisionPresent(fx('catalog_idle')));
     const { posts } = await openControl(page, { stats: fx('stats_setup'), catalog: doc });
     const row = page.locator('#cat-body tr', { hasText: 'Gemma 4 E2B' });
+    // tower on disk, model not yet in the roster: the chip says ready, not wired
+    await expect(row.locator('.chip', { hasText: 'vision' })).toHaveText('vision ready');
     await row.locator('button', { hasText: 'serve this model' }).click();
     await expect(page.locator('#badge')).toHaveText(/restarting/);
     const cfg = lastJson(posts.filter(p => p.path === '/config'));

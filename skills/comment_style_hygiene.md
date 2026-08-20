@@ -31,18 +31,23 @@ some (noted), C++ and JS have none — there the rule is the reviewer's.
 ## Comments
 
 **.das: ABSOLUTELY NO comments that are not documentation or lint suppression.** The kept
-set is exactly: `//!` docs on public API, `// nolint:CODE` / `@nolint` suppressions
+set is exactly: `//!` docs on public API (never on private symbols), `// nolint:CODE` /
+`@nolint` suppressions
 carrying their one-line why, `//fmt:` formatter directives, and the file's leading header
 block (which may sit below the `options` / `module` / `require` preamble). Everything else —
 narration, banners, section dividers, commented-out code — does not exist. The MCP
 `format_file` tool applies this file-wide by default, fail-closed (a strip must compile or
-the file is restored). Teaching code is the one exception: in tutorials and examples the
+the file is restored). A `//` comment is therefore EPHEMERAL: anything worth preserving
+becomes code (a name, a `//!` doc, an assert) or lands in an `.md` beside the code.
+Teaching code is the one exception: in tutorials and examples the
 prose IS the deliverable — format those with `keep_comments='true'`; comments that add
 nothing to their line still go.
 
 **Other languages:** the test for every comment — does it add information the reader would
-otherwise have to go look for? 1–2 lines, when in doubt delete. No banners or preambles, no
-public-style docs on private symbols, no incident citations (PR numbers, dates, "used to
+otherwise have to go look for? 1–2 lines is the default, not a limit — a longer comment may
+be earned when the WHY is genuinely load-bearing and has no better home; if a reader would
+ask "why is this long?", that is the finding. When in doubt delete. No banners or preambles,
+no public-style docs on private symbols, no incident citations (PR numbers, dates, "used to
 crash" — name the failure mode in present tense at the code that guards it). The message is
 the comment: a site with a good error string needs no comment restating it.
 

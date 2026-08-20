@@ -1662,7 +1662,6 @@ def register_kernel_backend(be : KernelBackend) {
     }
 }
 
-// engine half of the facade's kernel_backend_available — the defaults-first detection probe
 def kernel_backend_available_(name : string) : bool {
     if (!key_exists(g_kernel_backends, name)) {
         return false

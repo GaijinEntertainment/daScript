@@ -36,6 +36,12 @@ file is added, corrected when what it covers is renamed or re-scoped.
 **Weakening `test_env_registry.das` is a defect.** It enforces the knob contract that
 `../ENVIRONMENT.md` describes.
 
+**Weakening `test_model_specs.das`'s provenance invariants is a defect.** They are the gate
+on the one model-set table (`../performance/model_specs.das`).
+
+**Weakening `test_exchange_schema.das` or `test_bench_records_schema.das` — both round-trip
+the real `write_bench_records` output — is a defect.**
+
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
 model gate; a test that silently vanishes on one platform is a defect, and so is a
 zero-assertion pass — a cell whose whole body is platform-gated prints a skip or feint on the

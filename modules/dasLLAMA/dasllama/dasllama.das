@@ -489,6 +489,8 @@ def moe_gpu_tier_arm() : bool {
 
 def moe_gpu_weight_budget() : int64 {
     //! The armed backend's resident-weight VRAM budget in bytes (0 = no GPU backend armed).
+    //! CAVEAT: the hook device-inits on first call — a reporting caller gates on
+    //! ``gpu_tier_status().device`` being non-empty first (``supported`` must not be the gate).
     return moe_gpu_weight_budget_()
 }
 

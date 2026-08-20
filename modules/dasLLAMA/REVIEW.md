@@ -79,16 +79,13 @@ reaches it: the contracts arm down the call graph, so an interior function carri
 its own. A region entry is a KERNEL `*_encode` / `*_decode` / step driver; the tokenizer
 encode/decode path is out of scope (`ARCHITECTURE.md` §2.11).
 
-**A new entry point — a kernel-backend override, a batch donor, a step driver — carries its
+**A new function that a kernel dispatch reaches, or that drives a step, carries its
 annotation itself; a rename is not new** (annotations follow the name in the same change).
 
 **A change to `encode`/`bpe_encode` or anything they reach in `dasllama/dasllama_spm.das` /
 `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das` ships before/after `--tok` rows for the affected
 backend** — the instrument is the scaling ratio across the size ladder, and superlinear is a
 defect.
-
-**A change to the corpus input of the `--tok` measurement cell (`benchmarks/lcpp_bench.das`)
-ships the same before/after rows or a statement that the bytes are unchanged.**
 
 **A change reaching `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das` records a
@@ -178,6 +175,9 @@ scheduler, and the exchange pair.
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
 owns, or a consumer `ARCHITECTURE.md` §1 names as ruled.** Any other file carrying it is a
 defect — a symbol the facade lacks is added to `dasllama/dasllama.das`, not escaped around.
+A `require ... public` that re-exports an engine module OUT of an escaped file is the same
+defect wearing a different line, unless the re-export itself is part of the consumer's ruled
+charter in `ARCHITECTURE.md` §1.
 
 **Weakening `REVIEW.das` (beside this file) — the gate that fails when a `def` of
 `dasllama/dasllama.das` appears in no `tutorials/dasLLAMA/*.das` (repo root) or in no

@@ -79,6 +79,12 @@ def public catalog_models_dir(cfg_models_dir : string) : string {
 def public catalog_env_override : string
     => g_env_harness.models_dir
 
+//! The env rail's GPU master switch read as an explicit OFF (`DASLLAMA_GPU=0`) — exposed like
+//! [[catalog_env_override]] so the facade-only server root never touches g_env_* itself. The
+//! defaults-first backend pick treats it as the opt-out that knob documents.
+def public gpu_env_master_off : bool
+    => is_some(g_env_gpu.gpu) && !unwrap(g_env_gpu.gpu)
+
 def private strip_trailing_sep(p : string) : string {
     if (!ends_with(p, "/") && !ends_with(p, "\\")) {
         return p

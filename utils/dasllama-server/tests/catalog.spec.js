@@ -10,6 +10,9 @@ test('setup mode: badge, header, and chat gate flip; serving mode leaves them al
     await expect(page.locator('#model')).toHaveText('no model loaded');
     await expect(page.locator('#b-send')).toBeDisabled();
     await expect(page.locator('#chat-text')).toHaveAttribute('placeholder', /no model loaded/);
+    // the tower buttons only dim while SERVING; setup has nothing to attach them to
+    await expect(page.locator('#b-img')).toBeHidden();
+    await expect(page.locator('#b-mic')).toBeHidden();
 });
 
 test('the catalog renders every entry: star on the default, present chip, size and needs', async ({ page }) => {

@@ -10,7 +10,7 @@ function withBox(ramGb, vramMb) {
     return d;
 }
 
-const needsCell = (page, display) => page.locator('#cat-body tr', { hasText: display }).locator('td').nth(4);
+const needsCell = (page, display) => page.locator('#cat-body tr', { hasText: display }).locator('td.needs');
 
 test('a roomy box fits everything green', async ({ page }) => {
     await openControl(page, { catalog: withBox(64) });

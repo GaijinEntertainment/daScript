@@ -72,9 +72,7 @@ struct ModelSpec {
     serve_ctx : int = 0             // trained context window
     serve_vram_gb : float = 0.0     // advertised working-set hint, not a fit check
     serve_default : bool = false    // the one the getting-started path recommends
-    serve_vision : string           // vision-tower companion NAME (resolved across all rows'
-                                    // companions - the tower is size-invariant, so the pinning
-                                    // row and the serving row may differ); "" = text only
+    serve_vision : string           // vision-tower companion NAME ("" = text only); [[serve_vision_tower]] resolves it
 }
 
 // ===== Parity fixture ids (frozen from the simple_ids oracle — harness/parity.sh) =====
@@ -384,8 +382,9 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 4372812000l, sha256 = "1270d22c0fbb3d092fb725d4d96c457b7b687a5f5a715abe1e818da303e562b6"),
         ModelSpec(file = "Mistral-7B-Instruct-v0.3-Q8_0.gguf", display = "Mistral-7B",
             parity <- ev_mistral7b()),
-        // this row owns the carrier's provenance and its mmproj companion (a companion rides
-        // the row that pins its carrier); the asr_catalog spec keeps only the pairing
+        // this row owns the carrier's provenance and PINS its mmproj companion (the serving
+        // Q4_K_M row consumes the same tower by name via serve_vision); asr_catalog keeps
+        // only the pairing
         ModelSpec(file = "gemma-4-E2B-it-Q8_0.gguf", display = "gemma-4-E2B", official = true,
             url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf",
             bytes = 4967497152l, sha256 = "996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",

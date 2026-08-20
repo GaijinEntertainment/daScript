@@ -17,7 +17,10 @@ Always the WHOLE arc — never just the topmost commit of a multi-commit branch.
 
 ## Phase 0 — grounding (one agent)
 
-Spawn ONE read-only agent over the full diff range. It produces a map, not findings:
+Spawn ONE `targeted-reviewer` instance (`.claude/agents/targeted-reviewer.md` — read-only
+tools, `model: opus`, report-only contract; every grounding/surfacing/proving instance below
+uses it, with general-purpose + an explicit opus pin as the fallback when the registry
+snapshot lacks it) over the full diff range. It produces a map, not findings:
 
 - **Intent** — what the change is for, in one paragraph.
 - **Integration surface** — every boundary the change touches: callers of changed functions,
@@ -55,7 +58,7 @@ reviews the committed arc only). It outlives the surfacers, so launch it first a
 harvest when they return. Its P-ranked findings enter Phase 3 as hypotheses like any
 surfacer's; the damper in the skill decides whether any later round re-arms it.
 
-Spawn in ONE message, all read-only, model `opus`:
+Spawn in ONE message, all as `targeted-reviewer` instances unless named otherwise:
 
 - **One surfacer per dimension.** Prompt = the dimension name + the grounding's hotspot notes
   for it (risk patterns, not methodology). Recall over precision: report every suspicion with
@@ -80,8 +83,8 @@ Findings come back as: `file:line`, the concern, the evidence (quoted code), sev
 ## Phase 3 — proving (one agent)
 
 First a mechanical dedupe by the orchestrator: same location + same concern from different
-surfacers → keep the strongest-evidence copy. Then spawn ONE read-only prover (model `opus`)
-over the survivors. Its stance: findings are hypotheses; the surfacer selected confirming
+surfacers → keep the strongest-evidence copy. Then spawn ONE prover (a `targeted-reviewer`
+instance, prompt assigning the prove phase) over the survivors. Its stance: findings are hypotheses; the surfacer selected confirming
 evidence and anchored on a conclusion; the prover's job is to find the reason each finding is
 wrong, by its own reading — not by re-reading the surfacer's quotes. The more confident a
 finding sounds, the deeper the investigation.

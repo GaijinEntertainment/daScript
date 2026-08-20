@@ -28,3 +28,6 @@ record or the ledger is a defect.
 
 **A number derived by subtracting one measured wall from another prints both raw walls, not
 only the difference.**
+
+**A change to the corpus input of the `--tok` measurement cell (`lcpp_bench.das`)
+ships the same before/after rows or a statement that the bytes are unchanged.**

@@ -524,8 +524,7 @@ function apply(s) {
     const bimg = $("b-img");
     bimg.style.display = setupMode ? "none" : "";
     bimg.classList.toggle("off", !s.vision);
-    bimg.title = s.vision ? "attach an image — paste or drop one too"
-        : "this model can see, but its vision tower is not wired — download it in the model catalog";
+    bimg.title = s.vision ? "attach an image — paste or drop one too" : VISION_OFFER;
     if (!thinkSeeded && !thinkTouched && typeof s.thinking_default === "boolean") {
         $("kn-thinking").checked = s.thinking_default;
         thinkSeeded = true;
@@ -534,8 +533,7 @@ function apply(s) {
         const bmic = $("b-mic");
         bmic.style.display = setupMode ? "none" : "";
         bmic.classList.toggle("off", !(s.asr_workers > 0));
-        bmic.title = s.asr_workers > 0 ? "record, click again to stop + transcribe"
-            : "dictation needs the ASR tower — download parakeet in the model catalog";
+        bmic.title = s.asr_workers > 0 ? "record, click again to stop + transcribe" : ASR_OFFER;
     }
     if (s.asr_workers > 0) {
         $("tile-asr").classList.remove("hide");
@@ -1176,15 +1174,19 @@ function attachImageFile(file) {
     fr.readAsDataURL(file);
 }
 
+// one sentence per tower, used verbatim by the dimmed button's tooltip AND its click hint
+const VISION_OFFER = "image chat needs this model's vision tower — download it on the model's catalog row, then enable + restart";
+const ASR_OFFER = "dictation needs the ASR tower — download parakeet under the catalog, then enable + restart";
+
 // an un-wired tower button walks the user to its § 03 offer instead of doing nothing
-function towerHint(what) {
-    $("cat-note").textContent = what;
+function towerHint(message) {
+    $("cat-note").textContent = message;
     $("catalog-sec").scrollIntoView({ behavior: "smooth" });
 }
 
 $("b-img").addEventListener("click", () => {
     if ($("b-img").classList.contains("off")) {
-        towerHint("image chat needs the vision tower — download it on this model's row, then enable + restart");
+        towerHint(VISION_OFFER);
         return;
     }
     $("img-file").click();
@@ -1345,7 +1347,7 @@ let micDenied = false;   // mic permission refused — keep the button down inst
 async function micToggle() {
     const btn = $("b-mic");
     if (btn.classList.contains("off")) {
-        towerHint("dictation needs the ASR tower — download parakeet below the catalog, then enable + restart");
+        towerHint(ASR_OFFER);
         return;
     }
     if (micRec) {
@@ -1382,8 +1384,8 @@ async function micToggle() {
         btn.classList.add("rec");
         btn.textContent = "■ stop";
     } catch (_e) {
-        micDenied = true;
-        btn.style.display = "none";   // no mic permission — hide the button (and keep it hidden)
+        micDenied = true;   // no mic permission
+        btn.style.display = "none";
     }
 }
 $("b-mic").addEventListener("click", micToggle);
@@ -1707,11 +1709,12 @@ function renderForm(surface, status) {
     toggle.type = "button";
     toggle.className = "mini";
     toggle.id = "b-adv";
-    toggle.textContent = (advOpen ? "▾" : "▸") + " advanced overrides" + (advCount ? " (" + advCount + " set)" : "");
+    const advLabel = () => (advOpen ? "▾" : "▸") + " advanced overrides" + (advCount ? " (" + advCount + " set)" : "");
+    toggle.textContent = advLabel();
     toggle.addEventListener("click", () => {
         advOpen = !advOpen;
         $("cfg-adv").style.display = advOpen ? "grid" : "none";
-        toggle.textContent = (advOpen ? "▾" : "▸") + " advanced overrides" + (advCount ? " (" + advCount + " set)" : "");
+        toggle.textContent = advLabel();
     });
     toggleRow.append(toggle);
     form.append(toggleRow);
@@ -2427,8 +2430,10 @@ let catState = null;   // the last GET /catalog document — the tower offers re
 
 function fmtGB(b) { return (b / 1e9).toFixed(1) + " GB"; }
 
+const OS_HEADROOM_GB = 4;   // RAM the fit verdict leaves to the OS before calling it "tight"
+
 // The box-fit verdict for one entry's advertised working set: facts from /catalog's `box`
-// (0 = unknown, no badge). GPU-tier budget first, then RAM with ~4 GB OS headroom.
+// (0 = unknown, no badge). GPU-tier budget first, then RAM minus the OS headroom.
 function fitBadge(hintGb, box) {
     const ram = (box && box.ram_gb) || 0;
     if (!ram || !hintGb) return null;
@@ -2439,14 +2444,14 @@ function fitBadge(hintGb, box) {
         chip.className = "chip good";
         chip.textContent = "fits gpu";
         chip.title = "~" + hintGb + " GB working set fits the GPU tier's " + vramGb.toFixed(0) + " GB weight budget";
-    } else if (hintGb <= ram - 4) {
+    } else if (hintGb <= ram - OS_HEADROOM_GB) {
         chip.className = "chip good";
         chip.textContent = "fits";
         chip.title = "~" + hintGb + " GB working set fits this box's " + ram + " GB RAM";
     } else if (hintGb <= ram) {
         chip.className = "chip";
         chip.textContent = "tight";
-        chip.title = "~" + hintGb + " GB working set on a " + ram + " GB box leaves little for the OS - close other apps";
+        chip.title = "~" + hintGb + " GB working set on a " + ram + " GB box leaves under " + OS_HEADROOM_GB + " GB for the OS - close other apps";
     } else {
         chip.className = "chip bad";
         chip.textContent = "too big";
@@ -2472,14 +2477,13 @@ function dlProgress(dl) {
     return "downloading — " + pct + "% of " + fmtGB(dl.total);
 }
 
-// the roster row an entry's local file serves (path match; -1 = not in the roster)
 function rosterRowFor(path) {
     return path ? roster.findIndex(r => r.path === path) : -1;
 }
 
 // a saved tower wire is one restart from live — offer that restart right in the note
 // instead of leaving the user to find the button in § 09
-function wiredNote(text) {
+function noteWithRestart(text) {
     const note = $("cat-note");
     note.textContent = text + " ";
     const b = miniButton("restart now", async () => {
@@ -2523,7 +2527,7 @@ function visionControl(e, dl) {
                 const asr = catState && catState.asr;
                 const asrHint = (asr && !(asr.present && fieldEnabled("asr")))
                     ? " · dictation (below) can ride the same restart" : "";
-                wiredNote("vision tower wired for " + e.display + asrHint + " —");
+                noteWithRestart("vision tower wired for " + e.display + asrHint + " —");
             }
         });
         b.title = "wire the downloaded tower into this model's config";
@@ -2568,7 +2572,7 @@ function renderAsrOffer(doc, dl) {
             asrEl.disabled = false;
             asrEl.closest(".field").classList.remove("off");
             asrEl.value = asr.path;
-            if (await saveConfig()) wiredNote("dictation wired (parakeet v3) —");
+            if (await saveConfig()) noteWithRestart("dictation wired (parakeet v3) —");
         });
         strip.append(b, label);
         return;
@@ -2599,6 +2603,7 @@ function renderCatalog(doc) {
         const ctx = document.createElement("td");
         ctx.textContent = fmt(e.ctx);
         const needs = document.createElement("td");
+        needs.className = "needs";
         needs.textContent = "~" + e.vram_hint_gb.toFixed(0) + " GB";
         const fit = fitBadge(e.vram_hint_gb, doc.box);
         if (fit) needs.append(fit);

@@ -211,7 +211,10 @@ failure is never fatal — the boot falls through to the local tuner. The `gpu` 
 backend selector, and **defaults-first: unset (with no legacy `--metal` flag) behaves as
 `auto`** — the boot probes the box and serves on the best detected backend (the Metal rails
 where the box has them, else the Vulkan tier when a device answers, else the CPU), logging
-one `gpu backend auto-detected:` line; `gpu = off` is the explicit opt-out. Per-model
+one `gpu backend auto-detected:` line; `gpu = off` is the explicit opt-out, and an explicit
+`DASLLAMA_GPU=0` in the environment keeps its meaning — auto-detection never out-votes it
+(the env master only overrides the `auto_tier` field of an explicit want, so the pick
+resolves to `off` before any want is constructed). Per-model
 support is unchanged — a model the armed tier cannot serve falls back to the CPU with the
 reason on the control page. `gpu = vulkan` arms the MoE tier in its blessed shape — expert stacks sized
 **automatically** (resident layers fill the VRAM budget, the rest stream) plus DN + ATTN + dense +
@@ -298,12 +301,12 @@ mode too. E.g. Qwen3.6's instruct-mode card settings: `"temperature": 0.7, "top_
 ### Thinking control and `reasoning_content`
 
 `enable_thinking` is tri-state: ABSENT leaves the family's own default in force (the
-Qwen3/3.5/3.6 and GLM families think by default; gemma-4 E-series is instruct unless asked;
-gpt-oss always thinks), and a present bool — top-level or the llama.cpp spelling
+Qwen3/3.5/3.6, GLM, gemma-4, and gpt-oss families all think by default), and a present bool —
+top-level or the llama.cpp spelling
 `"chat_template_kwargs": {"enable_thinking": ...}` — overrides it. `false` on a
 `<think>`-family appends the template's empty think block so the model answers directly;
-`true` on gemma-4 opens the system turn with the `<|think|>` gate and lets the model emit its
-thought channel. A no-op for models whose vocab has no think tokens.
+`false` on gemma-4 prefills the closed empty thought channel (the instruct opt-out). A no-op
+for models whose vocab has no think tokens.
 
 A thinking reply's reasoning span comes back as **`reasoning_content`** (the
 DeepSeek/llama.cpp framing) with `content` clean of the family's markers: on the

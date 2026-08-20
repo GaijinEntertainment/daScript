@@ -1134,7 +1134,7 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
             refs <- [AsrRef(tool = "parakeet-cli", handle = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin", exec_fmt = "q8_0"),
                      AsrRef(tool = "onnx", handle = "int8", exec_fmt = "int8")],
             buckets <- corpus_buckets(), libri_short = "v3", lang = "en",
-            prov = serve_asr_tower(),   // the server's dictation tower — ONE pinned row (model_specs)
+            prov = serve_asr_tower(),
             companions <- [ProvEntry(name = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin", root = "whisper", recipe = REF_Q8_RECIPE)]),
         AsrModelSpec(display = "Whisper tiny", das_model = "ggml-tiny.bin",
             das_mmproj = "", root = wroot,

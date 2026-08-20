@@ -406,14 +406,21 @@ and the shipped bf16 mmproj rounds activations to bf16; llama.cpp's own four arm
   entry modules (facade, scheduler, exchange pair) fails to compile. Escape:
   `options _dasllama_internal = true` — engine files, this module's own tests/harnesses/
   benchmarks/rigs, and the ruled consumers: `utils/dasllama-convert` (the bake tool reads
-  the mint rail), `utils/dasllama-server/test_openai_server*.das` (env-registry test knobs),
+  the mint rail), `utils/dasllama-server/model_catalog.das` (the env rail + the model-set
+  serving view; it re-exports `model_specs` so the server's catalog tests can gate the
+  serve rows), `utils/dasllama-server/test_openai_server*.das` (env-registry test knobs),
   `modules/dasLLVM/daslib/llvm_user_modules.das` + `modules/dasLLVM/tests/test_{grid,tune,tuned}.das`
   (the tune-generator contract).
 - **`performance/model_specs.das`** — the ONE model-set table: per carrier, the profiled-
-  catalog fields, the official-board flag, the provenance pin (exact HF repo + revision +
-  sha256, or the on-box conversion recipe; companions hang off their owning entry), and the
+  catalog fields, the official-board flag, the serving-catalog fields (`serve_*`, incl.
+  `serve_vision` naming a tower companion by name), the provenance pin (exact HF repo +
+  revision + sha256, or the on-box conversion recipe; companions hang off their owning entry,
+  and a companion shared by several rows is referenced from the others by name), and the
   frozen parity evidence as data (pinned ids + arms). `llm_catalog` / `official_catalog` /
-  `models_provenance` are views over it.
+  `models_provenance` are views over it; `serve_vision_tower` resolves a tower name to its
+  pinned companion, and `serve_asr_tower` is the one standalone pinned artifact the file
+  carries — the serving ASR tower (parakeet v3), consumed by `asr_catalog`'s v3 row in
+  `profile_common.das` (the pin's single source lives here, not there).
 - **`performance/fetch_models.das`** — the fetch/verify driver over the provenance view.
   Verify by default, `--fetch` downloads; it never converts on `--fetch`, never benches, and
   it touches no tune state (`tune_policy(missing="fallback")`). BRINGUP.md §2 is the runbook.

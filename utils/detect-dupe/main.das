@@ -464,16 +464,23 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
         }
 
         var n_failed = 0
+        var n_prereq = 0
         for (i in range(length(compile_files))) {
             let file = compile_files[i]
             if (cfg.verbose) {
                 to_log(LOG_INFO, "[{i + 1}/{length(compile_files)}] {file}\n")
             }
-            if (!compile_and_collect(file, records, seen_loc, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
+            var prereq_skipped = false
+            if (!compile_and_collect_ex(file, records, seen_loc, prereq_skipped, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
                 n_failed++
+            } elif (prereq_skipped) {
+                n_prereq++
             }
         }
         to_log(LOG_INFO, "collected {length(records)} function record(s); {n_failed} compile failure(s), {n_skipped} skipped (expect-directive)\n")
+        if (n_prereq > 0) {
+            to_log(LOG_INFO, "{n_prereq} file(s) skipped (missing prerequisite - module not in this build)\n")
+        }
 
         if (exporting) {
             // In export mode, treat compile failures as fatal —
@@ -529,8 +536,13 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
                 continue
             }
             let before = length(records)
-            if (!compile_and_collect(af, records, seen_loc, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
+            var af_prereq = false
+            if (!compile_and_collect_ex(af, records, seen_loc, af_prereq, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
                 n_against_failed++
+                continue
+            }
+            if (af_prereq) {
+                n_against_skipped++
                 continue
             }
             // Tag the freshly-pushed records as candidates.

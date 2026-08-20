@@ -1,12 +1,11 @@
-// The header's sidecar-mint chip (scenario: "is this box tuned, and is its mint on the
-// ladder?"): red = bad mint (absent / stale / version-lapsed / noisy race), amber = good
-// mint not yet shared, green = tuned and shared or exchange-sourced. Click lands on §12.
+// The header's sidecar-mint chip: every verdict class and the click target
+// (the legend lives at renderMintChip in control.html).
 
 const { test, expect, fx, openControl } = require('./fixtures');
 
-function ex(mut) {
+function withCurrent(overrides) {
     const e = JSON.parse(JSON.stringify(fx('exchange')));
-    Object.assign(e.current, mut || {});
+    Object.assign(e.current, overrides || {});
     return e;
 }
 
@@ -18,41 +17,48 @@ test('a good local mint that is not on the ladder reads amber not-shared', async
 });
 
 test('a shared local mint reads green tuned', async ({ page }) => {
-    await openControl(page, { exchange: ex({ shared: true }) });
+    await openControl(page, { exchange: withCurrent({ shared: true }) });
     const chip = page.locator('#mint-chip');
     await expect(chip).toHaveText('tuned');
     await expect(chip).toHaveClass(/good/);
 });
 
 test('an exchange-sourced sidecar reads green tuned', async ({ page }) => {
-    await openControl(page, { exchange: ex({ origin: 'exchange', exchange_sha: 'abc123def456', local: false }) });
+    await openControl(page, { exchange: withCurrent({ origin: 'exchange', exchange_sha: 'abc123def456', local: false }) });
     const chip = page.locator('#mint-chip');
     await expect(chip).toHaveText('tuned');
     await expect(chip).toHaveClass(/good/);
 });
 
 test('a noisy race reads red noisy-mint', async ({ page }) => {
-    await openControl(page, { exchange: ex({ noise: 'noisy' }) });
+    await openControl(page, { exchange: withCurrent({ noise: 'noisy' }) });
     const chip = page.locator('#mint-chip');
     await expect(chip).toHaveText('noisy mint');
     await expect(chip).toHaveClass(/bad/);
 });
 
+test('an overridden noise refusal is a pass, not a bad mint', async ({ page }) => {
+    await openControl(page, { exchange: withCurrent({ noise: 'overridden', shared: true }) });
+    const chip = page.locator('#mint-chip');
+    await expect(chip).toHaveText('tuned');
+    await expect(chip).toHaveClass(/good/);
+});
+
 test('no sidecar reads red untuned', async ({ page }) => {
-    await openControl(page, { exchange: ex({ present: false }) });
+    await openControl(page, { exchange: withCurrent({ present: false }) });
     const chip = page.locator('#mint-chip');
     await expect(chip).toHaveText('untuned');
     await expect(chip).toHaveClass(/bad/);
 });
 
 test('a stale sidecar reads red stale', async ({ page }) => {
-    await openControl(page, { exchange: ex({ stale: true }) });
+    await openControl(page, { exchange: withCurrent({ stale: true }) });
     await expect(page.locator('#mint-chip')).toHaveText('tune: stale');
     await expect(page.locator('#mint-chip')).toHaveClass(/bad/);
 });
 
 test('an engine-version lapse reads red re-tune due', async ({ page }) => {
-    await openControl(page, { exchange: ex({ version_ok: false, dasllama_version: 4 }) });
+    await openControl(page, { exchange: withCurrent({ version_ok: false, dasllama_version: 4 }) });
     await expect(page.locator('#mint-chip')).toHaveText('tune: re-tune due');
     await expect(page.locator('#mint-chip')).toHaveClass(/bad/);
 });

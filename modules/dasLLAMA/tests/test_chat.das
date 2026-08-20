@@ -419,11 +419,11 @@ def test_chat_think_suppress(t : T?) {
     }
 }
 
-// ===== gemma-4 E-series thinking (opt-in via the <|think|> gate) =====
+// ===== gemma-4 E-series thinking (ON by default; instruct = the opt-out) =====
 
 [test]
 def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
-    t |> run("default = closed empty thought; thinking-ON = gate + bare opener (needs gemma-4-E2B)") @(t : T?) {
+    t |> run("default = thinking; instruct opt-out = closed empty thought (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
@@ -438,10 +438,11 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         t |> success(trn >= 0l && trc >= 0l && cho >= 0l && chc >= 0l, "the vocab carries the turn/channel markers")
         t |> success(thk >= 0l, "the vocab carries the <|think|> gate")
 
-        // thinking OFF (the E-series default): the closed empty thought prefill — the exact
-        // pre-thinking-arc token stream, pinned so the assistant_open restructure changes nothing
         var c = create_chat_renderer(m, "", 8l)
-        t |> success(!c.enable_thinking, "gemma-4 defaults to thinking off")
+        t |> success(c.enable_thinking, "gemma-4 defaults to thinking on (thinking-trained family)")
+        // instruct opt-out: the closed empty thought prefill — the exact pre-thinking-arc token
+        // stream, pinned so the assistant_open restructure changes nothing
+        set_thinking(c, false)
         // instruct mode stops at a stray channel marker; thinking-ON must NOT (they frame the thought)
         let base_stops = length(c.stop_ids)
         var eff_off <- effective_stop_ids(c)

@@ -851,7 +851,7 @@ STAGE_LABELS = {
     "exchange_lookup": "checking the tune exchange",
     "tuning": "tuning this box",
     "model_load": "loading the model",
-    "ready": "waking up",
+    "ready": "up — first health check pending",
 }
 
 
@@ -932,10 +932,11 @@ def tray_state() -> tuple[str, str]:
             line += " · tuning off"   # a 'run untuned' hold is active — visible, and revocable in the menu
         return line, "base"
     stage = s.get("stage")
-    # "unhealthy" is reserved for a server that SERVED and then stopped answering. A child
-    # that has not reached its first healthy poll is starting up — a cold JIT start is minutes
-    # of failed health polls, and framing that as ill sends users hunting for a problem.
-    if healthy is False and float(s.get("serving_since") or 0.0) > 0.0:
+    # "unhealthy" is reserved for a server that SERVED and then stopped answering — a cold
+    # JIT start is minutes of failed health polls, and framing that as ill sends users
+    # hunting for a problem.
+    has_served = float(s.get("serving_since") or 0.0) > 0.0
+    if healthy is False and has_served:
         return (f"unhealthy ({stage})" if stage else "unhealthy"), "red"
     label = STAGE_LABELS.get(stage, stage)
     return (f"starting up — {label}" if label else "starting up"), "amber"

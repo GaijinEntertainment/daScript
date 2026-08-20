@@ -42,7 +42,6 @@ def register_arch_gemma4() {
     d.chat.system.parts <- [chat_special("<|turn>"), chat_text("system\n"), chat_content(), chat_special("<turn|>"), chat_text("\n")]
     d.chat.user.parts <- [chat_special("<|turn>"), chat_text("user\n"), chat_content(), chat_special("<turn|>"), chat_text("\n")]
     d.chat.assistant_open.parts <- [chat_special("<|turn>"), chat_text("model\n"), chat_special("<|channel>"), chat_text("thought\n"), chat_special("<channel|>")]
-    // thinking-trained family, instruct is the opt-out - the why and mechanics: THINKING.md
     d.chat.think_default = true
     d.chat.think_gate.parts <- [chat_special("<|think|>")]
     d.chat.assistant_open_think.parts <- [chat_special("<|turn>"), chat_text("model\n")]

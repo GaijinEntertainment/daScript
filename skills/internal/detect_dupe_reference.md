@@ -51,7 +51,10 @@ Invocation is `bin/daslang utils/detect-dupe/main.das -- <flags>`.
 is required.
 
 `builtin.das`, `daslib/debugger.das`, `daslib/profiler.das`, and any path containing
-`ast-fuzz/selftest/` (deliberately-broken AST fixtures) are skipped automatically ---
+Files whose compile fails on `missing prerequisite` (a module this build/platform does not
+carry — e.g. Apple-only Metal benchmarks on Windows) are skipped loudly (`SKIP <file>` + a
+count), never counted as compile failures: export refuses only on files that are genuinely
+broken. `ast-fuzz/selftest/` (deliberately-broken AST fixtures) are skipped automatically ---
 the two daslib files install thread-local debug agents at compile time, which abort
 the scanner on the second use.
 

@@ -100,7 +100,7 @@ struct ServerArgs {
     @clarg_doc = "Context-length cap in tokens (default: the model's trained context_length)"
     ctx : int
 
-    @clarg_doc = "Default reply token budget when a request omits max_tokens (default 256; clamped to ctx per request)"
+    @clarg_doc = "Default reply token budget when a request omits max_tokens (default 16384; clamped to ctx per request)"
     max_tokens : int
 
     @clarg_short = "s"
@@ -503,9 +503,7 @@ def pick_quant(s : string) : QuantMode {
     return QuantMode.q8
 }
 
-// the pure defaults-first pick over the two detection facts: the Apple rails when the box has
-// them, else the vulkan tier when a device answers the probe, else the CPU
-def gpu_auto_pick(metal_ok, vulkan_ok : bool) : string {
+def private gpu_auto_pick(metal_ok, vulkan_ok : bool) : string {
     if (metal_ok) {
         return "metal"
     }
@@ -516,9 +514,23 @@ var private g_gpu_detected = ""   // cached auto-pick ("" = not probed yet; the 
 
 def private detected_gpu() : string {
     if (empty(g_gpu_detected)) {
-        g_gpu_detected = gpu_auto_pick(kernel_backend_available("metal"), kernel_backend_available("vulkan"))
+        // an explicit DASLLAMA_GPU=0 stays the opt-out: the env master only overrides the
+        // auto_tier field of an explicit want, so arming the blessed shape would out-vote it
+        g_gpu_detected = (gpu_env_master_off() ? "off"
+                          : gpu_auto_pick(kernel_backend_available("metal"), kernel_backend_available("vulkan")))
     }
     return g_gpu_detected
+}
+
+// the ONE derivation of "does the pick fall to auto-detection" — effective_gpu and the boot
+// announce both read it, so the log can never disagree with the pick (an unknown --gpu
+// spelling falls through to auto exactly like unset)
+def private gpu_pick_is_auto(cfg : ServerArgs) : bool {
+    let l = to_lower(cfg.gpu)
+    if (l == "off" || l == "metal" || l == "metal-required" || l == "vulkan") {
+        return false
+    }
+    return l == "auto" || empty(cfg.metal)
 }
 
 // --gpu selector: one knob over the metal mode and the vulkan tier. Defaults-first: unset
@@ -529,13 +541,10 @@ def private effective_gpu(cfg : ServerArgs) : string {
     if (l == "off" || l == "metal" || l == "metal-required" || l == "vulkan") {
         return l
     }
-    if (l == "auto") {
-        return detected_gpu()
-    }
-    if (!empty(l)) {
+    if (!empty(l) && l != "auto") {
         to_log(LOG_WARNING, "dasllama-server: unknown --gpu '{cfg.gpu}', ignoring (valid: auto | off | metal | metal-required | vulkan)\n")
     }
-    return empty(cfg.metal) ? detected_gpu() : ""
+    return gpu_pick_is_auto(cfg) ? detected_gpu() : ""
 }
 
 def private cfg_sourced(key : string) : bool
@@ -582,7 +591,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         image_mmproj = cfg.image_mmproj,
         asr_workers = cfg.asr_workers > 0 ? cfg.asr_workers : 1,
         ctx = cfg.ctx,
-        max_tokens = cfg.max_tokens > 0 ? cfg.max_tokens : 256,
+        max_tokens = cfg.max_tokens > 0 ? cfg.max_tokens : 16384,
         streams = cfg.streams > 0 ? cfg.streams : 4,
         threads = cfg.threads == 0 ? 16 : cfg.threads,
         team_dispatch = empty(cfg.team_dispatch) ? "hybrid" : cfg.team_dispatch,
@@ -811,7 +820,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     // GPU backend lands BEFORE the load: the metal mode pins the row-major backend the GPU
     // kernels read, and the vulkan tier want must be armed before the load walk uploads stacks
     let gpu = effective_gpu(g_cfg)
-    if (empty(g_cfg.metal) && (empty(g_cfg.gpu) || to_lower(g_cfg.gpu) == "auto")) {
+    if (gpu_pick_is_auto(g_cfg)) {
         to_log(LOG_INFO, "dasllama-server: gpu backend auto-detected: {gpu} (set gpu = off | metal | vulkan to pin)\n")
     }
     var metal_mode = pick_metal_mode(g_cfg.metal)
@@ -955,7 +964,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             }
         }
         set_default_model(g_models[def_idx].name)
-        set_default_max_tokens(g_cfg.max_tokens > 0 ? int64(g_cfg.max_tokens) : 256l)
+        // 16384, not a chat-sized 256: thinking-default families spend the budget's head on the
+        // thought channel, and a request that omits max_tokens must still get its whole answer
+        set_default_max_tokens(g_cfg.max_tokens > 0 ? int64(g_cfg.max_tokens) : 16384l)
         for (i in range(length(g_models))) {
             let path = (!empty(g_models[i].image_mmproj) ? g_models[i].image_mmproj
                                                          : (i == def_idx ? g_cfg.image_mmproj : ""))
