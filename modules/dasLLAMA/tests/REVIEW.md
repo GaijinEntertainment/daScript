@@ -95,8 +95,7 @@ regenerates it, beside the dumps under `models_dir()`, named in the test that lo
 dump.**
 
 **A test that reads a vision encode oracle dump names the minting arm in its header — the
-backend, the flash-attention setting, and the mmproj precision the dump came from.** The mint
-doctrine itself is `../ARCHITECTURE.md` §1.7b's oracle-provenance paragraph.
+backend, the flash-attention setting, and the mmproj precision the dump came from.**
 
 **A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob OFF for
 that leg (`set_metal_wdec(false)` / `set_metal_tower(false)`) and restores it after** — never

@@ -17,13 +17,12 @@ are twins, whatever the axis (single/batch, format, single-pass/chunked); they s
 method spliced flat at emission), a stamp-varying binding rides `@template_gate`. A
 copy-pasted twin, or a dummy-bound field where a gate serves, is a defect.
 
-**Every field on a `[metal_dispatch]` / `[vk_dispatch]` kernel class backed by load-once memory —
-a model plane, or an `upload_region` upload never written after arming — declares
-`@role = "weight"` explicitly; per-encode data (a pooled buffer the host refills each encode)
-never takes `weight`: its `@role` is left off — the lens derives the direction from the body —
-or spelled to match that direction.** An un-roled load-once field is a
-defect even when the kernel compiles and passes parity; a `weight` role on per-encode data is
-one too (it drops the hazard staging).
+**A `[metal_dispatch]` / `[vk_dispatch]` field carries `@role = "weight"` exactly when its
+memory is load-once — a model plane, or an `upload_region` upload never written after
+arming.** A load-once field with no `@role` is a defect even when the kernel compiles and
+passes parity; `weight` on per-encode data — a pooled buffer the host refills each encode —
+is one too, it drops the hazard staging. A per-encode field either omits `@role` or names the
+access its body performs.
 
 **A kernel declares its dispatch on the class; the builder is generated.** A new kernel class
 carries `[metal_dispatch]` / `[vk_dispatch]` with per-field `@binding` / `@role` / `@off` /
@@ -89,8 +88,9 @@ codec-mismatched sessions silently, so that log must show `resident driver armed
 **A change to the tower driver `dasllama/dasllama_metal_tower.das` ships a run of
 `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, and `tests/test_gemma3v.das` — the
 per-family GPU oracle gates — for every family the changed code is reachable from, and of all
-three when the change touches shared tower state (`g_tw_pool`, `metal_tower_init`,
-`dasllama_metal_tower_register`).** A new tower family adds its gate file to this list in the
+three when the change touches state or setup the whole driver shares rather than one family's
+path — any module-level `g_tw_*` variable in that file, `metal_tower_init`, or
+`dasllama_metal_tower_register`.** A new tower family adds its gate file to this list in the
 same change.
 
 **A change to the tower driver `dasllama/dasllama_metal_tower.das` ships a

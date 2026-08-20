@@ -1,6 +1,3 @@
-[W] env DAS_TUNE_MANIFEST is set but empty - treated as unset (use DAS_TUNE_MANIFEST=0 to disable a flag)
-[W] env DAS_TUNE_MANIFEST is set but empty - treated as unset (use DAS_TUNE_MANIFEST=0 to disable a flag)
-[W] env DAS_TUNE_MANIFEST is set but empty - treated as unset (use DAS_TUNE_MANIFEST=0 to disable a flag)
 dasllama_tune: dot <- vec8_u2 (default)
 dasllama_tune: axpy <- vec8_u2 (default)
 dasllama_tune: dot_bf16 <- vec8_u2 (default)
@@ -39,5 +36,17 @@ llvm_tune: k4q8_tile_gen <- mr4 (fallback)
 llvm_tune: k5q8_tile_gen <- mr4 (fallback)
 llvm_tune: k6q8_tile_gen <- mr4 (fallback)
 llvm_tune: q40q8_tile_gen <- mr4 (fallback)
-llvm_tune: q8q8_tile_gen <- kstep2 (fallback)
+llvm_tune: q8q8_tile_gen <- mr8_budget (/Users/borisbatkin/Work/daScript/_tune_confirm_manifest.json)
 llvm_tune: q51q8_tile_gen <- mr4 (fallback)
+llvm_tune: WARNING DAS_TUNE_MANIFEST=/Users/borisbatkin/Work/daScript/_tune_confirm_manifest.json: scope 'dasllama' reads untuned (sidecar records no dasllama_version - minted before this pin; kernels have changed since); kernels run fallback stamps
+[I] LLVM JIT: DLL cache miss, codegen for .jitted_scripts/_anon_14057640064396230159/0x68acdedb5e8ba28c.dll
+[I] Library .jitted_scripts/_anon_14057640064396230159/0x68acdedb5e8ba28c.dll linked - ok
+[I] LLVM JIT: GC stale artifact .jitted_scripts/_anon_14057640064396230159/0x7cf11e425b90443.o
+[I] LLVM JIT: GC stale artifact .jitted_scripts/_anon_14057640064396230159/0x7cf11e425b90443.dll
+[I] LLVM JIT: 3234 functions incl 26 tune-stamped in 61.91346 sec (codegen, O3)
+[I] dasLLAMA: source prefetch armed (7659 MB)
+[I] dasLLAMA: load stage meta+config+smalls: 560 ms
+[I] dasLLAMA: load stage weights: 326 ms
+[I] dasLLAMA: load stage repack: 190 ms
+[I] dasLLAMA: weight-scale plane converted to f16 (253313024 scales, -506626048 bytes)
+[I] dasLLAMA: load stage wscale: 50 ms, total 1335 ms

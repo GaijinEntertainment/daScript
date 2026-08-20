@@ -19,7 +19,8 @@ holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
 `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file — one
 `dasllama/dasllama_<family>.das` holding a single vision projector family — or a path that
-splices decoded media into a prompt or schedules it, applies `REVIEW_VISION.md`. A
+splices a stream carrying decoded media into a prompt or schedules such a stream, applies
+`REVIEW_VISION.md`. A
 `dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
 `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
 thereby pick up the other modality's checklist. A change to the tune sidecar's schema or

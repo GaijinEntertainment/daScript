@@ -10,7 +10,8 @@ with the master's.** `REVIEW_COMMON.md` (repo root) binds this file too. Archite
 **A type or loader a single vision family owns (its embedder or tower, its state, its staging)
 is named outside its own file only in `dasllama/dasllama_vision_embedder.das`, in
 `dasllama/dasllama_metal_tower.das`'s family hooks, and in files under
-`modules/dasLLAMA/tests/`.** The
+`modules/dasLLAMA/tests/`.** The `VisionEmbedder` union carries it through every other seam
+(chat, server, bench, facade, tutorials); a family name at a seam is a defect.
 `VisionEmbedder` union carries it through every other seam (chat, server, bench, facade,
 tutorials); a family name at a seam is a defect.
 
@@ -18,18 +19,19 @@ tutorials); a family name at a seam is a defect.
 `mm_bf16_b`, `mm_plane_b` (`dasllama/dasllama_tower.das`) or `matmul_q8q8_batch`
 (`dasllama/dasllama_math.das`).** A hand-written dot-product loop beside them is a defect.
 
-**A per-encode reused buffer in `dasllama/dasllama_vision_embedder.das`,
-`dasllama/dasllama_metal_tower.das`, or a vision family file is `@scratch` — on its
-declaration, or on the callee parameter it grows through.** A nolint where the annotation fits
-is a defect.
+**A per-encode reused buffer in `dasllama/dasllama_vision_embedder.das` or a vision family
+file is `@scratch` — on its declaration, or on the callee parameter it grows through.** A
+nolint where the annotation fits is a defect.
 
-**A debug or profiling leg in `dasllama/dasllama_vision_embedder.das`,
-`dasllama/dasllama_metal_tower.das`, or a vision family file is `[cold_path]`.** A nolint
-where it fits is a defect.
+**A debug or profiling leg in `dasllama/dasllama_vision_embedder.das` or a vision family file
+is `[cold_path]`.** A nolint where it fits is a defect.
 
-**A vision family file applies every clamp sidecar its mmproj carries, through `read_clamp` —
-never a literal bound; a family whose forward clamps nowhere says so in its file header.** The
-mtmd ±FLT_MAX default applies only where the scalars are absent.
+**A vision family file takes every clamp bound from `read_clamp`, never from a literal.**
+`read_clamp` returns the four scalars stored beside a weight tensor in the projector file
+(`<base>.input_min` / `.input_max` / `.output_min` / `.output_max`), or an inactive ±FLT_MAX
+clamp where the file carries none.
+
+**A vision family whose forward applies no clamp at all says so in its file header.**
 
 **A tower piece two tower families both need lives in `dasllama/dasllama_tower.das`** (the
 encoder-tower home — its inventory is `ARCHITECTURE.md` §1.7); a family file that re-implements
@@ -55,4 +57,3 @@ shape; any other representation at the seam is a defect.
 
 **A family gaining an arm for a media kind rides the existing splice prefill path** — a
 parallel prefill path for it is a defect.
-
