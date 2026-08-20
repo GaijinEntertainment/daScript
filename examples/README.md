@@ -63,6 +63,8 @@ daslang-live.exe examples/games/arcanoid/main.das
 | Directory | Description |
 |-----------|-------------|
 | `arcanoid/` | Breakout game: DECS, OpenGL, procedural audio, strudel music, 30+ live commands |
+| `pacman/` | Pac-Man: maze, ghosts, power pills, strudel music |
+| `boulder-dash/` | Boulder Dash–style caves: scan-line physics, seeded generator, grab, quota + timer |
 | `sequence/` | Sequence card board game: multi-module, bot AI, ELO tournament runner (requires `daspkg install`) |
 
 ## debugapi/ — Debug Agent Examples

@@ -849,6 +849,7 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
     g_done_status |> append(1)
     // create PCM stream on main thread (audio globals are initialized here)
     let thread_sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, MA_CHANNELS)
+    g_sid = thread_sid   // main-thread copy: shutdown/save_state run here, not on the worker
     // capture shared resources from main thread
     var bank_ptr = unsafe(addr(g_bank))
     var sf2_ptr = g_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_sf2)) : null
@@ -896,6 +897,8 @@ def public strudel_shutdown() {
         // refcount was 2 after init; worker's release made it 1; *_remove decrements to 0 and deletes
         unsafe(stream_remove(g_cmd_stream))
         unsafe(job_status_remove(g_done_status))
+        g_cmd_stream = null
+        g_done_status = null
         // player box
         unsafe(lock_box_remove(g_playback_box))
         g_playback_box = null
@@ -923,7 +926,10 @@ def public strudel_shutdown() {
     unsafe {
         delete g_tracks
     }
-    g_sid = 0ul
+    if (g_sid != 0ul) {
+        stop(g_sid, 0.0)   // mixer voice outlives the worker unless stopped
+        g_sid = 0ul
+    }
     // release SF2 soundfont (finalizer recursively frees instruments/presets/zones)
     if (g_sf2 != null) {
         unsafe {
@@ -1133,7 +1139,7 @@ def public strudel_restore_sf2_state(data : array<uint8>) {
 
 def public strudel_save_state() : array<uint8> {
     //! Serialize playback state (wall time, CPS, sample bank) into a byte array; shuts down playback first.
-    if (g_sid == 0ul) {
+    if (g_sid == 0ul && g_cmd_stream == null) {
         var empty : array<uint8>
         return <- empty
     }
