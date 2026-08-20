@@ -1,7 +1,7 @@
 # The daslang agent-skill bundle
 
 This directory is the **distributable, SDK-free daslang language skill** for AI coding
-agents (Claude Code / claude.ai skill format): `SKILL.md` plus eight reference files under
+agents (Claude Code / claude.ai skill format): `SKILL.md` plus the reference files under
 `references/`. Third parties drop the whole `daslang/` folder into their agent's skills
 directory; nothing in it assumes this repository, the SDK layout, MCP tools, or any
 particular embedding.

@@ -542,6 +542,9 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
         if (n_against_compiled > 0 || n_against_failed > 0 || n_against_skipped > 0) {
             to_log(LOG_INFO, "--against: compiled {n_against_compiled}, failed {n_against_failed}, skipped {n_against_skipped}\n")
         }
+        if (n_against_failed > 0) {
+            panic("detect-dupe --against failed: {n_against_failed} candidate file(s) did not compile - the report would be incomplete")
+        }
     }
 
     // B1 wiring: tag records whose member identity (file:line:name)

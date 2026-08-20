@@ -1,18 +1,7 @@
 # Generic programming
 
-Omit an argument type and the function becomes *generic*: it is instantiated for each distinct
-combination of argument types at the call site. Instances are created as private functions in the
-**calling** module — this drives both name resolution (see `_::` below) and error reporting.
-
-Unlike C++ SFINAE, branching on types uses ordinary conditionals — `static_if` with `typeinfo`.
-
-```das
-def set_field(var obj; val) {
-    static_if (typeinfo safe_has_field<x>(obj)) {
-        obj.x = val
-    }
-}
-```
+Omit an argument type and the function becomes *generic*: it is instantiated per distinct
+combination of call-site argument types, as a private function in the **calling** module.
 
 ## Declaring a generic
 
@@ -27,19 +16,16 @@ def set_field(var obj; val) {
 | `def f(a : auto(TT)[])` | fixed array; `TT` binds the element, one level peeled |
 | `[generic] def f(a : int)` | forces generic instantiation even with fully concrete arguments |
 
-Constrain in the signature rather than in the body: `def set0(var a; b; i : int) { a[i] = b }`
-fails deep inside with an obscure message, while
-`def set0(var a : array<auto(T)>; b : T; i : int)` fails at the call with a clear one.
+Constrain in the signature, not the body: unconstrained, a mismatch surfaces deep inside the body
+with an obscure message instead of at the call.
 
-`type<TT>` refers to the bound alias as a type; `TT -const`, `TT -#`, `TT -&`, `TT -[]` strip one
-qualifier from it (`typeinfo typename(type<TT -const>)` is `int` where `TT` is `int const`).
-
-A non-`var` parameter binds the alias const, a `var` parameter binds it mutable. A plain
-`auto(TT)` binds the **whole** matched type including fixed-array dimensions (`int[4]` -> `TT` is
-`int const[4]`), whereas `auto(TT)[]` peels one level.
+`type<TT>` refers to the bound alias as a type, and the strip contracts apply to it
+(`typeinfo typename(type<TT -const>)` is `int` where `TT` is `int const`). A non-`var` parameter
+binds the alias const, a `var` parameter mutable. Plain `auto(TT)` binds the **whole** matched type
+including fixed-array dimensions (`int[4]` -> `TT` is `int const[4]`).
 
 **Generic tuples work; generic structs do not.** A `tuple` may declare `auto(T)` members, and a
-generic taking it refers to it as `type<Name>`. A `struct` with an `auto` field is a compile error
+generic taking it refers to it as `type<Name>`; an `auto` field in a `struct` is a compile error
 ("structure field type can't be inferred").
 
 ```das
@@ -49,23 +35,21 @@ tuple Handle {
 }
 
 def make_handle(t : auto(HandleType)) : Handle {
-    var h : type<Handle>            // type<> resolves from the argument
+    var h : type<Handle>
     return h
 }
 ```
 
 ## Type contracts
 
-Contracts modify how a parameter type *matches*. They are consumed during inference and have no
-runtime cost.
+Contracts modify how a parameter type *matches*; they are consumed during inference.
 
 **They belong on a parameter, not on a cast.** `-const`, `-&`, `-[]`, `-#` and `==const` act on
-the head of the type expression they sit on, and that is load-bearing only while a generic alias
-is binding. On a concrete cast target they compute nothing you could not have spelled outright —
-`reinterpret<Foo? -const>(p)` is just `reinterpret<Foo?>(p)` — and they never reach a nested
-qualifier: with `typedef CI = int const`, `CI? -const` is still `int const?`. Spell the target
-type you want — and to get a writable pointer, declare the parameter `var T?` rather than
-stripping `const` off a cast (memory.md). (probe-verified 2026-08-16)
+the head of the type expression they sit on, and are load-bearing only while a generic alias is
+binding. On a concrete cast target they are inert (`reinterpret<Foo? -const>(p)` is
+`reinterpret<Foo?>(p)`), and never reach a nested qualifier: with `typedef CI = int const`,
+`CI? -const` is still `int const?`. For a writable pointer declare the parameter `var T?`
+(memory.md). (probe-verified 2026-08-16)
 
 | Contract | Accepts |
 |---|---|
@@ -85,37 +69,22 @@ stripping `const` off a cast (memory.md). (probe-verified 2026-08-16)
 | `Foo explicit` | exactly `Foo`; no substitution of derived types |
 | `int \| float` | OR type (see below) |
 
-`==const` means **exact** constness, not "accepts either". Since a non-`var` parameter already
-implies `const`, `def f(a : Foo ==const)` accepts only const arguments and `def f(var a : Foo ==const)`
-accepts only mutable ones. The idiom is a *pair* of overloads, so the result's constness follows
-the argument's:
+`==const` is **exact**, not "accepts either": `def f(a : Foo ==const)` takes only const arguments,
+`def f(var a : Foo ==const)` only mutable ones. Write the *pair*, so the result's constness follows
+the argument's.
 
-```das
-def view(a : Foo ==const) : string {
-    return "const view"
-}
+`-#` lets a generic own a copy of a possibly-temporary argument: `var owned : TT -# := a` clones a
+temporary into an owned value.
 
-def view(var a : Foo ==const) : string {
-    a.x += 1
-    return "mutable view"
-}
-```
-
-`-#` is what lets a generic own a copy of a possibly-temporary argument: inside
-`def own_copy(a : auto(TT))`, `var owned : TT -# := a` clones a temporary into a regular, owned
-value.
-
-Gotcha: combining `-#` with `==const` on **two or more** parameters that share the same alias
-breaks matching — a plain `array<int>` is then rejected. For multi-source signatures use the
-plain `array<TT>` form.
+`-#` with `==const` on **two or more** parameters sharing one alias breaks matching — a plain
+`array<int>` is then rejected. For multi-source signatures use plain `array<TT>`.
 
 ## OR types
 
 `def f(a : int | float | double)` accepts any listed alternative and always makes the function
-generic. This is **not** a runtime tagged union: the function is monomorphized per concrete
-argument type, so inside the body `a` simply *is* an `int`, or a `float` — no dispatch, no
-unpacking. Alternatives are tried in the order listed (`Bar explicit | Foo` tries exact `Bar`
-first).
+generic. **Not** a runtime tagged union: it is monomorphized per concrete argument type, so in the
+body `a` simply *is* an `int`. Alternatives are tried in the order listed (`Bar explicit | Foo`
+tries exact `Bar` first).
 
 ## typeinfo
 
@@ -147,25 +116,22 @@ constant. Every trait takes exactly one argument; a few take extra names in angl
 `struct_has_annotation_argument<ann; arg>`, `struct_safe_has_annotation_argument<ann; arg>`,
 `struct_get_annotation_argument<ann; arg>`, `variant_index<name>`, `safe_variant_index<name>`
 
-`is_unsafe_when_uninitialized` is how a generic decides whether a bare `var x : TT` is legal for
-the type it bound: guard the declaration with
-`static_if (typeinfo is_unsafe_when_uninitialized(type<TT>)) { unsafe { ... } } else { ... }`.
-The `@safe_when_uninitialized` field annotation and the `[safe_when_uninitialized]` struct
-annotation are what flip it (structs-and-classes.md).
+`is_unsafe_when_uninitialized` tells a generic whether a bare `var x : TT` is legal for the bound
+type: `static_if (typeinfo is_unsafe_when_uninitialized(type<TT>)) { unsafe { ... } }`. The
+`@safe_when_uninitialized` field annotation and the `[safe_when_uninitialized]` struct annotation
+flip it (structs-and-classes.md).
 
-The annotation traits are spelled with the `struct_` prefix — plain `has_annotation` does not
-exist. The `safe_` forms return `false` / `-1` instead of raising a compile error, which is what
-you want in a generic that must accept anything. `has_field` requires the argument to already be
-a struct or handled type; `safe_has_field` does not.
+Annotation traits all carry the `struct_` prefix — plain `has_annotation` does not exist. The
+`safe_` forms return `false` / `-1` instead of raising a compile error; `has_field` requires the
+argument to already be a struct or handled type, `safe_has_field` does not. `<name>` takes the
+bare field name, not a string: `typeinfo safe_has_field<hp>(obj)`.
 
-**Existence** — `builtin_module_exists(name)`, `builtin_annotation_exists(type<T>)` (true for
-registered native types), `builtin_function_exists(@@<sig> name)` (native functions only — a
-daslang-defined function is a compile error here).
+**Existence** — `builtin_module_exists(name)` (how a binding is made optional),
+`builtin_annotation_exists(type<T>)` (true for registered native types),
+`builtin_function_exists(@@<sig> name)` (native functions only — a daslang-defined function is a
+compile error here).
 
-`static_if (typeinfo builtin_module_exists(some_optional_module)) { ... }` compiles its body only
-when that module is linked in — the standard way to make a binding optional.
-
-There is no `is_same_type(A, B)` — traits take one argument. Compare type identity with
+No `is_same_type(A, B)`; compare identity with
 `typeinfo stripped_typename(a) == typeinfo stripped_typename(b)`.
 
 Any trait name not on this list is dispatched to the user-extensible typeinfo-macro system.
@@ -173,37 +139,11 @@ Any trait name not on this list is dispatched to the user-extensible typeinfo-ma
 ## static_if, static_assert, concept_assert
 
 `static_if (cond) { } static_elif (cond) { } else { }` — parentheses required; only the selected
-branch is compiled, so the other branches may be invalid for the current types.
-
-```das
-def kind(a) : string {
-    static_if (typeinfo is_array(a)) {
-        return "array"
-    } static_elif (typeinfo is_numeric(a)) {
-        return "number"
-    } else {
-        return "other"
-    }
-}
-```
-
-Two compile-time asserts turn a deep instantiation failure into one readable message:
+branch is compiled, so the others may be invalid for the current types.
 
 - `static_assert(cond, "message")` — reports **at the assert**, inside the generic.
-- `concept_assert(cond, "message")` — reports **at the call site**. Prefer it for preconditions
-  a caller can act on.
-
-```das
-def sum_all(a : array<auto(TT)>) : TT {
-    concept_assert(typeinfo is_numeric(type<TT>), "sum_all requires a numeric element type")
-    var total : TT
-    for (x in a) {
-        total += x
-    }
-    return total
-}
-// sum_all(["a"]) -> error at the call: "sum_all requires a numeric element type"
-```
+- `concept_assert(cond, "message")` — reports **at the call site**; prefer it for preconditions a
+  caller can act on.
 
 ## Recursive (variadic) generics
 
@@ -226,15 +166,14 @@ def flat_push(var dest : array<auto(numT)>; src) {                  // deeper ne
 }
 ```
 
-A bare untyped parameter is *less* specialized than `array<numT>`, so the concrete overload keeps
-winning for flat sources and the recursive one only fires for deeper nesting.
+A bare untyped parameter is *less* specialized than `array<numT>`, so the concrete overload wins.
 
 ## Specialization and ambiguity
 
 `array<numT>` (an already-bound alias) and `array<auto(TT)>` (a fresh binding) are **equally**
-specialized. Two same-name overloads differing only in that produce
+specialized: two same-name overloads differing only in that produce
 `error[30341] too many matching functions`. Distinguish them by a concrete element type, or make
-one of them the untyped form above.
+one the untyped form above.
 
 ## Name resolution inside a generic
 
@@ -244,40 +183,13 @@ one of them the untyped form above.
 | `_::` | as if written in the **instantiating** module — the caller's overloads *and* everything it requires |
 | `__::` | the instantiating module's **own** symbols only, nothing imported |
 
-```das
-module serializer                       // --- library ---
-
-[generic]
-def save(val) {
-    _::write(val)                       // picks up the caller's write() overloads
-}
-```
-
-```das
-require serializer                      // --- user code ---
-
-struct Color {
-    r, g, b : float
-}
-
-def write(c : Color) {
-    print("{c.r},{c.g},{c.b}")
-}
-
-[export]
-def main() {
-    save(Color(r = 1.0))                // calls the user's write(Color)
-}
-```
-
-Plain `write(val)` there would fail with "module is not visible directly from serializer". This is
-why `:=` and `delete` are emitted as `_::clone` and `_::finalize` — so user-defined `clone` and
-`finalize` overloads are found at the instantiation site.
+Inside a library generic, an unprefixed call to a function the caller defines fails with
+`module is not visible directly from <the generic's module>`. `:=` and `delete` are emitted as
+`_::clone` / `_::finalize` for the same reason.
 
 ## Types built from expressions
 
-`typedecl(expr)` yields the compile-time type of an expression and can be used anywhere a type is
-expected:
+`typedecl(expr)` yields the compile-time type of an expression, usable anywhere a type is expected:
 
 ```das
 def table_by_id(t : auto(T)) {
@@ -285,31 +197,13 @@ def table_by_id(t : auto(T)) {
     return <- tab
 }
 // for struct A { id : string } -> table<string const; A const>
-// for struct B { id : int }    -> table<int const; B const>
 ```
 
 ## Pattern matching
 
 `require daslib/match` adds `match`, `static_match`, `multi_match`, `static_multi_match` — macros
-that compare a value against structural patterns and bind parts of it. Each arm is an `if (pattern)`;
-`_` is the catch-all; `$v(name)` declares a variable bound to the matched part.
-
-```das
-require daslib/match
-
-def enum_match(color : Color) : int {
-    match (color) {
-        if (Color.Red) {
-            return 1
-        }
-        if (_) {
-            return -1
-        }
-    }
-}
-```
-
-Enum cases use the dotted `Color.Red` form.
+matching a value against structural patterns, binding parts of it. Each arm is an `if (pattern)`;
+enum cases use the dotted `Color.Red` form.
 
 | Pattern | Matches |
 |---|---|
@@ -327,21 +221,8 @@ Enum cases use the dotted `Color.Red` form.
 | `match_expr(x + 1)` | element equals an expression over already-bound variables |
 | `match_type(type<int>, $v(e))` | matches on the type of the expression |
 
-```das
-def guards_match(ab : AB) : string {
-    match (ab) {
-        if (AB(a = $v(a), b = $v(b)) && (b > a)) {
-            return "{b} > {a}"
-        }
-        if (_) {
-            return "other"
-        }
-    }
-}
-```
-
 **`static_match`** silently drops arms whose pattern cannot possibly match the argument type, so
-it compiles for any type — the tool for matching inside a generic:
+it compiles for any type — the matcher to use inside a generic:
 
 ```das
 def static_kind(what) : string {
@@ -364,7 +245,6 @@ def static_kind(what) : string {
 
 Matching values of unrelated struct types requires opting the struct in: `[match_as_is]` plus
 user-defined `operator is` / `operator as`, or `[match_copy, safe_when_uninitialized]` plus a
-`match_copy` function that attempts the conversion and returns `true` on success.
+`match_copy` function returning `true` on a successful conversion.
 
-`match` also decomposes compiler AST node pointers by node type and field, with nested patterns —
-the workhorse for macro code.
+`match` also decomposes compiler AST node pointers by node type and field, with nested patterns.

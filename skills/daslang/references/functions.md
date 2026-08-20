@@ -1,30 +1,24 @@
 # Functions and Operators
 
-Declaration syntax, overload resolution, function pointers, pipes, the operator-overloading
-catalog, and operator precedence.
-
 ## Declaration
 
-The return type is written with `:` or `->` (equivalent), and may be omitted — daslang infers
-it. Returning two different types from one function is a compile error.
+`:` and `->` are equivalent; the return type may be omitted and inferred. Returning two
+different types from one function is a compile error.
 
 ```das
 def add(a, b : int) : int { return a + b }
 def sub(a, b : int) -> int { return a - b }
-def mul(a, b : int) { return a * b }        // inferred: int
-def hello {                                 // no arguments -> parentheses optional
-    print("hello\n")                        // (the call site still needs them: hello())
-}
+def mul(a, b : int) { return a * b }     // inferred: int
+def hello { print("hello\n") }           // no arguments -> parens optional (call site: hello())
 ```
 
-Visibility is a **prefix keyword**, not an annotation: `def private helper(...)`,
-`def public api(...)`. Without it a function inherits its module's publicity.
+Visibility is a **prefix keyword**: `def private helper(...)`, `def public api(...)`. Without it
+a function inherits its module's publicity.
 
 ### Parameter list
 
-A parameter list is a sequence of **groups**. A group is either `name[, name...] : Type`
-(all names share that one type) or a bare untyped `name[, name...]` (each name is
-independently generic).
+A parameter list is a sequence of **groups**: `name[, name...] : Type` (all names share that one
+type) or a bare untyped `name[, name...]` (each name independently generic).
 
 | Separator | Legal after |
 |---|---|
@@ -33,46 +27,38 @@ independently generic).
 
 ```das
 def a(x : int, y : float) => float(x) + y      // comma between two typed groups
-def b(x : int; y : float) => float(x) + y      // semicolon, same meaning
-def c(x, y : int) => x + y                     // ONE group: both x and y are int
-def d(x, y : int, z : float) => float(x+y) + z // typed group, then another typed group
-def e(x; y : int) => x + y                     // untyped x (generic), then typed y
-def f(x, y) => "{x}/{y}"                       // two untyped names, independently generic
+def b(x, y : int) => x + y                     // ONE group: both x and y are int
+def c(x; y : int) => x + y                     // untyped x (generic), then typed y
+def d(x, y) => "{x}/{y}"                       // two untyped names, independently generic
 ```
 
-Not: "semicolon is the separator and comma is an error" — both work. But note `c` above:
-`x, y : int` does **not** mean "generic `x`, int `y`" — it means both are `int`. To leave `x`
-generic you must use `;` (form `e`). Every `def` needs a body; there are no bodiless
-declarations.
+Every `def` needs a body.
 
-The parameter list wraps freely inside its parentheses, but **the return-type annotation must
-stay on the closing-paren line** — a continuation line starting `: int {` is
+The parameter list may wrap, but **the return type must stay on the closing-paren line** — a
+continuation line starting `: int {` is
 `error[30151] syntax error, unexpected ':', expecting => or '{'`. (probe-verified 2026-08-16)
 
 ### var / let parameters
 
-A parameter with no keyword is const (`let` is the explicit, redundant spelling). `var` makes
-it mutable; add `&` for a reference the caller sees written back.
+No keyword means const (`let` is the explicit, redundant spelling). `var` makes it mutable; add
+`&` for a reference the caller sees written back.
 
 ```das
-def peek(a : int) : int => a          // a is int const
 def bump(var a : int&) { a += 1 }     // caller's variable is modified
 def fill(var out : float?; n : int) { unsafe(out[0]) = float(n) }
 ```
 
-To write *through* a pointer parameter, declare it `var T?`. Do not take `T const?` and
-reinterpret the const away — the optimizer is licensed to drop the write.
+To write *through* a pointer parameter, declare it `var T?`; taking `T const?` and reinterpreting
+the const away licenses the optimizer to drop the write.
 
 ### Single-expression (arrow) body
 
 ```das
 def succ(x : int) => x + 1
-def greeting(name : string) : string => "hello, {name}"
 def make_arr() : array<int> => <- [1, 2, 3]      // move-return
 ```
 
-The body must **start on the `=>` line** — a newline right after `=>` is a syntax error. To wrap
-a long body, open a paren on the `=>` line and break inside it:
+The body must **start on the `=>` line**; to wrap, open a paren there and break inside it:
 
 ```das
 def blend(a, b : float) : float => (
@@ -81,12 +67,10 @@ def blend(a, b : float) : float => (
 )
 ```
 
-Struct and class methods use the same form: `def area() : int => w * h`.
-
 ### Default parameters
 
-Any parameter may have a default (a compile-time constant expression), including
-non-trailing ones. Defaults on non-trailing parameters can only be skipped by a named call.
+Any parameter may have a default (a compile-time constant expression), including non-trailing
+ones; a non-trailing default can only be skipped by a named call.
 
 ```das
 def rect(x, y : int; w : int = 10; h : int = 20) : int => x + y + w * 100 + h * 1000
@@ -98,45 +82,40 @@ lead(a = 2, b = 3)          // c=1, d=1
 
 ## Calling
 
-Named arguments are written **bare**, after the positional ones: `foo(pos, name = value)`.
-They must be a strict suffix (a positional after a named one is a syntax error) and must stay
-in declaration order (out-of-order gives "no matching functions").
+Named arguments are written **bare**, after all positional ones (a positional after a named one
+is a syntax error) and in declaration order (out-of-order gives "no matching functions").
 
 ```das
 rect(1, 2, w = 3)               // x=1, y=2, w=3, h=20
-rect(x = 1, y = 2)              // all named
 rect(1, 2, [w = 3, h = 4])      // legacy bracketed form, still valid
 ```
 
-The bracketed form groups **all** named arguments in one `[...]`; separate groups
-(`foo([a = 1], [b = 2])`) are a syntax error. Prefer the bare form. Named arguments also work
-on method calls: `obj.m(bias = 1)`, `obj->m(bias = 1)`.
+One `[...]` holds **all** named arguments; separate groups (`foo([a = 1], [b = 2])`) are a
+syntax error. Prefer the bare form; it works on method calls too: `obj.m(bias = 1)`,
+`obj->m(bias = 1)`.
 
 **There is no angle-bracket call form.** `take<int>(1, 2)` is
-`error[30151] syntax error, unexpected '>', expecting '('` — a type is passed as an ordinary
-argument instead, `take(type<int>, 1, 2)`, against a parameter declared `t : type<auto(TT)>`
-(tag it `[unused_argument(t)]`, since a `type<>` parameter occupies no stack and cannot be read).
-Take `default<T>` instead of `type<T>` when the body needs a value. (probe-verified 2026-08-16)
+`error[30151] syntax error, unexpected '>', expecting '('`. Pass the type as an ordinary
+argument, `take(type<int>, 1, 2)`, against a parameter declared `t : type<auto(TT)>` (tag it
+`[unused_argument(t)]` — a `type<>` parameter occupies no stack and cannot be read); take
+`default<T>` when the body needs a value. (probe-verified 2026-08-16)
 
-Defaults sitting between the explicit arguments and a trailing block are padded automatically —
-don't spell them out:
+Defaults between the explicit arguments and a trailing block are padded automatically:
 
 ```das
 def visit(tag : string; depth : int = 3; blk : block<(d : int) : void>) { invoke(blk, depth) }
 visit("root") $(d : int) { print("depth={d}\n") }        // depth = 3
-visit("root", 7) $(d : int) { print("depth={d}\n") }     // depth = 7
 ```
 
 ## Overloading and specialization
 
-Two functions may share a name if their argument types differ; identical argument lists are a
-compile error. Matching picks the **most specialized** candidate: non-`auto` beats `auto` (an
-alias base type ranks lowest, two aliases rank equal); among non-`auto`, the one needing no cast
-wins; array forms beat non-array forms, and a concrete element type beats an abstract one.
-Compound types (pointer, array, table, tuple, variant, function/block/lambda) are compared by
-subtype and return type recursively, and all parts must match or rank equally. Among equally
-specialized candidates the one with the smallest *substitute distance* wins (+1 per argument
-needing a substitution cast); a remaining tie is a compile error.
+Overloads must differ in argument types; identical argument lists are a compile
+error. Matching picks the **most specialized** candidate: non-`auto` beats `auto` (alias
+base type ranks lowest, two aliases rank equal); among non-`auto`, no-cast beats cast; array
+beats non-array; concrete element type beats abstract. Compound types (pointer, array, table,
+tuple, variant, function/block/lambda) compare recursively by subtype and return type — all parts
+must match or rank equally. Ties break on smallest *substitute distance* (+1 per argument needing
+a substitution cast); a remaining tie is a compile error.
 
 ```das
 def twice(a : int) : int => a + a           // 4
@@ -148,23 +127,20 @@ def twice(a) => "generic"                   // anything else
 `explicit` on a parameter disables substitution — `def only_base(b : Base explicit)` accepts
 `Base` but rejects a struct that inherits from it.
 
-Contract annotations (from `daslib/contracts`) restrict which types a generic will match, and
-combine with `!`, `&&`, `||`, `^^`:
+Contract annotations (`daslib/contracts`) restrict which types a generic matches, and combine
+with `!`, `&&`, `||`, `^^`:
 
 ```das
 require daslib/contracts
-[expect_any_array(blah)]
-def count_any(blah) : int => length(blah)
 [expect_any_tuple(t) || expect_any_variant(t)]
 def kind(t) : string => "tuple-or-variant"
 ```
 
-Generic parameters (`auto`, `auto(TT)`), OR-types and `static_if` dispatch: see *generics*.
-
 ## Function pointers
 
 The type is `function<(args) : Ret>` (or `-> Ret`); bare `function` means an unspecified
-signature. Take a pointer with `@@`.
+signature. Take a pointer with `@@`. They are ordinary values — locals, arrays, table slots,
+struct fields, parameters.
 
 ```das
 let f = @@thrice                          // by name
@@ -173,20 +149,11 @@ let h <- @@ (a : int) { return a + a }    // nameless
 let k = @@(a : int) => a - 1              // nameless, arrow form
 ```
 
-Call via `invoke(f, args)`, or with call notation on a **variable** holding the pointer
-(`f(3)`). Call notation does not work on an arbitrary expression — `arr[0](7)` is a syntax
-error, use `invoke(arr[0], 7)`.
+Call via `invoke(f, args)`, or with call notation on a **variable** holding the pointer (`f(3)`),
+never on an arbitrary expression — `arr[0](7)` is a syntax error, use `invoke(arr[0], 7)`.
 
 Nameless functions capture nothing — referring to an enclosing local inside one is a compile
-error (that is what distinguishes them from lambdas). You cannot take the address of a generic
-function: `@@gen` where `gen` has untyped parameters reports "function not found".
-
-Function pointers are ordinary values — store them in locals, arrays, table slots and struct
-fields, and take them as parameters:
-
-```das
-def apply(fn : function<(a : int) : int>; v : int) : int => invoke(fn, v)
-```
+error. `@@gen` on a generic (untyped-parameter) function reports "function not found".
 
 ## Pipes and method-style calls
 
@@ -200,47 +167,35 @@ def apply(fn : function<(a : int) : int>; v : int) : int => invoke(fn, v)
 ```das
 let t = 12 |> addX(2) |> addX(3)     // addX(addX(12,2),3) == 17
 var f = Foo()
-f |> setXY(10, 11)                   // setXY(f, 10, 11)
-f.setXY(10, 11)                      // same; chains too: f.area() is area(f)
+f.setXY(10, 11)                      // == f |> setXY(10,11) == setXY(f,10,11); f.area() is area(f)
 ```
 
-**Assumed pipe** — a block or lambda written straight after a call is piped in as the last
-argument, so `<|` is not needed. Parameterless blocks need no `$` either; blocks with parameters
-keep `$`, lambdas keep `@` / `@@`. It works after named calls, dot-method calls (`obj.m()`) and
-arrow-method calls (`obj->m()`). Explicit `<|` is still needed to pipe a non-block expression,
-e.g. `<| new Foo()`.
+**Assumed pipe** — parameterless blocks need no `$`; blocks with parameters keep `$`, lambdas
+keep `@` / `@@`. Works after named calls, `obj.m()` and `obj->m()`. A non-block expression still
+needs explicit `<|`, e.g. `<| new Foo()`.
 
 ```das
 doSomething() {                                   // parameterless block
     print("hello\n")
 }
-let s = build_string() $(var w : StringBuilderWriter) {
-    w |> write("built")
-}
 arr |> sort() $(a, b) => a < b                    // arrow shorthand works here too
 let res = r.call_method() $ : int { return 42 }   // also on method calls
 ```
 
-**Dot-as-pseudo-pipe limits.** `a.f(b)` only rewrites to `f(a, b)` when `a` is a struct or class
-value. On a primitive, tuple, array, or a `lambda` typedef it is a field lookup and fails
-(`can't get field 'double' of int const&`). Those receivers must use `|>` or a direct call.
-
-The reverse carve-out: **class METHODS are not reachable through `|>`**. `obj.method()` and
-`obj->method()` work, but `obj |> method()` fails with "no matching functions" — the generated
-method function is invisible to pipe — and the same holds for `[class_method]` struct methods.
-Pipe is for free functions; dot and arrow are for methods.
+**Dot limits.** On a primitive, tuple, array, or a `lambda` typedef, `a.f(b)` is a field lookup
+and fails (`can't get field 'double' of int const&`); those receivers need `|>` or a direct
+call. Conversely, **class
+METHODS are invisible to `|>`**: `obj |> method()` fails with "no matching functions", and so do
+`[class_method]` struct methods.
 
 ## Operator overloading
 
-Define a free function or a struct/class method named `operator <op>`. The compiler dispatches
-`a + b` to `operator +` and so on.
+Define a free function or a struct/class method named `operator <op>`.
 
 ```das
 struct Vec2 { x, y : float }
 def operator + (a, b : Vec2) : Vec2 => Vec2(x = a.x + b.x, y = a.y + b.y)
 def operator - (a : Vec2) : Vec2 => Vec2(x = -a.x, y = -a.y)     // unary: one argument
-def operator == (a, b : Vec2) : bool => a.x == b.x && a.y == b.y
-def operator += (var a : Vec2&; b : Vec2) { a.x += b.x; a.y += b.y }
 ```
 
 | Category | Spellings |
@@ -258,9 +213,7 @@ def operator += (var a : Vec2&; b : Vec2) { a.x += b.x; a.y += b.y }
 | Null coalesce | `??` |
 | Interval | `..` (alias for `interval`) |
 
-Compound-assign operators take a mutable reference first. Increment is two separate operators:
-`++operator` is prefix `++c`, `operator++` is postfix `c++`. Index reads and writes are separate
-too; `?[]` is the null-safe read.
+Compound-assign operators take a mutable reference first.
 
 ```das
 def ++operator (var c : Counter&) : Counter { c.value += 1; return c }
@@ -273,8 +226,8 @@ def operator ?[] (var s : Sparse; i : int) : int? {
 }
 ```
 
-For `is` / `as` / `?as` the target type is part of the **operator name** — not a `type<T>`
-parameter. Call sites then read `a is Cat`, `(a as Cat).name`, `a ?as Cat`.
+For `is` / `as` / `?as` the target type is part of the **operator name**, not a `type<T>`
+parameter.
 
 ```das
 def operator is Cat (a : Animal) : bool => a.isCat
@@ -282,23 +235,21 @@ def operator as Cat (a : Animal) : Cat => a.cat
 def operator ?as Cat (var a : Animal) : Cat? { return a.isCat ? unsafe(addr(a.cat)) : null }
 
 def operator := (var dst : Res; src : Res) { dst.name = src.name; dst.n = src.n + 1 }
-def operator delete (var r : Res) { print("releasing {r.name}\n") }   // same as 'def finalize'
+def operator delete (var r : Res) { print("releasing {r.name}\n") }
 def operator ?? (a : Opt; d : int) : int => a.has ? a.val : d
-def operator .. (a, b : Deg) : range => range(a.d, b.d)              // same as 'def interval'
+def operator .. (a, b : Deg) : range => range(a.d, b.d)
 ```
 
 ### Field access and computed properties
 
-`operator .` can be overloaded generically (the field name arrives as a `string`) or per name.
-Inside such an operator, `t!.field` reaches the real field, bypassing the overload. A
-read/write pair makes a computed property; the setter is `operator . name :=`, invoked with
-`:=` at the call site.
+`operator .` overloads generically (the field name arrives as a `string`) or per name. Inside
+it, `t!.field` reaches the real field, bypassing the overload. A read/write pair makes a
+computed property.
 
 ```das
 struct Goo { a : string }
 def operator . (t : Goo; name : string) : string => "{name}={t!.a}"   // any field name
 def operator . size (t : Goo) : int => length(t!.a)                   // just '.size'
-// with a = "hello": g.whatever is "whatever=hello", g.size is 5
 
 def operator . magnitude (b : Ball) : float => length(b.dir)
 def operator . magnitude := (var b : Ball; value : float) { b.dir = normalize(b.dir) * value }
@@ -307,14 +258,12 @@ def operator . magnitude := (var b : Ball; value : float) { b.dir = normalize(b.
 
 ### Original-operator access (`!`)
 
-`!` in front of any overloadable access or test operator yields the **original** operator,
-never the overload: `a!.x` (raw field), `a!?.x`, `a![i]`, `a!?[i]`, `a !?? b`, `a !is x`,
-`a !as x`, `a !?as x`. The variant and coalescing forms also bypass variant macros. Use these
-in generic or generated code that must get the language's own semantics regardless of what
-overloads are in scope. The legacy spelling `t . .field` (dot, space, dot) is equivalent to
-`t!.field` — the space is required there because `t..field` lexes as the interval operator.
+`!` in front of any overloadable access or test operator yields the **original** operator, never
+the overload: `a!.x`, `a!?.x`, `a![i]`, `a!?[i]`, `a !?? b`, `a !is x`, `a !as x`, `a !?as x`.
+The variant and coalescing forms also bypass variant macros. Legacy spelling: `t . .field` ==
+`t!.field`, the space required because `t..field` lexes as the interval operator.
 
-Operators also work as struct/class methods — mark read-only ones `const`:
+Mark read-only method operators `const`:
 
 ```das
 struct Bag {
@@ -355,15 +304,13 @@ is  as
 ,
 ```
 
-Three rows bite people coming from C-family languages:
-
-- **`??` binds tighter than `*` `/` `%`** (and everything below). `p ?? 2 * 10` is `(p ?? 2) * 10`.
-- **Pipes bind tighter than all arithmetic.** `2 * 3 |> inc()` is `2 * inc(3)`, not `inc(2 * 3)`.
-- **`is` / `as` bind tighter than prefix `!`.** `!v is i` is `!(v is i)`.
+So `p ?? 2 * 10` is `(p ?? 2) * 10`; `2 * 3 |> inc()` is `2 * inc(3)`, not `inc(2 * 3)`;
+`!v is i` is `!(v is i)`.
 
 ## Also
 
-- Recursion is supported; there is no tail-call optimization — a deep recursion consumes stack.
-- Blocks, lambdas, generators and their capture rules: see *closures*.
-- `_::name` call resolution, generic instantiation and type contracts: see *generics*.
-- Class methods, `->` calls, `super`, abstract/override: see *structs and classes*.
+Recursion is supported, with no tail-call optimization — deep recursion consumes stack.
+
+See *closures* (blocks, lambdas, generators, capture), *generics* (`auto`, `auto(TT)`, OR-types,
+`static_if`, `_::name` resolution, type contracts), *structs and classes* (methods, `->`,
+`super`, abstract/override).
