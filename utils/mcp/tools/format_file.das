@@ -54,15 +54,19 @@ def private format_file_single(file : string; keep_comments : bool; project, pro
         let verify = run_mcp_subtool("compile_check", [file, project, "false"], project_root, load_modules)
         var envelope : ToolResult
         if (!sscan_json(verify, envelope) || envelope.isError) {
-            fwrite(file, unformatted)
-            result.status = "reverted"
+            let restored = fwrite(file, unformatted)
+            result.status = restored ? "reverted" : "error"
             var why = ""
             if (!empty(envelope.content)) {
                 let txt = envelope.content[0].text
                 let nl = find(txt, '\n')
                 why = " ({nl < 0 ? txt : slice(txt, 0, nl)})"
             }
-            result.message = "Comment strip broke compile_check{why}; original restored: {file}"
+            if (restored) {
+                result.message = "Comment strip broke compile_check{why}; original restored: {file}"
+            } else {
+                result.message = "Comment strip broke compile_check{why}; RESTORE WRITE FAILED - file left stripped: {file}"
+            }
             return result
         }
     }
