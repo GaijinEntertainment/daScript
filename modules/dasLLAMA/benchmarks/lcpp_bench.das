@@ -15,10 +15,11 @@ require dasllama/dasllama_tokenizer   // the tg-real row needs REAL tokens (see 
 require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcribe (narrower than the full facade; it requires the transformer umbrella itself)
 require audio   // --asr: the miniaudio decoder behind load_audio_16k_mono
 require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono contract
+require dasllama/dasllama_tower   // the encode-stage prof rail (set_asr_prof/asr_prof_ms)
 require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
 require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
-require dasllama/dasllama_gemma4uv   // --image: the vision embedder + encode_image_
+require dasllama/dasllama_vision_embedder   // --image: the vision embedder (any family) + encode_image_
 require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
 require dasllama/dasllama_vision_io   // --image: decode the picture to RGB8
 require dasllama/dasllama_sampling   // --image: generate_embd_ over the spliced prompt
@@ -146,7 +147,7 @@ struct Args {
     image : string
 
     @clarg_name = "image-mmproj"
-    @clarg_doc = "Image cell: the vision mmproj (gemma4uv) paired with -m"
+    @clarg_doc = "Image cell: the vision mmproj (gemma4uv or gemma4v, sniffed) paired with -m"
     image_mmproj : string
 
     @clarg_doc = "Image cell: the question asked about the picture (default: a short describe prompt)"
@@ -436,10 +437,10 @@ struct private ImageTurn {
     text : string                // the LAST rep's reply — a duration alone cannot tell "faster" from "said less"
 }
 
-def private measure_image_turn(var m : Model; emb : Gemma4uvEmbedder; img : VisionImage;
+def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : VisionImage;
                                prompt : string; reps : int) : ImageTurn {
     var r = ImageTurn()
-    var st = Gemma4uvState()
+    var st = VisionState()
     var rows : array<float>
     for (_rep in range(reps)) {
         let t_enc = ref_time_ticks()
@@ -490,13 +491,32 @@ def private measure_image_turn(var m : Model; emb : Gemma4uvEmbedder; img : Visi
 }
 
 // The --image entry: load the pair, time the turn, emit the same cell JSON the LLM rows emit.
-def private image_cell_main(model, mmproj, image, prompt, json_path : string; reps, threads : int; gpu : bool) : bool {
+def private image_cell_main(model, mmproj, image, prompt, json_path : string; reps, threads : int; gpu, accel : bool) : bool {
     // the metal arm serves the whole turn on the driver with the tripwire ARMED, so a CPU
     // fallback reds the row instead of sandbagging it
     if (gpu) {
         set_metal_mode(MetalMode.required)
     } else {
         allow_cpu_prefill()   // the CPU arm is CPU by intent — disarm the Metal-build tripwire
+    }
+    if (accel && gpu) {
+        print("--accel is a CPU-tier lever - drop it or run with -ngl 0\n")
+        return false
+    }
+    if (accel) {   // the +AMX tier — the tower's bf16 GEMMs are exactly the float-batch shapes it serves
+        static_if (typeinfo builtin_module_exists(das_accelerate)) {
+            dasllama_accelerate_enable(32l)   // the shipped +AMX defaults, same as the LLM leg
+            print("DASLLAMA_ACCEL armed (float-batch tier, min ntok 32) - this row measures the accelerate lane\n")
+        } else {
+            print("--accel requested but das_accelerate is not built on this platform - no accel row to measure\n")
+            return false
+        }
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!gpu) {   // a CPU/accel row means CPU: the default-on tower driver would silently GPU-serve the encode
+            set_metal_tower(false)
+            print("lcpp_bench --image: CPU row - DASLLAMA_METAL_TOWER=0 pinned (the encode runs on the CPU)\n")
+        }
     }
     apply_box_profile_runtime()
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
@@ -513,18 +533,18 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
     with_job_que() {
         setup_dasllama_jobque_()
         var m <- load_model_cached(model, QuantMode.q8)
-        var emb <- load_gemma4uv_embedder(mmproj)
+        var emb <- load_vision_embedder(mmproj)
         var pic <- load_image_rgb(image)
-        if (emb.proj_dim != m.config.dim) {
+        if (vision_proj_dim(emb) != m.config.dim) {
             // this cell drives the low-level splice, so it owes the named refusal create_chat_ gives
-            print("lcpp_bench --image: mmproj proj_dim {emb.proj_dim} does not match the decoder dim {m.config.dim} — wrong model/mmproj pair\n")
+            print("lcpp_bench --image: mmproj proj_dim {vision_proj_dim(emb)} does not match the decoder dim {m.config.dim} — wrong model/mmproj pair\n")
         } elif (pic.width == 0) {
             print("lcpp_bench --image: could not decode '{image}'\n")
         } else {
             var inscope warm <- measure_image_turn(m, emb, pic, ask, 1)   // warm: JIT + first touch
             var inscope turn <- measure_image_turn(m, emb, pic, ask, reps)
-            var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp("tuned"),
-                exec_fmt = model_exec_fmt(m),
+            var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp(accel ? "accel" : "tuned"),
+                exec_fmt = "tower {vision_family(emb)} {vision_exec_fmt(emb)}; {model_exec_fmt(m)}",
                 workload = "image-chat", box = box_name(), threads = threads,
                 date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
                 sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
@@ -536,9 +556,9 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
             run.tests |> insert("img:enc", BenchTest(ms = turn.enc_ms))
             run.tests |> insert("img:pp", BenchTest(tok_s = turn.pp_tok_s))
             run.tests |> insert("img:tg", BenchTest(tok_s = turn.tg_tok_s, text = turn.text))
-            print("lcpp_bench --image: {pic.width}x{pic.height} -> {turn.n_rows} soft tokens | enc {turn.enc_ms} ms | pp {turn.pp_tok_s} tok/s | tg {turn.tg_tok_s} tok/s\n")
+            print("lcpp_bench --image: {pic.width}x{pic.height} -> {turn.n_rows} soft tokens ({vision_family(emb)} {vision_exec_fmt(emb)}) | enc {turn.enc_ms} ms | pp {turn.pp_tok_s} tok/s | tg {turn.tg_tok_s} tok/s\n")
             print("  text: {turn.text}\n")
-            var cell = BenchModel(gguf = base_name(model), arch = "gemma4uv",
+            var cell = BenchModel(gguf = base_name(model), arch = vision_family(emb),
                                   size_bytes = int64(stat(model).size))
             cell.runs |> emplace(run)
             jsonModels |> emplace(cell)
@@ -1326,11 +1346,11 @@ def main() : int {
     }
     if (!empty(cfg.image)) {   // the vision cell, same deal
         if (empty(cfg.image_mmproj)) {
-            print("--image needs --image-mmproj (the gemma4uv embedder paired with -m)\n")
+            print("--image needs --image-mmproj (the vision mmproj paired with -m)\n")
             return 1
         }
         return image_cell_main(cfg.model, cfg.image_mmproj, cfg.image, cfg.image_prompt,
-                               cfg.json_path, reps, threads, gpu) ? 0 : 1
+                               cfg.json_path, reps, threads, gpu, cfg.accel) ? 0 : 1
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag

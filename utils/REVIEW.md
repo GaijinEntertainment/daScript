@@ -3,9 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `CLAUDE.md` (repo root).
 
-A tool directory is any direct child directory of `utils/` or `utils/internal/`. A file
-belonging to a tool whose directory carries its own `REVIEW.md`, wherever the diff puts it,
-answers to that tool's checklist too.
+**A file belonging to a tool directory — a direct child directory of `utils/` or
+`utils/internal/` — answers to that directory's own `REVIEW.md` too when it carries one**,
+wherever the diff puts the file.
 
 **Weakening `REVIEW.das` (beside this file) is a defect.** It machine-checks this folder's
 mechanical rules — what it enforces is read from it, each check's finding text stating its

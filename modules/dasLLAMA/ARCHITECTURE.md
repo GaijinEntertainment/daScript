@@ -186,7 +186,7 @@ that a question answered for one backend has an obvious address in the other. Th
 | `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
 | `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates — no GPU C++ require, so any box can bake | device calls |
-| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the whisper-class block loop, the conv frontends + the qwen3a padded-weight slab) — no session, no KV, no mirror; registers the gemma4uv, encoder_blocks, tower-conv and qwen3a-conv hooks | kernel bodies, decoder state |
+| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT block loop, the whisper-class block loop, the conv frontends + the qwen3a padded-weight slab) — no session, no KV, no mirror; registers the gemma4uv, gemma4v, encoder_blocks, tower-conv and qwen3a-conv hooks | kernel bodies, decoder state |
 | the ASR-decoder driver<br>`dasllama_metal_asr_dec` | the whisper decoder on Metal: the 34B weight blob, the f16 resident cross/self K/V, window-granular cross-KV + decode-step serves; registers the whisper cross-KV and decode hooks (family registries in `dasllama_whisper`) | kernel bodies, LLM session state |
 | the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan — the `[vk_dispatch]` macro derives access per class) | the kernel-access macro | anything else |
 
@@ -207,16 +207,21 @@ that a question answered for one backend has an obvious address in the other. Th
 - **Backend-only capabilities live in their matching ROLE file, not in new grab-bags** — vulkan's
   weight arena, streamed mirrors, heat cache, host-import, coopmat; metal's blob transform and MTP.
 - **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,
-  posadd) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
+  posadd, the gemma4v clamp / rope2d / GEGLU-quick) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
   releases them like every other registry PSO; the borrowed prefill builders (`pf_enc_bf16_mm`,
   `enc_add_bias_rows`, the attention trio via `enc_qk_mm`/`enc_av_mm`) come up through
   `metal_prefill_pso_init`, prefill's public bring-up seat, and `plane_buffer` in common is
   public for the same wrap-a-plane reason. The tower's own objects (the ones buffer, its
   scratch pool) release through `metal_tower_shutdown`.
 - **The tower driver is a Metal-only role** — Vulkan has no tower twin; audio/vision encodes
-  on the Vulkan tier stay CPU. Likewise the non-causal media span: Metal serves it through
+  on the Vulkan tier stay CPU (the gemma4v ViT block loop included: on Vulkan and on plain CPU
+  boxes the tower serves its q8 lane). Likewise the non-causal media span: Metal serves it through
   `AttnArgs.uend`; the Vulkan resident prefill declines it (`followup_general.md` #23's
   remaining half).
+- **Per-layer FFN widths (MatFormer E-series, at most two — `ffn_second_hidden`) serve on Metal
+  only**: the decode and prefill drivers bind the width per layer (dense trunks, no MTP; batch
+  keeps the layer-0 hoist behind its uniformity decline). The Vulkan tier has no PLE arm, so
+  E-series never reaches its width question.
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class — "the builder needs the driver module" is never a placement reason. Prefill's
@@ -312,21 +317,29 @@ Family behavior is distributed by `Config` flag, not dispatched by name — an `
 on a shared path is the anti-pattern. Only a genuinely new dataflow earns its own block pointer.
 `register_arch` MOVES the descriptor, so an alias must clone the template first (§3).
 
-### 1.7 Audio and ASR
+### 1.7 Encoder towers, audio, and ASR
 
 - **`dasllama_asr_types.das`** — the ASR floor: the capability/segment/timestamp types every
   family file and the facade share (`AsrCaps`/`AsrTimestamps`/`TranscribeSegment`, plus
   `asr_ctx_guard`). Family modules require this instead of each other — a shape needed by two
   families moves up here, never sideways.
-- **`dasllama_audio.das`** — the shared audio tower: mel front-end, encoder blocks, the pieces every
-  audio model composes.
+- **`dasllama_tower.das`** — the family-neutral encoder-tower home, composed by every audio AND
+  vision tower: the oracle-exact activations (erf / tanh-LUT / quick-LUT gelu, swiglu, geglu),
+  the LayerNorm/RMS row forms, bias and residual row adds, the
+  `mm_blob_b`/`mm_bf16_b`/`mm_plane_b` GEMM wrappers, `Clamp`/`read_clamp`,
+  `im2col_rgb_patches`, `rope_neox_2d_rows`, `avg_pool2d_rows`, blocked `attention_bidir`, and
+  the encode-stage prof rail. The one home: a family file that re-implements one of these is a
+  defect, and nothing here names a family type.
+- **`dasllama_audio.das`** — the audio encoder tower: the mel front-ends (mtmd and whisper.cpp
+  flavors), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`, and the
+  whisper-class encode + block loop with its GPU hooks. Composes `dasllama_tower.das`.
 - **`dasllama_audio_io.das`** — decode-any-format → 16 kHz mono f32 PCM. The only file that talks to
   miniaudio.
 - **`dasllama_asr.das`** — the ASR facade: capability declaration, timestamp granularity, the
   backend-neutral entry points.
 - **`dasllama_whisper.das`** / **`dasllama_parakeet.das`** / **`dasllama_canary.das`** /
   **`dasllama_qwen3a.das`** / **`dasllama_gemma4a.das`** — one file per model family, each owning its
-  weights, its decode loop, and its quirks. Shared tower pieces go up into `dasllama_audio`, not
+  weights, its decode loop, and its quirks. Shared tower pieces go up into `dasllama_tower`, not
   sideways between families.
 - **`dasllama_vad.das`** — Silero-VAD weights and per-stream state.
 
@@ -340,17 +353,32 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   decode through one seam — the engine itself takes decoded pixels.
 - **`dasllama_gemma4uv.das`** — the gemma4uv embedder (gemma-4 dense): mmproj load and the
   im2col → LayerNorm → GEMM → position-table → projection forward. One file per vision
-  projector family, following the audio tower pattern; shared pieces move up, never sideways.
+  projector family, following the audio tower pattern; shared pieces move up into
+  `dasllama_tower.das` (the encoder-tower home), never sideways.
   A shipped mmproj mixes element types per tensor — gemma-4's "BF16" file stores the patch
   embedder as F32 and only the projection as BF16 — which is why a weight plane's element type
   follows its source tensor, per tensor, never a per-file verdict.
+- **`dasllama_gemma4v.das`** — the gemma4v ViT tower (gemma-4 E-series): mmproj load (bf16 GEMM
+  planes as the file has them, the clamp sidecars as a blob table) and the 16-block pre-norm RMS
+  forward — clamped GEMMs, per-head q/k RMS, two-axis NEOX rope, weightless V RMS, unscaled
+  bidirectional attention, GEGLU-quick — then the 3×3 pool, RMS and projection. Composes the
+  `dasllama_tower.das` tower pieces; owns only its layout and the block loop.
+- **`dasllama_vision_embedder.das`** — the vision carrier: `VisionEmbedder` / `VisionState`, the
+  `AsrModel` shape for vision — one union through every seam, the family sniffed from the mmproj
+  (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a
+  family's own file, a family type is named only here, in `dasllama_metal_tower.das`'s family
+  hooks, and in that family's tests.
 
 Vision oracle provenance (the convention `REVIEW.md`'s fixture rule points at): real image
 fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated
 (their `performance/fetch_models.das` entries are the checkable pins); the mtmd reference dumps
-live beside them in `gemma4-vision-oracle/`, whose `mint.sh` records the exact
-`llama-mtmd-debug` / `llama-mtmd-cli` invocation that minted each dump, so regeneration is a
-command, not archaeology.
+live beside them in `gemma4-vision-oracle/`, whose `mint.sh` (gemma4uv) and `mint_e2b.sh`
+(gemma4v) record the exact `llama-mtmd-debug` / `llama-mtmd-cli` invocation that minted each
+dump, so regeneration is a command, not archaeology. An encode oracle dump is minted on the
+CPU, `-fa off`, from the f32-widened mmproj twin — the only true-f32 reference arm (the
+reference's Metal "f32" GEMM stages half operands, its flash-attention path casts K/V to f16,
+and the shipped bf16 mmproj rounds activations to bf16; llama.cpp's own four arms spread
+≤ 6.5e-3 on the gemma4v tokens).
 
 ### 1.8 Instrumentation and support
 

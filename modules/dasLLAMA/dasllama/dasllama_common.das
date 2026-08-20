@@ -1111,6 +1111,16 @@ def grow_resize(@scratch var a : array<auto(numT)>; n : int | int64) {
     a |> resize(n)
 }
 
+// Grow-only sizing for reused scratch: the length becomes at least n (exact reserve first, so the
+// grow never trips max_unreserved_size) and never shrinks — a buffer sized once per tower keeps
+// serving smaller calls with no realloc; the grown tail is zeroed. The family towers' scratch shape.
+def ensure_length(@scratch var a : array<auto(numT)>; n : int64) {
+    if (long_length(a) < n) {
+        a |> reserve(n)
+        a |> resize(n)
+    }
+}
+
 def copy_floats(src : array<float> | #; soff : int64; var dst : array<float>; doff, n : int64) {
     for (i in range64(n)) {
         dst[doff + i] = src[soff + i]
@@ -3272,6 +3282,17 @@ def requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; va
     requant_rows_q8(x, n, npos, xqb, xsb, n * npos >= g_requant_par_threshold)
     prof_add("mm_requant", ts_rq)
 }
+
+//! Per-site Q8_0 requant of a token-major image, growing the caller's scratch pair to the image
+//! first — the sizing every tower repeats around ``requant_rows_q8``.
+def requant_rows_q8_sized(x : array<float>; n, npos : int64; @scratch var xq : array<int8>;
+                          @scratch var xs : array<float>) {
+    let need = npos * n
+    ensure_length(xq, need)
+    ensure_length(xs, need / 32l)
+    requant_rows_q8(x, n, npos, xq, xs)
+}
+
 
 // Q8_K-form batch requant (kq v2): per-256 scales + per-16 sums of the per-256-scaled
 // quants. k4-weight batch matmuls and MoE gathers consume these rows.

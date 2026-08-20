@@ -7,6 +7,7 @@ options _cyclomatic_complexity = 0   // image walk/GC bodies mirror the archive 
 options _function_length = 0   // same
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_ple   // ple_check_table — the E-series table go-live tripwire
 require daslib/fio
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require daslib/apply
@@ -126,6 +127,19 @@ def image_peek(path : string) : DlimPeek {
     }
     unsafe(fmap_close(base, msize))
     return p
+}
+
+//! A prepared image's family, from the baked identity's trailing tag ("" = no family tag — a
+//! decoder image, which routes on its gguf instead). Panics on an unreadable image.
+def image_family_tag(path : string) : string {
+    let p = image_peek(path)
+    if (!p.valid || empty(p.identity)) {
+        panic("dasLLAMA: '{path}' is not a readable prepared image (see the log above)")
+    }
+    var parts <- split(p.identity, "|")
+    let tag = parts[length(parts) - 1]
+    delete parts
+    return tag
 }
 
 //! One .dlim sibling of a GGUF, as list/GC tooling sees it (converter --list, the server page).
@@ -1463,7 +1477,9 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
         return false
     }
     // AFTER the plane borrows (image_post_load runs before them, when every array is still
-    // empty): the GPU MoE tier gathers from the PREPARED planes, so the mapped rail serves it too
+    // empty): the PLE-table tripwire needs the bound planes, and the GPU MoE tier gathers
+    // from the PREPARED planes, so the mapped rail serves it too
+    ple_check_table(t, "prepared image '{path}'")
     moe_gpu_upload_resident(t)
     return true
 }

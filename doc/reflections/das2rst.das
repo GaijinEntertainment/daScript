@@ -372,10 +372,10 @@ def document_module_dasllama(_root : string) {
             "A loaded audio encoder: Whisper-family encoder weights plus the model-specific projector tail, as produced by ``load_audio_tower`` from an mmproj GGUF. Pass it to ``create_chat`` to enable ``add_user_audio`` turns.")
         dasllama_type_stanza(f, "struct-dasllama_vision-VisionImage", "VisionImage",
             "A decoded RGB8 image: ``width``, ``height``, and the pixel bytes in ``rgb``. Produced by ``load_image_rgb`` (the optional ``dasllama_vision_io`` companion) or built directly; ``add_user_image`` / ``encode_image`` letterbox and normalize it to the model's geometry.")
-        dasllama_type_stanza(f, "struct-dasllama_gemma4uv-Gemma4uvEmbedder", "Gemma4uvEmbedder",
-            "A loaded gemma vision embedder: the mmproj GGUF's projection weights plus the family's geometry, as produced by ``load_gemma4uv_embedder``. Pass it to ``create_chat`` to enable ``add_user_image`` turns; ``proj_dim`` must match the decoder's embedding width (checked at create).")
-        dasllama_type_stanza(f, "struct-dasllama_gemma4uv-Gemma4uvState", "Gemma4uvState",
-            "Caller-owned scratch for the embedder forward: the im2col and GEMM buffers ``encode_image`` reuses across calls. One per embedder user; holds no image state between calls.")
+        dasllama_type_stanza(f, "struct-dasllama_vision_embedder-VisionEmbedder", "VisionEmbedder",
+            "A loaded vision embedder of whatever family the mmproj GGUF turned out to be (gemma4uv — the gemma-4 dense embedder; gemma4v — the gemma-4 E-series ViT tower), as produced by ``load_vision_embedder``, which sniffs the family. Pass it to ``create_chat`` to enable ``add_user_image`` turns; ``vision_proj_dim`` must match the decoder's embedding width (checked at create).")
+        dasllama_type_stanza(f, "struct-dasllama_vision_embedder-VisionState", "VisionState",
+            "Caller-owned scratch for the embedder forward of whichever family is carried: the buffers ``encode_image`` reuses across calls. One per embedder user; holds no image state between calls.")
         dasllama_type_stanza(f, "struct-dasllama_image-DlimImageInfo", "DlimImageInfo",
             "One prepared image beside a GGUF, as listed by ``dlim_inventory``: ``file``, ``path``, ``bytes``, the image ``version``, its bake ``identity``, and a ``verdict`` — ``CURRENT`` loads; ``STALE vN`` is an older image version; ``OTHER`` a different bake configuration or box; ``FOREIGN`` a different flavor.")
         dasllama_type_stanza(f, "struct-dasllama_gpu_tier-GpuTierStatus", "GpuTierStatus",

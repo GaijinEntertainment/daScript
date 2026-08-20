@@ -44,6 +44,30 @@ def private ple_pre_finish(t : Model; var s : Session; embd_scaled : array<float
     scale_inplace(unsafe(addr(s.ple_inp[0])), 1.0 / sqrt(2.0), npos * all)
 }
 
+//! Go-live tripwire, called at every carrier seam: panics unless the PLE token table's plane
+//! really holds the table (a short plane would otherwise die mid-forward inside the gather).
+def ple_check_table(t : Model; origin : string) {
+    if (!has_ple(t.config)) {
+        return
+    }
+    let need = t.ple_emb_off + t.config.vocab_size * t.config.n_layers * t.config.n_embd_per_layer
+    var have = 0l
+    if (t.ple_emb_fmt == KqFmt.q8) {
+        have = t.metal_blob ? (long_length(t.mblob) / 34l) * 32l : long_length(t.qblob)
+    } elif (t.ple_emb_fmt == KqFmt.k4) {
+        have = (long_length(t.k4q) / K4_QSB) * 256l
+    } elif (t.ple_emb_fmt == KqFmt.k5) {
+        have = (long_length(t.k5q) / K5_QSB) * 256l
+    } elif (t.ple_emb_fmt == KqFmt.k6) {
+        have = (long_length(t.k6q) / K6_QSB) * 256l
+    } elif (t.ple_emb_fmt == KqFmt.q40) {
+        have = (long_length(t.q40q) / Q40_QSB) * 256l
+    }
+    if (have < need) {
+        panic("dasLLAMA: the PLE token table is not resident ({origin}): fmt {t.ple_emb_fmt} plane holds {have} of {need} elements - regenerate this carrier (it predates the pinned-table rail)")
+    }
+}
+
 // One PLE token row (all = layers*ple elements, superblock-aligned by the detect gate) off the
 // gather's storage: native disk-order K-quant planes (the table is excluded from the grp repack)
 // or the q8 linear region on fallback loads.
@@ -54,14 +78,21 @@ def private ple_gather_row(t : Model; row : int64; var dst : array<float>; doff 
         dequant_q8_row(t, eloff, all, unsafe(addr(dst[doff])))
         return
     }
+    // metal-blob carriers compact k4/k5 scale strips to 16B and split k6 (embed_row's strides)
+    let ssb45 = t.metal_blob ? 16l : K4_SSB
+    let k6d0 = t.metal_blob ? (long_length(t.k6s) / K6_SSB) * 16l : 0l
     for (blk in range64(all / 256l)) {
         let sb = (eloff + blk * 256l) / 256l
         if (t.ple_emb_fmt == KqFmt.k4) {
-            dequant_k4_plane_superblock(t.k4q, sb * K4_QSB, t.k4s, sb * K4_SSB, dst, doff + blk * 256l)
+            dequant_k4_plane_superblock(t.k4q, sb * K4_QSB, t.k4s, sb * ssb45, dst, doff + blk * 256l)
         } elif (t.ple_emb_fmt == KqFmt.k5) {
-            dequant_k5_plane_superblock(t.k5q, sb * K5_QSB, t.k5s, sb * K5_SSB, dst, doff + blk * 256l)
+            dequant_k5_plane_superblock(t.k5q, sb * K5_QSB, t.k5s, sb * ssb45, dst, doff + blk * 256l)
         } elif (t.ple_emb_fmt == KqFmt.k6) {
-            dequant_k6_plane_superblock(t.k6q, sb * K6_QSB, t.k6s, sb * K6_SSB, dst, doff + blk * 256l)
+            if (t.metal_blob) {
+                dequant_k6_plane_superblock_at(t.k6q, sb * K6_QSB, t.k6s, sb * 16l, k6d0 + sb * 2l, dst, doff + blk * 256l)
+            } else {
+                dequant_k6_plane_superblock(t.k6q, sb * K6_QSB, t.k6s, sb * K6_SSB, dst, doff + blk * 256l)
+            }
         } elif (t.ple_emb_fmt == KqFmt.q40) {
             dequant_q40_plane_superblock(t.q40q, sb * Q40_QSB, t.q40s, sb * Q40_SSB, dst, doff + blk * 256l)
         } else {

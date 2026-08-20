@@ -101,19 +101,6 @@ def set_asr_tower_fp32(on : bool) {
     g_asr_tower_fp32 = on
 }
 
-// a prepared image's family, from the baked identity's trailing tag ("" = no family tag —
-// a decoder/tower image that needs the two-argument route)
-def private image_family_tag(path : string) : string {
-    let p = image_peek(path)
-    if (!p.valid || empty(p.identity)) {
-        panic("dasLLAMA asr: '{path}' is not a readable prepared image (see the log above)")
-    }
-    var parts <- split(p.identity, "|")
-    let tag = parts[length(parts) - 1]
-    delete parts
-    return tag
-}
-
 //! Load an ASR model, sniffing the format: ggml-bin magic = whisper vs parakeet (disambiguated
 //! on vocab size: whisper >= 51864, parakeet 1k/8k); GGUF needs the model's mmproj too — use the
 //! two-argument overload. A ``.dlim`` prepared image routes on its baked family tag. One loader, no family names.

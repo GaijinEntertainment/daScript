@@ -20,6 +20,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_plane public   // PlaneF — the borrowed weight planes; re-exported so requirers can delete an encoder
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
+require dasllama/dasllama_tower
 require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the Qwen3 decoder
 require dasllama/dasllama_common   // apply_box_profile_runtime for the canary-image identity
 require dasllama/dasllama_convert   // quantize_q8_0_into — the q8 load's read-time transcode
@@ -266,13 +267,6 @@ struct CanaryState {
     xsi : array<float>
     posq : array<int8>        // pos_emb rows requantized once per encode (layer-invariant input)
     poss : array<float>
-}
-
-def private cn_ensure(@scratch var a : array<float>; n : int64) {
-    if (long_length(a) < n) {
-        a |> reserve(n)
-        a |> resize(n)
-    }
 }
 
 // mm_blob_b with the q8 route: activation image (xq, xs) pre-quantized by the caller so
@@ -674,7 +668,7 @@ def stage_canary_encoder(path : string; q8 : bool = false) : CanaryStaging {
 [hot_path]
 def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : CanaryState) {
     let n_in = long_length(samples)
-    cn_ensure(st.pre, n_in)
+    ensure_length(st.pre, n_in)
     for (i in range(int(n_in))) {
         st.pre[i] = samples[i]
     }
@@ -685,7 +679,7 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
     }
     let pad = m.n_fft / 2l
     let n_padded = n_in + 2l * pad
-    cn_ensure(st.padded, n_padded)
+    ensure_length(st.padded, n_padded)
     for (i in range(int(pad))) {
         st.padded[i] = 0.0
     }
@@ -701,12 +695,12 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
     let n_mel = m.n_mel
     st.n_len = (n_padded - n_fft) / CN_HOP + 1l
     let n_len = st.n_len
-    cn_ensure(st.mel, n_len * n_mel)
+    ensure_length(st.mel, n_len * n_mel)
     let wsz = length(m.window)
     let wpad = (n_fft - wsz) / 2l
 
     // windowed frames -> DFT via twiddle gemm -> power
-    cn_ensure(st.xw, n_len * n_fft)
+    ensure_length(st.xw, n_len * n_fft)
     for (i in range64(n_len * n_fft)) {
         st.xw[i] = 0.0
     }
@@ -719,11 +713,11 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
             }
         }
     }
-    cn_ensure(st.reim, n_len * n_bins * 2l)
+    ensure_length(st.reim, n_len * n_bins * 2l)
     gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(m.twiddles, 0l),
              n_len, n_fft, n_bins * 2l)
 
-    cn_ensure(st.power, n_bins)
+    ensure_length(st.power, n_bins)
     for (i in range64(n_len)) {
         for (k in range64(n_bins)) {
             let re = st.reim[i * n_bins * 2l + k * 2l]
@@ -790,7 +784,7 @@ def private cn_conv0(m : CanaryEncoder; var st : CanaryState; ih, iw : int64) {
     let ow = (iw - 1l) / 2l + 1l
     let oh = (ih - 1l) / 2l + 1l
     let rows = oh * ow
-    cn_ensure(st.col, rows * 9l)
+    ensure_length(st.col, rows * 9l)
     for (oy in range64(oh)) {
         for (ox in range64(ow)) {
             let r = (oy * ow + ox) * 9l
@@ -804,7 +798,7 @@ def private cn_conv0(m : CanaryEncoder; var st : CanaryState; ih, iw : int64) {
             }
         }
     }
-    cn_ensure(st.y0, rows * cout)
+    ensure_length(st.y0, rows * cout)
     mm_blob_b(st.y0, m.blob, m.c0_w, st.col, 9l, cout, rows)
     add_bias_rows(st.y0, m.blob, m.c0_b, cout, rows)
     cn_relu_rows(st.y0, rows * cout)
@@ -816,7 +810,7 @@ def private cn_conv_dw(m : CanaryEncoder; var out : array<float>; x : array<floa
     let ch = m.n_sub_ch
     let ow = (iw - 1l) / 2l + 1l
     let oh = (ih - 1l) / 2l + 1l
-    cn_ensure(out, oh * ow * ch)
+    ensure_length(out, oh * ow * ch)
     for (oy in range64(oh)) {
         for (ox in range64(ow)) {
             let obase = (oy * ow + ox) * ch
@@ -843,7 +837,7 @@ def private cn_conv_dw(m : CanaryEncoder; var out : array<float>; x : array<floa
 def private cn_conv_pw(m : CanaryEncoder; var out : array<float>; x : array<float>;
                        var xq : array<int8>; var xs : array<float>; w_off, b_off, rows : int64) {
     let ch = m.n_sub_ch
-    cn_ensure(out, rows * ch)
+    ensure_length(out, rows * ch)
     cn_mm_rq(m, out, w_off, x, xq, xs, ch, ch, rows)
     add_bias_rows(out, m.blob, b_off, ch, rows)
     cn_relu_rows(out, rows * ch)
@@ -882,7 +876,7 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
 
     let tt = t3
     let feat = w3 * nch
-    cn_ensure(st.xf, tt * feat)                                  // xf[t][f + w3·c] = y6[t][f][c]
+    ensure_length(st.xf, tt * feat)                                  // xf[t][f + w3·c] = y6[t][f][c]
     for (t in range64(tt)) {
         for (fr in range64(w3)) {
             for (c in range64(nch)) {
@@ -890,13 +884,13 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
             }
         }
     }
-    cn_ensure(st.x, tt * d)
+    ensure_length(st.x, tt * d)
     cn_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
     add_bias_rows(st.x, m.blob, m.pre_b, d, tt)
 
     // rel-pos embedding table [W × d], interleaved (sin, cos); W = 2T−1
     let ww = 2l * tt - 1l
-    cn_ensure(st.pos_emb, ww * d)
+    ensure_length(st.pos_emb, ww * d)
     for (w in range64(ww)) {
         let rel = double(tt - 1l - w)
         for (k in range64(d / 2l)) {
@@ -910,27 +904,27 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
         cn_requant(st.pos_emb, d, ww, st.posq, st.poss)
     }
 
-    cn_ensure(st.xb, tt * d)
-    cn_ensure(st.h, tt * ff)
-    cn_ensure(st.glu, tt * d)
-    cn_ensure(st.ao, tt * d)
-    cn_ensure(st.qq, tt * d)
-    cn_ensure(st.kk, tt * d)
-    cn_ensure(st.vv, tt * d)
-    cn_ensure(st.posl, ww * d)
-    cn_ensure(st.qu, tt * dh)
-    cn_ensure(st.qv, tt * dh)
-    cn_ensure(st.kt, dh * tt)
-    cn_ensure(st.vh, tt * dh)
-    cn_ensure(st.posh, dh * ww)
+    ensure_length(st.xb, tt * d)
+    ensure_length(st.h, tt * ff)
+    ensure_length(st.glu, tt * d)
+    ensure_length(st.ao, tt * d)
+    ensure_length(st.qq, tt * d)
+    ensure_length(st.kk, tt * d)
+    ensure_length(st.vv, tt * d)
+    ensure_length(st.posl, ww * d)
+    ensure_length(st.qu, tt * dh)
+    ensure_length(st.qv, tt * dh)
+    ensure_length(st.kt, dh * tt)
+    ensure_length(st.vh, tt * dh)
+    ensure_length(st.posh, dh * ww)
     // per-job B-row slabs, NOT tt-row matrices — the parakeet twin's slab dispatch (job li
     // owns slab li; 4-aligned row groups keep gemm_f32's FMA order, bit-exact). Jobs never
     // exceed blocks — the twin's short-clip dispatch-overhead lesson.
     let atn_jobs = min(int64(lanes_for_work(tt * dh * (2l * tt + ww), 0)),
         (tt + CN_ATN_BLOCK - 1l) / CN_ATN_BLOCK)
-    cn_ensure(st.sc, atn_jobs * CN_ATN_BLOCK * tt)
-    cn_ensure(st.rl, atn_jobs * CN_ATN_BLOCK * ww)
-    cn_ensure(st.oh, atn_jobs * CN_ATN_BLOCK * dh)
+    ensure_length(st.sc, atn_jobs * CN_ATN_BLOCK * tt)
+    ensure_length(st.rl, atn_jobs * CN_ATN_BLOCK * ww)
+    ensure_length(st.oh, atn_jobs * CN_ATN_BLOCK * dh)
     let scale = 1.0 / sqrt(float(dh))
     let nk = m.conv_kernel
     let kpad = (nk - 1l) / 2l
@@ -1093,7 +1087,7 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     }
 
     // perception.proj: encoder rows (d) -> decoder embedding (proj_dim)
-    cn_ensure(st.out, tt * m.proj_dim)
+    ensure_length(st.out, tt * m.proj_dim)
     cn_mm_rq(m, st.out, m.proj_w, st.x, st.xqi, st.xsi, d, m.proj_dim, tt)
     add_bias_rows(st.out, m.blob, m.proj_b, m.proj_dim, tt)
     return tt

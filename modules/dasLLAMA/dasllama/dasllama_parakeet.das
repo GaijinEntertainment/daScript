@@ -19,6 +19,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8/PlaneI32/PlaneI64 — the borrowed weight planes
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
+require dasllama/dasllama_tower
 require dasllama/dasllama_convert
 require dasllama/dasllama_par
 require dasllama/dasllama_common   // apply_box_profile_runtime for the parakeet-image identity

@@ -47,8 +47,9 @@ of lines its text would occupy re-wrapped at the width the file's other comments
 count those against the cap. das lint STYLE014 enforces the physical line count under
 `daslib/` and wherever `options _comment_hygiene = true`; everywhere else the cap is
 the reviewer's. The cap covers per-symbol and in-body comments; the file header — the
-block before the first declaration, STYLE014's boundary — is governed by the map rule
-below. Over the cap, a comment stands only when its content alone shows why — an
+block before the first SYMBOL declaration, which is STYLE014's boundary — is governed by
+the map rule below. Prologue lines (`options`, `module`, `require`, imports) are not
+declarations; the header sits after them. Over the cap, a comment stands only when its content alone shows why — an
 injectivity argument, a wire-format contract, a miscompile it prevents; the test is
 that a cold reader never asks "why is this comment so long?". Anything else over the
 cap gets interrogated: does the detail belong at the use site, in the file-header map
@@ -67,10 +68,12 @@ header-only: a comment whose lines are one-fact-each, sitting above a list-shape
 declaration, is a map too — capped by the list it describes, not by the prose cap.
 
 **Private symbols don't get public-style docs.** Doc-comment syntax (`//!` and kin) is
-for tooling-visible public API. On a private symbol a docstring restates the name to a
-reader who already has it; if there is a genuine one-line WHY, write a plain comment.
-The bar for any comment on a private symbol: a maintainer reading the symbol alone
-would be surprised without it.
+for tooling-visible public API — a symbol a consumer outside the owning tree can require,
+or one a doc generator reads. A symbol exported only for its sibling tests (a `_`-prefixed
+test-support module beside them) takes the private-symbol bar. On a private symbol
+a docstring restates the name to a reader who already has it; if there is a genuine
+one-line WHY, write a plain comment. The bar for any comment on a private symbol: a
+maintainer reading the symbol alone would be surprised without it.
 
 **The body of a private function caps comments at ONE line** — a `def private`, a C++
 static or anonymous-namespace helper, a non-exported JS function (das: STYLE015, same

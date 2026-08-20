@@ -13,6 +13,7 @@ require daslib/fio
 require daslib/apply
 require daslib/archive
 require dasllama/dasllama_math
+require dasllama/dasllama_tower   // the family-neutral encoder-tower pieces this tower composes
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — plane forms of the blob helpers; re-exported for deleters
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf
@@ -36,113 +37,6 @@ struct MelChunk {
     n_mel : int64
     n_len : int64
     data : array<float>
-}
-
-// erfc rational approximation (Numerical Recipes 6.2), |fractional error| < 1.2e-7 —
-// float-level agreement with ggml's erff. Double internally.
-def private erf_nr(x : double) : double {
-    let z = abs(x)
-    let t = 1.0lf / (1.0lf + 0.5lf * z)
-    let erfc = t * exp(-z * z - 1.26551223lf + t * (1.00002368lf + t * (0.37409196lf + t * (0.09678418lf +
-        t * (-0.18628806lf + t * (0.27886807lf + t * (-1.13520398lf + t * (1.48851587lf +
-        t * (-0.82215223lf + t * 0.17087277lf)))))))))
-    return x >= 0.0lf ? 1.0lf - erfc : erfc - 1.0lf
-}
-
-//! gelu_erf(x) = 0.5·x·(1 + erf(x/√2)) — the EXACT erf form (ggml's ggml_vec_gelu_erf_f32),
-//! not the tanh approximation ``gelu`` uses. Whisper's conv frontend and encoder FFN both
-//! use this flavor. In place over the first ``size`` elements.
-def gelu_erf(var x : float?; size : int64) {
-    let inv_sqrt2 = 0.7071067811865476lf
-    unsafe {
-        for (i in range64(size)) {
-            let v = double(x[i])
-            x[i] = float(0.5lf * v * (1.0lf + erf_nr(v * inv_sqrt2)))
-        }
-    }
-}
-
-def gelu_erf(var x : array<float> | #; size : int64) {
-    if (size <= 0l) return
-    gelu_erf(unsafe(addr(x[0])), size)
-}
-
-//! whisper.cpp's ggml_gelu flavor (GGML_GELU_FP16): tanh approximation evaluated through an
-//! fp16 lookup table — input and output both round-trip through binary16, with ±10 clamps
-//! applied BEFORE the conversion. Bit-exact vs ggml's CPU path. In place over ``size``.
-def gelu_tanh_lut(var x : float?; size : int64) {
-    unsafe {
-        for (i in range64(size)) {
-            let v = x[i]
-            if (v <= -10.0) {
-                x[i] = 0.0
-            } elif (v < 10.0) {  // v >= 10 passes through unchanged
-                let xr = f16_to_f32(f32_to_f16(v))
-                let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))
-                x[i] = f16_to_f32(f32_to_f16(g))
-            }
-        }
-    }
-}
-
-def gelu_tanh_lut(var x : array<float> | #; size : int64) {
-    if (size <= 0l) return
-    gelu_tanh_lut(unsafe(addr(x[0])), size)
-}
-
-// The f16 lookup table for gelu_tanh_lut's middle branch: pure f16-domain (idx = f32_to_f16(v)),
-// bit-exact vs the computed form by construction; replaces a tanh + two f16 round-trips per element.
-// Built once, on first batch call, main thread — before any dispatch captures the pointer.
-var private g_gelu_lut : array<float>
-
-[cold_path]
-def private gelu_lut_ensure() {
-    if (!empty(g_gelu_lut)) {
-        return
-    }
-    g_gelu_lut |> resize(65536)
-    for (h in range(65536)) {
-        let xr = f16_to_f32(uint(h))
-        // every finite pattern gets a value: fp32 inputs just under 10.0 round up to f16's 10.0 pattern, so boundary entries must be built too
-        if ((unsafe(reinterpret<uint>(xr)) & 0x7F800000u) != 0x7F800000u) {   // finite (not inf/nan)
-            let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))
-            g_gelu_lut[h] = f16_to_f32(f32_to_f16(g))
-        }
-    }
-}
-
-//! gelu_tanh_lut over a token-major image (npos rows × d): the middle branch reads the
-//! precomputed f16 table, rows split across lanes. Elementwise ⇒ bit-identical to the
-//! whole-image computed form at any lane count.
-def gelu_tanh_lut_batch(var x : array<float> | #; d, npos : int64) {
-    gelu_lut_ensure()
-    unsafe {
-        var xp = addr(x[0])
-        let lp = addr<float const?>(g_gelu_lut[0])
-        maybe_parallel_for(0, int(npos), lanes_for_work(npos * d * 8l, 0)) $(rb, re) {
-            unsafe {
-                for (i in range64(int64(rb) * d, int64(re) * d)) {
-                    let v = xp[i]
-                    if (v <= -10.0) {
-                        xp[i] = 0.0
-                    } elif (v < 10.0) {   // v >= 10 passes through unchanged
-                        xp[i] = lp[int(f32_to_f16(v))]
-                    }
-                }
-            }
-        }
-    }
-}
-
-//! gelu_erf over a token-major image (npos rows × d), rows split across lanes. Elementwise
-//! ⇒ bit-identical to the whole-image call at any lane count.
-def gelu_erf_batch(var x : array<float> | #; d, npos : int64) {
-    unsafe {
-        var xp = addr(x[0])
-        maybe_parallel_for(0, int(npos), lanes_for_work(npos * d * 16l, 0)) $(rb, re) {
-            gelu_erf(unsafe(xp + int64(rb) * d), int64(re - rb) * d)
-        }
-    }
 }
 
 //! Hann window of length ``n`` (periodic when ``periodic``), float-exact vs mtmd's
@@ -834,143 +728,11 @@ def enc_layer_offsets(t : AudioTower; l : int64) : LayerOffs {
 // 4 square attn mats + 2 ffn mats + 9 d-vectors (ln1 w/b, q/k/v/o bias, ln2 w/b, fc2 bias) + fc1 bias
 def enc_layer_stride(d, ff : int64) : int64 => 4l * d * d + 2l * ff * d + 9l * d + ff
 
-//! LayerNorm row: o = (x − mean)/√(var + eps)·w + b, mean/var double-accumulated over the
-//! row (ggml_norm's exact shape; the decoder only has RMS so this is new). Population var.
-def layernorm(var o : float?; x, w, b : float const?; size : int64; eps : float) {
-    unsafe {
-        var mean = 0.0lf
-        for (i in range64(size)) {
-            mean += double(x[i])
-        }
-        mean /= double(size)
-        var variance = 0.0lf
-        for (i in range64(size)) {
-            let dv = double(x[i]) - mean
-            variance += dv * dv
-        }
-        variance /= double(size)
-        let scale = 1.0 / sqrt(float(variance) + eps)
-        let fmean = float(mean)
-        for (i in range64(size)) {
-            o[i] = (x[i] - fmean) * scale * w[i] + b[i]
-        }
-    }
-}
-
-//! Threaded per-position layernorm over token-major rows (rms_batch's shape, LN math),
-//! weight/bias read from ``blob`` at the given offsets.
-def private layernorm_batch_at(var out : array<float>; src : array<float>; wp, bp : float const?; dim, npos : int64; eps : float) {
-    unsafe {
-        var op = addr(out[0])
-        let ip = addr<float const?>(src[0])
-        maybe_parallel_for(0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (p in range(rb, re)) {
-                    let off = int64(p) * dim
-                    layernorm(op + off, ip + off, wp, bp, dim, eps)
-                }
-            }
-        }
-    }
-}
-
-def layernorm_batch(var out : array<float>; src : array<float>; blob : array<float>; w_off, b_off, dim, npos : int64; eps : float) {
-    unsafe {
-        layernorm_batch_at(out, src, addr<float const?>(blob[w_off]), addr<float const?>(blob[b_off]), dim, npos, eps)
-    }
-}
-
-//! Borrowed-plane form — the weight/bias rows live in a prepared image.
-def layernorm_batch(var out : array<float>; src : array<float>; blob : PlaneF; w_off, b_off, dim, npos : int64; eps : float) {
-    layernorm_batch_at(out, src, plane_at(blob, w_off), plane_at(blob, b_off), dim, npos, eps)
-}
-
 //! Per-row Q8_0 requant of a token-major activation image, through common's thresholded +
 //! profiled form (small rows stay serial; the work lands in the mm_requant bucket).
 //! Feeds matmul_q8q8_batch/group3.
 def asr_requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>) {
     requant_rows_q8(x, n, npos, xqb, xsb)
-}
-
-//! y[p] += blob[b_off .. b_off+d) for every row (projection bias). float4 bulk + scalar
-//! tail, threaded over rows (gemv lane cap — pure streaming) — elementwise adds in the
-//! same per-element order, bit-exact vs the scalar loop at any lane count.
-def add_bias_rows(var y : array<float>; blob : array<float>; b_off, d, npos : int64) {
-    add_bias_rows_at(y, unsafe(addr<float const?>(blob[b_off])), d, npos)
-}
-
-//! Borrowed-plane form — the bias row lives in a prepared image.
-def add_bias_rows(var y : array<float>; blob : PlaneF; b_off, d, npos : int64) {
-    add_bias_rows_at(y, plane_at(blob, b_off), d, npos)
-}
-
-def private add_bias_rows_at(var y : array<float>; bp : float const?; d, npos : int64) {
-    if (npos <= 0l || d <= 0l) return
-    let d4 = d - d % 4l
-    unsafe {
-        var yp = addr(y[0])
-        maybe_parallel_for(0, int(npos), lanes_for_work(npos * d, get_gemv_lane_cap())) $(rb, re) {
-            unsafe {
-                for (p in range64(int64(rb), int64(re))) {
-                    let row = p * d
-                    var i = 0l
-                    while (i < d4) {
-                        *reinterpret<float4?>(yp + row + i) = (*reinterpret<float4 const?>(yp + row + i)) + (*reinterpret<float4 const?>(bp + i))
-                        i += 4l
-                    }
-                    while (i < d) {
-                        yp[row + i] += bp[i]
-                        i++
-                    }
-                }
-            }
-        }
-    }
-}
-
-//! x += r, elementwise (residual). float4 bulk in 4-aligned threaded chunks + scalar tail
-//! (gemv lane cap — pure streaming) — bit-exact vs the scalar loop at any lane count.
-def add_inplace_rows(var x : array<float>; r : array<float>; n : int64) {
-    if (n <= 0l) return
-    let nblk = n / 4l
-    unsafe {
-        var xp = addr(x[0])
-        let rp = addr<float const?>(r[0])
-        maybe_parallel_for(0, int(nblk), lanes_for_work(n, get_gemv_lane_cap())) $(bb, be) {
-            unsafe {
-                for (b in range64(int64(bb), int64(be))) {
-                    let i = b * 4l
-                    *reinterpret<float4?>(xp + i) = (*reinterpret<float4 const?>(xp + i)) + (*reinterpret<float4 const?>(rp + i))
-                }
-            }
-        }
-        for (i in range64(nblk * 4l, n)) {
-            xp[i] += rp[i]
-        }
-    }
-}
-
-//! fp32 matmul against a blob region: Y [npos×d] = W[d×n]·X[npos×n] (threaded matmul_batch,
-//! blob+offset form — no array_view).
-def mm_blob_b(var y : array<float>; blob : array<float>; woff : int64; x : array<float>; n, d, npos : int64) {
-    matmul_batch(y, blob, woff, x, n, d, npos)
-}
-
-//! Borrowed-plane form — the weights live in a prepared image.
-def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : array<float>; n, d, npos : int64) {
-    matmul_batch(y, blob, woff, x, n, d, npos)
-}
-
-//! Both sides borrowed — the activation is itself a baked table.
-def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : PlaneF; n, d, npos : int64) {
-    matmul_batch(y, blob, woff, x, n, d, npos)
-}
-
-//! `mm_blob_b`'s BF16-weight twin — the tower form of `matmul_bf16_batch`, weights borrowed from
-//! a prepared image. Bit-for-bit the fp32 expand at half the weight read, so a tower can hold
-//! its GEMMs in bf16 with no parity move.
-def mm_bf16_b(var y : array<float>; blob : PlaneU16; woff : int64; x : array<float>; n, d, npos : int64) {
-    matmul_bf16_batch(y, blob, woff, x, n, d, npos)
 }
 
 // ===== tower Q8 rail (parakeet's v1 recipe: whole-blob Q8_0 image + per-GEMM-region repack) =====
@@ -1419,8 +1181,6 @@ struct EncoderState {
     @exact_size xsi : array<float>   // per-32-block scales for xqi
 }
 
-let ATTN_ENC_QB = 128l  // query rows per attention score block (15 MB att scratch at T=1500)
-
 def make_encoder_state(t : AudioTower) : EncoderState {
     let tin = AUDIO_CHUNK_FRAMES
     let tt = t.n_ctx
@@ -1459,90 +1219,9 @@ def make_encoder_state(t : AudioTower) : EncoderState {
     return <- s
 }
 
-// Blocked non-causal attention (score=Q·Kᵀ, softmax, out=P·V) flattened over head×row-block units
-// so head-parallel dispatch doesn't waste lanes (6 heads/8 lanes would otherwise idle ~17%).
-// No KV cache, no mask — every position attends to all `tt` positions.
 def private enc_attention(t : AudioTower; var s : EncoderState; tt : int64) {
-    let d = t.d_model
-    let hs = d / t.n_head
-    let scale = 1.0 / sqrt(float(hs))
-    let nqb = int((tt + ATTN_ENC_QB - 1l) / ATTN_ENC_QB)
-    let nu = int(t.n_head) * nqb
-    // que-less-creation guard: the state may have been sized under a smaller slot bound
-    let attNeed = int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt
-    if (long_length(s.att) < attNeed) {   // inline: PERF026 can't see @scratch through reserve_resize
-        s.att |> reserve(attNeed)
-        s.att |> resize(attNeed)
-    }
-    unsafe {
-        let qp = addr<float const?>(s.qq[0])
-        let kp = addr<float const?>(s.kk[0])
-        let vp = addr<float const?>(s.vv[0])
-        var hpp = addr(s.hp[0])
-        var attp = addr(s.att[0])
-        var aop = addr(s.xb2[0])
-        var tp = ref_time_ticks()
-        maybe_parallel_for(0, nu, min(get_dispatch_lanes(), nu)) $(ub, ue) {
-            unsafe {
-                for (u in range(ub, ue)) {
-                    let h = u / nqb
-                    let hoff = int64(h) * hs
-                    // per-head pack region: q [tt×hs], kT [hs×tt], v [tt×hs], oh [tt×hs]
-                    var qh = hpp + int64(h) * 4l * tt * hs
-                    var kt = qh + tt * hs
-                    var vh = kt + tt * hs
-                    let p0 = int64(u % nqb) * ATTN_ENC_QB
-                    let p1 = min(p0 + ATTN_ENC_QB, tt)
-                    for (p in range64(p0, p1)) {
-                        for (j in range64(hs)) {
-                            qh[p * hs + j] = qp[p * d + hoff + j]
-                            kt[j * tt + p] = kp[p * d + hoff + j]
-                            vh[p * hs + j] = vp[p * d + hoff + j]
-                        }
-                    }
-                }
-            }
-        }
-        asr_prof_add("enc.attn.pack", tp)
-        tp = ref_time_ticks()
-        maybe_parallel_for_indexed(0, nu, nu) $(slot, ub, ue) {
-            unsafe {
-                var ah = attp + int64(slot) * ATTN_ENC_QB * tt
-                for (u in range(ub, ue)) {
-                    let h = u / nqb
-                    let hoff = int64(h) * hs
-                    var qh = hpp + int64(h) * 4l * tt * hs
-                    var kt = qh + tt * hs
-                    var vh = kt + tt * hs
-                    var oh = vh + tt * hs
-                    let qb0 = int64(u % nqb) * ATTN_ENC_QB
-                    let qbn = min(ATTN_ENC_QB, tt - qb0)
-                    for (i in range64(qbn * tt)) {
-                        ah[i] = 0.0
-                    }
-                    gemm_f32(ah, qh + qb0 * hs, kt, qbn, hs, tt)
-                    for (r in range64(qbn)) {
-                        var row = ah + r * tt
-                        for (i in range64(tt)) {
-                            row[i] *= scale
-                        }
-                        softmax(row, tt)
-                    }
-                    for (i in range64(qbn * hs)) {
-                        oh[qb0 * hs + i] = 0.0
-                    }
-                    gemm_f32(oh + qb0 * hs, ah, vh, qbn, tt, hs)
-                    // scatter this unit's rows back to token-major xb2
-                    for (p in range64(qb0, qb0 + qbn)) {
-                        for (j in range64(hs)) {
-                            aop[p * d + hoff + j] = oh[p * hs + j]
-                        }
-                    }
-                }
-            }
-        }
-        asr_prof_add("enc.attn.blocks", tp)
-    }
+    let hs = t.d_model / t.n_head
+    attention_bidir(s.xb2, s.qq, s.kk, s.vv, s.hp, s.att, tt, t.d_model, t.n_head, 1.0 / sqrt(float(hs)))
 }
 
 // Stage-diff witness: when set (debug only), audio_encode maxdiffs each stage against
@@ -1581,56 +1260,6 @@ def private diff_stage(name : string; x : array<float>; n : int64) {
         }
     }
     fclose(f)
-}
-
-// ===== ASR stage profiling rail =====
-// set_asr_prof(true) → the ASR encode/decode paths accumulate wall us per stage label;
-// asr_prof_report() prints totals sorted desc and resets. Harness-only, off by default.
-var g_asr_prof_on = false
-var private g_asr_prof : table<string; int64>
-var private g_asr_prof_hits : table<string; int64>
-
-def set_asr_prof(on : bool) {
-    g_asr_prof_on = on
-}
-
-//! Accumulate ``get_time_usec(t0)`` under ``name`` (no-op unless set_asr_prof(true)).
-[cold_path]
-def asr_prof_add(name : string; t0 : int64) {
-    if (!g_asr_prof_on) {
-        return
-    }
-    g_asr_prof[name] += int64(get_time_usec(t0))
-    g_asr_prof_hits[name]++
-}
-
-//! One bucket's accumulated ms (0 when absent) — the store's encode-split reader.
-def asr_prof_ms(name : string) : double {
-    return double(g_asr_prof?[name] ?? 0l) / 1000.0lf
-}
-
-//! Reset the accumulators without printing — per-rep sampling (asr_prof_report also clears).
-def asr_prof_reset() {
-    clear(g_asr_prof)
-    clear(g_asr_prof_hits)
-}
-
-def asr_prof_report() {
-    var rows : array<tuple<name : string; us : int64>>
-    var total = 0l
-    for (k, v in keys(g_asr_prof), values(g_asr_prof)) {
-        rows |> push((name = k, us = v))
-        total += v
-    }
-    rows |> sort() $(a, b) => a.us > b.us
-    for (r in rows) {
-        let hits = g_asr_prof_hits?[r.name] ?? 0l
-        let pct = total > 0l ? double(r.us) * 100.0lf / double(total) : 0.0lf
-        print("PROF\t{r.name}\t{double(r.us) / 1000.0lf}\t{hits}\t{pct}\n")
-    }
-    print("PROF\ttotal\t{double(total) / 1000.0lf}\t\t\n")
-    clear(g_asr_prof)
-    clear(g_asr_prof_hits)
 }
 
 // t.gelu_tanh selects the oracle-exact activation flavor (see gelu_tanh_lut); threaded
@@ -1810,22 +1439,6 @@ def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
     }
     trace_tag(0)   // clear: dispatches after the encoder must not inherit the last stage's color
     diff_stage("after_blocks", s.x, tt * d)
-}
-
-//! Per-row swiglu with ggml's swapped halves: out[r][i] = silu(x[r][half+i]) · x[r][i]
-//! (ultravox_model.py's SwiGLU — silu on the SECOND half, passthrough on the first).
-def swiglu_swapped_rows(var o : array<float>; x : array<float>; half, rows : int64) {
-    for (r in range64(rows)) {
-        for (i in range64(half)) {
-            o[r * half + i] = x[r * 2l * half + half + i]
-        }
-    }
-    silu(o, rows * half)
-    for (r in range64(rows)) {
-        for (i in range64(half)) {
-            o[r * half + i] *= x[r * 2l * half + i]
-        }
-    }
 }
 
 // RMS-norm each d-wide row in place against a weight vector in the blob (ultravox projector

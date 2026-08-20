@@ -10,7 +10,7 @@ require strings
 //
 // This tutorial covers:
 //   - load_image_rgb: any image file to an RGB8 VisionImage
-//   - load_gemma4uv_embedder reads a vision multimodal projector (mmproj) GGUF
+//   - load_vision_embedder reads a vision multimodal projector (mmproj) GGUF
 //   - create_chat(model, embedder) — a conversation that can see
 //   - add_user_image + add_user composing one turn; respond() streams the reply
 //   - Under the hood: encode_image soft tokens, render_turn_image head/tail,
@@ -18,9 +18,11 @@ require strings
 //
 // A vision chat model pairs a normal text decoder with an image encoder: the
 // encoder turns pixels into "soft tokens" — embedding rows the decoder reads
-// inline with text, one row per image patch group. The supported family is
-// gemma-4 dense (decoder GGUF + its vision mmproj GGUF); the chat template
-// frames the image span for you, so the calls below stay family-agnostic.
+// inline with text, one row per image patch group. The supported families are
+// gemma-4 dense (the gemma4uv embedder) and gemma-4 E-series (the gemma4v ViT
+// tower) — each a decoder GGUF + its vision mmproj GGUF; the loader sniffs which,
+// and the chat template frames the image span, so the calls below stay
+// family-agnostic.
 //
 // Prerequisites: a gemma-4 decoder GGUF + its vision mmproj GGUF + an image
 // file (PNG/JPG/BMP — anything stbimage decodes).
@@ -35,7 +37,7 @@ let N_GEN = 96l
 // ──────────────────────────────────────────────────────────────────────────
 //
 // The easy path is four calls. load_image_rgb decodes the file to RGB8.
-// load_gemma4uv_embedder reads the mmproj — the vision half of the model,
+// load_vision_embedder reads the mmproj — the vision half of the model,
 // shipped as its own GGUF. create_chat(model, embedder) moves the embedder
 // into the chat, and add_user_image queues the picture for the next turn:
 // geometry, letterbox and the encoder run right there, so respond() only
@@ -47,7 +49,7 @@ def section_easy(m : Model; decoder_mmproj : string; image_path : string; prompt
         panic("could not decode image '{image_path}'")
     }
     print("image: {img.width}x{img.height}\n")
-    var emb <- load_gemma4uv_embedder(decoder_mmproj)
+    var emb <- load_vision_embedder(decoder_mmproj)
     var chat <- create_chat(m, emb, "", N_GEN)
     add_user_image(chat, img)
     add_user(chat, prompt)
@@ -86,8 +88,8 @@ def section_easy(m : Model; decoder_mmproj : string; image_path : string; prompt
 
 def section_by_hand(m : Model; decoder_mmproj : string; image_path : string; prompt : string) {
     var inscope img <- load_image_rgb(image_path)
-    var emb <- load_gemma4uv_embedder(decoder_mmproj)
-    var scratch = Gemma4uvState()
+    var emb <- load_vision_embedder(decoder_mmproj)
+    var scratch = VisionState()
 
     // the encoder half: pixels to soft tokens
     var img_rows : array<float>

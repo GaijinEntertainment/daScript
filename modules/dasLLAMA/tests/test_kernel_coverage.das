@@ -15,6 +15,7 @@ require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model_ — the census's 
 require dasllama/dasllama_whisper   // the cov_tower whisper row
 require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GELU carrier
 require dasllama/dasllama_gemma4uv  // the cov_tower embedder row
+require dasllama/dasllama_gemma4v   // the cov_tower ViT row
 require dasllama/dasllama_qwen3a    // the cov_tower conv2d carrier
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
 require ?das_metal dasllama/dasllama_metal_asr_dec // set_metal_wdec — the cov_tower mixed chunk's decoder half
@@ -175,9 +176,37 @@ def private census_zoo(t : T?) {
     cov_tower(t)
 }
 
+// the gemma4v row of cov_tower: a 96x96 canvas through the E2B ViT tower on the file's planes
+[unused_argument(t)]   // off-Apple the gated body is empty
+def private cov_tower_gemma4v(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let vpath = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        if (model_available(t, vpath)) {
+            set_gemma4v_q8(false)   // the driver serves the file's planes (the lane policy picks this with the tower on; pinned for the census)
+            var inscope tw <- load_gemma4v_tower(vpath)
+            reset_gemma4v_q8()
+            var st = Gemma4vState()
+            var planes : array<float>
+            planes |> resize(96l * 96l * 3l)
+            for (i in range64(96l * 96l * 3l)) {
+                planes[i] = sin(float(i) * 0.017) * 0.5 + 0.5
+            }
+            var out : array<float>
+            with_job_que() {
+                setup_dasllama_jobque()
+                gemma4v_encode(tw, st, planes, 96l, 96l, out)
+            }
+            delete out
+            delete planes
+            delete st
+        }
+    }
+}
+
 // cov_tower: the tower-driver kernels (LN / f32 mul_mm / the gelu flavors / posadd / the
-// borrowed trio) AND the decoder-side cross-KV kernels go non-zero — a whisper tiny MIXED
-// chunk (f32 enc = the tower LUT flavor, q8 dec = the wdec driver) plus a small gemma4uv canvas
+// borrowed trio / the gemma4v clamp, rope2d, GEGLU-quick) AND the decoder-side cross-KV kernels
+// go non-zero — a whisper tiny MIXED chunk (f32 enc = the tower LUT flavor, q8 dec = the wdec
+// driver) plus a small gemma4uv canvas plus a 96x96 gemma4v canvas (the E2B tower)
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -256,6 +285,7 @@ def private cov_tower(t : T?) {
             delete planes
             delete st
         }
+        cov_tower_gemma4v(t)
     }
 }
 

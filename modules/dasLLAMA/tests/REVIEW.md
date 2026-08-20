@@ -8,8 +8,10 @@ the whole directory.** A change reaches a test when it alters what code does at 
 the test file, a shared helper, or engine code the test exercises; an identifier- or
 comment-only edit reaches none.
 
-**A test file that runs (or skips its model arms) with no model file present is listed in
-`run.das`'s `model-free` suite in the same change it is added.**
+**A test file with at least one cell that RUNS (not skips) with no model file present is listed
+in `run.das`'s `model-free` suite in the same change it is added. A file whose every cell is
+model-gated joins that list too when its cells skip honestly without their models** — the
+per-PR gate then runs them wherever the models are stocked.
 
 **A test file in a `run.das` model suite (every suite but `model-free`) runs only through
 `run.das`; dastest invoked directly on such a file is a defect. A `model-free` file runs
@@ -35,12 +37,14 @@ covers is renamed or re-scoped.
 `../ENVIRONMENT.md` describes.
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
-model gate; a test that silently vanishes on one platform is a defect.
+model gate; a test that silently vanishes on one platform is a defect, and so is a
+zero-assertion pass — a cell whose whole body is platform-gated prints a skip or feint on the
+platforms where that body compiles out.
 
-**A skip gate keys on a device capability, a run-mode knob's value, or a stocked model file (a
-model gate) — never on the existence of a runtime artifact: a file a build or a previous run
-produced (a dump, a mint, a generated binary).** An artifact gate goes permanently false when
-its producer moves.
+**A skip gate keys on a device capability, a run-mode knob's value, or a stocked fixture beside
+the models (a model file, an mmproj, an oracle dump — a model gate) — never on the existence of
+an artifact this repo's build or a previous test run produced (a mint, a generated binary, a
+dump a test wrote).** An artifact gate goes permanently false when its producer moves.
 
 **A test loading a model over 6 GiB runs only under `DASLLAMA_PARITY_FULL=1`** — a final pre-PR
 gate, not the iteration loop. Here the spelling is `model_available` (`_model_tier.das`); a
@@ -51,9 +55,15 @@ test loads first.
 through their family loaders). Image-rail coverage belongs to the image suites alone.
 
 **A signature widening with an unchanged body ships its test — the new receivers are the new
-bit; a platform-fixed predicate's observable is the argv it gates or the mode it selects; a
-moved or edited registration's observable is reachability.** Feed the function and check the
-bytes; "the model still runs" is not that test.
+bit.** Feed the function a new receiver and check the bytes; "the model still runs" is not that
+test.
+
+**A predicate whose value is fixed by the build platform — it cannot differ between two runs on
+one machine — is tested through the argv it gates or the mode it selects**, never through the
+predicate's value.
+
+**A moved or edited registration's test observes reachability** — the registered thing is
+reached through the registry, not called directly.
 
 **A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
 naming the `ggml-vocab-*.gguf` fixture; a corpus case asserts exact reference ids AND lossless

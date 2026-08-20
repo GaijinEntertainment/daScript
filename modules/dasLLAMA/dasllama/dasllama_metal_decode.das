@@ -70,7 +70,7 @@ def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDec
     if (s.uid == 0ul) {
         return MetalDecodeDecline.no_uid
     }
-    let shape = decode_shape_decline(t, DECODE_NEEDS_OK, true, true)
+    let shape = decode_shape_decline(t, DECODE_NEEDS_OK, true, true, true)
     if (shape != MetalDecodeDecline.none) {
         return shape
     }
@@ -147,6 +147,8 @@ struct private StepRes {
     u_kvd : MetalBuffer?
     u_qkvd : MetalBuffer?
     u_hidden : MetalBuffer?
+    u_hidden2 : MetalBuffer?   // the second FFN width's uniform (MatFormer E-series; null = uniform model)
+    hid0 : int64               // layer 0's FFN width — the per-layer uniform pick keys on it
     u_hs : MetalBuffer?
     u_cnt : MetalBuffer?
     u_scale : MetalBuffer?
@@ -298,6 +300,8 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     let qd = n_heads * head_size
     let kv_dim = c.n_kv_heads * head_size
     let hidden = layer_hidden(t, 0l)
+    let hid2 = ffn_second_hidden(t)   // decline guarantees 0 (uniform) or the one other width
+    let hid_mx = max(hidden, hid2)
     let qkvd = qd + 2l * kv_dim
     let hs_sw = c.head_size_swa > 0l ? c.head_size_swa : head_size
     let kvh_sw = c.n_kv_heads_swa > 0l ? c.n_kv_heads_swa : c.n_kv_heads
@@ -311,7 +315,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     let moe = !t.blocks.ffn_is_dense
     let knfe = moe ? c.n_expert_used * c.n_ff_exp : 0l
     let nsh = moe ? c.n_ff_shexp : 0l
-    let h2 = max(2l * hidden, max(2l * knfe, 2l * nsh))   // moe: bh12 holds k gate rows | k up rows (+ the shexp pair)
+    let h2 = max(2l * hid_mx, max(2l * knfe, 2l * nsh))   // moe: bh12 holds k gate rows | k up rows (+ the shexp pair)
     let rot = c.rope_dim > 0l ? c.rope_dim : head_size   // partial-rope tables are rot/2 wide
     var r = StepRes(valid = true, pos = pos, uid = s.uid, nrows = nrows,
         kdt = s.kv_dtype_k, s16 = t.wscale_f16, hetero = hetero, moe = moe,
@@ -342,6 +346,10 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     r.u_qkvd = uniform_u32(uint(qkvd))
     r.k_qkvd = uint(qkvd)
     r.u_hidden = uniform_u32(uint(hidden))
+    r.hid0 = hidden
+    if (hid2 > 0l) {
+        r.u_hidden2 = uniform_u32(uint(hid2))
+    }
     r.u_hs = uniform_u32(uint(head_size))
     r.k_nh = uint(n_heads)
     r.u_cnt = uniform_u32(uint(pos + 1l))
@@ -431,7 +439,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
             r.u_moe_nsh = uniform_u32(uint(nsh))
         }
         if (c.moe_dense_shexp || nsh > 0l) {
-            r.bytes_h12s = uint64(nrows * max(2l * hidden, 2l * nsh) * 4l)
+            r.bytes_h12s = uint64(nrows * max(2l * hid_mx, 2l * nsh) * 4l)
             r.bh12s = pool_acquire(g_pool, g_dev, r.bytes_h12s)
         }
         r.u_moe_gmode = uniform_u32(c.moe_gate == MoeGate.softmax_weight ? 1u : (c.norm_topk_prob ? 0u : 2u))
@@ -548,7 +556,8 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
     let c = t.config
     let dim = c.dim
     let n_heads = c.n_heads
-    let hidden = layer_hidden(t, 0l)
+    let hid_l = layer_hidden(t, l)   // per-layer (MatFormer E-series)
+    let u_hid_l = (r.u_hidden2 == null || hid_l == r.hid0) ? r.u_hidden : r.u_hidden2
     let pos = r.pos
     let cap = r.cap
     let f16v = r.kdt == KVDtype.f16
@@ -894,17 +903,17 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                         // fused shared-branch gate+up + gelu (extends the dense w13sw fusion to the g4 shexp)
                         let bw1 = blob_of(g_dev, t, t.w1_offs[l])
                         enc_gemv_w13sw(enc, bw1.buf, bw1.boff, uint64((t.w3_offs[l] / 32l) * 34l),
-                            r.bxb, r.bh12s, r.u_dim, r.u_hidden, hidden, geglu ? r.u_one32 : r.u_zero32)
+                            r.bxb, r.bh12s, r.u_dim, u_hid_l, hid_l, geglu ? r.u_one32 : r.u_zero32)
                     } else {
-                        enc_site_gemv(enc, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], hidden, dim, r.bxb, r.bh12s, r.u_dim, r.u_hidden)
-                        enc_site_gemv(enc, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], hidden, dim, r.bxb, r.bh12s, r.u_dim, r.u_hidden, uint64(hidden * 4l))
+                        enc_site_gemv(enc, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], hid_l, dim, r.bxb, r.bh12s, r.u_dim, u_hid_l)
+                        enc_site_gemv(enc, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], hid_l, dim, r.bxb, r.bh12s, r.u_dim, u_hid_l, uint64(hid_l * 4l))
                     }
                 }
                 if (g_skip != "ew" && !sh_w13_q8) {
-                    enc_geglu(enc, r.bh12s, 0ul, r.bh12s, uint64(hidden * 4l), r.u_hidden, hidden)
+                    enc_geglu(enc, r.bh12s, 0ul, r.bh12s, uint64(hid_l * 4l), u_hid_l, hid_l)
                 }
                 if (g_skip != "gemv" && g_skip != "moe_sh") {
-                    enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hidden, r.bh12s, r.bxb, r.u_hidden, r.u_dim)
+                    enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hid_l, r.bh12s, r.bxb, u_hid_l, r.u_dim)
                 }
                 if (g_skip != "ew") {
                     var bw_pf1 = upload_region(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim]), uint64(dim * 4l))
@@ -921,21 +930,21 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                     // fused gate+up dot + silu/gelu epilogue — gemma geglu rides the act uniform, no separate ew pass
                     let bw1 = blob_of(g_dev, t, t.w1_offs[l])
                     enc_gemv_w13sw(enc, bw1.buf, bw1.boff, uint64((t.w3_offs[l] / 32l) * 34l),
-                        r.bxb, r.bh12, r.u_dim, r.u_hidden, hidden, geglu ? r.u_one32 : r.u_zero32)
+                        r.bxb, r.bh12, r.u_dim, u_hid_l, hid_l, geglu ? r.u_one32 : r.u_zero32)
                 } else {
-                    enc_site_gemv(enc, t, f1, t.w1_offs[l], hidden, dim, r.bxb, r.bh12, r.u_dim, r.u_hidden)
-                    enc_site_gemv(enc, t, f3, t.w3_offs[l], hidden, dim, r.bxb, r.bh12, r.u_dim, r.u_hidden, uint64(hidden * 4l))
+                    enc_site_gemv(enc, t, f1, t.w1_offs[l], hid_l, dim, r.bxb, r.bh12, r.u_dim, u_hid_l)
+                    enc_site_gemv(enc, t, f3, t.w3_offs[l], hid_l, dim, r.bxb, r.bh12, r.u_dim, u_hid_l, uint64(hid_l * 4l))
                 }
             }
             if (g_skip != "ew" && !w13_q8) {
                 if (geglu) {
-                    enc_geglu(enc, r.bh12, 0ul, r.bh12, uint64(hidden * 4l), r.u_hidden, hidden)
+                    enc_geglu(enc, r.bh12, 0ul, r.bh12, uint64(hid_l * 4l), u_hid_l, hid_l)
                 } else {
-                    enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(hidden * 4l), r.u_hidden, hidden)
+                    enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(hid_l * 4l), u_hid_l, hid_l)
                 }
             }
             if (g_skip != "gemv") {
-                enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hidden, r.bh12, r.bxb, r.u_hidden, r.u_dim)
+                enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hid_l, r.bh12, r.bxb, u_hid_l, r.u_dim)
             }
         }
         if (g_skip != "ew") {
@@ -1789,6 +1798,9 @@ def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — fl
     pool_release(g_upool, r.u_kvd, 4ul)
     pool_release(g_upool, r.u_qkvd, 4ul)
     pool_release(g_upool, r.u_hidden, 4ul)
+    if (r.u_hidden2 != null) {
+        pool_release(g_upool, r.u_hidden2, 4ul)
+    }
     pool_release(g_upool, r.u_hs, 4ul)
     pool_release(g_upool, r.u_cnt, 4ul)
     pool_release(g_upool, r.u_neox, 4ul)

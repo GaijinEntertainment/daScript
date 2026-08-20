@@ -3583,6 +3583,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_gelu_erf = compile_pso(MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, ok)
     g_pso_gelu_lut = compile_pso(MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, ok)
     g_pso_posadd = compile_pso(metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, ok)
+    g_pso_clamp = compile_pso(metal_clamp_msl, metal_clamp_msl_entry, metal_clamp_msl_fastmath, ok)
+    g_pso_rope2d = compile_pso(metal_rope2d_msl, metal_rope2d_msl_entry, metal_rope2d_msl_fastmath, ok)
+    g_pso_geglu_quick = compile_pso(MetalGegluQuick_metal_ew2_msl, MetalGegluQuick_metal_ew2_msl_entry, MetalGegluQuick_metal_ew2_msl_fastmath, ok)
     g_pso_cross_kx = compile_pso(metal_cross_kx_msl, metal_cross_kx_msl_entry, metal_cross_kx_msl_fastmath, ok)
     g_pso_cross_vx = compile_pso(metal_cross_vx_msl, metal_cross_vx_msl_entry, metal_cross_vx_msl_fastmath, ok)
     g_pso_cross_vx_h = compile_pso(metal_cross_vx_h_msl, metal_cross_vx_h_msl_entry, metal_cross_vx_h_msl_fastmath, ok)
@@ -4265,6 +4268,9 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_posadd)
         g_pso_posadd = null
     }
+    release_pso(g_pso_clamp)
+    release_pso(g_pso_rope2d)
+    release_pso(g_pso_geglu_quick)
     release_pso(g_pso_cross_kx)
     release_pso(g_pso_cross_vx)
     release_pso(g_pso_cross_vx_h)
@@ -4723,6 +4729,69 @@ class MetalPosAdd2D {
         let ex = tbl[(p % ncols) * dim + i]
         let ey = tbl[(pos_entries + p / ncols) * dim + i]
         x[gid] = (x[gid] + ex) + ey
+    }
+}
+
+// mtmd's ClippableLinear clamp (gemma4v): dst = clamp(src, lo, hi), the bounds read off the tower's
+// f32 blob at the GEMM's clamp record (imin imax omin omax …; `side` 0 = input pair, 1 = output
+// pair). dst may be src (each thread owns one element); an inactive record holds ±FLT_MAX = identity.
+[metal_dispatch(name = "enc_clamp", pso = "g_pso_clamp", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalClamp {
+    @ssbo @binding = 0 @role = "read" @off = "soff" @span = "total*4" src : array<float>
+    @ssbo @binding = 1 @role = "write" @off = "doff" @span = "total*4" dst : array<float>
+    @ssbo @binding = 2 @role = "weight" @off = "boff" bounds : array<float>   // [imin imax omin omax] at the record
+    @uniform @binding = 3 side : uint
+    @uniform @binding = 4 total : uint
+
+    [metal_kernel(name="metal_clamp_msl")]
+    def metal_clamp {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let lo = bounds[side * 2u]
+        let hi = bounds[side * 2u + 1u]
+        dst[gid] = min(max(src[gid], lo), hi)   // nolint:STYLE019 — the MSL subset has no clamp lowering
+    }
+}
+
+// The gemma4v two-axis NEOX rope over token-major rows [npos x n_head*hs]: each head's first hs/2
+// dims rotate by the row's x table, the second hs/2 by its y table — `tabs` packs the CPU's four
+// tables per row as [cx | sx | cy | sy], `pairs` (= hs/4) wide each; one thread per (row, head, j).
+[metal_dispatch(name = "enc_rope2d", pso = "g_pso_rope2d", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalRope2D {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>     // [npos x d]
+    @ssbo @binding = 1 @role = "read" tabs : array<float>       // [npos x 4q]
+    @uniform @binding = 2 d : uint
+    @uniform @binding = 3 pairs : uint   // rotated pairs per axis, one table row; the head is 4 of them
+    @uniform @binding = 4 total : uint   // npos * n_head * pairs
+
+    [metal_kernel(name="metal_rope2d_msl")]
+    def metal_rope2d {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let hs = 4u * pairs
+        let n_head = d / hs
+        let r = gid / (n_head * pairs)
+        let rem = gid % (n_head * pairs)
+        let h = rem / pairs
+        let j = rem % pairs
+        let base = r * d + h * hs
+        let tb = r * 4u * pairs
+        let cx = tabs[tb + j]
+        let sx = tabs[tb + pairs + j]
+        let cy = tabs[tb + 2u * pairs + j]
+        let sy = tabs[tb + 3u * pairs + j]
+        let x0 = x[base + j]
+        let x1 = x[base + j + pairs]
+        x[base + j] = x0 * cx - x1 * sx
+        x[base + j + pairs] = x0 * sx + x1 * cx
+        let y0 = x[base + 2u * pairs + j]
+        let y1 = x[base + 3u * pairs + j]
+        x[base + 2u * pairs + j] = y0 * cy - y1 * sy
+        x[base + 3u * pairs + j] = y0 * sy + y1 * cy
     }
 }
 
@@ -7251,6 +7320,21 @@ class MetalSwiglu : MetalEw2T {
 class MetalGeglu : MetalEw2T {
     def override combine(a, b : float) : float => (
         0.5 * a * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.7978845608028654 * (a + 0.044715 * a * a * a))))) * b)
+}
+
+// GEGLU-quick (gemma4v): gelu_quick(g)*u with the CPU's ggml-cpu f16-table form — both binary16
+// round-trips run in kernel (RNE), so the residual stream sees the same activation bits as the
+// CPU lane rather than the exact x*sigmoid(1.702x) (form-matched like the tower GELUs).
+[never_inline]   // the single-return-splice protection of msl_gelu_lut_form
+def private msl_gelu_quick_lut_form(a : float) : float {
+    let xr = float(float16(a))
+    let gv = xr * (1.0 / (1.0 + exp(-1.702 * xr)))
+    return float(float16(gv))
+}
+
+[metal_dispatch(name = "enc_geglu_quick", pso = "g_pso_geglu_quick", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGegluQuick : MetalEw2T {
+    def override combine(a, b : float) : float => msl_gelu_quick_lut_form(a) * b
 }
 
 // residual add: x += y, scaled — gemma4 layer_out_scale scales the WHOLE layer output

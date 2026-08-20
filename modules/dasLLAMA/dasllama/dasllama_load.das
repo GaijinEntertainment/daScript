@@ -11,6 +11,7 @@ module dasllama_load shared public
 // breaks the cycle, exactly like the GPU residency rail and the Metal drivers.
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_ple   // ple_check_table — the E-series table go-live tripwire
 require dasllama/dasllama_common
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gguf
@@ -40,6 +41,7 @@ struct private LayoutSizes {
     k6_n : int64
     q40_n : int64
     q51_n : int64
+    pleq8_n : int64   // the dedicated q8 plane holding ONLY the PLE table (fp32/q4 serving)
 }
 
 // The big-weight layout cursors: one element cursor per storage plane. kq_take advances the
@@ -304,6 +306,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         for (l in range64(layers)) { t.dnout_offs |> push(layer_is_recurrent(c, l) ? kq_take(cur, fmt_at(t.dnout_fmt, l), c.ssm_d_inner * dim) : -1l) }
     }
     var mx = 0l
+    var pleq8 = 0l
     if (c.n_expert > 0l) {
         // MoE: routed expert stacks — expert e of layer l is a normal 2D matrix at we*_off + (l*n_expert+e)*(dim*n_ff_exp)
         let ege = dim * c.n_ff_exp   // per-expert element count (same for gate/up and down)
@@ -339,8 +342,13 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
     }
     if (has_ple(c)) {  // gemma-4 E-series PLE big weights: the token table + per-layer Q8 gate/proj
         let ple = c.n_embd_per_layer
-        // gather-only rows, NOT repacked — kq tag keeps native planes (disk order), else q8 linear
-        t.ple_emb_off = kq_take(cur, t.ple_emb_fmt, c.vocab_size * ple * layers)
+        // gather-only rows, NOT repacked — pinned to the DISK-format plane in every serving mode (the mode owns the wo region, never the table)
+        if (t.ple_emb_fmt == KqFmt.q8 && t.quant != QuantMode.q8) {
+            t.ple_emb_off = 0l
+            pleq8 = c.vocab_size * ple * layers
+        } else {
+            t.ple_emb_off = kq_take(cur, t.ple_emb_fmt, c.vocab_size * ple * layers)
+        }
         t.ple_gate_off = cur.wo
         cur.wo += layers * dim * ple
         t.ple_proj_off = cur.wo
@@ -372,7 +380,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         fo += dim
     }
     return LayoutSizes(fblob_n = fo, wblob_n = cur.wo, mx_n = mx, bf16_n = bf16,
-                       k4_n = cur.k4, k5_n = cur.k5, k6_n = cur.k6, q40_n = cur.q40, q51_n = cur.q51)
+                       k4_n = cur.k4, k5_n = cur.k5, k6_n = cur.k6, q40_n = cur.q40, q51_n = cur.q51, pleq8_n = pleq8)
 }
 
 
@@ -873,7 +881,7 @@ def private transcode_kq_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : s
             return "k5 transcode (Q5_K)"
         }
         // Q5_0 source: no exact embedding exists, so dequant and re-encode (lossy)
-        scratch |> resize(int(n))
+        scratch |> grow_resize(n)
         gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
         quantize_k5_plane(scratch, n, kq, ks, eloff)
         return "k5 RE-ENCODE (Q5_0 dequant+quant)"
@@ -900,7 +908,7 @@ def private transcode_q8_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : s
         gguf_transcode_q5_0_to_q8(m, bytes, name, q, s, qoff, soff, n, src_off)
         return "q8 transcode (Q5_0 exact)"
     }
-    scratch |> resize(int(n))
+    scratch |> grow_resize(n)
     gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
     quantize_q8_0_into(scratch, n, q, s, qoff, soff)
     return "q8 REQUANT (dequant+quant)"
@@ -930,7 +938,7 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
             gguf_transcode_q4_0(m, bytes, name, t.q4blob, t.q4scales, woff / 2l, woff / 32l, n, src_off)
             kind = "q4_0 transcode (Q4_0 verbatim)"
         } else {
-            scratch |> resize(n)
+            scratch |> grow_resize(n)
             gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
             quantize_q4_0_into(scratch, n, t.q4blob, t.q4scales, woff / 2l, woff / 32l)
             kind = "q4_0 REQUANT (dequant+quant)"
@@ -1736,18 +1744,6 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             t.config.rope_mscale *= 1.0 + 0.1 * log(1.0 / fscale)
         }
-        // q4_0 serving has no per-layer-embedding rail: the PLE table reserves on the q8 cursor
-        // but its bytes route to q4blob, so the gather reads an empty qblob (E-series dies token
-        // 1). Not adding a PLE q4 rail — strict loads panic here, resilient (server) fall back to q8.
-        if (mode == QuantMode.q4_0 && has_ple(t.config)) {
-            if (get_resilient_load()) {
-                to_log(LOG_WARNING, "dasLLAMA: q4 serving mode has no per-layer-embedding rail - this model falls back to q8\n")
-                mode = QuantMode.q8
-                t.quant = QuantMode.q8
-            } else {
-                panic("dasLLAMA: q4 serving mode has no per-layer-embedding rail - serve this model with quant q8")
-            }
-        }
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
         // tied Q8 loads of a Q8_0 embedding matmul the classifier on the DISK quants (llama.cpp's
@@ -1770,6 +1766,12 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // per-tensor K-quant format tags (kquant_native rail; no-op when the knob is off or the
         // file has no K-quant tensors) — must precede layout_offsets, which walks the tags
         detect_kq_formats(t, m)
+        // fp32/q4 serving: the PLE token table is STILL pinned to its disk format
+        // (detect_kq_formats runs only on the q8 rail); same superblock-alignment gate
+        if (t.quant != QuantMode.q8 && has_ple(t.config)
+                && (t.config.n_layers * t.config.n_embd_per_layer) % 256l == 0l) {
+            t.ple_emb_fmt = kq_fmt_of(gguf_tensor_type(m, "per_layer_token_embd.weight"))
+        }
         // logit soft-caps from metadata when present (gemma2: 50/30, gemma4: final 30 only);
         // configure()'s values stay as the fallback for files without the keys
         if (gguf_has(m, "{arch}.attn_logit_softcapping")) {
@@ -1912,6 +1914,12 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             t.q4scales |> resize(sz.wblob_n / 32l)
         } else {
             reserve_resize(t.wblob, sz.wblob_n)
+        }
+        if (sz.pleq8_n > 0l) {   // fp32/q4: the dedicated q8 plane holding ONLY the PLE table
+            t.qblob |> reserve(sz.pleq8_n)
+            t.qblob |> resize(sz.pleq8_n)
+            t.qscales |> reserve(sz.pleq8_n / 32l)
+            t.qscales |> resize(sz.pleq8_n / 32l)
         }
         // embedding + norms -> fblob (decoded to fp32 from whatever the disk type is); cls_q8 /
         // cls_kq keep the embedding out of fblob — the quantized copies transcode with the big
@@ -2133,7 +2141,20 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             // head's prefix (shape-vetted at config parse) — deliberately never loaded
         }
         if (has_ple(t.config)) {  // the per-layer token-embedding table [vocab x (ple*layers)], gathered per token, never repacked
-            load_big(m, bytes, "per_layer_token_embd.weight", t, t.ple_emb_off, vocab * t.config.n_embd_per_layer * layers, scratch, 0l, t.ple_emb_fmt)
+            let pn = vocab * t.config.n_embd_per_layer * layers
+            if (t.ple_emb_fmt == KqFmt.q8 && t.quant != QuantMode.q8) {
+                // fp32/q4: the table stays on its q8 plane. Exact only from Q8_0/Q5_0 disk bits,
+                // and fp32 is the exactness instrument, so a lossy requant there fails closed.
+                let gt = gguf_tensor_type(m, "per_layer_token_embd.weight")
+                if (t.quant != QuantMode.q4_0 && gt != GGML_TYPE_Q8_0 && gt != GGML_TYPE_Q5_0) {
+                    panic("dasLLAMA: fp32 serving keeps the PLE table on its disk plane, and this file's table type ({gt}) has no exact q8 form - serve q8/q4, or use a Q8_0/K-quant-table file")
+                }
+                let t0 = g_conv_prof ? ref_time_ticks() : 0l
+                let kind = transcode_q8_tensor(m, bytes, "per_layer_token_embd.weight", t.qblob, t.qscales, t.ple_emb_off, t.ple_emb_off / 32l, pn, 0l, scratch)
+                conv_note(kind, t0, pn)
+            } else {
+                load_big(m, bytes, "per_layer_token_embd.weight", t, t.ple_emb_off, pn, scratch, 0l, t.ple_emb_fmt)
+            }
         }
         if (!t.config.shared_weights) {
             load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.wcls_fmt)
@@ -2219,6 +2240,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         to_log(LOG_INFO, "dasLLAMA: load stage wscale: {get_time_usec(ts_stage) / 1000} ms, total {get_time_usec(ts_load) / 1000} ms\n")
         log_load_report(t)
         if (!g_fill_plan_mode) {   // streaming converts only — no serving, no gathers over unmade planes
+            ple_check_table(t, "gguf load")
             gpu_upload_resident(t)
         }
     }
@@ -2228,6 +2250,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
 //! Requires the fp32 representation (wblob) — i.e. a model loaded with QuantMode.fp32. Keeps wblob
 //! so the same model can be re-quantized to another precision for an A/B comparison.
 def quantize_weights(var t : Model) {
+    if (has_ple(t.config)) {   // the PLE table rides its disk plane, which this requant would clobber
+        panic("dasLLAMA: quantize_weights cannot requant an E-series (PLE) model in place - load with the target quant mode instead")
+    }
     let n = long_length(t.wblob)
     var qt <- quantize_q8_0(t.wblob, n)
     t.qblob <- qt.q
@@ -2246,6 +2271,9 @@ def quantize_weights(var t : Model) {
 //! Quantize a fp32-loaded model's big weights to Q4_0 in place and switch forward onto the Q4 path.
 //! Same fp32-required / wblob-kept contract as quantize_weights.
 def quantize_weights_q4(var t : Model) {
+    if (has_ple(t.config)) {   // same clobber as quantize_weights — the table plane is not wblob's to replace
+        panic("dasLLAMA: quantize_weights_q4 cannot requant an E-series (PLE) model in place - load with the target quant mode instead")
+    }
     let n = long_length(t.wblob)
     var qt <- quantize_q4_0(t.wblob, n)
     t.q4blob <- qt.q

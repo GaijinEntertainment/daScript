@@ -8,92 +8,15 @@ require dasllama/dasllama_gemma4uv
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
-require daslib/strings_boost
-require strings
-require math
 require _model_tier   // models_dir() + model_available() gate
+require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gate pins the knob off
 
-// Tier-1 gemma4uv embedder parity vs llama-mtmd-debug -p encode (CPU, --no-mmproj-offload):
-// pre-resized [0,1] float fixtures skip preprocessing entirely, so a diff here isolates the
-// embedder math. Oracle per-token lines live beside the models in gemma4-vision-oracle/
+// Tier-1 gemma4uv embedder parity vs llama-mtmd-debug -p encode (CPU, --no-mmproj-offload, dumps
+// minted from the f32-widened 12B mmproj twin; the embedder has no attention, so the flash-attn
+// setting does not enter): pre-resized [0,1] float fixtures skip preprocessing entirely, so a diff
+// here isolates the embedder math. Oracle per-token lines live beside the models in gemma4-vision-oracle/
 // (mint.sh regenerates); both the mmproj and the dumps gate this test with explicit skips.
-
-struct OracleEncode {
-    npos : int
-    means : array<float>
-    v0 : array<float>; v1 : array<float>; v2 : array<float>; v3 : array<float>
-}
-
-def private parse_field(part : string) : float {
-    let eq = find(part, "=")
-    return eq < 0 ? 0.0 : to_float(slice(part, eq + 1))
-}
-
-def private load_oracle_encode(path : string; var o : OracleEncode) : bool {
-    let text = fread(path)
-    if (empty(text)) {
-        return false
-    }
-    for (line in split(text, "\n")) {
-        let sh = find(line, "Shape: [")
-        if (sh >= 0) {
-            let inner = slice(line, sh + length("Shape: ["))
-            let comma = find(inner, ",")
-            o.npos = to_int(strip(slice(inner, comma + 1, find(inner, "]"))))
-            continue
-        }
-        let tk = find(line, " tok ")
-        if (tk < 0 || find(line, "mean=") < 0) {
-            continue
-        }
-        for (part in split(slice(line, tk + 1), " ")) {
-            if (part |> starts_with("mean=")) {
-                o.means |> push(parse_field(part))
-            } elif (part |> starts_with("v0=")) {
-                o.v0 |> push(parse_field(part))
-            } elif (part |> starts_with("v1=")) {
-                o.v1 |> push(parse_field(part))
-            } elif (part |> starts_with("v2=")) {
-                o.v2 |> push(parse_field(part))
-            } elif (part |> starts_with("v3=")) {
-                o.v3 |> push(parse_field(part))
-            }
-        }
-    }
-    return o.npos > 0 && length(o.means) == o.npos
-}
-
-// the -p encode fixture generators, float-for-float from mtmd-debug.cpp (interleaved RGB rows)
-def private make_planes(kind : string; w, h : int) : array<float> {
-    var planes : array<float>
-    planes |> resize(w * h * 3)
-    if (kind == "gray") {
-        for (v in planes) {
-            v = 0.5
-        }
-    } elif (kind == "cb") {
-        for (y in range(h)) {
-            for (x in range(w)) {
-                let v = ((x + y) % 2) != 0 ? 0.0 : 1.0
-                let p = (y * w + x) * 3
-                planes[p] = v
-                planes[p + 1] = v
-                planes[p + 2] = v
-            }
-        }
-    } elif (kind == "red" || kind == "green" || kind == "blue") {
-        let c = kind == "red" ? 0 : (kind == "green" ? 1 : 2)
-        for (y in range(h)) {
-            for (x in range(w)) {
-                planes[(y * w + x) * 3 + c] = 1.0
-            }
-        }
-    }
-    // no rainbow arm: its generator runs atan2f, which is not float-portable across libms -
-    // tier-1 fixtures must have exact-value generators (see mint.sh)
-    return <- planes
-}
 
 // the tier-1 gate: encode a fixture, compare per-token mean/v0..v3 against the oracle dump.
 // %.6f print rounding is ±5e-7 and the measured accumulation-order noise is ~2e-5 (logged per
@@ -119,43 +42,12 @@ def private gate_encode(t : T?; emb : Gemma4uvEmbedder; var st : Gemma4uvState;
     if (int(npos) != o.npos) {
         return false
     }
-    var maxdiff = 0.0
-    var max_tok = -1
-    var max_excess = 0.0   // gpu ladder: worst diff past its per-token scale-relative bound
     let d = int(emb.proj_dim)
-    for (p in range(o.npos)) {
-        var mean = 0.0
-        var sq = 0.0
-        for (i in range(d)) {
-            mean += out[p * d + i]
-            sq += out[p * d + i] * out[p * d + i]
-        }
-        mean /= float(d)
-        let bound = TIER1_TOL + (gpu_ladder ? 4e-3 * sqrt(sq / float(d)) : 0.0)
-        for (diff in [abs(mean - o.means[p]), abs(out[p * d + 0] - o.v0[p]), abs(out[p * d + 1] - o.v1[p]),
-                      abs(out[p * d + 2] - o.v2[p]), abs(out[p * d + 3] - o.v3[p])]) {
-            if (diff > maxdiff) {
-                maxdiff = diff
-                max_tok = p
-            }
-            if (diff - bound > max_excess) {
-                max_excess = diff - bound
-            }
-        }
-    }
     if (gpu_ladder) {
-        let rung = (maxdiff <= TIER1_TOL ? "held the strict CPU 2e-4"
-            : (max_excess <= 0.0 ? "held the scale-relative rung" : "EXCEEDED the scale-relative rung"))
-        to_log(LOG_INFO, "gemma4uv tier-1 GPU {kind} {w}x{h}: {o.npos} tokens, maxdiff {maxdiff} at tok {max_tok} - {rung}\n")
-        if (max_excess > 0.0) {
-            t |> failure("{kind} {w}x{h} GPU: worst diff exceeds TIER1_TOL + 4e-3*rms by {max_excess} (maxdiff {maxdiff} at tok {max_tok})")
-        }
+        compare_encode(t, "gemma4uv tier-1 GPU {kind} {w}x{h}", out, d, o, TIER1_TOL, 4e-3)
         return true
     }
-    to_log(LOG_INFO, "gemma4uv tier-1 {kind} {w}x{h}: {o.npos} tokens, maxdiff {maxdiff} at tok {max_tok}\n")
-    if (maxdiff > TIER1_TOL) {
-        t |> failure("{kind} {w}x{h}: maxdiff {maxdiff} at tok {max_tok} exceeds {TIER1_TOL} - got ({out[max_tok * d]}, {out[max_tok * d + 1]}, ...) want ({o.v0[max_tok]}, {o.v1[max_tok]}, ...)")
-    }
+    compare_encode(t, "gemma4uv tier-1 {kind} {w}x{h}", out, d, o, TIER1_TOL, 0.0)
     return true
 }
 

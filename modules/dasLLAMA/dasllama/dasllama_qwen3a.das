@@ -18,6 +18,7 @@ require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — th
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
+require dasllama/dasllama_tower
 require dasllama/dasllama_convert   // quantize_q8_0_into — the cblob q8 image
 require dasllama/dasllama_common   // apply_box_profile_runtime for the qwen3a-image identity
 require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the qwen3 decoder

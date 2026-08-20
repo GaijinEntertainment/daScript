@@ -145,11 +145,14 @@ instrument only: its rows stamp `debug-jit` and never reach a board or a doc.
   the timed text and the row prices a reply the product would never have shown.
 - `workload = "image-chat"` on the record, beside `asr` and `audio-chat`. The picture is pinned by
   content hash in `files`, like the weights and the mmproj.
-- Two backends, one flag: without `--ngl` the cell runs all-CPU by intent
-  (`allow_cpu_prefill()`, `backend = "cpu"`); with `--ngl` it loads the metal-blob flavor and
-  the whole turn — head, span (`AttnArgs.uend`), tail, decode — serves on Metal
-  (`backend = "metal"`), with the tripwire ARMED so a CPU fallback reds the row instead of
-  sandbagging it. The Vulkan span is still declined (`followup_general.md` #23's other half).
+- Three arms, two flags: without `--ngl` the cell runs all-CPU by intent
+  (`allow_cpu_prefill()`, the tower driver pinned off and announced, `backend = "cpu"`); with
+  `--accel` it is the CPU row with the accelerate float-batch tier armed (`flavor = "accel"`;
+  a gemma4v tower then serves the file's planes through it instead of its q8 lane; refused
+  with `--ngl`); with `--ngl` it loads the metal-blob flavor and the whole turn — head, span
+  (`AttnArgs.uend`), tail, decode — serves on Metal (`backend = "metal"`), with the tripwire
+  ARMED so a CPU fallback reds the row instead of sandbagging it. The Vulkan span is still
+  declined (`followup_general.md` #23's other half).
 - The embedder ALONE is a kernel question, not a board row: price it in the kernel A/B lab, not here.
 
 ---

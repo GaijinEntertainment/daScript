@@ -13,6 +13,8 @@ require dasllama/dasllama_plane   // PlaneF — the served side of the round-tri
 require dasllama/dasllama_canary  // CanaryStaging/stage_canary_encoder — the off-rail truth read
 require dasllama/dasllama_gemma4a // Gemma4aStaging/stage_gemma4a_encoder — same, for the gemma4a arm
 require dasllama/dasllama_gemma4uv // Gemma4uvStaging/stage_gemma4uv_embedder — same, for the vision arm
+require dasllama/dasllama_gemma4v // Gemma4vStaging/stage_gemma4v_tower — the gemma4v (E-series ViT) arm
+require dasllama/dasllama_vision_embedder // the carrier's .dlim route
 require dasllama/dasllama_parakeet // ParakeetStaging/stage_parakeet_model — same, for the parakeet arm
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
@@ -622,6 +624,60 @@ def test_metal_flavor_image(tst : T?) {
             delete prompt
             clear_kernel_backend_pin()
             select_kernel_backend(prior_backend)
+        }
+    }
+}
+
+[test]
+def test_gemma4e_flavor_image(tst : T?) {
+    tst |> run("E2B q8: the metal-flavor image serves the PLE table (mint + map, the go-live tripwire seam)") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "gemma4e") || !arm_on(t, "gemma4e")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            if (!has_decode_override("metal")) {
+                t |> skip("metal overrides not registered")
+                return
+            }
+            let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            // cold metal mint: the freshly baked blob image must clear the PLE go-live tripwire
+            // (ple_check_table once ran BEFORE the plane borrows and false-panicked on every
+            // fresh mint) and then serve — a blob model cannot silently CPU-serve
+            let prior_backend = active_kernel_backend()
+            pin_kernel_backend("portable")   // BEFORE image_path_for — the identity carries the pin
+            set_metal_mode(MetalMode.when_available)
+            let img_m = image_path_for(path, METAL_IMAGE_TAG)
+            remove(img_m)
+            var tm <- load_model(path, QuantMode.q8)
+            tm.config.seq_len = min(tm.config.seq_len, 512l)
+            t |> success(tm.metal_blob, "metal-mode load is blob-form")
+            t |> success(stat(img_m).is_valid, "cold metal load saved the metal-flavor image")
+            var prompt <- counting_ids(tm)
+            var g_mint <- gen_ids(tm, prompt, 8)
+            t |> success(length(g_mint) > length(prompt), "mint-backed blob model serves a continuation")
+            delete tm
+            // warm map: the tripwire's after-borrows seam again, now off the mapped planes
+            var tw <- load_model(path, QuantMode.q8)
+            tw.config.seq_len = min(tw.config.seq_len, 512l)
+            t |> success(tw.image_map != null && tw.metal_blob, "warm metal load maps the blob image")
+            var g_map <- gen_ids(tw, prompt, 8)
+            log_gen_texts(tw, "E2B mint-vs-mapped", g_mint, g_map)
+            t |> success(count_mismatch(g_mint, g_map) == 0l,
+                "mapped-image tokens match the mint's ({count_mismatch(g_mint, g_map)} differ)")
+            delete tw
+            set_metal_mode(MetalMode.off)
+            delete g_mint
+            delete g_map
+            delete prompt
+            clear_kernel_backend_pin()
+            select_kernel_backend(prior_backend)
+        } else {
+            feint("das_metal is not built on this platform - the metal-flavor image is Apple-only\n")
         }
     }
 }
@@ -1302,6 +1358,69 @@ def test_gemma4uv_embedder_image_roundtrip(t : T?) {
             t |> equal(count_mismatch(a32.blob, c32.blob), 0l, "f32 blob element-exact")
             t |> success(img32 != img, "a different source keys a different image")
         }
+    }
+}
+
+[test]
+def test_gemma4v_tower_image_roundtrip(t : T?) {
+    t |> run("gemma4v tower: mapped image planes are element-exact vs mmproj, bf16 lane") @(t : T?) {
+        if (!family_on(t, "gemma") || !arm_on(t, "gemma4v")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        let img = image_path_for(path, "gemma4v")
+        remove(img)
+        set_gemma4v_q8(false)   // the exact-plane lane first; the q8 serving lane is the second half
+        var inscope a <- stage_gemma4v_tower(path)
+        var inscope cold <- load_gemma4v_tower(path)
+        t |> success(cold.image_map != null, "cold load serves the image it built")
+        t |> success(stat(img).is_valid, "cold load saved an image")
+        t |> success(!cold.patch_bf16 && cold.blk_bf16 && cold.proj_bf16, "plane split follows the file: f32 conv, bf16 GEMMs")
+        t |> equal(count_mismatch(a.blob, cold.blob), 0l, "cold-built blob element-exact")
+        var inscope b <- load_gemma4v_tower(path)
+        t |> success(b.image_map != null, "warm load is image-backed")
+        t |> equal(b.n_embd, a.t.n_embd)
+        t |> equal(b.n_layer, a.t.n_layer)
+        t |> equal(b.proj_dim, a.t.proj_dim)
+        t |> equal(b.pos_entries, a.t.pos_entries)
+        t |> equal(b.layer_f, a.t.layer_f)
+        t |> equal(b.layer_f_stride, a.t.layer_f_stride)
+        t |> equal(b.layer_w, a.t.layer_w)
+        t |> equal(b.layer_w_stride, a.t.layer_w_stride)
+        t |> equal(b.proj_clamp, a.t.proj_clamp)
+        t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob (f32: conv, pos tables, norms, clamp table) element-exact")
+        t |> equal(count_mismatch_u16(a.wblob, b.wblob), 0l, "wblob (the bf16 GEMMs) element-exact")
+        t |> equal(long_length(a.wblob), a.t.n_layer * a.t.layer_w_stride + a.t.n_embd * a.t.proj_dim,
+                   "the bf16 plane is exactly the GEMM set ({length(a.wblob)} halfwords)")
+        set_gemma4v_q8(true)
+        let imgq = image_path_for(path, "gemma4v-q8")
+        remove(imgq)
+        var inscope aq <- stage_gemma4v_tower(path)
+        var inscope cq <- load_gemma4v_tower(path)
+        t |> success(cq.q8 && cq.image_map != null && stat(imgq).is_valid, "q8 lane: cold load built and serves its own image")
+        t |> success(imgq != img, "the q8 lane keys a different image")
+        t |> equal(count_mismatch(aq.blob, cq.blob), 0l, "q8 lane: blob element-exact")
+        t |> equal(count_mismatch_u16(aq.wblob, cq.wblob), 0l, "q8 lane: wblob (the projection) element-exact")
+        t |> equal(count_mismatch_i8(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
+        t |> equal(count_mismatch(aq.qscales, cq.qscales), 0l, "q8 lane: qscales element-exact")
+        t |> equal(long_length(aq.qblob), aq.t.n_layer * aq.t.layer_w_stride, "qblob is exactly the block GEMM set")
+        t |> equal(long_length(aq.wblob), aq.t.n_embd * aq.t.proj_dim, "q8 lane: the bf16 plane is exactly the projection")
+        reset_gemma4v_q8()
+        // a .dlim named directly loads on its BAKED lane, whatever the pin, and the carrier sniffs it
+        set_gemma4v_q8(false)
+        var inscope dq <- load_gemma4v_tower(imgq)
+        t |> success(dq.q8 && dq.image_map != null, "the q8 .dlim serves its q8 lane under an exact pin")
+        reset_gemma4v_q8()
+        var inscope dcarrier <- load_vision_embedder(imgq)
+        t |> equal(vision_family(dcarrier), "gemma4v", "the carrier routes the q8-tagged .dlim to gemma4v")
+        t |> equal(vision_exec_fmt(dcarrier), "q8", "...and stamps its lane")
+        var inscope dx <- load_gemma4v_tower(img)
+        t |> success(!dx.q8, "the exact-plane .dlim serves its lane")
     }
 }
 

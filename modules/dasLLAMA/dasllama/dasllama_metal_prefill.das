@@ -1980,7 +1980,9 @@ def private pf_mm_shape64(t : Model) : bool {
     let c = t.config
     let hs_sw = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
     let kvh_sw = c.n_kv_heads_swa > 0l ? c.n_kv_heads_swa : c.n_kv_heads
+    let h1 = ffn_second_hidden(t)
     return ((c.dim % 64l) == 0l && (layer_hidden(t, 0l) % 64l) == 0l &&
+        h1 >= 0l && (h1 % 64l) == 0l &&
         ((c.n_heads * c.head_size) % 64l) == 0l && ((c.n_kv_heads * c.head_size) % 64l) == 0l &&
         ((c.n_heads * hs_sw) % 64l) == 0l && ((kvh_sw * hs_sw) % 64l) == 0l)
 }
@@ -2050,16 +2052,21 @@ def private prefill_decline_caps(t : Model; npos : int64; span : bool = false) :
     }
     let c = t.config
     let hidden = layer_hidden(t, 0l)
-    if ((c.dim % 32l) != 0l || (hidden % 32l) != 0l) {
+    // MatFormer E-series: at most TWO per-layer FFN widths serve, dense trunks, no MTP
+    let h1 = ffn_second_hidden(t)
+    if (h1 != 0l && (h1 < 0l || !t.blocks.ffn_is_dense || c.n_layer_nextn > 0l)) {
+        return MetalPrefillDecline.layers
+    }
+    if ((c.dim % 32l) != 0l || (hidden % 32l) != 0l || (h1 > 0l && (h1 % 32l) != 0l)) {
         return MetalPrefillDecline.shape
     }
-    // per-CLASS: head_size/kv_dim % 32 grid the AV kernel (QK k-slabs any size); hetero geometry and missing attn_v serve, hidden stays pinned
+    // per-CLASS: head_size/kv_dim % 32 grid the AV kernel (QK k-slabs any size); hetero geometry and missing attn_v serve
     for (l in range64(c.n_layers)) {
         if ((layer_head_size(c, l) % 32l) != 0l || (layer_kv_dim(c, l) % 32l) != 0l) {
             return MetalPrefillDecline.shape
         }
         // E-series shared-KV layers (Q-only) serve when the source is byte-compatible — the panel aliases it
-        if ((t.kv_src[l] != l && !kv_share_ok(t, l)) || layer_hidden(t, l) != hidden) {
+        if (t.kv_src[l] != l && !kv_share_ok(t, l)) {
             return MetalPrefillDecline.layers
         }
     }
@@ -2313,6 +2320,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let qd = n_heads * head_size
     let kv_dim = c.n_kv_heads * head_size
     let hidden = layer_hidden(t, 0l)
+    let hid2 = ffn_second_hidden(t)   // decline guarantees 0 (uniform) or the one other width
+    let hid_mx = max(hidden, hid2)
     let kv_mul = uint(n_heads / c.n_kv_heads)
     let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
     let half = (c.rope_dim > 0l ? c.rope_dim : head_size) / 2l   // partial rope: table rows are rope_dim/2 wide
@@ -2359,7 +2368,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let bytes_xb = uint64(mp * max(dim, qd_mx) * 4l)   // dim-wide norm outs AND the qd-wide AV out
     let bytes_q = uint64(mp * qd_mx * 4l)
     let nsh = !t.blocks.ffn_is_dense ? c.n_ff_shexp : 0l   // shared expert (qwen35moe) rides bhb/bhb2
-    let bytes_h = uint64(mp * max(hidden, nsh) * 4l)
+    let bytes_h = uint64(mp * max(hid_mx, nsh) * 4l)
     let bytes_att = uint64(n_heads * mp * nk64 * 4l)   // per-head score slabs: mp queries x nk64 keys
     let bytes_tab = uint64(npos * half * 4l)
     let bytes_tab_sw = uint64(npos * half_sw * 4l)   // the swa pair's row width is ITS class's hs/2
@@ -2524,6 +2533,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_qd = uniform_u32(uint(qd))
     var u_kvd = uniform_u32(uint(kv_dim))
     var u_hidden = uniform_u32(uint(hidden))
+    var u_hidden2 = hid2 > 0l ? uniform_u32(uint(hid2)) : null
     var u_hs = uniform_u32(uint(head_size))
     var u_npairs_q = uniform_u32(uint(npos * qd / 2l))
     var u_npairs_k = uniform_u32(uint(npos * kv_dim / 2l))
@@ -2535,6 +2545,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let vfromk = c.v_from_k_mask != 0ul
     var u_total_dim = uniform_u32(uint(npos * dim))
     var u_total_h = uniform_u32(uint(npos * hidden))
+    var u_total_h2 = hid2 > 0l ? uniform_u32(uint(npos * hid2)) : null
     var u_moe_ne = moe ? uniform_u32(uint(c.n_expert)) : null
     var u_moe_nk = moe ? uniform_u32(uint(c.n_expert_used)) : null
     var u_moe_np = moe ? uniform_u32(uint(npos)) : null
@@ -3046,43 +3057,46 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         pf_enc_rms(enc, bmg4rt, 0ul, bw_pf2, bmg4rt, u_dim, u_eps, npos)
                     }
                 }
+                let hid_l = layer_hidden(t, l)   // per-layer (MatFormer E-series)
+                let u_hid_l = (u_hidden2 == null || hid_l == hidden) ? u_hidden : u_hidden2
+                let u_th_l = (u_total_h2 == null || hid_l == hidden) ? u_total_h : u_total_h2
                 if ((!moe || g4moe) && g_pf_skip != "gemm") {   // g4: the dense parallel shared branch
                     let f1 = fmt_at(t.w1_fmt, l)
                     let f3 = fmt_at(t.w3_fmt, l)
                     if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {
                         if (f1 != KqFmt.q8) {
-                            pf_enc_kq_site_mm(enc, t, f1, t.w1_offs[l], hidden, bxb, bhb, u_dim, u_hidden, mp)
+                            pf_enc_kq_site_mm(enc, t, f1, t.w1_offs[l], hid_l, bxb, bhb, u_dim, u_hid_l, mp)
                         } else {
                             let bw1b = blob_of(g_dev, t, t.w1_offs[l])
-                            enc_gemm_mm(enc, bw1b.buf, bw1b.boff, bxb, bhb, u_dim, u_hidden, mp, hidden)
+                            enc_gemm_mm(enc, bw1b.buf, bw1b.boff, bxb, bhb, u_dim, u_hid_l, mp, hid_l)
                         }
                         if (f3 != KqFmt.q8) {
-                            pf_enc_kq_site_mm(enc, t, f3, t.w3_offs[l], hidden, bxb, bhb2, u_dim, u_hidden, mp)
+                            pf_enc_kq_site_mm(enc, t, f3, t.w3_offs[l], hid_l, bxb, bhb2, u_dim, u_hid_l, mp)
                         } else {
                             let bw3b = blob_of(g_dev, t, t.w3_offs[l])
-                            enc_gemm_mm(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hidden, mp, hidden)
+                            enc_gemm_mm(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hid_l, mp, hid_l)
                         }
                     } else {
                         let bw1b = blob_of(g_dev, t, t.w1_offs[l])
                         let bw3b = blob_of(g_dev, t, t.w3_offs[l])
-                        enc_gemm_mm(enc, bw1b.buf, bw1b.boff, bxb, bhb, u_dim, u_hidden, mp, hidden)
-                        enc_gemm_mm(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hidden, mp, hidden)
+                        enc_gemm_mm(enc, bw1b.buf, bw1b.boff, bxb, bhb, u_dim, u_hid_l, mp, hid_l)
+                        enc_gemm_mm(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hid_l, mp, hid_l)
                     }
                 }
                 if ((!moe || g4moe) && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     if (c.ffn_act != FfnAct.silu) {
-                        enc_geglu(enc, bhb, 0ul, bhb2, 0ul, u_total_h, npos * hidden)
+                        enc_geglu(enc, bhb, 0ul, bhb2, 0ul, u_th_l, npos * hid_l)
                     } else {
-                        enc_swiglu(enc, bhb, 0ul, bhb2, 0ul, u_total_h, npos * hidden)
+                        enc_swiglu(enc, bhb, 0ul, bhb2, 0ul, u_th_l, npos * hid_l)
                     }
                 }
                 if ((!moe || g4moe) && g_pf_skip != "gemm") {
                     let f2 = fmt_at(t.w2_fmt, l)
                     if (f2 != KqFmt.q8) {
-                        pf_enc_kq_site_mm(enc, t, f2, t.w2_offs[l], dim, bhb, bxb, u_hidden, u_dim, mp)
+                        pf_enc_kq_site_mm(enc, t, f2, t.w2_offs[l], dim, bhb, bxb, u_hid_l, u_dim, mp)
                     } else {
                         let bw2b = blob_of(g_dev, t, t.w2_offs[l])
-                        enc_gemm_mm(enc, bw2b.buf, bw2b.boff, bhb, bxb, u_hidden, u_dim, mp, dim)
+                        enc_gemm_mm(enc, bw2b.buf, bw2b.boff, bhb, bxb, u_hid_l, u_dim, mp, dim)
                     }
                 }
                 if (g4moe && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
@@ -3341,6 +3355,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     pool_release(g_pf_upool, u_qd, 4ul)
     pool_release(g_pf_upool, u_kvd, 4ul)
     pool_release(g_pf_upool, u_hidden, 4ul)
+    if (u_hidden2 != null) {
+        pool_release(g_pf_upool, u_hidden2, 4ul)
+    }
     pool_release(g_pf_upool, u_hs, 4ul)
     pool_release(g_pf_upool, u_npairs_q, 4ul)
     pool_release(g_pf_upool, u_npairs_k, 4ul)
@@ -3370,6 +3387,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     }
     pool_release(g_pf_upool, u_total_dim, 4ul)
     pool_release(g_pf_upool, u_total_h, 4ul)
+    if (u_total_h2 != null) {
+        pool_release(g_pf_upool, u_total_h2, 4ul)
+    }
     if (moe) {
         pool_release(g_pf_upool, u_moe_ne, 4ul)
         pool_release(g_pf_upool, u_moe_nk, 4ul)
