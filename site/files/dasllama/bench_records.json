@@ -2234,7 +2234,7 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-03",
+        "date":"2026-08-20",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -2244,23 +2244,27 @@
           "total_cores":10,
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
-          "model_id":"MacBookPro18,2"
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
         },
         "tests":{
           "pp512":{
-            "tok_s":219.13014022379758,
-            "stddev":1.8707826137542725
+            "tok_s":218.96438423900494,
+            "stddev":2.0331292152404785
           },
           "tg128":{
-            "tok_s":22.057328337740127,
-            "stddev":0.0044649578630924225
+            "tok_s":22.165345146306123,
+            "stddev":0.018541594967246056
           }
         },
         "source":"official",
-        "sha":"db50a7da2",
+        "sha":"cd10a67a4",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
-        "tune_sha":"bf42018efa628277924359a4e145892127c0b36b258a3bcb11996856eac641e9",
+        "dasllama_version":5,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"d38809a51e2c5fed3e2d61860680a64e366c6df015d812c9d2ee8c4175da42d7",
+        "noise":"ok",
+        "parity":"ok",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
         "files":[
           {
@@ -2277,7 +2281,7 @@
         "flavor":"clean-cpu",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-02",
+        "date":"2026-08-20",
         "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -2287,16 +2291,17 @@
           "total_cores":10,
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
-          "model_id":"MacBookPro18,2"
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
         },
         "tests":{
           "pp512":{
-            "tok_s":121.42473200000001,
-            "stddev":0.12463100000000001
+            "tok_s":120.54863400000001,
+            "stddev":1.243153
           },
           "tg128":{
-            "tok_s":20.330411999999999,
-            "stddev":0.15936800000000001
+            "tok_s":20.274649,
+            "stddev":0.053168
           }
         },
         "source":"official",
@@ -2317,7 +2322,7 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-02",
+        "date":"2026-08-20",
         "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -2327,16 +2332,17 @@
           "total_cores":10,
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
-          "model_id":"MacBookPro18,2"
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
         },
         "tests":{
           "pp512":{
-            "tok_s":200.670841,
-            "stddev":0.55844800000000006
+            "tok_s":198.68788699999999,
+            "stddev":2.8011499999999998
           },
           "tg128":{
-            "tok_s":19.951280000000001,
-            "stddev":0.56960299999999997
+            "tok_s":20.200565000000001,
+            "stddev":0.049085999999999998
           }
         },
         "source":"official",
@@ -2357,7 +2363,7 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-02",
+        "date":"2026-08-20",
         "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -2367,16 +2373,17 @@
           "total_cores":10,
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
-          "model_id":"MacBookPro18,2"
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
         },
         "tests":{
           "pp512":{
-            "tok_s":915.626037,
-            "stddev":0.85216700000000001
+            "tok_s":911.47997099999998,
+            "stddev":3.891991
           },
           "tg128":{
-            "tok_s":52.939664999999998,
-            "stddev":0.028410999999999999
+            "tok_s":52.877133000000001,
+            "stddev":0.121401
           }
         },
         "source":"official",
@@ -2397,7 +2404,7 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-02",
+        "date":"2026-08-20",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -2407,24 +2414,28 @@
           "total_cores":10,
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
-          "model_id":"MacBookPro18,2"
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
         },
         "tests":{
           "pp512":{
-            "tok_s":981.64260281698535,
-            "stddev":1.2203842401504517
+            "tok_s":981.10735629017802,
+            "stddev":1.9796314239501953
           },
           "tg128":{
-            "tok_s":52.636187287656618,
-            "stddev":0.032106913626194
+            "tok_s":52.770026613217077,
+            "stddev":0.10024738311767578
           }
         },
         "source":"official",
-        "sha":"7605e8476",
+        "sha":"cd10a67a4",
         "version":"0.6.4",
-        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
+        "dasllama_version":5,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"d38809a51e2c5fed3e2d61860680a64e366c6df015d812c9d2ee8c4175da42d7",
+        "noise":"ok",
+        "parity":"ok",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2440,7 +2451,7 @@
         "flavor":"accel",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-03",
+        "date":"2026-08-20",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -2450,23 +2461,27 @@
           "total_cores":10,
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
-          "model_id":"MacBookPro18,2"
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
         },
         "tests":{
           "pp512":{
-            "tok_s":228.55390069209653,
-            "stddev":3.0338196754455566
+            "tok_s":229.74539443578274,
+            "stddev":0.64958512783050537
           },
           "tg128":{
-            "tok_s":21.380548947972713,
-            "stddev":0.48116523027420044
+            "tok_s":22.149308649428683,
+            "stddev":0.006412864662706852
           }
         },
         "source":"official",
-        "sha":"db50a7da2",
+        "sha":"cd10a67a4",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
-        "tune_sha":"bf42018efa628277924359a4e145892127c0b36b258a3bcb11996856eac641e9",
+        "dasllama_version":5,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"d38809a51e2c5fed3e2d61860680a64e366c6df015d812c9d2ee8c4175da42d7",
+        "noise":"ok",
+        "parity":"ok",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
         "files":[
           {
@@ -12721,7 +12736,7 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-05",
+        "date":"2026-08-19",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m gemma-4-E2B-it-Q8_0.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -12736,32 +12751,38 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1732.9069999999999,
+            "ms":1582.3910000000001,
             "audio_s":11,
+            "encode_ms":336.40899999999999,
             "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":4717.4160000000002,
+            "ms":4290.4769999999999,
             "audio_s":33,
+            "encode_ms":1134.1030000000001,
             "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow American country"
           },
           "asr:gb1.wav":{
-            "ms":33941.521999999997,
+            "ms":30730.791000000001,
             "audio_s":198.734375,
+            "encode_ms":5777.875,
             "text":"Fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. On board was the crew of seven. Fellow Americans, Colonel Rick Husband and Captain Michael Anderson and Admiral Clark at 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. And Ilan Romon. A short time later, debris was seen falling from the skies above Texas. These men and women assumed great risk. The Columbia's lost to all humanity. There are no survivors. In an age when spaceflight bore witness to the dangers of travel by rock, Anderson and great sadness to Admiral Clark navigating the fierce atmosphere near 9:00 this morning, mission control lost contact with our space shuttle Columbia and Ilan Romon, knowing they had a short time and noble purpose. Debris was seen falling from the skies above Texas. This kind of women assumed great risk for the Columbia's will, idealism, all humanity. There are no survivors. In an age when spaceflight bore witness to the dangers of travel by rock, Anderson and great sadness to Admiral Clark navigating the fierce atmosphere near 9:00 this morning, mission control lost contact with our space shuttle Columbia and Ilan Romon, knowing they had a short time and noble purpose. Debris was seen falling from the skies above Texas. The words of all humanity are right."
           },
           "asr:hp0.wav":{
-            "ms":47617.576999999997,
+            "ms":42024.910000000003,
             "audio_s":273.28724999999997,
-            "text":"Henry F. Phillips, from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon. Henry F. has the honor of having the Phillips and screw, the free encyclopedia named after him. The importance of the crosshead screw design. Henry F. Phillips centering property from which of automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the crosshead screw businessman to the Portland, Oregon. It was so dominantly passed on from Wikipedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property from which of automated production lines. 2 million powered screw. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon. It was so dominantly passed on from Wikipedia. Although he received patents for the design. The American screw company. The Phillips uses port bonds of US to devise an American screw. 10,000 devices and 600 employees. 100 on autolysis for patents. differs from the 2 million powered screw. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon. It was so dominantly passed on from Wikipedia. Although he received patents for the design. The American screw company. The Phillips uses port bonds of US to devise an American screw. 10,000 devices and 600 employees. 100 on autolysis for patents. differs from the 2 million powered screw. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon. It was so dominantly passed on from Wikipedia."
+            "encode_ms":8003.4780000000001,
+            "text":"Henry F. Phillips, from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon. Henry F. has the honor of having the Phillips hand screw the free encyclopedia, named after him. The importance of the crosshead screw design lies in Henry F. Phillips centering property from which of automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adominately has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adominately has the name of the free encyclopedia. Although he received patents for the design. The American tool company. The Phillips uses port bonds of US to devise American screw. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adominately has the name of the free encyclopedia. Although he received patents for the design. The American tool company. The Phillips uses port bonds of US to devise American screw. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adominately has the name of the free encyclopedia."
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"a63300c2f",
+        "sha":"1f9c36c8c",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=kstep2 (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"fe8408bf2a4c00d535f1d21276651c1cd5b0c32d03a169c9b1237e62882a1946",
+        "dasllama_version":5,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"b13fa031bf352e2dbaa6cd45bed2f671c19778e4ad99037958e399f0895115a3",
+        "noise":"ok",
         "exec_fmt":"q8/q8",
         "files":[
           {
@@ -12808,7 +12829,7 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-05",
+        "date":"2026-08-19",
         "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -12823,16 +12844,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":10826.200000000001,
-            "encode_ms":10221.299999999999
+            "ms":10856.700000000001,
+            "encode_ms":10250,
+            "text":"0.00.002.693 I common_init_result: fitting params to device memory ... 0.00.002.698 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.394.588 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 65536 MiB of total host memory 0.00.717.140 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.720.088 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.727.508 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.03.555.923 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.03.601.627 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.03.871.589 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.03.871.647 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.03.871.857 W WARN: This is an experimental CLI for testing multimodal capability. 0.03.871.861 W       For normal use cases, please use the standard llama-cli 0.03.911.963 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 3) 0.13.320.562 I mtmd batch encoding done in 9408 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
           },
           "asr:jfk3.wav":{
-            "ms":32454.099999999999,
-            "encode_ms":30645.400000000001
+            "ms":32567.700000000001,
+            "encode_ms":30752.799999999999,
+            "text":"0.00.002.705 I common_init_result: fitting params to device memory ... 0.00.002.711 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.386.614 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 65536 MiB of total host memory 0.00.709.151 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.712.157 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.719.632 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.03.552.780 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.03.598.616 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.03.867.936 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.03.868.007 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.03.868.236 W WARN: This is an experimental CLI for testing multimodal capability. 0.03.868.238 W       For normal use cases, please use the standard llama-cli 0.03.917.351 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 4) 0.29.551.257 I mtmd batch encoding done in 25634 ms 0.31.591.355 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 4) 0.34.195.849 I mtmd batch encoding done in 2604 ms And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country.DASLLAMA_IDS: 3133 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 532 834 1041 12339 14522 2679 711 1144 822 2891 740 776 573 611 2679 1144 611 740 776 573 822 2891 236761 106"
           },
           "asr:gb1.wav":{
-            "ms":198702.70000000001,
-            "encode_ms":186084.79999999999
+            "ms":199122.89999999999,
+            "encode_ms":186566.5,
+            "text":"0.00.002.711 I common_init_result: fitting params to device memory ... 0.00.002.719 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on) 0.00.392.436 I common_params_fit_impl: projected to use 4889 MiB of host memory vs. 65536 MiB of total host memory 0.00.722.790 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.725.808 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden 0.00.733.411 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list 0.03.566.951 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable) 0.03.613.063 I mtmd_cli_context: chat template example: <|turn>system You are a helpful assistant<turn|> <|turn>user Hello<turn|> <|turn>model Hi there<turn|> <|turn>user How are you?<turn|> <|turn>model 0.03.883.901 W init_audio: audio input is in experimental stage and may have reduced quality: https://github.com/ggml-org/llama.cpp/discussions/13759 0.03.883.969 I main: loading model: /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf 0.03.884.208 W WARN: This is an experimental CLI for testing multimodal capability. 0.03.884.209 W       For normal use cases, please use the standard llama-cli 0.04.009.695 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 9) 0.29.640.810 I mtmd batch encoding done in 25631 ms 0.31.753.252 I encoding mtmd batch, n_chunks = 1 (done = 2, total = 9) 0.57.359.370 I mtmd batch encoding done in 25606 ms 0.59.593.505 I encoding mtmd batch, n_chunks = 1 (done = 3, total = 9) 1.25.190.660 I mtmd batch encoding done in 25597 ms 1.27.622.943 I encoding mtmd batch, n_chunks = 1 (done = 4, total = 9) 1.53.167.372 I mtmd batch encoding done in 25545 ms 1.55.682.842 I encoding mtmd batch, n_chunks = 1 (done = 5, total = 9) 2.21.252.229 I mtmd batch encoding done in 25570 ms 2.23.966.896 I encoding mtmd batch, n_chunks = 1 (done = 6, total = 9) 2.49.589.272 I mtmd batch encoding done in 25623 ms 2.52.458.579 I encoding mtmd batch, n_chunks = 1 (done = 7, total = 9) 3.08.436.803 I mtmd batch encoding done in 15978 ms My fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shawla, and Elaine Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity in an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce atmosphere of the Earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As far as we can see, there is comfort and hope in the words of the prophet Isaiah. Lift your eyes and look to the heavens, who created space. He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the Shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families and may God may God continue to bless America.DASLLAMA_IDS: 4754 12339 14522 236764 672 1719 815 6111 21832 4668 532 1822 55882 531 1023 2891 236761 2640 236743 236819 236787 236771 236771 672 5597 236764 9017 2256 528 21912 5745 3662 607 1023 2557 51320 18693 236761 562 2822 990 3209 236764 37061 691 3472 14773 699 506 55748 2787 9539 236761 669 18693 563 5745 236761 2085 659 951 43732 236761 2154 3905 691 496 13919 529 6819 236787 44221 26839 89702 236764 41523 44221 8972 19864 236764 43224 94816 18093 236764 22359 6822 9833 236764 43224 8966 16376 1209 236764 3587 236761 751 19321 1789 34525 2149 236764 532 98134 121873 236764 496 105721 528 506 33722 5661 15150 236761 3143 1758 532 3607 12718 1822 4652 528 506 2509 531 784 27069 528 614 3911 1056 2557 10224 815 2229 531 4483 4180 15668 236761 1030 563 3735 531 29346 506 39793 529 4301 684 35305 532 506 18502 529 67112 506 48621 11661 529 506 10824 236761 3143 101195 7261 506 39793 532 901 17175 1091 95826 236764 14111 901 1053 496 1494 532 29417 5708 528 1972 236761 8468 529 910 23648 532 63485 532 184291 236764 692 795 4305 1091 784 506 919 236761 2343 14522 3124 659 6972 618 1388 529 506 7965 529 1239 1758 532 3607 1015 735 1010 2238 672 11059 10932 532 32717 236761 1599 236789 500 711 7057 236761 5137 4251 7097 66031 2061 607 611 236761 1452 1724 611 9312 795 2462 735 506 2833 532 36637 529 672 2891 236761 669 4400 528 837 901 8390 795 4102 236761 192411 563 5378 1131 506 29151 6998 1023 1902 684 506 18014 529 17324 532 506 86508 531 3050 236761 5137 9338 1131 2557 795 817 580 236761 799 506 55748 3124 236764 692 5004 21404 532 40578 236761 1773 2793 618 692 740 1460 236764 993 563 5931 532 4614 528 506 4171 529 506 59918 81034 236761 79493 822 6114 532 1385 531 506 80958 236764 1015 4464 2557 236761 1293 1015 12076 855 506 129196 20472 886 684 886 532 9139 1091 1546 684 1463 236761 8468 529 914 1822 2066 532 45478 6332 236764 711 886 529 1091 563 9724 236761 669 1638 33797 1015 5618 506 8197 992 10077 506 5618 529 506 6819 39690 692 92377 3124 236761 669 13919 529 506 114357 18693 1602 711 994 21236 531 10824 236761 16961 692 740 14098 600 784 659 21236 2033 236761 3353 3803 14321 506 112792 7965 532 1149 3803 1149 3803 4102 531 14321 5711 236761 106"
           }
         },
         "workload":"audio-chat",
@@ -12869,6 +12893,363 @@
             "name":"gb1.wav",
             "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
             "bytes":6359578
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":1947.8267083121839,
+            "stddev":5.2698860168457031
+          },
+          "tg128":{
+            "tok_s":96.186670660259409,
+            "stddev":0.65781205892562866
+          }
+        },
+        "source":"official",
+        "sha":"cd10a67a4",
+        "version":"0.6.4",
+        "dasllama_version":5,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"d38809a51e2c5fed3e2d61860680a64e366c6df015d812c9d2ee8c4175da42d7",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":427.33937716903711,
+            "stddev":4.3431744575500488
+          },
+          "tg128":{
+            "tok_s":43.600298532821839,
+            "stddev":0.054628435522317886
+          }
+        },
+        "source":"official",
+        "sha":"cd10a67a4",
+        "version":"0.6.4",
+        "dasllama_version":5,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"d38809a51e2c5fed3e2d61860680a64e366c6df015d812c9d2ee8c4175da42d7",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"accel",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":449.92644083960158,
+            "stddev":3.9499580860137939
+          },
+          "tg128":{
+            "tok_s":43.560661170705991,
+            "stddev":0.09648982435464859
+          }
+        },
+        "source":"official",
+        "sha":"cd10a67a4",
+        "version":"0.6.4",
+        "dasllama_version":5,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"d38809a51e2c5fed3e2d61860680a64e366c6df015d812c9d2ee8c4175da42d7",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"accel",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-19",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m gemma-4-E2B-it-Q8_0.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "asr:jfk.wav":{
+            "ms":1564.2629999999999,
+            "audio_s":11,
+            "encode_ms":325.48200000000003,
+            "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
+          },
+          "asr:jfk3.wav":{
+            "ms":4241.6620000000003,
+            "audio_s":33,
+            "encode_ms":966.19399999999996,
+            "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow American country"
+          },
+          "asr:gb1.wav":{
+            "ms":29630.029999999999,
+            "audio_s":198.734375,
+            "encode_ms":6265.634,
+            "text":"Fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. On board was the crew of seven. Fellow Americans, Colonel Rick Husband and Captain Michael Anderson and Admiral Clark at 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. And Ilan Romon. A short time later, debris was seen falling from the skies above Texas. These men and women assumed great risk. The Columbia's lost to all humanity. There are no survivors. In an age when spaceflight bore witness to the dangers of travel by rock, Anderson and great sadness to Admiral Clark navigating the fierce atmosphere near 9:00 this morning, mission control lost contact with our space shuttle Columbia and Ilan Romon, knowing they had a short time and noble purpose. Debris was seen falling from the skies above Texas. This kind of women assumed great risk for the Columbia's will, idealism, all humanity. There are no survivors. In an age when spaceflight bore witness to the dangers of travel by rock, Anderson and great sadness to Admiral Clark navigating the fierce atmosphere near 9:00 this morning, mission control lost contact with our space shuttle Columbia and Ilan Romon, knowing they had a short time and noble purpose. Debris was seen falling from the skies above Texas. The words of all humanity are right."
+          },
+          "asr:hp0.wav":{
+            "ms":38693.896000000001,
+            "audio_s":273.28724999999997,
+            "encode_ms":7994.6610000000001,
+            "text":"Henry F. Phillips, from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon. Henry F. has the honor of having the Phillips hand screw the free encyclopedia, named after him. The importance of the crosshead screw design lies in Henry F. Phillips centering property from which of automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the crosshead screw businessman to the Portland, Oregon. It was so adominately has the honor of naming the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to Milise F. Phillips Century property, 340 feet on automated production lines, 2 million powered screw drives. Henry F. Phillips, 1890-1958 was an US businessman to the Portland, Oregon. It was so adominately has the honor of naming the free encyclopedia. Although he received patents for the design. The American screw company. The Phillips uses port bonds of US to devise an American screw. Henry F. Phillips, 1890-1958 was a driving the crosshead screw businessman to the Portland, Oregon. It was so adominately has the honor of naming the free encyclopedia."
+          }
+        },
+        "workload":"audio-chat",
+        "source":"official",
+        "sha":"1f9c36c8c",
+        "version":"0.6.4",
+        "dasllama_version":5,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"b13fa031bf352e2dbaa6cd45bed2f671c19778e4ad99037958e399f0895115a3",
+        "noise":"ok",
+        "exec_fmt":"q8/q8",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E2B-it-bf16.gguf",
+            "sha256":"711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4",
+            "bytes":986833664
+          },
+          {
+            "role":"clip",
+            "name":"jfk.wav",
+            "sha256":"59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+            "bytes":352078
+          },
+          {
+            "role":"clip",
+            "name":"jfk3.wav",
+            "sha256":"a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+            "bytes":1056078
+          },
+          {
+            "role":"clip",
+            "name":"gb1.wav",
+            "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+            "bytes":6359578
+          },
+          {
+            "role":"clip",
+            "name":"hp0.wav",
+            "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+            "bytes":8745270
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"metal",
+        "flavor":"stock",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":1747.974324,
+            "stddev":3.6447440000000002
+          },
+          "tg128":{
+            "tok_s":85.985833999999997,
+            "stddev":0.70113499999999995
+          }
+        },
+        "source":"official",
+        "sha":"ebd048f",
+        "exec_fmt":"native gguf formats",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"clean-cpu",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":242.20238800000001,
+            "stddev":2.2900200000000002
+          },
+          "tg128":{
+            "tok_s":39.158079000000001,
+            "stddev":0.313556
+          }
+        },
+        "source":"official",
+        "sha":"ebd048f",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          }
+        ]
+      },
+      {
+        "engine":"llama.cpp",
+        "backend":"cpu",
+        "flavor":"stock",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
+        },
+        "tests":{
+          "pp512":{
+            "tok_s":392.22936299999998,
+            "stddev":9.6444489999999998
+          },
+          "tg128":{
+            "tok_s":39.050325000000001,
+            "stddev":0.38299499999999997
+          }
+        },
+        "source":"official",
+        "sha":"ebd048f",
+        "exec_fmt":"native gguf formats; cpu runtime layout repack",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
           }
         ]
       },
@@ -13449,6 +13830,9 @@
       }
     ],
     "arch":"Gemma-4 E2B audio",
+    "quant":"q8",
+    "params_b":4.6474501469999998,
+    "active_b":2.2476226559999999,
     "size_bytes":4967497152
   },
   {
