@@ -135,3 +135,6 @@ its line here, with its tests, in the same change.**
   operator-edited after deploy.
 - `_ladder_test_common.das` — shared test fixtures, required by bare name from the store and
   server suites (the leading `_` keeps dastest's walker away).
+- `test_ladder_store.das` — the store suite: `ladder_store` calls against `:memory:`, no server.
+- `test_ladder_server.das` — the HTTP suite: routes through `with_ladder_server` on port 19015.
+- `test_ladder_config.das` — the config suite: the defaults/toml/CLI merge and its provenance.
