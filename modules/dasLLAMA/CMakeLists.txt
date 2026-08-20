@@ -80,4 +80,9 @@ IF(NOT DAS_LLAMA_INCLUDED)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/tune_for_this_box.md
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA
     )
+    # the ONE model set (provenance + serving-catalog rows) — dasllama-server's /catalog is a
+    # view over it, so the bundle must carry it or the server dies at require
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/performance/model_specs.das
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/performance
+    )
 ENDIF()

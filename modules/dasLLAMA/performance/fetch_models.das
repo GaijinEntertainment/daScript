@@ -30,7 +30,7 @@ struct FetchArgs {
     @clarg_doc = "Print what --fetch would download, download nothing"
     dry_run : bool
 
-    @clarg_doc = "Run the on-box conversion recipes for absent converted entries (parakeet v2/v3, canary) — needs the setup_asr_rig nemo venv + refs; POSIX boxes only"
+    @clarg_doc = "Run the on-box conversion recipes for absent converted entries (canary) — needs the setup_asr_rig nemo venv + refs; POSIX boxes only"
     convert : bool
 
     @clarg_short = "o"
@@ -81,19 +81,6 @@ def private hub_download(py, expr : string) : string {
     return last
 }
 
-def private convert_parakeet(e : ProvEntry; path : string) {
-    let py = convert_nemo_py()
-    let v = find(e.name, "-v3-") >= 0 ? "v3" : "v2"
-    let src = hub_download(py, "hf_hub_download; print(hf_hub_download('nvidia/parakeet-tdt-0.6b-{v}','parakeet-tdt-0.6b-{v}.nemo'))")
-    if (empty(src) || !stat(src).is_valid) {
-        to_log(LOG_ERROR, "fetch_models: --convert {e.name} - the .nemo download failed\n")
-        return
-    }
-    // the converter's default output name is ggml-model-f32.bin — --out-name is load-bearing
-    // (the zen4 bringup lost v2 to a v3 overwrite without it)
-    run_capture("{py} \"{g_env_prof.whisper_cpp}/models/convert-parakeet-to-ggml.py\" --model \"{src}\" --out-dir \"{dir_name(path)}\" --use-f32 --out-name {e.name}", false)
-}
-
 def private convert_canary(path : string) {
     let py = convert_nemo_py()
     let hub = convert_hub_root()
@@ -112,13 +99,14 @@ def private try_convert(e : ProvEntry; path : string; var canary_done : bool&) {
         to_log(LOG_ERROR, "fetch_models: --convert is POSIX-only (the venv/converter paths differ on Windows) - run the recipes by hand: {e.recipe}\n")
         return
     }
-    if (find(e.name, "parakeet") >= 0) {
-        convert_parakeet(e, path)
-    } elif (find(e.name, "canary") >= 0) {
+    if (find(e.name, "canary") >= 0) {
         if (!canary_done) {
             convert_canary(path)
             canary_done = true
         }
+    } else {
+        // parakeet v2's historic note still routes here via !empty(recipe) - say so, not silence
+        to_log(LOG_WARNING, "fetch_models: --convert has no recipe for {e.name} ({e.recipe})\n")
     }
 }
 

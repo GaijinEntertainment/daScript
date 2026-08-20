@@ -55,7 +55,18 @@ Then capture (`B=http://127.0.0.1:18132`):
 `sse_chat.txt`, and the concatenated `delta.reasoning_content` /
 `delta.content` of `sse_think.txt`. Update it whenever the SSE captures move.
 
+Catalog/setup fixtures (same server, booted with NO model for the setup ones):
+
+| File | Command |
+|---|---|
+| `stats_setup.json` | `curl $B/v1/stats` on a no-model (setup mode) boot |
+| `catalog_idle.json` | `curl $B/catalog` with at least one entry already downloaded |
+| `catalog_downloading.json` | start a download (`POST $B/catalog/download`), then `curl $B/catalog` mid-flight |
+| `catalog_done.json` | `curl $B/catalog` after downloads landed (from a serving boot) |
+| `catalog_refusal.json` | `POST $B/catalog/download` for a second entry while one runs (the 409 body) |
+
 After capture, mechanically normalize machine-local paths (model dirs →
-`D:/models`, the capture TOML path → `D:/models/dasllama-server.toml`) —
+`D:/models`, the capture TOML path → `D:/models/dasllama-server.toml`, the capture user's
+home → `C:/Users/user`) —
 paths are the ONE permitted edit; every other byte stays as served. The
 hardware/box identity lines stay as captured.

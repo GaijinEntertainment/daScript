@@ -363,7 +363,7 @@ struct public AccelerateEnv {
 [EnvConfig(env_prefix = "DASLLAMA")]
 struct public HarnessEnv {
     @clarg_path
-    @clarg_doc = "Directory holding the .gguf models the probes, benches and tests load."
+    @clarg_doc = "Directory holding the .gguf models the probes, benches and tests load. dasllama-server's model catalog downloads here too when set."
     models_dir : string = ""
 
     @clarg_path
@@ -658,6 +658,11 @@ struct public CoreEnv {
     @clarg_doc = "Ambient platform variable; read only to derive the default Hugging Face cache when HF_HOME is unset."
     home : string = ""
 
+    @clarg_env = "USERPROFILE"
+    @clarg_path
+    @clarg_doc = "Ambient platform variable (Windows twin of HOME); read only to derive dasllama-server's default models dir."
+    user_profile : string = ""
+
     @clarg_default_doc = "conservative default"
     @clarg_doc = "Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/internal/environment_variables.md."
     jobque_threads : Option<int>
@@ -702,9 +707,9 @@ let public g_env_test = env_config(type<TestEnv>)
 let public g_env_exchange = env_config(type<ExchangeEnv>)
 let public g_env_core = env_config(type<CoreEnv>)
 
-//! The ONE models-dir resolution (DASLLAMA_MODELS_DIR, else the primary rig's dir) with the
-//! trailing separator guaranteed — callers concat "{models_dir_resolved()}{file}", and a
-//! slashless override would silently skip every catalog file.
+//! The rig/probe/test models-dir resolution (DASLLAMA_MODELS_DIR, else the primary rig's dir),
+//! trailing separator guaranteed — callers concat "{models_dir_resolved()}{file}". The server's
+//! catalog resolves its own chain (model_catalog.das: env > models_dir key > ~/.dasllama/models).
 def public models_dir_resolved() : string {
     let env = g_env_harness.models_dir
     if (empty(env)) {
