@@ -21,7 +21,7 @@ import * as P from './protocol.mjs';
 import { installProbe } from './probe.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO_MANIFEST = path.join(HERE, '..', '..', '..', 'web', 'examples', 'ui', 'samples', 'data.json');
+const REPO_MANIFEST = path.join(HERE, '..', '..', '..', '..', 'web', 'examples', 'ui', 'samples', 'data.json');
 
 const POLL_MS = 500;
 // Build polling is deliberately slow: the queue is one shared compute box and
