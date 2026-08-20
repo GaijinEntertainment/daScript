@@ -82,6 +82,27 @@ def test_model_spec_views(t : T?) {
         t |> equal(counting_prompt(3), "1, 2, 3,")
         t |> equal(counting_prompt(1), "1,")
     }
+    t |> run("mmproj_companion pairs the vision rows and only them") @(t : T?) {
+        var inscope g12 <- spec_by_file("gemma-4-12B-it-Q4_K_M.gguf")
+        t |> equal(mmproj_companion(g12), "mmproj-gemma-4-12B-it-BF16.gguf")
+        var inscope oss <- spec_by_file("gpt-oss-20b-mxfp4.gguf")
+        t |> equal(mmproj_companion(oss), "", "a text-only row has no vision pairing")
+        // the board's image legs need real coverage: at least two official vision decoders
+        var inscope off <- official_catalog()
+        var vision = 0
+        for (s in off) {
+            vision += empty(mmproj_companion(s)) ? 0 : 1
+        }
+        t |> success(vision >= 2, "the official board carries >= 2 vision rows (got {vision})")
+    }
+    t |> run("the image fixture is provenanced (some spec row owns its pin)") @(t : T?) {
+        var inscope entries <- models_provenance()
+        var pinned = false
+        for (e in entries) {
+            pinned ||= e.name == bench_image_fixture()
+        }
+        t |> success(pinned, "{bench_image_fixture()} rides a companion list, so every box provisions it")
+    }
 }
 
 [test]

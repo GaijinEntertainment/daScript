@@ -1662,7 +1662,7 @@ struct BenchRun {
     cmd : string
     hardware : HardwareInfo
     tests : table<string; BenchTest>
-    @optional workload : string // "" = text LLM; "asr" | "audio-chat" — selects the tests-key shape
+    @optional workload : string // "" = text LLM; "asr" | "audio-chat" | "image-chat" — selects the tests-key shape
     @optional source : string   // "official" | "community" — stamped by the store driver, not the tool
     @optional sha : string      // engine commit (das: git HEAD; llama.cpp: build_commit)
     @optional version : string  // das release version

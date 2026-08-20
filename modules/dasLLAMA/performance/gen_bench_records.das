@@ -80,14 +80,18 @@ struct Args {
     asr_tier : string = "all"
 
     @clarg_short = "w"
-    @clarg_doc = "Workloads to measure: llm | asr | all (default: all — absent models/tools skip with a warning)"
+    @clarg_doc = "Workloads to measure: llm | asr | image | all (default: all — absent models/tools skip with a warning; image = only the image-chat cells of the llm sweep)"
     workload : string = "all"
 
     @clarg_name = "asr-reps"
     @clarg_doc = "Timed repetitions per ASR clip, best kept (default: 2 — clips are minutes, not seconds)"
     asr_reps : int = 2
 
-    @clarg_doc = "Verify instead of measure: re-run each stored das LLM row once and gate it against the store. The batch starts with an image wipe; a prepare pass bakes and warms each cell's image so only the timed cell is frozen, and a model's images are deleted after its last cell. No refs, no store writes. Stops at the first FAIL"
+    @clarg_name = "image-reps"
+    @clarg_doc = "Timed repetitions per image-chat cell, best kept (default: 3 — a cell is one full image turn: encode, spliced prefill, decode)"
+    image_reps : int = 3
+
+    @clarg_doc = "Verify instead of measure: re-run each stored das row (text, ASR, image-chat) once and gate it against the store. The batch starts with an image wipe; a prepare pass bakes and warms each text cell's image so only the timed cell is frozen, and a model's images are deleted after its last cell. No refs, no store writes. Stops at the first FAIL"
     oracle : bool
 
     @clarg_doc = "Oracle: run every row and report the full board instead of stopping at the first FAIL"
@@ -211,7 +215,8 @@ def private mint_check(dir, whose : string) {
 def private batch_start_wipe(workload : string) {
     // scoped to what THIS batch will re-bake: an ASR-only run must not wipe LLM images it
     // never touches again, so it wipes per ASR carrier instead of the whole models dir
-    if (workload == "llm" || workload == "all") {
+    // (image cells bake decoder + mmproj images in the llm dir, so they take the llm scope)
+    if (workload == "llm" || workload == "all" || workload == "image") {
         let w_llm = dlim_wipe(models_dir())
         if (w_llm.removed > 0) {
             to_log(LOG_INFO, "gen_bench_records: lifecycle wipe - {w_llm.removed} image(s), {w_llm.freed >> 20l} MB in {models_dir()}\n")
@@ -495,6 +500,58 @@ def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; leg : string
     return verdict
 }
 
+// The image twin of oracle_asr_cell: re-measure one stored image-chat row and gate it against
+// itself. Like the ASR twin the cell is not frozen — it bakes the decoder and mmproj images it
+// needs (the batch starts wiped); img:enc gates ms-mirrored, img:pp/img:tg as tok/s.
+def private oracle_image_cell(gguf, mm, pic : string; stored : BenchRun; leg : string; cfg : Args; threads : int;
+                              cellPath, exe : string; var board : array<string>) : OracleVerdict {
+    let leg_tag = empty(leg) ? "image" : "image {leg}"
+    let path = "{models_dir()}{gguf}"
+    for (p in [path, "{models_dir()}{mm}", pic]) {
+        if (!stat(p).is_valid) {
+            let miss = "FAIL {gguf} das {leg_tag} - file missing: {p}"
+            to_log(LOG_ERROR, "gen_bench_records: ORACLE {miss}\n")
+            board |> push(miss)
+            return OracleVerdict.fail
+        }
+    }
+    to_log(LOG_INFO, "gen_bench_records: ORACLE START {gguf} das {leg_tag}\n")
+    logger_info("bench.records", "oracle image cell start", JV({"model" => JV(gguf), "leg" => JV(leg_tag)}))
+    var args <- [exe, "--", "-m", path, "--image-mmproj", "{models_dir()}{mm}", "--image", pic,
+                 "-r", "{cfg.image_reps}", "-t", "{threads}", "--json-path", cellPath]
+    if (leg == "accel") {
+        args |> push("--accel")
+    } elif (leg == "metal") {
+        args |> push_from(["--ngl", "99"])
+    }
+    var out = ""
+    let rc = run_and_stream(args, out)
+    var cell : array<BenchModel>
+    if (rc != 0 || !read_bench_records(cellPath, cell)) {
+        board |> push("FAIL {gguf} das {leg_tag} - cell did not measure (rc={rc}, see the log)")
+        return OracleVerdict.fail
+    }
+    remove(cellPath)
+    var verdict = OracleVerdict.fail
+    var detail = "no das {stored.backend} image-chat run in the fresh cell records"
+    for (c in cell) {
+        for (r in c.runs) {
+            if (r.engine != "das" || r.workload != "image-chat" || r.backend != stored.backend) {
+                continue
+            }
+            var lines : array<string>
+            verdict = oracle_compare(r, stored, double(cfg.oracle_warn), double(cfg.oracle_fail), lines)
+            detail = join(lines, "; ")
+            delete lines
+        }
+    }
+    let line = "{oracle_verdict_str(verdict)} {gguf} das {leg_tag}: {detail}"
+    let level = verdict == OracleVerdict.fail ? LOG_ERROR : (verdict == OracleVerdict.warn ? LOG_WARNING : LOG_INFO)
+    to_log(level, "gen_bench_records: ORACLE {line}\n")
+    board |> push(line)
+    return verdict
+}
+
 // The freeze exists so a cell cannot silently mint a DIFFERENT image and measure a config the
 // stored row never used — but an ABSENT image (GC'd) has no identity to protect, and freezing
 // there just makes the board unrunnable. The load walk mints it (never pre-mint by hand); this
@@ -562,7 +619,8 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                         threads : int; cellPath, exe : string) : int {
     let box = box_name()
     let currentSha = sidecar_generation_sha(sidecar_for(exe))
-    let doAsrOracle = cfg.workload != "llm"
+    let doAsrOracle = cfg.workload == "asr" || cfg.workload == "all"
+    let doImageOracle = cfg.workload != "asr"   // mirrors the publishing scope: llm | image | all
     let asrTier = parse_tier(cfg.asr_tier)
     var board : array<string>
     var cells = 0
@@ -580,6 +638,57 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
             if (sr.engine != "das" || sr.box != box) {
                 continue
             }
+            if (sr.workload == "image-chat") {   // image row: its own cell, mixed ms + tok/s gate
+                if (!doImageOracle) {
+                    continue
+                }
+                let mm = mmproj_companion(spec_by_file(m.gguf))
+                if (empty(mm)) {
+                    to_log(LOG_WARNING, "gen_bench_records: ORACLE skips stored run {m.gguf} image-chat - its spec carries no mmproj companion\n")
+                    continue
+                }
+                var imgLeg = ""
+                var imgWant = false
+                if (sr.backend == "metal" && sr.flavor == "tuned") {
+                    imgLeg = "metal"
+                    imgWant = legMetal
+                } elif (sr.backend == "cpu" && sr.flavor == "tuned") {
+                    imgWant = legNeon
+                } elif (sr.backend == "cpu" && sr.flavor == "accel") {
+                    imgLeg = "accel"
+                    imgWant = legAmx
+                } else {
+                    to_log(LOG_WARNING, "gen_bench_records: ORACLE skips stored run {m.gguf} image-chat {sr.backend}/{sr.flavor} - no rig leg produces it\n")
+                    continue
+                }
+                if (!imgWant) {
+                    continue
+                }
+                cells++
+                if (!crossgen_ok(sr, currentSha, cfg.oracle_allow_crossgen, "{m.gguf} das image", board, fails, warns)) {
+                    continue
+                }
+                settle(cfg)
+                let pic = "{models_dir()}{bench_image_fixture()}"
+                var vi = oracle_image_cell(m.gguf, mm, pic, sr, imgLeg, cfg, threads, cellPath, exe, board)
+                if (vi == OracleVerdict.fail && cfg.oracle_retry_settle > 0) {
+                    // same contract as the LLM legs below: the solo re-run's verdict stands
+                    to_log(LOG_WARNING, "gen_bench_records: ORACLE FAIL {m.gguf} - auto solo re-run after {cfg.oracle_retry_settle}s settle (the retry is the verdict)\n")
+                    board |> push("  ^ suspect FAIL - the auto solo re-run below is the verdict")
+                    sleep(uint(cfg.oracle_retry_settle * 1000))
+                    vi = oracle_image_cell(m.gguf, mm, pic, sr, imgLeg, cfg, threads, cellPath, exe, board)
+                }
+                if (vi == OracleVerdict.fail) {
+                    fails++
+                    if (!cfg.oracle_keep_going) {
+                        to_log(LOG_ERROR, "gen_bench_records: ORACLE stopping at the first FAIL (--oracle-keep-going runs the full board)\n")
+                        stopped = true
+                    }
+                } elif (vi == OracleVerdict.warn) {
+                    warns++
+                }
+                continue
+            }
             if (!empty(sr.workload)) {   // audio row: its own cell, its own ms-shaped gate
                 if (!doAsrOracle) {
                     continue
@@ -593,6 +702,11 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                     }
                 }
                 if (!found) {
+                    // tier narrowing is a quiet skip; a workload string no branch owns is not —
+                    // an unknown modality's rows must never vanish from the board silently
+                    if (sr.workload != "asr" && sr.workload != "audio-chat") {
+                        to_log(LOG_WARNING, "gen_bench_records: ORACLE skips stored run {m.gguf} workload `{sr.workload}` - no oracle arm covers it\n")
+                    }
                     continue
                 }
                 // stored row -> the rig leg that produced it, like the LLM map below; a row no
@@ -632,7 +746,7 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 }
                 continue
             }
-            if (cfg.workload == "asr") {   // -w asr narrows the oracle exactly like the publishing rig
+            if (cfg.workload == "asr" || cfg.workload == "image") {   // -w narrows the oracle exactly like the publishing rig
                 continue
             }
             var be = ""
@@ -706,8 +820,9 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
 
 def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; cfg : Args; threads : int;
                      hw : HardwareInfo; box, date, note, store : string;
-                     var models : array<BenchModel>; var failed : array<string>) {
+                     var models : array<BenchModel>; var failed : array<string>; var refSkipped : array<string>) {
     if (empty(bin)) {
+        refSkipped |> push("{file} ref {flavor} {ngl != 0 ? "metal" : "cpu"}")
         return
     }
     let backend = ngl != 0 ? "metal" : "cpu"
@@ -765,6 +880,47 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     write_bench_records(store, models)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
+}
+
+// ===== Image legs (the image-chat cells of vision decoders — das-only: llama-bench has no image mode) =====
+
+// One lcpp_bench --image child per (vision model, leg), absorbed via the same cell protocol.
+// leg: "" = cpu (neon) | "accel" (amx) | "metal"
+def private image_das_cell(file, path, mm, pic : string; cfg : Args; threads : int; cellPath, note, store, exe : string;
+                           var models : array<BenchModel>; var failed : array<string>; leg : string = "") {
+    let t0 = ref_time_ticks()
+    let log_leg = empty(leg) ? "image" : "image {leg}"
+    for (p in [mm, pic]) {
+        if (!stat(p).is_valid) {
+            to_log(LOG_WARNING, "gen_bench_records: SKIP {file} das {log_leg} - missing companion {p}\n")
+            return
+        }
+    }
+    to_log(LOG_INFO, "gen_bench_records: START {file} das {log_leg}\n")
+    logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg)}))
+    var args <- [exe, "--", "-m", path, "--image-mmproj", mm, "--image", pic,
+                 "-r", "{cfg.image_reps}", "-t", "{threads}", "-o", "json", "--json-path", cellPath]
+    if (leg == "accel") {
+        args |> push("--accel")
+    } elif (leg == "metal") {
+        args |> push_from(["--ngl", "99"])
+    }
+    mint_snapshot(models_dir())
+    var out = ""
+    let rc = run_and_stream(args, out)
+    var cell : array<BenchModel>
+    if (rc != 0 || !read_bench_records(cellPath, cell)) {
+        let tail = slice(out, max(0, length(out) - 400))
+        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} das {log_leg} rc={rc} ({elapsed_ms(t0)} ms) - tail: {tail}\n")
+        logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg), "rc" => JV(rc)}))
+        failed |> push("{file} das {log_leg}")
+        return
+    }
+    mint_check(models_dir(), "{file} das {log_leg}")
+    absorb_cell(models, cell, store, note, failed, "ok")
+    remove(cellPath)
+    to_log(LOG_INFO, "gen_bench_records: DONE {file} das {log_leg} ({elapsed_ms(t0)} ms)\n")
+    logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
 // ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
@@ -1028,8 +1184,9 @@ def main : int {
     }
     let doLlm = cfg.workload == "llm" || cfg.workload == "all"
     let doAsr = cfg.workload == "asr" || cfg.workload == "all"
-    if (!doLlm && !doAsr) {
-        to_log(LOG_ERROR, "gen_bench_records: unknown --workload `{cfg.workload}` (expected llm | asr | all)\n")
+    let doImage = doLlm || cfg.workload == "image"   // image cells ride the llm sweep; -w image narrows to just them
+    if (!doLlm && !doAsr && !doImage) {
+        to_log(LOG_ERROR, "gen_bench_records: unknown --workload `{cfg.workload}` (expected llm | asr | image | all)\n")
         return 1
     }
     // pair legs: --legs wins outright; otherwise --backend implies its legs (amx is Apple-only —
@@ -1096,6 +1253,14 @@ def main : int {
         to_log(LOG_WARNING, "gen_bench_records: stock ref `{refStock}` not found - no stock rows\n")
         refStock = ""
     }
+    // a ref-less sweep is legal but must never be a surprise: an unset ref silently minted a
+    // whole das-only board once — say it up front, and the end summary names every skipped pair
+    if (doLlm && empty(refClean)) {
+        to_log(LOG_WARNING, "gen_bench_records: clean-cpu ref UNSET (--ref-clean / LLAMA_BENCH_CLEAN) - every neon cell mints das-only, no board ratio\n")
+    }
+    if (doLlm && empty(refStock)) {
+        to_log(LOG_WARNING, "gen_bench_records: stock ref UNSET (--ref-stock / LLAMA_BENCH_STOCK) - no stock rows, metal/amx cells mint das-only\n")
+    }
     let exe = rig_exe_checked()
     if (empty(exe)) {
         return 1
@@ -1112,13 +1277,18 @@ def main : int {
     let threads = cfg.threads > 0 ? cfg.threads : profile_threads()
     let cellPath = "modules/dasLLAMA/performance/records/_cell_{box}.json"
     var failed : array<string>
+    var refSkipped : array<string>
     var cat <- official_catalog()
     for (ent in cat) {
-        if (!doLlm) {
+        if (!doLlm && !doImage) {
             continue
         }
         let file = ent.file
         if (!empty(cfg.only) && find(file, cfg.only) < 0) {
+            continue
+        }
+        let mm = mmproj_companion(ent)
+        if (!doLlm && empty(mm)) {   // -w image visits the vision rows only
             continue
         }
         let path = "{models_dir()}{file}"
@@ -1142,33 +1312,57 @@ def main : int {
         // das-cpu heat soak while the lcpp metal ref ran minutes later on a different chip
         // state (27B: das 110.7 soaked vs 138.1 quiet — a phantom 0.91 board red). Refs still
         // run independently of das-cell failures.
-        if (legMetal) {
+        if (doLlm && legMetal) {
             settle_das(cfg)
             das_cell(file, path, "metal", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
             // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
             // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
             settle_das(cfg)
-            ref_pass(file, path, refStock, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
+            ref_pass(file, path, refStock, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
         }
-        if (legNeon) {
+        if (doLlm && legNeon) {
             settle_das(cfg)
             das_cell(file, path, "cpu", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
             // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
             // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
             settle_das(cfg)
-            ref_pass(file, path, refClean, "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
+            ref_pass(file, path, refClean, "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
         }
-        if (legAmx) {
+        if (doLlm && legAmx) {
             settle_das(cfg)
             das_cell(file, path, "cpu", exe, true, cfg, threads, cellPath, ent.note, store, models, failed)
             // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
             // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
             settle_das(cfg)
-            ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed)
+            ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
+        }
+        // the image-chat legs of a vision decoder (an mmproj companion), das-only — same
+        // leg order and cool-slot discipline; the picture is the one pinned fixture
+        if (doImage && !empty(mm)) {
+            let mmPath = "{models_dir()}{mm}"
+            let picPath = "{models_dir()}{bench_image_fixture()}"
+            if (legMetal) {
+                settle_das(cfg)
+                image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed, "metal")
+            }
+            if (legNeon) {
+                settle_das(cfg)
+                image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed)
+            }
+            if (legAmx) {
+                settle_das(cfg)
+                image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed, "accel")
+            }
         }
         let wm = dlim_wipe(path)   // fully profiled - its images are done serving
         if (wm.removed > 0) {
             to_log(LOG_INFO, "gen_bench_records: lifecycle - {file} profiled, {wm.removed} image(s) deleted ({wm.freed >> 20l} MB)\n")
+        }
+        if (doImage && !empty(mm)) {   // the image legs' second carrier gets the same lifecycle
+            let wmm = dlim_wipe("{models_dir()}{mm}")
+            if (wmm.removed > 0) {
+                to_log(LOG_INFO, "gen_bench_records: lifecycle - {mm} profiled, {wmm.removed} image(s) deleted ({wmm.freed >> 20l} MB)\n")
+            }
         }
     }
     if (doAsr) {
@@ -1217,6 +1411,10 @@ def main : int {
                 to_log(LOG_INFO, "gen_bench_records: lifecycle - {spec.display} profiled, {wasr.removed} image(s) deleted ({wasr.freed >> 20l} MB)\n")
             }
         }
+    }
+    if (!empty(refSkipped)) {
+        // the loud tail of the sweep-start UNSET warning: name every pair the board is missing
+        to_log(LOG_WARNING, "gen_bench_records: {length(refSkipped)} ref cell(s) SKIPPED (refs unset - das-only rows, no board ratio): {join(refSkipped, ", ")}\n")
     }
     if (!empty(failed)) {
         let list = join(failed, ", ")
