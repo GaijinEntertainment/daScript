@@ -168,6 +168,7 @@ button.xs { font-size: 10px; padding: 2px 8px; }
 .chat-btns { display: flex; flex-direction: column; gap: 6px; }
 .chat-btns button { padding: 6px 14px; font-size: 12px; }
 #b-mic.rec { border-color: var(--red); color: var(--red); }
+.chat-btns button.off { opacity: 0.5; }
 .knobs { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 12px; align-items: center; }
 .knobs .knob { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint); }
 .knobs input[type="number"] {
@@ -291,7 +292,7 @@ button:disabled { opacity: 0.45; cursor: default; }
         <div class="swstrip" id="sw-strip" style="display:none"></div>
     </div>
 
-    <div class="sec"><span>§ 03</span><span class="rule"></span><span>model catalog</span></div>
+    <div class="sec" id="catalog-sec"><span>§ 03</span><span class="rule"></span><span>model catalog</span></div>
     <div class="panel">
         <div class="ctl-note" id="cat-note" style="margin-bottom:8px">curated, sha-pinned downloads — one at a time, resume on retry</div>
         <table class="ctable" id="cat-table">
@@ -518,15 +519,27 @@ function apply(s) {
         $("t-mtp").textContent = fmt(s.mtp_accepted) + " / " + fmt(s.mtp_drafted) +
             " (" + (100 * s.mtp_accepted / s.mtp_drafted).toFixed(0) + "%)";
     }
-    $("b-img").style.display = s.vision ? "" : "none";
+    // image/mic stay visible while serving, dimmed when their tower is not wired — a hidden
+    // button reads as "this can't do that", when the truth is "download the tower in § 03"
+    const bimg = $("b-img");
+    bimg.style.display = setupMode ? "none" : "";
+    bimg.classList.toggle("off", !s.vision);
+    bimg.title = s.vision ? "attach an image — paste or drop one too"
+        : "this model can see, but its vision tower is not wired — download it in the model catalog";
     if (!thinkSeeded && !thinkTouched && typeof s.thinking_default === "boolean") {
         $("kn-thinking").checked = s.thinking_default;
         thinkSeeded = true;
     }
+    if (micRec === null && !micDenied) {
+        const bmic = $("b-mic");
+        bmic.style.display = setupMode ? "none" : "";
+        bmic.classList.toggle("off", !(s.asr_workers > 0));
+        bmic.title = s.asr_workers > 0 ? "record, click again to stop + transcribe"
+            : "dictation needs the ASR tower — download parakeet in the model catalog";
+    }
     if (s.asr_workers > 0) {
         $("tile-asr").classList.remove("hide");
         $("t-asr").textContent = s.asr_ready + " · " + s.asr_active + " · " + s.asr_pending;
-        if (micRec === null) $("b-mic").style.display = "";
         $("asr-section").style.display = "block";
     }
     $("cfg").innerHTML =
@@ -1065,7 +1078,7 @@ const KNOBS = [
     { k: "temperature", v: 0, step: 0.1 }, { k: "top_k", v: 40, step: 1 },
     { k: "top_p", v: 0.9, step: 0.05 }, { k: "min_p", v: 0, step: 0.01 },
     { k: "presence_penalty", v: 0, step: 0.1 }, { k: "frequency_penalty", v: 0, step: 0.1 },
-    { k: "max_tokens", v: 512, step: 32 },
+    { k: "max_tokens", v: 16384, step: 256 },
 ];
 const chatMsgs = [];   // {role, content} — replayed on every send; TEXT only (see chatImage)
 let chatBusy = false;
@@ -1163,7 +1176,19 @@ function attachImageFile(file) {
     fr.readAsDataURL(file);
 }
 
-$("b-img").addEventListener("click", () => $("img-file").click());
+// an un-wired tower button walks the user to its § 03 offer instead of doing nothing
+function towerHint(what) {
+    $("cat-note").textContent = what;
+    $("catalog-sec").scrollIntoView({ behavior: "smooth" });
+}
+
+$("b-img").addEventListener("click", () => {
+    if ($("b-img").classList.contains("off")) {
+        towerHint("image chat needs the vision tower — download it on this model's row, then enable + restart");
+        return;
+    }
+    $("img-file").click();
+});
 $("img-file").addEventListener("change", e => {
     attachImageFile(e.target.files && e.target.files[0]);
     e.target.value = "";
@@ -1315,8 +1340,14 @@ function encodeWav(chunks, sampleRate) {
     return new Blob([buf], { type: "audio/wav" });
 }
 
+let micDenied = false;   // mic permission refused — keep the button down instead of re-showing it
+
 async function micToggle() {
     const btn = $("b-mic");
+    if (btn.classList.contains("off")) {
+        towerHint("dictation needs the ASR tower — download parakeet below the catalog, then enable + restart");
+        return;
+    }
     if (micRec) {
         const { ctx, node, stream, chunks } = micRec;
         micRec = null;
@@ -1351,7 +1382,8 @@ async function micToggle() {
         btn.classList.add("rec");
         btn.textContent = "■ stop";
     } catch (_e) {
-        btn.style.display = "none";   // no mic permission — hide the button
+        micDenied = true;
+        btn.style.display = "none";   // no mic permission — hide the button (and keep it hidden)
     }
 }
 $("b-mic").addEventListener("click", micToggle);
