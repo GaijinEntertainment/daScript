@@ -1081,7 +1081,7 @@ def public create_shader_module(device : Device; var code : array<uint8>) : Shad
 //! count (4 per word); pCode points straight at the word data, no uint8->uint reinterpret.
 def public create_shader_module(device : Device; var code : array<uint>) : ShaderModule {
     var ci = VkShaderModuleCreateInfo()
-    ci.codeSize = uint64(length(code) * 4)
+    ci.codeSize = uint64(long_length(code) * 4l)
     unsafe {
         ci.pCode = addr(code[0])
     }
@@ -1662,7 +1662,7 @@ def public create_compute_pipeline(device : Device; layout : PipelineLayout; sha
     }
     var si = VkSpecializationInfo()
     si.mapEntryCount = uint(length(spec))
-    si.dataSize = uint64(length(spec) * 4)
+    si.dataSize = uint64(long_length(spec) * 4l)
     var stage = VkPipelineShaderStageCreateInfo()
     stage.stage.compute = true
     stage.module_ = boost_value_to_vk(shader)
@@ -2814,10 +2814,10 @@ def public build_blas(device : Device; phys : VkPhysicalDevice; pool : CommandPo
     assert(length(indices) % 3 == 0, "build_blas: indices must be uint triples")
     var input_usage : VkBufferUsageFlags
     input_usage.acceleration_structure_build_input_read_only_khr = true
-    let vsize = uint64(length(vertices) * typeinfo sizeof(type<float3>))
+    let vsize = uint64(long_length(vertices) * int64(typeinfo sizeof(type<float3>)))
     var inscope vbuf <- create_address_buffer(device, phys, vsize, input_usage, true)
     vbuf |> upload_bytes(device, vertices)
-    let isize = uint64(length(indices) * 4)
+    let isize = uint64(long_length(indices) * 4l)
     var inscope ibuf <- create_address_buffer(device, phys, isize, input_usage, true)
     ibuf |> upload_bytes(device, indices)
     var tri = VkAccelerationStructureGeometryTrianglesDataKHR()
@@ -2844,7 +2844,7 @@ def public build_tlas(device : Device; phys : VkPhysicalDevice; pool : CommandPo
     assert(!empty(instances), "build_tlas: instances must be non-empty")
     var input_usage : VkBufferUsageFlags
     input_usage.acceleration_structure_build_input_read_only_khr = true
-    let isize = uint64(length(instances) * typeinfo sizeof(type<AccelInstance>))
+    let isize = uint64(long_length(instances) * int64(typeinfo sizeof(type<AccelInstance>)))
     var inscope ibuf <- create_address_buffer(device, phys, isize, input_usage, true)
     ibuf |> upload_bytes(device, instances)
     var idata = VkAccelerationStructureGeometryInstancesDataKHR()

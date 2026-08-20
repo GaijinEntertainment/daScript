@@ -1,4 +1,5 @@
 options gen2
+// lint-skip-file: verify_breaker corrupts the AST and verify_module reports 50503 by design
 require verify_breaker
 
 [export]

@@ -56,7 +56,7 @@ def find_memory_type(phys : VkPhysicalDevice; type_bits : uint; want : VkMemoryP
 def create_shader_module(device : VkDevice; var code : array<uint>) : VkShaderModule {
     var sci : VkShaderModuleCreateInfo
     sci.sType = VkStructureType.SHADER_MODULE_CREATE_INFO
-    sci.codeSize = uint64(length(code) * 4)
+    sci.codeSize = uint64(long_length(code) * 4l)
     unsafe {
         sci.pCode = addr(code[0])
     }

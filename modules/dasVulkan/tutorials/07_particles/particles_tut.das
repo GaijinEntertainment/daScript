@@ -322,7 +322,7 @@ def public build_particles_resources(device : Device; phys : VkPhysicalDevice; q
         descriptorCount = 1u)
     cw.pBufferInfo |> push(DescriptorBufferInfo(
         buffer = weak_copy(particle_buf.buffer),
-        range_ = uint64(N_PARTICLES * int(PARTICLE_STRIDE))))
+        range_ = uint64(N_PARTICLES) * uint64(PARTICLE_STRIDE)))
     cwrites |> emplace(cw)
     var no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(device, cwrites, no_copies)
@@ -480,7 +480,7 @@ def public record_particles_render_pass(res : ParticlesResources; cmd : CommandB
     bmb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
     bmb.buffer = boost_value_to_vk(res.particle_buf.buffer)
     bmb.offset = 0ul
-    bmb.size = uint64(N_PARTICLES * int(PARTICLE_STRIDE))
+    bmb.size = uint64(N_PARTICLES) * uint64(PARTICLE_STRIDE)
     var src_stage : VkPipelineStageFlags
     src_stage.compute_shader = true
     var dst_stage : VkPipelineStageFlags
