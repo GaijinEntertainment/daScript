@@ -32,6 +32,8 @@ let IMAGE_CLOSE = 258882l
 let CATS_ROWS = 130l
 let MM_G3 = "mmproj-gemma-3-4b-it-F16.gguf"   // the gemma3 SigLIP pair
 let DEC_G3 = "gemma-3-4b-it-Q8_0.gguf"
+let MM_G3_12B = "mmproj-gemma-3-12b-it-F16.gguf"   // the same tower at projection width 3840
+let DEC_G3_12B = "gemma-3-12b-it-Q4_K_M.gguf"      // large tier: DASLLAMA_PARITY_FULL gates it
 // gemma3 vocab: <start_of_image> / <end_of_image>; the fixed 896² canvas always yields 256 rows
 let G3_IMAGE_OPEN = 255999l
 let G3_IMAGE_CLOSE = 256000l
@@ -232,6 +234,48 @@ def test_vision_chat_gemma3(t : T?) {
                 return true
             }
             to_log(LOG_INFO, "vision caption (gemma-3-4b/gemma3v): {replace(reply, "\n", "\\n")}\n")
+            let low = to_lower(reply)
+            tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
+            tt |> success(length(reply) > 40, "the caption is a description, not a fragment")
+            delete chat
+        }
+        delete m
+    }
+}
+
+// The 12B gemma3 pair: the SAME SigLIP tower at projection width 3840 — the one dimension the
+// family varies per decoder; large tier, so DASLLAMA_PARITY_FULL gates it.
+[test]
+def test_vision_chat_gemma3_12b(t : T?) {
+    t |> run("the gemma-3-12b image turn: the widened projection, then the caption") @(tt : T?) {
+        let mm = path_join(models_dir(), MM_G3_12B)
+        let dec = path_join(models_dir(), DEC_G3_12B)
+        let cats = path_join(models_dir(), CATS)
+        if (!model_available(tt, mm) || !model_available(tt, dec)) {
+            return
+        }
+        if (!stat(cats).is_valid) {
+            tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
+            return
+        }
+        let img <- load_image_rgb(cats)
+        var m <- load_model_(dec)   // the Q4_K_M file picks its serving mode like the gemma-4 12B turn
+        allow_cpu_prefill()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var emb <- load_vision_embedder(mm)
+            tt |> equal(vision_family(emb), "gemma3v", "the 12B mmproj sniffs as gemma3v")
+            tt |> equal(vision_proj_dim(emb), 3840l, "projection width matches the 12B decoder")
+            var chat <- create_chat_(m, emb, "", 96l)
+            add_user_image_(chat, img)
+            add_user_(chat, "describe this image")
+            tt |> equal(chat.n_image_rows, G3_ROWS, "the fixed canvas always splices 256 rows")
+            var params = SamplingParams()
+            params.temp = 0.0
+            let reply = respond_(m, chat, params) $(piece : string) {
+                return true
+            }
+            to_log(LOG_INFO, "vision caption (gemma-3-12b/gemma3v): {replace(reply, "\n", "\\n")}\n")
             let low = to_lower(reply)
             tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
             tt |> success(length(reply) > 40, "the caption is a description, not a fragment")

@@ -312,6 +312,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             url = "{HF}/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf",
             bytes = 3106738272l, sha256 = "740185b21d22ceb83a11c3aa62ad5842ef32c70f6096d756bbee85a1e4ec34b8"),
         ModelSpec(file = "gemma-3-4b-it-Q8_0.gguf", display = "gemma-3-4B",
+            // the vision mmproj rides as a companion: the gemma3v tower tests and the image chat
+            // load it beside this decoder (the tower itself is size-invariant; 4B is the tested pair)
+            companions <- [
+                ProvEntry(name = "mmproj-gemma-3-4b-it-F16.gguf", root = "llm",
+                    url = "{HF}/ggml-org/gemma-3-4b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
+                    bytes = 851251104l, sha256 = "8c0fb064b019a6972856aaae2c7e4792858af3ca4561be2dbf649123ba6c40cb")],
             parity <- ev_gemma3_4b()),
         ModelSpec(file = "Qwen3-4B-Instruct-2507-Q8_0.gguf", display = "Qwen3-4B",
             parity <- ev_qwen_count()),
@@ -351,6 +357,15 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // weights + a sigmoid-gated shared expert; QKV bias, NEOX rope); the fixture runs
             // BOTH MoE prefill paths off one load — bit-identical by construction
             parity <- ev_qwen_count([moe_reference = true])),
+        // parity-less provenance carrier: the gemma3 vision 12B pair (the same SigLIP tower at
+        // projection 3840; test_vision_chat's PARITY_FULL leg is its coverage)
+        ModelSpec(file = "gemma-3-12b-it-Q4_K_M.gguf",
+            url = "{HF}/ggml-org/gemma-3-12b-it-GGUF/resolve/main/gemma-3-12b-it-Q4_K_M.gguf",
+            bytes = 7300574976l, sha256 = "7bb69bff3f48a7b642355d64a90e481182a7794707b3133890646b1efa778ff5",
+            companions <- [
+                ProvEntry(name = "mmproj-gemma-3-12b-it-F16.gguf", root = "llm",
+                    url = "{HF}/ggml-org/gemma-3-12b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
+                    bytes = 854200224l, sha256 = "30c02d056410848227001830866e0a269fcc28aaf8ca971bded494003de9f5a5")]),
         ModelSpec(file = "gemma-4-12B-it-Q4_K_M.gguf", official = true,
             url = "{HF}/lmstudio-community/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q4_K_M.gguf",
             bytes = 7381382944l, sha256 = "95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8",
