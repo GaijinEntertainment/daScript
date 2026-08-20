@@ -188,12 +188,14 @@ On Apple builds the CPU gate pins the tower knob off, and a second test gates th
 encode against the same dumps on a scale-relative bar (2e-4 + 4e-3·token-rms) — exceeding it
 is a red, the bar each fixture actually held is logged either way, and engage is proven per
 fixture by the encodes counter.
-`test_gemma4v.das` — the gemma4v ViT tower (E-series; E2B mmproj) tier-1 parity vs the
-`-p encode` dumps minted on the f32-widened E2B mmproj, CPU, `-fa off` (`mint_e2b.sh`): eight
+`test_gemma4v.das` — the gemma4v ViT tower (E-series) tier-1 parity vs the `-p encode` dumps
+minted on the f32-widened mmproj, CPU, `-fa off` (`mint_e2b.sh` / `mint_e4b.sh`): eight E2B
 fixtures (96² cb through 672×336) on the scale-relative bar 2e-4 + 4e-3·token-rms, the measured
 maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed through the
-staging planes must miss the oracle — the sidecar scalars are load-bearing). Skips honestly
-without the mmproj or dumps. `_vision_oracle.das` is the shared dump parser / fixture generator /
+staging planes must miss the oracle — the sidecar scalars are load-bearing); plus the E4B rung —
+the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam subset
+with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps.
+`_vision_oracle.das` is the shared dump parser / fixture generator /
 per-token compare both vision tier-1 tests use.
 `test_vision_embedder.das` — model-free: the `VisionEmbedder` carrier's own arms — the sniffed
 family tag, the none-carrier refusals, and the `.dlim` route — over constructed carriers.

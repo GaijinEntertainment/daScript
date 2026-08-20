@@ -15,9 +15,9 @@ require _vision_oracle   // the mtmd dump parser, fixture generators, per-token 
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gates pin the knob off
 
 // Tier-1 gemma4v tower parity vs llama-mtmd-debug -p encode.
-// Reference arm: the f32-widened E2B mmproj, CPU, --no-mmproj-offload, -fa off (the only true-f32 arm).
+// Reference arm: the f32-widened mmproj, CPU, --no-mmproj-offload, -fa off (the only true-f32 arm).
 // Fixtures: pre-resized [0,1] float canvases - no preprocessing, so a diff isolates the tower math.
-// Dumps: beside the models in gemma4-vision-oracle/ (mint_e2b.sh regenerates).
+// Dumps: beside the models in gemma4-vision-oracle/ (mint_e2b.sh / mint_e4b.sh regenerate).
 // Bar: scale-relative - 16 blocks of bf16-weight GEMMs under summation-order drift cannot promise
 // gemma4uv's 2e-4; the logged maxdiff is the number.
 
@@ -31,7 +31,7 @@ def private gate_encode(t : T?; tw : Gemma4vTower; var st : Gemma4vState; kind :
     var o = OracleEncode()
     let logpath = path_join(path_join(models_dir(), "gemma4-vision-oracle"), logname)
     if (!load_oracle_encode(logpath, o)) {
-        t |> skip("oracle dump {logname} not present/parseable - mint via gemma4-vision-oracle/mint_e2b.sh")
+        t |> skip("oracle dump {logname} not present/parseable - mint via its gemma4-vision-oracle mint script")
         return false
     }
     let planes <- make_planes(kind, w, h)
@@ -342,5 +342,54 @@ def test_gemma4v_tier1_q8(t : T?) {
         tt |> gate_encode(tw, st, "cb", 672, 336, "e2b.encode.cb672x336.log", TIER1_REL_Q8)
         delete st
         delete tw
+    }
+}
+
+// The E4B rung: the larger E-series vehicle shares the tower geometry block for block - only the
+// soft-token width differs (2560 vs 1536) - so the dump set is the seam subset (smallest grid,
+// one product size, the orientation gate; mint_e4b.sh), with one GPU and one q8-lane fixture.
+[test]
+def test_gemma4v_tier1_e4b(t : T?) {
+    t |> run("tier-1 tower parity vs the mtmd encode dumps (E4B)") @(tt : T?) {
+        let mm = path_join(models_dir(), "mmproj-gemma-4-E4B-it-BF16.gguf")
+        if (!model_available(tt, mm)) {
+            return
+        }
+        set_gemma4v_q8(false)
+        var tw <- load_gemma4v_tower(mm)
+        reset_gemma4v_q8()
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // the CPU gate first; the GPU rung re-arms below
+        }
+        var st = Gemma4vState()
+        tt |> success(!tw.q8, "exact-plane lane")
+        tt |> equal(int(tw.proj_dim), 2560, "soft-token width - the one dimension E4B changes")
+        tt |> equal(int(tw.n_embd), 768, "tower width matches E2B's")
+        tt |> equal(int(tw.n_layer), 16, "block count matches E2B's")
+        tt |> success(tw.blk_bf16 && tw.proj_bf16 && !tw.patch_bf16, "plane split as the file has it: bf16 GEMMs, f32 patch conv")
+        tt |> success(!tw.has_std, "E4B carries no std_bias/std_scale")
+        tt |> gate_encode(tw, st, "cb", 96, 96, "e4b.encode.cb96.log")
+        tt |> gate_encode(tw, st, "cb", 336, 336, "e4b.encode.cb336.log")
+        tt |> gate_encode(tw, st, "green", 336, 336, "e4b.encode.green336.log")
+        tt |> gate_encode(tw, st, "cb", 672, 336, "e4b.encode.cb672x336.log")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)
+            let s0 = metal_tower_stats()
+            let ran = gate_encode(tt, tw, st, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_GPU)
+            if (ran) {
+                tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "GPU-served (encodes delta)")
+                tt |> equal(metal_tower_stats().blocks - s0.blocks, tw.n_layer, "every block ran on the driver (blocks delta)")
+            }
+        }
+        delete st
+        delete tw
+        set_gemma4v_q8(true)   // the serving lane on its own bar (the Metal driver declines q8)
+        var twq <- load_gemma4v_tower(mm)
+        reset_gemma4v_q8()
+        var stq = Gemma4vState()
+        tt |> success(twq.q8, "q8 lane loaded")
+        tt |> gate_encode(twq, stq, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
+        delete stq
+        delete twq
     }
 }

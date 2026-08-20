@@ -375,10 +375,11 @@ So there's no ambiguity about what will fail:
 - **Grouped expert routing** (DeepSeek-V3 `expert_group_count` > 1) panics honestly at load —
   the one MoE routing shape still missing. (The DeepSeek-style `exp_probs_b` selection bias
   itself ships, via glm4moe.)
-- **MLA** (DeepSeek-style low-rank-compressed KV), **Mamba/SSM** proper, and **vision**
-  multimodal input are not implemented. The hybrid recurrent+attention shape IS shipped
-  (Gated-DeltaNet: qwen35 / qwen35moe / qwen3next), and so is audio-in — vision is what stays
-  out of scope on the omni models.
+- **MLA** (DeepSeek-style low-rank-compressed KV) and **Mamba/SSM** proper are not
+  implemented. The hybrid recurrent+attention shape IS shipped (Gated-DeltaNet: qwen35 /
+  qwen35moe / qwen3next), and so are audio-in and vision-in (gemma-4 families: 12B `gemma4uv`,
+  E-series `gemma4v`) — vision on the OTHER multimodal families (Qwen-VL/Omni, pixtral,
+  gemma3) is what stays out of scope.
 - **GGUF weight types beyond F32 / F16 / Q8_0 / Q4_0 / MXFP4 / Q4_K / Q5_K / Q6_K** — no IQ
   quants; BF16 is read only for the audio-tower mmprojs, not as an LLM weight format.
 - `encode(..., parse_special)` is reserved and currently a no-op — the chat renderer injects

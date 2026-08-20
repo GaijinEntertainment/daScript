@@ -869,9 +869,9 @@ group; wording kept.
 
 ### From `audio_models_plan.md` (Findings; correctness, not perf)
 
-- **OPEN — the v0.3 Mistral `[INST]` template's derived close is ` [/INST]` — wrong for multi-turn
-  (should be `</s>`); untouched, flagged for Boris.** Pre-existing; spotted in audio session B while
-  adding `ChatTemplate.assistant_close` for the v7-tekken template (which does close with `</s>`).
+- **RESOLVED (87ffe39fe) — the v0.3 Mistral `[INST]` template's derived close was ` [/INST]` —
+  wrong for multi-turn.** Fixed: `mistral_instruct_template`'s `assistant_close` is `</s>`, like
+  v7-tekken's. Spotted in audio session B while adding `ChatTemplate.assistant_close`.
 
 ### From `whisper_plan.md` ("Performance ledger — fold into API_REWORK.md at PR time")
 
