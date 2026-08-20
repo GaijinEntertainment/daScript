@@ -1,0 +1,34 @@
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"role":"assistant"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":"Hello"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":","}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":" I"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":"'m"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":" here"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":" to"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":" help"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":" you"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":" with"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":" your"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":" questions"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":" and"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":" concerns"}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{"content":"."}}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1751200001,"model":"smol","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
+

@@ -1,0 +1,15 @@
+// Negative control (not part of the suite — rename to .spec.js to run):
+// serves a stats payload the assertion contradicts; every test here MUST fail.
+// Proves the harness binds assertions to page output, not to the fixture file.
+
+const { test, expect, fx, openControl } = require('./fixtures');
+
+test('NEGATIVE: queued tile must NOT match a value the mock never served', async ({ page }) => {
+    await openControl(page, { stats: { ...fx('stats'), queued: 3 } });
+    await expect(page.locator('#t-queued')).toHaveText('999');
+});
+
+test('NEGATIVE: badge must NOT read serving when the fixture drains', async ({ page }) => {
+    await openControl(page, { stats: { ...fx('stats'), draining: true } });
+    await expect(page.locator('#badge')).toHaveText('serving');
+});
