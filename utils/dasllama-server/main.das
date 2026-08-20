@@ -62,7 +62,7 @@ struct ServerArgs {
     @clarg_doc = "Metal (GPU) serving mode: off | auto | required (default off). auto = GPU when a path's gates pass, CPU fallback otherwise; required = a call the GPU cannot serve is a hard failure"
     metal : string
 
-    @clarg_doc = "GPU backend: off | metal | metal-required | vulkan (unset = legacy --metal flag + DASLLAMA_GPU_* env vars)"
+    @clarg_doc = "GPU backend: auto (default: metal/vulkan when detected, else CPU) | off | metal | metal-required | vulkan (a set --metal flag keeps the legacy env-driven path)"
     gpu : string
 
     @clarg_doc = "vulkan: resident MoE expert-stack layers K, offloaded from the end (default 2 under --gpu vulkan)"
@@ -503,17 +503,39 @@ def pick_quant(s : string) : QuantMode {
     return QuantMode.q8
 }
 
-// --gpu selector: one knob over the metal mode and the vulkan tier. Unset falls back to the
-// legacy --metal flag + DASLLAMA_GPU_* env vars.
+// the pure defaults-first pick over the two detection facts: the Apple rails when the box has
+// them, else the vulkan tier when a device answers the probe, else the CPU
+def gpu_auto_pick(metal_ok, vulkan_ok : bool) : string {
+    if (metal_ok) {
+        return "metal"
+    }
+    return vulkan_ok ? "vulkan" : "off"
+}
+
+var private g_gpu_detected = ""   // cached auto-pick ("" = not probed yet; the probes cache too)
+
+def private detected_gpu() : string {
+    if (empty(g_gpu_detected)) {
+        g_gpu_detected = gpu_auto_pick(kernel_backend_available("metal"), kernel_backend_available("vulkan"))
+    }
+    return g_gpu_detected
+}
+
+// --gpu selector: one knob over the metal mode and the vulkan tier. Defaults-first: unset
+// (with no legacy --metal flag) and the explicit "auto" spelling both serve on the detected
+// backend — `gpu = off` is the opt-out. A set --metal keeps the legacy env-driven path.
 def private effective_gpu(cfg : ServerArgs) : string {
     let l = to_lower(cfg.gpu)
     if (l == "off" || l == "metal" || l == "metal-required" || l == "vulkan") {
         return l
     }
-    if (!empty(l)) {
-        to_log(LOG_WARNING, "dasllama-server: unknown --gpu '{cfg.gpu}', ignoring (valid: off | metal | metal-required | vulkan)\n")
+    if (l == "auto") {
+        return detected_gpu()
     }
-    return ""
+    if (!empty(l)) {
+        to_log(LOG_WARNING, "dasllama-server: unknown --gpu '{cfg.gpu}', ignoring (valid: auto | off | metal | metal-required | vulkan)\n")
+    }
+    return empty(cfg.metal) ? detected_gpu() : ""
 }
 
 def private cfg_sourced(key : string) : bool
@@ -594,7 +616,9 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         "sources" => JV(sources),
         "authoritative" => JV(g_cfg_authoritative),
         "config_path" => JV(cfg.config),
-        "save_path" => JV(save_path)
+        "save_path" => JV(save_path),
+        "gpu_effective" => JV(gpu),
+        "gpu_detected" => JV(detected_gpu())
     }
     var doc = JV(top)
     let text = write_json_compact(doc)
@@ -787,6 +811,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     // GPU backend lands BEFORE the load: the metal mode pins the row-major backend the GPU
     // kernels read, and the vulkan tier want must be armed before the load walk uploads stacks
     let gpu = effective_gpu(g_cfg)
+    if (empty(g_cfg.metal) && (empty(g_cfg.gpu) || to_lower(g_cfg.gpu) == "auto")) {
+        to_log(LOG_INFO, "dasllama-server: gpu backend auto-detected: {gpu} (set gpu = off | metal | vulkan to pin)\n")
+    }
     var metal_mode = pick_metal_mode(g_cfg.metal)
     if (!empty(gpu) && !from_cli("gpu") && from_cli("metal")) {
         // gpu is the master backend switch, but an explicit CLI --metal losing to a config-file

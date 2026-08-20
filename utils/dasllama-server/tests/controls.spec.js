@@ -34,6 +34,7 @@ test('restart with dirty edits saves first; a failed save aborts the restart', a
     const { posts } = await openControl(page, {
         responses: { '/config': { status: 400, json: { error: { message: 'ctx must be positive' } } } },
     });
+    await page.locator('#en-ctx').check();   // ctx is default-gated — tick its override to edit it
     await page.locator('#f-ctx').fill('-1');
     page.once('dialog', async d => {
         expect(d.message()).toContain('Save the edited config');

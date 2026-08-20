@@ -765,18 +765,32 @@ def private handle_catalog_download(var req : HttpRequest?; var resp : HttpRespo
         }
     }
     let want = js?["name"] ?? ""
+    let tower = js?["tower"] ?? ""
+    if (tower == "asr") {
+        let refusal = catalog_download_start_asr(g_catalog_dir)
+        if (!empty(refusal)) {
+            return resp |> JSON(error_body(refusal, "invalid_request_error"), http_status.CONFLICT)
+        }
+        to_log(LOG_INFO, "dasllama-server: catalog download started: asr tower (into {g_catalog_dir})\n")
+        return resp |> JSON("\{\"ok\":true,\"name\":\"asr\"}", http_status.ACCEPTED)
+    }
     if (empty(want)) {
         let why = empty(jerr) ? "" : " ({jerr})"
         return resp |> JSON(error_body("body must name a catalog entry: \{\"name\": ...}{why}", "invalid_request_error"), http_status.BAD_REQUEST)
     }
+    if (!empty(tower) && tower != "vision") {
+        return resp |> JSON(error_body("unknown tower '{tower}' (vision | asr)", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
     for (e in model_catalog()) {
         if (e.name == want) {
-            let refusal = catalog_download_start(g_catalog_dir, e)
+            let refusal = (tower == "vision" ? catalog_download_start_vision(g_catalog_dir, e)
+                                             : catalog_download_start(g_catalog_dir, e))
             if (!empty(refusal)) {
                 return resp |> JSON(error_body(refusal, "invalid_request_error"), http_status.CONFLICT)
             }
-            to_log(LOG_INFO, "dasllama-server: catalog download started: {e.name} ({e.bytes >> 20l} MB into {g_catalog_dir})\n")
-            return resp |> JSON("\{\"ok\":true,\"name\":{json_str(e.name)},\"bytes\":{e.bytes}}", http_status.ACCEPTED)
+            let bytes = tower == "vision" ? e.vision_bytes : e.bytes
+            to_log(LOG_INFO, "dasllama-server: catalog download started: {tower == "vision" ? "vision:" : ""}{e.name} ({bytes >> 20l} MB into {g_catalog_dir})\n")
+            return resp |> JSON("\{\"ok\":true,\"name\":{json_str(e.name)},\"bytes\":{bytes}}", http_status.ACCEPTED)
         }
     }
     return resp |> JSON(error_body("unknown catalog entry '{want}'", "invalid_request_error"), http_status.NOT_FOUND)
@@ -865,6 +879,55 @@ def private cpu_brand : string {
     run_and_capture(args, out, 10.0)
     delete args
     return strip(out)
+}
+
+var private g_box_ram_gb = 0   // total physical RAM in whole GiB, probed once at init_server (0 = unknown)
+
+// linux /proc/meminfo: "MemTotal:       131842348 kB" -> whole GiB; 0 = parse failure
+def ram_gb_from_meminfo(text : string) : int {
+    for (ln in split(text, "\n")) {
+        if (ln |> starts_with("MemTotal")) {
+            let c = find(ln, ":")
+            if (c >= 0) {
+                var toks <- split(strip(slice(ln, c + 1)), " ")
+                let kb = empty(toks) ? 0.0 : to_float(toks[0])
+                delete toks
+                return int(kb / (1024.0 * 1024.0) + 0.5)
+            }
+        }
+    }
+    return 0
+}
+
+// Total physical RAM, the same per-platform probes as the profiling rig: wmic falling through
+// to CIM on Windows (clean 24H2+ installs ship without wmic), sysctl on macOS, /proc on linux.
+def private box_ram_gb() : int {
+    let gib = 1024.0 * 1024.0 * 1024.0
+    var out = ""
+    if (get_platform_name() == "windows") {
+        var args <- ["wmic", "ComputerSystem", "get", "TotalPhysicalMemory", "/value"]
+        run_and_capture(args, out, 10.0)
+        delete args
+        for (ln in split(out, "\n")) {
+            let i = find(ln, "=")
+            if (i >= 0 && find(ln, "TotalPhysicalMemory") >= 0) {
+                return int(to_float(strip(slice(ln, i + 1))) / gib + 0.5)
+            }
+        }
+        var ps <- ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"]
+        out = ""
+        run_and_capture(ps, out, 15.0)
+        delete ps
+        let t = strip(out)
+        return empty(t) ? 0 : int(to_float(t) / gib + 0.5)
+    }
+    if (get_platform_name() == "darwin") {
+        var args <- ["sysctl", "-n", "hw.memsize"]
+        run_and_capture(args, out, 10.0)
+        delete args
+        return int(to_float(strip(out)) / gib + 0.5)
+    }
+    return ram_gb_from_meminfo(fread("/proc/meminfo"))
 }
 
 def private compose_hardware_line {
@@ -3558,7 +3621,10 @@ class OpenAiServer : HvWebServer {
             return handle_bake_start(req, resp)
         }
         GET("/catalog") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return resp |> JSON(catalog_state_json(g_catalog_dir))
+            // budget only when the device already exists — the budget hook device-inits on first call
+            let tier = gpu_tier_status()
+            let vram_mb = !empty(tier.device) ? moe_gpu_weight_budget() / 1_000_000l : 0l
+            return resp |> JSON(catalog_state_json(g_catalog_dir, g_box_ram_gb, vram_mb))
         }
         POST("/catalog/download") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (!is_loopback_req(req)) return deny_operator(resp)
@@ -3715,6 +3781,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     g_server_started = true
     g_started_at = ref_time_ticks()
     compose_hardware_line()
+    g_box_ram_gb = box_ram_gb()
     var names <- [for (s in g_slots); s.is_default && length(g_slots) > 1 ? "{s.name}*" : s.name]
     let kv_mode = page_rows > 0l ? "{kv_dtype} paged P={page_rows}" : "{kv_dtype} flat"
     to_log(LOG_INFO, "dasllama-server listening on http://127.0.0.1:{port}/v1  (models: {join(names, ", ")}; streams: {max_streams}, prefill chunk: {chunk_tokens}, kv: {kv_mode})\n")

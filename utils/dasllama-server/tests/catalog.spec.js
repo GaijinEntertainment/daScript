@@ -21,7 +21,7 @@ test('the catalog renders every entry: star on the default, present chip, size a
     const present = doc.entries.filter(e => e.present);
     expect(present.length).toBeGreaterThan(0);
     await expect(page.locator('#cat-body')).toContainText(def.display + ' ★');
-    await expect(page.locator('#cat-body .chip').first()).toHaveText('downloaded');
+    await expect(page.locator('#cat-body .chip', { hasText: 'downloaded' })).toHaveCount(present.length);
     await expect(page.locator('#cat-body')).toContainText((def.bytes / 1e9).toFixed(1) + ' GB');
     // setup mode: a present entry offers the serve button; absent entries offer download
     await expect(page.locator('#cat-body button', { hasText: 'serve this model' })).toHaveCount(present.length);

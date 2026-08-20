@@ -10,14 +10,15 @@ options _dasllama_internal = true   // the env rail (g_env_*) is knob-internal; 
 require daslib/fio
 require daslib/defer
 require dasllama/dasllama_env   // g_env_harness.models_dir / g_env_core home fields — the env rail
-require ../../modules/dasLLAMA/performance/model_specs.das   // the ONE model set — the catalog is a view over it
+require ../../modules/dasLLAMA/performance/model_specs.das public   // the ONE model set — the catalog is a view over it (re-exported: the tests gate its serve rows)
 require daslib/json_boost
 require daslib/jobque_boost
 require daslib/strings_boost
 require strings
 
 //! One curated model: a commit-pinned, ungated HF file this engine serves today.
-//! `vram_hint_gb` is the advertised working-set hint, not a fit check.
+//! `vram_hint_gb` is the advertised working-set hint, not a fit check. The `vision_*`
+//! fields carry the row's pinned vision tower (mmproj) when it has one — "" = text only.
 struct public CatalogEntry {
     name : string          // route/catalog id (kebab, stable)
     display : string       // human name on the card
@@ -29,18 +30,27 @@ struct public CatalogEntry {
     ctx : int              // trained context length
     vram_hint_gb : float
     is_default : bool      // the one the getting-started path recommends
+    vision_file : string   // pinned vision-tower artifact ("" = text only)
+    vision_url : string
+    vision_bytes : int64
+    vision_sha256 : string
+}
+
+def private catalog_entry_of(s : ModelSpec) : CatalogEntry {
+    let tower <- serve_vision_tower(s.serve_vision)
+    return CatalogEntry(name = s.serve_name, display = s.serve_display,
+        note = s.serve_note, file = s.file, url = s.url, bytes = s.bytes,
+        sha256 = s.sha256, ctx = s.serve_ctx, vram_hint_gb = s.serve_vram_gb,
+        is_default = s.serve_default,
+        vision_file = tower.name, vision_url = tower.url,
+        vision_bytes = tower.bytes, vision_sha256 = tower.sha256)
 }
 
 //! The serving catalog: a VIEW over `model_specs()` (the one model set) — rows carrying a
 //! `serve_name`. Every entry is commit-pinned + sha-canonical there; every one is
 //! load-tested on this engine before it ships.
 def public model_catalog() : array<CatalogEntry> {
-    return <- [for (s in model_specs());
-        CatalogEntry(name = s.serve_name, display = s.serve_display,
-            note = s.serve_note, file = s.file, url = s.url, bytes = s.bytes,
-            sha256 = s.sha256, ctx = s.serve_ctx, vram_hint_gb = s.serve_vram_gb,
-            is_default = s.serve_default);
-        where !empty(s.serve_name)]
+    return <- [for (s in model_specs()); catalog_entry_of(s); where !empty(s.serve_name)]
 }
 
 //! The pure resolution core: env override > config key > `<home>/.dasllama/models`;
@@ -220,44 +230,65 @@ def private dl_worker(url_, partial_, final_path_, sha_path_, want_sha_ : string
     events |> push_clone(DlEvent(kind = DlEventKind.done, text = ""))
 }
 
-//! Start downloading catalog entry `e` into `dir`. One at a time; "" on success, else the refusal.
-def public catalog_download_start(dir : string; e : CatalogEntry) : string {
+// the shared start core: one download at a time, any pinned catalog artifact (model or tower)
+def private download_start_item(dir, id, file, url, want_sha : string; want_bytes : int64) : string {
     if (catalog_download_running()) {
         return "a download is already running ({g_dl_name})"
     }
-    if (!empty(catalog_local_path(dir, e))) {
-        return "{e.file} is already present"
+    if (empty(url) || empty(want_sha)) {
+        return "no pinned artifact for '{id}'"
+    }
+    if (stat(path_join(dir, file)).is_valid) {
+        return "{file} is already present"
     }
     if (!mkdir_rec(dir)) {
         return "cannot create models dir {dir}"
     }
     let free = int64(disk_space(dir).available)
-    if (free > 0l && free < e.bytes + (1l << 30l)) {
-        return "not enough disk space in {dir}: need {(e.bytes >> 30l) + 2l} GB free, have {free >> 30l} GB"
+    if (free > 0l && free < want_bytes + (1l << 30l)) {
+        return "not enough disk space in {dir}: need {(want_bytes >> 30l) + 2l} GB free, have {free >> 30l} GB"
     }
     if (g_dl_events == null) {
         return "the download rail is not initialized (server boot owns the channel)"
     }
     g_dl_state = "downloading"
-    g_dl_name = e.name
+    g_dl_name = id
     g_dl_error = ""
-    g_dl_want_bytes = e.bytes
-    g_dl_partial = path_join(dir, "{e.file}.partial")
-    g_dl_url = e.url
-    g_dl_final = path_join(dir, e.file)
-    g_dl_sha_path = path_join(dir, "{e.file}.sha")
-    g_dl_want_sha = e.sha256
-    let url = g_dl_url
+    g_dl_want_bytes = want_bytes
+    g_dl_partial = path_join(dir, "{file}.partial")
+    g_dl_url = url
+    g_dl_final = path_join(dir, file)
+    g_dl_sha_path = path_join(dir, "{file}.sha")
+    g_dl_want_sha = want_sha
+    let url_c = g_dl_url
     let partial = g_dl_partial
     let final_path = g_dl_final
     let sha_path = g_dl_sha_path
-    let want_sha = g_dl_want_sha
-    let want_bytes = e.bytes
+    let want_sha_c = g_dl_want_sha
     var events_capture = g_dl_events
-    new_thread() <| @capture(= url, = partial, = final_path, = sha_path, = want_sha, = want_bytes, = events_capture) {
-        dl_worker(url, partial, final_path, sha_path, want_sha, want_bytes, events_capture)
+    new_thread() <| @capture(= url_c, = partial, = final_path, = sha_path, = want_sha_c, = want_bytes, = events_capture) {
+        dl_worker(url_c, partial, final_path, sha_path, want_sha_c, want_bytes, events_capture)
     }
     return ""
+}
+
+//! Start downloading catalog entry `e` into `dir`. One at a time; "" on success, else the refusal.
+def public catalog_download_start(dir : string; e : CatalogEntry) : string {
+    return download_start_item(dir, e.name, e.file, e.url, e.sha256, e.bytes)
+}
+
+//! Start downloading entry `e`'s vision tower (download id "vision:<name>"). "" on success.
+def public catalog_download_start_vision(dir : string; e : CatalogEntry) : string {
+    if (empty(e.vision_file)) {
+        return "'{e.name}' has no vision tower"
+    }
+    return download_start_item(dir, "vision:{e.name}", e.vision_file, e.vision_url, e.vision_sha256, e.vision_bytes)
+}
+
+//! Start downloading the ASR tower (parakeet v3; download id "asr"). "" on success.
+def public catalog_download_start_asr(dir : string) : string {
+    let tower <- serve_asr_tower()
+    return download_start_item(dir, "asr", tower.name, tower.url, tower.sha256, tower.bytes)
 }
 
 //! Drain worker events; call once per HTTP tick.
@@ -280,19 +311,29 @@ def public catalog_download_tick() {
     }
 }
 
-//! The GET /catalog document: entries with local presence, plus the download state machine.
-def public catalog_state_json(dir : string) : string {
+//! The GET /catalog document: entries with local presence (model AND vision tower), the ASR
+//! tower, the box's memory facts (`ram_gb`/`vram_mb`, 0 = unknown — the page's fit badges),
+//! plus the download state machine.
+def public catalog_state_json(dir : string; ram_gb : int = 0; vram_mb : int64 = 0l) : string {
     var cat <- model_catalog()
     var entries : array<JsonValue?>
     entries |> reserve(length(cat))
     for (e in cat) {
         let local = catalog_local_path(dir, e)
+        let vision_path = empty(e.vision_file) ? "" : path_join(dir, e.vision_file)
+        let vision_present = !empty(vision_path) && stat(vision_path).is_valid
         entries |> push(JV((
             name = e.name, display = e.display, note = e.note, file = e.file,
             bytes = e.bytes, sha256 = e.sha256, ctx = e.ctx,
             vram_hint_gb = e.vram_hint_gb, is_default = e.is_default,
-            present = !empty(local), path = local)))
+            present = !empty(local), path = local,
+            vision_file = e.vision_file, vision_bytes = e.vision_bytes,
+            vision_present = vision_present,
+            vision_path = vision_present ? vision_path : "")))
     }
+    let asr_tower <- serve_asr_tower()
+    let asr_path = path_join(dir, asr_tower.name)
+    let asr_present = stat(asr_path).is_valid
     var got = 0l
     if (g_dl_state == "downloading") {
         let st = stat(g_dl_partial)
@@ -303,6 +344,9 @@ def public catalog_state_json(dir : string) : string {
     var doc = JV((
         models_dir = dir,
         entries = JV(entries),
+        asr = (file = asr_tower.name, bytes = asr_tower.bytes,
+            present = asr_present, path = asr_present ? asr_path : ""),
+        box = (ram_gb = ram_gb, vram_mb = vram_mb),
         download = (state = g_dl_state, name = g_dl_name, got = got,
             total = g_dl_want_bytes, error = g_dl_error)))
     let text = write_json_compact(doc)
