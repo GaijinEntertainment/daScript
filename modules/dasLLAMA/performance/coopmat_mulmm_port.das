@@ -336,7 +336,7 @@ def private make_raw_pipeline(dev : VkDevice; shader_words : array<uint>; var rl
                               use_spec : bool) : VkPipeline {
     var words := shader_words
     var smci = VkShaderModuleCreateInfo()
-    smci.codeSize = uint64(length(words) * 4)
+    smci.codeSize = uint64(long_length(words) * 4l)
     var raw_shader : VkShaderModule
     var entries : VkSpecializationMapEntry[12]
     for (i in range(12)) {

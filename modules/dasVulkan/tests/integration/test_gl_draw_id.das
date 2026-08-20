@@ -95,7 +95,7 @@ def private render_draw_id() : array<uint8> {
 
     // Indirect draw buffer: N_DRAW VkDrawIndirectCommand entries (16 bytes each).
     let stride = 16u
-    let buf_bytes = uint64(stride * uint(N_DRAW))
+    let buf_bytes = uint64(stride) * uint64(N_DRAW)
     var indirect_usage : VkBufferUsageFlags
     indirect_usage.indirect_buffer = true
     var inscope indirect_buf <- create_host_buffer(device, phys, buf_bytes, indirect_usage)

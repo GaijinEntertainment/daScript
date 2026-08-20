@@ -222,7 +222,7 @@ test('every expectations row resolves, and the shipped manifest is fully covered
         assert.equal(r.ok, true, `${name}: ${r.error}`);
     }
     const manifest = JSON.parse(await readFile(
-        path.join(HERE, '..', '..', '..', 'web', 'examples', 'ui', 'samples', 'data.json'), 'utf8'));
+        path.join(HERE, '..', '..', '..', '..', 'web', 'examples', 'ui', 'samples', 'data.json'), 'utf8'));
     const rows = P.planRows(manifest.examples, table);
     const unresolved = rows.filter((r) => r.status === 'FAIL').map((r) => r.name);
     assert.deepEqual(unresolved, [], 'samples with no expectations row');
