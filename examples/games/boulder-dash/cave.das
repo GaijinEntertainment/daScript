@@ -20,7 +20,7 @@ let DEFAULT_SLIME_PERM = 0.2
 //   . empty   : dirt     o boulder   ! boulder_fall
 //   * diamond $ diamond_fall  # brick  X steel
 //   M magic   m magic_active  = expand  ~ slime
-//   nesw firefly NESW   ABCD butterfly NESW
+//   n e s w firefly (U R D L)   A B C D butterfly (U R D L)
 //   a amoeba  R player  E exit_closed  O exit_open
 //   123 empty-explosion   456 diamond-explosion
 enum Tile : int {

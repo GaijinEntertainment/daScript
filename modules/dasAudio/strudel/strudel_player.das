@@ -914,6 +914,7 @@ def public strudel_shutdown() {
     if (g_tick_status_box != null) {
         unset_status_update(g_sid)
         g_tick_status_box |> seq_box_release
+        g_tick_status_box = null
     }
     // release tracks and buffers before measuring memory
     for (t in g_tracks) {
