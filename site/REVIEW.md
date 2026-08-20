@@ -14,9 +14,9 @@ A receipt is per run, not per row: when one harness run produced several rows (o
 rows shows that run's receipt line.
 
 **`files/dasllama/bench_records.json` is generator output: `modules/dasLLAMA/performance/gen_site_records.das`
-copies it unchanged from `modules/dasLLAMA/performance/records/<box>.json`, so re-running the
-generator leaves the file byte-identical.** A diff where it does not is a hand edit and a
-defect.
+merges every `modules/dasLLAMA/performance/records/<box>.json` and applies
+`records/annotations.json`, so re-running the generator leaves the file byte-identical.** A
+diff where it does not is a hand edit and a defect.
 
 **Every code sample shown on a page compiles and runs with the current toolchain.** daslang
 samples are gen2 and compile with the current binary; no pseudo-code presented as code.

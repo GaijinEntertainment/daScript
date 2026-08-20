@@ -12,8 +12,6 @@ is named outside its own file only in `dasllama/dasllama_vision_embedder.das`, i
 `dasllama/dasllama_metal_tower.das`'s family hooks, and in files under
 `modules/dasLLAMA/tests/`.** The `VisionEmbedder` union carries it through every other seam
 (chat, server, bench, facade, tutorials); a family name at a seam is a defect.
-`VisionEmbedder` union carries it through every other seam (chat, server, bench, facade,
-tutorials); a family name at a seam is a defect.
 
 **A GEMM in a vision family file goes through a shared batch-GEMM entry point — `mm_blob_b`,
 `mm_bf16_b`, `mm_plane_b` (`dasllama/dasllama_tower.das`) or `matmul_q8q8_batch`
