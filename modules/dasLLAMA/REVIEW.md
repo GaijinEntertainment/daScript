@@ -9,14 +9,23 @@ module's `tests/REVIEW.md` — and every `dasllama/` change opens `tests/REVIEW.
 obligation it names; a timing rig — a script whose output is a measured wall or rate — and any
 kernel A/B lab, wherever the diff puts them, answer to `benchmarks/REVIEW.md`; a change to what
 enters `performance/records/` or its manifests, and an exchange or provenance-manifest change,
-answers to `performance/REVIEW.md`. A kind-routed file applies BOTH its checklist and this one.
+answers to `performance/REVIEW.md`.
 
 **Kind-routed companions sit beside this file:** a GPU kernel, driver, dispatch-class, or
-K/V-mirror change applies `REVIEW_GPU.md`; an audio or ASR change `REVIEW_AUDIO.md`; a vision
-or media change `REVIEW_VISION.md`; a `dasllama/dasllama_tower.das` change — the shared
-encoder-tower home — applies both. A change to what the tune sidecar emits, wherever it
-lands, answers to `modules/dasLLVM/REVIEW.md`. Every file under `modules/dasLLAMA/` that the
-routing above does not claim is reviewed against the rules below.
+K/V-mirror change applies `REVIEW_GPU.md`. A change to `dasllama/dasllama_audio.das`,
+`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_asr.das`, `dasllama/dasllama_asr_types.das`,
+`dasllama/dasllama_vad.das`, or an ASR family file — one `dasllama/dasllama_<family>.das`
+holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
+`dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
+`dasllama/dasllama_vision_embedder.das`, a vision family file — one
+`dasllama/dasllama_<family>.das` holding a single vision projector family — or a path that
+splices decoded media into a prompt or schedules it, applies `REVIEW_VISION.md`. A
+`dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
+`REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
+thereby pick up the other modality's checklist. A change to the tune sidecar's schema or
+emitter, wherever it lands, answers to `modules/dasLLVM/REVIEW.md`. A routed file applies BOTH
+the checklist it routes to and this one; every other file under `modules/dasLLAMA/` applies
+this one.
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same change.** Kernel
 work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
@@ -219,9 +228,10 @@ signature there takes a type `dasllama/dasllama_audio.das` or a family file decl
 requires neither.** The file every tower composes must serve every tower; a helper shaped for
 one lands in that tower's own file.
 
-**A weight plane's element type follows its SOURCE tensor, per tensor.** A carrier reads a bf16
-tensor as bf16 and an fp32 tensor as fp32 — never rounds one down to match the other, and never
-decides the question for a whole file, because a shipped file mixes them.
+**A weight plane's element type follows its SOURCE tensor, per tensor.** A carrier reads each
+tensor at the element type that tensor is stored as and never picks one type for the whole
+file (a shipped file mixes them); a type it cannot serve is refused in a message naming that
+tensor and its element type, never converted silently.
 
 **A harness that prints output for another tool to compare fails loudly when it has nothing to
 print.** A run that ends without its comparison lines — wrong flags, failed load — exits

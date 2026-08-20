@@ -471,7 +471,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     return true
 }
 
-def private metal_gemma4v_serves() : bool => g_tw_env_tower
+def private metal_tower_serves() : bool => g_tw_env_tower
 
 // The gemma3v SigLIP block loop as ONE command buffer on the f32 blob — LN(w,b), biased f32 GEMMs,
 // scaled attention, GELU. The 72-wide heads restride to the attention tiles' 128 (zero pads exact,
@@ -880,8 +880,8 @@ def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
 def dasllama_metal_tower_register {
     g_tw_env_tower = g_env_metal.tower
     register_gemma4uv_gpu(@@metal_gemma4uv_encode)
-    register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_gemma4v_serves)
-    register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_gemma4v_serves)   // same serves: the tower knob
+    register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_tower_serves)
+    register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_tower_serves)
     register_tower_blocks_gpu(@@metal_tower_blocks)
     register_tower_conv_gpu(@@metal_conv_frontend)
     register_qwen3a_conv_gpu(@@metal_q3a_convs)

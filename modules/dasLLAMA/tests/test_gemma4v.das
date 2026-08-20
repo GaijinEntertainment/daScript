@@ -333,6 +333,9 @@ def test_gemma4v_tier1_q8(t : T?) {
         var inscope via_carrier_exact <- load_vision_embedder(mm)
         tt |> equal(vision_exec_fmt(via_carrier_exact), "f32", "the carrier stamps the exact lane")
         reset_gemma4v_q8()
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // a CPU-lane claim pins the covering knob, never relies on the runtime decline
+        }
         var st = Gemma4vState()
         tt |> success(tw.q8, "q8 lane loaded")
         tt |> success(length(tw.qblob) == tw.n_layer * tw.layer_w_stride, "qblob holds exactly the block GEMM set")
@@ -340,6 +343,9 @@ def test_gemma4v_tier1_q8(t : T?) {
         tt |> gate_encode(tw, st, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
         tt |> gate_encode(tw, st, "green", 336, 336, "e2b.encode.green336.log", TIER1_REL_Q8)
         tt |> gate_encode(tw, st, "cb", 672, 336, "e2b.encode.cb672x336.log", TIER1_REL_Q8)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)
+        }
         delete st
         delete tw
     }
@@ -383,12 +389,18 @@ def test_gemma4v_tier1_e4b(t : T?) {
         }
         delete st
         delete tw
-        set_gemma4v_q8(true)   // the serving lane on its own bar (the Metal driver declines q8)
+        set_gemma4v_q8(true)   // the serving lane on its own bar
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // a CPU-lane claim pins the covering knob, never relies on the runtime decline
+        }
         var twq <- load_gemma4v_tower(mm)
         reset_gemma4v_q8()
         var stq = Gemma4vState()
         tt |> success(twq.q8, "q8 lane loaded")
         tt |> gate_encode(twq, stq, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)
+        }
         delete stq
         delete twq
     }

@@ -64,11 +64,11 @@ bin/daslang -jit examples/dasLLAMA/dictate.das -- <asr-model.bin>
 - **Audio-in chat (omni)**: Qwen2-Audio, Qwen2.5-Omni, Qwen3-Omni-30B-A3B, Ultravox v0.5,
   Voxtral-Mini-3B, Gemma-4 E-series audio.
 - **Image-in chat**: Gemma-4 dense via its `gemma4uv` vision mmproj (12B is the tested
-  pair), Gemma-4 E-series via its `gemma4v` ViT mmproj (E2B is the tested pair), and Gemma-3
-  via its `gemma3v` SigLIP mmproj (4B is the tested pair; fixed 896² canvas) — the
-  family is sniffed from the mmproj; dynamic resolution, one image per turn. On Apple builds
-  the embedder / ViT tower and the image span serve on Metal by default; elsewhere the ViT
-  tower serves a q8 lane on the CPU (the +AMX float tier takes the file's planes). Library API
+  pair) and Gemma-4 E-series via its `gemma4v` ViT mmproj (E2B is the tested pair), both at
+  dynamic resolution; and Gemma-3 via its `gemma3v` SigLIP mmproj (4B and 12B are the tested
+  pairs; fixed 896² canvas) — the family is sniffed from the mmproj; one image per turn. On
+  Apple builds the embedder / vision towers and the image span serve on Metal by default;
+  elsewhere a tower serves its q8 lane on the CPU (the +AMX float tier takes exact planes). Library API
   (`create_chat(model, embedder)` + `add_user_image`), `ask --image`, and the OpenAI server:
   `image_url` data-URI parts under `--image-mmproj`, encoded off the tick thread.
 - **Speech-to-text**: the whole Whisper family (tiny → large-v3-turbo, stock whisper.cpp bins),

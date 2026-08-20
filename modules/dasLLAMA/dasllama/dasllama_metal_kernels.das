@@ -4759,7 +4759,7 @@ class MetalClamp {
 
 // Head restride (gemma3v): repack token-major rows [npos x n_head*hs_src] to [npos x n_head*hs_dst],
 // zero-filling dst lanes past hs_src — pads Q/K/V to the attention tile head width (72 -> 128) and
-// compacts the AV output back. One thread per dst element; zero pads keep both directions exact.
+// compacts the AV output back; zero pads keep both directions exact.
 [metal_dispatch(name = "enc_head_restride", pso = "g_pso_head_restride", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalHeadRestride {
     @ssbo @binding = 0 @role = "read" src : array<float>

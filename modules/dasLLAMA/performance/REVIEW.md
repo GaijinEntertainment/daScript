@@ -50,7 +50,8 @@ added to it is a defect.
 **A change to a provenance field on a model row (`url`, `bytes`, `sha256`, `recipe`, a
 `companions` entry in `model_specs.das` or `profile_common.das`), or to `fetch_models.das`
 other than its comments, records its gate run in the PR description: `fetch_models.das --`
-ends `0 failed`.**
+ends `0 pending, 0 failed`** (an absent pinned entry counts `pending`, not `failed` — `0 failed`
+alone passes on a box that holds none of the changed pins).
 
 **An entry point whose timed reps dispatch `[tune]`-selected kernels calls `tune_gate()`
 (`profile_common.das`) before its first timed rep**, or it measures fallback kernels silently.

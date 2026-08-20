@@ -26,9 +26,9 @@ instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
 
 **A test file in this folder is registered in no `CMakeLists.txt`.**
 
-**A test file in no `run.das` model suite (every suite but `model-free`) has an accurate
-`CLAUDE.md` entry in the same change** — added when the file is added, corrected when what it
-covers is renamed or re-scoped.
+**A `model-free`-listed or suite-less test file — one in no `run.das` model suite (every suite
+but `model-free`) — has an accurate `CLAUDE.md` entry in the same change** — added when the
+file is added, corrected when what it covers is renamed or re-scoped.
 
 **Weakening `test_program_roots.das` — dropping a root from its sweep, loosening its
 `options stack = 524288` assert, or relaxing its prefill-intent assert — is a defect.**
@@ -87,10 +87,21 @@ input, which can wrongly satisfy a tolerant compare.
 **Every ASR family has a token-for-token oracle cell** — one comparing a transcript against a
 reference leg, external dump or CPU control alike.
 
-**A real model file, mmproj, or image fixture a test in this folder loads has a row in
-`../performance/model_specs.das` (or `asr_catalog` in `../performance/profile_common.das`),
-rides a row's `companions` list, or has a convert script checked in beside the table in
-`../performance/`.**
+**A stocked artifact a test in this folder loads — a model file, mmproj, image fixture, or
+oracle dump — has a row in `../performance/model_specs.das` (or `asr_catalog` in
+`../performance/profile_common.das`), rides a row's `companions` list, has a convert script
+checked in beside the table in `../performance/`, or (an oracle dump) has a mint script that
+regenerates it, beside the dumps under `models_dir()`, named in the test that loads the
+dump.**
+
+**A test that reads a vision encode oracle dump names the minting arm in its header — the
+backend, the flash-attention setting, and the mmproj precision the dump came from.** The mint
+doctrine itself is `../ARCHITECTURE.md` §1.7b's oracle-provenance paragraph.
+
+**A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob OFF for
+that leg (`set_metal_wdec(false)` / `set_metal_tower(false)`) and restores it after** — never
+relies on the driver's runtime decline. The mechanism (why the hooks flip legs silently) is
+`CLAUDE.md`'s "Metal fixtures" section.
 
 **A vision test that needs no model builds its image procedurally and pins its expectations
 in-repo; any image a test feeds an embedder is a fixture the test builds, or previewable via

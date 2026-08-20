@@ -23,8 +23,9 @@ require math
 //! The gemma3 vision tower (SigLIP-400M; gemma-3-4b is the tested pair): 27-block pre-norm
 //! LayerNorm ViT over 14 px patches on a FIXED 896² canvas — x·2−1 → patch conv + bias → learned
 //! position add → blocks (biased GEMMs, scaled bidirectional attention, GELU-tanh) → post-LN →
-//! 4×4 average pool → weighted RMS → projection. Oracle: llama-mtmd-debug -p encode on the
-//! f32-widened mmproj, CPU, -fa off (gemma3-vision-oracle/mint_gemma3.sh).
+//! 4×4 average pool → weighted RMS → projection. This forward clamps nowhere — the mmproj
+//! carries no clamp sidecar scalars (SigLIP has no ClippableLinear). Oracle: llama-mtmd-debug
+//! -p encode on the f32-widened mmproj, CPU, -fa off (gemma3-vision-oracle/mint_gemma3.sh).
 
 let private GEMMA3V_MERGE_DEFAULT = 4l
 let private GEMMA3V_STAGE_CAP = 1073741824ul   // the staged-mint line: a carrier source at or past 1 GiB streams instead
@@ -43,9 +44,7 @@ struct Gemma3vTower {
     n_layer : int64      // 27
     n_head : int64       // 16 (head width 72)
     n_ff : int64         // 4304 — the FILE's ffn width (tensor sizes and bias reads use it)
-    ff_pad : int64       // n_ff rounded up to 64 (4352) — the SERVED ffn width: the up GEMM pads
-    // zero weight rows + zero bias, the down GEMM zero columns, so the padded forward is
-    // bit-identical; %64 serves the Metal mulmm tiles, %32 lets the down GEMM quantize
+    ff_pad : int64       // n_ff rounded up to 64 (4352) — the SERVED ffn width (zero pads, exact)
     proj_dim : int64     // mm.input_projection output width — the soft-token width (decoder width)
     patch : int64        // 14 px
     patch_dim : int64    // patch² × 3 — the im2col row (588)
@@ -244,7 +243,7 @@ def private g3v_announce_lane() {
     } elif (float_batch_override_active()) {
         why = "DASLLAMA_ACCEL on: the float-batch tier serves f32 planes"
     }
-    to_log(LOG_INFO, "dasLLAMA gemma3v: block GEMM lane {g3v_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
+    to_log(LOG_INFO, "dasLLAMA gemma3v: block GEMM lane {g3v_serve_q8() ? "q8" : "exact planes"} - {why}\n")
 }
 
 // the block GEMM tensors in GEMMA3V_GEMM_* order (q k v o up down). The shipped mmproj carries
@@ -301,6 +300,7 @@ def private g3v_layout(var t : Gemma3vTower; var off : int64&; var qo : int64&) 
     t.proj_w = off; off += d * t.proj_dim
     t.layer_f_stride = 9l * d + t.ff_pad   // ln1 w/b, ln2 w/b, q/k/v/o bias, down bias [d each]; up bias [ff_pad]
     t.layer_f = off; off += t.n_layer * t.layer_f_stride
+    // ff_pad = zero up rows / down columns, bit-identical; %64 fits Metal tiles, %32 quantizes
     t.layer_w_stride = 4l * d * d + 2l * d * t.ff_pad
     if (t.q8) {
         t.layer_w = qo
@@ -527,6 +527,17 @@ def stage_gemma3v_tower(path : string) : Gemma3vStaging {
         }
         let swapped = !empty(m.tensors[dn].dims) && m.tensors[dn].dims[0] == d
         let names <- g3v_gemm_names(swapped)
+        // this carrier serves ONE f32 plane (the widen is exact for these types, and ledgered in
+        // ARCHITECTURE.md); any other on-disk type is refused by name, never dequantized silently
+        for (l in range64(st.t.n_layer)) {
+            for (g in range64(GEMMA3V_GEMMS)) {
+                let name = "v.blk.{l}.{names[g]}.weight"
+                let gt = gguf_tensor_type(m, name)
+                if (gt != GGML_TYPE_F32 && gt != GGML_TYPE_F16 && gt != GGML_TYPE_BF16) {
+                    panic("dasLLAMA gemma3v: '{name}' has ggml type {gt} - this carrier serves f32-widened F32/F16/BF16 planes only")
+                }
+            }
+        }
         st.t.ff_pad = (st.t.n_ff + 63l) / 64l * 64l
         let gemm_sizes <- g3v_gemm_sizes(d, st.t.ff_pad)
         g3v_verify_tensors(m, st.t, names)
@@ -606,8 +617,8 @@ def private g3v_check_planes(t : Gemma3vTower; src : string) {
     }
 }
 
-// one biased GEMM: y = W · x + b; `q8site` routes through the Q8_0 planes (the down GEMM never
-// does — its rows are not 32-divisible, so it stays f32 on both lanes)
+// one biased GEMM: y = W · x + b; `q8site` routes through the Q8_0 planes — the FFN pair is
+// served at ff_pad, so the down GEMM quantizes too
 def private g3v_gemm_biased(var y : array<float>; t : Gemma3vTower; var s : Gemma3vState; woff, boff : int64;
                             x : array<float>; n, d, npos : int64; q8site : bool) {
     if (q8site) {
@@ -684,8 +695,7 @@ def private g3v_block(t : Gemma3vTower; var s : Gemma3vState; l, npos : int64) {
 }
 
 // the stem: im2col → patch conv + bias → learned position add, leaving the residual stream in
-// s.x (npos rows). The mean/std normalize is PREPROCESSING for this family (encode_image_ owns
-// it), not graph — the mtmd encode fixtures feed the graph raw, and so does this entry.
+// s.x (npos rows); planes arrive already normalized (encode_image_ owns the mean/std step)
 def private g3v_stem(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h : int64) : int64 {
     let d = t.n_embd
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)

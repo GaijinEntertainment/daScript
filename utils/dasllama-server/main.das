@@ -90,7 +90,7 @@ struct ServerArgs {
     mmproj : string
 
     @clarg_name = "image-mmproj"
-    @clarg_doc = "Vision mmproj (gemma4uv) for the default model — enables image_url parts on /v1/chat/completions"
+    @clarg_doc = "Vision mmproj (gemma4uv, gemma4v, or gemma3v, sniffed) for the default model — enables image_url parts on /v1/chat/completions"
     image_mmproj : string
 
     @clarg_doc = "Long-lived asynchronous ASR worker threads (default 1; 2 permits two parallel transcriptions)"

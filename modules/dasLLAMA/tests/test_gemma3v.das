@@ -88,6 +88,29 @@ def test_gemma3v_tier1(t : T?) {
             tripped = true
         }
         tt |> success(tripped, "a non-896 canvas panics at the fixed-canvas gate")
+        // refusals by name: a wrong-family mmproj, and a source past the 1 GiB staged-mint line
+        let wrong = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        if (stat(wrong).is_valid) {
+            var wrong_tripped = false
+            try {
+                var bad <- load_gemma3v_tower(wrong)
+                delete bad
+            } recover {
+                wrong_tripped = true
+            }
+            tt |> success(wrong_tripped, "a gemma4v mmproj is refused by projector name")
+        }
+        let f32twin = path_join(models_dir(), "mmproj-gemma-3-4b-it-F32.gguf")
+        if (stat(f32twin).is_valid) {   // the oracle artifact doubles as the over-cap fixture
+            var cap_tripped = false
+            try {
+                var bad2 <- load_gemma3v_tower(f32twin)
+                delete bad2
+            } recover {
+                cap_tripped = true
+            }
+            tt |> success(cap_tripped, "the 1.6 GB f32 twin trips the staged-mint cap")
+        }
         static_if (typeinfo builtin_module_exists(das_metal)) {
             set_metal_tower(true)
         }
@@ -129,6 +152,19 @@ def test_gemma3v_tier1_gpu(t : T?) {
             set_metal_tower(true)
             delete st
             delete tw
+            // the q8-decline leg: a q8 tower with the knob ARMED must never dispatch (its planes
+            // are Q8_0 - a driver serve would read them as f32 garbage)
+            set_gemma3v_q8(true)
+            var twq <- load_gemma3v_tower(mm)
+            reset_gemma3v_q8()
+            var stq = Gemma3vState()
+            let sq0 = metal_tower_stats()
+            tt |> gate_encode(twq, stq, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
+            let sq1 = metal_tower_stats()
+            tt |> equal(sq1.encodes, sq0.encodes, "q8 tower never dispatched")
+            tt |> success(sq1.declines - sq0.declines >= 1l, "q8 tower recorded the quant_mode decline")
+            delete stq
+            delete twq
         } else {
             feint("das_metal is not built on this platform - the GPU rung is Apple-only\n")
         }
@@ -144,6 +180,9 @@ def test_gemma3v_tier1_q8(t : T?) {
             return
         }
         set_gemma3v_q8(true)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // a CPU-lane claim pins the covering knob, never relies on the runtime decline
+        }
         var tw <- load_gemma3v_tower(mm)
         var inscope via_carrier <- load_vision_embedder(mm)
         tt |> equal(vision_family(via_carrier), "gemma3v", "the carrier sniffs the family")

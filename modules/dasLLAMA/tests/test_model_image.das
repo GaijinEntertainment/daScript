@@ -14,6 +14,7 @@ require dasllama/dasllama_canary  // CanaryStaging/stage_canary_encoder — the 
 require dasllama/dasllama_gemma4a // Gemma4aStaging/stage_gemma4a_encoder — same, for the gemma4a arm
 require dasllama/dasllama_gemma4uv // Gemma4uvStaging/stage_gemma4uv_embedder — same, for the vision arm
 require dasllama/dasllama_gemma4v // Gemma4vStaging/stage_gemma4v_tower — the gemma4v (E-series ViT) arm
+require dasllama/dasllama_gemma3v // Gemma3vStaging/stage_gemma3v_tower — the gemma3v (SigLIP) arm
 require dasllama/dasllama_vision_embedder // the carrier's .dlim route
 require dasllama/dasllama_parakeet // ParakeetStaging/stage_parakeet_model — same, for the parakeet arm
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
@@ -1420,6 +1421,65 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
         t |> equal(vision_family(dcarrier), "gemma4v", "the carrier routes the q8-tagged .dlim to gemma4v")
         t |> equal(vision_exec_fmt(dcarrier), "q8", "...and stamps its lane")
         var inscope dx <- load_gemma4v_tower(img)
+        t |> success(!dx.q8, "the exact-plane .dlim serves its lane")
+    }
+}
+
+[test]
+def test_gemma3v_tower_image_roundtrip(t : T?) {
+    t |> run("gemma3v tower: mapped image planes are element-exact vs mmproj, both lanes") @(t : T?) {
+        if (!family_on(t, "gemma") || !arm_on(t, "gemma3v")) {
+            return
+        }
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        let img = image_path_for(path, "gemma3v")
+        remove(img)
+        set_gemma3v_q8(false)   // the exact-plane (f32-widened) lane first; the q8 serving lane follows
+        var inscope a <- stage_gemma3v_tower(path)
+        var inscope cold <- load_gemma3v_tower(path)
+        t |> success(cold.image_map != null, "cold load serves the image it built")
+        t |> success(stat(img).is_valid, "cold load saved an image")
+        t |> equal(count_mismatch(a.blob, cold.blob), 0l, "cold-built blob element-exact")
+        var inscope b <- load_gemma3v_tower(path)
+        t |> success(b.image_map != null, "warm load is image-backed")
+        t |> equal(b.n_embd, a.t.n_embd)
+        t |> equal(b.n_layer, a.t.n_layer)
+        t |> equal(b.proj_dim, a.t.proj_dim)
+        t |> equal(b.ff_pad, a.t.ff_pad)
+        t |> equal(b.image_px, a.t.image_px)
+        t |> equal(b.layer_f, a.t.layer_f)
+        t |> equal(b.layer_f_stride, a.t.layer_f_stride)
+        t |> equal(b.layer_w, a.t.layer_w)
+        t |> equal(b.layer_w_stride, a.t.layer_w_stride)
+        t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob (all f32, incl. the ff_pad-padded GEMMs) element-exact")
+        set_gemma3v_q8(true)
+        let imgq = image_path_for(path, "gemma3v-q8")
+        remove(imgq)
+        var inscope aq <- stage_gemma3v_tower(path)
+        var inscope cq <- load_gemma3v_tower(path)
+        t |> success(cq.q8 && cq.image_map != null && stat(imgq).is_valid, "q8 lane: cold load built and serves its own image")
+        t |> success(imgq != img, "the q8 lane keys a different image")
+        t |> equal(count_mismatch(aq.blob, cq.blob), 0l, "q8 lane: blob element-exact")
+        t |> equal(count_mismatch_i8(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
+        t |> equal(count_mismatch(aq.qscales, cq.qscales), 0l, "q8 lane: qscales element-exact")
+        t |> equal(long_length(aq.qblob), aq.t.n_layer * aq.t.layer_w_stride, "qblob is exactly the padded block GEMM set")
+        reset_gemma3v_q8()
+        // a .dlim named directly loads on its BAKED lane, whatever the pin, and the carrier sniffs it
+        set_gemma3v_q8(false)
+        var inscope dq <- load_gemma3v_tower(imgq)
+        t |> success(dq.q8 && dq.image_map != null, "the q8 .dlim serves its q8 lane under an exact pin")
+        reset_gemma3v_q8()
+        var inscope dcarrier <- load_vision_embedder(imgq)
+        t |> equal(vision_family(dcarrier), "gemma3v", "the carrier routes the q8-tagged .dlim to gemma3v")
+        t |> equal(vision_exec_fmt(dcarrier), "q8", "...and stamps its lane")
+        var inscope dx <- load_gemma3v_tower(img)
         t |> success(!dx.q8, "the exact-plane .dlim serves its lane")
     }
 }

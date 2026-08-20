@@ -153,8 +153,8 @@ def test_accel_float_batch(t : T?) {
             }
             t |> run("bf16 widen scratch clears the unreserved-size guard (E4B PLE-projection class)") @(t : T?) {
                 // the widen scratch is d*n floats: past max_unreserved_size (64 MiB) a bare
-                // resize panics - E4B's native-bf16 PLE projection region (27.5M elements)
-                // tripped exactly this; E2B's 15.7M squeaked under
+                // resize panics - E4B's bf16 PLE projection is 27.5M elements (over the line),
+                // E2B's 15.7M is under
                 let bd = 4200l
                 let bn = 4096l
                 var w : array<float>

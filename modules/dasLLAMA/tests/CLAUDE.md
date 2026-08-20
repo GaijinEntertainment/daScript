@@ -73,7 +73,7 @@ every derived-truth compare its own poison. A kernel with `@workgroup` state nee
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
-canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma4e mtower`; `gemma4e` is the E2B metal-blob
+canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e mtower`; `gemma4e` is the E2B metal-blob
 mint+map arm — the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
 embedding table's plane is short) runs after the blob plane borrows, so a fresh mint and a warm
 map must both clear it; `gemma4uv-metal` is the GPU tower
@@ -229,9 +229,11 @@ same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which i
 cannot live in test_attn_span — that file arms it in `[init]`, and why it stays out of the
 runner's `model-free` suite — the runner sets `DASLLAMA_CPU_PREFILL=1`). Metal-capable builds
 only; plain dastest only.
-`test_vision_chat.das` — the image chat turn end to end, two families: the 12B gemma4uv pair
-(the cats fixture, so `DASLLAMA_PARITY_FULL=1`) and the E2B gemma4v pair (E2B Q8 decoder +
-bf16 mmproj — small tier, runs without the flag): the prompt stream shape around the splice
+`test_vision_chat.das` — the image chat turn end to end, three families / four legs: the 12B
+gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`), the E2B gemma4v pair (E2B Q8
+decoder + bf16 mmproj — small tier, runs without the flag), the gemma-3-4b gemma3v pair (small
+tier), and the gemma-3-12b pair (the same SigLIP tower at projection 3840 — large tier,
+`DASLLAMA_PARITY_FULL=1`): the prompt stream shape around the splice
 (marker ids, media-first, span length from the geometry) and the greedy caption, logged in
 full. NOT token-parity with
 llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
@@ -253,8 +255,8 @@ images the rig cannot use and purges the flavors the rig depends on. Image-rail 
 
 ## Metal fixtures — driver knobs and the two-model pattern
 
-**A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob OFF for
-that leg (`set_metal_wdec(false)` / `set_metal_tower(false)`) and restores it after.** The
+(REVIEW: "A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob
+OFF for that leg and restores it after.") The
 hooks are on by default: they flip a q8 leg to the GPU silently, and an f32 leg records a
 quant_mode decline that panics under required mode — either way the cell stops measuring what
 its name says.
