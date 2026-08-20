@@ -665,6 +665,12 @@ def test_format_strip_comments_source(t : T?) {
         t |> success(find(out, "//fmt:keep-alignment") >= 0, "fmt directive kept")
         t |> success(find(out, "narration") < 0, "narration stripped")
     }
+    t |> run("!is-prefixed identifiers survive formatting untouched") <| @(t : T?) {
+        let src = "options gen2\n\ndef check(f : bool) : bool \{\n    return !is_unary(f)\n\}\n"
+        let out = format_source_string(src, false)
+        t |> success(find(out, "!is_unary(f)") >= 0,
+            "template matching has no word boundary: a '!is'/'!as' entry in greedy_match_safe_tokens would eat the prefix of !is_unary-style unary-not calls - those two tokens must stay OUT of the list")
+    }
 }
 
 [test]
