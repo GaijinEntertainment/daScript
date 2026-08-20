@@ -3283,6 +3283,17 @@ def requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; va
     prof_add("mm_requant", ts_rq)
 }
 
+//! Per-site Q8_0 requant of a token-major image, growing the caller's scratch pair to the image
+//! first — the sizing every tower repeats around ``requant_rows_q8``.
+def requant_rows_q8_sized(x : array<float>; n, npos : int64; @scratch var xq : array<int8>;
+                          @scratch var xs : array<float>) {
+    let need = npos * n
+    ensure_length(xq, need)
+    ensure_length(xs, need / 32l)
+    requant_rows_q8(x, n, npos, xq, xs)
+}
+
+
 // Q8_K-form batch requant (kq v2): per-256 scales + per-16 sums of the per-256-scaled
 // quants. k4-weight batch matmuls and MoE gathers consume these rows.
 def requant_rows_q8k_bs(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>; var xbsb : array<int>) {
@@ -3341,31 +3352,6 @@ def layer_is_sliding(c : Config; l : int64) : bool => (c.sliding_window > 0l && 
 
 //! Does this model carry per-layer embeddings (gemma-4 E-series)?
 def has_ple(c : Config) : bool => c.n_embd_per_layer > 0l
-
-//! Go-live tripwire: the PLE token table's plane really holds the table. A carrier that predates
-//! the pinned-plane rail (a stale fp32/q4 image) or a mis-routed load leaves the plane short and
-//! would otherwise die mid-forward in dequant; fail at load, naming the carrier to regenerate.
-def ple_check_table(t : Model; origin : string) {
-    if (!has_ple(t.config)) {
-        return
-    }
-    let need = t.ple_emb_off + t.config.vocab_size * t.config.n_layers * t.config.n_embd_per_layer
-    var have = 0l
-    if (t.ple_emb_fmt == KqFmt.q8) {
-        have = t.metal_blob ? (long_length(t.mblob) / 34l) * 32l : long_length(t.qblob)
-    } elif (t.ple_emb_fmt == KqFmt.k4) {
-        have = (long_length(t.k4q) / K4_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.k5) {
-        have = (long_length(t.k5q) / K5_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.k6) {
-        have = (long_length(t.k6q) / K6_QSB) * 256l
-    } elif (t.ple_emb_fmt == KqFmt.q40) {
-        have = (long_length(t.q40q) / Q40_QSB) * 256l
-    }
-    if (have < need) {
-        panic("dasLLAMA: the PLE token table is not resident ({origin}): fmt {t.ple_emb_fmt} plane holds {have} of {need} elements - regenerate this carrier (it predates the pinned-table rail)")
-    }
-}
 
 //! Layer `l` runs the Gated-DeltaNet recurrent block instead of attention (qwen35 hybrid).
 // the l < n_layers guard is load-bearing: the MTP/NextN block sits at index n_layers, which on

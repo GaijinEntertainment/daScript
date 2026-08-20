@@ -506,6 +506,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
     if (accel) {   // the +AMX tier — the tower's bf16 GEMMs are exactly the float-batch shapes it serves
         static_if (typeinfo builtin_module_exists(das_accelerate)) {
             dasllama_accelerate_enable(32l)   // the shipped +AMX defaults, same as the LLM leg
+            print("DASLLAMA_ACCEL armed (float-batch tier, min ntok 32) - this row measures the accelerate lane\n")
         } else {
             print("--accel requested but das_accelerate is not built on this platform - no accel row to measure\n")
             return false

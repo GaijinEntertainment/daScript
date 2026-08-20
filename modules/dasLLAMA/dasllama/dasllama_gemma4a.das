@@ -721,22 +721,12 @@ def private g4a_mm(enc : Gemma4aEncoder; var y : array<float>; woff : int64; x :
     }
 }
 
-def private g4a_requant(x : array<float>; n, npos : int64; @scratch var xq : array<int8>; @scratch var xs : array<float>) {
-    let need = npos * n   // minutes-long clips: tens of MB
-    if (long_length(xq) < need) {
-        xq |> reserve(need)
-        xq |> resize(need)
-        xs |> reserve(need / 32l)
-        xs |> resize(need / 32l)
-    }
-    requant_rows_q8(x, n, npos, xq, xs)
-}
 
 // requant-and-multiply — per-site requant (the clamps differ per site, so images never share)
 def private g4a_mm_rq(enc : Gemma4aEncoder; var st : Gemma4aState; var y : array<float>;
                       woff : int64; x : array<float>; n, d, npos : int64) {
     if (enc.q8) {
-        g4a_requant(x, n, npos, st.xqi, st.xsi)
+        requant_rows_q8_sized(x, n, npos, st.xqi, st.xsi)
     }
     g4a_mm(enc, y, woff, x, st.xqi, st.xsi, n, d, npos)
 }
@@ -754,7 +744,7 @@ def private g4a_requant_rpe(enc : Gemma4aEncoder; var st : Gemma4aState; d : int
             fp[i] = pp[i]
         }
     }
-    g4a_requant(st.posf, d, G4A_PAST + 1l, st.posq, st.poss)
+    requant_rows_q8_sized(st.posf, d, G4A_PAST + 1l, st.posq, st.poss)
 }
 
 // clamped matmul: y = W · clamp(x); then clamp(y). x is [npos × n], y is [npos × d].

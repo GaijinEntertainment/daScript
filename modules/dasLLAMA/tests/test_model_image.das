@@ -666,7 +666,9 @@ def test_gemma4e_flavor_image(tst : T?) {
             tw.config.seq_len = min(tw.config.seq_len, 512l)
             t |> success(tw.image_map != null && tw.metal_blob, "warm metal load maps the blob image")
             var g_map <- gen_ids(tw, prompt, 8)
-            t |> success(count_mismatch(g_mint, g_map) == 0l, "mint vs mapped tokens")
+            log_gen_texts(tw, "E2B mint-vs-mapped", g_mint, g_map)
+            t |> success(count_mismatch(g_mint, g_map) == 0l,
+                "mapped-image tokens match the mint's ({count_mismatch(g_mint, g_map)} differ)")
             delete tw
             set_metal_mode(MetalMode.off)
             delete g_mint

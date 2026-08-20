@@ -504,7 +504,6 @@ def gguf_int_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array
     return <- out
 }
 
-//! Index of tensor `name` in m.tensors, or -1 if absent.
 //! Panic by name unless tensor ``name`` exists with exactly ``want`` elements — the loaders'
 //! shape gate; ``who`` prefixes the message ("dasLLAMA gemma4v").
 def gguf_expect_elems(m : GGUFMeta; name : string; want : int64; who : string) {
@@ -532,6 +531,7 @@ def take_cursor(use_alt : bool; var o : int64&; var alt : int64&; size : int64) 
     return at
 }
 
+//! Index of tensor `name` in m.tensors, or -1 if absent.
 def gguf_find_tensor(m : GGUFMeta; name : string) : int {
     for (i in range(length(m.tensors))) {
         if (m.tensors[i].name == name) {

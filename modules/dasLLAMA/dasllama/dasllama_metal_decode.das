@@ -556,8 +556,8 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
     let c = t.config
     let dim = c.dim
     let n_heads = c.n_heads
-    let hidden = layer_hidden(t, l)   // per-layer (MatFormer E-series); u_hidden binds the layer's width
-    let u_hidden = (r.u_hidden2 == null || hidden == r.hid0) ? r.u_hidden : r.u_hidden2
+    let hid_l = layer_hidden(t, l)   // per-layer (MatFormer E-series)
+    let u_hid_l = (r.u_hidden2 == null || hid_l == r.hid0) ? r.u_hidden : r.u_hidden2
     let pos = r.pos
     let cap = r.cap
     let f16v = r.kdt == KVDtype.f16
@@ -903,17 +903,17 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                         // fused shared-branch gate+up + gelu (extends the dense w13sw fusion to the g4 shexp)
                         let bw1 = blob_of(g_dev, t, t.w1_offs[l])
                         enc_gemv_w13sw(enc, bw1.buf, bw1.boff, uint64((t.w3_offs[l] / 32l) * 34l),
-                            r.bxb, r.bh12s, r.u_dim, u_hidden, hidden, geglu ? r.u_one32 : r.u_zero32)
+                            r.bxb, r.bh12s, r.u_dim, u_hid_l, hid_l, geglu ? r.u_one32 : r.u_zero32)
                     } else {
-                        enc_site_gemv(enc, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], hidden, dim, r.bxb, r.bh12s, r.u_dim, u_hidden)
-                        enc_site_gemv(enc, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], hidden, dim, r.bxb, r.bh12s, r.u_dim, u_hidden, uint64(hidden * 4l))
+                        enc_site_gemv(enc, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], hid_l, dim, r.bxb, r.bh12s, r.u_dim, u_hid_l)
+                        enc_site_gemv(enc, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], hid_l, dim, r.bxb, r.bh12s, r.u_dim, u_hid_l, uint64(hid_l * 4l))
                     }
                 }
                 if (g_skip != "ew" && !sh_w13_q8) {
-                    enc_geglu(enc, r.bh12s, 0ul, r.bh12s, uint64(hidden * 4l), u_hidden, hidden)
+                    enc_geglu(enc, r.bh12s, 0ul, r.bh12s, uint64(hid_l * 4l), u_hid_l, hid_l)
                 }
                 if (g_skip != "gemv" && g_skip != "moe_sh") {
-                    enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hidden, r.bh12s, r.bxb, u_hidden, r.u_dim)
+                    enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hid_l, r.bh12s, r.bxb, u_hid_l, r.u_dim)
                 }
                 if (g_skip != "ew") {
                     var bw_pf1 = upload_region(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim]), uint64(dim * 4l))
@@ -930,21 +930,21 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                     // fused gate+up dot + silu/gelu epilogue — gemma geglu rides the act uniform, no separate ew pass
                     let bw1 = blob_of(g_dev, t, t.w1_offs[l])
                     enc_gemv_w13sw(enc, bw1.buf, bw1.boff, uint64((t.w3_offs[l] / 32l) * 34l),
-                        r.bxb, r.bh12, r.u_dim, u_hidden, hidden, geglu ? r.u_one32 : r.u_zero32)
+                        r.bxb, r.bh12, r.u_dim, u_hid_l, hid_l, geglu ? r.u_one32 : r.u_zero32)
                 } else {
-                    enc_site_gemv(enc, t, f1, t.w1_offs[l], hidden, dim, r.bxb, r.bh12, r.u_dim, u_hidden)
-                    enc_site_gemv(enc, t, f3, t.w3_offs[l], hidden, dim, r.bxb, r.bh12, r.u_dim, u_hidden, uint64(hidden * 4l))
+                    enc_site_gemv(enc, t, f1, t.w1_offs[l], hid_l, dim, r.bxb, r.bh12, r.u_dim, u_hid_l)
+                    enc_site_gemv(enc, t, f3, t.w3_offs[l], hid_l, dim, r.bxb, r.bh12, r.u_dim, u_hid_l, uint64(hid_l * 4l))
                 }
             }
             if (g_skip != "ew" && !w13_q8) {
                 if (geglu) {
-                    enc_geglu(enc, r.bh12, 0ul, r.bh12, uint64(hidden * 4l), u_hidden, hidden)
+                    enc_geglu(enc, r.bh12, 0ul, r.bh12, uint64(hid_l * 4l), u_hid_l, hid_l)
                 } else {
-                    enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(hidden * 4l), u_hidden, hidden)
+                    enc_swiglu(enc, r.bh12, 0ul, r.bh12, uint64(hid_l * 4l), u_hid_l, hid_l)
                 }
             }
             if (g_skip != "gemv") {
-                enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hidden, r.bh12, r.bxb, u_hidden, r.u_dim)
+                enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hid_l, r.bh12, r.bxb, u_hid_l, r.u_dim)
             }
         }
         if (g_skip != "ew") {

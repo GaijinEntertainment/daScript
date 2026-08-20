@@ -11,6 +11,7 @@ module dasllama_load shared public
 // breaks the cycle, exactly like the GPU residency rail and the Metal drivers.
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_ple   // ple_check_table — the E-series table go-live tripwire
 require dasllama/dasllama_common
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gguf

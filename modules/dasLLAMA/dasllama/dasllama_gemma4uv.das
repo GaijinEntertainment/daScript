@@ -197,7 +197,7 @@ def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
         st.e.proj_w = take_cursor(st.e.proj_bf16, off, woff, d * st.e.proj_dim)
         st.blob |> reserve_resize(off)
         st.wblob |> reserve_resize(woff)
-        uv_read_gemm(m, bytes, "v.patch_embd.weight", st, st.e.patch_bf16, st.e.patch_w, pd * d)
+        tower_read_gemm(m, bytes, "v.patch_embd.weight", st.wblob, st.blob, st.e.patch_bf16, st.e.patch_w, pd * d)
         gguf_read_tensor_f32(m, bytes, "v.patch_embd.bias", st.blob, st.e.patch_b, d)
         gguf_read_tensor_f32(m, bytes, "v.patch_norm.1.weight", st.blob, st.e.ln1_w, pd)
         gguf_read_tensor_f32(m, bytes, "v.patch_norm.1.bias", st.blob, st.e.ln1_b, pd)
@@ -206,21 +206,10 @@ def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
         gguf_read_tensor_f32(m, bytes, "v.patch_norm.3.weight", st.blob, st.e.ln3_w, d)
         gguf_read_tensor_f32(m, bytes, "v.patch_norm.3.bias", st.blob, st.e.ln3_b, d)
         gguf_read_tensor_f32(m, bytes, "v.position_embd.weight", st.blob, st.e.pos_w, 2l * st.e.pos_entries * d)
-        uv_read_gemm(m, bytes, "mm.input_projection.weight", st, st.e.proj_bf16, st.e.proj_w, d * st.e.proj_dim)
+        tower_read_gemm(m, bytes, "mm.input_projection.weight", st.wblob, st.blob, st.e.proj_bf16, st.e.proj_w, d * st.e.proj_dim)
     }
     fclose(f)
     return <- st
-}
-
-// GEMM read: a bf16 load copies the file's own halfwords (exact, no conversion); an fp32 load
-// reads it like any plain tensor
-def private uv_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma4uvStaging;
-                         bf16 : bool; off, n_elem : int64) {
-    if (bf16) {
-        gguf_transcode_bf16(m, b, name, st.wblob, off, n_elem)
-    } else {
-        gguf_read_tensor_f32(m, b, name, st.blob, off, n_elem)
-    }
 }
 
 //! Load the gemma4uv embedder, image-backed: a prepared `.dlim` maps and every plane

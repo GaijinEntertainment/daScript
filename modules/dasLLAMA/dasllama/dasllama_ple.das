@@ -44,6 +44,30 @@ def private ple_pre_finish(t : Model; var s : Session; embd_scaled : array<float
     scale_inplace(unsafe(addr(s.ple_inp[0])), 1.0 / sqrt(2.0), npos * all)
 }
 
+//! Go-live tripwire, called at every carrier seam: panics unless the PLE token table's plane
+//! really holds the table (a short plane would otherwise die mid-forward inside the gather).
+def ple_check_table(t : Model; origin : string) {
+    if (!has_ple(t.config)) {
+        return
+    }
+    let need = t.ple_emb_off + t.config.vocab_size * t.config.n_layers * t.config.n_embd_per_layer
+    var have = 0l
+    if (t.ple_emb_fmt == KqFmt.q8) {
+        have = t.metal_blob ? (long_length(t.mblob) / 34l) * 32l : long_length(t.qblob)
+    } elif (t.ple_emb_fmt == KqFmt.k4) {
+        have = (long_length(t.k4q) / K4_QSB) * 256l
+    } elif (t.ple_emb_fmt == KqFmt.k5) {
+        have = (long_length(t.k5q) / K5_QSB) * 256l
+    } elif (t.ple_emb_fmt == KqFmt.k6) {
+        have = (long_length(t.k6q) / K6_QSB) * 256l
+    } elif (t.ple_emb_fmt == KqFmt.q40) {
+        have = (long_length(t.q40q) / Q40_QSB) * 256l
+    }
+    if (have < need) {
+        panic("dasLLAMA: the PLE token table is not resident ({origin}): fmt {t.ple_emb_fmt} plane holds {have} of {need} elements - regenerate this carrier (it predates the pinned-table rail)")
+    }
+}
+
 // One PLE token row (all = layers*ple elements, superblock-aligned by the detect gate) off the
 // gather's storage: native disk-order K-quant planes (the table is excluded from the grp repack)
 // or the q8 linear region on fallback loads.

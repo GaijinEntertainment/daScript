@@ -7,6 +7,7 @@ options _cyclomatic_complexity = 0   // image walk/GC bodies mirror the archive 
 options _function_length = 0   // same
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_ple   // ple_check_table — the E-series table go-live tripwire
 require daslib/fio
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require daslib/apply

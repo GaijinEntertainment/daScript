@@ -12,10 +12,9 @@ require daslib/fio
 require math
 require _model_tier
 
-// E-series serving-mode rails for the PLE token table (eseries_bringup_plan.md slice A): the
-// table is pinned to its DISK-format plane in EVERY serving mode — fp32 keeps the plane bits
-// verbatim (gather-time dequant == eager expand, so the fp32 rail stays exact), q4 serves with
-// the same pin instead of the old refusal.
+// the PLE token table is pinned to its disk-format plane in every serving mode
+// fp32: gather-time dequant off that plane == the eager expansion, bit for bit
+// q4: serves through the same pin
 
 def private e2b_q8_path() : string => path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
 def private e2b_kq_path() : string => path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
@@ -109,6 +108,22 @@ def test_ple_fp32_rail(t : T?) {
         }
         t |> success(eq, "gather rows bit-match the file dequant (worst |diff| {worst})")
         delete have
+        // in-place requant would replace wblob and orphan the pinned table's plane: both forms
+        // refuse an E-series model outright
+        var q8_tripped = false
+        try {
+            quantize_weights(tr)
+        } recover {
+            q8_tripped = true
+        }
+        t |> success(q8_tripped, "quantize_weights refuses a PLE model in place")
+        var q4_tripped = false
+        try {
+            quantize_weights_q4(tr)
+        } recover {
+            q4_tripped = true
+        }
+        t |> success(q4_tripped, "quantize_weights_q4 refuses a PLE model in place")
         delete tr
     }
 }
@@ -161,13 +176,11 @@ def test_ple_mode_forwards(t : T?) {
         if (!model_available(t, path)) {
             return
         }
-        var q8_text = ""
         {
-            // q8 control: the known-good serving mode, same raw turn — the shape the other two
-            // modes' continuations are eyeballed against
+            // q8 control: the known-good serving mode, same turn — the log's reference shape
             var m <- load_model_(path, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, 512l)   // KV sizing only; the turn is short
-            q8_text = greedy_turn(m, "Name three colors.", 24l)
+            let q8_text = greedy_turn(m, "Name three colors.", 24l)
             to_log(LOG_INFO, "PLE q8 greedy (control): {q8_text}\n")
             t |> success(letters(q8_text) >= 3, "q8 control continuation is text: '{q8_text}'")
             delete m

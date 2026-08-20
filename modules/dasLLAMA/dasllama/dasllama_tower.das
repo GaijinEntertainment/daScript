@@ -283,6 +283,17 @@ def mm_plane_b(var y : array<float>; bf16 : bool; wblob : PlaneU16; blob : Plane
     }
 }
 
+//! Read one GEMM weight into the plane its per-tensor type picked: the bf16 halfword plane when
+//! ``bf16``, the fp32 plane otherwise (a shipped mmproj mixes the two per tensor).
+def tower_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var wblob : array<uint16>;
+                    var blob : array<float>; bf16 : bool; off, n_elem : int64) {
+    if (bf16) {
+        gguf_transcode_bf16(m, b, name, wblob, off, n_elem)
+    } else {
+        gguf_read_tensor_f32(m, b, name, blob, off, n_elem)
+    }
+}
+
 //! Per-op activation-quant calibration range (mtmd ClippableLinear): clamp(x, imin, imax) before
 //! the matmul, clamp the result to (omin, omax) after. ``active`` false = no sidecar scalars on
 //! disk, which mtmd treats as ±FLT_MAX — an identity clamp, so callers may skip the pass.

@@ -48,7 +48,7 @@ batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`. Prefill parity:
 kq cont span dim qkv` (span = the non-causal media eval shape, head + embd span, per codec).
 Support matrix: `cells-q8 window cells-s16 mode kq dim8b dim70b` + the
 family matrix `fam-qwen3 fam-qwen2 fam-phi3 fam-gemma2 fam-gemma3 fam-gemma4 fam-qwen3moe
-fam-gemma4moe fam-gptoss fam-qwen35 fam-qwen35moe fam-qwen2moe` (needs-derivation pins +
+fam-gemma4moe fam-gptoss fam-gemma4e fam-qwen35 fam-qwen35moe fam-qwen2moe` (needs-derivation pins +
 per-path cells; fam-gemma2 also carries the sliding-window masking parity row;
 fam-gemma4/fam-qwen3moe/fam-gemma4moe/fam-gptoss/fam-qwen35moe/fam-qwen2moe are
 DASLLAMA_PARITY_FULL-gated — 7.4/18.5/26.9/12.1/22/15GB; fam-gemma4moe and fam-gptoss are ENGAGE
@@ -73,9 +73,10 @@ every derived-truth compare its own poison. A kernel with `@workgroup` state nee
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
-canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma4e mtower`; `gemma4e` is the E2B
-metal-blob mint+map arm — the PLE go-live tripwire's after-borrows seam on both a fresh mint
-and a warm map (a false positive here once panicked every fresh E-series blob mint); `gemma4uv-metal` is the GPU tower
+canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma4e mtower`; `gemma4e` is the E2B metal-blob
+mint+map arm — the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
+embedding table's plane is short) runs after the blob plane borrows, so a fresh mint and a warm
+map must both clear it; `gemma4uv-metal` is the GPU tower
 driver's parity/counter/knob gate for the gemma4uv embedder, Apple builds only (`--arm
 gemma4uv` selects it too — arm filters match by substring); `mtower` is the whisper-class
 tower-blocks gate, Apple builds only — whisper tiny + large-v3-turbo transcript-exact and
@@ -194,14 +195,17 @@ maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed 
 staging planes must miss the oracle — the sidecar scalars are load-bearing). Skips honestly
 without the mmproj or dumps. `_vision_oracle.das` is the shared dump parser / fixture generator /
 per-token compare both vision tier-1 tests use.
+`test_vision_embedder.das` — model-free: the `VisionEmbedder` carrier's own arms — the sniffed
+family tag, the none-carrier refusals, and the `.dlim` route — over constructed carriers.
 `test_ple_check.das` — model-free: the PLE go-live tripwire (`ple_check_table`) on synthetic
 Model shells — short plane trips per format arm, full plane passes, non-PLE exempt.
 `test_ple_modes.das` — suite-less, model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE
 token table's pinned-plane rail across serving modes — fp32 keeps the Q8_0 table on a
 dedicated q8 plane (offset 0, plane == table exactly, gather rows BIT-match the file dequant,
 wblob provably too small to carry the expansion) and a K-quant table on its native kq plane;
-plus one fp32 and one q4 greedy chat turn each (the q4 load panicked outright before the rail).
-`test_tower_helpers.das` — model-free: the shared encoder-tower helpers in `dasllama_tower.das`
+plus a greedy chat turn per serving mode on the E2B Q8_0 carrier — a q8 control, an fp32 turn,
+and a `q4_0` turn, the `q4_0` one proving q4 serving has a per-layer-embedding rail.
+`test_tower_helpers.das` — model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference.
 `test_attn_span.das` — the non-causal image span (`eval_embd_ non_causal`): mask direction by
@@ -263,10 +267,10 @@ model blocks tagged with a listed family run — `family_on(t, name)` in
 today: `llama` (all four metal suites + the image smol arm), `qwen2`, `qwen3`, `phi3`,
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe` (the support-matrix family cells), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
-`gemma4e` (three support-matrix rows — E4B PARITY_FULL-gated, E2B Q8_0 + Q4_K_M small-tier
-always-on with the per-layer-FFN-width and blob-kq-PLE-gather coverage; E2B rows use the
-forced-feed cells as parity, not token equality — the 2B near-ties freeform; plus the
-coverage-census E4B row; `gptoss`/`qwen2moe`/`qwen3moe` carry census rows too — all PARITY_FULL-gated).
+`gemma4e` (support-matrix rows under `fam-gemma4e` — E4B PARITY_FULL-gated; E2B Q8_0 and
+Q4_K_M small-tier always-on, carrying the per-layer-FFN-width and blob-kq-PLE-gather coverage.
+Both E2B rows assert parity through their forced-feed cells, not token equality, because
+freeform continuations from a 2B sit on near-ties; plus the coverage-census E4B row; `gptoss`/`qwen2moe`/`qwen3moe` carry census rows too — all PARITY_FULL-gated).
 When profiling one family across formats, gate each round with
 `--arm <arms> --family <fam>` instead of the whole zoo. Tag every NEW model-loading block
 with its family or it silently joins every family's gate.

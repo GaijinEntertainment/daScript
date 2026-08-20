@@ -77,16 +77,17 @@ is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that w
 
 **A change to a GPU decode or prefill driver — `dasllama/dasllama_metal_decode.das`,
 `dasllama/dasllama_metal_prefill.das`, `dasllama/dasllama_vulkan_decode.das`,
-`dasllama/dasllama_vulkan_prefill.das`, or the resident rail in
+`dasllama/dasllama_vulkan_prefill.das`, the servability gate that admits models to them
+(`dasllama/dasllama_metal_shapes.das`), or the resident rail in
 `dasllama/dasllama_gpu_resident.das` (`resident_upload`, `resident_plan`, and the decode,
 batch-decode and prefill overrides it registers) — ships with `harness/parity.das` GPU-vs-CPU
 runs on one q8 and one kq model, with `--kv` matching the armed mirror codec.** The Metal arm is
 `--ngl`; the vulkan arm is `DASLLAMA_GPU=1`, never `--ngl`, and its driver declines
 codec-mismatched sessions silently, so that log must show `resident driver armed`.
 
-**A change to the tower driver `dasllama/dasllama_metal_tower.das` ships runs of the GPU
-oracle-parity gates of the towers it serves (`tests/test_gemma4uv.das`, `tests/test_gemma4v.das`)
-plus a `tests/test_model_image.das` run with the `mtower` arm** — those GPU-vs-CPU cells, with
+**A change to the tower driver `dasllama/dasllama_metal_tower.das` ships a run of the GPU
+oracle-parity gate of every tower family its change can reach, plus a `tests/test_model_image.das`
+run with the `mtower` arm** — those GPU-vs-CPU cells, with
 the driver's encode counter proving it engaged, are that driver's parity instrument.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)

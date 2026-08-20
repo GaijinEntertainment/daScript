@@ -1067,10 +1067,8 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             var sd = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             eval_(tr, sc, pa)
-            // single-stream forced-step logits bar: force the CPU chain through the GPU's own
-            // picks and compare end logits — the cell a per-layer width mis-bind fails (the
-            // forced-feed cont cell below rides the B=2 verify rail and is blind to the
-            // single-stream loop; a short counting continuation survives it token-for-token)
+            // cont_logits_cell below rides the B=2 verify rail — a per-layer width mis-bind
+            // shows only in the single-stream loop, which this forced-step compare covers
             for (pk in picks) {
                 var one <- [pk]
                 eval_(tr, sc, one)
@@ -1080,7 +1078,9 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             for (i in range64(vocab)) {
                 ssmaxd = max(ssmaxd, abs(sc.logits[i] - sa.logits[i]))
             }
-            to_log(LOG_INFO, "{tag} single-stream forced-step logits maxd {ssmaxd}\n")
+            let cpu_next = greedy_top(sc.logits, vocab)
+            let gpu_next = greedy_top(sa.logits, vocab)
+            to_log(LOG_INFO, "{tag} single-stream forced-step: CPU next '{eyeball_str(piece_(tr, cpu_next))}' vs GPU next '{eyeball_str(piece_(tr, gpu_next))}' (maxd {ssmaxd})\n")
             t |> success(ssmaxd <= 8.0, "{tag}: single-stream forced-step logits within 8.0 (maxd {ssmaxd})")
             delete picks
             delete sc

@@ -275,17 +275,6 @@ def private g4v_announce_lane() {
     to_log(LOG_INFO, "dasLLAMA gemma4v: block GEMM lane {g4v_serve_q8() ? "q8" : "exact planes"} - {why}\n")
 }
 
-// GEMM read: a bf16 load copies the file's own halfwords (exact, no conversion); an fp32 load
-// reads it like any plain tensor
-def private g4v_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma4vStaging;
-                          bf16 : bool; off, n_elem : int64) {
-    if (bf16) {
-        gguf_transcode_bf16(m, b, name, st.wblob, off, n_elem)
-    } else {
-        gguf_read_tensor_f32(m, b, name, st.blob, off, n_elem)
-    }
-}
-
 // the clamp's five floats into the f32 blob at `off` (read back by g4v_clamp_at)
 def private g4v_put_clamp(var blob : array<float>; off : int64; c : Clamp) {
     blob[off] = c.imin
@@ -374,13 +363,13 @@ def private g4v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gem
     let d = st.t.n_embd
     let hd = d / st.t.n_head
     var wscratch : array<float>   // the q8 transcode's f32 staging, one GEMM at a time
-    g4v_read_gemm(m, bytes, "v.patch_embd.weight", st, st.t.patch_bf16, st.t.patch_w, st.t.patch_dim * d)
+    tower_read_gemm(m, bytes, "v.patch_embd.weight", st.wblob, st.blob, st.t.patch_bf16, st.t.patch_w, st.t.patch_dim * d)
     gguf_read_tensor_f32(m, bytes, "v.position_embd.weight", st.blob, st.t.pos_w, 2l * st.t.pos_entries * d)
     if (st.t.has_std) {
         gguf_read_tensor_f32(m, bytes, "v.std_bias", st.blob, st.t.std_bias, d)
         gguf_read_tensor_f32(m, bytes, "v.std_scale", st.blob, st.t.std_scale, d)
     }
-    g4v_read_gemm(m, bytes, "mm.input_projection.weight", st, st.t.proj_bf16, st.t.proj_w, d * st.t.proj_dim)
+    tower_read_gemm(m, bytes, "mm.input_projection.weight", st.wblob, st.blob, st.t.proj_bf16, st.t.proj_w, d * st.t.proj_dim)
     g4v_put_clamp(st.blob, st.t.proj_clamp, read_clamp(m, bytes, "mm.input_projection"))
     for (l in range64(st.t.n_layer)) {
         let p = "v.blk.{l}"
@@ -397,7 +386,7 @@ def private g4v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gem
             if (st.t.q8) {
                 g4v_read_gemm_q8(m, bytes, "{base}.weight", st, wscratch, wo, gemm_sizes[g])
             } else {
-                g4v_read_gemm(m, bytes, "{base}.weight", st, st.t.blk_bf16, wo, gemm_sizes[g])
+                tower_read_gemm(m, bytes, "{base}.weight", st.wblob, st.blob, st.t.blk_bf16, wo, gemm_sizes[g])
             }
             wo += gemm_sizes[g]
             g4v_put_clamp(st.blob, fo, read_clamp(m, bytes, base))
@@ -578,14 +567,7 @@ def private g4v_check_planes(t : Gemma4vTower; src : string) {
 // the q8 route: per-site requant of the (clamped) input, then the q8q8 batch kernel
 def private g4v_gemm_q8(var y : array<float>; t : Gemma4vTower; var s : Gemma4vState; off : int64;
                         x : array<float>; n, d, npos : int64) {
-    let need = npos * n
-    if (long_length(s.xqi) < need) {
-        s.xqi |> reserve(need)
-        s.xqi |> resize(need)
-        s.xsi |> reserve(need / 32l)
-        s.xsi |> resize(need / 32l)
-    }
-    requant_rows_q8(x, n, npos, s.xqi, s.xsi)
+    requant_rows_q8_sized(x, n, npos, s.xqi, s.xsi)
     matmul_q8q8_batch(y, t.qblob, t.qscales, off, s.xqi, s.xsi, n, d, npos)
 }
 
