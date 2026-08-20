@@ -28,14 +28,14 @@ require daslib/regex_boost
 | Pad, repeat, reverse, join | `pad_left(s, w, ' ')` / `pad_right`, `repeat(unit, n)`, `reverse(s)`, `join(items, ", ")` *(all boost except `repeat` / `reverse`)* |
 | Edit distance | `levenshtein_distance(a, b)`, or `levenshtein_distance_fast` for short strings |
 
-`replace_multiple(s, [(text="a", replacement="b"), (text="b", replacement="a")])` swaps in one
-pass — replacements never see each other's output. `join(items, ", ") $(var w, elem) { … }` is the
+`replace_multiple(s, [(text="a", replacement="b"), (text="b", replacement="a")])` swaps a and b —
+replacements never see each other's output. `join(items, ", ") $(var w, elem) { … }` is the
 custom-formatter form.
 
 ## Parsing numbers — validate at the boundary
 
 ```das
-let silent  = to_int(s)              // 0 for "foo", 12 for "12abc" — no error signal
+let silent  = to_int(s)              // 0 for "foo", 12 for "12abc"
 let lenient = try_to_int(s) ?? 0
 
 let r = try_to_int(s)                // Result<int; ConversionError>
@@ -44,7 +44,7 @@ use(unwrap(r))
 ```
 
 - **`to_int` / `to_float` / `int(s)` / `float(s)` parse silently** — only for data already known
-  clean, never for user input, the environment, or file contents.
+  clean.
 - **`try_to_int` / `try_to_float`** *(strings_convert)* cover `int8`…`uint64`, `float`, `double`
   and distinguish `invalid_argument`, `out_of_range`, `trailing_garbage`. Accessors (`is_ok` /
   `unwrap` / `unwrap_or` / `map` / `and_then` / `??`) arrive transitively. `Result` is a structural
@@ -58,7 +58,6 @@ use(unwrap(r))
 
 ```das
 let result = build_string() $(var writer) {
-    writer |> write("prefix=")
     for (x in items) {
         writer |> write(", ")
         writer |> write(x)
@@ -66,9 +65,8 @@ let result = build_string() $(var writer) {
 }
 ```
 
-- One pass, versus a reallocating `+=` loop. Writer ops: `write(any)`, `write_char(c)`,
-  `write_chars(c, n)`, `write_escape_string(s)`; `build_hash()` runs the same block, returning
-  `uint64` instead of the string.
+- Writer ops: `write(any)`, `write_char(c)`, `write_chars(c, n)`, `write_escape_string(s)`;
+  `build_hash()` runs the same block, returning `uint64` instead of the string.
 - **The result lives in the context string heap** — safe to return or store, no `unsafe`. An empty
   build returns `""`.
 - **`fmt` vs `format`.** `fmt(":.2f", v)` takes a colon-prefixed libfmt spec, no `%`; `format` is
@@ -90,18 +88,7 @@ per byte. `modify_data(s) $(var arr)` gives a mutable view and returns a NEW str
 variable is a mutable element reference — `for (c in arr) { c = uint8('/') }`, no index.
 
 **`slice`, `chop`, `find` and friends re-`strlen` the source on every call** and return a fresh
-heap string — a slice-per-element loop over a big string is O(n²):
-
-```das
-peek_data(line) $(d) {
-    var i = 0
-    while (i < n) {
-        total += length(slice(d, i, i + 4))
-        if (starts_with(d, i, "//")) break
-        i = find(d, ' ', i) + 1
-    }
-}
-```
+heap string — a slice-per-element loop over a big string is O(n²).
 
 | Family | View forms |
 |---|---|
@@ -116,11 +103,11 @@ peek_data(line) $(d) {
 - **Only the haystack becomes a view** — needles stay `string`: `find(d, "foo")`, `rtrim(d, " \t")`.
   `length(d)`, `empty(d)`, `d[i]` are array builtins, no twin needed.
 - **The parse cursor is IN and OUT** — it starts the scan, skips leading whitespace, and on success
-  lands just past the number, ready for the next call. On failure `res` says why and the cursor
-  stays put; outside `0..length(d)` it reports `invalid_argument`. (String forms write the offset
-  out only, always starting at 0.)
-- **Comparisons and searches answer from the view with no allocation**; `slice` / `strip` / `trim`
-  still allocate a temp string.
+  lands just past the number. On failure `res` says why and the cursor stays put; outside
+  `0..length(d)` it reports `invalid_argument`. (String forms write the offset out only, always
+  starting at 0.)
+- **Comparisons and searches allocate nothing**; `slice` / `strip` / `trim` still allocate a temp
+  string.
 - **Views are binary-safe, strings are not.** View ops are length-bounded, so an interior `\0` is
   ordinary data — but materialize a window containing one and downstream `strlen` ops read it as
   truncated there. A view past `INT_MAX` bytes panics.
@@ -137,7 +124,7 @@ peek_data(line) $(d) {
   classifiers, `skip_white_space`, `strip` / `trim`, and every parse function's leading skip. JSON
   is the exception: the spec-exact four-char set.
 - **Char sets** are a `uint[8]` bitset over the 256-byte alphabet: build one with bit math
-  (`cset[ch / 32] |= 1u << uint(ch & 31)`), query with `is_char_in_set(ch, cset)` — faster than
+  (`cset[ch / 32] |= 1u << uint(ch & 31)`), query with `is_char_in_set(ch, cset)` — beats
   `find(charset, c) >= 0` in a hot loop. `set_total` counts members, `set_element(i, cset)` returns
   the i-th; nothing builtin *adds* to a set.
 - **`escape(s)`** escapes `"`, `\`, and control characters, but adds no quotes and leaves `{` /
@@ -150,22 +137,21 @@ peek_data(line) $(d) {
   `ch` as an unsigned byte: a code outside `0..255` matches nothing.
 - **Escape a literal brace as `\{` / `\}`** — an unescaped `{` starts an interpolation even in
   JSON-looking text, and the errors point somewhere else entirely.
-- **No nested string literals inside an interpolation** — `"{find(\"a\", \"b\")}"` is a syntax
-  error, escaping the quotes does not help. Hoist the call into a local.
+- **A nested string literal inside an interpolation is written plain** — `"{s == "abc"}"` works;
+  *escaping* the inner quotes (`"{s == \"abc\"}"`) is the syntax error. (probe-verified 2026-08-20)
 - **`das_string` compares with `string` directly** — `das_str == "foo"`, `empty(das_str)`; never
   `string(das_str) == "foo"`. `to_int(s, true)` is the accept-hex parse.
 - `:=` on a string clones only under `options multiple_contexts` (see memory.md).
 
 ## Regular expressions
 
-`daslib/regex` is a pure NFA engine — not PCRE, not POSIX. `daslib/regex_boost` adds the
-compile-time reader macro, the default for a literal pattern.
+`daslib/regex` is a pure NFA engine, not PCRE or POSIX. `daslib/regex_boost` adds the compile-time
+reader macro, the default for a literal pattern.
 
 ```das
-var private RE    <- %regex~^\s*(?:def|struct)\s+private\b%%
-var private RE_I  <- %regex~hello~i%%          // case-insensitive
-var private RE_S  <- %regex~start.*end~s%%     // dot-all: `.` matches \n
-var private RE_IS <- %regex~Foo~is%%           // both
+var private RE   <- %regex~^\s*(?:def|struct)\s+private\b%%
+var private RE_I <- %regex~hello~i%%          // case-insensitive
+var private RE_S <- %regex~start.*end~s%%     // dot-all: `.` matches \n; `~is%%` combines both
 ```
 
 Flags go after a trailing `~` INSIDE the macro; anything after the closing `%%` is a syntax error.

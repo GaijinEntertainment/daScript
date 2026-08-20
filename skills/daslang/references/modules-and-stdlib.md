@@ -4,13 +4,12 @@
 
 ```das
 options gen2
-module physics shared public            // libraries only
+module physics shared public
 require math
 require daslib/strings_boost
 
 struct Body { pos, vel : float3 }
 let GRAVITY = float3(0.0, -9.8, 0.0)
-typedef Bodies = array<Body>
 
 def step(var b : Body; dt : float) {
     b.pos += b.vel * dt
@@ -23,10 +22,10 @@ def main { print("ok\n") }
 The only enforced ordering is `module` before any type declaration; `options` / `module` /
 `require` otherwise interleave. A file with no `module` line is a program, named by its file stem.
 
-`[export]` makes a function callable from the host by name; `[init]` runs at context init and
-`[finalize]` at shutdown (both take no arguments, return nothing). `main` is a convention, not a
-keyword, and returns `void` unless declared `def main() : int` — then the return value is the
-process exit code (do not use `panic` to force one). (probe-verified 2026-08-16)
+`[export]` makes a function callable from the host by name; `[init]` / `[finalize]` run at context
+init / shutdown (no arguments, no return). `main` is a convention, not a keyword: it returns `void`
+unless declared `def main() : int`, whose return value is the process exit code (do not `panic` to
+force one). (probe-verified 2026-08-16)
 
 ## Module declaration
 
@@ -42,8 +41,8 @@ Modifiers are positional in that order; `module physics public shared` is a synt
 | `public` / `private` | Default visibility of everything in the file. Omitted means the environment default (normally public). |
 | `!inscope` | Visible to every module in the program, with no `require`. |
 
-`!inscope` loads nothing by itself — something must still pull the module in; after that its public
-symbols resolve unqualified everywhere, even from files that reach it only through someone else's
+`!inscope` loads nothing by itself — something must still require the module; after that its public
+symbols resolve unqualified everywhere, even in files that reach it only through someone else's
 non-`public` require.
 
 ## Visibility
@@ -58,16 +57,14 @@ var private counter = 0
 let shared private SEEN : table<string> <- { "a", "b" }
 
 struct public Point { x, y : int }
-enum public Color { red, green, blue }
-typedef public Ints = array<int>
 typedef private distinct Handle = int
 
-def public bump : int { counter++; return counter }
-def private helper : int { return 0 }
+def public bump { counter++ }
+def private helper { }
 ```
 
-`shared` on a global shares the value across cloned contexts. Calling a private symbol from
-another module errors with the candidate plus `function is private to module <name>`.
+`shared` on a global shares the value across cloned contexts. Calling a private symbol from another
+module errors `function is private to module <name>`.
 
 ## require
 
@@ -76,7 +73,6 @@ require math                          // module name (resolved by the host/proje
 require daslib/strings_boost          // module names may contain `/` and `.`
 require geom                          // a bare name also finds geom.das next to this file
 require ./helpers.das                 // file-relative path
-require ../common/util.das            // ...with `..`
 require %/daslib/random.das as rng    // `%` is the daslang root; `as` binds a local qualifier
 require dastest/testing_boost public  // re-export to whoever requires me
 require ?pugixml pugixml/PUGIXML_boost  // load only if module `pugixml` is available
@@ -86,16 +82,16 @@ require ?pugixml pugixml/PUGIXML_boost  // load only if module `pugixml` is avai
   or `%/` **and** ends in `.das` (or `.das_project`); anything else resolves as a module name.
 - **A file's `module` name must match its file stem** (`wrong module name 'x'; did you mean 'y'?`),
   so one file required through several paths dedupes to one module.
-- **`public` re-exports**; without it a require is visible only inside the requiring file.
-- **`as` binds a local qualifier** for same-named modules. Under the default (no-project) resolver
-  it takes effect for the *path* forms; otherwise the host project's resolver decides.
+- **Without `public`** a require is visible only inside the requiring file.
+- **`as`** takes effect for the *path* forms under the default (no-project) resolver; otherwise the
+  host project's resolver decides.
 - **A require path is `NAME` tokens joined by `/ . % ..`** — so `require ../my-tools/x.das` parses
   as `../my` and fails, and a directory named after a keyword (`shared`, `block`, `where`, ...) is
   unreachable; use a same-directory bare require instead.
 - **`?guard` skips silently** when the guard module is unavailable — no dependency, no error, even
   if the target does not exist; with the guard present a missing target errors normally. A guard
-  containing `/` is satisfied when that path resolves, a plain-name guard when that module is
-  registered. Pair with `static_if (typeinfo builtin_module_exists(guard)) { ... }`.
+  containing `/` is satisfied when that path resolves, a plain name when that module is registered.
+  Pair with `static_if (typeinfo builtin_module_exists(guard)) { ... }`.
 
 ## Qualified calls
 
@@ -115,10 +111,8 @@ the generic-instancing consequences: generics.md.
 if written in that module — its *private* symbols included, plus everything it requires.
 
 ```das
-require physics                     // it must already be loaded
-
 with (module physics) {
-    let s = internal_state()        // private to physics, reachable here
+    let s = internal_state()
     _::report(describe(s))          // describe: physics; _::report: this module
 }
 ```
@@ -137,24 +131,21 @@ are exempt. (probe-verified 2026-08-16)
 ## options
 
 ```das
-options gen2
-options no_unused_block_arguments = false
 options rtti = true, no_aot = true      // several per line
 options profiler                        // bare name == `= true`
 ```
 
 Values are `bool`, `int`, or `string`. An unrecognized name is `error[50100] invalid option 'x'`,
 and a wrong value type is reported too; names starting with `_` are never validated. Modules may
-register their own names.
+register their own.
 
 **Scope:**
 
-- **Compile-time options apply to the declaring file and nothing else** —
-  `options no_unused_function_arguments = true` in a library flags that library only.
-- **Context options are read from the entry program only.** `stack`, `heap_size_hint`, `gc`,
-  `persistent_heap`, `rtti` configure the context the host simulates. A library **cannot** raise
-  them for its users: a module declaring `options stack = 262144` still overflows at the 16 KB
-  default under a program that does not declare it, and the failure surfaces *inside* the library.
+- **Compile-time options apply to the declaring file and nothing else.**
+- **Context options (`stack`, `heap_size_hint`, `gc`, `persistent_heap`, `rtti`) are read from the
+  entry program only.** A library **cannot** raise them for its users: a module declaring
+  `options stack = 262144` still overflows at the 16 KB default under a program that does not
+  declare it, and the failure surfaces *inside* the library.
 - **`threadlock_context` alone unifies upward:** OR-ed across every module parsed, so a library
   needing the context mutex gets it regardless of the program.
 
@@ -201,20 +192,20 @@ Arrays and tables always pass by reference and cannot be copied — only moved (
 
 ```das
 var a <- [3, 1, 2]
-a |> push(4)                       // copy in; push(v, at) inserts at an index
-a |> push_from(other)              // bulk copy; reserves once
-a |> sort() $(x, y) => x > y       // custom comparator
-a |> erase_if() $(x) => x == 1     // erase(at [, count]) for index removal
-let sub <- a[1..3]                 // subarray via a range index
+a |> push(4)                       // push(v, at) inserts at an index
+a |> push_from(other)
+a |> sort() $(x, y) => x > y
+a |> erase_if() $(x) => x == 1
+let sub <- a[1..3]                 // subarray
 ```
 
 | Operation | Effect |
 |---|---|
 | `push` / `push_clone` / `emplace` | Copy in / deep-clone in / move in (zeroes the source). |
-| `push_from` / `push_clone_from` | Bulk forms taking a whole `array<T>` or `T[]`. |
+| `push_from` / `push_clone_from` | Bulk forms taking a whole `array<T>` or `T[]`; reserve once. |
 | `resize` / `resize_and_init` / `resize_no_init` / `reserve` | Grow or shrink; `reserve` only changes capacity, exactly (no pow2 round-up). A resize that must GROW past `max_unreserved_size` bytes (64 MB default) without a prior reserve panics. |
 | `ensure_capacity` | Geometric (at-least-doubling) reserve for open-ended appends — a following `resize` never grows, so it never trips `max_unreserved_size`. |
-| `erase` / `erase_if` / `remove_value` / `pop` / `clear` | Remove; `clear` keeps the capacity. |
+| `erase` / `erase_if` / `remove_value` / `pop` / `clear` | Remove; `erase(at [, count])` removes by index, `clear` keeps the capacity. |
 | `length` / `long_length` / `capacity` / `empty` / `back` | Query; `back` panics (`back empty array`) when empty. |
 | `find_index` / `find_index_if` / `has_value` | Search; the `find_*` pair returns `-1` when absent. |
 | `sort` / `subarray` / `to_array` / `to_array_move` / `swap` | Order, convert, exchange. |
@@ -227,14 +218,12 @@ let sub <- a[1..3]                 // subarray via a range index
 ```das
 var t <- { "one" => 1, "two" => 2 }        // table<string; int>
 t |> insert("three", 3)
-t |> emplace("five", five)                 // moves; `five` ends up zeroed
-let safe = t?["nope"] ?? -1                // safe lookup: never inserts
+t |> emplace("five", five)
+let safe = t?["nope"] ?? -1
 let found = get(t, "three") $(v) { print("{v}\n") }
 for (k, v in keys(t), values(t)) { }
 
-var seen : table<string>                   // ONE type parameter == a set
-let stop : table<string> <- { "the", "a", "an" }
-var squares <- { for (x in range(5)); x => x * x }
+let stop : table<string> <- { "the", "a", "an" }   // ONE type parameter == a set
 ```
 
 | Operation | Effect |
@@ -245,15 +234,12 @@ var squares <- { for (x in range(5)); x => x * x }
 | `erase` / `clear` / `length` / `empty` | Remove one, remove all, query. |
 | `keys` / `values` | Iterators, usable together in one `for`. |
 
-Two traps:
-
 - **`tab[key]` inserts a default entry when the key is missing** — read with `tab?[key] ?? fallback`.
   Indexing a non-`var` table is a compile error outright. Under `default_init_containers` the
   inserted slot gets `default<V>`, but only for a *reading* index; a direct store (`tab[k] = v`,
   `<- v`, `:= v`) and `addr(tab[k])` keep the raw zeroed slot.
 - **Never index the same table twice in one expression:** `tab[a] = tab[b]` is rejected
-  (`table_lookup_collision`) — a rehash from one lookup invalidates the other's reference. Two
-  *different* tables are fine.
+  (`table_lookup_collision`); two *different* tables are fine.
 
 ## daslib
 
@@ -282,7 +268,7 @@ base and adds macro sugar.
 | `archive`, `clargs`, `logger`, `profiler_boost`, `debug` | Binary serialization, argument parsing, structured logging, profiling, debug/DAP server. |
 | `math_boost`, `random`, `math_bits` | `AABB`/`Ray`/`Plane`, RNG, bit twiddling. |
 | `lint`, `perf_lint`, `style_lint` | Extra lint passes, opt-in per file. |
-| `shader_lingua_franca` | Operator rail for porting GLSL: closed `+` / `-` and ordering compares over the int16 lattice family, `half4(half2, half2)`, `unpackHalf2x16`. The operators exist only where this module is required. |
+| `shader_lingua_franca` | Operator rail for porting GLSL: closed `+` / `-` and ordering compares over the int16 lattice family, `half4(half2, half2)`, `unpackHalf2x16`; the operators exist only where this module is required. |
 | `sql_linq` (+ `sql_boost`, `sql_migrate`) | LINQ-to-SQL against a provider module (SQLite, DuckDB, PostgreSQL): `[sql_table]` declarations, `_sql(...)` queries, transactions, migrations. |
 | `pugixml/PUGIXML_boost` | XML over the `dasPUGIXML` module (not daslib): RAII parsing, builder, XPath, struct round-trip. |
 
@@ -291,8 +277,6 @@ base and adds macro sugar.
 `dastest` ships with daslang distributions.
 
 ```das
-options gen2
-
 require dastest/testing_boost public
 
 [test]
@@ -302,4 +286,4 @@ def sum_works(t : T?) {
 ```
 
 `[test]` functions take a single `T?` asserter; `equal(a, b)`, `success(cond)` and `failure(msg)`
-record results, and the `dastest` driver discovers and runs them.
+record results; the `dastest` driver discovers and runs them.

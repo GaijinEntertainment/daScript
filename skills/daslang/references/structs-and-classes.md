@@ -1,7 +1,7 @@
 # Structs and Classes
 
 **Structs** are pure data with value semantics. **Classes** add a generated vtable of
-function-pointer fields: virtual/abstract methods, initializers, finalizers. All examples are gen2.
+function-pointer fields: virtual/abstract methods, initializers, finalizers.
 
 ## Struct declaration
 
@@ -35,23 +35,15 @@ A function whose name matches the struct is its initializer; the compiler genera
 `[safe_when_uninitialized]` on the struct allows it, but zero-fills instead of applying the
 initializers.
 
-One level down: a field whose *type* is unsafe-when-uninitialized and has no initializer is
+A field whose *type* is unsafe-when-uninitialized and has no initializer is
 `error[31030]: Uninitialized field a is unsafe` at the struct declaration, silenced by
-`@safe_when_uninitialized value : T` on that field — typical for a generic payload that may not be
-default-constructible. (probe-verified 2026-08-16)
+`@safe_when_uninitialized value : T` on that field. (probe-verified 2026-08-16)
 
-**Clone initializer** — takes a pointer to an existing instance, so `new Foo(a)` deep-copies `a`:
-
-```das
-def Foo(p : Foo?) {
-    var self := *p          // := clones
-    return <- self
-}
-```
+**Clone initializer** — an initializer taking `Foo?`, so `new Foo(a)` deep-copies `a`:
+`def Foo(p : Foo?) { var self := *p; return <- self }`.
 
 Arrays of structs: `var fs <- [Foo(x = 11, y = 22.0), Foo(x = 33)]`. The older
-`array struct<Foo>((x = 11, y = 22.0), (x = 33))` (bare field tuples, declared initializers filling
-the rest) still works.
+`array struct<Foo>((x = 11, y = 22.0), (x = 33))` (bare field tuples) still works.
 
 ## Methods on structs
 
@@ -61,7 +53,7 @@ Structs have no member functions; four idioms replace them:
 
 ```das
 def setXY(var self : Point; X, Y : int) {
-    with (self) { x = X; y = Y }    // brings fields into scope; no self. prefix
+    with (self) { x = X; y = Y }    // fields in scope; no self. prefix
 }
 
 var p = Point()
@@ -73,8 +65,8 @@ let n = p.length2()         // dot works on struct values too: length2(p)
 reference. There is no `with (var x = expr)` binding form.
 
 **2. Function-pointer field** — an indirect call through a data member, overridable per derived
-type: this is what "virtual" means for a struct. **3. An inline `def`** is exactly sugar for it,
-body wrapped in `with (self)`.
+type: "virtual" for a struct. **3. An inline `def`** is sugar for it, body wrapped in
+`with (self)`.
 
 ```das
 struct Vfoo { x, y : int = 0; set = @@setV }     // @@ makes a function pointer
@@ -104,11 +96,10 @@ struct Counter {
 }
 ```
 
-`[explicit_const_class_method]` when one name needs both a const and a non-const overload (typical
-for `foreach` or `operator []`).
+`[explicit_const_class_method]` when one name needs both a const and a non-const overload.
 
 Call forms for idioms 3 and 4: `obj.m(...)`, `ptr->m(...)`, and `` Type`m(obj, ...) ``. **`|>` does
-not work** for either — the generated function is named `` Type`m ``.
+not work** — the generated function is named `` Type`m ``.
 
 ## Struct inheritance
 
@@ -125,9 +116,7 @@ struct Kid : Base {
     def override tag : int { return 2 }      // override is mandatory
 }
 
-def whichTag(var b : Base) : int => b->tag()
-
-whichTag(Kid())     // 2 — dispatch goes through the function-pointer field
+def whichTag(var b : Base) : int => b->tag()    // whichTag(Kid()) is 2
 ```
 
 | What can be overridden | Spelling |
@@ -145,18 +134,12 @@ unsafe { upcast<Kid>(b).y = 5 }     // unchecked; corrupts memory if b is not re
 ```
 
 `[cpp_layout(pod = false)]` on a struct and its descendants makes inherited alignment follow C++
-class rules, for interop with native structures.
+class rules.
 
 **Struct finalizers** are free functions named `operator delete` (or `finalize`) taking `self`:
-
-```das
-def operator delete(var self : Bar) {
-    print("~Bar\n")
-    delete super.self       // runs the parent struct's finalizer on self
-}
-```
-
-Structs do **not** chain: omitting `delete super.self` silently skips ancestor finalizers.
+`def operator delete(var self : Bar) { ...; delete super.self }`, where `delete super.self` runs
+the parent struct's finalizer on `self`. Structs do **not** chain: omitting it silently skips
+ancestor finalizers.
 
 ## Classes
 
@@ -168,7 +151,6 @@ class Shape {
     static made : int = 0           // shared across all instances
     def Shape { name = "shape"; made ++ }       // initializer: name matches the class
     def abstract area : float       // must be fully qualified, including return type
-    def describe : string { return "{name}: area = {area()}" }
     def static howMany : int { return made }    // no self; may touch static fields
 }
 
@@ -180,7 +162,6 @@ class Circle : Shape {
         radius = r
     }
     def override area : float { return 3.14159 * radius * radius }
-    def override describe : string { return "<{super.describe()}>" }
 }
 ```
 
@@ -204,8 +185,8 @@ inheritance (`error[20701]`); `def sealed area : float` overrides and bans furth
 methods (`error[30187]`).
 
 **Local class instances are unsafe** — `var f = Foo()` is `error[31017]: local class requires
-unsafe`; allocate with `new Foo()`, or wrap in `unsafe { }` when a stack instance is genuinely
-wanted. `delete` on a class pointer also requires `unsafe` (`error[31009]`).
+unsafe`; allocate with `new Foo()`, or wrap in `unsafe { }`. `delete` on a class pointer also
+requires `unsafe` (`error[31009]`).
 
 `private` fields and `def private` methods are class-internal; touching one from outside is
 `error[30900]`.
@@ -213,9 +194,9 @@ wanted. `delete` on a class pointer also requires `unsafe` (`error[31009]`).
 ### Constructors and `super`
 
 `super()` calls the parent constructor; `super.method(args)` calls a parent method bypassing
-virtual dispatch. Both rewrite to the backtick form (`` Base`Base(self) ``,
-`` Base`process(self, x) ``). If the immediate parent has no match, `super` walks up to the nearest
-ancestor that does, matching by argument types.
+virtual dispatch; both rewrite to the backtick form (`` Base`Base(self) ``). If the immediate
+parent has no match, `super` walks up to the nearest ancestor that does, matching by argument
+types.
 
 A derived constructor whose parent has a user constructor must call `super(...)` **exactly once on
 every control-flow path** — zero, two, or a call inside a loop are all `error[30308]`.
@@ -230,15 +211,6 @@ every control-flow path** — zero, two, or a call inside a loop are all `error[
 
 `def finalize { ... }` or, equivalently, `def operator delete { ... }`. Classes chain level by
 level; each level finalizes its own field slice exactly once.
-
-```das
-class Mid : Base {
-    def operator delete {
-        print("~Mid\n")         // derived cleanup first
-        delete super.self       // then the parent's finalizer on self
-    }
-}
-```
 
 - A class with no finalizer of its own inherits chaining automatically.
 - When an ancestor has a user finalizer, a derived finalizer must call `delete super.self` exactly
@@ -268,10 +240,10 @@ pointer fails to compile with `error[30190]: is Dog only allowed for variants`.
 require daslib/dynamic_cast_rtti
 
 var a : Animal? = new Dog()
-a is Dog                    // true  — walks the __rtti chain at runtime
-a is Animal                 // true  — Dog is an Animal; a is Cat is false
-var d = a as Dog            // forced cast: panics if the type is wrong
-var c = a ?as Cat           // safe cast: null if the type is wrong
+a is Dog                    // true — walks the __rtti chain at runtime
+a is Animal                 // true — Dog is an Animal; a is Cat is false
+var d = a as Dog            // forced: panics if the type is wrong
+var c = a ?as Cat           // safe: null if the type is wrong
 ```
 
 This differs from `is`/`as` on *handled* (C++-bound) types, where the check is exact-type and
@@ -280,8 +252,8 @@ ignores C++ inheritance.
 ## Interfaces
 
 `daslib/interfaces` gives polymorphism without a shared base class: an `[interface]` class holds
-methods only, no data fields, and every `[implements(IName)]` class must define all of them —
-missing ones are a compile error. Interface inheritance (`[interface] class IChild : IParent`) and
+methods only, no data fields; every `[implements(IName)]` class must define all of them — missing
+ones are a compile error. Interface inheritance (`[interface] class IChild : IParent`) and
 non-abstract default methods are both supported.
 
 ```das
@@ -308,8 +280,8 @@ s->get`IDrawable()->draw()  // the explicit getter the macro generates
 A `class template` / `struct template` carrying `[template_structure(Params...)]` from
 `daslib/typemacro_boost` is a blueprint, never instantiated directly; `$Name<Args>` is a type macro
 cloning it per argument list (`typedef IntBox = $TBox<int>`). It must live in a **required
-module** — the type macro is registered by that module's macro pass, so `$TBox<int>` in the file
-declaring `TBox` fails with `error[30821]: can't find typeMacro TBox`.
+module**: `$TBox<int>` in the file declaring `TBox` fails with
+`error[30821]: can't find typeMacro TBox`.
 
 C++-bound handle types (not daslang classes) expose `using()`, which constructs the handle on the
 stack and finalizes it at block exit: `using() $(var s : das_string) { s := "hello" }`.

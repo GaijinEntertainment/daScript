@@ -30,19 +30,18 @@ primitives. **Unknown keys are silently ignored** — validate required fields y
 
 | Annotation | Effect |
 |---|---|
-| `@optional` | Skip the field on output when it equals the default/empty value |
-| `@embed` | Emit a `string` field as raw JSON (the caller must supply valid JSON) |
-| `@unescape` | Do not escape characters in the string output |
-| `@enum_as_int` | Serialize an enum as its integer value instead of its name |
-| `@rename = "json_key"` | Map to a different JSON key — the fix for a key colliding with a daslang keyword: field `_type` plus `@rename = "type"` |
+| `@optional` | Omit the field on output when it equals the default/empty value |
+| `@embed` | Emit a `string` field as raw JSON — caller must supply valid JSON |
+| `@unescape` | Emit the string unescaped |
+| `@enum_as_int` | Serialize an enum as its integer value, not its name |
+| `@rename = "json_key"` | Map to another JSON key; fixes daslang-keyword collisions: field `_type` plus `@rename = "type"` |
 
 `JV` / `from_JV` read the same annotations.
 
-**Defaults hold only for the top-level struct you construct.** Elements of a nested `array<Struct>`
-that `sscan_json` allocates are **zero-filled — field initializers are not applied** — so
+**Field initializers apply only to the top-level struct you construct.** Elements `sscan_json`
+allocates inside a nested `array<Struct>` are **zero-filled**, so
 `rotation : float4 = float4(0,0,0,1)` comes back all-zero, silently, for any element whose JSON
-omits the key. For meaningful non-zero element defaults parse with `read_json` +
-`from_JV(js, type<T>)`, which honors them.
+omits the key. `read_json` + `from_JV(js, type<T>)` honors element defaults.
 
 ## JV / from_JV and JsonValue?
 
@@ -57,8 +56,7 @@ let p2 = from_JV(parsed, type<Player>)           // tree → value
 `JV` accepts primitives, vectors, arrays, tables, tuples, variants, enums, and structs/classes by
 reflection; `JV(a, b, c, …)` (up to 10 arguments) builds an array. `from_JV`'s second argument is a
 type witness; an optional third is the fallback when the value is null, missing, or wrong-typed.
-
-Custom types are handled by overloads:
+Custom types need overloads:
 
 ```das
 def JV(data : MyType) : JsonValue? {
@@ -77,20 +75,19 @@ let name  = js?.user?.name ?? "unknown"           // ?. walks object keys
 let score = js?["user"]?["scores"]?[0] ?? 0       // ?[] takes keys and array indices
 ```
 
-The safe operators never crash, even on a null pointer. **`js?.value` reads the struct field
+Safe operators never crash, even on null. **`js?.value` reads the struct field
 `JsonValue.value`** (the underlying `JsValue` variant), *not* a JSON key named `"value"` — for that
 key write `js?["value"]`.
 
-`is` / `as` test the underlying variant through the pointer; `as` on the wrong case crashes —
-guard with `is`.
+`is` / `as` test the underlying variant through the pointer; `as` on the wrong case crashes.
 
 Cases: `_object` (`table<string; JsonValue?>`), `_array` (`array<JsonValue?>`), `_string`
 (`string`), `_number` (`double`), `_longint` (`int64`), `_bool` (`bool`), `_null` (`void?`).
 
 ## Parsing, writing, embedding
 
-- `read_json(text, var error)` takes a `string` or an `array<uint8>`; `write_json(js)` serializes
-  (a null pointer writes as `"null"`).
+- `read_json(text, var error)` takes a `string` or an `array<uint8>`; `write_json(js)` serializes,
+  a null pointer as `"null"`.
 - `try_fixing_broken_json(text)` repairs model-generated output before `read_json` — concatenation
   (`"a" + "b"`), trailing commas, double-quoted nesting.
 - Writer settings return the previous value (save and restore for a scoped change):
@@ -102,19 +99,18 @@ Cases: `_object` (`table<string; JsonValue?>`), `_array` (`array<JsonValue?>`), 
 
 ```das
 return JV((kind = meta.kind, rendered = false, payload = invoke(meta.serializer)))
-// → {"kind": "…", "rendered": false, "payload": {…}}
 
 var tab : table<string; JsonValue?>
 tab |> insert("name", JV("Alice"))
 var obj = JV(tab)
 ```
 
-The named-tuple form has **no `@optional` / `@rename` / `@embed`**: every key is always emitted
-under its daslang name. For conditional keys, declare a small struct with `@optional`.
+The named-tuple form has **no `@optional` / `@rename` / `@embed`**: every key is emitted under its
+daslang name. For conditional keys, declare a small struct with `@optional`.
 
-The hand-built table takes a plain `var`, **never `var inscope`** — the scope-exit finalize deletes
-a container of raw pointers, which frees the pointees (`error[31009] … requires unsafe`).
-`JsonValue?` is a garbage-collected raw pointer; passing it by value copies the pointer.
+The hand-built table takes a plain `var`, **never `var inscope`** — scope-exit finalize would free
+the pointees (`error[31009] … requires unsafe`). `JsonValue?` is a garbage-collected raw pointer;
+passing it by value copies the pointer.
 
 **Cross-context:** a `JsonValue?` allocated in one context's heap is invalid in another. Send the
 raw text across a thread boundary and re-parse, not the tree.

@@ -6,7 +6,7 @@ Preference order for filter / map / sort / group / aggregate / materialize:
 2. **LINQ** — multi-step chains, lazy iterators, set operations, joins, aggregations.
 3. **Plain `for`** — side effect in the body, or `break` / `continue`.
 
-`daslib/functional` (`map`, `filter`, `each`, `to_array`) is legacy: not integrated with the chain
+`daslib/functional` (`map`, `filter`, `each`, `to_array`) is legacy — not integrated with the chain
 macros, does not fuse. Only for code already built on it.
 
 ## Comprehensions
@@ -14,14 +14,13 @@ macros, does not fuse. Only for code already built on it.
 ```das
 let names <- [for (x in func.arguments); string(x.name)]
 let positive <- [for (x in arr); x; where x > 0]
-let squares <- [for (i in range(10)); i * i]
 let pairs <- [for (k, v in keys(t), values(t)); Pair(k = k, v = v)]
 let lookup <- {for (x in items); x.key => x.value}
 ```
 
 One fused loop, no intermediate iterator. It wins whenever **all** hold: one source (or two iterated
 in parallel), a single-expression body, at most one `where` clause, an `array<T>` / `table<K;V>`
-result. Chaining (filter, then sort, then take), or a lazy iterator result, means LINQ.
+result.
 
 ## LINQ
 
@@ -41,52 +40,45 @@ require daslib/linq_boost        // re-exports daslib/linq and the fold family �
 | Join / group | `join`, `group_join`, `left_join`, `right_join`, `full_outer_join`, `cross_join`, `group_by`, `group_by_lazy` |
 | Materialize | `to_array`, `to_table`, and a `*_to_array` twin for most of the above |
 
-The filters carry a trailing underscore — **`where_`**, **`having_`** — since `where` is the
-comprehension keyword. The fold machinery selects the `*_inplace` family on its own for a mutable
-local source; don't call those by hand.
+The fold machinery selects the `*_inplace` family on its own for a mutable local source; don't call
+those by hand.
 
-**Two-source operators come in four shapes** (iterator/array × iterator/array), so a lazy source can
-meet an in-memory array without materializing. **Never append `_to_array` to an array+array call:**
-the base overload already returns `array<T>`, only the iterator-carrying shapes are lazy, so
+**Two-source operators come in four shapes** (iterator/array × iterator/array). **Never append
+`_to_array` to an array+array call:** the base overload already returns `array<T>`, so
 `union_to_array(a, b)` on two arrays is `error[30341]`. `zip` is N-ary up to 8 sources; for three or
 more, mix operands with `each(arr)`.
 
 ### `_fold` — the default terminator
 
-`_fold` rewrites a chain to stay in **array form** end to end, which is cheaper than the lazy form
-on essentially every input. **It goes last, as a trailing call:**
+`_fold` rewrites a chain to stay in **array form** end to end, cheaper than the lazy form on
+essentially every input. **It goes last, as a trailing call:**
 
 ```das
 let names <- arr._where(_.flag)._select(_.name)._fold()
-let xs    <- arr |> _select(_ * 2) |> to_array() |> _fold()
 ```
 
 The wrapping form `_fold(chain)` needs a chain already ending in a terminator (`to_array` / `count`
 / `to_table` / …) — over a bare trailing `_select` it fails to infer the selector; trailing position
 has no such restriction. Skip `_fold` only for a lazy `iterator<T>` composed into a larger pipeline.
 
-`linq_boost`'s `_<op>(iter, expr)` shorthand expands to `<op>(iter, $(_) => expr)`, `_` the implicit
-element. It covers the common operators (`_where`, `_select`, `_count`, `_any`, `_order_by`,
-`_group_by`, `_distinct_by`, `_join`, …); most have a `_<op>_to_array` twin that materializes in one
-step.
+`linq_boost`'s `_<op>(iter, expr)` shorthand expands to `<op>(iter, $(_) => expr)` for the common
+operators, `_` the implicit element; most have a `_<op>_to_array` twin that materializes in one step.
 
 ### Writing a chain that compiles
 
 ```das
-let s     = (arr._select("{_:d}")._fold()) |> join(", ")
-let names = (arr._where(_.flag)._select(_.name)._fold()) |> join(", ")
-let dims  = (each(range(N))._select("{_:d}").to_array()._fold()) |> join(", ")
+let s    = (arr._select("{_:d}")._fold()) |> join(", ")
+let dims = (each(range(N))._select("{_:d}").to_array()._fold()) |> join(", ")
 ```
 
 - **The shorthands need an iterator or an array receiver.** `range(N)` is a `range` value, not an
   iterator: `error[50503] expecting iterator or array` — write `each(range(N))._select(…)`. Same for
   a C++-bound vector field.
 - **`each(...)` is `[unsafe_outside_of_for]`**, arrays included. A `_fold` chain peels it before
-  inference, so no wrap there; a plain LINQ call needs `unsafe(each(arr))`.
-- **`_fold`'s output type follows the source, not the spelling.** An `array<T>` source stays an
-  array; an iterator source folds to `iterator<T>` — add `.to_array()` before `._fold()`.
-- **A multi-line chain needs surrounding parentheses** — newlines are statement-level outside
-  brackets.
+  inference; a plain LINQ call needs `unsafe(each(arr))`.
+- **`_fold`'s output type follows the source, not the spelling** — an iterator source folds to
+  `iterator<T>`; add `.to_array()` before `._fold()`.
+- **A multi-line chain needs surrounding parentheses.**
 - **`_` is local to the closest enclosing `_<op>(...)`.** Name inner closures (`@@(x) => …`); don't
   nest the placeholder. It does substitute inside string interpolation and inside a
   `build_string() $(w) { … }` body.
@@ -99,8 +91,7 @@ let dims  = (each(range(N))._select("{_:d}").to_array()._fold()) |> join(", ")
 
 ### Table sources and the `to_table` sink
 
-A `table<K;V>` (or a `table<K>` set) is a first-class source; its `[unsafe_outside_of_for]` head
-needs an `unsafe` wrap.
+A `table<K;V>` (or `table<K>` set) is a first-class source; its head needs the same `unsafe` wrap.
 
 ```das
 let pricey = _fold(unsafe(each_kv(cars)) |> _where(_.value.price > 500) |> count())
@@ -110,13 +101,13 @@ var byId <- _fold(each(orders) |> _select(_.id => _.total) |> to_table())
 ```
 
 `to_table()` gives `table<K;V>` from a kv (or any `k => v` tuple) chain, the `table<K>` set form
-from a scalar chain; duplicate keys keep the last occurrence. Table slot order is unspecified —
-never write an order-sensitive expectation over a table chain.
+from a scalar chain; duplicate keys keep the last occurrence. Slot order is unspecified — never
+write an order-sensitive expectation over a table chain.
 
 ## What fuses, and what falls back
 
-`_fold` splices each recognized shape into one specialized loop; an unrecognized shape still
-produces the right answer, through the ordinary materializing surface.
+`_fold` splices each recognized shape into one specialized loop; an unrecognized shape still gives
+the right answer, materializing.
 
 **Fuses** — filters and projections into the loop body; every aggregate, element and test
 terminator; `take` / `skip` / `take_while` / `skip_while`; `to_array` and the selector-free
@@ -125,7 +116,7 @@ bounded heap of N; `distinct` / `distinct_by` as one hash-set lane, also as a ga
 `group_by` with a reducing `select`, plus a HAVING filter and a trailing `order_by`; equi-joins on a
 **primitive** key (`group_join` on array and table leads only); `zip` over 2–8 sources. Sources fuse
 symmetrically — arrays, tables (`each_kv` / `keys` / `values`), decs templates, `from_json`,
-`from_xml_node` — each pruned to the fields and lanes the chain actually reads.
+`from_xml_node` — each pruned to the fields and lanes the chain reads.
 
 **Falls back** — `left_join` / `right_join` / `full_outer_join` / `cross_join`; any join whose key
 is not primitive (tuple keys); mixed-source `union` / `except` / `intersect` / `concat` once the
@@ -135,14 +126,13 @@ with a non-reducing `select`.
 
 **Some shapes fuse only in one order** — reorder rather than accept the fallback:
 `reverse().take(N)._select(F)` fuses where `reverse()._select(F).take(N)` does not; `distinct`
-combines with `order_by` only when a `take` bounds it, and `take(N).distinct()` bails because it
-would dedup before the take; `_order_by(K2)._distinct_by(K1)` bails while the distinct-first order
-fuses; a `_select` placed *before* `_skip_while` / `_take_while` blocks the match — push it past
-them, those predicates running on the source element, not on the projection.
+combines with `order_by` only when a `take` bounds it, and `take(N).distinct()` bails;
+`_order_by(K2)._distinct_by(K1)` bails while the distinct-first order fuses; a `_select` placed
+*before* `_skip_while` / `_take_while` blocks the match — push it past them, those predicates
+running on the source element, not on the projection.
 
-A chain over a decs-template source that no arm claims warns at compile time, naming the call site
-(the bridge materializes a temporary array before the fallback runs). Suppress it per file with
-`options _no_linq_perf_warn = true`.
+A chain over a decs-template source that no arm claims warns at compile time, naming the call site.
+Suppress it per file with `options _no_linq_perf_warn = true`.
 
 ## Don't mix styles
 
@@ -154,15 +144,13 @@ and don't drop a comprehension mid-chain.
 ```das
 // Bad:
 let pairs <- join([for (x in customers); x], orders, …)
-let names <- [for (x in arr |> _where(_.flag)); x.name]
 
 // Good:
 let pairs <- customers |> join(orders,
     @@(c : Cust) => c.id,
     @@(o : Ord) => o.customer_id,
     @@(c : Cust; o : Ord) => Pair(c = c, o = o))
-let names <- arr._where(_.flag)._select(_.name)._fold()
 ```
 
-Side effects stay in a plain `for`: `_select` lambdas are meant to be pure, and a side effect inside
-a chain observes an evaluation order you did not choose.
+`_select` lambdas are meant to be pure; a side effect inside a chain observes an evaluation order
+you did not choose.

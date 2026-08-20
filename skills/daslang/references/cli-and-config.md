@@ -1,14 +1,11 @@
 # Command-Line Arguments and Environment Config
 
-`daslib/clargs` replaces hand-rolled `find_index("--foo")` / `args[i+1]` parsing with one annotated
-struct that also renders its own `--help`.
+`daslib/clargs` turns one annotated struct into an argv parser that also renders its own `--help`.
 
 ## The recipe
 
 ```das
 require daslib/clargs
-
-enum LogLevel { Debug, Info, Warning, Error }
 
 [CommandLineArgs]
 struct Config {
@@ -17,16 +14,8 @@ struct Config {
     @clarg_doc = "Greeting target"
     name : string
 
-    @clarg_short = "v"
-    @clarg_doc = "Verbose output"
-    verbose : bool
-
-    @clarg_short = "l"
-    @clarg_doc = "Log level filter"
-    level : LogLevel
-
     @clarg_short = "t"
-    @clarg_doc = "Optional tags (repeatable)"
+    @clarg_doc = "Tags (repeatable)"
     tag : array<string>
 }
 
@@ -41,7 +30,7 @@ def main : int {
 
 **Don't pick an argv accessor.** `parse_args` pulls argv through `get_user_args()`: `argv[1..]` for
 a standalone `-exe` binary, the post-`--` slice under the interpreter or the JIT.
-`get_program_args()` / `get_cli_arguments()` force one specific slice regardless of host.
+`get_program_args()` / `get_cli_arguments()` force one slice regardless of host.
 
 Field types: `string`, `int`, `float`, `bool`, an enum (clargs validates the value), `array<T>` for
 a repeatable flag. The long name is the field name with underscores as hyphens; clargs adds the
@@ -49,14 +38,14 @@ a repeatable flag. The long name is the field name with underscores as hyphens; 
 
 | Annotation / form | Behaviour |
 |---|---|
-| `@clarg_required` | Missing flag makes `parse_args` return an error string. |
-| `@clarg_doc` | The `--help` text. Write it. |
+| `@clarg_required` | Missing flag ⇒ `parse_args` returns an error string. |
+| `@clarg_doc` | The `--help` text. |
 | `@clarg_short = "n"` | Short alias (`-n`). |
 | `@clarg_name = "show-help"` | Overrides the derived long name. |
 | `@clarg_env = "NAME"` | Environment twin. |
 | `@clarg_positional` | Consumed in declaration order. `string`, `Option<string>`, `array<string>` only; an array positional must be last; a required positional cannot follow an optional one; not combinable with `@clarg_short` or `@clarg_count`. |
 | `@clarg_count` | Plain `int`; sums occurrences, so `-v -v -v` gives `3`. **Short-flag bundling is not implemented** — `-vvv` parses as nothing and leaves the field `0`. |
-| `@clarg_mutex_group = "name"` | Mutually exclusive group; a violation reports `--fast, --slow: mutually exclusive (group 'mode')`. |
+| `@clarg_mutex_group = "name"` | Mutually exclusive group. |
 | `@clarg_skip` | Excludes the field from the CLI schema. |
 | `Option<T>` field type | Distinguishes "not supplied" from the zero value (`require daslib/option`). |
 
@@ -67,7 +56,7 @@ declares no `--help` / `-h` field of its own; it intercepts those flags, prints 
 returns **`0`** = help printed, **`-1`** = clean parse (struct populated), **`1`** = parse error
 (already logged at error level).
 
-To control the failure path:
+Controlling the failure path:
 
 ```das
 var r <- parse_args(type<Config>)
@@ -79,10 +68,9 @@ if (r |> is_err) {
 let cfg <- r |> move_unwrap
 ```
 
-`parse_args` returns `Result<Config, string>`. `parse_args(type<Config>, args)` takes an explicit
-`array<string>` — for tests, or to share argv with another consumer, since clargs ignores unknown
-flag-shaped tokens instead of erroring. `format_help` returns the help as a string instead of
-printing it. Field defaults are **not** rendered in help text.
+`parse_args` returns `Result<Config, string>`; `parse_args(type<Config>, args)` takes an explicit
+`array<string>`. Unknown flag-shaped tokens are ignored, not errors. `format_help` returns the help
+as a string instead of printing it. Field defaults are **not** rendered in help text.
 
 **The help-flag pitfall.** Under the script host, `daslang` intercepts `-h` / `--help` itself before
 forwarding script arguments, even after the `--` separator. A script that must offer help under the
@@ -95,12 +83,12 @@ interpreter wires it to `-?` instead:
 help : bool
 ```
 
-Only a standalone `-exe` binary owns argv directly, so only there are `-h` / `--help` — and
-`parse_args_with_help`'s automatic help flag — reachable.
+Only an `-exe` binary owns argv, so `-h` / `--help` — and `parse_args_with_help`'s automatic help
+flag — are reachable only there.
 
 ## Environment twins
 
-An option can also come from an environment variable: **the command line wins, environment beats the
+An option can also come from an environment variable: **command line beats environment beats
 default.** Declare the twin per field with `@clarg_env = "NAME"`, or struct-wide with
 `[CommandLineArgs(env_prefix = "TOOL")]`, deriving `TOOL_LONG_NAME` from the long name (hyphens
 become underscores; `@clarg_env = ""` opts a field out). Help shows it as `(env: NAME)`.
@@ -114,22 +102,20 @@ environment-supplied value never conflicts.
 
 ## `[EnvConfig]` — ambient library knobs
 
-A library has no argv. `[EnvConfig(env_prefix = "MYLIB")]` — same `@clarg_doc` / `@clarg_env`
-vocabulary and name derivation, `bool` / `int` / `int64` / `float` / `string` fields, field
-initializers as defaults — generates `env_config(type<T>) : T` plus `get_env_config_info(type<T>)`
-for documentation generators.
+`[EnvConfig(env_prefix = "MYLIB")]` — same `@clarg_doc` / `@clarg_env` vocabulary and name
+derivation, `bool` / `int` / `int64` / `float` / `string` fields, field initializers as defaults —
+generates `env_config(type<T>) : T` plus `get_env_config_info(type<T>)` for documentation
+generators.
 
 ```das
-let g_cfg = env_config(type<MyLibConfig>)      // global initializer: loads at context init,
-                                               // before any requirer's globals or [init]
+let g_cfg = env_config(type<MyLibConfig>)   // at context init, before requirers' globals and [init]
 ```
 
 Call it **once**, never per call. Same semantics as the twins, except that garbage numeric text logs
-a warning and keeps the default rather than failing the library load. The command-line-only
-annotations (positional, count, required, short, mutex) are rejected here.
+a warning and keeps the default instead of erroring. The command-line-only annotations (positional,
+count, required, short, mutex) are rejected here.
 
-An `Option<T>` field stays `none` when the variable is unset, so the read site writes
-`cfg.layers ?? computed_default()` or branches on `is_some`. Through `CommandArgumentInfo`,
-documentation generators also see `@clarg_default_doc = "probed"` (overrides the rendered default
-when the initializer literal would mislead) and `@clarg_path` (marks a string field as a filesystem
-path).
+An `Option<T>` field stays `none` when the variable is unset — read it with `??` or `is_some`.
+`CommandArgumentInfo` also exposes, for documentation generators, `@clarg_default_doc = "probed"`
+(overrides the rendered default, for when the initializer literal would mislead) and `@clarg_path`
+(marks a string field as a filesystem path).

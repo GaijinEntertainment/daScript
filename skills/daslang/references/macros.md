@@ -10,10 +10,9 @@ Modules compile in `require` order; per module, errors in any phase stop the com
 
 1. **Parse** — reader macros, on raw characters.
 2. **Apply** — `apply` on every function / structure / enumeration annotation.
-3. **Infer** — repeats until stable: `[pre_infer_macro]`, type inference (during which
-   `transform`, call macros, variant macros, for-loop macros and type macros fire),
-   `[dirty_infer_macro]`. Once the passes settle with no errors `[infer_macro]` runs; returning
-   `true` restarts them, numbered from 0 again.
+3. **Infer** — repeats until stable: `[pre_infer_macro]`, type inference (firing `transform`,
+   call, variant, for-loop and type macros), `[dirty_infer_macro]`. Once the passes settle with no
+   errors `[infer_macro]` runs; returning `true` restarts them, numbered from 0 again.
 4. **Finish** — `finish` hooks. Fully typed; no more edits.
 5. **Lint** — `lint` / `verifyCall`, `[lint_macro]` / `[global_lint_macro]`. Read-only.
 6. **Optimize** — repeats: built-in optimization plus `[optimization_macro]`.
@@ -21,11 +20,11 @@ Modules compile in `require` order; per module, errors in any phase stop the com
 
 ## Registering a macro
 
-**A macro cannot be used in the module that defines it** — using the annotation in that file fails
-with `annotation <name> is not found`. Put macros in their own module and `require` it.
+**A macro cannot be used in the module that defines it** — the annotation fails with
+`annotation <name> is not found`. Put macros in their own module and `require` it.
 
-Annotate the class and `daslib/ast_boost` registers it; the optional `name` argument is the
-spelling users write, defaulting to the class name.
+Annotating the class registers it; the optional `name` argument is the spelling users write,
+defaulting to the class name.
 
 ```das
 options gen2
@@ -49,7 +48,7 @@ class TraceMacro : AstFunctionAnnotation {
 }
 ```
 
-Manual registration, for what the annotations do not cover: a `[_macro] def private setup` function
+For what the annotations do not cover, register manually: a `[_macro] def private setup` function
 runs at the end of every module compile. Guard it with `is_compiling_macros_in_module("my_macros")`
 so it fires once, then `add_new_function_annotation("note", new NoteMacro())` — there is an
 `add_new_*_annotation` / `add_new_*_macro` entry point for every macro kind. `[_macro, private]`
@@ -75,11 +74,11 @@ is an error.
 | `[comment_reader]` | `AstCommentReader` | comment text plus `before*`/`after*` declaration hooks |
 | `[simulate_macro]` | `AstSimulateMacro` | `preSimulate`, `simulate` |
 
-**Pass macros** see the whole program and all derive from `AstPassMacro` (there is no
-`AstLintMacro` / `AstInferMacro`), with `apply(prog : ProgramPtr; mod : Module?) : bool` — plus,
-for `[pre_infer_macro]` only, an optional `canVisitPass(prog, mod, index) : bool` (`false` skips
-that pass; `index` is the pass number within the current inference run, 0 after every restart).
-The annotation picks the phase: `[pre_infer_macro]`, `[infer_macro]` (return `true` to re-infer),
+**Pass macros** see the whole program and derive from `AstPassMacro` (there is no `AstLintMacro` /
+`AstInferMacro`), with `apply(prog : ProgramPtr; mod : Module?) : bool` — plus, for
+`[pre_infer_macro]` only, an optional `canVisitPass(prog, mod, index) : bool` (`false` skips that
+pass; `index` is the pass number within the current inference run, 0 after every restart).
+The annotation picks the phase: `[pre_infer_macro]`, `[infer_macro]`,
 `[dirty_infer_macro]`, `[post_infer_macro]`, `[optimization_macro]`, `[lint_macro]` (per module),
 `[global_lint_macro]` (once, after all modules), `[pre_simulate_macro]`, `[post_compile_macro]`
 (after gc-root collection).
@@ -90,9 +89,9 @@ for expressions subclass `AstVisitor` (prefix/postfix callbacks per expression k
 return a replacement) and run `make_visitor(*v) $(adapter) { visit(prog, adapter) }`. `visit`
 accepts `ProgramPtr`, `FunctionPtr`, `ExpressionPtr` or `TypeDeclPtr`, **not** `Module?`.
 
-A call macro's `visit` runs *after* its arguments, so inner macros have expanded and typed
-sub-expressions carry a resolved `_type`. Fail with `macro_verify` (`daslib/macro_boost`), not by
-returning null — a silent null re-queues the macro into a confusing inference cascade.
+A call macro's `visit` runs *after* its arguments, so inner macros have expanded and
+sub-expressions carry a resolved `_type`. Fail with `macro_verify` (`daslib/macro_boost`);
+returning null instead re-queues the macro.
 
 ```das
 [call_macro(name="twice")]
@@ -110,10 +109,10 @@ A structure macro's `apply(var st : StructurePtr; …)` edits the declaration be
 `compiling_module() |> add_function(fn)` / `add_generic` / `add_structure` / `add_alias` register
 generated declarations.
 
-A reader macro embeds foreign syntax, invoked as `%name~ ... %%`: `accept` takes one character at a
-time (return `false` at the terminator), then `visit` turns the collected text into AST. The
-`suffix` hook instead returns **daslang source** the parser re-reads — at module level with `~`, in
-expression position with `!` (`%name! ... %%`).
+A reader macro embeds foreign syntax as `%name~ ... %%`: `accept` takes one character at a time
+(`false` at the terminator), then `visit` turns the collected text into AST. `suffix` instead
+returns **daslang source** the parser re-reads — module level with `~`, expression position with
+`!` (`%name! ... %%`).
 
 ## AST nodes are plain pointers
 
@@ -126,14 +125,14 @@ tracked by the compiler's node GC, not a `smart_ptr`:
 - No `get_ptr(x)` — the value already is a pointer. `x == null`, `x.field`, `x is ExprVar` work.
 - **`is` / `as` on a node are EXACT-type tests, not "kind of".** `expr is ExprField` is `false`
   when `expr` is an `ExprSafeField`, and `as` on the wrong type crashes. Enumerate every concrete
-  node class you mean, or use a matcher (below).
+  node class, or use a matcher (below).
 - **One parent per node** — inserting the same pointer twice makes every later pass edit it twice.
   To reuse a subtree, clone it: `clone_type`, `clone_expression` (deep), `clone_function`,
   `clone_variable`, `clone_structure` (not the generic `clone_to_move`).
 - AST built at **runtime** (outside a compile pass) must sit inside `ast_gc_guard() { ... }` from
   `daslib/ast`, or the leak detector reports a GC leak at exit.
 
-The compiler types still refcounted as `smart_ptr` do use `var inscope` / `<-`: `ProgramPtr`,
+Types still refcounted as `smart_ptr` do use `var inscope` / `<-`: `ProgramPtr`,
 `FileAccessPtr`, and the adapter `make_visitor` returns (the block form hides it). `ContextPtr`
 is a C++-side typedef only — `var c : ContextPtr` does not compile. (probe-verified 2026-08-16)
 
@@ -182,7 +181,7 @@ var fun <- qmacro_function("madd") <| $ ( a, b ) {
 // def madd(a:auto const; b:auto const) : auto { return (scale * a) + b; }
 ```
 
-`$e(...)` clones each substitution independently, so pre-cloning with `clone_expression` is wasted
+`$e(...)` clones each substitution independently — pre-cloning with `clone_expression` is wasted
 work even when one source feeds several slots. `describe(node)` renders any AST node back to source.
 
 `$c(name)` cannot be qualified — `_::$c(name)(...)` is
@@ -280,7 +279,7 @@ Visibility is never an annotation: `def private helper`, `struct private Foo`, `
   native type, where `default<>` is `error[50503] unsupported variable type`, set
   `flags.safeWhenUninitialized = true` on the cloned declaration type instead.
 - **`options` are module-local for pass macros.** The macro fires once per module in the require
-  chain and reads *that* module's options table; an option set in one file does not cascade.
+  chain and reads *that* module's options table.
 - **Each macro module compiles into its own context**: compile-time globals one macro mutates are
   invisible to another macro module. Cross-macro state travels through the AST, files or the
   environment — never a shared global.
@@ -289,19 +288,19 @@ Visibility is never an annotation: `def private helper`, `struct private Foo`, `
 
 ## Debugging a macro
 
-Slightly-wrong AST crashes a later inference or codegen pass, with no line number and no hint which
-macro did it. `daslib/ast_verify` reports it at the offending node: `daslang --ast-verify prog.das`,
-or from a macro `verify_module(prog, mod)` / `verify_expression(expr)` / `verify_function(fn)`.
-Each repairs what it reports so the scan finishes and every finding prints; any report fails the
-compile. `--ast-verify` re-checks before every inference pass, catching a break on the pass right
-after it happens; `--ast-verify-batch` checks only the finished tree — cheaper for many files.
-Silence is not proof: the verifier only knows shapes that crash the compiler. A macro that
-re-breaks the same node every pass never converges — apply such a change once.
+Slightly-wrong AST crashes a later inference or codegen pass, with no hint which macro did it.
+`daslib/ast_verify` reports it at the offending node: `daslang --ast-verify prog.das`, or from a
+macro `verify_module(prog, mod)` / `verify_expression(expr)` / `verify_function(fn)`. Each repairs
+what it reports so the scan finishes; any report fails the compile. `--ast-verify` re-checks before
+every inference pass, catching a break on the pass right after it happens; `--ast-verify-batch`
+checks only the finished tree — cheaper for many files. Silence is not proof: the verifier only
+knows shapes that crash the compiler. A macro that re-breaks the same node every pass never
+converges — apply such a change once.
 
 It enforces two invariants on anything a macro builds, both on by default: one parent per node, and
-an `at` on **every** node — the location it stands for. Without one, later diagnostics, profile rows
-and debug entries over that node point at nothing; pass it at construction, and thread an `at`
-through node-building helpers rather than defaulting it:
+an `at` on **every** node. Without one, later diagnostics, profile rows and debug entries over that
+node point at nothing; pass it at construction, and thread an `at` through node-building helpers
+rather than defaulting it:
 
 ```das
 var lit = new ExprConstInt(at = expr.at, value = 0)   // not new ExprConstInt(value = 0)
