@@ -2,14 +2,15 @@ options gen2
 
 // make-pr - the mechanical gates of PR preparation that preflight's CI-mirror charter
 // does not carry (skills/internal/make_pr.md keeps the policy and the judgment steps).
-// Gates in order: sync, review-md, dupes, ast-verify (conditional), jit-smoke (conditional),
-// then preflight --full unless --no-preflight. Exit codes: 0 all green (judgment checklist
-// printed), 2 a gate failed (named), 1 environment/API failure.
+// Exit codes: 0 all green (judgment checklist printed), 2 a gate failed (named),
+// 1 environment/API failure.
 
 require strings
 require daslib/fio
 require daslib/clargs
+require daslib/defer
 require daslib/strings_boost
+require gates
 
 [CommandLineArgs]
 struct Config {
@@ -54,18 +55,8 @@ def private find_daslang() : string {
     if (!empty(g_cfg.daslang)) {
         return fexist(g_cfg.daslang) ? get_full_file_name(g_cfg.daslang) : ""
     }
-    var best = ""
-    var best_mtime = 0l
-    for (c in ["bin/daslang", "bin/daslang.exe", "bin/Release/daslang.exe",
-               "bin/RelWithDebInfo/daslang.exe", "build/daslang", "build/bin/daslang"]) {
-        if (fexist(c)) {
-            let st = stat(c)
-            if (st.is_valid && int64(st.mtime) > best_mtime) {
-                best_mtime = int64(st.mtime)
-                best = c
-            }
-        }
-    }
+    let best = pick_newest(["bin/daslang", "bin/daslang.exe", "bin/Release/daslang.exe",
+                            "bin/RelWithDebInfo/daslang.exe", "build/daslang", "build/bin/daslang"])
     return empty(best) ? "" : get_full_file_name(best)
 }
 
@@ -110,19 +101,7 @@ def private gate_review_md(daslang : string) : bool {
 }
 
 def private touched_scopes() : array<string> {
-    var seen : table<string>
-    var scopes : array<string>
-    for (f in changed_files("*.das")) {
-        let parts <- split(to_generic_path(f), "/")
-        if (length(parts) >= 2) {
-            let scope = "{parts[0]}/{parts[1]}"
-            if (!key_exists(seen, scope)) {
-                seen |> insert(scope)
-                scopes |> push(scope)
-            }
-        }
-    }
-    return <- scopes
+    return <- scopes_of(changed_files("*.das"))
 }
 
 def private gate_dupes(daslang : string) : bool {
@@ -141,6 +120,10 @@ def private gate_dupes(daslang : string) : bool {
     if (empty(tmp)) {
         to_log(LOG_ERROR, "dupes: temp dir failed: {err}\n")
         return false
+    }
+    defer() {
+        var rmerr = ""
+        rmdir_rec(tmp, rmerr)
     }
     let corpus = path_join(tmp, "corpus.json")
     var argv <- [daslang, "utils/detect-dupe/main.das", "--"]
@@ -163,22 +146,17 @@ def private gate_dupes(daslang : string) : bool {
         against |> push(f)
     }
     var report = ""
-    run(against, report, 1800.0)
+    if (run(against, report, 1800.0) != 0) {
+        to_log(LOG_ERROR, "dupes: --against run failed\n{report}\n")
+        return false
+    }
     to_log(LOG_INFO, "dupes: scope = {join(scopes, ", ")}\n{report}\n")
     to_log(LOG_INFO, "dupes: TRIAGE IS YOURS - exact match means reuse/justify/extract (skills/internal/detect_dupe.md)\n")
     return true
 }
 
 def private diff_touches(patterns : array<string>) : bool {
-    for (f in changed_files()) {
-        let g = to_generic_path(f)
-        for (p in patterns) {
-            if (find(g, p) >= 0) {
-                return true
-            }
-        }
-    }
-    return false
+    return any_path_matches(changed_files(), patterns)
 }
 
 def private gate_ast_verify(daslang : string) : bool {
@@ -186,20 +164,26 @@ def private gate_ast_verify(daslang : string) : bool {
         to_log(LOG_INFO, "ast-verify: diff touches no macro/AST surface - skipped\n")
         return true
     }
-    let das_files <- changed_files("*.das")
+    var das_files <- changed_files("*.das")
+    var subject = "{length(das_files)} changed files"
     if (empty(das_files)) {
-        to_log(LOG_INFO, "ast-verify: no .das changes - skipped\n")
-        return true
+        das_files |> push("tests/jit_tests/array.das")
+        das_files |> push("tests/decs/test_bulk_create.das")
+        subject = "the macro-heavy smoke set (C++-only AST change)"
     }
     var argv <- [daslang, "--ast-verify-batch", "-compile-only"]
     argv |> push_from(das_files)
     var out = ""
-    run(argv, out, 1800.0)
+    let rc = run(argv, out, 1800.0)
     if (find(out, "AST verify") >= 0) {
         to_log(LOG_ERROR, "ast-verify: reports found - a report is a bug in whatever built the node; plain --ast-verify on ONE file names the pass (skills/das_macros.md)\n{out}\n")
         return false
     }
-    to_log(LOG_INFO, "ast-verify: clean over {length(das_files)} changed files\n")
+    if (rc != 0 && find(out, "error[") < 0) {
+        to_log(LOG_ERROR, "ast-verify: verifier crashed, timed out, or failed to launch (exit {rc}) - an incomplete run is not a pass\n{out}\n")
+        return false
+    }
+    to_log(LOG_INFO, "ast-verify: clean over {subject}\n")
     return true
 }
 
@@ -229,24 +213,25 @@ def private print_judgment_checklist() {
 }
 
 def private want(gate : string) : bool {
-    if (!empty(g_cfg.only)) {
-        return g_cfg.only == gate
-    }
-    for (s in g_cfg.skip) {
-        if (s == gate) {
-            return false
-        }
-    }
-    return true
+    return want_gate(g_cfg.only, g_cfg.skip, gate)
 }
 
 [export]
 def main() : int {
     let rc = parse_args_with_help(g_cfg, "make-pr")
     return rc if (rc >= 0)
+    let bad <- unknown_gate_names(g_cfg.only, g_cfg.skip)
+    if (!empty(bad)) {
+        to_log(LOG_ERROR, "make-pr: unknown gate name(s) {join(bad, ", ")} (gates: {join(GATE_NAMES, " ")})\n")
+        return 1
+    }
     let daslang = find_daslang()
     if (empty(daslang)) {
-        to_log(LOG_ERROR, "make-pr: no repo-local daslang binary found\n")
+        if (!empty(g_cfg.daslang)) {
+            to_log(LOG_ERROR, "make-pr: --daslang '{g_cfg.daslang}' does not exist\n")
+        } else {
+            to_log(LOG_ERROR, "make-pr: no repo-local daslang binary found\n")
+        }
         return 1
     }
     if ((want("sync") && !gate_sync()) ||

@@ -16,7 +16,6 @@ require report
 require ../common/parallel_workers.das
 
 
-
 def make_record(name : string; canonical : string; line : int; want_sigs : bool) : FuncRecord {
     var rec = FuncRecord()
     rec.ref.name = name
@@ -87,7 +86,6 @@ def find_canonical_required(t : T?; records : array<FuncRecord>; name : string) 
 }
 
 
-
 [test]
 def test_tokenize_basic(t : T?) {
     let toks <- tokenize_canonical("A B C")
@@ -119,7 +117,6 @@ def test_tokenize_trailing_space(t : T?) {
     let toks <- tokenize_canonical("FN ENDFN ")
     t |> equal(length(toks), 2)
 }
-
 
 
 [test]
@@ -207,7 +204,6 @@ def test_jaccard_unrelated_low(t : T?) {
 }
 
 
-
 [test]
 def test_exact_groups_duplicates(t : T?) {
     var records <- array<FuncRecord>(
@@ -266,7 +262,6 @@ def test_exact_singleton_not_reported(t : T?) {
 }
 
 
-
 [test]
 def test_sort_clusters_by_size(t : T?) {
     var records <- array<FuncRecord>(
@@ -309,7 +304,6 @@ def test_sort_pairs_by_similarity(t : T?) {
     t |> equal(pairs[0].similarity, 0.95f)
     t |> equal(pairs[1].similarity, 0.75f)
 }
-
 
 
 [test]
@@ -373,7 +367,6 @@ def test_fuzzy_min_tokens_filter(t : T?) {
     let pairs <- fuzzy_pairs(records, 0.7f, 100)
     t |> equal(length(pairs), 0)
 }
-
 
 
 def make_temp_export_path(t : T?) : string {
@@ -514,7 +507,8 @@ def test_import_rejects_zero_end_line(t : T?) {
     }
     var loaded : array<FuncRecord>
     var err : string
-    let ok = read_import(path, loaded, false, 0, err, true)
+    let quiet = true
+    let ok = read_import(path, loaded, false, 0, err, quiet)
     t |> success(ok, "read_import succeeds (envelope is valid; record is dropped as malformed)")
     t |> equal(length(loaded), 0)
     remove(path)
@@ -533,12 +527,12 @@ def test_import_rejects_zero_line(t : T?) {
     }
     var loaded : array<FuncRecord>
     var err : string
-    let ok = read_import(path, loaded, false, 0, err, true)
+    let quiet = true
+    let ok = read_import(path, loaded, false, 0, err, quiet)
     t |> success(ok, "envelope is valid; line=0 record is dropped as malformed")
     t |> equal(length(loaded), 0)
     remove(path)
 }
-
 
 
 [test]
@@ -580,7 +574,6 @@ def test_read_path_lines_missing_file(t : T?) {
 }
 
 
-
 let SCAN_FIXTURE_DIR = "utils/detect-dupe/fixture"
 
 
@@ -614,7 +607,6 @@ def test_skip_ast_fuzz_selftest(t : T?) {
     scan_das_files("{SCAN_FIXTURE_DIR}/ast-fuzz/selftest", files, cache)
     t |> equal(length(files), 0, "directory scan yields nothing from a selftest dir")
 }
-
 
 
 def synth_paths(n : int) : array<string> {
@@ -674,7 +666,6 @@ def test_chunk_files_empty_input(t : T?) {
     let chunks <- chunk_files(files, 4)
     t |> equal(length(chunks), 0, "empty input => empty chunk list")
 }
-
 
 
 def write_shard(t : T?; functions : array<ExportedFunction>; schema : int) : string {
@@ -784,7 +775,6 @@ def test_merge_envelope_files_missing_shard(t : T?) {
 }
 
 
-
 [test]
 def test_derive_sig_and_count_no_sigs(t : T?) {
     var rec = FuncRecord()
@@ -812,7 +802,6 @@ def test_derive_sig_and_count_below_floor(t : T?) {
     t |> equal(length(rec.sig), 0)
     t |> equal(rec.token_count, 4)
 }
-
 
 
 let CANONICAL_FIXTURE = "utils/detect-dupe/fixture/canonical_cases.das"
@@ -908,7 +897,6 @@ def test_canonical_let_var_token(t : T?) {
     let a = find_canonical_required(t, records, "case_let_var")
     t |> success(find(a, "LET_VAR") >= 0, "LET_VAR present in: {a}")
 }
-
 
 
 let SYNTH_FIXTURE = "utils/detect-dupe/fixture/synth.das"
@@ -1009,8 +997,6 @@ def test_pipeline_export_import_clusters_match(t : T?) {
     }
     remove(path)
 }
-
-
 
 
 [test]
@@ -1190,7 +1176,6 @@ def test_per_candidate_rollup_shape(t : T?) {
 }
 
 
-
 [test]
 def test_pattern_dispatch_three_identical_stmts(t : T?) {
     let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN"
@@ -1348,7 +1333,6 @@ def test_split_top_level_stmts_skips_nested(t : T?) {
 }
 
 
-
 [test]
 def test_apply_pattern_filter_drops_dispatch(t : T?) {
     var records : array<FuncRecord> <- [
@@ -1406,7 +1390,6 @@ def test_apply_pattern_filter_preserves_candidate_flag(t : T?) {
     t |> equal(length(records), 1)
     t |> success(records[0].is_candidate, "is_candidate flag preserved through filter")
 }
-
 
 
 let GENERICS_FIXTURE = "utils/detect-dupe/fixture/generics_cases.das"

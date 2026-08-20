@@ -627,8 +627,8 @@ def test_format_file_batches(t : T?) {
 
 
 [test]
-def test_format_strip_comments_source(t0 : T?) {
-    t0 |> run("keeps header, docs, fmt directives, nolint; strips the rest") <| @(t : T?) {
+def test_format_strip_comments_source(t : T?) {
+    t |> run("keeps header, docs, fmt directives, nolint; strips the rest") <| @(t : T?) {
         let src = fread(fixture_path("_fixture_comments.das"))
         t |> success(!empty(src), "fixture readable")
         let stripped = format_source_string(src, true)
@@ -641,22 +641,35 @@ def test_format_strip_comments_source(t0 : T?) {
         t |> success(find(stripped, "block dies") < 0, "block comment stripped")
         t |> success(find(stripped, "let z = x + y") >= 0, "multi-line inline comment joins its expression")
     }
-    t0 |> run("keep_comments path leaves every comment in place") <| @(t : T?) {
+    t |> run("keep_comments path leaves every comment in place") <| @(t : T?) {
         let src = fread(fixture_path("_fixture_comments.das"))
         let formatted = format_source_string(src, false)
         t |> success(find(formatted, "narration dies") >= 0, "narration kept when not stripping")
         t |> success(find(formatted, "block dies") >= 0, "block comment kept when not stripping")
     }
-    t0 |> run("//fmt:ignore-file opts out of stripping too") <| @(t : T?) {
+    t |> run("//fmt:ignore-file opts out of stripping too") <| @(t : T?) {
         let src = "//fmt:ignore-file\nlet X = 1\n// narration survives ignore\nlet Y = 2\n"
         let out = format_source_string(src, true)
         t |> success(find(out, "narration survives ignore") >= 0, "ignore-file blocks the strip")
     }
+    t |> run("header under options survives; a stripped banner leaves no blank-line scar") <| @(t : T?) {
+        let src = "options gen2\n\n// header under options stays\n\nrequire strings\n\ndef a() \{\n    return\n\}\n\n\n// banner dies\n\n\ndef b() \{\n    return\n\}\n"
+        let out = format_source_string(src, true)
+        t |> success(find(out, "header under options stays") >= 0, "header kept below the options line")
+        t |> success(find(out, "banner") < 0, "banner stripped")
+        t |> success(find(out, "\n\n\n\n") < 0, "no 3+ blank run at the strip site")
+    }
+    t |> run("//fmt: directives inside code survive a strip") <| @(t : T?) {
+        let src = "options gen2\n\ndef a() \{\n    //fmt:keep-alignment\n    // narration dies\n    return\n\}\n"
+        let out = format_source_string(src, true)
+        t |> success(find(out, "//fmt:keep-alignment") >= 0, "fmt directive kept")
+        t |> success(find(out, "narration") < 0, "narration stripped")
+    }
 }
 
 [test]
-def test_format_file_strips_by_default(t0 : T?) {
-    t0 |> run("fail-closed: file is stripped or byte-identical after the call") <| @(t : T?) {
+def test_format_file_strips_by_default(t : T?) {
+    t |> run("default run strips, and the compile verify passes") <| @(t : T?) {
         var terr : string
         let dir = create_temp_directory("mcp_strip_test", terr)
         if (empty(dir)) {
@@ -670,17 +683,34 @@ def test_format_file_strips_by_default(t0 : T?) {
         var is_error = false
         let ok = parse_result(do_format_file(dst), text, is_error)
         t |> success(ok, "parse result JSON")
+        t |> success(find(text, "comments stripped") >= 0, "default path stripped -- text={text}")
         let after = fread(dst)
-        if (find(text, "comments stripped") >= 0) {
-            t |> success(find(after, "narration") < 0, "comments removed on disk")
-            t |> success(find(after, "//! doc comment survives") >= 0, "docs kept on disk")
-        } else {
-            t |> equal(after, original, "non-stripped outcome restores the original bytes (a revert is legitimate: popen capture for the compile verify is broken under dastest on Windows)")
-        }
+        t |> success(find(after, "narration") < 0, "comments removed on disk")
+        t |> success(find(after, "//! doc comment survives") >= 0, "docs kept on disk")
         remove(dst)
         rmdir(dir)
     }
-    t0 |> run("keep_comments='true' formats without touching comments") <| @(t : T?) {
+    t |> run("fail-closed: a strip whose compile_check fails restores the original bytes") <| @(t : T?) {
+        var terr : string
+        let dir = create_temp_directory("mcp_revert_test", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let dst = path_join(dir, "broken.das")
+        let src = "options gen2\n\ndef broken() \{\n    // narration to strip\n    return undefined_symbol_xyz\n\}\n"
+        t |> success(fwrite(dst, src), "broken source written")
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_format_file(dst), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "reverted outcome reports as error")
+        t |> success(find(text, "reverted") >= 0, "status is reverted -- text={text}")
+        t |> equal(fread(dst), src, "original bytes restored")
+        remove(dst)
+        rmdir(dir)
+    }
+    t |> run("keep_comments='true' formats without touching comments") <| @(t : T?) {
         var terr : string
         let dir = create_temp_directory("mcp_keep_test", terr)
         if (empty(dir)) {
@@ -1620,7 +1650,6 @@ def test_lint_invalid_project(t : T?) {
 }
 
 
-
 def make_temp_text_file(t : T?; prefix : string; ext : string; body : string) : string {
     let r = create_temp_file_result(prefix, ext)
     if (!(r is value)) {
@@ -1721,8 +1750,6 @@ def test_detect_duplicates_bad_schema(t : T?) {
         remove(path)
     }
 }
-
-
 
 
 [test]

@@ -3,6 +3,7 @@ options gen2
 require common public
 require daslib/das_source_formatter
 require daslib/json_boost
+require daslib/fio
 
 struct FormatResult {
     file : string
@@ -10,19 +11,7 @@ struct FormatResult {
     message : string
 }
 
-def private write_text(file : string; text : string) : bool {
-    var ok = false
-    fopen(file, "wb") $(fw) {
-        if (fw == null) {
-            return
-        }
-        ok = true
-        fw |> fprint(text)
-    }
-    return ok
-}
-
-def private format_file_single(file : string; keep_comments : bool; project_root : string; load_modules : array<string>) : FormatResult {
+def private format_file_single(file : string; keep_comments : bool; project, project_root : string; load_modules : array<string>) : FormatResult {
     var result = FormatResult(file = file)
     var unformatted = ""
     var formatted = ""
@@ -56,18 +45,24 @@ def private format_file_single(file : string; keep_comments : bool; project_root
         result.message = "File already formatted: {file}"
         return result
     }
-    if (!write_text(file, formatted)) {
+    if (!fwrite(file, formatted)) {
         result.status = "error"
         result.message = "Cannot write file: {file}"
         return result
     }
     if (stripped_any) {
-        let verify = run_mcp_subtool("compile_check", [file, "", "true"], project_root, load_modules)
+        let verify = run_mcp_subtool("compile_check", [file, project, "false"], project_root, load_modules)
         var envelope : ToolResult
         if (!sscan_json(verify, envelope) || envelope.isError) {
-            write_text(file, unformatted)
+            fwrite(file, unformatted)
             result.status = "reverted"
-            result.message = "comment strip broke compile_check; original restored: {file}"
+            var why = ""
+            if (!empty(envelope.content)) {
+                let txt = envelope.content[0].text
+                let nl = find(txt, '\n')
+                why = " ({nl < 0 ? txt : slice(txt, 0, nl)})"
+            }
+            result.message = "Comment strip broke compile_check{why}; original restored: {file}"
             return result
         }
     }
@@ -76,7 +71,7 @@ def private format_file_single(file : string; keep_comments : bool; project_root
     return result
 }
 
-def do_format_file(file : string; keep_comments : bool = false; project_root : string = ""; load_modules : array<string> = array<string>()) : string {
+def do_format_file(file : string; keep_comments : bool = false; project : string = ""; project_root : string = ""; load_modules : array<string> = array<string>()) : string {
     var files : array<string>
     parse_file_list(file, files)
     if (empty(files)) {
@@ -87,7 +82,7 @@ def do_format_file(file : string; keep_comments : bool = false; project_root : s
     results |> reserve(length(files))
     var any_errors = false
     for (f in files) {
-        let r = format_file_single(f, keep_comments, project_root, load_modules)
+        let r = format_file_single(f, keep_comments, project, project_root, load_modules)
         if (r.status == "error" || r.status == "reverted") {
             any_errors = true
         }

@@ -453,8 +453,8 @@ def find_pair_angle(ctx : FormatterCtx; from_index : int) : int {
 }
 
 
-def mark_range_as_type(var ctx : FormatterCtx; from, to : int) {
-    for (i in range(from, to)) {
+def mark_range_as_type(var ctx : FormatterCtx; from, toExclusive : int) {
+    for (i in range(from, toExclusive)) {
         if (ctx.tokens[i].tokenType != TokenType.COMMENT) {
             ctx.tokens[i].isInType = true
         }
@@ -1227,24 +1227,28 @@ def private is_kept_comment(s : string) : bool {
 def private strip_comment_tokens(var ctx : FormatterCtx) {
     var kept : array<Token>
     kept |> reserve(length(ctx.tokens))
-    var carry = 0
+    var pendingNewLines = 0
     var in_header = true
+    var seen_code = false
     for (t in ctx.tokens) {
-        var eff = carry + t.newLines
-        if (carry > 0 && t.newLines > 0) {
-            eff--
+        var newLines = pendingNewLines + t.newLines
+        if (pendingNewLines > 0 && t.newLines > 0) {
+            newLines = max(pendingNewLines, t.newLines)
         }
         if (t.tokenType == TokenType.COMMENT && !in_header && !is_kept_comment(t.str)) {
-            carry = eff
+            pendingNewLines = newLines
             continue
         }
         if (t.tokenType != TokenType.COMMENT && !empty(t.str)) {
-            in_header = false
+            if (t.newLines > 0 || !seen_code) {
+                in_header = in_header && (t.str == "options" || t.str == "module" || t.str == "require")
+            }
+            seen_code = true
         }
-        var c = t
-        c.newLines = eff
-        carry = 0
-        kept |> push(c)
+        var out = t
+        out.newLines = newLines
+        pendingNewLines = 0
+        kept |> push(out)
     }
     ctx.tokens <- kept
 }
@@ -1267,7 +1271,7 @@ def public format_source(file_data : array<uint8> const& implicit; strip_comment
 
 
 def public format_source_string(file_data : string const& implicit; strip_comments : bool) : string {
-    //! String-input variant of the comment-stripping ``format_source``.
+    //! String-input variant of ``format_source(data, strip_comments)``.
     var bytes <- [for (c in file_data); uint8(c)]
     return format_source(bytes, strip_comments)
 } finally {

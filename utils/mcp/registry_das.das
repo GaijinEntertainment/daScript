@@ -78,13 +78,14 @@ def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool
             {
                 "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern (e.g. 'dir/*.das')"),
                 "keep_comments" => PropertySchema(_type = "string", description = "If 'true', format only — do not strip comments (tutorials/examples)"),
+                "project" => PROJECT_PROP,
                 "project_root" => PROJECT_ROOT_PROP,
                 "load_modules" => LOAD_MODULES_PROP
             },
             ["file"]),
         required <- ["file"],
         arg_names <- ["file", "keep_comments"],
-        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_format_file(arg1, arg2 == "true", project_root, load_modules)))
+        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_format_file(arg1, arg2 == "true", project, project_root, load_modules)))
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "run_script",

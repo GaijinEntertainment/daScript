@@ -11,9 +11,6 @@ require exchange
 require patterns
 
 
-
-
-
 def public read_path_lines(f : FILE const?; var paths : array<string>) {
     if (f == null) return
     while (!feof(f)) {
@@ -48,8 +45,7 @@ def public is_daslib_skip(path : string; basename : string) : bool {
 
 //! Files no scan should compile: builtin.das, daslib debugger/profiler
 //! (thread-local agents abort a second in-process install), and the
-//! ast-fuzz selftest victims (deliberately broken; test_ast_fuzz.das
-//! owns them — same exclusion as CI's ast-verify sweep).
+//! ast-fuzz selftest victims (deliberately broken; test_ast_fuzz.das owns them).
 def public is_skip_file(path : string; basename : string) : bool {
     if (basename == "builtin.das" || normalize_path(path) |> contains("ast-fuzz/selftest/")) return true
     return (is_daslib_skip(path, "debugger.das")

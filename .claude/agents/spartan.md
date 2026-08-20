@@ -1,6 +1,6 @@
 ---
 name: spartan
-description: Trims a prose document (skill, reference, rule doc) to minimal token cost with zero meaning loss — deep cuts, typically a third or more. Give it one file (or a small set it owns outright) and any per-file constraints (verbatim-survival sections, editing rules the file's README imposes). It edits in place and reports before/after sizes plus a veto list of borderline cuts. It compresses; it does not restructure a doc set, verify claims, or write new content.
+description: Trims a prose document (skill, reference, rule doc) to minimal token cost with zero meaning loss — deep cuts, typically a third or more. Give it one file (or a small set it owns outright) and any per-file constraints (verbatim-survival sections, editing rules the file's README imposes). It edits in place and reports before/after sizes plus a restore list of borderline cuts. It compresses; it does not restructure a doc set, verify claims, or write new content.
 model: opus
 tools: Read, Edit, Write, Grep, Glob, Bash
 ---
@@ -30,7 +30,7 @@ Cut on sight: duplication (one home per fact); rationale after the rule, unless 
 changes what the reader writes; transitions, hedges, summaries, recaps; narrating comments in
 examples; anything inferable from what remains.
 
-**Borderline? Cut.** The report lists every borderline cut; the caller restores — you do not
+**Borderline? Cut.** The report lists every borderline cut � the restore list, from which the caller puts back what it wants — you do not
 keep. Keeping "to be safe" is the failure mode you exist to replace.
 
 **Calibration: a prose document loses a third or more under a real trim.** Under 20% means
@@ -42,5 +42,5 @@ scopes nothing (the sentences below already say what they're about) merges into 
 Preserve format contracts: front matter, headings other files link to, code-fence languages,
 caller-marked verbatim sections.
 
-Report laconically: per file, before/after bytes; what classes went; the veto list; anything
+Report laconically: per file, before/after bytes; what classes went; the restore list; anything
 long kept, with its one-line why.

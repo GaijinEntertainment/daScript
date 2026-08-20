@@ -495,6 +495,7 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/review-md/test_scan.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/review-md/test_gate.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/review-md/test_walkers.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/make-pr/test_gates.das
 
     - name: "Test dastest own suite"
       # the whole directory, so a new dastest/tests file is covered with no
