@@ -631,11 +631,13 @@ function lockGpuControls(flavor) {
 const swHist = [];               // newest first: { from, to, ms }
 let prevSlots = null;            // last poll's models[] keyed by name
 
-let servedIds = new Set();   // slot ids AND source files from the last stats poll — the catalog's
-                             // serve-live gate matches on the FILE, so a custom slot name still hides it
+let servedKeys = new Set();   // matched on the FILE too, so a custom slot name still hides a served GGUF
 
 function renderModels(s) {
-    servedIds = new Set((s.models || []).flatMap(m => [m.name, m.file].filter(Boolean)));
+    const nextServed = new Set((s.models || []).flatMap(m => [m.name, m.file].filter(Boolean)));
+    const servedChanged = nextServed.size !== servedKeys.size || [...nextServed].some(k => !servedKeys.has(k));
+    servedKeys = nextServed;
+    if (servedChanged && catState) renderCatalog(catState);   // a load/unload re-offers or retires "serve live" rows
     const slots = s.models || [];
     if (prevSlots) {
         for (const m of slots) {
@@ -2700,7 +2702,7 @@ function renderCatalog(doc) {
                 const b = miniButton("serve this model", () => serveDownloaded(e));
                 b.style.marginLeft = "8px";
                 act.append(b);
-            } else if (!servedIds.has(e.file)) {
+            } else if (!servedKeys.has(e.file)) {
                 const b = miniButton("serve live", () => serveLive(e, b));
                 b.title = "load into a new serving slot and switch to it — no restart";
                 b.style.marginLeft = "8px";
@@ -2758,12 +2760,8 @@ async function startCatalogDownload(name, tower) {
     }
 }
 
-// setup mode's exit: point the config at the downloaded file, save, restart into serving.
-// Defaults-first: towers already on disk wire themselves — vision via the entry's tower,
-// dictation via the ASR override field.
 // The live-switch rail: load the downloaded file into a NEW slot and make it the default —
-// no restart, no JIT recompile. The load blocks the server's tick for its duration, so the
-// note says what the pause is.
+// no restart, no JIT recompile. The load blocks the server's tick for its duration.
 async function serveLive(e, btn) {
     btn.disabled = true;
     $("cat-note").textContent = "loading " + e.display + " into a new slot — the server pauses while it loads";
@@ -2790,6 +2788,9 @@ async function serveLive(e, btn) {
     }
 }
 
+// setup mode's exit: point the config at the downloaded file, save, restart into serving.
+// Defaults-first: towers already on disk wire themselves — vision via the entry's tower,
+// dictation via the ASR override field.
 async function serveDownloaded(e) {
     roster = [{ name: "", path: e.path, backend: "auto", ctx: "", quant: "", kv_dtype: "",
                 streams: "", chunk: "", page_rows: "", prefix: "", mtp: "",

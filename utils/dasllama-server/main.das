@@ -438,7 +438,7 @@ def apply_config(var cfg : ServerArgs) : bool {
 
 // An EXPLICIT --model wins over the config's roster (the CLI-overrides-config contract): the
 // matching roster entry becomes the default, an unlisted path joins the roster AS the default.
-// Degrade-not-die: a bad path or a route-name collision leaves the roster UNTOUCHED — clearing
+// Warn-and-degrade: a bad path or a route-name collision leaves the roster UNTOUCHED — clearing
 // the roster's default first would silently boot the wrong model on the very typo being made.
 def private apply_model_override() {
     if (!stat(g_cfg.model).is_valid) {
@@ -957,8 +957,6 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                 }
             }
         }
-        // the box policy runtime loads (POST /v1/models/load) re-apply: the same want + ctx
-        // clamp every boot load got — NOT whatever slot happens to be default at load time
         set_runtime_load_policy(slot_want, ctx)
         // A serving process prefers degrading (warn + nearest working mode) over dying on an
         // unsupported model/quant combo; API-facing tools keep the strict fail-loud default.

@@ -126,11 +126,15 @@ def private slot_index(model_field : string) : int {
     }
     return -1
 }
-//! Separator- and (on windows) case-insensitive path identity — roster matching and the
-//! one-serving-slot-per-GGUF dedup both compare through this, never exact strings.
+
+//! Path identity for roster matching and the one-serving-slot-per-GGUF dedup: canonical
+//! absolute form (relative and `..` spellings resolve), separator- and (on windows)
+//! case-insensitive — never exact strings.
 def same_model_path(a, b : string) : bool {
-    let ga = to_generic_path(a)
-    let gb = to_generic_path(b)
+    let fa = get_full_file_name(a)
+    let fb = get_full_file_name(b)
+    let ga = to_generic_path(empty(fa) ? a : fa)
+    let gb = to_generic_path(empty(fb) ? b : fb)
     return get_platform_name() == "windows" ? to_lower(ga) == to_lower(gb) : ga == gb
 }
 
@@ -235,7 +239,7 @@ def private install_slot_marks(si : int) {
 
 // add_model's capture takes whatever is INSTALLED — a runtime load must recreate the boot
 // precondition (nothing installed) or the new slot steals the stepped slot's routing marks.
-def private park_installed_marks() {
+def private uninstall_slot_marks() {
     if (g_marks_slot >= 0 && g_marks_slot < length(g_slots)) {
         moe_gpu_model_marks_save(g_slots[g_marks_slot].gpu_marks)
     }
@@ -322,8 +326,9 @@ var private g_boot_gpu_want = GpuTierWant()
 var private g_boot_ctx = 0l
 
 //! Register the box policy a runtime load re-applies: the boot GPU tier want (zero on
-//! non-vulkan boxes) and the ``--ctx`` clamp. Call once before ``run_server`` — without it
-//! POST /v1/models/load loads CPU-only with the model's trained context.
+//! non-vulkan boxes) and the ``--ctx`` clamp — the same policy every boot load got, NOT
+//! whatever slot happens to be default at load time. Call once before ``run_server`` —
+//! without it POST /v1/models/load loads CPU-only with the model's trained context.
 def set_runtime_load_policy(want : GpuTierWant; ctx : int64) {
     g_boot_gpu_want = want
     g_boot_ctx = ctx
@@ -1770,9 +1775,6 @@ def private handle_embeddings(var req : HttpRequest?; var resp : HttpResponse?) 
     return resp |> JSON(body, http_status.OK)
 }
 
-// POST /v1/models/activate {"model": name}: admin warm-switch — make `name` the stepped slot
-// and move the GPU tier to it NOW instead of waiting for the owner to drain. 409 while any
-// work is live: the switch drops the owner's whole VRAM state.
 def private streams_busy() : bool {
     return total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || g_media_pending > 0
 }
@@ -1793,7 +1795,7 @@ def private free_gpu_tier_for_load(cpu_only : bool) : int {
         g_slots[g_gpu_owner].backend_effective = "cpu"
         g_gpu_owner = -1
     }
-    park_installed_marks()
+    uninstall_slot_marks()
     set_gpu_tier_want(cpu_only ? GpuTierWant() : g_boot_gpu_want)
     return prev_owner
 }
@@ -1808,7 +1810,7 @@ def private unwind_failed_runtime_load(id : string; prev_owner : int) {
             moe_gpu_drop_model()
             g_gpu_owner = -1
         }
-        park_installed_marks()
+        uninstall_slot_marks()
         delete g_slots[ni]
         g_slots |> erase(ni)
     }
@@ -1855,12 +1857,8 @@ def private runtime_load_conflict(id, rpath : string) : string {
     return ""
 }
 
-// Load a downloaded GGUF into a NEW serving slot without a process restart — no watchdog bounce,
-// no JIT recompile; the load blocks the tick thread for its duration (streams must be idle, so
-// nothing stalls mid-decode). GPU loads follow the boot-order semantics: the current owner's
-// VRAM state drops first, then the load arms under the engine's boot want (a DASLLAMA_GPU_* env
-// override still wins, as everywhere). Towers arm from an optional image_mmproj — the media
-// worker restarts to pick them up.
+// POST /v1/models/load. Contract: the README's route row. In-code precondition: streams must
+// be idle (the busy gate) because the load blocks the tick thread for its duration.
 def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) : http_status {   // nolint:STYLE038 — one guard + one client-facing message per validation
     if (!is_loopback_req(req)) {
         return deny_operator(resp)
@@ -1898,6 +1896,9 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
         return resp |> JSON(error_body("streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"), http_status.CONFLICT)
     }
     let backend = js?["backend"] ?? "auto"
+    if (backend != "auto" && backend != "cpu") {
+        return resp |> JSON(error_body("'backend' must be \"auto\" or \"cpu\" (got '{backend}')", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
     let cpu_only = backend == "cpu"
     let prev_owner = free_gpu_tier_for_load(cpu_only)
     let t0 = ref_time_ticks()
@@ -1940,13 +1941,11 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
         // dropped instead of leaving an idle box demoted until a later step happens to re-bind
         bind_gpu_slot(prev_owner)
     }
-    let mmproj = js?["image_mmproj"] ?? ""
-    let tower_note = empty(mmproj) ? "" : arm_runtime_towers(length(g_slots) - 1, mmproj)
     let mi_new = length(g_slots) - 1
+    let mmproj = js?["image_mmproj"] ?? ""
+    let tower_note = empty(mmproj) ? "" : arm_runtime_towers(mi_new, mmproj)
     if (js?["activate"] ?? true) {
-        // the point of a live load is usually to TALK to the model: make it the default (the
-        // slot model-less page requests land on) and step it next, unless the caller says not to
-        set_default_model(id)
+        set_default_model(id)   // the default is the slot model-less (page) requests land on
         g_active = mi_new
         g_cur = mi_new
         set_mtp_spec(g_slots[mi_new].sched.mtp)
@@ -1956,13 +1955,11 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
     let load_ms = int64(get_time_usec(t0)) / 1000l
     to_log(LOG_INFO, "dasllama-server: runtime load: {id} in {load_ms}ms ({g_slots[mi_new].backend_effective})\n")
     return resp |> JSON(
-        "\{\"ok\":true,\"model\":{json_str(id)},\"backend_effective\":{json_str(g_slots[length(g_slots) - 1].backend_effective)},\"load_ms\":{load_ms},\"ctx\":{g_slots[length(g_slots) - 1].model.config.seq_len},\"tower_note\":{json_str(tower_note)}}",
+        "\{\"ok\":true,\"model\":{json_str(id)},\"backend_effective\":{json_str(g_slots[mi_new].backend_effective)},\"load_ms\":{load_ms},\"ctx\":{g_slots[mi_new].model.config.seq_len},\"tower_note\":{json_str(tower_note)}}",
         http_status.OK)
 }
 
-// Unload a served slot, freeing its weights, KV pool, and (for the GPU owner) its VRAM state.
-// The DEFAULT slot never unloads — activate another model first — which also keeps the server
-// from unloading its last model.
+// POST /v1/models/unload. Contract: the README's route row.
 def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     if (!is_loopback_req(req)) {
         return deny_operator(resp)
@@ -1994,7 +1991,7 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
         g_gpu_owner = -1
     }
     if (g_marks_slot == mi) {
-        park_installed_marks()   // the engine must not keep a dying slot's marks installed
+        uninstall_slot_marks()   // the engine must not keep a dying slot's marks installed
     }
     let had_towers = g_slots[mi].vision.kind != VisionKind.none || g_slots[mi].audio_armed
     let dead_name = g_slots[mi].name
@@ -2013,7 +2010,7 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
         g_marks_slot--
     }
     if (had_towers && g_media_armed) {
-        var drop = MediaJob(drop_name = dead_name)   // async: the worker frees the encoders, no bounce
+        var drop = MediaJob(kind = MediaJobKind.drop, name = dead_name)
         g_media_jobs |> push_clone(drop)
         delete drop
     }
@@ -2021,9 +2018,13 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
     return resp |> JSON("\{\"ok\":true,\"unloaded\":{json_str(want)}}", http_status.OK)
 }
 
+// POST /v1/models/activate {"model": name}: admin warm-switch — make `name` the DEFAULT +
+// stepped slot (model-less page requests follow) and move the GPU tier to it NOW instead of
+// waiting for the owner to drain. 409 while any work is live: the switch drops the owner's
+// whole VRAM state. Loopback-only, like its load/unload siblings.
 def private handle_activate(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     if (!is_loopback_req(req)) {
-        return deny_operator(resp)   // moves the default slot + the tier's VRAM state, like its load/unload siblings
+        return deny_operator(resp)
     }
     var perr = ""
     var js = read_json(string(req.body), perr)
@@ -2408,7 +2409,7 @@ def private park_media_request(srv : WebSocketServer; var writer : HttpResponseW
     g_media_jobs |> push_clone(vjob)
     delete vjob
     g_media_pending++
-    to_log(LOG_INFO, "[req {rid}] {is_audio ? "audio" : "image"} parked for the media worker ({g_media_pending} in flight)\n")
+    to_log(LOG_INFO, "[req {rid}] {is_audio ? "audio" : "image"} parked for the media worker ({g_media_pending} queued or in flight)\n")
     return MediaPark.parked
 }
 
@@ -2809,8 +2810,7 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
 // unchanged); `models` carries one entry per slot for the page's roster panel.
 struct private OaiSlotStats {
     name : string
-    file : string             // base name of the source GGUF — the page's serve-live gate keys
-                              // on the FILE, which a custom slot name would otherwise hide
+    file : string             // base name of the source GGUF
     is_default : bool
     is_active : bool          // the slot the tick loop is stepping
     holds_gpu : bool          // the slot whose VRAM state is armed (the GPU owner)
@@ -2877,7 +2877,7 @@ struct private OaiStatsResponse {
     vision : bool             // the DEFAULT slot's vision arm — the slot a model-less page request lands on
     audio : bool              // the DEFAULT slot's audio arm (native audio through the serving slot)
     thinking_default : bool   // the DEFAULT slot's family thinking default (the page's checkbox seed)
-    vision_pending : int      // image requests parked on the vision worker (0 = idle)
+    media_pending : int       // media encode jobs queued or in flight (0 = idle)
     media_rows : int64        // media (image span) rows admitted to prefill since boot
 }
 
@@ -2930,7 +2930,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         vision = g_slots[g_default_slot].vision.kind != VisionKind.none,
         audio = g_slots[g_default_slot].audio_armed,
         thinking_default = g_slots[g_default_slot].think_default,
-        vision_pending = g_media_pending, media_rows = g_media_rows)
+        media_pending = g_media_pending, media_rows = g_media_rows)
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
@@ -3767,16 +3767,21 @@ def private stop_asr_worker_threads() {
 // The decode + letterbox + embedder GEMMs run on ONE worker thread, so an image request never
 // stalls the tick loop's decode of every live stream.
 
+enum private MediaJobKind {
+    encode   // zero value — the channel pops zeroed clones
+    stop     // worker exits
+    drop     // free slot `name`'s encoders (unload without a worker bounce)
+}
+
 struct private MediaJob {
+    kind : MediaJobKind
     id : int64
-    name : string               // the serving slot's NAME — the worker's encoder tables key on it
-                                // (an index would go stale the moment an unload shifts the array)
+    name : string               // the serving slot's NAME — the worker's encoder tables key on it,
+                                // so an unload's index shift never reaches the worker
     file_bytes : array<uint8>   // the base64-decoded media FILE (image or audio); the worker decodes + encodes
     tag : string                // DASLLAMA_VISION_DUMP artifact name (image jobs)
     is_audio : bool             // audio job: decode to 16 kHz PCM, encode via the slot's gemma4a encoder
     max_audio_frames : int
-    stop : bool
-    drop_name : string          // non-empty: control job — free this slot's encoders (unload, no bounce)
 }
 
 enum private MediaEventKind {
@@ -3917,15 +3922,15 @@ def private media_worker_main(slot_path_lines : string; var jobs : Channel?&; va
     var stopping = false
     while (!stopping) {
         jobs |> pop_with_timeout_clone(250) $(job : MediaJob#) {
-            if (job.stop) {
+            if (job.kind == MediaJobKind.stop) {
                 stopping = true
                 return
             }
-            if (!empty(job.drop_name)) {   // an unloaded slot's encoders free here, no worker bounce
-                embs |> erase(job.drop_name)
-                states |> erase(job.drop_name)
-                auds |> erase(job.drop_name)
-                astates |> erase(job.drop_name)
+            if (job.kind == MediaJobKind.drop) {
+                embs |> erase(job.name)
+                states |> erase(job.name)
+                auds |> erase(job.name)
+                astates |> erase(job.name)
                 return
             }
             var job_copy : MediaJob
@@ -3987,7 +3992,7 @@ def private stop_media_worker() {
     if (!g_media_armed) {
         return
     }
-    var halt = MediaJob(stop = true)
+    var halt = MediaJob(kind = MediaJobKind.stop)
     g_media_jobs |> push_clone(halt)
     delete halt
     var stopped = false
@@ -4213,7 +4218,6 @@ def private init_worker_rails {
     start_media_worker()
 }
 
-// one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
 // The boot-time scheduler knobs, kept for slots loaded at RUNTIME (POST /v1/models/load builds
 // its scheduler with the same defaults every boot slot got).
 struct private SchedDefaults {
@@ -4248,6 +4252,7 @@ def private init_one_scheduler(var s : ModelSlot) {
     s.sched <- create_scheduler(s.model, s_streams, g_sched_defaults.max_queue, s_chunk, s_pages, pfx, s_kv, spec)
 }
 
+// one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
 def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows, prefix_groups : int64; kv_dtype : KVDtype; mtp : bool) {
     g_sched_defaults = SchedDefaults(max_streams = max_streams, max_queue = max_queue,
                                      chunk_tokens = chunk_tokens, page_rows = page_rows,

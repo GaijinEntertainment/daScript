@@ -486,7 +486,6 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     }
                 }
             }
-            // the DEFAULT slot never unloads — the guard that also keeps the last model serving
             POST("{base_url}/v1/models/unload", "\{\"model\":\"test-llm\"}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "unloading the default is refused")
             }
@@ -559,8 +558,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 POST("{base_url}/v1/completions", "\{\"model\":\"test-llm\",\"prompt\":\"hi\",\"max_tokens\":2}") $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.NOT_FOUND), "the unloaded boot slot 404s")
                 }
-                // a bad mmproj degrades to text-only with the reason in tower_note — the model
-                // itself must load and serve (the tower probe panic is caught, not fatal)
+                // the tower probe panic is caught, not fatal
                 POST("{base_url}/v1/models/load", "\{\"path\":\"{to_generic_path(MODEL_PATH)}\",\"id\":\"boot-back\",\"activate\":false,\"ctx\":512,\"image_mmproj\":\"{junk}\"}") $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.OK), "a load with a corrupt mmproj still loads the model")
                     t |> success(find(string(resp.body), "\"tower_note\":\"\"") < 0 && find(string(resp.body), "tower_note") >= 0,
@@ -887,10 +885,8 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
             POST("{base_url}/v1/completions", body_a) $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
             }
-            // per-slot stats: roster present, the ACTIVATION moved the default to smol (activate
-            // means "talk to this one now" — model-less requests follow it, so a live-loaded
-            // default can always be walked off and unloaded), smol's requested backend recorded,
-            // tiny's cache hit counted, smol's cache untouched
+            // per-slot stats: roster present, the activation moved the default to smol,
+            // smol's requested backend recorded, tiny's cache hit counted, smol's cache untouched
             GET("{base_url}/v1/stats") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 var err : string
