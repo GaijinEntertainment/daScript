@@ -313,6 +313,12 @@ an entry lands here only when no name, shape, or test can carry it.
 
 - **interfaces**: the implements-marker IS the generated getter field — `is`/`as`/`?as`
   key purely on its presence; parent interfaces get their own deduped getter fields.
+  The const getter's `unsafe(addr<$t(st)? -const>(self))` is the one blessed const-strip
+  write, and it escapes the DCE trap on two counts, not on the `unsafe`: the constness sits
+  on the PARAMETER BINDING while the object behind it is an ordinary mutable allocation, and
+  the store is re-read through the same pointer two lines later while the new proxy escapes
+  into it — no tier can prove it dead. Emitted AOT C++ keeps the cast and the store verbatim.
+  Caching into anything the caller owns by const VALUE would not survive this.
 - **flat_hash_table**: `hashes[i]` is the slot state — 0 never-used (probe stops),
   1 tombstone (probe continues), above 1 live; a hash function that can return 0 or 1
   loses entries silently.
