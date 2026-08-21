@@ -1974,54 +1974,59 @@ def private generate_topic_stub(var tab : table<string>; doc_file : file; topic 
     }
 }
 
-def private generate_substitute_stub(mod : Module?; substname : string) {
-    var _st : FStat
+def private generate_module_stubs(var tab : table<string>; stub_file : file; mod : Module?) {
+    for_each_typedef(mod) $(name, _value) {
+        generate_topic_stub(tab, stub_file, topic("typedef", mod, name))
+    }
+    for_each_enumeration(mod) $(value) {
+        generate_topic_stub(tab, stub_file, topic("enumeration", mod, string(value.name)))
+    }
+    for_each_structure(mod) $(value) {
+        if (value.flags.isClass) {
+            generate_topic_stub(tab, stub_file, topic("class", mod, string(value.name)))
+            for (fld in value.fields) {
+                if (is_class_method(value, fld) && !(fld.flags.generated) && !fld.flags.privateField && !(fld.flags.parentType) && (fld.flags.implemented) && fld.init != null) {
+                    generate_topic_stub(tab, stub_file, topic("function", mod, "{value.name}-{function_label_file(fld.name, fld.init._type, 1)}"))
+                }
+            }
+        } elif (!value.flags.generated) {
+            generate_topic_stub(tab, stub_file, topic("structure", mod, string(value.name)))
+        }
+    }
+    for_each_function(mod, "") $(func) {
+        if (function_needs_documenting(func)) {
+            generate_topic_stub(tab, stub_file, topic("function", mod, function_label_file(func)))
+        }
+    }
+    for_each_generic(mod) $(func) {
+        if (function_needs_documenting(func)) {
+            generate_topic_stub(tab, stub_file, topic("function", mod, function_label_file(func)))
+        }
+    }
+    module_for_each_annotation(mod) $(value) {
+        if (value.isBasicStructureAnnotation) {
+            generate_topic_stub(tab, stub_file, topic("structure_annotation", mod, string(value.name)))
+        } elif (value.isTypeAnnotation) {
+            generate_topic_stub(tab, stub_file, topic("annotation", mod, string(value.name)))
+        }
+    }
+    for_each_global(mod) $(value) {
+        if (is_global_constant(value)) {
+            generate_topic_stub(tab, stub_file, topic("Variable", mod, string(value.name)))
+        }
+    }
+}
+
+def private generate_substitute_stub(mods : array<Module?>; substname : string) {
     mkdir_rec(dir_name(substname))
     fopen(substname, "wb") $(stub_file) {
-        if (stub_file != null) {
-            var tab : table<string>
-            for_each_typedef(mod) $(name, _value) {
-                generate_topic_stub(tab, stub_file, topic("typedef", mod, name))
-            }
-            for_each_enumeration(mod) $(value) {
-                generate_topic_stub(tab, stub_file, topic("enumeration", mod, string(value.name)))
-            }
-            for_each_structure(mod) $(value) {
-                if (value.flags.isClass) {
-                    generate_topic_stub(tab, stub_file, topic("class", mod, string(value.name)))
-                    for (fld in value.fields) {
-                        if (is_class_method(value, fld) && !(fld.flags.generated) && !(fld.flags.parentType) && (fld.flags.implemented)) {
-                            generate_topic_stub(tab, stub_file, topic("method", mod, "{value.name}.{fld.name}"))
-                        }
-                    }
-                } elif (!value.flags.generated) {
-                    generate_topic_stub(tab, stub_file, topic("structure", mod, string(value.name)))
-                }
-            }
-            for_each_function(mod, "") $(func) {
-                if (function_needs_documenting(func)) {
-                    generate_topic_stub(tab, stub_file, topic("function", mod, "{func.name}"))
-                }
-            }
-            for_each_generic(mod) $(func) {
-                if (function_needs_documenting(func)) {
-                    generate_topic_stub(tab, stub_file, topic("function", mod, "{func.name}"))
-                }
-            }
-            module_for_each_annotation(mod) $(value) {
-                if (value.isBasicStructureAnnotation) {
-                    generate_topic_stub(tab, stub_file, topic("structure_annotation", mod, string(value.name)))
-                } elif (value.isTypeAnnotation) {
-                    generate_topic_stub(tab, stub_file, topic("any_annotation", mod, string(value.name)))
-                }
-            }
-            for_each_global(mod) $(value) {
-                if (is_global_constant(value)) {
-                    generate_topic_stub(tab, stub_file, topic("variable", mod, string(value.name)))
-                }
-            }
-        } else {
+        if (stub_file == null) {
             PANIC("can't generate stub at {substname}\n")
+            return
+        }
+        var tab : table<string>
+        for (mod in mods) {
+            generate_module_stubs(tab, stub_file, mod)
         }
     }
 }
@@ -2084,9 +2089,7 @@ def public documents(name : string; mods : array<Module?>; fname : string; var g
     }
     fwrite(doc_file, make_header(name, mod_name))
     fwrite(doc_file, ".. das:module:: {mod_name}\n\n")
-    for (mod in mods) {
-        generate_substitute_stub(mod, "{topic_root}/detail/{fname}")
-    }
+    generate_substitute_stub(mods, "{topic_root}/detail/{fname}")
     for (mod in mods) {
         document_topic(doc_file, topic(mod), "Module {mod.name}")
         break
