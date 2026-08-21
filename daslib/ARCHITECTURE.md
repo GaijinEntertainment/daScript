@@ -320,6 +320,147 @@ an entry lands here only when no name, shape, or test can carry it.
   leak 0, so nothing shows up in a heap count. Both `apply_qmacro_template_*` appliers are
   inscope-only; the three plain-local `apply_template` overloads pair the declaration with
   the delete. Pick one form per local and read the declaration before adding a delete.
+- **`apply_template` returns a possibly-NEW root.** Its `expr` parameter is by value while
+  `visit_expression` reassigns its own reference, so a substitution that replaces the ROOT
+  node — an identity key body, `_order_by(_)` — is visible only through the return value;
+  non-root replacements leave the pointer unchanged. Always reassign, or the identity case
+  silently keeps the unsubstituted node.
+
+## linq
+
+- **`top_n_by_with_cmp` exists for the fold splice and has no daslib call site.** When an
+  order-by key body is pure and inlineable, `linq_fold_common` emits it with that body
+  spliced into BOTH sides of the comparator — killing the per-comparison comparator dispatch
+  and the per-side `key(v)` dispatch the key-lambda overloads pay. It is not a redundant
+  twin of `top_n_by`.
+- **`BucketLambdaStamper` exists because a bucket-surface lambda cannot infer on its own.**
+  On the `group_by_lazy` element shape `tuple<K; array<E>>`, an untyped lambda in
+  `<bind>._1 |> select/sum/…(<lambda>)` has nothing to bind against in the fully generic
+  tier-2 parameters (error 30303); the chain type knows `E`, so the macro stamps the
+  lambda's parameter before the rewrite — the same move as the outer-parameter injection in
+  `visit()`.
+- **`result_param1_type` is the join result-lambda auto-typing hook.** param0 is always TA;
+  param1 is whatever the override returns — `_join` → TB, `_group_join` → a bare `array<TB>`
+  with const/ref cleared to match the bucket type. `_left_join` / `_right_join` /
+  `_full_outer_join` deliberately do not override: their result parameter is `$Option<T>` on
+  one or both sides, so those result lambdas stay user-spelled.
+
+## linq_das
+
+- **`JOIN_TI` is a spellable identifier on purpose.** `__`-prefixed names are reserved by
+  the compiler, so the transparent-identifier carrier cannot be hidden outside the user's
+  namespace and must stay a single plain token — hence the explicit rejection of a range
+  variable named `linq_join_ti` instead of an unspellable name.
+- **`build_src`'s two arms are a fusion decision, not a formatting one.** A fused source
+  (chain head, join) is built as `from_in(...)` so `_fold` can route it; an UNFUSED operator
+  argument — the uncorrelated multiple-`from`, whose `_cross_join` runs at tier-3
+  passthrough — is passed as the bare parenthesized expression, so `each`'s
+  `[unsafe_outside_of_for]` does not trip and the array×array overload is selected.
+- **The correlated-flatten collection selector borrows, it never copies.** `unsafe(each(tail))`
+  is chosen over `to_sequence` (whose const-array overload clones per row) and over
+  `where_`'s array overload (which materializes per row). Borrowing a TEMPORARY tail
+  (`from x in [c.id]`, a function result) is safe because daslang heap-allocates arrays and
+  does not finalize them at scope exit — the backing storage outlives the borrow and is
+  reclaimed by GC.
+- **`from_in` identifies typed sources by matching module + type NAME as strings**, not by
+  requiring the provider modules: `sqlite_boost::SqlRunner` → `select_from`, pugixml
+  `xml_node` → `from_xml_node`, `json::JsonValue?` → `from_json` — linq_das stays
+  dependency-free on sqlite/pugixml/json. Both node builders are `[unsafe_outside_of_for]`,
+  so the emitted call carries the `unsafe` wrap a `_fold` chain requires. A table source is
+  rejected with a fix message before those arms: it already carries its row shape, and the
+  typed builders would all mis-fire.
+
+## linq_fold
+
+- **group_by's per-key update is a dummy plus an address compare, not a `key_exists`
+  probe.** `entry &= tab?[uk] ?? dummy` costs one hash op per element on hits;
+  `addr(entry) == addr(dummy)` identifies the miss, which then fills the dummy, inserts it,
+  and re-defaults it — the second hash op is paid on misses only. Average slots hold a
+  `(sum, count)` accumulator and divide with no zero guard: sound because a key enters the
+  table only on its first element.
+- **`hoist_prelude` hand-builds a flat block on purpose.** The materializer prelude — the
+  hoisted default-row declaration on the field-prune path — must be a SIBLING of the walk; a
+  `$b(prelude)` splice nests it in its own scope, where the per-element reads cannot see it.
+- **An `ExprFor` the typer has not re-inferred carries an EMPTY `iteratorVariables`.** A
+  decs bridge feeding a no-chain terminator (`from_decs_template(...).count()`) has no chain
+  op to force the second inference pass, so the iterator names are recovered from the push
+  tuple's values — each references its iter var by name under an `ExprRef2Value` wrap — and
+  match what the loop binds once a later pass infers it.
+- **`extract_sql_source` walks the call's own `arguments[0]` spine, not linq_fold's
+  flattened `top`** — the SQL DSL ops are not `linqCalls`, so `flatten_linq` stops at the
+  first one and never reaches the `select_from` source. `sql_linq_loaded(prog)` then gates
+  on `_sql` being in THIS program: a consumer can get `select_from` from a provider boost
+  without `daslib/sql_linq`, and that chain must fall through to the in-memory path.
+
+## linq_fold_decs
+
+- **Column pruning is a four-step pipeline over the `decs_tup` bind, and every step exists
+  to reach bind elision.** Scan the body for `decs_tup.<field>` uses; if the bind is
+  referenced as a WHOLE var, rewrite each whole-var use into a synthesized
+  `(userName1 = iter1, …)` literal — semantically identical — and re-scan; then flatten the
+  surviving field reads to the iter vars and drop the bind entirely. Unused `get_ro` slots
+  disappear along with one tuple-make plus N field reads per iteration. The unpruned bind
+  stays only for whole-var refs that survive the rewrite.
+- **The decs random-index fast paths rest on two source facts.** A plain `[decs_template]`
+  field compiles to `get_ro` (an indexable array) while a default-init field compiles to
+  `get_default_ro` — an iterator, not indexable — so `decs_can_random_index` bails and the
+  walk stands. `get_ro` is `[unsafe_outside_of_for]`, so each cloned source AND the index
+  read are marked `alwaysSafe` (mirroring `decs_boost`'s `append_index_lookup`).
+  `for_each_archetype` visits archetypes in order and skips empty ones, so a no-predicate
+  `last()` overwriting a result per archetype ends holding the global last in
+  O(num_archetypes), and `reverse |> take(N)` collects only the tail with the boundary
+  archetype's head indexed past rather than walked.
+- **Trivial-select elision removes the copy a `_select(_.userName)` would emit.** The
+  pruned inner-for already keeps that component's iter var, so the synthetic bind would
+  flatten to a pure copy; renaming the chain's `finalBind` to the iter var skips the binding
+  entirely. Detecting the shape needs TWO `ExprRef2Value` peels: the typer wraps both the
+  projection root and the `ExprVar` inside the `ExprField`.
+- **The decs join hook keeps hash-collect and probe inline rather than riding
+  `wrap_source_loop`** — that is what preserves the count-no-`where` fast path, which
+  answers from bucket lengths instead of walking pairs. Its key lambdas are synthesized
+  upstream by the LinqJoin macro as 1-arg single-return blocks, so the BLOCK's return type
+  is the key type; a change to that synthesized shape breaks the decs join silently.
+
+## sql_linq
+
+- **Equal phase numbers are deliberate.** `PHASE_ORDER_BY == PHASE_SELECT` — ORDER BY
+  commutes with the projection in SQL (it may reference projected aliases or source
+  columns) — and `PHASE_GROUP_BY == PHASE_DISTINCT == PHASE_SET_OP`. Giving either member
+  its own number spuriously diverts the canonical `_group_by |> _order_by |> _select` into
+  a nested SELECT.
+- **Emitted SQL is a template over two in-band markers.** `?` is a bind, `\x01` a runtime
+  identifier (a dynamic `_order_by` column name); `next_placeholder` scans outside
+  single-quoted literals and always resumes just past a placeholder, so the scan starts
+  with no quote open. `sql_to_frags_ex` pairs each marker with `orderedBinds` /
+  `orderedInlineIds` in occurrence order and preserves a marker as text once its list is
+  exhausted. Nothing reaches the text unquoted: a compile-time constant folds in with SQL
+  doubling, a non-constant emits a runtime `sql_quote_id` / `sql_quote_lit` call, and every
+  other runtime value stays a `?`.
+- **Key contexts render with constants inlined because their fragment is re-used.** A
+  computed `_group_by` / `_order_by` key fragment is emitted at several SQL positions
+  (SELECT, GROUP BY, ORDER BY) while a placeholder can be bound only once, so
+  `render_inlined_key_sql` sets `q.inlineConstants`, admits only `ExprConst*` (strings
+  through `sql_quote_lit`), and rejects any key that pushed a bind.
+- **`_distinct_by(K)` is dialect-routed on `caps.distinct_on`.** Without it, SQLite's
+  bare-aggregate form `SELECT *, MIN/MAX(pk) FROM t GROUP BY K` keeps the `*` columns of
+  the min-pk (or max-pk) row per K — SQLite-only semantics; strict engines reject bare
+  columns beside GROUP BY. With it, `SELECT DISTINCT ON (K) * … ORDER BY K, pk [DESC]` — a
+  PostgreSQL extension DuckDB also implements. MIN/ASC is linq's "first row per K", MAX/DESC
+  is `reverse() |> _distinct_by(K)` "last row per K" — both only while pk is monotonic with
+  insertion order.
+- **A join's `into` projection registry is snapshotted because the outer projection
+  clobbers the live one.** `process_join_call` copies `projRecordNames` and the parallel
+  join columns/aliases/fragments/types into the `joinProj*` arrays, which survive
+  `analyze_grouped_projection`'s clear-and-repopulate. Post-join `_.<alias>` resolves
+  through that snapshot in exactly one hook — `pred_to_sql`'s column-ref arm — which
+  transitively serves `_having`, `_order_by`, computed group keys and grouped aggregates. A
+  registry miss is rejected loudly everywhere alike: falling back to base-table resolution
+  would leak the unqualified base-table namespace into post-join predicates.
+- **`normalize_single_source_arg_names` exists for the linq_das front end.** `_sql`
+  resolves a single source against the placeholder `_`, but LINQ-syntax lowering splices
+  the user's range variable verbatim (`$(c) => c.field`), so a single-parameter chain-op
+  lambda's bound variable is renamed to `_`. Gated on a pure single-source chain — join and
+  set-op key lambdas bind distinct sources and are left alone.
 
 ## dupe_detect
 
