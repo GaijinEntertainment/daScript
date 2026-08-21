@@ -1373,7 +1373,13 @@ namespace das {
     }
 
     Expression * ast_rpipe ( yyscan_t scanner, Expression * arg, Expression * fncall, const LineInfo & locAt ) {
-        if ( fncall->rtti_isCallLikeExpr() ) {
+        if ( fncall->rtti_isOp1() || fncall->rtti_isOp2() || fncall->rtti_isOp3() ) {
+            auto pOp = (ExprOp *) fncall;
+            das_yyerror(scanner,"can't rpipe into operator '" + pOp->op + "'. the piped argument would be discarded",
+                locAt,CompilationError::cant_expression);
+            delete arg;
+            return fncall;
+        } else if ( fncall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) fncall;
             pCall->arguments.insert(pCall->arguments.begin(),arg);
             return fncall;
@@ -1397,6 +1403,7 @@ namespace das {
             return fncall;
         } else {
             das_yyerror(scanner,"can only rpipe into a function call",locAt,CompilationError::cant_expression);
+            delete arg;
             return fncall;
         }
     }
