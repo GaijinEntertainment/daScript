@@ -46,6 +46,38 @@ def private fixture_mutables(t : T?; fnName : string) : table<string> {
     return <- res
 }
 
+def private assert_arg_guard(t : T?; fnName : string) {
+    let path = "{get_das_root()}/tests/flatten/no_aot/_mut_fixtures.das"
+    var inscope access <- make_file_access("")
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.threadlock_context = true
+            cop.version_2_syntax = true
+            compile_file(path, access, unsafe(addr(mg)), cop) $(ok; program; iss) {
+                if (!ok) {
+                    t |> failure("compile failed: {path}\n{iss}")
+                    return
+                }
+                var seen = false
+                program_for_each_module(program) $(mod) {
+                    for_each_function(mod, "") $(func) {
+                        if (func.body == null || func.flags.builtIn || "{func.name}" != fnName) {
+                            return
+                        }
+                        seen = true
+                        t |> equal(length(func.arguments), 2, "mut_out takes a value and a var ref")
+                        t |> success(!writes_through_argument(func, 0), "a by-value parameter is not a write target")
+                        t |> success(writes_through_argument(func, 1), "a 'var T&' parameter is a write target")
+                        t |> success(!writes_through_argument(func, -1), "a negative index answers false, never throws")
+                        t |> success(!writes_through_argument(func, 2), "an index past the last argument answers false")
+                    }
+                }
+                t |> success(seen, "{fnName} must be found")
+            }
+        }
+    }
+}
+
 [test]
 def test_flatten_mutcollect(t : T?) {
     t |> run("every store spelling reaches collect_mutable") @(t : T?) {
@@ -56,5 +88,8 @@ def test_flatten_mutcollect(t : T?) {
         }
         t |> success(!key_exists(m, "ro"), "'ro' is only read; a read must not enter the mutable set")
         delete m
+    }
+    t |> run("writes_through_argument answers false off both ends of the argument list") @(t : T?) {
+        assert_arg_guard(t, "mut_out")
     }
 }

@@ -6,7 +6,11 @@ require math
 //! Store-form corpus for `collect_mutable` (daslib/flatten_opt_common). One local per spelling a
 //! store can take — plain copy, move, clone, increment, compound assign, swizzle lane, and a write
 //! through a by-reference call argument — plus `ro`, the read-only control that must stay out of
-//! the mutable set. The `//! ` names here are the assertion keys in test_flatten_mutcollect.das.
+//! the mutable set. The local names here are the assertion keys in test_flatten_mutcollect.das.
+//!
+//! `mut_out` is the signature side of the same corpus: one by-value parameter and one `var T&`,
+//! so `writes_through_argument` can be asked a true case, a false case, and both out-of-range
+//! ends against a real Function.
 
 [export]
 def mut_forms(x : float) : float {
@@ -28,4 +32,9 @@ def mut_forms(x : float) : float {
     lane.y = ro
     sincos(x, sn, cs)
     return cp + acc + sn + cs + lane.y + ro + float(inc + length(mv) + length(cl))
+}
+
+[export]
+def mut_out(x : float; var dst : float&) {
+    dst = x * 2.0
 }

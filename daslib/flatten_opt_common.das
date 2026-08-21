@@ -616,7 +616,7 @@ def public store_base(e : Expression const?) : ExpressionPtr {
 }
 
 def public writes_through_argument(fn : Function const?; argIndex : int) : bool {
-    if (fn == null || argIndex >= length(fn.arguments)) return false
+    if (fn == null || argIndex < 0 || argIndex >= length(fn.arguments)) return false
     let at = fn.arguments[argIndex]._type
     return at != null && !at.flags.constant && (at.flags.ref || at.isRefType)
 }
