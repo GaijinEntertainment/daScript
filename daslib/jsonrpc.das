@@ -48,7 +48,7 @@ struct public ParsedRequest {
     method          : string       //!< Method name. Empty when the request was malformed.
     params_json     : string       //!< Raw serialized ``params`` value (e.g. ``"null"``, ``"[1,2]"``, ``"{\"x\":1}"``).
     params          : JsonValue?   //!< Pre-parsed ``params`` JsonValue; null when absent. Saves callers a second ``read_json``. A view into ``document`` — dangling once the request is freed.
-    is_notification : bool         //!< True when the request omits ``id`` (spec §4.1 — MUST NOT send a response).
+    is_notification : bool         //!< True when a WELL-FORMED request omits ``id`` (spec §4.1 — MUST NOT send a response). Never true alongside ``error_envelope``: malformed input is answered with ``"id":null`` (spec §5), so test ``error_envelope`` first and this only after it is empty.
     error_envelope  : string       //!< Pre-built error response for malformed input. Empty when the request was well-formed.
     document        : JsonValue?   //!< Parse tree this request owns; free it with ``free_request``. Null in a batch entry — ``ParsedBatch`` owns the batch document.
 }

@@ -98,3 +98,45 @@ def test_integers_past_double_range_error(t : T?) {
         t |> success(!empty(error), "the lexer reports the out-of-range number")
     }
 }
+
+def expect_number_error(t : T?; text : string) {
+    var error : string
+    var js = read_json(text, error)
+    t |> success(js == null, "{text} is rejected")
+    t |> success(!empty(error), "{text} reports an error instead of panicking")
+}
+
+[test]
+def test_floats_past_double_range_error(t : T?) {
+    t |> run("exponent overflow") @(t : T?) {
+        expect_number_error(t, "1e400")
+        expect_number_error(t, "-1e999")
+        expect_number_error(t, "2.5e308")
+    }
+    t |> run("exponent underflow") @(t : T?) {
+        expect_number_error(t, "1e-400")
+    }
+    t |> run("inside a document") @(t : T?) {
+        expect_number_error(t, "\{ \"ratio\" : 1e400 \}")
+        expect_number_error(t, "[1, 1e400]")
+    }
+}
+
+[test]
+def test_floats_within_range_still_parse(t : T?) {
+    t |> run("ordinary and extreme representable values") @(t : T?) {
+        for (text in ["3.14", "-0.5", "1.5e10", "2.5E-3", "1.7e308", "-1.7e308", "1e-320", "0.0"]) {
+            var js = parse(t, text)
+            t |> success(js is _number, "{text} is a number")
+        }
+    }
+}
+
+[test]
+def test_leading_plus_is_not_a_number(t : T?) {
+    t |> run("RFC 8259 has no leading plus") @(t : T?) {
+        expect_number_error(t, "+5")
+        expect_number_error(t, "+3.14")
+        expect_number_error(t, "[+1]")
+    }
+}

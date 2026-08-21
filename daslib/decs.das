@@ -178,7 +178,7 @@ def public operator .(var cmp : ComponentMap; name : string) : ComponentValue& {
 
 def public set(var cv : ComponentValue; val : auto) {
     //! Sets individual component value. Verifies that the value is of the correct type.
-    concept_assert(typeinfo sizeof(val) <= typeinfo sizeof(cv.data), "unsupported component type {typeinfo typename(val)} (its too big)")
+    concept_assert(typeinfo sizeof(val) <= typeinfo sizeof(cv.data), "component type {typeinfo typename(val)} is too big for ComponentValue.data, which holds float4[4]")
     let cval = make_component(cv.name, val)
     assert(cv.info.hash == 0ul || cv.info.hash == cval.info.hash)
     cv = cval
@@ -1186,7 +1186,7 @@ def private make_component(name : string; value : auto(TT)) {
 def public set(var cmp : ComponentMap; name : string; value : auto(TT)) {
     //! Set component value specified by name and type.
     //! If value already exists, it is overwritten. If already existing value type is not the same - panic.
-    concept_assert(typeinfo sizeof(value) <= typeinfo sizeof(cmp[0].data), "unsupported component type {typeinfo typename(value)} (its too big)")
+    concept_assert(typeinfo sizeof(value) <= typeinfo sizeof(cmp[0].data), "component type {typeinfo typename(value)} is too big for ComponentValue.data, which holds float4[4]")
     let cv = make_component(name, value)
     let idx = lower_bound(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
     if (idx < length(cmp) && cmp[idx].name == name) {

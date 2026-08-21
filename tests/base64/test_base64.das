@@ -52,6 +52,27 @@ def test_decode_rejects_bad_input(t : T?) {
 }
 
 [test]
+def test_decode_url_safe_alphabet(t : T?) {
+    t |> equal(base64_decode("PDw/Pz8+Pj4=").text, "<<???>>>")
+    t |> equal(base64_decode("PDw_Pz8-Pj4").text, "<<???>>>", "- and _ are the URL-safe spelling of + and /")
+    t |> equal(base64_decode("PDw_Pz8-Pj4=").text, "<<???>>>")
+    t |> equal(base64_decode("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9").text, "\{\"alg\":\"HS256\",\"typ\":\"JWT\"\}")
+}
+
+[test]
+def test_decode_rejects_orphan_quantum(t : T?) {
+    var out : array<uint8>
+    t |> equal(base64_decode("Q", out), -1, "one leftover character cannot carry a byte")
+    t |> equal(length(out), 0)
+    t |> equal(base64_decode("QUJDR", out), -1)
+    t |> equal(base64_decode("QUJDREUJQ", out), -1)
+    t |> equal(base64_decode("QUJDR").size, -1)
+    t |> equal(base64_decode("QUJD", out), 3, "a whole quantum still decodes")
+    t |> equal(base64_decode("QUJDRA", out), 4, "so does a 2-over tail")
+    t |> equal(base64_decode("QUJDREU", out), 5, "and a 3-over tail")
+}
+
+[test]
 def test_decode_empty_input_clears_output(t : T?) {
     var out : array<uint8>
     t |> equal(base64_decode("QUJD", out), 3)

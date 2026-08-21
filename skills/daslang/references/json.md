@@ -84,9 +84,10 @@ key write `js?["value"]`.
 Cases: `_object` (`table<string; JsonValue?>`), `_array` (`array<JsonValue?>`), `_string`
 (`string`), `_number` (`double`), `_longint` (`int64`), `_bool` (`bool`), `_null` (`void?`).
 
-An integer literal is `_longint` only while it fits `int64`; past that it parses as `_number`,
-and past `double` it is a parse error. So a wire format carrying `uint64` ids above
-`INT64_MAX` loses precision — send those as strings.
+An integer literal is `_longint` only while it fits `int64`; past that it parses as `_number`. So a
+wire format carrying `uint64` ids above `INT64_MAX` loses precision — send those as strings. Any
+number the `double` range cannot hold at all (`1e400`, `1e-400`, 400 digits) is a parse error, never
+a panic and never a silent zero.
 
 ## Parsing, writing, embedding
 
