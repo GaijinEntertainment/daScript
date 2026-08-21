@@ -16,7 +16,20 @@ diff yourself: `git diff -- <files>` in the tree you are pointed at). Read the s
 source when a comment's meaning depends on it — a rescue you cannot place in context is not
 a rescue.
 
-**The two lifeboats — nothing else exists**:
+**The first rescue is a rename.** When the comment's whole payload fits in an identifier,
+the rescue is a refactor suggestion, not prose: `// index of the last fused token` on
+`idx` becomes `rename idx → last_fused_token`; same for enumerations, structures, fields,
+functions. Prefer this over both lifeboats whenever it carries the full information —
+a name is read at every use site, a document only when someone opens it. Mark each
+suggestion public (API/doc surface moves with it) or private (free).
+
+**HARD LIMIT — documented symbols are frozen.** A symbol carrying `//!` documentation —
+therefore published in the daslib reference RST (generated under `doc/source/stdlib/` in
+this repo) — canNOT be renamed: its name is API surface. Verify before suggesting (grep
+the symbol under `doc/source/`); for a frozen symbol the rescue falls back to the
+lifeboats or drowns.
+
+**The two lifeboats — for what no name can carry**:
 
 - **REVIEW.md material**: a rule a human reviewer must check on future diffs to this code
   and that no lint enforces — an ordering constraint, a "never call X before Y", a
@@ -42,6 +55,9 @@ should appear in the target file, ready to paste.
 **Output** (your final message, nothing else):
 
 ```
+## Refactor suggestions
+- <file>:<symbol> — rename `<old>` → `<new>` (carries: <the comment's information>) [public|private]
+
 ## REVIEW.md — <module root>
 - <ready-to-paste entry> (from <file>:<symbol>)
 

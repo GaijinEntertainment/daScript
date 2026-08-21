@@ -399,7 +399,6 @@ class PerfLintVisitor : AstVisitor {
     @safe_when_uninitialized pending_move_at : LineInfo
     pending_move_is_clone : bool = false
     perf018_stack : array<Perf018State>
-    perf018_paths : array<string>
     @do_not_delete perf018_for_exprs : array<ExprFor?>
     in_qualifying_idx : int = 0
     at_qualifying_pushes : array<int>
@@ -416,11 +415,9 @@ class PerfLintVisitor : AstVisitor {
     reported_locations : table<uint64>
     perf019_enum_or_probed : array<uint64>
     perf019_enum_or_yes : array<uint64>
-    def PerfLintVisitor() {
-        pass
-    }
-
     def report_key(at : LineInfo; code : string) : uint64 {
+        //! One report per (rule, location) across generic instantiations; fileInfo is in the key
+        //! because PERF026-028 report sinks in OTHER files. Line caps at 20 bits, column above it.
         let pos = uint64(at.line) | (uint64(at.column) << uint64(20))
         return (pos ^ (intptr(at.fileInfo) * 1099511628211ul)) ^ hash(code)
     }
@@ -1219,7 +1216,7 @@ class PerfLintVisitor : AstVisitor {
                 if (av != null) {
                     var st = perf018_stack[i]
                     st.perf029_sibling_count++
-                    let akey = "{intptr(av)}|"
+                    let akey = "|{intptr(av)}|"
                     if (find(st.perf029_sibling_keys, akey) < 0) {
                         st.perf029_sibling_keys += akey
                         st.perf029_sibling_names += ", {av.name}"
@@ -1256,7 +1253,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf022_push_sentinel(expr : ExprFor?) : void {
-        //! Always pushed in preVisitExprFor so the stack stays lock-step with for-loop nesting. preVisitExprForBody may flip `matched`; if a frame survives to perf022_pop_and_check matched-and-undisqualified, we fire at the for-loop's `at` (not the push's, to avoid colliding with PERF006 under the same-location dedup in perf_warning).
+        //! Always pushed in preVisitExprFor so the stack stays lock-step with for-loop nesting. preVisitExprForBody may flip `matched`; if a frame survives to perf022_pop_and_check matched-and-undisqualified, we fire at the for-loop's `at` — the actionable line a reader rewrites.
         var state : Perf022State
         perf022_stack |> push(state)
         unsafe {
