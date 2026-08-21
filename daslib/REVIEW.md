@@ -132,7 +132,9 @@ residual visitors call to prove the pass complete.
 
 **A residual oracle mirrors its arm's gate exactly and never calls the transform.** A
 narrower oracle is a false pass, a wider one a false miss; calling the transform from an
-oracle aliases the live tree.
+oracle aliases the live tree. A gate the transform takes as a parameter is threaded into the
+oracle too — re-spelling its default as a constant makes every non-default run a false pass,
+and the tests that call the oracle pass the same value.
 
 **Every new fold/fuse arm declares its float class.** Inf/NaN/rounding/association changes
 are fast-math-only; bit-exact per-lane rewrites are never gated. An arm added without that
@@ -141,6 +143,13 @@ decision silently changes output under `_flatten_no_fast_math`.
 **A fuse arm emits a call only after proving the target module can resolve it**, and the
 miss path falls back to the unfused shape — the pass must never turn a shader that compiled
 into an unresolvable call on a narrower backend.
+
+**A new store spelling joins `MutCollect` in the same change.** CSE reads a name outside the
+mutable set as constant for the whole block, so an uncollected store is a silently shared
+subexpression.
+
+**A statement the lowering cannot predicate is refused, never dropped.** `lower_stmt`'s
+fall-through drop is licensed only because every call that survives lowering is pure.
 
 **`flatten_function` runs its passes in this order — dse → copy-prop → mask-const-prop →
 dse → ssa-rename — and a diff that reorders them is a defect.** Each pass produces the next

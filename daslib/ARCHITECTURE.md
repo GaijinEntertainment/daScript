@@ -246,6 +246,29 @@ an entry lands here only when no name, shape, or test can carry it.
 - **The copy-prop/CSE walks stay O(size)** — one name-to-statement index, one structural
   walk; never materialize a `string` per `ExprVar` in a visitor callback (O(n^2) persistent
   heap — the heap-overflow amplifier).
+- **`MutCollect` is the value-stability oracle, so it counts every store spelling, not the
+  one the lowering emits.** CSE treats a name outside its set as constant for the whole
+  block; a missed store is a shared subexpression across a mutation. Copies are only the
+  visible half — `<-` also zeroes its SOURCE, `:=` lowers to a `builtin`clone`(dst, src)`
+  CALL rather than an `ExprClone`, `++`/`+=` are their own nodes, and a by-reference
+  argument writes with no assignment node anywhere. Hence the argument arm keys on the
+  callee's parameter type (non-const and `ref` or a ref type), not on a node kind.
+- **`delete` on a container of `ExpressionPtr` frees the BUFFER, never the nodes** — the
+  house rule that `delete array<T?>` frees the pointees is about das-heap `T`, and
+  `Expression` is a handled C++ type whose instances are not heap chunks at all (the
+  measurement: an `array<S?>` of das structs returns its pointees to `heap_bytes_allocated`,
+  an `array<ExpressionPtr>` returns only the buffer and the nodes surface in the exit GC
+  report). That is why `make_float_ctor`'s const-fold early return may leave its lanes
+  un-consumed while the ctor path `emplace`s them away, why every `unsafe { delete args }`
+  after it is sound over borrowed tree nodes, and why a struct field holding a borrowed
+  node needs no `@do_not_delete`. Node lifetime belongs to the AST GC: a lane the const
+  fold drops is unreachable and collected at the enclosing `ast_gc_guard`.
+- **The whitelist admits value-returning primitives only.** `lower_stmt`'s fall-through arm
+  lowers an unrecognized statement for its lifted sub-lets and drops the statement itself,
+  which is correct exactly while every surviving call is pure — so `lift_expr` refuses a
+  whitelisted call that writes through a by-reference argument (`sincos`) rather than let
+  the drop delete the store. Predicating such a write would need per-out-param temps the
+  lowering does not own.
 
 ## ast_verify
 
@@ -311,6 +334,12 @@ an entry lands here only when no name, shape, or test can carry it.
 
 - **interfaces**: the implements-marker IS the generated getter field — `is`/`as`/`?as`
   key purely on its presence; parent interfaces get their own deduped getter fields.
+  The const getter's `unsafe(addr<$t(st)? -const>(self))` is the one blessed const-strip
+  write, and it escapes the DCE trap on two counts, not on the `unsafe`: the constness sits
+  on the PARAMETER BINDING while the object behind it is an ordinary mutable allocation, and
+  the store is re-read through the same pointer two lines later while the new proxy escapes
+  into it — no tier can prove it dead. Emitted AOT C++ keeps the cast and the store verbatim.
+  Caching into anything the caller owns by const VALUE would not survive this.
 - **flat_hash_table**: `hashes[i]` is the slot state — 0 never-used (probe stops),
   1 tombstone (probe continues), above 1 live; a hash function that can return 0 or 1
   loses entries silently.

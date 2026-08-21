@@ -176,7 +176,10 @@ diagnostic in any tier.
 - **`delete` on `array<T?>` frees the POINTEES**, not just the buffer. On borrowed pointers the
   interpreter reports `deleting <ptr>, which is not a chunk pointer`, while Release+JIT corrupts
   the heap silently and crashes later at an unrelated allocation. `clear()` the container first,
-  or mark the field `@do_not_delete`.
+  or mark the field `@do_not_delete`. This is about das-heap `T`: a HANDLED (C++-bound) pointee —
+  every `daslib/ast` node — is not a heap chunk, so the identical spelling frees only the buffer
+  and reads as an ownership claim the language never honors. Which one you have decides whether
+  dropping the `delete` leaks or whether keeping it corrupts.
 - **A lambda copy aliases one capture frame** — deleting a container that holds two copies of
   the same lambda is a double free.
 - **`:=` on a string copies the pointer** unless the source is a temp (`#`) string or the

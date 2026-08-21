@@ -159,6 +159,12 @@ unsafe { delete view }          // frees only the buffer
 Interpreted, the bad free reports `deleting <ptr>, which is not a chunk pointer` at the delete;
 optimized and JIT-ed, it corrupts the heap silently and crashes later at an unrelated allocation.
 
+The pointee-free happens only when `T` lives on the das heap. A **handled** (C++-bound) pointee —
+every `daslib/ast` node is one — is not a heap chunk, so the same `delete` frees the buffer alone
+and the pointees outlive it under their own ownership. Read the element type before trusting the
+spelling: on das-heap pointers the `delete` is load-bearing, on handled ones it claims an
+ownership the language never honors.
+
 ---
 
 ## 5. Heaps, contexts, threads

@@ -599,7 +599,8 @@ def private rcp_residual_expr(pe : PEX; barriers : table<string>; e : Expression
     return fold_children_or(e) $(c) => rcp_residual_expr(pe, barriers, c)
 }
 
-def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool = false) : array<string> {   // nolint:STYLE037,STYLE038 - one arm per residual peephole; the ladder IS the optimizer
+def public opt_residuals(var func : FunctionPtr; barriers : table<string>;   // nolint:STYLE037,STYLE038 - one arm per residual peephole; the ladder IS the optimizer
+                         no_fast_math : bool = false; hadd_min_width : int = 3) : array<string> {
     var res : array<string>
     if (func == null || func.body == null || !(func.body is ExprBlock)) return <- res
     var blk = func.body as ExprBlock
@@ -718,7 +719,8 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fa
     let cm = fuse_callable(func._module, "mad")
     var fr = new FuseResidualVisitor(checkMad = cm, checkLerp = cm && fuse_callable(func._module, "lerp"),
         checkDot = !no_fast_math && fuse_callable(func._module, "dot", 2),
-        checkHadd = !no_fast_math && fuse_callable(func._module, "hadd", 1), noFastMath = no_fast_math)
+        checkHadd = !no_fast_math && fuse_callable(func._module, "hadd", 1),
+        haddMinWidth = hadd_min_width, noFastMath = no_fast_math)
     make_visitor(*fr) $(a) {
         visit(func.body, a)
     }
@@ -738,7 +740,7 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fa
         res |> push("an un-fused lane sum ('v.x + v.y + ...' should be dot(v, mask))")
     }
     if (fr.foundHadd) {
-        res |> push("an un-fused scalar sum ('a + b + c + d' should be hadd(float4(...)))")
+        res |> push("an un-fused scalar sum of >= {hadd_min_width} lanes (should be hadd(floatN(...)))")
     }
     unsafe {
         delete fr
