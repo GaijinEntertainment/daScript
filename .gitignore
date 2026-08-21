@@ -134,6 +134,7 @@ utils/**/modules/
 !.claude/skills/
 !.claude/agents/
 !.claude/hooks/
+!.claude/settings.json
 examples/games/sequence/modules/.daspkg.log
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.cpp
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.h

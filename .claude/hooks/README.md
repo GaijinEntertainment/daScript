@@ -63,8 +63,9 @@ by CI in `extended_checks.yml` beside the other python gates.
 
 ## Registration
 
-Copy the `hooks` block from `settings.example.json` into the tree's
-`.claude/settings.json` (gitignored, per machine). The command runs relative
-to the session's start directory — start sessions at the tree root, or use an
-absolute path. On Windows use `python`; the `python3` Store stub is not
-guaranteed.
+The tracked `.claude/settings.json` registers the hook for every checkout;
+machine-local permissions live in `.claude/settings.local.json` (gitignored) —
+the two merge. The command runs relative to the session's start directory —
+start sessions at the tree root. It invokes `python` (not `python3` — the
+Windows Store stub is not guaranteed); Claude Code asks once before running a
+project's hooks. Active from the next session start.
