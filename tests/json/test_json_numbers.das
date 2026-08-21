@@ -133,6 +133,26 @@ def test_floats_within_range_still_parse(t : T?) {
 }
 
 [test]
+def test_number_error_messages_distinguish_invalid_from_range(t : T?) {
+    t |> run("truncated exponents are invalid, not out of range") @(t : T?) {
+        for (text in ["1e", "1e+", "1.5e-", "[1e]"]) {
+            var error : string
+            var js = read_json(text, error)
+            t |> success(js == null, "{text} is rejected")
+            t |> success(error |> starts_with("invalid number"), "{text}: got <{error}>")
+        }
+    }
+    t |> run("true overflow stays out of range") @(t : T?) {
+        for (text in ["1e400", "1e-400", "2.5e308"]) {
+            var error : string
+            var js = read_json(text, error)
+            t |> success(js == null, "{text} is rejected")
+            t |> success(error |> find("out of range") >= 0, "{text}: got <{error}>")
+        }
+    }
+}
+
+[test]
 def test_leading_plus_is_not_a_number(t : T?) {
     t |> run("RFC 8259 has no leading plus") @(t : T?) {
         expect_number_error(t, "+5")
