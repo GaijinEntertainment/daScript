@@ -1,9 +1,7 @@
 # Utils Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
-doc: `CLAUDE.md` (repo root). A file that belongs to one tool — implementation, test, or
-fixture — answers to that tool's own `REVIEW.md` in the tool's directory, wherever the diff
-puts the file.
+doc: `CLAUDE.md` (repo root).
 
 **A tool's own files answer to that tool's `REVIEW.md` where one exists, keyed by what the file
 IS, not where it sits: a file belonging to a tool is reviewed with that tool's checklist as well
