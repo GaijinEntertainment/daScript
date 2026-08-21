@@ -64,11 +64,7 @@ def join(var it : iterator<auto(TT)>; separator : string implicit) {
             } else {
                 write(writer, separator)
             }
-            static_if (typeinfo is_numeric(type<TT>)) {
-                write_char(writer, elem)
-            } else {
-                write(writer, elem)
-            }
+            write(writer, elem)
         }
     }
     return st
