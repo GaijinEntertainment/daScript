@@ -17,7 +17,8 @@ Always the WHOLE arc — never just the topmost commit of a multi-commit branch.
 
 ## Phase 0 — grounding (one agent)
 
-Spawn ONE read-only agent over the full diff range. It produces a map, not findings:
+Spawn ONE `targeted-reviewer` instance (`.claude/agents/targeted-reviewer.md`) over the full
+diff range. It produces a map, not findings:
 
 - **Intent** — what the change is for, in one paragraph.
 - **Integration surface** — every boundary the change touches: callers of changed functions,
@@ -55,7 +56,7 @@ reviews the committed arc only). It outlives the surfacers, so launch it first a
 harvest when they return. Its P-ranked findings enter Phase 3 as hypotheses like any
 surfacer's; the damper in the skill decides whether any later round re-arms it.
 
-Spawn in ONE message, all read-only, model `opus`:
+Spawn in ONE message, all as `targeted-reviewer` instances unless named otherwise:
 
 - **One surfacer per dimension.** Prompt = the dimension name + the grounding's hotspot notes
   for it (risk patterns, not methodology). Recall over precision: report every suspicion with
@@ -80,11 +81,12 @@ Findings come back as: `file:line`, the concern, the evidence (quoted code), sev
 ## Phase 3 — proving (one agent)
 
 First a mechanical dedupe by the orchestrator: same location + same concern from different
-surfacers → keep the strongest-evidence copy. Then spawn ONE read-only prover (model `opus`)
-over the survivors. Its stance: findings are hypotheses; the surfacer selected confirming
-evidence and anchored on a conclusion; the prover's job is to find the reason each finding is
-wrong, by its own reading — not by re-reading the surfacer's quotes. The more confident a
-finding sounds, the deeper the investigation.
+surfacers → keep the strongest-evidence copy. Then spawn ONE prover (a `targeted-reviewer`
+instance, prompt assigning the prove phase) over the survivors. Its stance: findings are
+hypotheses; the surfacer selected confirming evidence and anchored on a conclusion; the
+prover's job is to find the reason each finding is wrong, by its own reading — not by
+re-reading the surfacer's quotes. The more confident a finding sounds, the deeper the
+investigation.
 
 Gates, in order — failing any gate rejects the finding outright:
 
@@ -129,7 +131,12 @@ good enough, not clean.
 
 ## Mechanics
 
-- Every agent is read-only — no Edit/Write; report-only.
+- Every agent is read-only — no Edit/Write; report-only (Bash held to read-only use).
+- Grounding, the dimension surfacers, the general surfacer, and the prover are
+  `targeted-reviewer` instances (the definition carries the model pin and the report
+  contract). When the session's registry snapshot lacks the agent, fall back to
+  general-purpose with an explicit opus pin. The `review-md-auditor`, `tdd-auditor`, and
+  `style-hygiene-auditor` keep their own definitions.
 - Spawn independent agents in a single message so they run in parallel; the prover waits for
   all surfacers and for the woodpecker harvest.
 - Agent definitions snapshot at session start — a freshly edited `.claude/agents/*.md` is live

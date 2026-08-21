@@ -277,7 +277,7 @@ def test_think_qwen35_tools(t : T?) {
     }
 }
 
-// ===== gemma-4-E2B: asymmetric channels, thinking OFF by default (opt-in via <|think|>) =====
+// ===== gemma-4-E2B: asymmetric channels, thinking ON by default (instruct = opt-out) =====
 
 [test]
 def test_think_gemma4(t : T?) {
@@ -285,10 +285,25 @@ def test_think_gemma4(t : T?) {
         return
     }
     with_think_server(t, GEMMA4_PATH, TEST_PORT + 1, 180) $(base_url) {
-        t |> run("default (family off): no reasoning_content, answer clean") @(t : T?) {
-            chat_resp(t, base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is 2+2? Answer with just the number.\"}],\"max_tokens\":64,\"temperature\":0}") $(r) {
+        t |> run("default (family on): a thought-eliciting prompt gets a reasoning span with no override") @(t : T?) {
+            // the bare thinking opener lets the model CHOOSE - a trivial prompt answers
+            // directly (probe-verified: greedy 2+2 emits just "4"), so the default cell
+            // uses the eliciting prompt; the instruct opt-out cell below keeps the trivial one
+            // 2048, not 512: the default-armed thought for this prompt runs past 512 tokens
+            // (length-cut at 512 leaves reasoning full and content empty - the exact budget
+            // starvation the 16k serving default exists to prevent)
+            chat_resp(t, base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is 17 times 23? Think it through, then answer.\"}],\"max_tokens\":2048,\"temperature\":0}") $(r) {
                 let msg & = unsafe(r.choices[0].message)
-                t |> success(empty(msg.reasoning_content), "the E-series default is instruct mode")
+                t |> success(!empty(msg.reasoning_content), "the family default arms thinking")
+                t |> success(!empty(msg.content), "answer present")
+                t |> success(find(msg.content, "<channel|>") < 0 && find(msg.content, "<|channel>") < 0,
+                             "no channel markers in content")
+            }
+        }
+        t |> run("enable_thinking=false: the instruct opt-out answers with no reasoning span") @(t : T?) {
+            chat_resp(t, base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is 2+2? Answer with just the number.\"}],\"max_tokens\":64,\"temperature\":0,\"enable_thinking\":false}") $(r) {
+                let msg & = unsafe(r.choices[0].message)
+                t |> success(empty(msg.reasoning_content), "instruct mode has no reasoning span")
                 t |> success(!empty(msg.content), "answer present")
                 t |> success(find(msg.content, "<channel|>") < 0 && find(msg.content, "<|channel>") < 0,
                              "no channel markers in content")

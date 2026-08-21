@@ -87,6 +87,33 @@ test('an attached image rides only the newest message as content parts', async (
     expect(typeof body.messages[body.messages.length - 1].content).toBe('string');
 });
 
+test('the reply budget defaults long and rides the wire', async ({ page }) => {
+    const { posts } = await openControl(page, { sse: raw('sse_chat') });
+    await expect(page.locator('#kn-max_tokens')).toHaveValue('16384');
+    await send(page, 'go long');
+    expect(chatBody(posts).max_tokens).toBe(16384);
+});
+
+test('un-wired towers dim the image and mic buttons; clicking walks to the catalog', async ({ page }) => {
+    await openControl(page);   // stock stats: serving, vision false, no asr workers
+    const img = page.locator('#b-img'), mic = page.locator('#b-mic');
+    await expect(img).toBeVisible();
+    await expect(img).toHaveClass(/off/);
+    await expect(mic).toBeVisible();
+    await expect(mic).toHaveClass(/off/);
+    await img.click();
+    await expect(page.locator('#cat-note')).toContainText('vision tower');
+    await expect(page.locator('#catalog-sec')).toBeInViewport();
+    await mic.click();
+    await expect(page.locator('#cat-note')).toContainText('ASR tower');
+});
+
+test('wired towers light the buttons up', async ({ page }) => {
+    await openControl(page, { stats: { ...fx('stats'), vision: true, asr_workers: 1 } });
+    await expect(page.locator('#b-img')).not.toHaveClass(/off/);
+    await expect(page.locator('#b-mic')).not.toHaveClass(/off/);
+});
+
 test('clear resets the conversation', async ({ page }) => {
     await openControl(page, { sse: raw('sse_chat') });
     await send(page, 'first');

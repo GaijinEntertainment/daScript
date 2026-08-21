@@ -215,8 +215,24 @@ def public compile_and_collect(file : string; var records : array<FuncRecord>;
                                want_sigs : bool; min_tokens : int;
                                quiet : bool = false;
                                project : string = "") : bool {
+    var prereq_skipped = false
+    return compile_and_collect_ex(file, records, seen_loc, prereq_skipped, verbose, lambdas_only, want_sigs, min_tokens, quiet, project)
+}
+
+//! `compile_and_collect` with the environment-skip out-param: a file whose compile fails on
+//! `missing prerequisite` (a module this build/platform does not carry — Apple-only Metal
+//! benchmarks on Windows) sets `prereq_skipped` and returns true. That is an honest skip,
+//! not a broken file: the caller counts and reports it, never fails the corpus on it.
+def public compile_and_collect_ex(file : string; var records : array<FuncRecord>;
+                                  var seen_loc : table<string; void?>;
+                                  var prereq_skipped : bool&;
+                                  verbose : bool; lambdas_only : bool;
+                                  want_sigs : bool; min_tokens : int;
+                                  quiet : bool = false;
+                                  project : string = "") : bool {
     var inscope access <- make_file_access(project)
     var ok_compile = true
+    prereq_skipped = false
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
             cop.ignore_shared_modules = true
@@ -224,6 +240,13 @@ def public compile_and_collect(file : string; var records : array<FuncRecord>;
             cop.version_2_syntax = true
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
+                    if (find("{issues}", "missing prerequisite") >= 0) {
+                        prereq_skipped = true
+                        if (!quiet) {
+                            to_log(LOG_INFO, "SKIP {file} (missing prerequisite - module not in this build)\n")
+                        }
+                        return
+                    }
                     ok_compile = false
                     if (!quiet) {
                         if (verbose) {

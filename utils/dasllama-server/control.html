@@ -112,6 +112,8 @@ button.mini.on { border-color: var(--amber); color: var(--amber); }
 .mcard canvas { height: 26px; margin-top: 6px; cursor: default; }
 .chip { font-family: var(--font-mono); font-size: 9.5px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--amber-dim); color: var(--amber); white-space: nowrap; }
 .chip.cpu { border-color: var(--rule); color: var(--fg-dim); }
+.chip.good { border-color: var(--green); color: var(--green); }
+.chip.bad { border-color: var(--red); color: var(--red); }
 button.xs { font-size: 10px; padding: 2px 8px; }
 .vbar { height: 14px; background: var(--bg-3); border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
 .vbar .vfill { background: var(--amber-dim); height: 100%; width: 0%; transition: width 0.4s; }
@@ -166,6 +168,7 @@ button.xs { font-size: 10px; padding: 2px 8px; }
 .chat-btns { display: flex; flex-direction: column; gap: 6px; }
 .chat-btns button { padding: 6px 14px; font-size: 12px; }
 #b-mic.rec { border-color: var(--red); color: var(--red); }
+.chat-btns button.off { opacity: 0.5; }
 .knobs { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 12px; align-items: center; }
 .knobs .knob { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint); }
 .knobs input[type="number"] {
@@ -205,6 +208,14 @@ button.xs { font-size: 10px; padding: 2px 8px; }
 .field.wide { grid-column: 1 / -1; }
 .field.check { flex-direction: row; align-items: center; gap: 8px; }
 .field.check label { flex: 1; }
+.field .ovr { width: 13px; height: 13px; margin: 0; flex: none; accent-color: var(--amber); }
+.field label .lft { display: flex; align-items: center; gap: 6px; }
+.field.off input:not(.ovr), .field.off select { opacity: 0.45; }
+.cfg-adv {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px 14px; grid-column: 1 / -1;
+}
+.cfg-defaults-note { grid-column: 1 / -1; font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
 .cfg-actions { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
 .cfg-file { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); margin-top: 10px; }
 
@@ -235,6 +246,7 @@ button:disabled { opacity: 0.45; cursor: default; }
         </span>
         <span class="model" id="model">…</span>
         <span class="spacer"></span>
+        <span class="chip" id="mint-chip" style="display:none; cursor:pointer"></span>
         <span class="badge" id="badge">connecting</span>
         <span class="uptime" id="uptime"></span>
     </header>
@@ -280,13 +292,14 @@ button:disabled { opacity: 0.45; cursor: default; }
         <div class="swstrip" id="sw-strip" style="display:none"></div>
     </div>
 
-    <div class="sec"><span>§ 03</span><span class="rule"></span><span>model catalog</span></div>
+    <div class="sec" id="catalog-sec"><span>§ 03</span><span class="rule"></span><span>model catalog</span></div>
     <div class="panel">
         <div class="ctl-note" id="cat-note" style="margin-bottom:8px">curated, sha-pinned downloads — one at a time, resume on retry</div>
         <table class="ctable" id="cat-table">
             <thead><tr><th>model</th><th></th><th>size</th><th>ctx</th><th>needs</th><th></th></tr></thead>
             <tbody id="cat-body"><tr><td colspan="6" class="ctl-note">loading the catalog…</td></tr></tbody>
         </table>
+        <div class="controls" id="asr-offer" style="display:none; margin-top:10px"></div>
     </div>
 
     <div class="sec"><span>§ 04</span><span class="rule"></span><span>streams</span>
@@ -506,15 +519,25 @@ function apply(s) {
         $("t-mtp").textContent = fmt(s.mtp_accepted) + " / " + fmt(s.mtp_drafted) +
             " (" + (100 * s.mtp_accepted / s.mtp_drafted).toFixed(0) + "%)";
     }
-    $("b-img").style.display = s.vision ? "" : "none";
+    // image/mic stay visible while serving, dimmed when their tower is not wired — a hidden
+    // button reads as "this can't do that", when the truth is "download the tower in § 03"
+    const bimg = $("b-img");
+    bimg.style.display = setupMode ? "none" : "";
+    bimg.classList.toggle("off", !s.vision);
+    bimg.title = s.vision ? "attach an image — paste or drop one too" : VISION_OFFER;
     if (!thinkSeeded && !thinkTouched && typeof s.thinking_default === "boolean") {
         $("kn-thinking").checked = s.thinking_default;
         thinkSeeded = true;
     }
+    if (micRec === null && !micDenied) {
+        const bmic = $("b-mic");
+        bmic.style.display = setupMode ? "none" : "";
+        bmic.classList.toggle("off", !(s.asr_workers > 0));
+        bmic.title = s.asr_workers > 0 ? "record, click again to stop + transcribe" : ASR_OFFER;
+    }
     if (s.asr_workers > 0) {
         $("tile-asr").classList.remove("hide");
         $("t-asr").textContent = s.asr_ready + " · " + s.asr_active + " · " + s.asr_pending;
-        if (micRec === null) $("b-mic").style.display = "";
         $("asr-section").style.display = "block";
     }
     $("cfg").innerHTML =
@@ -1053,7 +1076,7 @@ const KNOBS = [
     { k: "temperature", v: 0, step: 0.1 }, { k: "top_k", v: 40, step: 1 },
     { k: "top_p", v: 0.9, step: 0.05 }, { k: "min_p", v: 0, step: 0.01 },
     { k: "presence_penalty", v: 0, step: 0.1 }, { k: "frequency_penalty", v: 0, step: 0.1 },
-    { k: "max_tokens", v: 512, step: 32 },
+    { k: "max_tokens", v: 16384, step: 256 },
 ];
 const chatMsgs = [];   // {role, content} — replayed on every send; TEXT only (see chatImage)
 let chatBusy = false;
@@ -1151,7 +1174,23 @@ function attachImageFile(file) {
     fr.readAsDataURL(file);
 }
 
-$("b-img").addEventListener("click", () => $("img-file").click());
+// one sentence per tower, used verbatim by the dimmed button's tooltip AND its click hint
+const VISION_OFFER = "image chat needs this model's vision tower — download it on the model's catalog row, then enable + restart";
+const ASR_OFFER = "dictation needs the ASR tower — download parakeet under the catalog, then enable + restart";
+
+// an un-wired tower button walks the user to its § 03 offer instead of doing nothing
+function towerHint(message) {
+    $("cat-note").textContent = message;
+    $("catalog-sec").scrollIntoView({ behavior: "smooth" });
+}
+
+$("b-img").addEventListener("click", () => {
+    if ($("b-img").classList.contains("off")) {
+        towerHint(VISION_OFFER);
+        return;
+    }
+    $("img-file").click();
+});
 $("img-file").addEventListener("change", e => {
     attachImageFile(e.target.files && e.target.files[0]);
     e.target.value = "";
@@ -1303,8 +1342,14 @@ function encodeWav(chunks, sampleRate) {
     return new Blob([buf], { type: "audio/wav" });
 }
 
+let micDenied = false;   // mic permission refused — keep the button down instead of re-showing it
+
 async function micToggle() {
     const btn = $("b-mic");
+    if (btn.classList.contains("off")) {
+        towerHint(ASR_OFFER);
+        return;
+    }
     if (micRec) {
         const { ctx, node, stream, chunks } = micRec;
         micRec = null;
@@ -1339,7 +1384,8 @@ async function micToggle() {
         btn.classList.add("rec");
         btn.textContent = "■ stop";
     } catch (_e) {
-        btn.style.display = "none";   // no mic permission — hide the button
+        micDenied = true;   // no mic permission
+        btn.style.display = "none";
     }
 }
 $("b-mic").addEventListener("click", micToggle);
@@ -1536,20 +1582,22 @@ function renderAsrJobs(rows, stats) {
 }
 
 // ===== config editor =====
-// The model paths live in the [[models]] roster table above the flat form; the flat fields are
-// the process-wide knobs plus the per-model DEFAULTS that roster rows inherit when blank.
-// field spec: k = config key, t = text|path|int|sel|bool, o = select options ("" = unset/legacy)
+// Defaults-first: the model paths live in the [[models]] roster table; every flat knob below
+// is an OVERRIDE gated by its own checkbox — unchecked keys are OMITTED from the saved TOML,
+// so the engine defaults (model-window ctx, auto-detected backend, ...) stay live.
+// field spec: k = config key, t = text|path|int|sel|bool, o = select options
 const FIELDS = [
+    { k: "port", t: "int", primary: true },
     { k: "quant", t: "sel", o: ["q8", "fp32", "q4", "q8_0", "q4_0", "q4_k", "q5_k", "q6_k", "mxfp4", "f16", "bf16"] },
     { k: "kv_dtype", t: "sel", o: ["f16", "f32", "q8_0", "tq4"] },
     { k: "ctx", t: "int" }, { k: "max_tokens", t: "int" },
-    { k: "streams", t: "int" }, { k: "port", t: "int" },
+    { k: "streams", t: "int" },
     { k: "threads", t: "int" }, { k: "team_dispatch", t: "sel", o: ["hybrid", "team", "inline"] },
     { k: "affinity", t: "isel", o: [[0, "off"], [1, "ideal-cpu hint"], [2, "hard mask"]] },
     { k: "chunk", t: "int" },
     { k: "page_rows", t: "int" }, { k: "prefix", t: "int" },
     { k: "flat", t: "bool" }, { k: "mtp", t: "bool" },
-    { k: "gpu", t: "sel", o: ["", "off", "metal", "metal-required", "vulkan"] },
+    { k: "gpu", t: "sel", o: ["auto", "off", "metal", "metal-required", "vulkan"] },
     { k: "gpu_layers", t: "int" }, { k: "gpu_stream", t: "int" },
     { k: "gpu_vram_mb", t: "int" },
     { k: "gpu_dn", t: "bool" }, { k: "gpu_attn", t: "bool" }, { k: "gpu_dense", t: "bool" },
@@ -1562,61 +1610,120 @@ const FIELDS = [
 ];
 let cfgSurface = null;
 let savedSnapshot = "";   // JSON of the last rendered/saved form — restart guards against unsaved edits
+let advOpen = false;      // the advanced-overrides fold; sticky across re-renders
+
+function fieldEnabled(k) {
+    const en = $("en-" + k);
+    return !!(en && en.checked);
+}
+
+function buildField(f, cfg, src) {
+    const cell = document.createElement("div");
+    const source = src[f.k] || "default";
+    const enabled = source === "toml";   // cli keys stay CLI-owned until the override is ticked
+    cell.className = "field" + (f.t === "bool" ? " check" : "") + (f.wide ? " wide" : "") + (enabled ? "" : " off");
+    const label = document.createElement("label");
+    label.htmlFor = "f-" + f.k;
+    const lft = document.createElement("span");
+    lft.className = "lft";
+    const en = document.createElement("input");
+    en.type = "checkbox";
+    en.className = "ovr";
+    en.id = "en-" + f.k;
+    en.checked = enabled;
+    en.title = "override " + f.k + " in the saved config (unchecked = engine default)";
+    const name = document.createElement("span");
+    name.textContent = f.k;
+    if (f.t === "bool") lft.append(name); else lft.append(en, name);   // bools carry the override up front instead
+    const chip = document.createElement("span");
+    chip.className = "src " + source;
+    chip.textContent = source;
+    label.append(lft, chip);
+    let input;
+    if (f.t === "sel") {
+        input = document.createElement("select");
+        for (const o of f.o) {
+            const opt = document.createElement("option");
+            opt.value = String(o);
+            opt.textContent = String(o);
+            input.append(opt);
+        }
+        input.value = String(cfg[f.k]);
+        if (input.selectedIndex < 0) input.value = f.o[0];   // unknown/unset value fallback ("" reads back as "" — value comparison can't see the miss)
+    } else if (f.t === "isel") {
+        // int-valued select: options are [value, label] pairs — the config key stays an
+        // int, the user sees words (a bare "2" told nobody it meant a hard mask)
+        input = document.createElement("select");
+        for (const [v, txt] of f.o) {
+            const opt = document.createElement("option");
+            opt.value = String(v);
+            opt.textContent = txt;
+            input.append(opt);
+        }
+        input.value = String(cfg[f.k]);
+        if (input.selectedIndex < 0) input.value = String(f.o[0][0]);
+    } else if (f.t === "bool") {
+        input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = !!cfg[f.k];
+    } else {
+        input = document.createElement("input");
+        input.type = f.t === "int" ? "number" : "text";
+        if (f.t === "int") input.step = "1";
+        // sentinel-is-meaning keys read better as their meaning than as a bare 0
+        if (f.k === "ctx") {
+            input.value = cfg.ctx > 0 ? String(cfg.ctx) : "";
+            input.placeholder = "model's full window";
+        } else {
+            input.value = cfg[f.k];
+        }
+    }
+    input.id = "f-" + f.k;
+    input.dataset.key = f.k;
+    input.dataset.type = f.t;
+    input.disabled = !enabled;
+    en.addEventListener("change", () => {
+        input.disabled = !en.checked;
+        cell.classList.toggle("off", !en.checked);
+    });
+    if (f.t === "bool") cell.append(en, input, label); else cell.append(label, input);
+    return cell;
+}
 
 function renderForm(surface, status) {
     const cfg = surface.config, src = surface.sources || {};
     const form = $("cfg-form");
     form.textContent = "";
-    for (const f of FIELDS) {
-        const cell = document.createElement("div");
-        cell.className = "field" + (f.t === "bool" ? " check" : "") + (f.wide ? " wide" : "");
-        const label = document.createElement("label");
-        label.htmlFor = "f-" + f.k;
-        const name = document.createElement("span");
-        name.textContent = f.k;
-        const chip = document.createElement("span");
-        chip.className = "src " + (src[f.k] || "default");
-        chip.textContent = src[f.k] || "default";
-        label.append(name, chip);
-        let input;
-        if (f.t === "sel") {
-            input = document.createElement("select");
-            for (const o of f.o) {
-                const opt = document.createElement("option");
-                opt.value = String(o);
-                opt.textContent = o === "" ? "(unset)" : String(o);
-                input.append(opt);
-            }
-            input.value = String(cfg[f.k]);
-            if (input.value !== String(cfg[f.k])) input.value = f.o[0];   // unknown value fallback
-        } else if (f.t === "isel") {
-            // int-valued select: options are [value, label] pairs — the config key stays an
-            // int, the user sees words (a bare "2" told nobody it meant a hard mask)
-            input = document.createElement("select");
-            for (const [v, txt] of f.o) {
-                const opt = document.createElement("option");
-                opt.value = String(v);
-                opt.textContent = txt;
-                input.append(opt);
-            }
-            input.value = String(cfg[f.k]);
-            if (input.value !== String(cfg[f.k])) input.value = String(f.o[0][0]);
-        } else if (f.t === "bool") {
-            input = document.createElement("input");
-            input.type = "checkbox";
-            input.checked = !!cfg[f.k];
-        } else {
-            input = document.createElement("input");
-            input.type = f.t === "int" ? "number" : "text";
-            if (f.t === "int") input.step = "1";
-            input.value = cfg[f.k];
-        }
-        input.id = "f-" + f.k;
-        input.dataset.key = f.k;
-        input.dataset.type = f.t;
-        if (f.t === "bool") cell.append(input, label); else cell.append(label, input);
-        form.append(cell);
-    }
+    const advCount = FIELDS.filter(f => !f.primary && (src[f.k] || "default") === "toml").length;
+    if (!advOpen && advCount > 0) advOpen = true;   // saved overrides must not hide
+    for (const f of FIELDS.filter(f => f.primary)) form.append(buildField(f, cfg, src));
+    const note = document.createElement("div");
+    note.className = "cfg-defaults-note";
+    note.id = "cfg-defaults-note";
+    note.textContent = "defaults-first: unchecked knobs stay on engine defaults — ctx = the model's full window, backend = "
+        + (surface.gpu_detected ? "auto (" + surface.gpu_detected + " detected)" : "auto");
+    form.append(note);
+    const toggleRow = document.createElement("div");
+    toggleRow.className = "cfg-adv-toggle cfg-defaults-note";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "mini";
+    toggle.id = "b-adv";
+    const advLabel = () => (advOpen ? "▾" : "▸") + " advanced overrides" + (advCount ? " (" + advCount + " set)" : "");
+    toggle.textContent = advLabel();
+    toggle.addEventListener("click", () => {
+        advOpen = !advOpen;
+        $("cfg-adv").style.display = advOpen ? "grid" : "none";
+        toggle.textContent = advLabel();
+    });
+    toggleRow.append(toggle);
+    form.append(toggleRow);
+    const adv = document.createElement("div");
+    adv.className = "cfg-adv";
+    adv.id = "cfg-adv";
+    adv.style.display = advOpen ? "grid" : "none";
+    for (const f of FIELDS.filter(f => !f.primary)) adv.append(buildField(f, cfg, src));
+    form.append(adv);
     // gpu_layers / gpu_stream 0 means AUTO server-side (fill the VRAM budget, stream the rest), so
     // the zeros are safe to save now and the form no longer invents box-specific counts — only the
     // rail toggles need filling in so the page shows what will actually run
@@ -1888,6 +1995,7 @@ async function loadConfig() {
         renderRoster();
         renderGpu(c.status || {});
         savedSnapshot = JSON.stringify(gatherConfig());
+        if (catState) renderCatalog(catState);   // the tower offers key off the roster + asr field
     } catch (_e) {
         $("cfg-note").textContent = "could not load /config";
     }
@@ -1897,7 +2005,7 @@ function gatherConfig() {
     const out = {};
     for (const f of FIELDS) {
         const el = $("f-" + f.k);
-        if (!el) continue;
+        if (!el || !fieldEnabled(f.k)) continue;   // unchecked = OMITTED — the engine default stays live
         if (f.t === "bool") out[f.k] = el.checked;
         else if (f.t === "int" || f.t === "isel") out[f.k] = Math.trunc(Number(el.value) || 0);
         else out[f.k] = el.value;
@@ -2095,8 +2203,45 @@ function exLine(text) {
     return div;
 }
 
+// The header's sidecar-mint chip — the one-glance answer to "is this box running tuned
+// kernels, and is its mint on the ladder?": red = bad mint (absent / stale / version-lapsed /
+// raced on a noisy box), amber = good mint not yet shared to the exchange, green = tuned and
+// shared (or fetched from the exchange). Click lands on § 12.
+function renderMintChip() {
+    const chip = $("mint-chip");
+    if (!exchangeState) { chip.style.display = "none"; return; }
+    const c = exchangeState.current || {};
+    let cls = "good", txt = "tuned", tip = "";
+    if (!c.present) {
+        cls = "bad"; txt = "untuned";
+        tip = "no tune sidecar on this box - kernels run on generic fallbacks; fetch a match or re-tune below";
+    } else if (c.stale) {
+        cls = "bad"; txt = "tune: stale";
+        tip = "the sidecar predates this binary - its winners are dead; fetch a match or re-tune below";
+    } else if (!c.version_ok) {
+        cls = "bad"; txt = "tune: re-tune due";
+        tip = "sidecar minted at engine v" + c.dasllama_version + ", this build is v" + exchangeState.engine_version + " - re-tune below";
+    } else if (c.noise && c.noise !== "ok" && c.noise !== "overridden") {
+        cls = "bad"; txt = "noisy mint";
+        tip = "the tune raced on a noisy box (noise: " + c.noise + ") - its winners are suspect; re-tune on a quiet machine";
+    } else if (c.local && !c.shared) {
+        cls = ""; txt = "tuned - not shared";
+        tip = "this box's mint is good but not on the exchange ladder yet - share it below";
+    } else {
+        tip = c.origin === "exchange" ? "winners fetched from the exchange (" + exShort(c.exchange_sha) + ")" : "tuned on this box and shared to the exchange";
+    }
+    chip.className = "chip " + cls;
+    chip.textContent = txt;
+    chip.title = tip;
+    chip.style.display = "";
+}
+$("mint-chip").addEventListener("click", () => {
+    document.getElementById("exchange").scrollIntoView({ behavior: "smooth" });
+});
+
 function renderExchange() {
     if (!exchangeState) return;
+    renderMintChip();
     const c = exchangeState.current || {};
     const pol = exchangeState.policy || {};
     const box = $("ex-current");
@@ -2281,10 +2426,167 @@ $("ex-always").addEventListener("change", async () => {
 // ===== § 03 model catalog =====
 let catPolling = false;
 let catFailed = false;
+let catState = null;   // the last GET /catalog document — the tower offers re-render off it
 
 function fmtGB(b) { return (b / 1e9).toFixed(1) + " GB"; }
 
+const OS_HEADROOM_GB = 4;   // RAM the fit verdict leaves to the OS before calling it "tight"
+
+// The box-fit verdict for one entry's advertised working set: facts from /catalog's `box`
+// (0 = unknown, no badge). GPU-tier budget first, then RAM minus the OS headroom.
+function fitBadge(hintGb, box) {
+    const ram = (box && box.ram_gb) || 0;
+    if (!ram || !hintGb) return null;
+    const vramGb = ((box && box.vram_mb) || 0) / 1024;
+    const chip = document.createElement("span");
+    chip.style.marginLeft = "6px";
+    if (vramGb > 0 && hintGb <= vramGb) {
+        chip.className = "chip good";
+        chip.textContent = "fits gpu";
+        chip.title = "~" + hintGb + " GB working set fits the GPU tier's " + vramGb.toFixed(0) + " GB weight budget";
+    } else if (hintGb <= ram - OS_HEADROOM_GB) {
+        chip.className = "chip good";
+        chip.textContent = "fits";
+        chip.title = "~" + hintGb + " GB working set fits this box's " + ram + " GB RAM";
+    } else if (hintGb <= ram) {
+        chip.className = "chip";
+        chip.textContent = "tight";
+        chip.title = "~" + hintGb + " GB working set on a " + ram + " GB box leaves under " + OS_HEADROOM_GB + " GB for the OS - close other apps";
+    } else {
+        chip.className = "chip bad";
+        chip.textContent = "too big";
+        chip.title = "~" + hintGb + " GB working set exceeds this box's " + ram + " GB RAM";
+    }
+    return chip;
+}
+
+function miniButton(text, onClick) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "mini";
+    b.textContent = text;
+    b.addEventListener("click", onClick);
+    return b;
+}
+
+function dlBusy(dl) { return dl.state === "downloading" || dl.state === "verifying"; }
+
+function dlProgress(dl) {
+    if (dl.state === "verifying") return "verifying sha256…";
+    const pct = dl.total > 0 ? (100 * dl.got / dl.total).toFixed(0) : "0";
+    return "downloading — " + pct + "% of " + fmtGB(dl.total);
+}
+
+function rosterRowFor(path) {
+    return path ? roster.findIndex(r => r.path === path) : -1;
+}
+
+// a saved tower wire is one restart from live — offer that restart right in the note
+// instead of leaving the user to find the button in § 09
+function noteWithRestart(text) {
+    const note = $("cat-note");
+    note.textContent = text + " ";
+    const b = miniButton("restart now", async () => {
+        b.disabled = true;
+        try {
+            await fetch("/restart", { method: "POST" });
+            note.textContent = "restarting — the page reloads when it is back";
+            restartingSince = performance.now();
+            setBadge("warn", "restarting");
+            waitForRestart();
+        } catch (_e) {
+            note.textContent = "restart request failed";
+            b.disabled = false;
+        }
+    });
+    note.append(b);
+}
+
+// the vision-tower control for a downloaded entry: download, then enable, then wired
+function visionControl(e, dl) {
+    if (!e.vision_file) return null;
+    const id = "vision:" + e.name;
+    if (dl.name === id && dlBusy(dl)) {
+        const s = document.createElement("span");
+        s.className = "ctl-note";
+        s.textContent = dlProgress(dl);
+        return s;
+    }
+    if (!e.vision_present) {
+        const b = miniButton("vision tower (" + fmtGB(e.vision_bytes) + ")", () => startCatalogDownload(e.name, "vision"));
+        b.title = "this model can see - download its pinned mmproj to enable image chat";
+        b.disabled = dlBusy(dl);
+        return b;
+    }
+    const i = rosterRowFor(e.path);
+    if (i >= 0 && !roster[i].image_mmproj) {
+        const b = miniButton("enable vision", async () => {
+            roster[i].image_mmproj = e.vision_path;
+            renderRoster();
+            if (await saveConfig()) {
+                const asr = catState && catState.asr;
+                const asrHint = (asr && !(asr.present && fieldEnabled("asr")))
+                    ? " · dictation (below) can ride the same restart" : "";
+                noteWithRestart("vision tower wired for " + e.display + asrHint + " —");
+            }
+        });
+        b.title = "wire the downloaded tower into this model's config";
+        return b;
+    }
+    const s = document.createElement("span");
+    s.className = "chip good";
+    s.textContent = i >= 0 ? "vision ✓" : "vision ready";
+    s.title = i >= 0 ? "the tower is wired into this model's config" : "tower downloaded - add the model to the roster to wire it";
+    return s;
+}
+
+// the dictation offer strip: the ASR tower (parakeet v3) download, then enable, then wired
+function renderAsrOffer(doc, dl) {
+    const strip = $("asr-offer");
+    strip.replaceChildren();
+    const asr = doc.asr;
+    if (!asr || !asr.file) { strip.style.display = "none"; return; }
+    strip.style.display = "";
+    const label = document.createElement("span");
+    label.className = "ctl-note";
+    if (dl.name === "asr" && dlBusy(dl)) {
+        label.textContent = "dictation (parakeet v3): " + dlProgress(dl);
+        strip.append(label);
+        return;
+    }
+    if (!asr.present) {
+        label.textContent = "add dictation — speech-to-text on /v1/audio/transcriptions and the chat mic";
+        const b = miniButton("download parakeet asr (" + fmtGB(asr.bytes) + ")", () => startCatalogDownload("", "asr"));
+        b.disabled = dlBusy(dl);
+        strip.append(b, label);
+        return;
+    }
+    const asrEl = $("f-asr");
+    const wired = asrEl && String(asrEl.value || "") !== "" && fieldEnabled("asr");
+    if (!wired) {
+        label.textContent = "parakeet v3 is downloaded — wire it in to enable dictation";
+        const b = miniButton("enable dictation", async () => {
+            const en = $("en-asr");
+            if (!asrEl || !en) return;
+            en.checked = true;
+            asrEl.disabled = false;
+            asrEl.closest(".field").classList.remove("off");
+            asrEl.value = asr.path;
+            if (await saveConfig()) noteWithRestart("dictation wired (parakeet v3) —");
+        });
+        strip.append(b, label);
+        return;
+    }
+    const chip = document.createElement("span");
+    chip.className = "chip good";
+    chip.textContent = "dictation ✓";
+    chip.title = asrEl.value;
+    label.textContent = "speech-to-text serves on /v1/audio/transcriptions and the chat mic";
+    strip.append(chip, label);
+}
+
 function renderCatalog(doc) {
+    catState = doc;
     const body = $("cat-body");
     body.textContent = "";
     const dl = doc.download || { state: "idle" };
@@ -2301,7 +2603,10 @@ function renderCatalog(doc) {
         const ctx = document.createElement("td");
         ctx.textContent = fmt(e.ctx);
         const needs = document.createElement("td");
+        needs.className = "needs";
         needs.textContent = "~" + e.vram_hint_gb.toFixed(0) + " GB";
+        const fit = fitBadge(e.vram_hint_gb, doc.box);
+        if (fit) needs.append(fit);
         const act = document.createElement("td");
         if (e.present) {
             const ok = document.createElement("span");
@@ -2309,32 +2614,27 @@ function renderCatalog(doc) {
             ok.textContent = "downloaded";
             ok.title = e.path;
             act.append(ok);
+            const vc = visionControl(e, dl);
+            if (vc) {
+                vc.style.marginLeft = "8px";
+                act.append(vc);
+            }
             if (setupMode) {
-                const b = document.createElement("button");
-                b.type = "button";
-                b.className = "mini";
+                const b = miniButton("serve this model", () => serveDownloaded(e));
                 b.style.marginLeft = "8px";
-                b.textContent = "serve this model";
-                b.addEventListener("click", () => serveDownloaded(e));
                 act.append(b);
             }
-        } else if (dl.state === "downloading" && dl.name === e.name) {
-            const pct = dl.total > 0 ? (100 * dl.got / dl.total).toFixed(0) : "0";
-            act.textContent = "downloading \u2014 " + pct + "% of " + fmtGB(dl.total);
-        } else if (dl.state === "verifying" && dl.name === e.name) {
-            act.textContent = "verifying sha256\u2026";
+        } else if (dl.name === e.name && dlBusy(dl)) {
+            act.textContent = dlProgress(dl);
         } else {
-            const b = document.createElement("button");
-            b.type = "button";
-            b.className = "mini";
-            b.textContent = "download";
-            b.disabled = dl.state === "downloading" || dl.state === "verifying";
-            b.addEventListener("click", () => startCatalogDownload(e.name));
+            const b = miniButton("download", () => startCatalogDownload(e.name));
+            b.disabled = dlBusy(dl);
             act.append(b);
         }
         tr.append(name, note, size, ctx, needs, act);
         body.append(tr);
     }
+    renderAsrOffer(doc, dl);
     if (dl.state === "failed" && dl.error) {
         $("cat-note").textContent = "download failed: " + dl.error;
     }
@@ -2358,12 +2658,12 @@ async function loadCatalog() {
     }
 }
 
-async function startCatalogDownload(name) {
+async function startCatalogDownload(name, tower) {
     try {
         const r = await fetch("/catalog/download", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name }),
+            body: JSON.stringify(tower ? { name, tower } : { name }),
         });
         const j = await r.json().catch(() => null);
         if (!r.ok) {
@@ -2376,12 +2676,22 @@ async function startCatalogDownload(name) {
     }
 }
 
-// setup mode's exit: point the config at the downloaded file, save, restart into serving
+// setup mode's exit: point the config at the downloaded file, save, restart into serving.
+// Defaults-first: towers already on disk wire themselves — vision via the entry's tower,
+// dictation via the ASR override field.
 async function serveDownloaded(e) {
     roster = [{ name: "", path: e.path, backend: "auto", ctx: "", quant: "", kv_dtype: "",
-                streams: "", chunk: "", page_rows: "", prefix: "", mtp: "", image_mmproj: "",
+                streams: "", chunk: "", page_rows: "", prefix: "", mtp: "",
+                image_mmproj: e.vision_present ? e.vision_path : "",
                 def: true, adv: false }];
     renderRoster();
+    const asr = catState && catState.asr;
+    if (asr && asr.present && $("en-asr") && !fieldEnabled("asr")) {
+        $("en-asr").checked = true;
+        $("f-asr").disabled = false;
+        $("f-asr").closest(".field").classList.remove("off");
+        $("f-asr").value = asr.path;
+    }
     if (!(await saveConfig())) return;   // cat-note keeps quiet: cfg-note already says why
     try {
         await fetch("/restart", { method: "POST" });

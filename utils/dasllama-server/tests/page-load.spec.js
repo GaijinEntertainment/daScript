@@ -20,7 +20,7 @@ test('header, badge, and tiles render from /v1/stats', async ({ page }) => {
     await expect(page.locator('#cfg')).toContainText(`streams ${s.max_streams}`);
 });
 
-test('mtp/asr tiles, asr studio, and the image button stay hidden without those arms', async ({ page }) => {
+test('without those arms: mtp/asr tiles and studio hide; image and mic dim to tower offers', async ({ page }) => {
     const s = fx('stats');
     const arms = [s.mtp_drafted > 0 && 'mtp', s.asr_workers > 0 && 'asr', s.vision && 'vision'].filter(Boolean);
     // hard failure, not a skip: a regenerated fixture that grew an arm must be re-captured
@@ -31,8 +31,10 @@ test('mtp/asr tiles, asr studio, and the image button stay hidden without those 
     await expect(page.locator('#tile-mtp')).toBeHidden();
     await expect(page.locator('#tile-asr')).toBeHidden();
     await expect(page.locator('#asr-section')).toBeHidden();
-    await expect(page.locator('#b-img')).toBeHidden();
-    await expect(page.locator('#b-mic')).toBeHidden();
+    // the buttons stay visible-but-dimmed while serving: hidden read as "can't do that",
+    // when the truth is "download the tower in § 03" (chat.spec covers the click paths)
+    await expect(page.locator('#b-img')).toHaveClass(/off/);
+    await expect(page.locator('#b-mic')).toHaveClass(/off/);
 });
 
 test('a vision arm reveals the image button; asr workers reveal the tile, mic, and studio', async ({ page }) => {

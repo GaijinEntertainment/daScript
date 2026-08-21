@@ -68,7 +68,7 @@ struct ModelSlot {
     gpu_marks : GpuModelMarks <- gpu_model_marks_init()   // this model's tier routing marks while NOT installed
     vision : VisionEmbedder = VisionEmbedder()   // set_model_vision; kind == none = text only (encode runs on the vision worker)
     vision_path : string                             // the worker loads its own embedder from this
-    think_default : bool   // family default when the request sends no enable_thinking (gemma-4 off, qwen3 on)
+    think_default : bool   // family default when the request sends no enable_thinking (THINKING.md's table)
 }
 
 var g_slots : array<ModelSlot>
@@ -765,18 +765,35 @@ def private handle_catalog_download(var req : HttpRequest?; var resp : HttpRespo
         }
     }
     let want = js?["name"] ?? ""
+    let tower = js?["tower"] ?? ""
+    if (tower == "asr") {
+        let refusal = catalog_download_start_asr(g_catalog_dir)
+        if (!empty(refusal)) {
+            return resp |> JSON(error_body(refusal, "invalid_request_error"), http_status.CONFLICT)
+        }
+        to_log(LOG_INFO, "dasllama-server: catalog download started: asr tower (into {g_catalog_dir})\n")
+        return resp |> JSON("\{\"ok\":true,\"name\":\"asr\"}", http_status.ACCEPTED)
+    }
     if (empty(want)) {
         let why = empty(jerr) ? "" : " ({jerr})"
         return resp |> JSON(error_body("body must name a catalog entry: \{\"name\": ...}{why}", "invalid_request_error"), http_status.BAD_REQUEST)
     }
+    if (!empty(tower) && tower != "vision") {
+        return resp |> JSON(error_body("unknown tower '{tower}' (vision | asr)", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
     for (e in model_catalog()) {
         if (e.name == want) {
-            let refusal = catalog_download_start(g_catalog_dir, e)
+            let refusal = (tower == "vision" ? catalog_download_start_vision(g_catalog_dir, e)
+                                             : catalog_download_start(g_catalog_dir, e))
             if (!empty(refusal)) {
                 return resp |> JSON(error_body(refusal, "invalid_request_error"), http_status.CONFLICT)
             }
-            to_log(LOG_INFO, "dasllama-server: catalog download started: {e.name} ({e.bytes >> 20l} MB into {g_catalog_dir})\n")
-            return resp |> JSON("\{\"ok\":true,\"name\":{json_str(e.name)},\"bytes\":{e.bytes}}", http_status.ACCEPTED)
+            // echo the id the download state machine registered, so a caller can match the
+            // ACCEPTED body to the download.name it will poll
+            let dl_name = tower == "vision" ? "vision:{e.name}" : e.name
+            let bytes = tower == "vision" ? e.vision_bytes : e.bytes
+            to_log(LOG_INFO, "dasllama-server: catalog download started: {dl_name} ({bytes >> 20l} MB into {g_catalog_dir})\n")
+            return resp |> JSON("\{\"ok\":true,\"name\":{json_str(dl_name)},\"bytes\":{bytes}}", http_status.ACCEPTED)
         }
     }
     return resp |> JSON(error_body("unknown catalog entry '{want}'", "invalid_request_error"), http_status.NOT_FOUND)
@@ -865,6 +882,55 @@ def private cpu_brand : string {
     run_and_capture(args, out, 10.0)
     delete args
     return strip(out)
+}
+
+var private g_box_ram_gb = 0   // total physical RAM in whole GiB, probed once at init_server (0 = unknown)
+
+// linux /proc/meminfo: "MemTotal:       131842348 kB" -> whole GiB; 0 = parse failure
+def private ram_gb_from_meminfo(text : string) : int {
+    for (ln in split(text, "\n")) {
+        if (ln |> starts_with("MemTotal")) {
+            let c = find(ln, ":")
+            if (c >= 0) {
+                var toks <- split(strip(slice(ln, c + 1)), " ")
+                let kb = empty(toks) ? 0.0 : to_float(toks[0])
+                delete toks
+                return int(kb / (1024.0 * 1024.0) + 0.5)
+            }
+        }
+    }
+    return 0
+}
+
+// Total physical RAM — a twin of profile_common's private platform_ram_gb (kept separate so
+// the server never pays that file's tool closure); wmic falls through to CIM on Windows.
+def private box_ram_gb() : int {
+    let gib = 1024.0 * 1024.0 * 1024.0
+    var out = ""
+    if (get_platform_name() == "windows") {
+        var args <- ["wmic", "ComputerSystem", "get", "TotalPhysicalMemory", "/value"]
+        run_and_capture(args, out, 10.0)
+        delete args
+        for (ln in split(out, "\n")) {
+            let i = find(ln, "=")
+            if (i >= 0 && find(ln, "TotalPhysicalMemory") >= 0) {
+                return int(to_float(strip(slice(ln, i + 1))) / gib + 0.5)
+            }
+        }
+        var ps <- ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"]
+        out = ""
+        run_and_capture(ps, out, 15.0)
+        delete ps
+        let t = strip(out)
+        return empty(t) ? 0 : int(to_float(t) / gib + 0.5)
+    }
+    if (get_platform_name() == "darwin") {
+        var args <- ["sysctl", "-n", "hw.memsize"]
+        run_and_capture(args, out, 10.0)
+        delete args
+        return int(to_float(strip(out)) / gib + 0.5)
+    }
+    return ram_gb_from_meminfo(fread("/proc/meminfo"))
 }
 
 def private compose_hardware_line {
@@ -2400,6 +2466,13 @@ struct private OaiStatsResponse {
     media_rows : int64        // media (image span) rows admitted to prefill since boot
 }
 
+// budget only when the device already EXISTS (tier.device is "" until first upload creates
+// it) — the budget hook device-inits on first call, and `supported` can read true while the
+// tier is merely armed, so it must not gate this
+def private gpu_weight_budget_bytes() : int64 {
+    return !empty(gpu_tier_status().device) ? moe_gpu_weight_budget() : 0l
+}
+
 def private handle_stats(var resp : HttpResponse?) : http_status {
     if (empty(g_slots)) {
         // setup mode: the minimum shape control.html's apply() reads (it gates on `setup`)
@@ -2407,9 +2480,6 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
             "\{\"setup\":true,\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":0,\"asr_ready\":0,\"asr_active\":0,\"asr_pending\":0,\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":0,\"asr_audio_s\":0,\"vision\":false,\"models\":[]}",
             http_status.OK)
     }
-    // budget only when the device already EXISTS (tier.device is "" until first upload creates
-    // it) — the budget hook device-inits on first call, and `supported` can read true while the
-    // tier is merely armed, so it must not gate this
     let tier = gpu_tier_status()
     var out = OaiStatsResponse(
         model = g_slots[g_active].name, active_model = g_slots[g_active].name,
@@ -2437,7 +2507,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         heap_bytes = int64(heap_bytes_allocated()),
         string_heap_bytes = int64(string_heap_bytes_allocated()),
         gpu_vram_bytes = tier.vram_bytes,
-        gpu_budget_bytes = !empty(tier.device) ? moe_gpu_weight_budget() : 0l,
+        gpu_budget_bytes = gpu_weight_budget_bytes(),
         hardware = g_hardware_line,
         asr_done_jobs = g_asr_done_jobs, asr_audio_s = g_asr_audio_s,
         // DEFAULT slot, not g_active: these two gate the page's request UI, and a page request
@@ -3521,6 +3591,9 @@ class OpenAiServer : HvWebServer {
             // the control page ships beside the server sources; libhv sets text/html from the extension
             return resp |> SERVE_FILE(path_join(get_this_module_dir(), "control.html"))
         }
+        GET("/favicon.ico") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return resp |> SERVE_FILE(path_join(get_this_module_dir(), "tray.ico"))
+        }
         GET("/config") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_config_get(resp)
         }
@@ -3558,7 +3631,7 @@ class OpenAiServer : HvWebServer {
             return handle_bake_start(req, resp)
         }
         GET("/catalog") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return resp |> JSON(catalog_state_json(g_catalog_dir))
+            return resp |> JSON(catalog_state_json(g_catalog_dir, g_box_ram_gb, gpu_weight_budget_bytes() / (1024l * 1024l)))
         }
         POST("/catalog/download") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (!is_loopback_req(req)) return deny_operator(resp)
@@ -3715,6 +3788,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     g_server_started = true
     g_started_at = ref_time_ticks()
     compose_hardware_line()
+    g_box_ram_gb = box_ram_gb()
     var names <- [for (s in g_slots); s.is_default && length(g_slots) > 1 ? "{s.name}*" : s.name]
     let kv_mode = page_rows > 0l ? "{kv_dtype} paged P={page_rows}" : "{kv_dtype} flat"
     to_log(LOG_INFO, "dasllama-server listening on http://127.0.0.1:{port}/v1  (models: {join(names, ", ")}; streams: {max_streams}, prefill chunk: {chunk_tokens}, kv: {kv_mode})\n")

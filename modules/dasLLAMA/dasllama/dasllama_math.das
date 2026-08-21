@@ -1662,6 +1662,13 @@ def register_kernel_backend(be : KernelBackend) {
     }
 }
 
+def kernel_backend_available_(name : string) : bool {
+    if (!key_exists(g_kernel_backends, name)) {
+        return false
+    }
+    return invoke(g_kernel_backends[name].available)
+}
+
 //! Activate a registered backend by name (explicit control / A/B benchmarking). No-op if unknown.
 //! Runs the availability witness first — for some backends it doubles as the runtime enable
 //! (amx = XTILEDATA arch_prctl); activating past it would SIGILL on the first tile op.

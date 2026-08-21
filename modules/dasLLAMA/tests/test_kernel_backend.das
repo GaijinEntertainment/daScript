@@ -93,6 +93,9 @@ def test_backend_availability_predicate(t : T?) {
         t |> success(active_kernel_backend() != "test-unavailable", "for-load select skips an unavailable backend")
         pin_kernel_backend("test-unavailable")
         t |> success(active_kernel_backend() != "test-unavailable", "pin refuses an unavailable backend")
+        t |> success(!kernel_backend_available_("test-unavailable"), "the availability probe reports the witness verdict")
+        t |> success(!kernel_backend_available_("no-such-backend"), "an unregistered name reads unavailable")
+        t |> success(kernel_backend_available_("portable"), "the portable backend is available everywhere")
         if (saved != "") {
             select_kernel_backend(saved)
         }

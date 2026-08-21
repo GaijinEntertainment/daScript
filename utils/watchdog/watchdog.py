@@ -843,6 +843,17 @@ TRAY_BADGES = {
     "red": ("square", (217, 109, 79, 255)),      # trouble: unhealthy / crash-backoff
 }
 
+# Plain-language startup stages for the tray line — the raw stage names stay in the logs,
+# but a user watching the tooltip gets what the wait IS, not compiler jargon.
+STAGE_LABELS = {
+    "jit_codegen": "compiling this box's kernels (first start takes minutes)",
+    "jit_linked": "kernels compiled",
+    "exchange_lookup": "checking the tune exchange",
+    "tuning": "tuning this box",
+    "model_load": "loading the model",
+    "ready": "first health check pending",
+}
+
 
 def badge_tray_image(base, state: str):
     """A copy of `base` wearing the status badge for `state`; None for unknown states.
@@ -921,9 +932,14 @@ def tray_state() -> tuple[str, str]:
             line += " · tuning off"   # a 'run untuned' hold is active — visible, and revocable in the menu
         return line, "base"
     stage = s.get("stage")
-    if healthy is False:
+    # "unhealthy" is reserved for a server that SERVED and then stopped answering — a cold
+    # JIT start is minutes of failed health polls, and framing that as ill sends users
+    # hunting for a problem.
+    has_served = float(s.get("serving_since") or 0.0) > 0.0
+    if healthy is False and has_served:
         return (f"unhealthy ({stage})" if stage else "unhealthy"), "red"
-    return (f"booting ({stage})" if stage else "booting"), "amber"
+    label = STAGE_LABELS.get(stage, stage)
+    return (f"starting up — {label}" if label else "starting up"), "amber"
 
 
 def tray_status() -> str:
@@ -1125,7 +1141,7 @@ def build_tray_icon(args: argparse.Namespace, logger: logging.Logger, stopping: 
         icon = pystray.Icon(
             args.name,
             image,
-            title=f"{args.name} — booting",
+            title=f"{args.name} — starting up",
             menu=pystray.Menu(*items),
         )
         # Pre-composited status variants; tray_tick swaps between them as the coarse

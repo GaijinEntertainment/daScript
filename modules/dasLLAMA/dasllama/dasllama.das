@@ -467,6 +467,13 @@ def select_matmul_backend_for_load() : bool {
     return select_matmul_backend_for_load_()
 }
 
+def kernel_backend_available(name : string) : bool {
+    //! True when kernel backend ``name`` is registered AND its availability witness passes on
+    //! this box — the detection probe behind defaults-first backend selection (the vulkan
+    //! witness enumerates devices once and caches its verdict). Unknown names are false.
+    return kernel_backend_available_(name)
+}
+
 def set_gpu_tier_want(want : dasllama_gpu_tier::GpuTierWant) {
     //! Record the GPU tier request the NEXT ``moe_gpu_tier_arm``/``load_model`` honors — the
     //! programmatic form of the core ``DASLLAMA_GPU_*`` knobs (an env var present overrides its
@@ -482,6 +489,8 @@ def moe_gpu_tier_arm() : bool {
 
 def moe_gpu_weight_budget() : int64 {
     //! The armed backend's resident-weight VRAM budget in bytes (0 = no GPU backend armed).
+    //! CAVEAT: the hook device-inits on first call — a reporting caller gates on
+    //! ``gpu_tier_status().device`` being non-empty first (``supported`` must not be the gate).
     return moe_gpu_weight_budget_()
 }
 

@@ -55,6 +55,11 @@ is required.
 the two daslib files install thread-local debug agents at compile time, which abort
 the scanner on the second use.
 
+Files whose compile fails on `missing prerequisite` (a module this build/platform does not
+carry — e.g. Apple-only Metal benchmarks on Windows) are skipped loudly (`SKIP <file>` + a
+count), never counted as compile failures: export refuses only on files that are genuinely
+broken.
+
 
 (utils_detect_dupe_patterns)=
 ## Pattern filter
@@ -230,7 +235,8 @@ candidates pattern-filtered out".
 | `pipeline.das` | `compile_and_collect` / `collect_from_program`, shared by `main.das` and the tests; also `apply_pattern_filter` and the filesystem scan helpers |
 | `patterns.das` | `classify(name, canonical) → PatternHit` |
 | `exchange.das` | On-disk JSON schema + writer/reader for `--export-functions` / `--import-functions` |
-| `fixture/synth.das`, `fixture/canonical_cases.das` | End-to-end visitor smoke fixture; one-function-per-concern `CanonicalVisitor` unit fixture |
+| `fixture/synth.das`, `fixture/canonical_cases.das`, `fixture/generics_cases.das` | End-to-end visitor smoke fixture; one-function-per-concern `CanonicalVisitor` unit fixture; called / never-called generic-template records |
+| `fixture/ast-fuzz/selftest/victim.das` | The auto-skip fixture the scan cells walk |
 | `test_detect_dupe.das` | dastest suite --- `bin/daslang dastest/dastest.das -- --test utils/detect-dupe/test_detect_dupe.das` |
 
 ## Notes

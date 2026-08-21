@@ -46,6 +46,29 @@ def test_catalog_table(t : T?) {
         t |> equal(defaults, 1, "exactly one recommended default")
         t |> success(count >= 5, "curated list shrank: {count} entries, expected at least 5")
     }
+    t |> run("every vision tower resolves pinned, and the default model carries one") @(t : T?) {
+        var towers = 0
+        for (e in model_catalog()) {
+            if (e.is_default) {
+                t |> success(!empty(e.vision_file), "the getting-started default must carry a vision tower")
+            }
+            continue if (empty(e.vision_file))
+            towers++
+            t |> equal(length(e.vision_sha256), 64, "{e.name}: tower sha256 must be 64 hex chars")
+            t |> success(e.vision_bytes > 0l, "{e.name}: tower canonical size missing")
+            t |> success(e.vision_url |> starts_with("https://"), "{e.name}: tower url must be https")
+            t |> success(find(e.vision_url, "/resolve/main/") < 0, "{e.name}: tower url is not commit-pinned")
+        }
+        t |> success(towers >= 2, "vision towers shrank: {towers}, expected at least 2")
+    }
+    t |> run("the ASR tower (parakeet v3) is pinned like any carrier") @(t : T?) {
+        let tower <- serve_asr_tower()
+        t |> success(!empty(tower.name), "asr tower has a file name")
+        t |> equal(length(tower.sha256), 64, "asr tower sha256 must be 64 hex chars")
+        t |> success(tower.bytes > 0l, "asr tower canonical size missing")
+        t |> success(tower.url |> starts_with("https://"), "asr tower url must be https")
+        t |> success(find(tower.url, "/resolve/main/") < 0, "asr tower url is not commit-pinned")
+    }
 }
 
 [test]
@@ -111,6 +134,17 @@ def test_download_refusals(t : T?) {
         remove(planted)
         rmdir(dir)
     }
+    t |> run("a towerless entry refuses the vision download; an unpinned item refuses too") @(t : T?) {
+        let dir = tmp_models_dir("tower")
+        let bare = CatalogEntry(name = "x", file = "x.gguf", bytes = 4l, sha256 = "00", url = "https://example.invalid/x")
+        let r1 = catalog_download_start_vision(dir, bare)
+        t |> success(find(r1, "no vision tower") >= 0, "got: {r1}")
+        var unpinned = bare
+        unpinned.vision_file = "mmproj-x.gguf"
+        let r2 = catalog_download_start_vision(dir, unpinned)
+        t |> success(find(r2, "no pinned artifact") >= 0, "got: {r2}")
+        rmdir(dir)
+    }
 }
 
 [test]
@@ -118,7 +152,7 @@ def test_state_json(t : T?) {
     t |> run("the /catalog document carries every entry with presence and an idle machine") @(t : T?) {
         let dir = tmp_models_dir("doc")
         var jerr = ""
-        var doc = read_json(catalog_state_json(dir), jerr)
+        var doc = read_json(catalog_state_json(dir, 64, 8192l), jerr)
         t |> success(doc != null, "state json parses: {jerr}")
         if (doc != null) {
             t |> equal(doc?["models_dir"] ?? "", dir)
@@ -128,13 +162,54 @@ def test_state_json(t : T?) {
                 t |> equal(length(entries.value as _array), length(model_catalog()))
                 for (e in entries.value as _array) {
                     t |> equal(e?["present"] ?? true, false, "nothing is present in a fresh dir")
+                    t |> equal(e?["vision_present"] ?? true, false, "no tower is present in a fresh dir")
                 }
             }
+            t |> equal(doc?["asr"]?["present"] ?? true, false, "the asr tower is absent in a fresh dir")
+            t |> success(!empty("{doc?["asr"]?["file"] ?? ""}"), "the asr tower file is named")
+            t |> equal(int(doc?["box"]?["ram_gb"] ?? 0l), 64, "the box facts pass through")
+            t |> equal(doc?["box"]?["vram_mb"] ?? 0l, 8192l)
             t |> equal(doc?["download"]?["state"] ?? "", "idle")
         }
         unsafe {
             delete doc
         }
+        rmdir(dir)
+    }
+    t |> run("a planted tower reads present at its path") @(t : T?) {
+        let dir = tmp_models_dir("towerdoc")
+        var first_tower = ""
+        for (e in model_catalog()) {
+            if (empty(first_tower) && !empty(e.vision_file)) {
+                first_tower = e.vision_file
+            }
+        }
+        t |> success(!empty(first_tower), "the catalog carries at least one vision tower")
+        let planted = path_join(dir, first_tower)
+        fopen(planted, "wb") $(f) {
+            if (f != null) {
+                f |> fwrite("GGUF")
+            }
+        }
+        var jerr = ""
+        var doc = read_json(catalog_state_json(dir), jerr)
+        t |> success(doc != null, "state json parses: {jerr}")
+        let entries = doc?["entries"]
+        if (entries != null && (entries.value is _array)) {
+            var seen = false
+            for (e in entries.value as _array) {
+                if ("{e?["vision_file"] ?? ""}" == first_tower) {
+                    seen = true
+                    t |> equal(e?["vision_present"] ?? false, true, "the planted tower reads present")
+                    t |> equal(e?["vision_path"] ?? "", planted)
+                }
+            }
+            t |> success(seen, "the tower-carrying entry is in the document")
+        }
+        unsafe {
+            delete doc
+        }
+        remove(planted)
         rmdir(dir)
     }
 }

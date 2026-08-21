@@ -12,8 +12,10 @@ family-blind.
 
 **Prompt side:**
 
-1. **`think_default`** — the family's own thinking default. Qwen/GLM/gpt-oss think unless told
-   otherwise; gemma-4 E-series is instruct unless asked. `create_chat_renderer_` seeds the
+1. **`think_default`** — the family's own thinking default. Qwen/GLM/gpt-oss/gemma-4 think
+   unless told otherwise (gemma-4 is thinking-trained: the instruct prefill does not stop the
+   model from answering in thinking prose, it just strips the wrapper and burns the reply
+   budget — instruct is the opt-out). `create_chat_renderer_` seeds the
    session's `enable_thinking` from it; the server's `enable_thinking` request field (either
    spelling: top-level or `chat_template_kwargs`) is tri-state — ABSENT leaves the family
    default in force, a present bool overrides.
@@ -67,7 +69,7 @@ DeepSeek/llama.cpp framing). Tool-capable replies split reasoning FIRST, then
 | Qwen 3 / 3.5 / 3.6 (qwen3, qwen3moe, qwen35, qwen35moe, qwen3next) | on | symmetric | hermes | Qwen3-0.6B / Qwen3.5-0.8B |
 | GLM-4 MoE (glm4moe) | on | symmetric | none declared | **none local — zen2 leg pending, below** |
 | gpt-oss | on | channel_switch | harmony (developer-turn namespace, commentary-channel calls) | gpt-oss-20b (11 GB, large-tier) |
-| gemma-4 E-series | **off** (`<|think|>` gate) | asymmetric | gemma4 (declaration/call/response DSL) | gemma-4-E2B |
+| gemma-4 E-series | on (instruct = opt-out via the closed-channel prefill) | asymmetric | gemma4 (declaration/call/response DSL) | gemma-4-E2B |
 | llama-3.x (llama) | none | none | llama_json (whole-reply object, ipython results) | Llama-3.2-3B |
 | mistral v0.3 (mistral-instruct template) | none | none | mistral ([AVAILABLE_TOOLS]/[TOOL_CALLS]) | Mistral-7B-v0.3 Q4 |
 | phi3, gemma2/3, mistral3 (v7-tekken) | none | none | none declared | — |
@@ -91,7 +93,7 @@ undeclared (an honest 400) pending the zen2 leg.
   — defs/replay/result turns, displaced-results + open-turn healing (`test_chat_gemma4_tool_wire`).
 - `utils/dasllama-server/test_openai_server_think.das` — live legs, model-gated: Qwen3-0.6B
   (reasoning_content non-streaming + streaming order + tools-with-thinking compose),
-  gemma-4-E2B (off-default / thinking-ON pair + tools + the call→result→answer round-trip),
+  gemma-4-E2B (on-default / instruct-opt-out pair + tools + the call→result→answer round-trip),
   Llama-3.2-3B (llama_json), Mistral-7B-v0.3 (mistral), gpt-oss-20b (Harmony split + harmony
   tools; `DASLLAMA_PARITY_FULL=1`).
 

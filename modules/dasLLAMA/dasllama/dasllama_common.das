@@ -1052,7 +1052,7 @@ struct ChatTemplate {
     think_mode : ThinkMode = ThinkMode.none
     think_open : string = ""                  // reasoning opener as decoded in the reply (symmetric/asymmetric)
     think_close : string = ""                 // closer; channel_switch carries Harmony's markers in the mode itself
-    think_default : bool = true               // the family's thinking default (gemma-4 E-series: off)
+    think_default : bool = true               // per-family; THINKING.md's table is the roster
     think_gate : ChatTurn = ChatTurn()        // spliced before the system content when thinking is ON (gemma-4 <|think|>)
     assistant_open_think : ChatTurn = ChatTurn()   // replaces assistant_open when thinking is ON (gemma-4 bare header)
     audio_pre : ChatTurn = ChatTurn()

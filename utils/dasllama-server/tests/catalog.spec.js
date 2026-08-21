@@ -10,6 +10,9 @@ test('setup mode: badge, header, and chat gate flip; serving mode leaves them al
     await expect(page.locator('#model')).toHaveText('no model loaded');
     await expect(page.locator('#b-send')).toBeDisabled();
     await expect(page.locator('#chat-text')).toHaveAttribute('placeholder', /no model loaded/);
+    // the tower buttons only dim while SERVING; setup has nothing to attach them to
+    await expect(page.locator('#b-img')).toBeHidden();
+    await expect(page.locator('#b-mic')).toBeHidden();
 });
 
 test('the catalog renders every entry: star on the default, present chip, size and needs', async ({ page }) => {
@@ -21,7 +24,7 @@ test('the catalog renders every entry: star on the default, present chip, size a
     const present = doc.entries.filter(e => e.present);
     expect(present.length).toBeGreaterThan(0);
     await expect(page.locator('#cat-body')).toContainText(def.display + ' ★');
-    await expect(page.locator('#cat-body .chip').first()).toHaveText('downloaded');
+    await expect(page.locator('#cat-body .chip', { hasText: 'downloaded' })).toHaveCount(present.length);
     await expect(page.locator('#cat-body')).toContainText((def.bytes / 1e9).toFixed(1) + ' GB');
     // setup mode: a present entry offers the serve button; absent entries offer download
     await expect(page.locator('#cat-body button', { hasText: 'serve this model' })).toHaveCount(present.length);
