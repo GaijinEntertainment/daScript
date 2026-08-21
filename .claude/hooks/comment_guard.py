@@ -9,9 +9,11 @@ Pure python, no filesystem or config access: stdin JSON in, exit 0 (silent) or
 exit 2 with the advisory on stderr. Anything unexpected in the input = exit 0.
 
 The scanner is a char-level state machine over the finite comment/string grammar:
-strings and char literals mask comment markers, das strings and block comments
-span lines (das blocks NEST), C raw strings R"delim(...)delim" span lines, and
-`//` right after `:` is a URL, not a comment.
+strings and bounded char literals mask comment markers; das strings span lines
+and interpolate (`"{expr}"` may hold nested plain strings); das block comments
+NEST; das reader macros (`%name~ ... %%`) are opaque bodies; C raw strings
+R"delim(...)delim" and backslash-continued strings span lines; `scheme://` is a
+URL, not a comment.
 """
 
 import json
@@ -20,14 +22,23 @@ import sys
 from collections import Counter
 
 DAS_EXTS = (".das",)
-C_EXTS = (".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hxx")
+C_EXTS = (".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hxx", ".inc")
 MAX_QUOTED = 5
 
 _DAS_PREAMBLE = re.compile(r"^\s*(?:options|module|require)\b")
-_C_PREAMBLE = re.compile(r"^\s*#\s*(?:pragma|include|ifndef|define|if|endif)\b")
+_C_PREAMBLE = re.compile(r"^\s*#\s*[a-z_]+\b")
 _RAW_OPEN = re.compile(r'R"([^()\\ \t]{0,16})\(')
+_READER_OPEN = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*[~!]")
+_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.\-]+$")
+_WS = " \t\f\v\r\n"
 
-CODE, BLOCK, STR, RAW = range(4)
+CODE, BLOCK, STR, RAW, READER = range(5)
+
+
+def _lines(text):
+    """Split on real line breaks only — python's splitlines() also breaks on
+    \\f \\v \\u2028 etc., which neither lexer treats as a newline."""
+    return text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
 
 
 def _string_end(line, start):
@@ -46,6 +57,35 @@ def _string_end(line, start):
     return -1
 
 
+def _das_string_scan(line, start, depth, nested):
+    """Advance through a das interpolated string. `depth` is `{}` interpolation
+    depth, `nested` marks a plain string open inside an interpolation. Returns
+    (index past the close, depth, nested); index -1 while open at end of line."""
+    i = start
+    n = len(line)
+    while i < n:
+        c = line[i]
+        if c == "\\":
+            i += 2
+            continue
+        if nested:
+            if c == '"':
+                nested = False
+            i += 1
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            if depth > 0:
+                depth -= 1
+        elif c == '"':
+            if depth == 0:
+                return i + 1, 0, False
+            nested = True
+        i += 1
+    return -1, depth, nested
+
+
 def _char_end(line, start):
     """Index just past a closing single quote within a short span, or -1 for a
     lone apostrophe (it's, 1'000'000) — char literals are bounded, prose is not."""
@@ -62,6 +102,17 @@ def _char_end(line, start):
     return -1
 
 
+def _url_at(line, i):
+    """True when the `//` at i is the tail of `scheme://x` — an alpha-first
+    scheme of 2+ chars right before the colon, and something after the slashes."""
+    if i < 2 or line[i - 1] != ":":
+        return False
+    if i + 2 >= len(line) or line[i + 2].isspace():
+        return False
+    m = _SCHEME.search(line, 0, i - 1)
+    return m is not None
+
+
 def scan(text, is_das):
     """Return (comments, has_code): comments as (start_line, text, is_full_line)
     with multi-line blocks joined whole; has_code = the set of line numbers that
@@ -70,11 +121,13 @@ def scan(text, is_das):
     has_code = set()
     state = CODE
     depth = 0
+    str_depth = 0
+    str_nested = False
     raw_term = ""
     b_line = 0
     b_text = []
     b_full = False
-    for ln, line in enumerate(text.splitlines(), 1):
+    for ln, line in enumerate(_lines(text), 1):
         i = 0
         n = len(line)
         code_seen = False
@@ -98,12 +151,17 @@ def scan(text, is_das):
                 b_text.append(line)
                 continue
         elif state == STR:
-            j = _string_end(line, 0)
             has_code.add(ln)
-            if j < 0:
-                if not is_das and not line.endswith("\\"):
-                    state = CODE
-                continue
+            if is_das:
+                j, str_depth, str_nested = _das_string_scan(line, 0, str_depth, str_nested)
+                if j < 0:
+                    continue
+            else:
+                j = _string_end(line, 0)
+                if j < 0:
+                    if not line.endswith("\\"):
+                        state = CODE
+                    continue
             state = CODE
             i = j
             code_seen = True
@@ -115,13 +173,21 @@ def scan(text, is_das):
             state = CODE
             i = end + len(raw_term)
             code_seen = True
+        elif state == READER:
+            end = line.find("%%")
+            has_code.add(ln)
+            if end < 0:
+                continue
+            state = CODE
+            i = end + 2
+            code_seen = True
         while i < n:
             c = line[i]
             if c in " \t":
                 i += 1
                 continue
             if c == "/" and line.startswith("//", i):
-                if i > 0 and line[i - 1] == ":":
+                if _url_at(line, i):
                     i += 2
                     code_seen = True
                     continue
@@ -153,12 +219,18 @@ def scan(text, is_das):
                 b_full = full
                 break
             if c == '"':
-                j = _string_end(line, i + 1)
                 code_seen = True
-                if j < 0:
-                    if is_das or line.endswith("\\"):
+                if is_das:
+                    j, str_depth, str_nested = _das_string_scan(line, i + 1, 0, False)
+                    if j < 0:
                         state = STR
-                    break
+                        break
+                else:
+                    j = _string_end(line, i + 1)
+                    if j < 0:
+                        if line.endswith("\\"):
+                            state = STR
+                        break
                 i = j
                 continue
             if c == "'":
@@ -166,6 +238,16 @@ def scan(text, is_das):
                 code_seen = True
                 i = j if j > 0 else i + 1
                 continue
+            if c == "%" and is_das:
+                m = _READER_OPEN.match(line, i)
+                if m:
+                    code_seen = True
+                    end = line.find("%%", m.end())
+                    if end < 0:
+                        state = READER
+                        break
+                    i = end + 2
+                    continue
             if c == "R" and not is_das and line.startswith('R"', i):
                 m = _RAW_OPEN.match(line, i)
                 if m:
@@ -186,29 +268,22 @@ def scan(text, is_das):
     return comments, has_code
 
 
-def header_extent(text, is_das, has_code):
-    """Line count of the leading header region: blank lines, comment-only lines,
-    and preamble statements (das: options/module/require; C: leading preprocessor
-    lines). Any other code line — including code after a block close — ends it."""
+def first_code_line(text, is_das, has_code):
+    """First line holding real code — preamble statements (das options/module/
+    require; C preprocessor directives) don't count. Mirrors the formatter's
+    strip_comment_tokens: a comment is header while no code token was seen,
+    even when code follows it on the same line. inf when the file has none."""
     pre = _DAS_PREAMBLE if is_das else _C_PREAMBLE
-    last = 0
-    for ln, line in enumerate(text.splitlines(), 1):
-        if line.strip() == "":
-            last = ln
-            continue
-        if ln in has_code:
-            if pre.match(line):
-                last = ln
-                continue
-            break
-        last = ln
-    return last
+    for ln, line in enumerate(_lines(text), 1):
+        if ln in has_code and not pre.match(line):
+            return ln
+    return float("inf")
 
 
 def _kept_line_comment(ctext, is_das):
     if ctext.startswith("//!"):
         return True
-    rest = ctext[2:].lstrip()
+    rest = ctext[2:].lstrip(_WS)
     if is_das:
         # exact mirror of is_kept_comment in daslib/das_source_formatter.das:
         # //fmt: with no space, nolint WITH the colon, @nolint — all case-sensitive
@@ -220,7 +295,9 @@ def _kept_line_comment(ctext, is_das):
 def _kept_block_comment(ctext, is_das):
     if is_das:
         return False
-    return ctext.startswith("/*!") or (ctext.startswith("/**") and not ctext.startswith("/**/"))
+    if ctext.startswith("/*!"):
+        return True
+    return ctext.startswith("/**") and (len(ctext) == 3 or ctext[3] in _WS)
 
 
 def violations(text, is_das, whole_file):
@@ -228,10 +305,10 @@ def violations(text, is_das, whole_file):
     header block; edit fragments carry no positional context, so it stays False."""
     text = text.lstrip("\ufeff")
     comments, has_code = scan(text, is_das)
-    header_end = header_extent(text, is_das, has_code) if whole_file else 0
+    header_line = first_code_line(text, is_das, has_code) if whole_file else 0
     out = []
     for ln, ctext, full in comments:
-        if full and ln <= header_end:
+        if full and ln <= header_line:
             continue
         if ctext.startswith("//"):
             if _kept_line_comment(ctext, is_das):
@@ -242,18 +319,23 @@ def violations(text, is_das, whole_file):
     return out
 
 
+def _text_key(t):
+    return " ".join(t.split())
+
+
 def edit_violations(old, new, is_das):
     """Fires only on a NET comment increase; quotes the comments not present
-    verbatim in the replaced text. Moves, reindents, rewords, and deletions all
-    stay silent — the rule is 'no new comments', not 'no touching old ones'."""
+    (whitespace-normalized) in the replaced text. Moves, reindents, rewords,
+    and deletions all stay silent — the rule is 'no new comments', not 'no
+    touching old ones'."""
     old_list = violations(old, is_das, False)
     new_list = violations(new, is_das, False)
     if len(new_list) <= len(old_list):
         return []
-    counts = Counter(t.strip() for _, t in old_list)
+    counts = Counter(_text_key(t) for _, t in old_list)
     out = []
     for ln, t in new_list:
-        key = t.strip()
+        key = _text_key(t)
         if counts[key] > 0:
             counts[key] -= 1
             continue
@@ -264,28 +346,30 @@ def edit_violations(old, new, is_das):
 def build_message(path, viol, is_das, is_write):
     quoted = "\n".join("  L{}: {}".format(ln, t.splitlines()[0]) for ln, t in viol[:MAX_QUOTED])
     extra = "" if len(viol) <= MAX_QUOTED else "\n  ... and {} more".format(len(viol) - MAX_QUOTED)
-    rewrite_note = (
-        " A full-file Write also lists the file's PRE-EXISTING comments — ignore those."
-        if is_write else ""
-    )
+    if is_write:
+        what = "comment(s) in"
+        where_note = " A full-file Write also lists the file's PRE-EXISTING comments — ignore those."
+    else:
+        what = "new comment(s) in"
+        where_note = " Line numbers refer to the replacement text, not the file."
     if is_das:
         return (
-            "comment guard: {} comment(s) in {} will NOT survive the formatter:\n"
+            "comment guard: {} {} {} will NOT survive the formatter:\n"
             "{}{}\n"
             ".das keeps only `//!` public-API docs, `// nolint:CODE` / `// @nolint` suppressions, "
             "`//fmt:` directives, and the file's leading header block. Say it in the code (a name, "
             "a shape), pin it with a test, or move real documentation to the module's REVIEW.md / "
             "ARCHITECTURE.md. Teaching code (tutorials/examples) keeps its prose — ignore this "
             "warning there.{}"
-        ).format(len(viol), path, quoted, extra, rewrite_note)
+        ).format(len(viol), what, path, quoted, extra, where_note)
     return (
-        "comment guard: {} new comment(s) in {} — house rule: no new C/C++ comments.\n"
+        "comment guard: {} {} {} — house rule: no new C/C++ comments.\n"
         "{}{}\n"
         "Comments go stale, code does not. Prefer a clearer name, a shape, or a test; real "
         "documentation goes in the module's REVIEW.md / ARCHITECTURE.md. Kept: `//!` and "
         "`/** */` API docs, NOLINT suppressions, `// clang-format` directives, and the file's "
         "leading header block.{}"
-    ).format(len(viol), path, quoted, extra, rewrite_note)
+    ).format(len(viol), what, path, quoted, extra, where_note)
 
 
 def main():
@@ -294,6 +378,8 @@ def main():
     except Exception:
         return 0
     if not isinstance(data, dict):
+        return 0
+    if data.get("hook_event_name") not in (None, "PostToolUse"):
         return 0
     if data.get("tool_name") not in ("Edit", "Write"):
         return 0
