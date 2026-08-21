@@ -31,30 +31,40 @@ an existing lint, the lint compels — an unnoted rule is the reviewer's.
 ## Comments
 
 **.das outside teaching code: ABSOLUTELY NO comments that are not documentation or lint
-suppression.** The kept
-set is exactly: `//!` docs on public API (never on private symbols), `// nolint:CODE` /
-`@nolint` suppressions carrying their one-line why, `//fmt:` formatter directives, and the
-file's leading header block (which may sit below the `options` / `module` / `require`
-preamble). Everything else — narration, banners, section dividers, commented-out code —
-does not exist. The MCP `format_file` tool applies this file-wide by default, fail-closed
-(a strip must compile or the file is restored). A `//` comment outside the kept set is
-therefore EPHEMERAL: anything worth preserving becomes code (a name, a `//!` doc, an
-assert) or lands in an `.md` beside the code. In tutorials and examples the prose IS the
-deliverable — format those with `keep_comments='true'`; comments that add nothing to their
-line still go.
+suppression.** The kept set is exactly: `//!` docs on public API (never on private
+symbols), `// nolint:CODE` / `@nolint` suppressions carrying their one-line why, `//fmt:`
+formatter directives, and the file's leading header block (which may sit below the
+`options` / `module` / `require` preamble). Everything else — narration, banners, section
+dividers, commented-out code — does not exist. The MCP `format_file` tool applies this
+file-wide by default, fail-closed (a strip must compile or the file is restored). A `//`
+comment outside the kept set is therefore EPHEMERAL: anything worth preserving becomes
+code (a name, a `//!` doc, an assert) or lands in an `.md` beside the code. In tutorials
+and examples the prose IS the deliverable — format those with `keep_comments='true'`;
+comments that add nothing to their line still go.
 
-**Other languages:** the test for every comment is deletion — remove it and re-read; if the
+**C and C++: no NEW comments.** Comments go stale, code does not — new C-family code says
+it in a name, a shape, or a test, or documents itself in the module's `.md`. Kept when one
+is earned: `//!` and `/** */` docs on public API, `NOLINT` / `clang-format` suppressions,
+the leading header block. Existing comments answer to the deletion test below.
+
+**Other languages: the test for every comment is deletion** — remove it and re-read; if the
 WHY goes dark, it was load-bearing, restore it, otherwise it was noise. 1–2 lines is the
 default, not a limit — a longer comment may be earned when the WHY is genuinely load-bearing
-and has no better home; if a reader would ask "why is this long?", that is the finding. A
-file's leading header block (license, provenance) is kept in every language; below it, no
-decorated banner blocks (rules of dashes or asterisks, boxed headers) and no up-front
-preamble essays. No ceremonial doc templates (`@param`/`@return` boilerplate restating a
-signature) on non-public symbols — where docstrings are the idiom (Python), a private
-helper's docstring is judged by the same information test as any other comment. No incident
-citations (PR numbers, dates, "used to crash" — name the failure mode in present tense at
-the code that guards it). The message is the comment: a site with a good error string needs
-no comment restating it.
+and has no better home; if a reader would ask "why is this long?", that is the finding.
+
+**Outside `.das`, a file's leading header block (license, provenance) is kept; below it,
+nothing decorates** — no banner blocks (rules of dashes or asterisks, boxed headers), no
+up-front preamble essays. (For `.das` the kept set above governs.)
+
+**No ceremonial doc templates on non-public symbols** — `@param`/`@return` boilerplate
+restating a signature. Where docstrings are the idiom (Python), a private helper's
+docstring is judged by the same deletion test as any other comment.
+
+**No incident citations** — no PR numbers, no dates, no "used to crash"; name the failure
+mode in present tense at the code that guards it.
+
+**The message is the comment:** a site with a good error string needs no comment restating
+it.
 
 ## Names
 
@@ -91,13 +101,12 @@ the implementation.
 ## Shape
 
 **A flag set-then-returned is a return in disguise** *(partly lintable — STYLE041; a set
-that keeps looping and the walk-abort-in-callback form stay the reviewer's)*.
-A bool initialized false, set on failure paths, then immediately
-consumed by a single `if (flag) return/error` — collapse to a direct return at each
-set site. The flag form often keeps looping after the answer is known and reports
-repeatedly. When the set site is inside a callback or visitor that cannot return
-through its caller, the collapse is a walk-abort instead: guard the callback's first
-line on the flag.
+that keeps looping and the walk-abort-in-callback form stay the reviewer's)*. A bool
+initialized false, set on failure paths, then immediately consumed by a single
+`if (flag) return/error` — collapse to a direct return at each set site. The flag form
+often keeps looping after the answer is known and reports repeatedly. When the set site is
+inside a callback or visitor that cannot return through its caller, the collapse is a
+walk-abort instead: guard the callback's first line on the flag.
 
 **One guard style per function.** Message-setting early-outs are one-liners:
 `if (cond) { why = "..."; return false; }` — never a *gratuitous* mix of one-liners
