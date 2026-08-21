@@ -15,6 +15,10 @@ check to the sink line is a defect.
 change, never cleanup.** The guard's position encodes which rules are meaningful inside a
 lambda; the per-rule policy is in `daslib/ARCHITECTURE.md`.
 
+**A lint warning anchors at the code its fix rewrites.** A remedy that deletes a statement
+reports the statement; a remedy that edits one variable's initializer reports the variable —
+an anchor chosen for implementation convenience instead is a defect.
+
 **Per-loop visitor state is saved and restored per loop — a stack, never a bare scalar.**
 A scalar survives into the sibling loop's exit path and unbalances its counter for the rest
 of the walk.

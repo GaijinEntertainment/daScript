@@ -189,7 +189,7 @@ def private is_alloc_builtin(n : string) : bool {
                  || n == "__builtin_table_get_key" || n == "__builtin_table_keys"
                  || n == "__builtin_table_values")
     }
-    return n == "clone_string"
+    return false
 }
 
 def private is_container_sizing(n : string) : bool {
@@ -634,7 +634,7 @@ class PerfLintVisitor : AstVisitor {
         return describe(a) == describe(b)
     }
 
-    def is_workhorse_numeric(t : TypeDecl?) : bool {
+    def is_char_comparable_scalar(t : TypeDecl?) : bool {
         //! True if the type is one of the six numeric workhorse scalars (int, uint, int64, uint64, float, double). Vectors/bitfields/enums do NOT qualify.
         if (t == null) return false
         let bt = t.baseType
@@ -702,7 +702,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf020_target_basetype(fname : string) : Type {
-        //! Map a workhorse cast-function name to the Type it produces.
+        //! Map a cast-function name to the Type it produces.
         if (fname == "int") return Type.tInt
         if (fname == "int8") return Type.tInt8
         if (fname == "int16") return Type.tInt16
@@ -1476,7 +1476,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def check_perf013_incdec(expr : ExprOp2?) : void {
-        if (expr.left == null || !is_workhorse_numeric(expr.left._type)) return
+        if (expr.left == null || !is_char_comparable_scalar(expr.left._type)) return
         let rhs_one = is_const_one(expr.right)
         let rhs_neg = is_const_neg_one(expr.right)
         var delta = 0

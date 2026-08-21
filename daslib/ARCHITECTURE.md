@@ -39,7 +39,10 @@ an entry lands here only when no name, shape, or test can carry it.
   call sites must report twice, so a function is re-walked once per distinct anchor —
   a cost taken for per-call-site diagnostics. Generated/generic frames re-anchor to the
   caller side because their own `at` points into the template. A call to any function
-  with a `@scratch` parameter prunes that callee's whole subtree from the walk.
+  with a `@scratch` parameter prunes that callee's whole subtree from the walk — the
+  blessing is deliberately TRANSITIVE: a scratch-taking helper is trusted wholesale
+  (narrowing it to the sink floods real scratch-heavy code — dasLLAMA — with hundreds
+  of deep-resize findings on buffers the helper family sizes correctly).
 - **PERF030 release credits are consume-once**: a `delete x` licenses exactly one
   subsequent `x <- ...`, then the warning re-arms; the lowered delete family is matched
   by name in its four spellings (`_::finalize`, `finalize`, ``builtin`finalize``,
@@ -47,3 +50,18 @@ an entry lands here only when no name, shape, or test can carry it.
 - **`"$"` in module allowlists is the builtin module's name** — `Module_BuiltIn` registers
   as `Module("$")` (`src/builtin/module_builtin.cpp`), so macro-time reflection reports
   core builtins under `"$"` beside `"builtin"` and `"strings"`.
+- **`Function.tempStringResult` marks a FRESH per-call string allocation** — never a view
+  or a passthrough (`include/daScript/ast/ast.h`). A temp-string builtin (`to_char`,
+  `repeat`) on a hot path IS heap traffic; the PERF026 string-returning catch-all
+  deliberately has no temporary exemption. PERF020's `_type.flags.temporary` check is a
+  different axis: a `#`-typed VALUE being cast, where `string(x#)` is a load-bearing
+  temporary-to-permanent clone.
+- **PERF021's tail-argument comparison passes `require_pure = false`** — workhorse-cast
+  tails are flags and literals after the injected Fake* skips, so purity has nothing to
+  protect there; the default protects rules that collapse duplicated subexpressions from
+  changing evaluation counts.
+- **A generic-body exemption exists exactly where the remedy is not instantiation-safe.**
+  PERF020's fix (delete the cast) is wrong for the sibling instantiations of the same
+  source line, so it bails on `fromGeneric`; PERF019/PERF021 rewrites (fuse under one
+  cast, hoist over the ternary) stay valid for every instantiation, so they fire
+  everywhere.
