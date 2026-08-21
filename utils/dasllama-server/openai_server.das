@@ -1774,7 +1774,7 @@ def private handle_embeddings(var req : HttpRequest?; var resp : HttpResponse?) 
 // and move the GPU tier to it NOW instead of waiting for the owner to drain. 409 while any
 // work is live: the switch drops the owner's whole VRAM state.
 def private streams_busy() : bool {
-    return total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || !empty(g_media_wires)
+    return total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || g_media_pending > 0
 }
 
 // Free the tier for a runtime load and recreate the boot precondition (nothing installed, the
@@ -1997,10 +1997,10 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
         park_installed_marks()   // the engine must not keep a dying slot's marks installed
     }
     let had_towers = g_slots[mi].vision.kind != VisionKind.none || g_slots[mi].audio_armed
+    let dead_name = g_slots[mi].name
     delete g_slots[mi]
     g_slots |> erase(mi)
-    // every slot index above mi shifted down one; the wires are empty (gate above), the media
-    // worker's index-keyed snapshot goes stale — bounce it
+    // every slot index above mi shifted down one (the worker is immune: its tables key on names)
     if (g_default_slot > mi) {
         g_default_slot--
     }
@@ -2012,9 +2012,10 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
     if (g_marks_slot > mi) {
         g_marks_slot--
     }
-    if (had_towers || g_media_armed) {
-        stop_media_worker()
-        start_media_worker()
+    if (had_towers && g_media_armed) {
+        var drop = MediaJob(drop_name = dead_name)   // async: the worker frees the encoders, no bounce
+        g_media_jobs |> push_clone(drop)
+        delete drop
     }
     to_log(LOG_INFO, "dasllama-server: runtime unload: {want}\n")
     return resp |> JSON("\{\"ok\":true,\"unloaded\":{json_str(want)}}", http_status.OK)
@@ -2383,7 +2384,7 @@ def private park_media_request(srv : WebSocketServer; var writer : HttpResponseW
         service_unavailable(srv, writer, "the media worker is not ready")
         return MediaPark.answered
     }
-    if (length(g_media_wires) >= MEDIA_QUEUE_LIMIT) {
+    if (g_media_pending >= MEDIA_QUEUE_LIMIT) {
         service_unavailable(srv, writer, "the media queue is at capacity ({MEDIA_QUEUE_LIMIT}) — retry shortly")
         return MediaPark.answered
     }
@@ -2402,11 +2403,12 @@ def private park_media_request(srv : WebSocketServer; var writer : HttpResponseW
     set_writer_keepalive_timeout(srv, writer, LLM_WRITER_KEEPALIVE_MS)
     g_media_wires[rid] <- MediaWire(writer = writer, js = js, slot = g_cur, is_audio = is_audio)
     let max_audio_frames = is_audio ? audio_decode_frame_cap(g_slots[g_cur].model.config.seq_len) : 0
-    var vjob = MediaJob(id = rid, slot = g_cur, file_bytes <- file_bytes, tag = "req{rid}", is_audio = is_audio,
-                        max_audio_frames = max_audio_frames)
+    var vjob = MediaJob(id = rid, name = g_slots[g_cur].name, file_bytes <- file_bytes, tag = "req{rid}",
+                        is_audio = is_audio, max_audio_frames = max_audio_frames)
     g_media_jobs |> push_clone(vjob)
     delete vjob
-    to_log(LOG_INFO, "[req {rid}] {is_audio ? "audio" : "image"} parked for the media worker ({length(g_media_wires)} in flight)\n")
+    g_media_pending++
+    to_log(LOG_INFO, "[req {rid}] {is_audio ? "audio" : "image"} parked for the media worker ({g_media_pending} in flight)\n")
     return MediaPark.parked
 }
 
@@ -2926,7 +2928,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         vision = g_slots[g_default_slot].vision.kind != VisionKind.none,
         audio = g_slots[g_default_slot].audio_armed,
         thinking_default = g_slots[g_default_slot].think_default,
-        vision_pending = length(g_media_wires), media_rows = g_media_rows)
+        vision_pending = g_media_pending, media_rows = g_media_rows)
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
@@ -3765,12 +3767,14 @@ def private stop_asr_worker_threads() {
 
 struct private MediaJob {
     id : int64
-    slot : int
+    name : string               // the serving slot's NAME — the worker's encoder tables key on it
+                                // (an index would go stale the moment an unload shifts the array)
     file_bytes : array<uint8>   // the base64-decoded media FILE (image or audio); the worker decodes + encodes
     tag : string                // DASLLAMA_VISION_DUMP artifact name (image jobs)
     is_audio : bool             // audio job: decode to 16 kHz PCM, encode via the slot's gemma4a encoder
     max_audio_frames : int
     stop : bool
+    drop_name : string          // non-empty: control job — free this slot's encoders (unload, no bounce)
 }
 
 enum private MediaEventKind {
@@ -3818,21 +3822,23 @@ var private g_media_wires : table<int64; MediaWire>
 var private g_media_rows = 0l   // media (image span) rows admitted to prefill since boot
 var private g_media_ready = 0
 var private g_media_armed = false
+var private g_media_pending = 0   // encode jobs queued or in flight; the wire table undercounts
+                                  // (reap frees a dead client's wire while its job runs on)
 
 // One media job on the worker thread: decode the file bytes (image OR audio), run the slot's
 // encoder, and return the completed event — ok + rows, or why. The one rail that chews untrusted
 // bytes: an escaping panic in a new_thread worker is a PROCESS abort, so the decode+encode runs
 // under the catch (the ASR shape).
-def private media_encode_one(job : MediaJob; var embs : table<int; VisionEmbedder>;
-                             var states : table<int; VisionState>;
-                             var auds : table<int; Gemma4aEncoder>;
-                             var astates : table<int; Gemma4aState>) : MediaEvent {
+def private media_encode_one(job : MediaJob; var embs : table<string; VisionEmbedder>;
+                             var states : table<string; VisionState>;
+                             var auds : table<string; Gemma4aEncoder>;
+                             var astates : table<string; Gemma4aState>) : MediaEvent {
     var out = MediaEvent(id = job.id, is_audio = job.is_audio)
-    if (job.is_audio && !key_exists(auds, job.slot)) {
+    if (job.is_audio && !key_exists(auds, job.name)) {
         out.why = "this slot has no audio encoder in the worker (armed after init_server, or its load failed at boot)"
         return <- out
     }
-    if (!job.is_audio && !key_exists(embs, job.slot)) {
+    if (!job.is_audio && !key_exists(embs, job.name)) {
         out.why = "this slot has no vision embedder in the worker (armed after init_server, or its load failed at boot)"
         return <- out
     }
@@ -3844,7 +3850,7 @@ def private media_encode_one(job : MediaJob; var embs : table<int; VisionEmbedde
                 out.why = "the audio did not decode, or it is longer than this model's context can hold (wav/mp3/flac/ogg, up to ~{job.max_audio_frames / int(AUDIO_DECODE_SAMPLE_RATE)}s)"
             } else {
                 let t0 = ref_time_ticks()
-                out.n_media = gemma4a_encode_all(auds[job.slot], astates[job.slot], samples, out.rows)
+                out.n_media = gemma4a_encode_all(auds[job.name], astates[job.name], samples, out.rows)
                 out.ok = true
                 out.audio_cs = int(long_length(samples) * 100l / 16000l)
                 out.enc_ms = int64(get_time_usec(t0)) / 1000l
@@ -3853,7 +3859,7 @@ def private media_encode_one(job : MediaJob; var embs : table<int; VisionEmbedde
             var inscope img <- decode_image_bytes(job.file_bytes, out.why)
             if (img.width != 0) {
                 let t0 = ref_time_ticks()
-                out.n_media = encode_image(embs[job.slot], states[job.slot], img, job.tag, out.rows)
+                out.n_media = encode_image(embs[job.name], states[job.name], img, job.tag, out.rows)
                 out.ok = true
                 out.width = img.width
                 out.height = img.height
@@ -3872,34 +3878,34 @@ def private media_encode_one(job : MediaJob; var embs : table<int; VisionEmbedde
 def private media_worker_main(slot_path_lines : string; var jobs : Channel?&; var events : Channel?&) {
     this_context().name := "dasllama_media"
     set_jobque_thread_team_mode(false)
-    var embs : table<int; VisionEmbedder>
-    var states : table<int; VisionState>
-    var auds : table<int; Gemma4aEncoder>
-    var astates : table<int; Gemma4aState>
-    for (line in split(slot_path_lines, "\n")) {   // "<slot>\t<V|A>\t<path>" per line
+    var embs : table<string; VisionEmbedder>
+    var states : table<string; VisionState>
+    var auds : table<string; Gemma4aEncoder>
+    var astates : table<string; Gemma4aState>
+    for (line in split(slot_path_lines, "\n")) {   // "<slot name>\t<V|A>\t<path>" per line
         continue if (empty(line))
         let sep = find(line, "\t")
-        let slot = to_int(slice(line, 0, sep))
+        let name = slice(line, 0, sep)
         let kind = slice(line, sep + 1, sep + 2)
         let path = slice(line, sep + 3)
         var load_failure = ""
         let load_failed = catch_worker_panic(load_failure) {
             if (kind == "A") {
-                auds[slot] <- load_gemma4a_encoder(path)   // own mapping; pages shared with a vision arm on the same file
-                astates[slot] <- Gemma4aState()
+                auds[name] <- load_gemma4a_encoder(path)   // own mapping; pages shared with a vision arm on the same file
+                astates[name] <- Gemma4aState()
             } else {
-                embs[slot] <- load_vision_embedder(path)   // own mapping; pages shared with the slot's
-                states[slot] <- VisionState()
+                embs[name] <- load_vision_embedder(path)   // own mapping; pages shared with the slot's
+                states[name] <- VisionState()
             }
         }
         if (load_failed) {   // the slot's requests take the no-encoder 400; the boot must not hang on this thread
-            to_log(LOG_ERROR, "dasllama-server: media worker could not load slot {slot}'s {kind == "A" ? "audio encoder" : "vision embedder"}: {load_failure}\n")
+            to_log(LOG_ERROR, "dasllama-server: media worker could not load slot {name}'s {kind == "A" ? "audio encoder" : "vision embedder"}: {load_failure}\n")
             if (kind == "A") {
-                auds |> erase(slot)
-                astates |> erase(slot)
+                auds |> erase(name)
+                astates |> erase(name)
             } else {
-                embs |> erase(slot)
-                states |> erase(slot)
+                embs |> erase(name)
+                states |> erase(name)
             }
         }
     }
@@ -3911,6 +3917,13 @@ def private media_worker_main(slot_path_lines : string; var jobs : Channel?&; va
         jobs |> pop_with_timeout_clone(250) $(job : MediaJob#) {
             if (job.stop) {
                 stopping = true
+                return
+            }
+            if (!empty(job.drop_name)) {   // an unloaded slot's encoders free here, no worker bounce
+                embs |> erase(job.drop_name)
+                states |> erase(job.drop_name)
+                auds |> erase(job.drop_name)
+                astates |> erase(job.drop_name)
                 return
             }
             var job_copy : MediaJob
@@ -3939,19 +3952,19 @@ def private start_media_worker() {
     g_media_armed = false
     var arms : array<string>
     defer() { delete arms }
-    for (i in range(length(g_slots))) {
-        if (g_slots[i].vision.kind != VisionKind.none) {
-            arms |> push("{i}\tV\t{g_slots[i].vision_path}")
+    for (s in g_slots) {
+        if (s.vision.kind != VisionKind.none) {
+            arms |> push("{s.name}\tV\t{s.vision_path}")
         }
-        if (g_slots[i].audio_armed) {
-            arms |> push("{i}\tA\t{g_slots[i].audio_path}")
+        if (s.audio_armed) {
+            arms |> push("{s.name}\tA\t{s.audio_path}")
         }
     }
     if (empty(arms)) {
         return
     }
     g_media_armed = true
-    let arms_spec = join(arms, "\n")   // "<slot index>\t<V|A>\t<mmproj path>" per line
+    let arms_spec = join(arms, "\n")   // "<slot name>\t<V|A>\t<mmproj path>" per line
     var jobs_capture = g_media_jobs
     var events_capture = g_media_events
     to_log(LOG_INFO, "dasllama-server: starting the asynchronous media encode worker\n")
@@ -3981,6 +3994,7 @@ def private stop_media_worker() {
             if (event.kind == MediaEventKind.stopped) {
                 stopped = true
             } elif (event.kind == MediaEventKind.completed) {
+                g_media_pending = max(g_media_pending - 1, 0)
                 to_log(LOG_WARNING, "[req {event.id}] media result discarded during teardown\n")
             }
         }
@@ -3994,6 +4008,7 @@ def private drain_media_events(srv : WebSocketServer) {
     while (draining) {
         draining = g_media_events |> try_pop_clone() $(event : MediaEvent#) {
             return if (event.kind != MediaEventKind.completed)
+            g_media_pending = max(g_media_pending - 1, 0)   // even when the reap already freed the wire
             var ev : MediaEvent
             ev := event
             defer() { delete ev }
@@ -4132,7 +4147,7 @@ class OpenAiServer : HvWebServer {
             if (!g_shutdown_requested) {
                 to_log(
                     LOG_INFO,
-                    "dasllama-server: restart requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, vision_parked={length(g_media_wires)}\n")
+                    "dasllama-server: restart requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, media_pending={g_media_pending}\n")
             }
             g_shutdown_requested = true
             g_restart_requested = true
@@ -4143,7 +4158,7 @@ class OpenAiServer : HvWebServer {
             if (!g_shutdown_requested) {
                 to_log(
                     LOG_INFO,
-                    "dasllama-server: graceful shutdown requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, vision_parked={length(g_media_wires)}\n")
+                    "dasllama-server: graceful shutdown requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, media_pending={g_media_pending}\n")
             }
             g_shutdown_requested = true
             return resp |> JSON("\{\"ok\":true,\"draining\":true}", http_status.OK)
@@ -4413,7 +4428,7 @@ def update_server() : bool {
         prof_window_report()
     }
     if (g_shutdown_requested && total_active() == 0l && total_queued() == 0l &&
-        g_asr_pending == 0 && empty(g_media_wires)) {
+        g_asr_pending == 0 && g_media_pending == 0) {
         to_log(LOG_INFO, "dasllama-server: graceful shutdown drain complete\n")
         return false
     }
@@ -4524,6 +4539,7 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     g_asr_ready = 0
     g_asr_active = 0
     g_asr_pending = 0
+    g_media_pending = 0
     if (g_jobque_owned) {
         destroy_job_que()
         g_jobque_owned = false
