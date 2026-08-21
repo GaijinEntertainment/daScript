@@ -291,6 +291,8 @@ def _kept_line_comment(ctext, is_das):
 
 
 def _kept_block_comment(ctext, is_das):
+    if "copyright" in ctext.lower() or "SPDX-License-Identifier" in ctext:
+        return True
     if is_das:
         return False
     if ctext.startswith("/*!"):
@@ -312,11 +314,20 @@ def violations(text, *, is_das, whole_file):
         return []
     first_code = first_code_line(text, is_das, code_lines) if whole_file else 0
     out = []
+    # mirrors the formatter's continuation chain: a full-line `//` comment on the
+    # line right after a kept full-line comment is kept with it (`//fmt:` chains
+    # neither in nor out)
+    chain_line = -2
     for ln, ctext, full in comments:
         if full and ln <= first_code:
             continue
         if ctext.startswith("//"):
             if _kept_line_comment(ctext, is_das):
+                if is_das and full and not ctext.startswith("//fmt:"):
+                    chain_line = ln
+                continue
+            if is_das and full and ln == chain_line + 1:
+                chain_line = ln
                 continue
         elif _kept_block_comment(ctext, is_das):
             continue

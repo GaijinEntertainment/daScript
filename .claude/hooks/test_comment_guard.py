@@ -350,6 +350,27 @@ class TestKept(unittest.TestCase):
         self.assertEqual(cg.violations(src, is_das=True, whole_file=True), [])
         self.assertEqual(cg.violations(src, is_das=False, whole_file=True), [])
 
+    def test_license_notice_case_insensitive(self):
+        src = "def f() {}\n// COPYRIGHT 2026 SHOUTING\n"
+        self.assertEqual(cg.violations(src, is_das=True, whole_file=True), [])
+
+    def test_license_block_comment_kept(self):
+        src = "def f() {}\n/* Copyright (c) 2008 Some One */\n/* SPDX-License-Identifier: MIT */\n"
+        self.assertEqual(cg.violations(src, is_das=True, whole_file=True), [])
+        self.assertEqual(cg.violations(src, is_das=False, whole_file=True), [])
+
+    def test_das_kept_continuation_chain(self):
+        src = "def f() {}\n//! contract line one\n// continuation stays with its doc\ndef g() {}\n"
+        self.assertEqual(cg.violations(src, is_das=True, whole_file=True), [])
+
+    def test_das_continuation_needs_adjacency(self):
+        src = "def f() {}\n//! contract\n\n// detached narration\n"
+        self.assertEqual(len(cg.violations(src, is_das=True, whole_file=True)), 1)
+
+    def test_das_fmt_directive_opens_no_chain(self):
+        src = "def f() {}\n//fmt:keep-blank-lines\n// narration after a directive\n"
+        self.assertEqual(len(cg.violations(src, is_das=True, whole_file=True)), 1)
+
     def test_das_clang_format_flagged(self):
         self.assertEqual(len(cg.violations("// clang-format off\n", is_das=True, whole_file=False)), 1)
 
