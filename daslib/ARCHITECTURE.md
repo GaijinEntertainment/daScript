@@ -459,12 +459,12 @@ an entry lands here only when no name, shape, or test can carry it.
   clobbers the live one.** `process_join_call` copies the live projection into
   `joinProjRecordNames` + the `joinSelectCol*` arrays, which survive
   `analyze_grouped_projection`'s clear-and-repopulate. Post-join `_.<alias>` resolves
-  through that snapshot in five hooks — `pred_to_sql`'s column-ref arm,
+  through that snapshot in every post-join consumer — `pred_to_sql`'s column-ref arm,
   `collect_one_order_key`, `push_group_key`, `try_translate_group_aggregate`,
   `try_translate_global_aggregate` — all through `find_projection_alias` +
-  `render_projection_alias_sql`; a new post-join alias consumer goes through that pair too. A registry miss is rejected loudly everywhere alike: falling
-  back to base-table resolution would leak the unqualified base-table namespace into
-  post-join predicates.
+  `render_projection_alias_sql`; a new post-join alias consumer goes through that pair too.
+  A registry miss is rejected loudly everywhere alike: falling back to base-table resolution
+  would leak the unqualified base-table namespace into post-join predicates.
 - **`normalize_single_source_arg_names` exists for the linq_das front end.** `_sql`
   resolves a single source against the placeholder `_`, but LINQ-syntax lowering splices
   the user's range variable verbatim (`$(c) => c.field`), so a single-parameter chain-op

@@ -48,8 +48,8 @@ stays — comments that add nothing to their line still go.
 **The header block — the comments above the first declaration — describes the FILE.** A
 comment there that describes the next declaration moves onto that declaration: as a `//!`
 doc when it states a contract a caller must know, otherwise it goes, like any other
-narration. The formatter keeps everything above the first declaration and cannot tell the
-two apart, so this boundary is the reviewer's to hold.
+narration. The formatter keeps every full-line comment above the first declaration and
+cannot tell the two apart, so this boundary is the reviewer's to hold.
 
 **C and C++: no NEW comments.** Comments go stale, code does not — new C-family code says
 it in a name, a shape, or a test, or documents itself in the module's `.md`. Kept when one

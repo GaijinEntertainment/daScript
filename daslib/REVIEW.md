@@ -346,11 +346,11 @@ this stage's terminal lookup.
 `g._0`.** Every other `g.<member>` is left verbatim, so raw tuple access keeps working and a
 bad member errors as itself. Widening the rewrite turns `g._0` into `g._1._0`.
 
-**Every `FromInMacro` reject is `macro_error` + `return null`, never `return call`.**
-Returning the call reports ast-changed on every pass and churns to the infer-pass cap
-(30507); null lets infer stabilize so the error sticks. The not-yet-inferred-source arm is the DEFER
-by the same mechanism — errors clear per pass, so the error survives only when the source
-never infers.
+**Every `FromInMacro` reject — including the not-yet-inferred-source arm — is
+`macro_error` + `return null`, never `return call`.** Returning the call reports
+ast-changed on every pass and churns to the infer-pass cap (30507); null lets infer
+stabilize, and because errors clear per pass, the not-yet-inferred arm's error survives
+only when the source never infers, which is what makes that arm a deferral.
 
 **decs range slots are accepted in canonical chain order: skip → skip_while → take_while →
 take, all after any `where_`.**
@@ -384,4 +384,3 @@ those chains; the caller proves the type non-null before using it.
 **`emit_loop_or_count_lane_decs` declines `to_table` before the implicit-to_array arm.**
 decs has no to_table lane, and reaching the implicit arm emits an array for a table-typed
 expression.
-
