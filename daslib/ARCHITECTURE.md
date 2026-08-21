@@ -295,9 +295,10 @@ an entry lands here only when no name, shape, or test can carry it.
 - **toml**: the writer is hand-rolled because the builtins do not round-trip (`\v`,
   raw 0x7f, float exponent thresholds); a value scan that runs into a bare-key char
   rewinds and re-lexes as a key — a new numeric form needs the same rewind.
-- **shader_block_layout**: two rails, deliberately separate — the 32-bit-only std140
-  LAYOUT rail and the wider ARITHMETIC rail; 64-bit INT fails closed as a block member
-  before any opcode; `cpu_only_lattice_width` keys both emitters' fail-closed diagnostic.
+- **shader_block_layout**: two rails, deliberately separate — the LAYOUT rail admits
+  int64/uint64 as block members (`compute_block_layout` special-cases them) while the
+  ARITHMETIC rail rejects 64-bit INT (`arith_width_ok` allows width 64 only for floats);
+  `cpu_only_lattice_width` keys both emitters' fail-closed diagnostic.
 - **shader_lingua_franca**: every symbol is either an exact CPU mirror of its GPU
   semantics or a `[sideeffects]` dummy every rail lowers by name — the dummies return
   zero on the host, so a CPU replay is an oracle only for the real-bodied set. Unsigned
@@ -305,7 +306,7 @@ an entry lands here only when no name, shape, or test can carry it.
 - **templates_boost**: `stamp_missing_at` fills only MISSING locations (unlike the
   force-at of `$e()`); `carry_tag_safe_flags` copies the parser's unsafe-wrap flags
   across `$c` substitution or the safety is lost where the result lands.
-- **archive**: `ArchiveSerializer.write` grows capacity eagerly because under a
+- **archive**: `MemSerializer.write` grows capacity eagerly because under a
   very_safe_context each doubling generation is abandoned, not reused; no alias into
   `data` survives a write.
 - **json**: `is_json_white_space` is deliberately not the shared `is_white_space` —
