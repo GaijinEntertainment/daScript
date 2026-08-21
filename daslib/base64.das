@@ -41,7 +41,9 @@ let base64de <- fixed_array<int>(
 
 def public BASE64_DECODE_OUT_SIZE(s : int) {
     //! Returns the maximum decoded output size for a Base64 string of length `s`.
-    return s / 4 * 3
+    //! The length is rounded up to a whole quantum first, so unpadded input
+    //! (base64url, JWT segments) is sized as if its `=` padding were present.
+    return (s + 3) / 4 * 3
 }
 
 def public BASE64_ENCODE_OUT_SIZE(s : int) {
@@ -79,9 +81,15 @@ def public base64_decode(inp : array<uint8> | #; var out : array<uint8>) : int {
         let s = i % 4
         let ii = int(inp[i])
         if (ii == BASE64_PAD) break
-        if (ii < BASE64DE_FIRST || ii > BASE64DE_LAST) return -1
+        if (ii < BASE64DE_FIRST || ii > BASE64DE_LAST) {
+            j = -1
+            break
+        }
         c = base64de[ii - BASE64DE_FIRST]
-        if (c == -1) return -1
+        if (c == -1) {
+            j = -1
+            break
+        }
         if (s == 0) {
             out[j] = uint8((uint(c) << 2u) & 0xFF)
             continue
@@ -103,6 +111,8 @@ def public base64_decode(inp : array<uint8> | #; var out : array<uint8>) : int {
     }
     if (j != -1) {
         out |> resize(j)
+    } else {
+        out |> clear()
     }
     return j
 }
