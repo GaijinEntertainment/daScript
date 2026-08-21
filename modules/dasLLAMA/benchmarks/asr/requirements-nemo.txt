@@ -34,7 +34,7 @@ httpcore==1.0.9
 httpx==0.28.1
 huggingface_hub==1.22.0
 humanize==4.16.0
-hydra-core==1.3.2
+hydra-core==1.3.4
 idna==3.18
 indic_numtowords==1.1.0
 intervaltree==3.2.1
