@@ -320,19 +320,23 @@ an entry lands here only when no name, shape, or test can carry it.
   leak 0, so nothing shows up in a heap count. Both `apply_qmacro_template_*` appliers are
   inscope-only; the three plain-local `apply_template` overloads pair the declaration with
   the delete. Pick one form per local and read the declaration before adding a delete.
-- **`apply_template` returns a possibly-NEW root.** Its `expr` parameter is by value while
-  `visit_expression` reassigns its own reference, so a substitution that replaces the ROOT
-  node — an identity key body, `_order_by(_)` — is visible only through the return value;
-  non-root replacements leave the pointer unchanged. Always reassign, or the identity case
-  silently keeps the unsubstituted node.
+- **`apply_template` returns a possibly-NEW root.** `apply_template(rules, at, expr,
+  forceAt)` takes `expr` by value, and the block-form overloads take `Expression?&` only to
+  forward it — none writes the new root back. A substitution that replaces the ROOT node —
+  an identity key body, `_order_by(_)` — is visible only through the return value; non-root
+  replacements leave the pointer unchanged. Always reassign from the return value, or the
+  identity case silently keeps the unsubstituted node.
 
-## linq / linq_boost
+## linq
 
 - **`top_n_by_with_cmp` exists for the fold splice and has no daslib call site.** When an
   order-by key body is pure and inlineable, `linq_fold_common` emits it with that body
   spliced into BOTH sides of the comparator — killing the per-comparison comparator dispatch
   and the per-side `key(v)` dispatch the key-lambda overloads pay. It is not a redundant
   twin of `top_n_by`.
+
+## linq_boost
+
 - **`BucketLambdaStamper` exists because a bucket-surface lambda cannot infer on its own.**
   On the `group_by_lazy` element shape `tuple<K; array<E>>`, an untyped lambda in
   `<bind>._1 |> select/sum/…(<lambda>)` has nothing to bind against in the fully generic
@@ -370,7 +374,7 @@ an entry lands here only when no name, shape, or test can carry it.
   rejected with a fix message before those arms: it already carries its row shape, and the
   typed builders would all mis-fire.
 
-## linq_fold
+## linq_fold_common
 
 - **group_by's per-key update is a dummy plus an address compare, not a `key_exists`
   probe.** `entry &= tab?[uk] ?? dummy` costs one hash op per element on hits;
@@ -386,6 +390,8 @@ an entry lands here only when no name, shape, or test can carry it.
   op to force the second inference pass, so the iterator names are recovered from the push
   tuple's values — each references its iter var by name under an `ExprRef2Value` wrap — and
   match what the loop binds once a later pass infers it.
+## linq_fold_sql
+
 - **`extract_sql_source` walks the call's own `arguments[0]` spine, not linq_fold's
   flattened `top`** — the SQL DSL ops are not `linqCalls`, so `flatten_linq` stops at the
   first one and never reaches the `select_from` source. `sql_linq_loaded(prog)` then gates
@@ -449,13 +455,15 @@ an entry lands here only when no name, shape, or test can carry it.
   is `reverse() |> _distinct_by(K)` "last row per K" — both only while pk is monotonic with
   insertion order.
 - **A join's `into` projection registry is snapshotted because the outer projection
-  clobbers the live one.** `process_join_call` copies `projRecordNames` and the parallel
-  join columns/aliases/fragments/types into the `joinProj*` arrays, which survive
+  clobbers the live one.** `process_join_call` copies the live projection into
+  `joinProjRecordNames` + the `joinSelectCol*` arrays, which survive
   `analyze_grouped_projection`'s clear-and-repopulate. Post-join `_.<alias>` resolves
-  through that snapshot in exactly one hook — `pred_to_sql`'s column-ref arm — which
-  transitively serves `_having`, `_order_by`, computed group keys and grouped aggregates. A
-  registry miss is rejected loudly everywhere alike: falling back to base-table resolution
-  would leak the unqualified base-table namespace into post-join predicates.
+  through that snapshot in four hooks — `pred_to_sql`'s column-ref arm,
+  `collect_one_order_key`, `push_group_key`, `try_translate_group_aggregate` — all through
+  `find_projection_alias` + `render_projection_alias_sql`; a new post-join alias consumer
+  goes through that pair too. A registry miss is rejected loudly everywhere alike: falling
+  back to base-table resolution would leak the unqualified base-table namespace into
+  post-join predicates.
 - **`normalize_single_source_arg_names` exists for the linq_das front end.** `_sql`
   resolves a single source against the placeholder `_`, but LINQ-syntax lowering splices
   the user's range variable verbatim (`$(c) => c.field`), so a single-parameter chain-op

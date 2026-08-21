@@ -96,27 +96,27 @@ def private find_kw_depth0(q : string; kw : string; from : int) : int {
         var depth = 0
         var inStr = false
         var lastNonWs = 0
-        var lastNonWs2 = 0
+        var nonWsBeforeLast = 0
         var i = from
         while (i < n && found < 0) {
             let c = int(arr[i])
             if (inStr) {
                 if (c == '\\') { i += 2; continue }
-                if (c == '"') { inStr = false; lastNonWs2 = lastNonWs; lastNonWs = c }
+                if (c == '"') { inStr = false; nonWsBeforeLast = lastNonWs; lastNonWs = c }
                 i++
                 continue
             }
-            if (c == '"') { inStr = true; lastNonWs2 = lastNonWs; lastNonWs = c; i++; continue }
-            if (c == '(' || c == '[' || c == '{') { depth++; lastNonWs2 = lastNonWs; lastNonWs = c; i++; continue }
-            if (c == ')' || c == ']' || c == '}') { depth--; lastNonWs2 = lastNonWs; lastNonWs = c; i++; continue }
-            let afterPipeTail = lastNonWs == '>' && (lastNonWs2 == '|' || lastNonWs2 == '=' || lastNonWs2 == '-')
+            if (c == '"') { inStr = true; nonWsBeforeLast = lastNonWs; lastNonWs = c; i++; continue }
+            if (c == '(' || c == '[' || c == '{') { depth++; nonWsBeforeLast = lastNonWs; lastNonWs = c; i++; continue }
+            if (c == ')' || c == ']' || c == '}') { depth--; nonWsBeforeLast = lastNonWs; lastNonWs = c; i++; continue }
+            let afterPipeTail = lastNonWs == '>' && (nonWsBeforeLast == '|' || nonWsBeforeLast == '=' || nonWsBeforeLast == '-')
             let atWordStart = is_ident_byte(c) && ((i == 0) || !is_ident_byte(int(arr[i - 1]))) && lastNonWs != '.' && !afterPipeTail
             if (depth == 0 && atWordStart && i + m <= n && starts_with(arr, i, kw)) {
                 if (i + m == n || !is_ident_byte(int(arr[i + m]))) {
                     found = i
                 }
             }
-            if (!is_white_space(c)) { lastNonWs2 = lastNonWs; lastNonWs = c }
+            if (!is_white_space(c)) { nonWsBeforeLast = lastNonWs; lastNonWs = c }
             i++
         }
     }
@@ -229,20 +229,20 @@ def private substitute_idents(text : string; subs : table<string; string>) : str
             let n = length(arr)
             var i = 0
             var inStr = false
-            var interp = 0
+            var interpDepth = 0
             var lastNonWs = 0
             while (i < n) {
                 let c = int(arr[i])
-                if (inStr && interp == 0) {
+                if (inStr && interpDepth == 0) {
                     if (c == '\\' && i + 1 < n) { w |> write_string(arr, i, i + 2); i += 2; continue }
                     w |> write_string(arr, i, i + 1)
                     if (c == '"') { inStr = false; lastNonWs = c }
-                    elif (c == '{') { interp = 1; lastNonWs = 0 }
+                    elif (c == '{') { interpDepth = 1; lastNonWs = 0 }
                     i++
                     continue
                 }
                 if (c == '"') {
-                    if (interp > 0) {
+                    if (interpDepth > 0) {
                         w |> write_string(arr, i, i + 1); i++
                         while (i < n) {
                             let cc = int(arr[i])
@@ -256,11 +256,11 @@ def private substitute_idents(text : string; subs : table<string; string>) : str
                     inStr = true; lastNonWs = c; w |> write_string(arr, i, i + 1); i++
                     continue
                 }
-                if (interp > 0 && c == '{') { interp ++; w |> write_string(arr, i, i + 1); lastNonWs = c; i++; continue }
-                if (interp > 0 && c == '}') {
-                    interp --
+                if (interpDepth > 0 && c == '{') { interpDepth ++; w |> write_string(arr, i, i + 1); lastNonWs = c; i++; continue }
+                if (interpDepth > 0 && c == '}') {
+                    interpDepth --
                     w |> write_string(arr, i, i + 1)
-                    lastNonWs = interp == 0 ? '"' : c
+                    lastNonWs = interpDepth == 0 ? '"' : c
                     i++
                     continue
                 }
@@ -294,19 +294,19 @@ def private mentions_ident(text : string; name : string) : bool {
         let n = length(arr)
         var i = 0
         var inStr = false
-        var interp = 0
+        var interpDepth = 0
         var lastNonWs = 0
         while (i < n && !found) {
             let c = int(arr[i])
-            if (inStr && interp == 0) {
+            if (inStr && interpDepth == 0) {
                 if (c == '\\' && i + 1 < n) { i += 2; continue }
                 if (c == '"') { inStr = false; lastNonWs = c }
-                elif (c == '{') { interp = 1; lastNonWs = 0 }
+                elif (c == '{') { interpDepth = 1; lastNonWs = 0 }
                 i++
                 continue
             }
             if (c == '"') {
-                if (interp > 0) {
+                if (interpDepth > 0) {
                     i++
                     while (i < n) {
                         let cc = int(arr[i])
@@ -320,10 +320,10 @@ def private mentions_ident(text : string; name : string) : bool {
                 inStr = true; lastNonWs = c; i++
                 continue
             }
-            if (interp > 0 && c == '{') { interp++; lastNonWs = c; i++; continue }
-            if (interp > 0 && c == '}') {
-                interp--
-                lastNonWs = interp == 0 ? '"' : c
+            if (interpDepth > 0 && c == '{') { interpDepth++; lastNonWs = c; i++; continue }
+            if (interpDepth > 0 && c == '}') {
+                interpDepth--
+                lastNonWs = interpDepth == 0 ? '"' : c
                 i++
                 continue
             }
@@ -770,20 +770,20 @@ def private rewrite_group_var(text : string; gname : string) : string {
             let n = length(arr)
             var i = 0
             var inStr = false
-            var interp = 0
+            var interpDepth = 0
             var lastNonWs = 0
             while (i < n) {
                 let c = int(arr[i])
-                if (inStr && interp == 0) {
+                if (inStr && interpDepth == 0) {
                     if (c == '\\' && i + 1 < n) { w |> write_string(arr, i, i + 2); i += 2; continue }
                     w |> write_string(arr, i, i + 1)
                     if (c == '"') { inStr = false; lastNonWs = c }
-                    elif (c == '{') { interp = 1; lastNonWs = 0 }
+                    elif (c == '{') { interpDepth = 1; lastNonWs = 0 }
                     i++
                     continue
                 }
                 if (c == '"') {
-                    if (interp > 0) {
+                    if (interpDepth > 0) {
                         w |> write_string(arr, i, i + 1); i++
                         while (i < n) {
                             let cc = int(arr[i])
@@ -797,11 +797,11 @@ def private rewrite_group_var(text : string; gname : string) : string {
                     inStr = true; lastNonWs = c; w |> write_string(arr, i, i + 1); i++
                     continue
                 }
-                if (interp > 0 && c == '{') { interp ++; w |> write_string(arr, i, i + 1); lastNonWs = c; i++; continue }
-                if (interp > 0 && c == '}') {
-                    interp --
+                if (interpDepth > 0 && c == '{') { interpDepth ++; w |> write_string(arr, i, i + 1); lastNonWs = c; i++; continue }
+                if (interpDepth > 0 && c == '}') {
+                    interpDepth --
                     w |> write_string(arr, i, i + 1)
-                    lastNonWs = interp == 0 ? '"' : c
+                    lastNonWs = interpDepth == 0 ? '"' : c
                     i++
                     continue
                 }

@@ -647,7 +647,7 @@ class private LinqGroupByLazy : AstCallMacro_LinqPred2 {
 
 [call_macro(name="_group_by")]
 class private LinqGroupBy : AstCallMacro_LinqPred2 {
-    //! implements _group_by(iterator, key) shorthand notation that expands into group_by_lazy(iterator, $(_) => key) — same backing function as ``_group_by_lazy``; in-memory the two names are aliases
+    //! implements _group_by(iterator, key) shorthand notation that expands into group_by_lazy(iterator, $(_) => key) — the same macro as ``_group_by_lazy`` under two names
     override predName = "group_by_lazy"
 }
 

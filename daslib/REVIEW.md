@@ -223,9 +223,10 @@ array, so the guard is load-bearing, not defensive.
 `average`'s is a SELECTOR.** The 2-arg reducer set (`is_bucket_reducer_call`) admits only
 the latter — adding `count` or `first` to it splices a predicate into a projection slot.
 
-**In the distinct lane the dedup insert runs unconditionally; a `count(pred)` predicate
-gates only the counter.** `distinct[_by]` keeps the FIRST occurrence per key, so moving the
-insert under the predicate changes which occurrence represents the key.
+**In the distinct lane the dedup insert is not gated by the terminator's `count(pred)`
+predicate — only the counter is.** A `where_` filter gating the whole per-element body is
+expected; `distinct[_by]` keeps the FIRST occurrence per key, so moving the insert under the
+terminator predicate changes which occurrence represents the key.
 
 **A fold-emitted table probe binds by reference off `unsafe(tab?[k])` — a borrowed pointer
 into table storage, sound only while the generated invoke never inserts into or erases from
@@ -234,10 +235,11 @@ point-lookup probe (`try_table_point_lookup`) both rest on this; what licenses t
 the const-forced table param (`TableAdapter.invoke_param_type`) — an emit arm that mutates
 the source, or a param that loses the const, turns the bind into a use-after-free.
 
-**A field set from a row-usage scan is sorted before it drives emission.**
-`collect_row_usage` / `collect_decs_tup_usage` return names in `table<string>` key order, so
-an unsorted per-field walk makes the emitted AST a function of hash order instead of the
-chain — AST-shape tests and AOT semantic hashes both key on that shape.
+**A per-field WALK over a row-usage set is sorted first (or ordered by an external
+declaration-order list); a membership test needs no order.** `collect_row_usage` /
+`collect_decs_tup_usage` return names in `table<string>` key order, so an unsorted walk
+makes the emitted AST a function of hash order instead of the chain — AST-shape tests and
+AOT semantic hashes both key on that shape.
 
 **Two emit sites reachable at the same `at` use different `qn` prefixes.** `qn` keys only on
 (prefix, at), so a shared prefix shadows a bind instead of colliding loudly — a `group_by` +
@@ -246,11 +248,15 @@ handle materializer at one `at`.
 
 **The composite-key ordering has two implementations and they change together.** `key_less`
 / `less_masked` (`linq.das`) sort eagerly; `try_make_inline_cmp_keys` (`linq_fold_common.das`)
-emits an inline `_::less` if-chain for the same chain, capped at 4 keys to match the
-`less_masked` 1..4-tuple overloads and to keep the per-key direction bitmask under 32 bits.
-Both spell bit `i` of `mask` as "key `i` descending" (LSB = first key), flip operand order
-for descending, and break ties in key order — a change on one side makes a spliced chain and
-its tier-2 fallback sort differently, silently.
+emits an inline `_::less` if-chain for the same chain. Both spell bit `i` of `mask` as "key
+`i` descending" (LSB = first key), flip operand order for descending, and break ties in key
+order — a change on one side makes a spliced chain and its tier-2 fallback sort differently,
+silently.
+
+**The inline `_::less` if-chain is capped at 4 keys, matching `less_masked`'s 1..4-tuple
+overloads.** A longer key tuple declines the splice and sorts eagerly; raising the cap
+without adding the matching `less_masked` overload leaves a spliced chain with no tier-2
+twin to agree with.
 
 **`top_n*` over an ITERATOR never reserves `n`.** Cardinality is unknown, so a caller
 passing `n` far above the element count would allocate the whole `n` upfront for no win; the
@@ -318,12 +324,17 @@ a `>` that tails `|>`, `=>` or `->`.** Narrowing that exclusion lets an in-body 
 (`g |> select(…) |> sum`) parse as a `select` clause; widening it to any `>` stops a clause
 keyword that legitimately follows a generic bracket or a comparison from being found at all.
 
-**The linq_das byte scanners share one string model and change together** —
-`find_kw_depth0`, `substitute_idents`, `mentions_ident`, `rewrite_group_var`: plain `"…"`
-content is verbatim, a `{…}` interpolation body is CODE (scanned and substituted), and one
-level of nested string literal inside an interpolation is verbatim again. A model change in
-one scanner desyncs `mentions_ident` from the rewrite it gates, and the emitter then renames
-a parameter the spliced projection still references.
+**The three substituting linq_das scanners share one string model and change together** —
+`substitute_idents`, `mentions_ident`, `rewrite_group_var`: plain `"…"` content is verbatim,
+a `{…}` interpolation body is CODE (scanned and substituted), and one level of nested string
+literal inside an interpolation is verbatim again. A model change in one scanner desyncs
+`mentions_ident` from the rewrite it gates, and the emitter then renames a parameter the
+spliced projection still references.
+
+**`find_kw_depth0` skips a whole string literal, interpolation bodies included.** That
+asymmetry against the substituting scanners is load-bearing: a clause keyword inside `"{…}"`
+must never claim a stage terminal, so giving this scanner the interp-as-code model is a
+defect, not a unification.
 
 **`parse_one_stage` resolves the stage terminal — the earliest `select`/`group` at or after
 `start` — before any `where`/`orderby` position is considered.** The terminal bounds the

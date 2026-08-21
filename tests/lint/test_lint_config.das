@@ -313,3 +313,12 @@ def test_partition_by_format_policy(t : T?) {
         t |> success(jobs[2].file |> ends_with("c.das") && !jobs[2].strip_comments, "plain survivor keeps comments")
     }
 }
+
+[test]
+def test_daslib_policy_is_comment_clean(t : T?) {
+    t |> run("daslib ships with force_clean_comments on") @@(t : T?) {
+        let pol = format_policy_for(path_join(get_das_root(), "daslib/lint.das"))
+        t |> success(pol.format_enabled)
+        t |> success(pol.force_clean_comments, "daslib/.lint_config arms the strip; turning it off un-ratchets the comment sweep")
+    }
+}

@@ -1197,21 +1197,21 @@ def distinct_by_inplace(var a : array<auto(TT)>; key : block<(arg : TT -&) : aut
 }
 
 def unique(a : iterator<auto(TT)>) : iterator<TT -const -&> {
-    //! remove adjacent duplicate elements from an iterator (sort first for a global dedup)
+    //! remove adjacent duplicate elements from an iterator (sort first to make it global)
     var inscope buffer <- to_array(a)
     unique_inplace(buffer)
     return to_sequence_move(buffer)
 }
 
 def unique(a : array<auto(TT)>) : array<TT -const -&> {
-    //! remove adjacent duplicate elements from an array (sort first for a global dedup)
+    //! remove adjacent duplicate elements from an array (sort first to make it global)
     var b := a
     unique_inplace(b)
     return <- b
 }
 
 def unique_to_array(a : iterator<auto(TT)>) : array<TT -const -&> {
-    //! remove adjacent duplicate elements from an iterator and return an array (sort first for a global dedup)
+    //! remove adjacent duplicate elements from an iterator and return an array (sort first to make it global)
     var inscope buffer <- to_array(a)
     unique_inplace(buffer)
     return <- buffer
@@ -1230,28 +1230,28 @@ def unique_inplace(var a : array<auto(TT)>) {
 }
 
 def unique_by(a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
-    //! remove adjacent duplicate elements from an iterator based on a key (sort first for a global dedup)
+    //! remove adjacent duplicate elements from an iterator based on a key (sort first to make it global)
     var inscope buffer <- to_array(a)
     unique_by_inplace(buffer, key)
     return to_sequence_move(buffer)
 }
 
 def unique_by(a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
-    //! remove adjacent duplicate elements from an array based on a key (sort first for a global dedup)
+    //! remove adjacent duplicate elements from an array based on a key (sort first to make it global)
     var b := a
     unique_by_inplace(b, key)
     return <- b
 }
 
 def unique_by_to_array(a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
-    //! remove adjacent duplicate elements from an iterator based on a key and return an array (sort first for a global dedup)
+    //! remove adjacent duplicate elements from an iterator based on a key and return an array (sort first to make it global)
     var inscope buffer <- to_array(a)
     unique_by_inplace(buffer, key)
     return <- buffer
 }
 
 def unique_by_inplace(var a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) {
-    //! remove duplicate elements from an array based on a key in place
+    //! remove duplicate elements from a sorted array based on a key in place
     if (length(a) <= 1) return
     var write_index = 1
     for (from_index in 1 .. length(a)) {

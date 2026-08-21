@@ -15,24 +15,20 @@ module linq_fold_json shared public
 //! unconditionally — the adapter is always compiled in, unlike XML's pugixml gate; the matcher just
 //! returns null in a JSON-less program). Emits ``from_json`` / ``read_json_field`` (and ``from_JV`` for
 //! non-struct elements) BY NAME (resolved at the user's splice site, like linq_fold_decs emits
-//! ``for_each_archetype``), so this module pulls in no json dependency. See daslib/linq_fold.md.
+//! ``for_each_archetype``), so this module pulls in no json dependency. The field-pruning
+//! row-usage scanners (``RowUsageScanner`` / ``collect_row_usage`` / ``RowFieldFlattener`` /
+//! ``flatten_row_to_locals`` / ``hoist_prelude``) are shared with the XML and table adapters and
+//! live in ``daslib/linq_fold_common.das``. See daslib/linq_fold.md.
 
 require daslib/ast_boost
 require daslib/ast_match
 require daslib/templates_boost
 require daslib/linq_fold_common public
 
-// Field-pruning row-usage scanning (RowUsageScanner / collect_row_usage / RowFieldFlattener /
-// flatten_row_to_locals / hoist_prelude) is shared with the XML and table adapters — see daslib/linq_fold_common.das.
-
-// Whole-row by-name materialize: assign every top-level field via read_json_field (by name), so the JSON
-// linq source reads flat objects field-by-field like from_xml_node and NEVER calls the overridable struct
-// from_JV. Field VALUES still convert via from_JV (nested/scalar overrides honored); only a whole-row
-// from_JV(T) override is bypassed — by design (B / "like XML"): for that, materialize to an array first.
-// Caller declares `var <bindName>` (or it is pre-declared) and the `<defName>` default row.
 [macro_function]
 def private emit_full_row_by_name(bindName : string; declT : TypeDeclPtr; defName, curName : string;
                                   var dest : array<Expression?>) {
+    //! by-name row materialize — every field via ``read_json_field``, deliberately bypassing a whole-row ``from_JV(T)`` override (field values still convert via ``from_JV``); caller pre-declares ``var <bindName>`` and the ``<defName>`` default row
     for (fld in declT.structType.fields) {
         let fname = string(fld.name)
         dest |> push <| qmacro_expr() {

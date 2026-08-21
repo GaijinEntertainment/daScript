@@ -1,3 +1,2 @@
-# Comment strip is live for all of daslib: the formatter deletes every comment outside the kept set.
 [format]
 force_clean_comments = true

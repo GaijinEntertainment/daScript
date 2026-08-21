@@ -36,7 +36,11 @@ public API always, a private helper only when callers inside the module need the
 (narration of an implementation goes to a name, a test, or the module's `.md`) —
 `// nolint:CODE` / `@nolint` suppressions carrying their one-line why, `//fmt:` formatter
 directives, license comments (Copyright / SPDX), and the file's leading header block (which
-may sit below the `options` / `module` / `require` preamble). Everything else — narration,
+may sit below the `options` / `module` / `require` preamble). The header block is the
+comments before the first declaration AND it must describe the FILE — a comment there that
+describes the next declaration is narration and belongs on that declaration as `//!`; the
+formatter cannot tell the two apart (it keeps everything above the first declaration), so
+this boundary is the reviewer's to hold. Everything else — narration,
 banners, section dividers, commented-out code — does not exist. The formatter enforces this
 per folder, fail-closed (a strip must compile or the file is restored); the policy mechanics
 are `skills/das_formatting.md`. A `//` comment outside the kept set is therefore EPHEMERAL:
