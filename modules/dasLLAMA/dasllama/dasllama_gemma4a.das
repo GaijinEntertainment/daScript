@@ -329,6 +329,28 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
     return <- built
 }
 
+//! META-only probe of an mmproj gguf: the gemma4a audio encoder's projection width, or 0 when
+//! the file carries no gemma4a audio encoder (wrong family, vision-only, unreadable). The cheap
+//! arm-time validation — no plane bytes are read.
+def gemma4a_probe_proj_dim(path : string) : int64 {
+    let f = fopen(path, "rb")
+    if (f == null) {
+        return 0l
+    }
+    var dim = 0l
+    fmap(f) $(var bytes : array<uint8>#) {
+        var inscope m <- parse_gguf_meta(bytes)
+        let proj = (gguf_has(m, "clip.audio.projector_type")
+            ? gguf_str(m, bytes, "clip.audio.projector_type")
+            : (gguf_has(m, "clip.projector_type") ? gguf_str(m, bytes, "clip.projector_type") : ""))
+        if (proj == "gemma4a" && gguf_has(m, "clip.audio.projection_dim")) {
+            dim = gguf_int(m, bytes, "clip.audio.projection_dim")
+        }
+    }
+    fclose(f)
+    return dim
+}
+
 // GEMM read: a q8 load transcodes from the file straight into qblob/qscales (the fp32 blob
 // never holds it); an fp32 load reads it like any plain tensor
 def private g4a_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma4aStaging;

@@ -51,7 +51,9 @@ async function mockServer(page, opts = {}) {
     await page.route('**/*', async route => {
         const req = route.request();
         const url = new URL(req.url());
-        if (url.hostname !== 'dasllama-control.test') return route.abort();   // must match baseURL in playwright.config.js
+        // the config baseURL, plus localhost for specs that need a SECURE context (mediaDevices
+        // only exists on secure origins — audio-native.spec.js records through the fake mic)
+        if (url.hostname !== 'dasllama-control.test' && url.hostname !== 'localhost') return route.abort();
         const p = url.pathname;
 
         if (req.method() === 'GET') {

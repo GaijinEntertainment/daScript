@@ -312,6 +312,10 @@ def private gate_vocab_ok(m : Model; tmpl : ChatTemplate) : bool => parts_vocab_
 def image_vocab_ok(m : Model; tmpl : ChatTemplate) : bool => (
     parts_vocab_ok(m, tmpl.image_pre.parts) && parts_vocab_ok(m, tmpl.image_post.parts))
 
+//! ``image_vocab_ok``'s AUDIO twin: every audio span marker resolves in the vocab.
+def audio_vocab_ok(m : Model; tmpl : ChatTemplate) : bool => (
+    parts_vocab_ok(m, tmpl.audio_pre.parts) && parts_vocab_ok(m, tmpl.audio_post.parts))
+
 // The thinking gate (gemma-4's <|think|> opening the system turn) renders THIS turn: first turn,
 // thinking on, gate declared with its specials in the vocab, and a system turn to carry it.
 def private think_gate_now(c : ChatSession) : bool {
@@ -766,6 +770,13 @@ def render_turn_(m : Model; c : ChatSession) : array<int64> {
 //! Render-only: no KV, no embedder — the rows come from `encode_image` on the caller's own.
 def render_turn_image_(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
     render_prompt_image(m, c, head, tail)
+    render_think_suppress(m, c, tail)
+}
+
+//! `render_turn_`'s AUDIO twin: the same two-span contract around the audio soft-token splice
+//! (the template's audio span markers). The rows come from the family's audio encoder.
+def render_turn_audio_(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
+    render_prompt_audio(m, c, head, tail)
     render_think_suppress(m, c, tail)
 }
 

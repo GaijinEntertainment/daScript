@@ -972,6 +972,11 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                                                          : (i == def_idx ? g_cfg.image_mmproj : ""))
             if (!empty(path)) {
                 set_model_vision(g_models[i].name, path)
+                // the E-series mmproj carries BOTH towers: the same file arms native audio, so
+                // one download gives text + vision + audio off the one serving slot
+                if (gemma4a_probe_proj_dim(path) > 0l) {
+                    set_model_audio(g_models[i].name, path)
+                }
             }
         }
 

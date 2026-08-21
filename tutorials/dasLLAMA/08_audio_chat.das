@@ -41,7 +41,12 @@ require math
 // IS prefilling their embedding rows. Proof by identity — same prompt, both
 // roads, greedy, byte-identical output. An audio turn is this exact array with
 // a span of rows replaced by the tower's soft tokens; add_user_audio builds it
-// for you, and a custom modality builds it by hand.
+// for you, and a custom modality builds it by hand. A scheduler serving many
+// streams builds it by hand too: render_turn_audio renders the turn's tokens
+// as two spans — head before the audio rows, tail after, split exactly at the
+// template's audio marker (render_turn_image's audio twin) — and splices the
+// encoder's rows between them. Unlike an image span, audio rows stay CAUSAL:
+// sound has a left-to-right order.
 
 def section_splice(m : Model) {
     let prompt <- encode(m, "The capital of France is")
