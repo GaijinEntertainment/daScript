@@ -75,13 +75,24 @@ When you need to emit specific error codes per method
 .. code-block:: das
 
    def handle(line : string) : string {
-       let req = parse_request(line)
-       if (!empty(req.error_envelope)) return req.is_notification ? "" : req.error_envelope
-       if (req.method != "ping" && req.method != "echo") {
-           return error(req.id_str, METHOD_NOT_FOUND, "no such method: {req.method}")
+       var req = parse_request(line)
+       var wire = ""
+       if (!empty(req.error_envelope)) {
+           wire = req.error_envelope
+       } elif (req.method != "ping" && req.method != "echo") {
+           wire = error(req.id_str, METHOD_NOT_FOUND, "no such method: {req.method}")
+       } else {
+           wire = response(req.id_str, dispatch(req.method, req.params_json))
        }
-       return response(req.id_str, dispatch(req.method, req.params_json))
+       free_request(req)
+       return wire
    }
+
+``parse_request`` hands back the parse tree it built in ``req.document``, because
+``req.params`` is a view into it. Close the request scope with ``free_request``
+once you are done reading; the strings on ``ParsedRequest`` outlive the tree, so
+the assembled response is still valid afterwards. ``dispatch_line`` owns that
+scope itself, which is why the high-level path above frees nothing.
 
 Running the tutorial
 ====================

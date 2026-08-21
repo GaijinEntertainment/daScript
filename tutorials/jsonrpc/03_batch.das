@@ -112,7 +112,11 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
 
     print("\n=== Section 5: Manual batch via parse_batch ===\n")
 
-    let pb = parse_batch(wire)
+    // One parse tree backs the whole batch (`pb.document`), and every entry's
+    // `params` is a view into it. Read the entries, then close the scope with
+    // `free_batch` — it releases the tree and the entry array together.
+
+    var pb <- parse_batch(wire)
     print("is_batch: {pb.is_batch}, requests: {length(pb.requests)}, framing_error: '{pb.framing_error}'\n")
     for (req in pb.requests) {
         if (!empty(req.error_envelope)) {
@@ -122,6 +126,7 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
             print("  {kind}: method={req.method}, id={req.id_str}, params={req.params_json}\n")
         }
     }
+    free_batch(pb)
 
     print("\nDone.\n")
 }
