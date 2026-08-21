@@ -346,6 +346,10 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
     make_visitor(*flags) $(flags_adapter) {
         visit(program, flags_adapter)
     }
+    unsafe {
+        delete flags
+        delete pmarker
+    }
 
     var coll = new BlockVariableCollector();
     make_visitor(*coll) $(adapter_coll) {
