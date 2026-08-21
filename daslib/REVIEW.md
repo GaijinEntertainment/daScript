@@ -48,10 +48,12 @@ that a `lint-skip-file` past the header window is prose.
 **`options _enable_default_off_rules` skips BOTH the default seeding and the repo `off`
 directives.** Repo policy must not silence the rule a fixture exists to exercise.
 
-**Weakening `tests/lint/test_lint_config.das` or the kept-comment cases in
-`utils/mcp/test_tools.das` is a defect** — the first pins that each `[format]` key resolves
-nearest-wins independently up to the `.git` root, so a nearer `.lint_config` declaring one
-key does not reset the other; the second pins the formatter's kept set.
+**Weakening `tests/lint/test_lint_config.das` is a defect** — it pins that each `[format]`
+key resolves nearest-wins independently up to the `.git` root, so a nearer `.lint_config`
+declaring one key does not reset the other.
+
+**Weakening the kept-comment cases in `utils/mcp/test_tools.das` is a defect** — they pin
+the formatter's kept set.
 
 **A daslib module that emits a lint rule id joins `RULE_MODULES` in `utils/lint/REVIEW.das`
 in the same change.** An unlisted module's ids are never scanned, so its fixture-and-rst
@@ -72,7 +74,8 @@ gate on receiver type, arity, cloneability, and duplicate constant keys.
 
 **Exactly one sibling rule fires on a shape several collapse rules can match.** Overlaps
 stay partitioned: STYLE021 owns the const-key run over STYLE031, STYLE032 owns fresh-empty
-declarations over STYLE033, chains yield plain receivers to the variable form.
+declarations over STYLE033, and STYLE033's chain-receiver check leaves a plain-variable
+receiver to STYLE033's variable-form check, so the two never double-fire.
 
 **The lint message text is the rule-code transport: the code is everything before the
 FIRST colon.** Suppression, disable lists, and dedup all parse it from the message —
