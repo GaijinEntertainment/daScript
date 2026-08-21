@@ -1687,6 +1687,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
             body |> push <| qmacro_expr(${ let $i(direct_var) = qm_rtti($i(actual_var)) != "ExprBlock" && qm_rtti($i(actual_var)) != "ExprMakeBlock"; })
             var direct_body : array<Expression?>
             generate_match(single_pat, actual_var, direct_body, caps, index, at)
+            direct_body |> reserve(length(direct_body) + length(caps.commits) + 1)
             for (cstmt in caps.commits) {
                 direct_body |> push <| clone_expression(cstmt)
             }

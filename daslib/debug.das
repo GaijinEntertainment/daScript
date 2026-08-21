@@ -1827,6 +1827,7 @@ class private DAServer : Server {
         }
         agent.hwBreakpoints |> clear()
 
+        res.breakpoints |> reserve(length(ini.breakpoints))
         for (b in ini.breakpoints) {
             var setId = -1
             var hex = 0ul
@@ -1855,6 +1856,7 @@ class private DAServer : Server {
         //! Handles the DAP threads request, returning all registered contexts as threads.
         var inscope res : ThreadsResponseBody
         threadsDone = true
+        res.threads |> reserve(length(agent.contexts))
         for (ctx in agent.contexts) {
             res.threads |> emplace(Thread(id = double(ctx.id), name = ctx |> to_string()))
         }
