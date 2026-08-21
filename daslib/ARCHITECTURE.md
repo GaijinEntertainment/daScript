@@ -322,6 +322,18 @@ an entry lands here only when no name, shape, or test can carry it.
   `data` survives a write.
 - **json**: `is_json_white_space` is deliberately not the shared `is_white_space` —
   RFC 8259 admits exactly space/tab/CR/LF.
+- **jsonrpc**: parsing a request is a SCOPE, not a value. `ParsedRequest.params` is a
+  borrowed view into the parse tree, so the tree has to outlive the handler and cannot
+  be freed inside the parser — instead the owner is named in the result (`document` on
+  `ParsedRequest` for `parse_request`, on `ParsedBatch` for `parse_batch`, where the
+  entries borrow and own nothing) and the scope is closed by `free_request` /
+  `free_batch`; `dispatch_line` owns the whole scope and frees after the dispatcher has
+  run over every entry. Freeing is safe for the string fields because daslang never
+  finalizes a `string` field (`TypeDecl::needDelete` is false for `tString`), so
+  `method` / `id_str` / `params_json` / `error_envelope` outlive the tree — only the
+  `params` pointer dangles, which is why the free nulls it. The response side has no
+  such scope: `parse_one_response` copies everything into strings, so
+  `parse_response` / `parse_response_batch` free their own tree before returning.
 - **sql_migrate**: the audit table is provider-neutral by construction (client-side epoch
   seconds, BIGINT); duplicate versions are caught in two layers because neither sees
   everything; the `struct_convert_field` overload set is a specificity ladder — deleting

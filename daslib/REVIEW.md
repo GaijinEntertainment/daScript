@@ -112,6 +112,21 @@ A later pass lowers the lambda to a plain function and clears non-sticky errors.
 **UTF-8 byte-class tables are indexed through `uint(uint8(ch))`** — `for (ch in string)`
 yields a SIGNED byte under JIT; a raw index reads out of bounds for every byte >= 0x80.
 
+**A parser result that borrows a view into a tree the parser allocated names the owning
+field and ships the scope-ender that frees it.** Nothing else can free it — the tree must
+outlive the caller's read, and daslang finalizes neither a raw pointer field nor a local
+container at scope exit — so a borrowed view with no named owner leaks the whole document
+per call, invisibly until the process is long-lived.
+
+**A conversion that throws on out-of-range input is a panic on untrusted bytes.** `int64` /
+`uint64` / `double` on a string throw; a lexer or decoder reachable from a file, a socket,
+or a model reaches for the non-throwing `to_*` twin and reports through its own error
+channel.
+
+**A parser never re-derives control flow from the text of its own diagnostics.** A message
+carries user data, so `starts_with` on an error string is an input-controlled branch; the
+token that caused the failure is what the decision reads.
+
 **Every flatten_opt rewrite arm ships a read-only residual predicate** — the oracle the
 residual visitors call to prove the pass complete.
 

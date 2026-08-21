@@ -510,15 +510,14 @@ def dispatch_one(server : McpServer; reg : array<ToolDef>; req : jsonrpc::Parsed
     return req.is_notification ? "" : result
 }
 
-def dispatch_jsonrpc(server : McpServer; reg : array<ToolDef>; body : string) : string {
-    let pb = jsonrpc::parse_batch(body)
+def dispatch_parsed(server : McpServer; reg : array<ToolDef>; pb : jsonrpc::ParsedBatch; body : string) : string {
     if (!empty(pb.framing_error)) {
         log_error(pb.framing_error)
         return pb.framing_error
     }
     if (!pb.is_batch) return dispatch_one(server, reg, pb.requests[0], body)
     // §6 batch: collect non-empty per-entry responses, wrap as JSON array; "" if all-notifications.
-    var parts : array<string>
+    var inscope parts : array<string>
     parts |> reserve(length(pb.requests))
     for (req in pb.requests) {
         let r = dispatch_one(server, reg, req, body)
@@ -535,6 +534,13 @@ def dispatch_jsonrpc(server : McpServer; reg : array<ToolDef>; body : string) : 
         }
         write_char(w, ']')
     }
+}
+
+def dispatch_jsonrpc(server : McpServer; reg : array<ToolDef>; body : string) : string {
+    var pb <- jsonrpc::parse_batch(body)
+    let wire = dispatch_parsed(server, reg, pb, body)
+    jsonrpc::free_batch(pb)
+    return wire
 }
 
 // ── stdio server loop ────────────────────────────────────────────────
