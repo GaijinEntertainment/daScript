@@ -165,3 +165,29 @@ an entry lands here only when no name, shape, or test can carry it.
 - **STYLE039 requires non-ASCII in both the value and its source span** — escape-spelled
   bytes in ASCII source are log-safe, and span-slicing keeps a neighbouring comment's
   typography from firing.
+- **The unsafe-frame walk**: `preVisitExpression` pushes one frame per expression node,
+  `visitExpression` pops it — the popped frame is the subtree's summary, stored in
+  `unsafeExprs` for `visitExprUnsafe` (STYLE024 vs STYLE025), propagated to the parent
+  slot, and fired as STYLE024 when an `unsafe(...)` target's subtree had count 0. The
+  balance panic in each entry point is the guard for the no-`canVisit*` invariant on the
+  checklist.
+- **Two compiler regimes run this visitor.** The `[lint_macro]` path runs inside a normal
+  compile (const-folding ON — `T('c')` folds to a typed const); the standalone runner and
+  MCP path run under lint policies (folding OFF — `T('c')` stays an `ExprCall`, `-1` stays
+  an `ExprOp1`). Shape-sensitive rules carry both arms (`numeric_char_cast_target`'s
+  ExprCall branch + source-span re-parse); deleting the "redundant" second arm kills the
+  rule in the other regime.
+- **`expr.canShadow` on a for-variable exempts it from LINT002/003/004** — the flag marks
+  macro-generated loops, and lint does not judge names the user never spelled.
+- **The `expect` probe scans the whole file while `lint-skip-file` is header-capped** —
+  an `expect` directive anywhere makes the file a compile-error fixture (its position is
+  semantic to dastest), whereas `lint-skip-file` deeper than the header would let quoted
+  prose unlint a file.
+- **The seven `blk.list` index rescans are O(block²) by choice** — the per-statement
+  visitor callback carries no index, and a shared index stack would have to push/pop with
+  nested blocks; block statement lists are short. Do not "fix" one helper by caching
+  state across callbacks.
+- **Threshold provenance**: STYLE038's 80 ≈ p97 of this tree's function lengths; STYLE041
+  caps report-arg recursion at 8 and fails closed (deeper is unknown shape);
+  `LINT_SKIP_HEADER_LINES = 16` exists so prose quoting the directive cannot unlint a
+  file; STYLE037's 20 and `note_type`'s depth 24 have no recorded derivation.

@@ -54,3 +54,17 @@ exactly one sibling rule fires on it.** Gate on receiver type, arity, cloneabili
 duplicate constant keys; overlaps stay partitioned (STYLE021 owns the const-key run over
 STYLE031, STYLE032 owns fresh-empty declarations over STYLE033, chains yield plain
 receivers to the variable form).
+
+**The lint message text is the rule-code transport: the code is everything before the
+FIRST colon.** Suppression, disable lists, and dedup all parse it from the message —
+rewording a message so the code is not the leading colon-delimited token makes the rule
+unsuppressable and self-colliding.
+
+**style_lint overrides no `canVisit*` method — adding one is a defect** until the
+unsafe-frame push/pop (one frame per expression) is taught about the skipped subtree;
+the balance panic in each entry point is the tripwire.
+
+**The arity caps mirror overload sets that live elsewhere** — `MAX_CONCAT_ARITY` ↔ linq's
+`concat` variadics, `MAX_VARIADIC_PUSH_ARITY` ↔ builtin `push_from`/`push_clone_from`;
+growing either overload set without the cap is a silently missed finding, the reverse a
+suggestion that does not compile.

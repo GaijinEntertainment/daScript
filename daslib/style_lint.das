@@ -95,6 +95,12 @@ enum private St041Terminal {
     arm_end
 }
 
+enum private CtorFieldState {
+    unknown
+    default_empty
+    initialized
+}
+
 struct St041Candidate {
     //! Armed candidate awaiting the visitFunction reference-count cross-check.
     classified_refs : int
@@ -127,12 +133,9 @@ class StyleLintVisitor : AstVisitor {
     unresolved_call_names : table<string>
     @do_not_delete st041_candidates : table<Variable?; St041Candidate>
 
-    def StyleLintVisitor() {
-        pass
-    }
-
     def location_key(at : LineInfo) : uint64 {
-        return uint64(at.line) | (uint64(at.column) << uint64(20))
+        let pos = uint64(at.line) | (uint64(at.column) << uint64(20))
+        return pos ^ (intptr(at.fileInfo) * 1099511628211ul)
     }
 
     disabled_codes : table<string>
@@ -217,6 +220,14 @@ class StyleLintVisitor : AstVisitor {
                 }
                 if (!preceding_ok) continue
             }
+            var trailing_ok = true
+            peek_data(src) $(data) {
+                if (defer_pos + 5 < length(data)) {
+                    let ch = int(data[defer_pos + 5])
+                    trailing_ok = !(is_alpha(ch) || is_number(ch) || ch == '_')
+                }
+            }
+            if (!trailing_ok) continue
             let pipe_pos = find(src, "<|", defer_pos + 5)
             if (pipe_pos < 0) continue
             let after_pipe = strip_left(slice(src, pipe_pos + 2))
@@ -768,7 +779,8 @@ class StyleLintVisitor : AstVisitor {
         let bit_name = extract_single_bit_name(op2.right, bf_type)
         if (empty(bit_name)) return
         let positive = expr.op == "!="
-        let suggestion = positive ? "bf.{bit_name}" : "!bf.{bit_name}"
+        let recv = describe(op2.left)
+        let suggestion = positive ? "{recv}.{bit_name}" : "!{recv}.{bit_name}"
         style_warning("STYLE023: bitfield test via int-cast can be written directly - use '{suggestion}' instead (drop the cast and the '{expr.op} 0' compare)", expr.at)
     }
 
@@ -1408,33 +1420,33 @@ class StyleLintVisitor : AstVisitor {
         return "?"
     }
 
-    def ctor_field_state(v : Variable const?; fname : das_string) : int {
-        //! Classifies field `fname` of a just-declared local after construction:
+    def ctor_field_state(v : Variable const?; fname : das_string) : CtorFieldState {
+        //! Classifies field `fname` of a just-declared local right after construction.
         var st : Structure const? = null
         if (v._type != null && v._type.baseType == Type.tStructure) {
             st = v._type.structType
         }
-        if (st == null) return 0
+        if (st == null) return CtorFieldState.unknown
         for (fld in st.fields) {
             if (fld.name == fname) {
-                if (fld.init != null) return 2
+                if (fld.init != null) return CtorFieldState.initialized
                 break
             }
         }
         var ms : ExprMakeStruct const? = null
         if (v.init != null) {
-            return 0 if (!(v.init is ExprMakeStruct))
+            return CtorFieldState.unknown if (!(v.init is ExprMakeStruct))
             ms = v.init as ExprMakeStruct
-            return 0 if (ms._block != null)
+            return CtorFieldState.unknown if (ms._block != null)
         }
         if (ms != null) {
             for (row in ms.structs) {
                 for (mf in *row) {
-                    if (mf.name == fname) return 2
+                    if (mf.name == fname) return CtorFieldState.initialized
                 }
             }
         }
-        return 1
+        return CtorFieldState.default_empty
     }
 
     def emit_style012_chain(blk : ExprBlock?; idx : int; recv : Expression const?) : void {
@@ -1450,12 +1462,12 @@ class StyleLintVisitor : AstVisitor {
                     for (v in elet.variables) {
                         if (v != bvar || v.flags.generated || v.flags.inScope) continue
                         let state = ctor_field_state(v, ef.name)
-                        if (state == 1) {
+                        if (state == CtorFieldState.default_empty) {
                             let tname = string(v._type.structType.name)
                             style_warning("STYLE012: array field '{ef.name}' of freshly constructed '{v.name}' filled by a run of push/emplace; fold an array literal into the constructor `var {v.name} <- {tname}({ef.name} <- [x, <-y, z], ...)`", head.at)
                             return
                         }
-                        if (state == 2) return
+                        if (state == CtorFieldState.initialized) return
                         break
                     }
                 }
@@ -1597,7 +1609,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def is_insert_of_const_key(call : ExprCall?; target : Variable?) : bool {
-        //! True when `call` is `target |> insert(<const string>, <any>)` — i.e.
+        //! True when `call` is `target |> insert(<const string>, <any>)` — computed keys disqualify the chain.
         if (call.func == null || call.func.fromGeneric == null
             || call.func.fromGeneric.name != "insert"
             || length(call.arguments) < 3) return false
@@ -1934,7 +1946,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def const_key_repr(key0 : Expression?) : string {  // nolint:STYLE037 — `is` on handled types is exact-type, so one arm per const class is irreducible
-        //! Type-tagged stringification of the key when it is a constant literal;
+        //! Type-tagged stringification of a constant-literal key; "" for computed keys (not comparable at lint time).
         var key = key0
         if (key != null && key is ExprRef2Value) {
             key = (key as ExprRef2Value).subexpr
@@ -2229,18 +2241,13 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def note_decl_span(var file_first_decl : table<string; uint>; var file_max_line : table<string; uint>;
-                       fname : string; s, e : uint) : void {
+    def note_decl_span(var file_first_decl : table<string; uint>; fname : string; s : uint) : void {
         if (file_first_decl |> key_exists(fname)) {
             if (s < file_first_decl[fname]) {
                 file_first_decl[fname] = s
             }
-            if (e > file_max_line[fname]) {
-                file_max_line[fname] = e
-            }
         } else {
             file_first_decl |> insert(fname, s)
-            file_max_line |> insert(fname, e)
         }
     }
 
@@ -2248,7 +2255,6 @@ class StyleLintVisitor : AstVisitor {
         let mod = prog.getThisModule
         if (mod == null) return
         var file_first_decl : table<string; uint>
-        var file_max_line : table<string; uint>
         var fn_file : array<string>
         var fn_starts : array<uint>
         var fn_ends : array<uint>
@@ -2260,7 +2266,7 @@ class StyleLintVisitor : AstVisitor {
             let fname = string(fn.at.fileInfo.name)
             let s = fn.at.line
             let e = fn.body.at.last_line
-            note_decl_span(file_first_decl, file_max_line, fname, s, e)
+            note_decl_span(file_first_decl, fname, s)
             fn_file |> push(fname)
             fn_starts |> push(s)
             fn_ends |> push(e)
@@ -2275,28 +2281,28 @@ class StyleLintVisitor : AstVisitor {
             }
             if (is_template_instance) return
             let fname = string(st.at.fileInfo.name)
-            note_decl_span(file_first_decl, file_max_line, fname, st.at.line, st.at.line)
+            note_decl_span(file_first_decl, fname, st.at.line)
         }
         for_each_enumeration(mod) $(var en) {
             if (en.at.fileInfo == null || en.at.line == 0u) return
             let fname = string(en.at.fileInfo.name)
-            note_decl_span(file_first_decl, file_max_line, fname, en.at.line, en.at.line)
+            note_decl_span(file_first_decl, fname, en.at.line)
         }
         for_each_global(mod) $(var v) {
             if (v.at.fileInfo == null || v.at.line == 0u || v.flags.generated) return
             let fname = string(v.at.fileInfo.name)
-            note_decl_span(file_first_decl, file_max_line, fname, v.at.line, v.at.line)
+            note_decl_span(file_first_decl, fname, v.at.line)
         }
         for_each_typedef(mod) $(_name, value) {
             if (value.at.fileInfo == null || value.at.line == 0u) return
             let fname = string(value.at.fileInfo.name)
-            note_decl_span(file_first_decl, file_max_line, fname, value.at.line, value.at.line)
+            note_decl_span(file_first_decl, fname, value.at.line)
         }
-        scan_collected_files(mod, file_first_decl, file_max_line, fn_file, fn_starts, fn_ends, fn_private)
+        scan_collected_files(mod, file_first_decl, fn_file, fn_starts, fn_ends, fn_private)
     }
 
     def scan_collected_files(mod : Module?;
-                             var file_first_decl : table<string; uint>; var file_max_line : table<string; uint>;
+                             var file_first_decl : table<string; uint>;
                              fn_file : array<string>; fn_starts, fn_ends : array<uint>;
                              fn_private : array<bool>) : void {
         var seen : table<string; bool>
@@ -2307,7 +2313,7 @@ class StyleLintVisitor : AstVisitor {
             if ((seen |> key_exists(fname)) || !file_first_decl |> key_exists(fname)) return
             seen |> insert(fname, true)
             scan_file_lines(fn.at, fname,
-                file_first_decl[fname], file_max_line[fname],
+                file_first_decl[fname],
                 fn_file, fn_starts, fn_ends, fn_private)
         }
         for_each_structure(mod) $(var st) {
@@ -2322,7 +2328,7 @@ class StyleLintVisitor : AstVisitor {
             if ((seen |> key_exists(fname)) || !file_first_decl |> key_exists(fname)) return
             seen |> insert(fname, true)
             scan_file_lines(st.at, fname,
-                file_first_decl[fname], file_max_line[fname],
+                file_first_decl[fname],
                 fn_file, fn_starts, fn_ends, fn_private)
         }
         for_each_enumeration(mod) $(var en) {
@@ -2331,7 +2337,7 @@ class StyleLintVisitor : AstVisitor {
             if ((seen |> key_exists(fname)) || !file_first_decl |> key_exists(fname)) return
             seen |> insert(fname, true)
             scan_file_lines(en.at, fname,
-                file_first_decl[fname], file_max_line[fname],
+                file_first_decl[fname],
                 fn_file, fn_starts, fn_ends, fn_private)
         }
         for_each_global(mod) $(var v) {
@@ -2340,7 +2346,7 @@ class StyleLintVisitor : AstVisitor {
             if ((seen |> key_exists(fname)) || !file_first_decl |> key_exists(fname)) return
             seen |> insert(fname, true)
             scan_file_lines(v.at, fname,
-                file_first_decl[fname], file_max_line[fname],
+                file_first_decl[fname],
                 fn_file, fn_starts, fn_ends, fn_private)
         }
         for_each_typedef(mod) $(_name, value) {
@@ -2349,13 +2355,13 @@ class StyleLintVisitor : AstVisitor {
             if ((seen |> key_exists(fname)) || !file_first_decl |> key_exists(fname)) return
             seen |> insert(fname, true)
             scan_file_lines(value.at, fname,
-                file_first_decl[fname], file_max_line[fname],
+                file_first_decl[fname],
                 fn_file, fn_starts, fn_ends, fn_private)
         }
     }
 
     def scan_file_lines(sample_at : LineInfo; file_name : string;
-                        first_decl, max_line : uint;
+                        first_decl : uint;
                         fn_file : array<string>; fn_starts, fn_ends : array<uint>;
                         fn_private : array<bool>) : void {
         var ln : uint = 1u
@@ -2508,7 +2514,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
-        //! Pop the slot for this node. The popped frame is the subtree's summary. Use it to:
+        //! Pops this node's frame — the subtree's unsafe-requirement summary; the mechanics are in daslib/ARCHITECTURE.md.
         let n = length(unsafe_stack)
         let frame = unsafe_stack[n - 1]
         unsafe_stack |> pop

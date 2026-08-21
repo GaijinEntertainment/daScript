@@ -4,17 +4,17 @@ options strict_smart_pointers = true
 
 module lint shared private
 
-enum private Lint021CallKind {
-    plain
-    narrowing_cast
-    poison
-}
-
 //! Lint pass that enables paranoid compilation checks.
 //!
 //! When this module is required, the ``paranoid`` lint flag is turned on
 //! for the current module, enabling stricter compiler diagnostics.
 //! See also ``lint_everything`` for applying lint to all modules.
+
+enum private Lint021CallKind {
+    plain
+    narrowing_cast
+    poison
+}
 
 require daslib/strings_boost
 require daslib/ast_boost
@@ -56,10 +56,10 @@ def private is_block_terminator(expr : ExpressionPtr) : bool {
 }
 
 struct private RefIndex {
-    functions : table<Function const?>
+    @do_not_delete functions : table<Function const?>
     names : table<string>       //!< references knowable by name only (uninferred generic bodies)
-    structs : table<Structure?>
-    enums : table<Enumeration?>
+    @do_not_delete structs : table<Structure?>
+    @do_not_delete enums : table<Enumeration?>
 }
 
 def private unqualified(raw_name : string) : string {
@@ -149,17 +149,16 @@ def private lint022_is_skipped(fn : Function?; mod : Module?) : bool {
 }
 
 struct private Lint023Candidate {
-    v : Variable const?
+    @do_not_delete v : Variable const?
     stores : int
     disqualified : bool
 }
 
 class LintVisitor : AstVisitor {
-    lint014_candidates : array<Variable const?>
+    @do_not_delete lint014_candidates : array<Variable const?>
     lint023_candidates : array<Lint023Candidate>
     lint023_store_nodes : table<uint64>
     //! AST visitor that performs lint checks.
-    astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
     compile_time_errors : bool
     noLint : bool = false
@@ -179,7 +178,7 @@ class LintVisitor : AstVisitor {
     lint021_poison_depth : int = 0
     lint021_closure_depth : int = 0
     lint022_refs : RefIndex
-    lint022_self_struct : Structure const? = null
+    @do_not_delete lint022_self_struct : Structure const? = null
     lint022_generic_sweep : bool = false
     def LintVisitor() {
         pass
@@ -334,6 +333,13 @@ class LintVisitor : AstVisitor {
         if (fun.fromGeneric != null || fun.flags.generated) {
             genericDepth++
         }
+        branch_depth = 0
+        ds_entries |> clear()
+        lint021_candidates |> clear()
+        lint021_call_kind |> clear()
+        lint021_narrow_depth = 0
+        lint021_poison_depth = 0
+        lint021_closure_depth = 0
         if (fun.moreFlags.isTemplate) {
             noLint = true
             return
@@ -344,13 +350,6 @@ class LintVisitor : AstVisitor {
                 break
             }
         }
-        branch_depth = 0
-        ds_entries |> clear()
-        lint021_candidates |> clear()
-        lint021_call_kind |> clear()
-        lint021_narrow_depth = 0
-        lint021_poison_depth = 0
-        lint021_closure_depth = 0
     }
     def override preVisitExprReturn(expr : ExprReturn?) : void {
         if (expr.subexpr != null && expr.subexpr is ExprVar) {
@@ -496,7 +495,7 @@ class LintVisitor : AstVisitor {
             return
         }
         if (!v.access_flags.access_ref && !v.access_flags.access_pass && v.init != null && v.init |> is_expr_const() && !v.access_flags.access_fold) {
-            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it) {v.access_flags}", v.at)
+            lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
             return
         }
         if (!v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && (v.init == null || v.init.flags.noSideEffects) && !v.access_flags.access_fold) {
@@ -504,12 +503,7 @@ class LintVisitor : AstVisitor {
             return
         }
         if (!v.access_flags.access_get && !v.access_flags.access_ref && (v.init == null)) {
-            let sideEffects = (v.init != null && !v.init.flags.noSideEffects)
-            if (!sideEffects) {
-                lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used", v.at)
-            } else {
-                lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used (be careful, initializer has side effects)", v.at)
-            }
+            lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used", v.at)
             return
         }
         if (can_make_const && (v.flags.inScope || v.access_info.access_info_pass_mutable)) return
@@ -831,6 +825,7 @@ class LintVisitor : AstVisitor {
     }
 
     def lint022_collect_generic_refs(mod : Module?) : void {
+        let saved_noLint = noLint
         lint022_generic_sweep = true
         make_visitor(self) $(adapter) {
             for_each_generic(mod, "") $(gfn) {
@@ -838,7 +833,7 @@ class LintVisitor : AstVisitor {
             }
         }
         lint022_generic_sweep = false
-        noLint = false
+        noLint = saved_noLint
     }
 
     def lint022_note_decl_types(mod : Module?) : void {
@@ -924,21 +919,24 @@ class LintVisitor : AstVisitor {
         if (check_functions) {
             for_each_function(mod, "") $(fn) {
                 return if (!lint022_is_unreferenced(fn, mod))
-                funcFile = "{fn.at.fileInfo.name}"
-                lint_error("LINT022: private function '{fn.name}' is never used; remove it, or make it public if another module needs it", fn.at)
+                lint022_report_at_decl("LINT022: private function '{fn.name}' is never used; remove it, or make it public if another module needs it", fn.at)
             }
         }
         for_each_structure(mod) $(st) {
             return if (!lint022_struct_unreferenced(st, mod))
-            funcFile = "{st.at.fileInfo.name}"
             let kind = st.flags.isClass ? "class" : "structure"
-            lint_error("LINT022: private {kind} '{st.name}' is never used; remove it, or make it public if another module needs it", st.at)
+            lint022_report_at_decl("LINT022: private {kind} '{st.name}' is never used; remove it, or make it public if another module needs it", st.at)
         }
         for_each_enumeration(mod) $(en) {
             return if (!lint022_enum_unreferenced(en, mod))
-            funcFile = "{en.at.fileInfo.name}"
-            lint_error("LINT022: private enumeration '{en.name}' is never used; remove it, or make it public if another module needs it", en.at)
+            lint022_report_at_decl("LINT022: private enumeration '{en.name}' is never used; remove it, or make it public if another module needs it", en.at)
         }
+    }
+
+    def lint022_report_at_decl(msg : string; at : LineInfo) : void {
+        //! Reports at a declaration no function walk visited: retargets ``funcFile`` so ``lint_error``'s own-file gate admits a symbol from any file of the module.
+        funcFile = at.fileInfo != null ? "{at.fileInfo.name}" : ""
+        lint_error(msg, at)
     }
 
     def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool {
@@ -969,7 +967,6 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
-        lint022_refs |> note_ref(expr.func, "{expr.name}")
         lint022_note(expr.func, "{expr.name}")
         if (noLint || genericDepth > 0) return
         let op = string(expr.op)
@@ -996,7 +993,6 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
-        lint022_refs |> note_ref(expr.func, "{expr.name}")
         lint022_note(expr.func, "{expr.name}")
         if (noLint || genericDepth > 0) return
         if (expr_equal(expr.left, expr.right, false)) {
@@ -1176,8 +1172,7 @@ def public paranoid(prog : ProgramPtr; compile_time_errors : bool; disabled_code
         multiple_contexts = prog._options |> find_arg("multiple_contexts") ?as tBool ?? prog.policies.multiple_contexts)
     astVisitor.disabled_codes := disabled_codes
     make_visitor(*astVisitor) $(adapter) {
-        astVisitor.astVisitorAdapter = adapter
-        visit(prog, astVisitor.astVisitorAdapter)
+        visit(prog, adapter)
     }
     astVisitor->lint022_check_unused_private(prog)
     unsafe {
@@ -1203,8 +1198,7 @@ def public paranoid_collect(prog : ProgramPtr; var errors : array<string>;
     astVisitor.disabled_codes := disabled_codes
     astVisitor.enabled_codes := enabled_codes
     make_visitor(*astVisitor) $(adapter) {
-        astVisitor.astVisitorAdapter = adapter
-        visit(prog, astVisitor.astVisitorAdapter)
+        visit(prog, adapter)
     }
     astVisitor->lint022_check_unused_private(prog)
     let count = length(astVisitor.errors)
@@ -1226,8 +1220,7 @@ def public paranoid_collect_issues(prog : ProgramPtr; var issues : array<LintIss
     astVisitor.disabled_codes := disabled_codes
     astVisitor.enabled_codes := enabled_codes
     make_visitor(*astVisitor) $(adapter) {
-        astVisitor.astVisitorAdapter = adapter
-        visit(prog, astVisitor.astVisitorAdapter)
+        visit(prog, adapter)
     }
     astVisitor->lint022_check_unused_private(prog)
     let count = length(astVisitor.issues)
