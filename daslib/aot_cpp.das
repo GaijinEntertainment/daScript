@@ -2443,8 +2443,9 @@ class public CppAot : AstVisitor {
         return c;
     }
     def override visitExprConstPtr(var c : ExprConstPtr?) : ExpressionPtr {
-        if (c.getValue != null) {
-            write(*ss, "((void *) 0x{unsafe(reinterpret<int64>(c.getValue)):x}))");
+        let pvalue = c.getValue
+        if (pvalue != null) {
+            write(*ss, "((void *) 0x{unsafe(reinterpret<int64>(pvalue)):x})");
         } else {
             write(*ss, "nullptr");
         }
