@@ -12,19 +12,32 @@ what it costs today and what the fix would change.
 
 ## Entries
 
-- **OPEN — the spliced image prefill trails llama.cpp on Metal (measured 2026-08-21, M1 Max,
-  the image-ref arc).** Record-grade image-chat pairs (released `lcpp_bench` exe vs patched
-  `llama-mtmd-cli`, both pricing prefill as own positions over own time, ~160 positions): on
-  the Metal leg (das `--ngl 99` vs `llama-mtmd-cli -ngl 99 -n 32`) the `img:pp` ratio is
-  das/lcpp **0.52–0.62×** across all three vision models (E2B 687 vs 1101, E4B 362 vs 658,
-  12B 140 vs 268 tok/s) while das leads every CPU prefill cell and every encode/decode cell
-  on every leg. Mechanism hypothesis (proximity, unmeasured): the das image
-  turn evals head / soft-token rows / tail as THREE separate prefill quanta, and at ~160
-  positions the per-eval fixed cost (graph build, dispatch, KV plumbing) dominates — llama.cpp
-  runs one graph over the whole span. Levers to try: fuse the three evals into one span eval
-  with a per-range mask; or cut per-eval overhead on short prefills (the text pp512 cells show
-  no such gap — das leads Metal text prefill, so this is short-turn overhead, not kernel
-  throughput). The decode-side and encode-side crowns are unaffected.
+- **RULED AND LANDED — the spliced image prefill trailed llama.cpp on Metal; the fused span
+  eval closed it (measured 2026-08-21, M1 Max, the fused-image-span arc).** The record-grade
+  gap was das/lcpp **0.52–0.62×** `img:pp` across all three vision models (E2B 687 vs 1101,
+  E4B 362 vs 658, 12B 140 vs 268 tok/s) while das led every CPU prefill, encode and decode
+  cell. Two hypotheses refuted by per-slice probes (`eval_embd_slice_` timing +
+  `metal_prefill_stage_stats`): NOT a CPU fallback (all quanta served on Metal, blob models
+  exempt the `min_npos` floor, zero declines) and NOT submit/readback (gpu ≈ wall, CPU-side
+  ≈ 4 ms/turn). Also refuted: "llama.cpp runs one graph over the whole span" — it issues the
+  SAME three decodes (`mtmd_helper_eval_chunk_single`, causal-flag toggled around the image
+  chunk). The measured mechanism is the **pad-64 GEMM floor**: the mul_mm M tile pads every
+  quantum to 64 rows (`mp = ((npos+63)/64)*64`), so the ~5-token head and ~21-token tail each
+  billed a full 64-row GEMM pass through the stack — E2B slices 58.7 / 123.2 / 54.6 ms, the
+  head+tail 48 % of the wall for 17 % of the positions, while the rows slice alone already ran
+  at lcpp's whole-span rate. **The fix:** `eval_embd_span_` issues ONE eval with a per-query
+  mask — span rows [ulo, uend) uniform, head/tail causal — through the CPU flash/blocked/
+  classic arms and `AttnArgs.ulo` on Metal (DASLLAMA_VERSION 7); the three-eval splice remains
+  the vulkan-leg fallback and the `set_span_fuse(false)` parity rail. Direction-grade -jit
+  cells: E2B 659→**1230** (lcpp 1101), E4B 362→**632** (658), 12B 140→**224** (268) tok/s.
+  Record re-mint owed from the released rig.
+- **OPEN — the kquant mul_mm span quantum trails lcpp per token at prefill M≈192 (measured
+  2026-08-21, M1 Max, the fused-image-span probes).** With the splice cost gone, the 12B
+  Q4_K_M image prefill sits at ~0.84× lcpp: the 130-row span slice alone ran 4.76 ms/tok vs
+  lcpp's 3.73 whole-span — a ~27 % kernel-throughput deficit in the kq mul_mm lane at
+  image-turn batch sizes, invisible at pp512 (das leads Metal text prefill). Lever: the
+  kq_mulmm tile shapes / occupancy at small M, against the lcpp kernel per the side-by-side
+  lab discipline.
 
 - **gemma4v ViT tower (E-series): the encode is the image turn's biggest single stage on every
   CPU tier; the q8 lane and the Metal leg both landed (measured 2026-08-19, M1 Max, the gemma4v

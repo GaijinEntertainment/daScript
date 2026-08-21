@@ -32,6 +32,11 @@ let NPOS = 48l
 
 // deterministic pseudo-random embd rows in a tame range; `perturb_last` perturbs ONLY the final row
 def private make_embd(dim : int64; perturb_last : int) : array<float> {
+    return <- make_embd_at(dim, perturb_last != 0 ? NPOS - 1l : -1l)
+}
+
+// same rows; `perturb_row` >= 0 perturbs ONLY that row
+def private make_embd_at(dim, perturb_row : int64) : array<float> {
     var e : array<float>
     e |> resize(NPOS * dim)
     var state = 0x12345u
@@ -39,9 +44,9 @@ def private make_embd(dim : int64; perturb_last : int) : array<float> {
         state = state * 1664525u + 1013904223u
         e[i] = (float(state >> 8u) / float(1 << 24) - 0.5) * 0.1
     }
-    if (perturb_last != 0) {
+    if (perturb_row >= 0l) {
         for (i in range64(dim)) {
-            e[(NPOS - 1l) * dim + i] += 0.05 * float(perturb_last)
+            e[perturb_row * dim + i] += 0.05
         }
     }
     return <- e
@@ -66,6 +71,48 @@ def private span_prefill(t : Model; embd : array<float>; non_causal : bool) : ar
     }
     delete s
     return <- plane
+}
+
+let SPAN_LO = 7l
+let SPAN_HI = 29l
+
+// the spliced turn through eval_embd_span_ (fused or the three-eval splice), then one decode
+// step at NPOS — its logits fold in every cached row, so any KV divergence between the two
+// prefill shapes surfaces regardless of which quantum wrote it
+def private span_turn_logits(t : Model; embd : array<float>; fuse : bool) : array<float> {
+    set_span_fuse(fuse)
+    var s <- make_run_state(t.config)
+    eval_embd_span_(t, s, embd, NPOS, SPAN_LO, SPAN_HI)
+    forward(t, s, 1l, s.n_past)
+    var lg : array<float>
+    lg |> resize(long_length(s.logits))
+    for (i in range64(long_length(s.logits))) {
+        lg[i] = s.logits[i]
+    }
+    delete s
+    set_span_fuse(true)
+    return <- lg
+}
+
+// one FUSED prefill with the mid-turn span; returns the full x_b plane, caller owns
+def private fused_plane(t : Model; embd : array<float>) : array<float> {
+    var s <- make_run_state(t.config)
+    forward_prefill_embd(t, s, embd, NPOS, 0l, span_lo = SPAN_LO, span_hi = SPAN_HI)
+    var plane : array<float>
+    plane |> resize(NPOS * t.config.dim)
+    for (i in range64(NPOS * t.config.dim)) {
+        plane[i] = s.x_b[i]
+    }
+    delete s
+    return <- plane
+}
+
+def private arr_maxdiff(a, b : array<float>) : float {
+    var m = 0.0
+    for (i in range64(min(long_length(a), long_length(b)))) {
+        m = max(m, abs(a[i] - b[i]))
+    }
+    return m
 }
 
 [test]
@@ -121,6 +168,60 @@ def test_attn_span(t : T?) {
                 reset_diff = max(reset_diff, row_maxdiff(causal_a, causal_after, r, dim))
             }
             tt |> equal(reset_diff, 0.0, "causal after span == fresh causal, bit-exact")
+        }
+        delete tr
+    }
+}
+
+[test]
+def test_attn_span_fused(t : T?) {
+    t |> run("the fused mid-turn span: splice equivalence + per-query mask direction") @(tt : T?) {
+        if (!stat(MODEL_PATH).is_valid) {
+            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        let dim = tr.config.dim
+        let embd_a <- make_embd(dim, 0)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            // the fused single eval must leave the SAME cache as the three-eval splice: a decode
+            // step at NPOS attends every cached row, so its logits are the whole-cache witness
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            let lg_split <- span_turn_logits(tr, embd_a, false)
+            let lg_fused <- span_turn_logits(tr, embd_a, true)
+            tt |> equal(arr_maxdiff(lg_split, lg_fused), 0.0, "classic: fused == splice, bit-exact decode logits")
+            set_prefill_attn_mode(AttnPrefillMode.blocked)
+            let lg_split_b <- span_turn_logits(tr, embd_a, false)
+            let lg_fused_b <- span_turn_logits(tr, embd_a, true)
+            tt |> equal(arr_maxdiff(lg_split_b, lg_fused_b), 0.0, "blocked: fused == splice, bit-exact decode logits")
+            set_prefill_attn_mode(AttnPrefillMode.flash)
+            let lg_split_f <- span_turn_logits(tr, embd_a, false)
+            let lg_fused_f <- span_turn_logits(tr, embd_a, true)
+            let fdiff = arr_maxdiff(lg_split_f, lg_fused_f)
+            to_log(LOG_INFO, "attn_span fused: flash splice-vs-fused decode-logits maxdiff = {fdiff}\n")
+            tt |> success(fdiff < 1e-2, "flash: fused == splice within the online-softmax bar ({fdiff})")
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            // per-query mask direction inside ONE fused eval: a tail-row perturbation reaches no
+            // earlier row (span rows are bounded by uend, head/tail rows are causal)...
+            let base <- fused_plane(tr, embd_a)
+            let tail_p <- fused_plane(tr, make_embd(dim, 1))
+            var pre_tail = 0.0
+            for (r in range64(NPOS - 1l)) {
+                pre_tail = max(pre_tail, row_maxdiff(base, tail_p, r, dim))
+            }
+            tt |> equal(pre_tail, 0.0, "fused: rows before a perturbed last row are blind to it")
+            tt |> success(row_maxdiff(base, tail_p, NPOS - 1l, dim) > 1e-4, "fused: the perturbed last row itself moved")
+            // ...while a perturbation on the LAST span row reaches the FIRST span row (non-causal
+            // within the span) and no head row (causal before the span)
+            let span_p <- fused_plane(tr, make_embd_at(dim, SPAN_HI - 1l))
+            var pre_span = 0.0
+            for (r in range64(SPAN_LO)) {
+                pre_span = max(pre_span, row_maxdiff(base, span_p, r, dim))
+            }
+            tt |> equal(pre_span, 0.0, "fused: head rows are blind to a span perturbation")
+            let dspan = row_maxdiff(base, span_p, SPAN_LO, dim)
+            tt |> success(dspan > 1e-4, "fused: the first span row sees the last span row ({dspan})")
         }
         delete tr
     }

@@ -118,6 +118,76 @@ def private span_greedy(trp, trd : Model; head, tail : array<int64>; kdt : KVDty
     return <- ids
 }
 
+// the FUSED media turn: causal head + non-causal media rows + causal tail in ONE
+// eval_embd_span_ call (the per-query mask — AttnArgs.ulo on the GPU leg), then n greedy
+// steps on trd — CPU control and GPU run share it verbatim
+def private span_fused_greedy(trp, trd : Model; head, media, tail : array<int64>; kdt : KVDtype; nsteps : int) : array<int64> {
+    var ids : array<int64>
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s = make_run_state(trp.config, kdt, kdt)
+        let nh = long_length(head)
+        let nm = long_length(media)
+        let npos = nh + nm + long_length(tail)
+        var rows : array<float>
+        rows |> reserve(npos * trp.config.dim)
+        rows |> resize(npos * trp.config.dim)
+        embed_text_rows(trp, head, rows, 0l)
+        embed_text_rows(trp, media, rows, nh)
+        embed_text_rows(trp, tail, rows, nh + nm)
+        eval_embd_span_(trp, s, rows, npos, nh, nh + nm)
+        let vocab = trp.config.vocab_size
+        var cur = 0l
+        for (v in range64(1l, vocab)) {
+            if (s.logits[v] > s.logits[cur]) {
+                cur = v
+            }
+        }
+        for (_i in range(nsteps)) {
+            ids |> push(cur)
+            var one <- [cur]
+            eval_(trd, s, one)
+            delete one
+            cur = 0l
+            for (v in range64(1l, vocab)) {
+                if (s.logits[v] > s.logits[cur]) {
+                    cur = v
+                }
+            }
+        }
+        delete rows
+        delete s
+    }
+    return <- ids
+}
+
+// the fused turn's prefill logits alone (no decode) — the fused-vs-splice witness reads these
+// on ONE backend, where the per-row math is identical and any mask defect is the whole diff
+def private span_fused_prefill_logits(trp : Model; head, media, tail : array<int64>; kdt : KVDtype) : array<float> {
+    var lg : array<float>
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s = make_run_state(trp.config, kdt, kdt)
+        let nh = long_length(head)
+        let nm = long_length(media)
+        let npos = nh + nm + long_length(tail)
+        var rows : array<float>
+        rows |> reserve(npos * trp.config.dim)
+        rows |> resize(npos * trp.config.dim)
+        embed_text_rows(trp, head, rows, 0l)
+        embed_text_rows(trp, media, rows, nh)
+        embed_text_rows(trp, tail, rows, nh + nm)
+        eval_embd_span_(trp, s, rows, npos, nh, nh + nm)
+        lg |> resize(long_length(s.logits))
+        for (i in range64(long_length(s.logits))) {
+            lg[i] = s.logits[i]
+        }
+        delete rows
+        delete s
+    }
+    return <- lg
+}
+
 // prompt-to-continuation: prefill on trp (the arm's subject — GPU when the override is
 // selected and trp is the blob twin), then n_gen greedy decode steps on trd (the planar
 // model = the shared CPU decode both runs ride, preserving the prefill-isolation property).
@@ -344,6 +414,71 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete stail
                 delete trs
                 delete trsg
+            }
+
+            // span-fused arm: the image turn's ONE-eval shape — causal head, non-causal media
+            // rows, causal tail, all in a single prefill (the per-query mask through
+            // AttnArgs.ulo). Exactly ONE GPU prefill must serve it, token-exact vs the all-CPU
+            // control, per KV codec.
+            if (arm_on(t, "span-fused")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                var trf <- load_model_(path, QuantMode.q8)
+                if (trf.config.seq_len > 2048l) {
+                    trf.config.seq_len = 2048l
+                }
+                var trfg <- blob_twin(t, path, 2048l)
+                let nfull = long_length(prompt)
+                let fc1 = int(nfull * 2l / 5l)
+                let fc2 = int(nfull * 4l / 5l)
+                var fhead <- [for (i in range(fc1)); prompt[i]]
+                var fmedia <- [for (i in range(fc1, fc2)); prompt[i]]
+                var ftail <- [for (i in range(fc2, int(nfull))); prompt[i]]
+                // fused-vs-splice logits bars, per KV codec: the splice re-reads its head rows
+                // from the QUANTIZED cache while the fused eval keeps its own rows in the f32
+                // panels, so the codecs carry real quantization spread (measured clean: f16 = 0,
+                // q8 0.073, tq4 0.708) — the bars sit above that and well under the poisoned-mask
+                // magnitude (negative control: ~5.1 on every codec)
+                var fbars <- { KVDtype.f16 => 1e-4, KVDtype.q8_0 => 0.5, KVDtype.tq4 => 2.0 }
+                for (kdt in [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4]) {
+                    var cpu_f <- span_fused_greedy(trf, trf, fhead, fmedia, ftail, kdt, 24)
+                    select_prefill_override("metal")
+                    let pff0 = metal_prefill_stats().prefills
+                    var gpu_f <- span_fused_greedy(trfg, trf, fhead, fmedia, ftail, kdt, 24)
+                    t |> success(metal_prefill_stats().prefills - pff0 == 1l,
+                        "{kdt} fused turn served as ONE GPU prefill")
+                    // same-backend mask witness: fused vs the three-eval splice on the GPU run
+                    // row-identical math, so the prefill logits must agree at the bit-noise
+                    // floor — a mask defect on ANY row moves its KV and lands here
+                    var lg_fused <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
+                    set_span_fuse(false)
+                    set_metal_prefill_min_npos(1l)   // the splice's short head/tail ride the GPU too
+                    var lg_splice <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
+                    set_metal_prefill_min_npos(64l)
+                    set_span_fuse(true)
+                    select_prefill_override("")
+                    var lmax = 0.0
+                    for (i in range64(min(long_length(lg_fused), long_length(lg_splice)))) {
+                        lmax = max(lmax, abs(lg_fused[i] - lg_splice[i]))
+                    }
+                    to_log(LOG_INFO, "span-fused/{kdt} GPU fused-vs-splice prefill-logits maxdiff = {lmax}\n")
+                    t |> success(lmax < (fbars?[kdt] ?? 0.0), "{kdt} fused == splice on the GPU ({lmax})")
+                    log_gen_texts(trf, "span-fused/{kdt}", cpu_f, gpu_f)
+                    t |> success(same(cpu_f, gpu_f), "{kdt} fused turn matches the all-CPU control")
+                    delete cpu_f
+                    delete gpu_f
+                    delete lg_fused
+                    delete lg_splice
+                }
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                delete fbars
+                delete fhead
+                delete fmedia
+                delete ftail
+                delete trf
+                delete trfg
             }
 
             // dim-4096 arm (M2.6): past the fused add+rms+quant slab (dim <= 3072) the prefill

@@ -1013,7 +1013,9 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
             let mBase = m / 32 * 32
             for (nb in range(np32 / 64)) {
                 let nBase = nb * 64
-                let skip = ((uend > 0 ? nBase >= uend : nBase > qoff + mBase + 31)
+                // fused span: tail rows above uend stay causal, so the skip floor is
+                // max(uend, the block's causal reach) — mirrors the kernel's gate
+                let skip = ((uend > 0 ? nBase >= max(uend, qoff + mBase + 32) : nBase > qoff + mBase + 31)
                     || (window > 0 && qoff + mBase + 1 > window && nBase + 64 <= qoff + mBase + 1 - window))
                 continue if (skip)
                 for (pos in range(nBase, nBase + 64)) {

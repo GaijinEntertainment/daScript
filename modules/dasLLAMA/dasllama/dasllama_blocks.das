@@ -1502,15 +1502,22 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
 }
 
 def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64;
-                         non_causal : bool = false; src_off : int64 = 0l; skip_logits : bool = false) {
+                         non_causal : bool = false; src_off : int64 = 0l; skip_logits : bool = false;
+                         span_lo : int64 = -1l; span_hi : int64 = -1l) {
     if (npos <= 0l) {
         return
     }
     if (t.quant == QuantMode.q4_0) {
         panic("forward_prefill_embd: q4_0 mode has no batched prefill path (use q8 or fp32)")
     }
-    if (non_causal && t.config.recr_mask != 0ul) {
+    // span_lo/span_hi (chunk-relative): non-causal rows [span_lo, span_hi) inside an otherwise
+    // causal call — the fused image turn. non_causal = the whole-call span (span bounds ignored).
+    let spanned = non_causal || span_lo >= 0l
+    if (spanned && t.config.recr_mask != 0ul) {
         panic("forward_prefill_embd: a non-causal span cannot apply to recurrent layers (recr_mask != 0) - the recurrence has no uniform-bound form")
+    }
+    if (span_lo >= 0l && (span_hi <= span_lo || span_hi > npos)) {
+        panic("forward_prefill_embd: span [{span_lo},{span_hi}) outside [0,{npos})")
     }
     if (long_length(embd) < (src_off + npos) * t.config.dim) {
         panic("forward_prefill_embd: embd has {long_length(embd)} floats - rows [{src_off},{src_off + npos}) of dim={t.config.dim} need {(src_off + npos) * t.config.dim}")
@@ -1529,10 +1536,20 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
         ple_pre_prefill_pad(t, s, npos)
         prof_add("ple", ts_ple)
     }
-    // the non-causal image span (mtmd_decode_use_non_causal, gemma vision): every query of THIS
-    // call attends [the sliding-window floor, start_pos + npos) — set for exactly this body
-    s.attn_uniform_end = non_causal ? start_pos + npos : 0l
+    // the non-causal image span (mtmd_decode_use_non_causal, gemma vision): span queries attend
+    // [the sliding-window floor, attn_uniform_end), the rest stay causal — set for exactly this body
+    if (non_causal) {
+        s.attn_uniform_lo = start_pos
+        s.attn_uniform_end = start_pos + npos
+    } elif (span_lo >= 0l) {
+        s.attn_uniform_lo = start_pos + span_lo
+        s.attn_uniform_end = start_pos + span_hi
+    } else {
+        s.attn_uniform_lo = 0l
+        s.attn_uniform_end = 0l
+    }
     forward_prefill_body(t, s, npos, start_pos, skip_logits)
+    s.attn_uniform_lo = 0l
     s.attn_uniform_end = 0l
 }
 
@@ -1560,15 +1577,35 @@ def eval_embd_(t : Model; var s : Session; embd : array<float>; npos : int64; no
     s.n_past += npos
 }
 
+var private g_span_fuse = true
+
+//! A/B seat: pin the pre-fuse three-eval splice (head / rows / tail as separate prefill calls) —
+//! the parity rail for the fused span eval. Default fused.
+def public set_span_fuse(on : bool) {
+    g_span_fuse = on
+}
+
+// The vulkan resident chain encodes the causal mask device-side, so a fused span eval would push
+// the WHOLE turn off it — the splice keeps its head/tail on the chain there. Metal serves the
+// fused mask (AttnArgs.ulo), and the CPU arms mask per query.
+def private span_fusable : bool {
+    return g_span_fuse && active_prefill_override() != "vulkan"
+}
+
 //! `eval_embd_` for a prompt carrying ONE non-causal image span: rows [span_lo, span_hi) prefill
-//! with the span flag, the text around them causally. Three evals, because the flag is per-call —
-//! the KV cache is identical either way, so only the masks differ (`vision_plan.md` §pipeline).
+//! non-causally, the text around them causally. One fused eval (per-query mask) where the backend
+//! serves it; the three-eval splice is the fallback (`vision_plan.md` §pipeline).
 def eval_embd_span_(t : Model; var s : Session; embd : array<float>; npos, span_lo, span_hi : int64) {
     if (npos <= 0l) {
         return
     }
     if (span_lo < 0l || span_hi > npos || span_hi <= span_lo) {
         panic("eval_embd_span_: span [{span_lo},{span_hi}) outside [0,{npos})")
+    }
+    if (span_fusable()) {
+        forward_prefill_embd(t, s, embd, npos, s.n_past, span_lo = span_lo, span_hi = span_hi)
+        s.n_past += npos
+        return
     }
     // slices read embd in place via src_off; only the last non-empty slice produces logits
     eval_embd_slice_(t, s, embd, 0l, span_lo, false, false)

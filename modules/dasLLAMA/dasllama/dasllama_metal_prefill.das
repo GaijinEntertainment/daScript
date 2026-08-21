@@ -1110,7 +1110,8 @@ struct AttnArgs {
     window : uint       // > 0 = sliding span (this layer); 0 = global
     softcap : float     // > 0 = attention-logit soft cap (gemma2)
     hass : uint
-    uend : uint         // > 0 = uniform span end (media rows): every query attends [window floor, uend); 0 = causal
+    uend : uint         // > 0 = uniform span end (media rows): queries at [ulo, uend) attend [window floor, uend); 0 = causal
+    ulo : uint          // uniform span start; read only while uend > 0 (queries outside [ulo, uend) stay causal)
 }
 
 // One threadgroup (128 threads = 4 simdgroups) per 32x32 score block; blocks fully above the
@@ -1130,10 +1131,10 @@ class MetalAttnQK {
         let qi0 = gl_WorkGroupID.x * 32u
         let j0 = gl_WorkGroupID.y * 32u
         let h = gl_WorkGroupID.z
-        // skip blocks fully above the causal diagonal (uniform span: fully past uend), or fully
-        // below every row's sliding ka.window (the first row's wstart is the block minimum;
-        // softmax zeroes P over the skipped region)
-        if ((ka.uend > 0u ? j0 >= ka.uend : j0 > ka.qoff + qi0 + 31u) ||
+        // skip blocks fully past both uend and the causal reach (tail rows above the span stay
+        // causal), or fully below every row's sliding ka.window (the first row's wstart is the
+        // block minimum; softmax zeroes P over the skipped region)
+        if ((ka.uend > 0u ? j0 >= max(ka.uend, ka.qoff + qi0 + 32u) : j0 > ka.qoff + qi0 + 31u) ||
                 (ka.window > 0u && ka.qoff + qi0 + 1u > ka.window && j0 + 32u <= ka.qoff + qi0 + 1u - ka.window)) {
             return
         }
@@ -1204,7 +1205,8 @@ class MetalAttnSoftmax {
         let h = gl_WorkGroupID.y
         let lid = gl_LocalInvocationID.x
         let nthreads = gl_WorkGroupSize.x
-        let cnt = ka.uend > 0u ? ka.uend : ka.qoff + qi + 1u
+        let qpos = ka.qoff + qi
+        let cnt = (ka.uend > 0u && qpos >= ka.ulo && qpos < ka.uend) ? ka.uend : qpos + 1u
         let jlo = ka.window > 0u && ka.qoff + qi + 1u > ka.window ? ka.qoff + qi + 1u - ka.window : 0u
         let rowbase = (h * ka.qrows + qi) * ka.np32
         var m = -1.0e30
@@ -1368,7 +1370,7 @@ class MetalAttnQKMmT {
     def metal_attn_qk_mm_t {
         let mBase = gl_WorkGroupID.x * 32u
         let nBase = gl_WorkGroupID.y * 64u
-        if ((ka.uend > 0u ? nBase >= ka.uend : nBase > ka.qoff + mBase + 31u) ||
+        if ((ka.uend > 0u ? nBase >= max(ka.uend, ka.qoff + mBase + 32u) : nBase > ka.qoff + mBase + 31u) ||
                 (ka.window > 0u && ka.qoff + mBase + 1u > ka.window && nBase + 64u <= ka.qoff + mBase + 1u - ka.window)) {
             return
         }
@@ -1412,9 +1414,10 @@ class MetalAttnQKMm : MetalMmTileBase {
     def metal_attn_qk_mm {
         let mBase = gl_WorkGroupID.x * 32u  // query rows
         let nBase = gl_WorkGroupID.y * 64u  // key rows
-        // skip blocks fully above the causal diagonal (uniform span: fully past uend), or fully
-        // below every row's sliding ka.window
-        if ((ka.uend > 0u ? nBase >= ka.uend : nBase > ka.qoff + mBase + 31u) ||
+        // skip blocks fully above the causal diagonal (uniform span: fully past both uend and the
+        // block's causal reach — tail rows above the span stay causal), or fully below every
+        // row's sliding ka.window
+        if ((ka.uend > 0u ? nBase >= max(ka.uend, ka.qoff + mBase + 32u) : nBase > ka.qoff + mBase + 31u) ||
                 (ka.window > 0u && ka.qoff + mBase + 1u > ka.window && nBase + 64u <= ka.qoff + mBase + 1u - ka.window)) {
             return
         }
@@ -2904,7 +2907,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         qoff = uint(start_pos), qrows = uint(mp),
                         window = uint(lsl && c.sliding_window > 0l ? c.sliding_window : 0l),
                         softcap = c.attn_logit_softcap, hass = c.attn_sinks ? 1u : 0u,
-                        uend = s.attn_uniform_end > 0l ? uint(s.attn_uniform_end) : 0u)
+                        uend = s.attn_uniform_end > 0l ? uint(s.attn_uniform_end) : 0u,
+                        ulo = s.attn_uniform_end > 0l ? uint(s.attn_uniform_lo) : 0u)
                     if (g_pf_skip != "attn_qk") {
                         if (mmattn) {
                             enc_qk_mm(enc, bq, bks[l], batt, atka, mp, nk64, n_heads)

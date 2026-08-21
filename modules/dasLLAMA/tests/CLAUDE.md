@@ -45,7 +45,10 @@ arm6-churn arm7-q8kv arm7b-tq4kv arm8-s16 arm9-reload arm10-kq arm11-depth arm12
 arm13-conc arm14-poison` (arm14 = the shared-region collision gate: a foreign GPU prefill must
 not degrade a later forced-feed decode — Qwen2.5-0.5B, its own `[test]` block),
 batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`. Prefill parity: `base s16
-kq cont span dim qkv` (span = the non-causal media eval shape, head + embd span, per codec).
+kq cont span span-fused dim qkv` (span = the non-causal media eval shape, head + embd span,
+per codec; span-fused = the image turn's ONE-eval shape — causal head + media rows + causal
+tail through the per-query mask, one GPU prefill, with a same-backend fused-vs-splice logits
+witness on poison-calibrated per-codec bars).
 Support matrix: `cells-q8 window cells-s16 mode kq dim8b dim70b` + the
 family matrix `fam-qwen3 fam-qwen2 fam-phi3 fam-gemma2 fam-gemma3 fam-gemma4 fam-qwen3moe
 fam-gemma4moe fam-gptoss fam-gemma4e fam-qwen35 fam-qwen35moe fam-qwen2moe` (needs-derivation pins +
@@ -237,7 +240,10 @@ and a `q4_0` turn, the `q4_0` one proving q4 serving has a per-layer-embedding r
 each against an in-test reference.
 `test_attn_span.das` — the non-causal image span (`eval_embd_ non_causal`): mask direction by
 perturbation (causal row 0 blind to the last row, span row 0 sees it), classic/blocked/flash
-agreement, and the flag-reset bit-exactness; stories15M fixture (test_flash's), skips without it.
+agreement, and the flag-reset bit-exactness; plus the FUSED mid-turn span (`eval_embd_span_`):
+splice equivalence via a whole-cache decode-logits witness (classic/blocked bit-exact, flash
+tolerance) and the per-query mask direction inside one eval; stories15M fixture (test_flash's),
+skips without it.
 `test_cpu_prefill_tripwire.das` — the CPU-prefill guard: an undeclared prefill trips, span
 and causal alike (the metal rail serves spans, so a CPU-served one is a silent fallback);
 same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which is why it
