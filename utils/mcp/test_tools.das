@@ -641,7 +641,7 @@ def test_format_strip_comments_source(t : T?) {
         t |> success(find(stripped, "block dies") < 0, "block comment stripped")
         t |> success(find(stripped, "let z = x + y") >= 0, "multi-line inline comment joins its expression")
     }
-    t |> run("keep_comments path leaves every comment in place") <| @(t : T?) {
+    t |> run("strip-disabled path leaves every comment in place") <| @(t : T?) {
         let src = fread(fixture_path("_fixture_comments.das"))
         let formatted = format_source_string(src, false)
         t |> success(find(formatted, "narration dies") >= 0, "narration kept when not stripping")
@@ -2623,21 +2623,21 @@ let PROOT_CONSUMER = "_pretend_root/consumer.das"
 let PROOT = "_pretend_root"
 let PROOT_MISSING = "missing prerequisite 'pretend_mod"
 
-def assert_project_root_pair(t : T?; without_root, with_root : string) {
+def assert_prereq_pair(t : T?; what : string; without_it, with_it : string) {
     var t1 : string; var e1 = false
-    parse_result(without_root, t1, e1)
-    t |> success(e1, "without project_root: should be error -- text={t1}")
+    parse_result(without_it, t1, e1)
+    t |> success(e1, "without {what}: should be error -- text={t1}")
     t |> success(find(t1, PROOT_MISSING) >= 0,
-                 "without project_root: should mention missing prerequisite -- text={t1}")
+                 "without {what}: should mention missing prerequisite -- text={t1}")
     var t2 : string; var e2 = false
-    parse_result(with_root, t2, e2)
-    t |> success(!e2, "with project_root: should NOT be error -- text={t2}")
+    parse_result(with_it, t2, e2)
+    t |> success(!e2, "with {what}: should NOT be error -- text={t2}")
 }
 
 [test]
 def test_project_root_compile_check(t : T?) {
     t |> run("compile_check honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_compile_check(fixture_path(PROOT_CONSUMER)),
             do_compile_check(fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2646,7 +2646,7 @@ def test_project_root_compile_check(t : T?) {
 [test]
 def test_project_root_lint(t : T?) {
     t |> run("lint honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_lint(fixture_path(PROOT_CONSUMER)),
             do_lint(fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2655,7 +2655,7 @@ def test_project_root_lint(t : T?) {
 [test]
 def test_project_root_aot(t : T?) {
     t |> run("aot honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_aot(fixture_path(PROOT_CONSUMER), ""),
             do_aot(fixture_path(PROOT_CONSUMER), "", "", fixture_path(PROOT)))
     }
@@ -2664,7 +2664,7 @@ def test_project_root_aot(t : T?) {
 [test]
 def test_project_root_list_functions(t : T?) {
     t |> run("list_functions honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_list_functions(fixture_path(PROOT_CONSUMER)),
             do_list_functions(fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2673,7 +2673,7 @@ def test_project_root_list_functions(t : T?) {
 [test]
 def test_project_root_list_types(t : T?) {
     t |> run("list_types honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_list_types(fixture_path(PROOT_CONSUMER)),
             do_list_types(fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2682,7 +2682,7 @@ def test_project_root_list_types(t : T?) {
 [test]
 def test_project_root_list_requires(t : T?) {
     t |> run("list_requires honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_list_requires(fixture_path(PROOT_CONSUMER)),
             do_list_requires(fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2691,7 +2691,7 @@ def test_project_root_list_requires(t : T?) {
 [test]
 def test_project_root_program_log(t : T?) {
     t |> run("program_log honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_program_log(fixture_path(PROOT_CONSUMER), "main"),
             do_program_log(fixture_path(PROOT_CONSUMER), "main", "", fixture_path(PROOT)))
     }
@@ -2700,7 +2700,7 @@ def test_project_root_program_log(t : T?) {
 [test]
 def test_project_root_ast_dump(t : T?) {
     t |> run("ast_dump honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_ast_dump("", fixture_path(PROOT_CONSUMER), "main", "source", ""),
             do_ast_dump("", fixture_path(PROOT_CONSUMER), "main", "source", "", "", fixture_path(PROOT)))
     }
@@ -2709,7 +2709,7 @@ def test_project_root_ast_dump(t : T?) {
 [test]
 def test_project_root_find_references(t : T?) {
     t |> run("find_references honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_find_references(fixture_path(PROOT_CONSUMER), "7", "17", "file", ""),
             do_find_references(fixture_path(PROOT_CONSUMER), "7", "17", "file", "", "", fixture_path(PROOT)))
     }
@@ -2718,7 +2718,7 @@ def test_project_root_find_references(t : T?) {
 [test]
 def test_project_root_goto_definition(t : T?) {
     t |> run("goto_definition honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_goto_definition(fixture_path(PROOT_CONSUMER), "7", "17"),
             do_goto_definition(fixture_path(PROOT_CONSUMER), "7", "17", "", "", fixture_path(PROOT)))
     }
@@ -2727,7 +2727,7 @@ def test_project_root_goto_definition(t : T?) {
 [test]
 def test_project_root_type_of(t : T?) {
     t |> run("type_of honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_type_of(fixture_path(PROOT_CONSUMER), "7", "17"),
             do_type_of(fixture_path(PROOT_CONSUMER), "7", "17", "", "", fixture_path(PROOT)))
     }
@@ -2736,7 +2736,7 @@ def test_project_root_type_of(t : T?) {
 [test]
 def test_project_root_find_symbol(t : T?) {
     t |> run("find_symbol honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_find_symbol("hello", "", fixture_path(PROOT_CONSUMER)),
             do_find_symbol("hello", "", fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2825,21 +2825,10 @@ def make_lm_array(p : string) : array<string> {
     return <- arr
 }
 
-def assert_load_module_pair(t : T?; without_lm, with_lm : string) {
-    var t1 : string; var e1 = false
-    parse_result(without_lm, t1, e1)
-    t |> success(e1, "without load_module: should be error -- text={t1}")
-    t |> success(find(t1, PROOT_MISSING) >= 0,
-                 "without load_module: should mention missing prerequisite -- text={t1}")
-    var t2 : string; var e2 = false
-    parse_result(with_lm, t2, e2)
-    t |> success(!e2, "with load_module: should NOT be error -- text={t2}")
-}
-
 [test]
 def test_load_module_compile_check(t : T?) {
     t |> run("compile_check honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_compile_check(fixture_path(PROOT_CONSUMER)),
             do_compile_check(fixture_path(PROOT_CONSUMER), "", "", false, make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2848,7 +2837,7 @@ def test_load_module_compile_check(t : T?) {
 [test]
 def test_load_module_lint(t : T?) {
     t |> run("lint honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_lint(fixture_path(PROOT_CONSUMER)),
             do_lint(fixture_path(PROOT_CONSUMER), "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2857,7 +2846,7 @@ def test_load_module_lint(t : T?) {
 [test]
 def test_load_module_aot(t : T?) {
     t |> run("aot honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_aot(fixture_path(PROOT_CONSUMER), ""),
             do_aot(fixture_path(PROOT_CONSUMER), "", "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2866,7 +2855,7 @@ def test_load_module_aot(t : T?) {
 [test]
 def test_load_module_list_functions(t : T?) {
     t |> run("list_functions honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_list_functions(fixture_path(PROOT_CONSUMER)),
             do_list_functions(fixture_path(PROOT_CONSUMER), "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2875,7 +2864,7 @@ def test_load_module_list_functions(t : T?) {
 [test]
 def test_load_module_list_types(t : T?) {
     t |> run("list_types honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_list_types(fixture_path(PROOT_CONSUMER)),
             do_list_types(fixture_path(PROOT_CONSUMER), "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2884,7 +2873,7 @@ def test_load_module_list_types(t : T?) {
 [test]
 def test_load_module_list_requires(t : T?) {
     t |> run("list_requires honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_list_requires(fixture_path(PROOT_CONSUMER)),
             do_list_requires(fixture_path(PROOT_CONSUMER), "", "", false, make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2893,7 +2882,7 @@ def test_load_module_list_requires(t : T?) {
 [test]
 def test_load_module_program_log(t : T?) {
     t |> run("program_log honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_program_log(fixture_path(PROOT_CONSUMER), "main"),
             do_program_log(fixture_path(PROOT_CONSUMER), "main", "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2902,7 +2891,7 @@ def test_load_module_program_log(t : T?) {
 [test]
 def test_load_module_ast_dump(t : T?) {
     t |> run("ast_dump honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_ast_dump("", fixture_path(PROOT_CONSUMER), "main", "source", ""),
             do_ast_dump("", fixture_path(PROOT_CONSUMER), "main", "source", "", "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2911,7 +2900,7 @@ def test_load_module_ast_dump(t : T?) {
 [test]
 def test_load_module_find_references(t : T?) {
     t |> run("find_references honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_find_references(fixture_path(PROOT_CONSUMER), "7", "17", "file", ""),
             do_find_references(fixture_path(PROOT_CONSUMER), "7", "17", "file", "", "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2920,7 +2909,7 @@ def test_load_module_find_references(t : T?) {
 [test]
 def test_load_module_goto_definition(t : T?) {
     t |> run("goto_definition honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_goto_definition(fixture_path(PROOT_CONSUMER), "7", "17"),
             do_goto_definition(fixture_path(PROOT_CONSUMER), "7", "17", "", "", "", false, "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2929,7 +2918,7 @@ def test_load_module_goto_definition(t : T?) {
 [test]
 def test_load_module_type_of(t : T?) {
     t |> run("type_of honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_type_of(fixture_path(PROOT_CONSUMER), "7", "17"),
             do_type_of(fixture_path(PROOT_CONSUMER), "7", "17", "", "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2938,7 +2927,7 @@ def test_load_module_type_of(t : T?) {
 [test]
 def test_load_module_find_symbol(t : T?) {
     t |> run("find_symbol honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_find_symbol("hello", "", fixture_path(PROOT_CONSUMER)),
             do_find_symbol("hello", "", fixture_path(PROOT_CONSUMER), "", "", false, "", make_lm_array(fixture_path(PRETEND_LM))))
     }

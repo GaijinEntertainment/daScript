@@ -287,8 +287,16 @@ def public partition_by_format_policy(var files : array<string>; var strips : ar
     var kept : array<string>
     kept |> reserve(length(files))
     strips |> reserve(length(files))
+    var policy_by_dir : table<string; FormatPolicy>
     for (file in files) {
-        let policy = format_policy_for(file)
+        var d = to_generic_path(dir_name(to_generic_path(file)))
+        if (empty(d)) {
+            d = "."
+        }
+        if (!key_exists(policy_by_dir, d)) {
+            policy_by_dir[d] = format_policy_for(file)
+        }
+        let policy = policy_by_dir?[d] ?? FormatPolicy()
         if (!policy.format_enabled) {
             skipped |> push(file)
             continue
