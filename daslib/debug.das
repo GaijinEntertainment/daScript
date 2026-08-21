@@ -1151,7 +1151,7 @@ class private DAgent : DapiDebugAgent {
         })
     }
 
-    def override onSingleStep(var ctx : Context; at : LineInfo) : void {   // nolint:STYLE038 - one linear pause/step/resume sequence for a single stop event
+    def override onSingleStep(var ctx : Context; at : LineInfo) : void {
         //! Handles single-step events, processing pause, step-in, step-over requests, and breakpoint checks.
         if (at.fileInfo == null || server == null) return
 

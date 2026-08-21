@@ -542,7 +542,7 @@ def private for_source_substs(var ctx : FlatCtx?; src : Expression?; at : LineIn
     return <- substs
 }
 
-def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {   // nolint:STYLE038 - one linear unroll pass; the phases share the per-source value lists
+def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {
     let nIter = length(efor.iterators)
     if (nIter == 0 || length(efor.sources) != nIter) {
         ctx.ok = false

@@ -445,7 +445,7 @@ class SqlMigrationMacro : AstFunctionAnnotation {
     //! Marks ``def fn(db : <ProviderRunner>)`` as a versioned schema migration; runs once per
     //! DB. The runner parameter's type selects the provider STREAM; versions are unique per
     //! stream. Args: ``version=<int>`` (required), optional ``description``/``vacuum``/``analyze``.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE038 - flat annotation-argument validation ladder
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[sql_migration] is not supported on generic functions"

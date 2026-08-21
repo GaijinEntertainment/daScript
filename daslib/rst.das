@@ -1220,7 +1220,7 @@ def private collect_field_rows(value : StructurePtr; hasValues : bool; var rows 
     }
 }
 
-def document_classes(doc_file : file; mods : array<Module?>) { // nolint:STYLE038 — one linear page-emission pass per class facet
+def document_classes(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
         if (any) break

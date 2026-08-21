@@ -360,7 +360,7 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
         }
         return true
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool { // nolint:STYLE038 — pre-existing typemacro patch pass; sequential AST build, no free-standing seam
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_template_function") {
                 if (!(find_arg(ann.arguments, "patched") is nothing)) return true
