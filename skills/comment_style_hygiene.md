@@ -46,11 +46,15 @@ line still go.
 **Other languages:** the test for every comment is deletion — remove it and re-read; if the
 WHY goes dark, it was load-bearing, restore it, otherwise it was noise. 1–2 lines is the
 default, not a limit — a longer comment may be earned when the WHY is genuinely load-bearing
-and has no better home; if a reader would ask "why is this long?", that is the finding. No
+and has no better home; if a reader would ask "why is this long?", that is the finding. A
+file's leading header block (license, provenance) is kept in every language; below it, no
 decorated banner blocks (rules of dashes or asterisks, boxed headers) and no up-front
-preamble essays, no public-style docs on private symbols, no incident citations (PR numbers,
-dates, "used to crash" — name the failure mode in present tense at the code that guards it).
-The message is the comment: a site with a good error string needs no comment restating it.
+preamble essays. No ceremonial doc templates (`@param`/`@return` boilerplate restating a
+signature) on non-public symbols — where docstrings are the idiom (Python), a private
+helper's docstring is judged by the same information test as any other comment. No incident
+citations (PR numbers, dates, "used to crash" — name the failure mode in present tense at
+the code that guards it). The message is the comment: a site with a good error string needs
+no comment restating it.
 
 ## Names
 

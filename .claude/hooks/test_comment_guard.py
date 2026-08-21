@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""Tests for comment_guard.py — unit level (scanner, header exemption, kept
-sets, edit diff) and end-to-end (subprocess with hook JSON on stdin, asserting
-exit code, stderr, and empty stdout). The grammar is finite; the matrix walks
-it: comment forms x string/char/reader forms x header positions x edit modes x
-extensions, plus a bounded corpus invariant over known-tricky repo files."""
+"""The grammar is finite; the matrix walks it: comment forms x
+string/char/reader forms x header positions x edit modes x extensions, plus a
+bounded corpus invariant over known-tricky repo files."""
 
 import json
 import os
@@ -37,7 +35,7 @@ def write_payload(path, content):
 
 
 def comments(text, is_das=True):
-    return cg.scan(text, is_das)[0]
+    return cg.scan(text, is_das=is_das)[0]
 
 
 class TestScanner(unittest.TestCase):
@@ -85,7 +83,7 @@ class TestScanner(unittest.TestCase):
         got = comments("/* a /* b\nc", is_das=True)
         self.assertEqual(got, [(1, "/* a /* b\nc", True)])
 
-    def test_no_comment_inside_block_reported_twice(self):
+    def test_line_comment_inside_block_not_reported_separately(self):
         got = comments("/* head\n// inner narration\n*/\ncode()")
         self.assertEqual(len(got), 1)
 
@@ -215,7 +213,7 @@ class TestScanner(unittest.TestCase):
 
     def test_lone_cr_is_a_line_break(self):
         src = "// header\rint x;\rint y; // narr\r"
-        self.assertEqual([t for _, t in cg.violations(src, False, True)], ["// narr"])
+        self.assertEqual([t for _, t in cg.violations(src, is_das=False, whole_file=True)], ["// narr"])
 
     def test_control_chars_do_not_split_lines(self):
         got = comments("// a\x0cfeed /* block\n}", is_das=False)
@@ -244,183 +242,183 @@ class TestScanner(unittest.TestCase):
 
 class TestHeaderExemption(unittest.TestCase):
     def test_plain_header(self):
-        self.assertEqual(cg.violations("// hdr\n// hdr2\n\ndef f() {}", True, True), [])
+        self.assertEqual(cg.violations("// hdr\n// hdr2\n\ndef f() {}", is_das=True, whole_file=True), [])
 
     def test_header_below_options_require(self):
         src = "options gen2\nrequire daslib/fio\n// header prose\ndef f() {}"
-        self.assertEqual(cg.violations(src, True, True), [])
+        self.assertEqual(cg.violations(src, is_das=True, whole_file=True), [])
 
     def test_header_below_module(self):
-        self.assertEqual(cg.violations("module foo shared\n// header prose\ndef f() {}", True, True), [])
+        self.assertEqual(cg.violations("module foo shared\n// header prose\ndef f() {}", is_das=True, whole_file=True), [])
 
     def test_das_license_before_same_line_code(self):
-        self.assertEqual(cg.violations("/* license */ def f() {}", True, True), [])
+        self.assertEqual(cg.violations("/* license */ def f() {}", is_das=True, whole_file=True), [])
 
     def test_c_header_stops_at_code(self):
-        got = cg.violations("// copyright\nint x;\n// not header", False, True)
+        got = cg.violations("// copyright\nint x;\n// not header", is_das=False, whole_file=True)
         self.assertEqual([t for _, t in got], ["// not header"])
 
     def test_c_header_below_preprocessor(self):
         src = '#line 1 "gen.cpp"\n#ifdef X\n#else\n#undef Y\n/* flex banner */\nint x;'
-        self.assertEqual(cg.violations(src, False, True), [])
+        self.assertEqual(cg.violations(src, is_das=False, whole_file=True), [])
 
     def test_c_include_guard(self):
         src = "#ifndef X_H\n#define X_H\n// copyright\nint x;"
-        self.assertEqual(cg.violations(src, False, True), [])
+        self.assertEqual(cg.violations(src, is_das=False, whole_file=True), [])
 
     def test_cpp20_module_is_not_preamble(self):
-        got = cg.violations("module;\n// after\nint x;", False, True)
+        got = cg.violations("module;\n// after\nint x;", is_das=False, whole_file=True)
         self.assertEqual([t for _, t in got], ["// after"])
 
     def test_das_preamble_not_granted_in_c(self):
-        got = cg.violations("options gen2\n// x", False, True)
+        got = cg.violations("options gen2\n// x", is_das=False, whole_file=True)
         self.assertEqual([t for _, t in got], ["// x"])
 
     def test_block_header(self):
-        self.assertEqual(cg.violations("/* copyright\n   notice */\nint x;", False, True), [])
+        self.assertEqual(cg.violations("/* copyright\n   notice */\nint x;", is_das=False, whole_file=True), [])
 
     def test_self_closing_block_header(self):
-        self.assertEqual(cg.violations("/* copyright */\nint x;", False, True), [])
+        self.assertEqual(cg.violations("/* copyright */\nint x;", is_das=False, whole_file=True), [])
 
     def test_comment_after_header_code_line_flagged(self):
-        got = cg.violations("/* header */ int x;\n// narration\n", False, True)
+        got = cg.violations("/* header */ int x;\n// narration\n", is_das=False, whole_file=True)
         self.assertEqual([t for _, t in got], ["// narration"])
 
     def test_multiline_block_close_with_code_exempts_block_only(self):
-        got = cg.violations("/* header\nmore */ int x;\n// narr", False, True)
+        got = cg.violations("/* header\nmore */ int x;\n// narr", is_das=False, whole_file=True)
         self.assertEqual([t for _, t in got], ["// narr"])
 
     def test_comment_only_file_is_all_header(self):
-        self.assertEqual(cg.violations("// a\n\n// b\n/* c */\n", True, True), [])
+        self.assertEqual(cg.violations("// a\n\n// b\n/* c */\n", is_das=True, whole_file=True), [])
 
     def test_indented_header_stays_exempt(self):
-        self.assertEqual(cg.violations("    // a\n    // b\ndef f() {}", True, True), [])
+        self.assertEqual(cg.violations("    // a\n    // b\ndef f() {}", is_das=True, whole_file=True), [])
 
     def test_string_interior_line_counts_as_code(self):
         src = 'options gen2 = "abc\ndef\nrequire x"\n// after'
-        self.assertEqual([t for _, t in cg.violations(src, True, True)], ["// after"])
+        self.assertEqual([t for _, t in cg.violations(src, is_das=True, whole_file=True)], ["// after"])
 
     def test_trailing_comment_on_preamble_line_flagged(self):
         src = "options gen2\nrequire daslib/fio // for fopen\ndef f() {}\n"
-        self.assertEqual([t for _, t in cg.violations(src, True, True)], ["// for fopen"])
+        self.assertEqual([t for _, t in cg.violations(src, is_das=True, whole_file=True)], ["// for fopen"])
 
     def test_bom_does_not_kill_header(self):
-        self.assertEqual(cg.violations("﻿// copyright\nint x;\n", False, True), [])
+        self.assertEqual(cg.violations("\ufeff// copyright\nint x;\n", is_das=False, whole_file=True), [])
 
     def test_crlf_input(self):
         src = "// header\r\nint x;\r\nint y; // narr\r\n"
-        self.assertEqual([t for _, t in cg.violations(src, False, True)], ["// narr"])
+        self.assertEqual([t for _, t in cg.violations(src, is_das=False, whole_file=True)], ["// narr"])
 
     def test_empty_input(self):
-        self.assertEqual(cg.violations("", True, True), [])
+        self.assertEqual(cg.violations("", is_das=True, whole_file=True), [])
 
 
 class TestKept(unittest.TestCase):
     def test_das_kept_set(self):
         src = "//! doc\nfoo() // nolint: STYLE037 short why\n//fmt: ignore-file\n// @nolint tag\n"
-        self.assertEqual(cg.violations(src, True, False), [])
+        self.assertEqual(cg.violations(src, is_das=True, whole_file=False), [])
 
     def test_das_fmt_space_flagged(self):
-        self.assertEqual(len(cg.violations("// fmt: off\n", True, False)), 1)
+        self.assertEqual(len(cg.violations("// fmt: off\n", is_das=True, whole_file=False)), 1)
 
     def test_das_ignore_file_opts_out_whole_write(self):
         src = "//fmt:ignore-file\ndef f() {}\nx = 1 // narration stays\n"
-        self.assertEqual(cg.violations(src, True, True), [])
+        self.assertEqual(cg.violations(src, is_das=True, whole_file=True), [])
 
     def test_das_ignore_file_opts_out_edit_fragment(self):
-        self.assertEqual(cg.edit_violations("x()\n", "//fmt:ignore-file\nx() // narr\n", True), [])
+        self.assertEqual(cg.edit_violations("x()\n", "//fmt:ignore-file\nx() // narr\n", is_das=True), [])
 
     def test_das_ignore_file_with_space_is_not_the_token(self):
         src = "//fmt: ignore-file\ndef f() {}\nx = 1 // narr\n"
-        self.assertEqual([t for _, t in cg.violations(src, True, True)], ["// narr"])
+        self.assertEqual([t for _, t in cg.violations(src, is_das=True, whole_file=True)], ["// narr"])
 
     def test_c_ignore_file_not_special(self):
         src = "int x;\n//fmt:ignore-file\nint y; // narr\n"
-        self.assertEqual(len(cg.violations(src, False, False)), 2)
+        self.assertEqual(len(cg.violations(src, is_das=False, whole_file=False)), 2)
 
     def test_das_bare_nolint_no_colon_flagged(self):
-        self.assertEqual(len(cg.violations("// nolint missing colon\n", True, False)), 1)
+        self.assertEqual(len(cg.violations("// nolint missing colon\n", is_das=True, whole_file=False)), 1)
 
     def test_das_nolint_case_sensitive(self):
-        self.assertEqual(len(cg.violations("// NOLINT: X\n", True, False)), 1)
+        self.assertEqual(len(cg.violations("// NOLINT: X\n", is_das=True, whole_file=False)), 1)
 
     def test_das_nbsp_after_slashes_flagged(self):
-        self.assertEqual(len(cg.violations("// nolint: X\n", True, False)), 1)
+        self.assertEqual(len(cg.violations("//\u00a0nolint: X\n", is_das=True, whole_file=False)), 1)
 
     def test_das_clang_format_flagged(self):
-        self.assertEqual(len(cg.violations("// clang-format off\n", True, False)), 1)
+        self.assertEqual(len(cg.violations("// clang-format off\n", is_das=True, whole_file=False)), 1)
 
     def test_c_kept_set(self):
         src = ("//! doc\nint x; // NOLINT(readability)\n// NOLINTNEXTLINE(bugprone-x)\n"
               "// NOLINTBEGIN\n// nolint: lower\n// clang-format off\n/*! dox */\n/** dox */\n")
-        self.assertEqual(cg.violations(src, False, False), [])
+        self.assertEqual(cg.violations(src, is_das=False, whole_file=False), [])
 
     def test_c_doxygen_multiline_kept(self):
-        self.assertEqual(cg.violations("int y;\n/**\n * doc\n */\n", False, False), [])
+        self.assertEqual(cg.violations("int y;\n/**\n * doc\n */\n", is_das=False, whole_file=False), [])
 
     def test_c_star_banner_flagged(self):
-        self.assertEqual(len(cg.violations("int y;\n/***** section *****/\n", False, False)), 1)
+        self.assertEqual(len(cg.violations("int y;\n/***** section *****/\n", is_das=False, whole_file=False)), 1)
 
     def test_c_fmt_directive_flagged(self):
-        self.assertEqual(len(cg.violations("//fmt: off\n", False, False)), 1)
+        self.assertEqual(len(cg.violations("//fmt: off\n", is_das=False, whole_file=False)), 1)
 
     def test_c_empty_block_flagged(self):
-        self.assertEqual(len(cg.violations("int x;\n/**/\n", False, False)), 1)
+        self.assertEqual(len(cg.violations("int x;\n/**/\n", is_das=False, whole_file=False)), 1)
 
     def test_c_bare_doxygen_open_at_eof_kept_no_crash(self):
-        self.assertEqual(cg.violations("int x;\n/**", False, False), [])
+        self.assertEqual(cg.violations("int x;\n/**", is_das=False, whole_file=False), [])
 
     def test_das_doxygen_block_flagged(self):
-        self.assertEqual(len(cg.violations("def f() {}\n/*! doc-ish */\n", True, True)), 1)
+        self.assertEqual(len(cg.violations("def f() {}\n/*! doc-ish */\n", is_das=True, whole_file=True)), 1)
 
     def test_narration_flagged(self):
-        self.assertEqual(len(cg.violations("x = 1 // bump it\n", True, False)), 1)
+        self.assertEqual(len(cg.violations("x = 1 // bump it\n", is_das=True, whole_file=False)), 1)
 
 
 class TestEditDiff(unittest.TestCase):
     def test_move_silent(self):
         old = "    // legacy narration\n    foo()\n"
         new = "// legacy narration\nfoo()\nbar()\n"
-        self.assertEqual(cg.edit_violations(old, new, True), [])
+        self.assertEqual(cg.edit_violations(old, new, is_das=True), [])
 
     def test_addition_flagged(self):
-        self.assertEqual(len(cg.edit_violations("foo()\n", "foo() // call foo\n", True)), 1)
+        self.assertEqual(len(cg.edit_violations("foo()\n", "foo() // call foo\n", is_das=True)), 1)
 
     def test_reword_silent(self):
-        self.assertEqual(cg.edit_violations("// note about 1\n", "// note about 2\n", True), [])
+        self.assertEqual(cg.edit_violations("// note about 1\n", "// note about 2\n", is_das=True), [])
 
     def test_block_reword_silent(self):
-        self.assertEqual(cg.edit_violations("/* a\nold */\n", "/* a\nnew */\n", False), [])
+        self.assertEqual(cg.edit_violations("/* a\nold */\n", "/* a\nnew */\n", is_das=False), [])
 
     def test_reindented_block_not_quoted_as_new(self):
         old = "/* keep\nthis */\nx()\n"
         new = "    /* keep\n    this */\nx()\ny() // fresh\n"
-        got = cg.edit_violations(old, new, False)
+        got = cg.edit_violations(old, new, is_das=False)
         self.assertEqual([t for _, t in got], ["// fresh"])
 
     def test_duplicate_addition_flagged(self):
         old = "x()\n// note\n"
         new = "// note\nx()\n// note\n"
-        self.assertEqual(len(cg.edit_violations(old, new, True)), 1)
+        self.assertEqual(len(cg.edit_violations(old, new, is_das=True)), 1)
 
     def test_net_decrease_silent(self):
         old = "// a\n// b\nx()\n"
         new = "x()\n// c\n"
-        self.assertEqual(cg.edit_violations(old, new, True), [])
+        self.assertEqual(cg.edit_violations(old, new, is_das=True), [])
 
     def test_kept_demotion_flagged(self):
-        self.assertEqual(len(cg.edit_violations("//! doc\n", "// doc\n", True)), 1)
+        self.assertEqual(len(cg.edit_violations("//! doc\n", "// doc\n", is_das=True)), 1)
 
     def test_promotion_silent(self):
-        self.assertEqual(cg.edit_violations("// doc\n", "//! doc\n", True), [])
+        self.assertEqual(cg.edit_violations("// doc\n", "//! doc\n", is_das=True), [])
 
     def test_block_interior_fragment_with_url(self):
         old = "  see http://old.example.com\n"
         new = "  see http://new.example.com\n"
-        self.assertEqual(cg.edit_violations(old, new, False), [])
+        self.assertEqual(cg.edit_violations(old, new, is_das=False), [])
 
     def test_empty_old_string(self):
-        self.assertEqual(len(cg.edit_violations("", "// fresh\n", True)), 1)
+        self.assertEqual(len(cg.edit_violations("", "// fresh\n", is_das=True)), 1)
 
 
 class TestEndToEnd(unittest.TestCase):
@@ -471,7 +469,7 @@ class TestEndToEnd(unittest.TestCase):
         rc, _, _ = run_hook(p)
         self.assertEqual(rc, 0)
 
-    def test_das_write_narration_slapped(self):
+    def test_das_write_narration_flagged(self):
         rc, err, out = run_hook(write_payload("daslib/foo.das", "def f() {\n    // walk members\n}\n"))
         self.assertEqual(rc, 2)
         self.assertEqual(out, "")
@@ -485,7 +483,7 @@ class TestEndToEnd(unittest.TestCase):
         rc, err, _ = run_hook(write_payload("daslib/foo.das", src))
         self.assertEqual(rc, 0, err)
 
-    def test_das_edit_addition_slapped(self):
+    def test_das_edit_addition_flagged(self):
         rc, err, _ = run_hook(edit_payload("daslib/foo.das", "foo()", "// explain\nfoo()"))
         self.assertEqual(rc, 2)
         self.assertIn("comment guard", err)
@@ -496,7 +494,7 @@ class TestEndToEnd(unittest.TestCase):
         rc, _, _ = run_hook(edit_payload("daslib/foo.das", "// old note\nfoo()", "foo()\n// old note"))
         self.assertEqual(rc, 0)
 
-    def test_cpp_write_slapped_with_c_message(self):
+    def test_cpp_write_flagged_with_c_message(self):
         rc, err, _ = run_hook(write_payload("src/ast/x.cpp", "int f() {\n    return 1; // one\n}\n"))
         self.assertEqual(rc, 2)
         self.assertIn("no new C/C++ comments", err)
@@ -519,7 +517,7 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     def test_message_caps_quoted_lines(self):
-        body = "".join("int v{}; // c{}\n".format(i, i) for i in range(9))
+        body = "".join("int v{}; // c{}\n".format(i, i) for i in range(cg.MAX_QUOTED + 4))
         rc, err, _ = run_hook(write_payload("a.cpp", body))
         self.assertEqual(rc, 2)
         self.assertIn("and 4 more", err)
@@ -557,7 +555,7 @@ class TestEndToEnd(unittest.TestCase):
 class TestCorpus(unittest.TestCase):
     """Known-tricky tracked files: appending a probe comment must still be
     detected — proves no scanner derail (reader macros, huge strings, flex
-    output). Files missing in a partial checkout are skipped."""
+    output)."""
 
     DAS_FILES = [
         "utils/lint/REVIEW.das",
@@ -579,7 +577,7 @@ class TestCorpus(unittest.TestCase):
         with open(path, encoding="utf-8", errors="replace") as f:
             src = f.read()
         probed = src + "\n__probe__() // __probe_comment__\n"
-        found = [t for _, t in cg.violations(probed, is_das, True) if "__probe_comment__" in t]
+        found = [t for _, t in cg.violations(probed, is_das=is_das, whole_file=True) if "__probe_comment__" in t]
         self.assertEqual(len(found), 1, rel + ": scanner derailed, probe comment invisible")
 
     def test_das_corpus(self):
