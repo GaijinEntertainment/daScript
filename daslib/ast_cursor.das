@@ -36,17 +36,12 @@ def public cursor_inside(line, col : int; at : LineInfo) : bool {
     let tll = int(at.last_line)
     let tlc = int(at.last_column)
     if (line < tl || line > tll) return false
-    // single-line span
     if (line == tl && line == tll) return col >= tc && col < tlc
-    // first line of multi-line span
     if (line == tl) return col >= tc
-    // last line of multi-line span
     if (line == tll) return col < tlc
-    // middle lines
     return true
 }
 
-// Extract a human-readable name from an expression using is/as type checks.
 def private expression_name(expr : ExpressionPtr) : string {
     if (expr is ExprVar) return string((expr as ExprVar).name)
     if (expr is ExprCall) return string((expr as ExprCall).name)
@@ -85,7 +80,6 @@ class CursorVisitor : AstVisitor {
 
     def override preVisitExpression(expr : ExpressionPtr) : void {
         let e = expr
-        // filter by file if specified
         if (!empty(targetFile) && e.at.fileInfo != null) {
             let fname = string(e.at.fileInfo.name)
             if (find(fname, targetFile) < 0) return
@@ -119,7 +113,6 @@ def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col
     make_visitor(*visitor) $(adapter) {
         visit(program, adapter)
     }
-    // visitor collects parent-first (depth-first pre-order), reverse for innermost-first
     var result <- reverse_hits(visitor.hits)
     unsafe {
         delete visitor

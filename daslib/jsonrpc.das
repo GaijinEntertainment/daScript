@@ -38,8 +38,6 @@ let public INVALID_PARAMS   = -32602  //!< Invalid method params.
 let public INTERNAL_ERROR   = -32603  //!< Internal JSON-RPC error.
 
 
-// ===== Parsed request shape (server side) =====
-
 struct public ParsedRequest {
     id_str          : string       //!< Serialized id ("null" / "7" / "\"abc\"") — embed verbatim into responses.
     method          : string       //!< Method name. Empty when the request was malformed.
@@ -55,8 +53,6 @@ struct public ParsedBatch {
     framing_error   : string                 //!< Top-level error envelope to send as-is (parse failure, empty array). Mutually exclusive with ``requests``.
 }
 
-
-// ===== Parsed response shape (client side) =====
 
 struct public ParsedResponse {
     id_str       : string         //!< Echoed id from the response.
@@ -74,8 +70,6 @@ struct public ParsedResponseBatch {
     parse_error : string                      //!< Top-level parse error; mutually exclusive with ``responses``.
 }
 
-
-// ===== Envelope builders (responses + errors) =====
 
 def public response(id_str : string; result_json : string) : string {
     //! Wrap ``result_json`` in a JSON-RPC 2.0 success response envelope.
@@ -102,8 +96,6 @@ def public serialize_id(id_val : JsonValue?) : string {
     return id_val == null ? "null" : write_json(id_val)
 }
 
-
-// ===== Outgoing request builders (client side) =====
 
 def public make_request(method : string; params_json : string; id : int) : string {
     //! Build a JSON-RPC 2.0 request with an integer id.
@@ -140,8 +132,6 @@ def public make_batch(messages : array<string>) : string {
 }
 
 
-// ===== Server-side parsers =====
-
 def private parse_one_request(body_value : JsonValue?; strict : bool) : ParsedRequest {
     var result = ParsedRequest(id_str = "null")
     if (body_value == null || !(body_value.value is _object)) {
@@ -151,20 +141,16 @@ def private parse_one_request(body_value : JsonValue?; strict : bool) : ParsedRe
     let body & = unsafe(body_value.value as _object)
     let id_v = body?["id"] ?? null
     let method_v = body?["method"] ?? null
-    // params_v needs the reinterpret: it's assigned to `result.params : JsonValue?`, and `?[]` on a const view returns `JsonValue? const` — assignment to a non-const field would fail. id_v / method_v above are read-only and don't need it.
     var params_v = unsafe(reinterpret<JsonValue?>(body?["params"] ?? null))
-    // §4: id MUST be string, number, or null. Reject objects/arrays/booleans — they'd also break framing since write_json would pretty-print across lines.
     if (id_v != null && !(id_v.value is _string) && !(id_v.value is _number) && !(id_v.value is _longint) && !(id_v.value is _null)) {
         result.error_envelope = error("null", INVALID_REQUEST, "invalid request: id must be string, number, or null")
         return result
     }
     result.id_str = serialize_id(id_v)
     if (method_v == null || !(method_v.value is _string)) {
-        // Don't flag as notification before method validation — `{}` or `{"method":42}` without id would otherwise swallow the envelope per spec §5.1.
         result.error_envelope = error(result.id_str, INVALID_REQUEST, "invalid request: missing or non-string method")
         return result
     }
-    // Strict-mode jsonrpc field enforcement
     if (strict) {
         let jsonrpc_v = body?["jsonrpc"] ?? null
         if (jsonrpc_v == null || !(jsonrpc_v.value is _string) || (jsonrpc_v.value as _string) != "2.0") {
@@ -172,7 +158,6 @@ def private parse_one_request(body_value : JsonValue?; strict : bool) : ParsedRe
             return result
         }
     }
-    // §4.2: params, if present, MUST be Array or Object. Reject scalars.
     if (params_v != null && !(params_v.value is _object) && !(params_v.value is _array) && !(params_v.value is _null)) {
         result.error_envelope = error(result.id_str, INVALID_PARAMS, "invalid params: must be array or object")
         return result
@@ -219,14 +204,11 @@ def public parse_batch(line : string; strict : bool = false) : ParsedBatch {
         }
         return <- result
     }
-    // Single request — wrap in a one-element ParsedBatch
     result.is_batch = false
     result.requests |> push(parse_one_request(parsed, strict))
     return <- result
 }
 
-
-// ===== Client-side response parsers =====
 
 def private parse_one_response(body_value : JsonValue?) : ParsedResponse {
     var result = ParsedResponse(id_str = "null", is_success = false)
@@ -303,8 +285,6 @@ def public parse_response_batch(line : string) : ParsedResponseBatch {
 }
 
 
-// ===== Framing helper =====
-
 def public compact_json_whitespace(s : string) : string {
     //! Strip JSON pretty-printer whitespace (spaces, tabs, newlines, carriage returns) that appears outside string literals. Whitespace inside ``"..."`` is preserved verbatim, including backslash-escaped quotes. Used to flatten ``write_json`` output for one-message-per-line wire framing.
     return build_string() $(var w) {
@@ -335,8 +315,6 @@ def public compact_json_whitespace(s : string) : string {
     }
 }
 
-
-// ===== High-level dispatch convenience =====
 
 def private dispatch_one(req : ParsedRequest; dispatcher : block<(method : string; params_json : string) : string>) : string {
     if (!empty(req.error_envelope)) return req.is_notification ? "" : req.error_envelope

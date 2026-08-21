@@ -1216,6 +1216,9 @@ def private is_kept_comment(s : string) : bool {
     if ((s |> starts_with("//!")) || (s |> starts_with("//fmt:"))) {
         return true
     }
+    if ((s |> find("opyright") >= 0) || (s |> find("SPDX-License-Identifier") >= 0)) {
+        return true
+    }
     if (!(s |> starts_with("//"))) {
         return false
     }
@@ -1275,8 +1278,8 @@ def private strip_comment_tokens(var ctx : FormatterCtx) {
 
 def public format_source(file_data : array<uint8> const& implicit; strip_comments : bool) : string {
     //! Formats daslang source; with ``strip_comments`` also removes every comment except the
-    //! leading header block, `//!` docs, `//fmt:` directives, and `nolint` suppressions — a
-    //! kept full-line `//!`/nolint comment keeps its attached `//` continuations, whole or not at all.
+    //! leading header block, `//!` docs, `//fmt:` directives, `nolint` suppressions, and license
+    //! notices (Copyright / SPDX) — a kept full-line comment keeps its attached `//` continuations.
     var inscope ctx : FormatterCtx
     ctx.data := file_data
     ctx.data |> push(uint8(0))

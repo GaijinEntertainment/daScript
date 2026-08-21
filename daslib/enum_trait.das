@@ -95,10 +95,8 @@ class EnumFromStringConstruction : AstEnumerationAnnotation {
     def override apply(var enu : EnumerationPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         //! implements enum string constructor
         var enumT = new TypeDecl(baseType = Type.tEnumeration, enumType = enu)
-        // lets make a table variable
         let varName = "_`enum`table`{enu.name}"
         add_global_private_let(compiling_module(), varName, enu.at, qmacro(enum_to_table(type<$t(enumT)>)))
-        // panic one
         var enumFn = qmacro_function("{enu.name}") $(src : string) : $t(enumT) {
             if (!key_exists($i(varName), src)) {
                 panic("string_to_enum: enum value '{src}' not found in enum '{typeinfo typename(type<$t(enumT)>)}'")
@@ -109,7 +107,6 @@ class EnumFromStringConstruction : AstEnumerationAnnotation {
         force_at(enumFn, enu.at)
         force_generated(enumFn, true)
         compiling_module() |> add_function(enumFn)
-        // with default
         var enumFnDefault = qmacro_function("{enu.name}") $(src : string; defaultValue : $t(enumT)) : $t(enumT) {
             return $i(varName)?[src] ?? defaultValue
         }

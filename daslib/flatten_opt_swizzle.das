@@ -22,8 +22,8 @@ require daslib/flatten_opt_common
 // provenance, re-emit the cheapest form (base / swizzle / scalar / splat / narrower ctor).
 
 struct private LaneSrc {
-    lane : int          // -1: e itself is the lane; >= 0: lane of e
-    e : ExpressionPtr   // scalar expr when lane < 0, else the (opaque) float-vector base
+    lane : int
+    e : ExpressionPtr
 }
 
 def private lane_letter(i : int) : string {
@@ -33,7 +33,6 @@ def private lane_letter(i : int) : string {
     return "w"
 }
 
-// float2/3/4 ctor call of ANY arity (full per-lane, mixed vector+scalar, splat); null otherwise.
 def private float_ctor_of(e : ExpressionPtr) : ExprCall? {
     if (e == null || !(e is ExprCall)) return null
     var c = e as ExprCall
@@ -46,7 +45,6 @@ def private r2v_unwrap(var e : ExpressionPtr) : ExpressionPtr {
     return e is ExprRef2Value ? (e as ExprRef2Value).subexpr : e
 }
 
-// The fold arm's firing gate (and the residual oracle's): a value resolve_lanes can see through.
 def private swizzle_decomposable(e : ExpressionPtr) : bool {
     if (e == null) return false
     if (e is ExprRef2Value) return swizzle_decomposable((e as ExprRef2Value).subexpr)
@@ -55,16 +53,13 @@ def private swizzle_decomposable(e : ExpressionPtr) : bool {
     return float_ctor_of(e) != null
 }
 
-// Per-output-lane provenance of a float-vector expr. Sees through float ctors of any arity,
-// vector const literals, nested swizzles, component-read scalar args and Ref2Value wraps; an
-// opaque vector contributes (e, 0..d-1). False only when something isn't a typed float vector.
 def private resolve_lanes(var e : ExpressionPtr; var out : array<LaneSrc>) : bool {
     if (e == null) return false
     if (e is ExprRef2Value) return resolve_lanes((e as ExprRef2Value).subexpr, out)
     let d = float_vec_dim(expr_bt(e))
     if (d == 0) return false
     let L = const_lanes(e)
-    if (L.kind == CK_FLOAT && L.dim >= 2) {   // float2/3/4 literal — one scalar literal per lane
+    if (L.kind == CK_FLOAT && L.dim >= 2) {
         for (k in range(L.dim)) {
             out |> push(LaneSrc(lane = -1, e = new ExprConstFloat(at = e.at, value = L.f[k])))   // nolint:PERF006 -- ≤4 lanes
         }
@@ -90,17 +85,13 @@ def private resolve_lanes(var e : ExpressionPtr; var out : array<LaneSrc>) : boo
     }
     var c = float_ctor_of(e)
     if (c != null) return resolve_ctor_lanes(c, d, out)
-    // opaque float vector — contributes its own lanes
     for (i in range(d)) {
         out |> push(LaneSrc(lane = i, e = e))   // nolint:PERF006 -- ≤4 lanes
     }
     return true
 }
 
-// The float-ctor arm of resolve_lanes: a splat fills every lane, a scalar argument contributes
-// itself (or the component it reads), a vector argument recurses. False when the args don't cover d.
 def private resolve_ctor_lanes(var c : ExprCall?; d : int; var out : array<LaneSrc>) : bool {
-    // splat: the one scalar arg fills every lane (emitters clone the duplicate references)
     if (length(c.arguments) == 1 && expr_bt(c.arguments[0]) == Type.tFloat) {
         for (_i in range(d)) {
             out |> push(LaneSrc(lane = -1, e = c.arguments[0]))   // nolint:PERF006 -- ≤4 lanes
@@ -132,15 +123,13 @@ def private resolve_ctor_lanes(var c : ExprCall?; d : int; var out : array<LaneS
 }
 
 let private SWF_NONE = 0
-let private SWF_VALUE = 1      // identity selection — drop the swizzle, keep the value
-let private SWF_BASE = 2       // single base, full in-order width — the base itself
-let private SWF_SWIZZLE = 3    // single base — one re-masked swizzle
-let private SWF_SCALAR = 4     // one scalar lane — the scalar expr
-let private SWF_SPLAT = 5      // every lane the same non-const scalar — splat ctor
-let private SWF_CTOR = 6       // re-pack whole bases + scalars into a narrower/permuted ctor
+let private SWF_VALUE = 1
+let private SWF_BASE = 2
+let private SWF_SWIZZLE = 3
+let private SWF_SCALAR = 4
+let private SWF_SPLAT = 5
+let private SWF_CTOR = 6
 
-// Maximal consecutive same-base groups of a selection ((start, len) each); scalar lanes are
-// singleton runs. Shared by classify (validity) and the rewrite (emission) so they cannot drift.
 def private swizzle_sel_runs(sel : array<LaneSrc>; var runs : array<int2>) {
     var i = 0
     while (i < length(sel)) {
@@ -159,8 +148,6 @@ def private swizzle_sel_runs(sel : array<LaneSrc>; var runs : array<int2>) {
     }
 }
 
-// Resolve the swizzled value's lanes and project the mask into `sel`; false when a field falls
-// outside the resolved lanes. `nLanes` reports the resolved width.
 def private resolve_selection(var that : ExprSwizzle?; var sel : array<LaneSrc>; var nLanes : int&) : bool {
     var lanes : array<LaneSrc>
     var ok = resolve_lanes(that.value, lanes)
@@ -183,7 +170,6 @@ def private resolve_selection(var that : ExprSwizzle?; var sel : array<LaneSrc>;
     return ok
 }
 
-// Every lane resolved to the same (describe-equal) source expression.
 def private sel_all_same_source(sel : array<LaneSrc>) : bool {
     let k0 = describe(sel[0].e)
     for (s in sel) {
@@ -192,8 +178,6 @@ def private sel_all_same_source(sel : array<LaneSrc>) : bool {
     return true
 }
 
-// Single-base arm: the base itself when the selection is its full in-order width, else one
-// re-masked swizzle.
 def private single_base_kind(sel : array<LaneSrc>; nOut : int) : int {
     var ident = nOut == float_vec_dim(expr_bt(sel[0].e))
     for (i in range(nOut)) {
@@ -204,7 +188,6 @@ def private single_base_kind(sel : array<LaneSrc>; nOut : int) : int {
     return ident ? SWF_BASE : SWF_SWIZZLE
 }
 
-// The mask reads the whole value in order — the swizzle node itself is redundant.
 def private is_identity_selection(that : ExprSwizzle?; nOut, nLanes : int) : bool {
     if (nOut != nLanes) return false
     for (i in range(nOut)) {
@@ -213,8 +196,6 @@ def private is_identity_selection(that : ExprSwizzle?; nOut, nLanes : int) : boo
     return true
 }
 
-// Ctor re-pack arm: only whole in-order bases ride free (a partial run would pay fresh extracts),
-// and rebuilding the value's own arg list is churn rather than a fold (e.g. `float2(a, a).yx`).
 def private ctor_repack_kind(var that : ExprSwizzle?; sel : array<LaneSrc>; nOut, nLanes : int) : int {
     if (nOut > nLanes) return SWF_NONE
     var runs : array<int2>
@@ -249,8 +230,6 @@ def private ctor_repack_kind(var that : ExprSwizzle?; sel : array<LaneSrc>; nOut
     return bad ? SWF_NONE : SWF_CTOR
 }
 
-// Decide which rewrite a swizzle's resolved selection admits and fill `sel` for the builder.
-// Shared by the fold arm and the residual oracle — ONE gate, so a survivor is always a fold miss.
 def private swizzle_fold_classify(var that : ExprSwizzle?; var sel : array<LaneSrc>) : int {
     if (that == null || that.fieldFlags.write) return SWF_NONE
     let nOut = length(that.fields)
@@ -263,17 +242,14 @@ def private swizzle_fold_classify(var that : ExprSwizzle?; var sel : array<LaneS
             nScalar ++
         }
     }
-    // every lane a component of one base
     if (nScalar == 0 && sel_all_same_source(sel)) return single_base_kind(sel, nOut)
-    if (nOut == 1) return SWF_SCALAR    // the single component-lane case returned above
+    if (nOut == 1) return SWF_SCALAR
     if (is_identity_selection(that, nOut, nLanes)) return SWF_VALUE
-    // every lane the same non-const scalar — splat (all-const packs to a literal via SWF_CTOR)
     var cv = 0.0
     if (nScalar == nOut && sel_all_same_source(sel) && !scalar_float_const(sel[0].e, cv)) return SWF_SPLAT
     return ctor_repack_kind(that, sel, nOut, nLanes)
 }
 
-// Oracle mirror for the swizzle fold arm (FoldResidualVisitor in flatten.das).
 def public is_unfolded_swizzle_lanes(var e : ExprSwizzle?) : bool {
     var sel : array<LaneSrc>
     let k = swizzle_fold_classify(e, sel)
@@ -283,8 +259,6 @@ def public is_unfolded_swizzle_lanes(var e : ExprSwizzle?) : bool {
     return k != SWF_NONE
 }
 
-// Build the replacement classify picked. Source nodes are reused (the old tree is discarded
-// whole); only a source landing in a second output lane gets cloned.
 def public swizzle_fold_rewrite(var that : ExprSwizzle?) : ExpressionPtr {
     var sel : array<LaneSrc>
     let kind = swizzle_fold_classify(that, sel)

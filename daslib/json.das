@@ -183,8 +183,6 @@ def private next(var text : iterator<int>; var character, line, row : int&) : bo
     return false
 }
 
-// RFC 8259 whitespace is exactly these four; the shared is_white_space also accepts
-// FF and VT, which a conforming JSON document may not carry between tokens
 def private is_json_white_space(ch : int) : bool => ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t'
 
 def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one linear lexer state machine
@@ -249,7 +247,6 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                                             codepoint += uint(c - 'A' + 10)
                                         }
                                     }
-                                    // encode codepoint as UTF-8
                                     if (codepoint <= 0x7F) {
                                         push(str, uint8(codepoint))
                                     } elif (codepoint <= 0x7FF) {
@@ -261,7 +258,6 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                                         push(str, uint8(0x80 | (codepoint & 0x3F)))
                                     }
                                 } else {
-                                    // invalid hex sequence, preserve as-is
                                     push(str, uint8('\\')) // nolint:STYLE012 the unparsed escape appends to the accumulating token buffer
                                     push(str, uint8('u'))
                                     str |> push_from(hex_str) // nolint:PERF006,LINT019 hex_str is 4 bytes max; PERF006 fires only in downstream compiles
@@ -322,7 +318,6 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                     return false
                 }
                 if (is_integer) {
-                    // we can have big unsigned numbers, which overflow int64 but fit in uint64
                     var ival = is_negative ? int64(num) : int64(uint64(num))
                     yield TokenAt(value = Token(_longint = ival), line = line, row = row)
                 } else {
@@ -530,7 +525,6 @@ def set_allow_duplicate_keys(value : bool) {
     return old_adc
 }
 
-// note - we use StringBuilderWriter for performance reasons here
 def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; depth : int) {
     //! writes JSON value `jsv` into the `writer` at indentation `depth`.
     if (jsv == null) {
@@ -677,7 +671,7 @@ def write_json_compact(val : JsonValue?) : string {
 
 def write_json(val : JsonValue?#) : string {
     //! Overload accepting temporary type
-    unsafe {// Fine, as json doesn't escape the function
+    unsafe {
         return write_json(reinterpret<JsonValue?>(val))
     }
 }
@@ -691,14 +685,9 @@ def delete_json(var jsv : JsonValue?) {
 def update(var obj : JsonValue?; key : string; var jsv : JsonValue?) {
     //! Set object field ``key`` to ``jsv``, first freeing (via ``delete_json``) whatever JsonValue was stored at ``key``. Use this instead of a bare insert when overwriting a field on a reused/long-lived object every frame — a bare ``insert`` drops the old value on the heap. No-op when ``obj`` is null or not an ``_object``.
     if (obj == null || !(obj.value is _object)) return
-    // Never store a raw null (write_json deref's object values) or the shared sentinel
-    // (a later cascade-free would delete it out from under everyone) into a tree —
-    // substitute a fresh owned null for both.
     if (jsv == null || jsv == g_json_null_sentinel) {
         jsv = JVNull()
     }
-    // Free the previous value, unless the caller passed back the very pointer already
-    // stored here (freeing then re-inserting it would be a use-after-free).
     if (key_exists(obj.value as _object, key) && (obj.value as _object)[key] != jsv) {
         delete_json((obj.value as _object)[key])
     }
@@ -712,7 +701,6 @@ def try_fixing_broken_json(var bad : string) {  // nolint:STYLE038 - one linear 
             var i = 0
             let lstr = length(str)
             while (i < lstr) {
-                // write until beginning of string or end
                 while (i < lstr && str[i] != '"'u8) {
                     if (str[i] == ','u8) {
                         var j = i + 1;
@@ -734,71 +722,62 @@ def try_fixing_broken_json(var bad : string) {  // nolint:STYLE038 - one linear 
                     writer |> write_char(int(str[i]));
                     i ++;
                 }
-                if (i >= lstr) break  // eof — done
-                // write the first quote
+                if (i >= lstr) break
                 writer |> write_char('"')
                 i ++
-                // write until end of string or end of file
                 label 0:
                 while (i < lstr && str[i] != '"'u8) {
                     writer |> write_char(int(str[i]));
                     i ++;
                 }
-                if (i >= lstr) {// if eof we done, we fix close quote and we are done
+                if (i >= lstr) {
                     writer |> write_char('"')
                     break
                 }
-                // skipping whitespace
                 let nested = i
                 var j = i + 1
                 let any_white_space = j < lstr && is_white_space(int(str[j]))
                 while (j < lstr && is_white_space(int(str[j]))) {
                     j ++
                 }
-                if (j >= lstr) {// if eof we done, we fix close quote and we are done
+                if (j >= lstr) {
                     writer |> write_char('"');
                     break;
                 }
-                // valid JSON things after string are :, }, ], or , if its one of those, we close the string and we are done
                 let strj = int(str[j]);
                 if (strj == ':' || strj == '}' || strj == ']' || strj == ',') {
                     writer |> write_char('"')
                     i ++
                     continue
                 }
-                // now, if its a + - it could be a string concatenation
                 if (strj == '+') {
                     j ++
                     while (j < lstr && is_white_space(int(str[j]))) {
                         j ++
                     }
-                    if (j < lstr && str[j] == '"'u8) {// if it is indeed new string, we go back to string writing, and add a separator
+                    if (j < lstr && str[j] == '"'u8) {
                         writer |> write_char(' ');
                         i = j + 1;
                         goto label 0;
                     }
                 }
-                // ok, its not a string concatination, or a valid character
-                // if it was a whitespace after the quote, we assume its missing ','
                 if (any_white_space) {
                     writer |> write_char('"')
                     writer |> write_char(',')
                     i = nested + 1
                     continue
                 }
-                // . we assume its nested quotes and we replace with \"
                 writer |> write("`")
                 i = nested + 1
                 while (i < lstr && str[i] != '"'u8) {
                     writer |> write_char(int(str[i]));
                     i ++;
                 }
-                if (i >= lstr) {// if eof we done, we fix nested quote and and closing quote and we are done
+                if (i >= lstr) {
                     writer |> write("`");
                     writer |> write_char('"')
                     break
                 }
-                // write the second replaced quote
                 writer |> write("`")
                 i ++
                 goto label 0

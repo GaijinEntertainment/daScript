@@ -68,3 +68,87 @@ the balance panic in each entry point is the tripwire.
 `concat` variadics, `MAX_VARIADIC_PUSH_ARITY` ↔ builtin `push_from`/`push_clone_from`;
 growing either overload set without the cap is a silently missed finding, the reverse a
 suggestion that does not compile.
+
+**AOT emit is fail-closed: every entry point tests `macroException`/`failToCompile` BEFORE
+materializing output.** A codegen exception mid-visit leaves partial C++; the emitter never
+reports through `panic` (`runMacroFunction` swallows it) — an unreachable emit state writes
+`#error` into the output instead.
+
+**The two places that build a struct's C++ identifier agree via `buildStructEnumCollisions`,
+seeded before any AOT name is emitted.** An emit path that skips the seeding, or a suffix
+rule changed on one side, produces `offsetof`s naming a struct declared under a different
+identifier.
+
+**`match_error` stores a BORROWED `LineInfo` pointer — pass a pattern node's location,
+never a synthesized access expression's.** Access nodes are cloned per field inside a bare
+scope and die with it.
+
+**A macro that lowers lambdas reports through `macro_sticky_error`, never `macro_error`.**
+A later pass lowers the lambda to a plain function and clears non-sticky errors.
+
+**UTF-8 byte-class tables are indexed through `uint(uint8(ch))`** — `for (ch in string)`
+yields a SIGNED byte under JIT; a raw index reads out of bounds for every byte >= 0x80.
+
+**A residual oracle mirrors its transform's gate exactly and never calls the transform.**
+Every flatten_opt rewrite arm pairs with a read-only predicate the residual visitors use to
+prove the pass complete; a narrower oracle is a false pass, a wider one a false miss, and
+calling the transform from an oracle aliases the live tree.
+
+**Every new fold/fuse arm declares its float class.** Inf/NaN/rounding/association changes
+are fast-math-only; bit-exact per-lane rewrites are never gated. An arm added without that
+decision silently changes output under `_flatten_no_fast_math`.
+
+**A fuse arm emits a call only after proving the target module can resolve it**, and the
+miss path falls back to the unfused shape — the pass must never turn a shader that compiled
+into an unresolvable call on a narrower backend.
+
+**`flatten_function`'s pass order is load-bearing** (dse → copy-prop → mask-const-prop →
+dse → ssa-rename): each pass produces the next one's input; reordering leaves scaffolding
+in a twin that must verify branchless and call-free.
+
+**`lift_expr` and the lowering it drives use plain recursion, never `make_visitor`** —
+inlining recurses back through the pipeline, and a nested visitor traversal corrupts the
+visitor machinery.
+
+**A macro that splices the same subexpression more than once pre-binds it to a local ref
+first** — re-splicing re-evaluates a call once per splice; a lock/unlock pair then releases
+a different temporary than it took.
+
+**Every `[sql_table]` helper pair registers its 2-arg form BEFORE the 1-arg form** —
+`find_struct_helper_fn` keeps the LAST match, and the finish pass rewrites the helper it
+returns; swapped, index DDL attaches to the wrong overload.
+
+**A generated SQL statement's column list and its bind function change in one edit.** Bind
+indices are placeholder positions over bindable columns, never struct field positions;
+drift is silently wrong data, not an error.
+
+**A new environment-reading spelling joins the env_registry marker lists in the same
+change.** The scanners match source text; a missing spelling makes every enforcement test
+pass vacuously.
+
+**`ast_verify` checks name the C++ site that dereferences the slot unguarded, and repair
+the slot as well as reporting.** A check with no such site invents an invariant the
+compiler does not hold (`if_false`, `ExprFor.body`, `with (module x)` are legitimately
+null).
+
+**64-bit range sums prove both operands non-negative BEFORE summing as `uint64`**
+(`erase(at, count)`): a signed sum wraps, the bounds test passes, and the walk leaves the
+array silently.
+
+**Macro-built AST carries no branch a macro-time value can decide** — nothing folds at
+macro-application time, so a generated `if ($v(flag))` keeps its dead arm and type-checks
+it. Branch in daslang and emit only the taken arm.
+
+**Every buffer-I/O overload returns before taking `addr(buf[0])` on an empty buffer** —
+the address is out of bounds and the call sits inside `unsafe`; a new overload without the
+guard passes every non-empty test.
+
+**`apply`'s inline path decides lvalue-ness by node KIND, never by a ref flag**, and the
+generated let carries `alwaysSafe` — that, not an `unsafe` block, licenses the variant
+access; an rvalue stays materialized because a reference to a temporary dangles.
+
+**A swizzle rewrite reuses each source node once and clones every repeat** — the first
+appearance moves, a second output lane MUST clone, or one node gets two parents.
+
+**The RST label and topic key are computed twice — pre-infer and post-infer — and must
+agree byte-for-byte**, or the page prints a bare signature and the symbol re-stubs.

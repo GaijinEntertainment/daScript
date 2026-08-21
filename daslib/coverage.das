@@ -31,7 +31,6 @@ require daslib/templates_boost
 let private builtin_files = fixed_array("fio.das", "ast.das", "builtin.das", "debugger.das", "network.das", "rtti.das")
 
 def private generated_call(var e : ExpressionPtr) : ExpressionPtr {
-    // instrumentation calls are machinery output: lint skips them, and the inliner's cross-module `_::` gate exempts generated calls whose target resolves anywhere
     e.genFlags.generated = true
     return e
 }
@@ -69,9 +68,9 @@ struct BranchCov {
 }
 
 struct CoverageData {
-    line_cov = LineCov() // Line coverage.
-    func_cov : table<string; FuncCov> // Function name -> Function coverage.
-    branch_cov : table<uint; BranchCov> // branch_idx -> Branch coverage.
+    line_cov = LineCov()
+    func_cov : table<string; FuncCov>
+    branch_cov : table<uint; BranchCov>
 }
 
 var public coverageData = table<string; CoverageData>()
@@ -265,12 +264,11 @@ def public add_branch_coverage(file : string; branch_idx : uint) {
     }
 }
 
-// compile-time data for function and branch registration
 struct RegisterData {
     allFunctions : table<string; uint>
     allBranches : array<tuple<uint; uint; uint>>
     branchCounter : uint
-    funcLines : table<string; table<uint>>  // fname -> set of lines
+    funcLines : table<string; table<uint>>
 }
 
 var registration_data = table<string; RegisterData>()
@@ -346,7 +344,6 @@ class CoverageMacro : AstVisitor {
             false_idx = uint(file_reg.allBranches |> length)
             file_reg.allBranches |> push(tuple(line, block_num, 1u))
         }
-        // instrument true branch
         if (ifte.if_true != null && ifte.if_true is ExprBlock) {
             var true_blk = unsafe(reinterpret<ExprBlock?>(ifte.if_true))
             var prevTrue : array<ExpressionPtr>
@@ -359,7 +356,6 @@ class CoverageMacro : AstVisitor {
                 true_blk.list |> emplace <| el
             }
         }
-        // instrument false branch
         if (ifte.if_false != null && ifte.if_false is ExprBlock) {
             var false_blk = unsafe(reinterpret<ExprBlock?>(ifte.if_false))
             var prevFalse : array<ExpressionPtr>
@@ -372,7 +368,6 @@ class CoverageMacro : AstVisitor {
                 false_blk.list |> emplace <| el
             }
         } elif (ifte.if_false == null) {
-            // no else branch — create one with just the branch coverage call
             var elseBlk = new ExprBlock(at = ifte.at)
             elseBlk.list |> emplace_new <| generated_call(qmacro(_::add_branch_coverage($v(file), $v(false_idx))))
             ifte.if_false = elseBlk
@@ -393,7 +388,6 @@ class CoverageMacro : AstVisitor {
         }
         blk.list |> clear()
         for (el in prev) {
-            // Todo: add linter phase to check fileInfo is never null.
             if (el.at.fileInfo != null) {
                 let file = resolve_file_path(string(el.at.fileInfo.name))
                 if (file |> ends_with("coverage.das")) {
@@ -418,8 +412,6 @@ class CoverageMacro : AstVisitor {
     }
 
     def override preVisitExprAssert(var expr : ExprAssert?) {
-        // Once coverage added all assertions should become verify
-        // since side-effects added when calling coverage tools.
         expr.isVerify = true
         astChanged = true
         func.not_inferred()
@@ -453,19 +445,16 @@ class CoveragePass : AstPassMacro {
         }
         let result = astVisitor.astChanged
         if (result) {
-            // generate [init] function that registers all instrumented lines with 0 hits
             var initFn = qmacro_function("__coverage_init") $() {
                 pass
             }
             var blk = unsafe(reinterpret<ExprBlock?>(initFn.body))
             blk.list |> clear()
             for (file, values in keys(coverageData), values(coverageData)) {
-                // register lines
                 let lineArr <- [for (line in keys(values.line_cov.lines)); line]
                 blk.list |> emplace_new <| qmacro(_::register_coverage_lines($v(file), $v(lineArr)))
             }
             for (file, reg_data in keys(registration_data), values(registration_data)) {
-                // register functions
                 var nameArr : array<string>
                 var lineArr : array<uint>
                 for (fname, fline in keys(reg_data.allFunctions), values(reg_data.allFunctions)) {
@@ -474,13 +463,11 @@ class CoveragePass : AstPassMacro {
                 }
                 blk.list |> emplace_new <| qmacro(coverage::register_coverage_functions($v(file), $v(nameArr), $v(lineArr)))
 
-                // register per-function lines
                 for (fname, flines in keys(reg_data.funcLines), values(reg_data.funcLines)) {
                     let flineArr <- [for (fl in keys(flines)); fl]
                     blk.list |> emplace_new <| qmacro(coverage::register_coverage_func_lines($v(file), $v(fname), $v(flineArr)))
                 }
 
-                // register branches
                 let nbranches = reg_data.allBranches |> length()
                 var blines : array<uint>
                 var block_nums : array<uint>
@@ -579,11 +566,8 @@ def is_excluded(file : string; exclude_prefixes : array<string>) : bool {
 }
 
 
-// One LCOV record line for `currentFile`. `funcStarts` accumulates FN start lines so the caller can
-// map DA lines back onto functions once the whole file is read.
 def private parse_lcov_record(line : string; currentFile : string; var cov : CoverageData; var funcStarts : table<string; array<tuple<uint; string>>>) {
     if (line |> starts_with("FN:")) {
-        // FN:line,name
         let rest = slice(line, 3)
         let comma = find(rest, ",")
         if (comma >= 0) {
@@ -597,7 +581,6 @@ def private parse_lcov_record(line : string; currentFile : string; var cov : Cov
             }
         }
     } elif (line |> starts_with("FNDA:")) {
-        // FNDA:hit_count,function_name
         let rest = slice(line, 5)
         let comma = find(rest, ",")
         if (comma >= 0) {
@@ -608,7 +591,6 @@ def private parse_lcov_record(line : string; currentFile : string; var cov : Cov
             }
         }
     } elif (line |> starts_with("DA:")) {
-        // DA:line_number,hit_count
         let rest = slice(line, 3)
         let comma = find(rest, ",")
         if (comma >= 0) {
@@ -621,13 +603,11 @@ def private parse_lcov_record(line : string; currentFile : string; var cov : Cov
             }
         }
     } elif (line |> starts_with("BRDA:")) {
-        // BRDA:line,block,branch,taken
         let rest = slice(line, 5)
         let last_comma = rfind(rest, ",")
         if (last_comma >= 0) {
             let taken = slice(rest, last_comma + 1)
             let hits = taken == "-" ? 0u : uint(to_int(taken))
-            // parse line,block,branch from the key part
             let key_part = slice(rest, 0, last_comma)
             let c1 = find(key_part, ",")
             if (c1 >= 0) {
@@ -652,11 +632,8 @@ def private parse_lcov_record(line : string; currentFile : string; var cov : Cov
 
 
 def parse_lcov(lcov_path : string; exclude_prefixes : array<string>) : table<string; CoverageData> {
-    // Parses an LCOV file (possibly containing multiple records for the same
-    // source file), populates coverageData, and calls get_coverage_summary.
     var currentFile = ""
     var skipFile = false
-    // Track function start lines per file for assigning DA lines to functions.
     var funcStarts : table<string; array<tuple<uint; string>>>
     var result = table<string; CoverageData>()
     fopen(lcov_path, "rb") $(f) {
@@ -678,14 +655,12 @@ def parse_lcov(lcov_path : string; exclude_prefixes : array<string>) : table<str
             }
         }
     }
-    // Sort function starts and assign DA lines to functions for per-function line coverage.
     for (file, starts in keys(funcStarts), values(funcStarts)) {
         sort(starts) $(a, b) {
             return a._0 < b._0
         }
         result |> get(file) $(var cov) {
             for (ln, hits in keys(cov.line_cov.lines), values(cov.line_cov.lines)) {
-                // Find function with largest start line <= ln.
                 var bestFunc = ""
                 for (s in starts) {
                     if (s._0 <= ln) {
@@ -709,25 +684,18 @@ def parse_lcov(lcov_path : string; exclude_prefixes : array<string>) : table<str
     return <- result
 }
 
-// ==========================================================================
-// Public API
-// ==========================================================================
-
-// Assigns to str coverage summary
 [export]
 def public fill_coverage_summary(var str : string?; per_function : bool = false) {
     *str = get_coverage_summary(coverageData, per_function)
 }
 
 
-// Assigns to `dest` coverage in `lcov` format
 [export]
 def public fill_coverage_report(var dest : string?; name : string = "") {
     //! Fills the string at dest with the coverage report. Used for cross-context data transfer.
     *dest = get_report(name)
 }
 
-// Returns all recorded coverage table to this moment.
 [export, unused_argument(cov)]
 def public get_coverage_details(var cov : table<string; CoverageData>?) {
     return <- clone(coverageData)

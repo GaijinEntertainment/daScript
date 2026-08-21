@@ -47,8 +47,7 @@ def private env_text_is_true(v : string) : bool {
     return !(empty(s) || s == "0" || s == "false" || s == "off" || s == "no")
 }
 
-// last occurrence wins, matching general command-line convention
-def private find_arg_text(flag : string) : tuple<found : bool; value : string> {
+def private find_last_arg_text(flag : string) : tuple<found : bool; value : string> {
     var res = (found = false, value = "")
     let args <- get_command_line_arguments()
     let eq_prefix = flag + "="
@@ -80,7 +79,6 @@ class BuildFlagMacro : AstCallMacro {
                 on_argv = true
                 res = true
             } elif (starts_with(a, eq_prefix)) {
-                // --flag=value spelling, same truth rule as the env carrier
                 on_argv = true
                 res = env_text_is_true(a |> trim_prefix(eq_prefix))
             }
@@ -102,7 +100,7 @@ class BuildValueMacro : AstCallMacro {
         let flag = string((expr.arguments[0] as ExprConstString).value)
         let name = string((expr.arguments[1] as ExprConstString).value)
         var res = string((expr.arguments[2] as ExprConstString).value)
-        let hit = find_arg_text(flag)
+        let hit = find_last_arg_text(flag)
         if (hit.found) {
             res = hit.value
         } elif (has_env_variable(name)) {
@@ -125,7 +123,7 @@ class BuildIntMacro : AstCallMacro {
         let flag = string((expr.arguments[0] as ExprConstString).value)
         let name = string((expr.arguments[1] as ExprConstString).value)
         var res = (expr.arguments[2] as ExprConstInt).value
-        let hit = find_arg_text(flag)
+        let hit = find_last_arg_text(flag)
         let env_text = has_env_variable(name) ? get_env_variable(name) : ""
         if (hit.found) {
             let parsed = try_to_int(hit.value)
@@ -167,7 +165,7 @@ class BuildArgValueMacro : AstCallMacro {
         macro_verify(expr.arguments[0] is ExprConstString && expr.arguments[1] is ExprConstString, prog, expr.at,
             "build_arg_value: flag and dflt must be string literals, got {describe(expr.arguments[0])}, {describe(expr.arguments[1])}")
         let flag = string((expr.arguments[0] as ExprConstString).value)
-        let hit = find_arg_text(flag)
+        let hit = find_last_arg_text(flag)
         let res = hit.found ? hit.value : string((expr.arguments[1] as ExprConstString).value)
         return <- qmacro($v(res))
     }
@@ -181,7 +179,7 @@ class BuildArgIntMacro : AstCallMacro {
         macro_verify(expr.arguments[0] is ExprConstString && expr.arguments[1] is ExprConstInt, prog, expr.at,
             "build_arg_int: flag must be a string literal and dflt an int literal, got {describe(expr.arguments[0])}, {describe(expr.arguments[1])}")
         let flag = string((expr.arguments[0] as ExprConstString).value)
-        let hit = find_arg_text(flag)
+        let hit = find_last_arg_text(flag)
         var res = (expr.arguments[1] as ExprConstInt).value
         if (hit.found) {
             let parsed = try_to_int(hit.value)

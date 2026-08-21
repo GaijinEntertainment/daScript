@@ -361,13 +361,9 @@ def public week_day(year, month, day : int) {
         afterFeb = 0
     }
     let aux = year - 1700 - afterFeb
-    // dayOfWeek for 1700/1/1 = 5, Friday
     var dayOfWeek  = 5
-    // partial sum of days betweem current date and 1700/1/1
     dayOfWeek += (aux + afterFeb) * 365
-    // leap year correction
     dayOfWeek += aux / 4 - aux / 100 + (aux + 100) / 400
-    // sum monthly and day offsets
     dayOfWeek += offset[month] + (day - 1)
     dayOfWeek %= 7
     return dayOfWeek

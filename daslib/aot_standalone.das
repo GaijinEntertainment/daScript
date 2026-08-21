@@ -41,12 +41,10 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
             write(logs, "    ");
         }
         write(logs, "auto {prefix}{aotFunctionName(string(fn.origin != null ? fn.origin.name : fn.name))} ( ");
-    // describe arguments
         var vars : array<string>
         vars |> reserve(length(fn.arguments))
         for (variable in fn.arguments) {
             if (variable._type.baseType == Type.tStructure && declare_only) {
-                // It doesn't cover all cases, but anyway we'll get CE.
                 panic("Structures is not allowed in standalone contexts arguments.")
             }
             let type_str = build_string() $(var wr) {
@@ -61,7 +59,6 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
         let vars_str = join(vars, ", ");
         write(logs, "{vars_str}{!fn.arguments.empty() ? " " : ""}) -> ")
         if (fn.result.baseType == Type.tStructure && declare_only) {
-            // It doesn't cover all cases, but anyway we'll get CE.
             panic("Structures is not allowed in standalone contexts return types.");
         }
         describeLocalCppType(unsafe(addr(logs)), fn.result, cfg.cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes);
@@ -93,10 +90,6 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     }
 
     write(tw, "{cfg.class_name}::{cfg.class_name}() \{\n");
-    /**
-     * Same as in Program::simulate
-     * However, here we should delay it to execution time.
-     */
     write(tw, "    auto & context = *this;\n");
     write(tw, "    CodeOfPolicies policies;");
     write(tw, "    policies.debugger = {program.policies.debugger} /*policies.debugger*/;\n");
@@ -125,7 +118,6 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     write(tw, "    context.tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();\n");
     write(tw, "    context.tabMnLookup->clear();\n");
 
-    // MSVC forbide arrays of size 0
     if (initFunctions |> !empty(initFunctions)) {
         write(tw, "     // start totalFunctions\n");
         write(tw, "    struct FunctionStorage \{ int idx; FunctionInfo funcInfo; FuncInfo* debugInfo; \};\n");
@@ -156,7 +148,6 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
         });
     });
 
-    // aot init
     if (program.initSemanticHashWithDep != uint64(0)) {
         write(tw, "    \{\n");
         write(tw, "        auto it = getGlobalAotLibrary().find(0x{program.initSemanticHashWithDep:x}/*initSemanticHashWithDep*/);\n");
@@ -233,11 +224,9 @@ class StandaloneContextGen : CppAot {
         write(*ss, "\}\n");
     }
     def override preVisitProgramBody(var prog : ProgramPtr, that : Module?) {
-        // functions
         declarations = ss |> string_builder_str();
         ss |> string_builder_clear();
         write(*ss, "\n");
-        // print forward declarations
         let fnn = collectProgramUsedFunctions(prog, false, false);
         var inline_fns : array<string>
         for (pfun in fnn) {
@@ -270,10 +259,6 @@ def writeRegistration(var header : StringBuilderWriter;
     write(source, "\} // namespace {cfg.context_name}\n");
 }
 
-/**
- * Adds debug info to AotDebugInfoHelper
- * @return String with initialization of all functions
- */
 def GetFunctionInfo(pfun : Function?, info : string) {
     return build_string() $(tw) {
         let args = ["\"{pfun.name}\"",
@@ -338,7 +323,6 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
         }
     }
-    // Fail-closed (#3065): never assemble standalone C++ from a partial emit -- abort if a macro/codegen exception was recorded during the visits above.
     fail_on_aot_emit_error(program)
 
     write(source, "namespace {program.thisNamespace} \{\n");
@@ -351,7 +335,6 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
     //! Runs the standalone AOT visitor on the program to generate C++ source and header files.
     assume context = *pctx;
 
-    // mark prologue
     var pmarker = new PrologueMarker();
     make_visitor(*pmarker) $(adapter_p) {
         visit(program, adapter_p)
@@ -359,7 +342,6 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
 
     setAotHashes(program, context);
 
-    // now, for that AOT
     var flags = new SetPrinterFlags();
     make_visitor(*flags) $(flags_adapter) {
         visit(program, flags_adapter)
@@ -371,7 +353,6 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
     }
 
     let mod = program.getThisModule;
-    // if ( mod.isProperBuiltin() ) return true;
     let mod_name = mod.moduleFlags.promoted ? "" : string(mod.name);
     var source_content = ""
     let header_content = build_string() $(header) {
@@ -402,11 +383,8 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
     }
     }
 
-    // get the name of the current file from program?
-
     let cur_mod = mod.name.empty() ? cfg.context_name : string(mod.name);
     let outputFile = "{cfg.cpp_output_dir}/{cur_mod}.das";
-    // if (mod.name.empty()) {
         fopen("{outputFile}.h", "wb") $(fw) {
             if (fw != null) {
                 fwrite(fw, header_content)
@@ -414,7 +392,6 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
                 print("Couldn't create output file {outputFile}.h")
             }
         }
-    // }
     fopen("{outputFile}.cpp", "wb") $(fw) {
         if (fw != null) {
             fwrite(fw, source_content)
@@ -436,7 +413,6 @@ def public standalone_aot(input : string; output_dir : string; cross_platform : 
     using() $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")
         compile_and_simulate(input, access, unsafe(addr(mg)), cop) $(var program : ProgramPtr; var pctx : smart_ptr<Context>) {
-            // lets comment on required modules
             let (modules_str, noAotModule) = getRequiredModulesFor(program)
             if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
                 panic("Standalone context called on non aot module {input}")

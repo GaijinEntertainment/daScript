@@ -191,3 +191,133 @@ an entry lands here only when no name, shape, or test can carry it.
   caps report-arg recursion at 8 and fails closed (deeper is unknown shape);
   `LINT_SKIP_HEADER_LINES = 16` exists so prose quoting the directive cannot unlint a
   file; STYLE037's 20 and `note_type`'s depth 24 have no recorded derivation.
+
+## aot_cpp
+
+- **C++ identifier mangling**: `aotSuffixNameEx` prepends `_S`/`_E`/`_V`/`_f_` when a das
+  name is a C++ keyword, holds a non-alnum char, or is `DELETE` (winnt.h). Structs and
+  enums share ONE C++ namespace while daslang keeps separate tables, so `struct X` +
+  `enum X` in one module is legal das and a C++ redefinition — `buildStructEnumCollisions`
+  finds the pairs per module and forces both suffixes.
+- **The emitter targets the MSVC/GCC/Clang intersection; the redundant-looking spellings
+  are the portable ones** — `INT64_C`, the explicit `0x8000000000000000` enum arm,
+  `to_cpp_double`'s named non-finite tokens (mirrors `src/builtin/runtime_string.cpp` and
+  moves with it), elaborated `struct X`, double parens around `das_iterator` sources
+  (most vexing parse), non-const value loop variables (`first()`/`next()` write into it).
+- **Stack-frame `new`/ascend**: per-block storage declared once, the USE site
+  re-initializes per evaluation (memset for `new`, whole-value overwrite for ascend) —
+  dropping the reinit reuses the previous iteration's value.
+- **fp16 and the 8/16-bit lattice ride the vec4f policy ABI**: `SimPolicy_HalfVec` is
+  vec4f-shaped even at width 1, so scalar fp16 always casts across the policy boundary,
+  and a lattice-vector policy result must come back typed for `das_equ_val` deduction.
+  Lattice swizzles use element-typed helpers — generic `das_swizzle` caps at 4 fields,
+  `v_extract` is 32-bit-lane only.
+- **A struct needs a COMPLETE C++ type more often than field access suggests** — globals
+  need `sizeof` even untouched, and by-value field types emit depth-first before their
+  owner, or the type degrades to a forward declaration.
+
+## flatten
+
+- **Predicated lowering carries one live-mask per exit flavor** — `__flat_live` for
+  return, a per-loop break mask (persists across unrolled copies) and continue mask
+  (re-minted per copy). A write's predicate ANDs every active mask plus the structural
+  predicate; a narrow term excludes its own mask so it self-cancels. An inlined callee
+  gets a fresh live mask and lowers with `ctx.loopMasks` moved OUT, so its break/continue
+  can never reach the caller's loops.
+- **`flatten_preshade_cse` is a joint fixpoint, not a pipeline** — extraction, regroup,
+  CSE and alias elimination mutually enable each other; the `_preshader_`/`_cse_` counters
+  are owned by that loop and re-seeded from surviving suffixes (per-call numbering
+  re-mints a live name).
+- **A CSE/regroup tally counts exactly the regions its rewrite can change** — a duplicate
+  counted where the rewrite cannot reach never drops below 2 and spins the fixpoint to its
+  guard.
+- **`__flat_ret` carries `safeWhenUninitialized` only while every write is a
+  self-referential select** — a lowering change that makes the bare-decl read observable
+  turns the flag into a real uninitialized read.
+- **CSE is local value numbering over one converged basic block, and it is complete** —
+  pure subtrees keyed by `describe()`; value-stability = reads no reassigned name; a store
+  through index/field/swizzle destabilizes its base; an unrecognized node fails closed as
+  mutable-reading. Uniform duplicates route to the preshader.
+- **The copy-prop/CSE walks stay O(size)** — one name-to-statement index, one structural
+  walk; never materialize a `string` per `ExprVar` in a visitor callback (O(n^2) persistent
+  heap — the heap-overflow amplifier).
+
+## ast_verify
+
+- **One node set answers two opposite questions**: a node reached TWICE has two parents
+  (broken unique ownership); a gc-owned node reached ZERO times sits in a slot no visitor
+  enters, so every visitor-driven pass edits a tree it cannot see in full. Slots C++
+  `::visit` skips are walked by hand or recorded as whole trees — reading the matching
+  `::visit` is step one of adding a check.
+- **Reporting is repair**: diagnostics go through `macro_sticky_error` (infer clears plain
+  errors from a repaired tree); null entries in per-entry-dereferenced lists compact in
+  preVisit; a self-reachable node is CUT, not reported — a cycle kills every later walk.
+- **The two passes' skip sets are complementary**: pre-infer skips `generated` (filled in
+  across passes); post-infer skips only `[template]` bodies and dasbind `[extern]` stubs —
+  so generated bodies ARE checked post-infer, by nothing else.
+
+## quote
+
+- **A lowered quote is a generated leaf function, not an inline expression** — one frame
+  per quote instead of inflating every caller's; the result type clones the quote's static
+  type because `autoinfer` would leak the concrete node type and break `Expression?`
+  identity consumers.
+- **`blacklist` entries naming back-references break reconstruction cycles — removing one
+  hangs the walk** (`Function.classParent`, `ExprReturn._block`, `ExprVar.pBlock`,
+  `EnumEntry.value`); the rest are post-infer bookkeeping absent from quoted trees.
+
+## dupe_detect
+
+- **A run is unextractable when its meaning depends on the scope around it** — the gate
+  counts `unsafe`-authorized operations, `assume` aliases, `defer` (lowered away), and
+  `break`/`continue` targeting a loop the run does not own.
+- **The index is a preorder node array over the LIVE AST** — records keep node ids and
+  read `.at` off the node; `ExprConst*` re-enters the base pre-visit hook and the second
+  entry pushes a `-1` marker — lose it and every preorder interval is wrong.
+
+## misc module contracts
+
+- **interfaces**: the implements-marker IS the generated getter field — `is`/`as`/`?as`
+  key purely on its presence; parent interfaces get their own deduped getter fields.
+- **flat_hash_table**: `hashes[i]` is the slot state — 0 never-used (probe stops),
+  1 tombstone (probe continues), above 1 live; a hash function that can return 0 or 1
+  loses entries silently.
+- **coverage**: instrumentation is `generated` (lint-invisible, inliner-safe) and asserts
+  become verify so their spliced counters survive release.
+- **regex**: zero-width nodes (lookahead, Bos/Eos, word boundaries) leave `subexpr.next`
+  null on purpose — chaining them would consume the continuation.
+- **debugger**: `g_installed_agents` is the GC root for every installed agent — the C++
+  adapter holds a raw classPtr the das GC cannot see.
+- **typemacro_boost**: the parser does not run annotation `apply` for macro-added
+  functions — the add/erase pair in `tsi_stamp_methods` IS the trigger, not bookkeeping.
+- **constant_expression**: the generated specialization is called through `__::` — a
+  plain name resolves in the call site's DEFINING module, where it does not exist.
+- **toml**: the writer is hand-rolled because the builtins do not round-trip (`\v`,
+  raw 0x7f, float exponent thresholds); a value scan that runs into a bare-key char
+  rewinds and re-lexes as a key — a new numeric form needs the same rewind.
+- **shader_block_layout**: two rails, deliberately separate — the 32-bit-only std140
+  LAYOUT rail and the wider ARITHMETIC rail; 64-bit INT fails closed as a block member
+  before any opcode; `cpu_only_lattice_width` keys both emitters' fail-closed diagnostic.
+- **shader_lingua_franca**: every symbol is either an exact CPU mirror of its GPU
+  semantics or a `[sideeffects]` dummy every rail lowers by name — the dummies return
+  zero on the host, so a CPU replay is an oracle only for the real-bodied set. Unsigned
+  overloads never fold into signed twins (glslang picks the unsigned opcode).
+- **templates_boost**: `stamp_missing_at` fills only MISSING locations (unlike the
+  force-at of `$e()`); `carry_tag_safe_flags` copies the parser's unsafe-wrap flags
+  across `$c` substitution or the safety is lost where the result lands.
+- **archive**: `ArchiveSerializer.write` grows capacity eagerly because under a
+  very_safe_context each doubling generation is abandoned, not reused; no alias into
+  `data` survives a write.
+- **json**: `is_json_white_space` is deliberately not the shared `is_white_space` —
+  RFC 8259 admits exactly space/tab/CR/LF.
+- **sql_migrate**: the audit table is provider-neutral by construction (client-side epoch
+  seconds, BIGINT); duplicate versions are caught in two layers because neither sees
+  everything; the `struct_convert_field` overload set is a specificity ladder — deleting
+  a "duplicate" silently re-routes conversions.
+- **fio**: the glob matcher follows POSIX fnmatch on degenerate patterns (unterminated
+  `[`, `]` as first class member, `**/` slash rules) — conformance, not quirks.
+- **decs**: component finalizers are lambdas over the component's own untyped storage —
+  deleting the lambda IS the finalization event; capacity checks compare the highest
+  allocated value (`base + count - 1`), not the exclusive end.
+- **builtin**: `_table_index_and_init` exists for infer's `default_init_containers`
+  rewrite of non-store `tab[key]` — it has no daslib call site and is not dead.

@@ -36,9 +36,6 @@ class DapiDebugAgent {
     @do_not_delete thisAgent : DebugAgent ?
 }
 
-// GC root for every installed agent: the C++ DebugAgentAdapter holds a raw classPtr the das GC
-// can't see, so an unrooted agent is collected and the adapter reads freed memory (the
-// 2026-07-19 serving crash). Base-typed — the gc walker traces class objects by runtime type.
 var private g_installed_agents : array<DapiDebugAgent?>
 
 def install_new_debug_agent(var agentPtr; category : string) {
@@ -67,7 +64,6 @@ def install_new_thread_local_debug_agent(var agentPtr) {
     }
 }
 
-// das::Array. should we bind C++ structure?
 struct DapiArray {
     data : void?
     size : uint64
@@ -78,36 +74,31 @@ struct DapiArray {
     _pad_after_flags : uint
 }
 
-// das::Table. should we bind C++ structure?
 struct DapiTable : DapiArray {
     keys : void?
     hashes : uint?
     tombstones : uint64
 }
 
-// das::Block
 struct DapiBlock {
     stackOffset : uint
     argumentsOffset : uint
-    body : void?                    // SimNode *
+    body : void?
     aotFunction : void?
     functionArguments : float4?
     info : FuncInfo?
 }
 
-// das::Func
 struct DapiFunc {
     index : int
 }
 
-// das::Lambda
 struct DapiLambda {
     captured : void?
 }
 
-// das::Sequence
 struct DapiSequence {
-    iter : void?        // Iterator *
+    iter : void?
 }
 
 class DapiDataWalker {

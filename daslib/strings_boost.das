@@ -91,8 +91,6 @@ def private join_implement(iterable; separator : string; blk) : string {
     return st
 }
 
-// iterators must be iterated mutably (30939 on a const iterator), while the array/fixed-array
-// forms must keep binding let-declared sources - hence a var twin instead of one shared helper
 [temp_string_result]
 def private join_implement_iterator(var iterable : iterator<auto(TT)>; separator : string; blk) : string {
     let st = build_string() $(var writer) {
@@ -171,7 +169,6 @@ def eq(b : das_string; a : string implicit) {
 }
 
 
-// https://en.wikipedia.org/wiki/Levenshtein_distance
 def levenshtein_distance(s, t : string implicit) : int {
     //! computes Levenshtein distance between strings s and t
     let sLen = length(s)
@@ -197,8 +194,6 @@ def levenshtein_distance(s, t : string implicit) : int {
     return d[sLen][tLen]
 }
 
-// https://en.wikipedia.org/wiki/Levenshtein_distance#Iterative_with_two_matrix_rows
-// https://www.codeproject.com/Articles/13525/Fast-memory-efficient-Levenshtein-algorithm-2
 def levenshtein_distance_fast(s, t : string implicit) : int {
     //! computes Levenshtein distance between strings s and t using optimized memory
     let sLen = length(s)
@@ -393,7 +388,6 @@ def public glob_match(pattern, text : string) : bool {
     //! Matches ``text`` against a shell-style glob ``pattern``.
     if (empty(pattern)) return empty(text)
     if (empty(text)) {
-        // text is empty — only matches if pattern is all *'s
         unsafe {
             var pp = reinterpret<uint8?>(pattern)
             while (*pp == uint8('*')) {

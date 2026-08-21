@@ -80,7 +80,6 @@ class ValidateCompletionVisitor : AstVisitor {
                 }
             }
         }
-                // TODO: add support for more known finite sources
         if (!srcOk) {
             macro_error(compiling_program(), expr.at, "we don't know if this `for` loop ever finishes. add explicit range")
         }

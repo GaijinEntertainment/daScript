@@ -38,19 +38,19 @@ def spoof_args(invocation : string; blk : block<(var res : array<tuple<argName :
             return (argName = e, init = "")
         }
         var sub_element : string
-        rule("\\", "{set(0..255)}" as Ch) {    // escape
+        rule("\\", "{set(0..255)}" as Ch) {
             return string(Ch)
         }
-        rule("#", string_ as e, commit) {      // contents of the string (do we need unescape?)
+        rule("#", string_ as e, commit) {
             return e
         }
-        rule(string_ as e, commit) {           // "e"
+        rule(string_ as e, commit) {
             return "\"{e}\""
         }
-        rule("(", element as e, ")") {         // (e)
+        rule("(", element as e, ")") {
             return "({e})"
         }
-        rule("{not_set(')',',')}" as e) {      // any character except ')' and ','
+        rule("{not_set(')',',')}" as e) {
             return e
         }
         var element_value : string
@@ -92,7 +92,6 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
         }
     }
     if (empty(args)) return (result = error, ok = false)
-    // compare argument counts
     var instance_arguments : array<string>
     for (a, ai in args, count()) {
         if (ai < passed_arguments |> length) {
@@ -103,7 +102,6 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
             return (result = "invalid number of arguments", ok = false)
         }
     }
-    // skip to next line
     var it <- unsafe(each(temp))
     var Ch = -1
     while (next(it, Ch)) {
@@ -115,12 +113,11 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
         Ch = -1
     }
     if (Ch == -1) return (result = "unexpected end of file", ok = false)
-    // now, lets apply the arguments
     var result : array<uint8>
     var pendingCh : int
     Ch = 0
     while (Ch == -1 || next(it, Ch)) {
-        if (Ch == -1) {// we have pending character
+        if (Ch == -1) {
             Ch = pendingCh
         }
         if (Ch == SPOOF_SPEFICAL) {
@@ -135,7 +132,7 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
                         result |> push(uint8(c))
                     }
                 }
-                if (Ch != -1) {// pending after ident
+                if (Ch != -1) {
                     pendingCh = Ch
                     Ch = -1
                 }
@@ -143,7 +140,7 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
                 result |> push(uint8(SPOOF_SPEFICAL))
                 result |> push(uint8(SPOOF_SPEFICAL))
             } elif (Ch == -1) {
-                break   // eof
+                break
             } else {
                 return (result = "invalid sequence after %", ok = false)
             }
@@ -200,19 +197,19 @@ def instance_args(invocation : string; blk : block<(var res : SpoofInvocation; e
             return e
         }
         var sub_element : string
-        rule("\\", "{set(0..255)}" as Ch) {    // escape
+        rule("\\", "{set(0..255)}" as Ch) {
             return string(Ch)
         }
-        rule("#", string_ as e, commit) {      // contents of the string (do we need unescape?)
+        rule("#", string_ as e, commit) {
             return e
         }
-        rule(string_ as e, commit) {           // "e"
+        rule(string_ as e, commit) {
             return "\"{e}\""
         }
-        rule("(", element as e, ")") {         // (e)
+        rule("(", element as e, ")") {
             return "({e})"
         }
-        rule("{not_set(')',',')}" as e) {      // any character except ')' and ','
+        rule("{not_set(')',',')}" as e) {
             return e
         }
         var element : string
@@ -263,7 +260,6 @@ class SpoofInstanceReader : AstReaderMacro {
             }
         }
         return "" if (failed)
-        // lets find the variable for the template
         var vptr : VariablePtr
         find_matching_variable(get_ptr(prog), null, iargs.varName, false) $(vars) {
             if (empty(vars)) {
@@ -290,7 +286,6 @@ class SpoofInstanceReader : AstReaderMacro {
             prog |> macro_error(info, "variable {iargs.varName} is not a string")
             return ""
         }
-        // now, lets spoof the instance
         outLine = int(vptr.init.at.line) + 1
         outFile = vptr.init.at.fileInfo
         let result <- instance_spoof(vstr, iargs.args)

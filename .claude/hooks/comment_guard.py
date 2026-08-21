@@ -280,6 +280,8 @@ def first_code_line(text, is_das, code_lines):
 def _kept_line_comment(ctext, is_das):
     if ctext.startswith("//!"):
         return True
+    if "opyright" in ctext or "SPDX-License-Identifier" in ctext:
+        return True
     rest = ctext[2:].lstrip(_WS)
     if is_das:
         # mirrors is_kept_comment in daslib/das_source_formatter.das

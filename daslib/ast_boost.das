@@ -115,8 +115,6 @@ def emplace_new(var vec : dasvector`ptr`Expression; var ptr : Expression?) {
     emplace(vec, ptr)
 }
 
-// add_ptr_ref for Expression? is in ast.das (needs to be visible to all macro modules)
-
 def emplace_new(var vec : VectorTypeDeclPtr; var ptr : TypeDecl?) {
     //! Emplaces a smart pointer to a TypeDecl into a vector.
     emplace(vec, ptr)
@@ -586,8 +584,6 @@ def private makeAsOrSafeAs(expr; var enull : Expression?) {
     return tri
 }
 
-// replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
-// if value is ast_core::Expr*
 class BetterRttiVisitor : AstVariantMacro {
     //! Variant macro that optimizes `is` checks on AST expression types to __rtti string comparison.
     def override visitExprIsVariant(prog : ProgramPtr; mod : Module?; expr : ExprIsVariant?) : Expression? {
@@ -1179,8 +1175,6 @@ def public function_to_type(fn : FunctionPtr) : TypeDeclPtr {
     return <- td
 }
 
-// visit_finally(blk : ExprBlock?; adapter) - now calls C++ directly, wrapper removed (ExprBlock? == ExprBlock*)
-
 def public isCMRES(fun : FunctionPtr) : bool {
     //! Returns true if the function returns by copy or move (CMRES).
     return fun.flags.copyOnReturn || fun.flags.moveOnReturn
@@ -1311,7 +1305,6 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
             }
         }
     }
-                // writer |> write(" {name}={describe(xtype)}")
     for_each_field(*ann) $(name, _cppName, xtype, offset) {
         if (offset != -1u) {
             let tstr = describe(xtype)
@@ -1363,9 +1356,6 @@ def public debug_expression(expr : Expression?; deFlags : DebugExpressionFlags =
         debug_expression_impl(writer, expr, deFlags, 0)
     }
 }
-
-// debug_expression(Expression?) and describe(Expression?) overloads removed —
-// the main overloads now take Expression? directly after gc_node migration
 
 def getVectorElementCount(bt : Type) {
     //! Returns the number of elements in a vector base type (2, 3, or 4), or 0 if not a vector.

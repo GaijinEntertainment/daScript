@@ -27,8 +27,6 @@ def public env_value_of(name : string) : string {
     return get_env_variable(name)
 }
 
-// ===== ENVIRONMENT.md renderers =====
-
 //! A hand-written doc row for knobs no struct field can tell the truth about (compile-time
 //! constants, foreign variables) — appended to a section after its `write_env_info_rows`.
 struct public EnvDocRow {
@@ -54,7 +52,6 @@ def public write_env_info_rows(var w : StringBuilderWriter; info : CommandInfo) 
         } elif (a.value_type == Type.tString) {
             kind = a.is_path ? "path" : "text"
         }
-        // flags document as on/off, matching how the knobs are described everywhere else
         var dflt = a.default_doc
         if (a.value_type == Type.tBool) {
             dflt = dflt == "true" ? "on" : (dflt == "false" ? "off" : dflt)
@@ -106,12 +103,6 @@ def public save_generated_doc(path, body : string) : bool {
     return true
 }
 
-// ===== enforcement-test scanners =====
-// What counts as an environment read is a property of daslib, not of any one module, so the
-// marker lists live here; each module's test supplies only its roots and skip list.
-
-// Every spelling that reads an environment variable — raw fio reads plus the clargs loaders
-// (a literal name through env_config_* would bypass the declarations just as surely).
 let public ENV_READ_MARKERS = [
     "get_env_variable(\"",
     "has_env_variable(\"",
@@ -123,21 +114,15 @@ let public ENV_READ_MARKERS = [
     "env_config_text(\""
 ]
 
-// The sanctioned dynamic-name spellings: legal anywhere, but a LITERAL name through them must
-// still be declared — they feed the coverage scan, never the strict ban.
 let public ENV_SANCTIONED_MARKERS = [
     "env_is_set(\"",
     "env_value_of(\""
 ]
 
-// Foreign-knob WRITES (arming a child's or a library's environment) are legal outside the
-// registry — but the name must still be a declared knob, or a rename moves the read while the
-// write silently keeps the old spelling.
 let public ENV_WRITE_MARKERS = [
     "set_env_variable(\""
 ]
 
-// A fresh helper would dodge every scan above and reintroduce a private idea of "unset".
 let public ENV_BANNED_HELPERS = [
     "def private env_or(",
     "def env_or(",
@@ -168,8 +153,6 @@ def private skip_path(path : string; skip : array<string>) : bool {
     return false
 }
 
-// dir_rec yields BASE NAMES, not paths, so the walk is hand-rolled to keep the path it needs
-// for fread.
 def private walk_das(dirpath : string; skip : array<string>; blk : block<(path : string; text : string) : void>) {
     dir(dirpath) $(name : string) {
         return if (name == "." || name == "..")
@@ -287,7 +270,6 @@ def public env_undocumented_rows(md : string) : array<string> {
     var undocumented : array<string>
     for (line in split(md, "\n")) {
         continue if (!starts_with(line, "| `"))
-        // | `NAME` | kind | default | doc |
         var cols <- split(line, "|")
         if (length(cols) >= 5 && empty(strip(cols[4]))) {
             undocumented |> push(strip(cols[1]))

@@ -20,9 +20,6 @@ def find_unique_function_ptr(mod : Module?; name : string; canfail : bool = fals
     return fn
 }
 
-/*
- * We need this wrappers for initialization of Handle types
- */
 struct public CaptureEntryInitData {
     //! Initialization data for a captured variable entry.
     name : string       //! Variable name being captured.
@@ -81,8 +78,6 @@ struct public EnumEntryInitData {
     //! Initialization data for a quoted enum entry.
     name : string     //! Enum entry name.
     cppName : string  //! C++-side name for the entry (used when generating bindings).
-    // at : LineInfo
-    // value : ExpressionPtr
 }
 
 def public clone(var a : dasvector`EnumEntry; var b : array<EnumEntryInitData>) {
@@ -91,7 +86,6 @@ def public clone(var a : dasvector`EnumEntry; var b : array<EnumEntryInitData>) 
     for (e, i in b, count()) {
         a[i].name := e.name
         a[i].cppName := e.cppName
-        // a[i].value = e.value
     }
 }
 
@@ -103,7 +97,6 @@ struct public AnnotationArgumentInitData {
     bValue : bool     //! Bool value (used when basicType is tBool).
     iValue : int      //! Int value (used when basicType is tInt).
     fValue : float    //! Float value (used when basicType is tFloat).
-    // @safe_when_uninitialized at: LineInfo // todo: add if needed
 }
 
 def public clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentInitData>) {
@@ -120,7 +113,6 @@ def public clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentIni
         } elif (e.basicType == Type.tFloat) {
             a[i].fValue := e.fValue
         }
-        // a[i].at := e.at
         a[i].basicType = e.basicType
     }
 }
@@ -161,16 +153,16 @@ def public resolve_file_info(b : FileInfoInitData) : FileInfo? {
 let blacklist = [
     ("ast_core::Function", "inferStack"),
     ("ast_core::Function", "annotations"),
-    ("ast_core::Function", "classParent"), // loop
-    ("ast_core::ExprReturn", "_block"), // loop
-    ("ast_core::ExprVar", "pBlock"), // loop
-    ("ast_core::EnumEntry", "value"), // loop
-    ("ast_core::EnumEntry", "at"), // ignore it for now
-    ("ast_core::ExprBlock", "stackCleanVars"), // post-infer bookkeeping (allocateStack); always empty in quoted trees, and its vector<pair> type has no AOT mapping
+    ("ast_core::Function", "classParent"),
+    ("ast_core::ExprReturn", "_block"),
+    ("ast_core::ExprVar", "pBlock"),
+    ("ast_core::EnumEntry", "value"),
+    ("ast_core::EnumEntry", "at"),
+    ("ast_core::ExprBlock", "stackCleanVars"),
     ("rtti_core::AnnotationArgument", "at"),
-    ("ast_core::CaptureEntry", "at"), // ignore it for now
-    ("ast_core::MakeFieldDecl", "at"), // ignore it for now
-    ("ast_core::Enumeration", "list"), // too huge in TypeDecl
+    ("ast_core::CaptureEntry", "at"),
+    ("ast_core::MakeFieldDecl", "at"),
+    ("ast_core::Enumeration", "list"),
 ]
 
 let managed_types = [
@@ -224,7 +216,6 @@ def private fix_path_spelling(p : string) : string {
 }
 
 def private normalize_source_path(p : string) : string {
-    // the same source file may be opened via different spellings at AOT-generation time and at runtime (slash form, drive-letter case, dasroot-absolute vs repo-relative);
     var root = fix_path_spelling(get_das_root())
     if (!(root |> ends_with("/"))) {
         root += "/"
@@ -252,7 +243,7 @@ def private to_arr_move_args(var args : array<Expression?>; var dst_tp : TypeDec
 def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype : TypeDeclPtr, at : LineInfo) : Expression? {
     var src_tp = get_handled_type_index_type_declaration(xtype.annotation,
                              default<Expression?>, default<Expression?>);
-    src_tp.flags.ref = false; // vec type has ref, we don't need it
+    src_tp.flags.ref = false;
     var dst_tp = get_dst_type(clone(src_tp), at);
     var args : array<Expression?>;
 
@@ -261,7 +252,6 @@ def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype :
     for (idx in range(get_vector_length(field_values, src_tp))) {
         {
             var arg_expr = convert_quote_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp, idx))), src_tp, at);
-            // retarget the element make-struct to the InitData wrapper type when get_dst_type substituted one; pointer compare (dst_tp != src_tp) is always true after clone_type, and writing makeType through a reinterpret of a non-ExprMakeStruct stomps the node
             if (dst_tp.baseType != Type.tString && describe(dst_tp) != describe(src_tp) && arg_expr is ExprMakeStruct) {
                 var make_str = unsafe(reinterpret<ExprMakeStruct?>(arg_expr));
                 make_str.makeType = clone_type(dst_tp);
@@ -369,9 +359,6 @@ def private convert_pointer_expr(mod; data; info; at) : Expression? {
     if (pdata == null) return new ExprConstPtr(at = at);
     assume first_tstr = describe(info.firstType);
     if (first_tstr == "ast_core::TypeDecl") {
-        // a type that references an enum/struct from an anonymous module (the program's
-        // main module) can't be reconstructed by name — rebuild it as the alias the parser
-        // would have produced for an unresolved name; splice-site re-infer resolves it
         assume td = unsafe(reinterpret<TypeDecl?>(pdata));
         var aliasName = ""
         if (td.enumType != null && (td.enumType._module == null || empty(td.enumType._module.name))) {
@@ -391,8 +378,6 @@ def private convert_pointer_expr(mod; data; info; at) : Expression? {
     }
     var subexpr = convert_quote_expr(mod, pdata, final_type, at);
 
-    // This types are created on cpp side by managed functions.
-    // We already got pointer, no need to ascend.
     for (t in managed_types) {
         if (t == first_tstr) return subexpr
     }
@@ -405,7 +390,6 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
     if (isYetAnotherVectorTemplate(info)) return convert_vec_expr(mod, data, info, at);
     let tstr = describe(info);
 
-    // First check managed types
     if (tstr == "rtti_core::Annotation") {
         assume pdata = unsafe(reinterpret<rtti::Annotation>(data));
         return get_find_in_module_expr("module_find_annotation", pdata._module.name, pdata.name, at);
@@ -417,9 +401,7 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
          return get_find_in_module_expr("find_call_macro", pdata._module.name, pdata.name, at)
     } elif (tstr == "ast_core::Structure") {
          assume pdata = unsafe(reinterpret<Structure?>(data));
-         // disable support for Structure::Module. If we compile without shared_modules it's impossible
-         if (pdata._module.name == "ast_boost") return null  // disabled when shared_modules=false (no direct check)
-         // It's unnecessary, however there is bug in aot with ternary operator
+         if (pdata._module.name == "ast_boost") return null
          var tmp = get_find_in_module_expr("module_find_structure", pdata._module.name, pdata.name, at);
          return tmp;
     } elif (tstr == "ast_core::Function") {
@@ -427,19 +409,15 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
          return get_find_in_module_expr("find_unique_function_ptr", pdata._module.name, pdata.name, at);
     } elif (tstr == "ast_core::Enumeration") {
          assume pdata = unsafe(reinterpret<Enumeration?>(data));
-         // anonymous module (e.g. the program's main module) can't be found by name at reconstruction time; the TypeDecl-level alias fallback covers that shape
          if (pdata._module == null || empty(pdata._module.name)) return null
          return get_find_in_module_expr("module_find_enumeration", pdata._module.name, pdata.name, at);
     } elif (tstr == "rtti_core::Module") {
          assume cur_mod = unsafe(reinterpret<Module?>(data));
          return find_module_expr(cur_mod.name, at);
     } elif (tstr == "$::das_string") return create_string_expr(*unsafe(reinterpret<das_string?>(data)), at);
-    // Convert pointers
     if (info.baseType == Type.tPointer) return convert_pointer_expr(mod, data, info, at);
-    // Convert structures
     if (info.annotation != null && info.annotation.isBasicStructureAnnotation) {
         var field_loc = at;
-        // if possible use Expression.at
         if (isExpression(info)) {
             assume fval = unsafe(reinterpret<Expression?>(data));
             field_loc = fval.at;
@@ -466,7 +444,6 @@ class QuoteConverter : AstVisitor {
     def override visitExprQuote(var expr : ExprQuote?) : Expression? {
         astChanged = true
         var conv = convert_quote_to_expression(expr.arguments[0], expr.at)
-        // wrap the construction in a per-quote generated function and replace the quote with a call: the (large) construction expression then occupies one non-recursive leaf frame instead of inflating every caller's frame (fatal in recursive macros)
         var fname = ""
         while (true) {
             fname = "`quote`lowered`{counter}"
@@ -475,7 +452,6 @@ class QuoteConverter : AstVisitor {
         }
         var fn = new Function(at = expr.at, atDecl = expr.at, name := fname,
             flags = FunctionFlags.generated | FunctionFlags.privateFunction)
-        // preserve the raw quote's static type (Expression?) — autoinfer would leak the concrete node type (e.g. ExprConstInt?) and break consumers that need type identity, e.g. `cond ? clone_expression(x) : quote(0)`
         fn.result = expr._type != null ? clone_type(expr._type) : new TypeDecl(at = expr.at, baseType = Type.autoinfer)
         var blk = new ExprBlock(at = expr.at)
         emplace_new(blk.list) <| new ExprReturn(at = expr.at, subexpr = conv)
@@ -489,11 +465,10 @@ class QuoteConverter : AstVisitor {
 class QuotePass : AstPassMacro {
     //! Pass macro that processes quoted AST expressions.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        // Unwrapping ExprQuote is slow and inefficient, do it only if necessary.
         let lower = (compiling_program().policies.aot_macros
             || (compiling_program().policies.jit_enabled && !prog.flags.needMacroModule)
             || (prog._options |> find_arg("aot_macros") ?as tBool ?? false))
-        if (!lower) return false // nothing to do
+        if (!lower) return false
         var astVisitor = new QuoteConverter(mod = compiling_module())
         make_visitor(*astVisitor) $(astVisitorAdapter) {
             visit(prog, astVisitorAdapter)

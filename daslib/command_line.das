@@ -26,15 +26,11 @@ def get_das_exe() : string {
     let args <- get_command_line_arguments()
     if (empty(args)) return ""
     var exe = args[0]
-    // Normalize to forward slashes
     exe = replace(exe, "\\", "/")
-    // Strip the filename, keep the directory
     let last_slash = rfind(exe, "/")
     let dir = last_slash >= 0 ? slice(exe, 0, last_slash + 1) : ""
-    // Append platform-appropriate interpreter name
     let interpreter = get_platform_name() == "windows" ? "daslang.exe" : "daslang"
     var result = "{dir}{interpreter}"
-    // On Windows, replace forward slashes with backslashes for cmd.exe compatibility
     if (get_platform_name() == "windows") {
         result = replace(result, "/", "\\")
     }

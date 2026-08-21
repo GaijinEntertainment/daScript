@@ -93,11 +93,9 @@ def log_cpp_class_adapter(cpp_file : file; name : string; var cinfo : TypeDeclPt
     }
     fwrite(cpp_file, "  \}\n")
     for (mn, mt in methods, types) {
-        // get
         fwrite(cpp_file, "  __forceinline Func get_{mn.name} ( void * self ) const \{\n")
         fwrite(cpp_file, "    return getDasClassMethod(self,_das_class_method_offset[__fn_{mn.name}]);\n")
         fwrite(cpp_file, "  \}\n")
-        // invoke
         fwrite(cpp_file, "  __forceinline ")
         log_cpp_class_method(cpp_file, "invoke_{mn.name}", mt)
         fwrite(cpp_file, " const \{\n")
