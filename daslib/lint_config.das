@@ -26,6 +26,11 @@ module lint_config shared private
 //! Two environment variables feed the same cascade: ``DAS_LINT_CONFIG_PATH``
 //! redirects which file is read, and ``DAS_LINT_DISABLE`` (comma-separated
 //! codes) turns rules off for one run, overriding everything above.
+//!
+//! The ``[format]`` table works differently: it CASCADES per folder. Every
+//! directory may hold its own ``.lint_config``; ``format_policy_for`` walks
+//! from the file's directory to the repository root and the nearest file
+//! that defines a key wins that key (``[rules]`` stays repo-root-only).
 
 require daslib/fio
 require daslib/json
@@ -254,6 +259,69 @@ def public is_core_library_source(prog : ProgramPtr) : bool {
     // `modules/<X>/daslib/` carries a "daslib" segment too, and those trees are NOT swept
     return ((path_has_segment(file, "daslib") || path_has_segment(file, "utils"))
         && !path_has_segment(file, "modules"))
+}
+
+//! Per-file format policy from the ``[format]`` table of cascading ``.lint_config`` files:
+//! ``format_enabled = false`` exempts a tree (load-bearing fixture layout),
+//! ``force_clean_comments = true`` strips comments outside the kept set (swept trees).
+struct public FormatPolicy {
+    format_enabled : bool = true
+    force_clean_comments : bool = false
+}
+
+def private read_format_table(path : string) : JsonValue? {
+    let body = fread(path)
+    if (empty(body)) return null
+    var error : string
+    var root : JsonValue? = read_toml(body, error)
+    if (root == null || !(root.value is _object)) return null
+    var root_obj & = unsafe(root.value as _object)
+    if (!key_exists(root_obj, "format")) return null
+    var fmt_jv : JsonValue? = root_obj["format"]
+    if (fmt_jv == null || !(fmt_jv.value is _object)) return null
+    return fmt_jv
+}
+
+def private fold_format_key(var fmt_jv : JsonValue?; key : string; var dst : bool&; var decided : bool&) {
+    return if (decided)
+    var fmt & = unsafe(fmt_jv.value as _object)
+    if (!key_exists(fmt, key)) return
+    var val_jv : JsonValue? = fmt[key]
+    if (val_jv == null || !(val_jv.value is _bool)) return
+    dst = val_jv.value as _bool
+    decided = true
+}
+
+//! Walks ``.lint_config`` files from ``file``'s directory up to the repository root (the
+//! directory holding ``.git``, read inclusively); the nearest file defining a key wins that
+//! key. Single-threaded — resolve on the coordinating thread, pass results to jobs.
+def public format_policy_for(file : string) : FormatPolicy {
+    var pol = FormatPolicy()
+    var enabled_decided = false
+    var clean_decided = false
+    var d = to_generic_path(dir_name(to_generic_path(file)))
+    if (empty(d)) {
+        d = "."
+    }
+    while (true) {
+        let cfg = d == "." ? ".lint_config" : "{d}/.lint_config"
+        var fmt_jv = read_format_table(cfg)
+        if (fmt_jv != null) {
+            fold_format_key(fmt_jv, "format_enabled", pol.format_enabled, enabled_decided)
+            fold_format_key(fmt_jv, "force_clean_comments", pol.force_clean_comments, clean_decided)
+        }
+        break if (enabled_decided && clean_decided)
+        var st : FStat
+        break if (stat(path_join(d, ".git"), st))
+        let up = dir_name(d)
+        if (empty(up) || up == d) {
+            break if (d == ".")
+            d = "."
+        } else {
+            d = up
+        }
+    }
+    return pol
 }
 
 //! True when `fn` is user-authored from lint's point of view: not generated, or a generated

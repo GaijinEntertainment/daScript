@@ -74,18 +74,17 @@ def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "format_file",
-            "Format .das file(s) using the daslang code formatter. By default ALSO strips comments, FILE-WIDE: keeps the leading header comment block, `//!` documentation, `//fmt:` directives, and `nolint` suppressions; removes every other comment (fail-closed: when a comment was stripped the result must pass compile_check or the original is restored). Pass keep_comments='true' to format only — the escape hatch for tutorials and examples. Supports single file, comma-separated list, or glob pattern (e.g. 'daslib/*.das'). Returns JSON array with file, status ('formatted' | 'already_formatted' | 'reverted' | 'error'), and message.",
+            "Format .das file(s) using the daslang code formatter. Comment policy comes from the file's folder: the nearest `.lint_config` `[format]` table decides (`force_clean_comments = true` strips comments outside the kept set — leading header block, `//!` documentation, `//fmt:` directives, `nolint:` suppressions — fail-closed: a strip must pass compile_check or the original is restored; `format_enabled = false` exempts the tree). No per-call override. Supports single file, comma-separated list, or glob pattern (e.g. 'daslib/*.das'). Returns JSON array with file, status ('formatted' | 'already_formatted' | 'reverted' | 'skipped' | 'error'), and message.",
             {
                 "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern (e.g. 'dir/*.das')"),
-                "keep_comments" => PropertySchema(_type = "string", description = "If 'true', format only — do not strip comments (tutorials/examples)"),
                 "project" => PROJECT_PROP,
                 "project_root" => PROJECT_ROOT_PROP,
                 "load_modules" => LOAD_MODULES_PROP
             },
             ["file"]),
         required <- ["file"],
-        arg_names <- ["file", "keep_comments"],
-        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_format_file(arg1, arg2 == "true", project, project_root, load_modules)))
+        arg_names <- ["file"],
+        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_format_file(arg1, project, project_root, load_modules)))
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "run_script",

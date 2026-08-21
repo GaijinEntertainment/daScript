@@ -11,6 +11,7 @@ require log
 require daslib/jobque_boost
 require daslib/das_source_formatter
 require daslib/strings_boost
+require daslib/lint_config
 
 
 def private normalize_line_endings(text : string) : string {
@@ -131,7 +132,7 @@ def private drop_excluded_files(args : array<string>; var files : array<string>)
 }
 
 
-def private format_one_file(file : string; verify, verbose : bool; var verified : bool&) {
+def private format_one_file(file : string; verify, verbose, strip : bool; var verified : bool&) {
     // Runs on a job thread: formats `file` in place, or (under --verify) reports
     // it as unformatted and clears `verified`.
     var before : string
@@ -142,7 +143,7 @@ def private format_one_file(file : string; verify, verbose : bool; var verified 
             fmap(fr) $(data) {
                 open = true
                 before = string(data)
-                after = format_source(data)
+                after = format_source(data, strip)
             }
         }
     }
@@ -179,6 +180,23 @@ def private format_one_file(file : string; verify, verbose : bool; var verified 
     }
 }
 
+
+def private apply_format_policy(var files : array<string>; var strips : array<bool>) {
+    var kept : array<string>
+    kept |> reserve(length(files))
+    strips |> reserve(length(files))
+    for (file in files) {
+        let policy = format_policy_for(file)
+        if (!policy.format_enabled) {
+            log::info("-- {file} (format_enabled = false)")
+            continue
+        }
+        kept |> push(file)
+        strips |> push(policy.force_clean_comments)
+    }
+    delete files
+    files <- kept
+}
 
 [export]
 def main() {
@@ -217,6 +235,9 @@ def main() {
 
     drop_excluded_files(args, files)
 
+    var strips : array<bool>
+    apply_format_policy(files, strips)
+
     let filesNum = length(files)
     var verified = true
 
@@ -226,11 +247,13 @@ def main() {
             with_job_status(batchNum) $(status) {
                 for (_ in range(batchNum)) {
                     let file = files[length(files) - 1]
+                    let strip = strips[length(files) - 1]
                     files |> pop()
+                    strips |> pop()
                     unsafe {
                         new_job <| @ capture(& verified, := args) {
                             log::init_log(args)
-                            format_one_file(file, verify, verbose, verified)
+                            format_one_file(file, verify, verbose, strip, verified)
                             status |> notify_and_release
                         }
                     }

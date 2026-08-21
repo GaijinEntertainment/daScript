@@ -1,0 +1,3 @@
+# Teaching code: the prose IS the deliverable - format, never strip comments.
+[format]
+force_clean_comments = false

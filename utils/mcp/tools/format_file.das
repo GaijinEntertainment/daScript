@@ -4,6 +4,7 @@ require common public
 require daslib/das_source_formatter
 require daslib/json_boost
 require daslib/fio
+require daslib/lint_config
 
 struct FormatResult {
     file : string
@@ -11,8 +12,14 @@ struct FormatResult {
     message : string
 }
 
-def private format_file_single(file : string; keep_comments : bool; project, project_root : string; load_modules : array<string>) : FormatResult {
+def private format_file_single(file : string; project, project_root : string; load_modules : array<string>) : FormatResult {
     var result = FormatResult(file = file)
+    let policy = format_policy_for(file)
+    if (!policy.format_enabled) {
+        result.status = "skipped"
+        result.message = "formatting disabled by .lint_config: {file}"
+        return result
+    }
     var unformatted = ""
     var formatted = ""
     var stripped_any = false
@@ -24,8 +31,8 @@ def private format_file_single(file : string; keep_comments : bool; project, pro
         read_ok = true
         fmap(fr) $(data) {
             unformatted = string(data)
-            formatted = format_source(data, !keep_comments)
-            if (!keep_comments) {
+            formatted = format_source(data, policy.force_clean_comments)
+            if (policy.force_clean_comments) {
                 stripped_any = formatted != format_source(data)
             }
         }
@@ -75,7 +82,7 @@ def private format_file_single(file : string; keep_comments : bool; project, pro
     return result
 }
 
-def do_format_file(file : string; keep_comments : bool = false; project : string = ""; project_root : string = ""; load_modules : array<string> = array<string>()) : string {
+def do_format_file(file : string; project : string = ""; project_root : string = ""; load_modules : array<string> = array<string>()) : string {
     var files : array<string>
     parse_file_list(file, files)
     if (empty(files)) {
@@ -86,7 +93,7 @@ def do_format_file(file : string; keep_comments : bool = false; project : string
     results |> reserve(length(files))
     var any_errors = false
     for (f in files) {
-        let r = format_file_single(f, keep_comments, project, project_root, load_modules)
+        let r = format_file_single(f, project, project_root, load_modules)
         if (r.status == "error" || r.status == "reverted") {
             any_errors = true
         }

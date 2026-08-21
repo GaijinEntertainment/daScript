@@ -39,8 +39,9 @@ dividers, commented-out code — does not exist. The MCP `format_file` tool appl
 file-wide by default, fail-closed (a strip must compile or the file is restored). A `//`
 comment outside the kept set is therefore EPHEMERAL: anything worth preserving becomes
 code (a name, a `//!` doc, an assert) or lands in an `.md` beside the code. In tutorials
-and examples the prose IS the deliverable — format those with `keep_comments='true'`;
-comments that add nothing to their line still go.
+and examples the prose IS the deliverable — their folders' `.lint_config` declares
+`force_clean_comments = false`, so the formatter never strips them; comments that add
+nothing to their line still go.
 
 **C and C++: no NEW comments.** Comments go stale, code does not — new C-family code says
 it in a name, a shape, or a test, or documents itself in the module's `.md`. Kept when one

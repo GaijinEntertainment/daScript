@@ -674,11 +674,21 @@ def test_format_strip_comments_source(t : T?) {
     }
 }
 
+def private make_policy_dir(name, config : string; var err : string&) : string {
+    let dir = create_temp_directory(name, err)
+    return "" if (empty(dir))
+    mkdir(path_join(dir, ".git"))
+    if (!empty(config)) {
+        fwrite(path_join(dir, ".lint_config"), config)
+    }
+    return dir
+}
+
 [test]
-def test_format_file_strips_by_default(t : T?) {
-    t |> run("default run strips, and the compile verify passes") <| @(t : T?) {
+def test_format_file_comment_policy(t : T?) {
+    t |> run("force_clean_comments folder strips, and the compile verify passes") <| @(t : T?) {
         var terr : string
-        let dir = create_temp_directory("mcp_strip_test", terr)
+        let dir = make_policy_dir("mcp_strip_test", "[format]\nforce_clean_comments = true\n", terr)
         if (empty(dir)) {
             t |> failure("temp dir: {terr}")
             return
@@ -690,16 +700,15 @@ def test_format_file_strips_by_default(t : T?) {
         var is_error = false
         let ok = parse_result(do_format_file(dst), text, is_error)
         t |> success(ok, "parse result JSON")
-        t |> success(find(text, "comments stripped") >= 0, "default path stripped -- text={text}")
+        t |> success(find(text, "comments stripped") >= 0, "opted-in folder stripped -- text={text}")
         let after = fread(dst)
         t |> success(find(after, "narration") < 0, "comments removed on disk")
         t |> success(find(after, "//! doc comment survives") >= 0, "docs kept on disk")
-        remove(dst)
-        rmdir(dir)
+        rmdir_rec(dir)
     }
     t |> run("fail-closed: a strip whose compile_check fails restores the original bytes") <| @(t : T?) {
         var terr : string
-        let dir = create_temp_directory("mcp_revert_test", terr)
+        let dir = make_policy_dir("mcp_revert_test", "[format]\nforce_clean_comments = true\n", terr)
         if (empty(dir)) {
             t |> failure("temp dir: {terr}")
             return
@@ -714,12 +723,11 @@ def test_format_file_strips_by_default(t : T?) {
         t |> success(is_error, "reverted outcome reports as error")
         t |> success(find(text, "reverted") >= 0, "status is reverted -- text={text}")
         t |> equal(fread(dst), src, "original bytes restored")
-        remove(dst)
-        rmdir(dir)
+        rmdir_rec(dir)
     }
-    t |> run("keep_comments='true' formats without touching comments") <| @(t : T?) {
+    t |> run("no config: formats, comments stay") <| @(t : T?) {
         var terr : string
-        let dir = create_temp_directory("mcp_keep_test", terr)
+        let dir = make_policy_dir("mcp_keep_test", "", terr)
         if (empty(dir)) {
             t |> failure("temp dir: {terr}")
             return
@@ -728,12 +736,52 @@ def test_format_file_strips_by_default(t : T?) {
         fwrite(dst, fread(fixture_path("_fixture_comments.das")))
         var text : string
         var is_error = false
-        parse_result(do_format_file(dst, true), text, is_error)
-        t |> success(!is_error, "keep_comments run should not error")
+        parse_result(do_format_file(dst), text, is_error)
+        t |> success(!is_error, "default run should not error")
         let after = fread(dst)
         t |> success(find(after, "narration dies") >= 0, "comments intact on disk")
-        remove(dst)
-        rmdir(dir)
+        rmdir_rec(dir)
+    }
+}
+
+[test]
+def test_format_file_policy_scoping(t : T?) {
+    t |> run("format_enabled = false skips the file untouched") <| @(t : T?) {
+        var terr : string
+        let dir = make_policy_dir("mcp_skip_test", "[format]\nformat_enabled = false\n", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let dst = path_join(dir, "corpus.das")
+        let src = "options gen2\ndef f() \{\n    let x=1\n\}\n"
+        fwrite(dst, src)
+        var text : string
+        var is_error = false
+        parse_result(do_format_file(dst), text, is_error)
+        t |> success(find(text, "skipped") >= 0, "status is skipped -- text={text}")
+        t |> equal(fread(dst), src, "bytes untouched")
+        rmdir_rec(dir)
+    }
+    t |> run("nearest .lint_config wins per key") <| @(t : T?) {
+        var terr : string
+        let dir = make_policy_dir("mcp_cascade_test", "[format]\nforce_clean_comments = true\n", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let sub = path_join(dir, "teaching")
+        mkdir(sub)
+        fwrite(path_join(sub, ".lint_config"), "[format]\nforce_clean_comments = false\n")
+        let dst = path_join(sub, "victim.das")
+        fwrite(dst, fread(fixture_path("_fixture_comments.das")))
+        var text : string
+        var is_error = false
+        parse_result(do_format_file(dst), text, is_error)
+        t |> success(!is_error, "cascade run should not error")
+        let after = fread(dst)
+        t |> success(find(after, "narration dies") >= 0, "child override kept comments")
+        rmdir_rec(dir)
     }
 }
 

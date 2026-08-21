@@ -180,3 +180,69 @@ def test_path_excludes_match(t : T?) {
         t |> success(!matches_path_excludes("tests/a.das", ex))
     }
 }
+
+def private plant(dir, name, content : string) {
+    fopen(path_join(dir, name), "wb") $(f) {
+        if (f != null) {
+            fwrite(f, content)
+        }
+    }
+}
+
+def private cascade_root() : string {
+    let root = path_join(_tmp_dir, "cascade")
+    mkdir_rec(path_join(root, "a/b"))
+    mkdir(path_join(root, ".git"))
+    plant(root, ".lint_config", "[format]\nforce_clean_comments = true\n")
+    plant(path_join(root, "a"), ".lint_config", "[format]\nformat_enabled = false\n")
+    plant(path_join(root, "a/b"), ".lint_config", "[format]\nforce_clean_comments = false\n")
+    return root
+}
+
+[test]
+def test_format_policy_cascade(t : T?) {
+    fixture_path()
+    t |> run("no config anywhere: format on, keep comments") @@(t : T?) {
+        let bare = path_join(_tmp_dir, "bare")
+        mkdir_rec(bare)
+        mkdir(path_join(bare, ".git"))
+        let pol = format_policy_for(path_join(bare, "x.das"))
+        t |> success(pol.format_enabled)
+        t |> success(!pol.force_clean_comments)
+    }
+    t |> run("root config applies to a root file, .git read inclusively") @@(t : T?) {
+        let root = cascade_root()
+        let pol = format_policy_for(path_join(root, "x.das"))
+        t |> success(pol.format_enabled)
+        t |> success(pol.force_clean_comments)
+    }
+    t |> run("mid-level file: own key from a/, missing key cascades to root") @@(t : T?) {
+        let root = cascade_root()
+        let pol = format_policy_for(path_join(root, "a/x.das"))
+        t |> success(!pol.format_enabled)
+        t |> success(pol.force_clean_comments)
+    }
+    t |> run("deep file: each key from its own nearest level") @@(t : T?) {
+        let root = cascade_root()
+        let pol = format_policy_for(path_join(root, "a/b/x.das"))
+        t |> success(!pol.format_enabled)
+        t |> success(!pol.force_clean_comments)
+    }
+    t |> run("malformed config level falls through to its parent") @@(t : T?) {
+        let root = cascade_root()
+        let bad = path_join(root, "bad")
+        mkdir_rec(bad)
+        plant(bad, ".lint_config", "[format\nforce_clean_comments = false\n")
+        let pol = format_policy_for(path_join(bad, "x.das"))
+        t |> success(pol.format_enabled)
+        t |> success(pol.force_clean_comments)
+    }
+    t |> run("non-bool values are ignored, key cascades") @@(t : T?) {
+        let root = cascade_root()
+        let odd = path_join(root, "odd")
+        mkdir_rec(odd)
+        plant(odd, ".lint_config", "[format]\nforce_clean_comments = \"nope\"\n")
+        let pol = format_policy_for(path_join(odd, "x.das"))
+        t |> success(pol.force_clean_comments)
+    }
+}
