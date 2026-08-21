@@ -31,13 +31,18 @@ what it costs today and what the fix would change.
   the vulkan-leg fallback and the `set_span_fuse(false)` parity rail. Direction-grade -jit
   cells: E2B 659→**1230** (lcpp 1101), E4B 362→**632** (658), 12B 140→**224** (268) tok/s.
   Record re-mint owed from the released rig.
-- **OPEN — the kquant mul_mm span quantum trails lcpp per token at prefill M≈192 (measured
-  2026-08-21, M1 Max, the fused-image-span probes).** With the splice cost gone, the 12B
-  Q4_K_M image prefill sits at ~0.84× lcpp: the 130-row span slice alone ran 4.76 ms/tok vs
-  lcpp's 3.73 whole-span — a ~27 % kernel-throughput deficit in the kq mul_mm lane at
-  image-turn batch sizes, invisible at pp512 (das leads Metal text prefill). Lever: the
-  kq_mulmm tile shapes / occupancy at small M, against the lcpp kernel per the side-by-side
-  lab discipline.
+- **RULED AND LANDED — the "kquant small-M kernel deficit" was the 64-row M pad (measured and
+  fixed 2026-08-21, M1 Max, the fused-image-span arc round 2).** The suspected ~27 % kq
+  mul_mm throughput deficit at image-turn batch sizes was REFUTED by the M-sweep
+  (`harness/prefill_msweep_probe.das`, 12B Q4_K_M metal leg): the ms/npos curve is a pure
+  64-boundary STAIRCASE — npos=160 cost exactly npos=192's wall (604.6 vs 606.0 ms), 96 cost
+  128's — while per-PADDED-token cost is flat 3.1–3.2 ms from 128 to 512; the knockouts put
+  the GEMM family at 96 % of the wall at both M. Every prefill kernel's M grid is `mp/32`
+  (weight mul_mm, kq twins, attention trio), so the `mp = ceil64(npos)` pad billed a dead
+  32-row GEMM block on every short prefill; the fix is `ceil32`. Direction-grade -jit image
+  cells after: 12B **270** tok/s (lcpp 268 — parity), E4B **699** (658), E2B **1391** (1101)
+  — das leads or ties every Metal image-prefill cell. Full prefill-parity arm set + the
+  gemma2 sliding-window row green on the new pad.
 
 - **gemma4v ViT tower (E-series): the encode is the image turn's biggest single stage on every
   CPU tier; the q8 lane and the Metal leg both landed (measured 2026-08-19, M1 Max, the gemma4v

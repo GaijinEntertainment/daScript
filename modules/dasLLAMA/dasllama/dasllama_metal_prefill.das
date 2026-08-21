@@ -2354,7 +2354,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let hetero = hs_sw != head_size || kvh_sw != c.n_kv_heads
     let qd_mx = max(qd, qd_sw)
     let half_sw = hs_sw / 2l
-    let mp = ((npos + 63l) / 64l) * 64l    // 64 = the big GEMM kernel's M tile; attention kernels only assume %32
+    let mp = ((npos + 31l) / 32l) * 32l    // every kernel's M grid is mp/32 (weight mul_mm, kq twins, the attention trio) — a 64 pad billed a dead 32-row GEMM block on every short prefill
     // a continuation chunk (M2.5) attends the session's existing rows too: the K/V panels hold
     // [0, start_pos) gathered rows + the chunk at the start_pos offset, keys pad to the QK key
     // grid's 64-tile, and the score slabs widen to nk64 columns (rows stay the mp queries)
