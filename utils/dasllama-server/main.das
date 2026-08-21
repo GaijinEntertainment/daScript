@@ -518,25 +518,6 @@ def private apply_models_roster(root : JsonValue?) {
     g_cfg_sources["models"] = "toml"
 }
 
-// The serving modes are QuantMode fp32/q8/q4_0, CLI spellings "fp32" | "q8" | "q4" — "q4"
-// selects the legacy q4_0 requant tier (per-row kernels only, no batched prefill), whose one
-// use is squeezing an f16/f32 file down to 4 bits for RAM. The FILE formats the gguf loader
-// reads are first-class spellings too: q8_0 / q4_0 / q4_k / q5_k / q6_k (any case, _M/_S
-// suffixes fine), mxfp4, f16 / bf16 — all of those serve under QuantMode.q8 (K-quant, mx4,
-// and Q4_0 planes run NATIVELY on the kq tier).
-def pick_quant(s : string) : QuantMode {
-    let l = to_lower(s)
-    if (l == "fp32" || l == "f32") {
-        return QuantMode.fp32
-    } elif (l == "q4") {
-        return QuantMode.q4_0
-    } elif (!empty(l) && l != "q8" && l != "q8_0" && l != "q4_0" && l != "mxfp4" && l != "f16" && l != "bf16"
-            && !(starts_with(l, "q4_k") || starts_with(l, "q5_k") || starts_with(l, "q6_k"))) {
-        to_log(LOG_WARNING, "dasllama-server: unknown --quant '{s}', using q8 (valid: fp32 | q8 | q8_0 | q4_0 | q4_k | q5_k | q6_k | mxfp4 | f16 | bf16 | q4 = legacy requant)\n")
-    }
-    return QuantMode.q8
-}
-
 def private gpu_auto_pick(metal_ok, vulkan_ok : bool) : string {
     if (metal_ok) {
         return "metal"

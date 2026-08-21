@@ -138,6 +138,33 @@ def same_model_path(a, b : string) : bool {
     return get_platform_name() == "windows" ? to_lower(ga) == to_lower(gb) : ga == gb
 }
 
+//! True when ``s`` is a quant spelling ``pick_quant`` maps deliberately (any case): the serving
+//! modes fp32/f32 | q8 | q4, plus the gguf FILE formats that serve under the kq tier —
+//! q8_0 / q4_0 / q4_k / q5_k / q6_k (_M/_S suffixes fine), mxfp4, f16 / bf16.
+def quant_spelling_known(s : string) : bool {
+    let l = to_lower(s)
+    return (l == "fp32" || l == "f32" || l == "q4" || l == "q8" || l == "q8_0" || l == "q4_0"
+        || l == "mxfp4" || l == "f16" || l == "bf16"
+        || starts_with(l, "q4_k") || starts_with(l, "q5_k") || starts_with(l, "q6_k"))
+}
+
+//! The serving modes are QuantMode fp32/q8/q4_0, CLI spellings "fp32" | "q8" | "q4" — "q4"
+//! selects the legacy q4_0 requant tier (per-row kernels only, no batched prefill), whose one
+//! use is squeezing an f16/f32 file down to 4 bits for RAM. The FILE formats the gguf loader
+//! reads are first-class spellings too — all of those serve under QuantMode.q8 (K-quant, mx4,
+//! and Q4_0 planes run NATIVELY on the kq tier). An unknown spelling warns and serves q8.
+def pick_quant(s : string) : QuantMode {
+    let l = to_lower(s)
+    if (l == "fp32" || l == "f32") {
+        return QuantMode.fp32
+    } elif (l == "q4") {
+        return QuantMode.q4_0
+    } elif (!empty(l) && !quant_spelling_known(s)) {
+        to_log(LOG_WARNING, "dasllama-server: unknown --quant '{s}', using q8 (valid: fp32 | q8 | q8_0 | q4_0 | q4_k | q5_k | q6_k | mxfp4 | f16 | bf16 | q4 = legacy requant)\n")
+    }
+    return QuantMode.q8
+}
+
 var g_has_asr = false
 var g_asr_path = ""
 var g_asr_mmproj = ""
@@ -1899,10 +1926,14 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
     if (backend != "auto" && backend != "cpu") {
         return resp |> JSON(error_body("'backend' must be \"auto\" or \"cpu\" (got '{backend}')", "invalid_request_error"), http_status.BAD_REQUEST)
     }
+    let quant_spelling = js?["quant"] ?? "q8"
+    if (!empty(quant_spelling) && !quant_spelling_known(quant_spelling)) {
+        return resp |> JSON(error_body("'quant' value '{quant_spelling}' is not known — valid: fp32 | q8 | q8_0 | q4_0 | q4_k | q5_k | q6_k | mxfp4 | f16 | bf16 | q4", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
     let cpu_only = backend == "cpu"
     let prev_owner = free_gpu_tier_for_load(cpu_only)
     let t0 = ref_time_ticks()
-    let quant = (js?["quant"] ?? "q8") == "fp32" ? QuantMode.fp32 : QuantMode.q8
+    let quant = pick_quant(quant_spelling)
     var m = Model()
     var failure = ""
     var failed = catch_worker_panic(failure) {
@@ -2001,6 +2032,7 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
     if (g_default_slot > mi) {
         g_default_slot--
     }
+    let was_active = g_active == mi
     g_active = g_active > mi ? g_active - 1 : (g_active == mi ? g_default_slot : g_active)
     g_cur = g_cur > mi ? g_cur - 1 : (g_cur == mi ? g_default_slot : g_cur)
     if (g_gpu_owner > mi) {
@@ -2008,6 +2040,11 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
     }
     if (g_marks_slot > mi) {
         g_marks_slot--
+    }
+    if (was_active) {
+        // the MTP gate is process-global and update_server refreshes it only on an ACTIVE-slot
+        // change — the dying slot's setting must not survive onto the inherited default
+        set_mtp_spec(g_slots[g_active].sched.mtp)
     }
     if (had_towers && g_media_armed) {
         var drop = MediaJob(kind = MediaJobKind.drop, name = dead_name)

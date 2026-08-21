@@ -506,6 +506,13 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "an unknown backend value is refused, not auto-ed")
                 t |> success(find(string(resp.body), "auto") >= 0, "the 400 names the accepted values")
             }
+            POST("{base_url}/v1/models/load", "\{\"path\":\"{junk}\",\"quant\":\"q3_banana\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "an unknown quant value is refused, not q8-ed")
+                t |> success(find(string(resp.body), "not known") >= 0, "the 400 names the quant rejection")
+            }
+            POST("{base_url}/v1/models/load", "\{\"path\":\"{junk}\",\"quant\":\"q4_k_m\"}") $(resp) {
+                t |> success(find(string(resp.body), "not known") < 0, "a boot-legal quant spelling passes the route's validation")
+            }
             // the runtime-model routes share /config's operator gate: a rebound Host is refused
             with_http_request() $(var req) {
                 req.method = http_method.POST
