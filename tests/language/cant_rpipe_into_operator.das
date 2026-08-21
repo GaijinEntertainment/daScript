@@ -1,4 +1,4 @@
-// an operator has no argument list, so a value piped into one is silently discarded
+// an operator has no argument list, so piping a value into one is a compile error
 options gen2
 expect 30922:3
 

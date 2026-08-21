@@ -1377,6 +1377,7 @@ namespace das {
             auto pOp = (ExprOp *) fncall;
             das_yyerror(scanner,"can't rpipe into operator '" + pOp->op + "'. the piped argument would be discarded",
                 locAt,CompilationError::cant_expression);
+            delete arg;
             return fncall;
         } else if ( fncall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) fncall;
@@ -1402,6 +1403,7 @@ namespace das {
             return fncall;
         } else {
             das_yyerror(scanner,"can only rpipe into a function call",locAt,CompilationError::cant_expression);
+            delete arg;
             return fncall;
         }
     }
