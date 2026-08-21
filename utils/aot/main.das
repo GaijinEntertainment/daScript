@@ -133,7 +133,7 @@ def find_bool(args : array<string>; key : string) {
 def write_result(content : string; output_filename : string;
                  mode : string; force_overwrite : bool) {
     var result : bool = true
-    if (content |> !empty(content) && (force_overwrite || !is_content_same(content, output_filename))) {
+    if (!empty(content) && (force_overwrite || !is_content_same(content, output_filename))) {
         fopen(output_filename, "wb") $(fw) {
             if (fw != null) {
                 to_log(LOG_INFO, "{mode} to {output_filename}\n")

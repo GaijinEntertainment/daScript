@@ -908,7 +908,7 @@ class public AotDebugInfoHelper {
             writeDim(writer, fld, suffix);
             writeArgTypes(writer, fld, suffix);
             writeArgNames(writer, fld, suffix);
-            let prefix = (info.module_name |> !empty(info.module_name)) ? "{info.module_name}::" : "";
+            let prefix = !empty(info.module_name) ? "{info.module_name}::" : "";
             writeVarAnnotationArgs(writer, fld, "{structInfoName(info)}_field_{fi}_ann");
             let fldAnnRef = fld.annotation_argument_count > 0u ? ", {structInfoName(info)}_field_{fi}_ann, {int(fld.annotation_argument_count)}u" : ""
             let structCppName = aotSuffixNameEx(info.name, "_S",
