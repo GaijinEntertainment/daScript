@@ -3936,7 +3936,7 @@ def private aotEmitStruct(ps : Structure?;
 def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
     //! Writes forward declarations and dependent type/function definitions for AOT output.
     buildStructEnumCollisions(program);
-    let utm = new UseTypeMarker();
+    var utm = new UseTypeMarker();
     make_visitor(*utm) $(adapter) {
         visit(program, adapter);
     }
@@ -3971,7 +3971,9 @@ def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
             }
         });
     })
-
+    unsafe {
+        delete utm
+    }
 }
 
 class ArgsConverter : AstVisitor {
@@ -4069,9 +4071,12 @@ def public collectProgramUsedFunctions(program : ProgramPtr; all_modules : bool;
 
 def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, all_modules : bool = false) {
     let fnn = collectProgramUsedFunctions(program, all_modules, false);
-    let visitor = new ArgsConverter(logs, cross_platform);
+    var visitor = new ArgsConverter(logs, cross_platform);
     make_visitor(*visitor) $(adapter_marker) {
         visit(program, adapter_marker);
+    }
+    unsafe {
+        delete visitor
     }
 
     var funInit = false;
