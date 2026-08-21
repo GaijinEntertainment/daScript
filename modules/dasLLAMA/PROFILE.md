@@ -110,9 +110,11 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
   narrow.
 - Every official model with an mmproj companion (`mmproj_companion` in `model_specs.das`) also
   gets its image-chat cells — one `--image` child per selected leg on the pinned
-  `bench_image_fixture()` picture, das-only (llama-bench has no image mode), `--image-reps`
-  (default 3) repetitions. `-w image` runs just those cells; the oracle re-verifies the stored
-  rows the same way.
+  `bench_image_fixture()` picture, `--image-reps` (default 3) repetitions, each paired with a
+  patched `llama-mtmd-cli` reference cell (metal/amx vs the stock build's sibling of
+  `LLAMA_BENCH_STOCK`, neon vs the ASR rig's CPU ref build; the cpu arms pin
+  `--no-mmproj-offload` — without it the tower silently rides Metal). `-w image` runs just
+  those cells; the oracle re-verifies the stored das rows the same way.
 - `-p 512 -n 128 -r 5` are the recorded shapes. Changing them makes the row incomparable to
   every other row in the store.
 - `--settle <seconds>` (default 12) idles between passes; a dead child's multi-GB map reclaims

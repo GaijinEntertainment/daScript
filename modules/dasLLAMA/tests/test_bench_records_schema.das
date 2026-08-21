@@ -307,13 +307,151 @@ def test_image_chat_rows_pin_the_fixture(t : T?) {
                     rows++
                     t |> success(find(r.cmd, bench_image_fixture()) >= 0,
                         "{base_name(path)} {m.gguf} {r.backend}/{r.flavor}: the cmd receipt names {bench_image_fixture()}")
-                    t |> success(find(r.cmd, "--image-mmproj") >= 0,
-                        "{base_name(path)} {m.gguf} {r.backend}/{r.flavor}: the cmd receipt names its mmproj")
+                    t |> success(find(r.cmd, "--image-mmproj ") >= 0 || find(r.cmd, "--mmproj ") >= 0,
+                        "{base_name(path)} {m.gguf} {r.backend}/{r.flavor}: the cmd receipt passes an mmproj (either engine's flag spelling)")
                 }
             }
             delete models
         }
         t |> success(rows > 0, "the sweep found image-chat rows to gate ({rows})")
         delete stores
+    }
+}
+
+[test]
+def test_parse_mtmd_image(t : T?) {
+    t |> run("the image ref parse: encode lines sum, MTMD_TIMING splits, counts carry") @(t : T?) {
+        // fixture text from a live patched-mtmd run (m1, E2B metal) - two noise lines around it
+        let out = ("0.01.517.685 I mtmd batch encoding done in 116 ms\n"
+            + "1.  **Analyze the image:**\n"
+            + "MTMD_TIMING encode_prefill_ms 266.8 decode_ms 432.4 total_ms 699.1 n_prefill 159 n_decode 32\n")
+        let r = parse_mtmd_image(out)
+        t |> success(r.ok, "a complete run parses")
+        t |> numericEqual(float(r.enc_ms), 116.0)
+        t |> numericEqual(float(r.prefill_ms), 150.8)
+        t |> numericEqual(float(r.decode_ms), 432.4)
+        t |> equal(r.n_prefill, 159)
+        t |> equal(r.n_decode, 32)
+    }
+    t |> run("multi-chunk encodes sum; incomplete output refuses") @(t : T?) {
+        let two = ("I mtmd batch encoding done in 100 ms\nI mtmd batch encoding done in 50 ms\n"
+            + "MTMD_TIMING encode_prefill_ms 200.0 decode_ms 80.0 total_ms 280.0 n_prefill 40 n_decode 8\n")
+        let r2 = parse_mtmd_image(two)
+        t |> success(r2.ok)
+        t |> numericEqual(float(r2.enc_ms), 150.0)
+        t |> numericEqual(float(r2.prefill_ms), 50.0)
+        let noenc = parse_mtmd_image("MTMD_TIMING encode_prefill_ms 200.0 decode_ms 80.0 total_ms 280.0 n_prefill 40 n_decode 8\n")
+        t |> success(!noenc.ok, "no encode line = no cell (an unpatched or non-image run must not mint)")
+        let noline = parse_mtmd_image("I mtmd batch encoding done in 100 ms\nsome reply\n")
+        t |> success(!noline.ok, "no MTMD_TIMING = no cell")
+        let nocounts = parse_mtmd_image("I mtmd batch encoding done in 100 ms\n"
+            + "MTMD_TIMING encode_prefill_ms 200.0 decode_ms 80.0 total_ms 280.0\n")
+        t |> success(!nocounts.ok, "an old-patch line without position counts must not mint a bogus tok/s")
+    }
+}
+
+[test]
+def test_mtmd_versions_bin_param(t : T?) {
+    t |> run("the version stamp follows the bin argument - the stock build stamps its own checkout") @(tt : T?) {
+        // a non-git dir has no commit, so only the patch tag survives - the stamp's shape is
+        // the claim (commit resolution itself belongs to git, not to this seam)
+        let foreign = mtmd_versions("/nonexistent/build/bin/llama-mtmd-cli")
+        tt |> success(find(foreign, "mtmd-timing.patch") >= 0, "the patch tag is always stamped: {foreign}")
+        tt |> success(find(foreign, "llama.cpp") == 0, "the stamp names the engine: {foreign}")
+        let dflt = mtmd_versions()
+        tt |> success(find(dflt, "mtmd-timing.patch") >= 0, "the default arm keeps the CPU ref build's stamp: {dflt}")
+    }
+}
+
+[test]
+def test_image_ref_flag_invariants(t : T?) {
+    t |> run("every committed llama.cpp image row's flags match its backend/flavor stamp") @(t : T?) {
+        // the exact defect this gate pins: a stock -ngl 0 run without --no-mmproj-offload
+        // minted a Metal-speed encode under a cpu label
+        var stores <- list_record_stores("modules/dasLLAMA/performance/records")
+        var rows = 0
+        for (path in stores) {
+            var models : array<BenchModel>
+            t |> success(read_bench_records(path, models), "{path} parses")
+            for (m in models) {
+                for (r in m.runs) {
+                    if (r.workload != "image-chat" || r.engine != "llama.cpp") {
+                        continue
+                    }
+                    rows++
+                    let cpu = r.backend == "cpu"
+                    t |> equal(find(r.cmd, "-ngl 0") >= 0, cpu, "{m.gguf} {r.backend}/{r.flavor}: -ngl 0 iff cpu")
+                    t |> equal(find(r.cmd, "--no-mmproj-offload") >= 0, cpu, "{m.gguf} {r.backend}/{r.flavor}: the tower stays off Metal iff cpu")
+                    t |> equal(find(r.cmd, "--no-op-offload") >= 0, cpu && r.flavor == "stock", "{m.gguf} {r.backend}/{r.flavor}: -nopo on the stock cpu (amx) arm only")
+                }
+            }
+            delete models
+        }
+        t |> success(rows > 0, "the sweep found llama.cpp image rows to gate ({rows})")
+        delete stores
+    }
+}
+
+[test]
+def test_das_rows_cite_archived_generations(t : T?) {
+    t |> run("every das row's tune_sha resolves to a committed generation archive") @(t : T?) {
+        // a row citing a generation with no archive is unverifiable by the oracle's crossgen
+        // gate and by any reader - the hand-minted row that once did has been re-minted
+        var archives : table<string>
+        dir("modules/dasLLAMA/performance/records") $(name) {
+            let at = find(name, ".tune.")
+            if (at >= 0 && name |> ends_with(".json")) {
+                archives |> insert(slice(name, at + 6, at + 18))
+            }
+        }
+        var stores <- list_record_stores("modules/dasLLAMA/performance/records")
+        var rows = 0
+        for (path in stores) {
+            var models : array<BenchModel>
+            t |> success(read_bench_records(path, models), "{path} parses")
+            for (m in models) {
+                for (r in m.runs) {
+                    if (r.engine != "das" || empty(r.tune_sha)) {
+                        continue
+                    }
+                    rows++
+                    t |> success(key_exists(archives, slice(r.tune_sha, 0, 12)),
+                        "{base_name(path)} {m.gguf} {r.backend}/{r.flavor}/{r.workload}: tune_sha {slice(r.tune_sha, 0, 12)} has its archive")
+                }
+            }
+            delete models
+        }
+        t |> success(rows > 0, "the sweep found stamped das rows ({rows})")
+        delete archives
+        delete stores
+    }
+}
+
+[test]
+def test_parse_mtmd_image_refusals(t : T?) {
+    t |> run("the refusal arms nobody hit live: equality, counts-only, bad tail, noise lines") @(t : T?) {
+        // encode == encode_prefill would divide a prefill rate by zero - refuse, never inf
+        let eq = parse_mtmd_image("I mtmd batch encoding done in 100 ms\n"
+            + "MTMD_TIMING encode_prefill_ms 100.0 decode_ms 80.0 total_ms 180.0 n_prefill 40 n_decode 8\n")
+        t |> success(!eq.ok, "encode == encode+prefill = zero prefill wall - no cell")
+        let countsOnly = parse_mtmd_image("I mtmd batch encoding done in 100 ms\n"
+            + "MTMD_TIMING n_prefill 40 n_decode 8\n")
+        t |> success(!countsOnly.ok, "counts without the ms split - no cell")
+        let badTail = parse_mtmd_image("I mtmd batch encoding done in \n"
+            + "MTMD_TIMING encode_prefill_ms 200.0 decode_ms 80.0 total_ms 280.0 n_prefill 40 n_decode 8\n")
+        t |> success(!badTail.ok, "an encode line with no number never counts as seen")
+        let noise = parse_mtmd_image("I mtmd batch encoding done in 100 ms\n"
+            + "a reply line that mentions decode_ms 999 in prose\n"
+            + "MTMD_TIMING encode_prefill_ms 200.0 decode_ms 80.0 total_ms 280.0 n_prefill 40 n_decode 8\n")
+        t |> success(noise.ok, "a noise line without the MTMD_TIMING tag is skipped")
+        t |> numericEqual(float(noise.decode_ms), 80.0, "the tagged line wins over prose")
+    }
+}
+
+[test]
+def test_sibling_mtmd(t : T?) {
+    t |> run("the stock llama-mtmd-cli resolves as llama-bench's sibling, or not at all") @(t : T?) {
+        t |> equal(sibling_mtmd(""), "", "no stock ref = no sibling")
+        t |> equal(sibling_mtmd("/nonexistent/bin/llama-bench"), "", "a missing sibling refuses instead of naming a dead path")
     }
 }

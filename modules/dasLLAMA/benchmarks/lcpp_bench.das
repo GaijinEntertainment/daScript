@@ -446,7 +446,7 @@ def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : Vision
         let t_enc = ref_time_ticks()
         r.n_rows = encode_image_(emb, st, img, "bench", rows)
         r.enc_ms = min(r.enc_ms, double(get_time_usec(t_enc)) / 1000.0lf)
-        var chat <- create_chat_(m, "", 32l)
+        var chat <- create_chat_(m, "", int64(image_turn_steps()))
         set_thinking_(chat, false)   // the timed shape is the answer, not a scratchpad
         add_user_(chat, prompt)
         var head : array<int64>
@@ -467,7 +467,7 @@ def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : Vision
         // the same stop protocol respond_ runs: without it a stray channel marker rides into the
         // timed text, and the row would price a reply the product would never have shown
         var stops <- effective_stop_ids_(chat)
-        generate_embd_(m, chat.session, embd, npos, SamplingParams(), 32l, n_head, n_head + r.n_rows) $(id, piece) {
+        generate_embd_(m, chat.session, embd, npos, SamplingParams(), int64(image_turn_steps()), n_head, n_head + r.n_rows) $(id, piece) {
             for (sid in stops) {
                 return false if (id == sid)
             }
@@ -528,7 +528,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
             return false
         }
     }
-    let ask = empty(prompt) ? "What is in this picture? Answer in one sentence." : prompt
+    let ask = empty(prompt) ? image_turn_prompt() : prompt
     var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()

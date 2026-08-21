@@ -1,5 +1,5 @@
 diff --git a/common/arg.cpp b/common/arg.cpp
-index 841ca3c..673c1ce 100644
+index 841ca3ce2..673c1ce42 100644
 --- a/common/arg.cpp
 +++ b/common/arg.cpp
 @@ -3280,7 +3280,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
@@ -21,7 +21,7 @@ index 841ca3c..673c1ce 100644
          {"--reasoning-budget-message"}, "MESSAGE",
          "message injected before the end-of-thinking tag when reasoning budget is exhausted (default: none)",
 diff --git a/common/chat.cpp b/common/chat.cpp
-index 0cee804..955fdf0 100644
+index 0cee80434..955fdf0b4 100644
 --- a/common/chat.cpp
 +++ b/common/chat.cpp
 @@ -608,9 +608,11 @@ std::string common_chat_format_single(const struct common_chat_templates * tmpls
@@ -38,7 +38,7 @@ index 0cee804..955fdf0 100644
      inputs.add_eos   = tmpls->add_eos;
  
 diff --git a/common/chat.h b/common/chat.h
-index 7898f16..7ea9844 100644
+index 7898f1623..7ea98441d 100644
 --- a/common/chat.h
 +++ b/common/chat.h
 @@ -329,7 +329,8 @@ std::string common_chat_format_single(const struct common_chat_templates * tmpls
@@ -52,7 +52,7 @@ index 7898f16..7ea9844 100644
  // Returns an example of formatted chat
  std::string common_chat_format_example(const struct common_chat_templates *       tmpls,
 diff --git a/tools/mtmd/mtmd-cli.cpp b/tools/mtmd/mtmd-cli.cpp
-index 8704ea7..cb7ea3e 100644
+index 8704ea79d..129d63564 100644
 --- a/tools/mtmd/mtmd-cli.cpp
 +++ b/tools/mtmd/mtmd-cli.cpp
 @@ -1,3 +1,4 @@
@@ -96,7 +96,7 @@ index 8704ea7..cb7ea3e 100644
      ctx.chat_history.push_back(new_msg);
      return formatted;
  }
-@@ -453,12 +460,19 @@ int main(int argc, char ** argv) {
+@@ -453,12 +460,21 @@ int main(int argc, char ** argv) {
                  return 1; // error is already printed by libmtmd
              }
          }
@@ -105,14 +105,16 @@ index 8704ea7..cb7ea3e 100644
              return 1;
          }
 +        auto _t_enc1 = std::chrono::high_resolution_clock::now();
++        llama_pos _n_prefill = ctx.n_past;
          if (!g_is_interrupted && generate_response(ctx, n_predict)) {
              return 1;
          }
 +        auto _t_dec1 = std::chrono::high_resolution_clock::now();
++        llama_pos _n_decode = ctx.n_past - _n_prefill;
 +        double _enc_ms = std::chrono::duration<double, std::milli>(_t_enc1 - _t_enc0).count();
 +        double _dec_ms = std::chrono::duration<double, std::milli>(_t_dec1 - _t_enc1).count();
-+        fprintf(stderr, "MTMD_TIMING encode_prefill_ms %.1f decode_ms %.1f total_ms %.1f\n",
-+                _enc_ms, _dec_ms, _enc_ms + _dec_ms);
++        fprintf(stderr, "MTMD_TIMING encode_prefill_ms %.1f decode_ms %.1f total_ms %.1f n_prefill %d n_decode %d\n",
++                _enc_ms, _dec_ms, _enc_ms + _dec_ms, (int)_n_prefill, (int)_n_decode);
  
      } else {
          LOG("\n Running in chat mode, available commands:");

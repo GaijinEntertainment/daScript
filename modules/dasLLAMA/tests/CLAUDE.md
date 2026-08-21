@@ -1,8 +1,8 @@
 # modules/dasLLAMA/tests — testing discipline
 
 The Metal suites here are wall-time-expensive (model loads dominate; a full pass holds 40GB
-GGUFs). The rules below exist because one session spent 5.75 of 6 hours re-running full suites
-to verify one-arm fixes. They are enforcement, not advice.
+GGUFs), so the rules below are enforcement, not advice — an ad-hoc full-suite run turns a
+one-arm fix into an afternoon.
 
 ## Run suites ONLY through the runner
 
@@ -119,9 +119,20 @@ A model-free file — one with at least one cell that runs, not skips, when no m
 and `DASLLAMA_CPU_PREFILL=1` is set in the environment (the runner sets it for every child) —
 runs under plain dastest (still `-jit`) or as a set through `run.das -- --suite model-free`,
 the per-PR gate. The `model-free` list in `run.das` is the census of those files; this note is
-the per-file map. A file in a model suite (every suite but `model-free`) is listed in its
-suite's arm list in `run.das` instead.
-Current note: `failed_dasllama_lint_require.das` — model-free, expected-compile-failure: the
+the per-file map. A file in a model suite (every suite but `model-free`) is listed in that
+suite's file list in `run.das` instead.
+`test_bench_records_schema.das` — model-free: the record store's schema (round-trip, upsert
+identity with `workload` in the key, annotations landing only on the rows they select, the
+store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
+`-w` workload scope; the stored-row→rig-leg map, `backend`/`flavor` ⇒ `metal` | plain cpu |
+`accel`, else refused; the tune-stamp gate; the oracle compare's ok/warn/fail bands; the
+llama.cpp image-reference parser `parse_mtmd_image` — encode summing, the MTMD_TIMING split,
+its refusal arms); plus the committed-records sweeps: image-chat receipts match their
+`backend`/`flavor` stamps and pin the fixture and mmproj, and every das row's `tune_sha`
+resolves to its committed generation archive.
+`test_exchange_schema.das` — model-free: the exchange validator, sweeping the ENTIRE in-tree
+records/sidecar corpus, so a writer-schema change reds here first.
+`failed_dasllama_lint_require.das` — model-free, expected-compile-failure: the
 facade lint trips DASLLAMA001 (code 50503) on a direct engine require with no escape.
 `failed_dasllama_lint_sidedoor.das` — model-free, expected-compile-failure: the lint's tree
 guard trips on a path-require resolving into modules/dasLLAMA, name prefix or not.
@@ -305,7 +316,8 @@ batched code paths get their parity on small models via pins (e.g.
 ## Log discipline
 
 Always capture COMPLETE logs (the runner does this); grep afterwards, never at capture time —
-a capture-time filter once hid the exact proof line a verification run existed to produce.
+a capture-time filter can hide the exact proof line the run exists to produce, and the silent
+capture reads as success.
 When a fixture claims a size/depth property ("2030 tokens", "crosses 2048"), assert the
 actual number in the test; a resize cap is not evidence.
 THE EYEBALL RAIL (REVIEW: "Every test that compares generated tokens, ids, or logits logs the decoded text for both sides"): every token-for-token generate cell logs both decoded
@@ -330,13 +342,6 @@ FORCED-FEED logits-tolerance form (the k4 freeform cell, cached stream `gen_free
 token equality. For that form the cache is a FEED, not a truth: both sides force through the
 same tokens, so a stale feed stays a valid instrument and the stale-cache red class does not
 exist for it. Counting cells stay token-exact.
-
-## Standalone schema tests (model-free)
-
-`test_bench_records_schema.das` (the record store: round-trip, upsert identity, annotations)
-and `test_exchange_schema.das` (the exchange validator: sweeps the ENTIRE in-tree
-records/sidecar corpus, so a writer-schema change reds here first) run directly under dastest
-with `-jit` — no runner, no arms, no models.
 
 ## Out-of-folder test files (the checklist's placement ledger)
 

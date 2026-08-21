@@ -384,10 +384,32 @@ def main() {
         </div>
     </section>
 
-    <!-- § 04 supported model families -->
+    <!-- § 04 images in — vision decoders, reference is llama.cpp's mtmd -->
+    <section class="forge-section forge-section--alt" id="imagechat" hidden>
+        <div class="forge-container">
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 04</span><span class="forge-section-label__rule"></span><span>images in</span></div>
+            <h2 class="forge-h2">Vision models, a picture straight into the prompt.</h2>
+            <p class="forge-p forge-p--wide">One image turn end to end on the same decoder + mmproj pair both engines load: the vision encoder, the spliced prefill, the reply. The reference is <code>llama-mtmd-cli</code>; both sides price prefill and decode as their own positions over their own time, and the encoder's wall time gets its own column.</p>
+
+            <div class="dl-filters" id="imagechat-filters"></div>
+            <div class="dl-viewbar">
+                <div class="dl-seg" id="imagechat-view">
+                    <button class="is-on" data-view="bars">bars</button><button data-view="table">table</button>
+                </div>
+                <div class="dl-seg" id="imagechat-metric">
+                    <button class="is-on" data-metric="pp">prefill</button><button data-metric="tg">decode</button>
+                </div>
+            </div>
+            <div class="dl-bars" id="imagechat-bars"></div>
+            <div class="dl-table-wrap" id="imagechat-table-wrap" hidden><table class="dl-table dl-table--bench" id="imagechat-table"></table></div>
+            <div class="dl-caption" id="imagechat-caption"></div>
+        </div>
+    </section>
+
+    <!-- § 05 supported model families -->
     <section class="forge-section" id="models">
         <div class="forge-container">
-            <div class="forge-section-label"><span class="forge-section-label__num">§ 04</span><span class="forge-section-label__rule"></span><span>supported model families</span></div>
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 05</span><span class="forge-section-label__rule"></span><span>supported model families</span></div>
             <h2 class="forge-h2">One engine, twelve architectures.</h2>
             <p class="forge-p">Everything below loads from stock GGUF (llama2.c <code>.bin</code> for the toy), auto-detected from metadata, and is verified token-for-token against its reference engine. Weights: F32 / F16 / Q8_0 / Q4_0 / MXFP4 read directly; K-quant files (Q4_K_M / Q5_K_M / Q6_K) run on native K-quant kernels; bf16 audio towers read exactly.</p>
             <div class="dl-caveats">
@@ -404,10 +426,10 @@ def main() {
         </div>
     </section>
 
-    <!-- § 05 methodology -->
+    <!-- § 06 methodology -->
     <section class="forge-section forge-section--alt" id="method">
         <div class="forge-container">
-            <div class="forge-section-label"><span class="forge-section-label__num">§ 05</span><span class="forge-section-label__rule"></span><span>methodology</span></div>
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 06</span><span class="forge-section-label__rule"></span><span>methodology</span></div>
             <h2 class="forge-h2" style="margin-bottom:36px">The method, stated in full.</h2>
             <div class="dl-caveats">
                 <div class="dl-caveat"><div class="dl-caveat__k">what das is</div><div class="dl-caveat__v">An LLM + speech-to-text engine written entirely in daslang and JIT-compiled — no hand-written SIMD/assembly; the Metal kernels are emitted from daslang too.</div></div>
