@@ -739,9 +739,12 @@ def make_capture_macro(name : string; var someClassPtr) : CaptureMacroPtr {
     }
 }
 
+var private gc_root_AstTypeMacro : array<AstTypeMacro?>
+
 [macro_function]
 def make_type_macro(name : string; var someClassPtr) : TypeMacroPtr {
     static_if (typeinfo is_pointer(someClassPtr) && typeinfo is_class(*someClassPtr)) {
+        gc_root_AstTypeMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_type_macro(name, someClassPtr, classInfo)
     } else {
