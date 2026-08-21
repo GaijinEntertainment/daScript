@@ -3511,7 +3511,7 @@ let AUDIO_DECODE_SAMPLE_RATE = 16000l
 //! soft tokens must fit the context, so the longest usable clip is `seq_len / tokens-per-sec`
 //! seconds. Caps the decode of an untrusted upload before a compressed bomb reaches the encoder.
 def private audio_decode_frame_cap(seq_len : int64) : int {
-    return int(seq_len / GEMMA4A_AUDIO_SOFT_TOKENS_PER_SEC * AUDIO_DECODE_SAMPLE_RATE)
+    return max(int(AUDIO_DECODE_SAMPLE_RATE), int(seq_len / GEMMA4A_AUDIO_SOFT_TOKENS_PER_SEC * AUDIO_DECODE_SAMPLE_RATE))
 }
 
 var private g_media_jobs : Channel?
@@ -3967,6 +3967,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     }
     g_server_started = true
     g_started_at = ref_time_ticks()
+    g_tickprof = env_noisy_diag()
     compose_hardware_line()
     g_box_ram_gb = box_ram_gb()
     var names <- [for (s in g_slots); s.is_default && length(g_slots) > 1 ? "{s.name}*" : s.name]
@@ -3991,6 +3992,7 @@ def private pick_step_slot : int {
 
 //! Drive one non-blocking server iteration. False means the graceful drain completed (or the
 //! server never started); an external lifecycle host should then exit and call shutdown.
+var private g_tickprof = false
 var private g_prof_win = ref_time_ticks()
 var private g_prof_ticks = 0l
 var private g_prof_busy = 0l
@@ -4012,6 +4014,9 @@ def private prof_window_reset() {
 }
 
 def private prof_window_report() {
+    if (!g_tickprof) {
+        return
+    }
     let win_us = int64(get_time_usec(g_prof_win))
     if (win_us < 5_000_000l) {
         return
@@ -4029,17 +4034,23 @@ def update_server() : bool {
     }
     let t_pump = ref_time_ticks()
     g_server->tick()   // drains queued handlers: requests parse + render + submit here
-    g_prof_pump_us += int64(get_time_usec(t_pump))
+    if (g_tickprof) {
+        g_prof_pump_us += int64(get_time_usec(t_pump))
+    }
     let t_drain = ref_time_ticks()
     drain_asr_events(g_server.server)
     drain_media_events(g_server.server)
     drain_bench_events()
     drain_bake_events()
     catalog_download_tick()
-    g_prof_drain_us += int64(get_time_usec(t_drain))
     let t_reap = ref_time_ticks()
+    if (g_tickprof) {
+        g_prof_drain_us += int64(get_time_usec(t_drain))
+    }
     reap_disconnected(g_server.server)
-    g_prof_reap_us += int64(get_time_usec(t_reap))
+    if (g_tickprof) {
+        g_prof_reap_us += int64(get_time_usec(t_reap))
+    }
     // serialized multi-model stepping: ONE scheduler step per tick, slots with work interleave
     // round-robin. Every step runs under ITS model's routing marks; the GPU tier follows a
     // gpu-wanting slot once the current owner drains.
@@ -4054,8 +4065,11 @@ def update_server() : bool {
         maybe_bind_gpu(si)
         let t_step = ref_time_ticks()
         busy = scheduler_step(g_slots[si].model, g_slots[si].sched, g_events)
-        g_prof_step_us += int64(get_time_usec(t_step))
-        let step_ms = int64(get_time_usec(t_step)) / 1000l
+        let step_us = int64(get_time_usec(t_step))
+        let step_ms = step_us / 1000l
+        if (g_tickprof) {
+            g_prof_step_us += step_us
+        }
         if (step_ms > 3000l) {
             // the "why does it pause" catcher: one decode step / prefill chunk should be
             // well under a second — anything slower means contention or a stall
@@ -4065,12 +4079,14 @@ def update_server() : bool {
     let t_flush = ref_time_ticks()
     flush_events(g_server.server)
     flush_tool_keepalives(g_server.server)
-    g_prof_flush_us += int64(get_time_usec(t_flush))
-    g_prof_ticks++
-    if (busy) {
-        g_prof_busy++
+    if (g_tickprof) {
+        g_prof_flush_us += int64(get_time_usec(t_flush))
+        g_prof_ticks++
+        if (busy) {
+            g_prof_busy++
+        }
+        prof_window_report()
     }
-    prof_window_report()
     if (g_shutdown_requested && total_active() == 0l && total_queued() == 0l &&
         g_asr_pending == 0 && empty(g_media_wires)) {
         to_log(LOG_INFO, "dasllama-server: graceful shutdown drain complete\n")

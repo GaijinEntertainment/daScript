@@ -85,6 +85,12 @@ def public catalog_env_override : string
 def public gpu_env_master_off : bool
     => is_some(g_env_gpu.gpu) && !unwrap(g_env_gpu.gpu)
 
+//! The engine noisy-diagnostics switch (`DASLLAMA_NOISY`) read the facade-only way, like
+//! [[gpu_env_master_off]]. The server gates its optional [tickprof] serving-loop profile on it,
+//! so a production server pays no clock reads and emits no profile lines unless noisy is on.
+def public env_noisy_diag : bool
+    => g_env_engine.noisy
+
 def private strip_trailing_sep(p : string) : string {
     if (!ends_with(p, "/") && !ends_with(p, "\\")) {
         return p

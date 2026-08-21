@@ -6,6 +6,7 @@ module dasllama_audio_io shared public
 
 require dasllama/dasllama_lint public
 require daslib/defer
+require math
 require audio   // miniaudio: decode any audio container to PCM
 
 //! Decode any format miniaudio handles (wav / mp3 / flac / ogg …) to 16 kHz mono f32 PCM —
@@ -77,15 +78,15 @@ def decode_audio_16k_mono(bytes : array<uint8> | #; max_frames : int = 0) : arra
     let chunk = 16000
     var total = 0
     while (true) {
-        if (max_frames > 0 && total >= max_frames) {
-            samples |> resize(max_frames)
-            return <- samples
+        let want = max_frames > 0 ? min(chunk, max_frames - total) : chunk
+        if (want <= 0) {
+            break
         }
-        samples |> ensure_capacity(total + chunk)
-        samples |> resize(total + chunk)   // grow by a chunk, read straight into the tail
-        let got = int(ma_decoder_read_pcm_frames(decoder, unsafe(addr(samples[total])), uint64(chunk)))
+        samples |> ensure_capacity(total + want)
+        samples |> resize(total + want)   // grow by a chunk, read straight into the tail
+        let got = int(ma_decoder_read_pcm_frames(decoder, unsafe(addr(samples[total])), uint64(want)))
         total += got
-        if (got < chunk) {
+        if (got < want) {
             break
         }
     }
