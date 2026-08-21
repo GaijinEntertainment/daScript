@@ -4,6 +4,10 @@ options no_unused_block_arguments = false
 require daslib/algorithm
 require dastest/testing_boost public
 
+struct KeyedItem {
+    key : int
+}
+
 // ---- upper_bound ----
 
 [test]
@@ -49,6 +53,17 @@ def test_upper_bound(t : T?) {
         let a <- [1, 2, 2, 2, 3]
         t |> equal(lower_bound(a, 2), 1)
         t |> equal(upper_bound(a, 2), 4)
+    }
+    t |> run("key comparator of a type the elements are not") @(t : T?) {
+        let a <- [KeyedItem(key = 1), KeyedItem(key = 3), KeyedItem(key = 3), KeyedItem(key = 7)]
+        let lo = lower_bound(a, 3) $(e : KeyedItem const -&; k : int) {
+            return e.key < k
+        }
+        let hi = upper_bound(a, 3) $(k : int; e : KeyedItem const -&) {
+            return k < e.key
+        }
+        t |> equal(lo, 1)
+        t |> equal(hi, 3)
     }
 }
 
