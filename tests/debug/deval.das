@@ -101,7 +101,14 @@ def private check_operators(t : T?) {
         (src = "1||nosuchvar", want = "true"),
         (src = "1&&nosuchvar", want = "unknown variable nosuchvar"),
         (src = "0||nosuchvar", want = "unknown variable nosuchvar"),
-        (src = "1&&2/0", want = "runtime error, division by 0")
+        (src = "1&&2/0", want = "runtime error, division by 0"),
+        (src = "1||", want = "unexpected end of stream"),
+        (src = "0&&", want = "unexpected end of stream"),
+        (src = "1||1+", want = "unexpected end of stream"),
+        (src = "0&&]", want = "unexpected character ], expecting number or ("),
+        (src = "1||]", want = "unexpected character ], expecting number or ("),
+        (src = "0&&#", want = "invalid token invalid character #, expecting number or ("),
+        (src = "1||(2", want = "expecting )")
     )
     for (c in cases) {
         t |> equal(context |> eval_test(c.src), c.want, "eval '{c.src}'")
