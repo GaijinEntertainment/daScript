@@ -482,10 +482,9 @@ def handle_tools_call(server : McpServer; reg : array<ToolDef>; id_json : string
 // ── JSON-RPC dispatcher ──────────────────────────────────────────────
 
 def dispatch_one(server : McpServer; reg : array<ToolDef>; req : jsonrpc::ParsedRequest; body : string) : string {
-    // Malformed entry — parser already built the envelope. Notifications skip the wire.
     if (!empty(req.error_envelope)) {
-        if (!req.is_notification) log_error(req.error_envelope)
-        return req.is_notification ? "" : req.error_envelope
+        log_error(req.error_envelope)
+        return req.error_envelope
     }
     let id_json = req.id_str
     let method = req.method

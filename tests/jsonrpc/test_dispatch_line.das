@@ -80,6 +80,20 @@ def test_dispatch_batch_per_entry_errors(t : T?) {
 }
 
 [test]
+def test_dispatch_malformed_without_id_still_answers(t : T?) {
+    let r = dispatch_line("\{\"params\":[1,2]}", false) $(_method, _params_json) {
+        return "\"ok\""
+    }
+    t |> success(!empty(r), "a malformed idless request still gets a response")
+    t |> success(find(r, "\"id\":null") >= 0, "id is null")
+    t |> success(find(r, "-32600") >= 0, "INVALID_REQUEST code")
+    let rb = dispatch_line("[\{\"params\":[1,2]}]", false) $(_method, _params_json) {
+        return "\"ok\""
+    }
+    t |> success(find(rb, "-32600") >= 0, "same inside a batch")
+}
+
+[test]
 def test_dispatch_strict_mode_propagates(t : T?) {
     let r = dispatch_line("\{\"id\":1,\"method\":\"x\"}", true) $(_method, _params_json) {
         return "\"ok\""
