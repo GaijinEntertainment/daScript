@@ -200,7 +200,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_GPU_NAME` | text | probed | Override the GPU name recorded in a box profile. |
 | `LLAMA_BENCH` | path | unset | Path to the llama-bench binary used to establish reference baselines. |
 | `LLAMA_BENCH_CLEAN` | path | unset | Path to a clean-build llama-bench for the reference column. |
-| `LLAMA_BENCH_STOCK` | path | unset | Path to a stock-build llama-bench for the reference column. |
+| `LLAMA_BENCH_STOCK` | path | unset | Path to a stock-build llama-bench for the reference column; its sibling llama-mtmd-cli serves as the metal/amx image-chat reference. |
 | `WHISPER_CPP` | path | ../whisper.cpp | whisper.cpp checkout used for ASR reference baselines. |
 | `WHISPER_CPP_MODELS` | path | unset | Directory of whisper.cpp models for ASR reference baselines. |
 | `MTMD_BIN` | path | unset | llama-mtmd-cli binary for multimodal reference baselines. |

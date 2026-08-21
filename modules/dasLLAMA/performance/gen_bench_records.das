@@ -56,7 +56,7 @@ struct Args {
     ref_clean : string
 
     @clarg_name = "ref-stock"
-    @clarg_doc = "stock llama-bench binary (default: env LLAMA_BENCH_STOCK)"
+    @clarg_doc = "stock llama-bench binary (default: env LLAMA_BENCH_STOCK); its sibling llama-mtmd-cli serves as the metal/amx image-chat reference"
     ref_stock : string
 
     @clarg_name = "ref-no-affinity"
@@ -921,19 +921,6 @@ def private image_das_cell(file, path, mm, pic : string; cfg : Args; threads : i
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
-// the same question the das image cell asks (lcpp_bench --image's default prompt) — the pair
-// prices the same turn on both engines
-let IMAGE_REF_PROMPT = "What is in this picture? Answer in one sentence."
-
-// The stock build's llama-mtmd-cli sits beside the stock llama-bench; "" = no stock ref set
-def private sibling_mtmd(refStock : string) : string {
-    if (empty(refStock)) {
-        return ""
-    }
-    let p = path_join(dir_name(refStock), "llama-mtmd-cli")
-    return stat(p).is_valid ? p : ""
-}
-
 // The image-chat reference cell: patched llama-mtmd-cli (MTMD_TIMING carries the split and the
 // position counts) on the same decoder + mmproj + picture. Both engines price prefill and
 // decode as own-positions over own-time; -n 32 pins the decode budget to the das cell's cap.
@@ -948,12 +935,13 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
     }
     let t0 = ref_time_ticks()
     var args <- [bin, "-m", path, "--mmproj", mm, "--image", pic,
-                 "-p", IMAGE_REF_PROMPT, "--temp", "0", "--jinja",
-                 "-n", "32", "-t", "{threads}", "-ngl", "{ngl}"]
+                 "-p", image_turn_prompt(), "--temp", "0", "--jinja",
+                 "-n", "{image_turn_steps()}", "-t", "{threads}", "-ngl", "{ngl}"]
     if (ngl == 0) {
         // -ngl/-nopo govern the DECODER; the mmproj tower rides the GPU regardless unless
-        // told not to — a stock cpu arm without this minted a Metal-speed encode (107 ms
-        // beside the metal arm's 116) under a cpu label. Same class as -nopo itself.
+        // told not to — without this flag a stock -ngl 0 llama-mtmd-cli run encoded E2B in
+        // 107 ms (vs its own Metal arm's 116 ms and its honest CPU's 19946 ms) under a cpu
+        // label. Same class as -nopo itself.
         args |> push("--no-mmproj-offload")
     }
     if (nopo) {
@@ -1348,6 +1336,22 @@ def main : int {
     }
     if (doLlm && empty(refStock)) {
         to_log(LOG_WARNING, "gen_bench_records: stock ref UNSET (--ref-stock / LLAMA_BENCH_STOCK) - no stock rows, metal/amx cells mint das-only\n")
+    }
+    // the image refs resolve off the SAME knobs — announce by env spelling where they change
+    // what this sweep mints (the sibling rule for stock; MTMD_BIN or its layout for the cpu arm)
+    if (doImage) {
+        let sm = sibling_mtmd(refStock)
+        if (empty(sm)) {
+            to_log(LOG_WARNING, "gen_bench_records: stock llama-mtmd-cli UNRESOLVED (no sibling beside --ref-stock / LLAMA_BENCH_STOCK) - metal/amx image cells mint das-only\n")
+        } else {
+            to_log(LOG_INFO, "gen_bench_records: image refs - stock llama-mtmd-cli = {sm} (LLAMA_BENCH_STOCK sibling)\n")
+        }
+        let cm = mtmd_bin()
+        if (!stat(cm).is_valid) {
+            to_log(LOG_WARNING, "gen_bench_records: CPU ref llama-mtmd-cli ABSENT ({cm}; MTMD_BIN overrides) - neon image cells mint das-only\n")
+        } else {
+            to_log(LOG_INFO, "gen_bench_records: image refs - cpu llama-mtmd-cli = {cm} (MTMD_BIN)\n")
+        }
     }
     let exe = rig_exe_checked()
     if (empty(exe)) {

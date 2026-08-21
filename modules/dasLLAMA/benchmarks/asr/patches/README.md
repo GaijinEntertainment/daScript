@@ -9,9 +9,12 @@ benchmarked binary's identity: the version capture in the profiling rig records 
 Base: llama.cpp @ `ebd048fc5` (ggml-org/llama.cpp). Applied to the CPU-only build whose
 `llama-mtmd-cli` serves as the audio-in reference (`MTMD_BIN`). Three changes:
 
-1. `MTMD_TIMING encode_prefill_ms E decode_ms D total_ms T` line on stderr — the timing the
-   rig parses. Wall-clock around `eval_message` (encode + prefill) and `generate_response`
-   (decode); model load is outside both, so the parsed total excludes it.
+1. `MTMD_TIMING encode_prefill_ms E decode_ms D total_ms T n_prefill P n_decode N` line on
+   stderr — the timing the rig parses. Wall-clock around `eval_message` (encode + prefill) and
+   `generate_response` (decode); model load is outside both, so the parsed total excludes it.
+   `n_prefill`/`n_decode` are the position counts (`n_past` after prefill, and the decode
+   delta), so a tok/s derived from the split prices own-positions over own-time — the image
+   reference cells' contract.
 2. `--reasoning off` enabled for the mtmd example (upstream gates it to server/completion/cli)
    and plumbed through `common_chat_format_single` as `enable_thinking` — benchmark turns must
    not spend tokens on a thinking channel.

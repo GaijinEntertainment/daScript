@@ -14,10 +14,11 @@ what it costs today and what the fix would change.
 
 - **OPEN — the spliced image prefill trails llama.cpp on Metal (measured 2026-08-21, M1 Max,
   the image-ref arc).** Record-grade image-chat pairs (released `lcpp_bench` exe vs patched
-  `llama-mtmd-cli`, both pricing prefill as own positions over own time, ~160 positions): the
-  Metal `img:pp` ratio is das/lcpp **0.52–0.62×** across all three vision models (E2B 687 vs
-  1101, E4B 362 vs 658, 12B 140 vs 268 tok/s) while das leads every CPU prefill cell and every
-  encode/decode cell on every leg. Mechanism hypothesis (proximity, unmeasured): the das image
+  `llama-mtmd-cli`, both pricing prefill as own positions over own time, ~160 positions): on
+  the Metal leg (das `--ngl 99` vs `llama-mtmd-cli -ngl 99 -n 32`) the `img:pp` ratio is
+  das/lcpp **0.52–0.62×** across all three vision models (E2B 687 vs 1101, E4B 362 vs 658,
+  12B 140 vs 268 tok/s) while das leads every CPU prefill cell and every encode/decode cell
+  on every leg. Mechanism hypothesis (proximity, unmeasured): the das image
   turn evals head / soft-token rows / tail as THREE separate prefill quanta, and at ~160
   positions the per-eval fixed cost (graph build, dispatch, KV plumbing) dominates — llama.cpp
   runs one graph over the whole span. Levers to try: fuse the three evals into one span eval

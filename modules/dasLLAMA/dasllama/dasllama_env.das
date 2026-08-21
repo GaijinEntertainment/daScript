@@ -539,7 +539,7 @@ struct public ProfilingEnv {
 
     @clarg_env = "LLAMA_BENCH_STOCK"
     @clarg_path
-    @clarg_doc = "Path to a stock-build llama-bench for the reference column."
+    @clarg_doc = "Path to a stock-build llama-bench for the reference column; its sibling llama-mtmd-cli serves as the metal/amx image-chat reference."
     llama_bench_stock : string = ""
 
     @clarg_env = "WHISPER_CPP"

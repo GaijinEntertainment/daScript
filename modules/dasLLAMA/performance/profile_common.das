@@ -1420,11 +1420,40 @@ def parse_mtmd_ms(out : string) : tuple<total : double; encode : double> {
     return (total = -1.0lf, encode = -1.0lf)
 }
 
+//! The stock build's llama-mtmd-cli sits beside the stock llama-bench (`LLAMA_BENCH_STOCK`);
+//! "" in = no stock ref set, "" out = no such sibling on disk — either way the image ref pass
+//! skips loudly instead of spawning a missing binary.
+def sibling_mtmd(refStock : string) : string {
+    if (empty(refStock)) {
+        return ""
+    }
+    for (name in ["llama-mtmd-cli", "llama-mtmd-cli.exe"]) {
+        let p = path_join(dir_name(refStock), name)
+        if (stat(p).is_valid) {
+            return p
+        }
+    }
+    return ""
+}
+
+//! The image-chat pair's turn definition, ONE home for both engines: `lcpp_bench --image`'s
+//! default question and decode budget, and the driver's llama-mtmd-cli `-p` / `-n`. A second
+//! copy would let the two sides silently price different turns.
+def image_turn_prompt() : string {
+    return "What is in this picture? Answer in one sentence."
+}
+
+//! The image turn's decode budget (tokens), same contract as [[image_turn_prompt]].
+def image_turn_steps() : int {
+    return 32
+}
+
 //! One image turn's timing split from patched llama-mtmd-cli output, the image-chat ref cell's
 //! shape: `enc_ms` sums every "mtmd batch encoding done in N ms" line (one per media chunk),
 //! and the MTMD_TIMING tail supplies encode+prefill / decode ms with the position counts, so
 //! both engines price prefill and decode as own-positions over own-time. `ok` = both sources
-//! present and the counts positive; prefill_ms is already net of the encode.
+//! present, the counts positive, and encode strictly under encode+prefill (equality would
+//! divide a rate by zero); prefill_ms is already net of the encode.
 def parse_mtmd_image(out : string) : tuple<ok : bool; enc_ms : double; prefill_ms : double; decode_ms : double; n_prefill : int; n_decode : int> {
     var enc = 0.0lf
     var seen_enc = false
@@ -1436,8 +1465,9 @@ def parse_mtmd_image(out : string) : tuple<ok : bool; enc_ms : double; prefill_m
         let e = find(line, "mtmd batch encoding done in ")
         if (e >= 0) {
             let tail_ <- split(slice(line, e + length("mtmd batch encoding done in ")), " ")
-            if (!empty(tail_)) {
-                enc += to_double(tail_[0])
+            let v = empty(tail_) ? -1.0lf : to_double(tail_[0])
+            if (v > 0.0lf) {   // to_double("") and garbage read 0 - a zero-ms encode is no encode
+                enc += v
                 seen_enc = true
             }
             continue
@@ -1458,7 +1488,7 @@ def parse_mtmd_image(out : string) : tuple<ok : bool; enc_ms : double; prefill_m
             }
         }
     }
-    let ok = seen_enc && ep > 0.0lf && dec > 0.0lf && np > 0 && nd > 0 && ep >= enc
+    let ok = seen_enc && ep > 0.0lf && dec > 0.0lf && np > 0 && nd > 0 && ep > enc
     return (ok = ok, enc_ms = enc, prefill_ms = ep - enc, decode_ms = dec, n_prefill = np, n_decode = nd)
 }
 

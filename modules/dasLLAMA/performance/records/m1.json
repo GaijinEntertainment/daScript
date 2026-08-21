@@ -6545,8 +6545,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-20",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-3-4b-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-3-4b-it-F16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-21",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-3-4b-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-3-4b-it-F16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path /private/tmp/claude-501/-Users-borisbatkin-Work-daScript/58d9016a-90e4-45b7-a89b-1bd4278d337e/scratchpad/g3v_cell.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -6560,24 +6560,25 @@
         },
         "tests":{
           "img:enc":{
-            "ms":11616.031999999999
+            "ms":11689.111000000001
           },
           "img:pp":{
-            "tok_s":275.36694130722037
+            "tok_s":270.96652198873829
           },
           "img:tg":{
-            "tok_s":26.042823593572631,
+            "tok_s":26.210581982845945,
             "text":"The picture shows two tabby cats lounging on a pink cushion with television remotes nearby."
           }
         },
         "workload":"image-chat",
-        "sha":"8b9825490",
+        "sha":"5c09dd01e",
         "version":"0.6.4",
         "dasllama_version":6,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"d236ebadcb802d48acdf55ac04490d101a6ce5d6b55d177bd6e2b7ccc5ca2f44",
+        "tune_sha":"6184eac1527f5d36731e9e188d3943f52f86b6c7383f7213c742e07f84af0972",
         "noise":"ok",
         "exec_fmt":"tower gemma3v q8; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
+        "env":"DASLLAMA_BOX=m1",
         "files":[
           {
             "role":"weights",

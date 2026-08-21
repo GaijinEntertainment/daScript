@@ -64,8 +64,9 @@ the same weights and shape is a defect unless the site is a parity/oracle rail o
 comment naming why f32 is load-bearing there. Weights with no faster twin (unquantized
 planes) are out of scope.
 
-**Platform-specific code lands only in a platform backend file.** A platform-neutral file
-carrying it is a defect; a new shared concern gets its own file, not more of
+**Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
+file.** A platform-neutral engine file carrying it is a defect — rigs and harnesses select
+platforms by design and are out of scope; a new shared concern gets its own file, not more of
 `dasllama/dasllama_common.das`.
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
@@ -112,7 +113,8 @@ instrument). A tutorial's printed wall-clock is teaching output, feeding no boar
 family inside an existing cell owes a recorded row on at least one box.
 
 **A timing figure describing served output — tok/s, latency, a model-level comparison — that
-reaches a doc, a ledger, or a PR without a cell behind it is a defect.** The cell states its
+reaches any checked-in text — a doc, a ledger, a code comment, a PR — without a cell behind
+it is a defect.** The cell states its
 quant mode and stamps box and engine provenance, so a number can never silently describe a
 format nobody serves or a kernel set nobody ships. A rig-internal measurement margin — a crown
 delta, a noise floor, tuner timing — is settled by the sidecar or manifest stamp it rides in.

@@ -333,7 +333,10 @@ exist for it. Counting cells stay token-exact.
 
 ## Standalone schema tests (model-free)
 
-`test_bench_records_schema.das` (the record store: round-trip, upsert identity, annotations)
+`test_bench_records_schema.das` (the record store: round-trip, upsert identity, annotations,
+the `-w` workload scope + stored-row→leg maps, the committed image-chat receipts' fixture/mmproj
+pins, and the llama.cpp image-reference parser `parse_mtmd_image` — encode summing, the
+MTMD_TIMING split, its refusal arms)
 and `test_exchange_schema.das` (the exchange validator: sweeps the ENTIRE in-tree
 records/sidecar corpus, so a writer-schema change reds here first) run directly under dastest
 with `-jit` — no runner, no arms, no models.
