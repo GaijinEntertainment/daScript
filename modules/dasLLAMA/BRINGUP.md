@@ -298,11 +298,11 @@ fail bar as "suspicious — verify"). Exit is nonzero on any FAIL.
 
 - GATE 1 — llama.cpp never re-measures: no ref runs, ref binaries not even required.
 - GATE 2 — one das pass per row. The >3% cv warm-retry stays: it REPLACES a bad cold measure.
-- GATE 3 — the timed cell is frozen: the batch starts with the lifecycle wipe, a prepare pass
-  bakes each cell's image, and the timed child runs `lcpp_bench --frozen` (it never converts);
-  the store is never written.
+- GATE 3 — a timed text cell is frozen: the batch starts with the lifecycle wipe, a prepare
+  pass bakes its image, and the timed child runs `lcpp_bench --frozen` (it never converts);
+  ASR and image-chat cells bake what they need mid-cell. The store is never written.
 - Default is stop-at-first-FAIL (fail fast mid-refactor); `--oracle-keep-going` runs the full
-  board. `-o substr` narrows to one model; ASR legs are excluded (their das cells are CPU-path).
+  board. `-o substr` narrows to one model; `-w llm|asr|image` narrows the modality.
 - A FAIL auto-triggers ONE solo re-run of that cell after `--oracle-retry-settle` seconds
   (default 180 — thermal recovery takes ~3 minutes; 0 disables), and the RETRY verdict stands —
   the board shows both attempts. This

@@ -122,6 +122,37 @@ def parse_tier(s : string) : Tier {
     return Tier.small
 }
 
+//! The record rig's `-w` workload scope, shared by the publishing sweep and the oracle: which
+//! of the text (`llm`), audio (`asr`) and image-chat (`image`) cell sets a workload string
+//! selects. Image cells ride the llm sweep, so `llm`/`all` imply them and `image` narrows to
+//! just them. False = unknown workload (the caller rejects it); the out-params are then all false.
+def workload_scope(w : string; var llm, asr, image : bool&) : bool {
+    llm = w == "llm" || w == "all"
+    asr = w == "asr" || w == "all"
+    image = llm || w == "image"
+    return llm || asr || image
+}
+
+//! The rig leg that produced a stored das row, from its `(backend, flavor)` stamp:
+//! `"metal"` | `""` (the plain cpu leg — neon) | `"accel"` (amx). False = no rig leg
+//! produces that stamp (a foreign backend, a stale flavor) — the oracle skips such a row
+//! loudly instead of racing it on the wrong leg.
+def stored_row_leg(backend, flavor : string; var leg : string&) : bool {
+    leg = ""
+    if (backend == "metal" && flavor == "tuned") {
+        leg = "metal"
+        return true
+    }
+    if (backend == "cpu" && flavor == "tuned") {
+        return true
+    }
+    if (backend == "cpu" && flavor == "accel") {
+        leg = "accel"
+        return true
+    }
+    return false
+}
+
 // Full path to a catalog entry's GGUF.
 def model_path(m : ModelSpec) : string {
     return "{models_dir()}{m.file}"

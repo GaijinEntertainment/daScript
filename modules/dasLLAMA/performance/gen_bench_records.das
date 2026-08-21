@@ -22,9 +22,12 @@ require math
 //   amx   : das cpu --accel      vs stock -ngl 0 -nopo 1   ("cpu + accel" — -nopo keeps lcpp's
 //           Metal op-offload from serving 'CPU' rows on the GPU; nopo == nometal-build)
 //   asr   : das cpu (lcpp_bench --asr) vs each catalog reference tool, per clip
-//   bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- [-o substr] [--workload llm|asr|all]
-// --oracle inverts the rig into a regression tripwire: the stored das LLM rows re-measure once
-// each (frozen artifacts, no refs, store never written) and gate against their stored means.
+//   image : das cpu/accel/metal (lcpp_bench --image)  vs nothing ("image-chat" — llama-bench
+//           has no image mode, so the cells are das-only; the picture is the pinned fixture)
+//   bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- [-o substr] [--workload llm|asr|image|all] [--image-reps n]
+// --oracle inverts the rig into a regression tripwire: the stored das rows re-measure once
+// each (text cells frozen; ASR/image cells bake what they need; no refs, store never written)
+// and gate against their stored means.
 // Ref binaries come from setup_lcpp_ref: --ref-clean/--ref-stock or LLAMA_BENCH_CLEAN/LLAMA_BENCH_STOCK.
 // ASR references resolve via WHISPER_CPP / MTMD_BIN / ONNX_PY / NEMO_PY (profile_common).
 
@@ -619,8 +622,10 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                         threads : int; cellPath, exe : string) : int {
     let box = box_name()
     let currentSha = sidecar_generation_sha(sidecar_for(exe))
-    let doAsrOracle = cfg.workload == "asr" || cfg.workload == "all"
-    let doImageOracle = cfg.workload != "asr"   // mirrors the publishing scope: llm | image | all
+    var doLlmOracle = false
+    var doAsrOracle = false
+    var doImageOracle = false
+    workload_scope(cfg.workload, doLlmOracle, doAsrOracle, doImageOracle)   // validated at entry; the oracle shares the sweep's scope
     let asrTier = parse_tier(cfg.asr_tier)
     var board : array<string>
     var cells = 0
@@ -633,6 +638,7 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
             continue
         }
         let cellsBefore = cells
+        var imageVerified = false   // an image cell bakes the mmproj's images too - wipe them below
         for (sr in m.runs) {
             break if (stopped)
             if (sr.engine != "das" || sr.box != box) {
@@ -648,23 +654,16 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                     continue
                 }
                 var imgLeg = ""
-                var imgWant = false
-                if (sr.backend == "metal" && sr.flavor == "tuned") {
-                    imgLeg = "metal"
-                    imgWant = legMetal
-                } elif (sr.backend == "cpu" && sr.flavor == "tuned") {
-                    imgWant = legNeon
-                } elif (sr.backend == "cpu" && sr.flavor == "accel") {
-                    imgLeg = "accel"
-                    imgWant = legAmx
-                } else {
+                if (!stored_row_leg(sr.backend, sr.flavor, imgLeg)) {
                     to_log(LOG_WARNING, "gen_bench_records: ORACLE skips stored run {m.gguf} image-chat {sr.backend}/{sr.flavor} - no rig leg produces it\n")
                     continue
                 }
+                let imgWant = imgLeg == "metal" ? legMetal : (imgLeg == "accel" ? legAmx : legNeon)
                 if (!imgWant) {
                     continue
                 }
                 cells++
+                imageVerified = true
                 if (!crossgen_ok(sr, currentSha, cfg.oracle_allow_crossgen, "{m.gguf} das image", board, fails, warns)) {
                     continue
                 }
@@ -709,16 +708,8 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                     }
                     continue
                 }
-                // stored row -> the rig leg that produced it, like the LLM map below; a row no
-                // leg produces (a foreign backend, a stale flavor) is skipped loudly, not raced
                 var asrLeg = ""
-                if (sr.backend == "cpu" && sr.flavor == "tuned") {
-                    asrLeg = ""
-                } elif (sr.backend == "cpu" && sr.flavor == "accel") {
-                    asrLeg = "accel"
-                } elif (sr.backend == "metal" && sr.flavor == "tuned") {
-                    asrLeg = "metal"
-                } else {
+                if (!stored_row_leg(sr.backend, sr.flavor, asrLeg)) {
                     to_log(LOG_WARNING, "gen_bench_records: ORACLE skips stored run {m.gguf} {sr.backend}/{sr.flavor} - no rig leg produces it\n")
                     continue
                 }
@@ -746,7 +737,7 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 }
                 continue
             }
-            if (cfg.workload == "asr" || cfg.workload == "image") {   // -w narrows the oracle exactly like the publishing rig
+            if (!doLlmOracle) {   // -w narrows the oracle exactly like the publishing rig
                 continue
             }
             var be = ""
@@ -802,6 +793,12 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
             let wm = dlim_wipe("{models_dir()}{m.gguf}")
             if (wm.removed > 0) {
                 to_log(LOG_INFO, "gen_bench_records: lifecycle - {m.gguf} profiled, {wm.removed} image(s) deleted ({wm.freed >> 20l} MB)\n")
+            }
+            if (imageVerified) {   // the image cells baked the mmproj's images too - same lifecycle
+                let wmm = dlim_wipe("{models_dir()}{mmproj_companion(spec_by_file(m.gguf))}")
+                if (wmm.removed > 0) {
+                    to_log(LOG_INFO, "gen_bench_records: lifecycle - {m.gguf} mmproj verified, {wmm.removed} image(s) deleted ({wmm.freed >> 20l} MB)\n")
+                }
             }
         }
     }
@@ -1182,10 +1179,10 @@ def main : int {
         to_log(LOG_ERROR, "gen_bench_records: --backend metal requested on a non-Apple box - Metal is macOS-only\n")
         return 1
     }
-    let doLlm = cfg.workload == "llm" || cfg.workload == "all"
-    let doAsr = cfg.workload == "asr" || cfg.workload == "all"
-    let doImage = doLlm || cfg.workload == "image"   // image cells ride the llm sweep; -w image narrows to just them
-    if (!doLlm && !doAsr && !doImage) {
+    var doLlm = false
+    var doAsr = false
+    var doImage = false
+    if (!workload_scope(cfg.workload, doLlm, doAsr, doImage)) {
         to_log(LOG_ERROR, "gen_bench_records: unknown --workload `{cfg.workload}` (expected llm | asr | image | all)\n")
         return 1
     }

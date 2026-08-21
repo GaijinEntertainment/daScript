@@ -566,8 +566,9 @@ a number is self-describing rather than a bare figure in a table.
 **Regression checking inverts the same rig:** `gen_bench_records.das --oracle --legs metal`
 takes the store's das rows as the work list, re-measures each once, and gates one-sided against
 its stored mean (fail past 5%, warn past 3%, gains flagged as suspicious). llama.cpp never runs,
-the store is never written, and the timed child runs `--frozen` — a prepare pass bakes and warms
-each cell's image first (the batch starts wiped), so the cell itself never converts. A second
+the store is never written, and a text cell's timed child runs `--frozen` — a prepare pass bakes
+and warms its image first (the batch starts wiped), so the timed cell never converts; ASR and
+image-chat cells bake what they need mid-cell, like their publishing legs. A second
 harness would produce numbers that cannot be compared to any of this, which is
 why writing one is a review defect.
 

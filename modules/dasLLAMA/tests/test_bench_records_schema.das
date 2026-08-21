@@ -251,3 +251,69 @@ def test_das_run_unstamped(t : T?) {
         delete rr
     }
 }
+
+[test]
+def test_workload_scope(t : T?) {
+    t |> run("the -w scope table: llm/asr/image cells per workload, unknown rejected") @(t : T?) {
+        var llm = false
+        var asr = false
+        var image = false
+        t |> success(workload_scope("all", llm, asr, image), "all is known")
+        t |> success(llm && asr && image, "all selects every cell set")
+        t |> success(workload_scope("llm", llm, asr, image), "llm is known")
+        t |> success(llm && !asr && image, "llm selects text + image (image rides the llm sweep)")
+        t |> success(workload_scope("asr", llm, asr, image), "asr is known")
+        t |> success(!llm && asr && !image, "asr selects only the audio cells")
+        t |> success(workload_scope("image", llm, asr, image), "image is known")
+        t |> success(!llm && !asr && image, "image narrows to the image cells alone")
+        t |> success(!workload_scope("bogus", llm, asr, image), "an unknown workload is rejected")
+        t |> success(!llm && !asr && !image, "a rejection selects nothing")
+        t |> success(!workload_scope("", llm, asr, image), "the empty workload is rejected")
+    }
+}
+
+[test]
+def test_stored_row_leg(t : T?) {
+    t |> run("the stored-row -> rig-leg map: three stamps resolve, everything else refuses") @(t : T?) {
+        var leg = "poison"
+        t |> success(stored_row_leg("metal", "tuned", leg), "metal/tuned is a rig stamp")
+        t |> equal(leg, "metal")
+        t |> success(stored_row_leg("cpu", "tuned", leg), "cpu/tuned is a rig stamp")
+        t |> equal(leg, "", "the plain cpu leg is the empty leg symbol")
+        t |> success(stored_row_leg("cpu", "accel", leg), "cpu/accel is a rig stamp")
+        t |> equal(leg, "accel")
+        t |> success(!stored_row_leg("metal", "accel", leg), "accel is a CPU-tier stamp - no metal leg produces it")
+        t |> equal(leg, "", "a refusal leaves no stale leg behind")
+        t |> success(!stored_row_leg("vulkan", "tuned", leg), "a foreign backend has no rig leg")
+        t |> success(!stored_row_leg("cpu", "debug-jit", leg), "a debug flavor has no rig leg")
+    }
+}
+
+[test]
+def test_image_chat_rows_pin_the_fixture(t : T?) {
+    t |> run("every committed image-chat row's receipt names the one pinned picture") @(t : T?) {
+        // the oracle re-measures a stored image row with bench_image_fixture(); a BenchRun has
+        // no image-identity field, so the cmd receipt is where that assumption is checkable
+        var stores <- list_record_stores("modules/dasLLAMA/performance/records")
+        var rows = 0
+        for (path in stores) {
+            var models : array<BenchModel>
+            t |> success(read_bench_records(path, models), "{path} parses")
+            for (m in models) {
+                for (r in m.runs) {
+                    if (r.workload != "image-chat") {
+                        continue
+                    }
+                    rows++
+                    t |> success(find(r.cmd, bench_image_fixture()) >= 0,
+                        "{base_name(path)} {m.gguf} {r.backend}/{r.flavor}: the cmd receipt names {bench_image_fixture()}")
+                    t |> success(find(r.cmd, "--image-mmproj") >= 0,
+                        "{base_name(path)} {m.gguf} {r.backend}/{r.flavor}: the cmd receipt names its mmproj")
+                }
+            }
+            delete models
+        }
+        t |> success(rows > 0, "the sweep found image-chat rows to gate ({rows})")
+        delete stores
+    }
+}

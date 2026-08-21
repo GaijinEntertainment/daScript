@@ -19,9 +19,11 @@ K/V-mirror change applies `REVIEW_GPU.md`. A change to `dasllama/dasllama_audio.
 holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
 `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file — one
-`dasllama/dasllama_<family>.das` holding a single vision projector family — or a path that
-splices a stream carrying decoded media into a prompt or schedules such a stream, applies
-`REVIEW_VISION.md`. A `dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
+`dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
+path that splices a stream carrying decoded media into a prompt or schedules such a stream
+(a rig that merely spawns an image-measuring child is not one), applies
+`REVIEW_VISION.md`. A
+`dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
 `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
 thereby pick up the other modality's checklist. A change to the tune sidecar's schema or
 emitter, wherever it lands, answers to `modules/dasLLVM/REVIEW.md`. A routed file applies BOTH
@@ -91,8 +93,9 @@ ratio across the size ladder, and superlinear is a defect.
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das` records a
 `tests/test_tokenizer.das` run with its cases EXECUTED, not skipped.**
 
-**An override announces itself where it changes the outcome.** An override is anything that
-moves a gate, policy, or threshold off its default — an env knob or its programmatic setter.
+**An override announces itself where it changes the outcome.** An override is an environment
+knob or its programmatic setter moving a gate, policy, or threshold off its default; a CLI
+flag is out of scope — the row's `cmd` receipt already carries it.
 Where one changes an observable outcome of the run — what it measures, writes, reads, or
 mints — a printed line names it by the env spelling; set-but-inert stays silent, per-site
 repeats are fine. Adding one, or giving one a new effect, without the announce is a defect.

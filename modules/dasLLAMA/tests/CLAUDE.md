@@ -153,8 +153,10 @@ cells, wdec knob pinned OFF per the fixtures section). Runs under plain dastest.
 `asr_encode_bucket`) over constructed structs and parakeet's SPM detokenizer over a toy vocab.
 `test_model_specs.das` — model-free: the model-set table's shape invariants
 (`../performance/model_specs.das`: unique file/display keys, official ⇒ provenance pinned,
-parity-evidence shape) and the derived provenance view's invariants (unique names, sha-or-recipe,
-https urls).
+parity-evidence shape), the derived provenance view's invariants (unique names, sha-or-recipe,
+https urls), and the vision pairing view (`mmproj_companion` — found by name, not companion
+position; ≥ 2 official vision rows) plus the pinned image fixture's provenance
+(`bench_image_fixture`).
 `test_parity.das` — suite-less, model-gated: the frozen token-for-token parity gates. ONE
 generic loop drives every evidence-carrying spec of the model-set table through its declared
 pinned arms (evidence is DATA on `ModelSpec.parity` — ids + arms, regenerated via

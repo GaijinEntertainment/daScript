@@ -87,6 +87,11 @@ def test_model_spec_views(t : T?) {
         t |> equal(mmproj_companion(g12), "mmproj-gemma-4-12B-it-BF16.gguf")
         var inscope oss <- spec_by_file("gpt-oss-20b-mxfp4.gguf")
         t |> equal(mmproj_companion(oss), "", "a text-only row has no vision pairing")
+        var shuffled <- ModelSpec(file = "toy.gguf", companions <- [
+            ProvEntry(name = "coco-val2017-000000039769.jpg"),
+            ProvEntry(name = "mmproj-toy.gguf")])
+        t |> equal(mmproj_companion(shuffled), "mmproj-toy.gguf", "the mmproj is found by name, not by companion position")
+        delete shuffled
         // the board's image legs need real coverage: at least two official vision decoders
         var inscope off <- official_catalog()
         var vision = 0
