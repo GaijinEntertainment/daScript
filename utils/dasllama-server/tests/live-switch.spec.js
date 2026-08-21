@@ -35,6 +35,17 @@ test('a served file under a custom slot name still hides serve live', async ({ p
     await expect(rows.nth(E4B_ROW).getByRole('button', { name: 'serve live' })).toBeVisible();
 });
 
+test('the serve-live offer retires when a later poll reports the file served', async ({ page }) => {
+    await openControl(page, {
+        stats: n => n < 2 ? fx('stats_multi') : statsServing('gemma-4-E4B-it-Q4_K_M.gguf'),
+        catalog: fx('catalog_done'),
+    });
+    const row = page.locator('#cat-body tr').nth(E4B_ROW);
+    await expect(row.getByRole('button', { name: 'serve live' })).toBeVisible();
+    // the served set changes on the next 1 Hz poll — renderModels re-renders the catalog
+    await expect(row.getByRole('button', { name: 'serve live' })).toHaveCount(0, { timeout: 7000 });
+});
+
 test('serve live posts the load with the row path and echoes the switch', async ({ page }) => {
     const { posts } = await openControl(page, {
         stats: fx('stats_multi'),

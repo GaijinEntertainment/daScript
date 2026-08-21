@@ -440,32 +440,32 @@ def apply_config(var cfg : ServerArgs) : bool {
 // matching roster entry becomes the default, an unlisted path joins the roster AS the default.
 // Warn-and-degrade: a bad path or a route-name collision leaves the roster UNTOUCHED — clearing
 // the roster's default first would silently boot the wrong model on the very typo being made.
-def private apply_model_override() {
-    if (!stat(g_cfg.model).is_valid) {
-        to_log(LOG_ERROR, "dasllama-server: ignoring --model - file not found: {g_cfg.model} (the config roster boots unchanged)\n")
+def apply_model_override(var models : array<ModelEntry>; cli_model : string) {
+    if (!stat(cli_model).is_valid) {
+        to_log(LOG_ERROR, "dasllama-server: ignoring --model - file not found: {cli_model} (the config roster boots unchanged)\n")
         return
     }
     var midx = -1
-    for (i in range(length(g_models))) {
-        if (same_model_path(g_models[i].path, g_cfg.model)) {
+    for (i in range(length(models))) {
+        if (same_model_path(models[i].path, cli_model)) {
             midx = i
             break
         }
     }
-    let route = base_name(g_cfg.model)
+    let route = base_name(cli_model)
     if (midx < 0) {
-        for (ent in g_models) {
+        for (ent in models) {
             if ((empty(ent.name) ? base_name(ent.path) : ent.name) == route) {
                 to_log(LOG_ERROR, "dasllama-server: ignoring --model - a different [[models]] entry already routes as '{route}' (rename that entry, or list this path in the roster)\n")
                 return
             }
         }
     }
-    for (i in range(length(g_models))) {
-        g_models[i].is_default = i == midx
+    for (i in range(length(models))) {
+        models[i].is_default = i == midx
     }
     if (midx < 0) {
-        g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))
+        models |> push(ModelEntry(path = cli_model, is_default = true))
     }
     to_log(LOG_INFO, "dasllama-server: --model {route} overrides the config roster's default\n")
 }
@@ -898,7 +898,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     if (empty(g_models) && !empty(g_cfg.model)) {
         g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))
     } elif (!empty(g_models) && !empty(g_cfg.model) && (g_cfg_sources?["model"] ?? "") == "cli") {
-        apply_model_override()
+        apply_model_override(g_models, g_cfg.model)
     }
     // A path typo in an AUTHORITATIVE config must not brick the boot into a crash loop: every
     // roster path is checked up front and degrades — skip the slot, drop the arm — instead of

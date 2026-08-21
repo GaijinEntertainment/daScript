@@ -502,6 +502,29 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
             GET("{base_url}/v1/models") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK), "the server serves on after a failed load")
             }
+            POST("{base_url}/v1/models/load", "\{\"path\":\"{junk}\",\"backend\":\"gpu\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "an unknown backend value is refused, not auto-ed")
+                t |> success(find(string(resp.body), "auto") >= 0, "the 400 names the accepted values")
+            }
+            // the runtime-model routes share /config's operator gate: a rebound Host is refused
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/v1/models/load"
+                set_header(req, "Host", "evil.example:{TEST_PORT}")
+                req.body := "\{\"path\":\"{junk}\"}"
+                request(req) $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.FORBIDDEN), "rebound-Host /v1/models/load refused")
+                }
+            }
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/v1/models/activate"
+                set_header(req, "Host", "evil.example:{TEST_PORT}")
+                req.body := "\{\"model\":\"test-llm\"}"
+                request(req) $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.FORBIDDEN), "rebound-Host /v1/models/activate refused")
+                }
+            }
             // runtime slot lifecycle: load a second model live (activate=false keeps the boot
             // slot default), route a completion to it BY NAME, then move the default onto it and
             // unload the BOOT slot — the branch where every index above the hole shifts down
@@ -570,6 +593,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
             } else {
                 t |> success(true, "skipped the runtime-load cells: SmolLM2-135M not present")
             }
+            remove(junk)
             // POST /restart — LAST in the block: the server starts draining after this. The exit-4
             // half of the contract lives in main.das + watchdog.py (not exercisable here).
             POST("{base_url}/restart", "") $(resp) {
@@ -577,6 +601,32 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> success(find(string(resp.body), "\"restarting\":true") >= 0, "restart response flags restarting")
             }
         }
+    }
+}
+
+[test]
+def test_same_model_path(t : T?) {
+    t |> run("path identity: separators, dot-dot, and (windows) case") @(t : T?) {
+        // real files: the POSIX canonicalizer is realpath, which resolves only paths that exist
+        var terr = ""
+        let td = temp_directory(terr)
+        let base = empty(td) ? "/tmp" : td
+        let a = path_join(base, "dasllama_smp_a.gguf")
+        let b = path_join(base, "dasllama_smp_b.gguf")
+        fwrite(a, "x")
+        fwrite(b, "x")
+        let fwd = to_generic_path(a)
+        let dir = dir_name(a)   // NOT temp_directory's raw value: that ends in a separator, which empties base_name
+        let dotdot = path_join(path_join(path_join(dir, ".."), base_name(dir)), "dasllama_smp_a.gguf")
+        t |> success(same_model_path(fwd, a), "spelling variants of one file match")
+        t |> success(same_model_path(dotdot, a), "a dot-dot spelling resolves before comparing")
+        t |> success(!same_model_path(a, b), "different files stay different")
+        if (get_platform_name() == "windows") {
+            t |> success(same_model_path(fwd, replace(fwd, "/", "\\")), "separator spelling is identity")
+            t |> success(same_model_path(fwd, to_upper(fwd)), "windows case-folds")
+        }
+        remove(a)
+        remove(b)
     }
 }
 
