@@ -1,7 +1,7 @@
 options gen2
 options indenting = 4
 options _comment_hygiene = true
-options _cyclomatic_complexity = 62     // driven by emit_zip (277 lines), the per-shape emitter
+options _cyclomatic_complexity = 62
 options _function_length = 278
 
 module linq_fold_array shared public
@@ -22,10 +22,9 @@ struct ZipShape {
     srcAExpr, srcBExpr : Expression?
     srcAName, srcBName : string
     srcAType, srcBType : TypeDeclPtr
-    itAName, itBName : string       // gensym loop-var names, shared by wrap_source_loop and the emit_zip body binds
+    itAName, itBName : string
 }
 
-// Array mirror of DecsJoinShape — same role (per-pair result bind for the cross-arm group_by case), 2 array sources iterated via plain `for` loops + a 2-source outer invoke. srcAType / srcBType are the FULL source types (array<T> / iterator<T>) for invoke-param spelling; tupAType / tupBType are the element types post strip_const_ref.
 struct ArrayJoinShape {
     srcAExpr, srcBExpr : Expression?
     srcAName, srcBName : string
@@ -112,7 +111,7 @@ class ArrayAdapter : SourceAdapter {
         }
     }
     def override count_shortcut(opName : string; at : LineInfo) : Expression? {
-        if (!type_has_length(top._type)) return null      // no O(1) length (iterator source) → walk
+        if (!type_has_length(top._type)) return null
         return emit_length_shortcut(opName, top, srcName, at)
     }
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
@@ -120,7 +119,6 @@ class ArrayAdapter : SourceAdapter {
             return null
         }
         if (c.single |> key_exists("upstream_join")) {
-            // srcA = chain top; srcB = join's second arg. plan_group_by_core consumes the ArrayJoin adapter via wrap_source_loop.
             var joinCall = c.single["upstream_join"]
             var core = extract_upstream_join_core(joinCall)
             var srcb = extract_upstream_join_array_srcb(joinCall)
@@ -155,7 +153,7 @@ class ZipAdapter : SourceAdapter {
         return "zip_"
     }
     def override supports_direct_return() : bool {
-        return true   // wrap_source_loop emits a real `for (<itA>, <itB> in ...)` inside the invoke
+        return true
     }
     def override bind_name(at : LineInfo) : string {
         return qn("it", at)
@@ -164,7 +162,6 @@ class ZipAdapter : SourceAdapter {
         return null
     }
     def override count_shortcut(opName : string; at : LineInfo) : Expression? {
-        // min(len a, len b) when BOTH sources have O(1) length; else null → walk the counter lane.
         if (!type_has_length(shape.srcAExpr._type) || !type_has_length(shape.srcBExpr._type)) return null
         let aN = shape.srcAName
         let bN = shape.srcBName
@@ -231,7 +228,7 @@ class ArrayJoinAdapter : SourceAdapter {
         return "ajoin_"
     }
     def override supports_direct_return() : bool {
-        return true   // probe `for (tupA in srcA)` is a real loop inside the invoke
+        return true
     }
     def override bind_name(at : LineInfo) : string {
         return shape.resBindName
@@ -292,8 +289,6 @@ class ArrayJoinAdapter : SourceAdapter {
     }
 }
 
-// ===== plan_reverse =====
-
 [macro_function]
 def build_zip_rows {
     splice_patterns |> emplace <| SplicePattern(
@@ -320,10 +315,8 @@ def build_zip_rows {
 
 [macro_function]
 def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    // 2-source lockstep zip splice. Bare zip (array/iterator) + fused where_/select/take/skip/take_while/skip_while + count/long_count/sum/min/max/average/first/first_or_default/any/all/contains terminators. 3-arg zip(a,b,sel) pre-lowers the selector. Trailing reverse on array lane emits reverse_inplace (Theme 8 C4). Counter (count/long_count) and array lanes are built inline here; accumulator + early-exit lanes delegate to emit_accumulator_lane / emit_early_exit_lane (parallel-array form).
     var zipCall = c.single["zip"]
     let zipArgCount = zipCall.arguments |> length
-    // Terminator name + counter predicate (2-arg count/long_count).
     var lastName = ""
     var counterPred : Expression?
     if (c.single |> key_exists("term")) {
@@ -350,7 +343,6 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
             if (candidateArgs != 2) return null
             lastName = candidateName
         } else {
-            // Recognized by loop_terminator_family alias but not by zip splice (e.g. last/single/element_at). Cascade.
             return null
         }
     }
@@ -401,7 +393,6 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
             allProjectionsPure = false
         }
     }
-    // Head walk: where_/select left-to-right. After-select where is the same "chained-bind dedup" gap the imperative bailed on (line 6583).
     for (call in c.many["head"]) {
         let opName = call_norm_name(call)
         if (opName == "where_") {
@@ -415,7 +406,6 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
             }
         } elif (opName == "select") {
             if (seenSelect) return null
-            // selectCall._type.firstType is a typedecl(result_selector(...)) formula that doesn't resolve in _fold context; pull from the projection block's return expression instead.
             var projRet = peel_lambda_single_return(call.arguments[1])
             if (projRet == null || projRet._type == null) return null
             var projElemType = strip_const_ref(clone_type(projRet._type))
@@ -428,7 +418,6 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
             }
         }
     }
-    // Range / while ops from c.single (positional slots already enforce canonical order: skip → skip_while → take_while → take).
     if (c.single |> key_exists("skip")) {
         var skipArg = c.single["skip"].arguments[1]
         if (skipArg == null || skipArg._type == null || skipArg._type.baseType != Type.tInt) return null
@@ -467,7 +456,6 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let isCounter = lastName == "count" || lastName == "long_count"
     if (seenSelect && !allProjectionsPure && !noLimits) return null
     let lane = classify_terminator(lastName)
-    // ZipShape feeds wrap_invoke; the zip loop is built locally because emit_zip prepends the optional `let it = (<itA>, <itB>)` bind based on needsItBind (D2-D — only emit_zip knows). Built up-front so the accumulator / early-exit lanes ride this adapter directly.
     var zipShape = ZipShape(
         srcAExpr = srcAExpr,
         srcBExpr = srcBExpr,
@@ -502,8 +490,6 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     if (isCounter) {
-        // count / long_count. O(1) min-length shortcut when both sources have length
-        // (ZipAdapter.count_shortcut); otherwise walk via the shared counter lane (int64 acc for long_count).
         if (noChain) {
             var sc = adapter->count_shortcut(lastName, at)
             if (sc != null) return sc
@@ -546,7 +532,6 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         return emit_counter_lane(adapter, accName, itName, names,
             skipExpr, takeExpr, skipWhileCond, loopBody, at, lastName == "long_count")
     }
-    // Buffer / to_array lane — ride the shared fold-array lane over the ZipAdapter.
     let needsItBindLocal = whereCond != null || projection != null || skipWhileCond != null || takeWhileCond != null
     var pushStmts : array<Expression?>
     if (projection != null) {

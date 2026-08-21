@@ -198,8 +198,6 @@ def private concat_impl(var a; var b; tt : auto(TT); reserveSize : int) : array<
     if (reserveSize > 0) {
         c.reserve(reserveSize)
     }
-    // generic over array and iterator sources; push_clone_from is only valid for arrays, so the
-    // element-wise loop is required here (PERF022 fires on the array instantiations only)
     for (it in a) { // nolint:PERF022,LINT019 - fires only when a consumer instantiates an array source
         c.push_clone(it)
     }
@@ -270,8 +268,6 @@ def concat_inplace(var a : array<auto(TT)>, b : array<auto(TT)>) {
     a |> push_clone_from(b)
 }
 
-// ===== concat — 3 sources =====
-
 [unused_argument(tt)]
 def private concat3_impl(var a; var b; var c; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
     var r : array<TT -const -&>
@@ -321,8 +317,6 @@ def concat_inplace(var a : array<auto(TT)>, b, c : array<auto(TT)>) {
     a |> push_clone_from(b)
     a |> push_clone_from(c)
 }
-
-// ===== concat — 4 sources =====
 
 [unused_argument(tt)]
 def private concat4_impl(var a; var b; var c; var d; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
@@ -378,8 +372,6 @@ def concat_inplace(var a : array<auto(TT)>, b, c, d : array<auto(TT)>) {
     a |> push_clone_from(c)
     a |> push_clone_from(d)
 }
-
-// ===== concat — 5 sources =====
 
 [unused_argument(tt)]
 def private concat5_impl(var a; var b; var c; var d; var e; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
@@ -440,8 +432,6 @@ def concat_inplace(var a : array<auto(TT)>, b, c, d, e : array<auto(TT)>) {
     a |> push_clone_from(d)
     a |> push_clone_from(e)
 }
-
-// ===== concat — 6 sources =====
 
 [unused_argument(tt)]
 def private concat6_impl(var a; var b; var c; var d; var e; var f; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
@@ -507,8 +497,6 @@ def concat_inplace(var a : array<auto(TT)>, b, c, d, e, f : array<auto(TT)>) {
     a |> push_clone_from(e)
     a |> push_clone_from(f)
 }
-
-// ===== concat — 7 sources =====
 
 [unused_argument(tt)]
 def private concat7_impl(var a; var b; var c; var d; var e; var f; var g; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
@@ -579,8 +567,6 @@ def concat_inplace(var a : array<auto(TT)>, b, c, d, e, f, g : array<auto(TT)>) 
     a |> push_clone_from(f)
     a |> push_clone_from(g)
 }
-
-// ===== concat — 8 sources =====
 
 [unused_argument(tt)]
 def private concat8_impl(var a; var b; var c; var d; var e; var f; var g; var h; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
@@ -842,8 +828,6 @@ def less(a, b : tuple<auto(TT), auto(UU), auto(VV), auto(WW)>) : bool {
     return a._3 < b._3
 }
 
-// One-key compare with direction: desc flips the operand order. Backs less_masked / the order_by_keys
-// eager fallback; the fold inline path builds an if-chain with scalar _::less instead and never calls this.
 def private key_less(a, b; desc : bool) : bool {
     return desc ? b < a : a < b
 }
@@ -960,18 +944,6 @@ def order_by_keys_to_array(var a : iterator<auto(TT)>; key; mask : uint) : array
     return <- arr
 }
 
-// ============================================================================
-// top_n / top_n_by — return the N smallest elements in ascending order.
-//
-// Array source: partial_sort on a clone, then resize to N. O(M log N).
-// Iterator source: bounded heap of size N maintained during scan, then sort.
-// Iteratively O(M log N), max N elements ever resident.
-//
-// For workhorse keys / element types the heap ops route to std::push_heap /
-// std::pop_heap. For user-defined types they route to das_push_heap_r /
-// das_pop_heap_r (byte-pointer heap on the any-cblock path).
-// ============================================================================
-
 def top_n_by(arr : array<auto(TT)>; n : int; key) : array<TT -const -&> {
     //! Returns the ``n`` smallest elements of ``arr`` by ``key(element)``,
     //! sorted ascending. ``n <= 0`` or empty ``arr`` yields an empty result.
@@ -990,9 +962,6 @@ def top_n_by(var a : iterator<auto(TT)>; n : int; key) : array<TT -const -&> {
     //! at most ``n`` elements resident.
     var buf : array<TT -const -&>
     if (n <= 0) return <- buf
-    // No reserve(n) — iterator cardinality is unknown; a caller passing
-    // n >> iter_size would force a large upfront allocation for no win.
-    // Geometric growth during the O(log n) fill phase is amortized O(1).
     for (it in a) {
         if (length(buf) < n) {
             buf |> push_clone(it)
@@ -1017,15 +986,6 @@ def top_n(var a : iterator<auto(TT)>; n : int) : array<TT -const -&> {
     return <- top_n_by(a, n, $(v : TT -&) => v)
 }
 
-// ============================================================================
-// top_n_descending / top_n_by_descending — return the N largest elements in
-// descending order. Mirror of top_n / top_n_by with flipped comparator.
-//
-// Array source: partial_sort on a clone with reversed less, then resize to N.
-// Iterator source: bounded min-heap of size N tracks the N largest seen so far;
-// when an element greater than the heap min arrives, evict and insert.
-// ============================================================================
-
 def top_n_by_descending(arr : array<auto(TT)>; n : int; key) : array<TT -const -&> {
     //! Returns the ``n`` largest elements of ``arr`` by ``key(element)``,
     //! sorted descending. ``n <= 0`` or empty ``arr`` yields an empty result.
@@ -1044,8 +1004,6 @@ def top_n_by_descending(var a : iterator<auto(TT)>; n : int; key) : array<TT -co
     //! at most ``n`` elements resident.
     var buf : array<TT -const -&>
     if (n <= 0) return <- buf
-    // Heap is ordered by reversed less — top is the MIN element seen so far.
-    // When an element greater than the heap min arrives, evict and insert.
     for (it in a) {
         if (length(buf) < n) {
             buf |> push_clone(it)
@@ -1069,18 +1027,6 @@ def top_n_descending(var a : iterator<auto(TT)>; n : int) : array<TT -const -&> 
     //! Returns the ``n`` largest elements of an iterator (by ``<``), descending.
     return <- top_n_by_descending(a, n, $(v : TT -&) => v)
 }
-
-// ============================================================================
-// top_n_by_with_cmp — take a comparator block directly instead of a key
-// lambda. The splice planner uses this when an order-by key body is pure and
-// inlineable: the body is spliced into the comparator twice (once per side),
-// eliminating both the per-comparison lambda dispatch (`cmp(v1, v2)`) AND the
-// per-side `key(v)` dispatch nested inside the standard comparator.
-//
-// Direction is encoded in the comparator: asc emits `less(body[v1], body[v2])`,
-// desc emits `less(body[v2], body[v1])`. The output is sorted ascending by the
-// comparator, so a reversed comparator yields a descending natural-key order.
-// ============================================================================
 
 def top_n_by_with_cmp(arr : array<auto(TT)>; n : int; cmp : block<(v1 : TT -&, v2 : TT -&) : bool>) : array<TT -const -&> {
     //! Returns the ``n`` smallest-per-``cmp`` elements of ``arr``.
@@ -1639,8 +1585,6 @@ def take_inplace(var arr : array<auto(TT)>; from : range) {
     arr.resize(taking)
 }
 
-// skip_last / take_last
-
 def skip_last(arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
     //! Yields all but the last `total` elements from an array
     let len = length(arr)
@@ -2056,9 +2000,6 @@ def private aggregate_impl(var src; tt : auto(TT); seed : auto(AGG); func : bloc
 
 [unused_argument(tt)]
 def private aggregate_impl_const(src : auto(ARGT); tt : auto(TT); seed : auto(AGG); func : block<(acc : AGG -&, x : TT -&) : AGG -&>) : AGG -& -const {
-    // Move-vs-return is decided by the accumulator type AGG (the return type), NOT the
-    // element type TT — those differ for aggregates that produce a workhorse acc from a
-    // non-workhorse element (e.g. summing prices off `array<Car>` with int seed).
     static_if (typeinfo is_workhorse(type<AGG>)) {
         return aggregate_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, seed, func)
     } else {
@@ -2366,7 +2307,6 @@ def join_to_array(srca : array<auto(TA)>; var srcb : iterator<auto(TB) const>; k
 
 [unused_argument(ta, tb)]
 def private group_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
-    // we pass TA, and sequence of TB to 'result'
     var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>
     for (itb in srcb) {
         let k = _::unique_key(keyb(itb))
@@ -2375,8 +2315,6 @@ def private group_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); ke
     var buffer : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&>
     for (ita in srca) {
         let k = _::unique_key(keya(ita))
-        // C# GroupJoin semantics: every left row surfaces. `get` returns false when the key is absent — then
-        // the left row pairs with an empty group (matching LEFT JOIN … GROUP BY, not an inner join).
         if (!tableb.get(k, $(var arr){
             buffer.push_clone(result(ita, arr))
         })) {
@@ -2494,7 +2432,6 @@ def left_join_to_array(srca : array<auto(TA)>; var srcb : iterator<auto(TB) cons
 
 [unused_argument(ta, tb)]
 def private right_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const -&>>, type<TB>)) -const -&> {
-    // Hash-build on srca; iterate srcb. For huge LEFT + tiny RIGHT this wastes memory — future optimizer may pick the smaller side.
     var inscope tablea : table<typedecl(_::unique_key(keya(type<TA>))); array<TA -const -&>>
     for (ita in srca) {
         let k = _::unique_key(keya(ita))
@@ -2559,8 +2496,6 @@ def right_join_to_array(srca : array<auto(TA)>; var srcb : iterator<auto(TB) con
 
 [unused_argument(ta, tb)]
 def private full_outer_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const -&>>, type<$Option<TB -const -&>>)) -const -&> {
-    // Two-pass with per-bucket seen-marking on srcb. Pass 1: srca → matched pairs + (some, none).
-    // Pass 2: re-iterate srcb (materialized into srcb_arr because srcb is single-pass) → (none, some) for unmarked buckets.
     var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>
     var inscope srcb_arr : array<TB -const -&>
     for (itb in srcb) {
@@ -2746,7 +2681,7 @@ def private group_by_lazy_impl(var source; tt : auto(TT); key)  {
         }
     }
     var buffer : array<ResultType -const -&>
-    buffer |> reserve(length(tab))   // one bucket tuple per distinct key
+    buffer |> reserve(length(tab))
     for (it in values(tab)) {
         buffer.push_clone(it)
     }
@@ -3893,9 +3828,6 @@ def private iter_type(src : array<auto(TT)>) : TT -const -& {
 def private select_many_impl(var src; tt : auto(TT); result_selector) : array<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
     var buffer : array<typedecl(result_selector(iter_type(type<TT>))) -const -&>
-    // Capacity hint when the outer source is length-bearing — one slot per outer row. The true count is the
-    // sum of the inner collection lengths (so it may be more, or fewer when some inner collections are empty);
-    // `length(src)` is just a reasonable starting capacity that avoids reallocating from zero.
     static_if (typeinfo is_array(src) || typeinfo is_dim(src)) {
         buffer |> reserve(length(src))
     }
@@ -3931,9 +3863,6 @@ def select_many_to_array(var src : iterator<auto(TT)>; result_selector) : array<
 def private select_many_impl(var src; tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
     var buffer : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&>
-    // Capacity hint when the outer source is length-bearing — one slot per outer row. The true count is the
-    // sum of the inner collection lengths (so it may be more, or fewer when some inner collections are empty);
-    // `length(src)` is just a reasonable starting capacity that avoids reallocating from zero.
     static_if (typeinfo is_array(src) || typeinfo is_dim(src)) {
         buffer |> reserve(length(src))
     }
@@ -3965,16 +3894,9 @@ def select_many_to_array(var src : iterator<auto(TT)>; collection_selector; resu
     return <- select_many_impl(src, type<TT -const -&>, collection_selector, result_selector)
 }
 
-// ===== select_many_pair — like select_many(src, collection_selector, result_selector) above, but the
-// result selector receives BOTH the outer element and each flattened inner element. C# correlated
-// `from o in O from x in o.coll select f(o, x)`; the 3-arg select_many passes only the inner element. =====
-
 [unused_argument(tt)]
 def private select_many_pair_impl(var src; tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&> {
     var buffer : array<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&>
-    // Capacity hint when the outer source is length-bearing — one slot per outer row. The true count is the
-    // sum of the inner collection lengths (so it may be more, or fewer when some inner collections are empty);
-    // `length(src)` is just a reasonable starting capacity that avoids reallocating from zero.
     static_if (typeinfo is_array(src) || typeinfo is_dim(src)) {
         buffer |> reserve(length(src))
     }
@@ -4111,8 +4033,6 @@ def zip_to_array(a : array<auto(TT)>; var b : iterator<auto(UU)>; result_selecto
     return <- zip_to_array(unsafe(each(a)), b, result_selector)
 }
 
-// zip with 3 sources
-
 [unused_argument(tt, uu, ww)]
 def private zip3_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW)) : array<tuple<TT -const -&, UU -const -&, WW -const -&>> {
     //! Merges three iterators into an array of tuples
@@ -4145,8 +4065,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     //! Merges three iterators into an array of tuples
     return <- zip3_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>)
 }
-
-// zip3 with result selector
 
 [unused_argument(tt, uu, ww)]
 def private zip3_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); result_selector : block<(l : TT -&; r : UU -&; w : WW -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&> {
@@ -4181,8 +4099,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     return <- zip3_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, result_selector)
 }
 
-// zip with 4 sources
-
 [unused_argument(tt, uu, ww, xx)]
 def private zip4_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&>> {
     //! Merges four iterators into an array of tuples
@@ -4215,8 +4131,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     //! Merges four iterators into an array of tuples
     return <- zip4_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>)
 }
-
-// zip4 with result selector
 
 [unused_argument(tt, uu, ww, xx)]
 def private zip4_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>)) -const -&> {
@@ -4251,8 +4165,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     return <- zip4_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, result_selector)
 }
 
-// zip with 5 sources
-
 [unused_argument(tt, uu, ww, xx, yy)]
 def private zip5_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&>> {
     //! Merges five iterators into an array of tuples
@@ -4285,8 +4197,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     //! Merges five iterators into an array of tuples
     return <- zip5_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>)
 }
-
-// zip5 with result selector
 
 [unused_argument(tt, uu, ww, xx, yy)]
 def private zip5_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>)) -const -&> {
@@ -4321,8 +4231,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     return <- zip5_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, result_selector)
 }
 
-// zip with 6 sources
-
 [unused_argument(tt, uu, ww, xx, yy, zz)]
 def private zip6_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&>> {
     //! Merges six iterators into an array of tuples
@@ -4355,8 +4263,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     //! Merges six iterators into an array of tuples
     return <- zip6_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>)
 }
-
-// zip6 with result selector
 
 [unused_argument(tt, uu, ww, xx, yy, zz)]
 def private zip6_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>)) -const -&> {
@@ -4391,8 +4297,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     return <- zip6_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, result_selector)
 }
 
-// zip with 7 sources
-
 [unused_argument(tt, uu, ww, xx, yy, zz, rr)]
 def private zip7_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ); var g; rr : auto(RR)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&>> {
     //! Merges seven iterators into an array of tuples
@@ -4425,8 +4329,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     //! Merges seven iterators into an array of tuples
     return <- zip7_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>)
 }
-
-// zip7 with result selector
 
 [unused_argument(tt, uu, ww, xx, yy, zz, rr)]
 def private zip7_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ); var g; rr : auto(RR); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>)) -const -&> {
@@ -4461,8 +4363,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     return <- zip7_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, result_selector)
 }
 
-// zip with 8 sources
-
 [unused_argument(tt, uu, ww, xx, yy, zz, rr, ss)]
 def private zip8_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ); var g; rr : auto(RR); var h; ss : auto(SS)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&, SS -const -&>> {
     //! Merges eight iterators into an array of tuples
@@ -4495,8 +4395,6 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     //! Merges eight iterators into an array of tuples
     return <- zip8_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, d, type<XX -const -&>, e, type<YY -const -&>, f, type<ZZ -const -&>, g, type<RR -const -&>, h, type<SS -const -&>)
 }
-
-// zip8 with result selector
 
 [unused_argument(tt, uu, ww, xx, yy, zz, rr, ss)]
 def private zip8_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); var d; xx : auto(XX); var e; yy : auto(YY); var f; zz : auto(ZZ); var g; rr : auto(RR); var h; ss : auto(SS); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&; n : SS -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>, type<SS>)) -const -&> {

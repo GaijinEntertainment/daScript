@@ -41,9 +41,6 @@ def private emit_full_row_by_name(bindName : string; declT : TypeDeclPtr; defNam
     }
 }
 
-// Materialize-under-guard: when the whole row escapes only inside a bare `if (fieldCond) { ... }`, read
-// the predicate's fields cheaply (read_json_field — no peek/borrow split, JSON is heap-owned) and build the
-// full by-name row only for matches. False (caller does the full build) unless the body is that exact shape.
 [macro_function]
 def private try_json_under_guard_materialize(var body : Expression?; bindName : string; declT : TypeDeclPtr;
                                              defName, curName : string; at : LineInfo;
@@ -52,7 +49,7 @@ def private try_json_under_guard_materialize(var body : Expression?; bindName : 
     var ite = body as ExprIfThenElse
     if (ite.if_false != null || ite.cond == null || ite.if_true == null) return false
     var (condAllUsed, condFields) = collect_row_usage(ite.cond, bindName)
-    if (condAllUsed || empty(condFields)) return false   // whole-`it` in the guard, or no field to prune
+    if (condAllUsed || empty(condFields)) return false
     sort(condFields)
     var fieldToLocal <- {for (f in condFields); f => qn("jf_{f}", at)}
     prelude |> push <| qmacro_expr() {
@@ -66,7 +63,6 @@ def private try_json_under_guard_materialize(var body : Expression?; bindName : 
         }
     }
     ite.cond = flatten_row_to_locals(ite.cond, bindName, fieldToLocal)
-    // Prepend the by-name full materialize to the guarded branch so only matching elements build the row.
     var guarded : array<Expression?>
     guarded |> push <| qmacro_expr() {
         var $i(bindName) <- default<$t(declT)>
@@ -78,9 +74,6 @@ def private try_json_under_guard_materialize(var body : Expression?; bindName : 
     return true
 }
 
-// Fills `prelude` (the hoisted default-row decl, prune path only) + `inner` (per-element, ends with
-// `body`): allUsed -> full from_JV(it); no field refs -> body only; pruned -> one `let jf_<f>` read per
-// referenced field with body's `it.<f>` rewritten to it (struct dropped). See linq_fold.md.
 [macro_function]
 def private build_json_materializer(var body : Expression?; bindName : string; declT : TypeDeclPtr;
                                     defName, curName : string; at : LineInfo;
@@ -90,7 +83,6 @@ def private build_json_materializer(var body : Expression?; bindName : string; d
         if (try_json_under_guard_materialize(body, bindName, declT, defName, curName, at, prelude, inner)) {
             return
         }
-        // whole row escapes: read every field by name (no struct from_JV — see emit_full_row_by_name).
         if (declT.baseType == Type.tStructure) {
             prelude |> push <| qmacro_expr() {
                 let $i(defName) = default<$t(declT)>
@@ -111,7 +103,7 @@ def private build_json_materializer(var body : Expression?; bindName : string; d
         inner |> push(body)
         return
     }
-    sort(usedFields)   // deterministic emission (AOT hash / test stability)
+    sort(usedFields)
     var fieldToLocal <- {for (f in usedFields); f => qn("jf_{f}", at)}
     prelude |> push <| qmacro_expr() {
         let $i(defName) = default<$t(declT)>
@@ -127,9 +119,6 @@ def private build_json_materializer(var body : Expression?; bindName : string; d
     inner |> push(body)
 }
 
-// Build the JSON array walk shared by wrap_source_loop and emit_distinct_take_loop. `for` over the array
-// makes a `continue` (skip/skip_while) land on the next element; non-null breakGuard emits `break if (guard)`
-// first (distinct+take early-exit). The `is _array` guard yields nothing for a null/non-array source.
 [macro_function]
 def private build_json_array_walk(srcName : string; curName : string; var inner : array<Expression?>;
                                   var breakGuard : Expression?) : Expression? {
@@ -149,8 +138,6 @@ def private build_json_array_walk(srcName : string; curName : string; var inner 
     }
 }
 
-// Materialize the per-element row (field-pruned) + emit the array walk + hoist the prelude. Shared by
-// wrap_source_loop and emit_distinct_take_loop. Non-null breakGuard emits `break if (guard)` first.
 [macro_function]
 def private build_pruned_array_walk(srcName : string; elemType : TypeDeclPtr; bindName : string;
                                     var body : Expression?; var breakGuard : Expression?; at : LineInfo) : Expression? {
@@ -164,9 +151,6 @@ def private build_pruned_array_walk(srcName : string; elemType : TypeDeclPtr; bi
     return hoist_prelude(prelude, loop, at)
 }
 
-// 2-source invoke binding the JSON value (param 1, named `srcName` so the array walk in bodyStmts reads it)
-// + the in-memory srcB array (param 2). Shared by JsonAdapter.emit_join_hook (standalone) and
-// JsonJoinAdapter.wrap_invoke (group_by-after-join); const-forced source so a `let` JsonValue? binds.
 [macro_function]
 def private build_json_join_invoke(var jsonExpr : Expression?; srcName : string; var bodyStmts : array<Expression?>;
                                    srcBName : string; srcBType : TypeDeclPtr; var srcBExpr : Expression?;
@@ -196,8 +180,6 @@ def private build_json_join_invoke(var jsonExpr : Expression?; srcName : string;
     return emission
 }
 
-// Single flat for-loop over the JSON array, like ArrayAdapter (unlike decs's 2-level archetype walk or
-// XML's DOM child-element while-walk). No name variants — the source IS the array.
 class JsonAdapter : SourceAdapter {
     jsonExpr : Expression?
     srcName  : string
@@ -206,7 +188,7 @@ class JsonAdapter : SourceAdapter {
         return "json_"
     }
     def override supports_direct_return() : bool {
-        return true   // single flat for-loop inside the invoke; a mid-loop `return` exits the invoke
+        return true
     }
     def override const can_group_by() : bool {
         return true
@@ -215,9 +197,6 @@ class JsonAdapter : SourceAdapter {
         return true
     }
     def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-        // JSON standalone join: hashed equi-join collecting srcB into a table, then probing from the
-        // field-pruned array walk (mirrors emit_array_join, but srcA is the JSON value, not an array param).
-        // group join over a JSON source isn't spliced yet — defer to tier-2 (the array adapter handles it).
         if (c.single_name |> key_exists("join") && c.single_name["join"] == "group_join") return null
         var joinCall = c.single["join"]
         if (!srcb_is_array_shaped(c, "join")) return null
@@ -236,9 +215,6 @@ class JsonAdapter : SourceAdapter {
         var leadWhereLam = extract_join_lead_where(c)
         if (c.single |> key_exists("lead_where") && leadWhereLam == null) return null
         let countOnly = c.single |> key_exists("term")
-        // Iterator-typed result (no count terminator): the fused single-pass build is the measured winner over
-        // a streaming generator — materialize the field-pruned result array, then wrap as a sequence to honor
-        // the iterator contract.
         let wrapIter = !countOnly && ctx.expr_is_iterator
         var srcbSrc = joinCall.arguments[1]
         if (srcbSrc == null || srcbSrc._type == null || srcbSrc._type.firstType == null) return null
@@ -247,7 +223,7 @@ class JsonAdapter : SourceAdapter {
         if (keyaLam == null || keybLam == null || keyaLam._type == null) return null
         let keyType = strip_const_ref(clone_type(keyaLam._type.firstType))
         if (!is_primitive_join_key_type(keyType)) return null
-        let tupAName = bind_name(at)   // = "it"; keya/result peel to read it.<f> so the materializer prunes
+        let tupAName = bind_name(at)
         let srcBName = qn("jjoin_srcB", at)
         let tupBName = qn("jjoin_tup_b", at)
         let hashName = qn("jjoin_hash", at)
@@ -272,8 +248,6 @@ class JsonAdapter : SourceAdapter {
     }
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
         if (c.single |> key_exists("upstream_join")) {
-            // join |> group_by over JSON: srcA = the JSON value (array-walked), srcB = join's second arg.
-            // plan_group_by_core drives the bucket-fill through JsonJoinAdapter.wrap_source_loop (pruning free).
             var joinCall = c.single["upstream_join"]
             var core = extract_upstream_join_core(joinCall)
             var srcb = extract_upstream_join_array_srcb(joinCall)
@@ -295,7 +269,6 @@ class JsonAdapter : SourceAdapter {
                 resultType = core.resultType,
                 resBindName = qn("jjoin_jres", at)))
         }
-        // join |> group_by deferred to tier-2 unless it hit the upstream-join arm; plain group_by clones self.
         return new JsonAdapter(jsonExpr = clone_expression(jsonExpr), srcName = qn("jsrc", at),
                                elemType = clone_type(elemType))
     }
@@ -312,13 +285,10 @@ class JsonAdapter : SourceAdapter {
         return build_pruned_array_walk(srcName, elemType, bind_name(at), body, null, at)
     }
     def override emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? {
-        // distinct(...) |> take(N): same field-pruned walk, breaking once N distinct elements are taken.
         var breakGuard = qmacro($i(takenName) >= $i(takeLimName))
         return build_pruned_array_walk(srcName, elemType, bindName, perElement, breakGuard, at)
     }
     def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
-        // Const-accepting param: the source `jv` is often a `let` (const JsonValue?), and a non-const source
-        // adds-const cleanly — so the single fused invoke binds either. Strip ref, force const.
         var jsonType = strip_const_ref(clone_type(jsonExpr._type))
         jsonType.flags.constant = true
         var jsonClone = clone_expression(jsonExpr)
@@ -341,16 +311,13 @@ class JsonAdapter : SourceAdapter {
         }
         return emission
     }
-    // Deferred materialization: a buffered reducer (order/take, distinct) holds `(orderKey, JsonValue?)`
-    // surrogates and builds the row only for the K survivors. The handle is the per-element `jcur`; the
-    // survivor materialize reads each field by name (like XML), never the overridable struct from_JV.
     def override const defers_materialization() : bool {
         return true
     }
     def override handle_type() : TypeDeclPtr {
         var ht = strip_const_ref(clone_type(jsonExpr._type))
         if (ht.firstType != null) {
-            ht.firstType.flags.constant = true   // `JsonValue const?` — matches `jsrc as _array`'s const elements
+            ht.firstType.flags.constant = true
         }
         return ht
     }
@@ -365,9 +332,6 @@ class JsonAdapter : SourceAdapter {
                 $i(outBind) <- from_JV($e(handleExpr), type<$t(declT)>)
             }
         }
-        // distinct prefix from the array-walk's "jdef" (line ~159): a group_by + first/order/distinct/take
-        // chain fires both materialize sites at the same `at`, and qn keys only on (prefix, at) — same
-        // prefix there would shadow (see groupby_first m6f).
         let defName = qn("jhdef", at)
         let curName = qn("jhandle", at)
         var stmts : array<Expression?>   // nolint:STYLE012 -- list grown further by emit_full_row_by_name below
@@ -382,7 +346,6 @@ class JsonAdapter : SourceAdapter {
     }
 }
 
-// JSON analog of XmlJoinShape — srcA = JSON value (array-walked), srcB = in-memory array.
 struct JsonJoinShape {
     jsonExpr : Expression?
     srcName  : string
@@ -395,16 +358,13 @@ struct JsonJoinShape {
     resBindName : string
 }
 
-// group_by-after-join over JSON — returned from JsonAdapter.build_group_by_adapter on the upstream-join arm.
-// plan_group_by_core drives the bucket-fill through wrap_source_loop (collect srcB into a hash, probe from
-// the field-pruned array walk). Mirrors XmlJoinAdapter.
 class JsonJoinAdapter : SourceAdapter {
     shape : JsonJoinShape
     def override name_prefix() : string {
         return "jjoin_"
     }
     def override supports_direct_return() : bool {
-        return true   // collect for{} + probe array for-walk, both single-level inside the invoke
+        return true
     }
     def override bind_name(at : LineInfo) : string {
         return shape.resBindName
@@ -416,7 +376,7 @@ class JsonJoinAdapter : SourceAdapter {
         let jhashName = qn("jjoin_jhash", at)
         let arrName   = qn("jjoin_jarr", at)
         let tupBName  = qn("jjoin_jtb", at)
-        let tupAName  = qn("it", at)   // srcA row bind; keya/result peel to read it.<f> so the materializer prunes
+        let tupAName  = qn("it", at)
         var pieces = build_join_adapter_pieces(shape.keyaLam, shape.keybLam, shape.resultLam, tupAName, tupBName, jhashName, arrName, shape.resBindName, shape.tupBType, shape.resultType, body, at)
         if (pieces == null) return null
         var probeWalk = build_pruned_array_walk(shape.srcName, shape.elemType, tupAName, pieces.probeOuter, null, at)
@@ -436,17 +396,12 @@ class JsonJoinAdapter : SourceAdapter {
     }
 }
 
-// Recognize a `from_json(jv, type<Row>)` chain top. Returns the call (caller reads arguments[0] = jv,
-// `_type.firstType` = Row); null otherwise. Name-only match — no json types referenced here, so a
-// JSON-less program never resolves a `from_json` and this returns null (the chain falls to the array tier).
 [macro_function]
 def extract_json_source(var top : Expression?) : ExprCall? {
     if (top == null || !(top is ExprCall)) return null
     var c = top as ExprCall
     if (get_call_short_name(c) != "from_json" || c._type == null || !c._type.isIterator
             || c._type.firstType == null || length(c.arguments) != 2) return null
-    // Confirm arg0 is a json::JsonValue? pointer. Name-only match would spuriously fire on an unrelated user
-    // `from_json` (this adapter is required unconditionally) and emit unresolved from_JV. No json dep — string-matched.
     let srcT = c.arguments[0]._type
     if (srcT == null || !srcT.isPointer || srcT.firstType == null || srcT.firstType.structType == null
             || srcT.firstType.structType.name != "JsonValue"
