@@ -49,7 +49,7 @@ module perf_lint shared private
 //!
 //! The five markers are registered compiler-side (src/builtin/module_builtin_runtime.cpp, beside
 //! [clone]), so code under contract requires NOTHING and pays no build time. This module is the
-//! checker, and is deliberately not required by the code it checks — it runs wherever lint runs. — interpolation already converts to string
+//! checker, and is deliberately not required by the code it checks — it runs wherever lint runs.
 
 require daslib/ast_boost
 require strings
@@ -753,7 +753,9 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf025_value_kind(arg : Expression const?) : Perf025Kind {
-        //! Classifies a string() cast's value argument by how `"{x}"` (the string builder's own conversion) compares to `string(x)`:
+        //! Classifies a string() cast's value argument by how `"{x}"` (the string builder's own
+        //! conversion) compares to `string(x)` — the enum values name the three verdicts, the
+        //! type lists below draw the boundaries.
         if (arg == null || arg._type == null) return Perf025Kind.not_a_cast
         let bt = arg._type.baseType
         if (bt == Type.tInt || bt == Type.tInt8 || bt == Type.tInt16 || bt == Type.tInt64
@@ -1601,7 +1603,9 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def parse_range_leg(leg : Expression?; upper_op, lower_op : string; var v_out : Expression?&; var bound_out : int&; var is_hi_out : bool&) : bool {
-        //! Parse `var <op> const` or `const <op> var` where op is `upper_op` or `lower_op`. Returns true and fills outputs with: the variable expression, the int bound, and whether this leg expresses the upper bound of the range on var. `upper_op` is the var-on-left operator that marks the upper-bound leg ("<=" closed-in-range, ">" open-out-of-range);
+        //! Parse `var <op> const` / `const <op> var`; fills the variable, the int bound, and is_hi_out
+        //! (does this leg bound the range from above). `upper_op` is the var-on-left upper-bound operator
+        //! ("<=" closed-in-range, ">" open-out-of-range), `lower_op` the lower (">=" / "<"); Yoda const-on-left forms flip, so that arm tests `lower_op`.
         if (leg == null || !(leg is ExprOp2)) return false
         var op2 = leg as ExprOp2
         let opname = string(op2.op)

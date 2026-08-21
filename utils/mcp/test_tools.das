@@ -666,6 +666,20 @@ def test_format_strip_comments_source(t : T?) {
         t |> success(find(out, "//fmt:keep-alignment") >= 0, "fmt directive kept")
         t |> success(find(out, "narration") < 0, "narration stripped")
     }
+    t |> run("a kept comment keeps its attached continuation lines, whole or not at all") <| @(t : T?) {
+        let src = "options gen2\n\ndef a() \{\n    // nolint:STYLE014 — the why starts here and\n    // continues on a second line without truncation\n    return\n\}\n\ndef b() \{\n    //! doc head\n    // doc continuation line\n    return\n\}\n"
+        let out = format_source_string(src, true)
+        t |> success(find(out, "continues on a second line") >= 0, "nolint why kept whole")
+        t |> success(find(out, "doc continuation line") >= 0, "//! continuation kept")
+    }
+    t |> run("a blank line or code breaks the continuation chain") <| @(t : T?) {
+        let src = "options gen2\n\ndef a() \{\n    // nolint:STYLE014 — one-line why\n\n    // separate narration dies\n    return  // nolint:STYLE014 — trailing why\n    // not a continuation of a trailing head, dies\n\}\n"
+        let out = format_source_string(src, true)
+        t |> success(find(out, "one-line why") >= 0, "head kept")
+        t |> success(find(out, "separate narration") < 0, "blank line breaks the chain")
+        t |> success(find(out, "trailing why") >= 0, "trailing nolint kept")
+        t |> success(find(out, "not a continuation") < 0, "trailing head opens no chain")
+    }
     t |> run("!is-prefixed identifiers survive formatting untouched") <| @(t : T?) {
         let src = "options gen2\n\ndef check(f : bool) : bool \{\n    return !is_unary(f)\n\}\n"
         let out = format_source_string(src, false)
