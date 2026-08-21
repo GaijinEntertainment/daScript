@@ -2,13 +2,24 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE.md`.
+
 **Routed from `REVIEW.md`: a diff touching a GPU kernel, driver, dispatch class, or the K/V
 mirrors applies this list with the master's.**
 
-**A claim about a shape constant is checked against the emitted artifact, not the das source.**
-An in-body tile constant is confirmed literal in the generated `*_msl` global or the SPIR-V
-dump; a grid or threadgroup constant is confirmed in the class's `[metal_dispatch]`/
-`[vk_dispatch]` `grid=`/`tg=` spec and the generated `enc_*` builder.
+**The EMITTED shader contains no indirection.** No function pointers, no vtables. A
+`class template` / `def abstract` / `def override` splice is compile-time and conforms —
+check the emission, not the das spelling.
+
+**The `*_decline_caps` predicates take only the model and the call shape; window-setup state
+is asked by `prefill_decline` / `decode_decline`, never by a caps predicate.** A caps parameter that
+reports the session's setup progress — rather than the CALL, its row count or its span
+shape — is a defect however it is derived.
+
+**A claim about a shape constant is checked against what the kernel is compiled and dispatched
+with, never against the das that computes the value.** An in-body tile constant is confirmed
+literal in the generated `*_msl` global or the SPIR-V dump; a grid or threadgroup constant is
+confirmed in both the class's `[metal_dispatch]` / `[vk_dispatch]` `grid=`/`tg=` spec and the
+generated `enc_*` builder.
 
 **Kernel twins — kernel classes whose bodies differ on one stamp axis — bind the same kargs
 (kernel-argument struct) type at the same binding numbers**, even where one twin ignores a
@@ -29,8 +40,9 @@ access its body performs.
 
 **A kernel declares its dispatch on the class; the builder is generated.** A new kernel class
 carries `[metal_dispatch]` / `[vk_dispatch]` with per-field `@binding` / `@role` / `@off` /
-`@span` / `@default`. A NEW hand-written `enc_*` body is a defect unless it is a wrapper shape:
-a format or twin pick, a default-filling wrapper, or a composite over generated builders.
+`@span` / `@default`. A NEW `enc_*` body is hand-written only as a wrapper — a format or twin
+pick, a default-filling wrapper, or a composite over generated builders; any other
+hand-written `enc_*` body is a defect.
 
 **A kernel is dispatched only through its `enc_*` builder** — a hand-rolled bind list in
 `dasllama/` or `performance/` is a defect.
@@ -43,9 +55,11 @@ not count.
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
 
-**A backend-only capability goes in that backend's matching role file.** A capability with no
-matching role gets its own role file; anything else is a grab-bag, and a grab-bag file is a
-defect.
+**A backend-only capability goes in that backend's file for the matching role** — the
+per-role files every backend has a twin of: the kernel home, `_common` (device state and
+plumbing), `_decode`, `_prefill`, `_shapes` (portable servability gates), and the
+kernel-access lens. A capability with no matching role gets its own role file; anything else
+is a grab-bag, and a grab-bag file is a defect.
 
 **A GPU family shares ONE device and queue from `dasllama/dasllama_<gpu>_common.das`'s
 init.** A module creating its own is a defect.
@@ -88,34 +102,33 @@ runs on one q8 and one kq model, with `--kv` matching the armed mirror codec.** 
 `--ngl`; the vulkan arm is `DASLLAMA_GPU=1`, never `--ngl`, and its driver declines
 codec-mismatched sessions silently, so that log must show `resident driver armed`.
 
-**A change to the tower driver `dasllama/dasllama_metal_tower.das` — or to a kernel class or
-kargs struct it dispatches (`AttnArgs`, `enc_qk_mm`, `enc_softmax`, `enc_av_mm`,
-`pf_enc_bf16_mm`, `enc_add_bias_rows`) — ships a run of
-`tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, and `tests/test_gemma3v.das` — the
-per-family GPU oracle gates — for every family the changed code is reachable from, and of all
-three when the change touches state or setup the whole driver shares rather than one family's
-path — any module-level `g_tw_*` variable in that file, `metal_tower_init`, or
-`dasllama_metal_tower_register`.** A new tower family adds its gate file to this list in the
-same change.
+**A change to the tower driver `dasllama/dasllama_metal_tower.das` — or to the `AttnArgs`
+kargs struct, or to any kernel class dispatched through `enc_qk_mm`, `enc_softmax`,
+`enc_av_mm`, `pf_enc_bf16_mm`, or `enc_add_bias_rows` — ships two runs: the per-family GPU
+oracle gates `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, and `tests/test_gemma3v.das`,
+for every family the changed code is reachable from and all three when the change touches
+state or setup the whole driver shares rather than one family's path (any module-level
+`g_tw_*` variable in that file, `metal_tower_init`, or `dasllama_metal_tower_register`); and
+a `tests/test_model_image.das` run with the `mtower` arm, with `metal_tower_stats()`'s encode
+count rising across the run.** The image run is the parity instrument for the families no
+per-family gate file covers.
 
-**A change to the tower driver `dasllama/dasllama_metal_tower.das` — or to a kernel class or
-kargs struct it dispatches (the list above) — ships a
-`tests/test_model_image.das` run with the `mtower` arm, with `metal_tower_stats()`'s encode
-count rising across the run** — those GPU-vs-CPU cells are that driver's parity instrument for
-the families no per-family gate file covers.
+**A diff that adds a tower family, or gives the tower driver a newly borrowed kernel class or
+kargs struct, adds that gate file or that name — in the same change — to the rule in this
+checklist whose trigger names `dasllama/dasllama_metal_tower.das`.**
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq
 model.** Parity runs never reach it.
 
-**A change to `dasllama/dasllama_metal_asr_dec.das` ships a `tests/test_model_image.das` run with the
-`mtower` arm** — its CPU-vs-GPU transcript cells are that driver's parity instrument.
+**A change to `dasllama/dasllama_metal_asr_dec.das` ships a `tests/test_model_image.das` run
+with the `mtower` arm** — its CPU-vs-GPU transcript cells are that driver's parity instrument.
 
-**A kernel that reads or writes the residency rail's `k_mirror`/`v_mirror` slabs is stamped
-from a `[|> template_struct_instance]` codec template (`typedef KT`) with both f32 and f16
-instances** — the rail serves both codecs, so a missing instance silently drops one codec's
-GPU path. A single-codec mirror kernel is legal only when a codec-templated sibling serves
-the other codec and its arming gate keys on `kv16`.
+**A kernel that reads or writes the residency rail's `k_mirror`/`v_mirror` slabs leaves
+neither codec unserved: it is stamped from a `[|> template_struct_instance]` codec template
+(`typedef KT`) with both f32 and f16 instances, or it is single-codec and a sibling stamped
+from that template serves the other codec behind an arming gate that keys on `kv16`.** The
+rail serves both codecs, so a codec no kernel covers silently drops that codec's GPU path.
 
 **An f16 store into any GPU-resident K/V clamps to the f16 finite range (±65504).**
 
@@ -130,14 +143,13 @@ authority.
 `dasllama/dasllama_vulkan_common.das`.
 
 **A diff that changes a kernel's binding numbers or the layout of a kargs struct it binds
-fixes or deletes, in the same change, every arm of a lab that hand-binds it** — a lab is a
-kernel A/B or knockout timing script, wherever the diff puts it (`benchmarks/`, `harness/`),
-that hand-lists its bindings instead of dispatching through the `enc_*` builder. A lab left
-dispatching stale bindings measures the wrong kernel silently.
+fixes or deletes, in the same change, every arm of a hand-binding lab that binds it** — a
+hand-binding lab is a kernel A/B or knockout timing script, wherever it lives (`benchmarks/`,
+`harness/`), that hand-lists its bindings instead of dispatching through the `enc_*` builder.
+A lab left dispatching stale bindings measures the wrong kernel silently.
 
-**A diff that ports a lab's winning variant into a kernel deletes the lab in the same
+**A diff that ports an A/B lab's winning variant into a kernel deletes that lab in the same
 change — its bench driver, both of its arm variants, and any variants-module code that exists
-only for it — wherever the lab lives (`benchmarks/`, `harness/`).** A lab that outlives its
-decision degrades into an unmaintained one-off measurement script; a sweep instrument whose
-knockout arms ATTRIBUTE rather than select between implementations is not a lab under this
-rule, and says so in its header.
+only for it.** An A/B lab is a timing script whose output SELECTS between two implementations
+of the same compute, wherever it lives (`benchmarks/`, `harness/`); one that outlives its
+decision degrades into an unmaintained one-off measurement script.

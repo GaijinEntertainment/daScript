@@ -14,11 +14,11 @@ require ../performance/profile_common.das   // tune_gate + apply_box_profile_run
 require daslib/jobque_boost
 require daslib/fio
 
-// The Metal prefill M-curve on ONE loaded model: per-npos best-of ms/tok with stage stats,
-// then the DASLLAMA_METAL_PREFILL_SKIP knockouts at a small and a large M. Direction-grade.
-// A sweep INSTRUMENT, not a lab: the knockout arms attribute stage families, they select no
-// implementation (REVIEW_GPU.md's lab-deletion rule does not bind it). It found the 64-row
-// M-pad staircase (npos=160 billed as 192) that the ceil32 pad removed.
+// An ATTRIBUTION SWEEP: the Metal prefill M-curve on ONE loaded model — per-npos best-of
+// ms/tok with stage stats, then the DASLLAMA_METAL_PREFILL_SKIP knockout arms, which
+// attribute wall cost across stage families (attn / gemm / ew / nongemm) and select no
+// implementation. Direction-grade. It found the 64-row M-pad staircase (npos=160 billed
+// as 192) that the ceil32 pad removed.
 
 def measure_one(tr : Model; npos : int64; reps : int) : double {
     var best = 1.0e30lf

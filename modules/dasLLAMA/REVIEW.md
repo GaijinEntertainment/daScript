@@ -7,10 +7,9 @@
 KIND, not location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this
 module's `tests/REVIEW.md`; a timing rig — a script whose output is a measured wall or rate — and any
 kernel A/B lab, wherever the diff puts them, answer to `benchmarks/REVIEW.md`; a change to what
-enters `performance/records/` or its manifests, and an exchange or provenance-manifest change,
-answers to `performance/REVIEW.md`; a diff naming a model file (a `.gguf`, `.dlim`, or
-audio/vision companion) anywhere under the module applies `performance/REVIEW.md`'s
-provenance rules.
+enters `performance/records/` or its manifests, an exchange or provenance-manifest change,
+and a diff naming a model file (a `.gguf`, a `.dlim`, an mmproj, or an image or audio fixture
+a model row pins) anywhere under the module, answer to `performance/REVIEW.md`.
 
 **Every `dasllama/` change applies `tests/REVIEW.md` for the test obligation it names.**
 
@@ -24,9 +23,8 @@ holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
 `dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
 path (one that runs inside the program under review, not a spawned child process) that
 splices a stream carrying decoded media into a prompt or schedules such a stream, applies
-`REVIEW_VISION.md`. A
-`dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
-`REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
+`REVIEW_VISION.md`. A `dasllama/dasllama_tower.das` change — the shared encoder-tower home —
+applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
 thereby pick up the other modality's checklist. A change to the tune sidecar's schema or
 emitter, wherever it lands, answers to `modules/dasLLVM/REVIEW.md`. A routed file applies BOTH
 the checklist it routes to and this one; every other file under `modules/dasLLAMA/` applies
@@ -46,30 +44,20 @@ this value change between dispatches? If yes it is data and belongs in a uniform
 struct; if no it is shape and must not reach the kernel as a uniform, a kargs field, or a
 helper parameter.
 
-**The EMITTED shader contains no indirection.** No function pointers, no vtables. A
-`class template` / `def abstract` / `def override` splice is compile-time and conforms —
-check the emission, not the das spelling.
-
-**The `*_decline_caps` predicates take only the model and the call shape; window-setup state
-is asked by `prefill_decline` / `decode_decline`, never by a caps predicate.** A caps
-parameter derived from a live `Session` is a defect unless it describes the CALL (its row
-count, its span shape), not the session's setup progress.
-
 **Peak memory wins ties against load cost.** A change to an allocation reached from a load,
 bake, or convert path (judge a shared helper at each call site) that trades footprint for speed
 ships the measured pair — peak footprint and wall-clock — and an explicit stated decision.
 
 **A new GEMM/GEMV call site takes the fastest serving lane that exists for its weights; the
 f32 fallback is for correctness rails only.** A new call to an f32 matmul (`matmul_batch`,
-`mm_blob_b`, per-head `gemm_f32`, or an f32 GPU mm) where a faster-format twin already serves
-the same weights and shape is a defect unless the site is a parity/oracle rail or carries a
-comment naming why f32 is load-bearing there. Weights with no faster twin (unquantized
-planes) are out of scope.
+`mm_blob_b`, per-head `gemm_f32`, or an f32 GPU mm) outside a parity or oracle rail, where a
+faster-format twin already serves the same weights and shape, is a defect. Weights with no
+faster twin (unquantized planes) are out of scope; a site that must stay f32 for another
+reason is ledgered in `ARCHITECTURE.md`, not commented into compliance.
 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
-file.** A platform-neutral engine file carrying it is a defect; a new shared concern gets its
-own file, not more of
-`dasllama/dasllama_common.das`.
+file.** A platform-neutral engine file carrying it is a defect; a new shared concern gets
+its own file, not more of `dasllama/dasllama_common.das`.
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
 a defect in engine code — instrumentation goes through the sanctioned rails, and a clock whose
@@ -108,8 +96,7 @@ one, or giving one a new effect, without the announce is a defect.
 exe — `benchmarks/lcpp_bench.das` built by `daspkg release`, spawned by
 `performance/gen_bench_records.das` or run by hand where the cell's `PROFILE.md` section says
 so — never from the `-jit` script** (a `--for-debug-purposes` row is a debug instrument). A
-stage-level figure is settled by the harness-naming rule below, not this one. A tutorial's
-printed wall-clock is teaching output, feeding no board.
+tutorial's printed wall-clock is teaching output, feeding no board.
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
@@ -123,10 +110,10 @@ provenance, so a number can never silently describe a format nobody serves or a 
 nobody ships. A rig-internal measurement margin — a crown delta, a noise floor, tuner
 timing — is settled by the sidecar or manifest stamp it rides in.
 
-**A figure measuring one engine stage rather than a served turn — a stage wall, a stage
-share, or a stage speedup — names the harness and flags that produced it in the same
-sentence, wherever it is written down: a checked-in doc, a ledger, a code comment, or a PR
-description.**
+**A figure measuring one engine stage inside a served turn — a stage wall, a stage share, or
+a stage speedup, never a board cell's `pp`/`tg` rate — names the harness and flags that
+produced it in the same sentence, wherever it is written down: a checked-in doc, a ledger, a
+code comment, or a PR description.**
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
 `parse_image`'s mapping, and going live does no real work — repacking, quantizing, folding,
@@ -155,9 +142,8 @@ defect.
 **A bake reaps only its own lane** — an identity's (quant, tag) pair. A save drops AT MOST that
 lane's dead siblings plus BROKEN/version-stale images in any lane, nothing else.
 
-**Only a process that can recompute an image's identity may judge it dead, and the one
-`dlim_wipe` caller is `performance/gen_bench_records.das`.** Reaping an image whose identity the code
-cannot recompute — another flavor's, another family's — is a defect.
+**Only a process that can recompute an image's identity may judge it dead.** Reaping an image
+whose identity the code cannot recompute — another flavor's, another family's — is a defect.
 
 **A plane split that follows the source FILE rather than a runtime knob takes ONE image tag**,
 with the meta flags describing the layout — a per-tensor type split is not a second flavor.
@@ -179,8 +165,7 @@ is a defect of the change, not of the docs.
 consumer requires only this module's public entry modules, matched by the resolved file's
 path under `modules/dasLLAMA/` — is a defect:** a module added to its allowed set, the path
 match dropped or narrowed, or an error text that no longer names the facade to require
-instead. The allowed set is the table in the lint; the entry modules are the facade, the
-scheduler, and the exchange pair.
+instead. The allowed set is the table in the lint.
 
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
@@ -213,8 +198,8 @@ files shipped from other subfolders resolve by relative path and register nothin
 
 **A diff that adds a file, moves code between files, or changes what a file owns lands the
 `ARCHITECTURE.md` §1 edit that keeps the charters true, in the same change.** A per-file
-inventory restated in this checklist is a defect of the checklist (the per-kind landing rules
-below are the checklist's own).
+inventory restated in this checklist is a defect of the checklist (a rule naming what KIND of code lands in
+which file is the checklist's own).
 
 **A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 

@@ -1297,8 +1297,8 @@ def main() : int {
             print("--tok supports -o txt only (the tokenizer cell has no records rail)\n")
             return 1
         }
-        // single-threaded pure-das cell: no jobque, and no tune_gate - it dispatches no tuned
-        // kernel (the REVIEW tune-gate carve-out)
+        // single-threaded pure-das cell: no jobque, and no tune_gate - tokenizing runs no
+        // forward pass on a loaded Model and dispatches no tuned kernel
         return tok_cell_main(cfg, reps, fmt) ? 0 : 1
     }
     if (ab && fmt != OutFmt.txt) {

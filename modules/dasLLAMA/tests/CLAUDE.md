@@ -49,7 +49,7 @@ kq cont span span-fused dim qkv` (span = the non-causal media eval shape, head +
 per codec; span-fused = the image turn's ONE-eval shape — causal head + media rows + causal
 tail through the per-query mask, one GPU prefill, with a same-backend fused-vs-splice logits
 witness on poison-calibrated per-codec bars).
-Support matrix: `cells-q8 window cells-s16 mode kq dim8b dim70b` + the
+Support matrix: `cells-q8 window cells-s16 mode kq tensor dim8b dim70b` + the
 family matrix `fam-qwen3 fam-qwen2 fam-phi3 fam-gemma2 fam-gemma3 fam-gemma4 fam-qwen3moe
 fam-gemma4moe fam-gptoss fam-gemma4e fam-qwen35 fam-qwen35moe fam-qwen2moe` (needs-derivation pins +
 per-path cells; fam-gemma2 also carries the sliding-window masking parity row;
@@ -276,7 +276,7 @@ images the rig cannot use and purges the flavors the rig depends on. Image-rail 
 
 ## Metal fixtures — driver knobs and the two-model pattern
 
-(REVIEW: "A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob
+(REVIEW: "A cell whose claim is a CPU-served or f32-decoder leg pins every default-ON driver hook
 OFF for that leg and restores it after.") The
 hooks are on by default: they flip a q8 leg to the GPU silently, and an f32 leg records a
 quant_mode decline that panics under required mode — either way the cell stops measuring what
@@ -328,7 +328,7 @@ a capture-time filter can hide the exact proof line the run exists to produce, a
 capture reads as success.
 When a fixture claims a size/depth property ("2030 tokens", "crosses 2048"), assert the
 actual number in the test; a resize cap is not evidence.
-THE EYEBALL RAIL (REVIEW: "Every test that compares generated tokens, ids, or logits logs the decoded text for both sides"): every token-for-token generate cell logs both decoded
+THE EYEBALL RAIL (REVIEW: "Every test that compares generated tokens, ids, or logits logs a human-readable form of BOTH sides"): every token-for-token generate cell logs both decoded
 streams (`log_gen_texts` in `_model_tier.das`), and every logits-tolerance cell logs a decoded
 text form (forced stream + the GPU's greedy would-be picks, or both next-token pieces) — read
 the text before trusting a red or a suspicious green; a near-tie synonym flip and real garbage
