@@ -3,6 +3,7 @@ options gen2
 require dastest/testing_boost
 require daslib/lint_config
 require daslib/fio
+require strings
 
 // Per-process temp directory. Created on first call, removed by [finalize].
 // Avoids two problems:
@@ -244,5 +245,63 @@ def test_format_policy_cascade(t : T?) {
         plant(odd, ".lint_config", "[format]\nforce_clean_comments = \"nope\"\n")
         let pol = format_policy_for(path_join(odd, "x.das"))
         t |> success(pol.force_clean_comments)
+    }
+}
+
+[test]
+def test_format_policy_per_key_cascade(t : T?) {
+    fixture_path()
+    t |> run("nearest level wins its key; the other key still cascades from above") @@(t : T?) {
+        let root = path_join(_tmp_dir, "perkey")
+        mkdir_rec(path_join(root, "a"))
+        mkdir(path_join(root, ".git"))
+        plant(root, ".lint_config", "[format]\nforce_clean_comments = true\nformat_enabled = true\n")
+        plant(path_join(root, "a"), ".lint_config", "[format]\nforce_clean_comments = false\n")
+        let pol = format_policy_for(path_join(root, "a/x.das"))
+        t |> success(!pol.force_clean_comments, "nearest a/ wins force_clean_comments")
+        t |> success(pol.format_enabled, "format_enabled cascades from root")
+    }
+    t |> run("a decided key is immune to an ancestor's redefinition") @@(t : T?) {
+        let root = path_join(_tmp_dir, "immune")
+        mkdir_rec(path_join(root, "a/b"))
+        mkdir(path_join(root, ".git"))
+        plant(root, ".lint_config", "[format]\nforce_clean_comments = true\n")
+        plant(path_join(root, "a"), ".lint_config", "[format]\nforce_clean_comments = false\n")
+        plant(path_join(root, "a/b"), ".lint_config", "[format]\nforce_clean_comments = true\n")
+        let pol = format_policy_for(path_join(root, "a/b/x.das"))
+        t |> success(pol.force_clean_comments, "b's own value stands against a's")
+    }
+    t |> run("a bare filename resolves against the working directory's cascade") @@(t : T?) {
+        let pol = format_policy_for("x.das")
+        t |> success(pol.format_enabled)
+        t |> success(!pol.force_clean_comments)
+    }
+    t |> run("a path outside any repository terminates at the filesystem root") @@(t : T?) {
+        let pol = format_policy_for(path_join(_tmp_dir, "no_git_here/x.das"))
+        t |> success(pol.format_enabled)
+    }
+}
+
+[test]
+def test_partition_by_format_policy(t : T?) {
+    fixture_path()
+    t |> run("skips disabled trees, keeps strips index-aligned with survivors") @@(t : T?) {
+        let root = path_join(_tmp_dir, "partition")
+        mkdir_rec(path_join(root, "swept"))
+        mkdir_rec(path_join(root, "corpus"))
+        mkdir_rec(path_join(root, "plain"))
+        mkdir(path_join(root, ".git"))
+        plant(path_join(root, "swept"), ".lint_config", "[format]\nforce_clean_comments = true\n")
+        plant(path_join(root, "corpus"), ".lint_config", "[format]\nformat_enabled = false\n")
+        var files <- [path_join(root, "swept/a.das"), path_join(root, "corpus/b.das"), path_join(root, "plain/c.das")]
+        var strips : array<bool>
+        var skipped : array<string>
+        partition_by_format_policy(files, strips, skipped)
+        t |> equal(length(files), 2)
+        t |> equal(length(strips), 2)
+        t |> equal(length(skipped), 1)
+        t |> success(skipped[0] |> ends_with("b.das"), "disabled tree file skipped")
+        t |> success(files[0] |> ends_with("a.das") && strips[0], "swept survivor strips")
+        t |> success(files[1] |> ends_with("c.das") && !strips[1], "plain survivor keeps comments")
     }
 }

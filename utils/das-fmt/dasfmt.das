@@ -182,20 +182,11 @@ def private format_one_file(file : string; verify, verbose, strip : bool; var ve
 
 
 def private apply_format_policy(var files : array<string>; var strips : array<bool>) {
-    var kept : array<string>
-    kept |> reserve(length(files))
-    strips |> reserve(length(files))
-    for (file in files) {
-        let policy = format_policy_for(file)
-        if (!policy.format_enabled) {
-            log::info("-- {file} (format_enabled = false)")
-            continue
-        }
-        kept |> push(file)
-        strips |> push(policy.force_clean_comments)
+    var skipped : array<string>
+    partition_by_format_policy(files, strips, skipped)
+    for (file in skipped) {
+        log::info("-- {file} (format_enabled = false)")
     }
-    delete files
-    files <- kept
 }
 
 [export]

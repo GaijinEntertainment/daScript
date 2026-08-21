@@ -1,6 +1,6 @@
 ---
 name: targeted-reviewer
-description: A read-only reviewer instance for the review_round phases (grounding, dimension surfacing, proving) and any other targeted one-dimension review. The orchestrator derives the dimension/assignment per change and passes it in the prompt - this agent brings the fixed half: read-only tools, the report-only contract, and the pinned model. Launch one instance per assignment; it never fans out, never edits, never re-scopes beyond its prompt. Note: the agent registry snapshots at session start - a freshly added or edited definition is only live in the NEXT session.
+description: A read-only reviewer instance for the review_round phases (grounding, dimension surfacing, proving) and any other targeted one-dimension review. The orchestrator derives the dimension/assignment per change and passes it in the prompt - this agent brings the fixed half: read-only tools, the report-only contract, and the pinned model. Launch one instance per assignment; it never fans out, never edits, never re-scopes beyond its prompt. Note: a NEW definition file hot-loads mid-session, but a file present at session start can be skipped by the initial scan — if this type is absent from the registry, run general-purpose instead: read this file first as the charter, pin this model.
 model: opus
 tools: Read, Grep, Glob, Bash
 color: cyan

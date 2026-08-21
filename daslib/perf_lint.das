@@ -416,8 +416,7 @@ class PerfLintVisitor : AstVisitor {
     perf019_enum_or_probed : array<uint64>
     perf019_enum_or_yes : array<uint64>
     def report_key(at : LineInfo; code : string) : uint64 {
-        //! One report per (rule, location) across generic instantiations; fileInfo is in the key
-        //! because PERF026-028 report sinks in OTHER files. Line caps at 20 bits, column above it.
+        //! One report per (rule, location); fileInfo is in the key — PERF026-028 report sinks in OTHER files.
         let pos = uint64(at.line) | (uint64(at.column) << uint64(20))
         return (pos ^ (intptr(at.fileInfo) * 1099511628211ul)) ^ hash(code)
     }
@@ -750,9 +749,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf025_value_kind(arg : Expression const?) : Perf025Kind {
-        //! Classifies a string() cast's value argument by how `"{x}"` (the string builder's own
-        //! conversion) compares to `string(x)` — the enum values name the three verdicts, the
-        //! type lists below draw the boundaries.
+        //! How `"{x}"` (the builder's own conversion) compares to `string(x)` — the enum values name the verdicts.
         if (arg == null || arg._type == null) return Perf025Kind.not_a_cast
         let bt = arg._type.baseType
         if (bt == Type.tInt || bt == Type.tInt8 || bt == Type.tInt16 || bt == Type.tInt64
@@ -1600,9 +1597,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def parse_range_leg(leg : Expression?; upper_op, lower_op : string; var v_out : Expression?&; var bound_out : int&; var is_hi_out : bool&) : bool {
-        //! Parse `var <op> const` / `const <op> var`; fills the variable, the int bound, and is_hi_out
-        //! (does this leg bound the range from above). `upper_op` is the var-on-left upper-bound operator
-        //! ("<=" closed-in-range, ">" open-out-of-range), `lower_op` the lower (">=" / "<"); Yoda const-on-left forms flip, so that arm tests `lower_op`.
+        //! Parse one comparison leg of a char-class range check; is_hi_out = this leg bounds the range from above.
         if (leg == null || !(leg is ExprOp2)) return false
         var op2 = leg as ExprOp2
         let opname = string(op2.op)
@@ -1978,7 +1973,7 @@ class PerfLintVisitor : AstVisitor {
             }
         }
         check_perf031_slice_in_loop(expr)
-        if (is_array_func(expr, "reserve")) {
+        if (is_array_func(expr, "reserve") || is_array_func(expr, "ensure_capacity")) {
             var path = ""
             let rv = find_expr_path(expr.arguments[0], path)
             if (rv != null) {

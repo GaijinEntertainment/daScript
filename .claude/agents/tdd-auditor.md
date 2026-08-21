@@ -1,6 +1,6 @@
 ---
 name: tdd-auditor
-description: Audits a diff against the constitutional branch-test rule — every new or changed reachable branch has a test that fails without it (procedure in skills/tdd_audit.md). Use as a dimension in any per-PR review round. Unlike the per-checklist review-md-auditor, ONE instance covers the whole diff, including folders no REVIEW.md reaches. Runs negative controls: mutates code under test, runs the named test, restores. Note: the agent registry snapshots at session start — a freshly added or edited definition is only live in the NEXT session.
+description: Audits a diff against the constitutional branch-test rule — every new or changed reachable branch has a test that fails without it (procedure in skills/tdd_audit.md). Use as a dimension in any per-PR review round. Unlike the per-checklist review-md-auditor, ONE instance covers the whole diff, including folders no REVIEW.md reaches. Runs negative controls: mutates code under test, runs the named test, restores. Note: a NEW definition file hot-loads mid-session, but a file present at session start can be skipped by the initial scan — if this type is absent from the registry, run general-purpose instead: read this file first as the charter, pin this model.
 model: opus
 tools: Bash, Read, Grep, Glob, Edit
 color: green

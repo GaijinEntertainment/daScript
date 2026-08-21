@@ -60,6 +60,13 @@ an entry lands here only when no name, shape, or test can carry it.
   tails are flags and literals after the injected Fake* skips, so purity has nothing to
   protect there; the default protects rules that collapse duplicated subexpressions from
   changing evaluation counts.
+- **`report_key` bit layout**: line in the low 20 bits, column shifted above it, XOR'd with
+  the FNV-64-prime-mixed `fileInfo` pointer and the rule-code hash. Lines past 2^20 alias —
+  accepted; a collision silently drops one warning.
+- **`parse_range_leg` operator polarity**: `upper_op` is the var-on-left operator marking
+  the upper-bound leg (`<=` closed-in-range, `>` open-out-of-range), `lower_op` the lower
+  (`>=` / `<`). Yoda (const-on-left) forms flip, so the const-on-left arm tests against
+  `lower_op` — the `is_hi_out` assignments differ between the two arms by design.
 - **A generic-body exemption exists exactly where the remedy is not instantiation-safe.**
   PERF020's fix (delete the cast) is wrong for the sibling instantiations of the same
   source line, so it bails on `fromGeneric`; PERF019/PERF021 rewrites (fuse under one

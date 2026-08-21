@@ -672,6 +672,12 @@ def test_format_strip_comments_source(t : T?) {
         t |> success(find(out, "continues on a second line") >= 0, "nolint why kept whole")
         t |> success(find(out, "doc continuation line") >= 0, "//! continuation kept")
     }
+    t |> run("the chain extends through a third line, and a block comment never continues it") <| @(t : T?) {
+        let src = "options gen2\n\ndef a() \{\n    // nolint:STYLE014 — line one of the why,\n    // line two of the why,\n    // line three of the why\n    return\n\}\n\ndef b() \{\n    //! doc head\n    /* block narration dies */\n    return\n\}\n"
+        let out = format_source_string(src, true)
+        t |> success(find(out, "line three of the why") >= 0, "third continuation line kept")
+        t |> success(find(out, "block narration") < 0, "a /* */ under a kept head is not a continuation")
+    }
     t |> run("a blank line or code breaks the continuation chain") <| @(t : T?) {
         let src = "options gen2\n\ndef a() \{\n    // nolint:STYLE014 — one-line why\n\n    // separate narration dies\n    return  // nolint:STYLE014 — trailing why\n    // not a continuation of a trailing head, dies\n\}\n"
         let out = format_source_string(src, true)

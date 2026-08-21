@@ -292,6 +292,26 @@ def private fold_format_key(var fmt_jv : JsonValue?; key : string; var dst : boo
     decided = true
 }
 
+//! Splits ``files`` by policy: drops ``format_enabled = false`` entries into ``skipped``,
+//! records each survivor's ``force_clean_comments`` in ``strips`` (index-aligned with the
+//! surviving ``files``). Single-threaded, like ``format_policy_for``.
+def public partition_by_format_policy(var files : array<string>; var strips : array<bool>; var skipped : array<string>) {
+    var kept : array<string>
+    kept |> reserve(length(files))
+    strips |> reserve(length(files))
+    for (file in files) {
+        let policy = format_policy_for(file)
+        if (!policy.format_enabled) {
+            skipped |> push(file)
+            continue
+        }
+        kept |> push(file)
+        strips |> push(policy.force_clean_comments)
+    }
+    delete files
+    files <- kept
+}
+
 //! Walks ``.lint_config`` files from ``file``'s directory up to the repository root (the
 //! directory holding ``.git``, read inclusively); the nearest file defining a key wins that
 //! key. Single-threaded — resolve on the coordinating thread, pass results to jobs.
