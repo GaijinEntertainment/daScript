@@ -173,10 +173,7 @@ class PrintVisitor : AstVisitor {
         if (!arg._type.flags.constant) {
             write(*writer, "var ");
         }
-        if (arg.isAccessUnused) {
-            write(*writer, " /*unsued*/ ");
-        }
-        write(*writer, "{arg.name} : {describe([decl=arg._type,extra=extraTypeInfo])}");
+        write_variable_decl(arg);
     }
     def override visitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; last : bool) {
         //! Prints the separator between function arguments.

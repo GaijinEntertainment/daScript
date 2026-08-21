@@ -2,6 +2,7 @@ options gen2
 options rtti
 options no_aot
 options no_coverage
+options no_unused_function_arguments = false
 
 require dastest/testing_boost public
 require daslib/ast
@@ -37,16 +38,22 @@ def fixture_shape() : int {
     return b
 }
 
-def printed_fixture(t : T?) : string {
+[never_inline]
+def fixture_args(var out : int; spare : int) : int { // nolint:LINT012 - spare is unused on purpose: it is the fixture for the printer's unused-argument marker
+    out ++
+    return out
+}
+
+def printed_fixture(t : T?; name : string) : string {
     var txt = ""
-    compiling_module() |> for_each_function("fixture_shape") $(var func) {
+    compiling_module() |> for_each_function(name) $(var func) {
         if (empty(txt)) {
             txt = build_string() $(var w) {
                 printFunc(func, unsafe(addr(w)))
             }
         }
     }
-    t |> success(!empty(txt), "fixture_shape not found in the compiling module")
+    t |> success(!empty(txt), "{name} not found in the compiling module")
     return txt
 }
 
@@ -71,6 +78,23 @@ def test_ast_print_let_var(t : T?) {
         "",
         ""), "\n")
     t |> run("locals and closure arguments print their own mutability") @(t : T?) {
-        t |> equal(printed_fixture(t), golden)
+        t |> equal(printed_fixture(t, "fixture_shape"), golden)
+    }
+}
+
+[test]
+def test_ast_print_function_arguments(t : T?) {
+    g_seed = 1
+    t |> equal(fixture_args(g_seed, 0), 2)
+    let golden = join(fixed_array<string>(
+        "[never_inline]",
+        "def fixture_args ( var out : int -const;  /*unused*/ spare : int const )  : int const \{",
+        "    ++(out)",
+        "    return out",
+        "\}",
+        "",
+        ""), "\n")
+    t |> run("function arguments print their mutability and the unused marker") @(t : T?) {
+        t |> equal(printed_fixture(t, "fixture_args"), golden)
     }
 }
