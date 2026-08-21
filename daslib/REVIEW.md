@@ -249,7 +249,7 @@ AOT semantic hashes both key on that shape.
 `first`/`order`/`distinct`/`take` chain reaches both the array-walk materializer and the
 handle materializer at one `at`.
 
-**The composite-key ordering has two implementations and they change together.** `key_less`
+**Every implementation of the composite-key ordering changes with the others.** `key_less`
 / `less_masked` (`linq.das`) sort eagerly; `try_make_inline_cmp_keys` (`linq_fold_common.das`)
 emits an inline `_::less` if-chain for the same chain. Both spell bit `i` of `mask` as "key
 `i` descending" (LSB = first key), flip operand order for descending, and break ties in key
@@ -329,7 +329,8 @@ a `>` that tails `|>`, `=>` or `->`.** Narrowing that exclusion lets an in-body 
 (`g |> select(…) |> sum`) parse as a `select` clause; widening it to any `>` stops a clause
 keyword that legitimately follows a generic bracket or a comparison from being found at all.
 
-**The three substituting linq_das scanners share one string model and change together** —
+**Every substituting linq_das scanner shares one string model and changes with the
+others** —
 `substitute_idents`, `mentions_ident`, `rewrite_group_var`: plain `"…"` content is verbatim,
 a `{…}` interpolation body is CODE (scanned and substituted), and one level of nested string
 literal inside an interpolation is verbatim again. A model change in one scanner desyncs
