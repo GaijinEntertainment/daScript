@@ -494,6 +494,12 @@ jobs:
         set -eux
         python3 ci/test_wheel_build.py
 
+    - name: "Test comment-guard hook (python)"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        python3 .claude/hooks/test_comment_guard.py
+
     - name: "Test review-md discovery"
       if: matrix.target == 'linux'
       run: |
