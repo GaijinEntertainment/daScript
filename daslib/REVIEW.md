@@ -87,10 +87,9 @@ the subtree it skips.** The walk pushes one frame per expression and pops it, so
 subtree unbalances the count; the balance panic in each entry point is the tripwire.
 
 **The arity caps mirror overload sets that live elsewhere** — `MAX_CONCAT_ARITY` ↔ linq's
-`concat` variadics, `MAX_VARIADIC_PUSH_ARITY` ↔ builtin `push_from`/`push_clone_from`,
-`try_make_inline_cmp_keys`'s 4-key cap ↔ linq's `less_masked` 1..4-tuple overloads (the cap
-also keeps the per-key direction bitmask under 32 bits); growing either overload set without
-the cap is a silently missed finding, the reverse a suggestion that does not compile.
+`concat` variadics, `MAX_VARIADIC_PUSH_ARITY` ↔ builtin `push_from`/`push_clone_from`;
+growing either overload set without the cap is a silently missed finding, the reverse a
+suggestion that does not compile.
 
 **AOT emit is fail-closed: every entry point tests `macroException`/`failToCompile` BEFORE
 materializing output.** A codegen exception mid-visit leaves partial C++.
@@ -209,12 +208,16 @@ appearance moves, a second output lane MUST clone, or one node gets two parents.
 **The RST label and topic key are computed twice — pre-infer and post-infer — and must
 agree byte-for-byte**, or the page prints a bare signature and the symbol re-stubs.
 
-**A fused linq emit reproduces the tier-2 `linq.das` overload's observable semantics, not
-only its result.** A terminator's default / compare argument binds ONCE at the top of the
-generated invoke — eagerly, even on paths that never use it — and an empty source panics or
-yields the default exactly where the tier-2 form does. A fused `first` over a prefilter
-buffer panics BEFORE reaching `min`/`max`: those return an uninitialized reference on an
-empty array, so the guard is load-bearing, not defensive.
+**A fused emit binds a terminator's default / compare argument ONCE, at the top of the
+generated invoke, eagerly** — even on paths that never use it, because the tier-2 `linq.das`
+overload evaluates it that way. This includes every `*_or_default` decs lane: an empty-tail
+fast path that evaluates the default lazily diverges from the walk lane and the iterator
+fallback.
+
+**A fused emit reproduces the tier-2 `linq.das` overload's empty-source behavior: it panics
+or yields the default exactly where tier-2 does.** A fused `first` over a prefilter buffer
+panics BEFORE reaching `min`/`max` — those return an uninitialized reference on an empty
+array, so the guard is load-bearing, not defensive.
 
 **`count` / `long_count`'s second argument is a PREDICATE; `sum` / `min` / `max` /
 `average`'s is a SELECTOR.** The 2-arg reducer set (`is_bucket_reducer_call`) admits only
@@ -243,10 +246,11 @@ handle materializer at one `at`.
 
 **The composite-key ordering has two implementations and they change together.** `key_less`
 / `less_masked` (`linq.das`) sort eagerly; `try_make_inline_cmp_keys` (`linq_fold_common.das`)
-emits an inline `_::less` if-chain for the same chain. Both spell bit `i` of `mask` as "key
-`i` descending" (LSB = first key), flip operand order for descending, and break ties in key
-order — a change on one side makes a spliced chain and its tier-2 fallback sort differently,
-silently.
+emits an inline `_::less` if-chain for the same chain, capped at 4 keys to match the
+`less_masked` 1..4-tuple overloads and to keep the per-key direction bitmask under 32 bits.
+Both spell bit `i` of `mask` as "key `i` descending" (LSB = first key), flip operand order
+for descending, and break ties in key order — a change on one side makes a spliced chain and
+its tier-2 fallback sort differently, silently.
 
 **`top_n*` over an ITERATOR never reserves `n`.** Cardinality is unknown, so a caller
 passing `n` far above the element count would allocate the whole `n` upfront for no win; the
@@ -262,9 +266,10 @@ no chain ops at all is still SQL — moving the check below `normalize_order_rev
 `collapse_chained_*`, or below `if (empty(calls))`, routes those chains to the in-memory
 tier instead.
 
-**A captured `srcsel` that cannot be wrapped skips the pattern row — it never emits.** The
-row's emit assumes the projected element; running it on the un-projected adapter orders or
-dedups raw rows — a wrong result rather than a missed splice.
+**A pattern row whose captured `select` (the `srcsel` slot) cannot be wrapped into a
+projected adapter skips the row — it never emits.** The row's emit assumes the projected
+element; running it on the un-projected adapter orders or dedups raw rows — a wrong result
+rather than a missed splice.
 
 **The call order in `register_all_linq_fold_rows` IS pattern priority.** Rows land in
 `splice_patterns` in call order and the walker takes the first match, so reordering the
@@ -272,12 +277,13 @@ dedups raw rows — a wrong result rather than a missed splice.
 `[_macro]`s in separate macro contexts that cannot coordinate — that single registrar is the
 only place the order exists.
 
-**A sql_linq translation arm gates its receiver before rendering it.** A `$e(recv).$f(field)`
-qmatch is accepted only when `recv is ExprVar` — a nested receiver (`l.opt.X`,
-`outer.Brand`) otherwise matches with a foreign name and emits a silently wrong column. A
-computed-expression arm runs only behind `is_sql_renderable_scalar` — the type gate is what
-routes a whole-row carry var to the clean row-object reject instead of a macro-time crash in
-`pred_to_sql`.
+**A sql_linq column-ref arm accepts a `$e(recv).$f(field)` qmatch only when
+`recv is ExprVar`.** A nested receiver (`l.opt.X`, `outer.Brand`) otherwise matches with a
+foreign name and emits a silently wrong column.
+
+**A sql_linq computed-expression arm runs only behind `is_sql_renderable_scalar`.** That
+type gate routes a whole-row carry var to the clean row-object reject instead of a
+macro-time crash in `pred_to_sql`.
 
 **A SQL-returning helper is checked on BOTH channels — `q.hadError || empty(frag)`.**
 Neither half suffices: operator arms wrap empty children into non-empty junk
@@ -285,18 +291,21 @@ Neither half suffices: operator arms wrap empty children into non-empty junk
 Dropping either half emits malformed SQL instead of a diagnostic.
 
 **Every `analyze_chain` consumer runs `maybe_finalize_distinct_by_passthrough` and
-`maybe_wrap_take_before_aggregate` before `build_sql_string` / `collect_query_binds`, and
-`q.innerSql` + `q.innerBindExprs` has exactly one producer per query.** Skipping the first
-pass silently drops a `_distinct_by` dedup; skipping the second leaves LIMIT/OFFSET on the
-aggregate. Installing a wrap over an already-populated `innerSql` drops the earlier subquery
-and orphans its binds — a bind/placeholder mismatch, not an error.
+`maybe_wrap_take_before_aggregate` before `build_sql_string` / `collect_query_binds`.**
+Skipping the first pass silently drops a `_distinct_by` dedup; skipping the second leaves
+LIMIT/OFFSET on the aggregate.
 
-**The five sql_linq projection arrays are index-parallel and always pushed together** —
+**`q.innerSql` and `q.innerBindExprs` have exactly one producer per query.** Installing a
+wrap over an already-populated `innerSql` drops the earlier subquery and orphans its binds —
+a bind/placeholder mismatch, not an error.
+
+**The sql_linq projection arrays are index-parallel and always pushed together** —
 `selectCols`, `selectColAliases`, `selectColSqlFragments`, `selectColTypes`,
 `projRecordNames`, through `push_source_column` / `push_computed_proj_slot` /
-`reserve_projection`. The emitter discriminates per slot on array-emptiness (SQL fragment >
-aliased col > unqualified col), never on `q.seenJoin`; a partial push desyncs the SELECT
-list from the row builder silently.
+`reserve_projection`. A partial push desyncs the SELECT list from the row builder silently.
+
+**The sql_linq emitter discriminates per projection slot on array-emptiness — SQL fragment >
+aliased col > unqualified col — never on `q.seenJoin`.**
 
 **A clause that can emit `?` pushes its binds at its SQL parse position in
 `collect_query_binds`.** `sql_to_frags_ex` re-scans the emitted SQL text and pairs markers
@@ -309,7 +318,7 @@ a `>` that tails `|>`, `=>` or `->`.** Narrowing that exclusion lets an in-body 
 (`g |> select(…) |> sum`) parse as a `select` clause; widening it to any `>` stops a clause
 keyword that legitimately follows a generic bracket or a comparison from being found at all.
 
-**The four linq_das byte scanners share one string model and change together** —
+**The linq_das byte scanners share one string model and change together** —
 `find_kw_depth0`, `substitute_idents`, `mentions_ident`, `rewrite_group_var`: plain `"…"`
 content is verbatim, a `{…}` interpolation body is CODE (scanned and substituted), and one
 level of nested string literal inside an interpolation is verbatim again. A model change in
@@ -331,16 +340,21 @@ null lets infer stabilize so the error sticks. The not-yet-inferred-source arm i
 by the same mechanism — errors clear per pass, so the error survives only when the source
 never infers.
 
-**decs range slots are accepted in canonical chain order (skip → skip_while → take_while →
-take, all after any `where_`) and their guards emit take-cap → skip counter → skip_while
-flag → take_while break → take bump**, mirroring the array side's `wrap_with_ranges`. The
-bump is LAST so an element the while-guards rejected does not eat the `take(N)` budget. A
-predicate-driven range additionally requires a select-free prefix — its predicate peels
-against the SOURCE tuple. Counters and the take limit are hoisted into the prelude above the
-archetype walk: the state is global to the query and the user's `take(N)` expression must
-evaluate exactly once.
+**decs range slots are accepted in canonical chain order: skip → skip_while → take_while →
+take, all after any `where_`.**
 
-**Dropping a decs component slot erases from all five parallel `ExprFor` vectors and clears
+**decs range guards emit take-cap → skip counter → skip_while flag → take_while break →
+take bump, mirroring the array side's `wrap_with_ranges`.** The bump is LAST so an element
+the while-guards rejected does not eat the `take(N)` budget.
+
+**A predicate-driven decs range requires a select-free prefix** — its predicate peels
+against the SOURCE tuple, so a select ahead of it changes the element the predicate reads.
+
+**decs range counters and the take limit are hoisted into the prelude above the archetype
+walk.** The state is global to the query, and the user's `take(N)` expression must evaluate
+exactly once.
+
+**Dropping a decs component slot erases from all parallel `ExprFor` vectors and clears
 `iteratorVariables`** — `sources`, `iterators`, `iteratorsAt`, `iteratorsAka`,
 `iteratorsTags`, erased back-to-front, with `iteratorVariables` cleared so the typer
 rebuilds it (the `soa.das` pattern). A vector left un-erased pairs a surviving slot with the
@@ -350,15 +364,12 @@ wrong component.
 `acc += int(arch.size)`, so it is int-safe only; an int64-safe total has to walk the
 entities.
 
-**The decs reverse-skip-into-tail projection type comes from the typer-resolved call type,
-never from the peeled lambda body.** `peel_lambda_rename_var`'s invoke fallback carries a
-null `_type` at macro stage, so deriving the type from the peel mis-classifies those chains;
-the caller proves the type non-null before selecting it.
+**`emit_decs_reverse_skip_into_tail` takes its projection type from the typer-resolved call
+type, never from the peeled lambda body.** `peel_lambda_rename_var`'s invoke fallback
+carries a null `_type` at macro stage, so deriving the type from the peel mis-classifies
+those chains; the caller proves the type non-null before using it.
 
 **`emit_loop_or_count_lane_decs` declines `to_table` before the implicit-to_array arm.**
 decs has no to_table lane, and reaching the implicit arm emits an array for a table-typed
 expression.
 
-**Every `*_or_default` decs lane binds the user's default EAGERLY, before iteration** — the
-default expression's side effects fire even when the query is non-empty. A fast path that
-evaluates it lazily in the empty tail diverges from the walk lane and the iterator fallback.

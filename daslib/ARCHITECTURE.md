@@ -326,7 +326,7 @@ an entry lands here only when no name, shape, or test can carry it.
   non-root replacements leave the pointer unchanged. Always reassign, or the identity case
   silently keeps the unsubstituted node.
 
-## linq
+## linq / linq_boost
 
 - **`top_n_by_with_cmp` exists for the fold splice and has no daslib call site.** When an
   order-by key body is pure and inlineable, `linq_fold_common` emits it with that body
