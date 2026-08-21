@@ -520,8 +520,7 @@ def JV(value : auto(TT)) : JsonValue? { // nolint:STYLE038 — flat static_if di
             arr |> push(JV(t))
         }
         return _::JV(arr)
-    }
-    static_if (typeinfo typename(value) == "json::JsonValue?" || typeinfo typename(value) == "json::JsonValue? const") {
+    } static_elif (typeinfo typename(value) == "json::JsonValue?" || typeinfo typename(value) == "json::JsonValue? const") {
         unsafe {
             return reinterpret<JsonValue?>(value)
         }
@@ -638,8 +637,6 @@ def JV(value : auto(TT)) : JsonValue? { // nolint:STYLE038 — flat static_if di
         var arr : array<JsonValue?>
         static_if (typeinfo is_array(value)) {
             arr |> reserve(long_length(value))
-        } static_elif (typeinfo is_dim(value)) {
-            arr |> reserve(typeinfo dim(value))
         }
         for (x in value) {
             arr |> push <| _::JV(x)
