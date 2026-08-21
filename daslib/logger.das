@@ -55,7 +55,6 @@ require daslib/rtti
 var private log_file : FILE const? = null
 var private log_path : string
 var private log_name : string
-var private log_open_attempted = false
 var private log_open_failed = false
 var private log_min_level = LOG_INFO
 var private log_category_overrides : table<string; int>
@@ -106,7 +105,6 @@ def private ensure_dir(path : string) {
 
 def private ensure_open() {
     return if (log_file != null || log_open_failed || empty(log_path))
-    log_open_attempted = true
     ensure_dir(log_path)
     log_file = fopen(log_path, "ab")
     if (log_file == null) {
@@ -167,7 +165,6 @@ def logger_set_path(path : string) {
     }
     log_path = path
     log_name = ""
-    log_open_attempted = false
     log_open_failed = false
 }
 
@@ -259,7 +256,6 @@ def logger_close() {
         fclose(log_file)
         log_file = null
     }
-    log_open_attempted = false
     log_open_failed = false
 }
 
