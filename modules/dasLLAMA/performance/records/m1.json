@@ -768,9 +768,198 @@
             "bytes":7381382944
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":11.734999999999999
+          },
+          "img:pp":{
+            "tok_s":137.05333571126727
+          },
+          "img:tg":{
+            "tok_s":34.940600978336825,
+            "text":"Two tabby cats are lying on a pink surface, with one cat on the left and the other on the right."
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"075ae8cd2",
+        "version":"0.6.4",
+        "dasllama_version":6,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"5da27197acae9c957f852454476bc00a4dbbaa4717d43bd7ccbe31cc105aeb6a",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"tower gemma4uv f32; weights k4/k6/q8 native; q8 activations; f32 scales; metal blob",
+        "env":"DASLLAMA_BOX=m1",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-12B-it-Q4_K_M.gguf",
+            "sha256":"95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8",
+            "bytes":7381382944
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-12B-it-BF16.gguf",
+            "sha256":"9b1edfa05b634728ca4bfd60b4e6b278e95166c078fa54ae4fa83e680112fd1d",
+            "bytes":175115616
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg",
+            "sha256":"dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e",
+            "bytes":173131
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":53.868000000000002
+          },
+          "img:pp":{
+            "tok_s":62.325558353103055
+          },
+          "img:tg":{
+            "tok_s":14.694673436438828,
+            "text":"Two tabby cats are lying on a pink surface, with one cat on the left and the other on the right."
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"075ae8cd2",
+        "version":"0.6.4",
+        "dasllama_version":6,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"5da27197acae9c957f852454476bc00a4dbbaa4717d43bd7ccbe31cc105aeb6a",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"tower gemma4uv f32; weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
+        "env":"DASLLAMA_BOX=m1",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-12B-it-Q4_K_M.gguf",
+            "sha256":"95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8",
+            "bytes":7381382944
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-12B-it-BF16.gguf",
+            "sha256":"9b1edfa05b634728ca4bfd60b4e6b278e95166c078fa54ae4fa83e680112fd1d",
+            "bytes":175115616
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg",
+            "sha256":"dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e",
+            "bytes":173131
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"accel",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-12B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":16.34
+          },
+          "img:pp":{
+            "tok_s":62.393436210510657
+          },
+          "img:tg":{
+            "tok_s":14.681543964550745,
+            "text":"Two tabby cats are lying on a pink surface, with one cat on the left and one on the right."
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"075ae8cd2",
+        "version":"0.6.4",
+        "dasllama_version":6,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"5da27197acae9c957f852454476bc00a4dbbaa4717d43bd7ccbe31cc105aeb6a",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"tower gemma4uv f32; weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
+        "env":"DASLLAMA_BOX=m1",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-12B-it-Q4_K_M.gguf",
+            "sha256":"95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8",
+            "bytes":7381382944
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-12B-it-BF16.gguf",
+            "sha256":"9b1edfa05b634728ca4bfd60b4e6b278e95166c078fa54ae4fa83e680112fd1d",
+            "bytes":175115616
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg",
+            "sha256":"dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e",
+            "bytes":173131
+          }
+        ]
       }
     ],
-    "arch":"gemma4",
+    "arch":"gemma4uv",
     "quant":"q8",
     "params_b":11.907350576000001,
     "active_b":11.906580480000001,
@@ -1042,9 +1231,198 @@
             "bytes":8031242688
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":96.126000000000005
+          },
+          "img:pp":{
+            "tok_s":362.37186321855904
+          },
+          "img:tg":{
+            "tok_s":51.35126027225796,
+            "text":"The user wants a one-sentence description of the provided image.\nThe image contains two cats lying on a pink surface.\n\nPlan: Describe the main subjects"
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"075ae8cd2",
+        "version":"0.6.4",
+        "dasllama_version":6,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"5da27197acae9c957f852454476bc00a4dbbaa4717d43bd7ccbe31cc105aeb6a",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; metal blob",
+        "env":"DASLLAMA_BOX=m1",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf",
+            "sha256":"34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
+            "bytes":8031242688
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E4B-it-BF16.gguf",
+            "sha256":"f77995e4b6a569ab8f0d1bfdb7e8da4a0fa5b9e6f309b9bf3bdb76164d75e29f",
+            "bytes":991552256
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg",
+            "sha256":"dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e",
+            "bytes":173131
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":419.255
+          },
+          "img:pp":{
+            "tok_s":196.65485056752573
+          },
+          "img:tg":{
+            "tok_s":21.798350273603354,
+            "text":"The user wants a one-sentence description of the provided image.\nThe image contains two cats lying on a pink surface.\n\nPlan: Describe the main subjects"
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"075ae8cd2",
+        "version":"0.6.4",
+        "dasllama_version":6,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"5da27197acae9c957f852454476bc00a4dbbaa4717d43bd7ccbe31cc105aeb6a",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"tower gemma4v q8; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
+        "env":"DASLLAMA_BOX=m1",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf",
+            "sha256":"34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
+            "bytes":8031242688
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E4B-it-BF16.gguf",
+            "sha256":"f77995e4b6a569ab8f0d1bfdb7e8da4a0fa5b9e6f309b9bf3bdb76164d75e29f",
+            "bytes":991552256
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg",
+            "sha256":"dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e",
+            "bytes":173131
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"accel",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E4B-it-BF16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":480.98200000000003
+          },
+          "img:pp":{
+            "tok_s":202.40971359025528
+          },
+          "img:tg":{
+            "tok_s":21.949770693489288,
+            "text":"The user wants a one-sentence description of the provided image.\nThe image contains two cats lying on a pink surface.\n\nPlan: Describe the main subjects"
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"075ae8cd2",
+        "version":"0.6.4",
+        "dasllama_version":6,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"5da27197acae9c957f852454476bc00a4dbbaa4717d43bd7ccbe31cc105aeb6a",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
+        "env":"DASLLAMA_BOX=m1",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E4B-it-Q8_0.gguf",
+            "sha256":"34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
+            "bytes":8031242688
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E4B-it-BF16.gguf",
+            "sha256":"f77995e4b6a569ab8f0d1bfdb7e8da4a0fa5b9e6f309b9bf3bdb76164d75e29f",
+            "bytes":991552256
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg",
+            "sha256":"dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e",
+            "bytes":173131
+          }
+        ]
       }
     ],
-    "arch":"gemma4",
+    "arch":"gemma4v",
     "quant":"q8",
     "params_b":7.5180692899999997,
     "active_b":4.5888307199999998,
@@ -4730,9 +5108,198 @@
             "bytes":4967497152
           }
         ]
+      },
+      {
+        "engine":"das",
+        "backend":"metal",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":90.968999999999994
+          },
+          "img:pp":{
+            "tok_s":682.06859161580303
+          },
+          "img:tg":{
+            "tok_s":93.042874156411273,
+            "text":": This is an image of two tabby cats lying on a pink surface."
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"075ae8cd2",
+        "version":"0.6.4",
+        "dasllama_version":6,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"5da27197acae9c957f852454476bc00a4dbbaa4717d43bd7ccbe31cc105aeb6a",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; metal blob",
+        "env":"DASLLAMA_BOX=m1",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E2B-it-bf16.gguf",
+            "sha256":"711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4",
+            "bytes":986833664
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg",
+            "sha256":"dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e",
+            "bytes":173131
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"tuned",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":422.83499999999998
+          },
+          "img:pp":{
+            "tok_s":362.82951199430636
+          },
+          "img:tg":{
+            "tok_s":42.981174245680393,
+            "text":": This is an image of two tabby cats lying on a pink surface."
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"075ae8cd2",
+        "version":"0.6.4",
+        "dasllama_version":6,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"5da27197acae9c957f852454476bc00a4dbbaa4717d43bd7ccbe31cc105aeb6a",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"tower gemma4v q8; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
+        "env":"DASLLAMA_BOX=m1",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E2B-it-bf16.gguf",
+            "sha256":"711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4",
+            "bytes":986833664
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg",
+            "sha256":"dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e",
+            "bytes":173131
+          }
+        ]
+      },
+      {
+        "engine":"das",
+        "backend":"cpu",
+        "flavor":"accel",
+        "box":"m1",
+        "threads":8,
+        "date":"2026-08-20",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "hardware":{
+          "cpu":"Apple M1 Max",
+          "arch":"arm64",
+          "os":"macOS 26.5.2",
+          "perf_cores":8,
+          "total_cores":10,
+          "ram_gb":64,
+          "gpu":"Apple M1 Max (32-core)",
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"off"
+        },
+        "tests":{
+          "img:enc":{
+            "ms":435.52100000000002
+          },
+          "img:pp":{
+            "tok_s":375.44493835242247
+          },
+          "img:tg":{
+            "tok_s":42.740035160802258,
+            "text":": This is an image of two tabby cats lying on a pink surface."
+          }
+        },
+        "workload":"image-chat",
+        "source":"official",
+        "sha":"075ae8cd2",
+        "version":"0.6.4",
+        "dasllama_version":6,
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
+        "tune_sha":"5da27197acae9c957f852454476bc00a4dbbaa4717d43bd7ccbe31cc105aeb6a",
+        "noise":"ok",
+        "parity":"ok",
+        "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
+        "env":"DASLLAMA_BOX=m1",
+        "files":[
+          {
+            "role":"weights",
+            "name":"gemma-4-E2B-it-Q8_0.gguf",
+            "sha256":"996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+            "bytes":4967497152
+          },
+          {
+            "role":"mmproj",
+            "name":"mmproj-gemma-4-E2B-it-bf16.gguf",
+            "sha256":"711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4",
+            "bytes":986833664
+          },
+          {
+            "role":"image",
+            "name":"coco-val2017-000000039769.jpg",
+            "sha256":"dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e",
+            "bytes":173131
+          }
+        ]
       }
     ],
-    "arch":"gemma4",
+    "arch":"gemma4v",
     "quant":"q8",
     "params_b":4.6474501469999998,
     "active_b":2.2476226559999999,

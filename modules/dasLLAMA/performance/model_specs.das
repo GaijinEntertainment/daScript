@@ -553,6 +553,25 @@ def official_catalog() : array<ModelSpec> {
     return <- spec_view() $(s : ModelSpec) : bool { return s.official; }
 }
 
+//! The spec's vision mmproj companion basename ("" = no vision pairing) — the image-chat
+//! cell's second file. A row with one is a vision decoder; the driver pairs it with
+//! [[bench_image_fixture]] for the board's image cells.
+def mmproj_companion(s : ModelSpec) : string {
+    for (c in s.companions) {
+        if (c.name |> starts_with("mmproj-")) {
+            return c.name
+        }
+    }
+    return ""
+}
+
+//! The one pinned picture every image-chat cell measures (provenanced as a companion of the
+//! spec row that owns it) — cells across models and boxes stay comparable because the input
+//! never varies.
+def bench_image_fixture() : string {
+    return "coco-val2017-000000039769.jpg"
+}
+
 //! The spec row keyed `file` (empty `file` field back = no such spec) — a fresh copy off the
 //! table, so a caller (a test run-lambda, the bench parity pregate) holds no reference into an
 //! iterated table.

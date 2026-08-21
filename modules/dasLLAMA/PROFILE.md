@@ -102,9 +102,17 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
   --ref-clean <llama-bench clean-cpu build> --ref-stock <llama-bench stock build>
 ```
 
-- Reference binaries also come from `LLAMA_BENCH_CLEAN` / `LLAMA_BENCH_STOCK`.
+- Reference binaries also come from `LLAMA_BENCH_CLEAN` / `LLAMA_BENCH_STOCK`. An unset ref is
+  loud: a warning at sweep start plus a skipped-pair list in the end summary — a das-only board
+  is legal but never a surprise.
 - `--legs` takes a comma list of `cpu` (= neon + amx) / `neon` / `amx` / `metal`; there is no
-  `all`. The full Apple board is `--legs cpu,metal`. `-w llm|asr|all`, `-o <substring>` to narrow.
+  `all`. The full Apple board is `--legs cpu,metal`. `-w llm|asr|image|all`, `-o <substring>` to
+  narrow.
+- Every official model with an mmproj companion (`mmproj_companion` in `model_specs.das`) also
+  gets its image-chat cells — one `--image` child per selected leg on the pinned
+  `bench_image_fixture()` picture, das-only (llama-bench has no image mode), `--image-reps`
+  (default 3) repetitions. `-w image` runs just those cells; the oracle re-verifies the stored
+  rows the same way.
 - `-p 512 -n 128 -r 5` are the recorded shapes. Changing them makes the row incomparable to
   every other row in the store.
 - `--settle <seconds>` (default 12) idles between passes; a dead child's multi-GB map reclaims
@@ -127,6 +135,8 @@ bin/daslang modules/dasLLAMA/performance/gen_site_records.das
 ## The image cell (`--image`)
 
 The image TURN on a vision decoder — what a user actually waits on when they attach a picture.
+Rig 3 spawns these for every official model with an mmproj companion (and the oracle re-verifies
+the stored rows); the manual form below is for off-board pairs and one-off probes.
 One process, one tune-key demand, one image-identity stamp, same as the ASR cell:
 
 ```sh

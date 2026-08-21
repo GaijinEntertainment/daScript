@@ -4,9 +4,9 @@
 doc: `CLAUDE.md`. Planned work: `../THINKING.md`.
 
 **Every PR runs `run.das -- --suite model-free`, plus every test here the change reaches — never
-the whole directory.** A change reaches a test when it alters what code does at runtime — through
-the test file, a shared helper, or engine code the test exercises; an identifier- or
-comment-only edit reaches none.
+the whole directory.** A change reaches a test when it alters anything the test's result
+depends on — the test file, a shared helper, engine code it exercises, an in-tree fixture or
+corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
 **A test file with at least one cell that RUNS (not skips) with no model file present is listed
 in `run.das`'s `model-free` suite in the same change it is added. A file whose every cell is
@@ -108,10 +108,13 @@ that leg (`set_metal_wdec(false)` / `set_metal_tower(false)`) and restores it af
 relies on the driver's runtime decline. The mechanism (why the hooks flip legs silently) is
 `CLAUDE.md`'s "Metal fixtures" section.
 
-**A vision test that needs no model builds its image procedurally and pins its expectations
-in-repo; any image a test feeds an embedder is a fixture the test builds, or previewable via
-`DASLLAMA_VISION_DUMP`** — a red never requires adding instrumentation before a human can see
-what the model saw.
+**A cell that encodes, preprocesses, or asserts on vision image bytes — pixels, not a `.dlim`
+model image — with no model loaded builds its image procedurally and pins its expectations
+in-repo.**
+
+**Any image a test feeds an embedder is a fixture the test builds, or is previewable via
+`DASLLAMA_VISION_DUMP`** — a red never requires adding instrumentation before a human can
+see what the model saw.
 
 **A tier-1 vision fixture — one an embedder-parity cell regenerates in-test and compares
 against an oracle dump — has an exact-value generator.** A generator running libm
