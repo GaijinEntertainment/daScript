@@ -121,7 +121,14 @@ runs under plain dastest (still `-jit`) or as a set through `run.das -- --suite 
 the per-PR gate. The `model-free` list in `run.das` is the census of those files; this note is
 the per-file map. A file in a model suite (every suite but `model-free`) is listed in its
 suite's arm list in `run.das` instead.
-Current note: `failed_dasllama_lint_require.das` — model-free, expected-compile-failure: the
+Current note: `test_bench_records_schema.das` — model-free: the record store and the record
+rig's shared seams: round-trip, upsert identity, annotations; the `-w` workload scope; the
+stored-row→rig-leg map (`backend`/`flavor` ⇒ `metal` | plain cpu | `accel`, else refused);
+the committed image-chat receipts' fixture/mmproj pins; and the llama.cpp image-reference
+parser `parse_mtmd_image` — encode summing, the MTMD_TIMING split, its refusal arms.
+`test_exchange_schema.das` — model-free: the exchange validator, sweeping the ENTIRE in-tree
+records/sidecar corpus, so a writer-schema change reds here first.
+`failed_dasllama_lint_require.das` — model-free, expected-compile-failure: the
 facade lint trips DASLLAMA001 (code 50503) on a direct engine require with no escape.
 `failed_dasllama_lint_sidedoor.das` — model-free, expected-compile-failure: the lint's tree
 guard trips on a path-require resolving into modules/dasLLAMA, name prefix or not.
@@ -330,16 +337,6 @@ FORCED-FEED logits-tolerance form (the k4 freeform cell, cached stream `gen_free
 token equality. For that form the cache is a FEED, not a truth: both sides force through the
 same tokens, so a stale feed stays a valid instrument and the stale-cache red class does not
 exist for it. Counting cells stay token-exact.
-
-## Standalone schema tests (model-free)
-
-`test_bench_records_schema.das` (the record store: round-trip, upsert identity, annotations,
-the `-w` workload scope + stored-row→leg maps, the committed image-chat receipts' fixture/mmproj
-pins, and the llama.cpp image-reference parser `parse_mtmd_image` — encode summing, the
-MTMD_TIMING split, its refusal arms)
-and `test_exchange_schema.das` (the exchange validator: sweeps the ENTIRE in-tree
-records/sidecar corpus, so a writer-schema change reds here first) run directly under dastest
-with `-jit` — no runner, no arms, no models.
 
 ## Out-of-folder test files (the checklist's placement ledger)
 

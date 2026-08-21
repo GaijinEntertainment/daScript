@@ -112,15 +112,16 @@ instrument). A tutorial's printed wall-clock is teaching output, feeding no boar
 `PROFILE.md` section. A modality, a family, or a serving path a user can wait on counts; a new
 family inside an existing cell owes a recorded row on at least one box.
 
-**A timing figure describing served output — tok/s, latency, a model-level comparison — that
-reaches any checked-in text — a doc, a ledger, a code comment, a PR — without a cell behind
-it is a defect.** The cell states its
-quant mode and stamps box and engine provenance, so a number can never silently describe a
-format nobody serves or a kernel set nobody ships. A rig-internal measurement margin — a crown
-delta, a noise floor, tuner timing — is settled by the sidecar or manifest stamp it rides in.
+**A timing figure describing served output — tok/s, latency, a model-level comparison — is a
+defect wherever it is written down with no cell behind it: a checked-in doc, a ledger, a code
+comment, or a PR description.** The cell states its quant mode and stamps box and engine
+provenance, so a number can never silently describe a format nobody serves or a kernel set
+nobody ships. A rig-internal measurement margin — a crown delta, a noise floor, tuner
+timing — is settled by the sidecar or manifest stamp it rides in.
 
 **A stage-level figure — a speedup of one engine stage, not a served turn — names the harness
-and flags that produced it in the same sentence.**
+and flags that produced it in the same sentence, wherever it is written down: a checked-in
+doc, a ledger, a code comment, or a PR description.**
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
 `parse_image`'s mapping, and going live does no real work — repacking, quantizing, folding,
@@ -227,9 +228,8 @@ its format family kept whole.** GPU twins land in their backend kernel file.
 **A kernel body lands in its tier or backend kernel file** — never in `dasllama/dasllama_math.das` or a
 lens/dispatch macro file.
 
-**A family quirk lands in the family file — or, when it is platform-specific, in that
-platform's backend file; a piece two families need moves UP into the concern's shared file
-(its own file when none exists)** — never sideways into a sibling.
+**A family quirk lands in the family file; a piece two families need moves UP into the
+concern's shared file (its own file when none exists)** — never sideways into a sibling.
 
 **Nothing in `dasllama/dasllama_tower.das` — the shared encoder-tower home — names a family: no
 signature there takes a type `dasllama/dasllama_audio.das` or a family file declares, and it

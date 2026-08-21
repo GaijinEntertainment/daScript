@@ -9,9 +9,11 @@ the implementation does not exist yet, the page does not show the command.
 
 **The `cmd` field of any run in `files/dasllama/bench_records.json` is the exact argv
 `modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it spawns)
-ran.** A receipt is per run — one `cmd` + `date` run object — not per rendered row:
-when one run produced several rows, `files/dasllama.js` shows that run's receipt line on
-every one of them.
+ran.** A receipt is per run — one `cmd` + `date` run object — never per rendered row.
+
+**`files/dasllama.js` shows a run's receipt line on every row that run produced.** One run's
+`cmd` + `date` covers several rendered rows; a row rendered without its run's receipt line is
+a defect.
 
 **`files/dasllama/bench_records.json` is generator output: `modules/dasLLAMA/performance/gen_site_records.das`
 merges every `modules/dasLLAMA/performance/records/<box>.json` and applies
@@ -33,17 +35,20 @@ commit message. The run also names its runtime artifacts: built from this change
 change feeds `web/output/daslang_static.*`, the deployed ones otherwise. The no-WASM lane
 cannot see a broken runtime path, and every sample on the page runs through that path.
 
-**Every measured number shown is either rendered from live data or copied from a checked-in
-measurement record; any other measurement-shaped number is a placeholder and carries a source
-comment naming it as one.** A placeholder that could be mistaken for a fact is a defect. A
-constant describing a fixture or a run parameter (an image's dimensions, a token budget) is
-neither — it names the artifact it is a property of.
+**Every number on a page that reports a measurement — a rate, a duration, a size, a score
+some run produced — is rendered from live data, copied from a checked-in measurement record,
+or carries a source comment naming it a placeholder.** A placeholder that could be mistaken
+for a fact is a defect. A number stating a fixture or a run parameter (an image's dimensions,
+a token budget) reports no measurement and is outside this rule.
 
 **A `dl-*` selector defined in BOTH `files/dasllama-table.css` (the file dasllama.io loads)
-and `dasllama.html`'s inline copy keeps identical bodies — changing only one is a defect.**
-A selector used by markup in `dasllama.html` is defined in `dasllama.html` (and in the css
-too when dasllama.io's own pages also use it); a selector only the css-served pages use
-lives in the css alone.
+and `dasllama.html`'s inline `<style>` copy keeps identical bodies.** Changing one copy and
+not the other is a defect.
+
+**A `dl-*` selector is defined where its markup lives: a selector `dasllama.html`'s markup
+uses is defined in `dasllama.html` — and in `files/dasllama-table.css` too when dasllama.io's
+pages use it as well; a selector only dasllama.io's pages use is defined in
+`files/dasllama-table.css` alone.**
 
 **News entries state real, shipped events.** An entry in `_news/*.md` for something not yet
 true at publish time is a defect.

@@ -39,8 +39,9 @@ file is added, corrected when what it covers is renamed or re-scoped.
 **Weakening `test_model_specs.das` is a defect.** It is the gate on the model-set table
 (`../performance/model_specs.das`).
 
-**Weakening any assert in `test_exchange_schema.das` or `test_bench_records_schema.das` is a
-defect** — they are the only gates on the real `write_bench_records` output.
+**Weakening `test_exchange_schema.das` or `test_bench_records_schema.das` — loosening an
+assert, dropping one, or narrowing the corpus either one sweeps — is a defect** — they gate
+the real `write_bench_records` output.
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
 model gate; a test that silently vanishes on one platform is a defect, and so is a
@@ -60,9 +61,9 @@ test loads first.
 **A suite loads decoders with `load_model_`, never the image rail** (towers and embedders load
 through their family loaders). Image-rail coverage belongs to the image suites alone.
 
-**A function that gains a parameter or a newly accepted value ships a test feeding the new
-value and checking the result — the new receivers are the new bit.** "The model still runs" is
-not that test.
+**A function that gains a parameter, or a parameter that gains an accepted value, ships a
+test feeding the new value and checking the result.** "The model still runs" is not that
+test.
 
 **A predicate whose value is fixed by the build platform — it cannot differ between two runs on
 one machine — is tested through the argv it gates or the mode it selects**, never through the
