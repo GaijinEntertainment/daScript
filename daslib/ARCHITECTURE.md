@@ -257,6 +257,17 @@ an entry lands here only when no name, shape, or test can carry it.
 - **Reporting is repair**: diagnostics go through `macro_sticky_error` (infer clears plain
   errors from a repaired tree); null entries in per-entry-dereferenced lists compact in
   preVisit; a self-reachable node is CUT, not reported — a cycle kills every later walk.
+  Both passes use the sticky form, post-infer included. `Program::stickyError` records the
+  error AND calls `Program::error`, so it is a strict superset of `macro_error` — the plain
+  form buys nothing. It is currently unreachable for a loss (every re-entry into
+  `inferTypes`/`inferTypesDirty` after a post-infer firing is guarded by
+  `!program->failed()`), but repair is what makes the guarantee necessary rather than
+  belt-and-suspenders: the guard that found the damage cannot fire twice, so an error
+  cleared once is gone for good.
+- **`visitExpression` is the only place an ancestor-path entry is dropped.** The C++
+  adapter's `VISIT_EXPR` macro (`aot_builtin_ast.h`) calls `visitExpression(that)` before
+  every `visitExprXXX`, so a derived visit that erased again would erase nothing — a
+  derived visit returns its node and leaves the path alone.
 - **The two passes' skip sets are complementary**: pre-infer skips `generated` (filled in
   across passes); post-infer skips only `[template]` bodies and dasbind `[extern]` stubs —
   so generated bodies ARE checked post-infer, by nothing else.
@@ -276,6 +287,16 @@ an entry lands here only when no name, shape, or test can carry it.
 - **`blacklist` entries naming back-references break reconstruction cycles — removing one
   hangs the walk** (`Function.classParent`, `ExprReturn._block`, `ExprVar.pBlock`,
   `EnumEntry.value`); the rest are post-infer bookkeeping absent from quoted trees.
+
+## templates_boost
+
+- **A `Template`'s substitution tables are freed once, by whichever mechanism the local
+  declares** — `var inscope rules` finalizes at scope exit; a plain `var rules` does not and
+  needs an explicit `delete rules`. Declaring both double-finalizes, and the double is
+  silent: a plain local leaks 224 B where inscope-only, inscope+delete and plain+delete all
+  leak 0, so nothing shows up in a heap count. Both `apply_qmacro_template_*` appliers are
+  inscope-only; the three plain-local `apply_template` overloads pair the declaration with
+  the delete. Pick one form per local and read the declaration before adding a delete.
 
 ## dupe_detect
 
