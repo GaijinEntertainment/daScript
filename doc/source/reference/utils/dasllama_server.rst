@@ -139,6 +139,24 @@ Endpoints
      - ``/v1/audio/translations``
      - Speech→English text (needs ``--asr``)
    * - ``POST``
+     - ``/v1/models/activate``
+     - ``{"model": name}`` — make ``name`` the default + stepped slot and move the GPU tier to it now (loopback-only; 409 while work is live)
+   * - ``POST``
+     - ``/v1/models/load``
+     - ``{"path", "id"?, "backend"?, "quant"?, "ctx"?, "image_mmproj"?, "activate"?}`` — load a GGUF into a NEW serving slot, no restart (loopback-only)
+   * - ``POST``
+     - ``/v1/models/unload``
+     - ``{"model": name}`` — free the slot's weights, KV, and VRAM; the default slot refuses (loopback-only)
+   * - ``GET``
+     - ``/v1/stats``
+     - Scheduler counters, memory footprint, hardware line, per-slot ``models[]``
+   * - ``GET``
+     - ``/v1/streams``
+     - Per-stream states + text tails, prefix-cache chains, recent ASR jobs
+   * - ``POST``
+     - ``/restart``
+     - Drain, then exit 4 — the watchdog relaunches with the saved config
+   * - ``POST``
      - ``/shutdown``
      - Graceful stop
 

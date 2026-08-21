@@ -436,6 +436,40 @@ def apply_config(var cfg : ServerArgs) : bool {
     return true
 }
 
+// An EXPLICIT --model wins over the config's roster (the CLI-overrides-config contract): the
+// matching roster entry becomes the default, an unlisted path joins the roster AS the default.
+// Warn-and-degrade: a bad path or a route-name collision leaves the roster UNTOUCHED — clearing
+// the roster's default first would silently boot the wrong model on the very typo being made.
+def apply_model_override(var models : array<ModelEntry>; cli_model : string) {
+    if (!stat(cli_model).is_valid) {
+        to_log(LOG_ERROR, "dasllama-server: ignoring --model - file not found: {cli_model} (the config roster boots unchanged)\n")
+        return
+    }
+    var midx = -1
+    for (i in range(length(models))) {
+        if (same_model_path(models[i].path, cli_model)) {
+            midx = i
+            break
+        }
+    }
+    let route = base_name(cli_model)
+    if (midx < 0) {
+        for (ent in models) {
+            if ((empty(ent.name) ? base_name(ent.path) : ent.name) == route) {
+                to_log(LOG_ERROR, "dasllama-server: ignoring --model - a different [[models]] entry already routes as '{route}' (rename that entry, or list this path in the roster)\n")
+                return
+            }
+        }
+    }
+    for (i in range(length(models))) {
+        models[i].is_default = i == midx
+    }
+    if (midx < 0) {
+        models |> push(ModelEntry(path = cli_model, is_default = true))
+    }
+    to_log(LOG_INFO, "dasllama-server: --model {route} overrides the config roster's default\n")
+}
+
 // [[models]] roster — per-model path + overrides; absent keys keep the ModelEntry sentinels
 // (inherit the flat keys). Hand-written TOML gets the same backend/default checks POST
 // /config enforces, in the warn-and-degrade shape config mistakes take everywhere else here.
@@ -482,25 +516,6 @@ def private apply_models_roster(root : JsonValue?) {
         g_models |> push(ent)
     }
     g_cfg_sources["models"] = "toml"
-}
-
-// The serving modes are QuantMode fp32/q8/q4_0, CLI spellings "fp32" | "q8" | "q4" — "q4"
-// selects the legacy q4_0 requant tier (per-row kernels only, no batched prefill), whose one
-// use is squeezing an f16/f32 file down to 4 bits for RAM. The FILE formats the gguf loader
-// reads are first-class spellings too: q8_0 / q4_0 / q4_k / q5_k / q6_k (any case, _M/_S
-// suffixes fine), mxfp4, f16 / bf16 — all of those serve under QuantMode.q8 (K-quant, mx4,
-// and Q4_0 planes run NATIVELY on the kq tier).
-def pick_quant(s : string) : QuantMode {
-    let l = to_lower(s)
-    if (l == "fp32" || l == "f32") {
-        return QuantMode.fp32
-    } elif (l == "q4") {
-        return QuantMode.q4_0
-    } elif (!empty(l) && l != "q8" && l != "q8_0" && l != "q4_0" && l != "mxfp4" && l != "f16" && l != "bf16"
-            && !(starts_with(l, "q4_k") || starts_with(l, "q5_k") || starts_with(l, "q6_k"))) {
-        to_log(LOG_WARNING, "dasllama-server: unknown --quant '{s}', using q8 (valid: fp32 | q8 | q8_0 | q4_0 | q4_k | q5_k | q6_k | mxfp4 | f16 | bf16 | q4 = legacy requant)\n")
-    }
-    return QuantMode.q8
 }
 
 def private gpu_auto_pick(metal_ok, vulkan_ok : bool) : string {
@@ -863,6 +878,8 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     // resolve the model roster: [[models]] entries, else the single legacy model key
     if (empty(g_models) && !empty(g_cfg.model)) {
         g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))
+    } elif (!empty(g_models) && !empty(g_cfg.model) && (g_cfg_sources?["model"] ?? "") == "cli") {
+        apply_model_override(g_models, g_cfg.model)
     }
     // A path typo in an AUTHORITATIVE config must not brick the boot into a crash loop: every
     // roster path is checked up front and degrades — skip the slot, drop the arm — instead of
@@ -921,6 +938,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                 }
             }
         }
+        set_runtime_load_policy(slot_want, ctx)
         // A serving process prefers degrading (warn + nearest working mode) over dying on an
         // unsupported model/quant combo; API-facing tools keep the strict fail-loud default.
         set_resilient_load(true)

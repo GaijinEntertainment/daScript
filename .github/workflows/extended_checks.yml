@@ -542,11 +542,13 @@ jobs:
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server_think.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server_stream.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server_vision.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server_audio.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_exchange_client.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_model_catalog.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_setup_mode.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_model_override.das
 
     - name: "Test env-knob registries"
       # The [EnvConfig] enforcement tests (daslib/env_registry scanners): raw-read

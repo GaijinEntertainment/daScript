@@ -140,6 +140,10 @@ def test_setup_mode(t : T?) {
             POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}]}") $(resp) {
                 t |> success(resp != null && resp.status_code == http_status.NOT_FOUND, "chat fails closed (404), server survives")
             }
+            POST("{base_url}/v1/models/load", "\{\"path\":\"whatever.gguf\"}") $(resp) {
+                t |> success(resp != null && resp.status_code == http_status.CONFLICT, "runtime loads refuse setup mode (409)")
+                t |> success(resp != null && find(string(resp.body), "serving server") >= 0, "the 409 names the serving-server precondition")
+            }
             GET("{base_url}/v1/models") $(resp) {
                 t |> success(resp != null && resp.status_code == http_status.OK, "models lists")
                 t |> success(resp != null && find(string(resp.body), "\"data\":[]") >= 0, "empty served set")

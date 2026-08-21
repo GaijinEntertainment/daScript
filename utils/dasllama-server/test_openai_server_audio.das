@@ -81,7 +81,7 @@ def private audio_chat_body(b64 : string; text : string) : string {
 }
 
 [test]
-def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one server boot, every route-proof cell against it
+def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one live server session per test: every endpoint assertion runs against that one boot
     t |> run("native audio: input_audio -> gemma4a soft tokens -> a transcription (needs E2B + its mmproj)") @(t : T?) {
         if (!jit_enabled()) {
             t |> success(true, "skipped: interpreted (dasLLAMA server tests are JIT-only)")
@@ -149,6 +149,23 @@ def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one server boot,
                 t |> success(find(string(resp.body), "did not decode") >= 0, "the async decode failure reaches the client as a named 400")
             }
             delete junk
+            // live unload of the towers-armed slot: the async drop job frees its encoders in the
+            // media worker (name-keyed tables, no bounce), and the tower-less new default 400s audio
+            let tiny = to_generic_path(path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"))
+            if (stat(tiny).is_valid) {
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{tiny}\",\"id\":\"tiny-live\",\"ctx\":512}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "a second slot live-loads beside the armed one")
+                }
+                POST("{base_url}/v1/models/unload", "\{\"model\":\"test-alm\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the towers-armed slot unloads once tiny-live is default")
+                }
+                POST("{base_url}/v1/chat/completions", audio_chat_body(slice(b64, 0, 64), "hi")) $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "audio on the tower-less default is a 400")
+                    t |> success(find(string(resp.body), "no audio arm") >= 0, "the 400 names the missing arm")
+                }
+            } else {
+                t |> success(true, "skipped the live-unload cells: tinyllama not present")
+            }
         }
     }
 }

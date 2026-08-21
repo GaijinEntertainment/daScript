@@ -631,7 +631,13 @@ function lockGpuControls(flavor) {
 const swHist = [];               // newest first: { from, to, ms }
 let prevSlots = null;            // last poll's models[] keyed by name
 
+let servedKeys = new Set();   // matched on the FILE too, so a custom slot name still hides a served GGUF
+
 function renderModels(s) {
+    const nextServed = new Set((s.models || []).flatMap(m => [m.name, m.file].filter(Boolean)));
+    const servedChanged = nextServed.size !== servedKeys.size || [...nextServed].some(k => !servedKeys.has(k));
+    servedKeys = nextServed;
+    if (servedChanged && catState) renderCatalog(catState);   // a load/unload re-offers or retires "serve live" rows
     const slots = s.models || [];
     if (prevSlots) {
         for (const m of slots) {
@@ -672,6 +678,8 @@ function renderModels(s) {
             '<span class="spacer"></span>' +
             (!m.is_active && slots.length > 1
                 ? '<button class="mini xs" type="button" data-activate="' + esc(m.name).replace(/"/g, "&quot;") + '">activate</button>' : '') +
+            (!m.is_default && slots.length > 1
+                ? '<button class="mini xs" type="button" data-unload="' + esc(m.name).replace(/"/g, "&quot;") + '" title="free this slot’s weights, kv, and vram">unload</button>' : '') +
             '</div>' +
             '<div class="line">ctx ' + fmt(m.ctx) + ' · backend ' + esc(backLine) +
                 ' · ' + (m.weights_bytes / 1e9).toFixed(1) + ' GB weights · ' + (m.kv_bytes / 1e9).toFixed(2) + ' GB kv</div>' +
@@ -728,6 +736,24 @@ $("mcards").addEventListener("click", async e => {
             }
         } catch (_e) {
             $("m-note").textContent = "bake request failed";
+        }
+        return;
+    }
+    const un = e.target.closest("button[data-unload]");
+    if (un) {
+        un.disabled = true;
+        try {
+            const r = await fetch("/v1/models/unload", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ model: un.dataset.unload }),
+            });
+            const j = await r.json().catch(() => null);
+            $("m-note").textContent = r.ok && j
+                ? j.unloaded + " unloaded"
+                : (j && j.error ? j.error.message : "unload failed: " + r.status);
+        } catch (_e) {
+            $("m-note").textContent = "unload request failed";
         }
         return;
     }
@@ -2676,6 +2702,11 @@ function renderCatalog(doc) {
                 const b = miniButton("serve this model", () => serveDownloaded(e));
                 b.style.marginLeft = "8px";
                 act.append(b);
+            } else if (!servedKeys.has(e.file)) {
+                const b = miniButton("serve live", () => serveLive(e, b));
+                b.title = "load into a new serving slot and switch to it — no restart";
+                b.style.marginLeft = "8px";
+                act.append(b);
             }
         } else if (dl.name === e.name && dlBusy(dl)) {
             act.textContent = dlProgress(dl);
@@ -2726,6 +2757,34 @@ async function startCatalogDownload(name, tower) {
         loadCatalog();
     } catch (_e) {
         $("cat-note").textContent = "download request failed";
+    }
+}
+
+// The live-switch rail: load the downloaded file into a NEW slot and make it the default —
+// no restart, no JIT recompile. The load blocks the server's tick for its duration.
+async function serveLive(e, btn) {
+    btn.disabled = true;
+    $("cat-note").textContent = "loading " + e.display + " into a new slot — the server pauses while it loads";
+    try {
+        const r = await fetch("/v1/models/load", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                path: e.path,
+                image_mmproj: e.vision_present ? e.vision_path : "",
+            }),
+        });
+        const j = await r.json().catch(() => null);
+        if (r.ok && j) {
+            $("cat-note").textContent = j.model + " serving (" + j.backend_effective + ", " +
+                (j.load_ms / 1000).toFixed(1) + "s load)" + (j.tower_note ? " — " + j.tower_note : "");
+        } else {
+            $("cat-note").textContent = j && j.error ? j.error.message : "load failed: " + r.status;
+            btn.disabled = false;
+        }
+    } catch (_e) {
+        $("cat-note").textContent = "load request failed";
+        btn.disabled = false;
     }
 }
 

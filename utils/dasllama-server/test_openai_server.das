@@ -486,6 +486,121 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     }
                 }
             }
+            POST("{base_url}/v1/models/unload", "\{\"model\":\"test-llm\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "unloading the default is refused")
+            }
+            // a load that panics inside load_model answers 400, not a dead server (the next cell
+            // proves the tick thread survived)
+            var tderr = ""
+            let td = temp_directory(tderr)
+            let junk = to_generic_path(path_join(empty(td) ? "/tmp" : td, "dasllama_test_junk.gguf"))
+            fwrite(junk, "not a gguf at all")
+            POST("{base_url}/v1/models/load", "\{\"path\":\"{junk}\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "a corrupt GGUF load answers 400")
+                t |> success(find(string(resp.body), "load failed") >= 0, "the 400 names the load failure")
+            }
+            GET("{base_url}/v1/models") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK), "the server serves on after a failed load")
+            }
+            POST("{base_url}/v1/models/load", "\{\"path\":\"{junk}\",\"backend\":\"gpu\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "an unknown backend value is refused, not auto-ed")
+                t |> success(find(string(resp.body), "auto") >= 0, "the 400 names the accepted values")
+            }
+            POST("{base_url}/v1/models/load", "\{\"path\":\"{junk}\",\"quant\":\"q3_banana\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "an unknown quant value is refused, not q8-ed")
+                t |> success(find(string(resp.body), "not known") >= 0, "the 400 names the quant rejection")
+            }
+            POST("{base_url}/v1/models/load", "\{\"path\":\"{junk}\",\"quant\":\"q4_k_m\"}") $(resp) {
+                t |> success(find(string(resp.body), "not known") < 0, "a boot-legal quant spelling passes the route's validation")
+            }
+            // the runtime-model routes share /config's operator gate: a rebound Host is refused
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/v1/models/load"
+                set_header(req, "Host", "evil.example:{TEST_PORT}")
+                req.body := "\{\"path\":\"{junk}\"}"
+                request(req) $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.FORBIDDEN), "rebound-Host /v1/models/load refused")
+                }
+            }
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/v1/models/activate"
+                set_header(req, "Host", "evil.example:{TEST_PORT}")
+                req.body := "\{\"model\":\"test-llm\"}"
+                request(req) $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.FORBIDDEN), "rebound-Host /v1/models/activate refused")
+                }
+            }
+            // runtime slot lifecycle: load a second model live (activate=false keeps the boot
+            // slot default), route a completion to it BY NAME, then move the default onto it and
+            // unload the BOOT slot — the branch where every index above the hole shifts down
+            let smol = to_generic_path(path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf"))   // forward slashes: a backslash path dies inside the JSON body
+            if (stat(smol).is_valid) {
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-live\",\"activate\":false,\"ctx\":512}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "a live load answers 200")
+                    t |> success(find(string(resp.body), "smol-live") >= 0, "the load echoes the new slot id")
+                    t |> success(find(string(resp.body), "\"ctx\":512") >= 0, "the body ctx clamps the KV pool")
+                }
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-live\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.CONFLICT), "a taken id is a 409")
+                }
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-other\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.CONFLICT), "one slot per GGUF — a second id on the same file is a 409")
+                    t |> success(find(string(resp.body), "smol-live") >= 0, "the 409 names the slot already serving the file")
+                }
+                POST("{base_url}/v1/completions", "\{\"model\":\"smol-live\",\"prompt\":\"The capital of France is\",\"max_tokens\":4}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the runtime slot serves by name")
+                }
+                GET("{base_url}/v1/stats") $(resp) {
+                    var err : string
+                    var js = read_json(string(resp.body), err)
+                    var boot_is_default = false
+                    if (js != null && js?["models"] != null && ((js?["models"]).value is _array)) {
+                        for (e in ((js?["models"]).value as _array)) {
+                            if ((e?["name"] ?? "") == "test-llm") {
+                                boot_is_default = e?["is_default"] ?? false
+                            }
+                        }
+                    }
+                    t |> success(boot_is_default, "activate=false leaves the boot slot default")
+                    if (js != null) {
+                        unsafe {
+                            delete js
+                        }
+                    }
+                }
+                POST("{base_url}/v1/models/activate", "\{\"model\":\"smol-live\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "activate moves the default to the runtime slot")
+                }
+                POST("{base_url}/v1/models/unload", "\{\"model\":\"test-llm\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the boot slot unloads once it is not default")
+                }
+                POST("{base_url}/v1/completions", "\{\"model\":\"smol-live\",\"prompt\":\"hi\",\"max_tokens\":2}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the shifted-down slot still serves by name")
+                }
+                POST("{base_url}/v1/completions", "\{\"prompt\":\"hi\",\"max_tokens\":2}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the model-less route follows the shifted default")
+                }
+                POST("{base_url}/v1/models/unload", "\{\"model\":\"smol-live\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "the shifted default still refuses to unload")
+                }
+                POST("{base_url}/v1/completions", "\{\"model\":\"test-llm\",\"prompt\":\"hi\",\"max_tokens\":2}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.NOT_FOUND), "the unloaded boot slot 404s")
+                }
+                // the tower probe panic is caught, not fatal
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{to_generic_path(MODEL_PATH)}\",\"id\":\"boot-back\",\"activate\":false,\"ctx\":512,\"image_mmproj\":\"{junk}\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "a load with a corrupt mmproj still loads the model")
+                    t |> success(find(string(resp.body), "\"tower_note\":\"\"") < 0 && find(string(resp.body), "tower_note") >= 0,
+                                 "the tower_note carries the arm failure")
+                }
+                POST("{base_url}/v1/completions", "\{\"model\":\"boot-back\",\"prompt\":\"hi\",\"max_tokens\":2}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the text-only degraded slot serves")
+                }
+            } else {
+                t |> success(true, "skipped the runtime-load cells: SmolLM2-135M not present")
+            }
+            remove(junk)
             // POST /restart — LAST in the block: the server starts draining after this. The exit-4
             // half of the contract lives in main.das + watchdog.py (not exercisable here).
             POST("{base_url}/restart", "") $(resp) {
@@ -493,6 +608,32 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> success(find(string(resp.body), "\"restarting\":true") >= 0, "restart response flags restarting")
             }
         }
+    }
+}
+
+[test]
+def test_same_model_path(t : T?) {
+    t |> run("path identity: separators, dot-dot, and (windows) case") @(t : T?) {
+        // real files: the POSIX canonicalizer is realpath, which resolves only paths that exist
+        var terr = ""
+        let td = temp_directory(terr)
+        let base = empty(td) ? "/tmp" : td
+        let a = path_join(base, "dasllama_smp_a.gguf")
+        let b = path_join(base, "dasllama_smp_b.gguf")
+        fwrite(a, "x")
+        fwrite(b, "x")
+        let fwd = to_generic_path(a)
+        let dir = dir_name(a)   // NOT temp_directory's raw value: that ends in a separator, which empties base_name
+        let dotdot = path_join(path_join(path_join(dir, ".."), base_name(dir)), "dasllama_smp_a.gguf")
+        t |> success(same_model_path(fwd, a), "spelling variants of one file match")
+        t |> success(same_model_path(dotdot, a), "a dot-dot spelling resolves before comparing")
+        t |> success(!same_model_path(a, b), "different files stay different")
+        if (get_platform_name() == "windows") {
+            t |> success(same_model_path(fwd, replace(fwd, "/", "\\")), "separator spelling is identity")
+            t |> success(same_model_path(fwd, to_upper(fwd)), "windows case-folds")
+        }
+        remove(a)
+        remove(b)
     }
 }
 
@@ -801,8 +942,8 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
             POST("{base_url}/v1/completions", body_a) $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
             }
-            // per-slot stats: roster present, default marked, smol's requested backend recorded,
-            // tiny's cache hit counted, smol's cache untouched
+            // per-slot stats: roster present, the activation moved the default to smol,
+            // smol's requested backend recorded, tiny's cache hit counted, smol's cache untouched
             GET("{base_url}/v1/stats") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 var err : string
@@ -816,9 +957,10 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
                         for (e in mv.value as _array) {
                             let nm = e?["name"] ?? ""
                             if (nm == "tiny") {
-                                t |> success(e?["is_default"] ?? false, "tiny is the default slot")
+                                t |> success(!(e?["is_default"] ?? true), "the activate moved the default off tiny")
                                 t |> success((e?["cached_tokens"] ?? 0l) > 0l, "tiny's prefix cache hit across the smol interleave")
                             } elif (nm == "smol") {
+                                t |> success(e?["is_default"] ?? false, "the activate made smol the default")
                                 t |> equal(e?["backend"] ?? "", "cpu")
                                 t |> equal(e?["backend_effective"] ?? "", "cpu")
                                 t |> equal(e?["cached_tokens"] ?? -1l, 0l)
