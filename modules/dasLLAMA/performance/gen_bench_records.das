@@ -22,8 +22,9 @@ require math
 //   amx   : das cpu --accel      vs stock -ngl 0 -nopo 1   ("cpu + accel" — -nopo keeps lcpp's
 //           Metal op-offload from serving 'CPU' rows on the GPU; nopo == nometal-build)
 //   asr   : das cpu (lcpp_bench --asr) vs each catalog reference tool, per clip
-//   image : das cpu/accel/metal (lcpp_bench --image)  vs nothing ("image-chat" — llama-bench
-//           has no image mode, so the cells are das-only; the picture is the pinned fixture)
+//   image : das cpu/accel/metal (lcpp_bench --image)  vs patched llama-mtmd-cli ("image-chat":
+//           metal/amx vs the stock build, neon vs the CPU ref build — llama-bench itself has no
+//           image mode; the picture is the pinned fixture)
 //   bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- [-o substr] [--workload llm|asr|image|all] [--image-reps n]
 // --oracle inverts the rig into a regression tripwire: the stored das rows re-measure once
 // each (text cells frozen; ASR/image cells bake what they need; no refs, store never written)
@@ -879,7 +880,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
-// ===== Image legs (the image-chat cells of vision decoders — das-only: llama-bench has no image mode) =====
+// ===== Image legs (the image-chat cells of vision decoders; the ref is patched llama-mtmd-cli) =====
 
 // One lcpp_bench --image child per (vision model, leg), absorbed via the same cell protocol.
 // leg: "" = cpu (neon) | "accel" (amx) | "metal"
@@ -918,6 +919,96 @@ def private image_das_cell(file, path, mm, pic : string; cfg : Args; threads : i
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {log_leg} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg), "elapsed_ms" => JV(elapsed_ms(t0))}))
+}
+
+// the same question the das image cell asks (lcpp_bench --image's default prompt) — the pair
+// prices the same turn on both engines
+let IMAGE_REF_PROMPT = "What is in this picture? Answer in one sentence."
+
+// The stock build's llama-mtmd-cli sits beside the stock llama-bench; "" = no stock ref set
+def private sibling_mtmd(refStock : string) : string {
+    if (empty(refStock)) {
+        return ""
+    }
+    let p = path_join(dir_name(refStock), "llama-mtmd-cli")
+    return stat(p).is_valid ? p : ""
+}
+
+// The image-chat reference cell: patched llama-mtmd-cli (MTMD_TIMING carries the split and the
+// position counts) on the same decoder + mmproj + picture. Both engines price prefill and
+// decode as own-positions over own-time; -n 32 pins the decode budget to the das cell's cap.
+// Best over image_reps: min encode, max pp/tg — the das cell's own protocol.
+def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int; nopo : bool; cfg : Args; threads : int;
+                           hw : HardwareInfo; box, date, note, store : string;
+                           var models : array<BenchModel>; var failed : array<string>; var refSkipped : array<string>) {
+    let backend = ngl != 0 ? "metal" : "cpu"
+    if (empty(bin)) {
+        refSkipped |> push("{file} ref image {flavor} {backend}")
+        return
+    }
+    let t0 = ref_time_ticks()
+    var args <- [bin, "-m", path, "--mmproj", mm, "--image", pic,
+                 "-p", IMAGE_REF_PROMPT, "--temp", "0", "--jinja",
+                 "-n", "32", "-t", "{threads}", "-ngl", "{ngl}"]
+    if (ngl == 0) {
+        // -ngl/-nopo govern the DECODER; the mmproj tower rides the GPU regardless unless
+        // told not to — a stock cpu arm without this minted a Metal-speed encode (107 ms
+        // beside the metal arm's 116) under a cpu label. Same class as -nopo itself.
+        args |> push("--no-mmproj-offload")
+    }
+    if (nopo) {
+        args |> push("--no-op-offload")
+    }
+    let cmd = argv_line(args)
+    to_log(LOG_INFO, "gen_bench_records: START {file} ref image {flavor} {backend}\n")
+    logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("image {flavor} {backend}")}))
+    var best_enc = -1.0lf
+    var best_pp = -1.0lf
+    var best_tg = -1.0lf
+    for (_rep in range(cfg.image_reps)) {
+        let out = run_capture_argv(args)
+        let r = parse_mtmd_image(out)
+        if (!r.ok) {
+            let tail = slice(out, max(0, length(out) - 300))
+            to_log(LOG_WARNING, "gen_bench_records: {file} ref image {flavor} {backend} - no timing parsed this rep - tail: {tail}\n")
+            continue
+        }
+        if (best_enc < 0.0lf || r.enc_ms < best_enc) {
+            best_enc = r.enc_ms
+        }
+        best_pp = max(best_pp, double(r.n_prefill) * 1000.0lf / r.prefill_ms)
+        best_tg = max(best_tg, double(r.n_decode) * 1000.0lf / r.decode_ms)
+    }
+    if (best_enc < 0.0lf) {
+        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} ref image {flavor} {backend} - no rep parsed ({elapsed_ms(t0)} ms)\n")
+        logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("image {flavor} {backend}")}))
+        failed |> push("{file} ref image {flavor} {backend}")
+        return
+    }
+    var rr = BenchRun(
+        engine = "llama.cpp",
+        backend = backend,
+        flavor = flavor,
+        workload = "image-chat",
+        box = box,
+        threads = threads,
+        date = date,
+        cmd = cmd,
+        source = "official",
+        versions = mtmd_versions(bin),
+        exec_fmt = lcpp_exec_fmt(backend),
+        hardware = hw)
+    rr.tests |> insert("img:enc", BenchTest(ms = best_enc))
+    rr.tests |> insert("img:pp", BenchTest(tok_s = best_pp))
+    rr.tests |> insert("img:tg", BenchTest(tok_s = best_tg))
+    rr.files <- [file_identity(path, "weights"), file_identity(mm, "mmproj"), file_identity(pic, "image")]
+    var bm = BenchModel(gguf = file, note = note)
+    bm.runs |> emplace(rr)
+    upsert_bench_model(models, bm)
+    stamp_note(models, file, note)
+    write_bench_records(store, models)
+    to_log(LOG_INFO, "gen_bench_records: DONE {file} ref image {flavor} {backend} - enc {best_enc:.1f} ms | pp {best_pp:.1f} | tg {best_tg:.1f} tok/s ({elapsed_ms(t0)} ms)\n")
+    logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("image {flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
 // ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
@@ -1333,22 +1424,33 @@ def main : int {
             settle_das(cfg)
             ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
         }
-        // the image-chat legs of a vision decoder (an mmproj companion), das-only — same
+        // the image-chat legs of a vision decoder (an mmproj companion) — same
         // leg order and cool-slot discipline; the picture is the one pinned fixture
         if (doImage && !empty(mm)) {
             let mmPath = "{models_dir()}{mm}"
             let picPath = "{models_dir()}{bench_image_fixture()}"
+            let stockMtmd = sibling_mtmd(refStock)
+            // pairing mirrors the text legs: metal vs stock -ngl 99; neon vs the dedicated
+            // CPU build (kernel vs kernel — stock ggml op-offloads to Metal even at -ngl 0);
+            // amx vs stock -ngl 0 --no-op-offload
             if (legMetal) {
                 settle_das(cfg)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed, "metal")
+                settle_das(cfg)
+                image_ref_pass(file, path, mmPath, picPath, stockMtmd, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
             if (legNeon) {
                 settle_das(cfg)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed)
+                settle_das(cfg)
+                let cpuMtmd = mtmd_bin()
+                image_ref_pass(file, path, mmPath, picPath, stat(cpuMtmd).is_valid ? cpuMtmd : "", "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
             if (legAmx) {
                 settle_das(cfg)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed, "accel")
+                settle_das(cfg)
+                image_ref_pass(file, path, mmPath, picPath, stockMtmd, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
         }
         let wm = dlim_wipe(path)   // fully profiled - its images are done serving

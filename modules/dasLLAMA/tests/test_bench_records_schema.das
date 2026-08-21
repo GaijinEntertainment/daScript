@@ -307,13 +307,45 @@ def test_image_chat_rows_pin_the_fixture(t : T?) {
                     rows++
                     t |> success(find(r.cmd, bench_image_fixture()) >= 0,
                         "{base_name(path)} {m.gguf} {r.backend}/{r.flavor}: the cmd receipt names {bench_image_fixture()}")
-                    t |> success(find(r.cmd, "--image-mmproj") >= 0,
-                        "{base_name(path)} {m.gguf} {r.backend}/{r.flavor}: the cmd receipt names its mmproj")
+                    t |> success(find(r.cmd, "mmproj") >= 0,
+                        "{base_name(path)} {m.gguf} {r.backend}/{r.flavor}: the cmd receipt names its mmproj (either engine's flag spelling)")
                 }
             }
             delete models
         }
         t |> success(rows > 0, "the sweep found image-chat rows to gate ({rows})")
         delete stores
+    }
+}
+
+[test]
+def test_parse_mtmd_image(t : T?) {
+    t |> run("the image ref parse: encode lines sum, MTMD_TIMING splits, counts carry") @(t : T?) {
+        // fixture text from a live patched-mtmd run (m1, E2B metal) - two noise lines around it
+        let out = ("0.01.517.685 I mtmd batch encoding done in 116 ms\n"
+            + "1.  **Analyze the image:**\n"
+            + "MTMD_TIMING encode_prefill_ms 266.8 decode_ms 432.4 total_ms 699.1 n_prefill 159 n_decode 32\n")
+        let r = parse_mtmd_image(out)
+        t |> success(r.ok, "a complete run parses")
+        t |> numericEqual(float(r.enc_ms), 116.0)
+        t |> numericEqual(float(r.prefill_ms), 150.8)
+        t |> numericEqual(float(r.decode_ms), 432.4)
+        t |> equal(r.n_prefill, 159)
+        t |> equal(r.n_decode, 32)
+    }
+    t |> run("multi-chunk encodes sum; incomplete output refuses") @(t : T?) {
+        let two = ("I mtmd batch encoding done in 100 ms\nI mtmd batch encoding done in 50 ms\n"
+            + "MTMD_TIMING encode_prefill_ms 200.0 decode_ms 80.0 total_ms 280.0 n_prefill 40 n_decode 8\n")
+        let r2 = parse_mtmd_image(two)
+        t |> success(r2.ok)
+        t |> numericEqual(float(r2.enc_ms), 150.0)
+        t |> numericEqual(float(r2.prefill_ms), 50.0)
+        let noenc = parse_mtmd_image("MTMD_TIMING encode_prefill_ms 200.0 decode_ms 80.0 total_ms 280.0 n_prefill 40 n_decode 8\n")
+        t |> success(!noenc.ok, "no encode line = no cell (an unpatched or non-image run must not mint)")
+        let noline = parse_mtmd_image("I mtmd batch encoding done in 100 ms\nsome reply\n")
+        t |> success(!noline.ok, "no MTMD_TIMING = no cell")
+        let nocounts = parse_mtmd_image("I mtmd batch encoding done in 100 ms\n"
+            + "MTMD_TIMING encode_prefill_ms 200.0 decode_ms 80.0 total_ms 280.0\n")
+        t |> success(!nocounts.ok, "an old-patch line without position counts must not mint a bogus tok/s")
     }
 }

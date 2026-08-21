@@ -601,6 +601,116 @@
     });
   }
 
+  /* ── § 04 images in: pair rows from the same records ────────────
+     One image turn per (model, box, lane): the das image-chat row against llama.cpp's
+     llama-mtmd-cli row. Same LANES as § 01 — the ref flavors match (stock / clean-cpu).
+     Both engines price prefill and decode as own-positions over own-time; encode is wall ms. */
+  function buildImagePairs(recs) {
+    var out = [];
+    recs.forEach(function (m) {
+      var runs = (m.runs || []).filter(function (r) { return r.workload === 'image-chat'; });
+      if (!runs.length) return;
+      var boxes = {};
+      runs.forEach(function (r) { boxes[r.box] = true; });
+      Object.keys(boxes).forEach(function (bx) {
+        LANES.forEach(function (L) {
+          function pick(engine, flavor) {
+            var hits = runs.filter(function (r) {
+              return r.box === bx && r.backend === L.backend && r.flavor === flavor && r.engine === engine;
+            });
+            return hits.length ? newest(hits) : null;
+          }
+          var das = pick('das', L.das), ref = pick('llama.cpp', L.ref);
+          if (!das || !ref) return;                    // no reference → no row
+          function msOf(r, k) { return (r.tests && r.tests[k]) ? r.tests[k].ms : 0; }
+          out.push({
+            model: m.gguf.replace(/\.gguf$/, ''), arch: m.arch || '',
+            size: m.size_bytes || 0, box: bx, boxName: boxLabel(das.hardware && das.hardware.cpu, bx),
+            lane: L.label, modelNote: m.note || '',
+            noted: !!(m.note || das.comment || ref.comment),
+            enc_das: msOf(das, 'img:enc'), enc_ref: msOf(ref, 'img:enc'),
+            pp_das: tok(das, 'img:pp'), pp_ref: tok(ref, 'img:pp'),
+            tg_das: tok(das, 'img:tg'), tg_ref: tok(ref, 'img:tg'),
+            enc_ratio: ratio(msOf(ref, 'img:enc'), msOf(das, 'img:enc')),  // times, so inverted: >1 = das faster
+            pp_ratio: ratio(tok(das, 'img:pp'), tok(ref, 'img:pp')),
+            tg_ratio: ratio(tok(das, 'img:tg'), tok(ref, 'img:tg')),
+            das: das, ref: ref
+          });
+        });
+      });
+    });
+    return out;
+  }
+
+  function mountImage(rows) {
+    if (!rows.length) return;
+    document.getElementById('imagechat').hidden = false;
+    makeTable({
+      table: '#imagechat-table', filters: '#imagechat-filters', caption: '#imagechat-caption',
+      rows: rows, sort: { key: 'size', desc: true },
+      tiebreak: function (a, b) { return a.model.localeCompare(b.model) || a.boxName.localeCompare(b.boxName); },
+      cols: [
+        { key: 'model', label: 'model', get: function (r) { return r.model; },
+          cell: function (r) { return modelCell(r, notedCell(r.model, r.arch)); },
+          cls: 'dl-td-model' },
+        { key: 'box', label: 'machine', get: function (r) { return r.boxName; },
+          cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2' },
+        { key: 'lane', label: 'category', get: function (r) { return r.lane; },
+          cell: function (r) { return esc(r.lane); }, cls: 'dl-dim2' },
+        { key: 'threads', label: 'threads', num: true, dim: true,
+          get: function (r) { return (r.das && r.das.threads) || 0; },
+          cell: function (r) { return r.das && r.das.threads ? String(r.das.threads) : '-'; } },
+        { key: 'enc_das', label: 'encode das', num: true, grp: true, grpStart: true,
+          get: function (r) { return r.enc_das; }, cell: function (r) { return ms(r.enc_das); } },
+        { key: 'enc_ref', label: 'lcpp', num: true, dim: true,
+          get: function (r) { return r.enc_ref; }, cell: function (r) { return ms(r.enc_ref); } },
+        { key: 'enc_ratio', label: 'ratio', num: true, grp: true,
+          get: function (r) { return r.enc_ratio; }, cell: function (r) { return ratioCell(r.enc_ratio); } },
+        { key: 'pp_das', label: 'prefill das', num: true, grp: true, grpStart: true,
+          get: function (r) { return r.pp_das; }, cell: function (r) { return tps(r.pp_das); } },
+        { key: 'pp_ref', label: 'lcpp', num: true, dim: true,
+          get: function (r) { return r.pp_ref; }, cell: function (r) { return tps(r.pp_ref); } },
+        { key: 'pp_ratio', label: 'ratio', num: true, grp: true,
+          get: function (r) { return r.pp_ratio; }, cell: function (r) { return ratioCell(r.pp_ratio); } },
+        { key: 'tg_das', label: 'decode das', num: true, grp: true, grpStart: true,
+          get: function (r) { return r.tg_das; }, cell: function (r) { return tps(r.tg_das); } },
+        { key: 'tg_ref', label: 'lcpp', num: true, dim: true,
+          get: function (r) { return r.tg_ref; }, cell: function (r) { return tps(r.tg_ref); } },
+        { key: 'tg_ratio', label: 'ratio', num: true, grp: true,
+          get: function (r) { return r.tg_ratio; }, cell: function (r) { return ratioCell(r.tg_ratio); } }
+      ],
+      filterDefs: [
+        { field: 'model', title: 'model', all: 'all models', get: function (r) { return r.model; } },
+        { field: 'box', title: 'machine', all: 'all machines', get: function (r) { return r.box; }, label: function (r) { return r.boxName; } },
+        { field: 'lane', title: 'category', all: 'all categories', get: function (r) { return r.lane; } }
+      ],
+      receipt: pairReceipt,
+      summary: function (shown, total) {
+        return esc(measuredLine(shown)) +
+          ' &nbsp;·&nbsp; showing ' + shown.length + ' of ' + total + ' paired turns' +
+          ' &nbsp;·&nbsp; one 640×480 picture; encode = the vision tower alone, wall ms';
+      }
+    });
+  }
+
+  function mountImageViews(rows) {
+    wireBars('imagechat', rows, function (all, filters, m) {
+      m = m || 'pp';
+      return all.filter(function (r) {
+        return (!filters.model || r.model === filters.model) &&
+               (!filters.box || r.box === filters.box) &&
+               (!filters.lane || r.lane === filters.lane) &&
+               r[m + '_ratio'] !== null;
+      }).sort(function (a, b) { return b[m + '_ratio'] - a[m + '_ratio']; })
+        .map(function (r) {
+          return { label: r.model, sub: r.boxName + ' · ' + r.lane,
+                   das: r[m + '_das'], ref: r[m + '_ref'],
+                   dasText: tps(r[m + '_das']), refText: tps(r[m + '_ref']),
+                   ratio: r[m + '_ratio'], r: r };
+        });
+    }, pairReceipt);
+  }
+
   /* Everything numeric in the hero derives from the records — the same rows the tables show,
      never a hand-typed number. The "up to N×" is the best audio-in pair, floored (6.19 measured
      → "6×"); the terminal output is the strongest un-annotated LLM pair, re-picked per load. */
@@ -642,6 +752,9 @@
       mountLLM(llmRows);
       mountLLMViews(llmRows);
       mountAudio(recs);
+      var imgRows = buildImagePairs(recs);
+      mountImage(imgRows);
+      mountImageViews(imgRows);
       mountHero(recs);
     })
     .catch(function () { /* no records yet — sections stay hidden */ });
