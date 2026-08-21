@@ -436,13 +436,6 @@ def apply_config(var cfg : ServerArgs) : bool {
     return true
 }
 
-// Separator- and (on windows) case-insensitive path identity for roster matching.
-def private same_model_path(a, b : string) : bool {
-    let ga = to_generic_path(a)
-    let gb = to_generic_path(b)
-    return get_platform_name() == "windows" ? to_lower(ga) == to_lower(gb) : ga == gb
-}
-
 // An EXPLICIT --model wins over the config's roster (the CLI-overrides-config contract): the
 // matching roster entry becomes the default, an unlisted path joins the roster AS the default.
 // Degrade-not-die: a bad path or a route-name collision leaves the roster UNTOUCHED — clearing

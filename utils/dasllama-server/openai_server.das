@@ -126,6 +126,14 @@ def private slot_index(model_field : string) : int {
     }
     return -1
 }
+//! Separator- and (on windows) case-insensitive path identity — roster matching and the
+//! one-serving-slot-per-GGUF dedup both compare through this, never exact strings.
+def same_model_path(a, b : string) : bool {
+    let ga = to_generic_path(a)
+    let gb = to_generic_path(b)
+    return get_platform_name() == "windows" ? to_lower(ga) == to_lower(gb) : ga == gb
+}
+
 var g_has_asr = false
 var g_asr_path = ""
 var g_asr_mmproj = ""
@@ -1833,6 +1841,20 @@ def private arm_runtime_towers(mi : int; mmproj : string) : string {
     return note
 }
 
+// A runtime load must not double-serve: neither an id another slot answers to, nor a GGUF
+// another slot already maps (two slots on one file = two full KV pools for zero capacity).
+def private runtime_load_conflict(id, rpath : string) : string {
+    if (slot_index(id) >= 0) {
+        return "model '{id}' is already served — unload it first, or pass a different 'id'"
+    }
+    for (s in g_slots) {
+        if (same_model_path(s.path, rpath)) {
+            return "this GGUF is already serving as '{s.name}' — one slot per file (activate it, or unload it first)"
+        }
+    }
+    return ""
+}
+
 // Load a downloaded GGUF into a NEW serving slot without a process restart — no watchdog bounce,
 // no JIT recompile; the load blocks the tick thread for its duration (streams must be idle, so
 // nothing stalls mid-decode). GPU loads follow the boot-order semantics: the current owner's
@@ -1868,8 +1890,9 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
         return resp |> JSON(error_body("'{path}' not found (also tried {rpath})", "invalid_request_error"), http_status.BAD_REQUEST)
     }
     let id = js?["id"] ?? base_name(rpath)
-    if (slot_index(id) >= 0) {
-        return resp |> JSON(error_body("model '{id}' is already served — unload it first, or pass a different 'id'", "conflict"), http_status.CONFLICT)
+    let conflict = runtime_load_conflict(id, rpath)
+    if (!empty(conflict)) {
+        return resp |> JSON(error_body(conflict, "conflict"), http_status.CONFLICT)
     }
     if (streams_busy()) {
         return resp |> JSON(error_body("streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"), http_status.CONFLICT)
@@ -1998,6 +2021,9 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
 }
 
 def private handle_activate(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return deny_operator(resp)   // moves the default slot + the tier's VRAM state, like its load/unload siblings
+    }
     var perr = ""
     var js = read_json(string(req.body), perr)
     if (js == null) {
