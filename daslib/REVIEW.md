@@ -229,11 +229,14 @@ expected; `distinct[_by]` keeps the FIRST occurrence per key, so moving the inse
 terminator predicate changes which occurrence represents the key.
 
 **A fold-emitted table probe binds by reference off `unsafe(tab?[k])` — a borrowed pointer
-into table storage, sound only while the generated invoke never inserts into or erases from
-that table** (a rehash dangles it). The join probe (`build_join_probe_pieces`) and the
-point-lookup probe (`try_table_point_lookup`) both rest on this; what licenses the latter is
-the const-forced table param (`TableAdapter.invoke_param_type`) — an emit arm that mutates
-the source, or a param that loses the const, turns the bind into a use-after-free.
+into table storage — so the generated invoke never inserts into or erases from the probed
+table.** A rehash dangles the bind into a use-after-free. Both the join probe
+(`build_join_probe_pieces`) and the point-lookup probe (`try_table_point_lookup`) rest on
+this.
+
+**`TableAdapter.invoke_param_type` returns the table parameter type with `constant` set.**
+That const is what proves the point-lookup probe's borrowed bind survives the invoke; a
+param that loses it turns the bind into a use-after-free.
 
 **A per-field WALK over a row-usage set is sorted first (or ordered by an external
 declaration-order list); a membership test needs no order.** `collect_row_usage` /
@@ -253,10 +256,10 @@ emits an inline `_::less` if-chain for the same chain. Both spell bit `i` of `ma
 order — a change on one side makes a spliced chain and its tier-2 fallback sort differently,
 silently.
 
-**The inline `_::less` if-chain is capped at 4 keys, matching `less_masked`'s 1..4-tuple
-overloads.** A longer key tuple declines the splice and sorts eagerly; raising the cap
-without adding the matching `less_masked` overload leaves a spliced chain with no tier-2
-twin to agree with.
+**The inline `_::less` if-chain's key cap and `less_masked`'s tuple overloads change
+together.** A key tuple longer than the cap declines the splice and sorts eagerly; raising
+the cap without adding the matching `less_masked` overload leaves a spliced chain with no
+tier-2 twin to agree with.
 
 **`top_n*` over an ITERATOR never reserves `n`.** Cardinality is unknown, so a caller
 passing `n` far above the element count would allocate the whole `n` upfront for no win; the
@@ -296,19 +299,20 @@ Neither half suffices: operator arms wrap empty children into non-empty junk
 (`lhs = rhs` → `" = ?"`), and several helpers return `""` without setting `hadError`.
 Dropping either half emits malformed SQL instead of a diagnostic.
 
-**Every `analyze_chain` consumer runs `maybe_finalize_distinct_by_passthrough` and
-`maybe_wrap_take_before_aggregate` before `build_sql_string` / `collect_query_binds`.**
-Skipping the first pass silently drops a `_distinct_by` dedup; skipping the second leaves
-LIMIT/OFFSET on the aggregate.
+**Both `maybe_finalize_distinct_by_passthrough` and `maybe_wrap_take_before_aggregate` run
+between `analyze_chain` and the `build_sql_string` / `collect_query_binds` that turn its
+result into SQL.** Skipping the first silently drops a `_distinct_by` dedup; skipping the
+second leaves LIMIT/OFFSET on the aggregate.
 
 **`q.innerSql` and `q.innerBindExprs` have exactly one producer per query.** Installing a
 wrap over an already-populated `innerSql` drops the earlier subquery and orphans its binds —
 a bind/placeholder mismatch, not an error.
 
-**The sql_linq projection arrays are index-parallel and always pushed together** —
-`selectCols`, `selectColAliases`, `selectColSqlFragments`, `selectColTypes`,
-`projRecordNames`, through `push_source_column` / `push_computed_proj_slot` /
-`reserve_projection`. A partial push desyncs the SELECT list from the row builder silently.
+**Every projection slot pushes one entry into each of the five index-parallel projection
+arrays — `selectCols`, `selectColAliases`, `selectColSqlFragments`, `selectColTypes`,
+`projRecordNames`.** A helper covering only part of the set (`push_source_column`,
+`push_computed_proj_slot`) leaves the rest to its caller; a partial push desyncs the SELECT
+list from the row builder silently.
 
 **The sql_linq emitter picks each projection slot's SQL by which of that slot's own entries
 is non-empty — SQL fragment first, then aliased column, then unqualified column — never by
