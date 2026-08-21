@@ -112,14 +112,13 @@ def private hex4_codepoint(hex_str : array<uint8>) : uint {
 }
 
 def private fits_int64(num : string) : bool {
-    //! true when the `[+-]?digits` literal `num` is representable as int64.
+    //! true when the `[-]?digits` literal `num` is representable as int64.
     var fits = true
     peek_data(num) $(digits) {
         let n = length(digits)
         var i = 0
-        var negative = false
-        if (i < n && (digits[i] == '+'u8 || digits[i] == '-'u8)) {
-            negative = digits[i] == '-'u8
+        let negative = n > 0 && digits[0] == '-'u8
+        if (negative) {
             i ++
         }
         while (i < n && digits[i] == '0'u8) {
@@ -367,7 +366,7 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                 yield TokenAt(value = Token(_string = string(str)), line = line, row = row)
                 clear(str)
                 next(tin, ahead)
-            } elif (ahead == '+' || ahead == '-' || is_number(ahead)) {
+            } elif (ahead == '-' || is_number(ahead)) {
                 push(str, uint8(ahead))
                 var anyNumbers = is_number(ahead)
                 while (next(tin, ahead, line, row) && is_number(ahead)) {
@@ -402,15 +401,15 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                 }
                 if (is_integer && fits_int64(num)) {
                     yield TokenAt(value = Token(_longint = int64(num)), line = line, row = row)
-                } elif (is_integer) {
-                    let wide = to_double(num)
-                    if (wide == 0.0lf) {
+                } else {
+                    var conversion : ConversionResult
+                    var consumed = 0
+                    let wide = double(num, conversion, consumed)
+                    if (conversion != ConversionResult.ok || consumed != length(num)) {
                         yield TokenAt(value = Token(_error = "number {num} is out of range"), line = line, row = row)
                         return false
                     }
                     yield TokenAt(value = Token(_number = wide), line = line, row = row)
-                } else {
-                    yield TokenAt(value = Token(_number = double(num)), line = line, row = row)
                 }
                 clear(str)
                 unsafe {
