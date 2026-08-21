@@ -12,6 +12,19 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **OPEN — the spliced image prefill trails llama.cpp on Metal (measured 2026-08-21, M1 Max,
+  the image-ref arc).** Record-grade image-chat pairs (released `lcpp_bench` exe vs patched
+  `llama-mtmd-cli`, both pricing prefill as own positions over own time, ~160 positions): the
+  Metal `img:pp` ratio is das/lcpp **0.52–0.62×** across all three vision models (E2B 687 vs
+  1101, E4B 362 vs 658, 12B 140 vs 268 tok/s) while das leads every CPU prefill cell and every
+  encode/decode cell on every leg. Mechanism hypothesis (proximity, unmeasured): the das image
+  turn evals head / soft-token rows / tail as THREE separate prefill quanta, and at ~160
+  positions the per-eval fixed cost (graph build, dispatch, KV plumbing) dominates — llama.cpp
+  runs one graph over the whole span. Levers to try: fuse the three evals into one span eval
+  with a per-range mask; or cut per-eval overhead on short prefills (the text pp512 cells show
+  no such gap — das leads Metal text prefill, so this is short-turn overhead, not kernel
+  throughput). The decode-side and encode-side crowns are unaffected.
+
 - **gemma4v ViT tower (E-series): the encode is the image turn's biggest single stage on every
   CPU tier; the q8 lane and the Metal leg both landed (measured 2026-08-19, M1 Max, the gemma4v
   arc).** The tower is 16 blocks × 7 GEMMs (112 bf16 GEMMs, ≈151 MMAC per patch) over 1170
