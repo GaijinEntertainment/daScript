@@ -47,24 +47,11 @@ it in a name, a shape, or a test, or documents itself in the module's `.md`. Kep
 is earned: `//!` and `/** */` docs on public API, `NOLINT` / `clang-format` suppressions,
 the leading header block. Existing comments answer to the deletion test below.
 
-**Other languages: the test for every comment is deletion** — remove it and re-read; if the
-WHY goes dark, it was load-bearing, restore it, otherwise it was noise. 1–2 lines is the
-default, not a limit — a longer comment may be earned when the WHY is genuinely load-bearing
-and has no better home; if a reader would ask "why is this long?", that is the finding.
-
-**Outside `.das`, a file's leading header block (license, provenance) is kept; below it,
-nothing decorates** — no banner blocks (rules of dashes or asterisks, boxed headers), no
-up-front preamble essays. (For `.das` the kept set above governs.)
-
-**No ceremonial doc templates on non-public symbols** — `@param`/`@return` boilerplate
-restating a signature. Where docstrings are the idiom (Python), a private helper's
-docstring is judged by the same deletion test as any other comment.
-
-**No incident citations** — no PR numbers, no dates, no "used to crash"; name the failure
-mode in present tense at the code that guards it.
-
-**The message is the comment:** a site with a good error string needs no comment restating
-it.
+**Other languages: the test for every comment is deletion** — remove it and re-read; if
+the WHY goes dark, it was load-bearing: restore it, rewritten in present tense (never as
+history — PR numbers, dates); otherwise it was noise. 1–2 lines is the default, not a
+limit — "why is this long?" is the finding. The leading header block (license, provenance)
+stays.
 
 ## Names
 
