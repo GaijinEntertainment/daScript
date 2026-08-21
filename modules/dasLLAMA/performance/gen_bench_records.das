@@ -933,6 +933,14 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
         refSkipped |> push("{file} ref image {flavor} {backend}")
         return
     }
+    for (p_ in [mm, pic]) {
+        if (!stat(p_).is_valid) {
+            // the das half of this pair already warned and skipped on the same absence -
+            // spawning a doomed child would red the sweep where the das side only skips
+            to_log(LOG_WARNING, "gen_bench_records: SKIP {file} ref image {flavor} {backend} - missing companion {p_}\n")
+            return
+        }
+    }
     let t0 = ref_time_ticks()
     var args <- [bin, "-m", path, "--mmproj", mm, "--image", pic,
                  "-p", image_turn_prompt(), "--temp", "0", "--jinja",
