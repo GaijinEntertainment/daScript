@@ -436,6 +436,47 @@ def apply_config(var cfg : ServerArgs) : bool {
     return true
 }
 
+// Separator- and (on windows) case-insensitive path identity for roster matching.
+def private same_model_path(a, b : string) : bool {
+    let ga = to_generic_path(a)
+    let gb = to_generic_path(b)
+    return get_platform_name() == "windows" ? to_lower(ga) == to_lower(gb) : ga == gb
+}
+
+// An EXPLICIT --model wins over the config's roster (the CLI-overrides-config contract): the
+// matching roster entry becomes the default, an unlisted path joins the roster AS the default.
+// Degrade-not-die: a bad path or a route-name collision leaves the roster UNTOUCHED — clearing
+// the roster's default first would silently boot the wrong model on the very typo being made.
+def private apply_model_override() {
+    if (!stat(g_cfg.model).is_valid) {
+        to_log(LOG_ERROR, "dasllama-server: ignoring --model - file not found: {g_cfg.model} (the config roster boots unchanged)\n")
+        return
+    }
+    var midx = -1
+    for (i in range(length(g_models))) {
+        if (same_model_path(g_models[i].path, g_cfg.model)) {
+            midx = i
+            break
+        }
+    }
+    let route = base_name(g_cfg.model)
+    if (midx < 0) {
+        for (ent in g_models) {
+            if ((empty(ent.name) ? base_name(ent.path) : ent.name) == route) {
+                to_log(LOG_ERROR, "dasllama-server: ignoring --model - a different [[models]] entry already routes as '{route}' (rename that entry, or list this path in the roster)\n")
+                return
+            }
+        }
+    }
+    for (i in range(length(g_models))) {
+        g_models[i].is_default = i == midx
+    }
+    if (midx < 0) {
+        g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))
+    }
+    to_log(LOG_INFO, "dasllama-server: --model {route} overrides the config roster's default\n")
+}
+
 // [[models]] roster — per-model path + overrides; absent keys keep the ModelEntry sentinels
 // (inherit the flat keys). Hand-written TOML gets the same backend/default checks POST
 // /config enforces, in the warn-and-degrade shape config mistakes take everywhere else here.
@@ -864,20 +905,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     if (empty(g_models) && !empty(g_cfg.model)) {
         g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))
     } elif (!empty(g_models) && !empty(g_cfg.model) && (g_cfg_sources?["model"] ?? "") == "cli") {
-        // an EXPLICIT --model wins over the config's roster (the CLI-overrides-config contract —
-        // this used to be silently ignored): a matching roster entry becomes the default, an
-        // unlisted path joins the roster AS the default
-        var matched = false
-        for (ent in g_models) {
-            ent.is_default = ent.path == g_cfg.model
-            if (ent.is_default) {
-                matched = true
-            }
-        }
-        if (!matched) {
-            g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))
-        }
-        to_log(LOG_INFO, "dasllama-server: --model {base_name(g_cfg.model)} overrides the config roster's default\n")
+        apply_model_override()
     }
     // A path typo in an AUTHORITATIVE config must not brick the boot into a crash loop: every
     // roster path is checked up front and degrades — skip the slot, drop the arm — instead of
