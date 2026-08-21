@@ -65,8 +65,8 @@ comment naming why f32 is load-bearing there. Weights with no faster twin (unqua
 planes) are out of scope.
 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
-file.** A platform-neutral engine file carrying it is a defect — rigs and harnesses select
-platforms by design and are out of scope; a new shared concern gets its own file, not more of
+file.** A platform-neutral engine file carrying it is a defect; a new shared concern gets its
+own file, not more of
 `dasllama/dasllama_common.das`.
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is

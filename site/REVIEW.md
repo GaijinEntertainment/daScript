@@ -45,10 +45,11 @@ a token budget) reports no measurement and is outside this rule.
 and `dasllama.html`'s inline `<style>` copy keeps identical bodies.** Changing one copy and
 not the other is a defect.
 
-**A `dl-*` selector is defined where its markup lives: a selector `dasllama.html`'s markup
-uses is defined in `dasllama.html` — and in `files/dasllama-table.css` too when dasllama.io's
-pages use it as well; a selector only dasllama.io's pages use is defined in
-`files/dasllama-table.css` alone.**
+**A `dl-*` selector is defined where its markup lives — the markup a page renders, including
+what `files/dasllama.js` injects: a selector `dasllama.html` renders is defined in
+`dasllama.html`, and in `files/dasllama-table.css` too when `site-dasllama/`'s pages (repo
+root — the dasllama.io site) render it as well; a selector only `site-dasllama/`'s pages
+render is defined in `files/dasllama-table.css` alone.**
 
 **News entries state real, shipped events.** An entry in `_news/*.md` for something not yet
 true at publish time is a defect.

@@ -119,13 +119,17 @@ A model-free file — one with at least one cell that runs, not skips, when no m
 and `DASLLAMA_CPU_PREFILL=1` is set in the environment (the runner sets it for every child) —
 runs under plain dastest (still `-jit`) or as a set through `run.das -- --suite model-free`,
 the per-PR gate. The `model-free` list in `run.das` is the census of those files; this note is
-the per-file map. A file in a model suite (every suite but `model-free`) is listed in its
-suite's arm list in `run.das` instead.
-Current note: `test_bench_records_schema.das` — model-free: the record store and the record
-rig's shared seams: round-trip, upsert identity, annotations; the `-w` workload scope; the
-stored-row→rig-leg map (`backend`/`flavor` ⇒ `metal` | plain cpu | `accel`, else refused);
-the committed image-chat receipts' fixture/mmproj pins; and the llama.cpp image-reference
-parser `parse_mtmd_image` — encode summing, the MTMD_TIMING split, its refusal arms.
+the per-file map. A file in a model suite (every suite but `model-free`) is listed in that
+suite's file list in `run.das` instead.
+`test_bench_records_schema.das` — model-free: the record store's schema (round-trip, upsert
+identity with `workload` in the key, annotations landing only on the rows they select, the
+store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
+`-w` workload scope; the stored-row→rig-leg map, `backend`/`flavor` ⇒ `metal` | plain cpu |
+`accel`, else refused; the tune-stamp gate; the oracle compare's ok/warn/fail bands; the
+llama.cpp image-reference parser `parse_mtmd_image` — encode summing, the MTMD_TIMING split,
+its refusal arms); plus the committed-records sweeps: image-chat receipts match their
+`backend`/`flavor` stamps and pin the fixture and mmproj, and every das row's `tune_sha`
+resolves to its committed generation archive.
 `test_exchange_schema.das` — model-free: the exchange validator, sweeping the ENTIRE in-tree
 records/sidecar corpus, so a writer-schema change reds here first.
 `failed_dasllama_lint_require.das` — model-free, expected-compile-failure: the
