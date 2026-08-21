@@ -10,12 +10,6 @@ module lint shared private
 //! for the current module, enabling stricter compiler diagnostics.
 //! See also ``lint_everything`` for applying lint to all modules.
 
-enum private Lint021CallKind {
-    plain
-    narrowing_cast
-    poison
-}
-
 require daslib/strings_boost
 require daslib/ast_boost
 require daslib/strings_boost
@@ -37,6 +31,12 @@ struct private DeadStoreEntry {
     skip : bool
     has_pending : bool
     pending_pure : bool
+}
+
+enum private Lint021CallKind {
+    plain
+    narrowing_cast
+    poison
 }
 
 struct private Lint021Candidate {

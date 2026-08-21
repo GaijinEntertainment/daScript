@@ -66,7 +66,12 @@ an entry lands here only when no name, shape, or test can carry it.
 - **`parse_range_leg` operator polarity**: `upper_op` is the var-on-left operator marking
   the upper-bound leg (`<=` closed-in-range, `>` open-out-of-range), `lower_op` the lower
   (`>=` / `<`). Yoda (const-on-left) forms flip, so the const-on-left arm tests against
-  `lower_op` — the `is_hi_out` assignments differ between the two arms by design.
+  `lower_op` — the `bounds_above` assignments differ between the two arms by design.
+- **PERF022 is a three-function protocol over one stack.** `perf022_push_sentinel` pushes a
+  frame in `preVisitExprFor` unconditionally, so the stack stays lock-step with for-loop
+  nesting; `preVisitExprForBody` may flip the frame's `matched`; `perf022_pop_and_check`
+  fires when a frame survives matched-and-undisqualified — at the for-loop's `at`, the
+  actionable line a reader rewrites, not the push site.
 - **A generic-body exemption exists exactly where the remedy is not instantiation-safe.**
   PERF020's fix (delete the cast) is wrong for the sibling instantiations of the same
   source line, so it bails on `fromGeneric`; PERF019/PERF021 rewrites (fuse under one
@@ -169,8 +174,8 @@ an entry lands here only when no name, shape, or test can carry it.
   `visitExpression` pops it — the popped frame is the subtree's summary, stored in
   `unsafeExprs` for `visitExprUnsafe` (STYLE024 vs STYLE025), propagated to the parent
   slot, and fired as STYLE024 when an `unsafe(...)` target's subtree had count 0. The
-  balance panic in each entry point is the guard for the no-`canVisit*` invariant on the
-  checklist.
+  balance panic in each entry point is the guard against a `canVisit*` override skipping a
+  subtree the frame walk still counts.
 - **Two compiler regimes run this visitor.** The `[lint_macro]` path runs inside a normal
   compile (const-folding ON — `T('c')` folds to a typed const); the standalone runner and
   MCP path run under lint policies (folding OFF — `T('c')` stays an `ExprCall`, `-1` stays
@@ -255,6 +260,12 @@ an entry lands here only when no name, shape, or test can carry it.
 - **The two passes' skip sets are complementary**: pre-infer skips `generated` (filled in
   across passes); post-infer skips only `[template]` bodies and dasbind `[extern]` stubs —
   so generated bodies ARE checked post-infer, by nothing else.
+- **Each check's licensing C++ site** (the checklist requires one per check; record new ones
+  here): `ExprOp1.subexpr` — `SimulateVisitor::visit(ExprOp1*)` dereferences;
+  `TypeDecl.dim` entries — `TypeDecl::dimConst` sentinel (`ast_typedecl.h`); `ExprFor`
+  sources/body — `ExprFor::visit` walks sources and body, never the iterator tags;
+  `ExprBlock.arguments` — `ExprBlock::visit` walks `arguments` only when `isClosure`;
+  `ExprBlock.returnType` — `ExprBlock::visit` walks it only for a closure.
 
 ## quote
 

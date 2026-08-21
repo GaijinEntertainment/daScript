@@ -258,7 +258,7 @@ def public env_config_opt_string(name : string; dflt : Option<string>) : Option<
     return is_none(v) ? dflt : v
 }
 
-def argv_only_present(args : array<string>; arg_info : CommandArgumentInfo) : bool {
+def present_in_argv(args : array<string>; arg_info : CommandArgumentInfo) : bool {
     if (flag_present(args, arg_info.flag_name)) return true
     return !empty(arg_info.short_flag_name) && flag_present(args, arg_info.short_flag_name)
 }
@@ -281,7 +281,7 @@ def public find_flag_raw_value(args : array<string>; arg_info : CommandArgumentI
             result = some(slice(arg, length(short_prefix)))
         }
     }
-    if (is_none(result) && !argv_only_present(args, arg_info)) {
+    if (is_none(result) && !present_in_argv(args, arg_info)) {
         result = env_raw_value(arg_info)
     }
     return result
@@ -340,7 +340,7 @@ def public find_array_flag_raw_values(args : array<string>; arg_info : CommandAr
 }
 
 def public flag_present(args : array<string>; arg_info : CommandArgumentInfo) : bool {
-    if (argv_only_present(args, arg_info)) return true
+    if (present_in_argv(args, arg_info)) return true
     return is_some(env_raw_value(arg_info))
 }
 
@@ -476,7 +476,7 @@ def public count_flag_value_violation(args : array<string>; arg_info : CommandAr
 def public find_mutex_violation(args : array<string>; info : CommandInfo) : string {
     var groups : table<string; array<string>>
     for (a in info.args) {
-        if (empty(a.mutex_group) || !argv_only_present(args, a)) continue
+        if (empty(a.mutex_group) || !present_in_argv(args, a)) continue
         if (!key_exists(groups, a.mutex_group)) {
             groups[a.mutex_group] <- [a.flag_name]
         } else {

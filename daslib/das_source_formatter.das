@@ -1213,10 +1213,8 @@ def public format_source(file_data : array<uint8> const& implicit) : string {
 
 
 def private is_kept_comment(s : string) : bool {
-    if ((s |> starts_with("//!")) || (s |> starts_with("//fmt:"))) {
-        return true
-    }
-    if ((s |> find("opyright") >= 0) || (s |> find("SPDX-License-Identifier") >= 0)) {
+    if ((s |> starts_with("//!")) || (s |> starts_with("//fmt:"))
+            || (s |> find("Copyright") >= 0) || (s |> find("copyright") >= 0) || (s |> find("SPDX-License-Identifier") >= 0)) {
         return true
     }
     if (!(s |> starts_with("//"))) {
@@ -1224,6 +1222,11 @@ def private is_kept_comment(s : string) : bool {
     }
     let rest = strip_left(s |> chop(2, length(s) - 2))
     return (rest |> starts_with("nolint:")) || (rest |> starts_with("@nolint"))
+}
+
+
+def private opens_kept_block(s : string) : bool {
+    return is_kept_comment(s) && !(s |> starts_with("//fmt:"))
 }
 
 
@@ -1240,8 +1243,9 @@ def private strip_comment_tokens(var ctx : FormatterCtx) {
         if (pendingNewLines > 0 && t.newLines > 0) {
             newLines = max(pendingNewLines, t.newLines)
         }
+        let on_next_line = t.newLines == 1
         if (t.tokenType == TokenType.COMMENT && !is_kept_comment(t.str)) {
-            let continuation = in_kept_block && t.newLines == 1 && (t.str |> starts_with("//"))
+            let continuation = in_kept_block && on_next_line && (t.str |> starts_with("//"))
             if (!continuation) {
                 let trailing = seen_any && t.newLines == 0
                 if (!in_header || trailing) {
@@ -1253,8 +1257,8 @@ def private strip_comment_tokens(var ctx : FormatterCtx) {
             }
         }
         if (t.tokenType == TokenType.COMMENT) {
-            in_kept_block = ((t.newLines > 0 && is_kept_comment(t.str) && !(t.str |> starts_with("//fmt:")))
-                || (in_kept_block && t.newLines == 1))
+            in_kept_block = ((t.newLines > 0 && opens_kept_block(t.str))
+                || (in_kept_block && on_next_line))
         } elif (!empty(t.str)) {
             in_kept_block = false
         }

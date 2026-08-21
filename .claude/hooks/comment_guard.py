@@ -280,7 +280,7 @@ def first_code_line(text, is_das, code_lines):
 def _kept_line_comment(ctext, is_das):
     if ctext.startswith("//!"):
         return True
-    if "opyright" in ctext or "SPDX-License-Identifier" in ctext:
+    if "copyright" in ctext.lower() or "SPDX-License-Identifier" in ctext:
         return True
     rest = ctext[2:].lstrip(_WS)
     if is_das:
@@ -359,7 +359,7 @@ def build_message(path, found, *, is_das, is_write):
         caveat = " Line numbers refer to the replacement text, not the file."
     if is_das:
         return (
-            "comment guard: {} {} {} — scaffold at best; in swept folders the formatter strips "
+            "comment guard: {} {} {} — scaffold at best; the formatter strips "
             "everything outside the kept set:\n"
             "{}{}\n"
             "Fine to keep thinking in comments — but drain them before commit: move what a name "

@@ -132,7 +132,7 @@ def private drop_excluded_files(args : array<string>; var files : array<string>)
 }
 
 
-def private format_one_file(file : string; verify, verbose, strip : bool; var verified : bool&) {
+def private format_one_file(file : string; verify, verbose, strip_comments : bool; var verified : bool&) {
     // Runs on a job thread: formats `file` in place, or (under --verify) reports
     // it as unformatted and clears `verified`.
     var before : string
@@ -143,7 +143,7 @@ def private format_one_file(file : string; verify, verbose, strip : bool; var ve
             fmap(fr) $(data) {
                 open = true
                 before = string(data)
-                after = format_source(data, strip)
+                after = format_source(data, strip_comments)
             }
         }
     }
@@ -181,12 +181,13 @@ def private format_one_file(file : string; verify, verbose, strip : bool; var ve
 }
 
 
-def private apply_format_policy(var files : array<string>; var strips : array<bool>) {
+def private drop_format_disabled_files(var files : array<string>) : array<FormatJob> {
     var skipped : array<string>
-    partition_by_format_policy(files, strips, skipped)
+    var jobs <- partition_by_format_policy(files, skipped)
     for (file in skipped) {
         log::info("-- {file} (format_enabled = false)")
     }
+    return <- jobs
 }
 
 [export]
@@ -226,25 +227,22 @@ def main() {
 
     drop_excluded_files(args, files)
 
-    var strips : array<bool>
-    apply_format_policy(files, strips)
+    var jobs <- drop_format_disabled_files(files)
 
-    let filesNum = length(files)
+    let filesNum = length(jobs)
     var verified = true
 
     with_job_que() $ {
-        while (!empty(files)) {
-            let batchNum = min(length(files), threadsNum)
+        while (!empty(jobs)) {
+            let batchNum = min(length(jobs), threadsNum)
             with_job_status(batchNum) $(status) {
                 for (_ in range(batchNum)) {
-                    let file = files[length(files) - 1]
-                    let strip = strips[length(files) - 1]
-                    files |> pop()
-                    strips |> pop()
+                    let job = jobs[length(jobs) - 1]
+                    jobs |> pop()
                     unsafe {
                         new_job <| @ capture(& verified, := args) {
                             log::init_log(args)
-                            format_one_file(file, verify, verbose, strip, verified)
+                            format_one_file(job.file, verify, verbose, job.strip_comments, verified)
                             status |> notify_and_release
                         }
                     }

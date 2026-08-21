@@ -270,7 +270,12 @@ def private read_format_table(path : string) : JsonValue? {
     return fmt_jv
 }
 
-def private fold_format_key(var fmt_jv : JsonValue?; key : string; var dst : bool&; var decided : bool&) {
+def private config_dir_of(file : string) : string {
+    let dir = to_generic_path(dir_name(to_generic_path(file)))
+    return empty(dir) ? "." : dir
+}
+
+def private take_format_key(var fmt_jv : JsonValue?; key : string; var dst : bool&; var decided : bool&) {
     return if (decided)
     var fmt & = unsafe(fmt_jv.value as _object)
     if (!key_exists(fmt, key)) return
@@ -280,32 +285,33 @@ def private fold_format_key(var fmt_jv : JsonValue?; key : string; var dst : boo
     decided = true
 }
 
-//! Splits ``files`` by policy: drops ``format_enabled = false`` entries into ``skipped``,
-//! records each survivor's ``force_clean_comments`` in ``strips`` (index-aligned with the
-//! surviving ``files``). Single-threaded, like ``format_policy_for``.
-def public partition_by_format_policy(var files : array<string>; var strips : array<bool>; var skipped : array<string>) {
-    var kept : array<string>
-    kept |> reserve(length(files))
-    strips |> reserve(length(files))
+//! One file the formatter will process, carrying its folder's comment policy.
+struct public FormatJob {
+    file : string
+    strip_comments : bool
+}
+
+//! Splits ``files`` by policy: drops ``format_enabled = false`` entries into ``skipped``;
+//! survivors come back as jobs carrying their folder's ``force_clean_comments``.
+//! Single-threaded, like ``format_policy_for``.
+def public partition_by_format_policy(var files : array<string>; var skipped : array<string>) : array<FormatJob> {
+    var jobs : array<FormatJob>
+    jobs |> reserve(length(files))
     var policy_by_dir : table<string; FormatPolicy>
     for (file in files) {
-        var d = to_generic_path(dir_name(to_generic_path(file)))
-        if (empty(d)) {
-            d = "."
+        let dir = config_dir_of(file)
+        if (!key_exists(policy_by_dir, dir)) {
+            policy_by_dir[dir] = format_policy_for(file)
         }
-        if (!key_exists(policy_by_dir, d)) {
-            policy_by_dir[d] = format_policy_for(file)
-        }
-        let policy = policy_by_dir?[d] ?? FormatPolicy()
+        let policy = policy_by_dir?[dir] ?? FormatPolicy()
         if (!policy.format_enabled) {
             skipped |> push(file)
             continue
         }
-        kept |> push(file)
-        strips |> push(policy.force_clean_comments)
+        jobs |> push(FormatJob(file = file, strip_comments = policy.force_clean_comments))
     }
     delete files
-    files <- kept
+    return <- jobs
 }
 
 //! Walks ``.lint_config`` files from ``file``'s directory up to the repository root (the
@@ -315,26 +321,23 @@ def public format_policy_for(file : string) : FormatPolicy {
     var pol = FormatPolicy()
     var enabled_decided = false
     var clean_decided = false
-    var d = to_generic_path(dir_name(to_generic_path(file)))
-    if (empty(d)) {
-        d = "."
-    }
+    var dir = config_dir_of(file)
     while (true) {
-        let cfg = d == "." ? ".lint_config" : "{d}/.lint_config"
+        let cfg = dir == "." ? ".lint_config" : "{dir}/.lint_config"
         var fmt_jv = read_format_table(cfg)
         if (fmt_jv != null) {
-            fold_format_key(fmt_jv, "format_enabled", pol.format_enabled, enabled_decided)
-            fold_format_key(fmt_jv, "force_clean_comments", pol.force_clean_comments, clean_decided)
+            take_format_key(fmt_jv, "format_enabled", pol.format_enabled, enabled_decided)
+            take_format_key(fmt_jv, "force_clean_comments", pol.force_clean_comments, clean_decided)
         }
         break if (enabled_decided && clean_decided)
         var st : FStat
-        break if (stat(path_join(d, ".git"), st))
-        let up = dir_name(d)
-        if (empty(up) || up == d) {
-            break if (d == ".")
-            d = "."
+        break if (stat(path_join(dir, ".git"), st))
+        let up = dir_name(dir)
+        if (empty(up) || up == dir) {
+            break if (dir == ".")
+            dir = "."
         } else {
-            d = up
+            dir = up
         }
     }
     return pol

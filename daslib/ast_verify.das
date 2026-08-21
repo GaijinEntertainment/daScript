@@ -116,7 +116,7 @@ let private DIM_CONST = -2
 typedef private DupReport = block<(msg : string; at : LineInfo) : void>
 
 def private note_node_is_new(var seen : table<void?>; node : void?; what : string; at : LineInfo;
-                      report : DupReport) : bool {
+                             report : DupReport) : bool {
     if (!key_exists(seen, node)) {
         seen |> insert(node)
         return true

@@ -416,7 +416,7 @@ class PerfLintVisitor : AstVisitor {
     perf019_enum_or_probed : array<uint64>
     perf019_enum_or_yes : array<uint64>
     def report_key(at : LineInfo; code : string) : uint64 {
-        //! One report per (rule, location); fileInfo is in the key — PERF026-028 report sinks in OTHER files.
+        //! fileInfo is part of the key — PERF026-028 report sinks in other files, where line|column alone collides.
         let pos = uint64(at.line) | (uint64(at.column) << uint64(20))
         return (pos ^ (intptr(at.fileInfo) * 1099511628211ul)) ^ hash(code)
     }
@@ -633,7 +633,7 @@ class PerfLintVisitor : AstVisitor {
         return describe(a) == describe(b)
     }
 
-    def is_char_comparable_scalar(t : TypeDecl?) : bool {
+    def is_workhorse_numeric_scalar(t : TypeDecl?) : bool {
         //! True if the type is one of the six numeric workhorse scalars (int, uint, int64, uint64, float, double). Vectors/bitfields/enums do NOT qualify.
         if (t == null) return false
         let bt = t.baseType
@@ -701,7 +701,6 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf020_target_basetype(fname : string) : Type {
-        //! Map a cast-function name to the Type it produces.
         if (fname == "int") return Type.tInt
         if (fname == "int8") return Type.tInt8
         if (fname == "int16") return Type.tInt16
@@ -749,7 +748,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf025_value_kind(arg : Expression const?) : Perf025Kind {
-        //! How `"{x}"` (the builder's own conversion) compares to `string(x)` — the enum values name the verdicts.
+        //! How `"{x}"` (the builder's own conversion) compares to the `string(x)` cast PERF025 flags.
         if (arg == null || arg._type == null) return Perf025Kind.not_a_cast
         let bt = arg._type.baseType
         if (bt == Type.tInt || bt == Type.tInt8 || bt == Type.tInt16 || bt == Type.tInt64
@@ -1250,7 +1249,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf022_push_sentinel(expr : ExprFor?) : void {
-        //! Always pushed in preVisitExprFor so the stack stays lock-step with for-loop nesting. preVisitExprForBody may flip `matched`; if a frame survives to perf022_pop_and_check matched-and-undisqualified, we fire at the for-loop's `at` — the actionable line a reader rewrites.
+        //! The warning fires at the for-loop's `at`, not the push site — the three-function protocol is in daslib/ARCHITECTURE.md.
         var state : Perf022State
         perf022_stack |> push(state)
         unsafe {
@@ -1473,7 +1472,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def check_perf013_incdec(expr : ExprOp2?) : void {
-        if (expr.left == null || !is_char_comparable_scalar(expr.left._type)) return
+        if (expr.left == null || !is_workhorse_numeric_scalar(expr.left._type)) return
         let rhs_one = is_const_one(expr.right)
         let rhs_neg = is_const_neg_one(expr.right)
         var delta = 0
@@ -1596,8 +1595,8 @@ class PerfLintVisitor : AstVisitor {
         perf_warning("PERF021: redundant per-branch {lname}(...) cast in ternary - hoist as {lname}(cond ? a : b)", expr.at)
     }
 
-    def parse_range_leg(leg : Expression?; upper_op, lower_op : string; var v_out : Expression?&; var bound_out : int&; var is_hi_out : bool&) : bool {
-        //! Parse one comparison leg of a char-class range check; is_hi_out = this leg bounds the range from above.
+    def parse_range_leg(leg : Expression?; upper_op, lower_op : string; var v_out : Expression?&; var bound_out : int&; var bounds_above : bool&) : bool {
+        //! Parse one comparison leg of a char-class range check.
         if (leg == null || !(leg is ExprOp2)) return false
         var op2 = leg as ExprOp2
         let opname = string(op2.op)
@@ -1605,13 +1604,13 @@ class PerfLintVisitor : AstVisitor {
         if (op2.right is ExprConstInt && op2.left != null) {
             v_out = op2.left
             bound_out = (op2.right as ExprConstInt).value
-            is_hi_out = opname == upper_op
+            bounds_above = opname == upper_op
             return true
         }
         if (op2.left is ExprConstInt && op2.right != null) {
             v_out = op2.right
             bound_out = (op2.left as ExprConstInt).value
-            is_hi_out = opname == lower_op
+            bounds_above = opname == lower_op
             return true
         }
         return false

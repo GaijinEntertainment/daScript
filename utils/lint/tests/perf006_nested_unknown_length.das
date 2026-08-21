@@ -4,11 +4,9 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // unbalance the known-length counter for the rest of the program.
 //
 // The counter is saved per loop: an inner for over an iterator (unknown length)
-// must not erase the outer array-loop's "known" state on exit, and an inner
-// known loop under an unknown outer must not drive the counter negative.
-// Before the fix, the first shape left the counter permanently +1 (a later
-// while-loop push then fired a spurious PERF006), and the second left it -1
-// (a later genuine known-loop push went silent).
+// must not erase the outer array-loop's "known" state on exit (a later while-loop
+// push must stay silent), and an inner known loop under an unknown outer must not
+// drive the counter negative (a later genuine known-loop push must still fire).
 
 expect 31208:2
 

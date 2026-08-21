@@ -133,9 +133,10 @@ class StyleLintVisitor : AstVisitor {
     unresolved_call_names : table<string>
     @do_not_delete st041_candidates : table<Variable?; St041Candidate>
 
-    def location_key(at : LineInfo) : uint64 {
+    def report_key(at : LineInfo; code : string) : uint64 {
+        //! fileInfo is part of the key, where line|column alone collides across files.
         let pos = uint64(at.line) | (uint64(at.column) << uint64(20))
-        return pos ^ (intptr(at.fileInfo) * 1099511628211ul)
+        return (pos ^ (intptr(at.fileInfo) * 1099511628211ul)) ^ hash(code)
     }
 
     disabled_codes : table<string>
@@ -152,7 +153,7 @@ class StyleLintVisitor : AstVisitor {
 
     def style_warning(text : string; at : LineInfo) : void {
         if (!is_user_authored_body(current_function) || is_suppressed(text, at)) return
-        let key = location_key(at) ^ hash(extract_lint_code(text))
+        let key = report_key(at, extract_lint_code(text))
         if (key_exists(reported_locations, key)) return
         reported_locations |> insert(key)
         warning_count++
@@ -1421,7 +1422,6 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def ctor_field_state(v : Variable const?; fname : das_string) : CtorFieldState {
-        //! Classifies field `fname` of a just-declared local right after construction.
         var st : Structure const? = null
         if (v._type != null && v._type.baseType == Type.tStructure) {
             st = v._type.structType
@@ -1609,7 +1609,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def is_insert_of_const_key(call : ExprCall?; target : Variable?) : bool {
-        //! True when `call` is `target |> insert(<const string>, <any>)` — computed keys disqualify the chain.
+        //! A computed key disqualifies the chain.
         if (call.func == null || call.func.fromGeneric == null
             || call.func.fromGeneric.name != "insert"
             || length(call.arguments) < 3) return false
@@ -2514,7 +2514,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
-        //! Pops this node's frame — the subtree's unsafe-requirement summary; the mechanics are in daslib/ARCHITECTURE.md.
+        //! The frame is the subtree's unsafe-requirement summary; mechanics in daslib/ARCHITECTURE.md.
         let n = length(unsafe_stack)
         let frame = unsafe_stack[n - 1]
         unsafe_stack |> pop

@@ -1775,8 +1775,7 @@ class public CppAot : AstVisitor {
         if (!expr._type.isPointer && !variable._type.flags.ref && expr._type.isAotAlias && !variable._type.isAotAlias) {
             write(*ss, ")");
         }
-        if (variable.flags.init_via_move && variable.init is ExprMakeBlock) {
-        } elif (variable.flags.init_via_move) {
+        if (variable.flags.init_via_move && !(variable.init is ExprMakeBlock)) {
             write(*ss, ")");
         }
         if (variable._type.flags.constant) {
