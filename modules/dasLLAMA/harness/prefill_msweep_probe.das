@@ -7,7 +7,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_load
-require dasllama/dasllama_image   // load_model_cached — the .dlim rail, the bench's own metal leg
+require dasllama/dasllama_image   // nolint:STYLE030,LINT019 — load_model_cached, used only inside the das_metal static_if half
 require dasllama/dasllama_env
 require ?das_metal dasllama/dasllama_metal_prefill
 require ../performance/profile_common.das   // tune_gate + apply_box_profile_runtime — the standing pre-measure stack
@@ -82,6 +82,6 @@ def main {
         }
         delete tr
     } else {
-        print("msweep: no das_metal on this build\n")
+        print("msweep: no das_metal on this build - nothing to measure for {path}\n")
     }
 }
