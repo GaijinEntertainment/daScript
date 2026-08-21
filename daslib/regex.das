@@ -1525,8 +1525,8 @@ def regex_compile(var re : Regex; expr : string; case_insensitive : bool = false
         re_assign_next(re)
         re_assign_groups(re)
         re_assign_match_functions(re)
-        re_early_out(re.earlyOut, re.root)
-        re.canEarlyOut = !is_set_empty(re.earlyOut)
+        let matchesEmpty = re_early_out(re.earlyOut, re.root)
+        re.canEarlyOut = !matchesEmpty && !is_set_empty(re.earlyOut)
     }
     return re.root != null
 }
