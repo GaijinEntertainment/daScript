@@ -486,16 +486,39 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     }
                 }
             }
+            // the DEFAULT slot never unloads — the guard that also keeps the last model serving
+            POST("{base_url}/v1/models/unload", "\{\"model\":\"test-llm\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "unloading the default is refused")
+            }
+            // a load that panics inside load_model answers 400, not a dead server (the next cell
+            // proves the tick thread survived)
+            var tderr = ""
+            let td = temp_directory(tderr)
+            let junk = to_generic_path(path_join(empty(td) ? "/tmp" : td, "dasllama_test_junk.gguf"))
+            fwrite(junk, "not a gguf at all")
+            POST("{base_url}/v1/models/load", "\{\"path\":\"{junk}\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "a corrupt GGUF load answers 400")
+                t |> success(find(string(resp.body), "load failed") >= 0, "the 400 names the load failure")
+            }
+            GET("{base_url}/v1/models") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK), "the server serves on after a failed load")
+            }
             // runtime slot lifecycle: load a second model live (activate=false keeps the boot
-            // slot default), route a completion to it BY NAME, unload it, and see it 404 after
-            let smol = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+            // slot default), route a completion to it BY NAME, then move the default onto it and
+            // unload the BOOT slot — the branch where every index above the hole shifts down
+            let smol = to_generic_path(path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf"))   // forward slashes: a backslash path dies inside the JSON body
             if (stat(smol).is_valid) {
-                POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-live\",\"activate\":false}") $(resp) {
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-live\",\"activate\":false,\"ctx\":512}") $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.OK), "a live load answers 200")
                     t |> success(find(string(resp.body), "smol-live") >= 0, "the load echoes the new slot id")
+                    t |> success(find(string(resp.body), "\"ctx\":512") >= 0, "the body ctx clamps the KV pool")
                 }
                 POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-live\"}") $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.CONFLICT), "a taken id is a 409")
+                }
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-other\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.CONFLICT), "one slot per GGUF — a second id on the same file is a 409")
+                    t |> success(find(string(resp.body), "smol-live") >= 0, "the 409 names the slot already serving the file")
                 }
                 POST("{base_url}/v1/completions", "\{\"model\":\"smol-live\",\"prompt\":\"The capital of France is\",\"max_tokens\":4}") $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.OK), "the runtime slot serves by name")
@@ -518,18 +541,36 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                         }
                     }
                 }
-                POST("{base_url}/v1/models/unload", "\{\"model\":\"smol-live\"}") $(resp) {
-                    t |> equal(int(resp.status_code), int(http_status.OK), "the runtime slot unloads")
+                POST("{base_url}/v1/models/activate", "\{\"model\":\"smol-live\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "activate moves the default to the runtime slot")
+                }
+                POST("{base_url}/v1/models/unload", "\{\"model\":\"test-llm\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the boot slot unloads once it is not default")
                 }
                 POST("{base_url}/v1/completions", "\{\"model\":\"smol-live\",\"prompt\":\"hi\",\"max_tokens\":2}") $(resp) {
-                    t |> equal(int(resp.status_code), int(http_status.NOT_FOUND), "an unloaded slot 404s")
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the shifted-down slot still serves by name")
+                }
+                POST("{base_url}/v1/completions", "\{\"prompt\":\"hi\",\"max_tokens\":2}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the model-less route follows the shifted default")
+                }
+                POST("{base_url}/v1/models/unload", "\{\"model\":\"smol-live\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "the shifted default still refuses to unload")
+                }
+                POST("{base_url}/v1/completions", "\{\"model\":\"test-llm\",\"prompt\":\"hi\",\"max_tokens\":2}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.NOT_FOUND), "the unloaded boot slot 404s")
+                }
+                // a bad mmproj degrades to text-only with the reason in tower_note — the model
+                // itself must load and serve (the tower probe panic is caught, not fatal)
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{to_generic_path(MODEL_PATH)}\",\"id\":\"boot-back\",\"activate\":false,\"ctx\":512,\"image_mmproj\":\"{junk}\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "a load with a corrupt mmproj still loads the model")
+                    t |> success(find(string(resp.body), "\"tower_note\":\"\"") < 0 && find(string(resp.body), "tower_note") >= 0,
+                                 "the tower_note carries the arm failure")
+                }
+                POST("{base_url}/v1/completions", "\{\"model\":\"boot-back\",\"prompt\":\"hi\",\"max_tokens\":2}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the text-only degraded slot serves")
                 }
             } else {
                 t |> success(true, "skipped the runtime-load cells: SmolLM2-135M not present")
-            }
-            // the DEFAULT slot never unloads — the guard that also keeps the last model serving
-            POST("{base_url}/v1/models/unload", "\{\"model\":\"test-llm\"}") $(resp) {
-                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "unloading the default is refused")
             }
             // POST /restart — LAST in the block: the server starts draining after this. The exit-4
             // half of the contract lives in main.das + watchdog.py (not exercisable here).
