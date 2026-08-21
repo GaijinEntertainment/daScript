@@ -543,6 +543,7 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server_think.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server_vision.das
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --compile-only --color --failures-only --test ./utils/dasllama-server/test_openai_server_audio.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_exchange_client.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_model_catalog.das
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_setup_mode.das

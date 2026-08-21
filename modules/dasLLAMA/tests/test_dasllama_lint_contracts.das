@@ -3,6 +3,7 @@ options _dasllama_internal = true   // this file spawns fixtures; its own requir
 
 require dastest/testing_boost public
 require dasllama/dasllama_audio_io
+require dasllama/dasllama_gemma4a
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -58,5 +59,66 @@ def test_load_audio_16k_mono_contract(t : T?) {
     t |> run("a missing or unreadable file decodes to an EMPTY array, never a panic") @(t : T?) {
         let samples <- load_audio_16k_mono("this-file-does-not-exist.wav")
         t |> equal(0, length(samples), "empty on a missing file")
+    }
+}
+
+def private put_le(var b : array<uint8>; off : int; v : uint; nbytes : int) {
+    for (i in range(nbytes)) {
+        b[off + i] = uint8((v >> uint(i * 8)) & 0xFFu)
+    }
+}
+
+//! A mono 8-bit PCM WAV of `data_bytes` samples at `rate` Hz. A rate of 1 is the decompression
+//! bomb — miniaudio resamples it to 16 kHz, so a tiny file inflates into hours of PCM.
+def fill_wav(var b : array<uint8>; rate : uint; data_bytes : int) {
+    b |> resize(44 + data_bytes)
+    b[0] = uint8('R'); b[1] = uint8('I'); b[2] = uint8('F'); b[3] = uint8('F')
+    put_le(b, 4, uint(36 + data_bytes), 4)
+    b[8] = uint8('W'); b[9] = uint8('A'); b[10] = uint8('V'); b[11] = uint8('E')
+    b[12] = uint8('f'); b[13] = uint8('m'); b[14] = uint8('t'); b[15] = uint8(' ')
+    put_le(b, 16, 16u, 4)
+    put_le(b, 20, 1u, 2)
+    put_le(b, 22, 1u, 2)
+    put_le(b, 24, rate, 4)
+    put_le(b, 28, rate, 4)
+    put_le(b, 32, 1u, 2)
+    put_le(b, 34, 8u, 2)
+    b[36] = uint8('d'); b[37] = uint8('a'); b[38] = uint8('t'); b[39] = uint8('a')
+    put_le(b, 40, uint(data_bytes), 4)
+}
+
+[test]
+def test_decode_audio_frame_cap(t : T?) {
+    t |> run("a well-formed clip under the cap decodes; a bomb over the cap decodes to EMPTY") @(t : T?) {
+        let cap = 16000 * 10
+        var ok : array<uint8>
+        fill_wav(ok, 8000u, 8000)
+        let good <- decode_audio_16k_mono(ok, cap)
+        t |> success(!empty(good), "a short clip decodes ({length(good)} frames)")
+        t |> success(length(good) <= cap, "the decode never exceeds the cap")
+        var bomb : array<uint8>
+        fill_wav(bomb, 1u, 4096)
+        let refused <- decode_audio_16k_mono(bomb, cap)
+        t |> equal(0, length(refused), "the length-probe refuses the bomb before decoding it")
+        let uncapped <- decode_audio_16k_mono(ok, 0)
+        t |> success(!empty(uncapped), "cap 0 is unbounded (the trusted-local-file path)")
+        delete ok
+        delete bomb
+    }
+}
+
+[test]
+def test_gemma4a_probe_rejects_non_gguf(t : T?) {
+    t |> run("the audio probe returns 0 (never panics) on a .dlim path and on non-GGUF bytes") @(t : T?) {
+        t |> equal(0l, gemma4a_probe_proj_dim("some-prepared-image.dlim"), "a .dlim is not a gguf")
+        t |> equal(0l, gemma4a_probe_proj_dim("this-file-does-not-exist.gguf"), "a missing file is 0")
+        let dir_r = create_temp_directory_result("dasllama_probe")
+        if (dir_r is value) {
+            let dir = unsafe(dir_r.value)
+            let junk = path_join(dir, "junk.gguf")
+            fwrite(junk, "not a gguf at all")
+            t |> equal(0l, gemma4a_probe_proj_dim(junk), "non-GGUF bytes are 0, not a panic")
+            rmdir_rec_result(dir)
+        }
     }
 }

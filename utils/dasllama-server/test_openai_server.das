@@ -301,11 +301,24 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
                 t |> success(find(string(resp.body), "no vision arm") >= 0, "the missing arm outranks the image count")
             }
-            // /v1/stats declares both arms the page reads: the vision flag and the thinking default
+            // an input_audio part on a slot with NO audio arm: same named-400 contract as vision
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"AAAA\",\"format\":\"wav\"}},\{\"type\":\"text\",\"text\":\"what is said\"}]}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "no audio arm") >= 0, "the 400 names the missing audio arm")
+            }
+            // an image AND audio in one message: refused by shape before any arm check — the
+            // scheduler takes ONE media splice per request
+            POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"AAAA\",\"format\":\"wav\"}}]}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "image AND audio") >= 0, "the 400 names the two-media shape")
+            }
+            // /v1/stats declares the arms the page reads: the vision/audio flags and the thinking default
             GET("{base_url}/v1/stats") $(resp) {
                 var err : string
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null && !(js?["vision"] ?? true), "stats reports no vision arm for a text-only slot")
+                t |> success(js != null && !(js?["audio"] ?? true), "stats reports no audio arm for a text-only slot")
                 // the VALUE, not just presence: tinyllama neither defaults to thinking nor has the
                 // reply markers in its vocab, so a true here means the vocab gate fell off
                 t |> success(js != null && js?["thinking_default"] != null, "stats declares the family thinking default")

@@ -48,6 +48,9 @@ def register_arch_gemma4() {
     // gemma4uv vision: the image soft-token span markers, media-first before the user text
     d.chat.image_pre.parts <- [chat_special("<|image>")]
     d.chat.image_post.parts <- [chat_special("<image|>")]
+    // gemma4a audio: same media-first span shape (the E-series mmproj carries both towers)
+    d.chat.audio_pre.parts <- [chat_special("<|audio>")]
+    d.chat.audio_post.parts <- [chat_special("<audio|>")]
     d.chat.tool_mode = ToolMode.gemma4   // <|tool>declaration DSL defs, <|tool_call> DSL calls
     d.chat.think_mode = ThinkMode.asymmetric
     d.chat.think_open = "<|channel>thought"

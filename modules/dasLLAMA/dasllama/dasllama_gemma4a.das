@@ -329,6 +329,35 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
     return <- built
 }
 
+//! META-only probe of an mmproj gguf: the gemma4a audio encoder's projection width, or 0 for no
+//! gemma4a audio tower (wrong family, vision-only, unreadable, a `.dlim`). Gates on the audio TENSOR
+//! and derives the width like the loader (`clip.audio.*` is written unconditionally, see REVIEW_AUDIO.md).
+def gemma4a_probe_proj_dim(path : string) : int64 {
+    if (path |> ends_with(".dlim")) {
+        return 0l
+    }
+    let f = fopen(path, "rb")
+    if (f == null) {
+        return 0l
+    }
+    var dim = 0l
+    fmap(f) $(var bytes : array<uint8>#) {
+        if (length(bytes) < 4 || !(int(bytes[0]) == 'G' && int(bytes[1]) == 'G' && int(bytes[2]) == 'U' && int(bytes[3]) == 'F')) {
+            return
+        }
+        var inscope m <- parse_gguf_meta(bytes)
+        let out_proj = gguf_find_tensor(m, "a.pre_encode.out.weight")
+        if (out_proj >= 0 && gguf_has(m, "clip.audio.embedding_length")) {
+            let d = gguf_int(m, bytes, "clip.audio.embedding_length")
+            if (d > 0l) {
+                dim = m.tensors[out_proj].n_elem / d
+            }
+        }
+    }
+    fclose(f)
+    return dim
+}
+
 // GEMM read: a q8 load transcodes from the file straight into qblob/qscales (the fp32 blob
 // never holds it); an fp32 load reads it like any plain tensor
 def private g4a_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma4aStaging;
@@ -968,9 +997,9 @@ def gemma4a_encode_all(enc : Gemma4aEncoder; var st : Gemma4aState; samples : ar
         gemma4a_log_mel(enc, samples, off, len, st)
         asr_prof_add("g4a.mel", tmel)
         let n = gemma4a_encode(enc, st)
-        rows |> reserve(int(long_length(rows) + n * enc.proj_dim))
+        rows |> ensure_capacity(int(long_length(rows) + n * enc.proj_dim))
         for (i in range64(n * enc.proj_dim)) {
-            rows |> push(st.out[i])
+            rows |> push(st.out[i])   // nolint:PERF006,LINT019 — ensure_capacity above IS the reserve; exact reserve() defeats geometric growth (O(chunks^2)); PERF006 fires at the downstream instantiation
         }
         total += n
         off += chunk

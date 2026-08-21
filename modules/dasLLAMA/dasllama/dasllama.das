@@ -315,6 +315,13 @@ def render_turn_image(model : Model; chat : ChatSession; var head : array<int64>
     render_turn_image_(model, chat, head, tail)
 }
 
+def render_turn_audio(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>) {
+    //! ``render_turn``'s AUDIO twin: the same two-span contract around the audio soft-token splice
+    //! (the template's audio span markers). The rows come from the family's audio encoder — for the
+    //! gemma-4 E-series, ``gemma4a_encode_all`` over the shared vision+audio mmproj.
+    render_turn_audio_(model, chat, head, tail)
+}
+
 def render_assistant(model : Model; var chat : ChatSession; text : string; var out : array<int64>) {
     //! ``add_assistant``'s render half: appends the exact token stream a known reply prefills to
     //! ``out`` WITHOUT running the model, advancing the transcript like ``add_assistant``. Use on a

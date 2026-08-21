@@ -56,6 +56,9 @@ def test_audio_wrap_parts(t : T?) {
         let q3 <- arch_chat("qwen3vl")
         t |> equal(q3.audio_pre.parts[0].s, "<|audio_start|>", "qwen3vl audio_pre")
         t |> equal(q3.audio_post.parts[0].s, "<|audio_end|>", "qwen3vl audio_post")
+        let g4 <- arch_chat("gemma4")
+        t |> equal(g4.audio_pre.parts[0].s, "<|audio>", "gemma4 audio_pre matches gemma4a_transcribe's hand-rolled span")
+        t |> equal(g4.audio_post.parts[0].s, "<audio|>", "gemma4 audio_post matches gemma4a_transcribe's hand-rolled span")
         let lt <- arch_chat("llama")
         t |> success(empty(lt.audio_pre.parts) && empty(lt.audio_post.parts), "llama-3: bare embeddings")
     }

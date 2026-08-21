@@ -323,6 +323,7 @@ button:disabled { opacity: 0.45; cursor: default; }
     <div class="panel">
         <div class="chat-log" id="chat-log"><div class="ctl-note">talk to the served model — the conversation lives in this page only</div></div>
         <div class="img-strip" id="img-strip" style="display:none"></div>
+        <div class="img-strip" id="aud-strip" style="display:none"></div>
         <div class="chat-input">
             <textarea id="chat-text" rows="2" placeholder="message the model — Enter sends, Shift+Enter for a newline"></textarea>
             <input id="img-file" type="file" accept="image/*" style="display:none">
@@ -529,11 +530,13 @@ function apply(s) {
         $("kn-thinking").checked = s.thinking_default;
         thinkSeeded = true;
     }
+    micNativeAudio = !!s.audio && !(s.asr_workers > 0);   // no fast-ASR workers: the clip rides the chat natively
     if (micRec === null && !micDenied) {
         const bmic = $("b-mic");
         bmic.style.display = setupMode ? "none" : "";
-        bmic.classList.toggle("off", !(s.asr_workers > 0));
-        bmic.title = s.asr_workers > 0 ? "record, click again to stop + transcribe" : ASR_OFFER;
+        bmic.classList.toggle("off", !(s.asr_workers > 0 || s.audio));
+        bmic.title = s.asr_workers > 0 ? "record, click again to stop + transcribe"
+            : (s.audio ? "record, click again to stop — the clip attaches to your next message" : ASR_OFFER);
     }
     if (s.asr_workers > 0) {
         $("tile-asr").classList.remove("hide");
@@ -1170,7 +1173,12 @@ function attachImageFile(file) {
     if (!file || !file.type.startsWith("image/")) return;
     if (file.size > IMAGE_MAX_MB * 1024 * 1024) { alert("image over the server's " + IMAGE_MAX_MB + " MB cap (" + (file.size / 1048576).toFixed(1) + " MB)"); return; }
     const fr = new FileReader();
-    fr.onload = () => { chatImage = { url: String(fr.result), name: file.name || "pasted image" }; renderImgStrip(); };
+    fr.onload = () => {
+        chatImage = { url: String(fr.result), name: file.name || "pasted image" };
+        chatAudio = null;   // the server takes ONE media clip per message
+        renderAudioStrip();
+        renderImgStrip();
+    };
     fr.readAsDataURL(file);
 }
 
@@ -1214,7 +1222,7 @@ $("chat-text").addEventListener("paste", e => {
 async function sendChat() {
     const ta = $("chat-text");
     const text = ta.value.trim();
-    if (!text || chatBusy) return;
+    if ((!text && !chatAudio) || chatBusy) return;
     chatBusy = true;
     $("b-send").disabled = true;
     ta.value = "";
@@ -1226,8 +1234,14 @@ async function sendChat() {
         shot.src = chatImage.url;
         ub.append(shot);
     }
+    if (chatAudio) {
+        const clip = document.createElement("span");
+        clip.className = "note";
+        clip.textContent = "● " + chatAudio.seconds.toFixed(1) + "s audio clip";
+        ub.append(clip);
+    }
     renderMsgContent(ub, text, "", null, true);
-    // the image goes onto the newest message only — the wire copy carries the parts array,
+    // media goes onto the newest message only — the wire copy carries the parts array,
     // chatMsgs keeps plain text so a long conversation does not resend old base64
     const wire = chatMsgs.slice();
     if (chatImage) {
@@ -1235,6 +1249,13 @@ async function sendChat() {
             { type: "image_url", image_url: { url: chatImage.url } },
             { type: "text", text: text },
         ] };
+    } else if (chatAudio) {
+        wire[wire.length - 1] = { role: "user", content: [
+            { type: "input_audio", input_audio: { data: chatAudio.b64, format: "wav" } },
+            { type: "text", text: text },
+        ] };
+        chatAudio = null;   // a clip rides ONE message; the image strip persists by design
+        renderAudioStrip();
     }
     const body = { messages: wire, stream: true };
     for (const kn of KNOBS) {
@@ -1343,6 +1364,23 @@ function encodeWav(chunks, sampleRate) {
 }
 
 let micDenied = false;   // mic permission refused — keep the button down instead of re-showing it
+let micNativeAudio = false;   // stats says: attach the clip to the chat (native audio) instead of transcribing
+let chatAudio = null;   // { b64, seconds } — rides the NEXT message as an input_audio part, then clears
+
+function renderAudioStrip() {
+    const strip = $("aud-strip");
+    strip.textContent = "";
+    if (!chatAudio) { strip.style.display = "none"; return; }
+    strip.style.display = "";
+    const note = document.createElement("span");
+    note.className = "note";
+    note.textContent = "● " + chatAudio.seconds.toFixed(1) + "s clip — rides your next message";
+    const x = document.createElement("button");
+    x.type = "button";
+    x.textContent = "remove";
+    x.addEventListener("click", () => { chatAudio = null; renderAudioStrip(); });
+    strip.append(note, x);
+}
 
 async function micToggle() {
     const btn = $("b-mic");
@@ -1360,6 +1398,21 @@ async function micToggle() {
         const rate = ctx.sampleRate;
         await ctx.close();
         if (!chunks.length) return;
+        if (micNativeAudio) {
+            // native audio: the wav attaches to the next chat message as an input_audio part —
+            // the model hears the clip itself, no transcription pass
+            const blob = encodeWav(chunks, rate);
+            const fr = new FileReader();
+            fr.onload = () => {
+                chatAudio = { b64: String(fr.result).split(",")[1] || "",
+                              seconds: chunks.reduce((n, c) => n + c.length, 0) / rate };
+                chatImage = null;   // the server takes ONE media clip per message
+                renderImgStrip();
+                renderAudioStrip();
+            };
+            fr.readAsDataURL(blob);
+            return;
+        }
         btn.disabled = true;
         try {
             const fd = new FormData();
