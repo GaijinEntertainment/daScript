@@ -318,7 +318,7 @@ def public catalog_download_tick() {
 }
 
 //! The GET /catalog document: entries with local presence (model AND vision tower), the ASR
-//! tower, the box's memory facts (`ram_gb`/`vram_mb`, 0 = unknown — the page's fit badges),
+//! tower, the box's memory facts (`ram_gb` in GiB, `vram_mb` in MiB, 0 = unknown — the page's fit badges),
 //! plus the download state machine.
 def public catalog_state_json(dir : string; ram_gb : int = 0; vram_mb : int64 = 0l) : string {
     var cat <- model_catalog()

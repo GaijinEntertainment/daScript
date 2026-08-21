@@ -3631,7 +3631,7 @@ class OpenAiServer : HvWebServer {
             return handle_bake_start(req, resp)
         }
         GET("/catalog") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return resp |> JSON(catalog_state_json(g_catalog_dir, g_box_ram_gb, gpu_weight_budget_bytes() / 1_000_000l))
+            return resp |> JSON(catalog_state_json(g_catalog_dir, g_box_ram_gb, gpu_weight_budget_bytes() / (1024l * 1024l)))
         }
         POST("/catalog/download") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (!is_loopback_req(req)) return deny_operator(resp)

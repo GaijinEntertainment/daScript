@@ -851,7 +851,7 @@ STAGE_LABELS = {
     "exchange_lookup": "checking the tune exchange",
     "tuning": "tuning this box",
     "model_load": "loading the model",
-    "ready": "up — first health check pending",
+    "ready": "first health check pending",
 }
 
 
