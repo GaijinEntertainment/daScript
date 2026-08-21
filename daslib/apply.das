@@ -398,15 +398,15 @@ def private invoke_apply(var expr : ExprCallMacro?; argT : TypeDeclPtr; hasExtra
     var nfields : int
     var names : array<string>
     if (argT.baseType == Type.tStructure) {
-        callName = "apply`struct`{argT.structType.name}`{expr.at.line}"
+        callName = "apply`struct`{argT.structType.name}`{expr.at.line}`{expr.at.column}"
         nfields = argT.structType.fields |> length
         names <- generateApplyVisitStruct(expr.arguments[0]._type, callName, expr.at, hasExtraArg)  // nolint:PERF030 - target is the fresh empty decl above; the three fills are mutually exclusive branches
     } elif (argT.baseType == Type.tTuple) {
-        callName = "apply`tuple`{expr.arguments[0]._type.get_mnh}`{expr.at.line}"
+        callName = "apply`tuple`{expr.arguments[0]._type.get_mnh}`{expr.at.line}`{expr.at.column}"
         nfields = length(argT.argTypes)
         names <- generateApplyVisitTuple(expr.arguments[0]._type, callName, expr.at)  // nolint:PERF030 - target is the fresh empty decl above; the three fills are mutually exclusive branches
     } else {
-        callName = "apply`variant`{expr.arguments[0]._type.get_mnh}`{expr.at.line}"
+        callName = "apply`variant`{expr.arguments[0]._type.get_mnh}`{expr.at.line}`{expr.at.column}"
         nfields = length(argT.argTypes)
         names <- generateApplyVisitVariant(expr.arguments[0]._type, callName, expr.at)  // nolint:PERF030 - target is the fresh empty decl above; the three fills are mutually exclusive branches
     }
