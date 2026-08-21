@@ -2,7 +2,7 @@
 
 After creating or modifying any `.das` file that is part of the project (daslib modules, tutorials, tests, etc.), run the source formatter on it. Do NOT format temporary/scratch files that will be deleted.
 
-**Formatter:** MCP `format_file` tool (calls `daslib/das_source_formatter` directly). Comment policy comes from the file's folder: the nearest `.lint_config` `[format]` table decides. `force_clean_comments = true` (swept trees, e.g. `daslib/`) also strips comments file-wide — kept set: leading header block, `//!` docs, `//fmt:` directives, `nolint:` suppressions; fail-closed (a strip must pass compile_check or the file is restored). Teaching folders (`tutorials/`, `examples/`) declare `force_clean_comments = false`; `format_enabled = false` exempts a tree entirely (load-bearing fixture layout). There is no per-call override.
+**Formatter:** MCP `format_file` tool (calls `daslib/das_source_formatter` directly). Comment policy comes from the file's folder: each `[format]` key is taken from the nearest `.lint_config` that declares it, and keys cascade independently up to the `.git` root. `force_clean_comments = true` also strips comments file-wide — kept set: leading header block, `//!` docs, `//fmt:` directives, `nolint:` / `@nolint` suppressions, license comments (Copyright / SPDX); fail-closed (a strip must pass compile_check or the file is restored). Teaching folders (`tutorials/`, `examples/`) declare `force_clean_comments = false`; `format_enabled = false` exempts a tree entirely (load-bearing fixture layout). There is no per-call override.
 
 **CLI fallback (when the MCP server is unavailable):** the formatter and linter also run as in-tree daslang scripts:
 

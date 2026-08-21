@@ -271,6 +271,15 @@ def test_format_policy_per_key_cascade(t : T?) {
         let pol = format_policy_for(path_join(root, "a/b/x.das"))
         t |> success(pol.force_clean_comments, "b's own value stands against a's")
     }
+    t |> run("a config with no [format] table falls through to its parent") @@(t : T?) {
+        let root = path_join(_tmp_dir, "noformat")
+        mkdir_rec(path_join(root, "a"))
+        mkdir(path_join(root, ".git"))
+        plant(root, ".lint_config", "[format]\nforce_clean_comments = true\n")
+        plant(path_join(root, "a"), ".lint_config", "[rules]\n")
+        let pol = format_policy_for(path_join(root, "a/x.das"))
+        t |> success(pol.force_clean_comments, "child without [format] inherits the parent's key")
+    }
     t |> run("a bare filename resolves against the working directory's cascade") @@(t : T?) {
         let pol = format_policy_for("x.das")
         t |> success(pol.format_enabled)
@@ -285,7 +294,7 @@ def test_format_policy_per_key_cascade(t : T?) {
 [test]
 def test_partition_by_format_policy(t : T?) {
     fixture_path()
-    t |> run("skips disabled trees, keeps strips index-aligned with survivors") @@(t : T?) {
+    t |> run("skips disabled trees, jobs carry their folder's policy") @@(t : T?) {
         let root = path_join(_tmp_dir, "partition")
         mkdir_rec(path_join(root, "swept"))
         mkdir_rec(path_join(root, "corpus"))
@@ -293,15 +302,14 @@ def test_partition_by_format_policy(t : T?) {
         mkdir(path_join(root, ".git"))
         plant(path_join(root, "swept"), ".lint_config", "[format]\nforce_clean_comments = true\n")
         plant(path_join(root, "corpus"), ".lint_config", "[format]\nformat_enabled = false\n")
-        var files <- [path_join(root, "swept/a.das"), path_join(root, "corpus/b.das"), path_join(root, "plain/c.das")]
-        var strips : array<bool>
+        var files <- [path_join(root, "swept/a.das"), path_join(root, "swept/a2.das"), path_join(root, "corpus/b.das"), path_join(root, "plain/c.das")]
         var skipped : array<string>
-        partition_by_format_policy(files, strips, skipped)
-        t |> equal(length(files), 2)
-        t |> equal(length(strips), 2)
+        let jobs <- partition_by_format_policy(files, skipped)
+        t |> equal(length(jobs), 3)
         t |> equal(length(skipped), 1)
         t |> success(skipped[0] |> ends_with("b.das"), "disabled tree file skipped")
-        t |> success(files[0] |> ends_with("a.das") && strips[0], "swept survivor strips")
-        t |> success(files[1] |> ends_with("c.das") && !strips[1], "plain survivor keeps comments")
+        t |> success(jobs[0].file |> ends_with("a.das") && jobs[0].strip_comments, "swept survivor strips")
+        t |> success(jobs[1].file |> ends_with("a2.das") && jobs[1].strip_comments, "memoized sibling gets the same policy")
+        t |> success(jobs[2].file |> ends_with("c.das") && !jobs[2].strip_comments, "plain survivor keeps comments")
     }
 }

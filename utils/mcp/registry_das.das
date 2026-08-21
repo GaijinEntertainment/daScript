@@ -74,7 +74,7 @@ def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "format_file",
-            "Format .das file(s) using the daslang code formatter. Comment policy comes from the file's folder: the nearest `.lint_config` `[format]` table decides (`force_clean_comments = true` strips comments outside the kept set — leading header block, `//!` documentation, `//fmt:` directives, `nolint:` suppressions — fail-closed: a strip must pass compile_check or the original is restored; `format_enabled = false` exempts the tree). No per-call override. Supports single file, comma-separated list, or glob pattern (e.g. 'daslib/*.das'). Returns JSON array with file, status ('formatted' | 'already_formatted' | 'reverted' | 'skipped' | 'error'), and message.",
+            "Format .das file(s) using the daslang code formatter. Comment policy comes from the file's folder: each `.lint_config` `[format]` key is taken from the nearest file that declares it (`force_clean_comments = true` strips comments outside the kept set — leading header block, `//!` documentation, `//fmt:` directives, `nolint:` suppressions — fail-closed: a strip must pass compile_check or the original is restored; `format_enabled = false` exempts the tree). No per-call override. Supports single file, comma-separated list, or glob pattern (e.g. 'daslib/*.das'). Returns JSON array with file, status ('formatted' | 'already_formatted' | 'reverted' | 'skipped' | 'error'), and message.",
             {
                 "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern (e.g. 'dir/*.das')"),
                 "project" => PROJECT_PROP,
