@@ -486,6 +486,51 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     }
                 }
             }
+            // runtime slot lifecycle: load a second model live (activate=false keeps the boot
+            // slot default), route a completion to it BY NAME, unload it, and see it 404 after
+            let smol = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+            if (stat(smol).is_valid) {
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-live\",\"activate\":false}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "a live load answers 200")
+                    t |> success(find(string(resp.body), "smol-live") >= 0, "the load echoes the new slot id")
+                }
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-live\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.CONFLICT), "a taken id is a 409")
+                }
+                POST("{base_url}/v1/completions", "\{\"model\":\"smol-live\",\"prompt\":\"The capital of France is\",\"max_tokens\":4}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the runtime slot serves by name")
+                }
+                GET("{base_url}/v1/stats") $(resp) {
+                    var err : string
+                    var js = read_json(string(resp.body), err)
+                    var boot_is_default = false
+                    if (js != null && js?["models"] != null && ((js?["models"]).value is _array)) {
+                        for (e in ((js?["models"]).value as _array)) {
+                            if ((e?["name"] ?? "") == "test-llm") {
+                                boot_is_default = e?["is_default"] ?? false
+                            }
+                        }
+                    }
+                    t |> success(boot_is_default, "activate=false leaves the boot slot default")
+                    if (js != null) {
+                        unsafe {
+                            delete js
+                        }
+                    }
+                }
+                POST("{base_url}/v1/models/unload", "\{\"model\":\"smol-live\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "the runtime slot unloads")
+                }
+                POST("{base_url}/v1/completions", "\{\"model\":\"smol-live\",\"prompt\":\"hi\",\"max_tokens\":2}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.NOT_FOUND), "an unloaded slot 404s")
+                }
+            } else {
+                t |> success(true, "skipped the runtime-load cells: SmolLM2-135M not present")
+            }
+            // the DEFAULT slot never unloads — the guard that also keeps the last model serving
+            POST("{base_url}/v1/models/unload", "\{\"model\":\"test-llm\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "unloading the default is refused")
+            }
             // POST /restart — LAST in the block: the server starts draining after this. The exit-4
             // half of the contract lives in main.das + watchdog.py (not exercisable here).
             POST("{base_url}/restart", "") $(resp) {
@@ -801,7 +846,9 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
             POST("{base_url}/v1/completions", body_a) $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
             }
-            // per-slot stats: roster present, default marked, smol's requested backend recorded,
+            // per-slot stats: roster present, the ACTIVATION moved the default to smol (activate
+            // means "talk to this one now" — model-less requests follow it, so a live-loaded
+            // default can always be walked off and unloaded), smol's requested backend recorded,
             // tiny's cache hit counted, smol's cache untouched
             GET("{base_url}/v1/stats") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
@@ -816,9 +863,10 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
                         for (e in mv.value as _array) {
                             let nm = e?["name"] ?? ""
                             if (nm == "tiny") {
-                                t |> success(e?["is_default"] ?? false, "tiny is the default slot")
+                                t |> success(!(e?["is_default"] ?? true), "the activate moved the default off tiny")
                                 t |> success((e?["cached_tokens"] ?? 0l) > 0l, "tiny's prefix cache hit across the smol interleave")
                             } elif (nm == "smol") {
+                                t |> success(e?["is_default"] ?? false, "the activate made smol the default")
                                 t |> equal(e?["backend"] ?? "", "cpu")
                                 t |> equal(e?["backend_effective"] ?? "", "cpu")
                                 t |> equal(e?["cached_tokens"] ?? -1l, 0l)

@@ -301,68 +301,87 @@ def set_default_max_tokens(n : int64) {
     g_default_max_new = n
 }
 
-//! Give slot `name` a vision arm: load the vision mmproj at `path` (any family) so its chat route accepts
-//! `image_url` content parts. Call ONCE per slot, after ``add_model``, before ``init_server`` /
-//! ``run_server`` (the vision worker snapshots the arms at init). Anything wrong with the pair
-//! PANICS here, not on the first request.
-def set_model_vision(name : string; path : string) {
-    if (g_server_started) {
-        panic("dasllama-server: set_model_vision after init_server - the vision worker snapshots the arms at init; arm the slot before starting")
-    }
-    let mi = slot_index(name)
-    if (mi < 0) {
-        panic("dasllama-server: --image-mmproj names slot '{name}', which is not served")
-    }
+// The arm proper, shared by the boot API (panics on misuse) and the runtime load route (which
+// turns the same failures into 400s). Empty return = armed.
+def private arm_slot_vision(mi : int; path : string) : string {
     if (g_slots[mi].vision.kind != VisionKind.none) {
-        panic("dasllama-server: slot '{name}' already has a vision arm ({base_name(g_slots[mi].vision_path)}) - set_model_vision is once per slot")
+        return "slot '{g_slots[mi].name}' already has a vision arm ({base_name(g_slots[mi].vision_path)}) - the arm is once per slot"
     }
     var inscope emb <- load_vision_embedder(path)
     if (vision_proj_dim(emb) != g_slots[mi].model.config.dim) {
-        panic("dasllama-server: {base_name(path)} projects to {vision_proj_dim(emb)} but {name} is {g_slots[mi].model.config.dim}-wide - mismatched pair")
+        return "{base_name(path)} projects to {vision_proj_dim(emb)} but {g_slots[mi].name} is {g_slots[mi].model.config.dim}-wide - mismatched pair"
     }
     var probe <- create_chat_renderer(g_slots[mi].model, "", 1l)
     let no_markers = empty(probe.tmpl.image_pre.parts) || !image_vocab_ok(g_slots[mi].model, probe.tmpl)
     delete probe
     if (no_markers) {
-        panic("dasllama-server: {name}'s chat template or vocab carries no image span markers - it has no vision arm")
+        return "{g_slots[mi].name}'s chat template or vocab carries no image span markers - it has no vision arm"
     }
     g_slots[mi].vision <- emb
     g_slots[mi].vision_path = path
-    to_log(LOG_INFO, "dasllama-server: {name} vision arm: {base_name(path)} ({vision_family(g_slots[mi].vision)}, {vision_proj_dim(g_slots[mi].vision)}-wide, {vision_align(g_slots[mi].vision)}px per token)\n")
+    to_log(LOG_INFO, "dasllama-server: {g_slots[mi].name} vision arm: {base_name(path)} ({vision_family(g_slots[mi].vision)}, {vision_proj_dim(g_slots[mi].vision)}-wide, {vision_align(g_slots[mi].vision)}px per token)\n")
+    return ""
 }
 
-//! Give slot `name` an audio arm: the mmproj at `path` must carry a gemma4a audio encoder (the
-//! E-series mmproj carries BOTH towers, so the same file arms vision and audio). The chat route
-//! then accepts `input_audio` content parts and `/v1/audio/transcriptions` serves through THIS
-//! slot — no second decoder copy. Same call contract as ``set_model_vision``: once per slot,
-//! before ``init_server`` (the media worker snapshots the arms at init); a bad pair PANICS here.
-def set_model_audio(name : string; path : string) {
+//! Give slot `name` a vision arm: load the vision mmproj at `path` (any family) so its chat route accepts
+//! `image_url` content parts. Call ONCE per slot, after ``add_model``, before ``init_server`` /
+//! ``run_server`` (the media worker snapshots the arms at init). Anything wrong with the pair
+//! PANICS here, not on the first request.
+def set_model_vision(name : string; path : string) {
     if (g_server_started) {
-        panic("dasllama-server: set_model_audio after init_server - the media worker snapshots the arms at init; arm the slot before starting")
+        panic("dasllama-server: set_model_vision after init_server - the media worker snapshots the arms at init; arm the slot before starting (a runtime load arms towers through POST /v1/models/load)")
     }
     let mi = slot_index(name)
     if (mi < 0) {
-        panic("dasllama-server: audio mmproj names slot '{name}', which is not served")
+        panic("dasllama-server: --image-mmproj names slot '{name}', which is not served")
     }
+    let err = arm_slot_vision(mi, path)
+    if (!empty(err)) {
+        panic("dasllama-server: {err}")
+    }
+}
+
+// ``arm_slot_vision``'s audio twin — META-only validation, the media worker owns the encoder.
+def private arm_slot_audio(mi : int; path : string) : string {
     if (g_slots[mi].audio_armed) {
-        panic("dasllama-server: slot '{name}' already has an audio arm ({base_name(g_slots[mi].audio_path)}) - set_model_audio is once per slot")
+        return "slot '{g_slots[mi].name}' already has an audio arm ({base_name(g_slots[mi].audio_path)}) - the arm is once per slot"
     }
     let proj_dim = gemma4a_probe_proj_dim(path)
     if (proj_dim == 0l) {
-        panic("dasllama-server: {base_name(path)} carries no gemma4a audio encoder - it cannot arm audio for {name}")
+        return "{base_name(path)} carries no gemma4a audio encoder - it cannot arm audio for {g_slots[mi].name}"
     }
     if (proj_dim != g_slots[mi].model.config.dim) {
-        panic("dasllama-server: {base_name(path)}'s audio encoder projects to {proj_dim} but {name} is {g_slots[mi].model.config.dim}-wide - mismatched pair")
+        return "{base_name(path)}'s audio encoder projects to {proj_dim} but {g_slots[mi].name} is {g_slots[mi].model.config.dim}-wide - mismatched pair"
     }
     var probe <- create_chat_renderer(g_slots[mi].model, "", 1l)
     let no_markers = empty(probe.tmpl.audio_pre.parts) || !audio_vocab_ok(g_slots[mi].model, probe.tmpl)
     delete probe
     if (no_markers) {
-        panic("dasllama-server: {name}'s chat template or vocab carries no audio span markers - it has no audio arm")
+        return "{g_slots[mi].name}'s chat template or vocab carries no audio span markers - it has no audio arm"
     }
     g_slots[mi].audio_armed = true
     g_slots[mi].audio_path = path
-    to_log(LOG_INFO, "dasllama-server: {name} audio arm: {base_name(path)} (gemma4a, {proj_dim}-wide)\n")
+    to_log(LOG_INFO, "dasllama-server: {g_slots[mi].name} audio arm: {base_name(path)} (gemma4a, {proj_dim}-wide)\n")
+    return ""
+}
+
+//! Give slot `name` an audio arm: the mmproj at `path` must carry a gemma4a audio encoder (the
+//! E-series mmproj carries BOTH towers, so the same file arms vision and audio). The chat route
+//! then accepts `input_audio` content parts — the clip serves through THIS slot, no second
+//! decoder copy. Same call contract as ``set_model_vision``: once per slot, before
+//! ``init_server`` (the media worker snapshots the arms at init); a bad pair PANICS here.
+def set_model_audio(name : string; path : string) {
+    if (g_server_started) {
+        panic("dasllama-server: set_model_audio after init_server - the media worker snapshots the arms at init; arm the slot before starting (a runtime load arms towers through POST /v1/models/load)")
+    }
+    let mi = slot_index(name)
+    if (mi < 0) {
+        panic("dasllama-server: audio mmproj names slot '{name}', which is not served")
+    }
+    let err = arm_slot_audio(mi, path)
+    if (!empty(err)) {
+        panic("dasllama-server: {err}")
+    }
 }
 
 //! Configure long-lived ASR worker threads. Each worker loads and owns its model in its cloned
@@ -571,7 +590,7 @@ def private handle_bench_start(var resp : HttpResponse?) : http_status {
             error_body(empty(g_lcpp_bin) ? "set lcpp_bin in the config to enable benchmarking" : "benchmarking needs a source-tree daslang (standalone exe cannot spawn the bench child)", "invalid_request_error"),
             http_status.BAD_REQUEST)
     }
-    if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || !empty(g_media_wires)) {
+    if (streams_busy()) {
         return resp |> JSON(
             error_body("streams are active — contended numbers are misleading; drain first, then bench", "invalid_request_error"),
             http_status.CONFLICT)
@@ -724,7 +743,7 @@ def private handle_bake_start(var req : HttpRequest?; var resp : HttpResponse?) 
             error_body("baking needs a source-tree daslang (standalone exe cannot spawn the converter child)", "invalid_request_error"),
             http_status.BAD_REQUEST)
     }
-    if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || !empty(g_media_wires)) {
+    if (streams_busy()) {
         return resp |> JSON(
             error_body("streams are active — the converter competes for cores and RAM; drain first, then bake", "invalid_request_error"),
             http_status.CONFLICT)
@@ -1726,6 +1745,176 @@ def private handle_embeddings(var req : HttpRequest?; var resp : HttpResponse?) 
 // POST /v1/models/activate {"model": name}: admin warm-switch — make `name` the stepped slot
 // and move the GPU tier to it NOW instead of waiting for the owner to drain. 409 while any
 // work is live: the switch drops the owner's whole VRAM state.
+def private streams_busy() : bool {
+    return total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || !empty(g_media_wires)
+}
+
+// Load a downloaded GGUF into a NEW serving slot without a process restart — no watchdog bounce,
+// no JIT recompile; the load blocks the tick thread for its duration (streams must be idle, so
+// nothing stalls mid-decode). GPU loads follow the boot-order semantics: the current owner's
+// VRAM state drops first, then the load arms under the engine's boot want (a DASLLAMA_GPU_* env
+// override still wins, as everywhere). Towers arm from an optional image_mmproj — the media
+// worker restarts to pick them up.
+def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) : http_status {   // nolint:STYLE038 — one guard + one client-facing message per validation
+    if (!is_loopback_req(req)) {
+        return deny_operator(resp)
+    }
+    if (!g_server_started || g_setup_mode) {
+        return resp |> JSON(error_body("runtime loads need a serving server (setup mode restarts into the first model)", "invalid_request_error"), http_status.CONFLICT)
+    }
+    var perr = ""
+    var js = read_json(string(req.body), perr)
+    if (js == null) {
+        return resp_error(resp, http_status.BAD_REQUEST, "invalid JSON: {perr}")
+    }
+    defer() {
+        unsafe {
+            delete js
+        }
+    }
+    let path = js?["path"] ?? ""
+    if (empty(path)) {
+        return resp |> JSON(error_body("'path' is required — an absolute GGUF path, or a filename under the models dir", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    var rpath = path
+    if (!stat(rpath).is_valid) {
+        rpath = path_join(g_catalog_dir, path)
+    }
+    if (!stat(rpath).is_valid) {
+        return resp |> JSON(error_body("'{path}' not found (also tried {rpath})", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    let id = js?["id"] ?? base_name(rpath)
+    if (slot_index(id) >= 0) {
+        return resp |> JSON(error_body("model '{id}' is already served — unload it first, or pass a different 'id'", "conflict"), http_status.CONFLICT)
+    }
+    if (streams_busy()) {
+        return resp |> JSON(error_body("streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"), http_status.CONFLICT)
+    }
+    let backend = js?["backend"] ?? "auto"
+    let cpu_only = backend == "cpu"
+    if (cpu_only) {
+        set_gpu_tier_want(GpuTierWant())   // zero the programmatic want for this load; restored below
+    } elif (g_gpu_owner >= 0) {
+        // boot-order semantics: the load arms under the engine's want, so the tier must be free
+        install_slot_marks(g_gpu_owner)
+        moe_gpu_drop_model()
+        g_slots[g_gpu_owner].backend_effective = "cpu"
+        g_gpu_owner = -1
+    }
+    let t0 = ref_time_ticks()
+    let quant = (js?["quant"] ?? "q8") == "fp32" ? QuantMode.fp32 : QuantMode.q8
+    var m = Model()
+    var failure = ""
+    let failed = catch_worker_panic(failure) {
+        delete m   // fresh above; the delete licenses the move on this heap (PERF030)
+        m <- load_model(rpath, quant)
+    }
+    let boot_want = g_slots[g_default_slot].gpu_want   // main registered the box policy here at boot
+    if (cpu_only) {
+        set_gpu_tier_want(boot_want)
+    }
+    if (failed) {
+        to_log(LOG_ERROR, "dasllama-server: runtime load of {rpath} failed: {failure}\n")
+        return resp |> JSON(error_body("the load failed: {failure}", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    var opts = SlotOpts()
+    opts.backend = cpu_only ? "cpu" : "auto"
+    add_model(m, id, opts, rpath)
+    if (!cpu_only) {
+        set_slot_gpu_want(id, boot_want)   // the want the switch-in re-arms with
+    }
+    init_one_scheduler(g_slots[length(g_slots) - 1])
+    let mmproj = js?["image_mmproj"] ?? ""
+    var tower_note = ""
+    if (!empty(mmproj)) {
+        let mi = length(g_slots) - 1
+        let verr = arm_slot_vision(mi, mmproj)
+        if (!empty(verr)) {
+            tower_note = verr
+        } elif (gemma4a_probe_proj_dim(mmproj) > 0l) {
+            tower_note = arm_slot_audio(mi, mmproj)   // the E-series file arms audio too
+        }
+        stop_media_worker()   // the worker snapshots arms — bounce it to load the new encoders
+        start_media_worker()
+    }
+    let mi_new = length(g_slots) - 1
+    if (js?["activate"] ?? true) {
+        // the point of a live load is usually to TALK to the model: make it the default (the
+        // slot model-less page requests land on) and step it next, unless the caller says not to
+        set_default_model(id)
+        g_active = mi_new
+        g_cur = mi_new
+        set_mtp_spec(g_slots[mi_new].sched.mtp)
+        install_slot_marks(mi_new)
+    }
+    g_slots[mi_new].last_used = ref_time_ticks()
+    let load_ms = int64(get_time_usec(t0)) / 1000l
+    to_log(LOG_INFO, "dasllama-server: runtime load: {id} in {load_ms}ms ({g_slots[mi_new].backend_effective})\n")
+    return resp |> JSON(
+        "\{\"ok\":true,\"model\":{json_str(id)},\"backend_effective\":{json_str(g_slots[length(g_slots) - 1].backend_effective)},\"load_ms\":{load_ms},\"ctx\":{g_slots[length(g_slots) - 1].model.config.seq_len},\"tower_note\":{json_str(tower_note)}}",
+        http_status.OK)
+}
+
+// Unload a served slot, freeing its weights, KV pool, and (for the GPU owner) its VRAM state.
+// The DEFAULT slot never unloads — activate another model first — which also keeps the server
+// from unloading its last model.
+def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return deny_operator(resp)
+    }
+    var perr = ""
+    var js = read_json(string(req.body), perr)
+    if (js == null) {
+        return resp_error(resp, http_status.BAD_REQUEST, "invalid JSON: {perr}")
+    }
+    defer() {
+        unsafe {
+            delete js
+        }
+    }
+    let want = js?["model"] ?? ""
+    let mi = slot_index(want)
+    if (mi < 0) {
+        return resp |> JSON(error_body("model '{want}' not found — GET /v1/models lists the served ids", "model_not_found"), http_status.NOT_FOUND)
+    }
+    if (mi == g_default_slot) {
+        return resp |> JSON(error_body("'{want}' is the default slot — activate another model first (POST /v1/models/activate)", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    if (streams_busy()) {
+        return resp |> JSON(error_body("streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"), http_status.CONFLICT)
+    }
+    if (g_gpu_owner == mi) {
+        install_slot_marks(mi)
+        moe_gpu_drop_model()
+        g_gpu_owner = -1
+    }
+    if (g_marks_slot == mi) {
+        g_marks_slot = -1   // the next step reinstalls its slot's marks
+    }
+    let had_towers = g_slots[mi].vision.kind != VisionKind.none || g_slots[mi].audio_armed
+    delete g_slots[mi]
+    g_slots |> erase(mi)
+    // every slot index above mi shifted down one; the wires are empty (gate above), the media
+    // worker's index-keyed snapshot goes stale — bounce it
+    if (g_default_slot > mi) {
+        g_default_slot--
+    }
+    g_active = g_active > mi ? g_active - 1 : (g_active == mi ? g_default_slot : g_active)
+    g_cur = g_cur > mi ? g_cur - 1 : (g_cur == mi ? g_default_slot : g_cur)
+    if (g_gpu_owner > mi) {
+        g_gpu_owner--
+    }
+    if (g_marks_slot > mi) {
+        g_marks_slot--
+    }
+    if (had_towers || g_media_armed) {
+        stop_media_worker()
+        start_media_worker()
+    }
+    to_log(LOG_INFO, "dasllama-server: runtime unload: {want}\n")
+    return resp |> JSON("\{\"ok\":true,\"unloaded\":{json_str(want)}}", http_status.OK)
+}
+
 def private handle_activate(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     var perr = ""
     var js = read_json(string(req.body), perr)
@@ -1751,7 +1940,7 @@ def private handle_activate(var req : HttpRequest?; var resp : HttpResponse?) : 
             error_body("model '{want}' not found — GET /v1/models lists the served ids{empty(g_slots) ? " (setup mode: no model loaded yet — download one from /catalog)" : ""}", "model_not_found"),
             http_status.NOT_FOUND)
     }
-    if (total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || !empty(g_media_wires)) {
+    if (streams_busy()) {
         return resp |> JSON(
             error_body("streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"),
             http_status.CONFLICT)
@@ -1759,6 +1948,7 @@ def private handle_activate(var req : HttpRequest?; var resp : HttpResponse?) : 
     let t0 = ref_time_ticks()
     g_active = mi
     g_cur = mi
+    set_default_model(g_slots[mi].name)   // model-less (page) requests follow the activation
     set_mtp_spec(g_slots[mi].sched.mtp)
     install_slot_marks(mi)
     bind_gpu_slot(mi)   // no-op for cpu slots and the current owner
@@ -3761,6 +3951,12 @@ class OpenAiServer : HvWebServer {
         POST("/v1/models/activate") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_activate(req, resp)
         }
+        POST("/v1/models/load") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_model_load(req, resp)
+        }
+        POST("/v1/models/unload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_model_unload(req, resp)
+        }
         GET("/v1/stats") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_stats(resp)
         }
@@ -3893,25 +4089,46 @@ def private init_worker_rails {
 }
 
 // one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
+// The boot-time scheduler knobs, kept for slots loaded at RUNTIME (POST /v1/models/load builds
+// its scheduler with the same defaults every boot slot got).
+struct private SchedDefaults {
+    max_streams : int64
+    max_queue : int64
+    chunk_tokens : int64
+    page_rows : int64
+    prefix_groups : int64
+    kv_dtype : KVDtype
+    mtp : bool
+}
+
+var private g_sched_defaults = SchedDefaults()
+
+def private init_one_scheduler(var s : ModelSlot) {
+    let s_streams = s.opts.streams >= 0l ? s.opts.streams : g_sched_defaults.max_streams
+    let s_chunk = s.opts.chunk >= 0l ? s.opts.chunk : g_sched_defaults.chunk_tokens
+    let s_pages = s.opts.page_rows != -2l ? s.opts.page_rows : g_sched_defaults.page_rows
+    var pfx = s.opts.prefix != -2l ? s.opts.prefix : g_sched_defaults.prefix_groups
+    if (s_pages > 0l && pfx == 0l) {   // auto: retain up to one full context per stream slot
+        pfx = s_streams * ((s.model.config.seq_len + s_pages - 1l) / s_pages)
+    }
+    if (pfx < 0l) {
+        pfx = 0l   // explicit unbounded
+    }
+    let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : g_sched_defaults.kv_dtype
+    var spec = s.opts.mtp >= 0 ? s.opts.mtp != 0 : g_sched_defaults.mtp
+    if (spec && s.model.config.n_layer_nextn <= 0l) {
+        to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")
+        spec = false
+    }
+    s.sched <- create_scheduler(s.model, s_streams, g_sched_defaults.max_queue, s_chunk, s_pages, pfx, s_kv, spec)
+}
+
 def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows, prefix_groups : int64; kv_dtype : KVDtype; mtp : bool) {
+    g_sched_defaults = SchedDefaults(max_streams = max_streams, max_queue = max_queue,
+                                     chunk_tokens = chunk_tokens, page_rows = page_rows,
+                                     prefix_groups = prefix_groups, kv_dtype = kv_dtype, mtp = mtp)
     for (s in g_slots) {
-        let s_streams = s.opts.streams >= 0l ? s.opts.streams : max_streams
-        let s_chunk = s.opts.chunk >= 0l ? s.opts.chunk : chunk_tokens
-        let s_pages = s.opts.page_rows != -2l ? s.opts.page_rows : page_rows
-        var pfx = s.opts.prefix != -2l ? s.opts.prefix : prefix_groups
-        if (s_pages > 0l && pfx == 0l) {   // auto: retain up to one full context per stream slot
-            pfx = s_streams * ((s.model.config.seq_len + s_pages - 1l) / s_pages)
-        }
-        if (pfx < 0l) {
-            pfx = 0l   // explicit unbounded
-        }
-        let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : kv_dtype
-        var spec = s.opts.mtp >= 0 ? s.opts.mtp != 0 : mtp
-        if (spec && s.model.config.n_layer_nextn <= 0l) {
-            to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")
-            spec = false
-        }
-        s.sched <- create_scheduler(s.model, s_streams, max_queue, s_chunk, s_pages, pfx, s_kv, spec)
+        init_one_scheduler(s)
     }
 }
 

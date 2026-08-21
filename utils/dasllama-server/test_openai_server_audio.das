@@ -81,7 +81,7 @@ def private audio_chat_body(b64 : string; text : string) : string {
 }
 
 [test]
-def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one server boot, every route-proof cell against it
+def test_openai_server_audio(t : T?) {
     t |> run("native audio: input_audio -> gemma4a soft tokens -> a transcription (needs E2B + its mmproj)") @(t : T?) {
         if (!jit_enabled()) {
             t |> success(true, "skipped: interpreted (dasLLAMA server tests are JIT-only)")
