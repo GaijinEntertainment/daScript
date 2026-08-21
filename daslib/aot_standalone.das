@@ -160,8 +160,8 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     if (initFunctions |> !empty(initFunctions)) {
         write(tw, " FillFunction(context, getGlobalAotLibrary(), id_to_funcs);\n");
         write(tw, "    context.runInitScript();\n");
-        write(tw, "\}\n");
     }
+    write(tw, "\}\n");
 }
 
 def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var header : StringBuilderWriter, var source : StringBuilderWriter; cfg : StandaloneContextCfg) {
@@ -232,7 +232,7 @@ class StandaloneContextGen : CppAot {
         for (pfun in fnn) {
             let needInline = that == pfun._module;
             if (needInline) {
-                inline_fns.push(describeCppFunc(pfun, collector, true, needInline));
+                inline_fns.push(describeCppFunc(pfun, collector, cross_platform, true, needInline));
                 used_functions.insert(aotFuncName(pfun));
             }
         }
@@ -345,6 +345,10 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
     var flags = new SetPrinterFlags();
     make_visitor(*flags) $(flags_adapter) {
         visit(program, flags_adapter)
+    }
+    unsafe {
+        delete flags
+        delete pmarker
     }
 
     var coll = new BlockVariableCollector();

@@ -2443,8 +2443,9 @@ class public CppAot : AstVisitor {
         return c;
     }
     def override visitExprConstPtr(var c : ExprConstPtr?) : ExpressionPtr {
-        if (c.getValue != null) {
-            write(*ss, "((void *) 0x{unsafe(reinterpret<int64>(c.getValue)):x}))");
+        let pvalue = c.getValue
+        if (pvalue != null) {
+            write(*ss, "((void *) 0x{unsafe(reinterpret<int64>(pvalue)):x})");
         } else {
             write(*ss, "nullptr");
         }
@@ -3935,7 +3936,7 @@ def private aotEmitStruct(ps : Structure?;
 def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
     //! Writes forward declarations and dependent type/function definitions for AOT output.
     buildStructEnumCollisions(program);
-    let utm = new UseTypeMarker();
+    var utm = new UseTypeMarker();
     make_visitor(*utm) $(adapter) {
         visit(program, adapter);
     }
@@ -3970,7 +3971,9 @@ def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
             }
         });
     })
-
+    unsafe {
+        delete utm
+    }
 }
 
 class ArgsConverter : AstVisitor {
@@ -4068,9 +4071,12 @@ def public collectProgramUsedFunctions(program : ProgramPtr; all_modules : bool;
 
 def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, all_modules : bool = false) {
     let fnn = collectProgramUsedFunctions(program, all_modules, false);
-    let visitor = new ArgsConverter(logs, cross_platform);
+    var visitor = new ArgsConverter(logs, cross_platform);
     make_visitor(*visitor) $(adapter_marker) {
         visit(program, adapter_marker);
+    }
+    unsafe {
+        delete visitor
     }
 
     var funInit = false;
@@ -4221,7 +4227,7 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
             write(writer, "namespace das \{\n");
             write(writer, "namespace {program.thisNamespace} \{\n");
             build_string() $(tmp_writer) {
-                let marker_vis = new NoAotMarker();
+                var marker_vis = new NoAotMarker();
                 make_visitor(*marker_vis) $(adapter_marker) {
                     visit(program, adapter_marker);
                 }
@@ -4266,6 +4272,9 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                     delete cpp_aot.helper.helper
                     delete cpp_aot.collector
                     delete cpp_aot
+                    delete flags
+                    delete pmarker
+                    delete marker_vis
                 }
                 fail_on_aot_emit_error(program)
             }
@@ -4297,7 +4306,7 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
         let (modules_str, noAotModule) = getRequiredModulesFor(program)
         if ((program._options |> find_arg("no_aot") ?as tBool ?? false) || noAotModule) return
         build_string() $(tmp_writer) {
-            let marker_vis = new NoAotMarker();
+            var marker_vis = new NoAotMarker();
             make_visitor(*marker_vis) $(adapter_marker) {
                 visit(program, adapter_marker);
             }
@@ -4343,6 +4352,9 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
                 delete cpp_aot.helper.helper
                 delete cpp_aot.collector
                 delete cpp_aot
+                delete flags
+                delete pmarker
+                delete marker_vis
             }
             fail_on_aot_emit_error(program)
             let begin_pos = find(full_output, AOT_FUNC_BEGIN)
