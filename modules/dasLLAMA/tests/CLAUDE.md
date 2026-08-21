@@ -1,8 +1,8 @@
 # modules/dasLLAMA/tests — testing discipline
 
 The Metal suites here are wall-time-expensive (model loads dominate; a full pass holds 40GB
-GGUFs). The rules below exist because one session spent 5.75 of 6 hours re-running full suites
-to verify one-arm fixes. They are enforcement, not advice.
+GGUFs), so the rules below are enforcement, not advice — an ad-hoc full-suite run turns a
+one-arm fix into an afternoon.
 
 ## Run suites ONLY through the runner
 
@@ -316,7 +316,8 @@ batched code paths get their parity on small models via pins (e.g.
 ## Log discipline
 
 Always capture COMPLETE logs (the runner does this); grep afterwards, never at capture time —
-a capture-time filter once hid the exact proof line a verification run existed to produce.
+a capture-time filter can hide the exact proof line the run exists to produce, and the silent
+capture reads as success.
 When a fixture claims a size/depth property ("2030 tokens", "crosses 2048"), assert the
 actual number in the test; a resize cap is not evidence.
 THE EYEBALL RAIL (REVIEW: "Every test that compares generated tokens, ids, or logits logs the decoded text for both sides"): every token-for-token generate cell logs both decoded
