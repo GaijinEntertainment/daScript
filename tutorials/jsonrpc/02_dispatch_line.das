@@ -111,16 +111,21 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
 
     print("\n=== Section 5: Lower-level (parse_request + envelopes) ===\n")
 
+    // `parse_request` hands back the parse tree it built (`parsed.document`), because
+    // `parsed.params` is a view into it. Close the request scope with `free_request`
+    // once you are done reading — the strings on `ParsedRequest` outlive the tree.
+
     let custom_req = "\{\"id\":42,\"method\":\"unknown\"}"
-    let parsed = parse_request(custom_req)
+    var parsed = parse_request(custom_req)
     var custom_resp = ""
     if (!empty(parsed.error_envelope)) {
-        custom_resp = parsed.is_notification ? "" : parsed.error_envelope
+        custom_resp = parsed.error_envelope
     } elif (parsed.method != "ping" && parsed.method != "echo") {
         custom_resp = error(parsed.id_str, METHOD_NOT_FOUND, "no such method: {parsed.method}")
     } else {
         custom_resp = response(parsed.id_str, dispatch_method(parsed.method, parsed.params_json))
     }
+    free_request(parsed)
     print("custom dispatch with -32601: {custom_resp}\n")
 
     print("\nDone.\n")

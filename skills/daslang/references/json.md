@@ -84,10 +84,15 @@ key write `js?["value"]`.
 Cases: `_object` (`table<string; JsonValue?>`), `_array` (`array<JsonValue?>`), `_string`
 (`string`), `_number` (`double`), `_longint` (`int64`), `_bool` (`bool`), `_null` (`void?`).
 
+An integer literal is `_longint` only while it fits `int64`; past that it parses as `_number`,
+and past `double` it is a parse error. So a wire format carrying `uint64` ids above
+`INT64_MAX` loses precision — send those as strings.
+
 ## Parsing, writing, embedding
 
 - `read_json(text, var error)` takes a `string` or an `array<uint8>`; `write_json(js)` serializes,
-  a null pointer as `"null"`.
+  a null pointer as `"null"`. `\uXXXX` escapes decode to UTF-8, a surrogate pair folding into one
+  code point; an unpaired surrogate becomes U+FFFD.
 - `try_fixing_broken_json(text)` repairs model-generated output before `read_json` — concatenation
   (`"a" + "b"`), trailing commas, double-quoted nesting.
 - Writer settings return the previous value (save and restore for a scoped change):

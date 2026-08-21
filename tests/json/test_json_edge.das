@@ -288,6 +288,22 @@ def test_parse_errors(t : T?) {
     t |> run("trailing comma in array rejected") @(t : T?) {
         parse_expect_fail("[1, 2, ]", t)
     }
+    t |> run("a string that looks like a close bracket does not open an empty array") @(t : T?) {
+        parse_expect_fail("[[1 \"]\"]", t)
+        parse_expect_fail("[[1 \"] fake\"]]", t)
+        parse_expect_fail("[\{\"a\":1 \"] fake\"}]", t)
+    }
+    t |> run("a value after an open bracket is still required") @(t : T?) {
+        parse_expect_fail("[\{]", t)
+        parse_expect_fail("[[\{]]", t)
+    }
+    t |> run("empty array nests and mixes") @(t : T?) {
+        var js = parse("[[], \{\}, []]", t)
+        t |> equal(length(js as _array), 3)
+        t |> equal((js as _array)[0] is _array, true)
+        t |> equal(length((js as _array)[0] as _array), 0)
+        t |> equal((js as _array)[1] is _object, true)
+    }
     t |> run("duplicate keys rejected by default") @(t : T?) {
         let input = "\{ \"a\": 1, \"a\": 2 \}"
         parse_expect_fail(input, t)
@@ -783,6 +799,16 @@ def test_fix_broken_json(t : T?) {
         var error : string
         var js = read_json(fixed, error)
         t |> success(js != null)
+    }
+    t |> run("input ending in a backslash outside a string") @(t : T?) {
+        let backslash = "\\"
+        t |> equal(try_fixing_broken_json(backslash), backslash)
+        t |> equal(try_fixing_broken_json("[1,2]" + backslash), "[1,2]" + backslash)
+        t |> equal(try_fixing_broken_json("\{\}" + backslash), "\{\}" + backslash)
+    }
+    t |> run("a unicode escape outside a string is still skipped") @(t : T?) {
+        let backslash = "\\"
+        t |> equal(try_fixing_broken_json("[1," + backslash + "u0020 2]"), "[1, 2]")
     }
 }
 

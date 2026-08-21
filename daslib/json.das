@@ -50,6 +50,93 @@ struct TokenAt {
 let private {
     Token_string = typeinfo variant_index<_string>(type<Token>) //! index of the
     Token_symbol = typeinfo variant_index<_symbol>(type<Token>)
+    HIGH_SURROGATE_FIRST = 0xD800u
+    HIGH_SURROGATE_LAST = 0xDBFFu
+    LOW_SURROGATE_FIRST = 0xDC00u
+    LOW_SURROGATE_LAST = 0xDFFFu
+    SUPPLEMENTARY_FIRST = 0x10000u
+    REPLACEMENT_CODEPOINT = 0xFFFDu
+    INT64_MAX_DIGITS = 19
+}
+
+def private is_high_surrogate(codepoint : uint) : bool => codepoint >= HIGH_SURROGATE_FIRST && codepoint <= HIGH_SURROGATE_LAST
+
+def private is_low_surrogate(codepoint : uint) : bool => codepoint >= LOW_SURROGATE_FIRST && codepoint <= LOW_SURROGATE_LAST
+
+def private push_utf8_continuation(var str : array<uint8>; codepoint : uint; shift : uint) {
+    //! appends one UTF-8 continuation byte carrying the six `codepoint` bits above `shift`.
+    push(str, uint8(0x80u | ((codepoint >> shift) & 0x3Fu)))
+}
+
+def private push_utf8(var str : array<uint8>; codepoint : uint) {
+    //! appends the UTF-8 encoding of `codepoint` to `str`.
+    if (codepoint <= 0x7Fu) {
+        push(str, uint8(codepoint))
+    } elif (codepoint <= 0x7FFu) {
+        push(str, uint8(0xC0u | (codepoint >> 6u)))
+        push_utf8_continuation(str, codepoint, 0u)
+    } elif (codepoint <= 0xFFFFu) {
+        push(str, uint8(0xE0u | (codepoint >> 12u)))
+        push_utf8_continuation(str, codepoint, 6u)
+        push_utf8_continuation(str, codepoint, 0u)
+    } else {
+        push(str, uint8(0xF0u | (codepoint >> 18u)))
+        push_utf8_continuation(str, codepoint, 12u)
+        push_utf8_continuation(str, codepoint, 6u)
+        push_utf8_continuation(str, codepoint, 0u)
+    }
+}
+
+def private flush_unpaired_surrogate(var str : array<uint8>; var pending : uint&) {
+    //! emits U+FFFD for a high surrogate that never got its low half, and clears `pending`.
+    if (!is_high_surrogate(pending)) return
+    pending = 0u
+    push_utf8(str, REPLACEMENT_CODEPOINT)
+}
+
+def private hex4_codepoint(hex_str : array<uint8>) : uint {
+    //! folds four hex digits into a code point.
+    var codepoint = 0u
+    for (hb in hex_str) {
+        codepoint = codepoint << 4u
+        let c = int(hb)
+        if (is_number(c)) {
+            codepoint += uint(c - '0')
+        } elif (c >= 'a' && c <= 'f') {
+            codepoint += uint(c - 'a' + 10)
+        } elif (c >= 'A' && c <= 'F') {
+            codepoint += uint(c - 'A' + 10)
+        }
+    }
+    return codepoint
+}
+
+def private fits_int64(num : string) : bool {
+    //! true when the `[+-]?digits` literal `num` is representable as int64.
+    var fits = true
+    peek_data(num) $(digits) {
+        let n = length(digits)
+        var i = 0
+        var negative = false
+        if (i < n && (digits[i] == '+'u8 || digits[i] == '-'u8)) {
+            negative = digits[i] == '-'u8
+            i ++
+        }
+        while (i < n && digits[i] == '0'u8) {
+            i ++
+        }
+        if (n - i > INT64_MAX_DIGITS) {
+            fits = false
+        } else {
+            var value = 0ul
+            while (i < n) {
+                value = value * 10ul + uint64(int(digits[i]) - '0')
+                i ++
+            }
+            fits = value <= (negative ? 9223372036854775808ul : 9223372036854775807ul)
+        }
+    }
+    return fits
 }
 
 def JVNull {
@@ -194,6 +281,7 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
         }
         var ahead : int = ' '
         var str : array<uint8>
+        var pending_high = 0u
         var line : int = 1
         var row : int = 0
         while (!empty(tin)) {
@@ -208,19 +296,7 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                 while (next(tin, ahead, line, row) && ahead != '"') {
                     if (ahead == '\\') {
                         if (next(tin, ahead, line, row)) {
-                            if (ahead == 'b') {
-                                ahead = '\b'
-                            } elif (ahead == 'f') {
-                                ahead = '\f'
-                            } elif (ahead == 'n') {
-                                ahead = '\n'
-                            } elif (ahead == 'r') {
-                                ahead = '\r'
-                            } elif (ahead == 't') {
-                                ahead = '\t'
-                            } elif (ahead == '/') {
-                                ahead = '/'
-                            } elif (ahead == 'u') {
+                            if (ahead == 'u') {
                                 var hex_str : array<uint8>
                                 var valid_hex = true
                                 for (_ in range(4)) {
@@ -235,29 +311,21 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                                     push(hex_str, uint8(ahead))
                                 }
                                 if (valid_hex && length(hex_str) == 4) {
-                                    var codepoint = uint(0)
-                                    for (hb in hex_str) {
-                                        codepoint = codepoint << uint(4)
-                                        let c = int(hb)
-                                        if (is_number(c)) {
-                                            codepoint += uint(c - '0')
-                                        } elif (c >= 'a' && c <= 'f') {
-                                            codepoint += uint(c - 'a' + 10)
-                                        } elif (c >= 'A' && c <= 'F') {
-                                            codepoint += uint(c - 'A' + 10)
-                                        }
-                                    }
-                                    if (codepoint <= 0x7F) {
-                                        push(str, uint8(codepoint))
-                                    } elif (codepoint <= 0x7FF) {
-                                        push(str, uint8(0xC0 | (codepoint >> uint(6)))) // nolint:STYLE012 UTF-8 continuation bytes append to the accumulating token buffer
-                                        push(str, uint8(0x80 | (codepoint & 0x3F)))
-                                    } elif (codepoint <= 0xFFFF) {
-                                        push(str, uint8(0xE0 | (codepoint >> uint(12)))) // nolint:STYLE012 UTF-8 continuation bytes append to the accumulating token buffer
-                                        push(str, uint8(0x80 | ((codepoint >> uint(6)) & 0x3F)))
-                                        push(str, uint8(0x80 | (codepoint & 0x3F)))
+                                    let codepoint = hex4_codepoint(hex_str)
+                                    if (is_high_surrogate(codepoint)) {
+                                        flush_unpaired_surrogate(str, pending_high)
+                                        pending_high = codepoint
+                                    } elif (is_low_surrogate(codepoint) && is_high_surrogate(pending_high)) {
+                                        push_utf8(str, SUPPLEMENTARY_FIRST + ((pending_high - HIGH_SURROGATE_FIRST) << 10u) + (codepoint - LOW_SURROGATE_FIRST))
+                                        pending_high = 0u
+                                    } elif (is_low_surrogate(codepoint)) {
+                                        push_utf8(str, REPLACEMENT_CODEPOINT)
+                                    } else {
+                                        flush_unpaired_surrogate(str, pending_high)
+                                        push_utf8(str, codepoint)
                                     }
                                 } else {
+                                    flush_unpaired_surrogate(str, pending_high)
                                     push(str, uint8('\\')) // nolint:STYLE012 the unparsed escape appends to the accumulating token buffer
                                     push(str, uint8('u'))
                                     str |> push_from(hex_str) // nolint:PERF006,LINT019 hex_str is 4 bytes max; PERF006 fires only in downstream compiles
@@ -267,12 +335,27 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                                 }
                                 continue
                             }
+                            flush_unpaired_surrogate(str, pending_high)
+                            if (ahead == 'b') {
+                                ahead = '\b'
+                            } elif (ahead == 'f') {
+                                ahead = '\f'
+                            } elif (ahead == 'n') {
+                                ahead = '\n'
+                            } elif (ahead == 'r') {
+                                ahead = '\r'
+                            } elif (ahead == 't') {
+                                ahead = '\t'
+                            } elif (ahead == '/') {
+                                ahead = '/'
+                            }
                             push(str, uint8(ahead))
                         } else {
                             yield TokenAt(value = Token(_error = "string escape sequence exceeds text"), line = line, row = row)
                             return false
                         }
                     } else {
+                        flush_unpaired_surrogate(str, pending_high)
                         push(str, uint8(ahead))
                     }
                 }
@@ -280,11 +363,11 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                     yield TokenAt(value = Token(_error = "string exceeds text"), line = line, row = row)
                     return false
                 }
+                flush_unpaired_surrogate(str, pending_high)
                 yield TokenAt(value = Token(_string = string(str)), line = line, row = row)
                 clear(str)
                 next(tin, ahead)
             } elif (ahead == '+' || ahead == '-' || is_number(ahead)) {
-                var is_negative = (ahead == '-')
                 push(str, uint8(ahead))
                 var anyNumbers = is_number(ahead)
                 while (next(tin, ahead, line, row) && is_number(ahead)) {
@@ -317,9 +400,15 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                     yield TokenAt(value = Token(_error = "invalid number {num}"), line = line, row = row)
                     return false
                 }
-                if (is_integer) {
-                    var ival = is_negative ? int64(num) : int64(uint64(num))
-                    yield TokenAt(value = Token(_longint = ival), line = line, row = row)
+                if (is_integer && fits_int64(num)) {
+                    yield TokenAt(value = Token(_longint = int64(num)), line = line, row = row)
+                } elif (is_integer) {
+                    let wide = to_double(num)
+                    if (wide == 0.0lf) {
+                        yield TokenAt(value = Token(_error = "number {num} is out of range"), line = line, row = row)
+                        return false
+                    }
+                    yield TokenAt(value = Token(_number = wide), line = line, row = row)
                 } else {
                     yield TokenAt(value = Token(_number = double(num)), line = line, row = row)
                 }
@@ -389,10 +478,15 @@ def private expect_symbol(var itv : iterator<TokenAt>; var ahead : TokenAt; sym 
     }
 }
 
-def private parse_value(var itv : iterator<TokenAt>; var error : string&) : JsonValue? {  // nolint:STYLE037,STYLE038 - recursive descent, one arm per json production
+def private parse_value(var itv : iterator<TokenAt>; var error : string&) : JsonValue? {
     //! parses a JSON value from the token iterator `itv`.
     var ahead : TokenAt
     if (!next(itv, ahead)) return null
+    return parse_value(itv, ahead, error)
+}
+
+def private parse_value(var itv : iterator<TokenAt>; var ahead : TokenAt; var error : string&) : JsonValue? {  // nolint:STYLE037 - recursive descent, one arm per json production
+    //! parses a JSON value whose first token `ahead` has already been read.
     if (ahead.value is _symbol) {
         let sym = ahead.value as _symbol
         if (sym == ']') {
@@ -401,30 +495,22 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
         }
         if (sym == '[') {
             var arr : array<JsonValue?>
-            while (!empty(itv)) {
-                var value = parse_value(itv, error)
-                if (value == null) {
-                    if (error |> starts_with("unexpected ]") && empty(arr)) {
-                        error = ""
-                        return JV(arr)
-                    }
-                    return null
-                }
+            var element : TokenAt
+            while (next(itv, element)) {
+                if (empty(arr) && (element.value is _symbol) && (element.value as _symbol) == ']') return JV(arr)
+                var value = parse_value(itv, element, error)
+                if (value == null) return null
                 push(arr, value)
                 if (!expect_token(itv, ahead, Token_symbol, error)) return null
                 let sepsym = ahead.value as _symbol
-                if (sepsym == ']') {
-                    break;
-                } elif (sepsym != ',') {
+                if (sepsym == ']') return JV(arr)
+                if (sepsym != ',') {
                     error = "unexpected array separator symbol `{to_char(sepsym)}` aka ASCII {sepsym} at {ahead.line}:{ahead.row}";
                     return null;
                 }
             }
-            if (empty(itv)) {
-                error = "unexpected eos";
-                return null;
-            }
-            return JV(arr);
+            error = "unexpected eos";
+            return null;
         } elif (sym == '{') {
             var tab : table<string; JsonValue?>;
             while (!empty(itv)) {
@@ -712,7 +798,7 @@ def try_fixing_broken_json(var bad : string) {  // nolint:STYLE038 - one linear 
                             continue;
                         }
                     }
-                    if (str[i] == '\\'u8 && str[i + 1] == 'u'u8) {
+                    if (str[i] == '\\'u8 && i + 1 < lstr && str[i + 1] == 'u'u8) {
                         i += 2;
                         while (i < lstr && is_hex(int(str[i]))) {
                             i ++;

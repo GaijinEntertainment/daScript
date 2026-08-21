@@ -86,8 +86,8 @@ directly:
 .. code-block:: das
 
    def handle_batch(wire : string) : string {
-       let pb = parse_batch(wire)
-       return pb.framing_error if (!empty(pb.framing_error))
+       var pb <- parse_batch(wire)
+       var out = pb.framing_error
        for (req in pb.requests) {
            if (!empty(req.error_envelope)) {
                // per-entry error — req.error_envelope is ready to go on the wire
@@ -95,8 +95,16 @@ directly:
                // req.method, req.id_str, req.params, req.params_json available
            }
        }
-       return ""   // assemble the response array from the per-entry results
+       // assemble the response array from the per-entry results into `out`
+       free_batch(pb)
+       return out
    }
+
+One parse tree backs the whole batch (``pb.document``), and every entry's
+``params`` is a view into it — an entry never owns a document of its own. Read
+the entries, then close the scope with ``free_batch``: it releases the tree and
+the entry array together, so ``pb.requests`` is empty afterwards. The per-entry
+strings outlive it. ``dispatch_line`` owns that scope itself.
 
 Running the tutorial
 ====================
