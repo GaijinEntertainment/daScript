@@ -27,7 +27,10 @@ Kept sets:
   (case-sensitive), plus the leading header block — every full-line comment
   before the first code line, where the `options`/`module`/`require` preamble
   does not count as code (trailing comments on preamble lines are not header,
-  and a leading `/* license */` before same-line code is).
+  and a leading `/* license */` before same-line code is). Message: scaffold
+  freely, drain before commit (rename/reshape, `//!`, REVIEW.md /
+  ARCHITECTURE.md) — the formatter strips the rest mechanically in swept
+  folders.
 - `.cpp .cc .cxx .c .h .hpp .hxx .inc` — `//!`, `NOLINT*` (any case),
   `clang-format` directives, `/*!` and `/** ` doxygen blocks (star-run banners
   are not doxygen), and the leading header block, where preprocessor directives

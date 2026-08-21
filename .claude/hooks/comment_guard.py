@@ -357,13 +357,14 @@ def build_message(path, found, *, is_das, is_write):
         caveat = " Line numbers refer to the replacement text, not the file."
     if is_das:
         return (
-            "comment guard: {} {} {} will NOT survive the formatter:\n"
+            "comment guard: {} {} {} — scaffold at best; in swept folders the formatter strips "
+            "everything outside the kept set:\n"
             "{}{}\n"
-            ".das keeps only `//!` public-API docs, `// nolint:CODE` / `// @nolint` suppressions, "
-            "`//fmt:` directives, and the file's leading header block. Say it in the code (a name, "
-            "a shape), pin it with a test, or move real documentation to the module's REVIEW.md / "
-            "ARCHITECTURE.md. Teaching code (tutorials/examples) keeps its prose — ignore this "
-            "warning there.{}"
+            "Fine to keep thinking in comments — but drain them before commit: move what a name "
+            "can carry into a rename or reshape, promote public-API docs to `//!`, rescue real "
+            "documentation to the module's REVIEW.md / ARCHITECTURE.md, and let the rest die. "
+            "Kept: `//!` docs, `// nolint:CODE` / `// @nolint`, `//fmt:`, the leading header "
+            "block. Teaching code (tutorials/examples) keeps its prose.{}"
         ).format(len(found), count_phrase, path, quoted, extra, caveat)
     return (
         "comment guard: {} {} {} — house rule: no new C/C++ comments.\n"
