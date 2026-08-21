@@ -428,12 +428,21 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     trf.config.seq_len = 2048l
                 }
                 var trfg <- blob_twin(t, path, 2048l)
+                // the turn length pins npos % 64 == 32 — the ceil32 M-pad's tail block (the
+                // shape the old ceil64 pad billed as a dead extra GEMM block) is exercised by
+                // every fused eval below, and the residue is asserted, not assumed
                 let nfull = long_length(prompt)
-                let fc1 = int(nfull * 2l / 5l)
-                let fc2 = int(nfull * 4l / 5l)
+                var ntarget = (nfull / 64l) * 64l + 32l
+                if (ntarget > nfull) {
+                    ntarget -= 64l
+                }
+                t |> success(ntarget % 64l == 32l && ntarget >= 96l,
+                    "fused-turn shape pins the ceil32 tail block (npos = {ntarget})")
+                let fc1 = int(ntarget * 2l / 5l)
+                let fc2 = int(ntarget * 4l / 5l)
                 var fhead <- [for (i in range(fc1)); prompt[i]]
                 var fmedia <- [for (i in range(fc1, fc2)); prompt[i]]
-                var ftail <- [for (i in range(fc2, int(nfull))); prompt[i]]
+                var ftail <- [for (i in range(fc2, int(ntarget))); prompt[i]]
                 // fused-vs-splice logits bars, per KV codec: the splice re-reads its head rows
                 // from the QUANTIZED cache while the fused eval keeps its own rows in the f32
                 // panels, so the codecs carry real quantization spread (measured clean: f16 = 0,
@@ -453,15 +462,33 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     var lg_fused <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
                     set_span_fuse(false)
                     set_metal_prefill_min_npos(1l)   // the splice's short head/tail ride the GPU too
+                    let pfsp0 = metal_prefill_stats().prefills
                     var lg_splice <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
+                    // the reference must actually BE the splice: three GPU prefills, or the
+                    // witness collapses onto its own subject (an always-fused mutant passes)
+                    t |> success(metal_prefill_stats().prefills - pfsp0 == 3l,
+                        "{kdt} splice leg served as THREE GPU prefills")
                     set_metal_prefill_min_npos(64l)
                     set_span_fuse(true)
                     select_prefill_override("")
                     var lmax = 0.0
+                    var amax_f = 0l
+                    var amax_s = 0l
                     for (i in range64(min(long_length(lg_fused), long_length(lg_splice)))) {
                         lmax = max(lmax, abs(lg_fused[i] - lg_splice[i]))
+                        if (lg_fused[i] > lg_fused[amax_f]) {
+                            amax_f = i
+                        }
+                        if (lg_splice[i] > lg_splice[amax_s]) {
+                            amax_s = i
+                        }
                     }
-                    to_log(LOG_INFO, "span-fused/{kdt} GPU fused-vs-splice prefill-logits maxdiff = {lmax}\n")
+                    to_log(LOG_INFO, "span-fused/{kdt} GPU fused-vs-splice prefill-logits maxdiff = {lmax} (argmax fused {amax_f} @{lg_fused[amax_f]}, splice {amax_s} @{lg_splice[amax_s]})\n")
+                    var pick_f <- [amax_f]
+                    var pick_s <- [amax_s]
+                    log_gen_texts(trf, "span-fused/{kdt} pick", pick_f, pick_s)
+                    delete pick_f
+                    delete pick_s
                     t |> success(lmax < (fbars?[kdt] ?? 0.0), "{kdt} fused == splice on the GPU ({lmax})")
                     log_gen_texts(trf, "span-fused/{kdt}", cpu_f, gpu_f)
                     t |> success(same(cpu_f, gpu_f), "{kdt} fused turn matches the all-CPU control")

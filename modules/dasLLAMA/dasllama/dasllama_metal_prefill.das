@@ -2083,7 +2083,7 @@ def private prefill_decline_caps(t : Model; npos : int64; span : bool = false) :
 
 
 // the production mul_mm dispatch: W blob bound twice (half-scale + byte views), raw f32 X,
-// grid (mp/32 token tiles, d/64 output tiles). Requires d % 64 == 0 and mp % 64 == 0.
+// grid (mp/32 token tiles, d/64 output tiles). Requires d % 64 == 0 and mp % 32 == 0.
 // yoff places the K/V outputs past a continuation's existing panel rows.
 def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; mp, d : int64; yoff : uint64 = 0ul) {
     if (g_pf_mm_tensor) {
@@ -2642,8 +2642,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         }
     }
     // ggml-geometry QK/AV (default): ~10x the old trio GEMMs' rate; needs hs % 64 (the AV grid;
-    // BOTH classes) and mp % 64 (the QK key grid — true by construction). DASLLAMA_METAL_ATTN=0
-    // pins the trio.
+    // BOTH classes); queries pad to mp % 32 and keys to nk64 % 64 — both true by construction.
+    // DASLLAMA_METAL_ATTN=0 pins the trio.
     let mmattn = (head_size % 64l) == 0l && (hs_sw % 64l) == 0l && g_pf_env_attn
     let ts_enc = ref_time_ticks()
     let setup_us = get_time_usec(ts_all)
@@ -4032,6 +4032,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
 //! takes the family's crown. Empty when there is no Metal device.
 def metal_tensor_race : array<MetalTensorRaceResult> {
     var results : array<MetalTensorRaceResult>
+    results |> reserve(16)
     var dev = metal_create_system_default_device()
     if (dev == null) {
         return <- results

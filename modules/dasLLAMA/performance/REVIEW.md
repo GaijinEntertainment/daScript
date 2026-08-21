@@ -8,6 +8,13 @@ record stores and tune sidecars.** A second validator is a defect. The engine-fr
 `dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
 that gate is a defect.
 
+**A row or sidecar entering `records/` is a quiet, traceable mint: `hardware.remote_desktop`
+is `off`, the row's `sha` and the sidecar's `engine_sha` name commits reachable from the
+branch, and the sidecar's `dasllama_version` equals `DASLLAMA_VERSION` at that commit** — a
+`parsec` row or a version/commit mismatch is a defect: re-mint. (Mechanical; a
+`check_committed_records` gate in `REVIEW.das` is the owed form — until it exists this rule
+is checked by hand.)
+
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** — the validator ignores run keys
 it does not know, so an unvalidated field ships silently.
@@ -53,9 +60,6 @@ that affects which bytes verify, the evidence is a `fetch_models.das --` run end
 sha unchanged) that run proves nothing — the verify never reads the url of a file already on
 disk — so the evidence is a fetch through the new url into a scratch dir, or a documented
 resolve of the pinned revision's size and content sha against the row's canonical values.
-
-**An entry point whose timed reps dispatch `[tune]`-selected kernels calls `tune_gate()`
-(`profile_common.das`) before its first timed rep**, or it measures fallback kernels silently.
 
 **A refreshed `last_known_good_sidecar.json` is one complete mint from the box its provenance
 names, at the current `dasllama_version` — never a hand-edited copy.** `REVIEW.das` (beside

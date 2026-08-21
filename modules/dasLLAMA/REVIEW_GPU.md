@@ -1,11 +1,14 @@
-# dasLLAMA GPU rules
+# dasLLAMA GPU Code Review Checklist
 
+**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
+doc: `ARCHITECTURE.md`.
 **Routed from `REVIEW.md`: a diff touching a GPU kernel, driver, dispatch class, or the K/V
-mirrors applies this list with the master's.** `REVIEW_COMMON.md` (repo root) binds this file
-too. Architecture doc: `ARCHITECTURE.md`.
+mirrors applies this list with the master's.**
 
-**A claim about a shape constant is checked against the emitted shader, not the das source.**
-Read the generated `*_msl` global or the SPIR-V dump and confirm the constant is literal there.
+**A claim about a shape constant is checked against the emitted artifact, not the das source.**
+An in-body tile constant is confirmed literal in the generated `*_msl` global or the SPIR-V
+dump; a grid or threadgroup constant is confirmed in the class's `[metal_dispatch]`/
+`[vk_dispatch]` `grid=`/`tg=` spec and the generated `enc_*` builder.
 
 **Kernel twins — kernel classes whose bodies differ on one stamp axis — bind the same kargs
 (kernel-argument struct) type at the same binding numbers**, even where one twin ignores a
@@ -85,7 +88,9 @@ runs on one q8 and one kq model, with `--kv` matching the armed mirror codec.** 
 `--ngl`; the vulkan arm is `DASLLAMA_GPU=1`, never `--ngl`, and its driver declines
 codec-mismatched sessions silently, so that log must show `resident driver armed`.
 
-**A change to the tower driver `dasllama/dasllama_metal_tower.das` ships a run of
+**A change to the tower driver `dasllama/dasllama_metal_tower.das` — or to a kernel class or
+kargs struct it dispatches (`AttnArgs`, `enc_qk_mm`, `enc_softmax`, `enc_av_mm`,
+`pf_enc_bf16_mm`, `enc_add_bias_rows`) — ships a run of
 `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, and `tests/test_gemma3v.das` — the
 per-family GPU oracle gates — for every family the changed code is reachable from, and of all
 three when the change touches state or setup the whole driver shares rather than one family's
@@ -93,7 +98,8 @@ path — any module-level `g_tw_*` variable in that file, `metal_tower_init`, or
 `dasllama_metal_tower_register`.** A new tower family adds its gate file to this list in the
 same change.
 
-**A change to the tower driver `dasllama/dasllama_metal_tower.das` ships a
+**A change to the tower driver `dasllama/dasllama_metal_tower.das` — or to a kernel class or
+kargs struct it dispatches (the list above) — ships a
 `tests/test_model_image.das` run with the `mtower` arm, with `metal_tower_stats()`'s encode
 count rising across the run** — those GPU-vs-CPU cells are that driver's parity instrument for
 the families no per-family gate file covers.
@@ -123,12 +129,15 @@ authority.
 `*_ready` latch, or a field inside `g_gpu` or the weight arena in
 `dasllama/dasllama_vulkan_common.das`.
 
-**A diff that changes a kernel's binding numbers fixes or deletes, in the same change, every
-arm of a `benchmarks/` lab that hand-binds it** — a lab is a kernel A/B timing script under
-`benchmarks/` that hand-lists its bindings instead of dispatching through the `enc_*`
-builder. A lab left dispatching stale bindings measures the wrong kernel silently.
+**A diff that changes a kernel's binding numbers or the layout of a kargs struct it binds
+fixes or deletes, in the same change, every arm of a lab that hand-binds it** — a lab is a
+kernel A/B or knockout timing script, wherever the diff puts it (`benchmarks/`, `harness/`),
+that hand-lists its bindings instead of dispatching through the `enc_*` builder. A lab left
+dispatching stale bindings measures the wrong kernel silently.
 
-**A diff that ports a `benchmarks/` lab's winning variant into a kernel deletes the lab in
-the same change — its bench driver, both of its arm variants, and any variants-module code
-that exists only for it.** A lab that outlives its decision degrades into an unmaintained
-one-off measurement script.
+**A diff that ports a lab's winning variant into a kernel deletes the lab in the same
+change — its bench driver, both of its arm variants, and any variants-module code that exists
+only for it — wherever the lab lives (`benchmarks/`, `harness/`).** A lab that outlives its
+decision degrades into an unmaintained one-off measurement script; a sweep instrument whose
+knockout arms ATTRIBUTE rather than select between implementations is not a lab under this
+rule, and says so in its header.

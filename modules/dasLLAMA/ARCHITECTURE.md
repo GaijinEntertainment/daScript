@@ -216,8 +216,11 @@ that a question answered for one backend has an obvious address in the other. Th
 - **The tower driver is a Metal-only role** — Vulkan has no tower twin; audio/vision encodes
   on the Vulkan tier stay CPU (the gemma4v ViT and gemma3v SigLIP block loops included: on
   Vulkan and on plain CPU boxes those towers serve their q8 lanes). Likewise the non-causal media span: Metal serves it through
-  `AttnArgs.uend`; the Vulkan resident prefill declines it (`followup_general.md` #23's
-  remaining half).
+  `AttnArgs.uend` — including the FUSED image turn (head + media rows + tail as ONE eval, the
+  per-query mask through `AttnArgs.ulo`); the Vulkan resident prefill declines span evals
+  (`followup_general.md` #23's remaining half) and registers the split-span capability
+  (`register_prefill_override_split_span`), so `eval_embd_span_` keeps the three-eval splice
+  while vulkan is the active override.
 - **Per-layer FFN widths (MatFormer E-series, at most two — `ffn_second_hidden`) serve on Metal
   only**: the decode and prefill drivers bind the width per layer (dense trunks, no MTP; batch
   keeps the layer-0 hoist behind its uniformity decline). The Vulkan tier has no PLE arm, so

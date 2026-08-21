@@ -10,12 +10,15 @@ require dasllama/dasllama_load
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail, the bench's own metal leg
 require dasllama/dasllama_env
 require ?das_metal dasllama/dasllama_metal_prefill
+require ../performance/profile_common.das   // tune_gate + apply_box_profile_runtime — the standing pre-measure stack
 require daslib/jobque_boost
 require daslib/fio
 
 // The Metal prefill M-curve on ONE loaded model: per-npos best-of ms/tok with stage stats,
-// then the DASLLAMA_METAL_PREFILL_SKIP knockouts at a small and a large M. Direction-grade —
-// it found the 64-row M-pad staircase (npos=160 billed as 192) that the ceil32 pad removed.
+// then the DASLLAMA_METAL_PREFILL_SKIP knockouts at a small and a large M. Direction-grade.
+// A sweep INSTRUMENT, not a lab: the knockout arms attribute stage families, they select no
+// implementation (REVIEW_GPU.md's lab-deletion rule does not bind it). It found the 64-row
+// M-pad staircase (npos=160 billed as 192) that the ceil32 pad removed.
 
 def measure_one(tr : Model; npos : int64; reps : int) : double {
     var best = 1.0e30lf
@@ -50,6 +53,10 @@ def main {
             panic("msweep: the mapped flavor is not metal_blob - wrong leg")
         }
         tr.config.seq_len = 2048l
+        apply_box_profile_runtime()
+        if (!tune_gate()) {   // never measure on fallback winners
+            panic("msweep: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
+        }
         with_job_que() {
             setup_dasllama_jobque_()
             measure_one(tr, 512l, 1)   // warm: JIT + blob upload + first graphs
@@ -69,7 +76,7 @@ def main {
                     set_metal_prefill_skip(fam)
                     let ms = measure_one(tr, npos, 3)
                     set_metal_prefill_skip("")
-                    print("knockout npos={npos} skip={fam} ms={ms} share={(base - ms) / base}\n")
+                    print("knockout npos={npos} skip={fam} ms={ms} share={(base - ms) / base} (output GARBAGE - timing attribution only)\n")
                 }
             }
         }

@@ -199,9 +199,21 @@ typedef PrefillOverrideFn = function<(t : Model; var s : Session; npos : int64; 
 var private g_prefill_overrides : table<string; PrefillOverrideFn>
 var private g_prefill_override : PrefillOverrideFn
 var private g_prefill_override_name = ""
+var private g_prefill_split_span : table<string; bool>
 
 def register_prefill_override(name : string; fn : PrefillOverrideFn) {
     g_prefill_overrides[name] = fn
+}
+
+//! Registered beside the override: `true` = this override cannot serve a fused mid-turn span
+//! (a per-query non-causal mask), so `eval_embd_span_` keeps the three-eval splice while it
+//! is active. Unregistered overrides — and the CPU layer loop — serve the fused mask.
+def register_prefill_override_split_span(name : string) {
+    g_prefill_split_span[name] = true
+}
+
+def active_prefill_splits_span : bool {
+    return g_prefill_split_span?[g_prefill_override_name] ?? false
 }
 
 //! Activate a registered whole-prefill override by name ("" deactivates). false = unknown name.

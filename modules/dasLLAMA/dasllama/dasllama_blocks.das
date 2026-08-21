@@ -1579,17 +1579,25 @@ def eval_embd_(t : Model; var s : Session; embd : array<float>; npos : int64; no
 
 var private g_span_fuse = true
 
+[init]
+def private span_fuse_env() {
+    g_span_fuse = g_env_vision.span_fuse
+    if (!g_span_fuse) {
+        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_SPAN_FUSE=0 - image turns run the three-eval splice\n")
+    }
+}
+
 //! A/B seat: pin the pre-fuse three-eval splice (head / rows / tail as separate prefill calls) —
-//! the parity rail for the fused span eval. Default fused.
+//! the parity rail for the fused span eval (DASLLAMA_SPAN_FUSE's setter twin). Default fused.
 def public set_span_fuse(on : bool) {
     g_span_fuse = on
 }
 
-// The vulkan resident chain encodes the causal mask device-side, so a fused span eval would push
-// the WHOLE turn off it — the splice keeps its head/tail on the chain there. Metal serves the
+// An override that cannot serve the per-query span mask registers the split-span capability
+// (register_prefill_override_split_span) and keeps the three-eval splice; Metal serves the
 // fused mask (AttnArgs.ulo), and the CPU arms mask per query.
 def private span_fusable : bool {
-    return g_span_fuse && active_prefill_override() != "vulkan"
+    return g_span_fuse && !active_prefill_splits_span()
 }
 
 //! `eval_embd_` for a prompt carrying ONE non-causal image span: rows [span_lo, span_hi) prefill

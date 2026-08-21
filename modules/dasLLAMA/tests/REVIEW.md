@@ -28,7 +28,9 @@ instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
 
 **A `model-free`-listed or suite-less test file — one in no `run.das` model suite (every suite
 but `model-free`) — has an accurate `CLAUDE.md` entry in the same change** — added when the
-file is added, corrected when what it covers is renamed or re-scoped.
+file is added, corrected when what it covers is renamed or re-scoped. The arm names a runner
+suite selects a file by are part of the same contract: a new or renamed arm updates the
+`CLAUDE.md` arm census in the same change.
 
 **Weakening `test_program_roots.das` — dropping a root from its sweep, loosening its
 `options stack = 524288` assert, or relaxing its prefill-intent assert — is a defect.**
@@ -76,9 +78,11 @@ reached through the registry, not called directly.
 naming the `ggml-vocab-*.gguf` fixture; a corpus case asserts exact reference ids AND lossless
 round-trip.**
 
-**Every test that compares generated tokens, ids, or logits logs the decoded text for BOTH
-sides (`log_gen_texts` in `_model_tier.das`, or one line per side).** A red, or a suspicious
-green, must be readable as text in the log, not only as an id or float difference.
+**Every test that compares generated tokens, ids, or logits logs a human-readable form of
+BOTH sides: the decoded text where the model carries a vocab (`log_gen_texts` in
+`_model_tier.das`, or one line per side), otherwise each side's argmax index and value.** A
+red, or a suspicious green, must be readable in the log, not only as an id or float
+difference.
 
 **A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
 
@@ -104,9 +108,10 @@ dump.**
 **A test that reads a vision encode oracle dump names the minting arm in its header — the
 backend, the flash-attention setting, and the mmproj precision the dump came from.**
 
-**A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob OFF for
-that leg (`set_metal_wdec(false)` / `set_metal_tower(false)`) and restores it after** — never
-relies on the driver's runtime decline. The mechanism (why the hooks flip legs silently) is
+**A cell whose claim is a CPU-served or f32-decoder leg pins every default-ON driver hook OFF
+for that leg (`set_metal_wdec(false)` / `set_metal_tower(false)`) and restores it after** —
+never relies on the driver's runtime decline; opt-in overrides the cell itself manages
+(`select_prefill_override`) are outside the rule. The mechanism (why the hooks flip legs silently) is
 `CLAUDE.md`'s "Metal fixtures" section.
 
 **A cell that encodes, preprocesses, or asserts on vision image bytes — pixels, not a `.dlim`

@@ -154,6 +154,9 @@ struct public VisionEnv {
 
     @clarg_doc = "Path prefix: dump every letterboxed image fed to a vision embedder as <prefix><tag>.ppm — the human smoke test; empty = off."
     vision_dump : string = ""
+
+    @clarg_doc = "Serve the image turn as ONE fused prefill (per-query span mask); 0 pins the three-eval splice (head / media rows / tail) — the parity A/B rail."
+    span_fuse : bool = true
 }
 
 // ===== Metal backend =====

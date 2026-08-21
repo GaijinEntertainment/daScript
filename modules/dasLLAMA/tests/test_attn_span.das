@@ -115,6 +115,14 @@ def private arr_maxdiff(a, b : array<float>) : float {
     return m
 }
 
+var private g_probe_calls = 0
+
+[unused_argument(t, s, npos, start_pos)]
+def private probe_override(t : Model; var s : Session; npos, start_pos : int64) : bool {
+    g_probe_calls++
+    return false
+}
+
 [test]
 def test_attn_span(t : T?) {
     t |> run("the non-causal span: direction, propagation, mode agreement, flag reset") @(tt : T?) {
@@ -222,6 +230,85 @@ def test_attn_span_fused(t : T?) {
             tt |> equal(pre_span, 0.0, "fused: head rows are blind to a span perturbation")
             let dspan = row_maxdiff(base, span_p, SPAN_LO, dim)
             tt |> success(dspan > 1e-4, "fused: the first span row sees the last span row ({dspan})")
+        }
+        delete tr
+    }
+}
+
+[test]
+def test_attn_span_guards(t : T?) {
+    t |> run("the guards and the split-span capability seat") @(tt : T?) {
+        if (!stat(MODEL_PATH).is_valid) {
+            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        let dim = tr.config.dim
+        let embd_a <- make_embd(dim, 0)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            // the span-bounds panic: a direct forward_prefill_embd caller with an inverted span
+            var tripped = false
+            var s1 <- make_run_state(tr.config)
+            try {
+                forward_prefill_embd(tr, s1, embd_a, NPOS, 0l, span_lo = 5l, span_hi = 3l)
+            } recover {
+                tripped = true
+            }
+            tt |> success(tripped, "an inverted span [5,3) panics forward_prefill_embd")
+            delete s1
+            // the hub guard: a foreign write to the session's span fields must panic the next
+            // prefill rather than drive a mask nobody set up
+            tripped = false
+            var s2 <- make_run_state(tr.config)
+            s2.attn_uniform_lo = 9l
+            s2.attn_uniform_end = 7l
+            var toks : array<int64>
+            toks |> resize(8l)
+            try {
+                forward_prefill(tr, s2, toks, 8l, 0l)
+            } recover {
+                tripped = true
+            }
+            tt |> success(tripped, "a foreign attn_uniform span [9,7) panics prefill_attention")
+            delete toks
+            delete s2
+            // the recurrent rejection: a fused span on a recurrent graph must refuse up front
+            tripped = false
+            var shell = Model()
+            shell.config.dim = 8l
+            shell.config.recr_mask = 1ul
+            var s3 = Session()
+            var e3 : array<float>
+            e3 |> resize(16l)
+            try {
+                forward_prefill_embd(shell, s3, e3, 2l, 0l, span_lo = 0l, span_hi = 1l)
+            } recover {
+                tripped = true
+            }
+            tt |> success(tripped, "a fused span on recr_mask != 0 panics forward_prefill_embd")
+            delete e3
+            delete s3
+            delete shell
+            // the split-span capability seat: an override that registers it forces the
+            // three-eval splice (3 override calls, each declining to the CPU arm); one that
+            // does not gets the fused single eval
+            register_prefill_override("test-split", @@probe_override)
+            register_prefill_override_split_span("test-split")
+            register_prefill_override("test-fused", @@probe_override)
+            select_prefill_override("test-split")
+            g_probe_calls = 0
+            var s4 <- make_run_state(tr.config)
+            eval_embd_span_(tr, s4, embd_a, NPOS, SPAN_LO, SPAN_HI)
+            delete s4
+            tt |> equal(g_probe_calls, 3, "a split-span override sees THREE prefill calls (the splice)")
+            select_prefill_override("test-fused")
+            g_probe_calls = 0
+            var s5 <- make_run_state(tr.config)
+            eval_embd_span_(tr, s5, embd_a, NPOS, SPAN_LO, SPAN_HI)
+            delete s5
+            tt |> equal(g_probe_calls, 1, "a fused-capable override sees ONE prefill call")
+            select_prefill_override("")
         }
         delete tr
     }

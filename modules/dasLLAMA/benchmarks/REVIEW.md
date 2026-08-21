@@ -3,6 +3,10 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `../PROFILE.md`.
 
+**An entry point that times `eval_`/`decode_`/prefill on a loaded `Model` calls `tune_gate()`
+(`../performance/profile_common.das`) before its first timed rep**, or it measures fallback
+kernels silently.
+
 **A kernel A/B lab — a rig whose output selects between two implementations of the same
 compute — times both variants interleaved in one process with one instrument.** A board bench
 cell that picks a kernel tier by flag is not an A/B lab.

@@ -23,9 +23,11 @@ what it costs today and what the fix would change.
   SAME three decodes (`mtmd_helper_eval_chunk_single`, causal-flag toggled around the image
   chunk). The measured mechanism is the **pad-64 GEMM floor**: the mul_mm M tile pads every
   quantum to 64 rows (`mp = ((npos+63)/64)*64`), so the ~5-token head and ~21-token tail each
-  billed a full 64-row GEMM pass through the stack — E2B slices 58.7 / 123.2 / 54.6 ms, the
-  head+tail 48 % of the wall for 17 % of the positions, while the rows slice alone already ran
-  at lcpp's whole-span rate. **The fix:** `eval_embd_span_` issues ONE eval with a per-query
+  billed a full 64-row GEMM pass through the stack — E2B slices 58.7 / 123.2 / 54.6 ms and
+  head+tail 48 % of the wall for 17 % of the positions, measured by a temporary -jit per-slice
+  probe (a `ref_time_ticks` wrap in `eval_embd_slice_` + `metal_prefill_stage_stats`, both
+  reverted; `harness/prefill_msweep_probe.das` is the kept instrument), while the rows slice
+  alone already ran at lcpp's whole-span rate. **The fix:** `eval_embd_span_` issues ONE eval with a per-query
   mask — span rows [ulo, uend) uniform, head/tail causal — through the CPU flash/blocked/
   classic arms and `AttnArgs.ulo` on Metal (DASLLAMA_VERSION 7); the three-eval splice remains
   the vulkan-leg fallback and the `set_span_fuse(false)` parity rail. Record-grade after the

@@ -8,7 +8,9 @@ KIND, not location:** a dasLLAMA `[test]` file, wherever the diff puts it, answe
 module's `tests/REVIEW.md`; a timing rig — a script whose output is a measured wall or rate — and any
 kernel A/B lab, wherever the diff puts them, answer to `benchmarks/REVIEW.md`; a change to what
 enters `performance/records/` or its manifests, and an exchange or provenance-manifest change,
-answers to `performance/REVIEW.md`.
+answers to `performance/REVIEW.md`; a diff naming a model file (a `.gguf`, `.dlim`, or
+audio/vision companion) anywhere under the module applies `performance/REVIEW.md`'s
+provenance rules.
 
 **Every `dasllama/` change applies `tests/REVIEW.md` for the test obligation it names.**
 
@@ -101,11 +103,13 @@ observable outcome of the run — what it measures, writes, reads, or mints — 
 names it by the env spelling; set-but-inert stays silent, per-site repeats are fine. Adding
 one, or giving one a new effect, without the announce is a defect.
 
-**A self-measured model time entering `performance/records/<box>.json` or `PERF_LEDGER.md` comes
-from the released `lcpp_bench` exe — `benchmarks/lcpp_bench.das` built by `daspkg release`,
-spawned by `performance/gen_bench_records.das` or run by hand where the cell's `PROFILE.md`
-section says so — never from the `-jit` script** (a `--for-debug-purposes` row is a debug
-instrument). A tutorial's printed wall-clock is teaching output, feeding no board.
+**A self-measured served-turn time — tok/s, a turn wall — entering
+`performance/records/<box>.json` or `PERF_LEDGER.md` comes from the released `lcpp_bench`
+exe — `benchmarks/lcpp_bench.das` built by `daspkg release`, spawned by
+`performance/gen_bench_records.das` or run by hand where the cell's `PROFILE.md` section says
+so — never from the `-jit` script** (a `--for-debug-purposes` row is a debug instrument). A
+stage-level figure is settled by the harness-naming rule below, not this one. A tutorial's
+printed wall-clock is teaching output, feeding no board.
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
@@ -119,9 +123,10 @@ provenance, so a number can never silently describe a format nobody serves or a 
 nobody ships. A rig-internal measurement margin — a crown delta, a noise floor, tuner
 timing — is settled by the sidecar or manifest stamp it rides in.
 
-**A stage-level figure — a speedup of one engine stage, not a served turn — names the harness
-and flags that produced it in the same sentence, wherever it is written down: a checked-in
-doc, a ledger, a code comment, or a PR description.**
+**A figure measuring one engine stage rather than a served turn — a stage wall, a stage
+share, or a stage speedup — names the harness and flags that produced it in the same
+sentence, wherever it is written down: a checked-in doc, a ledger, a code comment, or a PR
+description.**
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
 `parse_image`'s mapping, and going live does no real work — repacking, quantizing, folding,
