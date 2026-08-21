@@ -28,9 +28,10 @@ what it costs today and what the fix would change.
   at lcpp's whole-span rate. **The fix:** `eval_embd_span_` issues ONE eval with a per-query
   mask — span rows [ulo, uend) uniform, head/tail causal — through the CPU flash/blocked/
   classic arms and `AttnArgs.ulo` on Metal (DASLLAMA_VERSION 7); the three-eval splice remains
-  the vulkan-leg fallback and the `set_span_fuse(false)` parity rail. Direction-grade -jit
-  cells: E2B 659→**1230** (lcpp 1101), E4B 362→**632** (658), 12B 140→**224** (268) tok/s.
-  Record re-mint owed from the released rig.
+  the vulkan-leg fallback and the `set_span_fuse(false)` parity rail. Record-grade after the
+  arc's second lever (the M-pad fix below): Metal `img:pp` E2B **1400.2** vs 1102.6 (1.27×),
+  E4B **713.7** vs 663.1 (1.08×), 12B **268.0** vs 270.7 (parity within noise) — das leads or
+  ties every Metal image cell, with the decode/encode crowns re-confirmed.
 - **RULED AND LANDED — the "kquant small-M kernel deficit" was the 64-row M pad (measured and
   fixed 2026-08-21, M1 Max, the fused-image-span arc round 2).** The suspected ~27 % kq
   mul_mm throughput deficit at image-turn batch sizes was REFUTED by the M-sweep
@@ -39,10 +40,13 @@ what it costs today and what the fix would change.
   128's — while per-PADDED-token cost is flat 3.1–3.2 ms from 128 to 512; the knockouts put
   the GEMM family at 96 % of the wall at both M. Every prefill kernel's M grid is `mp/32`
   (weight mul_mm, kq twins, attention trio), so the `mp = ceil64(npos)` pad billed a dead
-  32-row GEMM block on every short prefill; the fix is `ceil32`. Direction-grade -jit image
-  cells after: 12B **270** tok/s (lcpp 268 — parity), E4B **699** (658), E2B **1391** (1101)
-  — das leads or ties every Metal image-prefill cell. Full prefill-parity arm set + the
-  gemma2 sliding-window row green on the new pad.
+  32-row GEMM block on every short prefill; the fix is `ceil32`. Record-grade image cells
+  after (released rig, refs adjacent): 12B **268.0** tok/s (lcpp 270.7 — parity within
+  noise), E4B **713.7** (663.1), E2B **1400.2** (1102.6) — das leads or ties every Metal
+  image-prefill cell. The pad cut also reaches every Metal-served model's short prefill
+  (`npos % 64` in [1, 32] — the interactive-prompt shape; pp512 cells sit at % 64 == 0, which
+  is why the pad went unnoticed). Full prefill-parity arm set + the gemma2 sliding-window +
+  gemma4e/qwen35 family rows green on the new pad.
 
 - **gemma4v ViT tower (E-series): the encode is the image turn's biggest single stage on every
   CPU tier; the q8 lane and the Metal leg both landed (measured 2026-08-19, M1 Max, the gemma4v
