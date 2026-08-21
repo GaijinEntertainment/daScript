@@ -1915,15 +1915,11 @@ def private handle_view_typing(var doc : TextViewerDocument) {
 def private handle_document_shortcuts(doc : TextViewerDocument const) {
     let io & = unsafe(GetIO())
     command_poll_scope(g_commands, CommandScope.document, "{doc.id}")
-<<<<<<< Updated upstream
     if (!doc.editing) {
         // while editing, the editor widget owns the component scope - a second
         // poll here would double-fire shared chords like Ctrl+C
         command_poll_scope(g_commands, CommandScope.component, "{doc.id}")
     }
-=======
-    command_poll_scope(g_commands, CommandScope.component, "{doc.id}")
->>>>>>> Stashed changes
     // io.KeyCtrl is logical — ImGui maps Cmd onto it under ConfigMacOSXBehaviors.
     if (IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && io.KeyCtrl) {
         if (io.MouseWheel > 0.0f) {

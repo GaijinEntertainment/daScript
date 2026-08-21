@@ -415,11 +415,7 @@ print("{greeting}\n")
 Entities decode for display while retaining source bytes: &amp; &copy; &#x1f680;.
 %%
     delete g_doc
-<<<<<<< Updated upstream
     g_doc <- md_parse(source)
-=======
-    g_doc <- md_parse(source)  // nolint:PERF030 - target deleted on the previous line; the lint mirrors the compiler rewrite, not statement context
->>>>>>> Stashed changes
     if (!g_doc.ok) {
         g_status = g_doc.error
     }
