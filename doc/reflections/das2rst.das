@@ -579,6 +579,7 @@ def document_module_jsonrpc(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Envelope builders", mod, %regex~(response|error|error_with_data|serialize_id)$%%),
         group_by_regex("Server-side parsers", mod, %regex~(parse_request|parse_batch)$%%),
+        group_by_regex("Request scope", mod, %regex~(free_request|free_batch)$%%),
         group_by_regex("Outgoing request builders", mod, %regex~(make_request|make_notification|make_batch)$%%),
         group_by_regex("Response parsers", mod, %regex~(parse_response|parse_response_batch)$%%),
         group_by_regex("Framing helper", mod, %regex~(compact_json_whitespace)$%%),
