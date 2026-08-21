@@ -22,10 +22,13 @@ reports the statement; a remedy that edits one variable's initializer reports th
 an anchor chosen for implementation convenience instead is a defect.
 
 **Visitor state scoped to a construct is reset or restored on every exit path of that
-construct.** Per-loop state is a stack, never a bare scalar — a scalar survives into the
-sibling loop's exit path and unbalances its counter; per-function state resets in
-`preVisitFunction` ahead of any early return — a latch that skips the template early-return
-poisons the next function.
+construct.**
+
+**Per-loop visitor state is a stack, never a bare scalar.** A scalar survives into the
+sibling loop's exit path and unbalances its counter.
+
+**Per-function visitor state resets in `preVisitFunction`, ahead of any early return.**
+A latch that skips the template early-return poisons the next function.
 
 **A daslib predicate that replicates a C++ compiler decision changes in lockstep with its
 C++ side.** The pairs: `lint022_optimized` / `lint022_calls_may_be_inlined` ↔
@@ -39,8 +42,8 @@ pins that a string literal, a URL, and a mid-comment `nolint:` do not suppress, 
 `tests/lint/test_stale_nolint.das` pins that a `lint-skip-file` past the header window is
 prose.
 
-**`@nolint` is recognized only as the first token after `//` / `//!`.** No test pins this
-window; a doc comment quoting the spelling would otherwise unlint code silently.
+**`@nolint` and `nolint:` are recognized only as the first token after `//` or `//!`.**
+A doc comment quoting the spelling would otherwise unlint code silently.
 
 **`build_lint_macro_disabled` layers four sources in this order: defaults, repo `off`, repo
 `on`, environment.** Env last lets a one-run `DAS_LINT_DISABLE` beat a `CODE = true`.
@@ -48,10 +51,14 @@ window; a doc comment quoting the spelling would otherwise unlint code silently.
 **`options _enable_default_off_rules` skips BOTH the default seeding and the repo `off`
 directives.** Repo policy must not silence the rule a fixture exists to exercise.
 
-**A `[format]` policy key resolves nearest-wins PER KEY, cascading independently up to the
-`.git` root.** `format_policy_for` and the formatter's kept set (`is_kept_comment`) are the
-contract `tests/lint/test_lint_config.das` pins; a nearer `.lint_config` declaring one key
-must not reset the other.
+**Weakening `tests/lint/test_lint_config.das` or the kept-comment cases in
+`utils/mcp/test_tools.das` is a defect** — the first pins that each `[format]` key resolves
+nearest-wins independently up to the `.git` root, so a nearer `.lint_config` declaring one
+key does not reset the other; the second pins the formatter's kept set.
+
+**A daslib module that emits a lint rule id joins `RULE_MODULES` in `utils/lint/REVIEW.das`
+in the same change.** An unlisted module's ids are never scanned, so its fixture-and-rst
+check never runs.
 
 **LINT010 records a store in the POST-visit of `ExprCopy`/`ExprClone`/`ExprMove`, never in
 `preVisitExprVar`.** The LHS's variable fires before the RHS is walked; an early record
@@ -105,10 +112,12 @@ A later pass lowers the lambda to a plain function and clears non-sticky errors.
 **UTF-8 byte-class tables are indexed through `uint(uint8(ch))`** — `for (ch in string)`
 yields a SIGNED byte under JIT; a raw index reads out of bounds for every byte >= 0x80.
 
-**A residual oracle mirrors its transform's gate exactly and never calls the transform.**
-Every flatten_opt rewrite arm pairs with a read-only predicate the residual visitors use to
-prove the pass complete; a narrower oracle is a false pass, a wider one a false miss, and
-calling the transform from an oracle aliases the live tree.
+**Every flatten_opt rewrite arm ships a read-only residual predicate** — the oracle the
+residual visitors call to prove the pass complete.
+
+**A residual oracle mirrors its arm's gate exactly and never calls the transform.** A
+narrower oracle is a false pass, a wider one a false miss; calling the transform from an
+oracle aliases the live tree.
 
 **Every new fold/fuse arm declares its float class.** Inf/NaN/rounding/association changes
 are fast-math-only; bit-exact per-lane rewrites are never gated. An arm added without that

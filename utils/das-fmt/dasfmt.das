@@ -12,6 +12,8 @@ require daslib/jobque_boost
 require daslib/das_source_formatter
 require daslib/strings_boost
 require daslib/lint_config
+require daslib/ast
+require daslib/rtti
 
 
 def private normalize_line_endings(text : string) : string {
@@ -132,6 +134,81 @@ def private drop_excluded_files(args : array<string>; var files : array<string>)
 }
 
 
+def private stripped_source_compiles(file, text : string) : bool {
+    // coordinating-thread only: the compiler is not reentrant across job threads
+    var compiles = false
+    var inscope access <- make_file_access("")
+    set_file_source(access, file, text)
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            compile_file(file, access, unsafe(addr(mg)), cop) $(ok; _program; _issues) {
+                compiles = ok
+            }
+        }
+    }
+    return compiles
+}
+
+
+def private format_one_strip_file(file : string; verify, verbose : bool; var verified : bool&; var strip_failures : int&) {
+    var before : string
+    var after : string
+    var open = false
+    fopen(file, "rb") $(fr) {
+        if (fr != null) {
+            fmap(fr) $(data) {
+                open = true
+                before = string(data)
+                after = format_source(data, true)
+            }
+        }
+    }
+    let diff_result = collect_diff(before, after)
+    let changed = diff_result.differ
+    if (!open) {
+        log::info("-- {file}")
+        log::error("Unable to open '{file}'")
+        strip_failures++
+        return
+    }
+    if (verify) {
+        if (changed) {
+            log::error("Unformatted file '{file}'")
+            log::info(diff_result.log)
+            verified = false
+        }
+        return
+    }
+    if (!changed) {
+        log::info("-- {file}")
+        return
+    }
+    if (!stripped_source_compiles(file, after)) {
+        log::info("-- {file}")
+        log::error("Comment strip broke compilation of '{file}'; file left unchanged")
+        strip_failures++
+        return
+    }
+    var write = false
+    fopen(file, "wb") $(fw) {
+        if (fw != null) {
+            fwrite(fw, after)
+            write = true
+        }
+    }
+    if (write) {
+        log::info("++ {file}")
+        if (verbose) {
+            log::info(diff_result.log)
+        }
+    } else {
+        log::info("-- {file}")
+        log::error("Unable to open '{file}' for writing")
+        strip_failures++
+    }
+}
+
+
 def private format_one_file(file : string; verify, verbose, strip_comments : bool; var verified : bool&) {
     // Runs on a job thread: formats `file` in place, or (under --verify) reports
     // it as unformatted and clears `verified`.
@@ -190,9 +267,47 @@ def private drop_format_disabled_files(var files : array<string>) : array<Format
     return <- jobs
 }
 
+def private run_format_jobs(var jobs : array<FormatJob>; threadsNum : int; verify, verbose : bool; args : array<string>; var verified : bool&; var strip_failures : int&) {
+    var plain_files : array<string>
+    var strip_files : array<string>
+    for (job in jobs) {
+        if (job.strip_comments) {
+            strip_files |> push(job.file)
+        } else {
+            plain_files |> push(job.file)
+        }
+    }
+    delete jobs
+
+    with_job_que() $ {
+        while (!empty(plain_files)) {
+            let batchNum = min(length(plain_files), threadsNum)
+            with_job_status(batchNum) $(status) {
+                for (_ in range(batchNum)) {
+                    let file = plain_files[length(plain_files) - 1]
+                    plain_files |> pop()
+                    unsafe {
+                        new_job <| @ capture(& verified, := args) {
+                            log::init_log(args)
+                            format_one_file(file, verify, verbose, false, verified)
+                            status |> notify_and_release
+                        }
+                    }
+                }
+                status |> join
+            }
+        }
+    }
+
+    for (file in strip_files) {
+        format_one_strip_file(file, verify, verbose, verified, strip_failures)
+    }
+}
+
+
 [export]
 def main() {
-    var args <- get_command_line_arguments()
+    let args <- get_command_line_arguments()
     log::init_log(args)
     let threadsNum = max(args |> get_arg("--t") <| get_total_hw_threads(), 1)
     let verify = args |> find_index("--verify") >= 0
@@ -231,25 +346,15 @@ def main() {
 
     let filesNum = length(jobs)
     var verified = true
+    var strip_failures = 0
+    run_format_jobs(jobs, threadsNum, verify, verbose, args, verified, strip_failures)
 
-    with_job_que() $ {
-        while (!empty(jobs)) {
-            let batchNum = min(length(jobs), threadsNum)
-            with_job_status(batchNum) $(status) {
-                for (_ in range(batchNum)) {
-                    let job = jobs[length(jobs) - 1]
-                    jobs |> pop()
-                    unsafe {
-                        new_job <| @ capture(& verified, := args) {
-                            log::init_log(args)
-                            format_one_file(job.file, verify, verbose, job.strip_comments, verified)
-                            status |> notify_and_release
-                        }
-                    }
-                }
-                status |> join
-            }
+    if (strip_failures > 0) {
+        log::info("Failed! {strip_failures} file(s) not stripped in {time_dt_hr(get_time_usec(startTime))}")
+        unsafe {
+            fio::exit(1)
         }
+        return
     }
 
     if (verify) {

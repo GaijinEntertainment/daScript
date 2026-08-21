@@ -642,10 +642,18 @@ def test_format_strip_comments_source(t : T?) {
         t |> success(find(stripped, "let z = x + y") >= 0, "multi-line inline comment joins its expression")
     }
     t |> run("license comments survive the strip anywhere in the file") <| @(t : T?) {
-        let src = "options gen2\n\ndef mid \{\n    return 1\n\}\n\n// Copyright (c) 2008 Bjoern Hoehrmann\n// SPDX-License-Identifier: MIT\ndef tail \{\n    return 2\n\}\n"
+        let src = "options gen2\n\ndef mid \{\n    return 1\n\}\n\n// Copyright (c) 2008 Bjoern Hoehrmann\n// SPDX-License-Identifier: MIT\n// COPYRIGHT 2026 SHOUTING NOTICES TOO\ndef tail \{\n    return 2\n\}\n"
         let stripped = format_source_string(src, true)
         t |> success(find(stripped, "Copyright (c) 2008") >= 0, "Copyright line kept mid-file")
         t |> success(find(stripped, "SPDX-License-Identifier: MIT") >= 0, "SPDX line kept mid-file")
+        t |> success(find(stripped, "COPYRIGHT 2026") >= 0, "match is case-insensitive")
+    }
+    t |> run("a fmt directive ends a kept continuation chain") <| @(t : T?) {
+        let src = "options gen2\n\ndef head \{\n    return 1\n\}\n\n//! documented contract\n//fmt:keep-blank-lines\n// narration dies here\ndef tail \{\n    return 2\n\}\n"
+        let stripped = format_source_string(src, true)
+        t |> success(find(stripped, "documented contract") >= 0, "doc kept")
+        t |> success(find(stripped, "fmt:keep-blank-lines") >= 0, "directive kept")
+        t |> success(find(stripped, "narration dies") < 0, "narration after the directive is not a continuation")
     }
     t |> run("strip-disabled path leaves every comment in place") <| @(t : T?) {
         let src = fread(fixture_path("_fixture_comments.das"))

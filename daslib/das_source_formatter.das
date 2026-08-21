@@ -1214,7 +1214,7 @@ def public format_source(file_data : array<uint8> const& implicit) : string {
 
 def private is_kept_comment(s : string) : bool {
     if ((s |> starts_with("//!")) || (s |> starts_with("//fmt:"))
-            || (s |> find("Copyright") >= 0) || (s |> find("copyright") >= 0) || (s |> find("SPDX-License-Identifier") >= 0)) {
+            || (to_lower(s) |> find("copyright") >= 0) || (s |> find("SPDX-License-Identifier") >= 0)) {
         return true
     }
     if (!(s |> starts_with("//"))) {
@@ -1258,7 +1258,7 @@ def private strip_comment_tokens(var ctx : FormatterCtx) {
         }
         if (t.tokenType == TokenType.COMMENT) {
             in_kept_block = ((t.newLines > 0 && opens_kept_block(t.str))
-                || (in_kept_block && on_next_line))
+                || (in_kept_block && on_next_line && !(t.str |> starts_with("//fmt:"))))
         } elif (!empty(t.str)) {
             in_kept_block = false
         }

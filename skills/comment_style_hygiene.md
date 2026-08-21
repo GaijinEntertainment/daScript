@@ -48,12 +48,14 @@ stays — comments that add nothing to their line still go.
 **C and C++: no NEW comments.** Comments go stale, code does not — new C-family code says
 it in a name, a shape, or a test, or documents itself in the module's `.md`. Kept when one
 is earned: `//!` and `/** */` docs on public API, `NOLINT` / `clang-format` suppressions,
-the leading header block. Existing comments answer to the deletion test below.
+the leading header block. Existing comments answer to the deletion test.
 
-**Other languages: the test for every comment is deletion** — remove it and re-read; if
-the WHY goes dark, it was load-bearing: restore it, rewritten in present tense; otherwise
+**The deletion test settles any comment no kept set covers: remove it and re-read.** If
+the WHY goes dark it was load-bearing — restore it, rewritten in present tense; otherwise
 it was noise. 1–2 lines is the default, not a limit — "why is this long?" is the finding.
 The leading header block (license, provenance) stays.
+
+**Other languages have no kept set: every comment answers to the deletion test.**
 
 **No incident citations in a comment** — no PR numbers, no dates, no "used to crash". Name
 the failure mode in present tense at the code that guards it.
