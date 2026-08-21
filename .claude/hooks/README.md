@@ -57,7 +57,7 @@ carry no positional context); a comment right after a scheme-shaped label
 
     python3 .claude/hooks/test_comment_guard.py
 
-124 cases over the grammar matrix plus a corpus invariant over known-tricky
+128 cases over the grammar matrix plus a corpus invariant over known-tricky
 tracked files (reader macros, generated flex output, 250KB+ sources). Also run
 by CI in `extended_checks.yml` beside the other python gates.
 

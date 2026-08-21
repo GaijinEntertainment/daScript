@@ -300,11 +300,18 @@ def _kept_block_comment(ctext, is_das):
     return ctext.startswith("/**") and (len(ctext) == 3 or ctext[3] in _WS)
 
 
+_IGNORE_FILE = "//fmt:ignore-file"
+
+
 def violations(text, is_das, whole_file):
     """Comments in `text` outside the kept set. `whole_file` grants the leading
-    header block; edit fragments carry no positional context, so it stays False."""
+    header block; edit fragments carry no positional context, so it stays False.
+    A das text carrying the formatter's file-wide opt-out (`//fmt:ignore-file`,
+    exact \u2014 a space breaks the token) has no violations at all."""
     text = text.lstrip("\ufeff")
     comments, has_code = scan(text, is_das)
+    if is_das and any(t == _IGNORE_FILE for _, t, _ in comments):
+        return []
     header_line = first_code_line(text, is_das, has_code) if whole_file else 0
     out = []
     for ln, ctext, full in comments:

@@ -323,6 +323,21 @@ class TestKept(unittest.TestCase):
     def test_das_fmt_space_flagged(self):
         self.assertEqual(len(cg.violations("// fmt: off\n", True, False)), 1)
 
+    def test_das_ignore_file_opts_out_whole_write(self):
+        src = "//fmt:ignore-file\ndef f() {}\nx = 1 // narration stays\n"
+        self.assertEqual(cg.violations(src, True, True), [])
+
+    def test_das_ignore_file_opts_out_edit_fragment(self):
+        self.assertEqual(cg.edit_violations("x()\n", "//fmt:ignore-file\nx() // narr\n", True), [])
+
+    def test_das_ignore_file_with_space_is_not_the_token(self):
+        src = "//fmt: ignore-file\ndef f() {}\nx = 1 // narr\n"
+        self.assertEqual([t for _, t in cg.violations(src, True, True)], ["// narr"])
+
+    def test_c_ignore_file_not_special(self):
+        src = "int x;\n//fmt:ignore-file\nint y; // narr\n"
+        self.assertEqual(len(cg.violations(src, False, False)), 2)
+
     def test_das_bare_nolint_no_colon_flagged(self):
         self.assertEqual(len(cg.violations("// nolint missing colon\n", True, False)), 1)
 
