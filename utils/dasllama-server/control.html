@@ -631,10 +631,11 @@ function lockGpuControls(flavor) {
 const swHist = [];               // newest first: { from, to, ms }
 let prevSlots = null;            // last poll's models[] keyed by name
 
-let servedIds = new Set();   // slot ids from the last stats poll — the catalog's serve-live gate
+let servedIds = new Set();   // slot ids AND source files from the last stats poll — the catalog's
+                             // serve-live gate matches on the FILE, so a custom slot name still hides it
 
 function renderModels(s) {
-    servedIds = new Set((s.models || []).map(m => m.name));
+    servedIds = new Set((s.models || []).flatMap(m => [m.name, m.file].filter(Boolean)));
     const slots = s.models || [];
     if (prevSlots) {
         for (const m of slots) {

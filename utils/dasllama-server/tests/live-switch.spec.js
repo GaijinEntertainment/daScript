@@ -4,9 +4,10 @@
 
 const { test, expect, fx, openControl, lastJson } = require('./fixtures');
 
-function statsServing(name) {
+function statsServing(name, file) {
     const s = JSON.parse(JSON.stringify(fx('stats_multi')));
     if (name) s.models[0].name = name;
+    if (file) s.models[0].file = file;
     return s;
 }
 
@@ -19,6 +20,17 @@ test('a present, unserved row offers serve live; a served row does not', async (
     // E2B is served (stats slot name matches its file) — downloaded chip, no serve-live
     await expect(rows.nth(0).getByRole('button', { name: 'serve live' })).toHaveCount(0);
     // E4B is present but unserved — the live rail offers it
+    await expect(rows.nth(1).getByRole('button', { name: 'serve live' })).toBeVisible();
+});
+
+test('a served file under a custom slot name still hides serve live', async ({ page }) => {
+    await openControl(page, {
+        stats: statsServing('my-gemma', 'gemma-4-E2B-it-Q4_K_M.gguf'),
+        catalog: fx('catalog_done'),
+    });
+    const rows = page.locator('#cat-body tr');
+    // the slot serves under a custom [[models]] name — the gate matches the FILE the stats expose
+    await expect(rows.nth(0).getByRole('button', { name: 'serve live' })).toHaveCount(0);
     await expect(rows.nth(1).getByRole('button', { name: 'serve live' })).toBeVisible();
 });
 

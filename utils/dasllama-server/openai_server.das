@@ -2809,6 +2809,8 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
 // unchanged); `models` carries one entry per slot for the page's roster panel.
 struct private OaiSlotStats {
     name : string
+    file : string             // base name of the source GGUF — the page's serve-live gate keys
+                              // on the FILE, which a custom slot name would otherwise hide
     is_default : bool
     is_active : bool          // the slot the tick loop is stepping
     holds_gpu : bool          // the slot whose VRAM state is armed (the GPU owner)
@@ -2933,7 +2935,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
         out.models |> push(OaiSlotStats(
-            name = s.name, is_default = s.is_default, is_active = i == g_active,
+            name = s.name, file = base_name(s.path), is_default = s.is_default, is_active = i == g_active,
             holds_gpu = i == g_gpu_owner,
             backend = s.opts.backend, backend_effective = s.backend_effective,
             flavor = slot_flavor(s), vision = s.vision.kind != VisionKind.none,
