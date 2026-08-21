@@ -786,27 +786,27 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":12.662000000000001
+            "ms":10.342000000000001
           },
           "img:pp":{
-            "tok_s":267.95836339276514
+            "tok_s":266.80577052993442
           },
           "img:tg":{
-            "tok_s":35.409020370963368,
+            "tok_s":35.363234229150684,
             "text":"Two tabby cats are lying on a pink surface, with one cat on the left and the other on the right."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"7ab12a6ea",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
         "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"e24f39adc0ec0394b486738617295d1b21bf96b6a8d1169ca34a9bcb87d8711a",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4uv f32; weights k4/k6/q8 native; q8 activations; f32 scales; metal blob",
@@ -849,27 +849,27 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":53.631
+            "ms":53.720999999999997
           },
           "img:pp":{
-            "tok_s":66.819466223830645
+            "tok_s":66.465735635092884
           },
           "img:tg":{
-            "tok_s":14.664822724609294,
+            "tok_s":14.585412811572954,
             "text":"Two tabby cats are lying on a pink surface, with one cat on the left and the other on the right."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"7ab12a6ea",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
         "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"e24f39adc0ec0394b486738617295d1b21bf96b6a8d1169ca34a9bcb87d8711a",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4uv f32; weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
@@ -912,27 +912,27 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":15.541
+            "ms":15.709
           },
           "img:pp":{
-            "tok_s":67.075886906614883
+            "tok_s":66.90945649362709
           },
           "img:tg":{
-            "tok_s":14.622982942290397,
+            "tok_s":14.533750672185969,
             "text":"Two tabby cats are lying on a pink surface, with one cat on the left and one on the right."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"7ab12a6ea",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
         "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"e24f39adc0ec0394b486738617295d1b21bf96b6a8d1169ca34a9bcb87d8711a",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4uv f32; weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
@@ -975,17 +975,17 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":143
+            "ms":144
           },
           "img:pp":{
-            "tok_s":270.73046143367958
+            "tok_s":270.96114519427402
           },
           "img:tg":{
-            "tok_s":25.990903183885639
+            "tok_s":26.193009740525497
           }
         },
         "workload":"image-chat",
@@ -1030,17 +1030,17 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
             "ms":245
           },
           "img:pp":{
-            "tok_s":58.52042694147957
+            "tok_s":58.453733318627997
           },
           "img:tg":{
-            "tok_s":13.653042068435873
+            "tok_s":13.542680604342122
           }
         },
         "workload":"image-chat",
@@ -1085,17 +1085,17 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
             "ms":244
           },
           "img:pp":{
-            "tok_s":57.377936559489015
+            "tok_s":57.795063792664756
           },
           "img:tg":{
-            "tok_s":13.792508943580019
+            "tok_s":13.74216267285064
           }
         },
         "workload":"image-chat",
@@ -1414,27 +1414,27 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":91.989999999999995
+            "ms":92.066000000000003
           },
           "img:pp":{
-            "tok_s":713.70729765711849
+            "tok_s":706.10600642737518
           },
           "img:tg":{
-            "tok_s":51.94763029520864,
+            "tok_s":51.289777626757875,
             "text":"The user wants a one-sentence description of the provided image.\nThe image contains two cats lying on a pink surface.\n\nPlan: Describe the main subjects"
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"7ab12a6ea",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
         "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"e24f39adc0ec0394b486738617295d1b21bf96b6a8d1169ca34a9bcb87d8711a",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; metal blob",
@@ -1477,27 +1477,27 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":418.33499999999998
+            "ms":417.28699999999998
           },
           "img:pp":{
-            "tok_s":219.04851503360851
+            "tok_s":219.08789216381595
           },
           "img:tg":{
-            "tok_s":21.971729250619845,
+            "tok_s":21.873447070701133,
             "text":"The user wants a one-sentence description of the provided image.\nThe image contains two cats lying on a pink surface.\n\nPlan: Describe the main subjects"
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"7ab12a6ea",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
         "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"e24f39adc0ec0394b486738617295d1b21bf96b6a8d1169ca34a9bcb87d8711a",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v q8; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
@@ -1540,27 +1540,27 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":435.67500000000001
+            "ms":475.10000000000002
           },
           "img:pp":{
-            "tok_s":227.25849050831607
+            "tok_s":227.43807050871774
           },
           "img:tg":{
-            "tok_s":21.926729093891623,
+            "tok_s":21.889726398941633,
             "text":"The user wants a one-sentence description of the provided image.\nThe image contains two cats lying on a pink surface.\n\nPlan: Describe the main subjects"
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"7ab12a6ea",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
         "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"e24f39adc0ec0394b486738617295d1b21bf96b6a8d1169ca34a9bcb87d8711a",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
@@ -1603,17 +1603,17 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":135
+            "ms":134
           },
           "img:pp":{
-            "tok_s":663.05254378648874
+            "tok_s":662.5
           },
           "img:tg":{
-            "tok_s":47.484790028194098
+            "tok_s":47.562425683709876
           }
         },
         "workload":"image-chat",
@@ -1658,17 +1658,17 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":19943
+            "ms":19951
           },
           "img:pp":{
-            "tok_s":158.93642542982784
+            "tok_s":158.76185721417872
           },
           "img:tg":{
-            "tok_s":20.352350060421038
+            "tok_s":20.239074062361649
           }
         },
         "workload":"image-chat",
@@ -1713,17 +1713,17 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":19958
+            "ms":19955
           },
           "img:pp":{
-            "tok_s":158.60349127182045
+            "tok_s":158.65096787068438
           },
           "img:tg":{
-            "tok_s":20.079061303884043
+            "tok_s":20.023778236656032
           }
         },
         "workload":"image-chat",
@@ -5456,27 +5456,27 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":91.090999999999994
+            "ms":91.099999999999994
           },
           "img:pp":{
-            "tok_s":1400.2459406331625
+            "tok_s":1399.6177966785992
           },
           "img:tg":{
-            "tok_s":92.053341843153376,
+            "tok_s":92.822356573988699,
             "text":": This is an image of two tabby cats lying on a pink surface."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"7ab12a6ea",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
         "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"e24f39adc0ec0394b486738617295d1b21bf96b6a8d1169ca34a9bcb87d8711a",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; metal blob",
@@ -5519,27 +5519,27 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":414.82999999999998
+            "ms":420.45400000000001
           },
           "img:pp":{
-            "tok_s":409.06981195899863
+            "tok_s":408.11307871611814
           },
           "img:tg":{
-            "tok_s":43.209111937525385,
+            "tok_s":42.84392244678785,
             "text":": This is an image of two tabby cats lying on a pink surface."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"7ab12a6ea",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
         "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"e24f39adc0ec0394b486738617295d1b21bf96b6a8d1169ca34a9bcb87d8711a",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v q8; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
@@ -5582,27 +5582,27 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":466.28399999999999
+            "ms":498.50599999999997
           },
           "img:pp":{
-            "tok_s":431.80880834608922
+            "tok_s":425.93158883403959
           },
           "img:tg":{
-            "tok_s":42.951267491903685,
+            "tok_s":43.098122933085854,
             "text":": This is an image of two tabby cats lying on a pink surface."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"7ab12a6ea",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
         "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"e24f39adc0ec0394b486738617295d1b21bf96b6a8d1169ca34a9bcb87d8711a",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
@@ -5645,17 +5645,17 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":115
+            "ms":116
           },
           "img:pp":{
-            "tok_s":1102.6352288488213
+            "tok_s":1109.5603628750871
           },
           "img:tg":{
-            "tok_s":74.280408542246974
+            "tok_s":73.988439306358387
           }
         },
         "workload":"image-chat",
@@ -5700,17 +5700,17 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":19934
+            "ms":19931
           },
           "img:pp":{
-            "tok_s":306.65380906460945
+            "tok_s":304.94821634062055
           },
           "img:tg":{
-            "tok_s":38.605380624924599
+            "tok_s":38.512456372608014
           }
         },
         "workload":"image-chat",
@@ -5755,17 +5755,17 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "img:enc":{
-            "ms":19941
+            "ms":19956
           },
           "img:pp":{
-            "tok_s":307.48404563914221
+            "tok_s":305.94573792572595
           },
           "img:tg":{
-            "tok_s":38.081637510412946
+            "tok_s":37.995725480883401
           }
         },
         "workload":"image-chat",
