@@ -245,7 +245,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/…)
 
 **Complexity/length lint (STYLE037/STYLE038): new code meets both limits from the start.** On a hit in existing code, the suppress-vs-split resolution policy is `skills/style_lint.md` — never force a split on an honest shape.
 
-**Comment hygiene, all languages: `skills/comment_style_hygiene.md` is the rulebook.** For `.das` outside tutorials/examples the headline is ABSOLUTELY NO comments outside the kept set (`//!` public-API docs, `// nolint:CODE` / `@nolint`, `//fmt:`, the leading header block) — the formatter strips everything else, fail-closed, by design; for C/C++ it is no NEW comments. The kept sets, teaching-code exception, naming and code-shape rules all live in the skill; the `style-hygiene-auditor` agent applies them to every PR's new code (mandatory run in `skills/internal/make_pr.md`, findings persuade rather than block).
+**Comment hygiene, all languages: `skills/comment_style_hygiene.md` is the rulebook.** For `.das` outside tutorials/examples the headline is ABSOLUTELY NO comments outside the skill's kept set — the formatter strips everything else, fail-closed, by design; for C/C++ it is no NEW comments. The kept sets, teaching-code boundary, naming and code-shape rules all live in the skill; the `style-hygiene-auditor` agent applies them to every PR's new code (mandatory run in `skills/internal/make_pr.md`, findings persuade rather than block).
 
 ## Key Directories
 
