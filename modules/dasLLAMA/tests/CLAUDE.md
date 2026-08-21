@@ -128,8 +128,10 @@ guard trips on a path-require resolving into modules/dasLLAMA, name prefix or no
 `test_dasllama_lint_escape.das` — model-free: `options _dasllama_internal = true` admits a
 direct engine require (the lint's escape hatch).
 `test_dasllama_lint_contracts.das` — model-free: the lint's ALLOWED set (a facade-only program
-with no escape compiles; an internal require does not) via spawned compiles, and
-`load_audio_16k_mono`'s empty-on-failure contract.
+with no escape compiles; an internal require does not) via spawned compiles,
+`load_audio_16k_mono`'s empty-on-failure contract, `decode_audio_16k_mono`'s frame cap (a
+synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call still works), and
+`gemma4a_probe_proj_dim`'s 0-not-panic contract on `.dlim` / missing / non-GGUF inputs.
 `test_think_split.das` — the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte.
 `test_tool_formats.das` — the per-ToolMode wire codecs (dasllama_tools), model-free: defs

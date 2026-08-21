@@ -5,6 +5,7 @@ options _dasllama_internal = true
 module dasllama_audio_io shared public
 
 require dasllama/dasllama_lint public
+require daslib/defer
 require audio   // miniaudio: decode any audio container to PCM
 
 //! Decode any format miniaudio handles (wav / mp3 / flac / ogg …) to 16 kHz mono f32 PCM —
@@ -41,10 +42,10 @@ def load_audio_16k_mono(path : string) : array<float> {
     return <- samples
 }
 
-//! ``load_audio_16k_mono``'s in-memory twin: decode an audio FILE's bytes (wav / mp3 / flac /
-//! ogg …) to 16 kHz mono f32 PCM without touching disk — the shape a server holding an upload
-//! or a base64 part wants. Empty array on a decode failure (corrupt / unsupported bytes).
-def decode_audio_16k_mono(bytes : array<uint8> | #) : array<float> {
+//! ``load_audio_16k_mono``'s in-memory twin: decode an audio FILE's bytes to 16 kHz mono f32 PCM
+//! without touching disk. ``max_frames`` (> 0) hard-caps the DECODED length — compressed audio inflates
+//! hundreds-fold over its bytes, so untrusted callers MUST pass one (0 = unbounded, trusted files only).
+def decode_audio_16k_mono(bytes : array<uint8> | #; max_frames : int = 0) : array<float> {
     var samples : array<float>
     if (empty(bytes)) {
         return <- samples
@@ -61,9 +62,25 @@ def decode_audio_16k_mono(bytes : array<uint8> | #) : array<float> {
         }
         return <- samples
     }
+    defer() {
+        ma_decoder_uninit(decoder)
+        unsafe {
+            delete decoder
+        }
+    }
+    if (max_frames > 0) {
+        let declared_frames_at_16k = int64(ma_decoder_get_length_in_pcm_frames(decoder))
+        if (declared_frames_at_16k > int64(max_frames)) {
+            return <- samples
+        }
+    }
     let chunk = 16000
     var total = 0
     while (true) {
+        if (max_frames > 0 && total >= max_frames) {
+            samples |> resize(max_frames)
+            return <- samples
+        }
         samples |> ensure_capacity(total + chunk)
         samples |> resize(total + chunk)   // grow by a chunk, read straight into the tail
         let got = int(ma_decoder_read_pcm_frames(decoder, unsafe(addr(samples[total])), uint64(chunk)))
@@ -73,9 +90,5 @@ def decode_audio_16k_mono(bytes : array<uint8> | #) : array<float> {
         }
     }
     samples |> resize(total)
-    ma_decoder_uninit(decoder)
-    unsafe {
-        delete decoder
-    }
     return <- samples
 }

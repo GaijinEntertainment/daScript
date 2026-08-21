@@ -2103,7 +2103,9 @@ def private park_media_request(srv : WebSocketServer; var writer : HttpResponseW
     let rid = next_id()
     set_writer_keepalive_timeout(srv, writer, LLM_WRITER_KEEPALIVE_MS)
     g_media_wires[rid] <- MediaWire(writer = writer, js = js, slot = g_cur, is_audio = is_audio)
-    var vjob = MediaJob(id = rid, slot = g_cur, file_bytes <- file_bytes, tag = "req{rid}", is_audio = is_audio)
+    let max_audio_frames = is_audio ? audio_decode_frame_cap(g_slots[g_cur].model.config.seq_len) : 0
+    var vjob = MediaJob(id = rid, slot = g_cur, file_bytes <- file_bytes, tag = "req{rid}", is_audio = is_audio,
+                        max_audio_frames = max_audio_frames)
     g_media_jobs |> push_clone(vjob)
     delete vjob
     to_log(LOG_INFO, "[req {rid}] {is_audio ? "audio" : "image"} parked for the media worker ({length(g_media_wires)} in flight)\n")
@@ -3469,6 +3471,7 @@ struct private MediaJob {
     file_bytes : array<uint8>   // the base64-decoded media FILE (image or audio); the worker decodes + encodes
     tag : string                // DASLLAMA_VISION_DUMP artifact name (image jobs)
     is_audio : bool             // audio job: decode to 16 kHz PCM, encode via the slot's gemma4a encoder
+    max_audio_frames : int
     stop : bool
 }
 
@@ -3501,6 +3504,16 @@ struct private MediaWire {
 
 let MEDIA_QUEUE_LIMIT = 8   // parked image requests are heavy (decoded bytes ride the channel)
 
+let GEMMA4A_AUDIO_SOFT_TOKENS_PER_SEC = 25l
+let AUDIO_DECODE_SAMPLE_RATE = 16000l
+
+//! The 16 kHz decode-frame ceiling for a clip a model with `seq_len` context can hold: the clip's
+//! soft tokens must fit the context, so the longest usable clip is `seq_len / tokens-per-sec`
+//! seconds. Caps the decode of an untrusted upload before a compressed bomb reaches the encoder.
+def private audio_decode_frame_cap(seq_len : int64) : int {
+    return int(seq_len / GEMMA4A_AUDIO_SOFT_TOKENS_PER_SEC * AUDIO_DECODE_SAMPLE_RATE)
+}
+
 var private g_media_jobs : Channel?
 var private g_media_events : Channel?
 var private g_media_wires : table<int64; MediaWire>
@@ -3528,9 +3541,9 @@ def private media_encode_one(job : MediaJob; var embs : table<int; VisionEmbedde
     var failure = ""
     let failed = catch_worker_panic(failure) {
         if (job.is_audio) {
-            var inscope samples <- decode_audio_16k_mono(job.file_bytes)
+            var inscope samples <- decode_audio_16k_mono(job.file_bytes, job.max_audio_frames)
             if (empty(samples)) {
-                out.why = "the audio bytes did not decode (wav/mp3/flac/ogg are supported)"
+                out.why = "the audio did not decode, or it is longer than this model's context can hold (wav/mp3/flac/ogg, up to ~{job.max_audio_frames / int(AUDIO_DECODE_SAMPLE_RATE)}s)"
             } else {
                 let t0 = ref_time_ticks()
                 out.n_media = gemma4a_encode_all(auds[job.slot], astates[job.slot], samples, out.rows)
@@ -3987,13 +4000,7 @@ var private g_prof_reap_us = 0l
 var private g_prof_step_us = 0l
 var private g_prof_flush_us = 0l
 
-def private prof_window_report() {
-    let win_us = int64(get_time_usec(g_prof_win))
-    if (win_us < 5_000_000l || g_prof_busy == 0l) {
-        return
-    }
-    let n = g_prof_ticks
-    to_log(LOG_INFO, "dasllama-server: [tickprof] {n} ticks ({g_prof_busy} busy) in {win_us / 1000l}ms | per-tick us: pump={g_prof_pump_us / n} drain={g_prof_drain_us / n} reap={g_prof_reap_us / n} step={g_prof_step_us / n} flush={g_prof_flush_us / n} | sandwich total {(g_prof_pump_us + g_prof_drain_us + g_prof_reap_us + g_prof_flush_us) / 1000l}ms vs step {g_prof_step_us / 1000l}ms\n")
+def private prof_window_reset() {
     g_prof_win = ref_time_ticks()
     g_prof_ticks = 0l
     g_prof_busy = 0l
@@ -4002,6 +4009,18 @@ def private prof_window_report() {
     g_prof_reap_us = 0l
     g_prof_step_us = 0l
     g_prof_flush_us = 0l
+}
+
+def private prof_window_report() {
+    let win_us = int64(get_time_usec(g_prof_win))
+    if (win_us < 5_000_000l) {
+        return
+    }
+    let n = g_prof_ticks
+    if (g_prof_busy > 0l && n > 0l) {
+        to_log(LOG_INFO, "dasllama-server: [tickprof] {n} ticks ({g_prof_busy} busy) in {win_us / 1000l}ms | per-tick us: pump={g_prof_pump_us / n} drain={g_prof_drain_us / n} reap={g_prof_reap_us / n} step={g_prof_step_us / n} flush={g_prof_flush_us / n} | sandwich total {(g_prof_pump_us + g_prof_drain_us + g_prof_reap_us + g_prof_flush_us) / 1000l}ms vs step {g_prof_step_us / 1000l}ms\n")
+    }
+    prof_window_reset()
 }
 
 def update_server() : bool {

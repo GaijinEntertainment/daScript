@@ -417,6 +417,5 @@ and warm-vs-cold TTFT for the prefix cache.
 ## Not yet implemented
 
 The request's `stop` / `response_format` fields and the forced-function `tool_choice` object form
-— all logged when a request carries them. On the image path: more than one image per request,
-images on earlier turns of a conversation, remote `image_url` fetches, and audio content parts in
-a chat message (`/v1/audio/*` takes audio today).
+— all logged when a request carries them. On the media path: more than one media clip per request,
+media on earlier turns of a conversation, and remote `image_url` fetches.
