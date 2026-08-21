@@ -25,9 +25,10 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // sink several frames deep is still reported — anchored on the deepest line
 // written in the root's own file, not on the daslib internal that allocates.
 
-expect 31208:7
+expect 31208:8
 
 require daslib/perf_lint
+require strings
 
 struct Blob {
     v : int
@@ -159,4 +160,10 @@ def mid_hop12(var a : array<int>) {
 [no_alloc]
 def good_chain_middle_nolint(var a : array<int>) {
     mid_hop12(a)
+}
+
+// 13. a temp-string builtin on a hot path is heap traffic
+[no_alloc]
+def bad_temp_string_builtin(c : int) : bool {
+    return strings::to_char(c) == "a"                       // PERF026
 }

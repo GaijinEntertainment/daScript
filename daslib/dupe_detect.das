@@ -46,14 +46,11 @@ struct public DupeFinding {
     message : string        //!< ready to report against `anchor.at`; see `finding_message`
 }
 
-// ===== Node class allowlist =====
-
 let private OPAQUE_CLASSES : table<string> <- {
     "ExprReader", "ExprQuote", "ExprTag", "ExprLabel", "ExprGoto", "ExprReturn", "ExprYield",
     "ExprMakeGenerator", "ExprFakeContext", "ExprFakeLineInfo", "ExprTryCatch"
 }
 
-// authorized by an enclosing `unsafe`, so the same statements in a plain helper would not compile
 def private needs_unsafe(expr : Expression?) : bool {
     if (expr is ExprCast) {
         let c = expr as ExprCast
@@ -67,12 +64,7 @@ def private needs_unsafe(expr : Expression?) : bool {
     return expr is ExprDelete || expr is ExprRef2Ptr
 }
 
-// ===== payload_key - the ONE reader of per-node payload =====
-
-// Whatever is NOT reachable as a child expression. Hashing and exact compare share it, so the
-// two cannot drift; "" means the class name is the whole key.
 def private payload_key(expr : Expression?) : string {   // nolint:STYLE037 - `is` on handled types is exact-type, so one arm per payload-bearing class is irreducible; hashing and verification MUST read the same key, so this stays one function
-    // a global needs no parameter, so unlike a local it is identified by name
     if (expr is ExprVar) {
         let e = expr as ExprVar
         return (e.varFlags.local || e.varFlags.argument || e.varFlags._block) ? "" : "{e.name}"
@@ -125,7 +117,6 @@ def private payload_key(expr : Expression?) : string {   // nolint:STYLE037 - `i
     return const_key(expr)
 }
 
-// the literal VALUE is part of the key - a run differing only in a constant is a different run
 def private const_key(expr : Expression?) : string {   // nolint:STYLE037 - one arm per const class; `is` on handled types is exact-type
     return "" if (!starts_with("{expr.__rtti}", "ExprConst"))
     if (expr is ExprConstInt) return "ci:{(expr as ExprConstInt).value}"
@@ -160,12 +151,10 @@ def private const_key(expr : Expression?) : string {   // nolint:STYLE037 - one 
     return ""
 }
 
-// [unroll] and friends discriminate otherwise-identical nodes, so they belong in the key
 def private annotation_key(anns : AnnotationList) : string {
     return empty(anns) ? "" : describe(anns)
 }
 
-// loop annotations come through as an argument list rather than an AnnotationList
 def private annotation_key(args : AnnotationArgumentList) : string {
     return describe(args)
 }
@@ -175,9 +164,6 @@ def private func_key(fn : Function?) : string {
     return "{fn.getMangledNameHash}"
 }
 
-// ===== Index =====
-
-// LineInfo cannot live in an array, so records keep the node id and read `.at` off the live AST
 struct private NodeRec {
     payload : uint64        //!< class name folded with every non-child payload arrival
     hash : uint64           //!< payload folded with child hashes, in visit order (Merkle)
@@ -197,9 +183,7 @@ struct private VarRec {
     type_show : string      //!< how a suggested parameter list spells it
 }
 
-// MUST be a stack: scalars are clobbered by a contained block's statements, which silently makes
-// non-adjacent statements look adjacent.
-struct private PendFrame {
+struct private StmtFrame {
     blk_id : int
     node : int = -1
     escape : int
@@ -215,18 +199,18 @@ class private DupeIndexer : AstVisitor {
     nodes : array<NodeRec>
     @do_not_delete node_expr : array<Expression?>
     vars : array<VarRec>
-    decls : array<int>              // vids in declaration order, ascending by decl_node
+    decls_ascending_by_node : array<int>
     @do_not_delete var_id : table<Variable?; int>
     @do_not_delete type_cache : table<TypeDecl?; string>
     stmt_block : array<int>
     stmt_node : array<int>
     stmt_ok : array<bool>
-    stmt_pos : array<int>           // statement index -> its position within its own block
-    by_block : array<array<int>>    // per block: its statement indices, in source order
+    stmt_pos_in_block : array<int>
+    by_block : array<array<int>>
     n_blocks : int = 0
-    stack : array<int>              // open node ids
-    block_stack : array<int>        // open block ids
-    pend : array<PendFrame>         // one frame per statement currently being walked
+    stack : array<int>
+    block_stack : array<int>
+    stmt_frames : array<StmtFrame>
     n_escape : int = 0
     n_freejump : int = 0
     n_defer : int = 0
@@ -235,7 +219,6 @@ class private DupeIndexer : AstVisitor {
     n_unsafe_ops : int = 0
     loop_depth : int = 0
 
-    // memoized per TypeDecl: build hashes the string, verify compares it, describe() runs once
     def type_text(td : TypeDecl?) : string {
         return "" if (td == null)
         if (key_exists(type_cache, td)) return type_cache[td]
@@ -249,7 +232,6 @@ class private DupeIndexer : AstVisitor {
         return hash(type_text(td))
     }
 
-    // as spelled in a parameter list: no alias decoration, no contracts, no trailing `const`
     def type_display(td : TypeDecl?) : string {
         return "" if (td == null)
         let t = describe(td, false, false, false)
@@ -291,14 +273,13 @@ class private DupeIndexer : AstVisitor {
 
 
     def override preVisitExpression(var expr : ExpressionPtr) {
-        // same node re-entering through a base-class hook (every ExprConst*) - never a child of itself
         let top = open_node()
         if (top >= 0 && node_expr[top] == expr) {
             stack |> push(-1)
             return
         }
         if (needs_unsafe(expr)) {
-            n_unsafe_ops++      // authorization comes from an enclosing scope a helper would not have
+            n_unsafe_ops++
         }
         let id = length(nodes)
         let cls = "{expr.__rtti}"
@@ -313,10 +294,10 @@ class private DupeIndexer : AstVisitor {
         if (!empty(key)) {
             add_payload(hash_combine64(TAG_PAYLOAD, hash(key)))
         }
-        if (!empty(pend)) {
-            let last = length(pend) - 1
-            if (pend[last].node < 0) {
-                pend[last].node = id
+        if (!empty(stmt_frames)) {
+            let last = length(stmt_frames) - 1
+            if (stmt_frames[last].node < 0) {
+                stmt_frames[last].node = id
             }
         }
     }
@@ -324,7 +305,7 @@ class private DupeIndexer : AstVisitor {
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
         let id = stack[length(stack) - 1]
         stack |> pop
-        return expr if (id < 0)     // re-entry marker, see preVisitExpression
+        return expr if (id < 0)
         nodes[id].size = length(nodes) - id
         let parent = open_node()
         if (parent >= 0) {
@@ -347,7 +328,7 @@ class private DupeIndexer : AstVisitor {
 
 
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; lastArg : bool) {
-        var_slot(arg)      // decl_node stays -1: an argument is never inside a run
+        var_slot(arg)
     }
 
     def override preVisitExprLetVariable(expr : ExprLet?; arg : VariablePtr; lastArg : bool) {
@@ -370,8 +351,7 @@ class private DupeIndexer : AstVisitor {
         let id = open_node()
         return if (vid < 0 || id < 0)
         vars[vid].decl_node = id
-        // visited in order, so `decls` stays sorted by decl_node (one node can declare several vars)
-        decls |> push(vid)
+        decls_ascending_by_node |> push(vid)
         note_use(vid, id)
         add_payload(hash_combine64(TAG_PAYLOAD, type_hash(v._type)))
     }
@@ -410,9 +390,8 @@ class private DupeIndexer : AstVisitor {
         n_escape++
     }
 
-    // a jump out of a loop the statement does not own would change meaning if it moved
     def stmt_loop_base() : int {
-        return empty(pend) ? 0 : pend[length(pend) - 1].loops
+        return empty(stmt_frames) ? 0 : stmt_frames[length(stmt_frames) - 1].loops
     }
 
     def override preVisitExprBreak(expr : ExprBreak?) {
@@ -433,7 +412,7 @@ class private DupeIndexer : AstVisitor {
 
     def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
         loop_depth--
-        return null    // null means 'unchanged' to the visitor adapter
+        return null
     }
 
     def override preVisitExprWhile(expr : ExprWhile?) {
@@ -442,16 +421,14 @@ class private DupeIndexer : AstVisitor {
 
     def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
         loop_depth--
-        return null    // null means 'unchanged' to the visitor adapter
+        return null
     }
 
-    // an `assume` alias is not a Variable, so the escaping-local gate cannot see it
     def override preVisitExprAssume(expr : ExprAssume?) {
         n_bind++
     }
 
     def override preVisitExprCall(expr : ExprCall?) {
-        // `defer` becomes `nada()` + a hoisted finally block: the statement no longer carries its code
         if (expr.name == "nada" || expr.name == "defer") {
             n_defer++
         }
@@ -465,21 +442,20 @@ class private DupeIndexer : AstVisitor {
 
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
         block_stack |> pop
-        return null    // null means 'unchanged' to the visitor adapter
+        return null
     }
 
-    // only `list` entries reach this hook, so a `finally` section never becomes a run candidate
     def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) {
         return if (empty(block_stack))
-        pend |> push(PendFrame(blk_id = block_stack[length(block_stack) - 1],
+        stmt_frames |> push(StmtFrame(blk_id = block_stack[length(block_stack) - 1],
             escape = n_escape, freejump = n_freejump, defer_calls = n_defer,
             scoped = n_scoped, binds = n_bind, unsafe_ops = n_unsafe_ops, loops = loop_depth))
     }
 
     def override visitExprBlockExpression(blk : ExprBlock?; var expr : ExpressionPtr) : ExpressionPtr {
-        return expr if (empty(pend))
-        let f = pend[length(pend) - 1]
-        pend |> pop
+        return expr if (empty(stmt_frames))
+        let f = stmt_frames[length(stmt_frames) - 1]
+        stmt_frames |> pop
         if (f.node >= 0) {
             let clean = (n_escape == f.escape && n_freejump == f.freejump
                 && n_defer == f.defer_calls && n_scoped == f.scoped && n_bind == f.binds
@@ -488,7 +464,7 @@ class private DupeIndexer : AstVisitor {
                 var fresh : array<int>
                 by_block |> emplace(fresh)
             }
-            stmt_pos |> push(length(by_block[f.blk_id]))
+            stmt_pos_in_block |> push(length(by_block[f.blk_id]))
             by_block[f.blk_id] |> push(length(stmt_node))
             stmt_block |> push(f.blk_id)
             stmt_node |> push(f.node)
@@ -501,10 +477,6 @@ class private DupeIndexer : AstVisitor {
 }
 
 
-// ===== Exact subtree comparison =====
-
-
-// preorder layout: first child is n+1, next sibling is c + size[c]
 def private subtree_equal(var ix : DupeIndexer?; a, b : int;
                           var m_ab : table<int; int>; var m_ba : table<int; int>) : bool {
     let na = ix.nodes[a]
@@ -550,8 +522,6 @@ def private run_equal(var ix : DupeIndexer?; a_blk, a_pos, b_blk, b_pos, len : i
     return true
 }
 
-// ===== Regions and extractability gates =====
-
 struct private Region {
     blk : int           //!< the block the run lives in
     pos : int           //!< index of the first statement within that block
@@ -567,8 +537,6 @@ def private make_region(ix : DupeIndexer?; blk, pos, len : int) : Region {
     return Region(blk = blk, pos = pos, len = len, lo = first, hi = hi)
 }
 
-// True when a helper could absorb the region verbatim: every rejection below would otherwise
-// change behaviour or fail to compile.
 struct private Gate {
     ok : bool
     params : array<string>
@@ -576,33 +544,32 @@ struct private Gate {
 
 def private region_gates(ix : DupeIndexer?; reg : Region; cfg : DupeConfig) : Gate {
     var params : array<string>
-    for (vid in ix.decls) {
+    for (vid in ix.decls_ascending_by_node) {
         let d = ix.vars[vid].decl_node
         continue if (d < reg.lo)
         break if (d >= reg.hi)
         return <- Gate() if (ix.vars[vid].last_use >= reg.hi)
     }
-    var seen : table<int; int>      // vid -> index into vids
+    var vid_to_index : table<int; int>
     var vids : array<int>
     var written : array<bool>
     for (n in range(reg.lo, reg.hi)) {
         let vid = ix.nodes[n].vid
         continue if (vid < 0 || (ix.vars[vid].decl_node >= reg.lo
             && ix.vars[vid].decl_node < reg.hi))
-        if (!key_exists(seen, vid)) {
-            seen |> insert(vid, length(vids))
+        if (!key_exists(vid_to_index, vid)) {
+            vid_to_index |> insert(vid, length(vids))
             vids |> push(vid)
             written |> push(false)
         }
         if (ix.nodes[n].wr) {
-            written[seen[vid]] = true
+            written[vid_to_index[vid]] = true
         }
     }
     var nparams = 0
     params |> reserve(length(vids))
     for (vid, wr in vids, written) {
         let v = ix.vars[vid]
-        // spellable + nameable (not `__self__12_3`), and a write needs a ref / ref-type parameter
         nparams++
         return <- Gate() if (empty(v.type_text) || find(v.type_text, "auto") >= 0
             || empty(v.name) || starts_with(v.name, "__")
@@ -611,8 +578,6 @@ def private region_gates(ix : DupeIndexer?; reg : Region; cfg : DupeConfig) : Ga
     }
     return <- Gate(ok = true, params <- params)
 }
-
-// ===== Discovery =====
 
 struct private Candidate {
     a_blk : int
@@ -638,13 +603,12 @@ def private stmt_hash(ix : DupeIndexer?; si : int) : uint64 {
     return ix.nodes[ix.stmt_node[si]].hash
 }
 
-// grows both runs while the next siblings stay hash-equal, eligible and disjoint
 def private extend_run(ix : DupeIndexer?; a_blk, a_pos, b_blk, b_pos : int) : int {
     let a_stop = length(ix.by_block[a_blk])
     let b_stop = length(ix.by_block[b_blk])
     var len = 1
     while (a_pos + len < a_stop && b_pos + len < b_stop) {
-        break if (a_blk == b_blk && a_pos + len == b_pos)   // would overlap the second run
+        break if (a_blk == b_blk && a_pos + len == b_pos)
         let sa = ix.by_block[a_blk][a_pos + len]
         let sb = ix.by_block[b_blk][b_pos + len]
         break if (!ix.stmt_ok[sa] || !ix.stmt_ok[sb]
@@ -654,7 +618,6 @@ def private extend_run(ix : DupeIndexer?; a_blk, a_pos, b_blk, b_pos : int) : in
     return len
 }
 
-// a run whose predecessors also match is the tail of a longer one
 def private maximal_start(ix : DupeIndexer?; a_blk, a_pos, b_blk, b_pos : int) : bool {
     return true if (a_pos == 0 || b_pos == 0)
     let pa = ix.by_block[a_blk][a_pos - 1]
@@ -665,7 +628,6 @@ def private maximal_start(ix : DupeIndexer?; a_blk, a_pos, b_blk, b_pos : int) :
 
 def private site_of(ix : DupeIndexer?; reg : Region) : DupeSite {
     let at = ix.node_expr[reg.lo].at
-    // widest line of ANY node in OUR file - an inliner splice carries the callee's lines
     var last = int(at.line)
     for (n in range(reg.lo, reg.hi)) {
         let a = ix.node_expr[n].at
@@ -676,7 +638,6 @@ def private site_of(ix : DupeIndexer?; reg : Region) : DupeSite {
         line = int(at.line), column = int(at.column), last_line = last)
 }
 
-// site 0 is where the warning lands, so only the others are named
 def private finding_message(f : DupeFinding) : string {
     let home = f.sites[0].file
     let span = f.sites[0].last_line - f.sites[0].line + 1
@@ -718,7 +679,6 @@ def private verified_run_len(var ix : DupeIndexer?; cfg : DupeConfig;
     while (len >= cfg.min_statements) {
         let ra = make_region(ix, a_blk, a_pos, len)
         let rb = make_region(ix, b_blk, b_pos, len)
-        // must not overlap or nest: blocks nest, so a run can sit inside a run
         if ((ra.hi <= rb.lo || rb.hi <= ra.lo) && ra.hi - ra.lo >= cfg.min_nodes
             && run_equal(ix, a_blk, a_pos, b_blk, b_pos, len)) {
             return len
@@ -751,8 +711,8 @@ def private collect_candidates(var ix : DupeIndexer?; cfg : DupeConfig) : array<
                     continue if (!ix.stmt_ok[order[q]])
                     let a_blk = ix.stmt_block[order[p]]
                     let b_blk = ix.stmt_block[order[q]]
-                    let a_pos = ix.stmt_pos[order[p]]
-                    let b_pos = ix.stmt_pos[order[q]]
+                    let a_pos = ix.stmt_pos_in_block[order[p]]
+                    let b_pos = ix.stmt_pos_in_block[order[q]]
                     continue if (!maximal_start(ix, a_blk, a_pos, b_blk, b_pos))
                     let len = verified_run_len(ix, cfg, a_blk, a_pos, b_blk, b_pos)
                     continue if (len == 0)
@@ -769,7 +729,6 @@ def private collect_candidates(var ix : DupeIndexer?; cfg : DupeConfig) : array<
     return <- cands
 }
 
-// biggest first, so a wider clone always wins over a narrower one overlapping it
 def private order_candidates(cands : array<Candidate>) : array<int> {
     var order : array<int>
     order |> resize(length(cands))
@@ -793,10 +752,8 @@ def private is_claimed(ix : DupeIndexer?; claimed : array<bool>; reg : Region) :
     return false
 }
 
-// true when the region sits inside an already-reported one (preorder intervals make this exact)
 def private nested_in_accepted(reg : Region; acc_lo, acc_hi : array<int>) : bool {
     for (lo, hi in acc_lo, acc_hi) {
-        // strictly inside: an EQUAL interval is that region paired again by a third occurrence
         return true if (reg.lo >= lo && reg.hi <= hi && (reg.lo != lo || reg.hi != hi))
     }
     return false
@@ -892,7 +849,6 @@ def public find_extractable_dupes(prog : ProgramPtr; cfg : DupeConfig) : array<D
     var ix = new DupeIndexer()
     make_visitor(*ix) $(adapter) {
         for_each_function(mod, "") $(var fn) {
-            // generated bodies and generic instances are duplicates by construction - pure noise
             return if (fn == null || fn.body == null || fn._module != mod || fn.at.fileInfo == null
                 || fn.flags.generated || fn.fromGeneric != null || fn.isGeneric
                 || fn.moreFlags.isTemplate)

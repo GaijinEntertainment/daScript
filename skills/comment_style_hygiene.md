@@ -31,40 +31,34 @@ an existing lint, the lint compels — an unnoted rule is the reviewer's.
 ## Comments
 
 **.das outside teaching code: ABSOLUTELY NO comments that are not documentation or lint
-suppression.** The kept set is exactly: `//!` docs on public API (never on private
-symbols), `// nolint:CODE` / `@nolint` suppressions carrying their one-line why, `//fmt:`
-formatter directives, and the file's leading header block (which may sit below the
-`options` / `module` / `require` preamble). Everything else — narration, banners, section
-dividers, commented-out code — does not exist. The MCP `format_file` tool applies this
-file-wide by default, fail-closed (a strip must compile or the file is restored). A `//`
-comment outside the kept set is therefore EPHEMERAL: anything worth preserving becomes
-code (a name, a `//!` doc, an assert) or lands in an `.md` beside the code. In tutorials
-and examples the prose IS the deliverable — format those with `keep_comments='true'`;
-comments that add nothing to their line still go.
+suppression.** The kept set is exactly: `//!` docs on a contract a CALLER must know —
+public API always, a private helper only when callers inside the module need the contract
+(narration of an implementation goes to a name, a test, or the module's `.md`) —
+`// nolint:CODE` / `@nolint` suppressions carrying their one-line why, `//fmt:` formatter
+directives, license comments (Copyright / SPDX), and the file's leading header block (which
+may sit below the `options` / `module` / `require` preamble). Everything else — narration,
+banners, section dividers, commented-out code — does not exist. The formatter enforces this
+per folder, fail-closed (a strip must compile or the file is restored); the policy mechanics
+are `skills/das_formatting.md`. A `//` comment outside the kept set is therefore EPHEMERAL:
+anything worth preserving becomes code (a name, a `//!` doc, an assert) or lands in an `.md`
+beside the code. The boundary is the folder's `.lint_config`: teaching code (tutorials,
+examples) and load-bearing fixture corpora opt out there, and prose carrying the lesson
+stays — comments that add nothing to their line still go.
 
 **C and C++: no NEW comments.** Comments go stale, code does not — new C-family code says
 it in a name, a shape, or a test, or documents itself in the module's `.md`. Kept when one
 is earned: `//!` and `/** */` docs on public API, `NOLINT` / `clang-format` suppressions,
-the leading header block. Existing comments answer to the deletion test below.
+the leading header block. Existing comments answer to the deletion test.
 
-**Other languages: the test for every comment is deletion** — remove it and re-read; if the
-WHY goes dark, it was load-bearing, restore it, otherwise it was noise. 1–2 lines is the
-default, not a limit — a longer comment may be earned when the WHY is genuinely load-bearing
-and has no better home; if a reader would ask "why is this long?", that is the finding.
+**The deletion test settles any comment no kept set covers: remove it and re-read.** If
+the WHY goes dark it was load-bearing — restore it, rewritten in present tense; otherwise
+it was noise. 1–2 lines is the default, not a limit — "why is this long?" is the finding.
+The leading header block (license, provenance) stays.
 
-**Outside `.das`, a file's leading header block (license, provenance) is kept; below it,
-nothing decorates** — no banner blocks (rules of dashes or asterisks, boxed headers), no
-up-front preamble essays. (For `.das` the kept set above governs.)
+**Other languages have no kept set: every comment answers to the deletion test.**
 
-**No ceremonial doc templates on non-public symbols** — `@param`/`@return` boilerplate
-restating a signature. Where docstrings are the idiom (Python), a private helper's
-docstring is judged by the same deletion test as any other comment.
-
-**No incident citations** — no PR numbers, no dates, no "used to crash"; name the failure
-mode in present tense at the code that guards it.
-
-**The message is the comment:** a site with a good error string needs no comment restating
-it.
+**No incident citations in a comment** — no PR numbers, no dates, no "used to crash". Name
+the failure mode in present tense at the code that guards it.
 
 ## Names
 
@@ -125,4 +119,4 @@ on "optional" members usually die with it.
 **Class bodies are dense** *(lintable)*. No blank lines between data members — blank
 separation is for top-level declarations; inline member-function bodies separate
 normally. A one-line section marker may subdivide a large class body in languages whose
-comments survive; in `.das` the kept set governs — no divider survives the formatter.
+comments survive; in `.das` the kept set governs — a divider comment is not in it.

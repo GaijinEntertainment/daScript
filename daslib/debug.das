@@ -40,7 +40,6 @@ let private {
     ARGUMENT_VARS = 2ul
     GLOBAL_VARS = 3ul
     STATE_VARS = 4ul
-    // EVAL_POOL = 1000ul
     BLOCKS_POOL = 4000ul
 
     MAX_STACK = 1000ul
@@ -50,13 +49,9 @@ let private {
             print_flags.escapeString
         |   print_flags.namesAndDimensions
         |   print_flags.singleLine
-        // |   print_flags humanReadable
-        // |   print_flags typeQualifiers
-        // |   print_flags refAddresses
     )
 }
 
-// one DAP Variable row, with the children reference the client uses to expand it
 def private push_dap_variable(var res : VariablesResponseBody; v : DAVariable; ctxAndFrame : uint64) : void {
     let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
     res.variables |> emplace(Variable(
@@ -68,10 +63,8 @@ def private push_dap_variable(var res : VariablesResponseBody; v : DAVariable; c
     ))
 }
 
-// blocks until the client resumes, then consumes the continue request. NOTE: one call site
-// (the stepRequestedStack arm) runs afterPause() before clearing the flag and is left as-is.
 def private wait_for_resume(var ctxData : DAContext) : void {
-    while (!ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0) {
+    while (!ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedDepth == 0) {
         tick_debugger()
     }
     ctxData.continueRequested = false
@@ -250,7 +243,6 @@ class DAWalker : DapiDataWalker {
         popStack()
     }
 
-    // shared by afterStructure / afterStructureCancel: close the container and build its preview
     def finish_structure_preview() : void {
         closeCont()
         let n = length(varsStack)
@@ -308,7 +300,6 @@ class DAWalker : DapiDataWalker {
         }
     }
 
-    // a leaf element / value prints itself when the walker gave it no children
     def finish_leaf_value(data : void?; ti : TypeInfo) : void {
         let n = length(varsStack)
         if (n > 0) {
@@ -627,8 +618,6 @@ def iter_top_child_var(stack : DAStackFrame; cb : block<(res : DAVariable) : voi
         cb |> invoke(c)
     }
 }
-    // for c in stack.state
-    //     cb |> invoke(c)
 
 
 class private DAStackWalker : DapiStackWalker {
@@ -707,7 +696,6 @@ class private DAStackWalker : DapiStackWalker {
             for (i in range(frame.func.globalCount)) {
                 let vinfo = unsafe(frame.func.globals[i])
                 if (vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require") continue
-                // if vinfo.scope == frame.func
                 collectGlobalAt(*vinfo, frame)
             }
         }
@@ -853,7 +841,7 @@ struct private DAContext {
     continueRequested : bool = false
     pauseRequested : bool = false
     stepInRequested : bool = false
-    stepRequestedStack : int = 0// stack depth
+    stepRequestedDepth : int = 0
 }
 
 
@@ -861,7 +849,7 @@ def private reset_debug_flags(var ctx : DAContext) {
     ctx.continueRequested = false
     ctx.pauseRequested = false
     ctx.stepInRequested = false
-    ctx.stepRequestedStack = 0
+    ctx.stepRequestedDepth = 0
 }
 
 
@@ -1134,7 +1122,7 @@ class private DAgent : DapiDebugAgent {
         //! Prepares debug state before entering a pause, setting the pause context and eval frame.
         pauseCtx = ctxData.ctx
         pauseAt = unsafe(addr(at))
-        evalFrame.varId = 1000ul //EVAL_POOL
+        evalFrame.varId = 1000ul
         unsafe {
             delete evalFrame.variables
         }
@@ -1159,15 +1147,13 @@ class private DAgent : DapiDebugAgent {
             sendStopped(ctx, ctxData, path, at, reason, text, -1ul)
             wait_for_resume(ctxData)
             afterPause()
-            ctx |> set_single_step(!withInstruments || ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
+            ctx |> set_single_step(!withInstruments || ctxData.stepInRequested || ctxData.stepRequestedDepth > 0)
         })
     }
 
-    def override onSingleStep(var ctx : Context; at : LineInfo) : void {   // nolint:STYLE038 - one linear pause/step/resume sequence for a single stop event
+    def override onSingleStep(var ctx : Context; at : LineInfo) : void {
         //! Handles single-step events, processing pause, step-in, step-over requests, and breakpoint checks.
         if (at.fileInfo == null || server == null) return
-
-        // unsafe self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n") print("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n")
 
         if (ctx.category.debugger_attached) {
             addContext(ctx)
@@ -1202,11 +1188,11 @@ class private DAgent : DapiDebugAgent {
                 afterPause()
             }
 
-            if (ctxData.stepRequestedStack > 0) {
-                if (stack_depth(*ctxData.ctx) > ctxData.stepRequestedStack) return
-                ctxData.stepRequestedStack = 0
+            if (ctxData.stepRequestedDepth > 0) {
+                if (stack_depth(*ctxData.ctx) > ctxData.stepRequestedDepth) return
+                ctxData.stepRequestedDepth = 0
                 sendStopped(ctx, ctxData, file, at, "step", "", -1ul)
-                while (!ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0) {
+                while (!ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedDepth == 0) {
                     tick_debugger()
                 }
                 afterPause()
@@ -1214,10 +1200,9 @@ class private DAgent : DapiDebugAgent {
             }
 
             if (withInstruments) {
-                ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
+                ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedDepth > 0)
                 return
             }
-            // self->log("search break `{file}`:{at.line} - {inBreak}\n")
             var i = 0
             while (i < length(breakpoints)) {
                 var fileBr : string
@@ -1233,7 +1218,6 @@ class private DAgent : DapiDebugAgent {
                     var brIdx = 0
                     while (brIdx < length(brs)) {
                         let br & = unsafe((brs)[brIdx++])
-                        // self->log("search break `{file}` {brs} in {file}\n")
                         if (br.line != at.line) continue
                         sendStopped(ctx, ctxData, file, at, "breakpoint", "", br.id)
 
@@ -1334,7 +1318,6 @@ class private DAgent : DapiDebugAgent {
 
         var alloc = string_heap_bytes_allocated()
         if (alloc > strLimit) {
-            // string_heap_report()
             var report : string
             if (logStrMemory) {
                 report = "STRING HEAP COLLECT: {bytes_hr(alloc)} -> "
@@ -1372,7 +1355,7 @@ class private DAgent : DapiDebugAgent {
             }
         }
 
-        let found = getContextDataFor(ctx, $(var ctxData : DAContext) {// TODO: speedup getContextDataFor
+        let found = getContextDataFor(ctx, $(var ctxData : DAContext) {
             *ctxData.ctx |> clear_instruments()
             *ctxData.ctx |> instrument_node(true) $(ati) {
                 if (ati.fileInfo == null) return false
@@ -1388,7 +1371,6 @@ class private DAgent : DapiDebugAgent {
                         for (br in brs) {
                             if (br.line == ati.line) {
                                 br.state = DABreakpointState.Instrumented
-                                // print("dap: reset breakpoint {file}:{int(br.line)}\n")
                                 return true
                             }
                         }
@@ -1400,7 +1382,6 @@ class private DAgent : DapiDebugAgent {
         })
 
         if (!found) {
-            // removed context, uninitialize related breakpoints
             let ctxAt = ctx_at(ctx)
             for (brs in values(breakpoints)) {
                 for (br in brs) {
@@ -1524,11 +1505,10 @@ class private DAServer : Server {
 
     disconnected : bool = false
 
-    // message data
     current_string : array<uint8>
     toRead : int = 0
 
-    initialized : int = -1// initialized event: ticks delay
+    initializedEventTicks : int = -1
     configurationDone : bool = false
     threadsDone : bool = false
 
@@ -1554,7 +1534,6 @@ class private DAServer : Server {
             current_string |> clear()
         }
     }
-        // print("disconnected\n")
 
     def restart() {
         //! Saves the current network session for a potential server restart.
@@ -1570,9 +1549,9 @@ class private DAServer : Server {
     def override tick() {
         //! Ticks the server and sends the DAP initialized event after a countdown delay.
         Server`tick(self)
-        if (initialized > 0) {
-            initialized--
-            if (initialized == 0) {
+        if (initializedEventTicks > 0) {
+            initializedEventTicks--
+            if (initializedEventTicks == 0) {
                 sendEvent("initialized", null)
             }
         }
@@ -1593,7 +1572,7 @@ class private DAServer : Server {
                 let str = string(current_string)
                 if (str |> starts_with(prefix)) {
                     unsafe {
-                        let lenStr = chop(str, 16, length(current_string) - length(prefix) - 2) // \r\n length
+                        let lenStr = chop(str, 16, length(current_string) - length(prefix) - 2)
                         toRead = to_int(lenStr)
                         clear(current_string)
                     }
@@ -1676,12 +1655,10 @@ class private DAServer : Server {
                                 supportsExceptionOptions = false,
                                 supportsExceptionFilterOptions = false,
                                 supportsDataBreakpoints = true
-                                // supportsDelayedStackTraceLoading=true
                     )
         sendSuccessResponse(seq, command, JV(res))
-        initialized = 100
+        initializedEventTicks = 100
     }
-        // self->sendEvent("initialized")
 
     def reqConfigurationDone(seq : double; command : string; data : JsonValue?) {
         //! Handles the DAP configurationDone request, marking client configuration as complete.
@@ -1759,7 +1736,6 @@ class private DAServer : Server {
             delete it
         }
         agent.breakpoints |> clear()
-        // ini.arguments.restart
         disconnected = true
     }
 
@@ -1851,6 +1827,7 @@ class private DAServer : Server {
         }
         agent.hwBreakpoints |> clear()
 
+        res.breakpoints |> reserve(length(ini.breakpoints))
         for (b in ini.breakpoints) {
             var setId = -1
             var hex = 0ul
@@ -1879,6 +1856,7 @@ class private DAServer : Server {
         //! Handles the DAP threads request, returning all registered contexts as threads.
         var inscope res : ThreadsResponseBody
         threadsDone = true
+        res.threads |> reserve(length(agent.contexts))
         for (ctx in agent.contexts) {
             res.threads |> emplace(Thread(id = double(ctx.id), name = ctx |> to_string()))
         }
@@ -1961,7 +1939,7 @@ class private DAServer : Server {
         var inscope res : VariablesResponseBody
         let ctxAndFrame = uint64(ini.variablesReference) / MAX_VARIABLES
         let ctxId = ctxAndFrame / MAX_STACK
-        if (ctxId == 0ul) {// eval ctx
+        if (ctxId == 0ul) {
             agent.evalFrame |> find_child_var(uint64(ini.variablesReference)) $(child) {
                 if (child.children != null) {
                     let varsNum = length(*child.children)
@@ -2013,7 +1991,7 @@ class private DAServer : Server {
                 }
             })
         }
-        sendSuccessResponseStr(seq, command, sprint_json(res, false)) // TODO: , false
+        sendSuccessResponseStr(seq, command, sprint_json(res, false))
     }
 
     def reqContinue(seq : double; command : string; data : JsonValue?) {
@@ -2050,8 +2028,8 @@ class private DAServer : Server {
         var inscope ini <- NextArguments(data)
         agent->getContextData(uint64(ini.threadId), $(var ctx : DAContext) {
             ctx |> reset_debug_flags()
-            ctx.stepRequestedStack = stack_depth(*ctx.ctx)
-            ctx.stepInRequested = ctx.stepRequestedStack == 0
+            ctx.stepRequestedDepth = stack_depth(*ctx.ctx)
+            ctx.stepInRequested = ctx.stepRequestedDepth == 0
         })
         sendSuccessResponse(seq, command, null)
     }
@@ -2061,8 +2039,8 @@ class private DAServer : Server {
         var inscope ini <- NextArguments(data)
         agent->getContextData(uint64(ini.threadId), $(var ctx : DAContext) {
             ctx |> reset_debug_flags()
-            ctx.stepRequestedStack = max(stack_depth(*ctx.ctx) - 1, 0)
-            ctx.stepInRequested = ctx.stepRequestedStack == 0
+            ctx.stepRequestedDepth = max(stack_depth(*ctx.ctx) - 1, 0)
+            ctx.stepInRequested = ctx.stepRequestedDepth == 0
         })
         sendSuccessResponse(seq, command, null)
     }
@@ -2126,7 +2104,6 @@ class private DAServer : Server {
                     var inscope vars : table<string; Result>
                     var frame = frameId
                     let stackLen = length(ctxData.stack)
-                    // collect all vars from all blocks till the function frame
                     while (frame < stackLen && ctxData.stack[frame].isBlock) {
                         frame++
                     }
@@ -2176,26 +2153,25 @@ class private DAServer : Server {
     def sendOutput(category : string; output : string) {
         //! Sends a DAP output event with the specified category and text.
         var inscope res = OutputEventBody(category = category, output = output)
-        sendRawData(JV({"type" => JV("event"), "event" => JV("output"), "body" => JV(res)}), /*log*/false)
+        sendRawData(JV({"type" => JV("event"), "event" => JV("output"), "body" => JV(res)}), false)
     }
 
     def sendEvent(event : string; body : JsonValue?) {
         //! Sends a DAP event message with the specified event name and body.
-        sendRawData(JV({"type" => JV("event"), "event" => JV(event), "body" => body}), /*log*/true)
+        sendRawData(JV({"type" => JV("event"), "event" => JV(event), "body" => body}), true)
     }
 
     def sendSuccessResponse(id : double; command : string; body : JsonValue?) {
         //! Sends a successful DAP response with a JSON body for the given request.
         sendRawData(JV({"request_seq" => JV(id), "type" => JV("response"),
-                                "body" => body, "command" => JV(command), "success" => JV(true)}), /*log*/true)
+                                "body" => body, "command" => JV(command), "success" => JV(true)}), true)
     }
 
     def sendSuccessResponseStr(id : double; command : string; body : string) {
         //! Sends a successful DAP response with a pre-serialized JSON string body.
-        sendRawDataStr("\{\"request_seq\":{id}, \"type\":\"response\", \"body\":{body}, \"command\":\"{command}\", \"success\":true\}", /*log*/true)
+        sendRawDataStr("\{\"request_seq\":{id}, \"type\":\"response\", \"body\":{body}, \"command\":\"{command}\", \"success\":true\}", true)
     }
 
-    // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#responseMessage
     def sendRawData(var data : JsonValue?; logData : bool) {
         //! Sends a JSON value as a DAP message with Content-Length header.
         let msg = write_json(data)
@@ -2203,7 +2179,6 @@ class private DAServer : Server {
         if (logData) {
             log("<------\n{packStr}")
         }
-        // else print("<------\n{packStr}\n")
         unsafe {
             send(reinterpret<uint8?>(packStr), length(packStr))
             delete data
@@ -2216,7 +2191,6 @@ class private DAServer : Server {
         if (logData) {
             log("<------\n{packStr}")
         }
-        // else print("<------\n{packStr}\n")
         unsafe {
             send(reinterpret<uint8?>(packStr), length(packStr))
         }
@@ -2307,7 +2281,7 @@ def private auto_start_debug() {
 }
 
 
-def private use_instruments() {// or stepping debugger
+def private use_instruments() {
     let args <- get_command_line_arguments()
     return !has_value(args, "--das-stepping-debugger")
 }

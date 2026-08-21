@@ -641,7 +641,21 @@ def test_format_strip_comments_source(t : T?) {
         t |> success(find(stripped, "block dies") < 0, "block comment stripped")
         t |> success(find(stripped, "let z = x + y") >= 0, "multi-line inline comment joins its expression")
     }
-    t |> run("keep_comments path leaves every comment in place") <| @(t : T?) {
+    t |> run("license comments survive the strip anywhere in the file") <| @(t : T?) {
+        let src = "options gen2\n\ndef mid \{\n    return 1\n\}\n\n// Copyright (c) 2008 Bjoern Hoehrmann\n// SPDX-License-Identifier: MIT\n// COPYRIGHT 2026 SHOUTING NOTICES TOO\ndef tail \{\n    return 2\n\}\n"
+        let stripped = format_source_string(src, true)
+        t |> success(find(stripped, "Copyright (c) 2008") >= 0, "Copyright line kept mid-file")
+        t |> success(find(stripped, "SPDX-License-Identifier: MIT") >= 0, "SPDX line kept mid-file")
+        t |> success(find(stripped, "COPYRIGHT 2026") >= 0, "match is case-insensitive")
+    }
+    t |> run("a fmt directive ends a kept continuation chain") <| @(t : T?) {
+        let src = "options gen2\n\ndef head \{\n    return 1\n\}\n\n//! documented contract\n//fmt:keep-blank-lines\n// narration dies here\ndef tail \{\n    return 2\n\}\n"
+        let stripped = format_source_string(src, true)
+        t |> success(find(stripped, "documented contract") >= 0, "doc kept")
+        t |> success(find(stripped, "fmt:keep-blank-lines") >= 0, "directive kept")
+        t |> success(find(stripped, "narration dies") < 0, "narration after the directive is not a continuation")
+    }
+    t |> run("strip-disabled path leaves every comment in place") <| @(t : T?) {
         let src = fread(fixture_path("_fixture_comments.das"))
         let formatted = format_source_string(src, false)
         t |> success(find(formatted, "narration dies") >= 0, "narration kept when not stripping")
@@ -666,6 +680,26 @@ def test_format_strip_comments_source(t : T?) {
         t |> success(find(out, "//fmt:keep-alignment") >= 0, "fmt directive kept")
         t |> success(find(out, "narration") < 0, "narration stripped")
     }
+    t |> run("a kept comment keeps its attached continuation lines, whole or not at all") <| @(t : T?) {
+        let src = "options gen2\n\ndef a() \{\n    // nolint:STYLE014 — the why starts here and\n    // continues on a second line without truncation\n    return\n\}\n\ndef b() \{\n    //! doc head\n    // doc continuation line\n    return\n\}\n"
+        let out = format_source_string(src, true)
+        t |> success(find(out, "continues on a second line") >= 0, "nolint why kept whole")
+        t |> success(find(out, "doc continuation line") >= 0, "//! continuation kept")
+    }
+    t |> run("the chain extends through a third line, and a block comment never continues it") <| @(t : T?) {
+        let src = "options gen2\n\ndef a() \{\n    // nolint:STYLE014 — line one of the why,\n    // line two of the why,\n    // line three of the why\n    return\n\}\n\ndef b() \{\n    //! doc head\n    /* block narration dies */\n    return\n\}\n"
+        let out = format_source_string(src, true)
+        t |> success(find(out, "line three of the why") >= 0, "third continuation line kept")
+        t |> success(find(out, "block narration") < 0, "a /* */ under a kept head is not a continuation")
+    }
+    t |> run("a blank line or code breaks the continuation chain") <| @(t : T?) {
+        let src = "options gen2\n\ndef a() \{\n    // nolint:STYLE014 — one-line why\n\n    // separate narration dies\n    return  // nolint:STYLE014 — trailing why\n    // not a continuation of a trailing head, dies\n\}\n"
+        let out = format_source_string(src, true)
+        t |> success(find(out, "one-line why") >= 0, "head kept")
+        t |> success(find(out, "separate narration") < 0, "blank line breaks the chain")
+        t |> success(find(out, "trailing why") >= 0, "trailing nolint kept")
+        t |> success(find(out, "not a continuation") < 0, "trailing head opens no chain")
+    }
     t |> run("!is-prefixed identifiers survive formatting untouched") <| @(t : T?) {
         let src = "options gen2\n\ndef check(f : bool) : bool \{\n    return !is_unary(f)\n\}\n"
         let out = format_source_string(src, false)
@@ -674,11 +708,21 @@ def test_format_strip_comments_source(t : T?) {
     }
 }
 
+def private make_policy_dir(name, config : string; var err : string&) : string {
+    let dir = create_temp_directory(name, err)
+    return "" if (empty(dir))
+    mkdir(path_join(dir, ".git"))
+    if (!empty(config)) {
+        fwrite(path_join(dir, ".lint_config"), config)
+    }
+    return dir
+}
+
 [test]
-def test_format_file_strips_by_default(t : T?) {
-    t |> run("default run strips, and the compile verify passes") <| @(t : T?) {
+def test_format_file_comment_policy(t : T?) {
+    t |> run("force_clean_comments folder strips, and the compile verify passes") <| @(t : T?) {
         var terr : string
-        let dir = create_temp_directory("mcp_strip_test", terr)
+        let dir = make_policy_dir("mcp_strip_test", "[format]\nforce_clean_comments = true\n", terr)
         if (empty(dir)) {
             t |> failure("temp dir: {terr}")
             return
@@ -690,16 +734,15 @@ def test_format_file_strips_by_default(t : T?) {
         var is_error = false
         let ok = parse_result(do_format_file(dst), text, is_error)
         t |> success(ok, "parse result JSON")
-        t |> success(find(text, "comments stripped") >= 0, "default path stripped -- text={text}")
+        t |> success(find(text, "comments stripped") >= 0, "opted-in folder stripped -- text={text}")
         let after = fread(dst)
         t |> success(find(after, "narration") < 0, "comments removed on disk")
         t |> success(find(after, "//! doc comment survives") >= 0, "docs kept on disk")
-        remove(dst)
-        rmdir(dir)
+        rmdir_rec(dir)
     }
     t |> run("fail-closed: a strip whose compile_check fails restores the original bytes") <| @(t : T?) {
         var terr : string
-        let dir = create_temp_directory("mcp_revert_test", terr)
+        let dir = make_policy_dir("mcp_revert_test", "[format]\nforce_clean_comments = true\n", terr)
         if (empty(dir)) {
             t |> failure("temp dir: {terr}")
             return
@@ -714,12 +757,11 @@ def test_format_file_strips_by_default(t : T?) {
         t |> success(is_error, "reverted outcome reports as error")
         t |> success(find(text, "reverted") >= 0, "status is reverted -- text={text}")
         t |> equal(fread(dst), src, "original bytes restored")
-        remove(dst)
-        rmdir(dir)
+        rmdir_rec(dir)
     }
-    t |> run("keep_comments='true' formats without touching comments") <| @(t : T?) {
+    t |> run("no config: formats, comments stay") <| @(t : T?) {
         var terr : string
-        let dir = create_temp_directory("mcp_keep_test", terr)
+        let dir = make_policy_dir("mcp_keep_test", "", terr)
         if (empty(dir)) {
             t |> failure("temp dir: {terr}")
             return
@@ -728,12 +770,52 @@ def test_format_file_strips_by_default(t : T?) {
         fwrite(dst, fread(fixture_path("_fixture_comments.das")))
         var text : string
         var is_error = false
-        parse_result(do_format_file(dst, true), text, is_error)
-        t |> success(!is_error, "keep_comments run should not error")
+        parse_result(do_format_file(dst), text, is_error)
+        t |> success(!is_error, "default run should not error")
         let after = fread(dst)
         t |> success(find(after, "narration dies") >= 0, "comments intact on disk")
-        remove(dst)
-        rmdir(dir)
+        rmdir_rec(dir)
+    }
+}
+
+[test]
+def test_format_file_policy_scoping(t : T?) {
+    t |> run("format_enabled = false skips the file untouched") <| @(t : T?) {
+        var terr : string
+        let dir = make_policy_dir("mcp_skip_test", "[format]\nformat_enabled = false\n", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let dst = path_join(dir, "corpus.das")
+        let src = "options gen2\ndef f() \{\n    let x=1\n\}\n"
+        fwrite(dst, src)
+        var text : string
+        var is_error = false
+        parse_result(do_format_file(dst), text, is_error)
+        t |> success(find(text, "skipped") >= 0, "status is skipped -- text={text}")
+        t |> equal(fread(dst), src, "bytes untouched")
+        rmdir_rec(dir)
+    }
+    t |> run("nearest .lint_config wins per key") <| @(t : T?) {
+        var terr : string
+        let dir = make_policy_dir("mcp_cascade_test", "[format]\nforce_clean_comments = true\n", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let sub = path_join(dir, "teaching")
+        mkdir(sub)
+        fwrite(path_join(sub, ".lint_config"), "[format]\nforce_clean_comments = false\n")
+        let dst = path_join(sub, "victim.das")
+        fwrite(dst, fread(fixture_path("_fixture_comments.das")))
+        var text : string
+        var is_error = false
+        parse_result(do_format_file(dst), text, is_error)
+        t |> success(!is_error, "cascade run should not error")
+        let after = fread(dst)
+        t |> success(find(after, "narration dies") >= 0, "child override kept comments")
+        rmdir_rec(dir)
     }
 }
 
@@ -2555,21 +2637,21 @@ let PROOT_CONSUMER = "_pretend_root/consumer.das"
 let PROOT = "_pretend_root"
 let PROOT_MISSING = "missing prerequisite 'pretend_mod"
 
-def assert_project_root_pair(t : T?; without_root, with_root : string) {
+def assert_prereq_pair(t : T?; what : string; without_it, with_it : string) {
     var t1 : string; var e1 = false
-    parse_result(without_root, t1, e1)
-    t |> success(e1, "without project_root: should be error -- text={t1}")
+    parse_result(without_it, t1, e1)
+    t |> success(e1, "without {what}: should be error -- text={t1}")
     t |> success(find(t1, PROOT_MISSING) >= 0,
-                 "without project_root: should mention missing prerequisite -- text={t1}")
+                 "without {what}: should mention missing prerequisite -- text={t1}")
     var t2 : string; var e2 = false
-    parse_result(with_root, t2, e2)
-    t |> success(!e2, "with project_root: should NOT be error -- text={t2}")
+    parse_result(with_it, t2, e2)
+    t |> success(!e2, "with {what}: should NOT be error -- text={t2}")
 }
 
 [test]
 def test_project_root_compile_check(t : T?) {
     t |> run("compile_check honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_compile_check(fixture_path(PROOT_CONSUMER)),
             do_compile_check(fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2578,7 +2660,7 @@ def test_project_root_compile_check(t : T?) {
 [test]
 def test_project_root_lint(t : T?) {
     t |> run("lint honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_lint(fixture_path(PROOT_CONSUMER)),
             do_lint(fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2587,7 +2669,7 @@ def test_project_root_lint(t : T?) {
 [test]
 def test_project_root_aot(t : T?) {
     t |> run("aot honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_aot(fixture_path(PROOT_CONSUMER), ""),
             do_aot(fixture_path(PROOT_CONSUMER), "", "", fixture_path(PROOT)))
     }
@@ -2596,7 +2678,7 @@ def test_project_root_aot(t : T?) {
 [test]
 def test_project_root_list_functions(t : T?) {
     t |> run("list_functions honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_list_functions(fixture_path(PROOT_CONSUMER)),
             do_list_functions(fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2605,7 +2687,7 @@ def test_project_root_list_functions(t : T?) {
 [test]
 def test_project_root_list_types(t : T?) {
     t |> run("list_types honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_list_types(fixture_path(PROOT_CONSUMER)),
             do_list_types(fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2614,7 +2696,7 @@ def test_project_root_list_types(t : T?) {
 [test]
 def test_project_root_list_requires(t : T?) {
     t |> run("list_requires honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_list_requires(fixture_path(PROOT_CONSUMER)),
             do_list_requires(fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2623,7 +2705,7 @@ def test_project_root_list_requires(t : T?) {
 [test]
 def test_project_root_program_log(t : T?) {
     t |> run("program_log honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_program_log(fixture_path(PROOT_CONSUMER), "main"),
             do_program_log(fixture_path(PROOT_CONSUMER), "main", "", fixture_path(PROOT)))
     }
@@ -2632,7 +2714,7 @@ def test_project_root_program_log(t : T?) {
 [test]
 def test_project_root_ast_dump(t : T?) {
     t |> run("ast_dump honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_ast_dump("", fixture_path(PROOT_CONSUMER), "main", "source", ""),
             do_ast_dump("", fixture_path(PROOT_CONSUMER), "main", "source", "", "", fixture_path(PROOT)))
     }
@@ -2641,7 +2723,7 @@ def test_project_root_ast_dump(t : T?) {
 [test]
 def test_project_root_find_references(t : T?) {
     t |> run("find_references honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_find_references(fixture_path(PROOT_CONSUMER), "7", "17", "file", ""),
             do_find_references(fixture_path(PROOT_CONSUMER), "7", "17", "file", "", "", fixture_path(PROOT)))
     }
@@ -2650,7 +2732,7 @@ def test_project_root_find_references(t : T?) {
 [test]
 def test_project_root_goto_definition(t : T?) {
     t |> run("goto_definition honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_goto_definition(fixture_path(PROOT_CONSUMER), "7", "17"),
             do_goto_definition(fixture_path(PROOT_CONSUMER), "7", "17", "", "", fixture_path(PROOT)))
     }
@@ -2659,7 +2741,7 @@ def test_project_root_goto_definition(t : T?) {
 [test]
 def test_project_root_type_of(t : T?) {
     t |> run("type_of honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_type_of(fixture_path(PROOT_CONSUMER), "7", "17"),
             do_type_of(fixture_path(PROOT_CONSUMER), "7", "17", "", "", fixture_path(PROOT)))
     }
@@ -2668,7 +2750,7 @@ def test_project_root_type_of(t : T?) {
 [test]
 def test_project_root_find_symbol(t : T?) {
     t |> run("find_symbol honors project_root") <| @(t : T?) {
-        assert_project_root_pair(t,
+        assert_prereq_pair(t, "project_root",
             do_find_symbol("hello", "", fixture_path(PROOT_CONSUMER)),
             do_find_symbol("hello", "", fixture_path(PROOT_CONSUMER), "", fixture_path(PROOT)))
     }
@@ -2757,21 +2839,10 @@ def make_lm_array(p : string) : array<string> {
     return <- arr
 }
 
-def assert_load_module_pair(t : T?; without_lm, with_lm : string) {
-    var t1 : string; var e1 = false
-    parse_result(without_lm, t1, e1)
-    t |> success(e1, "without load_module: should be error -- text={t1}")
-    t |> success(find(t1, PROOT_MISSING) >= 0,
-                 "without load_module: should mention missing prerequisite -- text={t1}")
-    var t2 : string; var e2 = false
-    parse_result(with_lm, t2, e2)
-    t |> success(!e2, "with load_module: should NOT be error -- text={t2}")
-}
-
 [test]
 def test_load_module_compile_check(t : T?) {
     t |> run("compile_check honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_compile_check(fixture_path(PROOT_CONSUMER)),
             do_compile_check(fixture_path(PROOT_CONSUMER), "", "", false, make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2780,7 +2851,7 @@ def test_load_module_compile_check(t : T?) {
 [test]
 def test_load_module_lint(t : T?) {
     t |> run("lint honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_lint(fixture_path(PROOT_CONSUMER)),
             do_lint(fixture_path(PROOT_CONSUMER), "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2789,7 +2860,7 @@ def test_load_module_lint(t : T?) {
 [test]
 def test_load_module_aot(t : T?) {
     t |> run("aot honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_aot(fixture_path(PROOT_CONSUMER), ""),
             do_aot(fixture_path(PROOT_CONSUMER), "", "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2798,7 +2869,7 @@ def test_load_module_aot(t : T?) {
 [test]
 def test_load_module_list_functions(t : T?) {
     t |> run("list_functions honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_list_functions(fixture_path(PROOT_CONSUMER)),
             do_list_functions(fixture_path(PROOT_CONSUMER), "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2807,7 +2878,7 @@ def test_load_module_list_functions(t : T?) {
 [test]
 def test_load_module_list_types(t : T?) {
     t |> run("list_types honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_list_types(fixture_path(PROOT_CONSUMER)),
             do_list_types(fixture_path(PROOT_CONSUMER), "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2816,7 +2887,7 @@ def test_load_module_list_types(t : T?) {
 [test]
 def test_load_module_list_requires(t : T?) {
     t |> run("list_requires honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_list_requires(fixture_path(PROOT_CONSUMER)),
             do_list_requires(fixture_path(PROOT_CONSUMER), "", "", false, make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2825,7 +2896,7 @@ def test_load_module_list_requires(t : T?) {
 [test]
 def test_load_module_program_log(t : T?) {
     t |> run("program_log honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_program_log(fixture_path(PROOT_CONSUMER), "main"),
             do_program_log(fixture_path(PROOT_CONSUMER), "main", "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2834,7 +2905,7 @@ def test_load_module_program_log(t : T?) {
 [test]
 def test_load_module_ast_dump(t : T?) {
     t |> run("ast_dump honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_ast_dump("", fixture_path(PROOT_CONSUMER), "main", "source", ""),
             do_ast_dump("", fixture_path(PROOT_CONSUMER), "main", "source", "", "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2843,7 +2914,7 @@ def test_load_module_ast_dump(t : T?) {
 [test]
 def test_load_module_find_references(t : T?) {
     t |> run("find_references honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_find_references(fixture_path(PROOT_CONSUMER), "7", "17", "file", ""),
             do_find_references(fixture_path(PROOT_CONSUMER), "7", "17", "file", "", "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2852,7 +2923,7 @@ def test_load_module_find_references(t : T?) {
 [test]
 def test_load_module_goto_definition(t : T?) {
     t |> run("goto_definition honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_goto_definition(fixture_path(PROOT_CONSUMER), "7", "17"),
             do_goto_definition(fixture_path(PROOT_CONSUMER), "7", "17", "", "", "", false, "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2861,7 +2932,7 @@ def test_load_module_goto_definition(t : T?) {
 [test]
 def test_load_module_type_of(t : T?) {
     t |> run("type_of honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_type_of(fixture_path(PROOT_CONSUMER), "7", "17"),
             do_type_of(fixture_path(PROOT_CONSUMER), "7", "17", "", "", "", make_lm_array(fixture_path(PRETEND_LM))))
     }
@@ -2870,7 +2941,7 @@ def test_load_module_type_of(t : T?) {
 [test]
 def test_load_module_find_symbol(t : T?) {
     t |> run("find_symbol honors load_module") <| @(t : T?) {
-        assert_load_module_pair(t,
+        assert_prereq_pair(t, "load_module",
             do_find_symbol("hello", "", fixture_path(PROOT_CONSUMER)),
             do_find_symbol("hello", "", fixture_path(PROOT_CONSUMER), "", "", false, "", make_lm_array(fixture_path(PRETEND_LM))))
     }

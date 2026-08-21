@@ -26,7 +26,6 @@ class UnrollMacro : AstFunctionAnnotation {
     //! This macro implements loop unrolling in the form of `unroll` function.
     def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
         if (is_in_lint_check()) {
-            // In lint mode, skip unrolling — return the inner for loop as-is
             var mblk = unsafe(reinterpret<ExprMakeBlock?>(call.arguments[0]))
             var blk = unsafe(reinterpret<ExprBlock?>(mblk._block))
             if (blk.list |> length == 1 && blk.list[0] is ExprFor) return <- clone_expression(blk.list[0])

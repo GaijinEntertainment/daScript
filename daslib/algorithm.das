@@ -135,8 +135,6 @@ def binary_search(a : array<auto(TT)>; f, last : int; val : TT const -&; less : 
     return (first != last) && (!invoke(less, val, a[first]))
 }
 
-// ---- upper_bound ----
-
 def upper_bound(a : array<auto(TT)>; f, l : int; val : TT const -&) {
     //! Returns the index of the first element in the range [f, l) that is greater than val, or l if no such element is found.
     assert(f >= 0 && f <= l, "upper bound first out of range")
@@ -185,8 +183,6 @@ def upper_bound(a : array<auto(TT)>; value : auto(QQ); less : block<(a : TT cons
     return upper_bound(a, 0, length(a), value, less)
 }
 
-// ---- equal_range ----
-
 def equal_range(a : array<auto(TT)>; val : TT const -&) {
     //! Returns a pair of indices [lower, upper) bounding the range of elements equal to val.
     //! The array must be sorted.
@@ -202,8 +198,6 @@ def equal_range(a : array<auto(TT)>; f, l : int; val : TT const -&) {
     let hi = upper_bound(a, f, l, val)
     return int2(lo, hi)
 }
-
-// now for all the other types
 
 [expect_any_array(a)]
 def reverse(var a) {
@@ -398,8 +392,6 @@ def erase_all(var arr; value) {
     }
 }
 
-// ---- fill ----
-
 def fill(var a : array<auto(TT)>; value : TT const -&) {
     //! Sets all elements of the array to the given value using clone.
     for (e in a) {
@@ -418,8 +410,6 @@ def fill(var a; value) {
         }
     }
 }
-
-// ---- is_sorted ----
 
 def is_sorted(a : array<auto(TT)>) : bool {
     //! Returns true if the array is sorted in non-descending order.
@@ -445,15 +435,12 @@ def is_sorted(a) : bool {
     }
 }
 
-// ---- rotate ----
-
 def rotate(var a : array<auto>; mid : int) {
     //! Rotates the array so that the element at index mid becomes the first element.
     //! Elements before mid are moved to the end.
     let l = length(a)
     if (l == 0 || mid == 0 || mid == l) return
     assert(mid > 0 && mid < l, "rotate mid out of range")
-    // reverse [0, mid), [mid, l), then reverse all
     let lm1 = l - 1
     let mm1 = mid - 1
     for (i in range(mid / 2)) {
@@ -475,8 +462,6 @@ def rotate(var a; mid : int) {
         rotate(temp_array(a), mid)
     }
 }
-
-// ---- min_element / max_element ----
 
 def min_element(a : array<auto(TT)>) : int {
     //! Returns the index of the minimum element in the array, or -1 if the array is empty.

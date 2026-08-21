@@ -94,7 +94,6 @@ def resize(var Arr : array<auto(numT)>; newSize : int64) {
 
 def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
     static_if (typeinfo is_int(newSize)) {
-        // trivially-zero element types take the bare arm - the builtin resize already zeroes new slots
         static_if (typeinfo needs_nontrivial_init(type<numT>)) {
             let oldSize = length(Arr)
             static_if (typeinfo needs_container_finalize(type<numT>)) {
@@ -267,7 +266,7 @@ def scratch_resize(var Arr : array<auto(numT)>; newSize : int64) {
 }
 
 def pop(var Arr : array<auto(numT)>) {
-    unsafe(resize(Arr, length(Arr) - 1))// resize will throw if negative
+    unsafe(resize(Arr, length(Arr) - 1))
 }
 
 [unused_argument(Arr, value)]
@@ -784,9 +783,6 @@ def back(arr : auto(TT) ==const) : auto& const {
     }
 }
 
-// the collect banner: erase/clear/shrink release the elements they drop. Raw-pointer
-// elements are carved out - for them "finalize" means delete-the-pointee, and clear-then-delete
-// is the documented borrowed-pointer escape. delete stays the ownership teardown.
 def erase(var Arr : array<auto(numT)>; at : int) {
     static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (uint(at) < uint(length(Arr))) {
@@ -818,7 +814,6 @@ def erase(var Arr : array<auto(numT)>; at : int; count : int) {
 
 def erase(var Arr : array<auto(numT)>; at : int64; count : int64) {
     static_if (typeinfo needs_container_finalize(type<numT>)) {
-        // sum as uint64 AFTER the non-negativity checks - int64 at+count can wrap (mirrors builtin_array_erase_range_i64)
         if (at >= 0_l && count >= 0_l && uint64(at) + uint64(count) <= uint64(long_length(Arr))) {
             for (i in range64(at, at + count)) {
                 unsafe(builtin_collect_local(Arr[i], uint(typeinfo sizeof(Arr[0]))))
@@ -872,8 +867,6 @@ def length(a : auto | #) : int {
     return typeinfo dim(a)
 }
 
-// table
-
 def reserve(var Tab : table<auto(keyT); auto>; newSize : int) {
     return if (newSize < 0)
     __builtin_table_reserve(Tab, uint64(newSize))
@@ -884,8 +877,6 @@ def reserve(var Tab : table<auto(keyT); auto>; newSize : int64) {
     __builtin_table_reserve(Tab, uint64(newSize))
 }
 
-// infer replaces a non-store tab[key] over an init-carrying value type with a call to this
-// (default_init_containers policy); a size bump across the index proves the slot is fresh
 def _table_index_and_init(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : valT& {
     let sz0 = length(Tab)
     var p & = unsafe(Tab[at])
@@ -903,8 +894,6 @@ def _table_index_and_init(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #
     }
 }
 
-
-// one table lookup with block to rule them all 'get'
 
 def get(Tab : table<auto(keyT); auto(valT)> ==const#; at : keyT | #; blk : block<(p : valT#&) : void>) {
     var val = __builtin_table_find(Tab, at)
@@ -998,7 +987,6 @@ def erase(var Tab : table<auto(keyT); auto(valT)>; at : string#) : bool {
 }
 
 def erase(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : bool {
-    // the collect banner: release the dropped value's heap (raw-pointer values carved out)
     static_if (typeinfo needs_container_finalize(type<valT>)) {
         var val = __builtin_table_find(Tab, at)
         if (val != null) {
@@ -1264,8 +1252,8 @@ def clone_dim(var a; b : auto | #) {
 
 def clone(var a : array<auto(TT)>; b : array<TT> ==const | #) {
     let ln = length(b)
-    reserve(a, ln)   // clone knows the final size: exact reserve, and the resize never grows
-    unsafe(resize(a, ln))// note: is this safe? do we actaully need to init first???
+    reserve(a, ln)
+    unsafe(resize(a, ln))
     return if (ln == 0)
     static_if (typeinfo is_pod(type<TT>)) {
         unsafe {
@@ -1280,8 +1268,8 @@ def clone(var a : array<auto(TT)>; b : array<TT> ==const | #) {
 
 def clone(var a : array<auto(TT)>; var b : array<TT> ==const | #) {
     let ln = length(b)
-    reserve(a, ln)   // clone knows the final size: exact reserve, and the resize never grows
-    unsafe(resize(a, ln))// note: is this safe? do we actaully need to init first???
+    reserve(a, ln)
+    unsafe(resize(a, ln))
     return if (ln == 0)
     static_if (typeinfo is_pod(type<TT>)) {
         unsafe {
@@ -1346,7 +1334,6 @@ def clone(var args; var nargs : array<string>) {
     for (i, na in range(tot), nargs) {
         args[i] := na
     }
-    // delete nargs // we can make this unsafe_when_not_clone_array, or just let GC deal with it
 }
 
 [expect_any_vector(args)]
@@ -1523,8 +1510,6 @@ def finalize(var a : table<auto(TK); auto(TV)>) {
     __builtin_table_free(a, typeinfo sizeof(type<TK>), typeinfo sizeof(type<TV>))
 }
 
-// temporal
-
 def lock(Tab : table<auto(keyT); auto(valT)> | #; blk : block<(t : table<keyT; valT>#) : void >) {
     __builtin_table_lock_mutable(Tab)
     invoke(blk, unsafe(reinterpret<table<auto(keyT); auto(valT)> const>(Tab)))
@@ -1537,8 +1522,6 @@ def lock_forever(var Tab : table<auto(keyT); auto(valT)> | #) : table<keyT; valT
         return <- reinterpret<table<keyT; valT>#>(Tab)
     }
 }
-
-// functional
 
 def next(var it : iterator<auto(TT)>; var value : TT&) : bool {
     static_if (!typeinfo can_copy(type<TT>)) {
@@ -1590,7 +1573,7 @@ def each(rng : urange64) : iterator<uint64> {
 
 def iter_range(foo) {
     concept_assert(typeinfo is_iterable(foo), "requires iterable")
-    return range(_::length(foo)) // assuming length(foo) exists
+    return range(_::length(foo))
 }
 
 def long_iter_range(foo) {
@@ -1650,8 +1633,6 @@ def each_ref(lam : lambda<(var arg : auto(argT)?&) : bool>) : iterator<argT&> {
     }
 }
 
-// trap for the by-value shape: the runtime hands the lambda the iteration-slot address,
-// so only a reference parameter can write the slot - a by-value pointer never can
 [nodiscard]
 def each_ref(lam : lambda<(var arg : auto(argT)? ==&) : bool>) : iterator<argT&> {
     concept_assert(false, "each_ref lambda must take its argument as a reference to a pointer: (var arg : T? &)")
@@ -1686,7 +1667,7 @@ def to_array(var it : iterator<auto(TT)>) : array<TT -const -&> {
 
 def to_array(a : auto(TT)[]) : array<TT -const> {
     var arr : array<TT -const>
-    unsafe(resize(arr, length(a)))  // TODO: is this safe? do we actually need to init first???
+    unsafe(resize(arr, length(a)))
     unsafe {
         reinterpret<TT -const[typeinfo dim(a)]>(addr(arr[0])) := a
     }
@@ -1712,10 +1693,10 @@ def to_array_move(var a : auto(TT)[]) : array<TT -const> {
     unsafe {
         var arr : array<TT -const>
         static_if (typeinfo can_copy(a)) {
-            resize(arr, length(a))// TODO: is this safe? do we actually need to init first???
+            resize(arr, length(a))
             reinterpret<TT -const[typeinfo dim(a)]>(addr(arr[0])) = a
         } static_elif (typeinfo can_move(a)) {
-            resize(arr, length(a))// TODO: is this safe? do we actually need to init first???
+            resize(arr, length(a))
             reinterpret<TT -const[typeinfo dim(a)]>(addr(arr[0])) <- a
         } else {
             concept_assert(false, "this array can't be copied or moved")
@@ -1870,13 +1851,13 @@ def sort(var a : auto(TT)[] | #) {
     return if (length(a) <= 1)
     static_if (typeinfo is_numeric_comparable(type<TT>)) {
         unsafe {
-            __builtin_sort(addr(a[0]), length(a))       // there is numeric specialization
+            __builtin_sort(addr(a[0]), length(a))
         }
     } static_elif (typeinfo is_vector(type<TT>)) {
         concept_assert(false, "there is no default compare function for vectors")
     } static_elif (typeinfo is_string(type<TT>)) {
         unsafe {
-            __builtin_sort_string(addr(a[0]), length(a))        // there is string specialization
+            __builtin_sort_string(addr(a[0]), length(a))
         }
     } else {
         unsafe {
@@ -1898,7 +1879,7 @@ def sort(var a : array<auto(TT)> | #) {
     static_if (typeinfo is_numeric_comparable(type<TT>)) {
         __builtin_array_lock(a)
         unsafe {
-            __builtin_sort(addr(a[0]), length(a))       // there is numeric specialization
+            __builtin_sort(addr(a[0]), length(a))
         }
         __builtin_array_unlock(a)
     } static_elif (typeinfo is_vector(type<TT>)) {
@@ -1906,7 +1887,7 @@ def sort(var a : array<auto(TT)> | #) {
     } static_elif (typeinfo is_string(type<TT>)) {
         __builtin_array_lock(a)
         unsafe {
-            __builtin_sort_string(addr(a[0]), length(a))        // there is string specialization
+            __builtin_sort_string(addr(a[0]), length(a))
         }
         __builtin_array_unlock(a)
     } else {
@@ -2041,8 +2022,6 @@ def lock_data(a : array<auto(TT)> ==const | #; blk : block<(p : TT const?#; s : 
         invoke(blk, unsafe(reinterpret<TT const?#>(null)), 0)
     }
 }
-
-// find_index
 
 def find_index(arr : array<auto(TT)> | #; key : TT) {
     for (o, i in arr, range(length(arr))) {
@@ -2243,7 +2222,6 @@ def move_to_ref(var a : auto&; var b) {
 }
 
 def clear(var t : table<auto(KT); auto(VT)>) {
-    // the collect banner: release every value's heap (raw-pointer values carved out)
     static_if (typeinfo needs_container_finalize(type<VT>)) {
         for (v in values(t)) {
             unsafe(builtin_collect_local(v, uint(typeinfo sizeof(v))))

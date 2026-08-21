@@ -48,8 +48,6 @@ def private emit_agent_entry(var func : FunctionPtr; contextName, ctxCloneFnName
   compiling_module() |> add_function(ctxFn)
 }
 
-// Moves the original body into the clone the agent entry calls, and replaces the caller-side body
-// with the pinvoke that hops into the agent context.
 def private rewrite_to_pinvoke(var func : FunctionPtr; contextName, ctxCloneFnName, ctxFnName, resName : string) {
   var fn = clone_function(func)
   fn.name := ctxCloneFnName

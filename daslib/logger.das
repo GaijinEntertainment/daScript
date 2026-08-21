@@ -62,8 +62,6 @@ var private log_category_overrides : table<string; int>
 var private log_fallback_to_stderr = true
 var private log_tee = false
 
-// ── Internal helpers ─────────────────────────────────────────────────
-
 def private level_name(level : int) : string {
     return "critical" if (level >= LOG_CRITICAL)
     return "error" if (level >= LOG_ERROR)
@@ -73,9 +71,6 @@ def private level_name(level : int) : string {
     return "trace"
 }
 
-// Resolve filter level for a category. Most-specific dotted prefix wins —
-// "mcp.live.foo" first looks up the full path, then "mcp.live", then "mcp",
-// before falling back to the global min level.
 def private resolve_level(category : string) : int {
     if (key_exists(log_category_overrides, category)) return log_category_overrides[category]
     var found = false
@@ -119,9 +114,6 @@ def private ensure_open() {
     }
 }
 
-// JSON-encode the four fixed fields directly into the writer, then append
-// the optional `fields` object via daslib/json's public `write_json` (no
-// json_boost reflection — fast path).
 def private write_record(var w : StringBuilderWriter; ts, lvl, cat, msg : string; fields : JsonValue?) {
     w |> write("\{\"ts\":\"")
     write_escape_string(w, ts)
@@ -133,7 +125,6 @@ def private write_record(var w : StringBuilderWriter; ts, lvl, cat, msg : string
     write_escape_string(w, msg)
     if (fields != null) {
         w |> write("\",\"fields\":")
-        // write_json always pretty-prints (depth=0 still inserts \n/\t between elements). One JSON object per line is load-bearing for JSON Lines, so flatten via the jsonrpc framing helper (preserves whitespace inside string literals).
         w |> write(compact_json_whitespace(write_json(fields)))
         w |> write("}\n")
     } else {
@@ -152,13 +143,10 @@ def private emit(level : int; category, message : string; fields : JsonValue?) {
         fflush(log_file)
         return
     }
-    // Open failed (or path never set). stderr is always safe — it isn't the JSON-RPC channel for stdio-transport servers, so a tail fallback can't corrupt protocol framing.
     if (log_fallback_to_stderr) {
         fwrite(fstderr(), line)
     }
 }
-
-// ── Public configuration ─────────────────────────────────────────────
 
 def logger_set_name(name : string) {
     //! Configure the log file as ``{get_das_root()}/logs/<name>.log``.
@@ -178,9 +166,6 @@ def logger_set_path(path : string) {
         log_file = null
     }
     log_path = path
-    // Clear logical name so logger_get_name() matches the doc claim:
-    // "empty if the path was set directly". logger_set_name() restores
-    // log_name immediately after it calls us, so that path still works.
     log_name = ""
     log_open_attempted = false
     log_open_failed = false
@@ -225,8 +210,6 @@ def logger_set_stderr_fallback(enabled : bool) {
     log_fallback_to_stderr = enabled
 }
 
-// ── Log calls ────────────────────────────────────────────────────────
-
 def logger_log(level : int; category, message : string; fields : JsonValue? = null) {
     //! Generic log entry. Prefer the named-level helpers below.
     emit(level, category, message, fields)
@@ -262,8 +245,6 @@ def logger_critical(category, message : string; fields : JsonValue? = null) {
     emit(LOG_CRITICAL, category, message, fields)
 }
 
-// ── Lifecycle ────────────────────────────────────────────────────────
-
 def logger_flush() {
     //! Explicit flush. Each write already flushes; only useful if you
     //! disable auto-flush in a fork.
@@ -282,20 +263,17 @@ def logger_close() {
     log_open_failed = false
 }
 
-// ── Debug-agent hook ─────────────────────────────────────────────────
-
 let private LOGGER_AGENT_CATEGORY = "daslib_logger"
 
 class private LogHookAgent : DapiDebugAgent {
     def override onLog(context : Context?; at : LineInfo const?; level : int; text : string#) : bool {
-        // Fail-open when logging isn't configured — let the default stdout/stderr path through instead of swallowing silently.
         if (empty(log_path) && !log_fallback_to_stderr) return false
         var fields : JsonValue? = null
         if (at != null && at.fileInfo != null) {
             fields = JV({"at" => JV("{at.fileInfo.name}:{at.line}")})
         }
         emit(level, "runtime", string(text), fields)
-        return !log_tee   // tee mode: the line also continues to the default stdout/stderr path
+        return !log_tee
     }
 }
 

@@ -1213,7 +1213,8 @@ def public format_source(file_data : array<uint8> const& implicit) : string {
 
 
 def private is_kept_comment(s : string) : bool {
-    if ((s |> starts_with("//!")) || (s |> starts_with("//fmt:"))) {
+    if ((s |> starts_with("//!")) || (s |> starts_with("//fmt:"))
+            || (to_lower(s) |> find("copyright") >= 0) || (s |> find("SPDX-License-Identifier") >= 0)) {
         return true
     }
     if (!(s |> starts_with("//"))) {
@@ -1224,6 +1225,11 @@ def private is_kept_comment(s : string) : bool {
 }
 
 
+def private opens_kept_block(s : string) : bool {
+    return is_kept_comment(s) && !(s |> starts_with("//fmt:"))
+}
+
+
 def private strip_comment_tokens(var ctx : FormatterCtx) {
     var kept : array<Token>
     kept |> reserve(length(ctx.tokens))
@@ -1231,18 +1237,30 @@ def private strip_comment_tokens(var ctx : FormatterCtx) {
     var in_header = true
     var seen_code = false
     var seen_any = false
+    var in_kept_block = false
     for (t in ctx.tokens) {
         var newLines = pendingNewLines + t.newLines
         if (pendingNewLines > 0 && t.newLines > 0) {
             newLines = max(pendingNewLines, t.newLines)
         }
+        let on_next_line = t.newLines == 1
         if (t.tokenType == TokenType.COMMENT && !is_kept_comment(t.str)) {
-            let trailing = seen_any && t.newLines == 0
-            if (!in_header || trailing) {
-                seen_any = true
-                pendingNewLines = newLines
-                continue
+            let continuation = in_kept_block && on_next_line && (t.str |> starts_with("//"))
+            if (!continuation) {
+                let trailing = seen_any && t.newLines == 0
+                if (!in_header || trailing) {
+                    seen_any = true
+                    pendingNewLines = newLines
+                    in_kept_block = false
+                    continue
+                }
             }
+        }
+        if (t.tokenType == TokenType.COMMENT) {
+            in_kept_block = ((t.newLines > 0 && opens_kept_block(t.str))
+                || (in_kept_block && on_next_line && !(t.str |> starts_with("//fmt:"))))
+        } elif (!empty(t.str)) {
+            in_kept_block = false
         }
         if (t.tokenType != TokenType.COMMENT && !empty(t.str)) {
             if (t.newLines > 0 || !seen_code) {
@@ -1264,7 +1282,8 @@ def private strip_comment_tokens(var ctx : FormatterCtx) {
 
 def public format_source(file_data : array<uint8> const& implicit; strip_comments : bool) : string {
     //! Formats daslang source; with ``strip_comments`` also removes every comment except the
-    //! leading header block, `//!` docs, `//fmt:` directives, and `nolint` suppressions.
+    //! leading header block, `//!` docs, `//fmt:` directives, `nolint` suppressions, and license
+    //! notices (Copyright / SPDX) — a kept full-line comment keeps its attached `//` continuations.
     var inscope ctx : FormatterCtx
     ctx.data := file_data
     ctx.data |> push(uint8(0))

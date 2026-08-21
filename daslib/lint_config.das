@@ -26,6 +26,11 @@ module lint_config shared private
 //! Two environment variables feed the same cascade: ``DAS_LINT_CONFIG_PATH``
 //! redirects which file is read, and ``DAS_LINT_DISABLE`` (comma-separated
 //! codes) turns rules off for one run, overriding everything above.
+//!
+//! The ``[format]`` table works differently: it CASCADES per folder. Every
+//! directory may hold its own ``.lint_config``; ``format_policy_for`` walks
+//! from the file's directory to the repository root and the nearest file
+//! that defines a key wins that key (``[rules]`` stays repo-root-only).
 
 require daslib/fio
 require daslib/json
@@ -75,23 +80,20 @@ def public load_lint_config_from_path(path : string; var disabled_codes : table<
     if (empty(body)) return
     var error : string
     var root : JsonValue? = read_toml(body, error)
-    // bad TOML or no [rules] table → defaults stand
     if (root == null || !(root.value is _object)) return
-    var root_obj & = unsafe(root.value as _object)   // table [] requires mutable binding
+    var root_obj & = unsafe(root.value as _object)
     if (!key_exists(root_obj, "rules")) return
     var rules_obj : JsonValue? = root_obj["rules"]
     if (rules_obj == null || !(rules_obj.value is _object)) return
-    var rules & = unsafe(rules_obj.value as _object)   // iteration requires mutable view
+    var rules & = unsafe(rules_obj.value as _object)
     for (code, val_jv in keys(rules), values(rules)) {
         if (val_jv == null || !(val_jv.value is _bool)) continue
         let enabled = val_jv.value as _bool
         if (enabled) {
-            // CODE = true → on → remove from default-disabled
             if (key_exists(disabled_codes, code)) {
                 disabled_codes |> erase(code)
             }
         } else {
-            // CODE = false → off → add to disabled
             if (!key_exists(disabled_codes, code)) {
                 disabled_codes |> insert(code)
             }
@@ -106,7 +108,6 @@ def public seed_default_disabled(var disabled_codes : table<string>) : void {
     }
 }
 
-// Process-wide cache of the parsed .lint_config split into "off" and "on" directives. `[lint_macro]` apply() fires once per module in the require chain — without caching the repo's `.lint_config` is re-read+parsed N times per compilation. The file is repo policy and doesn't change mid-compilation, so we parse once and reuse.
 var private _cache_off : table<string>
 var private _cache_on  : table<string>
 var private _cache_path_excludes : array<string>
@@ -121,11 +122,11 @@ def private ensure_cache_loaded() : void {
     var error : string
     var root : JsonValue? = read_toml(body, error)
     if (root == null || !(root.value is _object)) return
-    var root_obj & = unsafe(root.value as _object)   // table [] requires mutable binding
+    var root_obj & = unsafe(root.value as _object)
     if (!key_exists(root_obj, "rules")) return
     var rules_obj : JsonValue? = root_obj["rules"]
     if (rules_obj == null || !(rules_obj.value is _object)) return
-    var rules & = unsafe(rules_obj.value as _object)   // iteration requires mutable view
+    var rules & = unsafe(rules_obj.value as _object)
     for (code, val_jv in keys(rules), values(rules)) {
         if (val_jv == null || !(val_jv.value is _bool)) continue
         let enabled = val_jv.value as _bool
@@ -145,11 +146,11 @@ def public load_path_excludes_from_path(path : string; var excludes : array<stri
     var error : string
     var root : JsonValue? = read_toml(body, error)
     if (root == null || !(root.value is _object)) return
-    var root_obj & = unsafe(root.value as _object)   // table [] requires mutable binding
+    var root_obj & = unsafe(root.value as _object)
     if (!key_exists(root_obj, "paths")) return
     var paths_obj : JsonValue? = root_obj["paths"]
     if (paths_obj == null || !(paths_obj.value is _object)) return
-    var paths & = unsafe(paths_obj.value as _object)   // table [] requires mutable binding
+    var paths & = unsafe(paths_obj.value as _object)
     if (!key_exists(paths, "exclude")) return
     var excl_jv : JsonValue? = paths["exclude"]
     if (excl_jv == null || !(excl_jv.value is _array)) return
@@ -193,7 +194,7 @@ def public lint_config_forces_on(code : string) : bool {
     return key_exists(_cache_on, code)
 }
 
-//! Macro-side helper: builds the ``disabled_codes`` table the three ``[lint_macro]`` apply() methods need. Honors the module-local ``options _enable_default_off_rules = true`` opt-in (skips the ``seed_default_disabled`` step so default-off rules fire for that module), then layers cached ``.lint_config`` on top so the repo policy can still override either direction. Single source so a future default-off PERF/LINT rule applies uniformly.
+//! Macro-side helper: builds the ``disabled_codes`` table the three ``[lint_macro]`` apply() methods need. Honors the module-local ``options _enable_default_off_rules = true`` opt-in (skips BOTH the ``seed_default_disabled`` step and the repo config's ``off`` directives, so default-off rules fire for that module and repo policy cannot silence the rule a fixture exercises), then layers cached ``on`` directives and the environment on top. Single source so a future default-off PERF/LINT rule applies uniformly.
 def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
     let force_default_off = prog._options |> find_arg("_enable_default_off_rules") ?as tBool ?? false
     var disabled : table<string>
@@ -201,8 +202,6 @@ def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
         seed_default_disabled(disabled)
     }
     ensure_cache_loaded()
-    // fixture mode (_enable_default_off_rules) also skips the repo config's off directives —
-    // repo policy must not silence the rule a lint fixture exists to exercise
     if (!force_default_off) {
         for (code in keys(_cache_off)) {
             if (!key_exists(disabled, code)) disabled |> insert(code)
@@ -211,14 +210,9 @@ def public build_lint_macro_disabled(prog : ProgramPtr) : table<string> {
     for (code in keys(_cache_on)) {
         if (key_exists(disabled, code)) disabled |> erase(code)
     }
-    // last, so a one-run DAS_LINT_DISABLE beats a `CODE = true` in the repo config
     load_env_disabled(disabled)
     return <- disabled
 }
-
-// ---------------------------------------------------------------------------
-// Path-based rule defaults - the ONE place lint rules key off source location
-// ---------------------------------------------------------------------------
 
 def private module_source_path(prog : ProgramPtr) : string {
     let mod = prog.getThisModule
@@ -251,9 +245,102 @@ def public is_shipped_library_source(prog : ProgramPtr) : bool {
 //! private declarations (STYLE040/LINT022). Elsewhere both are a backlog, not a gate.
 def public is_core_library_source(prog : ProgramPtr) : bool {
     let file = module_source_path(prog)
-    // `modules/<X>/daslib/` carries a "daslib" segment too, and those trees are NOT swept
     return ((path_has_segment(file, "daslib") || path_has_segment(file, "utils"))
         && !path_has_segment(file, "modules"))
+}
+
+//! Per-file format policy from the ``[format]`` table of cascading ``.lint_config`` files:
+//! ``format_enabled = false`` exempts a tree (load-bearing fixture layout),
+//! ``force_clean_comments = true`` strips comments outside the kept set (swept trees).
+struct public FormatPolicy {
+    format_enabled : bool = true
+    force_clean_comments : bool = false
+}
+
+def private read_format_table(path : string) : JsonValue? {
+    let body = fread(path)
+    if (empty(body)) return null
+    var error : string
+    var root : JsonValue? = read_toml(body, error)
+    if (root == null || !(root.value is _object)) return null
+    var root_obj & = unsafe(root.value as _object)
+    if (!key_exists(root_obj, "format")) return null
+    var fmt_jv : JsonValue? = root_obj["format"]
+    if (fmt_jv == null || !(fmt_jv.value is _object)) return null
+    return fmt_jv
+}
+
+def private config_dir_of(file : string) : string {
+    let dir = to_generic_path(dir_name(to_generic_path(file)))
+    return empty(dir) ? "." : dir
+}
+
+def private take_format_key(var fmt_jv : JsonValue?; key : string; var dst : bool&; var decided : bool&) {
+    return if (decided)
+    var fmt & = unsafe(fmt_jv.value as _object)
+    if (!key_exists(fmt, key)) return
+    var val_jv : JsonValue? = fmt[key]
+    if (val_jv == null || !(val_jv.value is _bool)) return
+    dst = val_jv.value as _bool
+    decided = true
+}
+
+//! One file the formatter will process, carrying its folder's comment policy.
+struct public FormatJob {
+    file : string
+    strip_comments : bool
+}
+
+//! Splits ``files`` by policy: drops ``format_enabled = false`` entries into ``skipped``;
+//! survivors come back as jobs carrying their folder's ``force_clean_comments``.
+//! Single-threaded, like ``format_policy_for``.
+def public partition_by_format_policy(var files : array<string>; var skipped : array<string>) : array<FormatJob> {
+    var jobs : array<FormatJob>
+    jobs |> reserve(length(files))
+    var policy_by_dir : table<string; FormatPolicy>
+    for (file in files) {
+        let dir = config_dir_of(file)
+        if (!key_exists(policy_by_dir, dir)) {
+            policy_by_dir[dir] = format_policy_for(file)
+        }
+        let policy = policy_by_dir?[dir] ?? FormatPolicy()
+        if (!policy.format_enabled) {
+            skipped |> push(file)
+            continue
+        }
+        jobs |> push(FormatJob(file = file, strip_comments = policy.force_clean_comments))
+    }
+    delete files
+    return <- jobs
+}
+
+//! Walks ``.lint_config`` files from ``file``'s directory up to the repository root (the
+//! directory holding ``.git``, read inclusively); the nearest file defining a key wins that
+//! key. Single-threaded — resolve on the coordinating thread, pass results to jobs.
+def public format_policy_for(file : string) : FormatPolicy {
+    var pol = FormatPolicy()
+    var enabled_decided = false
+    var clean_decided = false
+    var dir = config_dir_of(file)
+    while (true) {
+        let cfg = dir == "." ? ".lint_config" : "{dir}/.lint_config"
+        var fmt_jv = read_format_table(cfg)
+        if (fmt_jv != null) {
+            take_format_key(fmt_jv, "format_enabled", pol.format_enabled, enabled_decided)
+            take_format_key(fmt_jv, "force_clean_comments", pol.force_clean_comments, clean_decided)
+        }
+        break if (enabled_decided && clean_decided)
+        var st : FStat
+        break if (stat(path_join(dir, ".git"), st))
+        let up = dir_name(dir)
+        if (empty(up) || up == dir) {
+            break if (dir == ".")
+            dir = "."
+        } else {
+            dir = up
+        }
+    }
+    return pol
 }
 
 //! True when `fn` is user-authored from lint's point of view: not generated, or a generated
@@ -271,9 +358,6 @@ def public is_lint_fixture_name(base : string) : bool {
     return starts_with(base, "_") && find(base, "fixture") >= 0
 }
 
-// The `// lint-skip-file` directive is honored in the first lines only, so prose
-// QUOTING it deeper in a file (a doc comment, a commented-out example) cannot
-// silently unlint the file.
 let public LINT_SKIP_HEADER_LINES = 16
 
 //! Content-based skip probe shared by the CLI runner and the MCP lint tool: ``expect <code>``

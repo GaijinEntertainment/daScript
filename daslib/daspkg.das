@@ -24,8 +24,6 @@ struct PackageMeta {
     min_sdk : string
 }
 
-// --- Package metadata globals (set by `package()`) ---
-
 var _pkg_meta : PackageMeta
 
 def package_name(name : string) {
@@ -60,8 +58,6 @@ def package_min_sdk(version : string) {
     _pkg_meta.min_sdk = version
 }
 
-// --- Version resolution (set by `resolve()`) ---
-
 enum DownloadKind {
     unset
     tag
@@ -89,8 +85,6 @@ def download_redirect(source, ref : string) {
     _download_ref = ref
 }
 
-// --- Dependencies (accumulated by `dependencies()`) ---
-
 struct Dependency {
     source : string
     version_constraint : string
@@ -101,8 +95,6 @@ var _dependencies : array<Dependency>
 def require_package(source : string; version_constraint : string = "") {
     _dependencies |> emplace(Dependency(source = source, version_constraint = version_constraint))
 }
-
-// --- Build info (set by `build()`) ---
 
 enum BuildKind {
     no_build
@@ -125,8 +117,6 @@ def custom_build(command : string) {
     _build_kind = BuildKind.custom
     _build_command = command
 }
-
-// --- Release info (set by `release()`) ---
 
 struct ReleaseSpec {
     name : string                       //!< bundle name; defaults to package_name
@@ -192,8 +182,6 @@ def release_include_from(source, dest : string) {
 }
 
 def release_include_from(source : string) {
-    // Empty dest = "use the source file name"; resolved by the shipper, which has fio. This
-    // module is requires-free by design, so base_name() is not available here.
     _release_spec.external_files |> push("{source}@")
 }
 

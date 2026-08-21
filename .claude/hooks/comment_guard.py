@@ -280,6 +280,8 @@ def first_code_line(text, is_das, code_lines):
 def _kept_line_comment(ctext, is_das):
     if ctext.startswith("//!"):
         return True
+    if "copyright" in ctext.lower() or "SPDX-License-Identifier" in ctext:
+        return True
     rest = ctext[2:].lstrip(_WS)
     if is_das:
         # mirrors is_kept_comment in daslib/das_source_formatter.das
@@ -289,6 +291,8 @@ def _kept_line_comment(ctext, is_das):
 
 
 def _kept_block_comment(ctext, is_das):
+    if "copyright" in ctext.lower() or "SPDX-License-Identifier" in ctext:
+        return True
     if is_das:
         return False
     if ctext.startswith("/*!"):
@@ -310,11 +314,20 @@ def violations(text, *, is_das, whole_file):
         return []
     first_code = first_code_line(text, is_das, code_lines) if whole_file else 0
     out = []
+    # mirrors the formatter's continuation chain: a full-line `//` comment on the
+    # line right after a kept full-line comment is kept with it (`//fmt:` chains
+    # neither in nor out)
+    chain_line = -2
     for ln, ctext, full in comments:
         if full and ln <= first_code:
             continue
         if ctext.startswith("//"):
             if _kept_line_comment(ctext, is_das):
+                if is_das and full and not ctext.startswith("//fmt:"):
+                    chain_line = ln
+                continue
+            if is_das and full and ln == chain_line + 1:
+                chain_line = ln
                 continue
         elif _kept_block_comment(ctext, is_das):
             continue
@@ -357,13 +370,14 @@ def build_message(path, found, *, is_das, is_write):
         caveat = " Line numbers refer to the replacement text, not the file."
     if is_das:
         return (
-            "comment guard: {} {} {} will NOT survive the formatter:\n"
+            "comment guard: {} {} {} — scaffold at best; the formatter strips "
+            "everything outside the kept set:\n"
             "{}{}\n"
-            ".das keeps only `//!` public-API docs, `// nolint:CODE` / `// @nolint` suppressions, "
-            "`//fmt:` directives, and the file's leading header block. Say it in the code (a name, "
-            "a shape), pin it with a test, or move real documentation to the module's REVIEW.md / "
-            "ARCHITECTURE.md. Teaching code (tutorials/examples) keeps its prose — ignore this "
-            "warning there.{}"
+            "Fine to keep thinking in comments — but drain them before commit: move what a name "
+            "can carry into a rename or reshape, promote public-API docs to `//!`, rescue real "
+            "documentation to the module's REVIEW.md / ARCHITECTURE.md, and let the rest die. "
+            "Kept: `//!` docs, `// nolint:CODE` / `// @nolint`, `//fmt:`, the leading header "
+            "block. Teaching code (tutorials/examples) keeps its prose.{}"
         ).format(len(found), count_phrase, path, quoted, extra, caveat)
     return (
         "comment guard: {} {} {} — house rule: no new C/C++ comments.\n"

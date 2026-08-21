@@ -1356,7 +1356,8 @@ def document_module_lint_config(_root : string) {
         group_by_regex("Path excludes", mod, %regex~(load_path_excludes_from_path|matches_path_excludes|is_lint_path_excluded)$%%),
         group_by_regex("Path-based rule defaults", mod, %regex~(is_daslib_source|is_shipped_library_source|is_core_library_source)$%%),
         group_by_regex("Lint-surface predicates", mod, %regex~(is_user_authored_body|is_lint_fixture_name|lint_file_skip_reason)$%%),
-        group_by_regex("Structured findings", mod, %regex~(make_lint_issue)$%%)
+        group_by_regex("Structured findings", mod, %regex~(make_lint_issue)$%%),
+        group_by_regex("Format policy", mod, %regex~(format_policy_for|partition_by_format_policy)$%%)
     )
     document("Repo-level lint configuration", mod, "lint_config.rst", groups)
 }

@@ -27,13 +27,13 @@ require daslib/templates_boost
 [tag_function(new_job_tag)]
 def new_job(var l : lambda) {
     //! Create a new job.
-    invoke(l)   // note, this is never called if job-que is there.
+    invoke(l)
 }
 
 [tag_function(new_job_tag)]
 def new_thread(var l : lambda) {
     //! Creates a new thread with a cloned context and invokes the cloned lambda on that thread.
-    invoke(l)   // note, this is never called if job-que is there
+    invoke(l)
 }
 
 [tag_function_macro(tag="new_job_tag")]
@@ -48,12 +48,11 @@ class private NewJobMacro : AstFunctionAnnotation {
         macro_verify(asc.subexpr is ExprMakeStruct, compiling_program(), call.at, "expecting lambda declaration, ExprMakeStruct")
         var mks = asc.subexpr as ExprMakeStruct
         macro_verify(!(mks._type == null || mks._type.baseType != Type.tStructure), compiling_program(), call.at, "expecting lambda declaration, not a structure")
-        // clone structure type. make fields non-constant, so that they can be cloned
         var stype <- clone_structure(mks._type.structType)
         stype.name := "{stype.name}_new_job_clone"
         var stype_ptr = stype
         var sttype = new TypeDecl(at = call.at, baseType = Type.tStructure, structType = stype_ptr)
-        for (fld in stype.fields) {// TODO: verify field type here
+        for (fld in stype.fields) {
             fld._type.flags.constant = false
             fld.flags.capturedConstant = false
         }
@@ -61,7 +60,6 @@ class private NewJobMacro : AstFunctionAnnotation {
         let const_clone = pclone.arguments[1]._type.flags.constant
         compiling_module() |> add_function(pclone)
         compiling_module() |> add_structure(stype)
-        // make an @@<function<(var L;L):void> type or @@<function<(var L;var L):void> type - depending on how the capture went
         var ftype = new TypeDecl(at = call.at, baseType = Type.tFunction)
         ftype.firstType = new TypeDecl(at = call.at, baseType = Type.tVoid)
         ftype.argTypes |> emplace_new <| clone_type(sttype)
@@ -69,7 +67,6 @@ class private NewJobMacro : AstFunctionAnnotation {
         if (const_clone) {
             ftype.argTypes[1].flags.constant = true
         }
-        // make a new_job_invoke call
         var ncall = new ExprCall(at = call.at, name := "{call.name}_invoke")
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
         ncall.arguments |> emplace_new <| new ExprAddr(at = call.at, target := "clone", funcType <- ftype)
@@ -406,8 +403,6 @@ def each_clone(var channel : Channel?; tinfo : auto(TT)) {
     }
 }
 
-//
-
 require daslib/archive
 
 def push(stream : Stream?; data : array<uint8>) {
@@ -553,8 +548,6 @@ def _parallel_for(range_begin, range_end : int; num_jobs : int; blk : block<(job
             offset = job_end
             invoke(blk, job_begin, job_end, wg)
         }
-        // main participates: flush the batch, then keep executing queued jobs on this thread until
-        // the wait group is ready (or the fifo drains — the workers then finish their in-flight tail)
         while (!wg.isReady) {
             break if (!jobque_try_run_one())
         }
@@ -588,13 +581,13 @@ class private ParallelForJobMacro : AstFunctionAnnotation {
 [tag_function(tag_team_parallel_for), unused_argument(num_jobs)]
 def team_parallel_for(range_begin, range_end : int; num_jobs : int; var l : lambda<(job_begin : int; job_end : int) : void>) {
     //! Team-mode ``parallel_for`` (see ``set_jobque_team_mode``): partitions ``[range_begin..range_end)`` into ``num_jobs`` chunks with the same split as ``parallel_for``, but instead of one fifo job per chunk the lambda is cloned once per WORKER and the workers self-serve chunk indices off a single atomic — no fifo, no wait group; the caller participates and spin-joins. Falls back to one inline invoke over the whole range when team mode is off (or the range/pool is trivial).
-    invoke(l, range_begin, range_end)   // note, this is never called if job-que is there.
+    invoke(l, range_begin, range_end)
 }
 
 [tag_function(tag_team_parallel_for_indexed), unused_argument(num_jobs)]
 def team_parallel_for_indexed(range_begin, range_end : int; num_jobs : int; var l : lambda<(slot : int; job_begin : int; job_end : int) : void>) {
     //! ``team_parallel_for`` with the claiming worker's slot exposed: the lambda receives ``(slot, job_begin, job_end)``. No two in-flight invocations share a slot, so per-slot scratch (sized ``get_total_hw_jobs() + 1`` — the caller participates as the last slot) needs no locks. Chunk split and self-serve scheduling are identical to ``team_parallel_for``; degenerate paths (team mode off, trivial range/pool) run one inline invoke over the whole range as slot 0.
-    invoke(l, 0, range_begin, range_end)   // note, this is never called if job-que is there.
+    invoke(l, 0, range_begin, range_end)
 }
 
 [tag_function(tag_team_parallel_stages)]
@@ -602,8 +595,6 @@ def team_parallel_stages(stages : array<int3>; var l : lambda<(stage : int; job_
     //! Multi-stage team dispatch: one team rendezvous runs the ``stages`` in order, with a worker-side barrier between consecutive stages — stage ``s+1`` may read anything stage ``s`` wrote. Each stage is ``int3(range_begin, range_end, num_chunks)``; the lambda receives ``(stage, job_begin, job_end)`` with the same chunk split as ``team_parallel_for``. The whole chain costs ONE publish + ONE join (the lambda is cloned once per worker), so a fused matmul→matmul chain pays the dispatch tail once instead of per op. Falls back to running the stages sequentially inline when team mode is off (or the pool/ranges are trivial).
     var idx = 0
     for (s in stages) {
-        // empty stage (zero range) is a pure barrier — skip the invoke, matching
-        // team_parallel_stages_invoke. (Normally dead: the macro rewrites every direct call.)
         if (s.y > s.x) {
             invoke(l, idx, s.x, s.y)
         }
@@ -621,7 +612,6 @@ class private TeamParallelStagesMacro : AstFunctionAnnotation {
         macro_verify(asc.subexpr is ExprMakeStruct, compiling_program(), call.at, "expecting lambda declaration, ExprMakeStruct")
         var mks = asc.subexpr as ExprMakeStruct
         macro_verify(!(mks._type == null || mks._type.baseType != Type.tStructure), compiling_program(), call.at, "expecting lambda declaration, not a structure")
-        // clone structure type. make fields non-constant, so that they can be cloned
         var stype <- clone_structure(mks._type.structType)
         stype.name := "{stype.name}_team_stages_clone"
         var stype_ptr = stype
@@ -634,7 +624,6 @@ class private TeamParallelStagesMacro : AstFunctionAnnotation {
         let const_clone = pclone.arguments[1]._type.flags.constant
         compiling_module() |> add_function(pclone)
         compiling_module() |> add_structure(stype)
-        // make an @@<function<(var L;L):void> type or @@<function<(var L;var L):void> type - depending on how the capture went
         var ftype = new TypeDecl(at = call.at, baseType = Type.tFunction)
         ftype.firstType = new TypeDecl(at = call.at, baseType = Type.tVoid)
         ftype.argTypes |> emplace_new <| clone_type(sttype)
@@ -642,7 +631,6 @@ class private TeamParallelStagesMacro : AstFunctionAnnotation {
         if (const_clone) {
             ftype.argTypes[1].flags.constant = true
         }
-        // make a team_parallel_stages_invoke call
         var ncall = new ExprCall(at = call.at, name := "team_parallel_stages_invoke")
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[1])
@@ -663,7 +651,6 @@ class private TeamParallelForMacro : AstFunctionAnnotation {
         macro_verify(asc.subexpr is ExprMakeStruct, compiling_program(), call.at, "expecting lambda declaration, ExprMakeStruct")
         var mks = asc.subexpr as ExprMakeStruct
         macro_verify(!(mks._type == null || mks._type.baseType != Type.tStructure), compiling_program(), call.at, "expecting lambda declaration, not a structure")
-        // clone structure type. make fields non-constant, so that they can be cloned
         var stype <- clone_structure(mks._type.structType)
         stype.name := "{stype.name}_team_pfor_clone"
         var stype_ptr = stype
@@ -676,7 +663,6 @@ class private TeamParallelForMacro : AstFunctionAnnotation {
         let const_clone = pclone.arguments[1]._type.flags.constant
         compiling_module() |> add_function(pclone)
         compiling_module() |> add_structure(stype)
-        // make an @@<function<(var L;L):void> type or @@<function<(var L;var L):void> type - depending on how the capture went
         var ftype = new TypeDecl(at = call.at, baseType = Type.tFunction)
         ftype.firstType = new TypeDecl(at = call.at, baseType = Type.tVoid)
         ftype.argTypes |> emplace_new <| clone_type(sttype)
@@ -684,7 +670,6 @@ class private TeamParallelForMacro : AstFunctionAnnotation {
         if (const_clone) {
             ftype.argTypes[1].flags.constant = true
         }
-        // make a team_parallel_for_invoke call
         var ncall = new ExprCall(at = call.at, name := function_name)
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[1])

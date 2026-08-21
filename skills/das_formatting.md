@@ -2,7 +2,7 @@
 
 After creating or modifying any `.das` file that is part of the project (daslib modules, tutorials, tests, etc.), run the source formatter on it. Do NOT format temporary/scratch files that will be deleted.
 
-**Formatter:** MCP `format_file` tool (calls `daslib/das_source_formatter` directly). By default it ALSO strips comments file-wide — kept set: leading header block, `//!` docs, `//fmt:` directives, `nolint` suppressions; fail-closed (a strip must pass compile_check or the file is restored). For tutorials and examples, where prose carries the lesson, pass `keep_comments='true'`.
+**Formatter:** MCP `format_file` tool (calls `daslib/das_source_formatter` directly). Comment policy comes from the file's folder: each `[format]` key is taken from the nearest `.lint_config` that declares it, and keys cascade independently up to the `.git` root. `force_clean_comments = true` also strips comments file-wide, keeping only the set `skills/comment_style_hygiene.md` defines; fail-closed (a strip must pass compile_check or the file is restored). Teaching folders (`tutorials/`, `examples/`) declare `force_clean_comments = false`; `format_enabled = false` makes the formatter a no-op for that tree (load-bearing fixture layout). There is no per-call override.
 
 **CLI fallback (when the MCP server is unavailable):** the formatter and linter also run as in-tree daslang scripts:
 
@@ -11,7 +11,7 @@ After creating or modifying any `.das` file that is part of the project (daslib 
 
 For a module under `modules/` whose files `require` sibling modules (e.g. `require openai/openai_chat`), pass `-load_module <moduleDir>` before `--` so cross-module requires resolve. The formatter only parses, so it works regardless; lint reports `SKIP … missing prerequisite` for files it can't fully resolve (e.g. examples/tests before the module is registered/installed).
 
-> **Not the converter:** the installed `bin/gen1_to_gen2` binary (CMake target from `utils/gen1-to-gen2/main.cpp`) is the **v1→v2 syntax converter** (flags `-i` / `--tests` / `--semicolon`), not a code formatter. The formatter is the daslang script `utils/das-fmt/dasfmt.das` (flags `--path` / `--verify`) — invoke it through `bin/daslang utils/das-fmt/dasfmt.das -- ...` or the MCP `format_file` tool.
+> **Not the converter:** the installed `bin/gen1_to_gen2` binary is the **v1→v2 syntax converter** (flags `-i` / `--tests` / `--semicolon`), not a code formatter. The formatter is the daslang script `utils/das-fmt/dasfmt.das` (flags `--path` / `--verify`) — invoke it through `bin/daslang utils/das-fmt/dasfmt.das -- ...` or the MCP `format_file` tool.
 
 **What the formatter does and does not do.** It normalizes spacing inside expressions (`if( a>0 )` → `if (a > 0)`, `print( x )` → `print(x)`). It does **not** re-indent: a misindented file is rewritten with its indentation untouched and still passes `--verify`, so it also passes the CI format gate. Indent width is taken from the file itself — inferred from the first indented line, or pinned by a file-level `options indenting = N` (clamped 1..8). Getting indentation right is on you; neither the formatter nor CI will catch it.
 
@@ -25,11 +25,3 @@ For a module under `modules/` whose files `require` sibling modules (e.g. `requi
 4. **Remove the backup** if formatting succeeded: delete `<filename>.das.bak`
 5. **Restore from backup** if formatting broke the file: copy `.das.bak` back over the `.das` file, delete the backup, and report the issue
 
-**When to format:**
-- New `.das` files: tutorials, tests, daslib modules, utilities
-- Modified `.das` files: after any edits to existing project files
-
-**When NOT to format:**
-- Temporary/scratch files that will be deleted immediately
-- Files you are only reading, not modifying
-- C++ source files, RST docs, Python scripts, etc. (only `.das` files)

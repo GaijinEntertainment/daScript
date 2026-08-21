@@ -159,7 +159,6 @@ class TypeMacroMacro : AstFunctionAnnotation {
                 if (!(find_arg(ann.arguments, "patched") is nothing)) return true
             }
         }
-        // we expect at least 2 arguments
         if (length(func.arguments) < 2) {
             errors := "expecting at least 2 argumentst (macroArgument: TypeDeclPtr, passArgument: TypeDeclPtr)"
             return false
@@ -173,7 +172,6 @@ class TypeMacroMacro : AstFunctionAnnotation {
         var body = cvtFn.body as ExprBlock
         body.list |> clear
         var retCall = qmacro($c(func.name)(td, passT))
-        // allowed are basic types (int, float, string, @@function etc) and TypeDeclPtr
         for (ai in range(2, length(func.arguments))) {
             let macroArgIndex = ai - 1
             assume argType = func.arguments[ai]._type
@@ -351,61 +349,30 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
     //! This one converts function into a type macro that uses template arguments.
     //! For example [typemacro_template(TFlatHashTable)] def makeFlatHashTable ( macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashFunctionName : string) : TypeDeclPtr { ... }
     //! We generate the body that handles template argument inference and instantiation.
-    /* LIKE THIS:
-        var template_type = typeinfo ast_typedecl(type<TFlatHashTable>)
-        var inscope template_arguments <- [
-            TypeMacroTemplateArgument(name="KeyType",  argument_type = clone_type(KeyType)),
-            TypeMacroTemplateArgument(name="ValueType", argument_type = clone_type(ValueType))
-        ]
-        var extra_template_arguments <- [
-            ("hashFunctionName", hashFunctionName)
-        ]
-        // code bellow can be auto-generated
-        if (passArgument != null) {
-            return null if (!is_typemacro_template_instance(passArgument, template_type, extra_template_arguments))
-            return null if (!infer_struct_aliases(passArgument.structType, template_arguments))
-            return infer_template_types(passArgument, template_arguments)
-        } else {
-            return null if (!verify_arguments(template_arguments))
-            var struct_name = template_structure_name(template_type.structType, template_arguments, extra_template_arguments)
-            var existing_struct = compiling_program().find_unique_structure(struct_name)
-            return new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = template_type.at) if (existing_struct != null)
-            var resType = qmacro_template_class(struct_name, type<TFlatHashTable>)
-            make_typemacro_template_instance(resType.structType, template_type.structType, extra_template_arguments)
-            add_structure_aliases(resType.structType, template_arguments)
-            return resType
-        }
-    */
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
-        // we expect at least 2 arguments
         if (length(func.arguments) < 2) {
             errors := "expecting at least 2 arguments (macroArgument: TypeDeclPtr, passArgument: TypeDeclPtr)"
             return false
         }
-        // expect one and only one unique annotation argument
         if (length(args) != 1) {
             errors := "expecting [typemacro_template(TemplateTypeName)]"
             return false
         }
         return true
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool { // nolint:STYLE038 — pre-existing typemacro patch pass; sequential AST build, no free-standing seam
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_template_function") {
                 if (!(find_arg(ann.arguments, "patched") is nothing)) return true
             }
         }
-        // lets get the template type name
         let template_type_name = string(args[0].name)
-        // we append to the existing function body
         var body = func.body as ExprBlock
         body.list.clear()
-        // add template_type
         var aliasT = new TypeDecl(at = func.at, baseType = Type.alias, alias := template_type_name)
         body.list |> emplace_new <| qmacro_expr() {
             var template_type = typeinfo ast_typedecl(type<$t(aliasT)>)
         }
-        // we need to build template arguments list
         var mk_array_expr = new ExprMakeArray(at = func.at, makeType = new TypeDecl(baseType = Type.autoinfer))
         for (i in range(2, length(func.arguments))) {
             assume argType = func.arguments[i]._type
@@ -421,7 +388,6 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
         body.list |> emplace_new <| qmacro_expr() {
             var template_arguments <- to_array_move($e(mk_array_expr))
         }
-        // we need to build extra arguments list
         var mk_extra_array_expr = new ExprMakeArray(at = func.at, makeType = new TypeDecl(baseType = Type.autoinfer))
         for (i in range(2, length(func.arguments))) {
             assume argType = func.arguments[i]._type
@@ -443,7 +409,6 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
                 var inscope extra_template_arguments <- to_array_move($e(mk_extra_array_expr))
             }
         }
-        // now we add boilerplate
         body.list |> emplace_new <| qmacro_block() {
             if (passArgument != null) {
                 return null if (!is_typemacro_template_instance(passArgument, template_type, extra_template_arguments))
@@ -460,7 +425,6 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
                 return resType
             }
         }
-        // mark it as patched
         astChanged = true
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_template_function") {
@@ -550,9 +514,7 @@ class TemplateTuple : AstStructureAnnotation {
         }
         let typeMacroFunctionName = string(st.name)
         let nFields = length(st.fields)
-        // Alias TypeDecl for the source struct — at typemacro-execution time ``typeinfo ast_typedecl(type<$t(aliasT)>)`` resolves through the module-scoped alias to the source struct, giving us its field list (with template aliases like ``T`` / ``array<T>`` preserved).
         var aliasT = new TypeDecl(at = st.at, baseType = Type.alias, alias := string(st.name))
-        // Per-field argName checks — guard the generic path before the recursive unifier runs.
         var perFieldArgNameChecks : array<ExpressionPtr>
         for (i, fld in iter_range(st.fields), st.fields) {
             let fname = string(fld.name)
@@ -562,7 +524,6 @@ class TemplateTuple : AstStructureAnnotation {
                 }
             })
         }
-        // Rules-block statements — substitute each template-arg alias (``T``, ``E``, ...) with the runtime arg. The same rules drive both paths: in the concrete path the runtime arg is a fully resolved type (``int``), and in the generic path it's ``auto(<caller-name>)`` — exactly the binding-slot the recursive unifier (``inferGenericType`` / ``updateAliasMap``) needs.
         var rulesStmts <- [for (an in argNames); qmacro_expr() {
             rules |> replaceTypeWithTypeDecl($v(an), clone_type($i(an)));
         }]
@@ -578,7 +539,6 @@ class TemplateTuple : AstStructureAnnotation {
                     return null
                 }
                 $b(perFieldArgNameChecks)
-                // Build (argument_type, inferred_type) pairs from the source struct's fields and let ``infer_template_types`` run the standard unifier loop. ``apply_template`` substitutes each alias (``T``, ``E``, ...) with the runtime arg — concrete type when caller passed one, ``auto(<caller-name>)`` in generic context. Either form is what ``infer_template_types`` expects in ``argument_type``.
                 var src_type_g = typeinfo ast_typedecl(type<$t(aliasT)>)
                 var src_g = src_type_g.structType
                 var template_arguments : array<TypeMacroTemplateArgument>
@@ -594,7 +554,6 @@ class TemplateTuple : AstStructureAnnotation {
                 }
                 return <- infer_template_types(passArgument, template_arguments)
             }
-            // Concrete path: walk the source struct's fields and substitute template aliases with the runtime args via templates_boost's existing TypeDecl visitor — handles array<T>, tuple<int; T>, etc.
             var src_type = typeinfo ast_typedecl(type<$t(aliasT)>)
             var src = src_type.structType
             var tt = new TypeDecl(baseType = Type.tTuple, at = macroArgument.at)
@@ -628,7 +587,6 @@ def private tsi_method_name(func : FunctionPtr) : string {
 
 [macro_function]
 def private tsi_bind_aliases(st : StructurePtr; var rules : Template) {
-    // instance aliases become rules; every other name is infer's to resolve (or a later macro's to supply)
     st |> for_each_structure_alias() $(var td) {
         rules |> replaceTypeWithTypeDecl(string(td.alias)) <| clone_type(td)
     }
@@ -667,12 +625,11 @@ def private tsi_bind_calls(var st : StructurePtr; temMethods : array<FunctionPtr
         }
         var callee = ""
         if (!tsi_callee_name(f.init, callee, errors)) return false
-        // bare spelling only, by design: `_::slot` / `__::slot` keep normal `_`/`__` resolution — the pinned escape to the real function
         rules |> renameCall(slot, callee)
         callIdx |> push(i)
     }
     for (i in range(length(callIdx))) {
-        st.fields |> erase(callIdx[length(callIdx) - 1 - i]) // reverse keeps indices valid
+        st.fields |> erase(callIdx[length(callIdx) - 1 - i])
     }
     return true
 }
@@ -680,7 +637,6 @@ def private tsi_bind_calls(var st : StructurePtr; temMethods : array<FunctionPtr
 [macro_function]
 def private tsi_is_const_init(e : ExpressionPtr) : bool {
     if (is_expr_const(e)) return true
-    // a signed literal (`-1`) is still ExprOp1 over the constant this early, pre-fold
     if (e is ExprOp1) {
         let op1 = e as ExprOp1
         return (op1.op == "-" || op1.op == "+") && is_expr_const(op1.subexpr)
@@ -705,7 +661,7 @@ def private tsi_bind_constants(var st : StructurePtr; var rules : Template; var 
         constIdx |> push(i)
     }
     for (i in range(length(constIdx))) {
-        st.fields |> erase(constIdx[length(constIdx) - 1 - i]) // reverse keeps indices valid
+        st.fields |> erase(constIdx[length(constIdx) - 1 - i])
     }
     return true
 }
@@ -736,7 +692,7 @@ def private tsi_apply_gates(var st : StructurePtr; consts : table<string; bool>;
         }
     }
     for (i in range(length(gateIdx))) {
-        st.fields |> erase(gateIdx[length(gateIdx) - 1 - i]) // reverse keeps indices valid
+        st.fields |> erase(gateIdx[length(gateIdx) - 1 - i])
     }
     return true
 }
@@ -747,7 +703,6 @@ def private tsi_stamp_methods(var st : StructurePtr; tem : StructurePtr; temMeth
     let temName = string(tem.name)
     let instName = string(st.name)
     var mod = compiling_module()
-    // both spellings: inherited method-pointer field inits hold module-qualified @@_::Tem`m
     for (func in temMethods) {
         let fn = string(func.name)
         let mname = tsi_method_name(func)
@@ -756,7 +711,6 @@ def private tsi_stamp_methods(var st : StructurePtr; tem : StructurePtr; temMeth
     }
     for (func in temMethods) {
         let mname = tsi_method_name(func)
-        // skip ctor + '__finalize (the instance parser already made its own); instance-authored methods win
         if (mname == temName || func.name == "{temName}'__finalize" || key_exists(ownMethods, mname)) {
             continue
         }
@@ -773,7 +727,6 @@ def private tsi_stamp_methods(var st : StructurePtr; tem : StructurePtr; temMeth
             errors := "[template_struct_instance] can't add method {instName}`{mname}"
             return false
         }
-        // run annotation applies (parser skips macro-added fns): re-add applying decls to the back, drop inert front copies
         let nann = fc.annotations |> length()
         for (i in range(nann)) {
             fc |> add_function_annotation(fc.annotations[i])
@@ -792,7 +745,6 @@ def private tsi_normalize_fields(var st : StructurePtr; var rules : Template) {
         if (f.init != null) {
             f.init = apply_template(rules, f.at, clone_expression(f.init))
         }
-        // the generated derived-class __finalize (cast<auto> init + parentType) resolves only through a live parent — we cut it, so normalize to the parentless shape
         f.flags.parentType = false
         if (f.name == "__finalize" && f.init != null && f.init is ExprCast) {
             let c = f.init as ExprCast
@@ -809,7 +761,7 @@ class TemplateStructInstance : AstStructureAnnotation {
     //! Put ``[|> template_struct_instance]`` on the template itself so every instance inherits the reifier ahead of its own annotations. Names the instance leaves unbound are left to the compiler: module types resolve on their own, a later macro (e.g. a ``[dirty_infer_macro]``) may still supply a ``typedef``, and a genuinely missing one surfaces as an undefined-type error in the stamped code.
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (st.flags.isTemplate) {
-            return true // [|> ...] fires on the template itself: nothing to reify
+            return true
         }
         if (st.parent == null || !st.parent.flags.isTemplate) {
             errors := "[template_struct_instance] {st.name} must derive from a struct template or a class template"
@@ -832,7 +784,6 @@ class TemplateStructInstance : AstStructureAnnotation {
         for (func in instMethods) {
             ownMethods |> insert(tsi_method_name(func))
         }
-        // no inscope: implicit delete of the lambda-holding Template needs unsafe; macro contexts free wholesale (ast_match pattern)
         var rules : Template
         var instType = new TypeDecl(at = st.at, baseType = Type.tStructure, structType = st)
         rules |> replaceStructWithTypeDecl(tem) <| clone_type(instType)
@@ -846,11 +797,10 @@ class TemplateStructInstance : AstStructureAnnotation {
             return false
         }
         for (func in instMethods) {
-            // constants + aliases substitute inside instance-authored bodies too
             func.body = apply_template(rules, func.at, func.body, false)
         }
         tsi_normalize_fields(st, rules)
-        st.parent = tem.parent // cut the template out of the ancestry, keep its base (if any)
+        st.parent = tem.parent
         return true
     }
 }

@@ -156,9 +156,6 @@ def private is_json_ptr_value(td : TypeDeclPtr) {
 }
 
 
-// replacing ExprIsVariant(value,name) => ExprIsVariant(value.value,name)
-// replacing ExprAsVariant(value,name) => ExprAsVariant(value.value,name)
-// if value is json::JsonValue?
 [variant_macro(name="better_json")]
 class private BetterJsonMacro : AstVariantMacro {
     //! This macro is used to implement `is json_value` and `as json_value` runtime checks.
@@ -400,8 +397,6 @@ def from_JV(v : JsonValue const explicit?; anything : table< auto(KT); auto(VT) 
     unsafe {
         let tab & = v.value as _object
         for (k, vv in keys(tab), values(tab)) {
-            // VT can be scalar or struct/table — keep from_JV uniform; ?? has
-            // no overload for non-scalar VT.
             move_to_ref(ret[k], _::from_JV(vv, type<VT -&>))  // nolint:STYLE020,LINT019 - fires only in downstream instantiations
         }
     }
@@ -446,7 +441,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
     //! Parse a JSON value and return the corresponding value of any type.
     //! This is the main dispatch function that handles various types.
     static_if (typeinfo is_dim(anything)) {
-        var ret : TT -const -&   // TT IS the matched fixed-array type
+        var ret : TT -const -&
         if (v == null || !(v.value is _array)) return <- ret
         unsafe {
             let arr & = v.value as _array
@@ -527,9 +522,6 @@ def JV(value : auto(TT)) : JsonValue? { // nolint:STYLE038 — flat static_if di
         return _::JV(arr)
     }
     static_if (typeinfo typename(value) == "json::JsonValue?" || typeinfo typename(value) == "json::JsonValue? const") {
-        // Pass-through: JsonValue? IS a JsonValue?. Const-strip the pointer
-        // so callers walking const containers (apply on a const struct/tuple
-        // hands fields as const) round-trip cleanly.
         unsafe {
             return reinterpret<JsonValue?>(value)
         }
@@ -543,9 +535,9 @@ def JV(value : auto(TT)) : JsonValue? { // nolint:STYLE038 — flat static_if di
         var map : table<string; JsonValue?>
         apply(value) $(name : string; field; annotations) {
             static_if (typeinfo is_function(field)) {
-                pass // skip functions
+                pass
             } static_elif (typeinfo is_void_pointer(field)) {
-                pass // skip void?
+                pass
             } static_elif (typeinfo is_pointer(field)) {
                 if (field != null) {
                     static_let("{typeinfo typename(type<TT-const-&>)}`{name}") {
@@ -567,10 +559,8 @@ def JV(value : auto(TT)) : JsonValue? { // nolint:STYLE038 — flat static_if di
                     fieldState <- parse_json_annotation(name, annotations)
                     fieldStateParsed = true
                 }
-                // No `return` to skip/replace a field: a `return` in the apply block routes the whole walk to the slow per-field invoke fallback (PR #3008). Pivot enum/string handling on a static type guard with an explicit default `else`, and gate @optional with `if (!skip)`, so the block stays return-free and inlines.
                 var skip = false   // nolint:LINT003,LINT019 — written only in static_if branches; some instantiations write, some don't
                 if (fieldState.optional) {
-                    // skip @optional fields at default (zero) value, matching sprint_json behavior
                     static_if (typeinfo is_string(field)) {
                         skip = empty(field)
                     } static_elif (typeinfo is_array(field)) {
@@ -581,8 +571,6 @@ def JV(value : auto(TT)) : JsonValue? { // nolint:STYLE038 — flat static_if di
                         skip = field == null
                     } else {
                         static_if (typeinfo is_workhorse(field)) {
-                            // bool path uses `!field` (avoids STYLE018 on `bool == false` after
-                            // generic instantiation); numeric workhorses keep the generic-zero compare.
                             static_if (typeinfo stripped_typename(field) == "bool") {
                                 skip = !field
                             } else {
@@ -592,7 +580,7 @@ def JV(value : auto(TT)) : JsonValue? { // nolint:STYLE038 — flat static_if di
                     }
                 }
                 if (!skip) {
-                    if (fieldState.enumAsInt) {     // we only need to handle it as we are writing out, reading handles it at the enum level
+                    if (fieldState.enumAsInt) {
                         static_if (typeinfo is_enum(field)) {
                             let fieldStateEnumValue : int = int(field)
                             map |> insert(fieldState.argName, _::JV(fieldStateEnumValue))
@@ -628,9 +616,9 @@ def JV(value : auto(TT)) : JsonValue? { // nolint:STYLE038 — flat static_if di
         var map : table<string; JsonValue?>
         apply(value) $(name : string; field) {
             static_if (typeinfo is_function(field)) {
-                pass // skip functions
+                pass
             } static_elif (typeinfo is_void_pointer(field)) {
-                pass // skip void?
+                pass
             } static_elif (typeinfo is_pointer(field)) {
                 if (field != null) {
                     map |> insert(name, _::JV(field))
@@ -716,9 +704,6 @@ def JV(val1; val2; val3; val4; val5; val6; val7; val8; val9; val10) : JsonValue?
     return _::JV([ _::JV(val1), _::JV(val2), _::JV(val3), _::JV(val4), _::JV(val5), _::JV(val6), _::JV(val7), _::JV(val8), _::JV(val9), _::JV(val10)])
 }
 
-// ===== linq_fold JSON source =====
-
-// By-name materialize of one JSON object into a struct TT: read each top-level field by name (the from_json query contract — like from_xml_node), so it never calls an overridable whole-row from_JV.
 [unused_argument(t)]
 def from_json_row(jv : JsonValue const explicit?; t : auto(TT)) : TT {
     //! Materialize one JSON object into *TT* **by name** — the per-element worker behind ``from_json``.
@@ -731,13 +716,12 @@ def from_json_row(jv : JsonValue const explicit?; t : auto(TT)) : TT {
         }
         return <- ret
     } static_elif (typeinfo is_string(type<TT>)) {
-        return jv.value ?as _string ?? default<TT -const>   // ?as: one .value access, payload type == TT
+        return jv.value ?as _string ?? default<TT -const>
     } static_elif (typeinfo stripped_typename(type<TT>) == "bool") {
         return jv.value ?as _bool ?? default<TT -const>
     } static_elif (typeinfo is_enum(type<TT>)) {
-        return from_JV(jv, type<TT>)   // enum: string-name or ordinal dispatch lives in from_JV
+        return from_JV(jv, type<TT>)
     } static_elif (typeinfo is_numeric(type<TT>)) {
-        // jv is non-null here (read_json_field / the from_json generator both guarantee it), so read the number straight off the variant with no null guard — inlines null_coalescing[_with_string].
         static_if (typeinfo is_float(type<TT>) || typeinfo is_double(type<TT>)) {
             if (jv.value is _number) return TT(jv.value as _number)    // nolint:PERF020,LINT019 redundant for TT=double; fires only in downstream instantiations
             if (jv.value is _longint) return TT(jv.value as _longint)
@@ -745,12 +729,12 @@ def from_json_row(jv : JsonValue const explicit?; t : auto(TT)) : TT {
             if (jv.value is _longint) return TT(jv.value as _longint)  // nolint:PERF020,LINT019 redundant for TT=int64/uint64; fires only in downstream instantiations
             if (jv.value is _number) return TT(jv.value as _number)
             static_if (typeinfo stripped_typename(type<TT>) == "int64" || typeinfo stripped_typename(type<TT>) == "uint64") {
-                if (jv.value is _string) return TT(jv.value as _string)  // 64-bit ints also accept a numeric string
+                if (jv.value is _string) return TT(jv.value as _string)
             }
         }
         return default<TT -const>
     } else {
-        return from_JV(jv, type<TT>)   // dim / array / tuple / variant / custom handled types
+        return from_JV(jv, type<TT>)
     }
 }
 
@@ -770,7 +754,7 @@ def from_json(jv : JsonValue const?; t : type<auto(TT)>) : iterator<TT -const> {
 [constant_expression(key=false)]
 def read_json_field(jv : JsonValue const?; key : string; defv : auto(TT)) : TT {
     //! Reads one same-named key of the JSON object *jv* into a *TT* — the field-pruned counterpart of a full by-name materialize, emitted by linq_fold's fused JSON lane. A missing key keeps *defv* (pass the struct field's declared default). The value is converted by name via ``from_json_row``, so a struct field reads *its* fields by name too — never an overridable whole-struct ``from_JV``.
-    let found = unsafe((unsafe(jv ?as _object))?[key])   // value-slot pointer; null if jv is null, not an object, or key absent
+    let found = unsafe((unsafe(jv ?as _object))?[key])
     if (found != null) return from_json_row(*found, type<TT>)
     return defv
 }

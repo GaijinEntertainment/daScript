@@ -31,16 +31,6 @@ def public hash_extra(data) {
     return k64 >>> 32ul
 }
 
-/*
-def public hash_extra(s : string) : uint64 {
-    var h : uint64 = 14695981039346656037ul
-    for (c in s) {
-        h = (h ^ uint64(c)) * 1099511628211ul
-    }
-    return h
-}
-*/
-
 [template_structure(KeyType, ValueType, hashFunction0Name=@@hash0, hashFunction1Name=@@hash_extra)]
 struct template TCuckooHashTable {
     //! Cuckoo hash table using two hash functions for collision resolution.
@@ -298,10 +288,9 @@ struct template TCuckooHashTable {
 
     [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]
     def static operator [] (key : KeyType) : ValueType & {
-        if (data_length > ((mask + 1) >> 1)) {// ((mask+1)*2/3)
+        if (data_length > ((mask + 1) >> 1)) {
             self |> grow()
         }
-        // if its already there
         let firstHash = $c(hashFunction0Name)(key)
         let firstIndex = int(firstHash) & mask
         if (khv[firstIndex].hash == firstHash && khv[firstIndex].key == key) {
@@ -316,7 +305,6 @@ struct template TCuckooHashTable {
                 return khv[secondIndex].value
             }
         }
-        // now, if there is a room to insert
         if (khv[firstIndex].hash == 0ul) {
             khv[firstIndex].hash = firstHash
             khv[firstIndex].key := key
@@ -333,7 +321,6 @@ struct template TCuckooHashTable {
                 return khv[secondIndex].value
             }
         }
-        // now we have to kick out one of the existing keys
         self |> insert(key, default<ValueType>)
         let index = self |> key_index(key)
         unsafe {
@@ -351,7 +338,7 @@ struct template TCuckooHashTable {
         }
         panic("key not found")
         unsafe {
-            return khv[0].value // we never get here due to panic
+            return khv[0].value
         }
     }
 

@@ -80,7 +80,6 @@ class AsyncMacro : AstFunctionAnnotation {
 
             retT.argTypes |> resize(2)
             retT.argTypes[0] = clone_type(func.result)
-            // qmacro_type, not `typeinfo ast_typedecl` - the latter needs infer-time folding
             retT.argTypes[1] = qmacro_type(type<bool>)
         }
 
@@ -88,7 +87,6 @@ class AsyncMacro : AstFunctionAnnotation {
         make_visitor(*astVisitor) $(astVisitorAdapter) {
             visit(func.body, astVisitorAdapter)
         }
-        // gc handles TypeDecl lifetime
         unsafe {
             delete astVisitor
         }
@@ -154,7 +152,6 @@ enum AssignOp {
 
 [macro_function]
 def make_await_yield_step(voidRoutine : bool; retType : TypeDecl?) : ExpressionPtr {
-    // macro-time branch: an `if ($v(voidRoutine))` keeps its dead arm in the generated AST, and without infer-time folding the never-taken `variant type<bool>` arm fails type-check
     if (voidRoutine) {
         return <- qmacro_expr(${ yield true; })
     }
@@ -163,7 +160,6 @@ def make_await_yield_step(voidRoutine : bool; retType : TypeDecl?) : ExpressionP
 
 [macro_function]
 def make_await_assign_step(var lhs : ExpressionPtr; name : string; useMove, useClone : bool) : ExpressionPtr {
-    // same macro-time branch as the yield step: the dead copy arm fails type-check for a non-copyable awaited payload without infer-time folding
     if (useMove) {
         return <- qmacro_expr(${ $e(lhs) <- $i(name) as res; })
     }
