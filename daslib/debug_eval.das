@@ -90,6 +90,7 @@ struct TokenStream {
     stream : array<Token> //! Buffered array of tokens.
     errors : array<string> //! Accumulated parsing errors.
     names  : table<string; Result> //! Named variable lookup table for expression evaluation.
+    shortCircuited : bool //! True while parsing an operand a logical operator already decided without.
 }
 
 def TokenStream(st : string) {
@@ -134,7 +135,7 @@ def InvalidResult {
 }
 
 def error(var st : TokenStream; error : string) {
-    st.errors |> push(error)
+    if (!st.shortCircuited) st.errors |> push(error)
     return InvalidResult()
 }
 
@@ -458,42 +459,6 @@ def expr_unary(var st : TokenStream) : Result {
     return expr_at(st)
 }
 
-def expr_mul_div(var st : TokenStream) : Result {
-    var leftValue = expr_unary(st)
-    let token = token(st)
-    match (token) {
-        if (Token(punkt = '*')) {
-            return Result(st |> getI(leftValue) * st |> getI(expr_mul_div(st)))
-        }
-        if (Token(punkt = '/')) {
-            let rightValue = st |> getI(expr_mul_div(st))
-            if (rightValue == 0l) return st |> error("runtime error, division by 0")
-            return Result(st |> getI(leftValue) * rightValue)
-        }
-        if (_) {
-            unput(st, token)
-        }
-    }
-    return <- leftValue
-}
-
-def expr_add_sub(var st : TokenStream) : Result {
-    var leftValue = expr_mul_div(st)
-    let token = token(st)
-    match (token) {
-        if (Token(punkt = '+')) {
-            return Result(st |> getI(leftValue) + st |> getI(expr_add_sub(st)))
-        }
-        if (Token(punkt = '-')) {
-            return Result(st |> getI(leftValue) - st |> getI(expr_add_sub(st)))
-        }
-        if (_) {
-            unput(st, token)
-        }
-    }
-    return <- leftValue
-}
-
 def try_accept_punkt(var st : TokenStream; punkt : int) {
     let token = token(st)
     if (token ?as punkt ?? 0 != punkt) {
@@ -503,77 +468,180 @@ def try_accept_punkt(var st : TokenStream; punkt : int) {
     return true
 }
 
-def expr_and(var st : TokenStream) : Result {
+def try_accept_punkt_pair(var st : TokenStream; firstPunkt : int; secondPunkt : int) {
+    let first = token(st)
+    if (first ?as punkt ?? 0 != firstPunkt) {
+        unput(st, first)
+        return false
+    }
+    let second = token(st)
+    if (second ?as punkt ?? 0 != secondPunkt) {
+        unput(st, second)
+        unput(st, first)
+        return false
+    }
+    return true
+}
+
+def try_accept_solo_punkt(var st : TokenStream; punkt : int) {
+    let first = token(st)
+    if (first ?as punkt ?? 0 != punkt) {
+        unput(st, first)
+        return false
+    }
+    let second = token(st)
+    unput(st, second)
+    if (second ?as punkt ?? 0 == punkt) {
+        unput(st, first)
+        return false
+    }
+    return true
+}
+
+def expr_mul_div(var st : TokenStream) : Result {
+    var leftValue = expr_unary(st)
+    while (true) {
+        if (try_accept_punkt(st, '*')) {
+            let rightValue = expr_unary(st)
+            leftValue = Result((st |> getI(leftValue)) * (st |> getI(rightValue)))
+        } elif (try_accept_punkt(st, '/')) {
+            let rightValue = expr_unary(st)
+            let divisor = st |> getI(rightValue)
+            if (divisor == 0l) return st |> error("runtime error, division by 0")
+            let dividend = st |> getI(leftValue)
+            if (divisor == -1l) {
+                leftValue = Result(-dividend)
+            } else {
+                leftValue = Result(dividend / divisor)
+            }
+        } else {
+            break
+        }
+    }
+    return <- leftValue
+}
+
+def expr_add_sub(var st : TokenStream) : Result {
+    var leftValue = expr_mul_div(st)
+    while (true) {
+        if (try_accept_punkt(st, '+')) {
+            let rightValue = expr_mul_div(st)
+            leftValue = Result((st |> getI(leftValue)) + (st |> getI(rightValue)))
+        } elif (try_accept_punkt(st, '-')) {
+            let rightValue = expr_mul_div(st)
+            leftValue = Result((st |> getI(leftValue)) - (st |> getI(rightValue)))
+        } else {
+            break
+        }
+    }
+    return <- leftValue
+}
+
+def expr_relational(var st : TokenStream) : Result {
     var leftValue = expr_add_sub(st)
-    if (try_accept_punkt(st, '&')) {
-        if (try_accept_punkt(st, '&')) {
-            return Result((st |> getI(leftValue) & st |> getI(expr_and(st))) != 0l)
+    while (true) {
+        if (try_accept_punkt_pair(st, '<', '=')) {
+            let rightValue = expr_add_sub(st)
+            leftValue = Result((st |> getI(leftValue)) <= (st |> getI(rightValue)))
+        } elif (try_accept_punkt_pair(st, '>', '=')) {
+            let rightValue = expr_add_sub(st)
+            leftValue = Result((st |> getI(leftValue)) >= (st |> getI(rightValue)))
+        } elif (try_accept_punkt(st, '<')) {
+            let rightValue = expr_add_sub(st)
+            leftValue = Result((st |> getI(leftValue)) < (st |> getI(rightValue)))
+        } elif (try_accept_punkt(st, '>')) {
+            let rightValue = expr_add_sub(st)
+            leftValue = Result((st |> getI(leftValue)) > (st |> getI(rightValue)))
         } else {
-            return Result(st |> getI(leftValue) & st |> getI(expr_and(st)))
+            break
         }
     }
     return <- leftValue
 }
 
-def expr_xor(var st : TokenStream) : Result {
-    var leftValue = expr_and(st)
-    if (try_accept_punkt(st, '^')) {
-        if (try_accept_punkt(st, '^')) {
-            return Result((st |> getI(leftValue) ^ st |> getI(expr_xor(st))) != 0l)
+def expr_equality(var st : TokenStream) : Result {
+    var leftValue = expr_relational(st)
+    while (true) {
+        if (try_accept_punkt_pair(st, '=', '=')) {
+            let rightValue = expr_relational(st)
+            leftValue = Result((st |> getT(leftValue)) == (st |> getT(rightValue)))
+        } elif (try_accept_punkt_pair(st, '!', '=')) {
+            let rightValue = expr_relational(st)
+            leftValue = Result((st |> getT(leftValue)) != (st |> getT(rightValue)))
         } else {
-            return Result(st |> getI(leftValue) ^ st |> getI(expr_xor(st)))
+            break
         }
     }
     return <- leftValue
 }
 
-def expr_or(var st : TokenStream) : Result {
-    var leftValue = expr_xor(st)
-    if (try_accept_punkt(st, '|')) {
-        if (try_accept_punkt(st, '|')) {
-            return Result((st |> getI(leftValue) | st |> getI(expr_or(st))) != 0l)
-        } else {
-            return Result(st |> getI(leftValue) | st |> getI(expr_or(st)))
-        }
+def expr_bit_and(var st : TokenStream) : Result {
+    var leftValue = expr_equality(st)
+    while (try_accept_solo_punkt(st, '&')) {
+        let rightValue = expr_equality(st)
+        leftValue = Result((st |> getI(leftValue)) & (st |> getI(rightValue)))
     }
     return <- leftValue
 }
 
-def expr_bool_op(var st : TokenStream) : Result {
-    var leftValue = expr_or(st)
-    let token = token(st)
-    let subtoken = token(st)
-    match (token) {
-        if (Token(punkt = '!') && (subtoken ?as punkt ?? 0 == '=')) {
-            return Result(st |> getT(leftValue) != st |> getT(expr_bool_op(st)))
-        }
-        if (Token(punkt = '=') && (subtoken ?as punkt ?? 0 == '=')) {
-            return Result(st |> getT(leftValue) == st |> getT(expr_bool_op(st)))
-        }
-        if (Token(punkt = '<') && (subtoken ?as punkt ?? 0 == '=')) {
-            return Result(st |> getI(leftValue) <= st |> getI(expr_bool_op(st)))
-        }
-        if (Token(punkt = '<')) {
-            unput(st, subtoken)
-            return Result(st |> getI(leftValue) < st |> getI(expr_bool_op(st)))
-        }
-        if (Token(punkt = '>') && (subtoken ?as punkt ?? 0 == '=')) {
-            return Result(st |> getI(leftValue) >= st |> getI(expr_bool_op(st)))
-        }
-        if (Token(punkt = '>')) {
-            unput(st, subtoken)
-            return Result(st |> getI(leftValue) > st |> getI(expr_bool_op(st)))
-        }
-        if (_) {
-            unput(st, subtoken)
-            unput(st, token)
-        }
+def expr_bit_xor(var st : TokenStream) : Result {
+    var leftValue = expr_bit_and(st)
+    while (try_accept_solo_punkt(st, '^')) {
+        let rightValue = expr_bit_and(st)
+        leftValue = Result((st |> getI(leftValue)) ^ (st |> getI(rightValue)))
+    }
+    return <- leftValue
+}
+
+def expr_bit_or(var st : TokenStream) : Result {
+    var leftValue = expr_bit_xor(st)
+    while (try_accept_solo_punkt(st, '|')) {
+        let rightValue = expr_bit_xor(st)
+        leftValue = Result((st |> getI(leftValue)) | (st |> getI(rightValue)))
+    }
+    return <- leftValue
+}
+
+def expr_logic_and(var st : TokenStream) : Result {
+    var leftValue = expr_bit_or(st)
+    while (try_accept_punkt_pair(st, '&', '&')) {
+        let leftTrue = (st |> getI(leftValue)) != 0l
+        let wasShortCircuited = st.shortCircuited
+        st.shortCircuited = wasShortCircuited || !leftTrue
+        let rightValue = expr_bit_or(st)
+        let bothTrue = leftTrue && ((st |> getI(rightValue)) != 0l)
+        st.shortCircuited = wasShortCircuited
+        leftValue = Result(bothTrue)
+    }
+    return <- leftValue
+}
+
+def expr_logic_xor(var st : TokenStream) : Result {
+    var leftValue = expr_logic_and(st)
+    while (try_accept_punkt_pair(st, '^', '^')) {
+        let rightValue = expr_logic_and(st)
+        let leftTrue = (st |> getI(leftValue)) != 0l
+        leftValue = Result(leftTrue != ((st |> getI(rightValue)) != 0l))
+    }
+    return <- leftValue
+}
+
+def expr_logic_or(var st : TokenStream) : Result {
+    var leftValue = expr_logic_xor(st)
+    while (try_accept_punkt_pair(st, '|', '|')) {
+        let leftTrue = (st |> getI(leftValue)) != 0l
+        let wasShortCircuited = st.shortCircuited
+        st.shortCircuited = wasShortCircuited || leftTrue
+        let rightValue = expr_logic_xor(st)
+        let eitherTrue = leftTrue || ((st |> getI(rightValue)) != 0l)
+        st.shortCircuited = wasShortCircuited
+        leftValue = Result(eitherTrue)
     }
     return <- leftValue
 }
 
 def expr(var st : TokenStream) : Result {
-    return expr_bool_op(st)
+    return expr_logic_or(st)
 }
 
 def public debug_eval(context : table<string; Result>; expr : string) : Result {
