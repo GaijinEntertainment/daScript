@@ -107,6 +107,15 @@ def test_model_spec_views(t : T?) {
             pinned ||= e.name == bench_image_fixture()
         }
         t |> success(pinned, "{bench_image_fixture()} rides a companion list, so every box provisions it")
+        var inscope specs <- model_specs()
+        var seen : table<string>
+        for (s in specs) {
+            for (c in s.companions) {
+                t |> success(!key_exists(seen, c.name), "a companion rides exactly one row's companions: {c.name}")
+                seen |> insert(c.name)
+            }
+        }
+        delete seen
     }
 }
 

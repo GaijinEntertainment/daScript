@@ -115,8 +115,8 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 
 ## Model-free / no-arm tests
 
-A model-free file — one with at least one cell that runs, not skips, with no model present and
-with CPU prefill declared (`DASLLAMA_CPU_PREFILL=1`, which the runner sets for every child) —
+A model-free file — one with at least one cell that runs, not skips, when no model is present
+and `DASLLAMA_CPU_PREFILL=1` is set in the environment (the runner sets it for every child) —
 runs under plain dastest (still `-jit`) or as a set through `run.das -- --suite model-free`,
 the per-PR gate. The `model-free` list in `run.das` is the census of those files; this note is
 the per-file map. A file in a model suite (every suite but `model-free`) is listed in its
@@ -154,9 +154,9 @@ cells, wdec knob pinned OFF per the fixtures section). Runs under plain dastest.
 `test_model_specs.das` — model-free: the model-set table's shape invariants
 (`../performance/model_specs.das`: unique file/display keys, official ⇒ provenance pinned,
 parity-evidence shape), the derived provenance view's invariants (unique names, sha-or-recipe,
-https urls), and the vision pairing view (`mmproj_companion` — found by name, not companion
-position; ≥ 2 official vision rows) plus the pinned image fixture's provenance
-(`bench_image_fixture`).
+https urls), the mmproj pairing lookup (`mmproj_companion` — the companion found by name, not
+by position; ≥ 2 official vision rows), and the pinned image fixture's provenance
+(`bench_image_fixture` rides some spec's companion list).
 `test_parity.das` — suite-less, model-gated: the frozen token-for-token parity gates. ONE
 generic loop drives every evidence-carrying spec of the model-set table through its declared
 pinned arms (evidence is DATA on `ModelSpec.parity` — ids + arms, regenerated via
