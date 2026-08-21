@@ -38,12 +38,9 @@ STYLE024/025 unsafe map ↔ infer's `unsafe_*` rules; `style036_inert_contract` 
 contract clearing. Nothing fails when one side moves alone.
 
 **Weakening the nolint-window tests is a defect** — `tests/lint/test_nolint_suppression.das`
-pins that a string literal, a URL, and a mid-comment `nolint:` do not suppress, and
-`tests/lint/test_stale_nolint.das` pins that a `lint-skip-file` past the header window is
-prose.
-
-**`@nolint` and `nolint:` are recognized only as the first token after `//` or `//!`.**
-A doc comment quoting the spelling would otherwise unlint code silently.
+pins that a string literal, a URL, and a mid-comment `nolint:` do not suppress while a
+first-token directive after `//` or `//!` does, and `tests/lint/test_stale_nolint.das` pins
+that a `lint-skip-file` past the header window is prose.
 
 **`build_lint_macro_disabled` layers four sources in this order: defaults, repo `off`, repo
 `on`, environment.** Env last lets a one-run `DAS_LINT_DISABLE` beat a `CODE = true`.
