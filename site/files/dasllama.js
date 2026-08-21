@@ -660,6 +660,8 @@
         { key: 'threads', label: 'threads', num: true, dim: true,
           get: function (r) { return (r.das && r.das.threads) || 0; },
           cell: function (r) { return r.das && r.das.threads ? String(r.das.threads) : '-'; } },
+        { key: 'size', label: 'size GB', num: true, dim: true, get: function (r) { return r.size; },
+          cell: function (r) { return r.size ? fmt(r.size / 1073741824, 1) : '-'; } },
         { key: 'enc_das', label: 'encode das', num: true, grp: true, grpStart: true,
           get: function (r) { return r.enc_das; }, cell: function (r) { return ms(r.enc_das); } },
         { key: 'enc_ref', label: 'lcpp', num: true, dim: true,
