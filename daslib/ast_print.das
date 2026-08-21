@@ -173,10 +173,7 @@ class PrintVisitor : AstVisitor {
         if (!arg._type.flags.constant) {
             write(*writer, "var ");
         }
-        if (arg.isAccessUnused) {
-            write(*writer, " /*unsued*/ ");
-        }
-        write(*writer, "{arg.name} : {describe([decl=arg._type,extra=extraTypeInfo])}");
+        write_variable_decl(arg);
     }
     def override visitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; last : bool) {
         //! Prints the separator between function arguments.
@@ -198,7 +195,7 @@ class PrintVisitor : AstVisitor {
                     if (arg.annotation |> length != 0) {
                         write(*writer, "[{describe(arg.annotation)}] ");
                     }
-                    if (arg._type.flags.constant) {
+                    if (!arg._type.flags.constant) {
                         write(*writer, "var ");
                     }
                     write(*writer, "{arg.name} : {describe([decl=arg._type,extra=extraTypeInfo])}");
@@ -256,7 +253,7 @@ class PrintVisitor : AstVisitor {
         //! Prints the let or var keyword for a variable declaration.
         var isLet = true;
         for (pv in expr.variables) {
-            if (pv._type != null && pv._type.flags.constant) {
+            if (pv._type != null && !pv._type.flags.constant) {
                 isLet = false;
                 break;
             }

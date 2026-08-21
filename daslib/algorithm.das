@@ -159,7 +159,7 @@ def upper_bound(a : array<auto(TT)>; val : TT const -&) {
     return upper_bound(a, 0, length(a), val)
 }
 
-def upper_bound(a : array<auto(TT)>; f, l : int; value : auto(QQ); less : block<(a : TT const -&, b : QQ) : bool>) {
+def upper_bound(a : array<auto(TT)>; f, l : int; value : auto(QQ); less : block<(a : QQ, b : TT const -&) : bool>) {
     //! Returns the index of the first element in the range [f, l) for which less(val, element) returns true, or l if no such element is found.
     assert(f >= 0 && f <= l, "upper bound first out of range")
     assert(l >= f && l <= length(a), "upper bound last out of range")
@@ -178,7 +178,7 @@ def upper_bound(a : array<auto(TT)>; f, l : int; value : auto(QQ); less : block<
     return first
 }
 
-def upper_bound(a : array<auto(TT)>; value : auto(QQ); less : block<(a : TT const -&, b : QQ) : bool>) {
+def upper_bound(a : array<auto(TT)>; value : auto(QQ); less : block<(a : QQ, b : TT const -&) : bool>) {
     //! Returns the index of the first element in the array for which less(val, element) returns true, or length(a) if no such element is found.
     return upper_bound(a, 0, length(a), value, less)
 }

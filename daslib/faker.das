@@ -347,12 +347,12 @@ def public is_leap_year(year : uint) {
 }
 
 def public week_day(year, month, day : uint) {
-    //! Returns week day for given date.
+    //! Returns week day for given date. `month` and `day` are 1-based; the result counts from 0 = Sunday.
     return week_day(int(year), int(month), int(day))
 }
 
 def public week_day(year, month, day : int) {
-    //! Returns week day for given date.
+    //! Returns week day for given date. `month` and `day` are 1-based; the result counts from 0 = Sunday.
     static_let() {
         let offset <- [ 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
     }
@@ -364,7 +364,7 @@ def public week_day(year, month, day : int) {
     var dayOfWeek  = 5
     dayOfWeek += (aux + afterFeb) * 365
     dayOfWeek += aux / 4 - aux / 100 + (aux + 100) / 400
-    dayOfWeek += offset[month] + (day - 1)
+    dayOfWeek += offset[month - 1] + (day - 1)
     dayOfWeek %= 7
     return dayOfWeek
 }
@@ -384,6 +384,6 @@ def public date(var faker : Faker) {
         max_days = 29u
     }
     day = 1u + (day % max_days)
-    let dow = week_day(year, month, day)
+    let dow = week_day(year, month + 1u, day)
     return "{g_days[dow]}, {g_months[month].name} {int(day)}, {int(year)}"
 }
