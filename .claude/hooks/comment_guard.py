@@ -398,11 +398,14 @@ def main():
     else:
         return 0
     is_write = data.get("tool_name") == "Write"
-    if is_write:
-        viol = violations(str(tool_input.get("content") or ""), is_das, True)
-    else:
-        viol = edit_violations(str(tool_input.get("old_string") or ""),
-                               str(tool_input.get("new_string") or ""), is_das)
+    try:
+        if is_write:
+            viol = violations(str(tool_input.get("content") or ""), is_das, True)
+        else:
+            viol = edit_violations(str(tool_input.get("old_string") or ""),
+                                   str(tool_input.get("new_string") or ""), is_das)
+    except Exception:
+        return 0
     if not viol:
         return 0
     try:

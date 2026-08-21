@@ -110,8 +110,12 @@ class TestScanner(unittest.TestCase):
         self.assertEqual(comments("if (c == '\\'') {} // t"), [(1, "// t", False)])
 
     def test_lone_apostrophe_does_not_mask(self):
-        got = comments("its = 1 // don't and won't")
+        got = comments("who's = 1 // don't and won't")
         self.assertEqual(got, [(1, "// don't and won't", False)])
+
+    def test_char_span_bound_keeps_comment_after_apostrophe(self):
+        got = comments("a = b'c // note about d'", is_das=False)
+        self.assertEqual(got, [(1, "// note about d'", False)])
 
     def test_apostrophe_before_block_close(self):
         got = comments("/* it's */ let c = 'x' // note\n// second", is_das=True)
@@ -179,8 +183,39 @@ class TestScanner(unittest.TestCase):
         self.assertEqual(comments('auto s = LR"x(a // b)x";', is_das=False), [])
 
     def test_raw_string_overlong_delimiter_falls_back(self):
-        src = 'auto s = R"aaaaaaaaaaaaaaaaaaaa(x)aaaaaaaaaaaaaaaaaaaa";'
+        d = "a" * 20
+        src = 'auto s = R"{}(x " y){}"; // tail'.format(d, d)
         self.assertEqual(comments(src, is_das=False), [])
+
+    def test_reader_bang_form(self):
+        self.assertEqual(comments("var x <- %foo!a//b%%", is_das=True), [])
+
+    def test_c_string_escaped_quote_then_int(self):
+        src = 'const char* s = "a\\" // x"; int y;'
+        self.assertEqual(comments(src, is_das=False), [])
+
+    def test_das_string_close_brace_literal(self):
+        self.assertEqual(comments('let s = "a}b" // t', is_das=True), [(1, "// t", False)])
+
+    def test_interpolation_depth_across_lines(self):
+        src = 'let s = "{ f(\n"a//b") } tail // not comment"\nz() // real'
+        self.assertEqual(comments(src, is_das=True), [(3, "// real", False)])
+
+    def test_interpolation_nested_across_lines(self):
+        src = 'let s = "{f("abc\ndef")} tail"\nx() // real'
+        self.assertEqual(comments(src, is_das=True), [(3, "// real", False)])
+
+    def test_c_string_open_line_start_resets(self):
+        src = 'printf("oops \\\nstill open\n// next comment'
+        self.assertEqual(comments(src, is_das=False), [(3, "// next comment", True)])
+
+    def test_c_string_three_line_continuation(self):
+        src = '"a \\\nb // not comment \\\nc // still not";'
+        self.assertEqual(comments(src, is_das=False), [])
+
+    def test_lone_cr_is_a_line_break(self):
+        src = "// header\rint x;\rint y; // narr\r"
+        self.assertEqual([t for _, t in cg.violations(src, False, True)], ["// narr"])
 
     def test_control_chars_do_not_split_lines(self):
         got = comments("// a\x0cfeed /* block\n}", is_das=False)
@@ -196,8 +231,15 @@ class TestScanner(unittest.TestCase):
         self.assertEqual(comments("case 1://Pure RLE", is_das=False),
                          [(1, "//Pure RLE", False)])
 
-    def test_url_needs_tail(self):
-        self.assertEqual(comments("x: // note", is_das=False), [(1, "// note", False)])
+    def test_url_needs_nonspace_tail(self):
+        self.assertEqual(comments("done:// cleanup", is_das=False),
+                         [(1, "// cleanup", False)])
+
+    def test_url_candidate_at_eol_is_comment(self):
+        self.assertEqual(comments("x = ab://", is_das=False), [(1, "//", False)])
+
+    def test_no_colon_before_slashes_is_comment(self):
+        self.assertEqual(comments("value//keep", is_das=False), [(1, "//keep", False)])
 
 
 class TestHeaderExemption(unittest.TestCase):
@@ -251,6 +293,13 @@ class TestHeaderExemption(unittest.TestCase):
     def test_comment_only_file_is_all_header(self):
         self.assertEqual(cg.violations("// a\n\n// b\n/* c */\n", True, True), [])
 
+    def test_indented_header_stays_exempt(self):
+        self.assertEqual(cg.violations("    // a\n    // b\ndef f() {}", True, True), [])
+
+    def test_string_interior_line_counts_as_code(self):
+        src = 'options gen2 = "abc\ndef\nrequire x"\n// after'
+        self.assertEqual([t for _, t in cg.violations(src, True, True)], ["// after"])
+
     def test_trailing_comment_on_preamble_line_flagged(self):
         src = "options gen2\nrequire daslib/fio // for fopen\ndef f() {}\n"
         self.assertEqual([t for _, t in cg.violations(src, True, True)], ["// for fopen"])
@@ -302,6 +351,9 @@ class TestKept(unittest.TestCase):
 
     def test_c_empty_block_flagged(self):
         self.assertEqual(len(cg.violations("int x;\n/**/\n", False, False)), 1)
+
+    def test_c_bare_doxygen_open_at_eof_kept_no_crash(self):
+        self.assertEqual(cg.violations("int x;\n/**", False, False), [])
 
     def test_das_doxygen_block_flagged(self):
         self.assertEqual(len(cg.violations("def f() {}\n/*! doc-ish */\n", True, True)), 1)
@@ -476,6 +528,15 @@ class TestEndToEnd(unittest.TestCase):
         rc, err, _ = run_hook(write_payload("a.das", "x = 1 // от так\n"))
         self.assertEqual(rc, 2)
         self.assertIn("от так", err)
+
+    def test_unicode_survives_legacy_codepage(self):
+        env = dict(os.environ, PYTHONIOENCODING="cp1252")
+        proc = subprocess.run(
+            [sys.executable, GUARD],
+            input=json.dumps(write_payload("a.das", "x = 1 // от так\n")).encode("utf-8"),
+            capture_output=True, timeout=30, env=env)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("от так".encode("utf-8"), proc.stderr)
 
 
 class TestCorpus(unittest.TestCase):
