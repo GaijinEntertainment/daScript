@@ -4222,7 +4222,7 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
             write(writer, "namespace das \{\n");
             write(writer, "namespace {program.thisNamespace} \{\n");
             build_string() $(tmp_writer) {
-                let marker_vis = new NoAotMarker();
+                var marker_vis = new NoAotMarker();
                 make_visitor(*marker_vis) $(adapter_marker) {
                     visit(program, adapter_marker);
                 }
@@ -4267,6 +4267,9 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                     delete cpp_aot.helper.helper
                     delete cpp_aot.collector
                     delete cpp_aot
+                    delete flags
+                    delete pmarker
+                    delete marker_vis
                 }
                 fail_on_aot_emit_error(program)
             }
@@ -4298,7 +4301,7 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
         let (modules_str, noAotModule) = getRequiredModulesFor(program)
         if ((program._options |> find_arg("no_aot") ?as tBool ?? false) || noAotModule) return
         build_string() $(tmp_writer) {
-            let marker_vis = new NoAotMarker();
+            var marker_vis = new NoAotMarker();
             make_visitor(*marker_vis) $(adapter_marker) {
                 visit(program, adapter_marker);
             }
@@ -4344,6 +4347,9 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
                 delete cpp_aot.helper.helper
                 delete cpp_aot.collector
                 delete cpp_aot
+                delete flags
+                delete pmarker
+                delete marker_vis
             }
             fail_on_aot_emit_error(program)
             let begin_pos = find(full_output, AOT_FUNC_BEGIN)
