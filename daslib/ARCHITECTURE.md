@@ -246,6 +246,19 @@ an entry lands here only when no name, shape, or test can carry it.
 - **The copy-prop/CSE walks stay O(size)** — one name-to-statement index, one structural
   walk; never materialize a `string` per `ExprVar` in a visitor callback (O(n^2) persistent
   heap — the heap-overflow amplifier).
+- **`MutCollect` is the value-stability oracle, so it counts every store spelling, not the
+  one the lowering emits.** CSE treats a name outside its set as constant for the whole
+  block; a missed store is a shared subexpression across a mutation. Copies are only the
+  visible half — `<-` also zeroes its SOURCE, `:=` lowers to a `builtin`clone`(dst, src)`
+  CALL rather than an `ExprClone`, `++`/`+=` are their own nodes, and a by-reference
+  argument writes with no assignment node anywhere. Hence the argument arm keys on the
+  callee's parameter type (non-const and `ref` or a ref type), not on a node kind.
+- **The whitelist admits value-returning primitives only.** `lower_stmt`'s fall-through arm
+  lowers an unrecognized statement for its lifted sub-lets and drops the statement itself,
+  which is correct exactly while every surviving call is pure — so `lift_expr` refuses a
+  whitelisted call that writes through a by-reference argument (`sincos`) rather than let
+  the drop delete the store. Predicating such a write would need per-out-param temps the
+  lowering does not own.
 
 ## ast_verify
 

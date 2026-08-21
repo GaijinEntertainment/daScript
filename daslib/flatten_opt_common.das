@@ -615,12 +615,45 @@ def public store_base(e : Expression const?) : ExpressionPtr {
     return e is ExprVar ? unsafe(reinterpret<Expression?>(e)) : null
 }
 
+def public writes_through_argument(fn : Function const?; argIndex : int) : bool {
+    if (fn == null || argIndex >= length(fn.arguments)) return false
+    let at = fn.arguments[argIndex]._type
+    return at != null && !at.flags.constant && (at.flags.ref || at.isRefType)
+}
+
 class public MutCollect : AstVisitor {
     names : table<string>
-    def override preVisitExprCopy(expr : ExprCopy?) : void {
-        let base = store_base(expr.left)
+    def note_store(lhs : Expression const?) : void {
+        let base = store_base(lhs)
         if (base != null) {
             names |> insert("{(base as ExprVar).name}")
+        }
+    }
+    def override preVisitExprCopy(expr : ExprCopy?) : void {
+        note_store(expr.left)
+    }
+    def override preVisitExprMove(expr : ExprMove?) : void {
+        note_store(expr.left)
+        note_store(expr.right)
+    }
+    def override preVisitExprClone(expr : ExprClone?) : void {
+        note_store(expr.left)
+    }
+    def override preVisitExprOp1(expr : ExprOp1?) : void {
+        if (expr.op == "++" || expr.op == "--" || expr.op == "+++" || expr.op == "---") {
+            note_store(expr.subexpr)
+        }
+    }
+    def override preVisitExprOp2(expr : ExprOp2?) : void {
+        if (expr.op |> ends_with("=") && !(expr.op == "==" || expr.op == "!=" || expr.op == "<=" || expr.op == ">=")) {
+            note_store(expr.left)
+        }
+    }
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        for (ai in range(length(expr.arguments))) {
+            if (writes_through_argument(expr.func, ai)) {
+                note_store(expr.arguments[ai])
+            }
         }
     }
 }

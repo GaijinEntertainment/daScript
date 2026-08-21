@@ -230,6 +230,13 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
         let c = e as ExprCall
         let bname = string(c.name)
         if (key_exists(ctx.whitelist, simple_name(bname))) {
+            for (ai in range(length(c.arguments))) {
+                if (writes_through_argument(c.func, ai)) {
+                    ctx.ok = false
+                    ctx.err = "flatten: '{bname}' writes through by-reference argument '{c.func.arguments[ai].name}'; a predicated twin cannot carry a store the lowering does not own - use a value-returning form"
+                    return clone_expression(e)
+                }
+            }
             var n = clone_expression(e)
             var o = n as ExprCall
             for (ai in range(length(c.arguments))) {

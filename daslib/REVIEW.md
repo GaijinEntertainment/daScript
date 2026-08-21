@@ -129,6 +129,13 @@ decision silently changes output under `_flatten_no_fast_math`.
 miss path falls back to the unfused shape — the pass must never turn a shader that compiled
 into an unresolvable call on a narrower backend.
 
+**A new store spelling joins `MutCollect` in the same change.** CSE reads a name outside the
+mutable set as constant for the whole block, so an uncollected store is a silently shared
+subexpression.
+
+**A statement the lowering cannot predicate is refused, never dropped.** `lower_stmt`'s
+fall-through drop is licensed only because every call that survives lowering is pure.
+
 **`flatten_function` runs its passes in this order — dse → copy-prop → mask-const-prop →
 dse → ssa-rename — and a diff that reorders them is a defect.** Each pass produces the next
 one's input; a reorder leaves scaffolding in the generated `<name>_flat` twin, which must
