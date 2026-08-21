@@ -1518,7 +1518,7 @@ def document_enumeration_annotations(doc_file : file; mods : array<Module?>; hoo
     for (mod in mods) {
         if (any) break
         module_for_each_annotation(mod) $(value) {
-            if (!value.isEnumerationAnnotation) return
+            if (any || !value.isEnumerationAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) return
             any = true
         }
     }
@@ -1526,7 +1526,7 @@ def document_enumeration_annotations(doc_file : file; mods : array<Module?>; hoo
     fwrite(doc_file, make_group("Handled enumerations"))
     for (mod in mods) {
         module_for_each_annotation(mod) $(value) {
-            if (!value.isEnumerationAnnotation) return
+            if (!value.isEnumerationAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) return
             document_enumeration_annotation(doc_file, mod, value)
         }
     }
