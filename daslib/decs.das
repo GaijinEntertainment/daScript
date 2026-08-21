@@ -178,6 +178,7 @@ def public operator .(var cmp : ComponentMap; name : string) : ComponentValue& {
 
 def public set(var cv : ComponentValue; val : auto) {
     //! Sets individual component value. Verifies that the value is of the correct type.
+    concept_assert(typeinfo sizeof(val) <= typeinfo sizeof(cv.data), "unsupported component type {typeinfo typename(val)} (its too big)")
     let cval = make_component(cv.name, val)
     assert(cv.info.hash == 0ul || cv.info.hash == cval.info.hash)
     cv = cval

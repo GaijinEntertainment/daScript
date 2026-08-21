@@ -550,9 +550,26 @@ def test_iterator(t : T?) {
         }
         t |> equal(count, 0)
     }
+    t |> run("iterator_whole_words") @@(t : T?) {
+        var a : BoolArray
+        let sizes = [32, 64, 96, 128]
+        for (size in sizes) {
+            a.clear()
+            a.resize(size)
+            for (i in range(size)) {
+                a[i] = (i % 7) == 0
+            }
+            var idx = 0
+            for (b in a) {
+                t |> equal(b, (idx % 7) == 0)
+                idx ++
+            }
+            t |> equal(idx, size)
+        }
+    }
     t |> run("iterator_various_sizes") @@(t : T?) {
         var a : BoolArray
-        let sizes = [1, 2, 31, 32, 33, 63, 64, 65, 100]
+        let sizes = [1, 2, 31, 32, 33, 63, 64, 65, 96, 100, 128]
         for (size in sizes) {
             a.clear()
             for (i in range(size)) {

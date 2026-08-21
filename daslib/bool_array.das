@@ -235,20 +235,16 @@ def each(self : BoolArray) : iterator<bool> {
     return <- generator<bool> {
         let len = (*pself).length()
         return false if (len == 0)
-        let full_uints = uint(len) >> 5u
-        let remaining_bits = uint(len) & 31u
+        let stored_uints = (uint(len) + 31u) >> 5u
+        let last_uint_bits = uint(len) - ((stored_uints - 1u) << 5u)
         let data_ptr = unsafe((*pself).data_pointer())
-        for (i in 0u .. full_uints) {
+        for (i in 0u .. stored_uints) {
             var bits_value = unsafe(data_ptr[i])
-            for (b in 0u .. 32u) {
+            let bit_count = i + 1u < stored_uints ? 32u : last_uint_bits
+            for (b in 0u .. bit_count) {
                 yield (bits_value & 1u) != 0u
                 bits_value >>= 1u
             }
-        }
-        var tail = unsafe(data_ptr[full_uints])
-        for (b in 0u .. remaining_bits) {
-            yield (tail & 1u) != 0u
-            tail >>= 1u
         }
         return false
     }
