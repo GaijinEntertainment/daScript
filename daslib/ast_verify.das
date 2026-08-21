@@ -318,13 +318,9 @@ class private AstVerifyVisitor : AstVisitor {
         track_type_tree(expr._type, "{expr.__rtti}.type")
     }
 
-    def leave(var expr : ExpressionPtr) : ExpressionPtr {
+    def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
         ancestors |> erase(expr)
         return expr
-    }
-
-    def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
-        return leave(expr)
     }
 
     def is_ancestor(slot : ExpressionPtr) : bool {
@@ -543,7 +539,7 @@ class private AstVerifyVisitor : AstVisitor {
         if (expr.blockFlags.isClosure && closure_depth > 0) {
             closure_depth--
         }
-        return leave(expr)
+        return expr
     }
 
     def override preVisitExprOp3(var expr : ExprOp3?) : void {
@@ -753,7 +749,7 @@ class private AstVerifyVisitor : AstVisitor {
             report(expr.at, "ExprVar.name '{expr.name}' disagrees with its resolved variable '{v.name}'")
             expr.name := v.name
         }
-        return leave(expr)
+        return expr
     }
 
     def override preVisitFunction(var fun : FunctionPtr) : void {
@@ -942,7 +938,7 @@ class private AstPostInferVerifyVisitor : AstVisitor {
         to_log(LOG_ERROR, empty(loc)
             ? "AST verify (post-infer): {text}\n"
             : "AST verify (post-infer): {text} at {loc}\n")
-        compiling_program() |> macro_error(anchor, "AST verify (post-infer): {text}")
+        compiling_program() |> macro_sticky_error(anchor, "AST verify (post-infer): {text}")
     }
 
     def guess_at(var expr : ExpressionPtr) : Anchor {
