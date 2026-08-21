@@ -31,6 +31,7 @@ def check_recursive(at : LineInfo; var fun : Function?; var call_graph : array<F
         macro_error(compiling_program(), at, sb)
         return
     }
+    if (visited |> key_exists(fun)) return
     visited |> insert(fun)
     call_graph |> push(fun)
     fun |> get_use_functions() $(f) {

@@ -321,7 +321,7 @@ def push(var Arr : array<auto(numT)>; var value : numT -# ==const) {
     }
 }
 
-[unused_argument(Arr, value)]
+[unused_argument(Arr, varr)]
 def push(var Arr : array<auto(numT)>; varr : array<numT -#> ==const) {
     static_if (typeinfo can_copy(type<numT>)) {
         static_if (typeinfo can_clone_from_const(varr[0])) {
@@ -337,7 +337,7 @@ def push(var Arr : array<auto(numT)>; varr : array<numT -#> ==const) {
     }
 }
 
-[unused_argument(Arr, value)]
+[unused_argument(Arr, varr)]
 def push(var Arr : array<auto(numT)>; var varr : array<numT -#> ==const) {
     static_if (typeinfo can_copy(type<numT>)) {
         Arr |> reserve(long_length(Arr) + long_length(varr))
@@ -349,7 +349,7 @@ def push(var Arr : array<auto(numT)>; var varr : array<numT -#> ==const) {
     }
 }
 
-[unused_argument(Arr, value)]
+[unused_argument(Arr, varr)]
 def push(var Arr : array<auto(numT)>; varr : numT[] -#) {
     static_if (typeinfo can_copy(type<numT>)) {
         Arr |> reserve(long_length(Arr) + int64(length(varr)))
@@ -455,7 +455,7 @@ def push_clone(var Arr : array<auto(numT)>; var value : numT ==const | #) {
     }
 }
 
-[unused_argument(Arr, value)]
+[unused_argument(Arr, varr)]
 def push_clone(var Arr : array<auto(numT)>; varr : numT[] ==const) {
     static_if (typeinfo can_clone(type<numT>)) {
         static_if (typeinfo can_clone_from_const(varr[0])) {
@@ -471,7 +471,7 @@ def push_clone(var Arr : array<auto(numT)>; varr : numT[] ==const) {
     }
 }
 
-[unused_argument(Arr, value)]
+[unused_argument(Arr, varr)]
 def push_clone(var Arr : array<auto(numT)>; var varr : numT[] ==const) {
     static_if (typeinfo can_clone(type<numT>)) {
         Arr |> reserve(long_length(Arr) + int64(length(varr)))

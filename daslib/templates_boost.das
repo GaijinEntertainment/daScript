@@ -1184,7 +1184,7 @@ class private AstQCallMacro : AstCallMacro {
     apply_call = "apply_qmacro" //! Default apply call, can be overridden in subclasses
     macro_call = "qmacro"       //! Default macro call, can be overridden in subclasses
     def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        //! Only first argument is visited
+        //! No argument is visited: like quote, the call is reified exactly as written.
         return false
     }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
@@ -1471,7 +1471,6 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
         }
     }
     mod |> add_structure(instance_structure)
-    delete rules
     return instance_type
 }
 

@@ -120,16 +120,17 @@ def private _registry_find_description(stream : string; version : int) : string 
     return ""
 }
 
-def private _verify_no_duplicate_versions(stream : string) : void {
+def private _duplicate_version_error(stream : string) : string {
     var seen : table<int; string>
     for (e in _registry) {
         if (e.stream != stream) continue
         if (key_exists(seen, e.version)) {
             let prev = seen[e.version]
-            panic("duplicate [sql_migration(version={e.version})] at runtime: '{prev}' and '{e.func_name}' (in '{e.module_name}')")
+            return "duplicate [sql_migration(version={e.version})] at runtime: '{prev}' and '{e.func_name}' (in '{e.module_name}')"
         }
         seen |> insert(e.version, "{e.func_name} (in '{e.module_name}')")
     }
+    return ""
 }
 
 let private ADOPTION_HINT = "this DB has existing tables/views/indexes but __schema_version is empty (no migration history yet). If your first migration creates tables that already exist, it will fail. To adopt migrations on an existing DB, call `db |> baseline(version = N)` before `migrate_to_latest()` to mark v1..vN as already applied. See tut 43 section \"Adopting migrations on an existing DB\"."
@@ -172,7 +173,7 @@ def private _log_warn_on_some(err : SqlError) : void {
     }
 }
 
-def private _migrate_inner(db; blocking : bool) : Result<int, string> {   // nolint:STYLE038 - one linear migration protocol; the layers share the audit-table state
+def private _migrate_inner(db; blocking : bool) : Result<int, string> {   // nolint:STYLE037,STYLE038 - one linear migration protocol; the layers share the audit-table state
     let stream = _::_migration_stream_key(db)
     let create_err = db |> _::try_exec(AUDIT_CREATE_DDL)
     if (create_err |> is_some) return err(create_err |> unwrap, type<int>)
@@ -181,7 +182,8 @@ def private _migrate_inner(db; blocking : bool) : Result<int, string> {   // nol
     if (audit_was_empty_before && max_registered > 0 && _::_migration_has_user_objects(db)) {
         to_log(LOG_WARNING, "{ADOPTION_HINT}\n")
     }
-    _verify_no_duplicate_versions(stream)
+    let dup_err = _duplicate_version_error(stream)
+    if (!empty(dup_err)) return err(dup_err, type<int>)
     let current = _scalar_int_or_zero(db, "SELECT COALESCE(MAX(version), 0) FROM __schema_version")
     if (current > max_registered) {
         let bin_max = max_registered
