@@ -23,7 +23,7 @@ require daslib/templates_boost
 require daslib/linq_fold_common public
 
 // Field-pruning row-usage scanning (RowUsageScanner / collect_row_usage / RowFieldFlattener /
-// flatten_row_to_locals / hoist_prelude) is shared with the XML adapter — see daslib/linq_fold_common.das.
+// flatten_row_to_locals / hoist_prelude) is shared with the XML and table adapters — see daslib/linq_fold_common.das.
 
 // Whole-row by-name materialize: assign every top-level field via read_json_field (by name), so the JSON
 // linq source reads flat objects field-by-field like from_xml_node and NEVER calls the overridable struct

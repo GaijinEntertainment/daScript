@@ -249,7 +249,7 @@ struct private SqlQuery {
     inlineConstants : bool
     innerSql       : string
     innerBindExprs : array<ExpressionPtr>
-    minPhaseSeen   : int = int(0x7fffffff)
+    minPhaseSeen   : int = INT_MAX_PHASE
     fromRowType    : TypeDeclPtr
 }
 
@@ -362,37 +362,37 @@ def private sql_to_frags_ex(sql : string;
     var idIdx = 0
     peek_data(sql) $(d) {
         let n = length(d)
-        var rest = 0
+        var runStart = 0
         while (true) {
-            let p = next_placeholder(d, rest)
+            let p = next_placeholder(d, runStart)
             if (p._0 < 0) break
             if (p._1 == uint8('?')) {
                 if (bindIdx >= length(orderedBinds)) {
-                    out |> push_text(slice(d, rest, p._0 + 1))
-                    rest = p._0 + 1
+                    out |> push_text(slice(d, runStart, p._0 + 1))
+                    runStart = p._0 + 1
                     continue
                 }
-                if (p._0 > rest) {
-                    out |> push_text(slice(d, rest, p._0))
+                if (p._0 > runStart) {
+                    out |> push_text(slice(d, runStart, p._0))
                 }
                 out |> push_bind(orderedBinds[bindIdx])
                 bindIdx++
             } else {
                 if (idIdx >= length(orderedInlineIds)) {
-                    out |> push_text(slice(d, rest, p._0 + 1))
-                    rest = p._0 + 1
+                    out |> push_text(slice(d, runStart, p._0 + 1))
+                    runStart = p._0 + 1
                     continue
                 }
-                if (p._0 > rest) {
-                    out |> push_text(slice(d, rest, p._0))
+                if (p._0 > runStart) {
+                    out |> push_text(slice(d, runStart, p._0))
                 }
                 out |> push_inline_id(orderedInlineIds[idIdx])
                 idIdx++
             }
-            rest = p._0 + 1
+            runStart = p._0 + 1
         }
-        if (rest < n) {
-            out |> push_text(slice(d, rest, n))
+        if (runStart < n) {
+            out |> push_text(slice(d, runStart, n))
         }
     }
 }
@@ -4277,20 +4277,20 @@ class private SqlCreateViewMacro : AstCallMacro {
         var bind_idx = 0
         peek_data(select_sql_template) $(d) {
             let n = length(d)
-            var rest = 0
+            var runStart = 0
             while (true) {
-                let pos = next_bind_placeholder(d, rest)
+                let pos = next_bind_placeholder(d, runStart)
                 if (pos < 0) {
-                    pending += slice(d, rest, n) // nolint:PERF001,LINT019 - PERF001 is blind inside a block body, so its marker reads stale
+                    pending += slice(d, runStart, n) // nolint:PERF001,LINT019 - PERF001 is blind inside a block body, so its marker reads stale
                     break
                 }
-                pending += slice(d, rest, pos) // nolint:PERF001,LINT019 - PERF001 is blind inside a block body, so its marker reads stale
+                pending += slice(d, runStart, pos) // nolint:PERF001,LINT019 - PERF001 is blind inside a block body, so its marker reads stale
                 if (!empty(pending)) {
                     sb.elements |> push <| new ExprConstString(at = call.at, value := pending)
                     pending = ""
                 }
                 sb.elements |> push <| qmacro(_::to_sql_literal($e(ordered_binds[bind_idx])))
-                rest = pos + 1
+                runStart = pos + 1
                 bind_idx++
             }
         }

@@ -95,28 +95,28 @@ def private find_kw_depth0(q : string; kw : string; from : int) : int {
         let n = length(arr)
         var depth = 0
         var inStr = false
-        var prevSig = 0
-        var prevSig2 = 0
+        var lastNonWs = 0
+        var lastNonWs2 = 0
         var i = from
         while (i < n && found < 0) {
             let c = int(arr[i])
             if (inStr) {
                 if (c == '\\') { i += 2; continue }
-                if (c == '"') { inStr = false; prevSig2 = prevSig; prevSig = c }
+                if (c == '"') { inStr = false; lastNonWs2 = lastNonWs; lastNonWs = c }
                 i++
                 continue
             }
-            if (c == '"') { inStr = true; prevSig2 = prevSig; prevSig = c; i++; continue }
-            if (c == '(' || c == '[' || c == '{') { depth++; prevSig2 = prevSig; prevSig = c; i++; continue }
-            if (c == ')' || c == ']' || c == '}') { depth--; prevSig2 = prevSig; prevSig = c; i++; continue }
-            let afterPipeTail = prevSig == '>' && (prevSig2 == '|' || prevSig2 == '=' || prevSig2 == '-')
-            let atWordStart = is_ident_byte(c) && ((i == 0) || !is_ident_byte(int(arr[i - 1]))) && prevSig != '.' && !afterPipeTail
+            if (c == '"') { inStr = true; lastNonWs2 = lastNonWs; lastNonWs = c; i++; continue }
+            if (c == '(' || c == '[' || c == '{') { depth++; lastNonWs2 = lastNonWs; lastNonWs = c; i++; continue }
+            if (c == ')' || c == ']' || c == '}') { depth--; lastNonWs2 = lastNonWs; lastNonWs = c; i++; continue }
+            let afterPipeTail = lastNonWs == '>' && (lastNonWs2 == '|' || lastNonWs2 == '=' || lastNonWs2 == '-')
+            let atWordStart = is_ident_byte(c) && ((i == 0) || !is_ident_byte(int(arr[i - 1]))) && lastNonWs != '.' && !afterPipeTail
             if (depth == 0 && atWordStart && i + m <= n && starts_with(arr, i, kw)) {
                 if (i + m == n || !is_ident_byte(int(arr[i + m]))) {
                     found = i
                 }
             }
-            if (!is_white_space(c)) { prevSig2 = prevSig; prevSig = c }
+            if (!is_white_space(c)) { lastNonWs2 = lastNonWs; lastNonWs = c }
             i++
         }
     }
@@ -230,14 +230,14 @@ def private substitute_idents(text : string; subs : table<string; string>) : str
             var i = 0
             var inStr = false
             var interp = 0
-            var prevSig = 0
+            var lastNonWs = 0
             while (i < n) {
                 let c = int(arr[i])
                 if (inStr && interp == 0) {
                     if (c == '\\' && i + 1 < n) { w |> write_string(arr, i, i + 2); i += 2; continue }
                     w |> write_string(arr, i, i + 1)
-                    if (c == '"') { inStr = false; prevSig = c }
-                    elif (c == '{') { interp = 1; prevSig = 0 }
+                    if (c == '"') { inStr = false; lastNonWs = c }
+                    elif (c == '{') { interp = 1; lastNonWs = 0 }
                     i++
                     continue
                 }
@@ -250,17 +250,17 @@ def private substitute_idents(text : string; subs : table<string; string>) : str
                             w |> write_string(arr, i, i + 1); i++
                             if (cc == '"') break
                         }
-                        prevSig = '"'
+                        lastNonWs = '"'
                         continue
                     }
-                    inStr = true; prevSig = c; w |> write_string(arr, i, i + 1); i++
+                    inStr = true; lastNonWs = c; w |> write_string(arr, i, i + 1); i++
                     continue
                 }
-                if (interp > 0 && c == '{') { interp ++; w |> write_string(arr, i, i + 1); prevSig = c; i++; continue }
+                if (interp > 0 && c == '{') { interp ++; w |> write_string(arr, i, i + 1); lastNonWs = c; i++; continue }
                 if (interp > 0 && c == '}') {
                     interp --
                     w |> write_string(arr, i, i + 1)
-                    prevSig = interp == 0 ? '"' : c
+                    lastNonWs = interp == 0 ? '"' : c
                     i++
                     continue
                 }
@@ -269,13 +269,13 @@ def private substitute_idents(text : string; subs : table<string; string>) : str
                     var j = i
                     while (j < n && is_ident_byte(int(arr[j]))) { j++ }
                     let word = slice(arr, i, j)
-                    w |> write(prevSig != '.' ? (subs?[word] ?? word) : word)
-                    prevSig = int(arr[j - 1])
+                    w |> write(lastNonWs != '.' ? (subs?[word] ?? word) : word)
+                    lastNonWs = int(arr[j - 1])
                     i = j
                     continue
                 }
                 w |> write_string(arr, i, i + 1)
-                if (!is_white_space(c)) { prevSig = c }
+                if (!is_white_space(c)) { lastNonWs = c }
                 i++
             }
         }
@@ -295,13 +295,13 @@ def private mentions_ident(text : string; name : string) : bool {
         var i = 0
         var inStr = false
         var interp = 0
-        var prevSig = 0
+        var lastNonWs = 0
         while (i < n && !found) {
             let c = int(arr[i])
             if (inStr && interp == 0) {
                 if (c == '\\' && i + 1 < n) { i += 2; continue }
-                if (c == '"') { inStr = false; prevSig = c }
-                elif (c == '{') { interp = 1; prevSig = 0 }
+                if (c == '"') { inStr = false; lastNonWs = c }
+                elif (c == '{') { interp = 1; lastNonWs = 0 }
                 i++
                 continue
             }
@@ -314,25 +314,25 @@ def private mentions_ident(text : string; name : string) : bool {
                         i++
                         if (cc == '"') break
                     }
-                    prevSig = '"'
+                    lastNonWs = '"'
                     continue
                 }
-                inStr = true; prevSig = c; i++
+                inStr = true; lastNonWs = c; i++
                 continue
             }
-            if (interp > 0 && c == '{') { interp++; prevSig = c; i++; continue }
+            if (interp > 0 && c == '{') { interp++; lastNonWs = c; i++; continue }
             if (interp > 0 && c == '}') {
                 interp--
-                prevSig = interp == 0 ? '"' : c
+                lastNonWs = interp == 0 ? '"' : c
                 i++
                 continue
             }
-            let atWordStart = is_ident_byte(c) && (i == 0 || !is_ident_byte(int(arr[i - 1]))) && prevSig != '.'
+            let atWordStart = is_ident_byte(c) && (i == 0 || !is_ident_byte(int(arr[i - 1]))) && lastNonWs != '.'
             if (atWordStart && i + m <= n && starts_with(arr, i, name)
                     && (i + m == n || !is_ident_byte(int(arr[i + m])))) {
                 found = true
             }
-            if (!is_white_space(c)) { prevSig = c }
+            if (!is_white_space(c)) { lastNonWs = c }
             i++
         }
     }
@@ -771,14 +771,14 @@ def private rewrite_group_var(text : string; gname : string) : string {
             var i = 0
             var inStr = false
             var interp = 0
-            var prevSig = 0
+            var lastNonWs = 0
             while (i < n) {
                 let c = int(arr[i])
                 if (inStr && interp == 0) {
                     if (c == '\\' && i + 1 < n) { w |> write_string(arr, i, i + 2); i += 2; continue }
                     w |> write_string(arr, i, i + 1)
-                    if (c == '"') { inStr = false; prevSig = c }
-                    elif (c == '{') { interp = 1; prevSig = 0 }
+                    if (c == '"') { inStr = false; lastNonWs = c }
+                    elif (c == '{') { interp = 1; lastNonWs = 0 }
                     i++
                     continue
                 }
@@ -791,17 +791,17 @@ def private rewrite_group_var(text : string; gname : string) : string {
                             w |> write_string(arr, i, i + 1); i++
                             if (cc == '"') break
                         }
-                        prevSig = '"'
+                        lastNonWs = '"'
                         continue
                     }
-                    inStr = true; prevSig = c; w |> write_string(arr, i, i + 1); i++
+                    inStr = true; lastNonWs = c; w |> write_string(arr, i, i + 1); i++
                     continue
                 }
-                if (interp > 0 && c == '{') { interp ++; w |> write_string(arr, i, i + 1); prevSig = c; i++; continue }
+                if (interp > 0 && c == '{') { interp ++; w |> write_string(arr, i, i + 1); lastNonWs = c; i++; continue }
                 if (interp > 0 && c == '}') {
                     interp --
                     w |> write_string(arr, i, i + 1)
-                    prevSig = interp == 0 ? '"' : c
+                    lastNonWs = interp == 0 ? '"' : c
                     i++
                     continue
                 }
@@ -810,7 +810,7 @@ def private rewrite_group_var(text : string; gname : string) : string {
                     var j = i
                     while (j < n && is_ident_byte(int(arr[j]))) { j++ }
                     let word = slice(arr, i, j)
-                    if (prevSig != '.' && word == gname) {
+                    if (lastNonWs != '.' && word == gname) {
                         let dotFollows = j < n && int(arr[j]) == '.'
                         var keyEnd = -1
                         if (dotFollows) {
@@ -821,22 +821,22 @@ def private rewrite_group_var(text : string; gname : string) : string {
                         if (keyEnd >= 0) {
                             w |> write("{gname}._0")
                             i = keyEnd
-                            prevSig = '_'
+                            lastNonWs = '_'
                             continue
                         } elif (!dotFollows) {
                             w |> write("{gname}._1")
                             i = j
-                            prevSig = '_'
+                            lastNonWs = '_'
                             continue
                         }
                     }
                     w |> write(word)
-                    prevSig = int(arr[j - 1])
+                    lastNonWs = int(arr[j - 1])
                     i = j
                     continue
                 }
                 w |> write_string(arr, i, i + 1)
-                if (!is_white_space(c)) { prevSig = c }
+                if (!is_white_space(c)) { lastNonWs = c }
                 i++
             }
         }

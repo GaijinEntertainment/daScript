@@ -453,10 +453,6 @@ def private parse_equi_join_on(var on_pred : Expression?; prog : ProgramPtr; at 
     return parts
 }
 
-def private rename_var_in_expr(var src : Expression?; from_name, to_name : string) : Expression? {
-    return clone_and_rename_var(src, from_name, to_name)
-}
-
 class private AstCallMacro_LinqJoinBase : AstCallMacro {
     //! Base call macro for ``_join`` and ``_left_join`` equi-join sugar.
     fnName = "join"
@@ -476,8 +472,8 @@ class private AstCallMacro_LinqJoinBase : AstCallMacro {
         var iterTypeB = clone_iterator_type(srcbType)
         let la_fresh = "__la__"
         let lb_fresh = "__lb__"
-        var keya_body = rename_var_in_expr(parts.keya_body, parts.larg_name, la_fresh)
-        var keyb_body = rename_var_in_expr(parts.keyb_body, parts.rarg_name, lb_fresh)
+        var keya_body = clone_and_rename_var(parts.keya_body, parts.larg_name, la_fresh)
+        var keyb_body = clone_and_rename_var(parts.keyb_body, parts.rarg_name, lb_fresh)
         var p1type = self.result_param1_type(iterTypeB, call.at)
         if (p1type != null) {
             var resultArg = call.arguments[3]
@@ -651,7 +647,7 @@ class private LinqGroupByLazy : AstCallMacro_LinqPred2 {
 
 [call_macro(name="_group_by")]
 class private LinqGroupBy : AstCallMacro_LinqPred2 {
-    //! implements _group_by(iterator, key) shorthand notation that expands into group_by_lazy(iterator, $(_) => key) — same backing function as ``_group_by_lazy``. In-memory both names are aliases:
+    //! implements _group_by(iterator, key) shorthand notation that expands into group_by_lazy(iterator, $(_) => key) — same backing function as ``_group_by_lazy``; in-memory the two names are aliases
     override predName = "group_by_lazy"
 }
 
