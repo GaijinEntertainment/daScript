@@ -5,14 +5,13 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 require dastest/testing_boost public
 require daslib/jsonrpc
-require daslib/json
 
 let SINGLE = "\{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"echo\",\"params\":\{\"a\":[1,2,3],\"b\":\"text\"}}"
 let BATCH = "[\{\"id\":1,\"method\":\"a\",\"params\":[1,2]},\{\"method\":\"n\"},\{\"id\":3,\"method\":\"b\"}]"
 let MALFORMED = "\{\"id\":1,\"method\":42,\"params\":[1,2]}"
 
 def echo_dispatch(line : string) : string {
-    return dispatch_line(line, false) $(method, params_json) {
+    return dispatch_line(line, false) $(method, _params_json) {
         return "\{\"m\":\"{method}\"}"
     }
 }
@@ -85,7 +84,7 @@ def test_free_request_ends_the_scope(t : T?) {
         free_request(req)
         t |> equal(req.method, "echo")
         t |> equal(req.id_str, "1")
-        t |> equal(req.params_json |> length > 0, true)
+        t |> equal(!empty(req.params_json), true)
     }
     t |> run("a failed parse owns nothing") @(t : T?) {
         let before = heap_bytes_allocated()
