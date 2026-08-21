@@ -1649,7 +1649,7 @@ function buildField(f, cfg, src) {
             input.append(opt);
         }
         input.value = String(cfg[f.k]);
-        if (input.value !== String(cfg[f.k])) input.value = f.o[0];   // unknown/unset value fallback
+        if (input.selectedIndex < 0) input.value = f.o[0];   // unknown/unset value fallback ("" reads back as "" — value comparison can't see the miss)
     } else if (f.t === "isel") {
         // int-valued select: options are [value, label] pairs — the config key stays an
         // int, the user sees words (a bare "2" told nobody it meant a hard mask)
@@ -1661,7 +1661,7 @@ function buildField(f, cfg, src) {
             input.append(opt);
         }
         input.value = String(cfg[f.k]);
-        if (input.value !== String(cfg[f.k])) input.value = String(f.o[0][0]);
+        if (input.selectedIndex < 0) input.value = String(f.o[0][0]);
     } else if (f.t === "bool") {
         input = document.createElement("input");
         input.type = "checkbox";

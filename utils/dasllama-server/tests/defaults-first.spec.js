@@ -44,6 +44,18 @@ test('ticking an override enables the input and lands the key in the save', asyn
     expect(body.quant).toBe('fp32');
 });
 
+test('an empty-string select value falls back to the first option, never a blank control', async ({ page }) => {
+    // the fixture surface carries gpu: "" — a <select> set to a non-option "" reads back ""
+    // so a value comparison can't see the miss; the control must land on "auto", and enabling
+    // the override without touching it must POST that, not ""
+    const { posts } = await openControl(page);
+    await expect(page.locator('#f-gpu')).toHaveValue('auto');
+    await page.locator('#en-gpu').check();
+    await page.locator('#b-save').click();
+    await expect(page.locator('#cfg-note')).toHaveText('saved — restart to apply');
+    expect(lastJson(posts.filter(p => p.path === '/config')).gpu).toBe('auto');
+});
+
 test('ctx reads as the model window; the defaults note names the detected backend', async ({ page }) => {
     await openControl(page);
     await expect(page.locator('#f-ctx')).toHaveAttribute('placeholder', "model's full window");
