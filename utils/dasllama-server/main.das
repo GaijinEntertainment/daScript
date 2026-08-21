@@ -936,6 +936,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                 }
             }
         }
+        // the box policy runtime loads (POST /v1/models/load) re-apply: the same want + ctx
+        // clamp every boot load got — NOT whatever slot happens to be default at load time
+        set_runtime_load_policy(slot_want, ctx)
         // A serving process prefers degrading (warn + nearest working mode) over dying on an
         // unsupported model/quant combo; API-facing tools keep the strict fail-loud default.
         set_resilient_load(true)

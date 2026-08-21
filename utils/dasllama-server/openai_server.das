@@ -225,6 +225,15 @@ def private install_slot_marks(si : int) {
     g_marks_slot = si
 }
 
+// add_model's capture takes whatever is INSTALLED — a runtime load must recreate the boot
+// precondition (nothing installed) or the new slot steals the stepped slot's routing marks.
+def private park_installed_marks() {
+    if (g_marks_slot >= 0 && g_marks_slot < length(g_slots)) {
+        moe_gpu_model_marks_save(g_slots[g_marks_slot].gpu_marks)
+    }
+    g_marks_slot = -1
+}
+
 // Move the GPU tier's VRAM state to slot `si`: hydrate + drop the current owner's whole state,
 // re-arm `si` from its mmap'd image (the same walk its load ran). Serialized with stepping —
 // only called between scheduler steps.
@@ -299,6 +308,17 @@ def set_default_model(name : string) {
 //! clamped to the context length per request like an explicit value).
 def set_default_max_tokens(n : int64) {
     g_default_max_new = n
+}
+
+var private g_boot_gpu_want = GpuTierWant()
+var private g_boot_ctx = 0l
+
+//! Register the box policy a runtime load re-applies: the boot GPU tier want (zero on
+//! non-vulkan boxes) and the ``--ctx`` clamp. Call once before ``run_server`` — without it
+//! POST /v1/models/load loads CPU-only with the model's trained context.
+def set_runtime_load_policy(want : GpuTierWant; ctx : int64) {
+    g_boot_gpu_want = want
+    g_boot_ctx = ctx
 }
 
 // The arm proper, shared by the boot API (panics on misuse) and the runtime load route (which
@@ -1749,6 +1769,70 @@ def private streams_busy() : bool {
     return total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || !empty(g_media_wires)
 }
 
+// Free the tier for a runtime load and recreate the boot precondition (nothing installed, the
+// want set for THIS load). Boot-order semantics: the load arms under the engine's want, so the
+// owner's VRAM state drops first — streams are idle, but prefix-cache KV can still own mirror
+// rows, hence the hydrate. Returns the evicted owner (-1 = none) for the failure re-arm.
+def private free_gpu_tier_for_load(cpu_only : bool) : int {
+    var prev_owner = -1
+    if (!cpu_only && g_gpu_owner >= 0) {
+        prev_owner = g_gpu_owner
+        install_slot_marks(g_gpu_owner)
+        for (st in g_slots[g_gpu_owner].sched.streams) {
+            moe_gpu_hydrate_session(g_slots[g_gpu_owner].model, st.session)
+        }
+        moe_gpu_drop_model()
+        g_slots[g_gpu_owner].backend_effective = "cpu"
+        g_gpu_owner = -1
+    }
+    park_installed_marks()
+    set_gpu_tier_want(cpu_only ? GpuTierWant() : g_boot_gpu_want)
+    return prev_owner
+}
+
+// Undo a runtime load that panicked after load_model: drop + remove the half-added slot (its
+// scheduler may have refused the KV pool) and re-arm the GPU owner the load evicted.
+def private unwind_failed_runtime_load(id : string; prev_owner : int) {
+    let ni = length(g_slots) - 1
+    if (ni >= 0 && g_slots[ni].name == id) {
+        if (g_gpu_owner == ni) {
+            install_slot_marks(ni)
+            moe_gpu_drop_model()
+            g_gpu_owner = -1
+        }
+        park_installed_marks()
+        delete g_slots[ni]
+        g_slots |> erase(ni)
+    }
+    if (prev_owner >= 0) {
+        bind_gpu_slot(prev_owner)
+    }
+}
+
+// Arm towers on a runtime-loaded slot from its mmproj; the returned note is "" or the
+// client-facing reason the slot serves text-only. Panics (a non-GGUF file, a bad projector)
+// are caught here — the model itself already serves.
+def private arm_runtime_towers(mi : int; mmproj : string) : string {
+    var note = ""
+    var failure = ""
+    let failed = catch_worker_panic(failure) {
+        let verr = arm_slot_vision(mi, mmproj)
+        if (!empty(verr)) {
+            note = verr
+        } elif (gemma4a_probe_proj_dim(mmproj) > 0l) {
+            note = arm_slot_audio(mi, mmproj)   // the E-series file arms audio too
+        }
+    }
+    if (failed) {
+        note = "the tower arm failed: {failure}"
+    }
+    if (g_slots[mi].vision.kind != VisionKind.none || g_slots[mi].audio_armed) {
+        stop_media_worker()   // the worker snapshots arms — bounce it to load the new encoders
+        start_media_worker()
+    }
+    return note
+}
+
 // Load a downloaded GGUF into a NEW serving slot without a process restart — no watchdog bounce,
 // no JIT recompile; the load blocks the tick thread for its duration (streams must be idle, so
 // nothing stalls mid-decode). GPU loads follow the boot-order semantics: the current owner's
@@ -1792,51 +1876,49 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
     }
     let backend = js?["backend"] ?? "auto"
     let cpu_only = backend == "cpu"
-    if (cpu_only) {
-        set_gpu_tier_want(GpuTierWant())   // zero the programmatic want for this load; restored below
-    } elif (g_gpu_owner >= 0) {
-        // boot-order semantics: the load arms under the engine's want, so the tier must be free
-        install_slot_marks(g_gpu_owner)
-        moe_gpu_drop_model()
-        g_slots[g_gpu_owner].backend_effective = "cpu"
-        g_gpu_owner = -1
-    }
+    let prev_owner = free_gpu_tier_for_load(cpu_only)
     let t0 = ref_time_ticks()
     let quant = (js?["quant"] ?? "q8") == "fp32" ? QuantMode.fp32 : QuantMode.q8
     var m = Model()
     var failure = ""
-    let failed = catch_worker_panic(failure) {
+    var failed = catch_worker_panic(failure) {
         delete m   // fresh above; the delete licenses the move on this heap (PERF030)
         m <- load_model(rpath, quant)
     }
-    let boot_want = g_slots[g_default_slot].gpu_want   // main registered the box policy here at boot
-    if (cpu_only) {
-        set_gpu_tier_want(boot_want)
-    }
     if (failed) {
+        if (prev_owner >= 0) {
+            bind_gpu_slot(prev_owner)   // a failed load must not leave the box demoted to CPU
+        }
         to_log(LOG_ERROR, "dasllama-server: runtime load of {rpath} failed: {failure}\n")
         return resp |> JSON(error_body("the load failed: {failure}", "invalid_request_error"), http_status.BAD_REQUEST)
     }
+    let want_ctx = js?["ctx"] ?? g_boot_ctx   // body ctx > boot --ctx > model default
+    if (want_ctx > 0l) {
+        m.config.seq_len = min(m.config.seq_len, want_ctx)
+    }
     var opts = SlotOpts()
     opts.backend = cpu_only ? "cpu" : "auto"
-    add_model(m, id, opts, rpath)
+    failed = catch_worker_panic(failure) {
+        // the KV-geometry validate inside create_scheduler can refuse the pool — caught, so an
+        // operator POST cannot abort the tick thread
+        add_model(m, id, opts, rpath)
+        init_one_scheduler(g_slots[length(g_slots) - 1])
+    }
+    if (failed) {
+        unwind_failed_runtime_load(id, prev_owner)
+        to_log(LOG_ERROR, "dasllama-server: runtime load of {rpath} failed after the model loaded: {failure}\n")
+        return resp |> JSON(error_body("the load failed: {failure}", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
     if (!cpu_only) {
-        set_slot_gpu_want(id, boot_want)   // the want the switch-in re-arms with
+        set_slot_gpu_want(id, g_boot_gpu_want)   // the want the switch-in re-arms with
     }
-    init_one_scheduler(g_slots[length(g_slots) - 1])
+    if (prev_owner >= 0 && g_gpu_owner < 0) {
+        // the new load did not take the tier (fp32 arm, no device claim) — re-arm the owner we
+        // dropped instead of leaving an idle box demoted until a later step happens to re-bind
+        bind_gpu_slot(prev_owner)
+    }
     let mmproj = js?["image_mmproj"] ?? ""
-    var tower_note = ""
-    if (!empty(mmproj)) {
-        let mi = length(g_slots) - 1
-        let verr = arm_slot_vision(mi, mmproj)
-        if (!empty(verr)) {
-            tower_note = verr
-        } elif (gemma4a_probe_proj_dim(mmproj) > 0l) {
-            tower_note = arm_slot_audio(mi, mmproj)   // the E-series file arms audio too
-        }
-        stop_media_worker()   // the worker snapshots arms — bounce it to load the new encoders
-        start_media_worker()
-    }
+    let tower_note = empty(mmproj) ? "" : arm_runtime_towers(length(g_slots) - 1, mmproj)
     let mi_new = length(g_slots) - 1
     if (js?["activate"] ?? true) {
         // the point of a live load is usually to TALK to the model: make it the default (the
@@ -1889,7 +1971,7 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
         g_gpu_owner = -1
     }
     if (g_marks_slot == mi) {
-        g_marks_slot = -1   // the next step reinstalls its slot's marks
+        park_installed_marks()   // the engine must not keep a dying slot's marks installed
     }
     let had_towers = g_slots[mi].vision.kind != VisionKind.none || g_slots[mi].audio_armed
     delete g_slots[mi]
