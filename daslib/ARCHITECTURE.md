@@ -390,6 +390,7 @@ an entry lands here only when no name, shape, or test can carry it.
   op to force the second inference pass, so the iterator names are recovered from the push
   tuple's values — each references its iter var by name under an `ExprRef2Value` wrap — and
   match what the loop binds once a later pass infers it.
+
 ## linq_fold_sql
 
 - **`extract_sql_source` walks the call's own `arguments[0]` spine, not linq_fold's
@@ -407,7 +408,7 @@ an entry lands here only when no name, shape, or test can carry it.
   surviving field reads to the iter vars and drop the bind entirely. Unused `get_ro` slots
   disappear along with one tuple-make plus N field reads per iteration. The unpruned bind
   stays only for whole-var refs that survive the rewrite.
-- **The decs random-index fast paths rest on two source facts.** A plain `[decs_template]`
+- **The decs random-index fast paths rest on these source facts.** A plain `[decs_template]`
   field compiles to `get_ro` (an indexable array) while a default-init field compiles to
   `get_default_ro` — an iterator, not indexable — so `decs_can_random_index` bails and the
   walk stands. `get_ro` is `[unsafe_outside_of_for]`, so each cloned source AND the index
@@ -458,10 +459,10 @@ an entry lands here only when no name, shape, or test can carry it.
   clobbers the live one.** `process_join_call` copies the live projection into
   `joinProjRecordNames` + the `joinSelectCol*` arrays, which survive
   `analyze_grouped_projection`'s clear-and-repopulate. Post-join `_.<alias>` resolves
-  through that snapshot in four hooks — `pred_to_sql`'s column-ref arm,
-  `collect_one_order_key`, `push_group_key`, `try_translate_group_aggregate` — all through
-  `find_projection_alias` + `render_projection_alias_sql`; a new post-join alias consumer
-  goes through that pair too. A registry miss is rejected loudly everywhere alike: falling
+  through that snapshot in five hooks — `pred_to_sql`'s column-ref arm,
+  `collect_one_order_key`, `push_group_key`, `try_translate_group_aggregate`,
+  `try_translate_global_aggregate` — all through `find_projection_alias` +
+  `render_projection_alias_sql`; a new post-join alias consumer goes through that pair too. A registry miss is rejected loudly everywhere alike: falling
   back to base-table resolution would leak the unqualified base-table namespace into
   post-join predicates.
 - **`normalize_single_source_arg_names` exists for the linq_das front end.** `_sql`

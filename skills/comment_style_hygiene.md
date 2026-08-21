@@ -36,11 +36,7 @@ public API always, a private helper only when callers inside the module need the
 (narration of an implementation goes to a name, a test, or the module's `.md`) —
 `// nolint:CODE` / `@nolint` suppressions carrying their one-line why, `//fmt:` formatter
 directives, license comments (Copyright / SPDX), and the file's leading header block (which
-may sit below the `options` / `module` / `require` preamble). The header block is the
-comments before the first declaration AND it must describe the FILE — a comment there that
-describes the next declaration is narration and belongs on that declaration as `//!`; the
-formatter cannot tell the two apart (it keeps everything above the first declaration), so
-this boundary is the reviewer's to hold. Everything else — narration,
+may sit below the `options` / `module` / `require` preamble). Everything else — narration,
 banners, section dividers, commented-out code — does not exist. The formatter enforces this
 per folder, fail-closed (a strip must compile or the file is restored); the policy mechanics
 are `skills/das_formatting.md`. A `//` comment outside the kept set is therefore EPHEMERAL:
@@ -48,6 +44,12 @@ anything worth preserving becomes code (a name, a `//!` doc, an assert) or lands
 beside the code. The boundary is the folder's `.lint_config`: teaching code (tutorials,
 examples) and load-bearing fixture corpora opt out there, and prose carrying the lesson
 stays — comments that add nothing to their line still go.
+
+**The header block — the comments above the first declaration — describes the FILE.** A
+comment there that describes the next declaration moves onto that declaration: as a `//!`
+doc when it states a contract a caller must know, otherwise it goes, like any other
+narration. The formatter keeps everything above the first declaration and cannot tell the
+two apart, so this boundary is the reviewer's to hold.
 
 **C and C++: no NEW comments.** Comments go stale, code does not — new C-family code says
 it in a name, a shape, or a test, or documents itself in the module's `.md`. Kept when one

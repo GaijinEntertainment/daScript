@@ -310,8 +310,9 @@ a bind/placeholder mismatch, not an error.
 `projRecordNames`, through `push_source_column` / `push_computed_proj_slot` /
 `reserve_projection`. A partial push desyncs the SELECT list from the row builder silently.
 
-**The sql_linq emitter discriminates per projection slot on array-emptiness — SQL fragment >
-aliased col > unqualified col — never on `q.seenJoin`.**
+**The sql_linq emitter picks each projection slot's SQL by which of that slot's own entries
+is non-empty — SQL fragment first, then aliased column, then unqualified column — never by
+`q.seenJoin`.**
 
 **A clause that can emit `?` pushes its binds at its SQL parse position in
 `collect_query_binds`.** `sql_to_frags_ex` re-scans the emitted SQL text and pairs markers
@@ -346,8 +347,8 @@ this stage's terminal lookup.
 bad member errors as itself. Widening the rewrite turns `g._0` into `g._1._0`.
 
 **Every `FromInMacro` reject is `macro_error` + `return null`, never `return call`.**
-Returning the call reports ast-changed on every pass and churns to the 50-pass cap (30507);
-null lets infer stabilize so the error sticks. The not-yet-inferred-source arm is the DEFER
+Returning the call reports ast-changed on every pass and churns to the infer-pass cap
+(30507); null lets infer stabilize so the error sticks. The not-yet-inferred-source arm is the DEFER
 by the same mechanism — errors clear per pass, so the error survives only when the source
 never infers.
 
