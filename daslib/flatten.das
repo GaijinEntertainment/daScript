@@ -718,13 +718,13 @@ def public flatten_fuse(var func : FunctionPtr; no_fast_math : bool = false; had
     return fuse_body(func, no_fast_math, hadd_min_width)
 }
 
-def public flatten_opt_residuals(var func : FunctionPtr; no_fast_math : bool = false) : array<string> {
-    //! Completeness oracle for the optimize pass (delegates to `opt_residuals`): empty ⇒ the twin
-    //! has no un-extracted uniform subtree, no un-CSE'd repeat, no un-rcp'd uniform division,
-    //! no un-packed ctor lane pattern, no un-fused lane sum, no regroup-to-share miss.
+def public flatten_opt_residuals(var func : FunctionPtr; no_fast_math : bool = false;
+                                 hadd_min_width : int = 3) : array<string> {
+    //! Completeness oracle for the optimize pass (delegates to `opt_residuals`): empty ⇒ the twin has no un-extracted uniform subtree, no un-CSE'd repeat, no un-rcp'd uniform division, no un-packed ctor lane pattern, no un-fused lane sum, no regroup-to-share miss.
+    //! `hadd_min_width` MUST be the floor the `flatten_fuse` run used (`flatten_hadd_pack_pairs() ? 2 : 3`) — a floor-3 oracle over a floor-2 pass calls a unit with surviving width-2 misses complete.
     var res : array<string>
     ast_gc_guard() {
-        res <- opt_residuals(func, FLATTEN_BARRIERS, no_fast_math)
+        res <- opt_residuals(func, FLATTEN_BARRIERS, no_fast_math, hadd_min_width)
     }
     return <- res
 }

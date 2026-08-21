@@ -861,7 +861,7 @@ def private hadd_fold_stmt(var s : ExpressionPtr; var changed : bool&; minWidth 
     }
 }
 
-def private has_unfused_hadd(var that : ExprOp2?; dotCallable : bool) : bool {
+def private has_unfused_hadd(var that : ExprOp2?; dotCallable : bool; minWidth : int) : bool {
     if (that == null || !(that.op == "+" || that.op == "-") || expr_bt(that) != Type.tFloat) return false
     var terms : array<ReTerm>
     collect_add(that, false, terms)
@@ -880,7 +880,7 @@ def private has_unfused_hadd(var that : ExprOp2?; dotCallable : bool) : bool {
     unsafe {
         delete terms
     }
-    return n >= 3
+    return n >= minWidth
 }
 
 class public FuseResidualVisitor : AstVisitor {
@@ -888,6 +888,7 @@ class public FuseResidualVisitor : AstVisitor {
     checkLerp : bool
     checkDot : bool
     checkHadd : bool
+    haddMinWidth : int
     noFastMath : bool
     foundMad : bool
     foundLerp : bool
@@ -899,7 +900,7 @@ class public FuseResidualVisitor : AstVisitor {
         if (checkDot && has_unfused_lane_dot(expr)) {
             foundDot = true
         }
-        if (checkHadd && has_unfused_hadd(expr, checkDot)) {
+        if (checkHadd && has_unfused_hadd(expr, checkDot, haddMinWidth)) {
             foundHadd = true
         }
         if (!checkMad) {

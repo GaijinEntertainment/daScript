@@ -506,10 +506,11 @@ Public API
     value-number cache. ``[flatten]`` runs it
     automatically; the ``[pixel_shader]`` backend runs it after its fold fixpoint.
 
-``flatten_fuse(var func, no_fast_math = false) : bool``
+``flatten_fuse(var func, no_fast_math = false, hadd_min_width = 3) : bool``
     The finishing fuse pass: collapse same-vector lane sums into
-    ``dot(v, mask)`` and independent ≥4-term scalar sums into
-    ``hadd(float4(…))`` (both fast-math), re-pack ctor lane patterns
+    ``dot(v, mask)`` and independent scalar sums of ``hadd_min_width``..4 terms into
+    ``hadd(floatN(…))`` (both fast-math; the default floor of 3 keeps a bare pair
+    scalar, and ``options _flatten_hadd_pack_pairs`` lowers it to 2), re-pack ctor lane patterns
     (re-vectorization, shared-factor extraction, majority compensation),
     ``a*b ± c`` into ``mad(a, b, c)``, and the expanded lerp shape
     ``mad(b - a, t, a)`` back into ``lerp(a, b, t)``. Run it
@@ -518,7 +519,7 @@ Public API
     fold — each round strictly drops a ``+``/``-`` node, so it converges.
     ``[flatten]`` runs it automatically; the ``[pixel_shader]`` backend mirrors it.
 
-``flatten_opt_residuals(var func, no_fast_math = false) : array<string>``
+``flatten_opt_residuals(var func, no_fast_math = false, hadd_min_width = 3) : array<string>``
     The optimize-completeness oracle (sibling of ``flatten_fold_residuals``):
     walks a compiled twin and returns a description for each missed optimization —
     a maximal uniform subtree still inline in the varying body, an un-rewritten
@@ -527,6 +528,9 @@ Public API
     a pure-alias ``let`` copy left uncollapsed, a fusable mul-add left un-packed,
     a mad still carrying the lerp shape, an un-fused same-vector lane sum, or an
     un-packed ctor lane pattern.
+    Pass the same ``hadd_min_width`` the ``flatten_fuse`` run used — an oracle
+    asked for a wider floor than the pass reports a unit with surviving
+    narrow-group misses as complete.
     Empty means complete. Drives the same
     ``tests/flatten/test_flatten_fold.das`` corpus and the ``flatten-fuzz``
     strict mode.

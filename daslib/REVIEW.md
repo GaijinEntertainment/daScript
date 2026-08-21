@@ -117,7 +117,9 @@ residual visitors call to prove the pass complete.
 
 **A residual oracle mirrors its arm's gate exactly and never calls the transform.** A
 narrower oracle is a false pass, a wider one a false miss; calling the transform from an
-oracle aliases the live tree.
+oracle aliases the live tree. A gate the transform takes as a parameter is threaded into the
+oracle too — re-spelling its default as a constant makes every non-default run a false pass,
+and the tests that call the oracle pass the same value.
 
 **Every new fold/fuse arm declares its float class.** Inf/NaN/rounding/association changes
 are fast-math-only; bit-exact per-lane rewrites are never gated. An arm added without that
