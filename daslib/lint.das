@@ -4,6 +4,12 @@ options strict_smart_pointers = true
 
 module lint shared private
 
+enum private Lint021CallKind {
+    plain
+    narrowing_cast
+    poison
+}
+
 //! Lint pass that enables paranoid compilation checks.
 //!
 //! When this module is required, the ``paranoid`` lint flag is turned on
@@ -40,7 +46,6 @@ struct private Lint021Candidate {
 }
 
 def private is_block_terminator(expr : ExpressionPtr) : bool {
-    // A direct-child block statement that always exits the enclosing function.
     if (expr is ExprReturn) return true
     if (expr is ExprCall) {
         let call = expr as ExprCall
@@ -50,8 +55,6 @@ def private is_block_terminator(expr : ExpressionPtr) : bool {
     return false
 }
 
-// Everything a reference sweep records. Both the rule-bearing visitor and the generic-body
-// collector own one, so the sweep is written once instead of threading four tables through it.
 struct private RefIndex {
     functions : table<Function const?>
     names : table<string>       //!< references knowable by name only (uninferred generic bodies)
@@ -60,7 +63,7 @@ struct private RefIndex {
 }
 
 def private unqualified(raw_name : string) : string {
-    let sep = raw_name |> rfind("::")     // strip module qualification, e.g. `_::foo`
+    let sep = raw_name |> rfind("::")
     return sep >= 0 ? raw_name |> slice(sep + 2) : raw_name
 }
 
@@ -81,7 +84,7 @@ def private knows(self : RefIndex; fn : Function?; nm : string) : bool {
 
 def private note_type(var self : RefIndex; t : TypeDecl?; depth : int; skip : Structure const? = null) : void {
     return if (t == null || depth > 24)
-    let st : Structure const? = t.structType     // add-const, so the identity compare below matches `skip`
+    let st : Structure const? = t.structType
     if (st != null && st != skip) {
         self.structs |> insert(t.structType)
     }
@@ -96,7 +99,6 @@ def private note_type(var self : RefIndex; t : TypeDecl?; depth : int; skip : St
 }
 
 def private note_type_names(var self : RefIndex; t : TypeDecl?; depth : int) : void {
-    // an uninferred generic body carries no structType/enumType, only the spelled alias name
     return if (t == null || depth > 24)
     let alias = "{t.alias}"
     if (!empty(alias)) {
@@ -116,7 +118,6 @@ def private note_type_names(var self : RefIndex; t : TypeDecl?; depth : int) : v
 }
 
 def private lint022_optimized(prog : ProgramPtr) : bool {
-    // mirrors Program::getOptimize: `optimize` decides outright, `no_optimization` only if absent
     return false if (prog.policies.no_optimizations)
     let optimize = prog._options |> find_arg("optimize")
     return optimize as tBool if (optimize is tBool)
@@ -126,7 +127,6 @@ def private lint022_optimized(prog : ProgramPtr) : bool {
 }
 
 def private lint022_calls_may_be_inlined(prog : ProgramPtr) : bool {
-    // Program::patchInline's own gate: that tier splices a small private callee away before lint runs, leaving an unreferenced husk indistinguishable from dead code.
     return (lint022_optimized(prog)
         && !(prog._options |> find_arg("disable_auto_inline") ?as tBool ?? prog.policies.disable_auto_inline)
         && !(prog._options |> find_arg("no_aliasing") ?as tBool ?? prog.policies.no_aliasing)
@@ -134,7 +134,6 @@ def private lint022_calls_may_be_inlined(prog : ProgramPtr) : bool {
 }
 
 def private lint022_enabled(prog : ProgramPtr) : bool {
-    // tri-state: module option wins; '.lint_config' LINT022=true means everywhere; else path default
     let configured = prog._options |> find_arg("_unused_private")
     if (configured is tBool) return configured as tBool
     if (lint_config_forces_on("LINT022")) return true
@@ -142,7 +141,6 @@ def private lint022_enabled(prog : ProgramPtr) : bool {
 }
 
 def private lint022_is_skipped(fn : Function?; mod : Module?) : bool {
-    // Public symbols, annotated entry points ([export]/[init]/[test]/macro hooks), virtually dispatched class methods, and generic/template/generated bodies all have callers lint cannot see.
     return (fn == null || !fn.flags.privateFunction
         || fn.flags.generated || fn.flags.isClassMethod
         || fn.fromGeneric != null || fn.isGeneric || fn.moreFlags.isTemplate
@@ -157,14 +155,9 @@ struct private Lint023Candidate {
 }
 
 class LintVisitor : AstVisitor {
-    // LINT014 is decided after the body: a `var` argument that is returned needs its mutability
-    // for the move (a non-copyable result cannot move from a const argument). Arguments are
-    // collected before the body, so a `return <arg>` just removes its candidate
     lint014_candidates : array<Variable const?>
-    // LINT023 (LINT014's mirror) is decided after the body too: by-value `var` arguments are
-    // collected before it; every appearance that is not a plain store disqualifies
     lint023_candidates : array<Lint023Candidate>
-    lint023_store_nodes : table<uint64>     // ExprVar nodes pre-marked as store targets (swizzle LHS, statement-level ++/--)
+    lint023_store_nodes : table<uint64>
     //! AST visitor that performs lint checks.
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
@@ -172,27 +165,19 @@ class LintVisitor : AstVisitor {
     noLint : bool = false
     genericDepth : int = 0
     multiple_contexts : bool = false
-    // collection mode — when true, errors are appended to `errors` instead of error()
     collect_errors : bool = false
     errors : array<string>
-    issues : array<LintIssue>       // structured twin of `errors`, same entries in the same order
-    // Filters: disabled (denylist) and enabled (whitelist; empty == all).
-    // Caller-populated via collect overload; applied alongside // nolint suppression.
+    issues : array<LintIssue>
     disabled_codes : table<string>
     enabled_codes : table<string>
-    // LINT010 state — dead-store detection. Per-local tracking; one entry per
-    // analyzed local in the current function. Reset on function entry.
     branch_depth : int = 0
     ds_entries : array<DeadStoreEntry>
-    funcFile : string       // current function's source file, anchors lint_error's foreign-lineinfo gate
-    // LINT021 state — 64-bit locals never consumed as 64-bit. Per-ExprCall kind stack keeps
-    // narrow/poison depths correct across nesting; closure depth disqualifies captured uses.
+    funcFile : string
     lint021_candidates : array<Lint021Candidate>
-    lint021_call_kind : array<int>      // 0 = plain, 1 = 64-bit narrowing cast, 2 = poison
+    lint021_call_kind : array<Lint021CallKind>
     lint021_narrow_depth : int = 0
     lint021_poison_depth : int = 0
     lint021_closure_depth : int = 0
-    // LINT022 — referenced functions, plus names of calls that never resolved (generic bodies)
     lint022_refs : RefIndex
     lint022_self_struct : Structure const? = null
     lint022_generic_sweep : bool = false
@@ -208,7 +193,6 @@ class LintVisitor : AstVisitor {
         return is_lint_suppressed(at, code)
     }
     def lint_error(text : string; at : LineInfo) : void {
-        // a node carrying another file's lineinfo (an inliner splice from a required module, macro-manufactured code) gets its diagnostics from that file's own compile — reporting it here would fail modules on idioms they cannot edit
         if (noLint || is_suppressed(text, at)
                 || (at.fileInfo != null && !empty(funcFile) && at.fileInfo.name != funcFile)) return
         if (compile_time_errors) {
@@ -337,9 +321,8 @@ class LintVisitor : AstVisitor {
         lint_error("LINT016: 'push_clone' does not clone a string without 'options multiple_contexts'; use 'push(value)' for same-context storage, or did you mean 'push(clone_string(value))' for a cross-context copy", expr.at)
     }
     def override preVisitFunction(fun : FunctionPtr) : void {
-        noLint = lint022_generic_sweep      // the sweep collects references and reports nothing
+        noLint = lint022_generic_sweep
         funcFile = fun.at.fileInfo != null ? "{fun.at.fileInfo.name}" : ""
-        // LINT022 — scoped to the one subject type, so lambda bodies (generated too) still count
         lint022_self_struct = null
         if (fun.flags.isClassMethod || fun.flags.generated) {
             if (fun.result != null && fun.result.structType != null) {
@@ -361,10 +344,8 @@ class LintVisitor : AstVisitor {
                 break
             }
         }
-        // LINT010 — reset dead-store tracking
         branch_depth = 0
         ds_entries |> clear()
-        // LINT021 — reset 64-bit-local tracking
         lint021_candidates |> clear()
         lint021_call_kind |> clear()
         lint021_narrow_depth = 0
@@ -382,14 +363,12 @@ class LintVisitor : AstVisitor {
     }
 
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
-        // LINT014 — report unwritten var arguments that were not returned either
         if (!noLint && genericDepth == 0) {
             for (v in lint014_candidates) {
                 lint_error("LINT014: mutable argument {v.name}: {describe(v._type)} is never written; declare it without 'var'", v.at)
             }
         }
         lint014_candidates |> clear()
-        // LINT023 — report by-value var arguments whose only uses were stores
         if (!noLint && genericDepth == 0) {
             for (c in lint023_candidates) {
                 if (!c.disqualified && c.stores > 0) {
@@ -399,7 +378,6 @@ class LintVisitor : AstVisitor {
         }
         lint023_candidates |> clear()
         lint023_store_nodes |> clear()
-        // LINT010 — emit final dead-store warnings for any still-pending stores
         if (!noLint && genericDepth == 0) {
             for (e in ds_entries) {
                 if (!e.skip && e.has_pending && e.pending_pure && e.pending_expr != null) {
@@ -408,7 +386,6 @@ class LintVisitor : AstVisitor {
                 }
             }
         }
-        // LINT021 — report 64-bit locals whose every use narrowed
         if (!noLint && genericDepth == 0) {
             for (c in lint021_candidates) {
                 if (!c.disqualified && c.safe_uses > 0) {
@@ -425,11 +402,10 @@ class LintVisitor : AstVisitor {
     }
     def override preVisitExprBlock(blk : ExprBlock?) : void {
         exprForTerminator |> push(0ul)
-        // LINT010: a block passed as a closure / lambda body / generator body executes deferred or conditionally — treat it as a branch so writes inside don't kill pending stores outside and reads inside don't keep an outside-init "live" (the callback may never fire).
         let bf = blk.blockFlags
         if (!noLint && genericDepth == 0 && (bf.isClosure || bf.isLambdaBlock || bf.isGeneratorBlock)) {
             branch_depth++
-            lint021_closure_depth++     // a captured use is a 64-bit escape, not a narrow
+            lint021_closure_depth++
         }
     }
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
@@ -444,7 +420,6 @@ class LintVisitor : AstVisitor {
         return <- blk
     }
     def override preVisitExprBlockExpression(_blk : ExprBlock?; expr : ExpressionPtr) : void {
-        // a statement-level `n++` / `--n` stores into n and discards the value; anywhere else the same operator is a read
         if (noLint || genericDepth > 0 || !(expr is ExprOp1)) return
         let op1 = expr as ExprOp1
         if (op1.op == "++" || op1.op == "--" || op1.op == "+++" || op1.op == "---") {
@@ -454,19 +429,16 @@ class LintVisitor : AstVisitor {
         }
     }
     def override visitExprBlockExpression(_blk : ExprBlock?; var expr : ExpressionPtr) : ExpressionPtr {
-        // Flag if a prior direct-child of THIS block already terminated control flow.
         let lb = exprForTerminator |> back()
         if (lb != 0ul) {
             lint_error("LINT001: unreachable code", expr.at)
         }
-        // LINT015: a free-floating unary +/- subexpression used as a statement — a continuation line that lost its wrapping parens (`let x = a` ⏎ `+ b`, which re-parses as a unary `+b` whose value is discarded; if the operand is pure the optimizer drops the whole statement silently). Only `+`/`-` qualify: they are the only operators that are both binary and unary, so a split binary `a + b` orphans as a valid unary statement (`~`/`!` aren't binary, `*`/`|>`/etc. can't start a statement → loud error).
         if (!noLint && genericDepth == 0 && expr is ExprOp1 && !expr.genFlags.generated) {
             let op1 = expr as ExprOp1
             if (op1.op == "+" || op1.op == "-") {
                 lint_error("LINT015: free-floating unary '{op1.op}' expression as a statement - its value is silently discarded; this is almost always a continuation line missing its parens, wrap the multi-line RHS in (...)", expr.at)
             }
         }
-        // Mark this block as terminated only when `expr` IS a direct-child terminator.
         if (is_block_terminator(expr)) {
             exprForTerminator |> pop()
             exprForTerminator |> push(intptr(expr))
@@ -479,13 +451,11 @@ class LintVisitor : AstVisitor {
         }
         exprForTerminator |> push(0ul)
     }
-    // --- LINT005: redundant reinterpret cast ---
 
     def override preVisitExprCast(expr : ExprCast?) : void {
         if (lint022_generic_sweep) {
             lint022_refs |> note_type_names(expr.castType, 0)
         }
-        // alwaysSafe = compiler-authorized (e.g. the early-out relocation const-strips a finally-used `let` with a reinterpret the user never wrote)
         if (noLint || genericDepth > 0
             || !expr.castFlags.reinterpretCast || expr.genFlags.alwaysSafe
             || expr.subexpr == null || expr.subexpr._type == null || expr.castType == null
@@ -500,7 +470,6 @@ class LintVisitor : AstVisitor {
         validate_var(v, false)
     }
 
-    // `_inl<site id>_…` (`_inl0_l_text`, `_inl3_res`); the digit keeps a user's `_inline_x` in scope
     def private is_inline_temp_name(name : string) : bool {
         if (!(name |> starts_with("_inl")) || length(name) <= 4) return false
         var digit = false
@@ -511,13 +480,11 @@ class LintVisitor : AstVisitor {
     }
 
     def validate_var(v : VariablePtr; can_make_const : bool) {
-        // marked_used: a transform consumed the reads (devirtualized block holder), or author intent
         if (v.flags.generated || v.flags.marked_used) return
         let name = string(v.name)
-        // skip names the compiler owns rather than the author: `__system`, backtick-mangled, inliner temps
         if (name |> starts_with("__") || find(name, "`") >= 0 || is_inline_temp_name(name)) return
         if (name |> starts_with("_")) {
-            if (name |> ends_with("_")) return  // _foo_ - ignore too
+            if (name |> ends_with("_")) return
             if (v.access_flags.access_ref || v.access_flags.access_pass || v.access_flags.access_get || v.access_flags.access_fold) {
                 lint_error("LINT004: variable '{v.name}' is used and should be named without underscore prefix", v.at)
                 return
@@ -545,9 +512,8 @@ class LintVisitor : AstVisitor {
             }
             return
         }
-        // inScope variables can't be const — delete/finalize at scope exit requires mutability.
         if (can_make_const && (v.flags.inScope || v.access_info.access_info_pass_mutable)) return
-        if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v.access_flags.access_ref && v._type.canCloneFromConst) {// && !v._type.flags.smartPtr
+        if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v.access_flags.access_ref && v._type.canCloneFromConst) {
             lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
         }
@@ -558,10 +524,8 @@ class LintVisitor : AstVisitor {
     }
 
     def validate_argument(v : VariablePtr; code, kind : string) {
-        // skip template/generic/[no_lint] context, generated vars, and [unused_argument(name)] (marked_used)
         if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used) return
         let name = string(v.name)
-        // A leading underscore on an argument means "leave it alone": intentionally unused, or dodging a reserved keyword / shadow (e.g. `_in`). Unlike locals, we do NOT raise LINT004 for a used `_arg` — a parameter name is often constrained and can't drop the underscore.
         if (name |> starts_with("_") || find(name, "`") >= 0) return
         if (v.isAccessUnused) {
             lint_error("{code}: unused {kind} {v.name}: {describe(v._type)} (add an underscore prefix or [unused_argument({v.name})] if intentional)", v.at)
@@ -571,7 +535,6 @@ class LintVisitor : AstVisitor {
     def validate_unwritten_var_argument(fun : FunctionPtr; v : VariablePtr) {
         if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used) return
         let name = string(v.name)
-        // skips, in order: leave-it-alone names; `finalize` overloads (the delete protocol dictates var) and address-taken functions (signature conforms to a function-pointer type); by-value parameters (a mutable copy is not a caller burden); written params (access_ref) and params whose mutability a callee's signature demands transitively (access_info_pass_mutable — the leaf callee gets flagged first; fixing it re-exposes this one); entirely-unused params (LINT012's report)
         if ((name |> starts_with("_")) || find(name, "`") >= 0
                 || fun.name == "finalize" || fun.moreFlags.addressTaken
                 || v._type == null || v._type.flags.constant
@@ -584,7 +547,6 @@ class LintVisitor : AstVisitor {
     }
 
     def lint023_collect_candidate(v : VariablePtr) {
-        // a by-ref param propagates its writes; a pointer param stays a candidate - a write through its pointee (`p.x = 1`) reaches the caller, and lint023_note_use sees that as a use, not a store
         if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used || v.isAccessUnused) return
         let name = string(v.name)
         if ((name |> starts_with("_")) || find(name, "`") >= 0
@@ -603,7 +565,6 @@ class LintVisitor : AstVisitor {
     }
 
     def lint023_mark_store_target(lhs : ExpressionPtr) : void {
-        // the compiler's under_clone marks a bare-var LHS of `=` and `:=` only; `<-` and a swizzle LHS (`v.x = ...` stores into the local copy just like `v = ...`) are marked here
         if (lhs == null) return
         if (lhs is ExprVar) {
             lint023_store_nodes |> insert(intptr(lhs))
@@ -629,7 +590,6 @@ class LintVisitor : AstVisitor {
         if (lint022_generic_sweep) {
             lint022_refs |> note_type_names(arg._type, 0)
         }
-        // class-method signatures are dictated by the base class / interface, and [extern] stubs by the bound C function — unused params there are structural, not a mistake
         if (fun.flags.isClassMethod) return
         for (ann in fun.annotations) {
             if (ann.annotation.name == "extern") return
@@ -643,10 +603,7 @@ class LintVisitor : AstVisitor {
         validate_argument(arg, "LINT013", "block argument")
     }
 
-    // --- LINT017: int64/uint64 cast of a call that has a long_ counterpart ---
-
     def lint017_long_twin(fname : string; icall : ExprCall?) : string {
-        // Receiver-gated, so a same-named user overload or the fixed-array `length` generic in daslib/builtin.das (which has no long_ twin) stays silent.
         let nargs = length(icall.arguments)
         if (nargs == 0 || icall.arguments[0]._type == null) return ""
         let bt = icall.arguments[0]._type.baseType
@@ -654,7 +611,6 @@ class LintVisitor : AstVisitor {
         if (fname == "capacity" && (bt == Type.tArray || bt == Type.tTable)) return "long_capacity"
         if (fname == "count" && (bt == Type.tArray || bt == Type.tIterator)) return "long_count"
         if (fname == "find_index" && bt == Type.tArray && nargs == 2) return "long_find_index"
-        // fio's `file` is a pointer-to-handle; the type gate keeps a user-defined 2-arg fread/fwrite from being told to call a long_ twin that does not exist.
         if ((fname == "fread" || fname == "fwrite") && bt == Type.tPointer && nargs == 2) return "long_{fname}"
         return ""
     }
@@ -674,10 +630,7 @@ class LintVisitor : AstVisitor {
         lint_error("LINT017: {expr.name}({iname}(...)) widens an already-32-bit result, so the 2^31 limit is still hit inside {iname} (as a wrap, or as the panic guard on array/table/string length) before the cast runs; call {twin}(...) instead", expr.at)
     }
 
-    // --- LINT024: int64/uint64 cast over a 32-bit product ---
-
     def lint024_scan(expr : ExpressionPtr; var has_product : bool&; var has_call : bool&) : void {
-        // a call among the leaves (length, a dimension getter) is the unbounded factor - a product of plain locals is tile geometry more often than not, and stays silent
         if (expr is ExprOp2) {
             let op2 = expr as ExprOp2
             let op = string(op2.op)
@@ -710,8 +663,6 @@ class LintVisitor : AstVisitor {
         lint_error("LINT024: {expr.name}(...) widens a product that already wrapped - every factor is 32-bit, so the multiply overflows at 2^31 before the cast runs; widen a factor instead: {expr.name}(a) * b", expr.at)
     }
 
-    // --- LINT018: narrowing the size/position argument of a call that has a 64-bit overload ---
-
     def lint018_check_arg(expr : ExprCall?; fname : string; idx : int; isMem : bool) : bool {
         let a = expr.arguments[idx]
         if (!(a is ExprCall)) return false
@@ -734,7 +685,6 @@ class LintVisitor : AstVisitor {
     }
 
     def check_lint018_mem_size_narrowing(expr : ExprCall?) : void {
-        // Receiver-gated: string resize is int-only (no 64-bit twin), and same-named user functions on non-container receivers stay silent.
         if (noLint || genericDepth > 0) return
         let fname = string(expr.func != null && expr.func.fromGeneric != null
             ? expr.func.fromGeneric.name
@@ -753,7 +703,6 @@ class LintVisitor : AstVisitor {
             } elif (nargs == 3 && fname == "resize_and_init") {
                 lint018_check_arg(expr, fname, 1, false)
             } elif (nargs == 3 && fname == "erase") {
-                // once per call - both position and count narrowing carry the same fix
                 if (!lint018_check_arg(expr, fname, 1, false)) {
                     lint018_check_arg(expr, fname, 2, false)
                 }
@@ -764,8 +713,6 @@ class LintVisitor : AstVisitor {
             }
         }
     }
-
-    // --- LINT020: 64-bit bound narrowed into a 32-bit range constructor ---
 
     def check_lint020_range_narrowing(expr : ExprCall?) : void {
         if (noLint || genericDepth > 0) return
@@ -787,11 +734,9 @@ class LintVisitor : AstVisitor {
                 let twin = isRange ? "range64" : "urange64"
                 lint_error("LINT020: {expr.name}({scall.name}(...)) truncates a 64-bit bound above 2^31; use {twin}(...) on the 64-bit values directly - arrays and pointers index with int64/uint64 as-is", expr.at)
             }
-            return  // once per constructor, however many bounds narrow
+            return
         }
     }
-
-    // --- LINT021 call-context tracking (candidates seeded in preVisitExprLetVariable) ---
 
     def lint021_is_narrow_cast(expr : ExprCall?) : bool {
         if ((expr.name != "int" && expr.name != "uint") || length(expr.arguments) != 1) return false
@@ -800,7 +745,6 @@ class LintVisitor : AstVisitor {
     }
 
     def lint021_is_transparent(expr : ExprCall?) : bool {
-        // only unbounded-top math keeps the hazard alive; min/clamp/sign cap the value, so int(clamp(x, lo, hi)) is deliberate saturation and must not fire
         let fname = string(expr.func != null && expr.func.fromGeneric != null
             ? expr.func.fromGeneric.name
             : expr.name)
@@ -808,13 +752,13 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprCall(expr : ExprCall?) : void {
-        var kind = 0
+        var kind = Lint021CallKind.plain
         if (!noLint && genericDepth == 0) {
             if (lint021_is_narrow_cast(expr)) {
-                kind = 1
+                kind = Lint021CallKind.narrowing_cast
                 lint021_narrow_depth++
             } elif (lint021_narrow_depth > 0 && !lint021_is_transparent(expr)) {
-                kind = 2
+                kind = Lint021CallKind.poison
                 lint021_poison_depth++
             }
         }
@@ -831,23 +775,20 @@ class LintVisitor : AstVisitor {
         if (!empty(lint021_call_kind)) {
             let kind = lint021_call_kind |> back()
             lint021_call_kind |> pop()
-            if (kind == 1) {
+            if (kind == Lint021CallKind.narrowing_cast) {
                 lint021_narrow_depth--
-            } elif (kind == 2) {
+            } elif (kind == Lint021CallKind.poison) {
                 lint021_poison_depth--
             }
         }
         return <- expr
     }
 
-    // --- LINT022: unused private declaration ---
-
     def lint022_note(fn : Function?; raw_name : string) : void {
         lint022_refs |> note_ref(fn, raw_name)
     }
 
     def override preVisitStructure(st : StructurePtr) : void {
-        // a class's method fields hold @@method pointers back to itself - not a use of the class
         lint022_self_struct = st
     }
 
@@ -859,9 +800,8 @@ class LintVisitor : AstVisitor {
     def override preVisitExpression(expr : ExpressionPtr) : void {
         lint022_refs |> note_type(expr._type, 0, lint022_self_struct)
         if (lint022_generic_sweep) {
-            lint022_refs |> note_type_names(expr._type, 0)      // uninferred: names are all there is
+            lint022_refs |> note_type_names(expr._type, 0)
         }
-        // a name-based lookup (find_structure, RTTI, a macro registry) leaves only a literal
         if (expr is ExprConstString && !expr.genFlags.generated) {
             let nm = string((expr as ExprConstString).value)
             if (!empty(nm)) {
@@ -891,7 +831,6 @@ class LintVisitor : AstVisitor {
     }
 
     def lint022_collect_generic_refs(mod : Module?) : void {
-        // `visit(prog)` skips generics; same visitor, reporting latched off
         lint022_generic_sweep = true
         make_visitor(self) $(adapter) {
             for_each_generic(mod, "") $(gfn) {
@@ -903,7 +842,6 @@ class LintVisitor : AstVisitor {
     }
 
     def lint022_note_decl_types(mod : Module?) : void {
-        // a private type can be reachable from a declaration alone - a field, a signature, a typedef
         for_each_function(mod, "") $(fn) {
             return if (fn.flags.generated)
             let self_st = (fn.flags.isClassMethod && !empty(fn.arguments)
@@ -920,7 +858,6 @@ class LintVisitor : AstVisitor {
             lint022_refs |> note_type(gfn.result, 0)
         }
         for_each_structure(mod) $(st) {
-            // a field of its own type keeps a linked list alive, so it does not count as a use
             if (st.parent != null) {
                 lint022_refs.structs |> insert(st.parent)
             }
@@ -980,7 +917,6 @@ class LintVisitor : AstVisitor {
                     || !lint022_enabled(prog))
         let mod = prog.getThisModule
         return if (mod == null)
-        // inlining erases calls before lint runs; types and globals survive that tier untouched
         let check_functions = !lint022_calls_may_be_inlined(prog)
         lint022_note_decl_types(mod)
         return if (!lint022_has_candidate(prog, mod, check_functions))
@@ -1005,9 +941,6 @@ class LintVisitor : AstVisitor {
         }
     }
 
-    // `assume name = <block>` keeps a template block at the alias-definition site; every use of
-    // `name` is replaced with a *clone* of that block.
-    // The template is never invoked directly, so its block arguments keep isAccessUnused == true and
     def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool {
         return false
     }
@@ -1017,8 +950,6 @@ class LintVisitor : AstVisitor {
             validate_var(v, true)
         }
     }
-
-    // --- LINT006: division by zero, LINT007: same operands ---
 
     def is_const_zero(expr : ExpressionPtr) : bool {
         if (expr == null) return false
@@ -1034,7 +965,6 @@ class LintVisitor : AstVisitor {
     def expr_equal(a : ExpressionPtr; b : ExpressionPtr; require_pure : bool = true) : bool {
         if (a == null || b == null
             || (require_pure && (!a.flags.noSideEffects || !b.flags.noSideEffects))) return false
-        // daslang AST nodes are not shared — each Expression has exactly one parent, so pointer-equality between sibling operands (left vs right) is effectively never true. Structural compare via describe() is the only correct option here.
         return describe(a) == describe(b)
     }
 
@@ -1059,14 +989,11 @@ class LintVisitor : AstVisitor {
             op == "&"  || op == "|"  || op == "^" ||
             op == "-=" || op == "/=" || op == "%="
         )
-        // identical constants are macro-splice residue (`$v(n) > 1` with n == 1), const-fold food rather than a copy-paste typo
         if (op_same_suspicious && expr_equal(expr.left, expr.right, false)
                 && !(expr.left.__rtti |> starts_with("ExprConst"))) {
             lint_error("LINT007: left and right operands of '{op}' are the same", expr.at)
         }
     }
-
-    // --- LINT008: ternary both branches equal ---
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
         lint022_refs |> note_ref(expr.func, "{expr.name}")
@@ -1076,8 +1003,6 @@ class LintVisitor : AstVisitor {
             lint_error("LINT008: both branches of ternary '?:' are equivalent", expr.at)
         }
     }
-
-    // --- LINT009: if-then-else branches equal ---
 
     def override preVisitExprIfThenElse(expr : ExprIfThenElse?) : void {
         if (noLint || genericDepth > 0) return
@@ -1093,10 +1018,7 @@ class LintVisitor : AstVisitor {
         return <- expr
     }
 
-    // --- LINT010: dead store ---
-
     def private ds_find(v : VariablePtr) : int {
-        // Linear scan — typical function has <10 tracked locals.
         let vc : Variable const? = v
         for (i in range(length(ds_entries))) {
             if (ds_entries[i].v == vc) return i
@@ -1118,12 +1040,10 @@ class LintVisitor : AstVisitor {
         }
         check_string_clone_init(v)
         if (noLint || genericDepth > 0) return
-        // LINT021 — seed initialized non-ref 64-bit locals
         if (v._type != null && !v._type.flags.ref && v.init != null && !v.flags.generated
                 && (v._type.baseType == Type.tInt64 || v._type.baseType == Type.tUInt64)) {
             lint021_candidates |> emplace(Lint021Candidate(v = v, safe_uses = 0, disqualified = false))
         }
-        // Skip reference bindings (`var r & = x`) and inscope smart_ptr vars — these have aliasing or scope-exit semantics we don't reason about.
         if ((v._type != null && v._type.flags.ref)
             || v.flags.inScope
             || v.access_flags.access_fold
@@ -1149,7 +1069,6 @@ class LintVisitor : AstVisitor {
         }
         if (noLint || genericDepth > 0) return
         lint023_note_use(expr)
-        // LINT021 — classify this use of a tracked 64-bit local
         let ci = lint021_find(expr.variable)
         if (ci >= 0 && !lint021_candidates[ci].disqualified) {
             if (expr.varFlags.write || lint021_closure_depth > 0
@@ -1162,14 +1081,11 @@ class LintVisitor : AstVisitor {
         let i = ds_find(expr.variable)
         if (i < 0 || ds_entries[i].skip) return
         let vf = expr.varFlags
-        // Any reference inside a branch/loop/lambda body, OR a write under an aliasing context (addr-of, ref-bind, mutable-ref-arg, compound op), means we can't reason about this var — bail.
         if (branch_depth > 0 || (vf.write && !vf.under_clone)) {
             ds_entries[i].skip = true
             return
         }
-        // Pure store — handled in postVisit for ExprCopy/Clone/Move so the RHS reads have been observed first. preVisit of the LHS fires BEFORE the RHS is walked, so we do nothing here.
         if (vf.write) return
-        // Read — kills any pending dead store on this var.
         ds_entries[i].has_pending = false
     }
 
@@ -1210,8 +1126,6 @@ class LintVisitor : AstVisitor {
         return <- expr
     }
 
-    // Branch / loop / try / lambda — bumps branch_depth so any var referenced
-    // inside is bailed-on.
     def override preVisitExprFor(_expr : ExprFor?) : void {
         if (!noLint && genericDepth == 0) branch_depth++
     }
@@ -1233,7 +1147,6 @@ class LintVisitor : AstVisitor {
         if (!noLint && genericDepth == 0) branch_depth--
         return <- expr
     }
-    // --- LINT011: int-literal-to-float precision loss ---
     def override visitExprConstFloat(var expr : ExprConstFloat?) : ExpressionPtr {
         if (!noLint && genericDepth == 0 && expr.inexactFloatPromotion) {
             lint_error("LINT011: int literal does not exactly represent as float", expr.at)
@@ -1329,8 +1242,7 @@ def private is_nolint_space(b : uint8) : bool {
     return int(b) == ' ' || int(b) == '\t'
 }
 
-// quote-aware comment locator: a `//` inside a string/char literal (escapes honored) does not open a comment
-def private nolint_comment_start(d : array<uint8> const# implicit) : int {
+def private comment_start_outside_literals(d : array<uint8> const# implicit) : int {
     let n = length(d)
     var p = 0
     while (p < n) {
@@ -1350,23 +1262,20 @@ def private nolint_comment_start(d : array<uint8> const# implicit) : int {
     return -1
 }
 
-// one line's directive walk; recognition mirrors the C-side rtti_is_nolint_suppressed (module_builtin_rtti.cpp) - change them in lockstep
 def private stale_scan_line(bytes : array<uint8> const# implicit; fname : string; line_no : int;
                             disabled_codes, enabled_codes : table<string>;
                             var stale_codes : array<string>; var self_suppressed : bool&) : void {
     let n = length(bytes)
-    var p = nolint_comment_start(bytes)
+    var p = comment_start_outside_literals(bytes)
     return if (p < 0)
     p += 2
     while (p < n && (int(bytes[p]) == '/' || int(bytes[p]) == '!')) {
-        p++     // `//!` docs, `///` piles
+        p++
     }
     while (p < n && is_nolint_space(bytes[p])) {
         p++
     }
-    // positional gate: the comment's first token must open a directive
     return if (find(bytes, "nolint:", p) != p)
-    // whitespace-split tokens; each `nolint:`-led token opens a comma-list
     while (p < n) {
         while (p < n && is_nolint_space(bytes[p])) {
             p++
@@ -1374,7 +1283,7 @@ def private stale_scan_line(bytes : array<uint8> const# implicit; fname : string
         break if (p >= n)
         if (find(bytes, "nolint:", p) == p) {
             p += length("nolint:")
-            while (p < n) {     // comma-list of codes
+            while (p < n) {
                 while (p < n && is_nolint_space(bytes[p])) {
                     p++
                 }
@@ -1385,7 +1294,6 @@ def private stale_scan_line(bytes : array<uint8> const# implicit; fname : string
                 break if (p == tok_start)
                 let code = slice(bytes, tok_start, p)
                 if (code == "LINT019") {
-                    // the marker exempts the WHOLE line's list - a genuinely dead sibling code rides along unreported
                     self_suppressed = true
                 } elif (is_rule_code(code)
                         && !key_exists(disabled_codes, code)
@@ -1419,7 +1327,6 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
     stale_codes |> reserve(4)
     for (raw_line in split(source, "\n")) {
         line_no++
-        // a CRLF checkout leaves \r glued to the last token - strip it
         let line = raw_line |> ends_with("\r") ? slice(raw_line, 0, length(raw_line) - 1) : raw_line
         continue if (find(line, "nolint:") < 0)
         stale_codes |> clear()
@@ -1441,8 +1348,6 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
     return count
 }
 
-// a rule id is LINT/PERF/STYLE + digits - anything else on a nolint list is a stray
-// token after a genuine directive, or a typo the C-side scanner would never match anyway
 def private is_rule_code(code : string) : bool {
     var prefix_len = 0
     if (code |> starts_with("LINT") || code |> starts_with("PERF")) {
