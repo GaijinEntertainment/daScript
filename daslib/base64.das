@@ -64,6 +64,7 @@ def public base64_decode(_in : string) : tuple<text : string; size : int> {
 def public base64_decode(_in : string; var out : array<uint8>) : int {
     //! Decodes a Base64-encoded string into the provided byte array. Returns the decoded byte count, or -1 on error.
     var outlen = 0
+    out |> clear()
     peek_data(_in) $(inp) {
         outlen = base64_decode(inp, out)
     }

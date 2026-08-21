@@ -51,4 +51,16 @@ def test_decode_rejects_bad_input(t : T?) {
     t |> equal(length(out), 0, "a rejected decode leaves no partial output")
 }
 
+[test]
+def test_decode_empty_input_clears_output(t : T?) {
+    var out : array<uint8>
+    t |> equal(base64_decode("QUJD", out), 3)
+    t |> equal(length(out), 3)
+    t |> equal(base64_decode("", out), 0)
+    t |> equal(length(out), 0, "an empty input decodes to no bytes, not the previous call's")
+    let dec = base64_decode("")
+    t |> equal(dec.size, 0)
+    t |> equal(dec.text, "")
+}
+
 
