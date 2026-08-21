@@ -863,6 +863,21 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     // resolve the model roster: [[models]] entries, else the single legacy model key
     if (empty(g_models) && !empty(g_cfg.model)) {
         g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))
+    } elif (!empty(g_models) && !empty(g_cfg.model) && (g_cfg_sources?["model"] ?? "") == "cli") {
+        // an EXPLICIT --model wins over the config's roster (the CLI-overrides-config contract —
+        // this used to be silently ignored): a matching roster entry becomes the default, an
+        // unlisted path joins the roster AS the default
+        var matched = false
+        for (ent in g_models) {
+            ent.is_default = ent.path == g_cfg.model
+            if (ent.is_default) {
+                matched = true
+            }
+        }
+        if (!matched) {
+            g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))
+        }
+        to_log(LOG_INFO, "dasllama-server: --model {base_name(g_cfg.model)} overrides the config roster's default\n")
     }
     // A path typo in an AUTHORITATIVE config must not brick the boot into a crash loop: every
     // roster path is checked up front and degrades — skip the slot, drop the arm — instead of
