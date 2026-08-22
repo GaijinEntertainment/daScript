@@ -222,7 +222,25 @@ noise demands them).
   img:tg), lcpp pairs via the patched mtmd-cli, `gen_bench_records -w image` cells, board
   refresh; the gemma-3-4b CPU image row re-mint rides this slice (owed from 3815's tails).
 - **K. Docs**: README support matrix, ENVIRONMENT regen if knobs appear, PERF_LEDGER entries,
-  this plan's findings section, predictions scored.
+  this plan's findings section, predictions scored. **DO NOT FORGET the daslang.io dasllama
+  page** — it is STALE gemma-only today and this arc must leave it current: (1) the model
+  family list in `doc/source/stdlib/handmade/module-dasllama.rst` (the Gemma bullet is the
+  freshest — Qwen gains the vision/Omni line); (2) the authored per-symbol cards in
+  `doc/reflections/das2rst.das` — `VisionEmbedder`'s card names gemma4uv/gemma4v/gemma3v
+  only and must gain qwen3v (and qwen2.5o when slice I lands); then regen
+  `doc/source/stdlib/generated/dasllama.rst` via das2rst (order-fragile — regen, never
+  hand-edit the generated file). Also the site model CARDS (dasllama.io): qwen VISION
+  official cards join with slice J's records; the stale gemma card prose gets the same
+  sweep.
+
+### Arc followups (owed by this arc, after K)
+
+- **qwen3a/gemma4a audio-in-chat** (= `followup_general.md` #41, pulled onto this arc): the
+  chat `AudioTower` serves whisper-class projectors only — the conformer families have no
+  chat splice, which blocks the one-session three-modality Omni showcase. Done = an
+  audio-encoder seam the chat layer holds for either type (the `VisionEmbedder` union
+  pattern), `add_user_audio_` routed by family, `test_omni_showcase` upgraded to
+  image + audio + text on one session.
 
 ## Predictions (registered before implementation, per the prediction game)
 

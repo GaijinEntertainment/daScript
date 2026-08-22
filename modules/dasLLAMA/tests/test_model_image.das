@@ -2038,3 +2038,94 @@ def test_k6_scale_split_sizing(t : T?) {
         delete m
     }
 }
+
+// ===== the meta-layout fingerprint (header byte 48) =====
+
+struct FpInner {
+    x : int64
+}
+
+struct FpPair {
+    a : int
+    b : float
+}
+
+struct FpPairSwapped {
+    b : float
+    a : int
+}
+
+struct FpPairWide {
+    a : int64
+    b : float
+}
+
+struct FpPairPlus {
+    a : int
+    b : float
+    c : int
+}
+
+struct FpNested {
+    a : int
+    inner : FpInner
+}
+
+struct FpRows {
+    rows : array<FpInner>
+}
+
+struct FpRowsPlus {
+    rows : array<FpPairPlus>
+}
+
+[test]
+def test_layout_fingerprint(t : T?) {
+    t |> run("the fingerprint moves on any field-shape change and holds on none") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var p1 = FpPair()
+        var p2 = FpPair()
+        t |> equal(layout_fingerprint(p1), layout_fingerprint(p2), "deterministic per type")
+        var sw = FpPairSwapped()
+        t |> success(layout_fingerprint(p1) != layout_fingerprint(sw), "field REORDER moves it")
+        var wd = FpPairWide()
+        t |> success(layout_fingerprint(p1) != layout_fingerprint(wd), "field RETYPE moves it")
+        var pl = FpPairPlus()
+        t |> success(layout_fingerprint(p1) != layout_fingerprint(pl), "field ADD moves it")
+        var ns = FpNested()
+        var iv = FpInner()
+        t |> success(layout_fingerprint(ns) != layout_fingerprint(iv), "nesting reaches the print")
+        var r1 = FpRows()
+        var r2 = FpRowsPlus()
+        t |> success(layout_fingerprint(r1) != layout_fingerprint(r2), "array ELEMENT shape reaches the print")
+        var m = Model()
+        let mfp = layout_fingerprint(m)
+        to_log(LOG_INFO, "image fingerprint: Model meta closure = {mfp}\n")
+        t |> success(mfp != 0ul, "the real Model closure fingerprints (no recursion trap)")
+        delete m
+    }
+    t |> run("a corrupted fingerprint byte refuses the image at parse") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var terr : string
+        let tmp = temp_directory(terr)
+        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_fp_{ref_time_ticks()}.dlim")
+        var p <- make_probe()
+        t |> success(save_image(p, path, "img-probe"), "save")
+        var f = fopen(path, "rb+")
+        t |> success(f != null, "reopen for the poke")
+        fseek(f, 48l, seek_set)
+        var one : array<uint8>
+        one |> push(uint8(0xA5))
+        fwrite(f, one)
+        fclose(f)
+        var m = ImgProbe()
+        t |> success(!load_image(path, m, "img-probe"), "a flipped fingerprint byte declines the load")
+        delete m
+        delete p
+        remove(path)
+    }
+}
