@@ -57,6 +57,7 @@ The image preprocessing rail: dynamic-resolution token bounds and the debug dump
 | `DASLLAMA_VISION_MIN_TOKENS` | number | 40 (the gemma-4 model default) | Minimum soft tokens per image; dynamic-resolution geometry upscales to reach it. |
 | `DASLLAMA_VISION_MAX_TOKENS` | number | 280 (the gemma-4 model default) | Maximum soft tokens per image; dynamic-resolution geometry downscales to fit. |
 | `DASLLAMA_VISION_DUMP` | text | unset | Path prefix: dump every letterboxed image fed to a vision embedder as <prefix><tag>.ppm — the human smoke test; empty = off. |
+| `DASLLAMA_SPAN_FUSE` | flag | on | Serve the image turn as ONE fused prefill (per-query span mask); 0 pins the three-eval splice (head / media rows / tail) — the parity A/B rail. |
 
 ## Metal backend
 

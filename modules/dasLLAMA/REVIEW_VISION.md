@@ -1,6 +1,8 @@
 # dasLLAMA vision and media rules
 
-**Routed from `REVIEW.md`: a diff touching the vision rail, a media splice, a media-carrying
+**Routed from `REVIEW.md`: a diff touching a media splice or its eval shape
+(`eval_embd_span_` / `forward_prefill_embd`'s span bounds / `encode_image_`),
+`dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`, a media-carrying
 scheduler path, `dasllama/dasllama_vision_embedder.das`, `dasllama/dasllama_tower.das` (with
 `REVIEW_AUDIO.md` — the shared encoder-tower home serves both), or a vision family file — one
 `dasllama/dasllama_<family>.das` holding a single vision projector family — applies this list
@@ -39,15 +41,11 @@ one is a defect.
 — never a second renderer.** A family whose template or vocab lacks the pair has no arm for
 that media kind — `create_chat_` panics at create, not at render.
 
-**A scheduler stream carrying media rows neither reads nor writes the prefix cache.** Cache
-keys are token ids and the KV past the splice does not follow from them, so a media stream
-skips `prefix_attach` at admit and `donate_stream` at reap.
-
-**A media splice's rows reach `forward_prefill_embd` in ONE call** (`eval_embd_span_`'s middle
-slice) — splitting them across calls, or letting a driver chunk them by row, is a defect: the
-non-causal flag is per call, so a boundary inside the span would change the mask. A driver
-DECLINING the whole call to the CPU loop, or splitting command buffers per layer, is not a
-split.
+**A media splice's rows reach `forward_prefill_embd` in ONE call** — splitting them across
+calls, or letting a driver chunk them by row, is a defect: the span bounds are call-relative,
+so a boundary inside the span changes the mask. A driver DECLINING the whole call to the CPU
+loop, or splitting command buffers per layer, is not a split, and whether the one call also
+carries the surrounding head and tail tokens is free.
 
 **A media splice is expressed as two token spans plus a row block, everywhere it appears** — so
 BPE merges never cross the media. The engine, the scheduler, and the server all carry the same

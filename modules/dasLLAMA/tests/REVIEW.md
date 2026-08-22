@@ -8,10 +8,12 @@ the whole directory.** A change reaches a test when it alters anything the test'
 depends on — the test file, a shared helper, engine code it exercises, an in-tree fixture or
 corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
-**A test file with at least one cell that RUNS (not skips) with no model file present is listed
-in `run.das`'s `model-free` suite in the same change it is added. A file whose every cell is
-model-gated joins that list too when its cells skip honestly without their models** — the
-per-PR gate then runs them wherever the models are stocked.
+**A test file with at least one cell that RUNS (not skips) with no model file present is
+listed in `run.das`'s `model-free` suite in the same change it is added.**
+
+**A test file in no `run.das` model suite (every suite but `model-free`), whose every cell is
+model-gated, is listed in the `model-free` suite too and skips honestly without its models** —
+the per-PR gate then runs it wherever the models are stocked.
 
 **A test file in a `run.das` model suite (every suite but `model-free`) runs only through
 `run.das`; dastest invoked directly on such a file is a defect. A `model-free` file runs
@@ -30,6 +32,11 @@ instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
 but `model-free`) — has an accurate `CLAUDE.md` entry in the same change** — added when the
 file is added, corrected when what it covers is renamed or re-scoped.
 
+**A new, renamed, or dropped arm name — the literal passed to `arm_on(t, name)`
+(`_model_tier.das`), what `--arm` matches — updates the arm census in `CLAUDE.md`'s "Arm
+filter mechanics" section in the same change** — an arm the census does not name is
+unreachable to whoever is choosing what to run.
+
 **Weakening `test_program_roots.das` — dropping a root from its sweep, loosening its
 `options stack = 524288` assert, or relaxing its prefill-intent assert — is a defect.**
 
@@ -43,10 +50,13 @@ file is added, corrected when what it covers is renamed or re-scoped.
 assert, dropping one, or narrowing the corpus either one sweeps — is a defect** — they gate
 the real `write_bench_records` output.
 
-**A test passes or skips explicitly on every platform.** A skip goes through a capability or
-model gate; a test that silently vanishes on one platform is a defect, and so is a
-zero-assertion pass — a cell whose whole body is platform-gated prints a skip or feint on the
-platforms where that body compiles out.
+**Weakening `test_scheduler.das`'s media-stream bypass check — a media stream attaches no
+cached hit at admit (`prefix_attach`) and donates no pages at reap (`donate_stream`) — is a
+defect.** Cache keys are token ids, and the KV past the splice does not follow from them.
+
+**A test passes or skips explicitly on every platform.** A test that silently vanishes on one
+platform is a defect, and so is a zero-assertion pass — a cell whose whole body is
+platform-gated prints a skip or feint on the platforms where that body compiles out.
 
 **A skip gate keys on a device capability, a run-mode knob's value, or a stocked fixture beside
 the models (a model file, an mmproj, an oracle dump — a model gate) — never on the existence of
@@ -58,8 +68,10 @@ gate, not the iteration loop. Here the spelling is `model_available` (`_model_ti
 serving leg, which cannot require this folder's fixtures, open-codes the same gate. Check what a
 test loads first.
 
-**A suite loads decoders with `load_model_`, never the image rail** (towers and embedders load
-through their family loaders). Image-rail coverage belongs to the image suites alone.
+**A suite loads decoders with `load_model_` (`dasllama/dasllama_load.das`), never
+`load_model`, `load_model_cached`, or `load_model_image` — the `.dlim` image rail** (towers
+and embedders load through their family loaders). Image-rail coverage — mint, map, GC,
+flavors — belongs to `test_model_image.das` and `test_model_image_vulkan.das` alone.
 
 **A function that gains a parameter, or a parameter that gains an accepted value, ships a
 test feeding the new value and checking the result.** "The model still runs" is not that
@@ -73,18 +85,23 @@ predicate's value.
 reached through the registry, not called directly.
 
 **A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
-naming the `ggml-vocab-*.gguf` fixture; a corpus case asserts exact reference ids AND lossless
-round-trip.**
+naming the `ggml-vocab-*.gguf` fixture.**
 
-**Every test that compares generated tokens, ids, or logits logs the decoded text for BOTH
-sides (`log_gen_texts` in `_model_tier.das`, or one line per side).** A red, or a suspicious
-green, must be readable as text in the log, not only as an id or float difference.
+**A `corpus_case` arm asserts exact reference ids AND lossless round-trip.**
+
+**Every test that compares generated tokens, ids, or logits logs a human-readable form of
+BOTH sides: the decoded text where the model carries a vocab (`log_gen_texts` in
+`_model_tier.das`, or one line per side), otherwise each side's argmax index and value.** A
+red, or a suspicious green, must be readable in the log, not only as an id or float
+difference.
 
 **A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
 
-**A kernel-unit arm compares its kernel against a CPU oracle.** A GPU-vs-GPU arm is allowed only
-for cross-dispatch bit-identity no CPU oracle can witness, and then its output buffers are
-prefilled with a sentinel.
+**A kernel-unit arm whose property a CPU oracle can witness compares its kernel against that
+oracle.**
+
+**A kernel-unit arm testing cross-dispatch bit-identity — a property no CPU oracle can
+witness — compares GPU against GPU with its output buffers prefilled with a sentinel.**
 
 **A kernel-unit arm whose output plane is its input plane, and whose CPU oracle does not
 differ from the input by construction, pairs its compare with an assert that the output
@@ -104,10 +121,10 @@ dump.**
 **A test that reads a vision encode oracle dump names the minting arm in its header — the
 backend, the flash-attention setting, and the mmproj precision the dump came from.**
 
-**A cell whose claim is a CPU-served or f32-decoder leg pins the covering driver knob OFF for
-that leg (`set_metal_wdec(false)` / `set_metal_tower(false)`) and restores it after** — never
-relies on the driver's runtime decline. The mechanism (why the hooks flip legs silently) is
-`CLAUDE.md`'s "Metal fixtures" section.
+**A cell whose claim is a CPU-served or f32-decoder leg pins every default-ON driver hook OFF
+for that leg — `set_metal_tower(false)`, `set_metal_wdec(false)`, `set_metal_wdec_step(false)`
+— and restores it after** — never relies on the driver's runtime decline. The mechanism (why
+the hooks flip legs silently) is `CLAUDE.md`'s "Metal fixtures" section.
 
 **A cell that encodes, preprocesses, or asserts on vision image bytes — pixels, not a `.dlim`
 model image — with no model loaded builds its image procedurally and pins its expectations
@@ -127,7 +144,7 @@ well as red.**
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** — the wire-shape pins, the render pins, and a live server leg gated on the family's
-smallest GGUF (the file homes are `CLAUDE.md`'s "Model-free / no-arm tests" and
-"Out-of-folder test files" notes). A family whose vocab lacks the markers has no format to
-test; with no small-enough local model the remote leg goes to `../THINKING.md`.
+smallest GGUF that runs on the small tier (the file homes are `CLAUDE.md`'s "Model-free /
+no-arm tests" and "Out-of-folder test files" notes). A family whose vocab lacks the markers
+has no format to test.
 

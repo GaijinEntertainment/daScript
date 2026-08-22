@@ -8,13 +8,23 @@ record stores and tune sidecars.** A second validator is a defect. The engine-fr
 `dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
 that gate is a defect.
 
-**A field added to what `write_bench_records` (`profile_common.das`) writes is added to
-`../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** — the validator ignores run keys
-it does not know, so an unvalidated field ships silently.
+**A row entering `records/` names a quiet box: its `hardware.remote_desktop` is `off`.** A
+`parsec` row is a defect — re-mint on a box with no remote-desktop session.
 
-**`../dasllama/dasllama_exchange.das` is the single exchange client — every HTTP call to the sidecar exchange
-(lookup, download, submit) goes through it.** A second HTTP path is a defect; the mechanical
-half (no second `dashv` requirer under the module) is `REVIEW.das`'s to enforce.
+**A row or sidecar entering `records/` names commits a reader can resolve: the row's `sha`
+and the sidecar's `provenance.engine_sha` name commits reachable from the branch under
+review, and the sidecar's `provenance.dasllama_version` equals `DASLLAMA_VERSION`
+(`../dasllama/dasllama_version.das`) at the commit its `engine_sha` names.** A stamp naming
+no reachable commit, or a version mismatch, is a defect — re-mint.
+
+**A field added to what `write_bench_records` (`profile_common.das`) writes is added to
+`../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** — the
+validator ignores run keys it does not know, so an unvalidated field ships silently.
+
+**`../dasllama/dasllama_exchange.das` is the single exchange client — every HTTP call to
+the sidecar exchange (lookup, download, submit) goes through it.** A second HTTP path is a
+defect; the mechanical half (no second `dashv` requirer under the module) is `REVIEW.das`'s
+to enforce.
 
 **Weakening the exchange download gate (content sha, schema, `DASLLAMA_VERSION`), the
 submission strip, or the submit rails that keep exchange-sourced and foreign-box sidecars
@@ -40,7 +50,7 @@ accessor, or an unnamed table lookup, does not count) — or a `recipe` a reader
 
 **A companion artifact (an mmproj, an image fixture) rides the `companions` of the row that
 pins its carrier.** A companion several rows consume is referenced from the other rows by
-name — uniqueness itself is `test_model_specs.das`'s to enforce.
+name — uniqueness itself is `../tests/test_model_specs.das`'s to enforce.
 
 **`fetch_models.das --fetch` downloads only.** A convert, a bench, or a tune-state write
 added to it is a defect.
@@ -53,9 +63,6 @@ that affects which bytes verify, the evidence is a `fetch_models.das --` run end
 sha unchanged) that run proves nothing — the verify never reads the url of a file already on
 disk — so the evidence is a fetch through the new url into a scratch dir, or a documented
 resolve of the pinned revision's size and content sha against the row's canonical values.
-
-**An entry point whose timed reps dispatch `[tune]`-selected kernels calls `tune_gate()`
-(`profile_common.das`) before its first timed rep**, or it measures fallback kernels silently.
 
 **A refreshed `last_known_good_sidecar.json` is one complete mint from the box its provenance
 names, at the current `dasllama_version` — never a hand-edited copy.** `REVIEW.das` (beside

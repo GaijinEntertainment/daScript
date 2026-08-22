@@ -816,6 +816,9 @@ def resident_driver_register() {
     register_decode_override("vulkan", @@vulkan_resident_decode)
     register_batch_decode_override("vulkan", @@vulkan_resident_batch_decode)
     register_prefill_override("vulkan", @@vulkan_resident_prefill)
+    // the resident chain encodes the causal mask device-side — a fused mid-turn span cannot
+    // serve on it, so eval_embd_span_ keeps the three-eval splice while vulkan is active
+    register_prefill_override_split_span("vulkan")
     register_gpu_upload_resident(@@moe_gpu_upload_resident)
     set_moe_gpu_slice_window_fn(@@vk_slice_window_provider)
 }

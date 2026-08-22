@@ -501,3 +501,12 @@
     differentiation, not parity catch-up. Done = `BATCH_NEEDS_OK` carries `ple`, a batch-decode
     E-series cell in the support matrix, and a scheduler-level A/B showing the batched step
     beats N per-row steps on an E-series carrier.
+
+- **`check_committed_records` gate in `performance/REVIEW.das`** (fused-image-span review round):
+    machine-check the two records-provenance rules — every `runs[]` row's
+    `hardware.remote_desktop == "off"`, every row `sha` and sidecar `provenance.engine_sha`
+    an ancestor of HEAD, and `provenance.dasllama_version` equal to `DASLLAMA_VERSION` at that
+    commit. When it lands, the two prose rules in `performance/REVIEW.md` collapse to the
+    "weakening that gate is a defect" residue form. Also owed: a re-mint of the gemma-3-4b cpu
+    image row (hand-minted in the gemma3v arc; still stamps `parsec` + a pre-branch sha, and
+    the image sweep's catalog does not reach it).
