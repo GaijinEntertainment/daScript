@@ -10,6 +10,7 @@ struct FormatResult {
     file : string
     status : string
     message : string
+    comments_stripped : bool
 }
 
 def private format_file_single(file : string; project, project_root : string; load_modules : array<string>) : FormatResult {
@@ -78,6 +79,7 @@ def private format_file_single(file : string; project, project_root : string; lo
         }
     }
     result.status = "formatted"
+    result.comments_stripped = stripped_any
     result.message = stripped_any ? "Formatted (comments stripped): {file}" : "Formatted: {file}"
     return result
 }
@@ -92,12 +94,20 @@ def do_format_file(file : string; project : string = ""; project_root : string =
     var results : array<FormatResult>
     results |> reserve(length(files))
     var any_errors = false
+    var stripped_count = 0
     for (f in files) {
         let r = format_file_single(f, project, project_root, load_modules)
         if (r.status == "error" || r.status == "reverted") {
             any_errors = true
         }
+        if (r.comments_stripped) {
+            stripped_count++
+        }
         results |> push(r)
+    }
+    if (stripped_count > 0) {
+        results |> push(FormatResult(status = "rescue_advisory",
+            message = "comments were deleted from {stripped_count} file(s) — before committing, run the rescue-bot agent over the strip diff of the entries with comments_stripped = true"))
     }
     return make_tool_result(sprint_json(results, false), any_errors)
 }

@@ -138,7 +138,9 @@ New knowledge about daslang syntax, semantics, or conventions — from compiler 
 
 **Rule files carry rules, not history.** CLAUDE.md files, `skills/*.md`, and per-module rule docs state the CURRENT contract only — no incident anecdotes, PR/issue numbers, dated rulings, or "as of" entries. When a rule changes, replace the old text outright and state the timeless WHY; history lives in git, `/history`, and memory, so archive a motivating incident worth keeping in `/history`. (Carve-out: `probe-verified <date>` tags on syntax/behavior claims are verification provenance, not history — they stay.)
 
-**Every REVIEW.md reviews itself.** A discovered checklist is itself audited under the self-review rule, not just applied — its own defects are findings, fixed in the same batch. The contract all checklists share lives ONCE in `REVIEW_COMMON.md` at the repo root; checklists point at it and never restate it (`skills/review_md.md`). Per-PR discovery, the `REVIEW.das` gates, and the auditor-agent topology: `skills/internal/make_pr.md` step 0a.
+**Boris's rulings get a `LAWS.md` sidecar.** When an edit to a rule document implements something Boris asked for, append an entry to `LAWS.md` in that document's folder (create the file on the first ruling): the date, the document(s) edited, and what he asked for — his words, condensed but verbatim in spirit. `LAWS.md` is not a rule document — it is append-only intent provenance, so no agent edits, compacts, or audits it, and its entries are never cited as rules; they exist so rule provenance can be decided later.
+
+**Every REVIEW.md reviews itself.** A discovered checklist is itself audited under the self-review rule, not just applied — its own defects are findings, fixed in the same batch. The contract all checklists share lives ONCE in `REVIEW_COMMON.md` at the repo root; checklists point at it and never restate it (`skills/review_md.md`). Per-PR discovery, the `REVIEW.das` gates, and the auditor-agent topology: `skills/internal/make_pr.md`, the REVIEW audit row and its agent-topology section.
 
 **Doc improvements at stopping points.** Propose-first applies only to restructuring, removing existing guidance, **or proposing a new skill file for a recurring pattern no existing skill covers**. Structural diffs get review; factual drift must be self-healing, not queued behind it.
 
@@ -248,7 +250,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/…)
 
 **Complexity/length lint (STYLE037/STYLE038): new code meets both limits from the start.** On a hit in existing code, the suppress-vs-split resolution policy is `skills/style_lint.md` — never force a split on an honest shape.
 
-**Comment hygiene, all languages: `skills/comment_style_hygiene.md` is the rulebook.** For `.das` outside tutorials/examples the headline is ABSOLUTELY NO comments outside the skill's kept set — the formatter strips everything else, fail-closed, by design; for C/C++ it is no NEW comments. The kept sets, teaching-code boundary, naming and code-shape rules all live in the skill; the `style-hygiene-auditor` agent applies them to every PR's new code (mandatory run in `skills/internal/make_pr.md`, findings persuade rather than block).
+**Comment hygiene, all languages: `skills/comment_style_hygiene.md` is the rulebook.** For `.das` outside tutorials/examples the headline is that no comment outside the skill's kept set survives to a commit — scaffolding is welcome while you work, and the PR gate drains it (`skills/internal/make_pr.md`, the Comment drain row). For C/C++ it is no NEW comments. The kept sets, teaching-code boundary, naming and code-shape rules all live in the skill; the `style-hygiene-auditor` agent applies them to every PR's new code (mandatory run in `skills/internal/make_pr.md`, findings persuade rather than block).
 
 ## Key Directories
 

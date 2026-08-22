@@ -150,7 +150,7 @@ def private stripped_source_compiles(file, text : string) : bool {
 }
 
 
-def private format_one_strip_file(file : string; verify, verbose : bool; var verified : bool&; var strip_failures : int&) {
+def private format_one_strip_file(file : string; verify, verbose : bool; var verified : bool&; var strip_failures, stripped_count : int&) {
     var before : string
     var after : string
     var open = false
@@ -197,7 +197,11 @@ def private format_one_strip_file(file : string; verify, verbose : bool; var ver
         }
     }
     if (write) {
-        log::info("++ {file}")
+        let stripped = after != format_source_string(before, false)
+        log::info(stripped ? "++ {file} (comments stripped)" : "++ {file}")
+        if (stripped) {
+            stripped_count++
+        }
         if (verbose) {
             log::info(diff_result.log)
         }
@@ -267,7 +271,7 @@ def private drop_format_disabled_files(var files : array<string>) : array<Format
     return <- jobs
 }
 
-def private run_format_jobs(var jobs : array<FormatJob>; threadsNum : int; verify, verbose : bool; args : array<string>; var verified : bool&; var strip_failures : int&) {
+def private run_format_jobs(var jobs : array<FormatJob>; threadsNum : int; verify, verbose : bool; args : array<string>; var verified : bool&; var strip_failures, stripped_count : int&) {
     var plain_files : array<string>
     var strip_files : array<string>
     for (job in jobs) {
@@ -300,7 +304,7 @@ def private run_format_jobs(var jobs : array<FormatJob>; threadsNum : int; verif
     }
 
     for (file in strip_files) {
-        format_one_strip_file(file, verify, verbose, verified, strip_failures)
+        format_one_strip_file(file, verify, verbose, verified, strip_failures, stripped_count)
     }
 }
 
@@ -347,7 +351,12 @@ def main() {
     let filesNum = length(jobs)
     var verified = true
     var strip_failures = 0
-    run_format_jobs(jobs, threadsNum, verify, verbose, args, verified, strip_failures)
+    var stripped_count = 0
+    run_format_jobs(jobs, threadsNum, verify, verbose, args, verified, strip_failures, stripped_count)
+
+    if (stripped_count > 0) {
+        log::info("comments were deleted from {stripped_count} file(s) — before committing, run the rescue-bot agent over their strip diff (the '(comments stripped)' files above)")
+    }
 
     if (strip_failures > 0) {
         log::info("Failed! {strip_failures} file(s) not stripped in {time_dt_hr(get_time_usec(startTime))}")

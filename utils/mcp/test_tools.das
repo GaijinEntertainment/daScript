@@ -735,9 +735,27 @@ def test_format_file_comment_policy(t : T?) {
         let ok = parse_result(do_format_file(dst), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(find(text, "comments stripped") >= 0, "opted-in folder stripped -- text={text}")
+        t |> success(find(text, "rescue_advisory") >= 0, "strip batch appends the rescue advisory -- text={text}")
+        t |> success(find(text, "rescue-bot") >= 0, "advisory names the rescue-bot agent")
         let after = fread(dst)
         t |> success(find(after, "narration") < 0, "comments removed on disk")
         t |> success(find(after, "//! doc comment survives") >= 0, "docs kept on disk")
+        rmdir_rec(dir)
+    }
+    t |> run("a reformat that strips no comments raises no advisory") <| @(t : T?) {
+        var terr : string
+        let dir = make_policy_dir("mcp_nostrip_test", "[format]\nforce_clean_comments = true\n", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        let dst = path_join(dir, "spacing.das")
+        fwrite(dst, "options gen2\n\ndef f() \{\n    let x=1\n    return x\n\}\n")
+        var text : string
+        var is_error = false
+        parse_result(do_format_file(dst), text, is_error)
+        t |> success(find(text, "\"status\":\"formatted\"") >= 0, "spacing-only file was reformatted -- text={text}")
+        t |> success(find(text, "rescue_advisory") < 0, "no comments deleted, no advisory")
         rmdir_rec(dir)
     }
     t |> run("fail-closed: a strip whose compile_check fails restores the original bytes") <| @(t : T?) {
@@ -756,6 +774,7 @@ def test_format_file_comment_policy(t : T?) {
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "reverted outcome reports as error")
         t |> success(find(text, "reverted") >= 0, "status is reverted -- text={text}")
+        t |> success(find(text, "rescue_advisory") < 0, "a reverted strip keeps its comments — no rescue advisory")
         t |> equal(fread(dst), src, "original bytes restored")
         rmdir_rec(dir)
     }
@@ -772,6 +791,7 @@ def test_format_file_comment_policy(t : T?) {
         var is_error = false
         parse_result(do_format_file(dst), text, is_error)
         t |> success(!is_error, "default run should not error")
+        t |> success(find(text, "rescue_advisory") < 0, "nothing stripped — no rescue advisory")
         let after = fread(dst)
         t |> success(find(after, "narration dies") >= 0, "comments intact on disk")
         rmdir_rec(dir)

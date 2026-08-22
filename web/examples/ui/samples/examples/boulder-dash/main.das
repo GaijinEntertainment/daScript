@@ -19,6 +19,7 @@ require daslib/strings_boost
 require live_stub   // playground shim: replaces the live/* + live_host stack (window, clock, no-op [live_command])
 require cave
 require cave_gen
+require sfx_gen
 
 // Music uses the THREADED strudel player (strudel_init/strudel_play). The runtime
 // gate in init() turns it on only where the audio backend is threaded — wasm64 and
@@ -31,8 +32,6 @@ let FILL_DIR = normalize(float3(0.55, 0.28, -0.32))
 let CAM_EYE = float3(0.0, -6.0, 26.0)
 let CAM_TARGET = float3(0.0, -0.65, 0.0)
 let START_LIVES = 3
-let AUDIO_RATE = 48000
-let AUDIO_CHANNELS = 1
 
 let COL_DIRT = float3(0.45, 0.28, 0.12)
 let COL_BOULDER = float3(0.55, 0.55, 0.58)
@@ -125,61 +124,6 @@ var display_w = 0
 var display_h = 0
 var skip_draw : array<bool>
 
-def gen_sine_sweep(freq_start, freq_end : float; duration : float; volume : float = 0.3) : array<float> {
-    let num_samples = int(float(AUDIO_RATE) * duration)
-    var samples : array<float>
-    samples |> resize(num_samples)
-    for (i in range(num_samples)) {
-        let t = float(i) / float(AUDIO_RATE)
-        let frac = t / duration
-        let freq = freq_start + (freq_end - freq_start) * frac
-        samples[i] = sin(2.0 * PI * freq * t) * (1.0 - frac) * volume
-    }
-    return <- samples
-}
-
-def gen_noise_burst(duration : float; volume : float = 0.2) : array<float> {
-    let num_samples = int(float(AUDIO_RATE) * duration)
-    var samples : array<float>
-    samples |> resize(num_samples)
-    var seed = 12345u
-    for (i in range(num_samples)) {
-        let frac = float(i) / float(num_samples)
-        seed = seed * 1103515245u + 12345u
-        let noise = float(int(seed >> 16u) % 1000) / 500.0 - 1.0
-        samples[i] = noise * (1.0 - frac) * volume
-    }
-    return <- samples
-}
-
-def gen_tone(freq, duration, volume : float) : array<float> {
-    return <- gen_sine_sweep(freq, freq, duration, volume)
-}
-
-def overlay_at(var dst : array<float>; src : array<float>; at : int) {
-    let need = at + length(src)
-    if (length(dst) < need) {
-        dst |> resize(need)
-    }
-    for (i in range(length(src))) {
-        dst[at + i] += src[i]
-    }
-}
-
-def gen_fanfare(base : float; vol : float = 0.28) : array<float> {
-    var out : array<float>
-    let step = int(float(AUDIO_RATE) * 0.11)
-    let n1 <- gen_tone(base, 0.09, vol)
-    let n2 <- gen_tone(base * 1.25, 0.09, vol)
-    let n3 <- gen_tone(base * 1.5, 0.10, vol * 1.05)
-    let n4 <- gen_tone(base * 2.0, 0.28, vol * 1.15)
-    overlay_at(out, n1, 0)
-    overlay_at(out, n2, step)
-    overlay_at(out, n3, step * 2)
-    overlay_at(out, n4, step * 3)
-    return <- out
-}
-
 var @live snd_dig : array<float>
 var @live snd_gem : array<float>
 var @live snd_land_boulder : array<float>
@@ -221,25 +165,25 @@ def init_audio_samples() {
     delete snd_amoeba_rocks
     delete snd_expand
     delete snd_time_low
-    snd_dig <- gen_sine_sweep(180.0, 90.0, 0.05, 0.2)
-    snd_gem <- gen_sine_sweep(980.0, 1560.0, 0.09, 0.28)
-    snd_land_boulder <- gen_sine_sweep(140.0, 55.0, 0.07, 0.24)
-    snd_land_diamond <- gen_sine_sweep(1400.0, 2100.0, 0.08, 0.26)
-    snd_fall_boulder <- gen_sine_sweep(200.0, 110.0, 0.04, 0.18)
-    snd_fall_diamond <- gen_sine_sweep(1600.0, 2200.0, 0.035, 0.22)
+    snd_dig <- gen_sine_sweep(180.0, 0.0, 0.05, 0.2)
+    snd_gem <- gen_sine_sweep(980.0, 2140.0, 0.09, 0.28)
+    snd_land_boulder <- gen_sine_sweep(140.0, -30.0, 0.07, 0.24)
+    snd_land_diamond <- gen_sine_sweep(1400.0, 2800.0, 0.08, 0.26)
+    snd_fall_boulder <- gen_sine_sweep(200.0, 20.0, 0.04, 0.18)
+    snd_fall_diamond <- gen_sine_sweep(1600.0, 2800.0, 0.035, 0.22)
     snd_boom <- gen_noise_burst(0.25, 0.28)
-    snd_die <- gen_sine_sweep(440.0, 80.0, 0.5, 0.3)
-    snd_timeout <- gen_sine_sweep(220.0, 40.0, 0.7, 0.32)
+    snd_die <- gen_sine_sweep(440.0, -280.0, 0.5, 0.3)
+    snd_timeout <- gen_sine_sweep(220.0, -140.0, 0.7, 0.32)
     snd_exit_open <- gen_fanfare(392.0, 0.3)
     snd_clear <- gen_fanfare(523.25, 0.32)
-    snd_push <- gen_sine_sweep(90.0, 70.0, 0.08, 0.22)
-    snd_magic <- gen_sine_sweep(300.0, 900.0, 0.18, 0.22)
-    snd_magic_convert <- gen_sine_sweep(700.0, 1400.0, 0.1, 0.24)
-    snd_amoeba <- gen_sine_sweep(220.0, 160.0, 0.06, 0.16)
-    snd_amoeba_gems <- gen_sine_sweep(600.0, 1600.0, 0.25, 0.26)
-    snd_amoeba_rocks <- gen_sine_sweep(160.0, 50.0, 0.3, 0.26)
-    snd_expand <- gen_sine_sweep(240.0, 180.0, 0.07, 0.18)
-    snd_time_low <- gen_sine_sweep(880.0, 440.0, 0.15, 0.22)
+    snd_push <- gen_sine_sweep(90.0, 50.0, 0.08, 0.22)
+    snd_magic <- gen_sine_sweep(300.0, 1500.0, 0.18, 0.22)
+    snd_magic_convert <- gen_sine_sweep(700.0, 2100.0, 0.1, 0.24)
+    snd_amoeba <- gen_sine_sweep(220.0, 100.0, 0.06, 0.16)
+    snd_amoeba_gems <- gen_sine_sweep(600.0, 2600.0, 0.25, 0.26)
+    snd_amoeba_rocks <- gen_sine_sweep(160.0, -60.0, 0.3, 0.26)
+    snd_expand <- gen_sine_sweep(240.0, 120.0, 0.07, 0.18)
+    snd_time_low <- gen_sine_sweep(880.0, 0.0, 0.15, 0.22)
 }
 
 def play_sfx(samples : array<float>) {
@@ -915,6 +859,8 @@ def update() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glEnable(GL_DEPTH_TEST)
     glEnable(GL_CULL_FACE)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     setup_camera()
 
     let dt = min(get_dt(), 1.0 / 30.0)
@@ -1079,6 +1025,7 @@ def cmd_load_ascii(input : JsonValue?) : JsonValue? {
     }
     var loaded <- cave_from_ascii(args.ascii)
     adopt_cave(g_cave, loaded)
+    finish_cave(g_cave, g_cave.rng, cave_index)
     g_cave.god = god_mode
     game_state = GameState.playing
     return JV(true)

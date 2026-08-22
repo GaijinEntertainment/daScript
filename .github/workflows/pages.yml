@@ -497,6 +497,7 @@ jobs:
             # Interpreted-fallback sources + HUD font (fetched by _interp.html;
             # the whole bundle — _interp.html's GAME_FILES mirrors data.json's list).
             cp web/examples/ui/samples/examples/"$g"/*.das "_site/examples/$g/"
+            rm -f "_site/examples/$g"/test_*.das   # dastest suites are repo-side, not deploy payload
             cp modules/dasStbImage/fonts/droidsansmono.ttf "_site/examples/$g/"
         done
 

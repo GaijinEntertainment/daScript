@@ -7,3 +7,7 @@
 `site/REVIEW.md` binds a change under them as if the files lived under `site/playground/`.**
 The deploy vendors them into the site (`pages.yml`), so `site/playground/` never shows the
 change and the walk from here is the only way that checklist fires.
+
+**A file of the boulder-dash sample — its `.das` sources, its dastest suites, its
+`ARCHITECTURE.md` — answers to `samples/examples/boulder-dash/REVIEW.md` wherever the
+diff puts it.**

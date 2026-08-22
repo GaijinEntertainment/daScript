@@ -436,8 +436,8 @@ def try_fall_empty(var c : Cave; x, y : int; below : Tile; gem : bool) : bool {
     return true
 }
 
-def try_magic_fall(var c : Cave; x, y : int; below : Tile; gem : bool) : bool {
-    if (below != Tile.magic && below != Tile.magic_active) {
+def try_magic_fall(var c : Cave; x, y : int; below : Tile; falling, gem : bool) : bool {
+    if (!falling || (below != Tile.magic && below != Tile.magic_active)) {
         return false
     }
     if (c.magic_spent || cave_at(c, x, y + 2) != Tile.empty) {
@@ -510,7 +510,7 @@ def process_fallable(var c : Cave; x, y : int) {
     let falling = t == Tile.boulder_fall || t == Tile.diamond_fall
     let gem = is_gem_tile(t)
     let below = cave_at(c, x, y + 1)
-    if (try_crush(c, x, y, below, falling, gem) || try_fall_empty(c, x, y, below, gem) || try_magic_fall(c, x, y, below, gem) || try_slime_fall(c, x, y, below, gem) || try_insect_hit(c, x, y, below, falling) || (!falling && try_roll(c, x, y, below, gem))) {
+    if (try_crush(c, x, y, below, falling, gem) || try_fall_empty(c, x, y, below, gem) || try_magic_fall(c, x, y, below, falling, gem) || try_slime_fall(c, x, y, below, gem) || try_insect_hit(c, x, y, below, falling) || (!falling && try_roll(c, x, y, below, gem))) {
         return
     }
     if (falling) {

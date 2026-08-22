@@ -330,23 +330,24 @@ def test_amoeba(t : T?) {
 
 [test]
 def test_magic_wall(t : T?) {
-    var c <- cave_from_ascii("XoX\nXMX\nX.X\nXXX")
-    cave_tick(c)
+    // the wall converts only FALLING objects, so the fixture drops the boulder one cell first
+    var c <- cave_from_ascii("XoX\nX.X\nXMX\nX.X\nXXX")
+    tick_n(c, 2)
     t |> success(c.magic_timer > 0.0, "activated")
-    t |> equal(cave_at(c, 1, 1), Tile.magic_active)
-    t |> equal(cave_at(c, 1, 2), Tile.diamond_fall, "boulder became diamond below")
-    t |> equal(cave_at(c, 1, 0), Tile.empty)
+    t |> equal(cave_at(c, 1, 2), Tile.magic_active)
+    t |> equal(cave_at(c, 1, 3), Tile.diamond_fall, "boulder became diamond below")
+    t |> equal(cave_at(c, 1, 1), Tile.empty)
 }
 
 [test]
 def test_magic_expires_to_brick(t : T?) {
-    var c <- cave_from_ascii("XoX\nXMX\nX.X\nXXX")
+    var c <- cave_from_ascii("XoX\nX.X\nXMX\nX.X\nXXX")
     c.magic_time_max = 2.0 / CAVE_HZ
-    cave_tick(c)
+    tick_n(c, 2)
     t |> success(c.magic_timer > 0.0)
     tick_n(c, 2)
     t |> success(c.magic_spent)
-    t |> equal(cave_at(c, 1, 1), Tile.brick)
+    t |> equal(cave_at(c, 1, 2), Tile.brick)
 }
 
 [test]
@@ -389,5 +390,29 @@ def test_quota_exit_and_timeout(t : T?) {
         cave_apply_time(c, 0.1)
         t |> success(!c.alive)
         t |> success(c.timed_out)
+    }
+}
+
+[test]
+def test_magic_wall_falling_gate(t : T?) {
+    t |> run("a boulder at rest on a magic wall stays put") <| @(t : T?) {
+        var c <- cave_from_ascii(".....\n..o..\n..M..\n.....\n.....")
+        cave_tick(c)
+        t |> equal(cave_at(c, 2, 1), Tile.boulder, "resting boulder survives the tick")
+        t |> equal(cave_at(c, 2, 3), Tile.empty, "nothing emerged below the wall")
+        t |> success(!c.magic_convert, "no conversion event fired")
+    }
+    t |> run("a FALLING boulder through a magic wall becomes a diamond") <| @(t : T?) {
+        var c <- cave_from_ascii(".....\n..o..\n.....\n..M..\n.....\n.....")
+        tick_n(c, 4)
+        t |> equal(cave_at(c, 2, 5), Tile.diamond, "converted object settled below the wall")
+        t |> equal(cave_at(c, 2, 1), Tile.empty, "source cell vacated")
+    }
+    t |> run("a falling boulder onto a SPENT magic wall settles on top") <| @(t : T?) {
+        var c <- cave_from_ascii(".....\n..o..\n.....\n..M..\n.....\n.....")
+        c.magic_spent = true
+        tick_n(c, 4)
+        t |> equal(cave_at(c, 2, 2), Tile.boulder, "settled on the spent wall")
+        t |> equal(cave_at(c, 2, 4), Tile.empty, "nothing emerged")
     }
 }
