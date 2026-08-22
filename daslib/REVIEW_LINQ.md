@@ -1,8 +1,8 @@
 # daslib linq family Code Review Checklist
 
-**A diff touching the linq family — `linq.das`, `linq_boost.das`, `linq_das.das`,
-`linq_fold*.das`, `sql_linq.das` — applies this checklist together with `REVIEW.md`.**
-`REVIEW_COMMON.md` (repo root) binds this file too. Architecture doc: `ARCHITECTURE.md`.
+**A diff touching the linq family — `linq*.das`, `sql_linq.das` — applies this checklist
+together with `REVIEW.md`.** `REVIEW_COMMON.md` (repo root) binds this file too.
+Architecture doc: `ARCHITECTURE.md`.
 
 **A fused emit binds a terminator's default / compare argument ONCE, at the top of the
 generated invoke, eagerly** — even on paths that never use it, because the tier-2 `linq.das`
