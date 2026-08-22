@@ -175,6 +175,9 @@ struct Config {
     // marks the mrope arch. Text rows carry equal positions in every section, which collapses to
     // plain NEOX — only image-span rows build their tables through build_rope_tabs_imrope.
     rope_sections : int4 = int4(0)
+    // qwen3vl's IMROPE interleaves the section walk (t,h,w repeating); qwen2vl's plain MROPE
+    // reads the sections as contiguous ranges — the arch configure picks the builder
+    mrope_interleaved : bool = false
     // qwen3vl deepstack: image-quantum embd rows arrive (1+n)·dim wide; slice l+1 adds to the
     // hidden state after layer l < n (text rows carry zero slices, so text serving is untouched)
     n_deepstack : int64 = 0
@@ -4825,9 +4828,15 @@ def private prefill_rope_tables(t : Model; var s : Session; npos, start_pos : in
         if (long_length(s.mrope_pos) != npos) {
             panic("forward_prefill_body: mrope map carries {long_length(s.mrope_pos)} rows for an npos={npos} call")
         }
-        build_rope_tabs_imrope(s.rope_cos, s.rope_sin, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale,
-                               t.rope_freqs, true, s.mrope_pos, c.rope_sections, npos,
-                               c.rope_dim > 0l ? c.rope_dim : c.head_size)
+        if (c.mrope_interleaved) {
+            build_rope_tabs_imrope(s.rope_cos, s.rope_sin, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale,
+                                   t.rope_freqs, true, s.mrope_pos, c.rope_sections, npos,
+                                   c.rope_dim > 0l ? c.rope_dim : c.head_size)
+        } else {   // qwen2vl: the sections read as contiguous ranges
+            build_rope_tabs_mrope(s.rope_cos, s.rope_sin, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale,
+                                  t.rope_freqs, true, s.mrope_pos, c.rope_sections, npos,
+                                  c.rope_dim > 0l ? c.rope_dim : c.head_size)
+        }
     } elif (g_use_rope_table) {
         // the swa table uses the sliding class's head size; delta = mrope grid-advanced positions
         build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale,

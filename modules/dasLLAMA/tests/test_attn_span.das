@@ -208,6 +208,7 @@ def test_mrope_span(t : T?) {
         var tr <- load_checkpoint(MODEL_PATH)
         // the toy is not an mrope arch — stamp sections summing to head_size/2 (stories15M: 48/2)
         tr.config.rope_sections = int4(8, 8, 8, 0)
+        tr.config.mrope_interleaved = true   // the qwen3vl proxy walk
         let dim = tr.config.dim
         let embd_a <- make_embd(dim, 0)
         with_job_que() {

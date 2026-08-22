@@ -238,8 +238,17 @@ merged-patch-grid panic gate; and the Qwen3-VL 4B DEEPSTACK leg (taps 5/11/17, w
 quarter-offset probes that hit each concatenated slice's first element (a skipped-tap poison
 lands at 6.9–9.7 on them, 600×; mean+v0..v3 alone are BLIND to a zeroed slice). Skips
 honestly without the mmprojs or dumps.
+`test_qwen25v.das` — the qwen25v tower (Qwen2.5-Omni's window-attention ViT, projector
+`qwen2.5o`) tier-1 parity vs the `-p encode` dumps minted on the f32-widened dual-tower
+mmproj, CPU (`qwen3vl-vision-oracle/mint_25o.sh`): five fixtures — cb112 = the single-window
+arm, cb448 = four full windows, cb616x336 = ragged window edges, and quad448 = the WINDOW
+DISCRIMINATOR (four exact-value quadrants; uniform/periodic fixtures make every window
+statistically identical, so an all-full-attention poison hides under them — quad reds it at
+10.7 vs the 2e-4 + 1e-2·rms bar) — plus the merged-patch-grid panic gate. Skips honestly
+without the mmproj or dumps.
 `_vision_oracle.das` is the shared dump parser / fixture generator /
-per-token compare all vision tier-1 tests use.
+per-token compare all vision tier-1 tests use (the `quad` generator and the q1/q2/q3
+quarter-offset probe fields live here).
 `test_audio_embedder.das` — model-free: the `AudioEmbedder` carrier's own arms — the no-audio
 refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on the E2B mmproj,
 carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft token).
@@ -279,7 +288,10 @@ projection 3840 — large tier, `DASLLAMA_PARITY_FULL=1`), and the Qwen3-Omni qw
 grid advance), the Qwen3-VL 4B deepstack pair (small tier — wide 10240-float rows through
 the chat, the caption, and the zeroed-slices decoder control: tails zeroed on the same rows
 must move the prefill logits, measured 10.4 — a caption alone cannot see a decoder that
-ignores the slices) plus `test_omni_showcase` (one Omni session: an image turn, then a text turn
+ignores the slices), the Qwen2.5-Omni-3B qwen25v pair (small tier — the window ViT + the
+qwen2vl NON-interleaved MROPE decoder; the vocab spells the span markers
+`<|vision_bos|>`/`<|vision_eos|>`, resolved by the chat layer's vocab-driven fallback)
+plus `test_omni_showcase` (one Omni session: an image turn, then a text turn
 whose answer needs the image turn across the mrope position delta; qwen3a audio-in-chat is a
 standing gap — the chat AudioTower serves the whisper-class families only):
 the prompt stream shape around the splice

@@ -59,6 +59,7 @@ def test_cpu_prefill_tripwire(t : T?) {
             // an mrope quantum is no longer exempt: metal serves it (the per-row-table
             // capability), so a CPU-served one is the same silent fallback as any other
             tr.config.rope_sections = int4(8, 8, 8, 0)   // stamp: the toy is not an mrope arch (rotary 48 -> half 24)
+            tr.config.mrope_interleaved = true
             var mrope_tripped = false
             try {
                 var s3 <- make_run_state(tr.config)

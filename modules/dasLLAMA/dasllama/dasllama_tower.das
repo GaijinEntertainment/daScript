@@ -701,6 +701,84 @@ def attention_bidir(var out : array<float>; qq, kk, vv : array<float>; @scratch 
     }
 }
 
+//! ``attention_bidir`` restricted to CONTIGUOUS row windows: ``win_lo`` = each window's first
+//! row plus a total-row sentinel; every window attends only within itself (the qwen2.5 ViT's
+//! block-diagonal mask in its window-sorted row order). Units = (window, head), per-slot scratch.
+def attention_bidir_windows(var out : array<float>; qq, kk, vv : array<float>; @scratch var hp : array<float>;
+                            @scratch var att : array<float>; win_lo : array<int64>; d, n_head : int64; scale : float) {
+    let hs = d / n_head
+    let nwin = long_length(win_lo) - 1l
+    var max_wr = 0l
+    for (i in range64(nwin)) {
+        max_wr = max(max_wr, win_lo[i + 1l] - win_lo[i])
+    }
+    let nu = int(nwin * n_head)
+    // per-slot scratch: q [wr×hs], kT [hs×wr], v [wr×hs], o [wr×hs] + the att block [wr×wr]
+    let slot_hp = 4l * max_wr * hs
+    let hpNeed = int64(get_dispatch_slot_bound()) * slot_hp
+    if (long_length(hp) < hpNeed) {   // inline: PERF026 can't see @scratch through reserve_resize
+        hp |> reserve(hpNeed)
+        hp |> resize(hpNeed)
+    }
+    let attNeed = int64(get_dispatch_slot_bound()) * max_wr * max_wr
+    if (long_length(att) < attNeed) {
+        att |> reserve(attNeed)
+        att |> resize(attNeed)
+    }
+    unsafe {
+        let qp = addr<float const?>(qq[0])
+        let kp = addr<float const?>(kk[0])
+        let vp = addr<float const?>(vv[0])
+        let wp = addr<int64 const?>(win_lo[0])
+        var hpp = addr(hp[0])
+        var attp = addr(att[0])
+        var aop = addr(out[0])
+        maybe_parallel_for_indexed(0, nu, nu) $(slot, ub, ue) {
+            unsafe {
+                var qh = hpp + int64(slot) * slot_hp
+                var ah = attp + int64(slot) * max_wr * max_wr
+                for (u in range(ub, ue)) {
+                    let wi = int64(u) / n_head
+                    let h = int64(u) % n_head
+                    let hoff = h * hs
+                    let r0 = wp[wi]
+                    let wr = wp[wi + 1l] - r0
+                    var kt = qh + wr * hs
+                    var vh = kt + wr * hs
+                    var oh = vh + wr * hs
+                    for (p in range64(wr)) {
+                        for (j in range64(hs)) {
+                            qh[p * hs + j] = qp[(r0 + p) * d + hoff + j]
+                            kt[j * wr + p] = kp[(r0 + p) * d + hoff + j]
+                            vh[p * hs + j] = vp[(r0 + p) * d + hoff + j]
+                        }
+                    }
+                    for (i in range64(wr * wr)) {
+                        ah[i] = 0.0
+                    }
+                    gemm_f32(ah, qh, kt, wr, hs, wr)
+                    for (r in range64(wr)) {
+                        var row = ah + r * wr
+                        for (i in range64(wr)) {
+                            row[i] *= scale
+                        }
+                        softmax(row, wr)
+                    }
+                    for (i in range64(wr * hs)) {
+                        oh[i] = 0.0
+                    }
+                    gemm_f32(oh, ah, vh, wr, wr, hs)
+                    for (p in range64(wr)) {
+                        for (j in range64(hs)) {
+                            aop[(r0 + p) * d + hoff + j] = oh[p * hs + j]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ===== encode-stage profiling rail =====
 // set_asr_prof(true) → the encode/decode paths accumulate wall us per stage label (asr.* and g4v.* buckets alike);
 // asr_prof_report() prints totals sorted desc and resets. Harness-only, off by default.

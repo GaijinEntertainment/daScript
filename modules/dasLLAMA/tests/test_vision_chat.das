@@ -43,6 +43,8 @@ let MM_OMNI = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf"   // the qwen3v pai
 let DEC_OMNI = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf"         // large tier: DASLLAMA_PARITY_FULL gates it
 let MM_4B = "mmproj-Qwen3VL-4B-Instruct-F16.gguf"              // the deepstack pair (small tier)
 let DEC_4B = "Qwen3VL-4B-Instruct-Q8_0.gguf"
+let MM_25O = "mmproj-Qwen2.5-Omni-3B-f16.gguf"                 // the qwen25v pair (small tier; qwen2vl MROPE decoder)
+let DEC_25O = "Qwen2.5-Omni-3B-Q8_0.gguf"
 // qwen vocab: <|vision_start|> / <|vision_end|>; 640x480 is 32-aligned = a 20x15 merged grid
 let Q_IMAGE_OPEN = 151652l
 let Q_IMAGE_CLOSE = 151653l
@@ -419,6 +421,50 @@ def test_vision_chat_deepstack(t : T?) {
             delete zeroed
             delete st
             delete emb2
+        }
+        delete m
+    }
+}
+
+[test]
+def test_vision_chat_qwen25o(t : T?) {
+    t |> run("the Qwen2.5-Omni image turn: window ViT + the NON-interleaved MROPE decoder, then the caption") @(tt : T?) {
+        let mm = path_join(models_dir(), MM_25O)
+        let dec = path_join(models_dir(), DEC_25O)
+        let cats = path_join(models_dir(), CATS)
+        if (!model_available(tt, mm) || !model_available(tt, dec)) {
+            return
+        }
+        if (!stat(cats).is_valid) {
+            tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
+            return
+        }
+        let img <- load_image_rgb(cats)
+        var m <- load_model_(dec, QuantMode.q8)
+        tt |> equal(m.config.rope_sections, int4(16, 24, 24, 0), "the qwen2vl decoder's sections")
+        tt |> success(!m.config.mrope_interleaved, "qwen2vl ropes the sections as contiguous ranges")
+        allow_cpu_prefill()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var emb <- load_vision_embedder(mm)
+            tt |> equal(vision_family(emb), "qwen25v", "the dual-tower Omni mmproj sniffs as qwen25v")
+            tt |> equal(vision_proj_dim(emb), 2048l, "projection width matches the 3B decoder")
+            var chat <- create_chat_(m, emb, "", 96l)
+            add_user_image_(chat, img)
+            add_user_(chat, "describe this image")
+            tt |> equal(chat.n_image_rows, 391l, "640x480 letterboxes to 644x476 at align 28: 391 soft tokens")
+            tt |> equal(chat.image_grid, int2(23, 17), "the merged grid reaches the chat (position advance 23)")
+            var params = SamplingParams()
+            params.temp = 0.0
+            let reply = respond_(m, chat, params) $(piece : string) {
+                return true
+            }
+            to_log(LOG_INFO, "vision caption (qwen2.5-omni/qwen25v): {replace(reply, "\n", "\\n")}\n")
+            let low = to_lower(reply)
+            tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
+            tt |> success(length(reply) > 40, "the caption is a description, not a fragment")
+            tt |> equal(chat.session.rope_pos_delta, 23l - 391l, "the session's rope delta reflects the grid advance")
+            delete chat
         }
         delete m
     }

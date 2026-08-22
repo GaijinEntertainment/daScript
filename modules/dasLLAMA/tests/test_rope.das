@@ -281,6 +281,75 @@ def test_rope_gen_imrope_shape(t : T?) {
     }
 }
 
+// the ggml NON-interleaved walk (is_imrope=false): sections read as contiguous ranges
+def private mrope_axis_ref(j, sx, sy, sz : int) : int {
+    if (j >= sx + sy + sz) {
+        return 3
+    } elif (j >= sx + sy) {
+        return 2
+    } elif (j >= sx) {
+        return 1
+    }
+    return 0
+}
+
+[test]
+def test_rope_gen_mrope_noninterleaved(t : T?) {
+    let qsec = int4(16, 24, 24, 0)   // the qwen2vl decoder's sections
+    t |> run("the contiguous-section walk: collapse, reference, and the imrope divergence") @(t : T?) {
+        var ff : array<float>
+        // text rows collapse bit-exactly to the rows builder, like the interleaved form
+        var p4 <- [int4(7, 7, 7, 7), int4(1234, 1234, 1234, 1234)]
+        var pl <- [7l, 1234l]
+        var c1 : array<float>
+        var s1 : array<float>
+        var c2 : array<float>
+        var s2 : array<float>
+        build_rope_tabs_mrope(c1, s1, 1000000.0, 1.0, 1.0, ff, false, p4, qsec, 2l, 128l)
+        build_rope_tabs_rows(c2, s2, 1000000.0, 1.0, 1.0, ff, false, pl, 2l, 128l)
+        var same = true
+        for (ca, cb, sa, sb in c1, c2, s1, s2) {
+            same &&= ca == cb && sa == sb
+        }
+        t |> success(same, "the (p,p,p,p) collapse must be bit-exact")
+        // an image-shaped row reads each axis over its CONTIGUOUS range, frequencies continuous
+        var pi4 <- [int4(100, 103, 117, 0)]
+        var ct : array<float>
+        var st : array<float>
+        build_rope_tabs_mrope(ct, st, 1000000.0, 1.0, 1.0, ff, false, pi4, qsec, 1l, 128l)
+        var ref_ok = true
+        for (j in range(64)) {
+            let axis = mrope_axis_ref(j, 16, 24, 24)
+            let pos = pi4[0][axis]
+            let freq = 1.0 / pow(1000000.0, float(2 * j) / 128.0)
+            let angle = float(pos) * freq
+            // 1e-5, not bit-equal: cross-compilation-unit cos drifts by ulps under -jit
+            ref_ok &&= abs(ct[j] - cos(angle)) < 1e-5 && abs(st[j] - sin(angle)) < 1e-5
+        }
+        t |> success(ref_ok, "every half-dim must read its contiguous-section axis")
+        // the two walks must genuinely differ on grid rows (same sections both ways)
+        var ci : array<float>
+        var si : array<float>
+        build_rope_tabs_imrope(ci, si, 1000000.0, 1.0, 1.0, ff, false, pi4, qsec, 1l, 128l)
+        var differs = false
+        for (j in range(64)) {
+            differs ||= ct[j] != ci[j] || st[j] != si[j]
+        }
+        t |> success(differs, "interleaved and contiguous walks differ on an image row")
+        delete p4
+        delete pl
+        delete pi4
+        delete c1
+        delete s1
+        delete c2
+        delete s2
+        delete ct
+        delete st
+        delete ci
+        delete si
+    }
+}
+
 [test]
 def test_mrope_span_positions(t : T?) {
     // the mtmd decoder walk: head sequential, span (pos0, pos0+i/nx, pos0+i%nx, 0), tail from

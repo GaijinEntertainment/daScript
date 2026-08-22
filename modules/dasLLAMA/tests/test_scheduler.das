@@ -853,6 +853,7 @@ def test_scheduler_mrope(t : T?) {
             setup_dasllama_jobque()
             var m <- load_capped(128l)
             m.config.rope_sections = int4(12, 10, 10, 0)   // stamp: the toy is not an mrope arch (rotary 64 -> half 32)
+            m.config.mrope_interleaved = true
             let saved_mode = get_prefill_attn_mode()
             set_prefill_attn_mode(AttnPrefillMode.classic)
             let prev_fused = get_fused_decode()
