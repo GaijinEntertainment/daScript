@@ -134,6 +134,8 @@ Multi-lane comparison over the same `Car` schema: `_sql` macro over `:memory:` S
 
 The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the splice ladder closed the gap between m3f and m4 across the corpus, and m3 was no longer a useful comparison point.
 
+`tests/test_update_results.das` (dastest suite, not a benchmark) settles `_update_results.das` itself: cell parsing (including ANSI-escape-prefixed JSON lines), absent-lane dashes/nulls, the site record matching the tables, and the both-outputs-untouched contract on a failed run.
+
 | Query family | Description |
 |---|---|
 | `aggregate_match` | `_where + aggregate(seed, op)` — user-supplied binary reducer over a filtered slice |

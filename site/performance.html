@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Data queries — linq benchmarks · daslang</title>
+    <meta name="description" content="One linq chain, six data sources — a plain array, decs entities, an XML DOM, a JSON tree, a hash table, and in-memory SQLite. The _fold macro fuses each chain into a single pass at compile time; ~80 query families measured in ns per element, interpreter and JIT." />
+    <meta name="keywords" content="daslang, linq, LINQ benchmark, data queries, SQL, SQLite, decs, ECS query, JSON query, XML query, JIT" />
+    <link rel="canonical" href="https://daslang.io/performance.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://daslang.io/performance.html" />
+    <meta property="og:site_name" content="daslang" />
+    <meta property="og:title" content="Data queries — one linq chain, six engines" />
+    <meta property="og:description" content="The same linq query over an array, decs entities, XML, JSON, a hash table, and SQLite — fused into a single pass at compile time. Every cell measured, interpreter and JIT." />
+    <meta name="twitter:card" content="summary" />
+
+    <link rel="icon" type="image/svg+xml" href="files/daslang-favicon.svg" />
+    <link rel="alternate icon" type="image/x-icon" href="files/daslang.ico" />
+    <link rel="alternate" type="application/atom+xml" title="Daslang blog" href="blog/feed.xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="files/forge.css" />
+    <link rel="stylesheet" href="files/nav-dropdown.css" />
+
+    <!-- Analytics -->
+    <script data-goatcounter="https://borisbat.goatcounter.com/count"
+            async src="//gc.zgo.at/count.js"></script>
+
+    <!-- Algolia DocSearch -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@docsearch/css@3" />
+    <link rel="stylesheet" href="files/docsearch.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@docsearch/js@3" defer></script>
+    <script src="files/docsearch.js" defer></script>
+
+<style>
+  /* ── performance page styling (pf-*), built on Forge tokens ── */
+  .pf-hero__badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.04em;
+    color: var(--amber); border: 1px solid var(--amber-dim); border-radius: 999px;
+    padding: 5px 12px; margin-bottom: 26px;
+  }
+  .pf-hero__badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+
+  .pf-run {
+    font-family: var(--font-mono); font-size: 12.5px; line-height: 1.9; color: var(--fg-dim);
+  }
+  .pf-run .prompt { color: var(--green); }
+  .pf-run .dim { color: var(--fg-faint); }
+  .pf-run .ok { color: var(--green); }
+  .pf-run .amber { color: var(--amber); }
+  .pf-run .metric { color: var(--fg); }
+
+  .pf-viewbar { margin-top: 26px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .pf-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  .pf-seg button {
+    background: none; border: 0; color: var(--fg-faint); font-family: var(--font-mono);
+    font-size: 11px; padding: 6px 14px; cursor: pointer; letter-spacing: 0.04em;
+  }
+  .pf-seg button + button { border-left: 1px solid var(--rule); }
+  .pf-seg button.is-on { color: var(--amber); background: rgba(232, 161, 58, 0.07); }
+  .pf-hint { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
+
+  /* overflow-y pinned: bare overflow-x:auto computes overflow-y to auto, and 1px sub-pixel
+     rounding at odd zoom levels spawns a phantom vertical scrollbar on the wrap */
+  .pf-table-wrap { margin-top: 14px; border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+  table.pf-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; min-width: 720px; }
+  .pf-table thead th {
+    text-align: right; padding: 12px 10px; color: var(--fg-faint); font-weight: 400;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--rule);
+    background: var(--bg-2); white-space: nowrap; cursor: pointer; user-select: none;
+    position: sticky; top: 0;
+  }
+  .pf-table thead th:first-child { text-align: left; }
+  .pf-table thead th:hover { color: var(--fg); }
+  .pf-table thead th.is-sorted { color: var(--amber); }
+  .pf-table thead th.is-sorted::after { content: ' ▲'; font-size: 8px; }
+  .pf-table thead th.is-sorted.is-desc::after { content: ' ▼'; }
+  .pf-table tbody td { padding: 8px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  .pf-table tbody tr:last-child td { border-bottom: 0; }
+  .pf-table tbody tr:hover td { background: rgba(232,161,58,0.04); }
+  .pf-td-name { color: var(--fg); }
+  .pf-num { text-align: right; color: var(--fg-dim); }
+  .pf-num.pf-best { color: var(--amber); }
+  .pf-dim { color: var(--fg-faint); }
+  .pf-caption { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); margin-top: 18px; }
+
+  .pf-lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 28px; margin: 26px 0 4px; }
+  .pf-lanes > div { border-top: 1px solid var(--rule); padding: 12px 0 0; }
+  .pf-lanes dt { font-family: var(--font-mono); font-size: 11.5px; color: var(--amber); margin-bottom: 5px; }
+  .pf-lanes dd { margin: 0 0 18px; font-size: 13px; line-height: 1.5; color: var(--fg-dim); }
+  .pf-lanes code { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg); }
+
+  .pf-bridge { margin-top: 30px; padding: 18px 22px; border: 1px solid var(--rule); border-left: 2px solid var(--amber); border-radius: 8px; max-width: 780px; }
+  .pf-bridge p { margin: 0; color: var(--fg-dim); font-size: 14px; line-height: 1.6; }
+  .pf-bridge__links { margin-top: 10px !important; display: flex; gap: 26px; flex-wrap: wrap; }
+
+  .pf-caveats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 40px; }
+  .pf-caveat { display: flex; gap: 12px; padding: 14px 0; border-top: 1px solid var(--rule); }
+  .pf-caveat__k { font-family: var(--font-mono); font-size: 11px; color: var(--amber); white-space: nowrap; padding-top: 2px; min-width: 118px; }
+  .pf-caveat__v { font-size: 14px; line-height: 1.55; color: var(--fg-dim); }
+  .pf-caveat__v code { font-family: var(--font-mono); font-size: 12px; color: var(--fg); }
+
+  .forge-p--wide { max-width: 780px; }
+
+  @media (max-width: 900px) {
+    .pf-caveats, .pf-lanes { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="forge-page">
+
+    <!-- ───── Nav ───── -->
+    <nav class="forge-nav">
+        <div class="forge-container forge-nav__inner">
+            <div class="forge-nav__left">
+                <a class="forge-mark" href="/">
+                    <span class="forge-mark__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M 19,2 C 6.848484,12.699956 12.591844,7.4593088 6.8243462,13.056243 16.852307,10.274014 6.8079126,19.737584 5,22 L 17.120536,11.596175 C 6.7139271,14.121239 17.627482,3.775356 19,2 Z m -7,1 c -5,0 -9,4 -9,9 0,2.5 0.9875,4.80625 2.6875,6.40625 L 7.09375,17 C 5.79375,15.8 5,14 5,12 5,8.1 8.1,5 12,5 12.4,5 12.69375,4.99375 13.09375,5.09375 L 14.8125,3.40625 C 13.9125,3.20625 13,3 12,3 Z M 18.3125,5.59375 16.90625,7 C 18.20625,8.2 19,10 19,12 c 0,3.9 -3.1,7 -7,7 -0.4,0 -0.69375,0.0063 -1.09375,-0.09375 L 9.1875,20.59375 C 10.0875,20.79375 11,21 12,21 c 5,0 9,-4 9,-9 0,-2.5 -0.9875,-4.80625 -2.6875,-6.40625 z"/></svg></span>
+                    <span>daslang</span>
+                    <span class="forge-mark__tld">.io</span>
+                </a>
+                <div class="forge-nav__links">
+                    <a href="doc/index.html">docs</a>
+                    <a href="/playground/">playground</a>
+                    <div class="forge-nav__group">
+                        <button class="forge-nav__trigger" type="button">performance <span class="forge-nav__chev">▾</span></button>
+                        <div class="forge-nav__menu">
+                            <a href="/#benchmarks"><span class="forge-nav__menu-label">benchmarks</span><span class="forge-nav__menu-desc">Cross-language CPU speed — interpreter &amp; JIT.</span></a>
+                            <a href="performance.html" class="is-active"><span class="forge-nav__menu-label">data queries <span class="forge-nav__menu-new">NEW</span></span><span class="forge-nav__menu-desc">One linq chain, six data sources — interp &amp; JIT.</span></a>
+                            <a href="dasllama.html"><span class="forge-nav__menu-label">dasLLAMA</span><span class="forge-nav__menu-desc">CPU LLM + speech-to-text, das vs llama.cpp.</span></a>
+                        </div>
+                    </div>
+                    <div class="forge-nav__group">
+                        <button class="forge-nav__trigger" type="button">ecosystem <span class="forge-nav__chev">▾</span></button>
+                        <div class="forge-nav__menu">
+                            <a href="daspkg.html"><span class="forge-nav__menu-label">daspkg</span><span class="forge-nav__menu-desc">The package manager that compiles in.</span></a>
+                            <a href="examples.html"><span class="forge-nav__menu-label">examples</span><span class="forge-nav__menu-desc">Games &amp; demos built in daslang.</span></a>
+                            <a href="downloads.html"><span class="forge-nav__menu-label">downloads</span><span class="forge-nav__menu-desc">Pre-built binaries &amp; source.</span></a>
+                        </div>
+                    </div>
+                    <div class="forge-nav__group">
+                        <button class="forge-nav__trigger" type="button">community <span class="forge-nav__chev">▾</span></button>
+                        <div class="forge-nav__menu">
+                            <a href="/blog/"><span class="forge-nav__menu-label">blog</span><span class="forge-nav__menu-desc">Release notes &amp; deep dives.</span></a>
+                            <a href="/#news"><span class="forge-nav__menu-label">news</span><span class="forge-nav__menu-desc">Latest releases &amp; ecosystem activity.</span></a>
+                            <a href="https://t.me/daScript"><span class="forge-nav__menu-label">telegram</span><span class="forge-nav__menu-desc">Chat with the daslang team.</span></a>
+                            <a href="https://github.com/GaijinEntertainment/daScript"><span class="forge-nav__menu-label">github</span><span class="forge-nav__menu-desc">Source, issues &amp; releases.</span></a>
+                            <a href="changelist.html"><span class="forge-nav__menu-label">change list</span><span class="forge-nav__menu-desc">Every release, version by version.</span></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="forge-nav__right">
+                <button class="forge-nav__burger" type="button" aria-label="menu"
+                    onclick="this.closest('.forge-nav').classList.toggle('is-open')">≡</button>
+                <a class="forge-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span class="forge-nav__gh-stars" data-github-star></span></a>
+                <span class="forge-nav__version">v0.6.4</span>
+                <div id="docsearch"></div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ───── Hero ───── -->
+    <section class="forge-hero">
+        <div class="forge-container forge-hero__grid">
+            <div>
+                <span class="pf-hero__badge"><span class="dot"></span>linq · data queries</span>
+                <h1>One query language — real database engines, or <em>a single fused pass.</em></h1>
+                <p class="forge-hero__lede">
+                    The linq chain you write is a macro. It can compile to SQL and run against a
+                    real database engine — SQLite, DuckDB, a live PostgreSQL — or fuse at compile
+                    time into one pass over das's own containers: an array, decs entities, an XML
+                    DOM, a JSON tree, a hash table. Below, the same query families run both ways —
+                    first against the engines, then across the containers — interpreter and JIT,
+                    in nanoseconds per element.
+                </p>
+                <div class="forge-hero__ctas">
+                    <a class="forge-btn-primary" href="#engines">$ view the scoreboard →</a>
+                    <a class="forge-btn-secondary" href="#method">methodology</a>
+                </div>
+            </div>
+
+            <div class="forge-terminal">
+                <div class="forge-terminal__header">
+                    <div class="forge-terminal__dots"><span class="forge-terminal__dot forge-terminal__dot--red"></span><span class="forge-terminal__dot forge-terminal__dot--amber"></span><span class="forge-terminal__dot forge-terminal__dot--green"></span></div>
+                    <div class="forge-terminal__label">query.das</div>
+                </div>
+                <pre class="forge-hero__code" style="display:block"><code class="language-daslang">require daslib/linq_boost
+
+struct Car {
+    brand : string
+    price : float
+}
+
+[export]
+def main {
+    var cars &lt;- [Car(brand = "Ka", price = 900.0),
+                 Car(brand = "Vaz", price = 1200.0)]
+    let stats &lt;- _fold(each(cars)
+        ._group_by(_.brand)
+        ._select((Brand = _._0,
+                  Avg = _._1 |&gt; select($(c : Car) =&gt; c.price)
+                             |&gt; average()))
+        .to_array())
+    for (s in stats) {
+        print("{s.Brand}: avg {s.Avg}\n")
+    }
+}</code></pre>
+                <!-- the command + its two output lines are a verbatim probe run; the ns/op pairs
+                     below are the groupby_average cells the two boards display (array from
+                     performance_bench.json, sqlite from performance_engines.json) — a commit-time
+                     snapshot performance.js overwrites from the records on load -->
+                <div class="forge-output">
+                    <div class="pf-run">
+                        <div><span class="prompt">$</span> daslang -jit query.das</div>
+                        <div class="dim">  Ka: avg 900</div>
+                        <div class="dim">  Vaz: avg 1200</div>
+                        <div class="dim">&nbsp;</div>
+                        <div class="dim">  the same chain at n = 100 000, from the matrix below:</div>
+                        <div><span class="metric">array&nbsp;&nbsp;</span> <span class="amber" id="pf-hero-arr">2.7 ns/op</span> <span class="dim" id="pf-hero-arr-i">· interp 43.4</span></div>
+                        <div><span class="metric">sqlite&nbsp;</span> <span class="amber" id="pf-hero-sql">291.1 ns/op</span> <span class="dim" id="pf-hero-sql-i">· interp 289.8</span></div>
+                        <div class="ok" id="pf-hero-foot">  ✓ same chain, engine or container · measured 2026-08-22</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- § 01 the engines (from performance_engines.json) -->
+    <section class="forge-section forge-section--alt" id="engines">
+        <div class="forge-container">
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span><span>real engines</span></div>
+            <h2 class="forge-h2">Your queries, against real database engines.</h2>
+            <p class="forge-p forge-p--wide">Every row is one query family; the chain compiles to SQL at compile time and the engine does the work — three engines side by side over the same schema: 100&nbsp;000 <code>Car</code> rows, 100 dealers, 5 brands. The das array lane runs the same chains with no database at all — fused linq folds — and is the baseline every engine is paying its overhead against. PostgreSQL numbers include the same-box TCP round trip: the honest client-side view of a networked engine, not engine-core speed (a fully dashed PostgreSQL column means no server was reachable when the sweep ran). Cells are nanoseconds per element, lower is better; the fastest measured lane in each row is highlighted. Click a column to sort by it.</p>
+
+            <dl class="pf-lanes">
+                <div><dt>SQLite</dt><dd>In-memory database via the in-tree <code>sqlite</code> provider — the row store.</dd></div>
+                <div><dt>DuckDB</dt><dd>In-memory database via <a class="forge-link-amber" href="https://github.com/borisbat/dasDuckDB">dasDuckDB</a> — columnar/analytical, so aggregate-heavy families land very differently.</dd></div>
+                <div><dt>PostgreSQL</dt><dd>A live server via <a class="forge-link-amber" href="https://github.com/borisbat/dasPostgreSQL">dasPostgreSQL</a>, over localhost TCP.</dd></div>
+                <div><dt>Array</dt><dd>No database at all — the same chains as fused linq folds over <code>array&lt;Car&gt;</code>.</dd></div>
+            </dl>
+
+            <div class="pf-viewbar">
+                <div class="pf-seg" id="pf-eng-mode">
+                    <button class="is-on" data-mode="interp">interpreter</button><button data-mode="jit">JIT</button>
+                </div>
+                <span class="pf-hint">ns/op · lower is better · click a column to sort</span>
+            </div>
+            <div class="pf-table-wrap"><table class="pf-table" id="pf-eng-table"><tbody><tr><td class="pf-caption" style="padding:22px 14px">loading benchmark data…</td></tr></tbody></table></div>
+            <div class="pf-caption" id="pf-eng-caption"></div>
+
+            <div class="pf-bridge">
+                <p>One front end, interchangeable back ends: the chain does not change when the engine does. The engine lanes live in an installable example package — the same providers any daslang program gets through daspkg.</p>
+                <p class="pf-bridge__links">
+                    <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript/tree/master/examples/benchmarks/sql">engine benchmark source &rarr;</a>
+                    <a class="forge-link-amber" href="daspkg.html">daspkg &rarr;</a>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- § 02 das containers (from performance_bench.json; the SQLite column lives on the engine
+         board above — performance.js drops the m1 lane from this table) -->
+    <section class="forge-section" id="matrix">
+        <div class="forge-container">
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 02</span><span class="forge-section-label__rule"></span><span>das containers</span></div>
+            <h2 class="forge-h2">The same queries, across das containers.</h2>
+            <p class="forge-p forge-p--wide">The array lane above is this table's baseline. Here the same query families run over the rest of das's data sources — decs entities, an XML DOM, a parsed JSON tree, a hash table — with every chain fused at compile time into a single pass over its container; no database anywhere in this table. Same schema, same discipline: each lane's fixture is built once, one process per lane. Cells are nanoseconds per element; the fastest measured lane in each row is highlighted.</p>
+
+            <dl class="pf-lanes">
+                <div><dt>Array</dt><dd><code>_fold</code> over <code>each(array&lt;Car&gt;)</code> — the chain fuses into a single pass over the array.</dd></div>
+                <div><dt>Decs</dt><dd><code>_fold</code> over <code>from_decs_template</code> — the same fusion as a per-archetype walk over ECS storage.</dd></div>
+                <div><dt>XML</dt><dd><code>_fold</code> over <code>from_xml_node</code> — one DOM walk, reading only the fields the chain uses.</dd></div>
+                <div><dt>JSON</dt><dd><code>_fold</code> over <code>from_json</code> — the XML lane's mirror over a parsed JSON tree.</dd></div>
+                <div><dt>Table</dt><dd><code>_fold</code> over <code>each_kv(table&lt;int; Car&gt;)</code> — a fused slot walk; a key-equality <code>where</code> folds to an O(1) probe.</dd></div>
+            </dl>
+
+            <div class="pf-viewbar">
+                <div class="pf-seg" id="pf-mode">
+                    <button class="is-on" data-mode="interp">interpreter</button><button data-mode="jit">JIT</button>
+                </div>
+                <span class="pf-hint">ns/op · lower is better · click a column to sort</span>
+            </div>
+            <div class="pf-table-wrap"><table class="pf-table" id="pf-table"><tbody><tr><td class="pf-caption" style="padding:22px 14px">loading benchmark data…</td></tr></tbody></table></div>
+            <div class="pf-caption" id="pf-caption"></div>
+
+            <div class="pf-bridge">
+                <p>The speed is the macro system: the chain is rewritten at compile time — filters, projections and aggregates fused into one loop, unused fields pruned, key lookups turned into probes — and the JIT column is that fused loop compiled to native code.</p>
+                <p class="pf-bridge__links">
+                    <a class="forge-link-amber" href="doc/reference/tutorials/28_linq.html">the linq tutorial &rarr;</a>
+                    <a class="forge-link-amber" href="doc/reference/linq_fold_patterns.html">what fuses, and when &rarr;</a>
+                    <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript/tree/master/benchmarks/sql">benchmark source &rarr;</a>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- § 03 methodology -->
+    <section class="forge-section forge-section--alt" id="method">
+        <div class="forge-container">
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 03</span><span class="forge-section-label__rule"></span><span>methodology</span></div>
+            <h2 class="forge-h2" style="margin-bottom:36px">How the numbers are made.</h2>
+            <div class="pf-caveats">
+                <div class="pf-caveat"><div class="pf-caveat__k">what is timed</div><div class="pf-caveat__v">Each cell is one query family over its lane's fixture, total time divided by the element count (ns/op), measured by the <code>dastest --bench</code> harness.</div></div>
+                <div class="pf-caveat"><div class="pf-caveat__k">the fixture</div><div class="pf-caveat__v">One <code>Car</code> schema everywhere — 100&nbsp;000 rows, 100 dealers, 5 brands — materialized natively in each source: an array, a decs world, a parsed DOM, a JSON tree, a hash table, a <code>:memory:</code> SQLite database.</div></div>
+                <div class="pf-caveat"><div class="pf-caveat__k">isolation</div><div class="pf-caveat__v">One process per lane, fixture built once per process — a lane is never contaminated by another lane's code, which is what keeps the JIT column stable.</div></div>
+                <div class="pf-caveat"><div class="pf-caveat__k">0.0 cells</div><div class="pf-caveat__v">Early-exit terminators — <code>first</code>, <code>any</code>, a bounded <code>take</code> — finish below timer resolution. Those queries are effectively free; the cell is real, not missing data.</div></div>
+                <div class="pf-caveat"><div class="pf-caveat__k">— cells</div><div class="pf-caveat__v">Intentionally absent lanes — a query that has no meaning for that source (bare <code>last()</code> on an unordered SQL result, <code>zip</code> over ECS archetypes). Every dash in the matrix has a stated reason in <a href="https://github.com/GaijinEntertainment/daScript/blob/master/benchmarks/sql/results.md">results.md</a>; on the engine board a fully dashed PostgreSQL column means no server was reachable.</div></div>
+                <div class="pf-caveat"><div class="pf-caveat__k">reproduce</div><div class="pf-caveat__v">The matrix lanes live in <a href="https://github.com/GaijinEntertainment/daScript/tree/master/benchmarks/sql"><code>benchmarks/sql/</code></a>, the engine lanes in <a href="https://github.com/GaijinEntertainment/daScript/tree/master/examples/benchmarks/sql"><code>examples/benchmarks/sql/</code></a>; each suite's <code>results.md</code> carries the sweep commands and the tool that regenerates both its tables and this page's data records.</div></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ───── Footer ───── -->
+    <footer class="forge-footer">
+        <div class="forge-container forge-footer__grid">
+            <div>
+                <a class="forge-mark" href="/">
+                    <span class="forge-mark__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M 19,2 C 6.848484,12.699956 12.591844,7.4593088 6.8243462,13.056243 16.852307,10.274014 6.8079126,19.737584 5,22 L 17.120536,11.596175 C 6.7139271,14.121239 17.627482,3.775356 19,2 Z m -7,1 c -5,0 -9,4 -9,9 0,2.5 0.9875,4.80625 2.6875,6.40625 L 7.09375,17 C 5.79375,15.8 5,14 5,12 5,8.1 8.1,5 12,5 12.4,5 12.69375,4.99375 13.09375,5.09375 L 14.8125,3.40625 C 13.9125,3.20625 13,3 12,3 Z M 18.3125,5.59375 16.90625,7 C 18.20625,8.2 19,10 19,12 c 0,3.9 -3.1,7 -7,7 -0.4,0 -0.69375,0.0063 -1.09375,-0.09375 L 9.1875,20.59375 C 10.0875,20.79375 11,21 12,21 c 5,0 9,-4 9,-9 0,-2.5 -0.9875,-4.80625 -2.6875,-6.40625 z"/></svg></span>
+                    <span>daslang</span>
+                    <span class="forge-mark__tld">.io</span>
+                </a>
+                <div class="forge-footer__about">
+                    High-performance scripting for C++.<br />
+                    © 2018–2026 Gaijin Entertainment · BSD 3-Clause
+                </div>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">performance</div>
+                <a class="forge-footer__link" href="/#benchmarks">benchmarks</a>
+                <a class="forge-footer__link" href="performance.html">data queries</a>
+                <a class="forge-footer__link" href="dasllama.html">dasLLAMA</a>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">ecosystem</div>
+                <a class="forge-footer__link" href="daspkg.html">daspkg · package index</a>
+                <a class="forge-footer__link" href="/playground/">playground</a>
+                <a class="forge-footer__link" href="https://edenspark.io">edenspark · games on daslang</a>
+                <a class="forge-footer__link" href="https://github.com/profelis/daScript-plugin">vs code extension</a>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">community</div>
+                <a class="forge-footer__link" href="https://t.me/daScript">telegram</a>
+                <a class="forge-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a>
+                <a class="forge-footer__link" href="changelist.html">change list</a>
+                <a class="forge-footer__link" href="downloads.html">downloads</a>
+            </div>
+        </div>
+    </footer>
+
+</div>
+<script src="files/highlight.js" defer></script>
+<script src="files/performance.js" defer></script>
+<script src="files/github-star.js" defer></script>
+<script src="files/blog-counter.js" defer></script>
+<script src="files/news-counter.js" defer></script>
+</body>
+</html>

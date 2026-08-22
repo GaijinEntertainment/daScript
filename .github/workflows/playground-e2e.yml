@@ -46,6 +46,7 @@ jobs:
           # Static landing page + assets
           cp site/index.html _site/
           cp site/downloads.html _site/ || true
+          cp site/performance.html _site/   # performance-page.spec.js drives it against the committed records
           cp -r site/files _site/files
 
           # Playground: vendor web/examples/ui IDE (no WASM artifacts)
