@@ -90,7 +90,7 @@ def test_pilot_gate_fixtures(t : T?) {
 def make_dasllama_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama.das", "options gen2\n\ndef covered_fn() \{\n\}\n")
     write_at(t, root, "modules/dasLLAMA/REVIEW.md", "rules\n")
-    write_at(t, root, "tutorials/dasLLAMA/01_demo.das", "// demonstrates covered_fn\n")
+    write_at(t, root, "tutorials/dasLLAMA/01_demo.das", "covered_fn()\n// prose beside the call stays harmless\n")
     write_at(t, root, "doc/source/reference/tutorials/dasLLAMA_01_demo.rst", "``covered_fn`` narrated\n")
     var err : string
     t |> success(copy_file(path_join(tree, "modules/dasLLAMA/REVIEW.das"), path_join(root, "modules/dasLLAMA/REVIEW.das"), true, err), "copied the real dasllama gate")
@@ -117,7 +117,7 @@ def test_dasllama_gate_fixtures(t : T?) {
     // near-miss (bound_fnx must not count as a mention of bound_fn)
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama.das",
         "options gen2\n\ndef covered_fn() \{\n\}\n\ndef hidden_fn() \{\n\}\n\ndef bound_fn() \{\n\}\n")
-    write_at(t, fixture, "tutorials/dasLLAMA/02_demo.das", "// bound_fnx is a different identifier\n")
+    write_at(t, fixture, "tutorials/dasLLAMA/02_demo.das", "// bound_fnx is a different identifier\n// hidden_fn taught only in this comment must not count\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(1, red.rc, "planted fixture is red")
