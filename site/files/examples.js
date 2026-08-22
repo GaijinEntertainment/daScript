@@ -35,6 +35,16 @@
             aspect: 900 / 760,
         },
         {
+            id: 'boulder-dash', name: 'Boulder Dash', kind: 'cave physics',
+            description: 'Dig for diamonds, dodge the boulders — fireflies, butterflies, ' +
+                'amoeba and magic walls on an 8 Hz scan-line cave, every cave generated ' +
+                'from a seed. A daslang-live game, compiled to wasm.',
+            tags: ['game', 'opengl', 'audio', 'wasm'],
+            controls: 'arrows move · z/ctrl grab · space start',
+            poster: 'files/examples/boulder-dash-poster.jpg',
+            aspect: 1280 / 720,
+        },
+        {
             id: 'furier', name: 'Fourier Series', kind: 'imgui showcase',
             description: 'Epicycle vectors tracing a Fourier curve — a live OpenGL ' +
                 'visualization driven by Dear ImGui controls. The whole ImGui surface ' +

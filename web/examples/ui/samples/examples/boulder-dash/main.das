@@ -1,33 +1,30 @@
 options gen2
 options persistent_heap
 options gc
+// boulder dash — web playground port (live/* + live_host replaced by live_stub)
 
 require glfw/glfw_boost
-require live/glfw_live
 require opengl/opengl_boost
 require opengl/opengl_gen
 require opengl/opengl_cache
 require daslib/defer
 require daslib/safe_addr
-require live/opengl_live
-require live/live_commands
-require ?dashv live/live_api
-require live/live_watch_boost
-require live/live_vars
-require live/audio_live
 require daslib/json_boost
 require daslib/math_boost
-require daslib/archive
 require opengl/opengl_ttf
 require audio/audio_boost
 require strudel/strudel
 require strudel/strudel_player
-require strudel/strudel_live
 require daslib/strings_boost
-require daslib/strings_convert
-require live_host
+require live_stub   // playground shim: replaces the live/* + live_host stack (window, clock, no-op [live_command])
 require cave
 require cave_gen
+
+// Music is OFF on the web build: the game's strudel music uses the THREADED
+// player (strudel_init/strudel_play), which needs the jobque worker that wasm
+// stubs out. SFX (play_sound_from_pcm) is single-threaded and stays on. Flip to
+// true once the music is ported to main-thread strudel (strudel_tick).
+let MUSIC_ENABLED = false
 
 let CELL_SIZE = 1.0
 let LIGHT_DIR = normalize(float3(-0.28, -0.62, -1.2))
@@ -254,7 +251,6 @@ def play_sfx(samples : array<float>) {
 
 var g_music_tracks : table<string; int>
 var music_initialized = false
-var music_enabled = false
 
 def strudel_music_cmd(cmd : string) {
     let parts <- split(cmd, ":")
@@ -319,7 +315,7 @@ def start_gameover_music() {
 }
 
 def start_music_for_state() {
-    return if (!music_enabled)
+    return if (!MUSIC_ENABLED)
     if (game_state == GameState.game_over_state) {
         start_gameover_music()
     } elif (game_state == GameState.menu) {
@@ -870,14 +866,14 @@ def sim_playing(dt : float) {
 }
 
 def update_music() {
-    return if (!music_enabled || prev_music_state == game_state)
+    return if (!MUSIC_ENABLED || prev_music_state == game_state)
     stop_all_music(0.2)
     start_music_for_state()
 }
 
 def setup_camera() {
     let aspect = display_h != 0 ? float(display_w) / float(display_h) : 1.0
-    v_projection = perspective_rh_opengl(50.0 * PI / 180.0, aspect, 0.1, 200.0)
+    v_projection = perspective_rh_minus1_to_1(50.0 * PI / 180.0, aspect, 0.1, 200.0)
     v_view = look_at_rh(CAM_EYE, CAM_TARGET, float3(0.0, 1.0, 0.0))
     f_Eye = CAM_EYE
     let t = get_uptime()
@@ -889,13 +885,12 @@ def setup_camera() {
 def init() {
     live_create_window("Boulder Dash", 1280, 720)
     create_gl_objects()
-    music_enabled = !audio_is_single_threaded()
     if (!audio_initialized) {
         asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
     }
-    if (music_enabled && !music_initialized) {
+    if (MUSIC_ENABLED && !music_initialized) {
         strudel_init(@@strudel_music_main)
         strudel_set_volume(0.4, 0.0)
         music_initialized = true
@@ -962,24 +957,13 @@ def update() {
 
 [export]
 def shutdown() {
-    if (music_enabled) {
+    if (MUSIC_ENABLED) {
         strudel_shutdown()
     }
     if (!is_reload()) {
         audio_system_finalize(asch.command, asch.next_sid)
     }
     live_destroy_window()
-}
-
-var max_frame_limit = 0
-
-def parse_args() {
-    let args <- get_command_line_arguments()
-    for (i in range(length(args) - 1)) {
-        if (args[i] == "--max-frames") {
-            max_frame_limit = try_to_int(args[i + 1]) ?? 0
-        }
-    }
 }
 
 struct GameStatusResult {
@@ -1119,18 +1103,16 @@ def cmd_slow_motion(input : JsonValue?) : JsonValue? {
     return JV(args)
 }
 
+// Entry point for the standalone cross-compiled build (daslang -exe → .wasm).
+// eval_main_loop drives the block once per frame: a blocking while-loop natively,
+// emscripten_set_main_loop (rAF) on the web — so the same main runs in the browser
+// without blocking. Returns false to end the loop.
 [export]
 def main() {
-    parse_args()
     init()
-    var frame_count = 0
-    while (!exit_requested()) {
+    eval_main_loop() {
         update()
-        maybe_collect_gc()
-        frame_count++
-        if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
-            break
-        }
+        return !exit_requested()
     }
     shutdown()
 }
