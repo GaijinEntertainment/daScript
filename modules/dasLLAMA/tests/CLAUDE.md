@@ -188,6 +188,10 @@ bench's engine compile.
 `test_run_summary.das` — model-free: `run.das`'s own `log_summary` log scraper (last marker line
 wins, end of file closes an unterminated final line, doubled marker yields one line), fed
 synthetic log files from a per-process temp dir. Requires `run` by bare same-dir name.
+`test_site_records.das` — model-free: the records-vs-site drift gate — `merge_site_records`
+(required by relative path, pays the engine compile) regenerated in memory and byte-compared
+against the committed `site/files/dasllama/bench_records.json` (what daslang.io/dasllama.html
+renders); red means a records commit skipped `gen_site_records`.
 `test_tok_seed.das` — model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
 `test_sizing_helpers.das` — model-free: the sizing helpers (`reserve_resize` exact capacity,
