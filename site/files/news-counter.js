@@ -58,16 +58,54 @@
         var chip = document.createElement('span');
         chip.className = 'forge-blog-chip';
         chip.textContent = (count > 9 ? '9+' : count) + ' NEW';
-        anchor.appendChild(chip);
-        anchor.classList.add('forge-blog-link');
+        var label = anchor.querySelector('.forge-nav__menu-label');
+        if (label) {
+            label.appendChild(chip);
+        } else {
+            anchor.appendChild(chip);
+            anchor.classList.add('forge-blog-link');
+        }
+        badgeCollapsedNav(anchor);
+    }
+
+    /* A chip inside a closed dropdown (or, on mobile, behind the burger)
+     * is invisible — mirror it as a dot on every collapsed shell above it. */
+    function badgeCollapsedNav(anchor) {
+        var group = anchor.closest('.forge-nav__group');
+        var trigger = group && group.querySelector('.forge-nav__trigger');
+        if (trigger && !trigger.querySelector('.forge-nav__dot')) {
+            var dot = document.createElement('span');
+            dot.className = 'forge-nav__dot';
+            trigger.insertBefore(dot, trigger.querySelector('.forge-nav__chev'));
+        }
+        var nav = anchor.closest('.forge-nav');
+        var burger = nav && nav.querySelector('.forge-nav__burger');
+        if (burger && !burger.querySelector('.forge-nav__dot')) {
+            var bdot = document.createElement('span');
+            bdot.className = 'forge-nav__dot';
+            burger.appendChild(bdot);
+        }
     }
 
     function clearChips() {
         var chips = document.querySelectorAll('.forge-nav__links a .forge-blog-chip');
         for (var i = 0; i < chips.length; i++) {
-            var parent = chips[i].parentNode;
-            if (parent && parent.hash === '#news') {
+            var anchor = chips[i].closest('a');
+            if (anchor && anchor.hash === '#news') {
                 chips[i].remove();
+            }
+        }
+        unbadgeCollapsedNav();
+    }
+
+    /* Drop any dot whose shell no longer holds a chip (the blog chip may
+     * still be alive in the same dropdown — then the dot stays). */
+    function unbadgeCollapsedNav() {
+        var dots = document.querySelectorAll('.forge-nav__dot');
+        for (var i = 0; i < dots.length; i++) {
+            var shell = dots[i].closest('.forge-nav__group') || dots[i].closest('.forge-nav');
+            if (shell && !shell.querySelector('.forge-blog-chip')) {
+                dots[i].remove();
             }
         }
     }
