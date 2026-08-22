@@ -29,11 +29,17 @@
  * Adapted from github.com/gzuidhof/coi-serviceworker (MIT). */
 
 // Only these subtrees get isolated. Root-scoped worker, narrow effect.
+// /files/wasm/ is the interpreter runtime the /examples fallback (_interp.html)
+// spawns its -pthread workers from: a dedicated worker script must itself carry
+// COEP under an isolated owner, or the load dies with ERR_BLOCKED_BY_RESPONSE
+// and the runtime waits on "loading-workers" forever. On a non-isolated page
+// (the landing hero) the extra COEP on these responses is ignored.
 function coiInIsolationScope(url) {
     return url.origin === self.location.origin &&
         (url.pathname === "/examples.html" ||
          url.pathname.indexOf("/examples/") === 0 ||
-         url.pathname.indexOf("/playground") === 0);
+         url.pathname.indexOf("/playground") === 0 ||
+         url.pathname.indexOf("/files/wasm/") === 0);
 }
 
 // /playground is the threaded wasm32 interpreter — it isolates on every engine (gate dropped).

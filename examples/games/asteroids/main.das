@@ -912,7 +912,7 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
     glEnable(GL_DEPTH_TEST)
 
     let aspect = (display_h != 0 ? float(display_w) / float(display_h) : 1.0)
-    v_projection = perspective_rh_opengl(45.0 * PI / 180.0, aspect, 0.1, 1000.0)
+    v_projection = perspective_rh_minus1_to_1(45.0 * PI / 180.0, aspect, 0.1, 1000.0)
     v_view = look_at_rh(float3(512, 384, 500), float3(512, 384, 0), float3(0, 1, 0))
 
     let dt = get_dt()

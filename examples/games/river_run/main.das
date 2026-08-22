@@ -130,7 +130,7 @@ def update() {
     glFrontFace(GL_CCW)
 
     let aspect = (display_h != 0 ? float(display_w) / float(display_h) : 1.0)
-    v_projection = perspective_rh_opengl(50.0 * PI / 180.0, aspect, 0.1, 500.0)
+    v_projection = perspective_rh_minus1_to_1(50.0 * PI / 180.0, aspect, 0.1, 500.0)
     update_camera()
 
     let real_dt = get_dt()

@@ -20,11 +20,10 @@ require live_stub   // playground shim: replaces the live/* + live_host stack (w
 require cave
 require cave_gen
 
-// Music is OFF on the web build: the game's strudel music uses the THREADED
-// player (strudel_init/strudel_play), which needs the jobque worker that wasm
-// stubs out. SFX (play_sound_from_pcm) is single-threaded and stays on. Flip to
-// true once the music is ported to main-thread strudel (strudel_tick).
-let MUSIC_ENABLED = false
+// Music uses the THREADED strudel player (strudel_init/strudel_play). The runtime
+// gate in init() turns it on only where the audio backend is threaded — wasm64 and
+// native; a single-threaded backend keeps music off and SFX (play_sound_from_pcm) on.
+var music_enabled = false
 
 let CELL_SIZE = 1.0
 let LIGHT_DIR = normalize(float3(-0.28, -0.62, -1.2))
@@ -315,7 +314,7 @@ def start_gameover_music() {
 }
 
 def start_music_for_state() {
-    return if (!MUSIC_ENABLED)
+    return if (!music_enabled)
     if (game_state == GameState.game_over_state) {
         start_gameover_music()
     } elif (game_state == GameState.menu) {
@@ -866,7 +865,7 @@ def sim_playing(dt : float) {
 }
 
 def update_music() {
-    return if (!MUSIC_ENABLED || prev_music_state == game_state)
+    return if (!music_enabled || prev_music_state == game_state)
     stop_all_music(0.2)
     start_music_for_state()
 }
@@ -890,7 +889,8 @@ def init() {
         audio_initialized = true
         init_audio_samples()
     }
-    if (MUSIC_ENABLED && !music_initialized) {
+    music_enabled = !audio_is_single_threaded()
+    if (music_enabled && !music_initialized) {
         strudel_init(@@strudel_music_main)
         strudel_set_volume(0.4, 0.0)
         music_initialized = true
@@ -957,7 +957,7 @@ def update() {
 
 [export]
 def shutdown() {
-    if (MUSIC_ENABLED) {
+    if (music_enabled) {
         strudel_shutdown()
     }
     if (!is_reload()) {

@@ -1359,7 +1359,7 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
     glEnable(GL_CULL_FACE)
 
     let aspect = display_h != 0 ? float(display_w) / float(display_h) : 1.0
-    v_projection = perspective_rh_opengl(45.0 * PI / 180.0, aspect, 0.1, 100.0)
+    v_projection = perspective_rh_minus1_to_1(45.0 * PI / 180.0, aspect, 0.1, 100.0)
     v_view = look_at_rh(
         float3(0.0, 14.0, -4.0),
         float3(0.0, 0.0, 5.0),
