@@ -303,15 +303,27 @@ noise demands them).
   test_vision_chat_qwen25o (small tier) — the 3B captions the cats ("pink couch with two
   cats… two remote controls"), grid 23×17, delta 23−391. omni-3b now serves text + image
   (audio already served standalone; audio-IN-CHAT stays followup #41).
-- **J. Bench + records (PREP DONE 2026-08-22; measurement + card decision PENDING)**:
+- **J. Bench + records (PREP + MEASUREMENT DONE 2026-08-22; card decision PENDING)**:
   provenance rows + verified sha pins for all six fetched files landed (fetch_models 6/6 ok);
-  the Metal ds-add landed, so the 8B Metal cells measure GPU prefill. BLOCKED ON BORIS: the
-  bench's image cells visit `official_catalog()` rows only and the parity PREGATE requires
-  frozen evidence — making Qwen3-VL-4B/8B and/or Qwen2.5-Omni-3B OFFICIAL board cards (each
-  needs a `harness/parity.sh` frozen fixture + `official = true`) is a product decision.
-  Once decided: mint evidence, `daspkg release --quick`, quiet-box `gen_bench_records -w
-  image` + lcpp pairs via the patched mtmd-cli, the gemma-3-4b CPU image row re-mint (3815's
-  tail), `gen_site_records` + commit (gated by test_site_records).
+  the Metal ds-add landed, so the 8B Metal cells measure GPU prefill. MEASURED (Boris:
+  numbers, not cards): all four models das-vs-mtmd on the M1 Max, driven per-model via the
+  released `lcpp_bench --image` (no catalog); the ref pp repriced on ROWS (mtmd's n_past
+  advances by the mrope grid delta, so the patched n_prefill undercounts rows ~8x on mrope
+  models). Numbers in the arc summary; headline — das wins EVERY CPU cell (pp +11..16%
+  dense, 6x on the 30B MoE; tg ties dense, +45% MoE) and EVERY Metal tg (+12..159%), trails
+  every Metal pp (−12..−41%) and every encode except the 30B CPU pair (no Metal tower for
+  the qwen ViTs = the known slice-J gap; mtmd's clip CPU encode is also 4-5x faster than the
+  das CPU tower, except the 30B where mtmd CPU encode collapses to 59 s vs das 6.3 s).
+  THREE bench defects found by the sweep (fixed, 13c5916cc): the image cell never passed the
+  mrope grid (priced the sequential walk — captions hid it via greedy-tie saturation, the
+  arc's own gate lesson, until the 30B emptied); an empty timed reply still minted numbers
+  (now refuses by name); and the qwen3 Instruct/VL checkpoints DERAIL on their own template's
+  think-suppress form (30B → immediate stop, 4B → re-emits 'assistant'; the form is in the
+  GGUF template but the Instruct checkpoints never trained on it) — `--image-think` prices
+  the template-default turn, which is also what the mtmd ref prices. OPEN protocol rule for
+  Boris: should image cells default to template-default thinking (symmetric with mtmd) with
+  think-off reserved for genuinely-thinking checkpoints (gemma-4-12B)? STILL PENDING: the
+  official-card decision, the gemma-3-4b CPU image row re-mint (3815's tail).
 - **K. Docs (DONE 2026-08-22, except J-dependent perf notes)**: README image bullet carries
   all three qwen towers (+ the Metal note); the three stale table claims fixed
   ("vision out of scope" on Qwen2.5-Omni, "deepstack inactive" on Qwen3-ASR/Omni-30B); the
@@ -405,13 +417,30 @@ while mtmd offloads the mmproj to Metal unless told not to.
     known loser: das enc (CPU tower both legs) 3–8 s vs mtmd Metal enc ≤ 0.4 s (≥ 10×
     against das); on the CPU pair (mtmd pinned --no-mmproj-offload) das enc is within 2×
     of mtmd's CPU enc, either side.
+    **SCORED: HALF.** Metal tg +21% ✓, CPU pp +16% ✓, enc-vs-Metal 29× ✓; Metal pp −16%
+    (outside ±10%, wrong side) ✗; CPU enc 4.6× against das ✗ — mtmd's clip CPU encode is
+    genuinely ~5× faster than the das CPU tower, not within 2×.
 10. **Qwen3VL-8B** (same tower class, ~580 M): the 4B shape scaled — Metal tg das leads
     10–25%, enc verdicts identical to P9.
+    **SCORED: MOSTLY.** Metal tg +12% ✓ (bottom of band), enc verdicts identical ✓ (5.3× CPU,
+    15× Metal); unpredicted: Metal pp worsens to −30% (vs the 4B's −16%) — the deepstack
+    Metal cell (CPU repack + per-layer enc_adds) is the suspect, unprofiled.
 11. **Qwen3-Omni-30B-A3B q8** (MoE, 3B active; 32.5 GB fits the 64 GB box on BOTH legs):
     Metal tg das leads 10–30% (the wave-C MoE arm), Metal pp ±15%; CPU pp das leads; enc =
     the 543 M tower on CPU, 4–10 s das.
+    **SCORED: HALF, sandbagged the lead.** CPU pp das leads ✓ but by 6× (not "leads"), CPU tg
+    +45%, Metal tg +159% (band said 10–30%) — mtmd's Metal MoE decode is far weaker than
+    predicted; Metal pp −41% ✗ (outside ±15%); enc 6.3 s ✓, and mtmd's own CPU encode
+    collapsing to 59 s was unpredicted.
 12. **Qwen2.5-Omni-3B q8** (the biggest tower in the set, ~1.3 B window ViT): das enc 8–20 s
     both legs, mtmd Metal enc beats das by ≥ 20×; decoder (3B dense) Metal tg das leads
     10–25%, pp ±10%.
+    **SCORED: HALF.** enc 12.1 s ✓; mtmd Metal enc 17.5× (near the ≥20× claim); Metal tg +45%
+    (above band), Metal pp −12% (just outside). Direction right everywhere, magnitudes off.
 13. Cross-cut: at least one of the 8 pairs voids on cv > 3% and takes a settle + re-run;
     zero das crashes across all cells (every rail in the sweep is mutation-gated).
+    **SCORED: HALF.** The cv void happened (4B ref CPU tg, 5.9% — re-run reproduced the value
+    to 0.2%; the cv is inherent to mtmd's 15-token decode window, not box noise). "Zero das
+    crashes" held literally but missed the real failure mode: TWO silent-wrong classes (the
+    grid never passed; the suppress-form derail) — the sweep's value was finding them, and
+    the prediction's frame ("crashes") was looking at the wrong hazard.
