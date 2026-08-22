@@ -203,8 +203,34 @@ noise demands them).
   standing gap the test surfaced: audio-in-chat rides the whisper-class `AudioTower` only —
   the qwen3a conformer has no chat splice (`followup_general.md` #41; prediction 6 scores
   WRONG on its premise — `add_user_audio_` existed but never served this family).
-- **F. Server**: the `PendingReq` media rail (gemma slice F) gains the mrope position walk in
-  its one-quantum prefill; page unchanged (sticky image already works).
+- **F. Server (DONE 2026-08-22)**: `PendingReq`/`Stream` gained `media_grid : int2` ((0,0) =
+  sequential; submit contract: positive grid ⇔ `nx·ny == n_media` ∧ non-causal, enforced by
+  named panics); the media quantum routes a grid through the new facade
+  `eval_embd_span_mrope` (span = the whole call), so the session delta then covers tail
+  chunks and decode. The E1 note's gap — batched-decode positions — closed by SPLITTING the
+  workspace positions: `ws.positions` stays the KV index (attention counts, cache rows,
+  mirror watermarks — every consumer audited), new `ws.rope_positions = n_past +
+  rope_pos_delta` feeds `build_rope_table_rows`, which the Metal batched override's table
+  copy consumes for free. Same delta fold in the three self-built rope-row sites: Metal spec
+  pre-encode (restores its "bit-identical to forward's row" contract), vulkan resident
+  single decode, vulkan resident batch decode (resident PREFILL needs nothing — it serves
+  `start_pos == 0` only, where the delta is necessarily 0, and an mrope quantum declines
+  every prefill override). Wire: the media worker stamps `MediaEvent.grid` from
+  `vision_mrope_grid` after encode; `handle_chat_tail` → `register_request` →
+  `PendingReq`; `/v1/stats` gained `mrope_streams` (scheduler counter) as the wire proof a
+  caption alone can't give. Gates: `test_scheduler_mrope` — the scheduler stream ==
+  `generate_embd`'s grid form solo AND batched 2-row against solo references, both
+  mutation-controlled (grid routing knocked out → the solo cell reds; delta dropped from the
+  batch gather → the batched cell reds); `test_scheduler_mrope_validation` — four named
+  panics; the server Omni leg (`test_openai_server_vision_mrope`, PARITY_FULL) GREEN end to
+  end — grid 20x15 through worker → scheduler → caption + `mrope_streams == 1` (the caption
+  POST rides the request BUILDER at `timeout = 600`: the 30B's CPU tower encode + CPU mrope
+  prefill dwarf the outbound default — slice G removes most of that wait). Two PRE-EXISTING
+  reds in the PARITY_FULL-gated gemma leg (stash-controlled off this slice's diff) fixed in
+  passing: the 12B's family default THINKS, so the caption sat wholly in `reasoning_content`
+  with `content` honestly empty (the cell now pins `enable_thinking: false`), and the
+  two-image 400 was renamed "one media clip per request" by the audio arc while the cell
+  still grepped the old wording. Suite 4/4 green.
 - **G. Metal IMROPE**: positions plane + sections into the prefill rope kernels (rope_store
   family) and the span eval from 3815; decode-side scalar offset; DASLLAMA_VERSION bump;
   parity arm vs CPU. Until G lands, image turns take CPU prefill by an explicit named

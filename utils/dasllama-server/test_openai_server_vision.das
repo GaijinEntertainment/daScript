@@ -32,13 +32,14 @@ let CATS_PATH = path_join(models_dir(), "coco-val2017-000000039769.jpg")
 // 640x480 letterboxes to 624x480 = 13x10 superpatches (mtmd oracle: image_tokens->nx = 130)
 let CATS_ROWS = 130
 
-def private with_vision_server(port : int; blk : block<(base_url : string) : void>) {
+def private with_vision_server(port : int; blk : block<(base_url : string) : void>;
+                               dec : string = DEC_PATH; mm : string = MM_PATH) {
     with_job_status(1) $(finished) {
         new_thread() @() {
             allow_cpu_prefill()   // planar q8 model: every prefill is CPU here, span included
-            var m <- load_model(DEC_PATH, QuantMode.q8)
+            var m <- load_model(dec, QuantMode.q8)
             set_model(m, "test-vlm")
-            set_model_vision("test-vlm", MM_PATH)
+            set_model_vision("test-vlm", mm)
             set_default_max_tokens(24l)
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
@@ -127,10 +128,13 @@ def test_openai_server_vision(t : T?) {   // nolint:STYLE038 — one server boot
                     }
                 }
             }
+            // enable_thinking: false — the 12B's family default THINKS, and a 32-token budget
+            // never closes the think block, leaving content honestly empty (the reply sits in
+            // reasoning_content); the caption bar reads content, so pin the instruct render
             var body = "\{\"messages\":[\{\"role\":\"user\",\"content\":["
             body += "\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"{uri}\"}},"
             body += "\{\"type\":\"text\",\"text\":\"What animals are in this picture? Answer in one short sentence.\"}"
-            body += "]}],\"max_tokens\":32,\"temperature\":0}"
+            body += "]}],\"max_tokens\":32,\"temperature\":0,\"enable_thinking\":false}"
             POST("{base_url}/v1/chat/completions", body) $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 var err : string
@@ -178,7 +182,7 @@ def test_openai_server_vision(t : T?) {   // nolint:STYLE038 — one server boot
             POST("{base_url}/v1/chat/completions",
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,BBBB\"}},\{\"type\":\"text\",\"text\":\"hi\"}]}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
-                t |> success(find(string(resp.body), "one image per request") >= 0, "the 400 names the one-image rule")
+                t |> success(find(string(resp.body), "one media clip per request") >= 0, "the 400 names the one-clip rule")
             }
             // a data URI with no base64 marker, and one with garbage payload — each its own 400
             POST("{base_url}/v1/chat/completions",
@@ -225,6 +229,79 @@ def test_openai_server_vision(t : T?) {   // nolint:STYLE038 — one server boot
                 let slot0 = js?["models"]?[0]
                 t |> success(slot0?["vision"] ?? false, "the slot row reports its vision arm")
                 t |> success(slot0?["thinking_default"] != null, "the slot row reports its thinking default")
+                if (js != null) {
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ===== the qwen mrope leg: the worker's grid crosses the wire into the scheduler =====
+
+let OMNI_TEST_PORT = 18102
+let OMNI_DEC_PATH = path_join(models_dir(), "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf")
+let OMNI_MM_PATH = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
+let OMNI_CATS_ROWS = 300   // 640x480 -> the qwen letterbox -> a 20x15 merged grid
+
+[test]
+def test_openai_server_vision_mrope(t : T?) {
+    t |> run("the qwen image route: worker grid -> mrope quantum -> caption (needs Qwen3-Omni-30B + its mmproj)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> success(true, "skipped: interpreted (dasLLAMA server tests are JIT-only)")
+            return
+        }
+        for (p in [OMNI_DEC_PATH, OMNI_MM_PATH, CATS_PATH]) {
+            if (!stat(p).is_valid) {
+                t |> success(true, "skipped: {base_name(p)} not present (set DASLLAMA_MODELS_DIR)")
+                return
+            }
+        }
+        if (!g_env_test.parity_full) {   // 30B MoE decoder: far over the 6 GiB tier line
+            t |> success(true, "skipped: the Omni pair runs under DASLLAMA_PARITY_FULL=1 (final pre-PR gate, not the iteration loop)")
+            return
+        }
+        let uri = cats_data_uri()
+        t |> success(length(uri) > 1000, "the cats jpeg encoded to a data URI ({length(uri)} chars)")
+        with_vision_server(OMNI_TEST_PORT, dec = OMNI_DEC_PATH, mm = OMNI_MM_PATH) $(base_url) {
+            var body = "\{\"messages\":[\{\"role\":\"user\",\"content\":["
+            body += "\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"{uri}\"}},"
+            body += "\{\"type\":\"text\",\"text\":\"What animals are in this picture? Answer in one short sentence.\"}"
+            body += "]}],\"max_tokens\":32,\"temperature\":0}"
+            // the builder, not the POST helper: the 30B's CPU tower encode + CPU mrope prefill
+            // (slice G moves it to Metal) dwarf the outbound default timeout
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/v1/chat/completions"
+                req.timeout = 600
+                req.body := body
+                request(req) $(resp) {
+                    t |> success(resp != null, "the image chat request completed")
+                    return if (resp == null)
+                    t |> equal(int(resp.status_code), int(http_status.OK))
+                    var err : string
+                    var js = read_json(string(resp.body), err)
+                    t |> success(js != null, "the image chat response parses")
+                    if (js != null) {
+                        let np = int(js?["usage"]?["prompt_tokens"] ?? 0l)
+                        t |> success(np > OMNI_CATS_ROWS, "prompt_tokens {np} includes the {OMNI_CATS_ROWS} image rows")
+                        let reply = to_lower(js?["choices"]?[0]?["message"]?["content"] ?? "")
+                        t |> success(find(reply, "cat") >= 0, "the model calls the cats cats: '{reply}'")
+                        unsafe {
+                            delete js
+                        }
+                    }
+                }
+            }
+            // the load-bearing wire proof: the scheduler admitted the stream ON the grid walk —
+            // a dropped grid would still caption (sequential positions degrade, not break)
+            GET("{base_url}/v1/stats") $(resp) {
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> success(js != null && (js?["mrope_streams"] ?? 0l) == 1l,
+                    "stats mrope_streams counts the grid-walked stream ({js?["mrope_streams"] ?? 0l})")
                 if (js != null) {
                     unsafe {
                         delete js
