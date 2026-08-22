@@ -9,6 +9,7 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
+require ?das_metal dasllama/dasllama_metal_tower   // the CPU gates pin the tower knob off
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 
 // Tier-1 qwen25v tower parity vs llama-mtmd-debug -p encode (the Qwen2.5-Omni window ViT).
@@ -50,6 +51,9 @@ def test_qwen25v_tier1(t : T?) {
             return
         }
         var tw <- load_qwen25v_tower(mm)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // this gate owns the CPU chain - the dumps are CPU-minted
+        }
         var st = Qwen25vState()
         tt |> equal(int(tw.patch), 14, "patch")
         tt |> equal(int(tw.merge), 2, "spatial merge")

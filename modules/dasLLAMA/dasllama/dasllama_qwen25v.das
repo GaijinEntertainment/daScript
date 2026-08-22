@@ -25,8 +25,9 @@ require math
 //! (separate q/k/v with biases, vision-mrope, gated-silu FFN; attention is block-diagonal per
 //! window except every ``n_wa_pattern``-th block, which attends in full) → RMS post-norm →
 //! 2×2 merger MLP (mm.0 → GELU → mm.2), then the window UN-sort back to group-row-major
-//! order. Rope-only positions — no learned table. Oracle: llama-mtmd-debug -p encode on the
-//! f32-widened mmproj (`qwen3vl_plan.md` slice I, dumps in models/qwen3vl-vision-oracle/).
+//! order. Rope-only positions — no learned table. No clamp — the files carry no
+//! ClippableLinear sidecars. Oracle: llama-mtmd-debug -p encode on the f32-widened mmproj
+//! (`qwen3vl_plan.md` slice I, dumps in models/qwen3vl-vision-oracle/).
 
 let QWEN25V_ROPE_THETA = 10000.0   // models/qwen2vl.cpp hardcodes it — not in the gguf
 let QWEN25V_MIN_TOKENS = 8
@@ -224,7 +225,7 @@ def private q25v_verify_tensors(m : GGUFMeta; t : Qwen25vTower; gemm_sizes : arr
             gguf_expect_elems(m, name, gemm_sizes[g], "dasLLAMA qwen25v")
             gguf_expect_elems(m, "{p}.{Q25V_BLK_GEMM_NAMES[g]}.bias", biases[g], "dasLLAMA qwen25v")
             if ((gguf_tensor_type(m, name) == GGML_TYPE_BF16) != t.blk_bf16) {
-                panic("dasLLAMA qwen25v: '{name}' is not the same element type as v.blk.0.attn_q.weight - mixed block GEMM types are not supported")
+                panic("dasLLAMA qwen25v: '{name}' ({gguf_tensor_type(m, name)}) is not the element type of v.blk.0.attn_q.weight ({t.blk_bf16 ? GGML_TYPE_BF16 : GGML_TYPE_F32}) - mixed block GEMM types are not supported")
             }
         }
     }
@@ -248,14 +249,7 @@ def private q25v_layout(var t : Qwen25vTower; var off : int64&; var woff : int64
 def private q25v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwen25vStaging; gemm_sizes : array<int64>) {
     let d = st.t.n_embd
     let ff = st.t.n_ff
-    gguf_read_tensor_f32(m, bytes, "v.patch_embd.weight", st.blob, st.t.patch_w, st.t.patch_dim * d)
-    var w1 : array<float>
-    w1 |> reserve_resize(st.t.patch_dim * d)
-    gguf_read_tensor_f32(m, bytes, "v.patch_embd.weight.1", w1, 0l, st.t.patch_dim * d)
-    for (i in range64(st.t.patch_dim * d)) {   // the still-image fold: conv0(img) + conv1(img) = (W0+W1)·img
-        st.blob[st.t.patch_w + i] += w1[i]
-    }
-    delete w1
+    tower_read_conv_pair_folded(m, bytes, "v.patch_embd.weight", st.blob, st.t.patch_w, st.t.patch_dim * d)
     gguf_read_tensor_f32(m, bytes, "v.post_ln.weight", st.blob, st.t.post_ln_w, d)
     tower_read_gemm(m, bytes, "mm.0.weight", st.wblob, st.blob, st.t.mm_bf16, st.t.mm0_w, 16l * d * d)
     gguf_read_tensor_f32(m, bytes, "mm.0.bias", st.blob, st.t.mm0_b, 4l * d)

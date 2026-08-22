@@ -410,10 +410,18 @@ def test_vision_chat_deepstack(t : T?) {
             var s2 <- create_session(m)
             eval_embd_span_mrope(m, s2, zeroed, nr, 0l, nr, int2(20, 15))
             var dmax = 0.0
+            var a1 = 0l
+            var a2 = 0l
             for (i in range64(long_length(s1.logits))) {
                 dmax = max(dmax, abs(s1.logits[i] - s2.logits[i]))
+                if (s1.logits[i] > s1.logits[a1]) {
+                    a1 = i
+                }
+                if (s2.logits[i] > s2.logits[a2]) {
+                    a2 = i
+                }
             }
-            to_log(LOG_INFO, "deepstack zeroed-slices logits maxdiff = {dmax}\n")
+            to_log(LOG_INFO, "deepstack zeroed-slices: wide picks '{replace(piece_(m, a1), "\n", "\\n")}' ({s1.logits[a1]}), zeroed picks '{replace(piece_(m, a2), "\n", "\\n")}' ({s2.logits[a2]}), logits maxdiff = {dmax}\n")
             tt |> success(dmax > 1e-2, "the decoder consumes the deepstack slices ({dmax})")
             delete s1
             delete s2

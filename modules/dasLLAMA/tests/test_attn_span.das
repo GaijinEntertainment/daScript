@@ -115,6 +115,23 @@ def private arr_maxdiff(a, b : array<float>) : float {
     return m
 }
 
+// the eyeball rail for a logits-tolerance compare: each side's argmax index and value
+def private log_argmax_sides(tag : string; a, b : array<float>) {
+    var ia = 0l
+    var ib = 0l
+    for (i in range64(long_length(a))) {
+        if (a[i] > a[ia]) {
+            ia = i
+        }
+    }
+    for (i in range64(long_length(b))) {
+        if (b[i] > b[ib]) {
+            ib = i
+        }
+    }
+    to_log(LOG_INFO, "{tag}: argmax A = {ia} ({a[ia]}) | argmax B = {ib} ({b[ib]})\n")
+}
+
 var private g_probe_calls = 0
 
 [unused_argument(t, s, npos, start_pos)]
@@ -218,6 +235,7 @@ def test_mrope_span(t : T?) {
             let lg_fused <- mrope_turn_logits(tr, embd_a, true, 11l, 2l)
             let lg_split <- mrope_turn_logits(tr, embd_a, false, 11l, 2l)
             let fs = arr_maxdiff(lg_fused, lg_split)
+            log_argmax_sides("mrope_span fused-vs-splice", lg_fused, lg_split)
             to_log(LOG_INFO, "mrope_span: fused-vs-splice decode-logits maxdiff = {fs}\n")
             tt |> equal(fs, 0.0, "mrope fused == mrope splice, bit-exact (classic)")
             // the delta: 22 rows advanced the position by 11
@@ -230,6 +248,7 @@ def test_mrope_span(t : T?) {
             // the map must reach the rope math: grid positions differ from sequential ones
             let lg_plain <- span_turn_logits(tr, embd_a, true)
             let dm = arr_maxdiff(lg_fused, lg_plain)
+            log_argmax_sides("mrope_span mrope-vs-sequential", lg_fused, lg_plain)
             to_log(LOG_INFO, "mrope_span: mrope-vs-sequential decode-logits maxdiff = {dm}\n")
             tt |> success(dm > 1e-4, "grid rope positions change the outcome ({dm})")
             // a different grid SHAPE of the same span changes the outcome too (h/w axes live)
@@ -436,6 +455,7 @@ def test_deepstack_rail(t : T?) {
             tt |> equal(arr_maxdiff(lg_n, lg_w0), 0.0, "zero-tail wide rows == the narrow eval, bit-exact")
             let lg_w <- ds_eval_logits(tr, wide)
             let dm = arr_maxdiff(lg_n, lg_w)
+            log_argmax_sides("deepstack_rail tails-vs-narrow", lg_n, lg_w)
             to_log(LOG_INFO, "deepstack_rail: tails-vs-narrow logits maxdiff = {dm}\n")
             tt |> success(dm > 1e-4, "nonzero tail slices reach the hidden state ({dm})")
             let lg_s0 <- ds_eval_logits(tr, wide_s0)

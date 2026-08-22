@@ -236,8 +236,9 @@ def private q3v_verify_tensors(m : GGUFMeta; t : Qwen3vTower; gemm_sizes : array
         gguf_expect_elems(m, "{p}.fc1.bias", 4l * d, "dasLLAMA qwen3v")
         gguf_expect_elems(m, "{p}.fc2.weight", 4l * d * t.proj_dim, "dasLLAMA qwen3v")
         gguf_expect_elems(m, "{p}.fc2.bias", t.proj_dim, "dasLLAMA qwen3v")
-        if ((gguf_tensor_type(m, "{p}.fc1.weight") == GGML_TYPE_BF16) != t.mm_bf16) {
-            panic("dasLLAMA qwen3v: '{p}.fc1.weight' is not the same element type as mm.0.weight - mixed merger types are not supported")
+        let fc1_type = gguf_tensor_type(m, "{p}.fc1.weight")
+        if ((fc1_type == GGML_TYPE_BF16) != t.mm_bf16) {
+            panic("dasLLAMA qwen3v: '{p}.fc1.weight' ({fc1_type}) is not the element type of mm.0.weight ({t.mm_bf16 ? GGML_TYPE_BF16 : GGML_TYPE_F32}) - mixed merger types are not supported")
         }
     }
     let biases <- [ 3l * d, d, t.n_ff, d ]
@@ -252,7 +253,7 @@ def private q3v_verify_tensors(m : GGUFMeta; t : Qwen3vTower; gemm_sizes : array
             gguf_expect_elems(m, name, gemm_sizes[g], "dasLLAMA qwen3v")
             gguf_expect_elems(m, "{p}.{Q3V_BLK_GEMM_NAMES[g]}.bias", biases[g], "dasLLAMA qwen3v")
             if ((gguf_tensor_type(m, name) == GGML_TYPE_BF16) != t.blk_bf16) {
-                panic("dasLLAMA qwen3v: '{name}' is not the same element type as v.blk.0.attn_qkv.weight - mixed block GEMM types are not supported")
+                panic("dasLLAMA qwen3v: '{name}' ({gguf_tensor_type(m, name)}) is not the element type of v.blk.0.attn_qkv.weight ({t.blk_bf16 ? GGML_TYPE_BF16 : GGML_TYPE_F32}) - mixed block GEMM types are not supported")
             }
         }
     }
@@ -285,14 +286,7 @@ def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&)
 def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwen3vStaging; gemm_sizes : array<int64>) {
     let d = st.t.n_embd
     let ff = st.t.n_ff
-    gguf_read_tensor_f32(m, bytes, "v.patch_embd.weight", st.blob, st.t.patch_w, st.t.patch_dim * d)
-    var w1 : array<float>
-    w1 |> reserve_resize(st.t.patch_dim * d)
-    gguf_read_tensor_f32(m, bytes, "v.patch_embd.weight.1", w1, 0l, st.t.patch_dim * d)
-    for (i in range64(st.t.patch_dim * d)) {   // the still-image fold: conv0(img) + conv1(img) = (W0+W1)·img
-        st.blob[st.t.patch_w + i] += w1[i]
-    }
-    delete w1
+    tower_read_conv_pair_folded(m, bytes, "v.patch_embd.weight", st.blob, st.t.patch_w, st.t.patch_dim * d)
     gguf_read_tensor_f32(m, bytes, "v.patch_embd.bias", st.blob, st.t.patch_b, d)
     gguf_read_tensor_f32(m, bytes, "v.position_embd.weight", st.blob, st.t.pos_w, st.t.pos_side * st.t.pos_side * d)
     gguf_read_tensor_f32(m, bytes, "v.post_ln.weight", st.blob, st.t.post_ln_w, d)

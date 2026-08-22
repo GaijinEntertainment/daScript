@@ -9,10 +9,12 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
+require ?das_metal dasllama/dasllama_metal_tower   // the CPU gates pin the tower knob off
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 
 // Tier-1 qwen3v tower parity vs llama-mtmd-debug -p encode (the Omni-30B SigLIP-geometry ViT).
-// Reference arm: the f32-widened mmproj, CPU, --no-mmproj-offload (qwen3vl-vision-oracle/mint.sh).
+// Reference arm: the f32-widened mmprojs, CPU, -fa off (qwen3vl-vision-oracle/mint.sh mints the
+// Omni encode.* dumps, mint_4b.sh the 4B deepstack encode4b.* dumps).
 // Fixtures: pre-resized [0,1] float canvases - no preprocessing, so a diff isolates the tower math.
 
 let private TIER1_ABS = 2e-4
@@ -34,7 +36,7 @@ def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : s
     var o = OracleEncode()
     let logpath = path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), logname)
     if (!load_oracle_encode(logpath, o)) {
-        t |> skip("oracle dump {logname} not present/parseable - mint via qwen3vl-vision-oracle/mint.sh")
+        t |> skip("oracle dump {logname} not present/parseable - mint via qwen3vl-vision-oracle/mint.sh (encode.*) / mint_4b.sh (encode4b.*)")
         return false
     }
     let planes <- make_planes(kind, w, h)
@@ -60,6 +62,9 @@ def test_qwen3v_tier1(t : T?) {
             return
         }
         var tw <- load_qwen3v_tower(mm)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // this gate owns the CPU chain - the dumps are CPU-minted
+        }
         var st = Qwen3vState()
         tt |> equal(int(tw.patch), 16, "patch")
         tt |> equal(int(tw.merge), 2, "spatial merge")
@@ -103,6 +108,9 @@ def test_qwen3v_tier1_deepstack(t : T?) {
             return
         }
         var tw <- load_qwen3v_tower(mm)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(false)   // this gate owns the CPU chain - the dumps are CPU-minted
+        }
         var st = Qwen3vState()
         tt |> equal(int(tw.n_embd), 1024, "tower width")
         tt |> equal(int(tw.n_layer), 24, "blocks")

@@ -105,7 +105,14 @@ the session tracks that delta for every later eval:
    eval_embd_span_mrope(m, s, rows, np, n_head, n_head + n_img, grid)
 
 A gemma pair reports a zero grid — the plain ``eval_embd_span`` shape serves
-it, and the tutorial's third section falls back exactly that way.
+it, and the tutorial's third section falls back exactly that way. The same
+section then runs the one-call form: ``generate_embd`` takes the spliced rows,
+the span bounds and the grid, prefills and streams the reply — what
+``respond`` runs under the hood for a media turn. One boundary worth knowing:
+a deepstack pair (dense Qwen3-VL) encodes wider rows —
+``(1 + n_deepstack) × dim`` floats each; the narrow by-hand splice still
+captions (the extra slices are additive refinement), and
+``create_chat(model, embedder)`` is the path that carries them in full.
 
 .. seealso::
 

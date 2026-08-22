@@ -15,8 +15,13 @@ require ../performance/profile_common.das   // BenchModel — the merge's row ty
 [test]
 def test_site_records_current(t : T?) {
     t |> run("the committed site merge matches the record stores byte for byte") @(tt : T?) {
+        if (!stat("modules/dasLLAMA/performance/records").is_valid) {
+            tt |> skip("not at the repo root (the record stores not visible) - the gate runs from the tree")
+            return
+        }
         if (!stat("site/files/dasllama/bench_records.json").is_valid) {
-            tt |> skip("not at the repo root (site/ not visible) - the gate runs from the tree")
+            // the committed merge is a tracked file - its absence is a broken or renamed rail, never a skip
+            tt |> failure("site/files/dasllama/bench_records.json is missing - the site merge rail moved or was deleted; update gen_site_records + this gate together")
             return
         }
         var merged : array<BenchModel>

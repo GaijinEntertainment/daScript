@@ -149,7 +149,7 @@ Endpoints
      - ``{"model": name}`` — free the slot's weights, KV, and VRAM; the default slot refuses (loopback-only)
    * - ``GET``
      - ``/v1/stats``
-     - Scheduler counters, memory footprint, hardware line, per-slot ``models[]``
+     - Scheduler counters (media ones include ``mrope_streams``), memory footprint, hardware line, per-slot ``models[]``
    * - ``GET``
      - ``/v1/streams``
      - Per-stream states + text tails, prefix-cache chains, recent ASR jobs

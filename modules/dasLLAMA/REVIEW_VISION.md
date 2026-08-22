@@ -1,7 +1,8 @@
 # dasLLAMA vision and media rules
 
 **Routed from `REVIEW.md`: a diff touching a media splice or its eval shape
-(`eval_embd_span_` / `forward_prefill_embd`'s span bounds / `encode_image_`),
+(any `eval_embd_span*` entry in `dasllama/dasllama_blocks.das`, `forward_prefill_embd`'s
+span bounds, or `encode_image_`),
 `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`, a media-carrying
 scheduler path, `dasllama/dasllama_vision_embedder.das`, `dasllama/dasllama_tower.das` (with
 `REVIEW_AUDIO.md` — the shared encoder-tower home serves both), or a vision family file — one
@@ -51,5 +52,6 @@ carries the surrounding head and tail tokens is free.
 BPE merges never cross the media. The engine, the scheduler, and the server all carry the same
 shape; any other representation at the seam is a defect.
 
-**A family gaining an arm for a media kind rides the existing splice prefill path** — a
-parallel prefill path for it is a defect.
+**A family gaining an arm for a media kind reaches the layer stack only through
+`forward_prefill_embd`** — a second prefill BODY for it is a defect; a sibling
+`eval_embd_span*` entry that feeds the same body is the sanctioned shape.
