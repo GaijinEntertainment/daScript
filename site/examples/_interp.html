@@ -27,6 +27,11 @@
     // it — the C++ WebLoop drives the exported init/update/shutdown per rAF.
     var GAME = (new URLSearchParams(location.search).get('g') || '').replace(/[^a-z0-9_-]/gi, '');
     var WASM_DIR = '../files/wasm/';
+    // Per-game source bundles (mirrors the file lists in web/examples/ui/samples/data.json);
+    // games not listed here ship the default two-file bundle.
+    var GAME_FILES = {
+      'boulder-dash': ['main.das', 'cave.das', 'cave_gen.das', 'live_stub.das'],
+    };
     var loadEl = document.getElementById('ex-load');
     function note(s) { if (loadEl) loadEl.textContent = s; }
 
@@ -54,7 +59,7 @@
         var font = get(GAME + '/droidsansmono.ttf')
           .then(function (b) { mount('/modules/dasStbImage/fonts/droidsansmono.ttf', b); })
           .catch(function () {});
-        var src = Promise.all(['main.das', 'live_stub.das'].map(function (f) {
+        var src = Promise.all((GAME_FILES[GAME] || ['main.das', 'live_stub.das']).map(function (f) {
           return get(GAME + '/' + f).then(function (b) { mount(f, b); });
         }));
         Promise.all([font, src]).then(function () {
