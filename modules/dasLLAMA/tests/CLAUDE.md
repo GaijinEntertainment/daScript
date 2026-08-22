@@ -223,6 +223,11 @@ sniff/exec_fmt cells. On Apple builds the CPU gate pins the tower knob off, and 
 gates two fixtures through the Metal block loop on its measured 4e-2·rms bar — engage proven
 per fixture by the encodes/blocks counters, plus the knob-off decline leg (the 72-wide heads
 restride to the attention tiles' 128 on the driver). Skips honestly without the mmproj or dumps.
+`test_qwen3v.das` — the qwen3v tower (Qwen3-Omni's SigLIP-geometry ViT, `qwen3vl_merger` no
+deepstack) tier-1 parity vs the `-p encode` dumps minted on the f32-widened Omni mmproj, CPU
+(`qwen3vl-vision-oracle/mint.sh`): seven fixtures (cb96 = the pos-table downscale arm,
+cb640x320 = the merge-reorder/transposed-grid gate) on the 2e-4 + 4e-3·token-rms bar, plus
+the merged-patch-grid panic gate. Skips honestly without the mmproj or dumps.
 `_vision_oracle.das` is the shared dump parser / fixture generator /
 per-token compare all vision tier-1 tests use.
 `test_audio_embedder.das` — model-free: the `AudioEmbedder` carrier's own arms — the no-audio

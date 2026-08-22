@@ -157,10 +157,22 @@ noise demands them).
   extreme-ratio budget property, and ten post-normalize fnv1a64 gates — ALL bit-exact on the
   first run (prediction 2's convention surprise was consumed at slice A). Negative control:
   a poisoned std reds all ten.
-- **D. Tower**: `dasllama_qwen3v.das` — mmproj load (W₀+W₁ fold, per-tensor plane types:
-  F32 stays f32, BF16 stays halfwords — the gemma slice-G rule), merge reorder, pos-embed
-  bilinear resize, 27 blocks (fused-qkv split, vision-mrope, GELU MLP), merger; tier-1
-  parity vs the f32-widened twin.
+- **D. Tower (DONE 2026-08-22)**: `dasllama_qwen3v.das` — image-rail load (per-tensor
+  bf16/f32 planes; W₀+W₁ conv fold at stage; deepstack refused by TENSOR scan), merge
+  reorder, the antialiased pos-embed resize (`interpolate_grid_bilinear_aa` in tower —
+  verified BIT-identical to a NumPy port of ggml's loop on the real table), 27 blocks
+  (fused-qkv, vision-mrope via `build_rope_tabs_vision` + full-head NEOX apply, scaled
+  bidir attention, GELU-tanh-LUT FFN), 2×2 merger. Tier-1 (`test_qwen3v.das`): all seven
+  fixtures green at maxdiff 3.7e-4–2.7e-3 on a poison-calibrated 2e-4 + 1e-2·rms bar (a
+  swapped rope ladder lands at 0.71–0.85 — 300×). Two oracle lessons: (1) the qwen mint
+  had omitted `-fa off` — clip's flash attention casts K/V to f16 and cost up to 1.5e-2
+  on the dumps (mint.sh now carries the flag + why); (2) the residual 1e-3-grade floor is
+  the f16 GELU LUT quantizing summation-order drift between das GEMMs and the
+  reference's — visible here because solid-color fixtures sit at LOW token rms, the same
+  floor gemma3v's higher-rms fixtures absorb inside 4e-3·rms. Prediction 3 scored: the
+  ≤1e-4 claim was WRONG for a LUT-activation tower (right for gemma4uv's linear embedder,
+  the wrong prior here); prediction 2's "surprise in the resize" landed as the -fa
+  discovery — oracle-side, as predicted by the gemma pattern.
 - **E. Decoder image span**: per-row int positions through the CPU prefill rope arms inside
   the existing uniform-span rail; Session rope-position offset (advance by max(nx,ny), decode
   continues from the offset counter); chat arm (`<|vision_start|>` splice via

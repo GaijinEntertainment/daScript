@@ -487,6 +487,86 @@ def rope_neox_2d_rows(var v : array<float>; npos, n_head, hs : int64;
     }
 }
 
+//! Full-head NEOX RoPE over token-major rows [npos × n_head·hs], in place, ONE table pair per
+//! row (every head of a row shares its angles — the qwen3vl ViT's vision-mrope, tables from
+//! ``build_rope_tabs_vision``): row r applies cos/sin row r across all heads.
+def rope_neox_tab_rows(var v : array<float>; npos, n_head, hs : int64; cos_t, sin_t : array<float>) {
+    if (npos <= 0l) return
+    let d = n_head * hs
+    let half = hs / 2l
+    unsafe {
+        var vp = addr(v[0])
+        let ct = addr<float const?>(cos_t[0])
+        let st = addr<float const?>(sin_t[0])
+        maybe_parallel_for(0, int(npos), lanes_for_work(npos * d * 4l, 0)) $(rb, re) {
+            unsafe {
+                for (r in range64(int64(rb), int64(re))) {
+                    rope_scaled_neox_tab(vp + r * d, hs, d, ct + r * half, st + r * half)
+                }
+            }
+        }
+    }
+}
+
+//! ggml's antialiased bilinear (BILINEAR | ANTIALIAS, the mtmd pos-embed resize): resample a
+//! channel-inner grid [sh×sw rows × d] to [dh×dw rows × d] — triangle filter, support
+//! max(1, 1/scale), weights normalized per pixel, f32 accumulation in ggml's (sy, sx) order.
+def interpolate_grid_bilinear_aa(@scratch var out : array<float>; src : PlaneF; src_off : int64;
+                                 sw, sh, dw, dh, d : int64) {
+    if (long_length(out) < dw * dh * d) {
+        out |> reserve(dw * dh * d)
+        out |> resize(dw * dh * d)
+    }
+    let sf0 = float(dw) / float(sw)
+    let sf1 = float(dh) / float(sh)
+    let support0 = max(1.0, 1.0 / sf0)
+    let support1 = max(1.0, 1.0 / sf1)
+    let invscale0 = 1.0 / support0
+    let invscale1 = 1.0 / support1
+    unsafe {
+        let sp = plane_at(src, src_off)
+        var op = addr(out[0])
+        maybe_parallel_for(0, int(dh), lanes_for_work(dw * dh * d * 8l, 0)) $(yb, ye) {
+            unsafe {
+                for (i1 in range64(int64(yb), int64(ye))) {
+                    let y = (float(i1) + 0.5) / sf1
+                    let y_min = max(int64(y - support1 + 0.5), 0l)
+                    let y_max = min(int64(y + support1 + 0.5), sh)
+                    for (i0 in range64(dw)) {
+                        let x = (float(i0) + 0.5) / sf0
+                        let x_min = max(int64(x - support0 + 0.5), 0l)
+                        let x_max = min(int64(x + support0 + 0.5), sw)
+                        var orow = op + (i1 * dw + i0) * d
+                        for (c in range64(d)) {
+                            orow[c] = 0.0
+                        }
+                        var total_weight = 0.0
+                        for (sy in range64(y_min, y_max)) {
+                            let weight_y = max(1.0 - abs((float(sy) - y + 0.5) * invscale1), 0.0)
+                            for (sx in range64(x_min, x_max)) {
+                                let weight = max(1.0 - abs((float(sx) - x + 0.5) * invscale0), 0.0) * weight_y
+                                if (weight <= 0.0) {
+                                    continue
+                                }
+                                let srow = sp + (sy * sw + sx) * d
+                                for (c in range64(d)) {
+                                    orow[c] += srow[c] * weight
+                                }
+                                total_weight += weight
+                            }
+                        }
+                        if (total_weight > 0.0) {
+                            for (c in range64(d)) {
+                                orow[c] /= total_weight
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! Average pool k×k, stride k, over a patch grid held token-major (row = gy·gw + gx, d channels):
 //! out row (oy·(gw/k) + ox) = mean of the k×k window (ky outer, kx inner — ggml's POOL_2D
 //! accumulation order, then one divide). Ragged edges are dropped. Returns the output row count.

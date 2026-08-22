@@ -117,6 +117,31 @@ def build_rope_tabs_imrope(@scratch var cos_tab : array<float>; @scratch var sin
     }
 }
 
+//! The qwen3vl ViT's VISION-mode rope table (ggml rope VISION): row pi's hs/2 slots = the h
+//! ladder (grid row) then the w ladder RESTARTED, freq divisor hs/2 — slot j reads
+//! θ^(−2·(j%(hs/4))/(hs/2)). Apply full-head NEOX (rope_scaled_neox_tab); positions2 = (h, w).
+def build_rope_tabs_vision(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
+                           theta : float; positions2 : array<int2>; nrows, head_size : int64) {
+    let half = head_size / 2l
+    let sect = half / 2l
+    cos_tab |> resize(nrows * half)
+    sin_tab |> resize(nrows * half)
+    unsafe {
+        var cp = addr(cos_tab[0])
+        var sp = addr(sin_tab[0])
+        let pp = addr<int2 const?>(positions2[0])
+        for (j in range64(half)) {
+            let freq = rope_freq_j(j % sect, half, theta, null)
+            let is_h = j < sect
+            for (pi in range64(nrows)) {
+                let angle = float(is_h ? pp[pi].x : pp[pi].y) * freq
+                cp[pi * half + j] = cos(angle)
+                sp[pi * half + j] = sin(angle)
+            }
+        }
+    }
+}
+
 //! One position's PACKED row — cos[half] then sin[half] in ONE array at `base` (the layout the
 //! resident device kernels take; a different layout from the two-tab builders). Angle order is
 //! `pos * freq * fscale` — this row's original loop — NOT the tabs' `pos * fscale * freq`.
