@@ -194,6 +194,16 @@ def collect_row_usage(var body : Expression?; bindName : string) : tuple<bool; a
     return (allUsed, used)
 }
 
+[macro_function]
+def needs_full_row_bind(usedFields : array<string>; allUsed : bool) : bool {
+    //! true when the walk must bind the whole row rather than key/value locals
+    if (allUsed) return true
+    for (f in usedFields) {
+        if (f != "key" && f != "value") return true
+    }
+    return false
+}
+
 class RowFieldFlattener : AstVisitor {
     bindName     : string
     fieldToLocal : table<string; string>
@@ -579,14 +589,14 @@ var linqCalls = {
     "long_count" => LinqCall(name = "long_count"),
     "average" => LinqCall(name = "average"),
     "min" => LinqCall(name = "min"),
-    "min_by" => LinqCall(name = "min_by"),
+    "min_by" => LinqCall(name = "min_by", noToArrayVariant = true),
     "max" => LinqCall(name = "max"),
-    "max_by" => LinqCall(name = "max_by"),
-    "min_max" => LinqCall(name = "min_max"),
-    "min_max_by" => LinqCall(name = "min_max_by"),
-    "min_max_average" => LinqCall(name = "min_max_average"),
-    "min_max_average_by" => LinqCall(name = "min_max_average_by"),
-    "aggregate" => LinqCall(name = "aggregate"),
+    "max_by" => LinqCall(name = "max_by", noToArrayVariant = true),
+    "min_max" => LinqCall(name = "min_max", noToArrayVariant = true),
+    "min_max_by" => LinqCall(name = "min_max_by", noToArrayVariant = true),
+    "min_max_average" => LinqCall(name = "min_max_average", noToArrayVariant = true),
+    "min_max_average_by" => LinqCall(name = "min_max_average_by", noToArrayVariant = true),
+    "aggregate" => LinqCall(name = "aggregate", noToArrayVariant = true),
     "sum" => LinqCall(name = "sum"),
     "skip" => LinqCall(name = "skip", inplace = true),
     "skip_to_array" => LinqCall(name = "skip", inplace = true),
@@ -628,14 +638,14 @@ var linqCalls = {
     "unique_to_array" => LinqCall(name = "unique", inplace = true),
     "unique_by" => LinqCall(name = "unique_by", inplace = true),
     "unique_by_to_array" => LinqCall(name = "unique_by", inplace = true),
-    "element_at" => LinqCall(name = "element_at"),
-    "element_at_or_default" => LinqCall(name = "element_at_or_default"),
-    "first" => LinqCall(name = "first"),
-    "first_or_default" => LinqCall(name = "first_or_default"),
-    "last" => LinqCall(name = "last"),
-    "last_or_default" => LinqCall(name = "last_or_default"),
-    "single" => LinqCall(name = "single"),
-    "single_or_default" => LinqCall(name = "single_or_default"),
+    "element_at" => LinqCall(name = "element_at", noToArrayVariant = true),
+    "element_at_or_default" => LinqCall(name = "element_at_or_default", noToArrayVariant = true),
+    "first" => LinqCall(name = "first", noToArrayVariant = true),
+    "first_or_default" => LinqCall(name = "first_or_default", noToArrayVariant = true),
+    "last" => LinqCall(name = "last", noToArrayVariant = true),
+    "last_or_default" => LinqCall(name = "last_or_default", noToArrayVariant = true),
+    "single" => LinqCall(name = "single", noToArrayVariant = true),
+    "single_or_default" => LinqCall(name = "single_or_default", noToArrayVariant = true),
     "join" => LinqCall(name = "join", recursive = [1]),
     "join_to_array" => LinqCall(name = "join", recursive = [1]),
     "left_join" => LinqCall(name = "left_join", recursive = [1]),
@@ -657,17 +667,17 @@ var linqCalls = {
 }
 
 [macro_function]
-def is_linq_call(var expr : Expression?) : bool {
+def is_linq_call(expr : Expression?) : bool {
     if (expr is ExprCall) {
-        var call = expr as ExprCall
-        var funcName = string(call.func.name)
-        while (call.func.fromGeneric != null) {
-            call.func = call.func.fromGeneric
-            funcName = string(call.func.name)
+        let call = expr as ExprCall
+        var fn = call.func
+        while (fn.fromGeneric != null) {
+            fn = fn.fromGeneric
         }
+        let funcName = string(fn.name)
         if (linqCalls.key_exists(funcName)) {
             let linqCall = unsafe(linqCalls?[funcName])
-            if (linqCall.moduleName == call.func._module.name) return true
+            if (linqCall.moduleName == fn._module.name) return true
         }
     }
     return false
@@ -841,7 +851,8 @@ def classify_terminator(name : string) : LinqLane {
     if (name == "count") return LinqLane.COUNTER
     if (name == "where_" || name == "select" || name == "take" || name == "skip"
             || name == "take_while" || name == "skip_while" || name == "to_table") return LinqLane.ARRAY
-    if (name == "sum" || name == "min" || name == "max" || name == "average" || name == "long_count") return LinqLane.ACCUMULATOR
+    if (name == "sum" || name == "min" || name == "max" || name == "average" || name == "long_count"
+            || is_min_max_family(name)) return LinqLane.ACCUMULATOR
     if (name == "first" || name == "first_or_default" || name == "any" || name == "all" || name == "contains"
             || name == "last" || name == "last_or_default"
             || name == "single" || name == "single_or_default"
@@ -1488,6 +1499,194 @@ def emit_accumulator_lane(
 }
 
 [macro_function]
+def is_min_max_family(name : string) : bool {
+    return (name == "min_by" || name == "max_by" || name == "min_max"
+        || name == "min_max_by" || name == "min_max_average" || name == "min_max_average_by")
+}
+
+[macro_function]
+def emit_min_max_family_lane(
+                             opName : string;
+                             var termCall : ExprCall?;
+                             var adapter : SourceAdapter?;
+                             var projection : Expression?;
+                             var whereCond : Expression?;
+                             var postTakeWhereCond : Expression?;
+                             var intermediateBinds : array<Expression?>;
+                             var preCondStmts : array<Expression?>;
+                             var elementType : TypeDeclPtr;
+                             itName : string;
+                             names : RangeStateNames;
+                             var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
+                             at : LineInfo
+                             ) : Expression? {
+    // nolint:STYLE014 — multi-output reduce: min_by / max_by / min_max / min_max_by / min_max_average[_by].
+    // Mirrors the daslib impls exactly (first-element latch, strict `less`, elif min/max arms, average
+    // seeded from the first element and divided in TT) so splice == plain on every input. Emits:
+    //   invoke((src…) {
+    //       var mmfirst = true; var mmmin : T [; var mmmax : T ; var mmtot : T ; var mmcnt : uint64]
+    //       for (it in src) {              // where / ranges / binds applied by emit_terminator_lane
+    //           let mmval = <projection ?? it>
+    //           if (mmfirst) { mmmin := mmval … mmfirst = false }
+    //           else { if (<mmval beats mmmin>) mmmin := mmval; elif (<mmval beats mmmax>) mmmax := mmval [; mmtot += mmval] }
+    //           [mmcnt ++]
+    //       }
+    //       [mmtot /= T(mmcnt)]
+    //       return mmmin | (mmmin, mmmax) | (mmmin, mmmax, mmtot)
+    //   }, src…)
+    var accType = mut_result_type(projection, elementType)
+    if (accType == null || !accType.canCopy) return null
+    let isBy = ends_with(opName, "_by")
+    var keyLam : Expression?
+    if (isBy) {
+        if (termCall == null || (termCall.arguments |> length) != 2) return null
+        keyLam = termCall.arguments[1]
+    }
+    let hasAvg = opName == "min_max_average" || opName == "min_max_average_by"
+    let isSingle = opName == "min_by" || opName == "max_by"
+    let workhorse = accType.isWorkhorseType
+    var valueExpr : Expression?
+    if (projection != null) {
+        valueExpr = clone_expression(projection)
+    } else {
+        valueExpr = qmacro_expr() {
+            $i(itName)
+        }
+    }
+    let valName = qn("mmval", at)
+    let minName = qn("mmmin", at)
+    let maxName = qn("mmmax", at)
+    let totName = qn("mmtot", at)
+    let cntName = qn("mmcnt", at)
+    let firstName = qn("mmfirst", at)
+    var minCmp : Expression?
+    var maxCmp : Expression?
+    if (isBy) {
+        var keyVal = peel_lambda_replace_var(keyLam, qmacro($i(valName)))
+        var keyMin = peel_lambda_replace_var(keyLam, qmacro($i(minName)))
+        if (keyVal == null || keyMin == null) return null
+        if (opName == "max_by") {
+            minCmp = qmacro(_::less($e(keyMin), $e(keyVal)))
+        } else {
+            minCmp = qmacro(_::less($e(keyVal), $e(keyMin)))
+        }
+        if (!isSingle) {
+            var keyMax = peel_lambda_replace_var(keyLam, qmacro($i(maxName)))
+            if (keyMax == null) return null
+            maxCmp = qmacro(_::less($e(keyMax), $e(keyVal)))
+        }
+    } else {
+        minCmp = min_max_compare(workhorse, "min", valName, minName)
+        if (!isSingle) {
+            maxCmp = min_max_compare(workhorse, "max", valName, maxName)
+        }
+    }
+    var prologue <- qmacro_block_to_array() {
+        var $i(firstName) = true
+        var $i(minName) : $t(accType)
+    }
+    if (!isSingle) {
+        prologue |> push <| qmacro_expr() {
+            var $i(maxName) : $t(accType)
+        }
+    }
+    if (hasAvg) {
+        prologue |> push_from <| qmacro_block_to_array() {
+            var $i(totName) : $t(accType)
+            var $i(cntName) : uint64
+        }
+    }
+    var perElementStmts : array<Expression?>
+    perElementStmts |> push <| qmacro_expr() {
+        let $i(valName) = $e(valueExpr)
+    }
+    if (isSingle) {
+        perElementStmts |> push <| qmacro_expr() {
+            if ($i(firstName)) {
+                $i(minName) := $i(valName)
+                $i(firstName) = false
+            } elif ($e(minCmp)) {
+                $i(minName) := $i(valName)
+            }
+        }
+    } elif (hasAvg) {
+        perElementStmts |> push_from <| qmacro_block_to_array() {
+            if ($i(firstName)) {
+                $i(minName) := $i(valName)
+                $i(maxName) := $i(valName)
+                $i(totName) := $i(valName)
+                $i(firstName) = false
+            } else {
+                if ($e(minCmp)) {
+                    $i(minName) := $i(valName)
+                } elif ($e(maxCmp)) {
+                    $i(maxName) := $i(valName)
+                }
+                $i(totName) += $i(valName)
+            }
+            $i(cntName) ++
+        }
+    } else {
+        perElementStmts |> push <| qmacro_expr() {
+            if ($i(firstName)) {
+                $i(minName) := $i(valName)
+                $i(maxName) := $i(valName)
+                $i(firstName) = false
+            } else {
+                if ($e(minCmp)) {
+                    $i(minName) := $i(valName)
+                } elif ($e(maxCmp)) {
+                    $i(maxName) := $i(valName)
+                }
+            }
+        }
+    }
+    var tailStmts : array<Expression?>
+    if (isSingle) {
+        tailStmts |> push <| qmacro_expr() {
+            return $i(minName)
+        }
+    } elif (hasAvg) {
+        if (workhorse) {
+            let castName = describe(accType)
+            tailStmts |> push <| qmacro_expr() {
+                if ($i(cntName) != 0ul) {
+                    $i(totName) /= $c(castName)($i(cntName))
+                }
+            }
+        } else {
+            tailStmts |> push <| qmacro_expr() {
+                if ($i(cntName) != 0ul) {
+                    $i(totName) /= $i(cntName)
+                }
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return ($i(minName), $i(maxName), $i(totName))
+        }
+    } else {
+        tailStmts |> push <| qmacro_expr() {
+            return ($i(minName), $i(maxName))
+        }
+    }
+    return emit_terminator_lane(TerminatorSpec(
+        prologue <- prologue,
+        preCondStmts <- preCondStmts,
+        intermediateBinds <- intermediateBinds,
+        whereCond = whereCond,
+        postTakeWhereCond = postTakeWhereCond,
+        perElementStmts <- perElementStmts,
+        skipExpr = skipExpr,
+        takeExpr = takeExpr,
+        skipWhileCond = skipWhileCond,
+        takeWhileCond = takeWhileCond,
+        rangeNames = names,
+        tailStmts <- tailStmts,
+        dispatch = adapter->effective_dispatch(LoopDispatch(Each = null))
+    ), adapter, at)
+}
+
+[macro_function]
 def emit_early_exit_lane(
                          opName : string;
                          var adapter : SourceAdapter?;
@@ -1527,6 +1726,10 @@ def emit_early_exit_lane(
     //   single            → full walk; 2nd match panics; empty panics
     //   element_at        → negative index panics/defaults pre-loop; `if (cnt == idx) return v; cnt++`; tail panic/default
     //   aggregate         → seed acc; `acc = aggFn(acc, v)` each element (workhorse `=`/`return`, else `<-`/`return <-`); tail returns acc
+    if (opName != "any" && opName != "all" && opName != "contains" && opName != "aggregate") {
+        var resType = mut_result_type(projection, elementType)
+        if (resType == null || !resType.canCopy) return null
+    }
     var perMatchStmts : array<Expression?>
     var valueName = itName
     let projBindName = qn("vproj", at)
@@ -2018,7 +2221,7 @@ def emit_early_exit_lane(
 }
 
 [macro_function]
-def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {    // nolint:STYLE037 — at the cap already; the +2 is the intermediate-bind flush guards, no natural seam
     // nolint:STYLE014 — the loop_or_count planner. Walks the head chain (where_ / select runs) into a whereCond,
     // a running projection, intermediate select-binds + preCond binds; then reads skip / take / skip_while /
     // take_while + an optional post-take where + terminator. Routes to one lane (the peeled where/select/range
@@ -2060,6 +2263,10 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
             var predicate : Expression?
             if (seenSelect) {
                 if (has_sideeffects(projection)) return null
+                if (!empty(intermediateBinds)) {
+                    preCondStmts |> push_from(intermediateBinds)
+                    intermediateBinds |> clear()
+                }
                 if (!counting) {
                     let wbName = "`vw`{at.line}`{at.column}`{length(preCondStmts)}"
                     var projType = clone_type(elementType)
@@ -2134,6 +2341,10 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         if (ptwArg == null) return null
         if (seenSelect) {
             if (has_sideeffects(projection)) return null
+            if (!empty(intermediateBinds)) {
+                preCondStmts |> push_from(intermediateBinds)
+                intermediateBinds |> clear()
+            }
             if (!counting) {
                 let wbName = "`vw`{at.line}`{at.column}`{length(preCondStmts)}"
                 var projType = clone_type(elementType)
@@ -2155,10 +2366,16 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
         var sc = ctx.src->count_shortcut(lastName, at)
         if (sc != null) return sc
     }
-    if (lane == LinqLane.ACCUMULATOR && !counting)
+    if (lane == LinqLane.ACCUMULATOR && !counting) {
+        if (is_min_max_family(lastName)) {
+            return emit_min_max_family_lane(lastName, c.single["term"], ctx.src, projection, whereCond, postTakeWhereCond,
+                intermediateBinds, preCondStmts, elementType, itName, names,
+                skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+        }
         return emit_accumulator_lane(lastName, ctx.src, projection, whereCond, postTakeWhereCond,
             intermediateBinds, preCondStmts, elementType, accName, itName, names,
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
+    }
     if (lane == LinqLane.EARLY_EXIT) {
         let terminatorCall = c.single["term"]
         let isAnyNoPred = lastName == "any" && length(terminatorCall.arguments) == 1
@@ -3034,6 +3251,10 @@ def emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineIn
     let minMaxName = order_min_call_name(oc.orderName, oc.hasKey)
     let needIterWrap = ctx.expr_is_iterator
     var emission : Expression?
+    var firstCount : Expression?
+    if (oc.firstName != "") {
+        firstCount = oc.takeExpr != null ? qmacro(($e(oc.takeExpr) > 0 ? 1 : 0)) : qmacro(1)
+    }
     if (oc.firstName == "first") {
         if (top._type.isGoodArrayType) {
             var srcParamType = invoke_src_param_type(top)
@@ -3044,30 +3265,37 @@ def emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineIn
             } else {
                 minMaxCall = qmacro($c(minMaxName)($i(firstSrcName)))
             }
-            emission = qmacro(invoke($($i(firstSrcName) : $t(srcParamType)) {
-                panic("sequence contains no elements") if (empty($i(firstSrcName)))
-                return $e(minMaxCall)
-            }, $e(topExpr)))
+            if (oc.takeExpr != null) {
+                emission = qmacro(invoke($($i(firstSrcName) : $t(srcParamType)) {
+                    panic("sequence contains no elements") if ($e(oc.takeExpr) <= 0 || empty($i(firstSrcName)))
+                    return $e(minMaxCall)
+                }, $e(topExpr)))
+            } else {
+                emission = qmacro(invoke($($i(firstSrcName) : $t(srcParamType)) {
+                    panic("sequence contains no elements") if (empty($i(firstSrcName)))
+                    return $e(minMaxCall)
+                }, $e(topExpr)))
+            }
             emission = finalize_invoke(emission, at)
         } else {
             var topNCall : Expression?
             if (inlineCmp != null) {
-                topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), 1, $e(inlineCmp)))
+                topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), $e(firstCount), $e(inlineCmp)))
             } elif (oc.hasKey) {
-                topNCall = qmacro($c(topNName)($e(topExpr), 1, $e(oc.orderKey)))
+                topNCall = qmacro($c(topNName)($e(topExpr), $e(firstCount), $e(oc.orderKey)))
             } else {
-                topNCall = qmacro($c(topNName)($e(topExpr), 1))
+                topNCall = qmacro($c(topNName)($e(topExpr), $e(firstCount)))
             }
             emission = qmacro(_::first($e(topNCall)))
         }
     } elif (oc.firstName == "first_or_default") {
         var topNCall : Expression?
         if (inlineCmp != null) {
-            topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), 1, $e(inlineCmp)))
+            topNCall = qmacro(_::top_n_by_with_cmp($e(topExpr), $e(firstCount), $e(inlineCmp)))
         } elif (oc.hasKey) {
-            topNCall = qmacro($c(topNName)($e(topExpr), 1, $e(oc.orderKey)))
+            topNCall = qmacro($c(topNName)($e(topExpr), $e(firstCount), $e(oc.orderKey)))
         } else {
-            topNCall = qmacro($c(topNName)($e(topExpr), 1))
+            topNCall = qmacro($c(topNName)($e(topExpr), $e(firstCount)))
         }
         emission = qmacro(_::first_or_default($e(topNCall), $e(oc.firstDefaultExpr)))
     } elif (oc.takeExpr == null) {
@@ -3178,9 +3406,19 @@ def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
         projBody = peel_lambda_replace_var(oc.selectLam, qmacro($i(elemName)))
     }
     var tailStmts : array<Expression?>
+    var firstCount : Expression?
+    if (oc.firstName != "") {
+        firstCount = oc.takeExpr != null ? qmacro(($e(oc.takeExpr) > 0 ? 1 : 0)) : qmacro(1)
+    }
     if (oc.firstName == "first") {
-        tailStmts |> push <| qmacro_expr() {
-            panic("sequence contains no elements") if (empty($i(bufName)))
+        if (oc.takeExpr != null) {
+            tailStmts |> push <| qmacro_expr() {
+                panic("sequence contains no elements") if ($e(oc.takeExpr) <= 0 || empty($i(bufName)))
+            }
+        } else {
+            tailStmts |> push <| qmacro_expr() {
+                panic("sequence contains no elements") if (empty($i(bufName)))
+            }
         }
         var minMaxCall : Expression?
         if (oc.hasKey) {
@@ -3201,11 +3439,11 @@ def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
     } elif (oc.firstName == "first_or_default") {
         var topNCall : Expression?
         if (inlineCmp != null) {
-            topNCall = qmacro(_::top_n_by_with_cmp($i(bufName), 1, $e(inlineCmp)))
+            topNCall = qmacro(_::top_n_by_with_cmp($i(bufName), $e(firstCount), $e(inlineCmp)))
         } elif (oc.hasKey) {
-            topNCall = qmacro($c(topNName)($i(bufName), 1, $e(oc.orderKey)))
+            topNCall = qmacro($c(topNName)($i(bufName), $e(firstCount), $e(oc.orderKey)))
         } else {
-            topNCall = qmacro($c(topNName)($i(bufName), 1))
+            topNCall = qmacro($c(topNName)($i(bufName), $e(firstCount)))
         }
         if (oc.selectLam != null) {
             let dBindName = qn("order_d", at)
@@ -4027,7 +4265,9 @@ def emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
         if (dtl == null) return null
         stmts |> push(dtl)
     } else {
-        stmts |> push <| ctx.src->wrap_source_loop(LoopDispatch(Each = null), perElement, at)
+        var srcLoop = ctx.src->wrap_source_loop(LoopDispatch(Each = null), perElement, at)
+        if (srcLoop == null) return null
+        stmts |> push(srcLoop)
     }
     if (terminatorName == "count") {
         if (countPred != null) {
@@ -4469,8 +4709,14 @@ def mk_hidden_acc_type(reducerName : string; isInnerSelect : bool;
 }
 
 [macro_function]
+def having_inner_bodies_render_same(a, b : Expression?) : bool {
+    if (a == null || b == null) return (a == null) == (b == null)
+    return describe(a) == describe(b)
+}
+
+[macro_function]
 def having_reducer_append_if_missing(var expr : Expression?; hbName, itName : string;
-                                     var specs : array<ReducerSpec>; userVisibleSlotCount : int;
+                                     var specs : array<ReducerSpec>;
                                      bucketElemType : TypeDeclPtr; at : LineInfo) : bool {
     if (expr == null || !(expr is ExprCall)) return true
     let c = expr as ExprCall
@@ -4506,11 +4752,13 @@ def having_reducer_append_if_missing(var expr : Expression?; hbName, itName : st
     }
     if (innerName != "select") return true
     let comboName = "{fnName}_inner_select"
-    for (s in specs) {
-        if (s.name == comboName) return s.slot <= userVisibleSlotCount
-    }
     var innerBody = peel_lambda_rename_var(ic.arguments[1], itName)
     if (innerBody == null || innerBody._type == null) return false
+    if (!has_sideeffects(innerBody)) {
+        for (s in specs) {
+            if (s.name == comboName && having_inner_bodies_render_same(s.innerBody, innerBody)) return true
+        }
+    }
     var accType = mk_hidden_acc_type(comboName, true, bucketElemType, innerBody._type, at)
     if (accType == null) return false
     let newSlot = (specs |> length) + 1
@@ -4520,42 +4768,42 @@ def having_reducer_append_if_missing(var expr : Expression?; hbName, itName : st
 
 [macro_function]
 def extend_specs_for_missing_having_reducers(var expr : Expression?; hbName, itName : string;
-                                             var specs : array<ReducerSpec>; userVisibleSlotCount : int;
+                                             var specs : array<ReducerSpec>;
                                              bucketElemType : TypeDeclPtr; at : LineInfo) : bool {
     if (expr == null) return true
     qm_peel_ref2value(expr)
     if (expr is ExprCall) {
         var c = expr as ExprCall
-        if (!having_reducer_append_if_missing(expr, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)) return false
+        if (!having_reducer_append_if_missing(expr, hbName, itName, specs, bucketElemType, at)) return false
         for (i in 0 .. (c.arguments |> length)) {
-            if (!extend_specs_for_missing_having_reducers(c.arguments[i], hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)) return false
+            if (!extend_specs_for_missing_having_reducers(c.arguments[i], hbName, itName, specs, bucketElemType, at)) return false
         }
         return true
     }
     if (expr is ExprField) {
         var f = expr as ExprField
-        return extend_specs_for_missing_having_reducers(f.value, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)
+        return extend_specs_for_missing_having_reducers(f.value, hbName, itName, specs, bucketElemType, at)
     }
     if (expr is ExprOp1) {
         var op = expr as ExprOp1
-        return extend_specs_for_missing_having_reducers(op.subexpr, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)
+        return extend_specs_for_missing_having_reducers(op.subexpr, hbName, itName, specs, bucketElemType, at)
     }
     if (expr is ExprOp2) {
         var op = expr as ExprOp2
-        if (!extend_specs_for_missing_having_reducers(op.left, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)) return false
-        return extend_specs_for_missing_having_reducers(op.right, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)
+        if (!extend_specs_for_missing_having_reducers(op.left, hbName, itName, specs, bucketElemType, at)) return false
+        return extend_specs_for_missing_having_reducers(op.right, hbName, itName, specs, bucketElemType, at)
     }
     if (expr is ExprOp3) {
         var op = expr as ExprOp3
-        return (extend_specs_for_missing_having_reducers(op.subexpr, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)
-                && extend_specs_for_missing_having_reducers(op.left, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at)
-                && extend_specs_for_missing_having_reducers(op.right, hbName, itName, specs, userVisibleSlotCount, bucketElemType, at))
+        return (extend_specs_for_missing_having_reducers(op.subexpr, hbName, itName, specs, bucketElemType, at)
+                && extend_specs_for_missing_having_reducers(op.left, hbName, itName, specs, bucketElemType, at)
+                && extend_specs_for_missing_having_reducers(op.right, hbName, itName, specs, bucketElemType, at))
     }
     return true
 }
 
 [macro_function]
-def rewrite_having_pred(var expr : Expression?; hbName, kvName : string; specs : array<ReducerSpec>) : Expression? {
+def rewrite_having_pred(var expr : Expression?; hbName, kvName, itName : string; specs : array<ReducerSpec>) : Expression? {
     if (expr == null) return expr
     qm_peel_ref2value(expr)
     if (expr is ExprCall) {
@@ -4581,8 +4829,9 @@ def rewrite_having_pred(var expr : Expression?; hbName, kvName : string; specs :
                     }
                     if (innerName == "select") {
                         let comboName = "{fnName}_inner_select"
+                        var rwBody = peel_lambda_rename_var(ic.arguments[1], itName)
                         for (s in specs) {
-                            if (s.name == comboName) return mk_slot_output_expr(expr.at, kvName, s)
+                            if (s.name == comboName && having_inner_bodies_render_same(s.innerBody, rwBody)) return mk_slot_output_expr(expr.at, kvName, s)
                         }
                         return null
                     }
@@ -4590,7 +4839,7 @@ def rewrite_having_pred(var expr : Expression?; hbName, kvName : string; specs :
             }
         }
         for (i in 0 .. (c.arguments |> length)) {
-            var sub = rewrite_having_pred(c.arguments[i], hbName, kvName, specs)
+            var sub = rewrite_having_pred(c.arguments[i], hbName, kvName, itName, specs)
             if (sub == null) return null
             c.arguments[i] = sub
         }
@@ -4605,7 +4854,7 @@ def rewrite_having_pred(var expr : Expression?; hbName, kvName : string; specs :
                 return null
             }
         }
-        var sub = rewrite_having_pred(f.value, hbName, kvName, specs)
+        var sub = rewrite_having_pred(f.value, hbName, kvName, itName, specs)
         if (sub == null) return null
         f.value = sub
         return expr
@@ -4617,30 +4866,30 @@ def rewrite_having_pred(var expr : Expression?; hbName, kvName : string; specs :
     }
     if (expr is ExprOp1) {
         var op = expr as ExprOp1
-        var sub = rewrite_having_pred(op.subexpr, hbName, kvName, specs)
+        var sub = rewrite_having_pred(op.subexpr, hbName, kvName, itName, specs)
         if (sub == null) return null
         op.subexpr = sub
         return expr
     }
     if (expr is ExprOp2) {
         var op = expr as ExprOp2
-        var l = rewrite_having_pred(op.left, hbName, kvName, specs)
+        var l = rewrite_having_pred(op.left, hbName, kvName, itName, specs)
         if (l == null) return null
         op.left = l
-        var r = rewrite_having_pred(op.right, hbName, kvName, specs)
+        var r = rewrite_having_pred(op.right, hbName, kvName, itName, specs)
         if (r == null) return null
         op.right = r
         return expr
     }
     if (expr is ExprOp3) {
         var op = expr as ExprOp3
-        var s = rewrite_having_pred(op.subexpr, hbName, kvName, specs)
+        var s = rewrite_having_pred(op.subexpr, hbName, kvName, itName, specs)
         if (s == null) return null
         op.subexpr = s
-        var l = rewrite_having_pred(op.left, hbName, kvName, specs)
+        var l = rewrite_having_pred(op.left, hbName, kvName, itName, specs)
         if (l == null) return null
         op.left = l
-        var r = rewrite_having_pred(op.right, hbName, kvName, specs)
+        var r = rewrite_having_pred(op.right, hbName, kvName, itName, specs)
         if (r == null) return null
         op.right = r
         return expr
@@ -4676,7 +4925,7 @@ def expr_uses_var(var e : Expression?; name : string) : bool {
 }
 
 [macro_function]
-def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
+def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;    // nolint:STYLE037 — at the cap already; +1 is the wrap_source_loop null guard, no natural seam
                        var keyBlock : Expression?;
                        var groupProjCall : ExprCall?;
                        var havingCall : ExprCall?;
@@ -4776,8 +5025,8 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
     if (havingCall != null) {
         let hbName = qn("{prefix}hb", at)
         var rawPred = peel_lambda_rename_var(havingCall.arguments[1], hbName)
-        if (rawPred == null || !extend_specs_for_missing_having_reducers(rawPred, hbName, itName, specs, userVisibleSlotCount, elemType, at)) return null
-        havingPred = rewrite_having_pred(rawPred, hbName, kvName, specs)
+        if (rawPred == null || !extend_specs_for_missing_having_reducers(rawPred, hbName, itName, specs, elemType, at)) return null
+        havingPred = rewrite_having_pred(rawPred, hbName, kvName, itName, specs)
         if (havingPred == null || expr_uses_var(havingPred, hbName)) return null
     }
     var trailingWherePred : Expression?
@@ -4892,7 +5141,9 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;
         }
         idx --
     }
-    stmts |> push(adapter->wrap_source_loop(LoopDispatch(Each = null), body, at))
+    var srcLoop = adapter->wrap_source_loop(LoopDispatch(Each = null), body, at)
+    if (srcLoop == null) return null
+    stmts |> push(srcLoop)
     let needOutput = terminatorName != "count" || trailingWherePred != null
     var outputExpr : Expression?
     var bufElemType : TypeDeclPtr
@@ -5587,6 +5838,7 @@ def build_join_probe_pieces(
             $b(pairStmts)
         }
         var (allUsed, usedFields) = collect_row_usage(pairBlock, bElemName)
+        allUsed = needs_full_row_bind(usedFields, allUsed)
         if (allUsed) {
             probeOuter = qmacro_block() {
                 let $i(kName) = $e(keyaBody)
@@ -5752,7 +6004,9 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
             }
         }
     }
-    allStmts |> push <| ctx.src->wrap_source_loop(LoopDispatch(Each = null), pieces.probeOuter, at)
+    var probeLoop = ctx.src->wrap_source_loop(LoopDispatch(Each = null), pieces.probeOuter, at)
+    if (probeLoop == null) return null
+    allStmts |> push(probeLoop)
     allStmts |> push(pieces.returnStmt)
     var invokeRetType = pieces.invokeRetType
     var topClone = clone_expression(topSrc)

@@ -223,6 +223,56 @@ def private build_src(rowType : string; srcText : string; fused : bool) : string
     return "from_in({srcText}, type<{rowType}>)"
 }
 
+def private strip_redundant_parens(s : string) : string {
+    let trimmed = strip(s)
+    var out = trimmed
+    peek_data(trimmed) $(arr) {
+        var lo = 0
+        var hi = length(arr)
+        var again = true
+        while (again) {
+            again = false
+            if (hi - lo >= 2 && int(arr[lo]) == '(' && int(arr[hi - 1]) == ')') {
+                var depth = 0
+                var matched = true
+                for (i in lo .. hi) {
+                    let c = int(arr[i])
+                    if (c == '(') {
+                        depth ++
+                    } elif (c == ')') {
+                        depth --
+                        if (depth == 0 && i != hi - 1) {
+                            matched = false
+                            break
+                        }
+                    }
+                }
+                if (matched) {
+                    lo ++
+                    hi --
+                    while (lo < hi && is_white_space(int(arr[lo]))) {
+                        lo ++
+                    }
+                    while (hi > lo && is_white_space(int(arr[hi - 1]))) {
+                        hi --
+                    }
+                    again = true
+                }
+            }
+        }
+        out = slice(arr, lo, hi)
+    }
+    return out
+}
+
+def private is_label_position(arr : auto; j, n : int) : bool {
+    var k = j
+    while (k < n && is_white_space(int(arr[k]))) {
+        k++
+    }
+    return k < n && int(arr[k]) == '=' && (k + 1 >= n || (int(arr[k + 1]) != '=' && int(arr[k + 1]) != '>'))
+}
+
 def private substitute_idents(text : string; subs : table<string; string>) : string {
     return build_string() $(var w) {
         peek_data(text) $(arr) {
@@ -269,7 +319,8 @@ def private substitute_idents(text : string; subs : table<string; string>) : str
                     var j = i
                     while (j < n && is_ident_byte(int(arr[j]))) { j++ }
                     let word = slice(arr, i, j)
-                    w |> write(lastNonWs != '.' ? (subs?[word] ?? word) : word)
+                    let isLabel = is_label_position(arr, j, n)
+                    w |> write((lastNonWs != '.' && !isLabel) ? (subs?[word] ?? word) : word)
                     lastNonWs = int(arr[j - 1])
                     i = j
                     continue
@@ -329,7 +380,8 @@ def private mentions_ident(text : string; name : string) : bool {
             }
             let atWordStart = is_ident_byte(c) && (i == 0 || !is_ident_byte(int(arr[i - 1]))) && lastNonWs != '.'
             if (atWordStart && i + m <= n && starts_with(arr, i, name)
-                    && (i + m == n || !is_ident_byte(int(arr[i + m])))) {
+                    && (i + m == n || !is_ident_byte(int(arr[i + m])))
+                    && !is_label_position(arr, i + m, n)) {
                 found = true
             }
             if (!is_white_space(c)) { lastNonWs = c }
@@ -358,7 +410,7 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
         macro_error(prog, at, "linq: 'into' over a second 'from' is not supported - group-join 'into' works after a 'join ... on ... equals ...' clause; query-continuation 'into' works on single-source queries")
         return "(0)"
     }
-    let orderByPos = find_kw_depth0(q, "orderby", tailStart)
+    let rawOrderByPos = find_kw_depth0(q, "orderby", tailStart)
     let selectPos = find_kw_depth0(q, "select", tailStart)
     let groupPos = find_kw_depth0(q, "group", tailStart)
     if (selectPos < 0 && groupPos < 0) {
@@ -371,6 +423,7 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
     }
     let isGroup = groupPos >= 0
     let termPos = isGroup ? groupPos : selectPos
+    let orderByPos = (rawOrderByPos >= 0 && rawOrderByPos < termPos) ? rawOrderByPos : -1
     let postTermInto = find_kw_depth0(q, "into", isGroup ? groupPos + 5 : selectPos + 6)
     if (postTermInto >= 0) {
         macro_error(prog, at, "linq: query-continuation 'into' after the 'select'/'group' terminal is not supported on a 'join' or multiple-'from' query - it works on single-source queries; a group-join 'into' goes before the terminal (`join ... equals ... into g select ...`)")
@@ -470,7 +523,7 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
         }
         correlated = mentions_ident(tail, varName)
         if (!correlated) {
-            srcB = build_src(rowType2, tail, false)
+            srcB = build_src(rowType2, tail, true)
         }
     }
     var orderKeys : array<string>
@@ -536,7 +589,11 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             }
         }
         srcB = build_string() $(var sw) {
-            sw |> write("$({varName}) => unsafe(each({tail}))")
+            if (rowType2 != "") {
+                sw |> write("$({varName}) => from_in({tail}, type<{rowType2}>)")
+            } else {
+                sw |> write("$({varName}) => unsafe(each({tail}))")
+            }
             for (pred in postWheres) {
                 sw |> write(" |> _where($({var2Name}) => {pred})")
             }
@@ -810,7 +867,7 @@ def private rewrite_group_var(text : string; gname : string) : string {
                     var j = i
                     while (j < n && is_ident_byte(int(arr[j]))) { j++ }
                     let word = slice(arr, i, j)
-                    if (lastNonWs != '.' && word == gname) {
+                    if (lastNonWs != '.' && word == gname && !is_label_position(arr, j, n)) {
                         let dotFollows = j < n && int(arr[j]) == '.'
                         var keyEnd = -1
                         if (dotFollows) {
@@ -950,7 +1007,7 @@ def private parse_one_stage(q : string; nq : int; start : int; rangeVar : string
             macro_error(prog, at, "linq: empty 'select' projection")
             return false
         }
-        stage.identitySelect = (projText == rangeVar)
+        stage.identitySelect = (strip_redundant_parens(projText) == rangeVar)
         stage.projText = (isGroupVar && !stage.identitySelect) ? rewrite_group_var(projText, rangeVar) : projText
     }
     if (intoPos >= 0) {
@@ -1127,6 +1184,7 @@ class LinqDasReader : AstReaderMacro {
     }
     def override suffix(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; info : LineInfo;
                         var outLine : int&; var outFile : FileInfo?&) : string {
+        outLine = int(info.line)
         return transpile_query(string(expr.sequence), prog, info)
     }
 }

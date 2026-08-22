@@ -40,8 +40,8 @@ def test_where_ends_with_emits_like_suffix(t : T?) {
     let sql = _sql_text(_db |> select_from(type<Car>)
                           |> _where(_.Name |> ends_with(_suffix)))
     t |> equal(sql,
-        "SELECT \"Id\", \"Name\" FROM \"Cars\" WHERE \"Name\" LIKE ? ESCAPE '\\'",
-        "ends_with -> LIKE ? ESCAPE '\\'")
+        "SELECT \"Id\", \"Name\" FROM \"Cars\" WHERE \"Name\" GLOB ?",
+        "ends_with -> case-sensitive GLOB on SQLite (ci_like provider)")
 }
 
 [test]

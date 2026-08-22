@@ -92,14 +92,12 @@ adds one `require ?<mod>` line plus one `static_if` branch to
 
 | Field | SQLite | Gate |
 |---|---|---|
-| `caps.fts5` | set | `[sql_fts5]` / `text_match` → compile error when absent |
+| `caps.fts5` | set | `text_match` → compile error when absent (and the `[sql_fts5]` struct check) |
 | `caps.client_udfs` | set | `[sql_function]` → compile error when absent (PG has no client-side UDFs) |
-| `caps.returning` | set | `_sql_*_returning` |
+| `caps.returning` | set | `_sql_update_returning` / `_sql_delete_returning` → compile error when absent |
 | `caps.distinct_on` | clear | `_distinct_by` lowering selector, routed in `build_distinct_by_inner_subquery`: clear → SQLite's bare-aggregate `SELECT *, MIN/MAX(pk) FROM t GROUP BY K` (bare columns beside GROUP BY are SQLite-only semantics); set → PostgreSQL-style `SELECT DISTINCT ON (K) * FROM t ORDER BY K, pk [DESC]` (a PG extension, also implemented by DuckDB). Not a macro_error gate — every provider gets one of the two lowerings |
+| `caps.ci_like` | set | provider's `LIKE` is case-insensitive (SQLite ASCII folding). Set → `contains`/`starts_with`/`ends_with` lower to case-sensitive `GLOB ?` with `glob_escape_*` binds so all rails match compat-mode string semantics; clear → `LIKE ? ESCAPE '\'` (already case-sensitive on PG/DuckDB). Not a macro_error gate — a lowering selector. A future ci_like provider without GLOB needs a dialect hook |
 | `pkReport : SqlPkReport` | `LastInsertRowid` | `insert(...) : id` — `ReturningPk` for providers without rowid |
-
-The gates wire up as the second provider lands; in this PR the flags are
-registered data only.
 
 A missing capability is a **compile-time** `macro_error` naming the provider and the
 feature — never a runtime failure.

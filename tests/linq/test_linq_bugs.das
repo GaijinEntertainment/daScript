@@ -320,12 +320,11 @@ def test_intersect_duplicates(t : T?) {
     t |> run("intersect_by with duplicates") @(t : T?) {
         var arr1 = [1, 2, 3]
         var arr2 = [12, 12, 13, 13]
-        // key: _ % 10, so arr1 keys={1,2,3}, arr2 keys: 12%10=2, 12%10=2, 13%10=3, 13%10=3
-        // should yield [12, 13] not [12, 12, 13, 13]
+        // key: _ % 10; left-biased: arr1 elements whose key appears in arr2 keys {2, 3}, deduped
         let result = _intersect_by(arr1, arr2, _ % 10)
         t |> equal(length(result), 2)
-        t |> equal(result[0], 12)
-        t |> equal(result[1], 13)
+        t |> equal(result[0], 2)
+        t |> equal(result[1], 3)
     }
 }
 
@@ -1047,5 +1046,248 @@ def test_any_all_edge_cases(t : T?) {
             _ >= 0
         )
         t |> success(result)
+    }
+}
+
+
+struct BiasPair {
+    id : int
+    tag : string
+}
+
+[test]
+def test_select_zip_source_preserved(t : T?) {
+    t |> run("indexed select preserves source elements") @(t : T?) {
+        var src <- [[10], [20], [30]]
+        var pairs <- select(src)
+        t |> equal(length(pairs), 3)
+        for (x, i in src, count()) {
+            t |> equal(length(x), 1, "src[{i}] intact")
+        }
+        delete pairs
+        delete src
+    }
+    t |> run("zip preserves both source arrays") @(t : T?) {
+        var a <- [[1], [2]]
+        var b <- [[3], [4]]
+        var z <- zip(a, b)
+        t |> equal(length(z), 2)
+        for (x, i in a, count()) {
+            t |> equal(length(x), 1, "a[{i}] intact")
+        }
+        for (x, i in b, count()) {
+            t |> equal(length(x), 1, "b[{i}] intact")
+        }
+        delete z
+        delete a
+        delete b
+    }
+    t |> run("zip3 preserves all source arrays") @(t : T?) {
+        var a <- [[1]]
+        var b <- [[2]]
+        var c <- [[3]]
+        var z <- zip(a, b, c)
+        t |> equal(length(z), 1)
+        t |> equal(length(a[0]), 1, "a[0] intact")
+        t |> equal(length(b[0]), 1, "b[0] intact")
+        t |> equal(length(c[0]), 1, "c[0] intact")
+        delete z
+        delete a
+        delete b
+        delete c
+    }
+}
+
+[test]
+def test_zipn_source_preserved(t : T?) {
+    t |> run("zip4 through zip7 preserve all source arrays") @(t : T?) {
+        var a1 <- [[1]]
+        var a2 <- [[2]]
+        var a3 <- [[3]]
+        var a4 <- [[4]]
+        var a5 <- [[5]]
+        var a6 <- [[6]]
+        var a7 <- [[7]]
+        var z4 <- zip(a1, a2, a3, a4)
+        t |> equal(length(z4), 1)
+        var z5 <- zip(a1, a2, a3, a4, a5)
+        t |> equal(length(z5), 1)
+        var z6 <- zip(a1, a2, a3, a4, a5, a6)
+        t |> equal(length(z6), 1)
+        var z7 <- zip(a1, a2, a3, a4, a5, a6, a7)
+        t |> equal(length(z7), 1)
+        t |> equal(length(a1[0]), 1, "a1[0] intact after four zips")
+        t |> equal(length(a4[0]), 1, "a4[0] intact after four zips")
+        t |> equal(length(a7[0]), 1, "a7[0] intact")
+        delete z4
+        delete z5
+        delete z6
+        delete z7
+        delete a1
+        delete a2
+        delete a3
+        delete a4
+        delete a5
+        delete a6
+        delete a7
+    }
+    t |> run("zip8 preserves all source arrays") @(t : T?) {
+        var a1 <- [[1]]
+        var a2 <- [[2]]
+        var a3 <- [[3]]
+        var a4 <- [[4]]
+        var a5 <- [[5]]
+        var a6 <- [[6]]
+        var a7 <- [[7]]
+        var a8 <- [[8]]
+        var z <- zip(a1, a2, a3, a4, a5, a6, a7, a8)
+        t |> equal(length(z), 1)
+        t |> equal(length(a1[0]), 1, "a1[0] intact")
+        t |> equal(length(a4[0]), 1, "a4[0] intact")
+        t |> equal(length(a8[0]), 1, "a8[0] intact")
+        delete z
+        delete a1
+        delete a2
+        delete a3
+        delete a4
+        delete a5
+        delete a6
+        delete a7
+        delete a8
+    }
+}
+
+
+[test]
+def test_group_by_lazy_source_preserved(t : T?) {
+    t |> run("group_by_lazy does not gut first group member") @(t : T?) {
+        var src <- [[10], [11], [20]]
+        var groups <- group_by_lazy(src, $(x : array<int>) => x[0] / 10)
+        t |> equal(length(groups), 2)
+        var total = 0
+        for (g in groups) {
+            for (m in g._1) {
+                t |> equal(length(m), 1, "group member has its payload")
+                total += !empty(m) ? m[0] : -1000
+            }
+        }
+        t |> equal(total, 41)
+        for (x, i in src, count()) {
+            t |> equal(length(x), 1, "src[{i}] intact")
+        }
+        delete groups
+        delete src
+    }
+}
+
+
+[test]
+def test_skip_take_last_negative(t : T?) {
+    t |> run("skip_last_inplace negative count is a no-op") @(t : T?) {
+        var arr = [1, 2, 3]
+        skip_last_inplace(arr, -1)
+        t |> equal(length(arr), 3)
+    }
+    t |> run("skip_last on array keeps all") @(t : T?) {
+        let arr = [1, 2, 3]
+        let res <- skip_last(arr, -1)
+        t |> equal(length(res), 3)
+    }
+    t |> run("skip_last_to_array keeps all") @(t : T?) {
+        let src = [1, 2, 3]
+        let res <- skip_last_to_array(unsafe(each(src)), -1)
+        t |> equal(length(res), 3)
+    }
+    t |> run("skip_last on iterator keeps all") @(t : T?) {
+        let src = [1, 2, 3]
+        var count = 0
+        for (_x in skip_last(unsafe(each(src)), -1)) {
+            count ++
+        }
+        t |> equal(count, 3)
+    }
+    t |> run("take_last on array keeps none") @(t : T?) {
+        let arr = [1, 2, 3]
+        let res <- take_last(arr, -1)
+        t |> equal(length(res), 0)
+    }
+    t |> run("take_last_inplace negative count keeps none") @(t : T?) {
+        var arr = [1, 2, 3]
+        take_last_inplace(arr, -1)
+        t |> equal(length(arr), 0)
+    }
+    t |> run("take_last_to_array keeps none") @(t : T?) {
+        let src = [1, 2, 3]
+        let res <- take_last_to_array(unsafe(each(src)), -1)
+        t |> equal(length(res), 0)
+    }
+}
+
+
+[test]
+def test_intersect_left_bias(t : T?) {
+    t |> run("intersect returns left elements in left order") @(t : T?) {
+        let a = [3, 1, 2]
+        let b = [2, 3]
+        let r <- intersect(a, b)
+        t |> equal(length(r), 2)
+        t |> equal(r[0], 3)
+        t |> equal(r[1], 2)
+    }
+    t |> run("intersect dedupes left duplicates") @(t : T?) {
+        let a = [2, 2, 3]
+        let b = [2]
+        let r <- intersect(a, b)
+        t |> equal(length(r), 1)
+        t |> equal(r[0], 2)
+    }
+    t |> run("intersect_by returns the left-side element") @(t : T?) {
+        let a = [BiasPair(id = 1, tag = "L1"), BiasPair(id = 2, tag = "L2")]
+        let b = [BiasPair(id = 2, tag = "R2"), BiasPair(id = 3, tag = "R3")]
+        let r <- intersect_by(a, b, $(x : BiasPair) => x.id)
+        t |> equal(length(r), 1)
+        t |> equal(r[0].tag, "L2")
+    }
+    t |> run("intersect iterator forms are left-biased") @(t : T?) {
+        let a = [3, 1, 2]
+        let b = [2, 3]
+        let r <- intersect_to_array(unsafe(each(a)), unsafe(each(b)))
+        t |> equal(length(r), 2)
+        t |> equal(r[0], 3)
+        t |> equal(r[1], 2)
+    }
+}
+
+[test]
+def test_lazy_surface_pointer_arrays(t : T?) {
+    t |> run("to_sequence over array of pointers preserves pointees") @(t : T?) {
+        var n1 = new BiasPair(id = 11, tag = "a")
+        var n2 = new BiasPair(id = 22, tag = "b")
+        var arr <- [n1, n2]
+        var total = 0
+        for (p in to_sequence(arr)) {
+            total += p.id
+        }
+        t |> equal(total, 33)
+        t |> equal(n1.id, 11, "pointee not freed by iteration")
+        t |> equal(n2.id, 22, "pointee not freed by iteration")
+        unsafe {
+            delete arr
+        }
+    }
+}
+
+[test]
+def test_unique_iterator_overloads(t : T?) {
+    t |> run("unique family accepts iterator sources") @(t : T?) {
+        let src = [3, 1, 1, 2]
+        let u <- unique(unsafe(each(src))) |> to_array()
+        t |> equal(length(u), 3)
+        let ub <- unique_by(unsafe(each(src)), $(x : int) => x) |> to_array()
+        t |> equal(length(ub), 3)
+        let ua <- unique_to_array(unsafe(each(src)))
+        t |> equal(length(ua), 3)
+        let uba <- unique_by_to_array(unsafe(each(src)), $(x : int) => x)
+        t |> equal(length(uba), 3)
     }
 }

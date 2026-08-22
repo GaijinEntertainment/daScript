@@ -61,10 +61,9 @@ def test_not_in_collection_non_nullable_emits_naive(t : T?) {
 [test]
 def test_not_in_collection_nullable_emits_defensive(t : T?) {
     var _db = SqlRunner()
-    // Item.OwnerId is Option<int> — defensive `OR IS NULL` so NULL rows survive NOT IN.
     let sql = _sql_text(_db |> select_from(type<Item>) |> _where(_.OwnerId._not_in([1, 2])))
     t |> equal(sql,
-        "SELECT \"Id\", \"Tag\", \"OwnerId\" FROM \"Items\" WHERE (\"OwnerId\" NOT IN (SELECT value FROM json_each(?)) OR \"OwnerId\" IS NULL)",
+        "SELECT \"Id\", \"Tag\", \"OwnerId\" FROM \"Items\" WHERE NOT IFNULL(\"OwnerId\" IN (SELECT value FROM json_each(?)), 0)",
         "_not_in on Option<T> column emits defensive form: rows with NULL column survive")
 }
 
@@ -126,7 +125,7 @@ def test_not_in_collection_nullable_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
         // Items 10 (owner 1) + 11 (owner 2) excluded. Item 13 (owner 3) survives, AND
-        // item 12 (NULL owner) survives via the defensive `OR IS NULL` clause —
+        // item 12 (NULL owner) survives via the defensive `NOT IFNULL(x IN …, 0)` form —
         // naive NOT IN would drop NULL-owner rows.
         let rows <- _sql(db |> select_from(type<Item>) |> _where(_.OwnerId._not_in([1, 2])))
         t |> equal(length(rows), 2, "items 12 (NULL owner) + 13 (owner 3) survive")

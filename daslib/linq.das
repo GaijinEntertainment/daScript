@@ -34,8 +34,8 @@ Set operations (*)
      union_by, union_by_to_array - Returns the union of two iterables (or by key)
      except, except_to_array - Returns elements from the first iterable that are not in the second iterable
      except_by, except_by_to_array - Returns elements from the first iterable that are not in the second iterable (or by key)
-     intersect, intersect_to_array - Returns elements that are present in both iterables
-     intersect_by, intersect_by_to_array - Returns elements that are present in both iterables (or by key)
+     intersect, intersect_to_array - Returns the first iterable's elements that are present in both (left-biased)
+     intersect_by, intersect_by_to_array - Returns the first iterable's elements whose key is present in both (left-biased)
      unique, unique_inplace, unique_to_array - Returns unique elements from a sorted iterable (by compare function)
      unique_by, unique_by_inplace, unique_by_to_array - Returns unique elements from a sorted iterable (or by key)
 Concatenation operations (*)
@@ -115,12 +115,19 @@ def to_sequence(var a : array<auto(TT)> ==const) : iterator<TT -const -&> {
 }
 
 def to_sequence_move(var a : array<auto(TT)>) : iterator<TT -const -&> {
-    //! Converts an array to an iterator, captures input
+    //! Converts an array to an iterator, captures input. Pointer elements are never freed — only the buffer is; ownership of pointees stays with the caller.
     return generator<TT -const -&> capture(<- a) {
         for (it in a) {
             yield <- it
         }
-        delete a
+        static_if (typeinfo is_pointer(type<TT>)) {
+            a |> clear()
+            unsafe {
+                delete a
+            }
+        } else {
+            delete a
+        }
         return false
     }
 }
@@ -1196,7 +1203,7 @@ def distinct_by_inplace(var a : array<auto(TT)>; key : block<(arg : TT -&) : aut
     a.resize(to_index)
 }
 
-def unique(a : iterator<auto(TT)>) : iterator<TT -const -&> {
+def unique(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! remove adjacent duplicate elements from an iterator (sort first to make it global)
     var inscope buffer <- to_array(a)
     unique_inplace(buffer)
@@ -1210,7 +1217,7 @@ def unique(a : array<auto(TT)>) : array<TT -const -&> {
     return <- b
 }
 
-def unique_to_array(a : iterator<auto(TT)>) : array<TT -const -&> {
+def unique_to_array(var a : iterator<auto(TT)>) : array<TT -const -&> {
     //! remove adjacent duplicate elements from an iterator and return an array (sort first to make it global)
     var inscope buffer <- to_array(a)
     unique_inplace(buffer)
@@ -1229,7 +1236,7 @@ def unique_inplace(var a : array<auto(TT)>) {
     a.resize(write_index)
 }
 
-def unique_by(a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
+def unique_by(var a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
     //! remove adjacent duplicate elements from an iterator based on a key (sort first to make it global)
     var inscope buffer <- to_array(a)
     unique_by_inplace(buffer, key)
@@ -1243,7 +1250,7 @@ def unique_by(a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT
     return <- b
 }
 
-def unique_by_to_array(a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+def unique_by_to_array(var a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! remove adjacent duplicate elements from an iterator based on a key and return an array (sort first to make it global)
     var inscope buffer <- to_array(a)
     unique_by_inplace(buffer, key)
@@ -1588,15 +1595,15 @@ def take_inplace(var arr : array<auto(TT)>; from : range) {
 def skip_last(arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
     //! Yields all but the last `total` elements from an array
     let len = length(arr)
-    let keeping = (len > total) ? len - total : 0
-    return <- subarray(arr, 0..keeping)
+    total = clamp(total, 0, len)
+    return <- subarray(arr, 0..(len - total))
 }
 
 def skip_last_inplace(var arr : array<auto(TT)>; var total : int) {
     //! Removes the last `total` elements from an array in place
     let len = length(arr)
-    let keeping = (len > total) ? len - total : 0
-    arr |> resize(keeping)
+    total = clamp(total, 0, len)
+    arr |> resize(len - total)
 }
 
 def skip_last_to_array(var src : iterator<auto(TT)>; var total : int) : array<TT -& -const> {
@@ -1614,19 +1621,19 @@ def skip_last(var src : iterator<auto(TT)>; var total : int) : iterator<TT -& -c
 def take_last(arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
     //! Yields only the last `total` elements from an array
     let len = length(arr)
-    let start = (len > total) ? len - total : 0
-    return <- subarray(arr, start..len)
+    total = clamp(total, 0, len)
+    return <- subarray(arr, (len - total)..len)
 }
 
 def take_last_inplace(var arr : array<auto(TT)>; var total : int) {
     //! Keeps only the last `total` elements in an array in place
     let len = length(arr)
-    let start = (len > total) ? len - total : 0
-    let keeping = len - start
-    for (i in 0..keeping) {
+    total = clamp(total, 0, len)
+    let start = len - total
+    for (i in 0..total) {
         arr[i] <- arr[start + i]
     }
-    arr |> resize(keeping)
+    arr |> resize(total)
 }
 
 def take_last_to_array(var src : iterator<auto(TT)>; var total : int) : array<TT -& -const> {
@@ -2677,7 +2684,8 @@ def private group_by_lazy_impl(var source; tt : auto(TT); key)  {
         if (tab.key_exists(k)) {
             tab[k]._1.push_clone(it)
         } else {
-            tab[k] = (kIT, [it])
+            var cloned := it    // nolint:LINT003,LINT019 — the array literal moves out of its element, so clone first; the loop var must survive the iteration
+            tab[k] = (kIT, [cloned])
         }
     }
     var buffer : array<ResultType -const -&>
@@ -3047,13 +3055,13 @@ def except_by_to_array(src : array<TT>; var exclude : iterator<auto(TT) const>; 
 
 [unused_argument(tt)]
 def private intersect_impl(var srca, srcb; tt : auto(TT)) : array<TT -const -&> {
-    //! Returns elements that are present in both iterators
+    //! Returns the first source's elements that are also present in the second (left-biased, like C#)
     var inscope seen : table<typedecl(_::unique_key(type<TT>))>
-    for (it in srca) {
+    for (it in srcb) {
         seen.insert(_::unique_key(it))
     }
     var buffer : array<TT -const -&>
-    for (it in srcb) {
+    for (it in srca) {
         let uk = _::unique_key(it)
         if (seen.key_exists(uk)) {
             buffer.push_clone(it)
@@ -3105,13 +3113,13 @@ def intersect_to_array(srca : array<TT>; var srcb : iterator<auto(TT) const>) : 
 
 [unused_argument(tt)]
 def private intersect_by_impl(var srca, srcb; tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
-    //! Returns elements that are present in both iterators by key
+    //! Returns the first source's elements whose key is also present in the second (left-biased, like C#)
     var inscope seen : table<typedecl(_::unique_key(key(type<TT>)))>
-    for (it in srca) {
+    for (it in srcb) {
         seen.insert(_::unique_key(key(it)))
     }
     var buffer : array<TT -const -&>
-    for (it in srcb) {
+    for (it in srca) {
         let uk = _::unique_key(key(it))
         if (seen.key_exists(uk)) {
             buffer.push_clone(it)
@@ -3711,7 +3719,12 @@ def private select_impl(var src; tt : auto(TT)) : array<tuple<int, TT -const -&>
     //! Projects each element of an iterator into a new form with its index
     var buffer : array<tuple<int, TT -const -&>>
     for (it, index in src, count()) {
-        buffer.emplace((index, it))
+        static_if (typeinfo can_copy(it)) {
+            buffer.emplace((index, it))
+        } else {
+            var cloned := it
+            buffer.emplace((index, cloned))
+        }
     }
     return <- buffer
 }
@@ -3936,7 +3949,13 @@ def private zip_impl(var a; tt : auto(TT); var b; var uu : auto(UU)) : array<tup
         buffer |> reserve(min(length(a), length(b)))
     }
     for (itA, itB in a, b) {
-        buffer.emplace((itA, itB)) // nolint:PERF006,LINT019 — iterator sources have no length to reserve; the array/dim case reserves above
+        static_if (typeinfo can_copy(itA) && typeinfo can_copy(itB)) {
+            buffer.emplace((itA, itB)) // nolint:PERF006,LINT019 — iterator sources have no length to reserve; the array/dim case reserves above
+        } else {
+            var cloneA := itA
+            var cloneB := itB
+            buffer.emplace((cloneA, cloneB)) // nolint:PERF006,LINT019 — iterator sources have no length to reserve; the array/dim case reserves above
+        }
     }
     return <- buffer
 }
@@ -4041,7 +4060,14 @@ def private zip3_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
         buffer |> reserve(min(length(a), min(length(b), length(c))))
     }
     for (itA, itB, itC in a, b, c) {
-        buffer.emplace((itA, itB, itC))
+        static_if (typeinfo can_copy(itA) && typeinfo can_copy(itB) && typeinfo can_copy(itC)) {
+            buffer.emplace((itA, itB, itC))
+        } else {
+            var cloneA := itA
+            var cloneB := itB
+            var cloneC := itC
+            buffer.emplace((cloneA, cloneB, cloneC))
+        }
     }
     return <- buffer
 }
@@ -4107,7 +4133,15 @@ def private zip4_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
         buffer |> reserve(min(length(a), min(length(b), min(length(c), length(d)))))
     }
     for (itA, itB, itC, itD in a, b, c, d) {
-        buffer.emplace((itA, itB, itC, itD))
+        static_if (typeinfo can_copy(itA) && typeinfo can_copy(itB) && typeinfo can_copy(itC) && typeinfo can_copy(itD)) {
+            buffer.emplace((itA, itB, itC, itD))
+        } else {
+            var cloneA := itA
+            var cloneB := itB
+            var cloneC := itC
+            var cloneD := itD
+            buffer.emplace((cloneA, cloneB, cloneC, cloneD))
+        }
     }
     return <- buffer
 }
@@ -4173,7 +4207,16 @@ def private zip5_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
         buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), length(e))))))
     }
     for (itA, itB, itC, itD, itE in a, b, c, d, e) {
-        buffer.emplace((itA, itB, itC, itD, itE))
+        static_if (typeinfo can_copy(itA) && typeinfo can_copy(itB) && typeinfo can_copy(itC) && typeinfo can_copy(itD) && typeinfo can_copy(itE)) {
+            buffer.emplace((itA, itB, itC, itD, itE))
+        } else {
+            var cloneA := itA
+            var cloneB := itB
+            var cloneC := itC
+            var cloneD := itD
+            var cloneE := itE
+            buffer.emplace((cloneA, cloneB, cloneC, cloneD, cloneE))
+        }
     }
     return <- buffer
 }
@@ -4239,7 +4282,17 @@ def private zip6_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
         buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), min(length(e), length(f)))))))
     }
     for (itA, itB, itC, itD, itE, itF in a, b, c, d, e, f) {
-        buffer.emplace((itA, itB, itC, itD, itE, itF))
+        static_if (typeinfo can_copy(itA) && typeinfo can_copy(itB) && typeinfo can_copy(itC) && typeinfo can_copy(itD) && typeinfo can_copy(itE) && typeinfo can_copy(itF)) {
+            buffer.emplace((itA, itB, itC, itD, itE, itF))
+        } else {
+            var cloneA := itA
+            var cloneB := itB
+            var cloneC := itC
+            var cloneD := itD
+            var cloneE := itE
+            var cloneF := itF
+            buffer.emplace((cloneA, cloneB, cloneC, cloneD, cloneE, cloneF))
+        }
     }
     return <- buffer
 }
@@ -4305,7 +4358,18 @@ def private zip7_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
         buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), min(length(e), min(length(f), length(g))))))))
     }
     for (itA, itB, itC, itD, itE, itF, itG in a, b, c, d, e, f, g) {
-        buffer.emplace((itA, itB, itC, itD, itE, itF, itG))
+        static_if (typeinfo can_copy(itA) && typeinfo can_copy(itB) && typeinfo can_copy(itC) && typeinfo can_copy(itD) && typeinfo can_copy(itE) && typeinfo can_copy(itF) && typeinfo can_copy(itG)) {
+            buffer.emplace((itA, itB, itC, itD, itE, itF, itG))
+        } else {
+            var cloneA := itA
+            var cloneB := itB
+            var cloneC := itC
+            var cloneD := itD
+            var cloneE := itE
+            var cloneF := itF
+            var cloneG := itG
+            buffer.emplace((cloneA, cloneB, cloneC, cloneD, cloneE, cloneF, cloneG))
+        }
     }
     return <- buffer
 }
@@ -4371,7 +4435,19 @@ def private zip8_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
         buffer |> reserve(min(length(a), min(length(b), min(length(c), min(length(d), min(length(e), min(length(f), min(length(g), length(h)))))))))
     }
     for (itA, itB, itC, itD, itE, itF, itG, itH in a, b, c, d, e, f, g, h) {
-        buffer.emplace((itA, itB, itC, itD, itE, itF, itG, itH))
+        static_if (typeinfo can_copy(itA) && typeinfo can_copy(itB) && typeinfo can_copy(itC) && typeinfo can_copy(itD) && typeinfo can_copy(itE) && typeinfo can_copy(itF) && typeinfo can_copy(itG) && typeinfo can_copy(itH)) {
+            buffer.emplace((itA, itB, itC, itD, itE, itF, itG, itH))
+        } else {
+            var cloneA := itA
+            var cloneB := itB
+            var cloneC := itC
+            var cloneD := itD
+            var cloneE := itE
+            var cloneF := itF
+            var cloneG := itG
+            var cloneH := itH
+            buffer.emplace((cloneA, cloneB, cloneC, cloneD, cloneE, cloneF, cloneG, cloneH))
+        }
     }
     return <- buffer
 }

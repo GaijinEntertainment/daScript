@@ -39,8 +39,8 @@ def test_where_contains_emits_like_wildcards(t : T?) {
     let sql = _sql_text(_db |> select_from(type<Car>)
                           |> _where(_.Name |> contains(_needle)))
     t |> equal(sql,
-        "SELECT \"Id\", \"Name\" FROM \"Cars\" WHERE \"Name\" LIKE ? ESCAPE '\\'",
-        "contains -> LIKE ? ESCAPE '\\'")
+        "SELECT \"Id\", \"Name\" FROM \"Cars\" WHERE \"Name\" GLOB ?",
+        "contains -> case-sensitive GLOB on SQLite (ci_like provider)")
 }
 
 [test]
