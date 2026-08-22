@@ -351,7 +351,7 @@ def test_vision_chat_omni(t : T?) {
 }
 
 [test]
-def test_vision_chat_deepstack(t : T?) {
+def test_vision_chat_deepstack(t : T?) {   // nolint:STYLE038 — one sequential turn story: wide rows → caption → zeroed-slices control
     t |> run("the Qwen3-VL 4B image turn: deepstack wide rows through the chat, then the caption") @(tt : T?) {
         let mm = path_join(models_dir(), MM_4B)
         let dec = path_join(models_dir(), DEC_4B)
