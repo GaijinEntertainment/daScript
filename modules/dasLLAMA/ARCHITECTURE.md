@@ -386,6 +386,14 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a
   family's own file, a family type is named only here, in `dasllama_metal_tower.das`'s family
   hooks, and in files under `tests/`.
+- **`dasllama_audio_embedder.das`** — the audio carrier: `AudioEmbedder` / `AudioState`, the
+  vision carrier's audio twin — one union through every seam (server media worker, facade
+  `encode_audio`, tutorials), the family probed from the mmproj's audio tensor (or a `.dlim`'s
+  baked tag) at load, one-line arms. Outside a family's own file, an audio family type is named
+  only here, in `dasllama_asr.das`'s union field and one-line arms (the ASR rail's own carrier),
+  in the metal family hooks (`dasllama_metal_tower.das`, `dasllama_metal_asr_dec.das`), in
+  `utils/dasllama-convert/main.das` (the per-family `.dlim` bake tool dispatches on family by
+  design), and in files under `tests/` — the set `REVIEW.das`'s seam check enforces.
 
 Vision oracle provenance (the convention `REVIEW.md`'s fixture rule points at): real image
 fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated

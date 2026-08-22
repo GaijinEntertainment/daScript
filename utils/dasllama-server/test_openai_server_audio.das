@@ -76,6 +76,47 @@ def private jfk_b64() : string {
     return empty(bytes) ? "" : base64_encode(bytes)
 }
 
+def private push_le16(var b : array<uint8>; v : int) {
+    b |> push(uint8(v & 0xFF))
+    b |> push(uint8((v >> 8) & 0xFF))
+}
+
+def private push_le32(var b : array<uint8>; v : int) {
+    push_le16(b, v & 0xFFFF)
+    push_le16(b, (v >> 16) & 0xFFFF)
+}
+
+def private push_ascii(var b : array<uint8>; s : string) {
+    for (c in s) {
+        b |> push(uint8(c))   // nolint:PERF006 — tiny_wav_b64 reserves the whole wav before any push
+    }
+}
+
+// a valid PCM16 mono 16 kHz wav of n zero samples — decodes non-empty, sub-frame for the encoder
+def private tiny_wav_b64(n_samples : int) : string {
+    let data_bytes = n_samples * 2
+    var b : array<uint8>
+    b |> reserve(44 + data_bytes)
+    push_ascii(b, "RIFF")
+    push_le32(b, 36 + data_bytes)
+    push_ascii(b, "WAVEfmt ")
+    push_le32(b, 16)         // fmt chunk size
+    push_le16(b, 1)          // PCM
+    push_le16(b, 1)          // mono
+    push_le32(b, 16000)      // sample rate
+    push_le32(b, 16000 * 2)  // byte rate
+    push_le16(b, 2)          // block align
+    push_le16(b, 16)         // bits per sample
+    push_ascii(b, "data")
+    push_le32(b, data_bytes)
+    for (_i in range(data_bytes)) {
+        b |> push(uint8(0))
+    }
+    let out = base64_encode(b)
+    delete b
+    return out
+}
+
 def private audio_chat_body(b64 : string; text : string) : string {
     return "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{b64}\",\"format\":\"wav\"}},\{\"type\":\"text\",\"text\":\"{text}\"}]}]}"
 }
@@ -149,6 +190,11 @@ def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one live server 
                 t |> success(find(string(resp.body), "did not decode") >= 0, "the async decode failure reaches the client as a named 400")
             }
             delete junk
+            // a sub-frame clip serves without a panic or decode failure; the >= 1-token padding
+            // contract itself is pinned by test_audio_embedder's encode cell
+            POST("{base_url}/v1/chat/completions", audio_chat_body(tiny_wav_b64(320), "hi")) $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK), "a sub-frame clip pads to a soft token and serves")
+            }
             // live unload of the towers-armed slot: the async drop job frees its encoders in the
             // media worker (name-keyed tables, no bounce), and the tower-less new default 400s audio
             let tiny = to_generic_path(path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"))

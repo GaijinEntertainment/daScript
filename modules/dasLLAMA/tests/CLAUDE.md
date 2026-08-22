@@ -225,8 +225,11 @@ per fixture by the encodes/blocks counters, plus the knob-off decline leg (the 7
 restride to the attention tiles' 128 on the driver). Skips honestly without the mmproj or dumps.
 `_vision_oracle.das` is the shared dump parser / fixture generator /
 per-token compare all vision tier-1 tests use.
+`test_audio_embedder.das` — model-free: the `AudioEmbedder` carrier's own arms — the no-audio
+refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on the E2B mmproj,
+carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft token).
 `test_vision_embedder.das` — model-free: the `VisionEmbedder` carrier's own arms — the sniffed
-family tag, the none-carrier refusals, and the `.dlim` route — over constructed carriers.
+family tag and the none-carrier refusals — over constructed carriers.
 `test_ple_check.das` — model-free: the PLE go-live tripwire (`ple_check_table`) on synthetic
 Model shells — short plane trips per format arm, full plane passes, non-PLE exempt.
 `test_ple_modes.das` — suite-less, model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE

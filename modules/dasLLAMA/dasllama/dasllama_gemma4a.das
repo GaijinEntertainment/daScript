@@ -330,8 +330,8 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
 }
 
 //! META-only probe of an mmproj gguf: the gemma4a audio encoder's projection width, or 0 for no
-//! gemma4a audio tower (wrong family, vision-only, unreadable, a `.dlim`). Gates on the audio TENSOR
-//! and derives the width like the loader (`clip.audio.*` is written unconditionally, see REVIEW_AUDIO.md).
+//! gemma4a audio tower (wrong family, vision-only, unreadable, a `.dlim`). Gates on the audio
+//! TENSOR — converters write the `clip.audio.*` keys unconditionally, tower or not.
 def gemma4a_probe_proj_dim(path : string) : int64 {
     if (path |> ends_with(".dlim")) {
         return 0l
@@ -1047,9 +1047,10 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     head |> push(special_id(dec, "<|turn>"))
     head |> push_from(encode_(dec, "user", false, false))
     head |> push_from(nl)
-    head |> push(special_id(dec, "<|audio>"))
+    var inscope tmpl <- arch_chat("gemma4")
+    head |> push(special_id(dec, tmpl.audio_pre.parts[0].s))
     var tail : array<int64>
-    tail |> push(special_id(dec, "<audio|>"))
+    tail |> push(special_id(dec, tmpl.audio_post.parts[0].s))
     tail |> push_from(encode_(dec, "Transcribe this audio.", false, false))
     tail |> push(special_id(dec, "<turn|>"))
     tail |> push_from(nl)

@@ -71,6 +71,41 @@ def section_splice(m : Model) {
     delete s2
 }
 
+// The scheduler's shape, live: a render-only chat carries the same turn, and
+// render_turn_audio hands back the two spans — everything before the splice
+// point, everything after — with the template's audio markers in place. No KV,
+// no encoder: the caller splices its own rows between them and prefills.
+def section_render_spans(m : Model; prompt : string) {
+    var rchat <- create_chat_renderer(m, "", 1l)
+    add_user(rchat, prompt)
+    var head : array<int64>
+    var tail : array<int64>
+    render_turn_audio(m, rchat, head, tail)
+    print("render_turn_audio: head {long_length(head)} tokens | <audio rows splice here> | tail {long_length(tail)} tokens\n")
+    delete head
+    delete tail
+    delete rchat
+}
+
+// And the rows themselves: the AudioEmbedder carrier is the family-neutral encoder a
+// scheduler owns — probe the mmproj first (0 = no carrier-served audio tower; the
+// load_audio_tower families above are served by the chat's own tower instead), then
+// load_audio_embedder + encode_audio turn the PCM into the soft-token rows that splice
+// between the two spans.
+def section_carrier_encode(mmproj_path : string; samples : array<float>) {
+    if (audio_probe_proj_dim(mmproj_path) == 0l) {
+        print("carrier: {mmproj_path} carries no carrier-served audio tower (gemma4a) - skipping the encode demo\n")
+        return
+    }
+    var inscope e <- load_audio_embedder(mmproj_path)
+    var st = AudioState()
+    var rows : array<float>
+    let n = encode_audio(e, st, samples, rows)
+    print("encode_audio ({audio_family(e)}): {float(length(samples)) / 16000.0}s -> {n} soft tokens x {audio_proj_dim(e)} wide\n")
+    delete rows
+    delete st
+}
+
 // Minimal RIFF/WAVE reader for 16-bit PCM mono 16 kHz input — enough for the tutorial;
 // real programs decode arbitrary formats through dasAudio's miniaudio bindings.
 def private wav_u16(b : array<uint8> | #; o : int64) : uint {
@@ -110,7 +145,7 @@ def read_wav_pcm16_mono(path : string) : array<float> {
 }
 
 [export]
-def main {
+def main {  // nolint:STYLE038 - one linear tutorial walkthrough; the carrier rail is its first fork
     let cmd <- get_command_line_arguments()
     var ggufs : array<string>
     var audio_path = ""
@@ -136,8 +171,24 @@ def main {
     // The decoder is any chat model dasLLAMA runs. The tower is that model's mmproj —
     // the pair must match: the tower projects into the decoder's embedding width, and
     // create_chat panics on a mismatched pair rather than degrading.
+    //
+    // Two rails, decided by the mmproj: a carrier-served file (the gemma-4 E-series —
+    // audio_probe_proj_dim answers its width) demos the scheduler-side carrier path and
+    // returns, because load_audio_tower does not serve that family; every load_audio_tower
+    // pair takes the chat rail below.
     var m <- load_model(ggufs[0], QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, 4096l)
+    if (audio_probe_proj_dim(ggufs[1]) > 0l) {
+        allow_cpu_prefill()
+        let carrier_samples <- read_wav_pcm16_mono(audio_path)
+        with_job_que() {
+            setup_dasllama_jobque()
+            section_render_spans(m, prompt)
+            section_carrier_encode(ggufs[1], carrier_samples)
+        }
+        print("this mmproj serves through the AudioEmbedder carrier (the server rail) - the create_chat sections need a load_audio_tower pair (qwen2a / omni / ultravox / voxtral)\n")
+        return
+    }
     var tower <- load_audio_tower(ggufs[1])
     allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
 
@@ -183,5 +234,6 @@ def main {
         print("\n---\n")
 
         section_splice(m)
+        section_render_spans(m, prompt)
     }
 }

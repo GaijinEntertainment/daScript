@@ -15,14 +15,16 @@ a model row pins) anywhere under the module, answer to `performance/REVIEW.md`.
 
 **Kind-routed companions sit beside this file:** a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`. A change to `dasllama/dasllama_audio.das`,
-`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_asr.das`, `dasllama/dasllama_asr_types.das`,
+`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_audio_embedder.das`,
+`dasllama/dasllama_asr.das`, `dasllama/dasllama_asr_types.das`,
 `dasllama/dasllama_vad.das`, or an ASR family file — one `dasllama/dasllama_<family>.das`
 holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
 `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file — one
 `dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
 path (one that runs inside the program under review, not a spawned child process) that
-splices a stream carrying decoded media into a prompt or schedules such a stream, applies
+splices a stream carrying decoded media — pixels or audio samples — into a prompt or
+schedules such a stream, applies
 `REVIEW_VISION.md`. A `dasllama/dasllama_tower.das` change — the shared encoder-tower home —
 applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
 thereby pick up the other modality's checklist. A change to the tune sidecar's schema or
@@ -80,9 +82,10 @@ rename is not new** (annotations follow the name in the same change).
 (`benchmarks/lcpp_bench.das`) for the affected backend** — the instrument is the scaling
 ratio across the size ladder, and superlinear is a defect.
 
-**A change reaching `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
-`dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das` records a
-`tests/test_tokenizer.das` run with its cases EXECUTED, not skipped.**
+**A change to `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
+`dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
+template strings any of them look up, records a `tests/test_tokenizer.das` run with its cases
+EXECUTED, not skipped.**
 
 **An override announces itself where it changes the outcome.** An override is an environment
 knob — an env variable or its programmatic setter — that moves a gate, policy, or threshold
@@ -175,10 +178,13 @@ A `require ... public` that re-exports an engine module OUT of an escaped file, 
 that consumer's ruled charter (`ARCHITECTURE.md` §1) grants, is the same defect wearing a
 different line.
 
-**Weakening `REVIEW.das` (beside this file) — the gate that fails when a `def` of
-`dasllama/dasllama.das` appears in no `tutorials/dasLLAMA/*.das` (repo root) or in no
-`doc/source/reference/tutorials/dasLLAMA_*.rst` page — is a defect:** dropping either
-check, exempting a def, or a finding text that no longer names what failed.
+**Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, adding a name to
+a check's licensed set — the names that check does not flag — or a finding text that no
+longer names what failed. What the gate enforces is read from the gate itself; each check's
+finding text states its own rule.
+
+**A new `REVIEW.das` check ships with its licensed set ledgered in `ARCHITECTURE.md` §1, in
+the same change.**
 
 **A def of `dasllama/dasllama.das` is TAUGHT where the gate finds it named — demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
