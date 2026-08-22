@@ -6,7 +6,7 @@ options gen2
 // some malformed chains additionally cascade real type errors before the
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field). Those cascades are expected.
-expect 30341, 30928:2, 50503:23
+expect 30341, 30928:2, 50503:26
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -25,6 +25,13 @@ struct Owner {
     @sql_primary_key Id : int
     CarId : int
     Name  : string
+}
+
+[sql_table(name="ComputedRows")]
+struct ComputedRow {
+    @sql_primary_key Id : int
+    Quantity : int
+    @sql_computed = "Quantity * 2" Doubled : int
 }
 
 [export]
@@ -102,8 +109,8 @@ def main() {
 
     // 18. Set-op LHS with `_order_by` — emitted SQL is unparenthesized
     //     `<lhs> UNION <rhs>`, so a per-side ORDER BY is a SQLite syntax
-    //     error. Reject at compile time; chunk 5 doesn't yet support a
-    //     trailing ORDER BY on the combined set-op result.
+    //     error. Reject at compile time; a trailing ORDER BY on the
+    //     combined set-op result is the supported spelling.
     let bad18 <- _sql((db |> select_from(type<Car>) |> _select(_.Price) |> _order_by(_))
                        |> union(db |> select_from(type<Car>) |> _select(_.Price)))
 
@@ -156,4 +163,17 @@ def main() {
     //  live for the rare case where the row-vs-rowset shape type-checks
     //  but produces a multi-column subquery; constructing that test
     //  reliably is left for a future chunk.)
+
+    // 27. Ternary over a column — mentions_source_arg walks ExprOp3, so the
+    //     expression is recognized as column-dependent and rejected as
+    //     untranslatable instead of binding as a captured `?` value.
+    let bad27 <- _sql_text(db |> select_from(type<Car>) |> _where((_.Price > 100 ? _.Price : _.Id) > 150))
+
+    // 28. Bare `_group_by` under `_sql_text` — the same reject_bare_group_by
+    //     that `_sql` runs applies to the text mirror.
+    let bad28 <- _sql_text(db |> select_from(type<Car>) |> _group_by(_.Price))
+
+    // 29. `_sql_update` SET on an @sql_computed column — compile-time
+    //     rejection (generated columns are not writable).
+    let bad29 = _sql_update(db, type<ComputedRow>, _.Id > 0, (Doubled = 5))
 }

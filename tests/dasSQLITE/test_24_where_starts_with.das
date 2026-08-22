@@ -41,8 +41,8 @@ def test_where_starts_with_emits_like_pattern(t : T?) {
     let sql = _sql_text(_db |> select_from(type<Car>)
                           |> _where(_.Name |> starts_with(_prefix)))
     t |> equal(sql,
-        "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" WHERE \"Name\" LIKE ? ESCAPE '\\'",
-        "starts_with -> LIKE ? ESCAPE '\\'")
+        "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" WHERE \"Name\" GLOB ?",
+        "starts_with -> case-sensitive GLOB on SQLite (ci_like provider)")
 }
 
 [test]

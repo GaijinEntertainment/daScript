@@ -139,7 +139,7 @@ def register_sqlite_provider {
         sqlTypeFor = @@sqlite_sql_type,
         identityDdl = "PRIMARY KEY",
         readTableSchema = @@_sqlite_read_table_schema,
-        caps = SqlProviderCaps.fts5 | SqlProviderCaps.client_udfs | SqlProviderCaps.returning,
+        caps = SqlProviderCaps.fts5 | SqlProviderCaps.client_udfs | SqlProviderCaps.returning | SqlProviderCaps.ci_like,
         pkReport = SqlPkReport.LastInsertRowid)
     register_sql_provider(info)
 }

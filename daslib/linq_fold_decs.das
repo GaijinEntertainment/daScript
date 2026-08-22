@@ -351,7 +351,8 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
         return emit_early_exit_lane(termName, adapter, null, null, clone_expression(rangeInfo.postTakeWhereCond),
             noBinds, noPre, elementType, termCall, chainInfo.finalBind, names, null, null, null, null, at)
     }
-    if (ctx.expr_is_iterator) return null
+    let unknownTerminator = hasTerm && termName != "to_array"
+    if (unknownTerminator || ctx.expr_is_iterator) return null
     let finalBind = chainInfo.finalBind
     var elemType = clone_type(chainInfo.finalType)
     let bufName = qn("decs_buf", at)

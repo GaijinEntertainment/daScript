@@ -287,19 +287,6 @@ def private push_inline_lit(var out : array<SqlFrag>; e : ExpressionPtr) {
 }
 
 [macro_function]
-def private push_frags(var dst : array<SqlFrag>; var src : array<SqlFrag>) {
-    dst |> push_from(src)
-}
-
-[macro_function]
-def private has_bind_frag(var frags : array<SqlFrag>) : bool {
-    for (f in frags) {
-        if (f is bind) return true
-    }
-    return false
-}
-
-[macro_function]
 def private fold_to_builder(var frags : array<SqlFrag>; providerIdx : int; at : LineInfo;
                             var sqlExpr : ExpressionPtr&;
                             var bindExprs : array<ExpressionPtr>) {
@@ -520,8 +507,9 @@ def private emit_in_collection_json_bridge(var collArg : ExpressionPtr; var q : 
     }
     if (negated) {
         // nolint:STYLE015 Three-valued logic: `x != NULL` is unknown, so naive NOT IN drops rows
-        // whose column is NULL. Defensive form preserves them on nullable columns.
-        if (nullable) return "({xSql} NOT IN (SELECT value FROM json_each(?)) OR {xSql} IS NULL)"
+        // whose column is NULL. The defensive form evaluates xSql ONCE (IFNULL over the IN) — a
+        // computed LHS may carry its own `?` binds, so interpolating it twice would desync binds.
+        if (nullable) return "NOT IFNULL({xSql} IN (SELECT value FROM json_each(?)), 0)"
         return "{xSql} NOT IN (SELECT value FROM json_each(?))"
     }
     return "{xSql} IN (SELECT value FROM json_each(?))"
@@ -627,7 +615,7 @@ def private finalize_distinct_by_count_wrap(var q : SqlQuery&; isLong : bool; pr
         q.hadError = true
         return
     }
-    q.innerSql = build_distinct_by_inner_subquery(q, pkField, false)
+    q.innerSql = build_distinct_by_inner_subquery(q, pkField, q.distinctByLast)
     q.fromRowType = q.rootType
     q.whereSql = predSql
     q.aggregateExpr = "COUNT(*)"
@@ -647,7 +635,7 @@ def private finalize_distinct_by_aggregate_wrap(var q : SqlQuery&; sqlOp : strin
         q.hadError = true
         return
     }
-    q.innerSql = build_distinct_by_inner_subquery(q, pkField, false)
+    q.innerSql = build_distinct_by_inner_subquery(q, pkField, q.distinctByLast)
     q.fromRowType = q.rootType
     q.aggregateExpr = "{sqlOp}(\"{sqlCol}\")"
     q.aggregateType = aggregateType
@@ -927,7 +915,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.aggregateExpr = ""
     q.aggregateType = null
     if (savedAggExpr != "") {
-        if (keepLimitInner) {
+        if (keepLimitInner && !(q.seenJoin && !empty(q.joinProjRecordNames))) {
             q.selectCols |> clear
             q.selectColAliases |> clear
             q.selectColSqlFragments |> clear
@@ -1397,12 +1385,10 @@ def private collect_query_binds(var q : SqlQuery&; var out : array<ExpressionPtr
     out |> push_from(q.bindExprs)
     out |> push_from(q.havingBindExprs)
     out |> push_from(q.setOpRhsBinds)
-    let forced_one_row = ((q.matr == Materializer.One || q.matr == Materializer.OneOpt)
-                          && q.proj != ProjectionShape.Aggregate)
-    if (!forced_one_row && q.limitBindExpr != null) {
+    if (q.limitBindExpr != null) {
         out |> push(q.limitBindExpr)
     }
-    if (!forced_one_row && q.offsetBindExpr != null) {
+    if (q.offsetBindExpr != null) {
         out |> push(q.offsetBindExpr)
     }
 }
@@ -1949,6 +1935,8 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             }
         }
         if (soCall != null) {
+            let dr = maybe_divert(q, PHASE_SET_OP, node, prog, at)
+            if (dr != 0) return dr > 0
             if (q.seenSetOp) {
                 macro_error(prog, at, "_sql: only one set-op (UNION / INTERSECT / EXCEPT) per chain (chained set-ops are deferred)")
                 return false
@@ -1957,12 +1945,15 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: union/intersect/except expected 2 args (lhs, rhs) post-expansion")
                 return false
             }
+            let preSeenOrderBy = q.seenOrderBy
+            let preHadLimit = q.limitBindExpr != null
+            let preHadOffset = q.offsetBindExpr != null
             if (!analyze_chain(soCall.arguments[0], q, prog, at)) return false
-            if (q.seenOrderBy) {
+            if (q.seenOrderBy && !preSeenOrderBy) {
                 macro_error(prog, at, "_sql: set-op LHS cannot use `_order_by` (apply to the combined set-op result instead)")
                 return false
             }
-            if (q.limitBindExpr != null || q.offsetBindExpr != null) {
+            if ((q.limitBindExpr != null && !preHadLimit) || (q.offsetBindExpr != null && !preHadOffset)) {
                 macro_error(prog, at, "_sql: set-op LHS cannot use `take(n)` / `skip(n)` (apply to the combined set-op result instead)")
                 return false
             }
@@ -2501,7 +2492,8 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; var q : SqlQ
                     }
                     return true
                 }
-                sqlOut = "{sqlOp}(\"{col}\")"
+                let sqlCol = field_to_column_name(q.rootType, col)
+                sqlOut = "{sqlOp}(\"{sqlCol}\")"
                 if (fname == "average") {
                     typeOut = new TypeDecl(at = at, baseType = Type.tDouble)
                 } else {
@@ -3096,7 +3088,7 @@ def private is_string_typed(e : ExpressionPtr) : bool {
     return e != null && e._type != null && e._type.baseType == Type.tString
 }
 
-def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery; asReceiver : bool = false) : bool {
+def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery; asReceiver : bool = false) : bool {    // nolint:STYLE037 — exact-type is-ladder over handled AST node types
     if (node == null) return false
     if (node is ExprRef2Value) {
         var rv = node as ExprRef2Value
@@ -3111,6 +3103,10 @@ def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery; asReceiver :
         var ef = node as ExprField
         return mentions_source_arg(ef.value, q, true)
     }
+    if (node is ExprSafeField) {
+        var sf = node as ExprSafeField
+        return mentions_source_arg(sf.value, q, true)
+    }
     if (node is ExprOp1) {
         var o1 = node as ExprOp1
         return mentions_source_arg(o1.subexpr, q)
@@ -3118,6 +3114,20 @@ def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery; asReceiver :
     if (node is ExprOp2) {
         var o2 = node as ExprOp2
         return mentions_source_arg(o2.left, q) || mentions_source_arg(o2.right, q)
+    }
+    if (node is ExprOp3) {
+        var o3 = node as ExprOp3
+        return (mentions_source_arg(o3.subexpr, q)
+            || mentions_source_arg(o3.left, q)
+            || mentions_source_arg(o3.right, q))
+    }
+    if (node is ExprAt) {
+        var ea = node as ExprAt
+        return mentions_source_arg(ea.subexpr, q) || mentions_source_arg(ea.index, q)
+    }
+    if (node is ExprCast) {
+        var ec = node as ExprCast
+        return mentions_source_arg(ec.subexpr, q)
     }
     if (node is ExprCall) {
         var c = node as ExprCall
@@ -3628,42 +3638,61 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     let argc = user_arg_count(call)
     if (fname == "starts_with" && argc == 2) {
         let lhs = pred_to_sql(call.arguments[0], q, prog, at)
-        return "" if (q.hadError)
-        var wrapped : ExpressionPtr = qmacro(_::like_escape_prefix($e(call.arguments[1])))
+        return "" if (q.hadError || empty(lhs))
+        let ciLike = sql_provider_at(q.providerIdx).caps.ci_like
+        var wrapped : ExpressionPtr
+        if (ciLike) {
+            wrapped = qmacro(_::glob_escape_prefix($e(call.arguments[1])))
+        } else {
+            wrapped = qmacro(_::like_escape_prefix($e(call.arguments[1])))
+        }
         if (q.inHaving) {
             q.havingBindExprs |> push(wrapped)
         } else {
             q.bindExprs |> push(wrapped)
         }
-        return "{lhs} LIKE ? ESCAPE '\\'"
+        return ciLike ? "{lhs} GLOB ?" : "{lhs} LIKE ? ESCAPE '\\'"
     }
     if (fname == "ends_with" && argc == 2) {
         let lhs = pred_to_sql(call.arguments[0], q, prog, at)
-        return "" if (q.hadError)
-        var wrapped : ExpressionPtr = qmacro(_::like_escape_suffix($e(call.arguments[1])))
+        return "" if (q.hadError || empty(lhs))
+        let ciLike = sql_provider_at(q.providerIdx).caps.ci_like
+        var wrapped : ExpressionPtr
+        if (ciLike) {
+            wrapped = qmacro(_::glob_escape_suffix($e(call.arguments[1])))
+        } else {
+            wrapped = qmacro(_::like_escape_suffix($e(call.arguments[1])))
+        }
         if (q.inHaving) {
             q.havingBindExprs |> push(wrapped)
         } else {
             q.bindExprs |> push(wrapped)
         }
-        return "{lhs} LIKE ? ESCAPE '\\'"
+        return ciLike ? "{lhs} GLOB ?" : "{lhs} LIKE ? ESCAPE '\\'"
     }
     if (fname == "contains" && argc == 2) {
         var firstT = call.arguments[0]._type
         if (firstT != null && (firstT.isIterator || firstT.isGoodArrayType)) {
         } else {
             let lhs = pred_to_sql(call.arguments[0], q, prog, at)
-            return "" if (q.hadError)
-            var wrapped : ExpressionPtr = qmacro(_::like_escape_substring($e(call.arguments[1])))
+            return "" if (q.hadError || empty(lhs))
+            let ciLike = sql_provider_at(q.providerIdx).caps.ci_like
+            var wrapped : ExpressionPtr
+            if (ciLike) {
+                wrapped = qmacro(_::glob_escape_substring($e(call.arguments[1])))
+            } else {
+                wrapped = qmacro(_::like_escape_substring($e(call.arguments[1])))
+            }
             if (q.inHaving) {
                 q.havingBindExprs |> push(wrapped)
             } else {
                 q.bindExprs |> push(wrapped)
             }
-            return "{lhs} LIKE ? ESCAPE '\\'"
+            return ciLike ? "{lhs} GLOB ?" : "{lhs} LIKE ? ESCAPE '\\'"
         }
     }
     if (fname == "text_match" && argc == 2) {
+        if (!sql_provider_at(q.providerIdx).caps.fts5) return pred_fail(q, prog, at, "_sql: text_match() cannot be used on provider '{sql_provider_at(q.providerIdx).name}' - it does not support FTS5 (caps.fts5); use contains(_.Col, q) for substring match instead")
         if (!has_struct_annotation(q.rootType, "sql_fts5")) return pred_fail(q, prog, at, "_sql: text_match() requires an [sql_fts5] struct, got '{describe(q.rootType)}'. Options: use contains(_.Col, q) for LIKE-based substring match, or annotate the struct with [sql_fts5] for indexed full-text search.")
         var receiver : ExpressionPtr
         var fieldName : string
@@ -3672,7 +3701,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
             return pred_fail(q, prog, at, "_sql: text_match() cannot target @sql_fts_unindexed field '{fieldName}' - UNINDEXED metadata is stored and filterable with ordinary comparisons, but deliberately excluded from FTS5 MATCH. Match an indexed string field instead.")
         }
         let lhs = pred_to_sql(call.arguments[0], q, prog, at)
-        return "" if (q.hadError)
+        return "" if (q.hadError || empty(lhs))
         if (q.inHaving) {
             q.havingBindExprs |> push <| clone_expression(call.arguments[1])
         } else {
@@ -3942,8 +3971,8 @@ def private has_struct_annotation(rootT : TypeDeclPtr; name : string) : bool {
 
 [macro_function]
 def private build_sql_string(var q : SqlQuery&; force_aliases : bool = false) : string {
+    if (q.setOpKind == SetOpKind.None) return "{build_sql_select(q, force_aliases)}{build_order_limit_tail(q)}"
     let inner = build_sql_select(q, force_aliases)
-    if (q.setOpKind == SetOpKind.None) return inner
     var op : string
     if (q.setOpKind == SetOpKind.Union) {
         op = "UNION"
@@ -3952,7 +3981,7 @@ def private build_sql_string(var q : SqlQuery&; force_aliases : bool = false) : 
     } else {
         op = "EXCEPT"
     }
-    return "{inner} {op} {q.setOpRhsSql}"
+    return "{inner} {op} {q.setOpRhsSql}{build_order_limit_tail(q)}"
 }
 
 [macro_function]
@@ -4114,6 +4143,12 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
             w |> write(" HAVING ")
             w |> write(q.havingSql)
         }
+    }
+}
+
+[macro_function]
+def private build_order_limit_tail(q : SqlQuery) : string {
+    return build_string() $(var w) {
         if (!empty(q.orderByCols)) {
             w |> write(" ORDER BY ")
             for (i in range(length(q.orderByCols))) {
@@ -4125,14 +4160,16 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
         }
         let forced_one_row = ((q.matr == Materializer.One || q.matr == Materializer.OneOpt)
                               && q.proj != ProjectionShape.Aggregate)
-        if (forced_one_row) {
+        if (forced_one_row && q.limitBindExpr != null) {
+            w |> write(" LIMIT CASE WHEN ? < 1 THEN 0 ELSE 1 END")
+        } elif (forced_one_row) {
             w |> write(" LIMIT 1")
         } elif (q.limitBindExpr != null) {
             w |> write(" LIMIT ?")
         } elif (q.offsetBindExpr != null) {
             w |> write(" {sql_provider_at(q.providerIdx).noLimitSpelling}")
         }
-        if (!forced_one_row && q.offsetBindExpr != null) {
+        if (q.offsetBindExpr != null) {
             w |> write(" OFFSET ?")
         }
     }
@@ -4145,8 +4182,9 @@ class private SqlTextMacro : AstCallMacro {
         var argT = call.arguments[0]._type
         macro_verify(argT != null, prog, call.at, "_sql_text: chain argument is not inferred yet")
         macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql_text: chain type is auto/alias after inference")
+        normalize_single_source_arg_names(call.arguments[0])
         var q = SqlQuery()
-        if (!analyze_chain(call.arguments[0], q, prog, call.at)
+        if (!analyze_chain(call.arguments[0], q, prog, call.at) || !reject_bare_group_by(q, prog, call.at)
                 || !maybe_finalize_distinct_by_passthrough(q, prog, call.at)
                 || !maybe_wrap_take_before_aggregate(q, prog, call.at)) return null
         let sql = build_sql_string(q)
@@ -4195,9 +4233,10 @@ class private SqlCreateViewMacro : AstCallMacro {
         var argChainT = call.arguments[2]._type
         macro_verify(argChainT != null, prog, call.at, "_create_view: chain argument is not inferred yet")
         macro_verify(!argChainT.isAutoOrAlias, prog, call.at, "_create_view: chain type is auto/alias after inference")
+        normalize_single_source_arg_names(call.arguments[2])
         var q = SqlQuery()
         q.inView = true
-        if (!analyze_chain(call.arguments[2], q, prog, call.at)) {
+        if (!analyze_chain(call.arguments[2], q, prog, call.at) || !reject_bare_group_by(q, prog, call.at)) {
             // nolint:STYLE015 Deeper pred_fail errors get eaten by the AST cascade after call_macro
             // returns null (free `_` refs confuse the typer); re-emit captured first error.
             if (!empty(q.lastError)) {
@@ -4275,6 +4314,7 @@ class private SqlCreateViewMacro : AstCallMacro {
         var sb = new ExprStringBuilder(at = call.at)
         var pending = "CREATE VIEW \"{view_name}\"({col_list}) AS "
         var bind_idx = 0
+        var bindOverflow = false
         peek_data(select_sql_template) $(d) {
             let n = length(d)
             var runStart = 0
@@ -4282,6 +4322,10 @@ class private SqlCreateViewMacro : AstCallMacro {
                 let pos = next_bind_placeholder(d, runStart)
                 if (pos < 0) {
                     pending += slice(d, runStart, n) // nolint:PERF001,LINT019 - PERF001 is blind inside a block body, so its marker reads stale
+                    break
+                }
+                if (bind_idx >= length(ordered_binds)) {
+                    bindOverflow = true
                     break
                 }
                 pending += slice(d, runStart, pos) // nolint:PERF001,LINT019 - PERF001 is blind inside a block body, so its marker reads stale
@@ -4293,6 +4337,10 @@ class private SqlCreateViewMacro : AstCallMacro {
                 runStart = pos + 1
                 bind_idx++
             }
+        }
+        if (bindOverflow) {
+            macro_error(prog, call.at, "_create_view: internal placeholder/bind mismatch - the generated SELECT carries more `?` than collected binds; report this chain shape")
+            return null
         }
         if (!empty(pending)) {
             sb.elements |> push <| new ExprConstString(at = call.at, value := pending)
@@ -4813,6 +4861,10 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;  
             var found = false
             for (f in st.fields) {
                 if (f.name == colName) {
+                    if (is_field_computed(f)) {
+                        macro_error(prog, at, "_sql_update: SET column \"{colName}\" is @sql_computed - generated columns are not writable; update the source columns and the computed value follows")
+                        return false
+                    }
                     found = true
                     break
                 }
@@ -4910,6 +4962,10 @@ def private emit_update_body(prog : ProgramPtr; var call : ExprCallMacro?;
         macro_error(prog, call.at, "_sql_update: no SQL provider registered for runner type {describe(dbE._type)} (registered: {sql_provider_names()})")
         return null
     }
+    if (isReturning && !sql_provider_at(q.providerIdx).caps.returning) {
+        macro_error(prog, call.at, "_sql_update_returning: provider '{sql_provider_at(q.providerIdx).name}' does not support RETURNING (caps.returning); use _sql_update and select the rows separately")
+        return null
+    }
     let whereSql = pred_to_sql_boolctx(whereE, q, prog, call.at)
     if (q.hadError || empty(whereSql)) return null
     var setSqlClauses : array<string>
@@ -4972,6 +5028,10 @@ def private emit_delete_body(prog : ProgramPtr; var call : ExprCallMacro?;
     q.providerIdx = find_sql_provider_by_runner(dbE._type)
     if (q.providerIdx < 0) {
         macro_error(prog, call.at, "_sql_delete: no SQL provider registered for runner type {describe(dbE._type)} (registered: {sql_provider_names()})")
+        return null
+    }
+    if (isReturning && !sql_provider_at(q.providerIdx).caps.returning) {
+        macro_error(prog, call.at, "_sql_delete_returning: provider '{sql_provider_at(q.providerIdx).name}' does not support RETURNING (caps.returning); use _sql_delete and select the rows separately")
         return null
     }
     let whereSql = pred_to_sql_boolctx(whereE, q, prog, call.at)
@@ -5131,14 +5191,6 @@ def private validate_outer_upsert_args(prog : ProgramPtr; var call : ExprCallMac
 }
 
 [macro_function]
-def private analyze_upsert_conflict(var conflictExpr : ExprCallMacro?; rootT : TypeDeclPtr;
-                                    var conflictCols : array<string>&;
-                                    prog : ProgramPtr; at : LineInfo) : bool {
-    var node : ExpressionPtr = conflictExpr
-    return analyze_upsert_conflict_inner(node, rootT, conflictCols, prog, at)
-}
-
-[macro_function]
 def private analyze_upsert_conflict_inner(var node : ExpressionPtr; rootT : TypeDeclPtr;
                                           var conflictCols : array<string>&;
                                           prog : ProgramPtr; at : LineInfo) : bool {
@@ -5195,6 +5247,7 @@ def private validate_conflict_cols(rootT : TypeDeclPtr; conflictCols : array<str
         for (f in st.fields) {
             if (f.name == col) {
                 found = true
+                break
             }
         }
         if (!found) {
@@ -5270,7 +5323,7 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
                 return false
             }
             if (is_computed) {
-                macro_error(prog, at, "_sql_upsert: do_update column \"{colName}\" is @sql_computed; SQLite rejects writes to generated columns. Update the source columns and the computed value follows.")
+                macro_error(prog, at, "_sql_upsert: do_update column \"{colName}\" is @sql_computed - generated columns are not writable; update the source columns and the computed value follows")
                 return false
             }
         }

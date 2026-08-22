@@ -154,11 +154,11 @@ def test_where_take_runtime_binds(t : T?) {
 }
 
 [test]
-def test_first_after_take_uses_limit_1(t : T?) {
+def test_first_after_take_clamps_limit(t : T?) {
     var _db = SqlRunner()
-    // take(5) |> _first() — terminal forces LIMIT 1 (overrides take's 5).
+    // take(n) |> _first() — clamps to at most one row, keeping take(0)'s empty result.
     let sql = _sql_text(_db |> select_from(type<Car>) |> take(5) |> _first())
     t |> equal(sql,
-        "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" LIMIT 1",
-        "single-row terminal overrides take's LIMIT")
+        "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" LIMIT CASE WHEN ? < 1 THEN 0 ELSE 1 END",
+        "single-row terminal clamps take's LIMIT, keeping the bind")
 }

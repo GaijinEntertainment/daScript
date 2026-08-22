@@ -760,3 +760,55 @@ def test_table_group_by(t : T?) { // nolint:STYLE038 flat list of independent ru
         delete tab
     }
 }
+
+[test]
+def test_table_kv_positional_fields(t : T?) {
+    t |> run("each_kv chains accept positional _0/_1 access") @(tt : T?) {
+        var tab <- { 1 => 10, 2 => 20, 3 => 30 }
+        unsafe {
+            let s = _fold(each_kv(tab)._select(_._1) |> sum())
+            tt |> equal(s, 60)
+            let ks = _fold(each_kv(tab)._select(_._0) |> sum())
+            tt |> equal(ks, 6)
+            let mixed = _fold(each_kv(tab)._select(_._0 * 100 + _._1) |> sum())
+            tt |> equal(mixed, 660)
+        }
+    }
+}
+
+def keys(var _t : table<int; string> ==const) : iterator<int> {
+    return [iterator for(_i in 0..1); 999]
+}
+
+[test]
+def test_user_keys_overload_not_hijacked(t : T?) {
+    t |> run("a user keys overload runs instead of folding to length(tab)") @(tt : T?) {
+        var tab <- { 1 => "a", 2 => "b", 3 => "c" }
+        var plainCount = 0
+        for (_k in keys(tab)) {
+            plainCount ++
+        }
+        tt |> equal(plainCount, 1)
+        unsafe {
+            let n = _fold(keys(tab) |> count())
+            tt |> equal(n, 1)
+        }
+    }
+}
+
+[test]
+def test_join_probe_kv_positional_fields(t : T?) {
+    t |> run("a table srcB joined on its key accepts positional _1 in the result") @(tt : T?) {
+        var tab <- { 1 => 100, 2 => 200 }
+        let leads = [1, 2, 2]
+        unsafe {
+            let rows <- _fold(each(leads)
+                |> _join(each_kv(tab), $(l, d) => l == d.key, $(l, d) => l * 1000 + d._1)
+                |> to_array())
+            tt |> equal(length(rows), 3)
+            tt |> equal(rows[0], 1100)
+            tt |> equal(rows[1], 2200)
+            tt |> equal(rows[2], 2200)
+        }
+    }
+}

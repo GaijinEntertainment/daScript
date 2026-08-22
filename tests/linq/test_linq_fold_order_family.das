@@ -114,3 +114,61 @@ def test_bounded_heap_with_distinct(t : T?) {
         }
     }
 }
+
+[test]
+def test_order_take_nonpositive_then_first(t : T?) {
+    t |> run("order_by + take(0) + first_or_default returns the default") @(tt : T?) {
+        let scores <- [5, 1, 4]
+        unsafe {
+            let v = _fold(each(scores)._order_by(_).take(0).first_or_default(-7))
+            tt |> equal(v, -7)
+        }
+    }
+    t |> run("where + order_by + take(0) + first_or_default returns the default") @(tt : T?) {
+        let scores <- [5, 1, 4]
+        unsafe {
+            let v = _fold(each(scores)._where(_ > 0)._order_by(_).take(0).first_or_default(-7))
+            tt |> equal(v, -7)
+        }
+    }
+    t |> run("order_by + take(negative) + first_or_default returns the default") @(tt : T?) {
+        let scores <- [5, 1, 4]
+        unsafe {
+            let v = _fold(each(scores)._order_by(_).take(-3).first_or_default(-7))
+            tt |> equal(v, -7)
+        }
+    }
+    t |> run("order_by + take(positive) + first_or_default still finds the min") @(tt : T?) {
+        let scores <- [5, 1, 4]
+        unsafe {
+            let v = _fold(each(scores)._order_by(_).take(2).first_or_default(-7))
+            tt |> equal(v, 1)
+        }
+    }
+    t |> run("order_by + take(0) + first panics like plain") @(tt : T?) {
+        let scores <- [5, 1, 4]
+        var didPanic = false
+        try {
+            unsafe {
+                let v = _fold(each(scores)._order_by(_).take(0).first())
+                tt |> success(false, "expected panic; got {v}")
+            }
+        } recover {
+            didPanic = true
+        }
+        tt |> success(didPanic, "take(0) |> first() panicked")
+    }
+    t |> run("where + order_by + take(0) + first panics like plain") @(tt : T?) {
+        let scores <- [5, 1, 4]
+        var didPanic = false
+        try {
+            unsafe {
+                let v = _fold(each(scores)._where(_ > 0)._order_by(_).take(0).first())
+                tt |> success(false, "expected panic; got {v}")
+            }
+        } recover {
+            didPanic = true
+        }
+        tt |> success(didPanic, "fused take(0) |> first() panicked")
+    }
+}

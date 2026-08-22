@@ -61,6 +61,7 @@ def private build_table_walk(lane : TableLane; srcName, bindName : string; var b
         }
     }
     var (allUsed, usedFields) = collect_row_usage(body, bindName)
+    allUsed = needs_full_row_bind(usedFields, allUsed)
     if (allUsed) {
         inner |> push <| qmacro_expr() {
             let $i(bindName) = (key = $i(kIter), value = $i(vIter))
@@ -372,6 +373,7 @@ def extract_table_source(var top : Expression?) : ExprCall? {
     var c = top as ExprCall
     let name = get_call_short_name(c)
     if ((name != "each_kv" && name != "keys" && name != "values")
+            || match_call_in_module(top, name, "builtin") == null
             || c._type == null || !c._type.isIterator || c._type.firstType == null
             || (c.arguments |> length) != 1) {
         return null

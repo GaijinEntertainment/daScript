@@ -631,7 +631,7 @@ def test_intersect(t : T?) {
             ._order_by(_) // sort
             ._fold()
         )
-        var expected = [3, 4, 5, 6]    // nolint:LINT003
+        var expected = [1, 2, 3, 4]    // nolint:LINT003
         t |> equal(length(t1), length(expected))
         for (i, v in 0..length(expected), t1) {
             t |> equal(expected[i], v)
@@ -2778,5 +2778,187 @@ def test_fold_order_by_first(t : T?) {
         tt |> equal(2, length(result), "take 2 of descending order")
         tt |> equal(25, result[0], "first is max (25)")
         tt |> equal(20, result[1], "second is next-max (20)")
+    }
+}
+
+[test]
+def test_join_multistatement_result_group_by(t : T?) {
+    t |> run("join with multi-statement result lambda + group_by keeps its rows") @(tt : T?) {
+        let cars = [(id = 1, dealer = 1), (id = 2, dealer = 2), (id = 3, dealer = 1)]
+        let dealers = [(id = 1, region = "north"), (id = 2, region = "south")]
+        unsafe {
+            let rows <- _fold(each(cars)
+                |> _join(dealers,
+                         $(l, r) => l.dealer == r.id,
+                         $(l, r) {
+                             let regionTag = r.region
+                             return (Region = regionTag, CarId = l.id)
+                         })
+                |> _group_by(_.Region)
+                |> _select((R = _._0, N = _._1 |> count()))
+                |> to_array())
+            tt |> equal(length(rows), 2)
+            var totalMembers = 0
+            for (row in rows) {
+                totalMembers += row.N
+            }
+            tt |> equal(totalMembers, 3)
+        }
+    }
+}
+
+var g_impure_counter = 0
+
+def impure_double_for_fold(x : int) : int {
+    g_impure_counter ++
+    return x * 2
+}
+
+[test]
+def test_chained_impure_selects_then_where(t : T?) {
+    t |> run("chained impure selects + where compile and match plain semantics") @(tt : T?) {
+        g_impure_counter = 0
+        unsafe {
+            let vals <- _fold(each([1, 2, 3])._select(impure_double_for_fold(_))._select(_ + 1)._where(_ > 3).to_array())
+            tt |> equal(length(vals), 2)
+            tt |> equal(vals[0], 5)
+            tt |> equal(vals[1], 7)
+            tt |> equal(g_impure_counter, 3)
+            let n = _fold(each([1, 2, 3])._select(impure_double_for_fold(_))._select(_ + 1)._where(_ > 3).count())
+            tt |> equal(n, 2)
+            tt |> equal(g_impure_counter, 6)
+            let taken <- _fold(each([1, 2, 3, 4])._select(impure_double_for_fold(_))._select(_ + 1).take(3)._where(_ > 3).to_array())
+            tt |> equal(length(taken), 2)
+            tt |> equal(taken[0], 5)
+            tt |> equal(taken[1], 7)
+        }
+    }
+}
+
+[test]
+def test_having_inner_select_distinct_selector(t : T?) {
+    t |> run("having inner-select uses its own selector, not the visible _select slot") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5, 6]
+        unsafe {
+            let got <- _fold(arr._group_by_lazy(_ % 3)._having(_._1 |> select($(x : int) => x * 10) |> sum > 60)._select((K = _._0, S = _._1 |> select($(x : int) => x * 1) |> sum)))
+            tt |> equal(length(got), 2)
+            var totalS = 0
+            for (g in got) {
+                totalS += g.S
+            }
+            tt |> equal(totalS, 16)
+        }
+    }
+}
+
+struct MmItem {
+    id : int
+    w : int
+}
+
+[test]
+def test_min_max_family_splice_parity(t : T?) {
+    t |> run("min_max family folds match plain evaluation") @(tt : T?) {
+        let xs = [5, 1, 9, 3, 7, 3]
+        var items <- [MmItem(id = 1, w = 30), MmItem(id = 2, w = 10), MmItem(id = 3, w = 20)]
+        unsafe {
+            let mm = _fold(each(xs) |> min_max())
+            tt |> equal(mm._0, 1)
+            tt |> equal(mm._1, 9)
+            let mmw = _fold(each(xs)._where(_ > 2)._select(_ * 10) |> min_max())
+            tt |> equal(mmw._0, 30)
+            tt |> equal(mmw._1, 90)
+            let mb = _fold(each(items) |> _min_by(_.w))
+            tt |> equal(mb.id, 2)
+            let xb = _fold(each(items) |> _max_by(_.w))
+            tt |> equal(xb.id, 1)
+            let mmb = _fold(each(items) |> _min_max_by(_.w))
+            tt |> equal(mmb._0.id, 2)
+            tt |> equal(mmb._1.id, 1)
+            let mma = _fold(each(xs) |> min_max_average())
+            tt |> equal(mma._0, 1)
+            tt |> equal(mma._1, 9)
+            tt |> equal(mma._2, 4)
+            let mmab = _fold(each(xs) |> _min_max_average_by(_ % 5))
+            let plainMmab = each(xs) |> _min_max_average_by(_ % 5)
+            tt |> equal(mmab._0, plainMmab._0)
+            tt |> equal(mmab._1, plainMmab._1)
+            tt |> equal(mmab._2, plainMmab._2)
+        }
+        delete items
+    }
+}
+
+[test]
+def test_tier2_generated_names_do_not_capture_locals(t : T?) {
+    t |> run("locals named like the generated binds do not hijack tier-2 chains") @(tt : T?) {
+        let fsrc = [7]
+        let other = [5]
+        unsafe {
+            let r <- _fold(other |> union(fsrc) |> unique())
+            tt |> equal(length(r), 2)
+            tt |> equal(r[0], 5)
+            tt |> equal(r[1], 7)
+            let fpass_0 = [9]
+            let r2 <- _fold(other |> union(fpass_0) |> unique())
+            tt |> equal(length(r2), 2)
+            tt |> equal(r2[0], 5)
+            tt |> equal(r2[1], 9)
+        }
+    }
+}
+
+[test]
+def test_early_exit_non_copyable_elements_cascade(t : T?) {
+    t |> run("first over array<array<int>> cascades instead of failing") @(tt : T?) {
+        var arr2d <- [[1, 2], [3]]
+        unsafe {
+            let f <- _fold(each(arr2d) |> first())
+            tt |> equal(length(f), 2)
+            tt |> equal(f[0], 1)
+            let g <- _fold(each(arr2d) |> skip(1) |> first())
+            tt |> equal(length(g), 1)
+            tt |> equal(g[0], 3)
+        }
+        delete arr2d
+    }
+    t |> run("other element-returning terminators cascade over array<array<int>> too") @(tt : T?) {
+        var arr2d <- [[1, 2], [3]]
+        unsafe {
+            let lst <- _fold(each(arr2d) |> last())
+            tt |> equal(length(lst), 1)
+            tt |> equal(lst[0], 3)
+            let ea <- _fold(each(arr2d) |> element_at(1))
+            tt |> equal(length(ea), 1)
+            tt |> equal(ea[0], 3)
+            let mb <- _fold(each(arr2d) |> _min_by(length(_)))
+            tt |> equal(length(mb), 1)
+            let sg <- _fold(each(arr2d) |> skip(1) |> single())
+            tt |> equal(length(sg), 1)
+        }
+        delete arr2d
+    }
+}
+
+var g_having_sel_calls = 0
+
+def impure_having_sel(x : int) : int {
+    g_having_sel_calls ++
+    return x
+}
+
+[test]
+def test_having_impure_selector_call_parity(t : T?) {
+    t |> run("repeated impure having reducers evaluate as often fused as plain") @(tt : T?) {
+        let arr = [1, 2, 3, 4, 5, 6]
+        unsafe {
+            g_having_sel_calls = 0
+            let plain <- arr._group_by_lazy(_ % 3)._having((_._1 |> select($(x : int) => impure_having_sel(x)) |> sum > 4) && (_._1 |> select($(x : int) => impure_having_sel(x)) |> sum < 100))._select((K = _._0, N = _._1 |> length))
+            let plainCalls = g_having_sel_calls
+            g_having_sel_calls = 0
+            let fused <- _fold(arr._group_by_lazy(_ % 3)._having((_._1 |> select($(x : int) => impure_having_sel(x)) |> sum > 4) && (_._1 |> select($(x : int) => impure_having_sel(x)) |> sum < 100))._select((K = _._0, N = _._1 |> length)))
+            tt |> equal(length(fused), length(plain))
+            tt |> equal(g_having_sel_calls, plainCalls, "impure selector side effects match tier-2")
+        }
     }
 }

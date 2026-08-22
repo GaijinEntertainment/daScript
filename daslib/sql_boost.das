@@ -74,6 +74,28 @@ def like_escape_substring(s : string) : string {
     return "%" + (s |> replace("\\", "\\\\") |> replace("%", "\\%") |> replace("_", "\\_")) + "%"
 }
 
+def private glob_escape(s : string) : string {
+    return s |> replace("[", "[[]") |> replace("*", "[*]") |> replace("?", "[?]")
+}
+
+def glob_escape_prefix(s : string) : string {
+    //! Returns `s` with GLOB metacharacters bracket-escaped, then `*` appended.
+    //! Pair with `col GLOB ?` - the case-sensitive starts_with form used on providers whose LIKE ignores case.
+    return glob_escape(s) + "*"
+}
+
+def glob_escape_suffix(s : string) : string {
+    //! Returns `s` with GLOB metacharacters bracket-escaped, prepended with `*`.
+    //! Pair with `col GLOB ?` - the case-sensitive ends_with form used on providers whose LIKE ignores case.
+    return "*" + glob_escape(s)
+}
+
+def glob_escape_substring(s : string) : string {
+    //! Returns `s` with GLOB metacharacters bracket-escaped, wrapped in `*…*`.
+    //! Pair with `col GLOB ?` - the case-sensitive contains form used on providers whose LIKE ignores case.
+    return "*" + glob_escape(s) + "*"
+}
+
 def sql_bind(v : int64) : int64 {
     return v
 }

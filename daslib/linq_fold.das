@@ -47,13 +47,14 @@ def private fold_linq_default(var expr : Expression?) : Expression? {   // nolin
     if (empty(calls)) return null
     var topExpr = clone_expression(top)
     var topExprType = clone_type(top._type)
-    var topValue = qmacro(source)
+    let srcName = qn("fsrc", expr.at)
+    var topValue : Expression? = qmacro($i(srcName))
     var argIndex = 0
     let argMax = length(calls)
     while (argIndex < argMax) {
         {
             var cll & = unsafe(calls[argIndex])
-            let newArgName = "pass_{argIndex}"
+            let newArgName = qn("fpass_{argIndex}", expr.at)
             var callName = cll._1.name
             var inplace = false
             if (cll._0._type.isIterator || cll._0._type.isGoodArrayType) {
@@ -108,7 +109,7 @@ def private fold_linq_default(var expr : Expression?) : Expression? {   // nolin
         }
     }
     topExpr.genFlags.alwaysSafe = true
-    var res = qmacro(invoke($(source : $t(topExprType)) { $e(blk); }, $e(topExpr)))
+    var res = qmacro(invoke($($i(srcName) : $t(topExprType)) { $e(blk); }, $e(topExpr)))
     (((res as ExprInvoke).arguments[0] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags.can_shadow = true
     res.force_generated(true)
     return res

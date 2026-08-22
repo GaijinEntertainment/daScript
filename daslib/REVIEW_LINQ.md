@@ -1,6 +1,7 @@
 # daslib linq family Code Review Checklist
 
-**A diff touching the linq family — `linq*.das`, `sql_linq.das` — applies this checklist
+**A diff touching the linq family — `linq*.das`, `sql_*.das` (the SQL lowering and its
+bind-side helpers, `sql_boost.das` and `sql_provider.das` included) — applies this checklist
 together with `REVIEW.md`.** `REVIEW_COMMON.md` (repo root) binds this file too.
 Architecture doc: `ARCHITECTURE.md`.
 
@@ -125,13 +126,15 @@ a `>` that tails `|>`, `=>` or `->`.** Narrowing that exclusion lets an in-body 
 (`g |> select(…) |> sum`) parse as a `select` clause; widening it to any `>` stops a clause
 keyword that legitimately follows a generic bracket or a comparison from being found at all.
 
-**Every substituting linq_das scanner shares one string model and changes with the
+**Every substituting linq_das scanner shares one token model and changes with the
 others** —
 `substitute_idents`, `mentions_ident`, `rewrite_group_var`: plain `"…"` content is verbatim,
-a `{…}` interpolation body is CODE (scanned and substituted), and one level of nested string
-literal inside an interpolation is verbatim again. A model change in one scanner desyncs
-`mentions_ident` from the rewrite it gates, and the emitter then renames a parameter the
-spliced projection still references.
+a `{…}` interpolation body is CODE (scanned and substituted), one level of nested string
+literal inside an interpolation is verbatim again, and identifier POSITION classifies the
+same way everywhere (after-`.` field access and before-single-`=` labels are not
+references — `is_label_position` is the shared judge). A model change in one scanner
+desyncs `mentions_ident` from the rewrite it gates, and the emitter then renames a
+parameter the spliced projection still references.
 
 **`find_kw_depth0` skips a whole string literal, interpolation bodies included.** That
 asymmetry against the substituting scanners is load-bearing: a clause keyword inside `"{…}"`
