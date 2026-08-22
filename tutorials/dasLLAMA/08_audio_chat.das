@@ -71,8 +71,6 @@ def section_splice(m : Model) {
     delete s2
 }
 
-// Minimal RIFF/WAVE reader for 16-bit PCM mono 16 kHz input — enough for the tutorial;
-// real programs decode arbitrary formats through dasAudio's miniaudio bindings.
 // The scheduler's shape, live: a render-only chat carries the same turn, and
 // render_turn_audio hands back the two spans — everything before the splice
 // point, everything after — with the template's audio markers in place. No KV,
@@ -89,6 +87,27 @@ def section_render_spans(m : Model; prompt : string) {
     delete rchat
 }
 
+// And the rows themselves: the AudioEmbedder carrier is the family-neutral encoder a
+// scheduler owns — probe the mmproj first (0 = no carrier-served audio tower; the
+// load_audio_tower families above are served by the chat's own tower instead), then
+// load_audio_embedder + encode_audio turn the PCM into the soft-token rows that splice
+// between the two spans.
+def section_carrier_encode(mmproj_path : string; samples : array<float>) {
+    if (audio_probe_proj_dim(mmproj_path) == 0l) {
+        print("carrier: {mmproj_path} carries no carrier-served audio tower (gemma4a) - skipping the encode demo\n")
+        return
+    }
+    var inscope e <- load_audio_embedder(mmproj_path)
+    var st = AudioState()
+    var rows : array<float>
+    let n = encode_audio(e, st, samples, rows)
+    print("encode_audio ({audio_family(e)}): {float(length(samples)) / 16000.0}s -> {n} soft tokens x {audio_proj_dim(e)} wide\n")
+    delete rows
+    delete st
+}
+
+// Minimal RIFF/WAVE reader for 16-bit PCM mono 16 kHz input — enough for the tutorial;
+// real programs decode arbitrary formats through dasAudio's miniaudio bindings.
 def private wav_u16(b : array<uint8> | #; o : int64) : uint {
     return uint(b[o]) | (uint(b[o + 1l]) << 8u)
 }
@@ -200,5 +219,6 @@ def main {
 
         section_splice(m)
         section_render_spans(m, prompt)
+        section_carrier_encode(ggufs[1], samples)
     }
 }

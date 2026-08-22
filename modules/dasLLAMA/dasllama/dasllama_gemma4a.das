@@ -1042,15 +1042,15 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     let nl = encode_(dec, "\n", false, false)
     // no-think turn: a bare user turn (no system/`<|think|>`) yields a deterministic transcription
     // — the reasoning channel is near-tie-brittle across float engines, so it is disabled here.
-    var inscope ct <- arch_chat("gemma4")   // ONE source for the audio span spelling: the arch template's markers
     var head : array<int64>
     head |> push(special_id(dec, "<bos>"))
     head |> push(special_id(dec, "<|turn>"))
     head |> push_from(encode_(dec, "user", false, false))
     head |> push_from(nl)
-    head |> push(special_id(dec, ct.audio_pre.parts[0].s))
+    var inscope tmpl <- arch_chat("gemma4")
+    head |> push(special_id(dec, tmpl.audio_pre.parts[0].s))
     var tail : array<int64>
-    tail |> push(special_id(dec, ct.audio_post.parts[0].s))
+    tail |> push(special_id(dec, tmpl.audio_post.parts[0].s))
     tail |> push_from(encode_(dec, "Transcribe this audio.", false, false))
     tail |> push(special_id(dec, "<turn|>"))
     tail |> push_from(nl)

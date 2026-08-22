@@ -89,11 +89,19 @@ def private strip_line_comments(text : string) : string {
     }
 }
 
-def private read_matching(folder : string; prefix : string; suffix : string; strip_comments : bool; var out : array<string>) {
+// .das sources arrive comment-stripped: a name mentioned only in a comment must not count
+def private read_das_stripped(folder : string; var out : array<string>) {
     dir(folder) $(name) {
-        if (name |> starts_with(prefix) && name |> ends_with(suffix)) {
-            let text = fread("{folder}/{name}")
-            out |> push(strip_comments ? strip_line_comments(text) : text)
+        if (name |> ends_with(".das")) {
+            out |> push(strip_line_comments(fread("{folder}/{name}")))
+        }
+    }
+}
+
+def private read_rst(folder : string; prefix : string; var out : array<string>) {
+    dir(folder) $(name) {
+        if (name |> starts_with(prefix) && name |> ends_with(".rst")) {
+            out |> push(fread("{folder}/{name}"))
         }
     }
 }
@@ -122,6 +130,63 @@ def private check_tutorial_floor(tut_texts, rst_texts : array<string>) {
     }
 }
 
+let private CARRIER = "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das"
+
+// Files licensed to name a carrier-carried audio family outside its own file: the carrier and
+// the ASR facade (their union fields and one-line arms), the metal family hooks, the per-family
+// bake tool, and tests.
+var private SEAM_EXEMPT <- {
+    "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das",
+    "modules/dasLLAMA/dasllama/dasllama_asr.das",
+    "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
+    "modules/dasLLAMA/dasllama/dasllama_metal_asr_dec.das",
+    "utils/dasllama-convert/main.das"
+}
+
+def private carried_families() : array<string> {
+    var fams : array<string>
+    for (line in split(fread(CARRIER), "\n")) {
+        continue if (!starts_with(line, "require dasllama/dasllama_"))
+        let name = ident_prefix(slice(line, length("require dasllama/")))
+        if (name != "dasllama_lint" && name != "dasllama_image") {
+            fams |> push(name)
+        }
+    }
+    return <- fams
+}
+
+def private family_owned_names(fam_path : string; var out : array<string>) {
+    for (line in split(fread(fam_path), "\n")) {
+        if (starts_with(line, "struct ") && !starts_with(line, "struct private ")) {
+            out |> push(ident_prefix(slice(line, 7)))
+        } elif (starts_with(line, "def load_")) {
+            out |> push(ident_prefix(slice(line, 4)))
+        }
+    }
+}
+
+def private check_audio_family_seams() {
+    for (fam in carried_families()) {
+        let fam_path = "modules/dasLLAMA/dasllama/{fam}.das"
+        continue if (!fexist(fam_path))
+        var inscope names : array<string>
+        family_owned_names(fam_path, names)
+        for (folder in ["modules/dasLLAMA/dasllama", "utils/dasllama-server", "tutorials/dasLLAMA"]) {
+            dir(folder) $(fname) {
+                return if (!ends_with(fname, ".das"))
+                let p = "{folder}/{fname}"
+                return if (p == fam_path || key_exists(SEAM_EXEMPT, p))
+                let text = strip_line_comments(fread(p))
+                for (n in names) {
+                    if (contains_word(text, n)) {
+                        gate_finding(p, "names {n}, which the {fam} family owns - the AudioEmbedder carrier is the one seam type; route through it (load_audio_embedder / encode_audio / audio_probe_proj_dim)")
+                    }
+                }
+            }
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
@@ -129,9 +194,10 @@ def main() : int {
         return 2
     }
     var inscope tut_texts : array<string>
-    read_matching(TUTORIAL_DIR, "", ".das", true, tut_texts)
+    read_das_stripped(TUTORIAL_DIR, tut_texts)
     var inscope rst_texts : array<string>
-    read_matching(RST_DIR, "dasLLAMA_", ".rst", false, rst_texts)
+    read_rst(RST_DIR, "dasLLAMA_", rst_texts)
     check_tutorial_floor(tut_texts, rst_texts)
+    check_audio_family_seams()
     return gate_verdict("dasllama")
 }

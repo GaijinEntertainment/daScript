@@ -15,7 +15,8 @@ a model row pins) anywhere under the module, answer to `performance/REVIEW.md`.
 
 **Kind-routed companions sit beside this file:** a GPU kernel, driver, dispatch-class, or
 K/V-mirror change applies `REVIEW_GPU.md`. A change to `dasllama/dasllama_audio.das`,
-`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_asr.das`, `dasllama/dasllama_asr_types.das`,
+`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_audio_embedder.das`,
+`dasllama/dasllama_asr.das`, `dasllama/dasllama_asr_types.das`,
 `dasllama/dasllama_vad.das`, or an ASR family file — one `dasllama/dasllama_<family>.das`
 holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
 `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
@@ -175,10 +176,10 @@ A `require ... public` that re-exports an engine module OUT of an escaped file, 
 that consumer's ruled charter (`ARCHITECTURE.md` §1) grants, is the same defect wearing a
 different line.
 
-**Weakening `REVIEW.das` (beside this file) — the gate that fails when a `def` of
-`dasllama/dasllama.das` appears in no `tutorials/dasLLAMA/*.das` (repo root) or in no
-`doc/source/reference/tutorials/dasLLAMA_*.rst` page — is a defect:** dropping either
-check, exempting a def, or a finding text that no longer names what failed.
+**Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, exempting a
+name, widening an exempt list, or a finding text that no longer names what failed. What the
+gate enforces is read from it — today the facade tutorial floor and the audio family-seam
+check, each check's finding text stating its rule.
 
 **A def of `dasllama/dasllama.das` is TAUGHT where the gate finds it named — demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a

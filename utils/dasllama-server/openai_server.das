@@ -408,7 +408,7 @@ def private arm_slot_audio(mi : int; path : string) : string {
     }
     let proj_dim = audio_probe_proj_dim(path)
     if (proj_dim == 0l) {
-        return "{base_name(path)} carries no audio tower any family serves - it cannot arm audio for {g_slots[mi].name}"
+        return "{base_name(path)} carries no audio encoder dasLLAMA serves (gemma4a) - it cannot arm audio for {g_slots[mi].name}"
     }
     if (proj_dim != g_slots[mi].model.config.dim) {
         return "{base_name(path)}'s audio encoder projects to {proj_dim} but {g_slots[mi].name} is {g_slots[mi].model.config.dim}-wide - mismatched pair"
@@ -3875,10 +3875,10 @@ var private g_media_pending = 0   // encode jobs queued or in flight; the wire t
 // under the catch (the ASR shape).
 def private media_encode_one(job : MediaJob; var embs : table<string; VisionEmbedder>;
                              var states : table<string; VisionState>;
-                             var auds : table<string; AudioEmbedder>;
-                             var astates : table<string; AudioState>) : MediaEvent {
+                             var audio_embs : table<string; AudioEmbedder>;
+                             var audio_states : table<string; AudioState>) : MediaEvent {
     var out = MediaEvent(id = job.id, is_audio = job.is_audio)
-    if (job.is_audio && !key_exists(auds, job.name)) {
+    if (job.is_audio && !key_exists(audio_embs, job.name)) {
         out.why = "this slot has no audio encoder in the worker (armed after init_server, or its load failed at boot)"
         return <- out
     }
@@ -3894,7 +3894,7 @@ def private media_encode_one(job : MediaJob; var embs : table<string; VisionEmbe
                 out.why = "the audio did not decode, or it is longer than this model's context can hold (wav/mp3/flac/ogg, up to ~{job.max_audio_frames / int(AUDIO_DECODE_SAMPLE_RATE)}s)"
             } else {
                 let t0 = ref_time_ticks()
-                out.n_media = encode_audio_(auds[job.name], astates[job.name], samples, out.rows)
+                out.n_media = encode_audio(audio_embs[job.name], audio_states[job.name], samples, out.rows)
                 out.ok = true
                 out.audio_cs = int(long_length(samples) * 100l / 16000l)
                 out.enc_ms = int64(get_time_usec(t0)) / 1000l
@@ -3924,8 +3924,8 @@ def private media_worker_main(slot_path_lines : string; var jobs : Channel?&; va
     set_jobque_thread_team_mode(false)
     var embs : table<string; VisionEmbedder>
     var states : table<string; VisionState>
-    var auds : table<string; AudioEmbedder>
-    var astates : table<string; AudioState>
+    var audio_embs : table<string; AudioEmbedder>
+    var audio_states : table<string; AudioState>
     for (line in split(slot_path_lines, "\n")) {   // "<slot name>\t<V|A>\t<path>" per line
         continue if (empty(line))
         let sep = find(line, "\t")
@@ -3935,8 +3935,8 @@ def private media_worker_main(slot_path_lines : string; var jobs : Channel?&; va
         var load_failure = ""
         let load_failed = catch_worker_panic(load_failure) {
             if (kind == "A") {
-                auds[name] <- load_audio_embedder(path)   // own mapping; pages shared with a vision arm on the same file
-                astates[name] <- AudioState()
+                audio_embs[name] <- load_audio_embedder(path)   // own mapping; pages shared with a vision arm on the same file
+                audio_states[name] <- AudioState()
             } else {
                 embs[name] <- load_vision_embedder(path)   // own mapping; pages shared with the slot's
                 states[name] <- VisionState()
@@ -3945,8 +3945,8 @@ def private media_worker_main(slot_path_lines : string; var jobs : Channel?&; va
         if (load_failed) {   // the slot's requests take the no-encoder 400; the boot must not hang on this thread
             to_log(LOG_ERROR, "dasllama-server: media worker could not load slot {name}'s {kind == "A" ? "audio encoder" : "vision embedder"}: {load_failure}\n")
             if (kind == "A") {
-                auds |> erase(name)
-                astates |> erase(name)
+                audio_embs |> erase(name)
+                audio_states |> erase(name)
             } else {
                 embs |> erase(name)
                 states |> erase(name)
@@ -3966,13 +3966,13 @@ def private media_worker_main(slot_path_lines : string; var jobs : Channel?&; va
             if (job.kind == MediaJobKind.drop) {
                 embs |> erase(job.name)
                 states |> erase(job.name)
-                auds |> erase(job.name)
-                astates |> erase(job.name)
+                audio_embs |> erase(job.name)
+                audio_states |> erase(job.name)
                 return
             }
             var job_copy : MediaJob
             job_copy := job
-            var out <- media_encode_one(job_copy, embs, states, auds, astates)
+            var out <- media_encode_one(job_copy, embs, states, audio_embs, audio_states)
             events |> push_clone(out)
             delete out
             delete job_copy
@@ -3981,8 +3981,8 @@ def private media_worker_main(slot_path_lines : string; var jobs : Channel?&; va
     unsafe {
         delete embs
         delete states
-        delete auds
-        delete astates
+        delete audio_embs
+        delete audio_states
     }
     var farewell = MediaEvent(kind = MediaEventKind.stopped)
     events |> push_clone(farewell)

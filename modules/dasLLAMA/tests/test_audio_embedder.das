@@ -8,9 +8,7 @@ require dasllama/dasllama_audio_embedder
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
 
-// The audio carrier's own arms, mirroring test_vision_embedder: the no-audio (none) shape the
-// seams test against, the probe's 0-not-panic contract, the loader's refusal by name, and
-// (model-gated) the gemma4a arm the E2B mmproj distinguishes.
+// the audio twin of test_vision_embedder
 
 [test]
 def test_audio_embedder_none(t : T?) {
@@ -55,7 +53,15 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
         }
         t |> equal(audio_probe_proj_dim(mm), 1536l, "the probe reports the E2B projection width")
         var inscope e <- load_audio_embedder(mm)
-        t |> equal(audio_family(e), "gemma4a")
+        t |> equal(audio_family(e), "gemma4a", "the carrier reports the gemma4a family")
         t |> equal(audio_proj_dim(e), 1536l, "the carrier reports the same width")
+        var st = AudioState()
+        var samples : array<float>
+        samples |> resize(320)
+        var rows : array<float>
+        t |> equal(encode_audio_(e, st, samples, rows), 1l, "a 20ms sub-frame clip pads to exactly one soft token - a non-empty clip can never encode to zero rows")
+        delete rows
+        delete samples
+        delete st
     }
 }

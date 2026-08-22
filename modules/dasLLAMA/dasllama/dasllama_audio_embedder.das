@@ -6,14 +6,15 @@ module dasllama_audio_embedder shared public
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_gemma4a public   // re-exported: a requirer that carries the union must see the family to delete it
+require dasllama/dasllama_image   // image_family_tag — a prepared .dlim routes on its baked tag
+require strings
 
-//! The audio encoder of whatever family the mmproj turned out to be — the VisionEmbedder shape:
-//! ONE carrier through every seam (server slot, media worker, bench cell, the facade), the
-//! family decided once at load and routed by one-line arms here. ``kind == none`` is the
-//! no-audio arm.
+//! The audio encoder of whatever family the mmproj turned out to be: ONE carrier through every
+//! seam (server slot, media worker, bench cell, the facade), the family decided once at load
+//! and routed by one-line arms here. ``kind == none`` is the no-audio arm.
 
 enum AudioKind {
-    none        // no audio arm
+    none
     gemma4a     // the gemma-4 E-series Conformer audio encoder
 }
 
@@ -56,10 +57,12 @@ def audio_probe_proj_dim(path : string) : int64 {
     return gemma4a_probe_proj_dim(path)
 }
 
-//! Load an audio mmproj as whichever family it is — probed from the file, never from a knob.
-//! Panics by name on a file no audio family serves; probe first where absence is an answer.
+//! Load an audio mmproj (gguf, or a prepared ``.dlim`` routed on its baked family tag) as
+//! whichever family it is — probed from the file, never from a knob. Panics by name on a file
+//! no audio family serves; probe first where absence is an answer.
 def load_audio_embedder(path : string) : AudioEmbedder {
-    if (audio_probe_proj_dim(path) > 0l) {
+    let is_gemma4a_image = path |> ends_with(".dlim") && image_family_tag(path) |> starts_with("gemma4a-")
+    if (is_gemma4a_image || audio_probe_proj_dim(path) > 0l) {
         var e = AudioEmbedder(kind = AudioKind.gemma4a)
         e.gemma4a <- load_gemma4a_encoder(path)
         return <- e

@@ -282,6 +282,14 @@ def encode_image(embedder : VisionEmbedder; var scratch : VisionState; img : Vis
     return encode_image_(embedder, scratch, img, tag, out)
 }
 
+def encode_audio(embedder : AudioEmbedder; var scratch : AudioState; samples : array<float> | #;
+                 var out : array<float>) : int64 {
+    //! ``encode_image``'s audio twin: 16 kHz mono samples through the carried family's encoder
+    //! into ``out`` = npos × proj_dim soft tokens (returns npos). A scheduler owning its own
+    //! embedder calls this; the server's media worker is the worked example.
+    return encode_audio_(embedder, scratch, samples, out)
+}
+
 def add_assistant(model : Model; var chat : ChatSession; text : string) {
     //! Inject a KNOWN assistant reply (no generation): prefill the pending user turn and ``text``
     //! into the KV cache, then close the turn — like ``respond`` but with a supplied reply. The
@@ -318,8 +326,8 @@ def render_turn_image(model : Model; chat : ChatSession; var head : array<int64>
 
 def render_turn_audio(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>) {
     //! ``render_turn``'s AUDIO twin: the same two-span contract around the audio soft-token splice
-    //! (the template's audio span markers). The rows come from ``encode_audio_`` over the
-    //! ``AudioEmbedder`` carrier — for the gemma-4 E-series, the shared vision+audio mmproj.
+    //! (the template's audio span markers). Render-only (no KV, no encoder): the rows come from
+    //! ``encode_audio``, and a scheduler prefills head, rows, tail.
     render_turn_audio_(model, chat, head, tail)
 }
 

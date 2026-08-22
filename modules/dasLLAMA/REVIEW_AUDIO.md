@@ -3,16 +3,11 @@
 **Routed from `REVIEW.md`: a diff touching `dasllama/dasllama_asr.das`,
 `dasllama/dasllama_asr_types.das`, `dasllama/dasllama_tower.das` (with `REVIEW_VISION.md` — the
 shared encoder-tower home serves both), `dasllama/dasllama_audio.das`,
-`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_vad.das`, or an ASR family file — one
+`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_audio_embedder.das`,
+`dasllama/dasllama_vad.das`, or an ASR family file — one
 `dasllama/dasllama_<family>.das` holding a single speech model family — applies this list with
 the master's.** `REVIEW_COMMON.md` (repo
 root) binds this file too. Architecture doc: `ARCHITECTURE.md`.
-
-**A type or loader a single audio family owns (its encoder, its state) is named outside its
-own file only in `dasllama/dasllama_audio_embedder.das`, in `dasllama/dasllama_asr.das`'s
-union field and one-line arms, and in files under `modules/dasLLAMA/tests/`.** The
-`AudioEmbedder` union carries it through every other seam (chat, server, bench, facade,
-tutorials); a family name at a seam is a defect.
 
 **A verb arm in `dasllama/dasllama_asr.das` is one forwarding call.** A new family touches the facade
 only at the union field, the finalize line, the `AsrKind` value, and the one-line arms; a

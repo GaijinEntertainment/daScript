@@ -104,6 +104,16 @@ template's audio marker (``render_turn_image``'s audio twin) — and splices the
 encoder's rows between them. Unlike an image span, audio rows stay *causal*:
 sound has a left-to-right order.
 
+The rows themselves come from the ``AudioEmbedder`` carrier — the
+family-neutral encoder a scheduler owns. Probe the mmproj with
+``audio_probe_proj_dim`` (0 means no carrier-served audio tower), load it with
+``load_audio_embedder``, and ``encode_audio`` turns 16 kHz PCM into the
+soft-token rows that splice between the two spans — ``encode_image``'s audio
+twin, and exactly what the server's media worker does per clip. The tutorial's
+``section_carrier_encode`` runs this path when the mmproj carries a
+carrier-served tower (the gemma-4 E-series file), and says so and skips when
+it does not.
+
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/08_audio_chat.das <../../../../tutorials/dasLLAMA/08_audio_chat.das>`
