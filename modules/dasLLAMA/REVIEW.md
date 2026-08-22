@@ -13,33 +13,40 @@ a model row pins) anywhere under the module, answer to `performance/REVIEW.md`.
 
 **Every `dasllama/` change applies `tests/REVIEW.md` for the test obligation it names.**
 
-**Kind-routed companions sit beside this file:** a GPU kernel, driver, dispatch-class, or
-K/V-mirror change applies `REVIEW_GPU.md`. A change to `dasllama/dasllama_audio.das`,
-`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_audio_embedder.das`,
-`dasllama/dasllama_asr.das`, `dasllama/dasllama_asr_types.das`,
-`dasllama/dasllama_vad.das`, or an ASR family file — one `dasllama/dasllama_<family>.das`
-holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
-`dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
+**A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
+
+**A change to `dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_io.das`,
+`dasllama/dasllama_audio_embedder.das`, `dasllama/dasllama_asr.das`,
+`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR family file — one
+`dasllama/dasllama_<family>.das` holding a single speech model family — applies
+`REVIEW_AUDIO.md`.**
+
+**A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file — one
 `dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
 path (one that runs inside the program under review, not a spawned child process) that
 splices a stream carrying decoded media — pixels or audio samples — into a prompt or
-schedules such a stream, applies
-`REVIEW_VISION.md`. A `dasllama/dasllama_tower.das` change — the shared encoder-tower home —
-applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
-thereby pick up the other modality's checklist. A change to the tune sidecar's schema or
-emitter, wherever it lands, answers to `modules/dasLLVM/REVIEW.md`. A routed file applies BOTH
-the checklist it routes to and this one; every other file under `modules/dasLLAMA/` applies
-this one.
+schedules such a stream, applies `REVIEW_VISION.md`.**
+
+**A `dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
+`REVIEW_AUDIO.md` and `REVIEW_VISION.md`;** a family file that only CALLS a shared rail does
+not thereby pick up the other modality's checklist.
+
+**A change to the tune sidecar's schema or emitter, wherever it lands, answers to
+`modules/dasLLVM/REVIEW.md`.**
+
+**A routed file applies BOTH the checklist it routes to and this one; every other file under
+`modules/dasLLAMA/` applies this one.**
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same change.** Kernel
 work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
 body, a variant set, or a `[tune]` / `[tune_perm]` / `[tune_companion]` grid. `[tune_scope]`
 metadata (`covers=`, `tuner=`, `version_of=`) is not kernel work.
 
-**A `DASLLAMA_VERSION` bump with neither the kernel roster nor sidecar interchangeability
-changed is a defect** — equal versions mean an equal kernel roster and an interchangeable
-sidecar set (the exchange keys validity on version and box).
+**A `DASLLAMA_VERSION` bump with neither the kernel roster — the set of `[tune]`-scoped
+kernels a sidecar carries winners for — nor sidecar interchangeability changed is a
+defect**: equal versions mean an equal kernel roster and an interchangeable sidecar set
+(the exchange keys validity on version and box).
 
 **A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel, can
 this value change between dispatches? If yes it is data and belongs in a uniform or a kargs
@@ -58,8 +65,10 @@ faster twin (unquantized planes) are out of scope; a site that must stay f32 for
 reason is ledgered in `ARCHITECTURE.md`, not commented into compliance.
 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
-file.** A platform-neutral engine file carrying it is a defect; a new shared concern gets
-its own file, not more of `dasllama/dasllama_common.das`.
+file.** A platform-neutral engine file carrying it is a defect.
+
+**A new engine concern that is not `Model`/`Session`/`Config` state gets its own file, not
+more of `dasllama/dasllama_common.das`.**
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
 a defect in engine code — instrumentation goes through the sanctioned rails, and a clock whose
@@ -70,8 +79,10 @@ legal, are `ARCHITECTURE.md` §2.10.
 any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts, or `[cold_path]` on its only
 reaching entry (a one-time transform is covered by being declared cold). Covered means an annotated entry
 reaches it: the contracts arm down the call graph, so an interior function carries nothing of
-its own. A region entry is a KERNEL `*_encode` / `*_decode` / step driver; the tokenizer
-encode/decode path is out of scope (`ARCHITECTURE.md` §2.11).
+its own. A region entry is the outermost function the runtime re-enters per token, per frame,
+or per prefill quantum (a kernel `*_encode` / `*_decode`, a step driver, the CPU decoder's
+`forward_*` entries); the tokenizer encode/decode path is out of scope
+(`ARCHITECTURE.md` §2.11).
 
 **A new function that no annotated entry reaches but the runtime enters — a step driver, or
 a backend entry called from dispatch or harness paths — carries its annotation itself; a
@@ -186,10 +197,11 @@ finding text states its own rule.
 **A new `REVIEW.das` check ships with its licensed set ledgered in `ARCHITECTURE.md` §1, in
 the same change.**
 
-**A def of `dasllama/dasllama.das` is TAUGHT where the gate finds it named — demonstrated in
+**A def of `dasllama/dasllama.das` — and a new OVERLOAD of one — is TAUGHT: demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
-`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** A mention that only names it (a
-comment, a passing reference) is a defect the gate cannot see.
+`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** The gate matches def NAMES only, so
+an overload passes on a sibling's tutorial — the reviewer confirms a tutorial calls the NEW
+signature, and a mention that only names it (a comment, a passing reference) does not count.
 
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
 struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;
@@ -227,15 +239,20 @@ lens/dispatch macro file.
 **A family quirk lands in the family file; a piece two families need moves UP into the
 concern's shared file (its own file when none exists)** — never sideways into a sibling.
 
-**Nothing in `dasllama/dasllama_tower.das` — the shared encoder-tower home — names a family: no
-signature there takes a type `dasllama/dasllama_audio.das` or a family file declares, and it
-requires neither.** The file every tower composes must serve every tower; a helper shaped for
-one lands in that tower's own file.
+**No signature in `dasllama/dasllama_tower.das` — the shared encoder-tower home — takes a
+type `dasllama/dasllama_audio.das` or a family file declares, and the file requires neither
+`dasllama/dasllama_audio.das` nor any family file.** A doc comment naming the family a
+helper was built for is fine; the code stays family-blind.
 
-**A weight plane's element type follows its SOURCE tensor, per tensor.** A carrier reads each
-tensor at the element type that tensor is stored as and never picks one type for the whole
-file (a shipped file mixes them); a type it cannot serve is refused in a message naming that
-tensor and its element type, never converted silently.
+**A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's
+file** — a single-caller helper sanctioned as tower-worthy is ledgered on `ARCHITECTURE.md`
+§1's tower charter line, not argued in review.
+
+**A weight plane's element type follows its SOURCE tensors, per weight region — the set of
+source tensors a carrier stores in one plane (a block stack, a merger/projector).** A
+carrier picks each weight region's plane type from that region's own tensors (a shipped
+file mixes types across regions), refuses a weight region whose tensors disagree in a
+message naming the offending tensor and both element types, and never converts silently.
 
 **A harness that prints output for another tool to compare fails loudly when it has nothing to
 print.** A run that ends without its comparison lines — wrong flags, failed load — exits
@@ -256,5 +273,5 @@ engine files, HTTP in the server, writer logic in the writer's own file.
 registrations, GPU tiers, every module requiring the engine back; it sits in
 `dasllama/dasllama_common.das` only if engine code needs it.
 
-**An architecture file (`dasllama_arch_*.das`) is declarative registration only.** An
+**An architecture file (`dasllama/dasllama_arch_*.das`) is declarative registration only.** An
 architecture that changes a forward loop, or tests a family name on a shared path, is a defect.

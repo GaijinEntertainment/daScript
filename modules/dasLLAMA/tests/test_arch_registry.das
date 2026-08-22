@@ -32,6 +32,22 @@ def test_arch_registry_populated(t : T?) {
 }
 
 [test]
+def test_mrope_walk_flags(t : T?) {
+    t |> run("the qwen3vl family ropes interleaved, qwen2vl contiguous - the flag decides the builder") @(t : T?) {
+        for (name in ["qwen3vl", "qwen3vlmoe"]) {
+            var m = Model()
+            resolve_arch(m, name)
+            t |> success(m.config.mrope_interleaved, "'{name}' sets mrope_interleaved (the IMROPE walk)")
+            delete m
+        }
+        var m2 = Model()
+        resolve_arch(m2, "qwen2vl")
+        t |> success(!m2.config.mrope_interleaved, "'qwen2vl' keeps the contiguous MROPE walk")
+        delete m2
+    }
+}
+
+[test]
 def test_llm_caps(t : T?) {
     t |> run("per-arch LlmCaps: gemma has no system role, everyone else does") @(t : T?) {
         for (name in ["gemma2", "gemma3", "gemma4"]) {

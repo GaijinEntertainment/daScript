@@ -14,6 +14,11 @@ def private configure_qwen3(var c : Config) {
     c.qk_norm = true
 }
 
+def private configure_qwen3vl(var c : Config) {
+    configure_qwen3(c)
+    c.mrope_interleaved = true   // qwen3vl image spans rope IMROPE; qwen2vl's MROPE stays contiguous
+}
+
 [init]
 def register_arch_qwen3() {
     var d = ArchDesc(name = "qwen3", configure = @@configure_qwen3)
@@ -23,7 +28,7 @@ def register_arch_qwen3() {
     // Qwen3-ASR's decoder converts as `qwen3vl` — M-RoPE + deepstack; for text/audio input every
     // M-RoPE coord equals linear position, so it's bit-identical to plain qwen3 forward here.
     // (Clone the template BEFORE register_arch moves `d`.)
-    var dv = ArchDesc(name = "qwen3vl", configure = @@configure_qwen3)
+    var dv = ArchDesc(name = "qwen3vl", configure = @@configure_qwen3vl)
     dv.blocks = std_blocks()
     dv.chat := d.chat
     // audio markers on `dv` ONLY: qwen3-family audio models convert as vl; base-arch audio

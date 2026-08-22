@@ -115,6 +115,23 @@ def private arr_maxdiff(a, b : array<float>) : float {
     return m
 }
 
+// the eyeball rail for a logits-tolerance compare: each side's argmax index and value
+def private log_argmax_sides(tag : string; a, b : array<float>) {
+    var ia = 0l
+    var ib = 0l
+    for (i in range64(long_length(a))) {
+        if (a[i] > a[ia]) {
+            ia = i
+        }
+    }
+    for (i in range64(long_length(b))) {
+        if (b[i] > b[ib]) {
+            ib = i
+        }
+    }
+    to_log(LOG_INFO, "{tag}: argmax A = {ia} ({a[ia]}) | argmax B = {ib} ({b[ib]})\n")
+}
+
 var private g_probe_calls = 0
 
 [unused_argument(t, s, npos, start_pos)]
@@ -181,6 +198,68 @@ def test_attn_span(t : T?) {
     }
 }
 
+// the mrope turn (grid positions through the span): prefill + one decode step; the decode
+// logits fold in every cached row AND the delta'd decode position
+def private mrope_turn_logits(t : Model; embd : array<float>; fuse : bool; nx, ny : int64) : array<float> {
+    set_span_fuse(fuse)
+    var s <- make_run_state(t.config)
+    eval_embd_span_mrope_(t, s, embd, NPOS, SPAN_LO, SPAN_HI, nx, ny)
+    forward(t, s, 1l, s.n_past)
+    var lg : array<float>
+    lg |> resize(long_length(s.logits))
+    for (i in range64(long_length(s.logits))) {
+        lg[i] = s.logits[i]
+    }
+    delete s
+    set_span_fuse(true)
+    return <- lg
+}
+
+[test]
+def test_mrope_span(t : T?) {
+    t |> run("the mrope quantum: fused == splice, the delta advances, the map reaches the math") @(tt : T?) {
+        if (!stat(MODEL_PATH).is_valid) {
+            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        // the toy is not an mrope arch — stamp sections summing to head_size/2 (stories15M: 48/2)
+        tr.config.rope_sections = int4(8, 8, 8, 0)
+        tr.config.mrope_interleaved = true   // the qwen3vl proxy walk
+        let dim = tr.config.dim
+        let embd_a <- make_embd(dim, 0)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            // span [7,29) = 22 rows = an 11x2 grid; position advance = max(11,2) = 11
+            let lg_fused <- mrope_turn_logits(tr, embd_a, true, 11l, 2l)
+            let lg_split <- mrope_turn_logits(tr, embd_a, false, 11l, 2l)
+            let fs = arr_maxdiff(lg_fused, lg_split)
+            log_argmax_sides("mrope_span fused-vs-splice", lg_fused, lg_split)
+            to_log(LOG_INFO, "mrope_span: fused-vs-splice decode-logits maxdiff = {fs}\n")
+            tt |> equal(fs, 0.0, "mrope fused == mrope splice, bit-exact (classic)")
+            // the delta: 22 rows advanced the position by 11
+            var s <- make_run_state(tr.config)
+            eval_embd_span_mrope_(tr, s, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+            tt |> equal(s.rope_pos_delta, 11l - 22l, "rope_pos_delta = max(grid) - span rows")
+            tt |> equal(int(long_length(s.mrope_pos)), 0, "the quantum map cleared after the call")
+            tt |> equal(s.n_past, NPOS, "KV rows advanced by the ROW count, not the position advance")
+            delete s
+            // the map must reach the rope math: grid positions differ from sequential ones
+            let lg_plain <- span_turn_logits(tr, embd_a, true)
+            let dm = arr_maxdiff(lg_fused, lg_plain)
+            log_argmax_sides("mrope_span mrope-vs-sequential", lg_fused, lg_plain)
+            to_log(LOG_INFO, "mrope_span: mrope-vs-sequential decode-logits maxdiff = {dm}\n")
+            tt |> success(dm > 1e-4, "grid rope positions change the outcome ({dm})")
+            // a different grid SHAPE of the same span changes the outcome too (h/w axes live)
+            let lg_tall <- mrope_turn_logits(tr, embd_a, true, 2l, 11l)
+            let dg = arr_maxdiff(lg_fused, lg_tall)
+            tt |> success(dg > 1e-4, "an 11x2 vs 2x11 grid differ ({dg})")
+        }
+        delete tr
+    }
+}
+
 [test]
 def test_attn_span_fused(t : T?) {
     t |> run("the fused mid-turn span: splice equivalence + per-query mask direction") @(tt : T?) {
@@ -236,7 +315,7 @@ def test_attn_span_fused(t : T?) {
 }
 
 [test]
-def test_attn_span_guards(t : T?) {
+def test_attn_span_guards(t : T?) {   // nolint:STYLE038 — one sequential guard story over one loaded toy: panics → seats → declines → refusals
     t |> run("the guards and the split-span capability seat") @(tt : T?) {
         if (!stat(MODEL_PATH).is_valid) {
             tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
@@ -308,7 +387,144 @@ def test_attn_span_guards(t : T?) {
             eval_embd_span_(tr, s5, embd_a, NPOS, SPAN_LO, SPAN_HI)
             delete s5
             tt |> equal(g_probe_calls, 1, "a fused-capable override sees ONE prefill call")
+            // the mrope seat: an override without it declines the WHOLE quantum by name -
+            // the CPU loop serves it, the override is never asked, and the logits match the
+            // no-override run bit-exact
+            tr.config.rope_sections = int4(8, 8, 8, 0)
             select_prefill_override("")
+            var s6 <- make_run_state(tr.config)
+            eval_embd_span_mrope_(tr, s6, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+            select_prefill_override("test-fused")
+            g_probe_calls = 0
+            var s7 <- make_run_state(tr.config)
+            eval_embd_span_mrope_(tr, s7, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+            tt |> equal(g_probe_calls, 0, "a seat-less override never sees an mrope quantum (declined by name)")
+            tt |> equal(arr_maxdiff(s6.logits, s7.logits), 0.0, "the declined mrope quantum serves on the CPU loop, bit-exact")
+            // the deepstack seat: same decline shape for a wide-row quantum
+            tr.config.n_deepstack = 2l
+            var inscope wide6 <- make_wide_embd(tr.config.dim, 2l, 1)
+            g_probe_calls = 0
+            var s8 <- make_run_state(tr.config)
+            eval_embd_(tr, s8, wide6, NPOS)
+            tt |> equal(g_probe_calls, 0, "a seat-less override never sees a deepstack quantum (declined by name)")
+            tr.config.n_deepstack = 0l
+            delete s6
+            delete s7
+            delete s8
+            select_prefill_override("")
+            // the mrope refusals: inverted span bounds, and a config with no rope sections
+            var tripped6 = false
+            var s9 <- make_run_state(tr.config)
+            try {
+                eval_embd_span_mrope_(tr, s9, embd_a, NPOS, 9l, 5l, 2l, 2l)
+            } recover {
+                tripped6 = true
+            }
+            tt |> success(tripped6, "an inverted mrope span [9,5) panics")
+            delete s9
+            tr.config.rope_sections = int4(0, 0, 0, 0)
+            tripped6 = false
+            var s10 <- make_run_state(tr.config)
+            try {
+                eval_embd_span_mrope_(tr, s10, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+            } recover {
+                tripped6 = true
+            }
+            tt |> success(tripped6, "an mrope span without rope.dimension_sections panics")
+            delete s10
+        }
+        delete tr
+    }
+}
+
+// wide rows for the deepstack rail: slice 0 = make_embd's rows, tails filled by `mode` —
+// 0 = all-zero, 1 = every slice pseudo-random, 2 = only slice `only` nonzero
+def private make_wide_embd(dim, n_ds : int64; mode : int; only : int64 = -1l) : array<float> {
+    var inscope narrow <- make_embd(dim, 0)
+    let w = (1l + n_ds) * dim
+    var e : array<float>
+    e |> resize(NPOS * w)
+    for (r in range64(NPOS)) {
+        for (i in range64(dim)) {
+            e[r * w + i] = narrow[r * dim + i]
+        }
+    }
+    if (mode > 0) {
+        var state = 0x777u
+        for (r in range64(NPOS)) {
+            for (sl in range64(n_ds)) {
+                for (i in range64(dim)) {
+                    state = state * 1664525u + 1013904223u
+                    if (mode == 1 || sl == only) {
+                        e[r * w + (1l + sl) * dim + i] = (float(state >> 8u) / float(1 << 24) - 0.5) * 0.1
+                    }
+                }
+            }
+        }
+    }
+    return <- e
+}
+
+def private ds_eval_logits(t : Model; embd : array<float>) : array<float> {
+    var s <- make_run_state(t.config)
+    eval_embd_(t, s, embd, NPOS)
+    var lg : array<float>
+    lg |> resize(long_length(s.logits))
+    for (i in range64(long_length(s.logits))) {
+        lg[i] = s.logits[i]
+    }
+    delete s
+    return <- lg
+}
+
+[test]
+def test_deepstack_rail(t : T?) {
+    t |> run("the deepstack wide-row seam: split, per-layer adds, clean reset") @(tt : T?) {
+        if (!stat(MODEL_PATH).is_valid) {
+            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        tr.config.n_deepstack = 3l   // stamp: the toy is not a deepstack arch
+        let dim = tr.config.dim
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let narrow <- make_embd(dim, 0)
+            let wide0 <- make_wide_embd(dim, 3l, 0)
+            let wide <- make_wide_embd(dim, 3l, 1)
+            let wide_s0 <- make_wide_embd(dim, 3l, 2, 0l)
+            let wide_s2 <- make_wide_embd(dim, 3l, 2, 2l)
+            let lg_n <- ds_eval_logits(tr, narrow)
+            let lg_w0 <- ds_eval_logits(tr, wide0)
+            tt |> equal(arr_maxdiff(lg_n, lg_w0), 0.0, "zero-tail wide rows == the narrow eval, bit-exact")
+            let lg_w <- ds_eval_logits(tr, wide)
+            let dm = arr_maxdiff(lg_n, lg_w)
+            log_argmax_sides("deepstack_rail tails-vs-narrow", lg_n, lg_w)
+            to_log(LOG_INFO, "deepstack_rail: tails-vs-narrow logits maxdiff = {dm}\n")
+            tt |> success(dm > 1e-4, "nonzero tail slices reach the hidden state ({dm})")
+            let lg_s0 <- ds_eval_logits(tr, wide_s0)
+            let lg_s2 <- ds_eval_logits(tr, wide_s2)
+            let ds02 = arr_maxdiff(lg_s0, lg_s2)
+            tt |> success(ds02 > 1e-4, "slice 0 and slice 2 add at different depths ({ds02})")
+            // the transient plane must not leak into a following plain eval
+            var s <- make_run_state(tr.config)
+            eval_embd_(tr, s, wide, NPOS)
+            tt |> success(!s.ds_active, "ds_active cleared after the wide quantum")
+            var one <- [42l]
+            eval_(tr, s, one)
+            delete one
+            var s2 <- make_run_state(tr.config)
+            eval_embd_(tr, s2, wide, NPOS)
+            var one2 <- [42l]
+            eval_(tr, s2, one2)
+            delete one2
+            var dd = 0.0
+            for (i in range64(long_length(s.logits))) {
+                dd = max(dd, abs(s.logits[i] - s2.logits[i]))
+            }
+            tt |> equal(dd, 0.0, "a text eval after the wide quantum is deterministic (no stale plane)")
+            delete s
+            delete s2
         }
         delete tr
     }

@@ -1923,13 +1923,13 @@ def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog 
         // a spec step is IN FLIGHT after forward() returns — must not touch session memory (staging only; acceptance lands it via finish_step)
         r.bnc = null
         r.btok = pool_acquire(g_pool, g_dev, 64ul)
-        build_decode_rope_row(t, npos, g_rope_cos_next, g_rope_sin_next)
+        build_decode_rope_row(t, npos + s.rope_pos_delta, g_rope_cos_next, g_rope_sin_next)   // the delta keeps this bit-identical to forward()'s row for post-image mrope sessions
         unsafe {
             memcpy(metal_buffer_contents(r.bcos), addr < void? >(g_rope_cos_next[0]), r.bytes_tab)
             memcpy(metal_buffer_contents(r.bsin), addr < void? >(g_rope_sin_next[0]), r.bytes_tab)
         }
         if (r.bcos_swa != null) {
-            build_decode_rope_row_swa(t, npos, g_rope_cos_next_swa, g_rope_sin_next_swa)
+            build_decode_rope_row_swa(t, npos + s.rope_pos_delta, g_rope_cos_next_swa, g_rope_sin_next_swa)
             unsafe {
                 memcpy(metal_buffer_contents(r.bcos_swa), addr < void? >(g_rope_cos_next_swa[0]), r.bytes_tab_sw)
                 memcpy(metal_buffer_contents(r.bsin_swa), addr < void? >(g_rope_sin_next_swa[0]), r.bytes_tab_sw)

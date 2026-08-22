@@ -92,6 +92,28 @@ it stays causal:
 keep their time order, so the audio family prefills through it; use it
 whenever you already hold the embedding rows and no image span is in play.
 
+The qwen families (Qwen3-Omni, Qwen3-VL, Qwen2.5-Omni) rope image rows by
+their 2D patch position instead of by sequence order. After the encode,
+``vision_mrope_grid`` reports the merged grid, and ``eval_embd_span_mrope``
+prefills the same non-causal span with grid-shaped angles — the position
+advance after the image is ``max(grid.x, grid.y)``, not the row count, and
+the session tracks that delta for every later eval:
+
+.. code-block:: das
+
+   let grid = vision_mrope_grid(emb, scratch)
+   eval_embd_span_mrope(m, s, rows, np, n_head, n_head + n_img, grid)
+
+A gemma pair reports a zero grid — the plain ``eval_embd_span`` shape serves
+it, and the tutorial's third section falls back exactly that way. The same
+section then runs the one-call form: ``generate_embd`` takes the spliced rows,
+the span bounds and the grid, prefills and streams the reply — what
+``respond`` runs under the hood for a media turn. One boundary worth knowing:
+a deepstack pair (dense Qwen3-VL) encodes wider rows —
+``(1 + n_deepstack) × dim`` floats each; the narrow by-hand splice still
+captions (the extra slices are additive refinement), and
+``create_chat(model, embedder)`` is the path that carries them in full.
+
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/14_vision_chat.das <../../../../tutorials/dasLLAMA/14_vision_chat.das>`

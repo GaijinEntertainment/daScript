@@ -510,3 +510,32 @@
     "weakening that gate is a defect" residue form. Also owed: a re-mint of the gemma-3-4b cpu
     image row (hand-minted in the gemma3v arc; still stamps `parsec` + a pre-branch sha, and
     the image sweep's catalog does not reach it).
+
+41. **Audio-in-chat serves the whisper-class `AudioTower` families only — the qwen3a conformer
+    (Qwen3-Omni) and gemma4a have no chat splice.** Surfaced by the omni showcase test (the
+    vision arc): `add_user_audio_`/`create_chat_(model, tower)` ride `AudioTower`
+    (qwen2a/ultravox/voxtral); `load_audio_tower` reads the legacy `clip.projector_type` key
+    the dual-tower Omni mmproj does not carry, and the qwen3a conformer is a different type
+    (`Qwen3aTower`) served through the ASR route. Done = an audio-encoder seam the chat layer
+    can hold for either type (the `VisionEmbedder` union pattern), `add_user_audio_` routed
+    by family, and the Omni showcase upgraded to the one-session three-modality form.
+    OWNED BY the qwen3vl arc (`qwen3vl_plan.md` §Arc followups) — it lands there, not here.
+
+42. **The CPU decoder prefill chain carries no `[hot_path]` region entry, so its mid-runtime
+    loops ride uncovered by the perf-lint contracts.** Surfaced by the qwen3vl review round:
+    the region-entry rule now names the CPU decoder's `forward_*` entries as region entries,
+    but annotating them (`forward_prefill_body` / `forward_prefill_embd` / `generate_`) arms
+    the allocation contracts down a large existing call graph — a lint-burn-down of its own,
+    not a ride-along on a feature arc. Done = `[hot_path]` (or the narrower contracts) on the
+    CPU decoder entries with the findings triaged, covering the mrope/deepstack loops
+    (`build_rope_tabs_imrope`/`_mrope`, `mrope_span_positions`, `ds_add_slice`,
+    `prefill_rope_tables`, `eval_embd_span_mrope_`) the vision arc added.
+
+43. **The tier-1 tower gates (test_qwen3v, test_qwen25v, and the gemma siblings) silently
+    serve a prepared `.dlim` beside the mmproj, bypassing the gguf load path they claim.**
+    Surfaced by the qwen3vl TDD round: dropping the conv-pair fold left both qwen tier-1
+    gates bit-identically green on a box holding the prepared images; the same mutation reds
+    at 10.1 under `DASLLAMA_IMAGE=0`. No in-process lever exists (`g_env_engine` loads once
+    at context init, immutably — by design). Done = a `DASLLAMA_IMAGE=0` leg (runner or
+    per-file env plumbing) or a cold-mint arm in the tier-1 gates, so a loader mutation reds
+    on any box.

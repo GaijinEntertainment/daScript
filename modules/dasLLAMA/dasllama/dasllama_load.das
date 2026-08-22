@@ -1549,6 +1549,28 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 panic("dasLLAMA: partial rotary (rope.dimension_count_swa != the sliding head size) is not supported")
             }
         }
+        // qwen3vl IMROPE sections: text-only serving stays plain NEOX (all sections read one
+        // position); the sections feed image-span rope tables (build_rope_tabs_imrope)
+        if (gguf_has(m, "{arch}.rope.dimension_sections")) {
+            var sect <- gguf_int_array(m, bytes, "{arch}.rope.dimension_sections")
+            if (length(sect) != 4) {
+                panic("dasLLAMA: {arch}.rope.dimension_sections has {length(sect)} entries - expected 4 (t,h,w,e)")
+            }
+            t.config.rope_sections = int4(int(sect[0]), int(sect[1]), int(sect[2]), int(sect[3]))
+            let span = t.config.rope_dim > 0l ? t.config.rope_dim : t.config.head_size
+            let ssum = int64(t.config.rope_sections.x + t.config.rope_sections.y + t.config.rope_sections.z + t.config.rope_sections.w)
+            if (2l * ssum != span) {
+                panic("dasLLAMA: rope.dimension_sections sum {ssum} half-dims does not cover the {span}-dim rotary span")
+            }
+            delete sect
+        }
+        // qwen3vl deepstack: the image quantum's wide-row slice count (0 on every other arch)
+        if (gguf_has(m, "{arch}.n_deepstack_layers")) {
+            t.config.n_deepstack = gguf_int(m, bytes, "{arch}.n_deepstack_layers")
+            if (t.config.n_deepstack < 0l || t.config.n_deepstack > 8l || t.config.n_deepstack >= layers) {
+                panic("dasLLAMA: {arch}.n_deepstack_layers = {t.config.n_deepstack} - expected 0..min(8, n_layer)")
+            }
+        }
         // gemma-4 E-series: cross-layer KV sharing — the last N layers reuse an earlier layer's KV
         // cache (n_layer_kv_from_start = layers - shared), and their own attn_k/attn_v are dead weights
         // (skipped by layout_offsets). Mirrors llama.cpp gemma4's has_kv()/reuse().

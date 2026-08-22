@@ -161,15 +161,30 @@ def public maybe_dump_vision(img : VisionImage; tag : string) {
     }
 }
 
-//! u8 → f32 planes for the embedder: exactly x/255, interleaved layout preserved — gemma-4's
-//! `image_mean`/`image_std` are identity and nothing else touches the values.
+//! u8 → f32 planes for the embedder: (x/255 − mean)/std per channel value in clip's own op
+//! order, interleaved layout preserved. The defaults are gemma-4's identity (bit-identical to
+//! plain x/255); qwen towers pass mean = std = 0.5 (the ×2−1 of their preprocessor).
 [no_env, no_io]
-def public vision_normalize(img : VisionImage) : array<float> {
+def public vision_normalize(img : VisionImage; mean : float = 0.0; std : float = 1.0) : array<float> {
     var planes : array<float>
     planes |> reserve(length(img.rgb))
     planes |> resize(length(img.rgb))
     for (d, s in planes, img.rgb) {
-        d = float(s) / 255.0
+        d = (float(s) / 255.0 - mean) / std
+    }
+    return <- planes
+}
+
+//! ``vision_normalize``'s per-channel twin (CLIP-normalized families — qwen2.5's image
+//! mean/std differ per channel); the interleaved RGB layout picks mean/std by ``i % 3``.
+[no_env, no_io]
+def public vision_normalize3(img : VisionImage; mean, std : float3) : array<float> {
+    var planes : array<float>
+    planes |> reserve(length(img.rgb))
+    planes |> resize(length(img.rgb))
+    for (i in range64(long_length(planes))) {
+        let c = int(i % 3l)
+        planes[i] = (float(img.rgb[i]) / 255.0 - mean[c]) / std[c]
     }
     return <- planes
 }

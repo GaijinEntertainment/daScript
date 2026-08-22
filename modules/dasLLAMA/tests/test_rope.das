@@ -167,6 +167,246 @@ def test_rope_gen_rows_twin(t : T?) {
     }
 }
 
+def private imrope_axis_ref(j, sx, sy, sz, sw : int) : int {
+    let sector = j % (sx + sy + sz + sw)
+    if (sector % 3 == 1 && sector < 3 * sy) {
+        return 1
+    } elif (sector % 3 == 2 && sector < 3 * sz) {
+        return 2
+    } elif (sector % 3 == 0 && sector < 3 * sx) {
+        return 0
+    }
+    return 3
+}
+
+[test]
+def test_rope_gen_imrope_collapse(t : T?) {
+    let qsec = int4(24, 20, 20, 0)
+    // Text rows: all four sections carry the same position, so every dim reads it and the
+    // table must be BIT-identical to the plain rows builder — the collapse that lets text
+    // decoding stay on the untouched path.
+    t |> run("all-equal positions collapse bit-exactly to the rows builder") @(t : T?) {
+        var ff : array<float>
+        var p4 <- [int4(7, 7, 7, 7), int4(1234, 1234, 1234, 1234), int4(0, 0, 0, 0)]
+        var pl <- [7l, 1234l, 0l]
+        var c1 : array<float>
+        var s1 : array<float>
+        var c2 : array<float>
+        var s2 : array<float>
+        build_rope_tabs_imrope(c1, s1, 1000000.0, 1.0, 1.0, ff, false, p4, qsec, 3l, 128l)
+        build_rope_tabs_rows(c2, s2, 1000000.0, 1.0, 1.0, ff, false, pl, 3l, 128l)
+        var same = true
+        for (ca, cb, sa, sb in c1, c2, s1, s2) {
+            same &&= ca == cb && sa == sb
+        }
+        t |> success(same, "the (p,p,p,p) collapse must be bit-exact")
+        delete p4
+        delete pl
+        delete c1
+        delete s1
+        delete c2
+        delete s2
+    }
+}
+
+[test]
+def test_rope_gen_imrope_reference(t : T?) {
+    let qsec = int4(24, 20, 20, 0)
+    // The ggml sector walk, re-derived per element in a different loop order: every dim of
+    // an image-shaped row must read the axis ggml_mrope_cache_init assigns it, including
+    // the [24,20,20,0] tail (60->t, 61->e, 62->e, 63->t).
+    t |> run("image row matches a per-element ggml-order reference") @(t : T?) {
+        var ff : array<float>
+        var p4 <- [int4(100, 103, 117, 0)]
+        var ct : array<float>
+        var st : array<float>
+        build_rope_tabs_imrope(ct, st, 1000000.0, 1.0, 1.0, ff, false, p4, qsec, 1l, 128l)
+        var same = true
+        for (j in range(64)) {
+            let axis = imrope_axis_ref(j, 24, 20, 20, 0)
+            let pos = p4[0][axis]
+            let freq = 1.0 / pow(1000000.0, float(2 * j) / 128.0)
+            let angle = float(pos) * 1.0 * freq
+            // 1e-5, not bit-equal: under -jit the builder's cos and this recomputed one live in
+            // different compilation units and drift by ulps; a wrong AXIS moves angles by O(1)
+            same &&= abs(ct[j] - cos(angle)) < 1e-5 && abs(st[j] - sin(angle)) < 1e-5
+        }
+        t |> success(same, "every half-dim must read its IMROPE axis")
+        t |> equal(imrope_axis_ref(60, 24, 20, 20, 0), 0)
+        t |> equal(imrope_axis_ref(61, 24, 20, 20, 0), 3)
+        t |> equal(imrope_axis_ref(62, 24, 20, 20, 0), 3)
+        t |> equal(imrope_axis_ref(63, 24, 20, 20, 0), 0)
+        t |> equal(ct[61], 1.0)
+        t |> equal(st[61], 0.0)
+        t |> equal(ct[62], 1.0)
+        t |> equal(st[62], 0.0)
+        delete p4
+        delete ct
+        delete st
+    }
+}
+
+[test]
+def test_rope_gen_imrope_shape(t : T?) {
+    let qsec = int4(24, 20, 20, 0)
+    // Perturbing ONE axis moves exactly that axis's dims: h (the grid row) owns the
+    // j%3==1 half-dims below 60 and nothing else.
+    t |> run("an h perturbation touches exactly the h dims") @(t : T?) {
+        var ff : array<float>
+        var pa <- [int4(50, 52, 57, 0)]
+        var pb <- [int4(50, 53, 57, 0)]
+        var ca : array<float>
+        var sa : array<float>
+        var cb : array<float>
+        var sb : array<float>
+        build_rope_tabs_imrope(ca, sa, 1000000.0, 1.0, 1.0, ff, false, pa, qsec, 1l, 128l)
+        build_rope_tabs_imrope(cb, sb, 1000000.0, 1.0, 1.0, ff, false, pb, qsec, 1l, 128l)
+        var shape_ok = true
+        for (j in range(64)) {
+            let moved = ca[j] != cb[j] || sa[j] != sb[j]
+            let is_h = imrope_axis_ref(j, 24, 20, 20, 0) == 1
+            if (is_h) {
+                shape_ok &&= moved
+            } else {
+                shape_ok &&= !moved
+            }
+        }
+        t |> success(shape_ok, "only the h-axis dims may move when h moves")
+        delete pa
+        delete pb
+        delete ca
+        delete sa
+        delete cb
+        delete sb
+    }
+}
+
+// the ggml NON-interleaved walk (is_imrope=false): sections read as contiguous ranges
+def private mrope_axis_ref(j, sx, sy, sz : int) : int {
+    if (j >= sx + sy + sz) {
+        return 3
+    } elif (j >= sx + sy) {
+        return 2
+    } elif (j >= sx) {
+        return 1
+    }
+    return 0
+}
+
+[test]
+def test_rope_gen_mrope_noninterleaved(t : T?) {
+    let qsec = int4(16, 24, 24, 0)   // the qwen2vl decoder's sections
+    t |> run("the contiguous-section walk: collapse, reference, and the imrope divergence") @(t : T?) {
+        var ff : array<float>
+        // text rows collapse bit-exactly to the rows builder, like the interleaved form
+        var p4 <- [int4(7, 7, 7, 7), int4(1234, 1234, 1234, 1234)]
+        var pl <- [7l, 1234l]
+        var c1 : array<float>
+        var s1 : array<float>
+        var c2 : array<float>
+        var s2 : array<float>
+        build_rope_tabs_mrope(c1, s1, 1000000.0, 1.0, 1.0, ff, false, p4, qsec, 2l, 128l)
+        build_rope_tabs_rows(c2, s2, 1000000.0, 1.0, 1.0, ff, false, pl, 2l, 128l)
+        var same = true
+        for (ca, cb, sa, sb in c1, c2, s1, s2) {
+            same &&= ca == cb && sa == sb
+        }
+        t |> success(same, "the (p,p,p,p) collapse must be bit-exact")
+        // an image-shaped row reads each axis over its CONTIGUOUS range, frequencies continuous
+        var pi4 <- [int4(100, 103, 117, 0)]
+        var ct : array<float>
+        var st : array<float>
+        build_rope_tabs_mrope(ct, st, 1000000.0, 1.0, 1.0, ff, false, pi4, qsec, 1l, 128l)
+        var ref_ok = true
+        for (j in range(64)) {
+            let axis = mrope_axis_ref(j, 16, 24, 24)
+            let pos = pi4[0][axis]
+            let freq = 1.0 / pow(1000000.0, float(2 * j) / 128.0)
+            let angle = float(pos) * freq
+            // 1e-5, not bit-equal: cross-compilation-unit cos drifts by ulps under -jit
+            ref_ok &&= abs(ct[j] - cos(angle)) < 1e-5 && abs(st[j] - sin(angle)) < 1e-5
+        }
+        t |> success(ref_ok, "every half-dim must read its contiguous-section axis")
+        // the two walks must genuinely differ on grid rows (same sections both ways)
+        var ci : array<float>
+        var si : array<float>
+        build_rope_tabs_imrope(ci, si, 1000000.0, 1.0, 1.0, ff, false, pi4, qsec, 1l, 128l)
+        var differs = false
+        for (j in range(64)) {
+            differs ||= ct[j] != ci[j] || st[j] != si[j]
+        }
+        t |> success(differs, "interleaved and contiguous walks differ on an image row")
+        delete p4
+        delete pl
+        delete pi4
+        delete c1
+        delete s1
+        delete c2
+        delete s2
+        delete ct
+        delete st
+        delete ci
+        delete si
+    }
+}
+
+[test]
+def test_mrope_span_positions(t : T?) {
+    // the mtmd decoder walk: head sequential, span (pos0, pos0+i/nx, pos0+i%nx, 0), tail from
+    // pos0 + max(nx, ny) — the grid's long side, not its row count
+    t |> run("the quantum map follows the mtmd walk") @(t : T?) {
+        var map : array<int4>
+        mrope_span_positions(map, 10l, 12l, 3l, 9l, 3l, 2l)
+        t |> equal(map[0], int4(10, 10, 10, 10))
+        t |> equal(map[2], int4(12, 12, 12, 12))
+        t |> equal(map[3], int4(13, 13, 13, 0))
+        t |> equal(map[4], int4(13, 13, 14, 0))
+        t |> equal(map[5], int4(13, 13, 15, 0))
+        t |> equal(map[6], int4(13, 14, 13, 0))
+        t |> equal(map[8], int4(13, 14, 15, 0))
+        // tail resumes at pos0 + max(3, 2) = 16, NOT pos0 + 6 rows
+        t |> equal(map[9], int4(16, 16, 16, 16))
+        t |> equal(map[11], int4(18, 18, 18, 18))
+        delete map
+    }
+    t |> run("a grid that does not match the span row count panics") @(t : T?) {
+        var tripped = false
+        try {
+            var map : array<int4>
+            mrope_span_positions(map, 0l, 8l, 2l, 6l, 3l, 2l)
+            delete map
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "4 span rows vs a 3x2 grid must refuse")
+    }
+}
+
+[test]
+def test_rope_gen_vision(t : T?) {
+    // The qwen3vl ViT table: hs/2 slots per row — the h ladder then the w ladder restarted,
+    // freq divisor hs/2 (ggml VISION mode with sections hs/4 x4 and indep_sects).
+    t |> run("vision table matches the per-element ladder reference") @(t : T?) {
+        var p2 <- [int2(3, 11), int2(0, 0)]
+        var ct : array<float>
+        var st : array<float>
+        build_rope_tabs_vision(ct, st, 10000.0, p2, 2l, 72l)
+        var same = true
+        for (j in range(36)) {
+            let jj = j % 18
+            let freq = 1.0 / pow(10000.0, float(2 * jj) / 36.0)
+            let a0 = float(j < 18 ? 3 : 11) * freq
+            // 1e-5, not bit-equal: cross-compilation-unit cos drifts by ulps under -jit
+            same &&= abs(ct[j] - cos(a0)) < 1e-5 && abs(st[j] - sin(a0)) < 1e-5
+            same &&= ct[36 + j] == 1.0 && st[36 + j] == 0.0
+        }
+        t |> success(same, "h slots then a restarted w ladder; (0,0) is the identity row")
+        delete p2
+        delete ct
+        delete st
+    }
+}
+
 [test]
 def test_rope_gen_mscale(t : T?) {
     t |> run("mscale is a pure post-scale: mscale=2 row == 2 x mscale=1 row") @(t : T?) {

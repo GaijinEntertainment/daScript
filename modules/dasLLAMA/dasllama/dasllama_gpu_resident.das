@@ -712,7 +712,7 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     // this position's rope row: cos[half] then sin[half]
     let half = hs / 2l
     g_rdec_cossin |> resize(hs)
-    rdec_rope_row(t, pos, hs, half, g_rdec_cossin, 0l)
+    rdec_rope_row(t, pos + s.rope_pos_delta, hs, half, g_rdec_cossin, 0l)   // rope at the delta'd position; KV stays at pos
     let cnt = pos + 1l
     rdec_token(g_rdec_x, g_rdec_cossin, pos, cnt, s.logits)
     g_rdec_cnt = pos + 1l   // mirror continuity: rows [0, pos] are now live
@@ -747,7 +747,7 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     g_rdec_tmp |> resize(npos * hs)   // the rope-row batch borrows the scratch row
     var cb & = g_rdec_tmp
     for (p in range64(npos)) {
-        rdec_rope_row(t, p, hs, half, cb, p * hs)
+        rdec_rope_row(t, p + s.rope_pos_delta, hs, half, cb, p * hs)
     }
     rdec_prefill(s.x_b, cb, npos, s.logits)
     g_rdec_cnt = npos   // the mirror now holds [0, npos) — the decode's continuity witness
@@ -794,7 +794,7 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
         for (k in range64(dim)) {
             g_rdec_x[int(k)] = ws.scr.x_b[i * dim + k]
         }
-        rdec_rope_row(t, pos, hs, half, g_rdec_cossin, 0l)
+        rdec_rope_row(t, ws.rope_positions[i], hs, half, g_rdec_cossin, 0l)   // rope at the delta'd position; KV stays at pos
         rdec_token(g_rdec_x, g_rdec_cossin, pos, pos + 1l, g_rdec_tmp)
         // write the new token's K/V back to this session's cache at pos, then scatter logits
         let krowb = kv_row_bytes(s.kv_dtype_k, kvd)

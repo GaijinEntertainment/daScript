@@ -1,7 +1,8 @@
 # dasLLAMA vision and media rules
 
 **Routed from `REVIEW.md`: a diff touching a media splice or its eval shape
-(`eval_embd_span_` / `forward_prefill_embd`'s span bounds / `encode_image_`),
+(any `eval_embd_span*` entry in `dasllama/dasllama_blocks.das`, `forward_prefill_embd`'s
+span bounds, or `encode_image_`),
 `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`, a media-carrying
 scheduler path, `dasllama/dasllama_vision_embedder.das`, `dasllama/dasllama_tower.das` (with
 `REVIEW_AUDIO.md` — the shared encoder-tower home serves both), or a vision family file — one
@@ -12,8 +13,8 @@ with the master's.** `REVIEW_COMMON.md` (repo root) binds this file too. Archite
 **A type or loader a single vision family owns (its embedder or tower, its state, its staging)
 is named outside its own file only in `dasllama/dasllama_vision_embedder.das`, in
 `dasllama/dasllama_metal_tower.das`'s family hooks, and in files under
-`modules/dasLLAMA/tests/`.** The `VisionEmbedder` union carries it through every other seam
-(chat, server, bench, facade, tutorials); a family name at a seam is a defect.
+`modules/dasLLAMA/tests/`.** The `VisionEmbedder` union carries it through every other seam;
+a family name at a seam is a defect.
 
 **A GEMM in a vision family file goes through a shared batch-GEMM entry point — `mm_blob_b`,
 `mm_bf16_b`, `mm_plane_b` (`dasllama/dasllama_tower.das`) or `matmul_q8q8_batch`
@@ -51,5 +52,6 @@ carries the surrounding head and tail tokens is free.
 BPE merges never cross the media. The engine, the scheduler, and the server all carry the same
 shape; any other representation at the seam is a defect.
 
-**A family gaining an arm for a media kind rides the existing splice prefill path** — a
-parallel prefill path for it is a defect.
+**A family gaining an arm for a media kind reaches the layer stack only through
+`forward_prefill_embd`** — a second prefill BODY for it is a defect; a sibling
+`eval_embd_span*` entry that feeds the same body is the sanctioned shape.

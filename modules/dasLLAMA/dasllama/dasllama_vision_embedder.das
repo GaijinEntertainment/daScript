@@ -8,6 +8,8 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_gemma4uv public   // re-exported: a requirer that carries the union must see both families to delete it
 require dasllama/dasllama_gemma4v public
 require dasllama/dasllama_gemma3v public
+require dasllama/dasllama_qwen3v public
+require dasllama/dasllama_qwen25v public
 require dasllama/dasllama_vision public     // VisionImage — the decoded-pixel input every family takes
 require dasllama/dasllama_gguf
 require dasllama/dasllama_image   // image_family_tag — a prepared .dlim routes on its baked tag
@@ -23,6 +25,8 @@ enum VisionKind {
     gemma4uv    // the gemma-4 dense embedder (no attention)
     gemma4v     // the gemma-4 E-series ViT tower
     gemma3v     // the gemma-3 SigLIP tower (fixed 896² canvas)
+    qwen3v      // the qwen3vl SigLIP-geometry ViT (Qwen3-Omni; mrope decoder positions)
+    qwen25v     // the qwen2.5 window-attention ViT (Qwen2.5-Omni/VL; mrope decoder positions)
 }
 
 struct VisionEmbedder {
@@ -30,6 +34,8 @@ struct VisionEmbedder {
     gemma4uv : Gemma4uvEmbedder = Gemma4uvEmbedder()
     gemma4v : Gemma4vTower = Gemma4vTower()
     gemma3v : Gemma3vTower = Gemma3vTower()
+    qwen3v : Qwen3vTower = Qwen3vTower()
+    qwen25v : Qwen25vTower = Qwen25vTower()
 }
 
 //! Per-encode scratch for whichever family the embedder carries (caller-owned, reused).
@@ -37,6 +43,8 @@ struct VisionState {
     gemma4uv : Gemma4uvState = Gemma4uvState()
     gemma4v : Gemma4vState = Gemma4vState()
     gemma3v : Gemma3vState = Gemma3vState()
+    qwen3v : Qwen3vState = Qwen3vState()
+    qwen25v : Qwen25vState = Qwen25vState()
 }
 
 // Stated rather than inferred: the family carriers hold borrowed planes, and a generated
@@ -45,12 +53,16 @@ def finalize(var e : VisionEmbedder) {
     delete e.gemma4uv
     delete e.gemma4v
     delete e.gemma3v
+    delete e.qwen3v
+    delete e.qwen25v
 }
 
 def finalize(var s : VisionState) {
     delete s.gemma4uv
     delete s.gemma4v
     delete s.gemma3v
+    delete s.qwen3v
+    delete s.qwen25v
 }
 
 //! Soft-token width the embedder projects to (must equal the decoder width); 0 = no vision arm.
@@ -58,7 +70,20 @@ def vision_proj_dim(e : VisionEmbedder) : int64 {
     if (e.kind == VisionKind.gemma4uv) return e.gemma4uv.proj_dim
     if (e.kind == VisionKind.gemma4v) return e.gemma4v.proj_dim
     if (e.kind == VisionKind.gemma3v) return e.gemma3v.proj_dim
+    if (e.kind == VisionKind.qwen3v) return e.qwen3v.proj_dim
+    if (e.kind == VisionKind.qwen25v) return e.qwen25v.proj_dim
     return 0l
+}
+
+//! Deepstack slice count (dense Qwen3-VL): the encoded rows are (1+n)·proj_dim wide and the
+//! decoder must carry the same `n_deepstack` — pair them at arm time. 0 for every other family.
+def vision_deepstack(e : VisionEmbedder) : int64 {
+    return e.kind == VisionKind.qwen3v ? e.qwen3v.n_deepstack : 0l
+}
+
+//! One encoded soft-token row's float count: proj_dim widened by the deepstack slices.
+def vision_row_width(e : VisionEmbedder) : int64 {
+    return vision_proj_dim(e) * (1l + vision_deepstack(e))
 }
 
 //! The family's canvas alignment in px (one soft token per align×align): the geometry's unit.
@@ -66,6 +91,8 @@ def vision_align(e : VisionEmbedder) : int64 {
     if (e.kind == VisionKind.gemma4uv) return e.gemma4uv.patch
     if (e.kind == VisionKind.gemma4v) return e.gemma4v.patch * e.gemma4v.merge
     if (e.kind == VisionKind.gemma3v) return e.gemma3v.patch * e.gemma3v.merge
+    if (e.kind == VisionKind.qwen3v) return e.qwen3v.patch * e.qwen3v.merge
+    if (e.kind == VisionKind.qwen25v) return e.qwen25v.patch * e.qwen25v.merge
     return 0l
 }
 
@@ -75,6 +102,8 @@ def vision_family(e : VisionEmbedder) : string {
     if (e.kind == VisionKind.gemma4uv) return "gemma4uv"
     if (e.kind == VisionKind.gemma4v) return "gemma4v"
     if (e.kind == VisionKind.gemma3v) return "gemma3v"
+    if (e.kind == VisionKind.qwen3v) return "qwen3v"
+    if (e.kind == VisionKind.qwen25v) return "qwen25v"
     return ""
 }
 
@@ -128,8 +157,31 @@ def load_vision_embedder(path : string) : VisionEmbedder {
         e.gemma3v <- load_gemma3v_tower(path)
         return <- e
     }
-    panic("dasLLAMA vision: '{path}' is projector '{proj}' - no vision family serves it (gemma4uv, gemma4v, gemma3)")
+    if (proj == "qwen3vl_merger" || proj == "qwen3v") {   // the gguf spells qwen3vl_merger; the image lane bakes qwen3v
+        var e = VisionEmbedder(kind = VisionKind.qwen3v)
+        e.qwen3v <- load_qwen3v_tower(path)
+        return <- e
+    }
+    if (proj == "qwen2.5o" || proj == "qwen2.5vl_merger" || proj == "qwen25v") {   // dual-tower Omni files spell qwen2.5o; the image lane bakes qwen25v
+        var e = VisionEmbedder(kind = VisionKind.qwen25v)
+        e.qwen25v <- load_qwen25v_tower(path)
+        return <- e
+    }
+    panic("dasLLAMA vision: '{path}' is projector '{proj}' - no vision family serves it (gemma4uv, gemma4v, gemma3, qwen3vl_merger, qwen2.5o)")
     return <- VisionEmbedder()
+}
+
+//! The MERGED image grid of the last encode when the carried family ropes the decoder with
+//! grid positions (qwen mrope): (nx, ny) soft-token columns/rows; (0, 0) = sequential
+//! positions (every gemma family). Valid right after ``encode_image_``.
+def vision_mrope_grid(e : VisionEmbedder; s : VisionState) : int2 {
+    if (e.kind == VisionKind.qwen3v) {
+        return int2(int(s.qwen3v.grid_w / e.qwen3v.merge), int(s.qwen3v.grid_h / e.qwen3v.merge))
+    }
+    if (e.kind == VisionKind.qwen25v) {
+        return int2(int(s.qwen25v.grid_w / e.qwen25v.merge), int(s.qwen25v.grid_h / e.qwen25v.merge))
+    }
+    return int2(0)
 }
 
 //! The whole image path for the carried family: geometry → letterbox → normalize → the family's
@@ -139,6 +191,8 @@ def encode_image_(e : VisionEmbedder; var s : VisionState; img : VisionImage; ta
     if (e.kind == VisionKind.gemma4uv) return encode_image_(e.gemma4uv, s.gemma4uv, img, tag, out)
     if (e.kind == VisionKind.gemma4v) return encode_image_(e.gemma4v, s.gemma4v, img, tag, out)
     if (e.kind == VisionKind.gemma3v) return encode_image_(e.gemma3v, s.gemma3v, img, tag, out)
+    if (e.kind == VisionKind.qwen3v) return encode_image_(e.qwen3v, s.qwen3v, img, tag, out)
+    if (e.kind == VisionKind.qwen25v) return encode_image_(e.qwen25v, s.qwen25v, img, tag, out)
     panic("dasLLAMA vision: encode_image_ on an embedder with no vision arm")
     return 0l
 }
