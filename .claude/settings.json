@@ -1,17 +1,5 @@
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python .claude/hooks/comment_guard.py",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Monitor|Bash",

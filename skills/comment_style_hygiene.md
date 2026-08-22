@@ -41,7 +41,8 @@ banners, section dividers, commented-out code — does not exist. The formatter 
 per folder, fail-closed (a strip must compile or the file is restored); the policy mechanics
 are `skills/das_formatting.md`. A `//` comment outside the kept set is therefore EPHEMERAL:
 anything worth preserving becomes code (a name, a `//!` doc, an assert) or lands in an `.md`
-beside the code. The boundary is the folder's `.lint_config`: teaching code (tutorials,
+beside the code. The ban is on what survives to a commit, not on writing — scaffold freely
+while working; the PR gate drains what remains. The boundary is the folder's `.lint_config`: teaching code (tutorials,
 examples) and load-bearing fixture corpora opt out there, and prose carrying the lesson
 stays — comments that add nothing to their line still go.
 

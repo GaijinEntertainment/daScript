@@ -4,6 +4,8 @@ After creating or modifying any `.das` file that is part of the project (daslib 
 
 **Formatter:** MCP `format_file` tool (calls `daslib/das_source_formatter` directly). Comment policy comes from the file's folder: each `[format]` key is taken from the nearest `.lint_config` that declares it, and keys cascade independently up to the `.git` root. `force_clean_comments = true` also strips comments file-wide, keeping only the set `skills/comment_style_hygiene.md` defines; fail-closed (a strip must pass compile_check or the file is restored). Teaching folders (`tutorials/`, `examples/`) declare `force_clean_comments = false`; `format_enabled = false` makes the formatter a no-op for that tree (load-bearing fixture layout). There is no per-call override.
 
+**A strip that deleted comments is reviewed before commit.** The MCP tool appends a final `rescue_advisory` entry to the batch result and the CLI prints `comments were deleted from N file(s)`; either way, read the strip diff before committing and rescue what carries lasting information. What counts as worth rescuing, and where it goes, is `skills/comment_style_hygiene.md`.
+
 **CLI fallback (when the MCP server is unavailable):** the formatter and linter also run as in-tree daslang scripts:
 
 - Format: `bin/daslang utils/das-fmt/dasfmt.das -- --path <dirOrFile>` — formats in place; add `--verify` for a dry-run check (changes nothing, fails on any unformatted file — same as CI).

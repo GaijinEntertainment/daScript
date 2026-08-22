@@ -18,7 +18,7 @@
     {
       "name" : "Game: Boulder Dash (3D, arrows + Z grab)",
       "slug" : "boulder-dash",
-      "files" : ["examples/boulder-dash/main.das", "examples/boulder-dash/cave.das", "examples/boulder-dash/cave_gen.das", "examples/boulder-dash/live_stub.das"]
+      "files" : ["examples/boulder-dash/main.das", "examples/boulder-dash/cave.das", "examples/boulder-dash/cave_gen.das", "examples/boulder-dash/sfx_gen.das", "examples/boulder-dash/live_stub.das"]
     },
     {
       "name" : "ImGui: Fourier Series (epicycles)",
