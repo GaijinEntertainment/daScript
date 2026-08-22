@@ -11,6 +11,7 @@ require daslib/jobque_boost
 require daslib/fio
 require daslib/strings_boost
 require strings
+require math
 require _model_tier   // models_dir() + model_available() gate
 require ?das_metal dasllama/dasllama_metal_tower   // the tower engage/knob legs (the facade registers the hook)
 
@@ -40,6 +41,8 @@ let G3_IMAGE_CLOSE = 256000l
 let G3_ROWS = 256l
 let MM_OMNI = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf"   // the qwen3v pair (mrope decoder)
 let DEC_OMNI = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf"         // large tier: DASLLAMA_PARITY_FULL gates it
+let MM_4B = "mmproj-Qwen3VL-4B-Instruct-F16.gguf"              // the deepstack pair (small tier)
+let DEC_4B = "Qwen3VL-4B-Instruct-Q8_0.gguf"
 // qwen vocab: <|vision_start|> / <|vision_end|>; 640x480 is 32-aligned = a 20x15 merged grid
 let Q_IMAGE_OPEN = 151652l
 let Q_IMAGE_CLOSE = 151653l
@@ -340,6 +343,82 @@ def test_vision_chat_omni(t : T?) {
             tt |> success(length(reply) > 40, "the caption is a description, not a fragment")
             tt |> equal(chat.session.rope_pos_delta, 20l - 300l, "the session's rope delta reflects the grid advance")
             delete chat
+        }
+        delete m
+    }
+}
+
+[test]
+def test_vision_chat_deepstack(t : T?) {
+    t |> run("the Qwen3-VL 4B image turn: deepstack wide rows through the chat, then the caption") @(tt : T?) {
+        let mm = path_join(models_dir(), MM_4B)
+        let dec = path_join(models_dir(), DEC_4B)
+        let cats = path_join(models_dir(), CATS)
+        if (!model_available(tt, mm) || !model_available(tt, dec)) {
+            return
+        }
+        if (!stat(cats).is_valid) {
+            tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
+            return
+        }
+        let img <- load_image_rgb(cats)
+        var m <- load_model_(dec, QuantMode.q8)
+        tt |> equal(m.config.n_deepstack, 3l, "the decoder carries n_deepstack_layers")
+        allow_cpu_prefill()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var emb <- load_vision_embedder(mm)
+            tt |> equal(vision_family(emb), "qwen3v", "the dense mmproj sniffs as qwen3v")
+            tt |> equal(vision_proj_dim(emb), 2560l, "projection width matches the 4B decoder")
+            tt |> equal(vision_deepstack(emb), 3l, "the tower carries three deepstack taps")
+            tt |> equal(vision_row_width(emb), 10240l, "wide rows: (1+3) x 2560")
+            var chat <- create_chat_(m, emb, "", 96l)
+            add_user_image_(chat, img)
+            add_user_(chat, "describe this image")
+            tt |> equal(chat.n_image_rows, Q_CATS_ROWS, "640x480 is 32-aligned: 300 soft tokens")
+            tt |> equal(chat.image_grid, int2(20, 15), "the merged grid reaches the chat")
+            tt |> equal(long_length(chat.image_rows), Q_CATS_ROWS * 10240l, "the chat holds wide rows")
+            var params = SamplingParams()
+            params.temp = 0.0
+            let reply = respond_(m, chat, params) $(piece : string) {
+                return true
+            }
+            to_log(LOG_INFO, "vision caption (qwen3vl-4b/deepstack): {replace(reply, "\n", "\\n")}\n")
+            let low = to_lower(reply)
+            tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
+            tt |> success(length(reply) > 40, "the caption is a description, not a fragment")
+            tt |> equal(chat.session.rope_pos_delta, 20l - 300l, "the session's rope delta reflects the grid advance")
+            delete chat
+            // the zeroed-slices decoder control: the SAME wide rows with their deepstack tails
+            // zeroed must move the decoder's logits - a caption gate alone cannot see a decoder
+            // that silently ignores the slices (the plan's slice-H requirement)
+            var emb2 <- load_vision_embedder(mm)   // create_chat_ moved `emb` into the session
+            var st = VisionState()
+            var rows : array<float>
+            let nr = encode_image(emb2, st, img, "ds-control", rows)
+            tt |> equal(nr, Q_CATS_ROWS, "control encode row count")
+            var zeroed := rows
+            for (r in range64(nr)) {
+                for (i in range64(2560l, 10240l)) {
+                    zeroed[r * 10240l + i] = 0.0
+                }
+            }
+            var s1 <- create_session(m)
+            eval_embd_span_mrope(m, s1, rows, nr, 0l, nr, int2(20, 15))
+            var s2 <- create_session(m)
+            eval_embd_span_mrope(m, s2, zeroed, nr, 0l, nr, int2(20, 15))
+            var dmax = 0.0
+            for (i in range64(long_length(s1.logits))) {
+                dmax = max(dmax, abs(s1.logits[i] - s2.logits[i]))
+            }
+            to_log(LOG_INFO, "deepstack zeroed-slices logits maxdiff = {dmax}\n")
+            tt |> success(dmax > 1e-2, "the decoder consumes the deepstack slices ({dmax})")
+            delete s1
+            delete s2
+            delete rows
+            delete zeroed
+            delete st
+            delete emb2
         }
         delete m
     }

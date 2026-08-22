@@ -371,6 +371,9 @@ def private arm_slot_vision(mi : int; path : string) : string {
     if (vision_proj_dim(emb) != g_slots[mi].model.config.dim) {
         return "{base_name(path)} projects to {vision_proj_dim(emb)} but {g_slots[mi].name} is {g_slots[mi].model.config.dim}-wide - mismatched pair"
     }
+    if (vision_deepstack(emb) != g_slots[mi].model.config.n_deepstack) {
+        return "{base_name(path)} carries {vision_deepstack(emb)} deepstack slices but {g_slots[mi].name} expects {g_slots[mi].model.config.n_deepstack} - mismatched pair"
+    }
     var probe <- create_chat_renderer(g_slots[mi].model, "", 1l)
     let no_markers = empty(probe.tmpl.image_pre.parts) || !image_vocab_ok(g_slots[mi].model, probe.tmpl)
     delete probe

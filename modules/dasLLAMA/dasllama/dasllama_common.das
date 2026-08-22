@@ -175,6 +175,9 @@ struct Config {
     // marks the mrope arch. Text rows carry equal positions in every section, which collapses to
     // plain NEOX — only image-span rows build their tables through build_rope_tabs_imrope.
     rope_sections : int4 = int4(0)
+    // qwen3vl deepstack: image-quantum embd rows arrive (1+n)·dim wide; slice l+1 adds to the
+    // hidden state after layer l < n (text rows carry zero slices, so text serving is untouched)
+    n_deepstack : int64 = 0
     ssm_d_conv : int64 = 0             // deltanet conv kernel width (4)
     ssm_d_state : int64 = 0            // deltanet q/k/v head dim (128)
     ssm_n_group : int64 = 0            // deltanet k-head count (16)
@@ -1692,6 +1695,10 @@ struct Session {
     // transient, one prefill call: per-row (t,h,w,e) positions overriding start_pos+pi in the rope
     // table build (the image-span quantum); empty = sequential positions
     @scratch mrope_pos : array<int4>
+    // transient, one prefill call (qwen3vl deepstack): the wide image quantum's tail slices
+    // [npos × n_deepstack·dim] — slice l adds to x_b after layer l while ds_active
+    @scratch ds_embd : array<float>
+    ds_active : bool
     // MoE scratch (sized in make_run_state when n_expert > 0; empty for dense arches)
     moe_logits : array<float>   // router logits, then probs (n_expert)
     moe_w : array<float>        // the selected top-k weights (n_expert_used)
@@ -4795,6 +4802,17 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     }
 }
 
+// the deepstack add: x_b[r] += ds[r][slice l] for every row (dst dim-wide, ds n_ds·dim-wide)
+def private ds_add_slice(var x_b : array<float>; ds : array<float>; l, n_ds, dim, npos : int64) {
+    unsafe {
+        var xp = addr(x_b[0])
+        let dp = addr<float const?>(ds[0])
+        for (r in range64(npos)) {
+            add_inplace(xp + r * dim, dp + r * n_ds * dim + l * dim, dim)
+        }
+    }
+}
+
 // the prefill rope tables: sequential from start_pos + rope_pos_delta, or the pending per-row mrope map (which forces the table path — no classic form)
 def private prefill_rope_tables(t : Model; var s : Session; npos, start_pos : int64) {
     let c = t.config
@@ -4838,13 +4856,15 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
     g_prefill_logits_done = false
     if (!empty(g_prefill_override_name) && !empty(s.mrope_pos) && !active_prefill_serves_mrope()) {
         to_log(LOG_INFO, "dasLLAMA: mrope image quantum ({npos} rows) declined to the CPU prefill loop - the `{g_prefill_override_name}` override does not rope from per-row tables\n")   // nolint:PERF026,PERF028 — once per image quantum, never per token
+    } elif (!empty(g_prefill_override_name) && s.ds_active) {
+        to_log(LOG_INFO, "dasLLAMA: deepstack image quantum ({npos} rows) declined to the CPU prefill loop - no GPU arm for the per-layer slice adds yet\n")   // nolint:PERF026,PERF028 — once per image quantum, never per token
     } elif (!empty(g_prefill_override_name)) {
         stack_done = invoke(g_prefill_override, t, s, npos, start_pos)
     }
     if (!stack_done) {
         blob_only_panic(t, "prefill stack")
         // Metal-capable build about to chew a real prompt on the CPU stack — the silent profiling-time sink, not a serving path; fail loud unless CPU intent was declared.
-        if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed()) {
+        if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed() && !s.ds_active) {
             panic("dasLLAMA: CPU batched prefill of {npos} tokens on a Metal-capable build (override `{g_prefill_override_name}` {empty(g_prefill_override_name) ? "not selected" : "declined"}) - select the metal prefill (set_metal_mode / DASLLAMA_PIN_PREFILL=metal), or declare CPU intent: allow_cpu_prefill() / DASLLAMA_CPU_PREFILL=1")
         }
         for (l in range64(c.n_layers)) {
@@ -4857,6 +4877,9 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
             let ts_blk_ffn = prof_ticks()
             t.blocks.ffn_prefill(t, s, l, npos)
             prof_add("blk_ffn", ts_blk_ffn)
+            if (s.ds_active && l < c.n_deepstack) {   // qwen3vl deepstack: slice l adds to every row (text slices are zero)
+                ds_add_slice(s.x_b, s.ds_embd, l, c.n_deepstack, dim, npos)
+            }
         }
     }
 

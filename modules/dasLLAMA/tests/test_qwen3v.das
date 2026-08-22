@@ -23,7 +23,14 @@ let private TIER1_ABS = 2e-4
 // A swapped rope-ladder poison lands at 0.71-0.85 maxdiff - 300x this bar.
 let private TIER1_REL = 1e-2
 
-def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : string; w, h : int; logname : string) : bool {
+// the deepstack leg runs FOUR GELU-LUT'd merger chains per wide row (main + three taps) where
+// the Omni runs one, and the q-probes read individual slice values - the compounded
+// summation-order floor measures 1.12e-2 on the low-rms gray fixture (a skipped-tap poison
+// lands at 6.9-9.7 on the same probes, 600x this bar)
+let private TIER1_REL_DS = 4e-2
+
+def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : string; w, h : int; logname : string;
+                        rel : float = TIER1_REL) : bool {
     var o = OracleEncode()
     let logpath = path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), logname)
     if (!load_oracle_encode(logpath, o)) {
@@ -41,7 +48,7 @@ def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : s
     if (int(nout) != o.npos) {
         return false
     }
-    compare_encode(t, "qwen3v tier-1 {kind} {w}x{h}", out, int(tw.proj_dim), o, TIER1_ABS, TIER1_REL)
+    compare_encode(t, "qwen3v tier-1 {kind} {w}x{h}", out, int(qwen3v_row_width(tw)), o, TIER1_ABS, rel)
     return true
 }
 
@@ -83,6 +90,33 @@ def test_qwen3v_tier1(t : T?) {
             ragged_tripped = true
         }
         tt |> success(ragged_tripped, "a canvas off the 32 px merged-patch grid panics by name")
+        delete st
+        delete tw
+    }
+}
+
+[test]
+def test_qwen3v_tier1_deepstack(t : T?) {
+    t |> run("tier-1 deepstack tower parity vs the mtmd encode dumps (Qwen3-VL 4B)") @(tt : T?) {
+        let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
+        if (!model_available(tt, mm)) {
+            return
+        }
+        var tw <- load_qwen3v_tower(mm)
+        var st = Qwen3vState()
+        tt |> equal(int(tw.n_embd), 1024, "tower width")
+        tt |> equal(int(tw.n_layer), 24, "blocks")
+        tt |> equal(int(tw.n_ff), 4096, "ffn width")
+        tt |> equal(int(tw.proj_dim), 2560, "soft-token width (main slice)")
+        tt |> equal(int(tw.n_deepstack), 3, "deepstack taps")
+        tt |> equal(int(tw.ds_l0), 5, "tap 0 block")
+        tt |> equal(int(tw.ds_l1), 11, "tap 1 block")
+        tt |> equal(int(tw.ds_l2), 17, "tap 2 block")
+        tt |> equal(int(qwen3v_row_width(tw)), 10240, "wide row = (1+3) x 2560")
+        tt |> gate_encode(tw, st, "gray", 448, 448, "encode4b.gray448.log", TIER1_REL_DS)
+        tt |> gate_encode(tw, st, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_DS)
+        tt |> gate_encode(tw, st, "cb", 640, 320, "encode4b.cb640x320.log", TIER1_REL_DS)   // non-square: merge-reorder + transposed-grid
+        tt |> gate_encode(tw, st, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_DS)   // 9 tokens: the pos-table DOWNSCALE arm
         delete st
         delete tw
     }

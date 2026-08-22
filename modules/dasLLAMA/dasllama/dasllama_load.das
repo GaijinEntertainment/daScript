@@ -1564,6 +1564,13 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             delete sect
         }
+        // qwen3vl deepstack: the image quantum's wide-row slice count (0 on every other arch)
+        if (gguf_has(m, "{arch}.n_deepstack_layers")) {
+            t.config.n_deepstack = gguf_int(m, bytes, "{arch}.n_deepstack_layers")
+            if (t.config.n_deepstack < 0l || t.config.n_deepstack > 8l || t.config.n_deepstack >= layers) {
+                panic("dasLLAMA: {arch}.n_deepstack_layers = {t.config.n_deepstack} - expected 0..min(8, n_layer)")
+            }
+        }
         // gemma-4 E-series: cross-layer KV sharing — the last N layers reuse an earlier layer's KV
         // cache (n_layer_kv_from_start = layers - shared), and their own attn_k/attn_v are dead weights
         // (skipped by layout_offsets). Mirrors llama.cpp gemma4's has_kv()/reuse().
