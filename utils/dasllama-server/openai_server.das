@@ -2131,7 +2131,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              tools_declared : bool = false; call_open : string = ""; call_close : string = "";
                              seed : int = 0; think : ThinkStream = ThinkStream();
                              tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l;
-                             media_is_audio : bool = false) {
+                             media_is_audio : bool = false; media_grid : int2 = int2(0)) {
     let np = long_length(prompt) + n_media
     if (np + 1l > cur_model().config.seq_len) {
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
@@ -2142,7 +2142,8 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     let created = created_ts()
     var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed,
                            media_at = media_at, n_media = n_media,
-                           media_non_causal = n_media > 0l && !media_is_audio)   // gemma image span rows attend in full; audio rows stay causal
+                           media_non_causal = n_media > 0l && !media_is_audio,   // image span rows attend in full; audio rows stay causal
+                           media_grid = media_grid)   // qwen mrope grid; (0,0) on gemma families
     preq.prompt <- prompt
     preq.stop_ids <- stop_ids
     preq.close_toks <- close_toks
@@ -2455,7 +2456,8 @@ def private park_media_request(srv : WebSocketServer; var writer : HttpResponseW
 // drain_media_events with the worker's rows.
 def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWriter?; js : JsonValue?;   // nolint:STYLE037,STYLE038 — flat request-field derivation: one guard and one client-facing message per field
                              slot : int; var media : array<float>; n_media : int64;
-                             media_is_audio : bool = false; resume_rid : int64 = 0l) {
+                             media_is_audio : bool = false; resume_rid : int64 = 0l;
+                             media_grid : int2 = int2(0)) {
     g_cur = slot
     let msgs_v = js?["messages"]
     let streaming = js?["stream"] ?? false
@@ -2569,7 +2571,7 @@ def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWri
     register_request(srv, writer, prompt, stop_ids, close, media, media_at, n_media, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
-                     media_is_audio)
+                     media_is_audio, media_grid)
 }
 
 def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
@@ -2916,6 +2918,7 @@ struct private OaiStatsResponse {
     thinking_default : bool   // the DEFAULT slot's family thinking default (the page's checkbox seed)
     media_pending : int       // media encode jobs queued or in flight (0 = idle)
     media_rows : int64        // media (image span) rows admitted to prefill since boot
+    mrope_streams : int64     // admitted streams whose media rode the qwen mrope grid walk
 }
 
 // budget only when the device already EXISTS (tier.device is "" until first upload creates
@@ -2967,7 +2970,8 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         vision = g_slots[g_default_slot].vision.kind != VisionKind.none,
         audio = g_slots[g_default_slot].audio_armed,
         thinking_default = g_slots[g_default_slot].think_default,
-        media_pending = g_media_pending, media_rows = g_media_rows)
+        media_pending = g_media_pending, media_rows = g_media_rows,
+        mrope_streams = g_slots[g_active].sched.mrope_streams)
     out.models |> reserve(length(g_slots))
     for (i in range(length(g_slots))) {
         var s & = unsafe(g_slots[i])
@@ -3836,6 +3840,7 @@ struct private MediaEvent {
     rows : array<float>
     width : int
     height : int
+    grid : int2                 // qwen mrope: the merged image grid; (0,0) = sequential positions (gemma, audio)
     is_audio : bool
     audio_cs : int    // decoded audio length in centiseconds (audio jobs; ints ride the channel clone)
     enc_ms : int64
@@ -3907,6 +3912,7 @@ def private media_encode_one(job : MediaJob; var embs : table<string; VisionEmbe
                 out.ok = true
                 out.width = img.width
                 out.height = img.height
+                out.grid = vision_mrope_grid(embs[job.name], states[job.name])
                 out.enc_ms = int64(get_time_usec(t0)) / 1000l
             }
         }
@@ -4075,7 +4081,7 @@ def private drain_media_events(srv : WebSocketServer) {
                 } else {
                     to_log(LOG_INFO, "[req {ev.id}] image {ev.width}x{ev.height} -> {ev.n_media} soft tokens in {ev.enc_ms}ms off-thread\n")
                 }
-                handle_chat_tail(srv, wire.writer, wire.js, wire.slot, ev.rows, ev.n_media, ev.is_audio, ev.id)
+                handle_chat_tail(srv, wire.writer, wire.js, wire.slot, ev.rows, ev.n_media, ev.is_audio, ev.id, ev.grid)
             }
             unsafe {
                 delete wire.js

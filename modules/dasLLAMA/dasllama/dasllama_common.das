@@ -317,7 +317,8 @@ typedef DecodeOverrideFn = function<(t : Model; var s : Session; token, pos : in
 //! apply unchanged; per call it impersonates the batch's cache geometry (dtypes + byte prefixes).
 struct BatchWorkspace {
     scr : Session             // *_b scratch, rope tables, ple scratch — no KV cache / sampler state
-    positions : array<int64>  // row i's absolute position (sessions[i].n_past at entry)
+    positions : array<int64>  // row i's absolute KV position (sessions[i].n_past at entry)
+    rope_positions : array<int64>   // row i's ROPE position (n_past + rope_pos_delta — mrope streams diverge)
     logits_b : array<float>   // B x vocab classifier output, scattered per session after softcap
     // row i's cache base pointers (into sessions[i]; valid per call). @do_not_delete is load-bearing:
     // delete of a plain array<T?> CASCADES to the pointees, which would free the sessions' cache blobs

@@ -242,12 +242,14 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     ws.scr.kv_bprefix_v := s0.kv_bprefix_v
     ws.scr.kv_pool = s0.kv_pool
     ws.positions |> grow_resize(nrows)
+    ws.rope_positions |> grow_resize(nrows)
     ws.kbase |> grow_resize(nrows)
     ws.vbase |> grow_resize(nrows)
     for (i in range64(nrows)) {
         var sp = sessions[i]
         kv_ensure(*sp, sp.n_past + 1l)
         ws.positions[i] = sp.n_past
+        ws.rope_positions[i] = sp.n_past + sp.rope_pos_delta   // post-image mrope streams rope ahead of their KV index
         if (s0.kv_pool == null) {
             unsafe {
                 ws.kbase[i] = addr(sp.key_cache[0])
@@ -277,11 +279,11 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     // per-row RoPE cos/sin table(s) — row i at sessions[i]'s own position
     let ts_rope_build = prof_ticks()
     build_rope_table_rows(ws.scr.rope_cos, ws.scr.rope_sin, t, c.rope_freq_base, c.rope_freq_scale,
-        ws.positions, nrows, c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
+        ws.rope_positions, nrows, c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
     if (has_dual_rope(c)) {
         let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
         build_rope_table_rows(ws.scr.rope_cos_swa, ws.scr.rope_sin_swa, t, c.rope_freq_base_swa,
-            c.rope_freq_scale_swa, ws.positions, nrows, swa_hs, !c.rope_ff_global_only)
+            c.rope_freq_scale_swa, ws.rope_positions, nrows, swa_hs, !c.rope_ff_global_only)
     }
     prof_add("rope_build", ts_rope_build)
     // layer stack: batched attention + the arch's batched FFN. An active batch-decode override may

@@ -163,6 +163,13 @@ def eval_embd_span(model : Model; var session : Session; embd : array<float>; np
     eval_embd_span_(model, session, embd, npos, span_lo, span_hi)
 }
 
+def eval_embd_span_mrope(model : Model; var session : Session; embd : array<float>; npos, span_lo, span_hi : int64; grid : int2) {
+    //! ``eval_embd_span``'s qwen mrope twin: the span rows rope as a ``grid``-shaped merged image
+    //! (position advance ``max(grid.x, grid.y)``, tracked on the session for every later eval);
+    //! same span mask, only the angles differ. Panics without ``rope.dimension_sections``.
+    eval_embd_span_mrope_(model, session, embd, npos, span_lo, span_hi, int64(grid.x), int64(grid.y))
+}
+
 def create_batch_workspace(model : Model) : BatchWorkspace {
     //! Create the caller-owned scratch that ``eval_batch`` steps through — one per concurrent batch,
     //! reused across calls (buffers grow to the largest batch seen). Holds no session state: the
