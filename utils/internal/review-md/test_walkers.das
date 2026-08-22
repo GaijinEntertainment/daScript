@@ -91,7 +91,7 @@ def make_dasllama_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama.das", "options gen2\n\ndef covered_fn() \{\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das", "enum AudioKind \{\n    none\n    toyfam\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das", "enum VisionKind \{\n    none\n    toyvis\n\}\n")
-    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_toyfam.das", "struct ToyfamThing \{\n\}\n\ndef set_toyfam_q8(on : bool) \{\n\}\n")
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_toyfam.das", "struct ToyfamThing \{\n\}\n\ntypedef ToyfamFn = int\n\ndef set_toyfam_q8(on : bool) \{\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_toyvis.das", "struct ToyvisTower \{\n\}\n")
     write_at(t, root, "modules/dasLLAMA/REVIEW.md", "rules\n")
     write_at(t, root, "tutorials/dasLLAMA/01_demo.das", "covered_fn()\n// prose beside the call stays harmless\n")
@@ -122,7 +122,7 @@ def test_dasllama_gate_fixtures(t : T?) {
         "options gen2\n\ndef covered_fn() \{\n\}\n\ndef hidden_fn() \{\n\}\n\ndef bound_fn() \{\n\}\n")
     write_at(t, fixture, "tutorials/dasLLAMA/02_demo.das", "// bound_fnx is a different identifier\n// hidden_fn taught only in this comment must not count\n")
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das", "enum AudioKind \{\n    none\n    toyfam\n    ghostfam\n\}\n")
-    write_at(t, fixture, "modules/dasLLAMA/benchmarks/asr/bench_probe.das", "set_toyfam_q8(true)\n")
+    write_at(t, fixture, "modules/dasLLAMA/benchmarks/asr/bench_probe.das", "set_toyfam_q8(true)\nvar fn : ToyfamFn\n")
     write_at(t, fixture, "tutorials/dasLLAMA/03_vis.das", "var tw : ToyvisTower\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
@@ -131,6 +131,7 @@ def test_dasllama_gate_fixtures(t : T?) {
                     "facade def hidden_fn appears in no doc/source/reference/tutorials/dasLLAMA_*.rst",
                     "facade def bound_fn appears in no tutorials/dasLLAMA/*.das",
                     "bench_probe.das: names set_toyfam_q8, which the dasllama_toyfam family owns",
+                    "bench_probe.das: names ToyfamFn, which the dasllama_toyfam family owns",
                     "03_vis.das: names ToyvisTower, which the dasllama_toyvis family owns",
                     "AudioKind arm dasllama_ghostfam has no modules/dasLLAMA/dasllama/dasllama_ghostfam.das"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")

@@ -169,6 +169,8 @@ def private family_owned_names(fam : string; fam_path : string; var out : array<
     for (line in split(fread(fam_path), "\n")) {
         if (starts_with(line, "struct ") && !starts_with(line, "struct private ")) {
             out |> push(ident_prefix(slice(line, 7)))
+        } elif (starts_with(line, "typedef ") && !starts_with(line, "typedef private ")) {
+            out |> push(ident_prefix(slice(line, 8)))
         } elif (starts_with(line, "def ") && !starts_with(line, "def private ") && !starts_with(line, "def operator")) {
             let name = ident_prefix(slice(line, 4))
             // not a prefix test - the family word sits mid-identifier (stage_gemma4uv_embedder, set_gemma4v_q8)

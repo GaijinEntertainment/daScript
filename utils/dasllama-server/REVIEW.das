@@ -92,10 +92,10 @@ def check_routes_in_surfaces() {
     for (path in keys(served)) {
         continue if (key_exists(DOC_EXEMPT_ROUTES, path))
         if (find(readme, "`{path}`") < 0) {
-            gate_finding(README_MD, "served route {path} has no `{path}` mention - every route the server registers gets its row in the README endpoint table")
+            gate_finding(README_MD, "served route {path} has no `{path}` mention - the README documents every route the server registers (the endpoint table is its home)")
         }
         if (find(rst, "``{path}``") < 0) {
-            gate_finding(SERVER_RST, "served route {path} has no ``{path}`` mention - every route the server registers gets its row in the shipped endpoint table")
+            gate_finding(SERVER_RST, "served route {path} has no ``{path}`` mention - the shipped page documents every route the server registers (the endpoint table is its home)")
         }
     }
     var inscope in_readme : table<string>
@@ -113,7 +113,10 @@ def check_routes_in_surfaces() {
         }
     }
     var inscope in_control : table<string>
-    quoted_routes(fread(CONTROL_HTML), "\"", in_control)
+    let control = fread(CONTROL_HTML)
+    quoted_routes(control, "\"", in_control)
+    quoted_routes(control, "'", in_control)
+    quoted_routes(control, "`", in_control)
     for (path in keys(in_control)) {
         if (!key_exists(served, path) && !key_exists(DOC_EXEMPT_ROUTES, path)) {
             gate_finding(CONTROL_HTML, "the control page consumes route {path}, which the server does not register")
