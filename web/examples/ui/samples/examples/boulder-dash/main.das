@@ -1113,7 +1113,6 @@ def main() {
     init()
     eval_main_loop() {
         update()
-        maybe_collect_gc()
         return !exit_requested()
     }
     shutdown()

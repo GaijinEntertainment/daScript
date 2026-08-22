@@ -329,7 +329,7 @@ jobs:
         FAILED=""
         for f in web/examples/ui/samples/examples/*.das web/examples/ui/samples/examples/*/main.das; do
             ./bin/daslang -dry-run "$f" > /tmp/gate.log 2>&1 || {
-                FAILED="$FAILED $(basename "$f")"
+                FAILED="$FAILED ${f#web/examples/ui/samples/examples/}"
                 echo "--- $f ---"; tail -20 /tmp/gate.log
             }
         done
