@@ -29,7 +29,7 @@ def is_route_byte(b : int) : bool {
     return is_alnum(b) || b == '/' || b == '_' || b == '-'
 }
 
-// every path registered in onInit; the scan reads only GET( / POST( / STREAM( rows
+// every path registered in onInit; the scan reads GET( / POST( / STREAM( / ANY( rows
 def served_routes() : table<string> {
     var routes : table<string>
     for (raw in split(fread(SERVER_DAS), "\n")) {
