@@ -282,6 +282,38 @@ def test_rope_gen_imrope_shape(t : T?) {
 }
 
 [test]
+def test_mrope_span_positions(t : T?) {
+    // the mtmd decoder walk: head sequential, span (pos0, pos0+i/nx, pos0+i%nx, 0), tail from
+    // pos0 + max(nx, ny) — the grid's long side, not its row count
+    t |> run("the quantum map follows the mtmd walk") @(t : T?) {
+        var map : array<int4>
+        mrope_span_positions(map, 10l, 12l, 3l, 9l, 3l, 2l)
+        t |> equal(map[0], int4(10, 10, 10, 10))
+        t |> equal(map[2], int4(12, 12, 12, 12))
+        t |> equal(map[3], int4(13, 13, 13, 0))
+        t |> equal(map[4], int4(13, 13, 14, 0))
+        t |> equal(map[5], int4(13, 13, 15, 0))
+        t |> equal(map[6], int4(13, 14, 13, 0))
+        t |> equal(map[8], int4(13, 14, 15, 0))
+        // tail resumes at pos0 + max(3, 2) = 16, NOT pos0 + 6 rows
+        t |> equal(map[9], int4(16, 16, 16, 16))
+        t |> equal(map[11], int4(18, 18, 18, 18))
+        delete map
+    }
+    t |> run("a grid that does not match the span row count panics") @(t : T?) {
+        var tripped = false
+        try {
+            var map : array<int4>
+            mrope_span_positions(map, 0l, 8l, 2l, 6l, 3l, 2l)
+            delete map
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "4 span rows vs a 3x2 grid must refuse")
+    }
+}
+
+[test]
 def test_rope_gen_vision(t : T?) {
     // The qwen3vl ViT table: hs/2 slots per row — the h ladder then the w ladder restarted,
     // freq divisor hs/2 (ggml VISION mode with sections hs/4 x4 and indep_sects).

@@ -171,6 +171,10 @@ struct Config {
     q_gated : bool = false             // attn_q is 2x-wide — per head [q | gate]; out ⊙ σ(gate) before wo
     recr_mask : uint64 = 0ul           // bit l: layer l is recurrent (deltanet) — no KV, no attn tensors
     rope_dim : int64 = 0               // partial rotary width (qwen35: 64 of 256); 0 = rope the full head
+    // qwen3vl IMROPE: half-dim sections (t,h,w,e) from {arch}.rope.dimension_sections; a sum > 0
+    // marks the mrope arch. Text rows carry equal positions in every section, which collapses to
+    // plain NEOX — only image-span rows build their tables through build_rope_tabs_imrope.
+    rope_sections : int4 = int4(0)
     ssm_d_conv : int64 = 0             // deltanet conv kernel width (4)
     ssm_d_state : int64 = 0            // deltanet q/k/v head dim (128)
     ssm_n_group : int64 = 0            // deltanet k-head count (16)
@@ -1668,6 +1672,13 @@ struct Session {
     // θ=10k unscaled local vs θ=1M linear-scaled global); empty otherwise
     rope_cos_swa : array<float>
     rope_sin_swa : array<float>
+    // qwen3vl mrope (rope_sections): rope position = row index + rope_pos_delta — an image span
+    // advances the sequence position by max(grid nx, ny), not by its row count, so the delta goes
+    // negative after each image. Applies ONLY where rope angles are computed, never to KV indexing.
+    rope_pos_delta : int64
+    // transient, one prefill call: per-row (t,h,w,e) positions overriding start_pos+pi in the rope
+    // table build (the image-span quantum); empty = sequential positions
+    @scratch mrope_pos : array<int4>
     // MoE scratch (sized in make_run_state when n_expert > 0; empty for dense arches)
     moe_logits : array<float>   // router logits, then probs (n_expert)
     moe_w : array<float>        // the selected top-k weights (n_expert_used)
@@ -3767,13 +3778,14 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     // values, trig deduplicated). Dual-rope arches get the sliding class's row alongside.
     if (g_use_rope_table) {
         let ts_rope_build = prof_ticks()
-        // partial rotary (qwen35): the table spans rope_dim — frequencies run over the rotated span
-        build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, pos, 1l,
+        // partial rotary (qwen35): the table spans rope_dim — frequencies run over the rotated span.
+        // rope_pos_delta: text after an image span ropes at grid-advanced positions (qwen3vl mrope)
+        build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, pos + s.rope_pos_delta, 1l,
                          c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
         if (has_dual_rope(c)) {
             let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
             build_rope_table(s.rope_cos_swa, s.rope_sin_swa, t, c.rope_freq_base_swa, c.rope_freq_scale_swa,
-                             pos, 1l, swa_hs, !c.rope_ff_global_only)
+                             pos + s.rope_pos_delta, 1l, swa_hs, !c.rope_ff_global_only)
         }
         prof_add("rope_build", ts_rope_build)
     }
@@ -4498,7 +4510,8 @@ def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; st
     let n_heads = c.n_heads
     let n_kv_heads = layer_n_kv_heads(c, l)
     let qd = n_heads * head_size
-    let use_rope_tab = g_use_rope_table
+    // a pending mrope map means the body built its per-row table — the classic path has no form for it
+    let use_rope_tab = g_use_rope_table || !empty(s.mrope_pos)
     // sliding vs global attention per the arch's layer pattern (see attention_std_decode)
     let is_sliding = layer_is_sliding(c, l)
     // gemma-4 E-series shared-KV layer: project Q only, attend against the source layer's cache (loff aliases it)
@@ -4560,7 +4573,7 @@ def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; st
         let theta = swa_rope ? c.rope_freq_base_swa : c.rope_freq_base
         let fscale = swa_rope ? c.rope_freq_scale_swa : c.rope_freq_scale
         let use_ff = !(c.rope_ff_global_only && is_sliding)
-        rope_batch(s.q_b, s.k_b, t, theta, fscale, start_pos, npos, head_size, qd, rope_kv, use_ff, c.rope_dim)
+        rope_batch(s.q_b, s.k_b, t, theta, fscale, start_pos + s.rope_pos_delta, npos, head_size, qd, rope_kv, use_ff, c.rope_dim)
     }
     prof_add("rope", ts_rope)
 }
@@ -4764,39 +4777,56 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     }
 }
 
+// the prefill rope tables: sequential from start_pos + rope_pos_delta, or the pending per-row mrope map (which forces the table path — no classic form)
+def private prefill_rope_tables(t : Model; var s : Session; npos, start_pos : int64) {
+    let c = t.config
+    let has_mrope = !empty(s.mrope_pos)
+    let ts_rope_build = prof_ticks()
+    if (has_mrope) {
+        if (has_dual_rope(c)) {
+            panic("forward_prefill_body: an mrope quantum on a dual-rope arch is not supported")
+        }
+        if (long_length(s.mrope_pos) != npos) {
+            panic("forward_prefill_body: mrope map carries {long_length(s.mrope_pos)} rows for an npos={npos} call")
+        }
+        build_rope_tabs_imrope(s.rope_cos, s.rope_sin, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale,
+                               t.rope_freqs, true, s.mrope_pos, c.rope_sections, npos,
+                               c.rope_dim > 0l ? c.rope_dim : c.head_size)
+    } elif (g_use_rope_table) {
+        // the swa table uses the sliding class's head size; delta = mrope grid-advanced positions
+        build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale,
+                         start_pos + s.rope_pos_delta, npos,
+                         c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
+        if (has_dual_rope(c)) {
+            let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
+            build_rope_table(s.rope_cos_swa, s.rope_sin_swa, t, c.rope_freq_base_swa, c.rope_freq_scale_swa,
+                             start_pos + s.rope_pos_delta, npos, swa_hs, !c.rope_ff_global_only)
+        }
+    }
+    prof_add("rope_build", ts_rope_build)   // one-time cos/sin table build (separate bucket)
+}
+
 // the shared prefill core: rope table + layer stack + final norm/classifier, over a pre-filled
 // s.x_b residual stream (token or embedding sourced)
 def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; skip_logits : bool = false) {
     let c = t.config
     let dim = c.dim
-
-    // one npos x head_size/2 cos/sin table replaces per-head/per-layer pow/cos/sin recomputation
-    let use_rope_tab = g_use_rope_table
-    let ts_rope_build = prof_ticks()
-    if (use_rope_tab) {
-        // swa table uses the sliding class's head size and drops factors on p-RoPE arches (gemma4)
-        build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, start_pos, npos,
-                         c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
-        if (has_dual_rope(c)) {
-            let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
-            build_rope_table(s.rope_cos_swa, s.rope_sin_swa, t, c.rope_freq_base_swa, c.rope_freq_scale_swa,
-                             start_pos, npos, swa_hs, !c.rope_ff_global_only)
-        }
-    }
-    prof_add("rope_build", ts_rope_build)   // one-time cos/sin table build (separate bucket)
+    prefill_rope_tables(t, s, npos, start_pos)
 
     // an active whole-prefill override may claim the entire stack (false = decline, fall back to
     // the CPU loop). Contract: a claiming override must honor s.attn_uniform_end — metal serves
-    // the span through AttnArgs.uend; vulkan declines it.
+    // the span through AttnArgs.uend; vulkan declines it. An mrope quantum stays on the CPU loop.
     var stack_done = false
     g_prefill_logits_done = false
-    if (!empty(g_prefill_override_name)) {
+    if (!empty(g_prefill_override_name) && !empty(s.mrope_pos)) {
+        to_log(LOG_INFO, "dasLLAMA: mrope image quantum ({npos} rows) declined to the CPU prefill loop - the GPU rope has no per-row position path yet\n")   // nolint:PERF026,PERF028 — once per image quantum, never per token
+    } elif (!empty(g_prefill_override_name)) {
         stack_done = invoke(g_prefill_override, t, s, npos, start_pos)
     }
     if (!stack_done) {
         blob_only_panic(t, "prefill stack")
         // Metal-capable build about to chew a real prompt on the CPU stack — the silent profiling-time sink, not a serving path; fail loud unless CPU intent was declared.
-        if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed()) {
+        if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed() && empty(s.mrope_pos)) {
             panic("dasLLAMA: CPU batched prefill of {npos} tokens on a Metal-capable build (override `{g_prefill_override_name}` {empty(g_prefill_override_name) ? "not selected" : "declined"}) - select the metal prefill (set_metal_mode / DASLLAMA_PIN_PREFILL=metal), or declare CPU intent: allow_cpu_prefill() / DASLLAMA_CPU_PREFILL=1")
         }
         for (l in range64(c.n_layers)) {

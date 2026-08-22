@@ -181,6 +181,65 @@ def test_attn_span(t : T?) {
     }
 }
 
+// the mrope turn (grid positions through the span): prefill + one decode step; the decode
+// logits fold in every cached row AND the delta'd decode position
+def private mrope_turn_logits(t : Model; embd : array<float>; fuse : bool; nx, ny : int64) : array<float> {
+    set_span_fuse(fuse)
+    var s <- make_run_state(t.config)
+    eval_embd_span_mrope_(t, s, embd, NPOS, SPAN_LO, SPAN_HI, nx, ny)
+    forward(t, s, 1l, s.n_past)
+    var lg : array<float>
+    lg |> resize(long_length(s.logits))
+    for (i in range64(long_length(s.logits))) {
+        lg[i] = s.logits[i]
+    }
+    delete s
+    set_span_fuse(true)
+    return <- lg
+}
+
+[test]
+def test_mrope_span(t : T?) {
+    t |> run("the mrope quantum: fused == splice, the delta advances, the map reaches the math") @(tt : T?) {
+        if (!stat(MODEL_PATH).is_valid) {
+            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        // the toy is not an mrope arch — stamp sections summing to head_size/2 (stories15M: 48/2)
+        tr.config.rope_sections = int4(8, 8, 8, 0)
+        let dim = tr.config.dim
+        let embd_a <- make_embd(dim, 0)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            // span [7,29) = 22 rows = an 11x2 grid; position advance = max(11,2) = 11
+            let lg_fused <- mrope_turn_logits(tr, embd_a, true, 11l, 2l)
+            let lg_split <- mrope_turn_logits(tr, embd_a, false, 11l, 2l)
+            let fs = arr_maxdiff(lg_fused, lg_split)
+            to_log(LOG_INFO, "mrope_span: fused-vs-splice decode-logits maxdiff = {fs}\n")
+            tt |> equal(fs, 0.0, "mrope fused == mrope splice, bit-exact (classic)")
+            // the delta: 22 rows advanced the position by 11
+            var s <- make_run_state(tr.config)
+            eval_embd_span_mrope_(tr, s, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+            tt |> equal(s.rope_pos_delta, 11l - 22l, "rope_pos_delta = max(grid) - span rows")
+            tt |> equal(int(long_length(s.mrope_pos)), 0, "the quantum map cleared after the call")
+            tt |> equal(s.n_past, NPOS, "KV rows advanced by the ROW count, not the position advance")
+            delete s
+            // the map must reach the rope math: grid positions differ from sequential ones
+            let lg_plain <- span_turn_logits(tr, embd_a, true)
+            let dm = arr_maxdiff(lg_fused, lg_plain)
+            to_log(LOG_INFO, "mrope_span: mrope-vs-sequential decode-logits maxdiff = {dm}\n")
+            tt |> success(dm > 1e-4, "grid rope positions change the outcome ({dm})")
+            // a different grid SHAPE of the same span changes the outcome too (h/w axes live)
+            let lg_tall <- mrope_turn_logits(tr, embd_a, true, 2l, 11l)
+            let dg = arr_maxdiff(lg_fused, lg_tall)
+            tt |> success(dg > 1e-4, "an 11x2 vs 2x11 grid differ ({dg})")
+        }
+        delete tr
+    }
+}
+
 [test]
 def test_attn_span_fused(t : T?) {
     t |> run("the fused mid-turn span: splice equivalence + per-query mask direction") @(tt : T?) {
