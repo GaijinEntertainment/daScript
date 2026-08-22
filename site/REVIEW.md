@@ -20,6 +20,18 @@ merges every `modules/dasLLAMA/performance/records/<box>.json` and applies
 `modules/dasLLAMA/performance/records/annotations.json`, so re-running the generator leaves
 the file byte-identical.** A diff where it does not is a hand edit and a defect.
 
+**`files/performance_bench.json` is generator output: `benchmarks/sql/_update_results.das --site-json`
+writes it from the same sweep output that regenerates the tables in `benchmarks/sql/results.md`.**
+A diff that changes `files/performance_bench.json` without changing `benchmarks/sql/results.md` in
+the same change, or that leaves any cell in the record differing from the same family-and-lane cell
+in the results.md tables, is a defect.
+
+**`files/performance_engines.json` is generator output: `examples/benchmarks/sql/_update_results.das
+--site-json` writes it from the same sweep output that regenerates the tables in
+`examples/benchmarks/sql/results.md`.** A diff that changes `files/performance_engines.json` without
+changing `examples/benchmarks/sql/results.md` in the same change, or that leaves any cell in the
+record differing from the same family-and-lane cell in those results.md tables, is a defect.
+
 **Every code sample shown on a page compiles and runs with the current toolchain.** daslang
 samples are gen2 and compile with the current binary; no pseudo-code presented as code.
 

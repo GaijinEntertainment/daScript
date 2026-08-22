@@ -520,6 +520,12 @@ jobs:
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./dastest/tests
 
+    - name: "Test benchmark results updater"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./benchmarks/sql/tests/test_update_results.das
+
     - name: "Run REVIEW.das gates"
       # the CI counterpart of the make_pr step-0a walk (fail-fix: agents only
       # ever review a mechanically-clean tree)

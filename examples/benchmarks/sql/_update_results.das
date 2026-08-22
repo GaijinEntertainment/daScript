@@ -12,6 +12,7 @@ options indenting = 4
 
 require daslib/clargs
 require daslib/fio
+require daslib/json_boost
 require daslib/strings_boost
 require strings
 
@@ -40,6 +41,12 @@ struct Config {
     @clarg_doc = "Path to results.md (default: examples/benchmarks/sql/results.md)"
     results : string
 
+    @clarg_doc = "Also write the daslang.io data record (site/files/performance_engines.json) to this path"
+    site_json : string
+
+    @clarg_doc = "Machine identity string for the site record (required with --site-json)"
+    machine : string
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -51,10 +58,35 @@ let HEADERS = ["SQLite", "DuckDB", "PostgreSQL", "Array"]
 let BEGIN_MARKER = "<!-- BENCH:TABLES BEGIN -->"
 let END_MARKER = "<!-- BENCH:TABLES END -->"
 
-// 1-decimal fixed format via integer math (avoids float-interpolation drift). 31.35 -> "31.4".
+// 1-decimal fixed rounding via integer math (avoids float-interpolation drift). 31.35 -> 314.
+def scaled1(v : double) : int {
+    return int(v * 10.0lf + 0.5lf)
+}
+
 def fmt1(v : double) : string {
-    let scaled = int(v * 10.0lf + 0.5lf)
+    let scaled = scaled1(v)
     return "{scaled / 10}.{scaled % 10}"
+}
+
+def strip_to_first_brace(raw : string) : string {
+    let s = strip(raw)
+    let br = find(s, "\{")
+    if (br < 0) return ""
+    return br == 0 ? s : slice(s, br)
+}
+
+def write_text_file(path, text : string) : bool {
+    var wrote = false
+    fopen(path, "wb") $(f) {
+        // `return` here only exits the block — the wrote flag carries the failure out.
+        if (f == null) {
+            to_log(LOG_ERROR, "cannot open {path} for writing\n")
+            return
+        }
+        fwrite(f, text)
+        wrote = true
+    }
+    return wrote
 }
 
 // Parse a JSON-lines benchmark file into the flat cell map keyed "family\tlane" -> ns/op, collecting
@@ -62,8 +94,8 @@ def fmt1(v : double) : string {
 def load_cells(path : string; var cells : table<string; double>; var families : table<string>) {
     let text = fread(path)
     for (raw in split(text, "\n")) {
-        let line = strip(raw)
-        if (!starts_with(line, "\{")) continue
+        let line = strip_to_first_brace(raw)
+        if (empty(line)) continue
         var row : BenchRow
         if (!sscan_json(line, row) || row.n == 0) continue
         let us = rfind(row.name, "_")
@@ -80,6 +112,33 @@ def cell_str(cells : table<string; double>; fam, lane : string) : string {
     let key = "{fam}\t{lane}"
     if (!key_exists(cells, key)) return "—"
     return fmt1(cells?[key] ?? 0.0lf)
+}
+
+def cell_jv(cells : table<string; double>; fam, lane : string) : JsonValue? {
+    let key = "{fam}\t{lane}"
+    if (!key_exists(cells, key)) return JVNull()
+    return JV(double(scaled1(cells?[key] ?? 0.0lf)) / 10.0lf)
+}
+
+def write_site_json(path, date, machine : string; interpCells, jitCells : table<string; double>; families : array<string>) : bool {
+    var lanesArr <- [for (id, hdr in LANES, HEADERS); JV({ "id" => JV(id), "name" => JV(hdr) })]
+    var fams : array<JsonValue?>
+    fams |> reserve(length(families))
+    for (fam in families) {
+        var interp <- [for (lane in LANES); cell_jv(interpCells, fam, lane)]
+        var jit <- [for (lane in LANES); cell_jv(jitCells, fam, lane)]
+        fams |> push(JV({ "name" => JV(fam), "interp" => JV(interp), "jit" => JV(jit) }))
+    }
+    let root = JV({
+        "generated" => JV(date),
+        "machine" => JV(machine),
+        "unit" => JV("ns/op"),
+        "lanes" => JV(lanesArr),
+        "families" => JV(fams)
+    })
+    if (!write_text_file(path, write_json(root))) return false
+    to_log(LOG_INFO, "site record written: {path}\n")
+    return true
 }
 
 def build_table(cells : table<string; double>; families : array<string>) : string {
@@ -134,6 +193,11 @@ def main : int {
     var families <- [for (f in keys(famSet)); f]
     sort(families)
 
+    if (!empty(cfg.site_json) && empty(cfg.machine)) {
+        to_log(LOG_ERROR, "--site-json needs --machine — the published record must name its capture box\n")
+        return 1
+    }
+
     let body = build_string() $(w) {
         w |> write("{BEGIN_MARKER}\n")
         w |> write("*Generated {cfg.date} by `examples/benchmarks/sql/_update_results.das` — ns/op; `—` = absent lane (e.g. no PostgreSQL server was reachable). Edit the prose around the markers, not the tables.*\n\n")
@@ -151,18 +215,13 @@ def main : int {
         to_log(LOG_ERROR, "results.md is missing the BENCH:TABLES markers — add them once before running this tool\n")
         return 1
     }
-    let updated = slice(doc, 0, bi) + body + slice(doc, ei + length(END_MARKER))
-    var wrote = false
-    fopen(resultsPath, "wb") $(f) {
-        // `return` here only exits the block — the wrote flag carries the failure out to main's exit code.
-        if (f == null) {
-            to_log(LOG_ERROR, "cannot open {resultsPath} for writing\n")
-            return
-        }
-        fwrite(f, updated)
-        wrote = true
+    // The site record and results.md must move together (site/REVIEW.md): the record writes
+    // only after every validation, immediately before the results write.
+    if (!empty(cfg.site_json)) {
+        if (!write_site_json(cfg.site_json, cfg.date, cfg.machine, interpCells, jitCells, families)) return 1
     }
-    if (!wrote) return 1
+    let updated = slice(doc, 0, bi) + body + slice(doc, ei + length(END_MARKER))
+    if (!write_text_file(resultsPath, updated)) return 1
     to_log(LOG_INFO, "results.md updated: {length(families)} families, INTERP+JIT matrices regenerated\n")
     return 0
 }

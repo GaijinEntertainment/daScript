@@ -12,10 +12,14 @@ site/
 ├── index.html              # landing — hand-authored
 ├── downloads.html          # downloads & links — hand-authored
 ├── dasllama.html           # dasLLAMA benchmarks — pair tables/bars from files/dasllama/bench_records.json
+├── performance.html        # data-queries (linq) benchmarks — matrix from files/performance_bench.json
 ├── files/
 │   ├── dasllama.js         # dasLLAMA page renderer (bars + tables + receipts, all derived from the records)
 │   ├── dasllama/
 │   │   └── bench_records.json  # COMMITTED — merged per-box stores, written by gen_site_records
+│   ├── performance.js      # data-queries page renderer (matrix + engine board, INTERP/JIT toggles, derived from the records)
+│   ├── performance_bench.json  # COMMITTED — written by benchmarks/sql/_update_results.das --site-json
+│   ├── performance_engines.json  # COMMITTED — written by examples/benchmarks/sql/_update_results.das --site-json
 │   ├── forge.css           # tokens + components (source of truth) — includes responsive rules + mobile nav
 │   ├── forge.js            # sample switcher · install tabs · bench · news (skips CM init on mobile)
 │   ├── highlight.js        # daslang tokenizer (hero + blog code blocks)
@@ -276,6 +280,20 @@ Measurement methodology and the sweep tooling live in `modules/dasLLAMA/METHODOL
 (published at /doc/reference/dasllama_methodology.html) and
 `modules/dasLLAMA/BRINGUP.md`. Hand-written per-row notes go in
 `modules/dasLLAMA/performance/records/annotations.json` — never edit the JSON by hand.
+
+## Updating the data-queries performance page
+
+`site/performance.html` renders entirely from two committed records, each written by its
+suite's updater from the same sweep output that regenerates that suite's `results.md` — the
+page and the results files can never disagree, and the JSON is never edited by hand:
+
+- `site/files/performance_bench.json` — `benchmarks/sql/_update_results.das` (the six-source matrix)
+- `site/files/performance_engines.json` — `examples/benchmarks/sql/_update_results.das` (the SQLite/DuckDB/PostgreSQL/Array board)
+
+Re-run each sweep and updater per the "How to re-run" section of its `results.md`, adding
+`--site-json site/files/<record>.json --machine "<capture box>"`. The engine suite needs the
+external providers (`-load_module` or a daspkg install) and, for a lit PostgreSQL column, a
+reachable server — see `examples/benchmarks/sql/README.md`.
 
 ## Updating dasProfile snapshot
 
