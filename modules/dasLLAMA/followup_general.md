@@ -519,3 +519,4 @@
     (`Qwen3aTower`) served through the ASR route. Done = an audio-encoder seam the chat layer
     can hold for either type (the `VisionEmbedder` union pattern), `add_user_audio_` routed
     by family, and the Omni showcase upgraded to the one-session three-modality form.
+    OWNED BY the qwen3vl arc (`qwen3vl_plan.md` §Arc followups) — it lands there, not here.
