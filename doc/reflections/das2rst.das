@@ -326,7 +326,7 @@ def document_module_dasllama(_root : string) {
         group_by_regex("Evaluation and sampling", mod, %regex~(eval|eval_embd|eval_embd_span|eval_batch|sample|set_seed|stats)$%%),
         group_by_regex("Generation", mod, %regex~(generate|generate_embd)$%%),
         group_by_regex("Embeddings", mod, %regex~(embed)$%%),
-        group_by_regex("Vision", mod, %regex~(encode_image)$%%),
+        group_by_regex("Vision and audio encoders", mod, %regex~(encode_image|encode_audio)$%%),
         group_by_regex("Chat", mod, %regex~(create_chat|create_chat_renderer|add_user|add_user_audio|add_user_image|add_assistant|render_turn|render_turn_image|render_turn_audio|render_assistant|render_close|respond|set_thinking)$%%),
         group_by_regex("Tool calling", mod, %regex~(set_tools|add_tool_results|render_assistant_calls|parse_calls)$%%),
         group_by_regex("Reasoning (thinking models)", mod, %regex~(split_reasoning|make_think_stream|think_feed|think_finish|think_drain|effective_stop_ids)$%%),
@@ -376,6 +376,10 @@ def document_module_dasllama(_root : string) {
             "A loaded vision embedder of whatever family the mmproj GGUF turned out to be (gemma4uv — the gemma-4 dense embedder; gemma4v — the gemma-4 E-series ViT tower; gemma3v — the gemma-3 SigLIP tower), as produced by ``load_vision_embedder``, which sniffs the family. Pass it to ``create_chat`` to enable ``add_user_image`` turns; ``vision_proj_dim`` must match the decoder's embedding width (checked at create).")
         dasllama_type_stanza(f, "struct-dasllama_vision_embedder-VisionState", "VisionState",
             "Caller-owned scratch for the embedder forward of whichever family is carried: the buffers ``encode_image`` reuses across calls. One per embedder user; holds no image state between calls.")
+        dasllama_type_stanza(f, "struct-dasllama_audio_embedder-AudioEmbedder", "AudioEmbedder",
+            "A loaded audio encoder of whatever family the mmproj GGUF turned out to be (gemma4a — the gemma-4 E-series Conformer), as produced by ``load_audio_embedder``, which probes the file; ``audio_probe_proj_dim`` answers 0 where absence is an answer. ``audio_proj_dim`` must match the decoder's embedding width. The server's media worker owns one per armed slot.")
+        dasllama_type_stanza(f, "struct-dasllama_audio_embedder-AudioState", "AudioState",
+            "Caller-owned scratch for the audio encoder forward of whichever family is carried: the buffers ``encode_audio`` reuses across calls. One per embedder user; holds no clip state between calls.")
         dasllama_type_stanza(f, "struct-dasllama_image-DlimImageInfo", "DlimImageInfo",
             "One prepared image beside a GGUF, as listed by ``dlim_inventory``: ``file``, ``path``, ``bytes``, the image ``version``, its bake ``identity``, and a ``verdict`` — ``CURRENT`` loads; ``STALE vN`` is an older image version; ``OTHER`` a different bake configuration or box; ``FOREIGN`` a different flavor.")
         dasllama_type_stanza(f, "struct-dasllama_gpu_tier-GpuTierStatus", "GpuTierStatus",
