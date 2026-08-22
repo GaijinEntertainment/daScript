@@ -81,6 +81,42 @@ def build_rope_tabs_rows(@scratch var cos_tab : array<float>; @scratch var sin_t
     }
 }
 
+//! build_rope_tabs_rows' interleaved-M-RoPE twin (qwen3vl image spans), the ggml
+//! ggml_mrope_cache_init sector walk verbatim: half-dim j reads the axis of positions4[pi] =
+//! (t, h=grid row, w=column, e) its sector selects; all-equal rows collapse bit-exactly.
+def build_rope_tabs_imrope(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
+                           theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
+                           positions4 : array<int4>; sections : int4; nrows, head_size : int64) {
+    let half = head_size / 2l
+    let has_ff = use_ff && !empty(rope_freqs)
+    let sect_dims = sections.x + sections.y + sections.z + sections.w
+    cos_tab |> resize(nrows * half)
+    sin_tab |> resize(nrows * half)
+    unsafe {
+        var cp = addr(cos_tab[0])
+        var sp = addr(sin_tab[0])
+        let pp = addr<int4 const?>(positions4[0])
+        let ffp = has_ff ? addr<float const?>(rope_freqs[0]) : null
+        for (j in range64(half)) {
+            let freq = rope_freq_j(j, head_size, theta, ffp)
+            let sector = int(j) % sect_dims
+            var axis = 3
+            if (sector % 3 == 1 && sector < 3 * sections.y) {
+                axis = 1
+            } elif (sector % 3 == 2 && sector < 3 * sections.z) {
+                axis = 2
+            } elif (sector % 3 == 0 && sector < 3 * sections.x) {
+                axis = 0
+            }
+            for (pi in range64(nrows)) {
+                let angle = float(pp[pi][axis]) * fscale * freq
+                cp[pi * half + j] = cos(angle) * mscale
+                sp[pi * half + j] = sin(angle) * mscale
+            }
+        }
+    }
+}
+
 //! One position's PACKED row — cos[half] then sin[half] in ONE array at `base` (the layout the
 //! resident device kernels take; a different layout from the two-tab builders). Angle order is
 //! `pos * freq * fscale` — this row's original loop — NOT the tabs' `pos * fscale * freq`.

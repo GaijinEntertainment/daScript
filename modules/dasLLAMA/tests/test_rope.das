@@ -167,6 +167,118 @@ def test_rope_gen_rows_twin(t : T?) {
     }
 }
 
+def private imrope_axis_ref(j, sx, sy, sz, sw : int) : int {
+    let sector = j % (sx + sy + sz + sw)
+    if (sector % 3 == 1 && sector < 3 * sy) {
+        return 1
+    } elif (sector % 3 == 2 && sector < 3 * sz) {
+        return 2
+    } elif (sector % 3 == 0 && sector < 3 * sx) {
+        return 0
+    }
+    return 3
+}
+
+[test]
+def test_rope_gen_imrope_collapse(t : T?) {
+    let qsec = int4(24, 20, 20, 0)
+    // Text rows: all four sections carry the same position, so every dim reads it and the
+    // table must be BIT-identical to the plain rows builder — the collapse that lets text
+    // decoding stay on the untouched path.
+    t |> run("all-equal positions collapse bit-exactly to the rows builder") @(t : T?) {
+        var ff : array<float>
+        var p4 <- [int4(7, 7, 7, 7), int4(1234, 1234, 1234, 1234), int4(0, 0, 0, 0)]
+        var pl <- [7l, 1234l, 0l]
+        var c1 : array<float>
+        var s1 : array<float>
+        var c2 : array<float>
+        var s2 : array<float>
+        build_rope_tabs_imrope(c1, s1, 1000000.0, 1.0, 1.0, ff, false, p4, qsec, 3l, 128l)
+        build_rope_tabs_rows(c2, s2, 1000000.0, 1.0, 1.0, ff, false, pl, 3l, 128l)
+        var same = true
+        for (ca, cb, sa, sb in c1, c2, s1, s2) {
+            same &&= ca == cb && sa == sb
+        }
+        t |> success(same, "the (p,p,p,p) collapse must be bit-exact")
+        delete p4
+        delete pl
+        delete c1
+        delete s1
+        delete c2
+        delete s2
+    }
+}
+
+[test]
+def test_rope_gen_imrope_reference(t : T?) {
+    let qsec = int4(24, 20, 20, 0)
+    // The ggml sector walk, re-derived per element in a different loop order: every dim of
+    // an image-shaped row must read the axis ggml_mrope_cache_init assigns it, including
+    // the [24,20,20,0] tail (60->t, 61->e, 62->e, 63->t).
+    t |> run("image row matches a per-element ggml-order reference") @(t : T?) {
+        var ff : array<float>
+        var p4 <- [int4(100, 103, 117, 0)]
+        var ct : array<float>
+        var st : array<float>
+        build_rope_tabs_imrope(ct, st, 1000000.0, 1.0, 1.0, ff, false, p4, qsec, 1l, 128l)
+        var same = true
+        for (j in range(64)) {
+            let axis = imrope_axis_ref(j, 24, 20, 20, 0)
+            let pos = p4[0][axis]
+            let freq = 1.0 / pow(1000000.0, float(2 * j) / 128.0)
+            let angle = float(pos) * 1.0 * freq
+            same &&= ct[j] == cos(angle) && st[j] == sin(angle)
+        }
+        t |> success(same, "every half-dim must read its IMROPE axis")
+        t |> equal(imrope_axis_ref(60, 24, 20, 20, 0), 0)
+        t |> equal(imrope_axis_ref(61, 24, 20, 20, 0), 3)
+        t |> equal(imrope_axis_ref(62, 24, 20, 20, 0), 3)
+        t |> equal(imrope_axis_ref(63, 24, 20, 20, 0), 0)
+        t |> equal(ct[61], 1.0)
+        t |> equal(st[61], 0.0)
+        t |> equal(ct[62], 1.0)
+        t |> equal(st[62], 0.0)
+        delete p4
+        delete ct
+        delete st
+    }
+}
+
+[test]
+def test_rope_gen_imrope_shape(t : T?) {
+    let qsec = int4(24, 20, 20, 0)
+    // Perturbing ONE axis moves exactly that axis's dims: h (the grid row) owns the
+    // j%3==1 half-dims below 60 and nothing else.
+    t |> run("an h perturbation touches exactly the h dims") @(t : T?) {
+        var ff : array<float>
+        var pa <- [int4(50, 52, 57, 0)]
+        var pb <- [int4(50, 53, 57, 0)]
+        var ca : array<float>
+        var sa : array<float>
+        var cb : array<float>
+        var sb : array<float>
+        build_rope_tabs_imrope(ca, sa, 1000000.0, 1.0, 1.0, ff, false, pa, qsec, 1l, 128l)
+        build_rope_tabs_imrope(cb, sb, 1000000.0, 1.0, 1.0, ff, false, pb, qsec, 1l, 128l)
+        var shape_ok = true
+        for (j in range(64)) {
+            let moved = ca[j] != cb[j] || sa[j] != sb[j]
+            let is_h = imrope_axis_ref(j, 24, 20, 20, 0) == 1
+            if (is_h) {
+                shape_ok &&= moved
+            } else {
+                shape_ok &&= !moved
+            }
+        }
+        t |> success(shape_ok, "only the h-axis dims may move when h moves")
+        delete pa
+        delete pb
+        delete ca
+        delete sa
+        delete cb
+        delete sb
+    }
+}
+
 [test]
 def test_rope_gen_mscale(t : T?) {
     t |> run("mscale is a pure post-scale: mscale=2 row == 2 x mscale=1 row") @(t : T?) {
