@@ -229,9 +229,12 @@ noise demands them).
   `doc/reflections/das2rst.das` — `VisionEmbedder`'s card names gemma4uv/gemma4v/gemma3v
   only and must gain qwen3v (and qwen2.5o when slice I lands); then regen
   `doc/source/stdlib/generated/dasllama.rst` via das2rst (order-fragile — regen, never
-  hand-edit the generated file). Also the site model CARDS (dasllama.io): qwen VISION
-  official cards join with slice J's records; the stale gemma card prose gets the same
-  sweep.
+  hand-edit the generated file). The §04 vision NUMBERS on that page turned out to be the
+  real staleness (the 3815 re-mint updated records/ but not the committed site merge) —
+  FIXED + GATED 2026-08-22: `gen_site_records --verify` and `test_site_records.das`
+  (model-free suite) red any records commit that skips the site merge, and the live-page
+  refresh rides `bbatkin/site-image-records-refresh` off master. Slice J's qwen image
+  records therefore update the page automatically-on-pain-of-red.
 
 ### Arc followups (owed by this arc, after K)
 
