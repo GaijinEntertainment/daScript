@@ -27,6 +27,7 @@ require dasllama/dasllama_tower public         // shared encoder-tower pieces (r
 require dasllama/dasllama_audio public         // audio tower (mel frontend + whisper encoder + projectors)
 require dasllama/dasllama_vision public        // image preprocessing rail (geometry, letterbox, normalize)
 require dasllama/dasllama_vision_embedder public   // the vision embedder of whatever family (gemma4uv / gemma4v) — image soft tokens
+require dasllama/dasllama_audio_embedder public    // the audio encoder of whatever family (gemma4a) — audio soft tokens
 require dasllama/dasllama_asr public           // uniform ASR surface (whisper today; parakeet/qwen3-asr land behind the same sniff)
 require dasllama/dasllama_vad public           // Silero-VAD (voice-activity detection): segments + streaming iterator
 require dasllama/dasllama_config public        // the explicit .dlim bake configuration — the --config / identity contract
@@ -317,8 +318,8 @@ def render_turn_image(model : Model; chat : ChatSession; var head : array<int64>
 
 def render_turn_audio(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>) {
     //! ``render_turn``'s AUDIO twin: the same two-span contract around the audio soft-token splice
-    //! (the template's audio span markers). The rows come from the family's audio encoder — for the
-    //! gemma-4 E-series, ``gemma4a_encode_all`` over the shared vision+audio mmproj.
+    //! (the template's audio span markers). The rows come from ``encode_audio_`` over the
+    //! ``AudioEmbedder`` carrier — for the gemma-4 E-series, the shared vision+audio mmproj.
     render_turn_audio_(model, chat, head, tail)
 }
 
