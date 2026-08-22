@@ -323,7 +323,7 @@ def document_module_dasllama(_root : string) {
         group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|caps)$%%),
         group_by_regex("Prefix cache", mod, %regex~(create_prefix_cache|prefix_attach|prefix_insert|prefix_release|prefix_held_groups|prefix_chain_list)$%%),
         group_by_regex("Tokenizer", mod, %regex~(encode|decode|piece)$%%),
-        group_by_regex("Evaluation and sampling", mod, %regex~(eval|eval_embd|eval_embd_span|eval_batch|sample|set_seed|stats)$%%),
+        group_by_regex("Evaluation and sampling", mod, %regex~(eval|eval_embd|eval_embd_span|eval_embd_span_mrope|eval_batch|sample|set_seed|stats)$%%),
         group_by_regex("Generation", mod, %regex~(generate|generate_embd)$%%),
         group_by_regex("Embeddings", mod, %regex~(embed)$%%),
         group_by_regex("Vision and audio encoders", mod, %regex~(encode_image|encode_audio)$%%),
