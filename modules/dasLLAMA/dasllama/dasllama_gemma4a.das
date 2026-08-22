@@ -330,8 +330,8 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
 }
 
 //! META-only probe of an mmproj gguf: the gemma4a audio encoder's projection width, or 0 for no
-//! gemma4a audio tower (wrong family, vision-only, unreadable, a `.dlim`). Gates on the audio TENSOR
-//! and derives the width like the loader (`clip.audio.*` is written unconditionally, see REVIEW_AUDIO.md).
+//! gemma4a audio tower (wrong family, vision-only, unreadable, a `.dlim`). Gates on the audio
+//! TENSOR — converters write the `clip.audio.*` keys unconditionally, tower or not.
 def gemma4a_probe_proj_dim(path : string) : int64 {
     if (path |> ends_with(".dlim")) {
         return 0l

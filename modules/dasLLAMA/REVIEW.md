@@ -178,8 +178,7 @@ different line.
 
 **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, exempting a
 name, widening an exempt list, or a finding text that no longer names what failed. What the
-gate enforces is read from it — today the facade tutorial floor and the audio family-seam
-check, each check's finding text stating its rule.
+gate enforces is read from the gate itself; each check's finding text states its own rule.
 
 **A def of `dasllama/dasllama.das` is TAUGHT where the gate finds it named — demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
