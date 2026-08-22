@@ -150,9 +150,13 @@ noise demands them).
   reference including the tail quirk (61/62 → e, unrotated at e=0), and an h-only
   perturbation moves exactly the h dims. Negative control run: a poisoned axis walk reds
   both gates.
-- **C. Preproc**: qwen geometry constants (align 32, budget 8–4096 tokens) + ×2−1 normalize
-  in `dasllama_vision.das`, riding the EXISTING gemma geometry + letterbox path (per-family
-  parameters, not a new code path); tier-0 bit-exact gates against the post-normalize dumps.
+- **C. Preproc (DONE 2026-08-22)**: `vision_normalize` gained mean/std defaults (0/1 —
+  gemma bit-identical by IEEE; qwen passes 0.5/0.5 in clip's own `(x/255 − mean)/std` order);
+  geometry and letterbox needed NO code — only constants (align 32, budget 8–4096).
+  `test_vision.das`: qwen geometry table (incl. 528→544 and the 2336×1760 clamp), the
+  extreme-ratio budget property, and ten post-normalize fnv1a64 gates — ALL bit-exact on the
+  first run (prediction 2's convention surprise was consumed at slice A). Negative control:
+  a poisoned std reds all ten.
 - **D. Tower**: `dasllama_qwen3v.das` — mmproj load (W₀+W₁ fold, per-tensor plane types:
   F32 stays f32, BF16 stays halfwords — the gemma slice-G rule), merge reorder, pos-embed
   bilinear resize, 27 blocks (fused-qkv split, vision-mrope, GELU MLP), merger; tier-1
