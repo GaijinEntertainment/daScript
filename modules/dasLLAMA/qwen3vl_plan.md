@@ -79,12 +79,20 @@ arc — fnv1a64 pixel dumps, per-token embedding lines, all reusable unchanged).
   **max(nx,ny)**, not the token count — the Session needs a rope-position rail decoupled
   from the KV row index from this point on. Audio chunks are mrope_1d = all sections
   sequential (today's behavior, unchanged).
-- **Template markers**: `<|vision_start|>` / `<|vision_end|>` around the soft-token span
-  (mtmd.cpp:461); exact ids + stream shape pinned at slice A from the oracle run.
-- **Preproc**: qwen dynamic resolution — stretch resize (no letterbox) to multiples of
-  patch×merge = 32 inside a min/max token budget; exact rounding + resize algo pinned at
-  slice A by oracle pixel dumps, not source-read guesswork (the gemma lesson: the reference's
-  arithmetic is part of the contract).
+- **Template markers**: `<|vision_start|>` (151652) / `<|vision_end|>` (151653) around the
+  soft-token span, `<|image_pad|>` = 151655 (mtmd.cpp:461); NO suppress-token list (unlike
+  gemma); stream shape pinned from the tier-2 log.
+- **Preproc** (slice-A oracle-verified 2026-08-22): `calc_size_preserved_ratio` 4-arg —
+  round each side to the nearest multiple of align = patch×merge = 32 with round-half-AWAY
+  (528→544, the discriminating case), β-scale into the [8, 4096]-token budget (×32² px;
+  4000×3000 → 2336×1760) — then the SAME PAD_CEIL letterbox as gemma (content scale =
+  min ratio, centered, BLACK pad). The plan's first read of `dyn_size` as "stretch, no
+  letterbox" was WRONG: PAD_CEIL is the clip-model.h DEFAULT and qwen never overrides it —
+  verified by the white4000x3000 probes (corners −1, mean (1752−8)/1760 = 0.990909).
+  Normalize = (x−0.5)/0.5, and the oracle preproc dumps are POST-normalize f32, so tier-0
+  gates compare normalized buffers (gemma's identity normalize hid this distinction). das
+  reuses the gemma geometry + letterbox code wholesale; only align, budget, and normalize
+  constants differ.
 
 ## Downloads (fetched 2026-08-21, sha256-verified against the HF API, .sha pins minted)
 
@@ -105,18 +113,40 @@ noise demands them).
 
 ## Slices (commit ladder, single PR; each lands its REVIEW.md entries with it)
 
-- **A. Oracle rig**: qwen3vl oracle dir beside the gemma one (`mint.sh` pattern, every dump
-  carries its invocation); geometry cases oracle-verified (square/non-square/up/downscale +
-  the budget clamp); pixel dumps for tier-0; per-token encode dumps (bf16 + f32-widened twin)
-  for tier-1; `cli.cats.log` (temp 0) for tier-2; token ids + stream shape + suppress-token
-  check; the ViT vision-mrope exact dim pattern and the preproc rounding pinned from source +
-  probe. Predictions scored against this rig.
+- **A. Oracle rig (DONE 2026-08-22)**: `~/Work/llama.cpp/models/qwen3vl-vision-oracle/` —
+  `mint.sh` + 17 dumps (10 preproc, 7 encode vs the f32-widened twin) + `cli.cats.log`;
+  the gemma dasdebug patch worked unchanged. Facts pinned:
+  - Geometry oracle-verified: 640→640, 100→96, 650×487→640×480, 528→544 (round-half-AWAY,
+    the discriminating case), 4000×3000→2336×1760 (β-floor clamp); letterbox PAD_CEIL
+    black centered (white4000x3000 probes); dumps are POST-normalize (×2−1).
+  - Encode shapes: 448→[2048,196], 640×320→[2048,200], 96→[2048,9]; per-token lines healthy.
+  - ViT rope (ggml ops.cpp `ggml_mrope_cache_init`, VISION mode): full 72-dim head rotated
+    as 36 NEOX pairs (i, i+36); pairs 0-17 use the y angle, 18-35 the x angle, each
+    section's frequency ladder RESTARTING (indep_sects), θ = 10000^(−2/36); ViT positions
+    per patch = (y, x, y, x) in the merge-reordered walk.
+  - Decoder IMROPE tail quirk, port VERBATIM: sections [24,20,20,0] over 64 half-dims give
+    the t,h,w interleave on dims 0-59, then 60→t, 61→e, 62→e, 63→t — e reads the 4th
+    position (0 on image rows ⇒ those dims unrotated; = p on text, so the NEOX collapse
+    holds).
+  - Cats (640×480): 300 soft tokens, grid nx=20 ny=15, position advance 20. Stream:
+    `<|im_start|>user\n` + `<|vision_start|>`(151652) + 300 rows + `<|vision_end|>`(151653)
+    + text + `<|im_end|>\n<|im_start|>assistant\n` — media-first, NO system prompt, no
+    suppress-token list. Greedy caption correctly describes the two cats; `DASLLAMA_IDS`
+    minted.
+  - Decoder hparams: 48 blocks, 128 experts top-8, GQA 4, head 128, rms eps 1e-6,
+    `n_deepstack_layers = 0` explicit, freq_base 1e6, standard attention (no GDN — the
+    "fused Gated Delta Net enabled" line in the log is a vacuous capability print).
+  - Deepstack carrier verified (4B mmproj): mergers at layers 5/11/17, 24-block 1024-wide
+    ViT, projection 2560, flags AGREE with tensors on dense files.
+  Note for regeneration: never edit mint.sh while it is running (bash re-reads by offset —
+  this bit once).
 - **B. Text-only IMROPE regression FIRST**: the decoder rope path gains the
   sections/int4-positions machinery with all sections equal — output must bit-match master's
   qwen35/qwen3vlmoe truth tsvs before any image code exists (branch-test rule: the refactor
   carries its own witness).
-- **C. Preproc**: qwen geometry + stretch resize + ×2−1 normalize in `dasllama_vision.das`
-  (new arms beside the gemma letterbox path, selected per family); tier-0 bit-exact gates.
+- **C. Preproc**: qwen geometry constants (align 32, budget 8–4096 tokens) + ×2−1 normalize
+  in `dasllama_vision.das`, riding the EXISTING gemma geometry + letterbox path (per-family
+  parameters, not a new code path); tier-0 bit-exact gates against the post-normalize dumps.
 - **D. Tower**: `dasllama_qwen3v.das` — mmproj load (W₀+W₁ fold, per-tensor plane types:
   F32 stays f32, BF16 stays halfwords — the gemma slice-G rule), merge reorder, pos-embed
   bilinear resize, 27 blocks (fused-qkv split, vision-mrope, GELU MLP), merger; tier-1
