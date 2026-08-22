@@ -249,11 +249,34 @@ noise demands them).
   vision server suite 4/4 unregressed. NOTE: the server-test harness maps the planar flavor
   by design, so the Omni-on-Metal E2E (and its prefill win) lands with slice J's bench
   cells, which run the metal rail.
-- **H. Deepstack (dense Qwen3-VL)**: `qwen3vl` dense arch registration (qwen3 dense +
-  IMROPE sections + the deepstack hparam); tower gains the three merger MLPs and the wide-row
-  output; prefill adds slice il+1 to image rows after layer il < 3; 4B is the dev vehicle,
-  8B the record carrier; own oracle dumps + tier-1/2/3 gates (the deepstack add is exactly
-  the class a caption test alone would miss — a zeroed-slices negative control pins it).
+- **H. Deepstack (DONE 2026-08-22)**: the `qwen3vl` dense arch was ALREADY registered (the
+  Qwen3-ASR precedent) and E1's sections read is arch-generic, so the decoder needed only
+  `Config.n_deepstack` (loader: `{arch}.n_deepstack_layers`) + the slice-add rail. Design =
+  llama.cpp-congruent WIDE ROWS: the tower emits (1+n_ds)·proj_dim rows (slice 0 = main
+  merger, slice k+1 = tap k in encounter order), rows travel OPAQUELY through chat / worker /
+  PendingReq / scheduler (zero plumbing there), and the eval seam (`forward_prefill_embd
+  ds_wide`, exact-length detection in the three eval_embd entries) splits slice 0 into x_b
+  and stashes the tails on `Session.ds_embd` (@scratch, `ds_active` framed like
+  attn_uniform); the CPU layer loop adds slice l after layer l < n_ds to EVERY row — text
+  rows carry zero tails (assembled by `embed_text_rows_strided`), which is exactly
+  llama.cpp's semantics, so no row masking exists anywhere. A ds quantum DECLINES every GPU
+  prefill override by name (tripwire-exempt) — the Metal per-layer-add kernel is an arc
+  followup, needed before slice J's 8B Metal rows. Tower: taps collected from the TENSOR
+  list (≤3), per-tap LayerNorm→fc1→GELU-LUT→fc2 over the ×4-merged rows; the projector key
+  falls back `clip.vision.projector_type` → `clip.projector_type` (the dense converter
+  scopes it top-level). Pairing: `vision_deepstack`/`vision_row_width` accessors + named
+  refusals in create_chat_ and the server's arm_slot_vision. Oracle: `mint_4b.sh` (4 encode
+  dumps on the f32-widened 4B mmproj + cli caption); the debug patch's per-token line grew
+  q1/q2/q3 QUARTER-OFFSET probes because mean+v0..v3 are BLIND to a zeroed slice (measured:
+  a skipped tap passed untouched; with q-probes it reds at 6.9–9.7 vs the 2e-4+4e-2·rms bar
+  — the compounded 4-chain GELU-LUT floor measures 1.12e-2 on low-rms gray). Gates, all
+  mutation-controlled: test_attn_span deepstack rail (zero-tail wide == narrow BIT-exact;
+  tails move logits 5.8; slice-0-vs-2 depth; no stale plane — the add knockout reds it),
+  test_qwen3v 4B tier-1 4/4, test_vision_chat_deepstack (small tier: wide rows through the
+  chat, caption names the cats, delta 20−300, and the zeroed-slices decoder control moves
+  prefill logits 10.4). The 8B record carrier smoked end-to-end via `ask --image` ("Two
+  cats.", 321-token prompt). The Config field add shifts every Model dlim's meta layout —
+  the v11 fingerprint auto-refuses and re-mints (observed on the 8B/4B first loads).
 - **I. qwen2.5o (Qwen2.5-Omni-3B)**: the window-attention ViT (32 blk, patch 14, RMSNorm,
   gated-silu FFN, rope-only positions, full-attn every 8th block per `n_wa_pattern`) +
   decoder MROPE (non-interleaved sections) on the `qwen2vl` arch; completes omni-3b to
@@ -277,6 +300,12 @@ noise demands them).
   records therefore update the page automatically-on-pain-of-red.
 
 ### Arc followups (owed by this arc, after K)
+
+- **Metal deepstack add** (owed BEFORE slice J's 8B Metal image rows): the per-layer slice
+  add is three elementwise-add dispatches over an uploaded plane inside the Metal prefill
+  stack + a capability seat mirroring `register_prefill_override_mrope_tables`; until it
+  lands, ds quanta decline to the CPU loop by name and an 8B Metal img:pp cell would
+  measure CPU prefill.
 
 - **qwen3a/gemma4a audio-in-chat** (= `followup_general.md` #41, pulled onto this arc): the
   chat `AudioTower` serves whisper-class projectors only — the conformer families have no

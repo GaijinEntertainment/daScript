@@ -68,6 +68,17 @@ def vision_proj_dim(e : VisionEmbedder) : int64 {
     return 0l
 }
 
+//! Deepstack slice count (dense Qwen3-VL): the encoded rows are (1+n)·proj_dim wide and the
+//! decoder must carry the same `n_deepstack` — pair them at arm time. 0 for every other family.
+def vision_deepstack(e : VisionEmbedder) : int64 {
+    return e.kind == VisionKind.qwen3v ? e.qwen3v.n_deepstack : 0l
+}
+
+//! One encoded soft-token row's float count: proj_dim widened by the deepstack slices.
+def vision_row_width(e : VisionEmbedder) : int64 {
+    return vision_proj_dim(e) * (1l + vision_deepstack(e))
+}
+
 //! The family's canvas alignment in px (one soft token per align×align): the geometry's unit.
 def vision_align(e : VisionEmbedder) : int64 {
     if (e.kind == VisionKind.gemma4uv) return e.gemma4uv.patch

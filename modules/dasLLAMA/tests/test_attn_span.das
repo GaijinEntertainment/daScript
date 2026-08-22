@@ -372,3 +372,95 @@ def test_attn_span_guards(t : T?) {
         delete tr
     }
 }
+
+// wide rows for the deepstack rail: slice 0 = make_embd's rows, tails filled by `mode` —
+// 0 = all-zero, 1 = every slice pseudo-random, 2 = only slice `only` nonzero
+def private make_wide_embd(dim, n_ds : int64; mode : int; only : int64 = -1l) : array<float> {
+    var inscope narrow <- make_embd(dim, 0)
+    let w = (1l + n_ds) * dim
+    var e : array<float>
+    e |> resize(NPOS * w)
+    for (r in range64(NPOS)) {
+        for (i in range64(dim)) {
+            e[r * w + i] = narrow[r * dim + i]
+        }
+    }
+    if (mode > 0) {
+        var state = 0x777u
+        for (r in range64(NPOS)) {
+            for (sl in range64(n_ds)) {
+                for (i in range64(dim)) {
+                    state = state * 1664525u + 1013904223u
+                    if (mode == 1 || sl == only) {
+                        e[r * w + (1l + sl) * dim + i] = (float(state >> 8u) / float(1 << 24) - 0.5) * 0.1
+                    }
+                }
+            }
+        }
+    }
+    return <- e
+}
+
+def private ds_eval_logits(t : Model; embd : array<float>) : array<float> {
+    var s <- make_run_state(t.config)
+    eval_embd_(t, s, embd, NPOS)
+    var lg : array<float>
+    lg |> resize(long_length(s.logits))
+    for (i in range64(long_length(s.logits))) {
+        lg[i] = s.logits[i]
+    }
+    delete s
+    return <- lg
+}
+
+[test]
+def test_deepstack_rail(t : T?) {
+    t |> run("the deepstack wide-row seam: split, per-layer adds, clean reset") @(tt : T?) {
+        if (!stat(MODEL_PATH).is_valid) {
+            tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        tr.config.n_deepstack = 3l   // stamp: the toy is not a deepstack arch
+        let dim = tr.config.dim
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let narrow <- make_embd(dim, 0)
+            let wide0 <- make_wide_embd(dim, 3l, 0)
+            let wide <- make_wide_embd(dim, 3l, 1)
+            let wide_s0 <- make_wide_embd(dim, 3l, 2, 0l)
+            let wide_s2 <- make_wide_embd(dim, 3l, 2, 2l)
+            let lg_n <- ds_eval_logits(tr, narrow)
+            let lg_w0 <- ds_eval_logits(tr, wide0)
+            tt |> equal(arr_maxdiff(lg_n, lg_w0), 0.0, "zero-tail wide rows == the narrow eval, bit-exact")
+            let lg_w <- ds_eval_logits(tr, wide)
+            let dm = arr_maxdiff(lg_n, lg_w)
+            to_log(LOG_INFO, "deepstack_rail: tails-vs-narrow logits maxdiff = {dm}\n")
+            tt |> success(dm > 1e-4, "nonzero tail slices reach the hidden state ({dm})")
+            let lg_s0 <- ds_eval_logits(tr, wide_s0)
+            let lg_s2 <- ds_eval_logits(tr, wide_s2)
+            let ds02 = arr_maxdiff(lg_s0, lg_s2)
+            tt |> success(ds02 > 1e-4, "slice 0 and slice 2 add at different depths ({ds02})")
+            // the transient plane must not leak into a following plain eval
+            var s <- make_run_state(tr.config)
+            eval_embd_(tr, s, wide, NPOS)
+            tt |> success(!s.ds_active, "ds_active cleared after the wide quantum")
+            var one <- [42l]
+            eval_(tr, s, one)
+            delete one
+            var s2 <- make_run_state(tr.config)
+            eval_embd_(tr, s2, wide, NPOS)
+            var one2 <- [42l]
+            eval_(tr, s2, one2)
+            delete one2
+            var dd = 0.0
+            for (i in range64(long_length(s.logits))) {
+                dd = max(dd, abs(s.logits[i] - s2.logits[i]))
+            }
+            tt |> equal(dd, 0.0, "a text eval after the wide quantum is deterministic (no stale plane)")
+            delete s
+            delete s2
+        }
+        delete tr
+    }
+}

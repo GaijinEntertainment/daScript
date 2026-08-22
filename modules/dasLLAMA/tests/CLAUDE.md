@@ -229,11 +229,15 @@ sniff/exec_fmt cells. On Apple builds the CPU gate pins the tower knob off, and 
 gates two fixtures through the Metal block loop on its measured 4e-2·rms bar — engage proven
 per fixture by the encodes/blocks counters, plus the knob-off decline leg (the 72-wide heads
 restride to the attention tiles' 128 on the driver). Skips honestly without the mmproj or dumps.
-`test_qwen3v.das` — the qwen3v tower (Qwen3-Omni's SigLIP-geometry ViT, `qwen3vl_merger` no
-deepstack) tier-1 parity vs the `-p encode` dumps minted on the f32-widened Omni mmproj, CPU
-(`qwen3vl-vision-oracle/mint.sh`): seven fixtures (cb96 = the pos-table downscale arm,
-cb640x320 = the merge-reorder/transposed-grid gate) on the 2e-4 + 4e-3·token-rms bar, plus
-the merged-patch-grid panic gate. Skips honestly without the mmproj or dumps.
+`test_qwen3v.das` — the qwen3v tower tier-1 parity vs the `-p encode` dumps minted on
+f32-widened mmprojs, CPU (`qwen3vl-vision-oracle/mint.sh` + `mint_4b.sh`): the Omni leg
+(`qwen3vl_merger` no deepstack) on seven fixtures (cb96 = the pos-table downscale arm,
+cb640x320 = the merge-reorder/transposed-grid gate) at 2e-4 + 1e-2·token-rms, plus the
+merged-patch-grid panic gate; and the Qwen3-VL 4B DEEPSTACK leg (taps 5/11/17, wide
+10240-float rows) on four fixtures at 2e-4 + 4e-2·rms — the newer dumps carry q1/q2/q3
+quarter-offset probes that hit each concatenated slice's first element (a skipped-tap poison
+lands at 6.9–9.7 on them, 600×; mean+v0..v3 alone are BLIND to a zeroed slice). Skips
+honestly without the mmprojs or dumps.
 `_vision_oracle.das` is the shared dump parser / fixture generator /
 per-token compare all vision tier-1 tests use.
 `test_audio_embedder.das` — model-free: the `AudioEmbedder` carrier's own arms — the no-audio
@@ -256,8 +260,10 @@ each against an in-test reference.
 perturbation (causal row 0 blind to the last row, span row 0 sees it), classic/blocked/flash
 agreement, and the flag-reset bit-exactness; plus the FUSED mid-turn span (`eval_embd_span_`):
 splice equivalence via a whole-cache decode-logits witness (classic/blocked bit-exact, flash
-tolerance) and the per-query mask direction inside one eval; stories15M fixture (test_flash's),
-skips without it.
+tolerance) and the per-query mask direction inside one eval; plus the deepstack wide-row rail
+(stamped `n_deepstack`): zero-tail wide == narrow bit-exact, nonzero tails move the logits,
+slice 0 vs slice 2 add at different depths, no stale plane after the quantum; stories15M
+fixture (test_flash's), skips without it.
 `test_cpu_prefill_tripwire.das` — the CPU-prefill guard: an undeclared prefill trips, span
 and causal alike (the metal rail serves spans, so a CPU-served one is a silent fallback);
 same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which is why it
@@ -270,7 +276,10 @@ gemma4v pair (E2B Q8 decoder + bf16 mmproj — small tier, runs without the flag
 gemma-3-4b gemma3v pair (small tier), the gemma-3-12b pair (the same SigLIP tower at
 projection 3840 — large tier, `DASLLAMA_PARITY_FULL=1`), and the Qwen3-Omni qwen3v pair
 (large tier — the mrope leg: grid reaches the chat, the session's rope delta reflects the
-grid advance) plus `test_omni_showcase` (one Omni session: an image turn, then a text turn
+grid advance), the Qwen3-VL 4B deepstack pair (small tier — wide 10240-float rows through
+the chat, the caption, and the zeroed-slices decoder control: tails zeroed on the same rows
+must move the prefill logits, measured 10.4 — a caption alone cannot see a decoder that
+ignores the slices) plus `test_omni_showcase` (one Omni session: an image turn, then a text turn
 whose answer needs the image turn across the mrope position delta; qwen3a audio-in-chat is a
 standing gap — the chat AudioTower serves the whisper-class families only):
 the prompt stream shape around the splice

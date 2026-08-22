@@ -20,13 +20,14 @@ require dasllama/dasllama_vision   // encode_image_: geometry + letterbox + norm
 require dasllama/dasllama_env     // g_env_engine.image — the dlim-rail switch
 require math
 
-//! The qwen3vl vision tower (Qwen3-Omni's SigLIP-geometry ViT; deepstack-less — the dense
-//! Qwen3-VL variant is refused until its slice lands): temporal-pair conv folded at load →
+//! The qwen3vl vision tower (Omni AND dense Qwen3-VL): temporal-pair conv folded at load →
 //! spatial-merge reorder → +bias +bilinearly-resized 48×48 pos table → pre-LN blocks (fused
 //! qkv, vision-mrope, scaled bidirectional attention, GELU-tanh FFN) → post-LN → 2×2 merger
-//! MLP to proj_dim soft tokens. This forward applies NO clamp — the file carries no
-//! ClippableLinear sidecars. Oracle: llama-mtmd-debug -p encode on the f32-widened mmproj
-//! (`qwen3vl_plan.md`, dumps in models/qwen3vl-vision-oracle/).
+//! MLP to proj_dim soft tokens. Dense carriers add DEEPSTACK taps: after each tap block, a
+//! LayerNorm→fc1→GELU→fc2 merger over the ×4-merged rows emits one more proj_dim slice, and
+//! the output rows widen to (1+n_deepstack)·proj_dim (slice 0 = the main merger). No clamp —
+//! the files carry no ClippableLinear sidecars. Oracle: llama-mtmd-debug -p encode on the
+//! f32-widened mmproj (`qwen3vl_plan.md`, dumps in models/qwen3vl-vision-oracle/).
 
 let QWEN3V_ROPE_THETA = 10000.0   // models/qwen3vl.cpp hardcodes it — not in the gguf
 // the family's dynamic-resolution token budget (mtmd set_limit_image_tokens for qwen)
@@ -69,6 +70,16 @@ struct Qwen3vTower {
     layer_f_stride : int64
     layer_w : int64      // per-block GEMM region (wblob when blk_bf16, else blob); stride layer_w_stride
     layer_w_stride : int64
+    // deepstack (dense Qwen3-VL): up to three tap mergers — output rows widen to
+    // (1+n_deepstack)·proj_dim; 0 taps = the Omni tower, narrow rows
+    n_deepstack : int64
+    ds_l0 : int64        // tap block indices in encounter order (-1 = unused seat)
+    ds_l1 : int64
+    ds_l2 : int64
+    ds_f : int64         // per-tap f32 region; stride: norm w+b [4d ×2], fc1_b [4d], fc2_b [proj]
+    ds_f_stride : int64
+    ds_w : int64         // per-tap GEMM region (mm plane type): fc1 [4d×4d], fc2 [4d×proj]
+    ds_w_stride : int64
     image_map : void?
     image_bytes : uint64
 }
@@ -88,6 +99,8 @@ struct Qwen3vState {
     @scratch @exact_size att : array<float>
     @exact_size hu : array<float>    // ffn up, GELU'd in place [npos × ff]
     @exact_size m0 : array<float>    // merger mid [nout × 4d]
+    @exact_size ds_mid : array<float>    // deepstack tap: LayerNorm out [nout × 4d] (m0 takes the fc1 out)
+    @exact_size ds_slice : array<float>  // deepstack tap / main-merger staging [nout × proj]
     @scratch @exact_size pos_rs : array<float>   // the pos table resized to the grid [npos × d]
     @exact_size cos_t : array<float>; @exact_size sin_t : array<float>
     @scratch pos2 : array<int2>      // per reordered row: (patch row, patch column)
@@ -117,15 +130,17 @@ def finalize(var s : Qwen3vState) {
     delete s.att
     delete s.hu
     delete s.m0
+    delete s.ds_mid
+    delete s.ds_slice
     delete s.pos_rs
     delete s.cos_t
     delete s.sin_t
     delete s.pos2
 }
 
-// serialize_image_meta(Qwen3vTower) covers 25 fields; image_map + image_bytes are deliberate
+// serialize_image_meta(Qwen3vTower) covers 33 fields; image_map + image_bytes are deliberate
 // skips (the two planes are sections, not meta)
-let private QWEN3V_META_FIELDS = 25 + 2
+let private QWEN3V_META_FIELDS = 33 + 2
 
 def private serialize_image_meta(var arch : Archive; var t : Qwen3vTower) {
     verify(count_meta_fields(t) == QWEN3V_META_FIELDS)   // grew Qwen3vTower? extend this list
@@ -154,6 +169,14 @@ def private serialize_image_meta(var arch : Archive; var t : Qwen3vTower) {
     arch |> serialize_raw(t.layer_f_stride)
     arch |> serialize_raw(t.layer_w)
     arch |> serialize_raw(t.layer_w_stride)
+    arch |> serialize_raw(t.n_deepstack)
+    arch |> serialize_raw(t.ds_l0)
+    arch |> serialize_raw(t.ds_l1)
+    arch |> serialize_raw(t.ds_l2)
+    arch |> serialize_raw(t.ds_f)
+    arch |> serialize_raw(t.ds_f_stride)
+    arch |> serialize_raw(t.ds_w)
+    arch |> serialize_raw(t.ds_w_stride)
 }
 
 [unused_argument(t)]
@@ -204,6 +227,19 @@ def private q3v_verify_tensors(m : GGUFMeta; t : Qwen3vTower; gemm_sizes : array
     gguf_expect_elems(m, "mm.0.bias", 4l * d, "dasLLAMA qwen3v")
     gguf_expect_elems(m, "mm.2.weight", 4l * d * t.proj_dim, "dasLLAMA qwen3v")
     gguf_expect_elems(m, "mm.2.bias", t.proj_dim, "dasLLAMA qwen3v")
+    for (k in range64(t.n_deepstack)) {
+        let dl = k == 0l ? t.ds_l0 : k == 1l ? t.ds_l1 : t.ds_l2
+        let p = "v.deepstack.{dl}"
+        gguf_expect_elems(m, "{p}.norm.weight", 4l * d, "dasLLAMA qwen3v")
+        gguf_expect_elems(m, "{p}.norm.bias", 4l * d, "dasLLAMA qwen3v")
+        gguf_expect_elems(m, "{p}.fc1.weight", 16l * d * d, "dasLLAMA qwen3v")
+        gguf_expect_elems(m, "{p}.fc1.bias", 4l * d, "dasLLAMA qwen3v")
+        gguf_expect_elems(m, "{p}.fc2.weight", 4l * d * t.proj_dim, "dasLLAMA qwen3v")
+        gguf_expect_elems(m, "{p}.fc2.bias", t.proj_dim, "dasLLAMA qwen3v")
+        if ((gguf_tensor_type(m, "{p}.fc1.weight") == GGML_TYPE_BF16) != t.mm_bf16) {
+            panic("dasLLAMA qwen3v: '{p}.fc1.weight' is not the same element type as mm.0.weight - mixed merger types are not supported")
+        }
+    }
     let biases <- [ 3l * d, d, t.n_ff, d ]
     for (l in range64(t.n_layer)) {
         let p = "v.blk.{l}"
@@ -238,6 +274,12 @@ def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&)
     t.layer_f = off; off += t.n_layer * t.layer_f_stride
     t.layer_w_stride = 4l * d * d + 2l * d * ff
     t.layer_w = take_cursor(t.blk_bf16, off, woff, t.n_layer * t.layer_w_stride)
+    if (t.n_deepstack > 0l) {
+        t.ds_f_stride = 12l * d + t.proj_dim
+        t.ds_f = off; off += t.n_deepstack * t.ds_f_stride
+        t.ds_w_stride = 16l * d * d + 4l * d * t.proj_dim
+        t.ds_w = take_cursor(t.mm_bf16, off, woff, t.n_deepstack * t.ds_w_stride)
+    }
 }
 
 def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwen3vStaging; gemm_sizes : array<int64>) {
@@ -259,6 +301,18 @@ def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwe
     gguf_read_tensor_f32(m, bytes, "mm.0.bias", st.blob, st.t.mm0_b, 4l * d)
     tower_read_gemm(m, bytes, "mm.2.weight", st.wblob, st.blob, st.t.mm_bf16, st.t.mm2_w, 4l * d * st.t.proj_dim)
     gguf_read_tensor_f32(m, bytes, "mm.2.bias", st.blob, st.t.mm2_b, st.t.proj_dim)
+    for (k in range64(st.t.n_deepstack)) {
+        let dl = k == 0l ? st.t.ds_l0 : k == 1l ? st.t.ds_l1 : st.t.ds_l2
+        let p = "v.deepstack.{dl}"
+        var dfo = st.t.ds_f + k * st.t.ds_f_stride
+        gguf_read_tensor_f32(m, bytes, "{p}.norm.weight", st.blob, dfo, 4l * d); dfo += 4l * d
+        gguf_read_tensor_f32(m, bytes, "{p}.norm.bias", st.blob, dfo, 4l * d); dfo += 4l * d
+        gguf_read_tensor_f32(m, bytes, "{p}.fc1.bias", st.blob, dfo, 4l * d); dfo += 4l * d
+        gguf_read_tensor_f32(m, bytes, "{p}.fc2.bias", st.blob, dfo, st.t.proj_dim)
+        let dwo = st.t.ds_w + k * st.t.ds_w_stride
+        tower_read_gemm(m, bytes, "{p}.fc1.weight", st.wblob, st.blob, st.t.mm_bf16, dwo, 16l * d * d)
+        tower_read_gemm(m, bytes, "{p}.fc2.weight", st.wblob, st.blob, st.t.mm_bf16, dwo + 16l * d * d, 4l * d * st.t.proj_dim)
+    }
     for (l in range64(st.t.n_layer)) {
         let p = "v.blk.{l}"
         var fo = st.t.layer_f + l * st.t.layer_f_stride
@@ -278,6 +332,29 @@ def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwe
     }
 }
 
+// collect the deepstack tap layers from the TENSOR list, never the metadata (is_deepstack_layers
+// flags are converter boilerplate on the Omni file, which carries zero merger tensors)
+def private q3v_scan_deepstack(m : GGUFMeta; var t : Qwen3vTower; path : string) {
+    t.ds_l0 = -1l
+    t.ds_l1 = -1l
+    t.ds_l2 = -1l
+    for (l in range64(t.n_layer)) {
+        if (gguf_find_tensor(m, "v.deepstack.{l}.fc1.weight") >= 0) {
+            if (t.n_deepstack >= 3l) {
+                panic("dasLLAMA qwen3v: '{path}' carries more than three deepstack taps - not served")
+            }
+            if (t.n_deepstack == 0l) {
+                t.ds_l0 = l
+            } elif (t.n_deepstack == 1l) {
+                t.ds_l1 = l
+            } else {
+                t.ds_l2 = l
+            }
+            t.n_deepstack ++
+        }
+    }
+}
+
 //! Read the tower off an mmproj gguf into owned staging arrays — the mint side of the image
 //! rail. No staged-size cap: the Omni mmproj (2.1 GB, both towers in one file) already stages
 //! its audio half the same way; the streaming mint is followup_general #24's item.
@@ -289,7 +366,9 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
-        let proj = gguf_str(m, bytes, "clip.vision.projector_type")
+        // the Omni converter scopes the key under vision; the dense Qwen3-VL one does not
+        let proj_key = gguf_has(m, "clip.vision.projector_type") ? "clip.vision.projector_type" : "clip.projector_type"
+        let proj = gguf_str(m, bytes, proj_key)
         if (proj != "qwen3vl_merger") {
             panic("dasLLAMA: mmproj projector '{proj}' is not qwen3vl_merger")
         }
@@ -312,13 +391,7 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
         if (st.t.merge != 2l) {
             panic("dasLLAMA qwen3v: spatial_merge_size {st.t.merge} - only the 2x2 merger is implemented")
         }
-        // the tensor list decides, never the metadata (is_deepstack_layers flags are converter
-        // boilerplate on the Omni file, which carries zero merger tensors)
-        for (l in range64(st.t.n_layer)) {
-            if (gguf_find_tensor(m, "v.deepstack.{l}.fc1.weight") >= 0) {
-                panic("dasLLAMA qwen3v: '{path}' carries deepstack mergers (dense Qwen3-VL) - not served yet; use the Omni mmproj")
-            }
-        }
+        q3v_scan_deepstack(m, st.t, path)
         let pos_ti = gguf_find_tensor(m, "v.position_embd.weight")
         if (pos_ti < 0) {
             panic("dasLLAMA qwen3v: mmproj is missing tensor 'v.position_embd.weight'")
@@ -556,6 +629,37 @@ def private q3v_stem(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>
     return npos
 }
 
+//! The soft-token row width this tower emits: proj_dim, widened by the deepstack slices.
+def qwen3v_row_width(t : Qwen3vTower) : int64 => t.proj_dim * (1l + t.n_deepstack)
+
+// one deepstack tap merger over the CURRENT residual stream (rows merge-adjacent, so the ×4
+// reshape is flat): LayerNorm → fc1 → GELU → fc2 into the wide out at slice k+1
+def private q3v_deepstack_tap(t : Qwen3vTower; var s : Qwen3vState; k, npos : int64; var out : array<float>) {
+    let d = t.n_embd
+    let nout = npos / 4l
+    let fo = t.ds_f + k * t.ds_f_stride
+    let wo = t.ds_w + k * t.ds_w_stride
+    layernorm_batch(s.ds_mid, s.x, t.blob, fo, fo + 4l * d, 4l * d, nout, t.eps)
+    mm_plane_b(s.m0, t.mm_bf16, t.wblob, t.blob, wo, s.ds_mid, 4l * d, 4l * d, nout)
+    add_bias_rows(s.m0, t.blob, fo + 8l * d, 4l * d, nout)
+    gelu_tanh_lut_batch(s.m0, 4l * d, nout)
+    mm_plane_b(s.ds_slice, t.mm_bf16, t.wblob, t.blob, wo + 16l * d * d, s.m0, 4l * d, t.proj_dim, nout)
+    add_bias_rows(s.ds_slice, t.blob, fo + 12l * d, t.proj_dim, nout)
+    q3v_scatter_slice(t, s.ds_slice, out, k + 1l, nout)
+}
+
+// copy a [nout × proj] slice into the wide out rows at slice index `sl`
+def private q3v_scatter_slice(t : Qwen3vTower; src : array<float>; var out : array<float>; sl, nout : int64) {
+    let w = qwen3v_row_width(t)
+    unsafe {
+        let sp = addr<float const?>(src[0])
+        var op = addr(out[0])
+        for (r in range64(nout)) {
+            copy_floats(op + r * w + sl * t.proj_dim, sp + r * t.proj_dim, t.proj_dim)
+        }
+    }
+}
+
 // the tail: post-LN, then the 2×2 merger MLP (rows are already merge-adjacent, so the ×4
 // reshape is a flat reinterpretation) into out; returns nout
 def private q3v_tail(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out : array<float>) : int64 {
@@ -572,8 +676,8 @@ def private q3v_tail(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out
 }
 
 //! Encode a letterboxed, normalized canvas (`vision_normalize(0.5, 0.5)` planes, w×h) into
-//! `out` = [nout × proj_dim] soft tokens; returns nout = (w/32)×(h/32). The oracle's
-//! `-p encode` fixtures skip the normalize — both sides feed the tower identically.
+//! `out` = [nout × qwen3v_row_width] soft tokens (deepstack: slice 0 = the main merger,
+//! slice k+1 = tap k); returns nout = (w/32)×(h/32). Oracle fixtures skip the normalize.
 [hot_path]
 def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h : int64;
                   var out : array<float>) : int64 {
@@ -587,11 +691,29 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
     q3v_rope_tables(t, s, pw, ph)
     let npos = q3v_stem(t, s, planes, w, h, pw, ph)
     asr_prof_add("q3v.stem", tp)
+    let nds = t.n_deepstack
+    if (nds > 0l) {
+        ensure_length(out, (npos / 4l) * qwen3v_row_width(t))
+        ensure_length(s.ds_mid, (npos / 4l) * 4l * t.n_embd)
+        ensure_length(s.ds_slice, (npos / 4l) * t.proj_dim)
+    }
     for (l in range64(t.n_layer)) {
         q3v_block(t, s, l, npos)
+        if (nds > 0l) {
+            let k = l == t.ds_l0 ? 0l : l == t.ds_l1 ? 1l : l == t.ds_l2 ? 2l : -1l
+            if (k >= 0l) {
+                q3v_deepstack_tap(t, s, k, npos, out)
+            }
+        }
     }
     tp = ref_time_ticks()
-    let nout = q3v_tail(t, s, npos, out)
+    var nout = 0l
+    if (nds > 0l) {
+        nout = q3v_tail(t, s, npos, s.ds_slice)
+        q3v_scatter_slice(t, s.ds_slice, out, 0l, nout)
+    } else {
+        nout = q3v_tail(t, s, npos, out)
+    }
     asr_prof_add("q3v.tail", tp)
     return nout
 }
