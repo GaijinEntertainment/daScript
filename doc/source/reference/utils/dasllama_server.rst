@@ -167,13 +167,13 @@ Endpoints
      - ``{"name": <entry>}`` — start one catalog download (sha-verified; ``"tower"`` pulls a vision/asr companion)
    * - ``GET`` / ``POST``
      - ``/bench``
-     - Read bench state and log / start the quiesced A/B benchmark against the configured llama.cpp binary (loopback-only)
+     - Read bench state and log / start the quiesced A/B benchmark against the configured llama.cpp binary (``POST`` is loopback-only)
    * - ``GET`` / ``POST``
      - ``/bake``
-     - Read bake state and log / bake the slot's prepared ``.dlim`` image via ``dasllama-convert`` (loopback-only)
+     - Read bake state and log / bake the slot's prepared ``.dlim`` image via ``dasllama-convert`` (``POST`` is loopback-only)
    * - ``GET`` / ``POST``
      - ``/config``
-     - Effective config with per-key source / validate and save an authoritative TOML, applied on the next restart (loopback-only)
+     - Effective config with per-key source / validate and save an authoritative TOML, applied on the next restart (``POST`` is loopback-only)
    * - ``GET``
      - ``/exchange``
      - The tune-sidecar exchange surface: policy plus the current sidecar's identity and share state

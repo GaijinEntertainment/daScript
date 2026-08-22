@@ -10,9 +10,9 @@ require dastest/review_gate
 // repo root). Run from the repo root: bin/daslang utils/dasllama-server/REVIEW.das.
 // Fixtures are captured wire bytes: every JSON fixture must parse, carry no latin-1 round-trip
 // mojibake (the raw Â pair or its \u00c2 escape spelling — the PowerShell/cp1252 trap), and
-// hold no machine-local username (the rail normalizes captures to C:/Users/user). Every route
-// the server registers appears in the README and rst endpoint tables, and no surface documents
-// or consumes a route the server does not register.
+// hold no machine-local username (the rail normalizes captures to C:/Users/user). Every
+// path-shaped route registration appears in the README and rst endpoint tables, and no
+// surface documents or consumes a route the server does not register.
 
 let FIXTURES_DIR = "utils/dasllama-server/tests/fixtures"
 let SERVER_DAS = "utils/dasllama-server/openai_server.das"
@@ -35,7 +35,7 @@ def served_routes() : table<string> {
     for (raw in split(fread(SERVER_DAS), "\n")) {
         let line = strip(raw)
         var open_at = -1
-        for (m in ["GET(\"", "POST(\"", "STREAM(\""]) {
+        for (m in ["GET(\"", "POST(\"", "STREAM(\"", "ANY(\""]) {
             if (line |> starts_with(m)) {
                 open_at = length(m)
                 break

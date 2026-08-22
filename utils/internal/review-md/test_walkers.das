@@ -169,7 +169,7 @@ def test_server_gate_fixtures(t : T?) {
 
     // one violation per direction - the needle list is the census
     write_at(t, fixture, "utils/dasllama-server/openai_server.das",
-        "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        STREAM(\"/sse\") <| $() \{\n        \}\n        POST(\"/vad\") <| $() \{\n        \}\n    \}\n\}\n")
+        "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        STREAM(\"/sse\") <| $() \{\n        \}\n        POST(\"/vad\") <| $() \{\n        \}\n        ANY(\"/anyroute\") <| $() \{\n        \}\n        ANY(\"*\") <| $() \{\n        \}\n    \}\n\}\n")
     write_at(t, fixture, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc` and `/sse` and `/dead`\n")
     write_at(t, fixture, "doc/source/reference/utils/dasllama_server.rst", "``/v1/models`` and ``/gc`` and ``/sse`` and ``/rstdead``\n")
     write_at(t, fixture, "utils/dasllama-server/control.html", "<script>fetch(\"/gc\");fetch(\"/nope\")</script>\n")
@@ -178,6 +178,7 @@ def test_server_gate_fixtures(t : T?) {
     t |> equal(1, red.rc, "planted fixture is red")
     for (needle in ["served route /vad has no `/vad` mention",
                     "served route /vad has no ``/vad`` mention",
+                    "served route /anyroute has no `/anyroute` mention",
                     "README.md: documents route /dead, which the server does not register",
                     "dasllama_server.rst: documents route /rstdead, which the server does not register",
                     "the control page consumes route /nope, which the server does not register"]) {
