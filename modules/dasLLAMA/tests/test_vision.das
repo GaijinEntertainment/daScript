@@ -246,6 +246,26 @@ def cleanup_temp_dir {
 }
 
 [test]
+def test_vision_normalize3_channels(t : T?) {
+    t |> run("per-channel CLIP normalize picks mean/std by channel, not by a shared scalar") @(t : T?) {
+        var img = VisionImage(width = 2, height = 1)
+        img.rgb <- [uint8(255), uint8(0), uint8(51), uint8(102), uint8(153), uint8(204)]
+        let mean = float3(0.5, 0.25, 0.75)
+        let std = float3(0.5, 0.2, 0.4)
+        let planes <- vision_normalize3(img, mean, std)
+        t |> equal(length(planes), 6, "plane count")
+        for (i in range(6)) {
+            let c = i % 3
+            let want = (float(int(img.rgb[i])) / 255.0 - mean[c]) / std[c]
+            t |> success(abs(planes[i] - want) < 1e-6, "channel {c} at {i}: {planes[i]} vs {want}")
+        }
+        // a channel swap must MOVE the values (the R and B params differ on purpose)
+        t |> success(abs(planes[0] - (float(255) / 255.0 - mean[2]) / std[2]) > 1e-3, "R rides channel 0's params, not channel 2's")
+        delete img
+    }
+}
+
+[test]
 def test_vision_io_roundtrip(t : T?) {
     t |> run("PNG bytes decode back to the exact RGB the writer saw") @(t : T?) {
         let src <- make_fixture("cb", 21, 13)   // odd non-square keeps stride and orientation honest

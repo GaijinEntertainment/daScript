@@ -3,10 +3,12 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `../PROFILE.md`.
 
-**A timed rep that runs model or tower kernels — any `eval*` / `generate*` / `forward*` /
-`encode_*` call under `../dasllama/`, on a `Model` or an encoder tower — calls `tune_gate()`
-(`../performance/profile_common.das`) before its first timed rep**, or it measures fallback
-kernels silently. Detokenizing (`decode` / `decode_`) is not a forward pass.
+**A timed rep that runs model or tower kernels — any `eval*` / `generate*` / `forward*` call
+on a `Model`, or any `encode_image*` / `encode_audio*` call on a vision or audio embedder or
+tower, all under `../dasllama/` — calls `tune_gate()` (`../performance/profile_common.das`)
+before its first timed rep**, or it measures fallback kernels silently. Tokenizing and
+detokenizing (`encode` / `encode_` / `decode` / `decode_`, on a `Model` or a `Tokenizer`)
+are not forward passes.
 
 **A kernel A/B lab — a rig whose output selects between two implementations of the same
 compute — times both variants interleaved in one process with one instrument.** A board bench
@@ -32,10 +34,11 @@ that lands the kernel; the board learns the winner only through a re-measured ce
 measures only what a process cannot measure about itself; its numbers may enter
 `../PERF_LEDGER.md` and no record file.**
 
-**An instrument under this folder never writes the wall time of a binary this repository
-does not build — a third-party reference tool — into `../performance/records/<box>.json` or
-`../PERF_LEDGER.md`**; such walls enter only through the reference cells of
-`../performance/gen_bench_records.das`, the cells that time such a tool on a board workload.
+**A timing instrument this checklist governs never writes the wall time of a binary this
+repository does not build — a third-party reference tool — into
+`../performance/records/<box>.json` or `../PERF_LEDGER.md`**; such walls enter only through
+the reference cells of `../performance/gen_bench_records.das`, the cells that time such a
+tool on a board workload.
 
 **A number derived by subtracting one measured wall from another prints both raw walls, not
 only the difference.**

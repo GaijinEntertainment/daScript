@@ -28,9 +28,10 @@ instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
 
 **A test file in this folder is registered in no `CMakeLists.txt`.**
 
-**A `model-free`-listed or suite-less test file — one in no `run.das` model suite (every suite
-but `model-free`) — has an accurate `CLAUDE.md` entry in the same change** — added when the
-file is added, corrected when what it covers is renamed or re-scoped.
+**A `model-free`-listed or suite-less test file whose name does not name what it covers has
+an accurate `CLAUDE.md` entry, kept true in the same change** — added when such a file is
+added, corrected when a mapped file's coverage is renamed or re-scoped; `run.das`'s
+`model-free` list is the complete census, the `CLAUDE.md` map is deliberately partial.
 
 **A new, renamed, or dropped arm name — the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches — updates the arm census in `CLAUDE.md`'s "Arm
