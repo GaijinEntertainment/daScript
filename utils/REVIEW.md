@@ -24,6 +24,7 @@ compile-checks the test (`dastest --compile-only`) is not that row. A test whose
 row runs passes review once and never runs again.
 
 **A test whose assertions CI cannot run — a suite gated on a model file, a GPU, or a network
-service — has a compile-only row in the tree, plus the executed run recorded in the PR
-description: the machine the assertions ran on, the gate it satisfied (the model file, GPU, or
-service present), and the pass count.**
+service — has a compile-only row in `.github/workflows/extended_checks.yml` (repo root) or the
+tool's own workflow, plus the executed run recorded in the PR description: the machine the
+assertions ran on, the gate it satisfied (the model file, GPU, or service present), and the
+pass count.**

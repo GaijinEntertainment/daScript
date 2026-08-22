@@ -20,7 +20,5 @@ updates every surface that documents or consumes it in the same change**: the `R
 route row, the endpoint table in `doc/source/reference/utils/dasllama_server.rst` (repo root),
 and `control.html` where the page consumes it.
 
-**A stats or streams wire key added, removed, or renamed updates the `README.md` route row,
-the endpoint table in `doc/source/reference/utils/dasllama_server.rst` (repo root), and
-`control.html` where the page consumes it, and its fixtures under `tests/fixtures/` re-capture
-in the same change** — the fixtures are the recorded wire shape.
+**A stats or streams wire key added, removed, or renamed re-captures its fixtures under
+`tests/fixtures/` in the same change** — the fixtures are the recorded wire shape.

@@ -23,7 +23,8 @@ holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
 `dasllama/dasllama_vision_embedder.das`, a vision family file — one
 `dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
 path (one that runs inside the program under review, not a spawned child process) that
-splices a stream carrying decoded pixels into a prompt or schedules such a stream, applies
+splices a stream carrying decoded media — pixels or audio samples — into a prompt or
+schedules such a stream, applies
 `REVIEW_VISION.md`. A `dasllama/dasllama_tower.das` change — the shared encoder-tower home —
 applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
 thereby pick up the other modality's checklist. A change to the tune sidecar's schema or
@@ -178,9 +179,12 @@ that consumer's ruled charter (`ARCHITECTURE.md` §1) grants, is the same defect
 different line.
 
 **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, adding a name to
-a shipped check's exempt list, or a finding text that no longer names what failed. A new
-check's licensed set ships with it, ledgered in `ARCHITECTURE.md` §1. What the gate enforces
-is read from the gate itself; each check's finding text states its own rule.
+a check's licensed set — the names that check does not flag — or a finding text that no
+longer names what failed. What the gate enforces is read from the gate itself; each check's
+finding text states its own rule.
+
+**A new `REVIEW.das` check ships with its licensed set ledgered in `ARCHITECTURE.md` §1, in
+the same change.**
 
 **A def of `dasllama/dasllama.das` is TAUGHT where the gate finds it named — demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
