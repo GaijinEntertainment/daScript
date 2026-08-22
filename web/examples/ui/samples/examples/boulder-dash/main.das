@@ -11,7 +11,6 @@ require daslib/defer
 require daslib/safe_addr
 require daslib/json_boost
 require daslib/math_boost
-require daslib/archive
 require opengl/opengl_ttf
 require audio/audio_boost
 require strudel/strudel
