@@ -57,10 +57,43 @@ def private word_in_any(texts : array<string>; name : string) : bool {
     return false
 }
 
-def private read_matching(folder : string; prefix : string; suffix : string; var out : array<string>) {
+// `text` with every // comment cut to end-of-line (string-literal-aware, so a "//" inside a
+// quoted URL survives): a facade def mentioned ONLY in a comment must not satisfy the floor.
+def private strip_line_comments(text : string) : string {
+    return build_string() $(var b : StringBuilderWriter) {
+        for (line in split(text, "\n")) {
+            var cut = -1
+            peek_data(line) $(d) {
+                var in_str = false
+                var i = 0
+                while (i < length(d)) {
+                    let c = int(d[i])
+                    if (in_str) {
+                        if (c == '\\') {
+                            i++
+                        } elif (c == '"') {
+                            in_str = false
+                        }
+                    } elif (c == '"') {
+                        in_str = true
+                    } elif (c == '/' && i + 1 < length(d) && int(d[i + 1]) == '/') {
+                        cut = i
+                        break
+                    }
+                    i++
+                }
+            }
+            b |> write(cut >= 0 ? slice(line, 0, cut) : line)
+            b |> write("\n")
+        }
+    }
+}
+
+def private read_matching(folder : string; prefix : string; suffix : string; strip_comments : bool; var out : array<string>) {
     dir(folder) $(name) {
         if (name |> starts_with(prefix) && name |> ends_with(suffix)) {
-            out |> push(fread("{folder}/{name}"))
+            let text = fread("{folder}/{name}")
+            out |> push(strip_comments ? strip_line_comments(text) : text)
         }
     }
 }
@@ -96,9 +129,9 @@ def main() : int {
         return 2
     }
     var inscope tut_texts : array<string>
-    read_matching(TUTORIAL_DIR, "", ".das", tut_texts)
+    read_matching(TUTORIAL_DIR, "", ".das", true, tut_texts)
     var inscope rst_texts : array<string>
-    read_matching(RST_DIR, "dasLLAMA_", ".rst", rst_texts)
+    read_matching(RST_DIR, "dasLLAMA_", ".rst", false, rst_texts)
     check_tutorial_floor(tut_texts, rst_texts)
     return gate_verdict("dasllama")
 }

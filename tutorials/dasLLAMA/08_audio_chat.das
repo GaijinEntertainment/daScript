@@ -73,6 +73,22 @@ def section_splice(m : Model) {
 
 // Minimal RIFF/WAVE reader for 16-bit PCM mono 16 kHz input — enough for the tutorial;
 // real programs decode arbitrary formats through dasAudio's miniaudio bindings.
+// The scheduler's shape, live: a render-only chat carries the same turn, and
+// render_turn_audio hands back the two spans — everything before the splice
+// point, everything after — with the template's audio markers in place. No KV,
+// no encoder: the caller splices its own rows between them and prefills.
+def section_render_spans(m : Model; prompt : string) {
+    var rchat <- create_chat_renderer(m, "", 1l)
+    add_user(rchat, prompt)
+    var head : array<int64>
+    var tail : array<int64>
+    render_turn_audio(m, rchat, head, tail)
+    print("render_turn_audio: head {long_length(head)} tokens | <audio rows splice here> | tail {long_length(tail)} tokens\n")
+    delete head
+    delete tail
+    delete rchat
+}
+
 def private wav_u16(b : array<uint8> | #; o : int64) : uint {
     return uint(b[o]) | (uint(b[o + 1l]) << 8u)
 }
@@ -183,5 +199,6 @@ def main {
         print("\n---\n")
 
         section_splice(m)
+        section_render_spans(m, prompt)
     }
 }
