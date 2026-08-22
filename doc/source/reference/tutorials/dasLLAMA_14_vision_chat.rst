@@ -92,6 +92,21 @@ it stays causal:
 keep their time order, so the audio family prefills through it; use it
 whenever you already hold the embedding rows and no image span is in play.
 
+The qwen families (Qwen3-Omni, Qwen3-VL, Qwen2.5-Omni) rope image rows by
+their 2D patch position instead of by sequence order. After the encode,
+``vision_mrope_grid`` reports the merged grid, and ``eval_embd_span_mrope``
+prefills the same non-causal span with grid-shaped angles — the position
+advance after the image is ``max(grid.x, grid.y)``, not the row count, and
+the session tracks that delta for every later eval:
+
+.. code-block:: das
+
+   let grid = vision_mrope_grid(emb, scratch)
+   eval_embd_span_mrope(m, s, rows, np, n_head, n_head + n_img, grid)
+
+A gemma pair reports a zero grid — the plain ``eval_embd_span`` shape serves
+it, and the tutorial's third section falls back exactly that way.
+
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/14_vision_chat.das <../../../../tutorials/dasLLAMA/14_vision_chat.das>`
