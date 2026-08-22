@@ -1,0 +1,15 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("boulder-dash")
+    package_description("Boulder Dash (cave physics) example built on dasGlfw + dasOpenGL")
+}
+
+[export]
+def release() {
+    release_main("main.das")            // single source: native desktop live-reload AND wasm64
+                                        // (live_api/dashv skipped on wasm via `require ?dashv`; music gated off)
+}
