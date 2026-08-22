@@ -303,18 +303,24 @@ noise demands them).
   test_vision_chat_qwen25o (small tier) — the 3B captions the cats ("pink couch with two
   cats… two remote controls"), grid 23×17, delta 23−391. omni-3b now serves text + image
   (audio already served standalone; audio-IN-CHAT stays followup #41).
-- **J. Bench + records**: `lcpp_bench --image` rows for all new carriers (img:enc / img:pp /
-  img:tg), lcpp pairs via the patched mtmd-cli, `gen_bench_records -w image` cells, board
-  refresh; the gemma-3-4b CPU image row re-mint rides this slice (owed from 3815's tails).
-- **K. Docs**: README support matrix, ENVIRONMENT regen if knobs appear, PERF_LEDGER entries,
-  this plan's findings section, predictions scored. **DO NOT FORGET the daslang.io dasllama
-  page** — it is STALE gemma-only today and this arc must leave it current: (1) the model
-  family list in `doc/source/stdlib/handmade/module-dasllama.rst` (the Gemma bullet is the
-  freshest — Qwen gains the vision/Omni line); (2) the authored per-symbol cards in
-  `doc/reflections/das2rst.das` — `VisionEmbedder`'s card names gemma4uv/gemma4v/gemma3v
-  only and must gain qwen3v (and qwen2.5o when slice I lands); then regen
-  `doc/source/stdlib/generated/dasllama.rst` via das2rst (order-fragile — regen, never
-  hand-edit the generated file). The §04 vision NUMBERS on that page turned out to be the
+- **J. Bench + records (PREP DONE 2026-08-22; measurement + card decision PENDING)**:
+  provenance rows + verified sha pins for all six fetched files landed (fetch_models 6/6 ok);
+  the Metal ds-add landed, so the 8B Metal cells measure GPU prefill. BLOCKED ON BORIS: the
+  bench's image cells visit `official_catalog()` rows only and the parity PREGATE requires
+  frozen evidence — making Qwen3-VL-4B/8B and/or Qwen2.5-Omni-3B OFFICIAL board cards (each
+  needs a `harness/parity.sh` frozen fixture + `official = true`) is a product decision.
+  Once decided: mint evidence, `daspkg release --quick`, quiet-box `gen_bench_records -w
+  image` + lcpp pairs via the patched mtmd-cli, the gemma-3-4b CPU image row re-mint (3815's
+  tail), `gen_site_records` + commit (gated by test_site_records).
+- **K. Docs (DONE 2026-08-22, except J-dependent perf notes)**: README image bullet carries
+  all three qwen towers (+ the Metal note); the three stale table claims fixed
+  ("vision out of scope" on Qwen2.5-Omni, "deepstack inactive" on Qwen3-ASR/Omni-30B); the
+  not-implemented list now names pixtral/minicpm-v as the remaining vision gap. daslang.io:
+  the handmade RST family bullets gained the vision/omni lines (Qwen AND Gemma), the das2rst
+  `VisionEmbedder` card names qwen3v + qwen25v, and the generated RST regenerates in the doc
+  pipeline (the generated dir is gitignored — the source edits are the deliverable). No new
+  env knobs (ENVIRONMENT untouched). Predictions 1–8 all scored in place. PERF_LEDGER
+  entries ride slice J's numbers. The §04 vision NUMBERS on that page turned out to be the
   real staleness (the 3815 re-mint updated records/ but not the committed site merge) —
   FIXED + GATED 2026-08-22: `gen_site_records --verify` and `test_site_records.das`
   (model-free suite) red any records commit that skips the site merge, and the live-page
@@ -350,13 +356,39 @@ noise demands them).
    ≤ 1e-4. Both numbers get measured, only the twin gates.
 4. The biggest debug sink is the decoder POSITION RAIL (the offset bookkeeping through
    prefill/decode/server), not the tower and not the mask.
+   **SCORED (F/G): HALF.** The rail itself landed cleanly (E1's design paid off — F was
+   plumbing, not debugging), but the CLASS was right: every follow-on gap was positional
+   bookkeeping (the batched-decode delta, the three delta-less GPU rope-row sites, the
+   qwen3vlmoe interleave-flag miss) — none was tower or mask. What made it cheap instead of
+   a sink was the E1 law "delta at every rope-angle site, never KV" turning each gap into a
+   grep, plus mutation-controlled gates.
 5. CPU encode of a ~300-token still on the M1 lands 0.5–2 s bf16 (27 blocks, 543 M params —
    between gemma4uv's 54 ms linear and a whisper-large encode).
+   **SCORED: WRONG on the high side of usage.** The tier-1 448² encode (196 tok) runs ~3 s
+   and the server's off-thread 300-token cats encode measured 42 s on the SINGLE-threaded
+   media worker (the worker pins team mode off) — the prediction priced the jobque'd
+   multi-core path, which the chat CLI gets (~9 s ttft incl. prefill) but the server worker
+   does not. The mechanism (GEMM-bound, 543 M params) was right; the deployment context
+   dominated. Slice J's Metal tower work is where this cost goes away.
 6. The showcase turn (image+audio+text, one prompt) works on the first session after slice E
    with no scheduler change.
+   **SCORED at E2: WRONG on its premise** — `add_user_audio_` existed but never served the
+   conformer families (chat AudioTower = whisper-class only); the two-modality showcase
+   (image + text recall) landed instead, and audio-in-chat is followup #41.
 7. Deepstack (slice H) is the CHEAPEST leg — under a session end to end, because both halves
    are adds to an already-green rail; its only red will be a slice-indexing bug caught by the
    zeroed-slices control, not a math bug.
+   **SCORED: CORRECT on cost** (well under a session, first-run tier-1 modulo the projector-key
+   spelling), **HALF on the red**: no slice-indexing bug materialized in das — the defect the
+   controls caught was in the GATE ITSELF (mean+v0..v3 provably blind to a zeroed slice; the
+   q-probe extension was the fix). The zeroed-slices DECODER control passed first try (10.4).
 8. qwen2.5o (slice I) costs more than deepstack but less than the Omni core; the window
    attention masks land right on the first attempt (they are index arithmetic), and the
    surprise, if any, is again in the reference's preproc arithmetic (patch-14 geometry).
+   **SCORED: CORRECT on cost and on the mask** — tier-1 went 5/5 green on the first run,
+   windows included. The surprise was NOT preproc (align-28 geometry passed via the shared
+   code) but the ORACLE'S FIXTURES: every stock debug image is window-symmetric, so an
+   all-full-attention poison passed tier-1 untouched until the `quad` generator landed —
+   the prediction named the right neighborhood (reference-side arithmetic) and the wrong
+   organ (fixtures, not preproc). Honorable mention: the vocab spells the span markers
+   `<|vision_bos|>`/`<|vision_eos|>`, which no prediction saw coming.
