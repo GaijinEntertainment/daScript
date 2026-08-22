@@ -70,6 +70,9 @@ struct Config {
     @clarg_doc = "Stop at the first failing gate"
     fail_fast : bool
 
+    @clarg_doc = "Lint gate: skip the -exe compiled rail, keeping the host + linux-mirror interp rails — run before every push; PR-open preflight runs all three"
+    lint_skip_exe_rail : bool
+
     @clarg_doc = "List gates with tier and description, then exit"
     list_gates : bool
 
@@ -112,6 +115,7 @@ struct PreflightCtx {
     jit_jobs : int
     jit_max_file_time : float
     verbose : bool
+    lint_skip_exe_rail : bool
 }
 
 // ===== subprocess + small helpers =====
@@ -507,7 +511,8 @@ def gate_format(ctx : PreflightCtx) : GateResult {
 // halves compile out, so their requires/args read unused there and nowhere else; dasVulkan
 // is in-tree and present on linux, so it is NOT disabled),
 // and TWICE (interp, then the -exe compiled das-lint, which resolves modules differently).
-// A host-flavor pass alone is structurally blind to both — so this gate runs three rails.
+// A host-flavor pass alone is structurally blind to both — so this gate runs three rails
+// (--lint-skip-exe-rail keeps just the interp two).
 // LINT019 is OFF on all three (mirrors CI): a changed-set ledger cannot see consumers
 // outside the PR — staleness belongs to the nightly whole-tree -j 1 pass.
 def gate_lint(ctx : PreflightCtx) : GateResult {
@@ -538,6 +543,10 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "LINUX-lane lint warnings (host pass was clean — a platform static_if half hides the symbol here; nolint:...,LINT019 both-worlds spelling, see skills/internal/preflight.md)", output = mirror.out)
     }
+    if (!lint_runs_exe_rail(ctx.lint_skip_exe_rail)) {
+        return GateResult(name = "lint", status = GateStatus.Pass, seconds = seconds_since(t0),
+            detail = lint_pass_detail(length(files), false))
+    }
     // the exe rail: CI compiles utils/lint into a standalone das-lint and lints AGAIN — the
     // -exe world resolves modules differently (dasAudio et al are not baked in). `-exe`
     // appends .exe on every platform (CI's LINUX lane invokes $BIN/das-lint.exe verbatim)
@@ -565,7 +574,7 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
             detail = "das-lint.exe rail warnings (interp rails were clean — the -exe module world differs)", output = exe.out)
     }
     return GateResult(name = "lint", status = GateStatus.Pass, seconds = seconds_since(t0),
-        detail = "{length(files)} file(s) clean on all three rails (host, linux-mirror, exe)")
+        detail = lint_pass_detail(length(files), true))
 }
 
 // ===== ast-verify on changed .das (mirrors extended_checks "Run ast-verify on changed .das files") =====
@@ -1233,7 +1242,7 @@ def gate_table() : array<GateInfo> {
     return <- [
         GateInfo(name = "untracked", full_only = true, doc = "no untracked files at PR time — commit, delete, or ignore each"),
         GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors CI)"),
-        GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings"),
+        GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings; --lint-skip-exe-rail drops the exe rail"),
         GateInfo(name = "hash-refs", full_only = false, doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
         GateInfo(name = "ast-verify", full_only = false, doc = "daslang -dry-run --ast-verify-batch on changed .das (parallel, 300s/file; mirrors CI) - an AST verify line, a crash, or a timeout fails"),
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
@@ -1340,7 +1349,8 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     var ctx = PreflightCtx(base = cfg.base, jobs = cfg.jobs,
                            jit_jobs = jit_jobs,
                            jit_max_file_time = jit_max_file_time,
-                           verbose = cfg.verbose)
+                           verbose = cfg.verbose,
+                           lint_skip_exe_rail = cfg.lint_skip_exe_rail)
     ctx.daslang = find_daslang(cfg.daslang_bin)
     if (empty(ctx.daslang)) {
         to_log(LOG_ERROR, "daslang binary not found — build it (cmake --build build --target daslang) or pass --daslang / set DASLANG\n")

@@ -19,6 +19,10 @@ daslang utils/internal/preflight/main.das -- --full
 daslang utils/internal/preflight/main.das -- --list-gates
 daslang utils/internal/preflight/main.das -- --only docs,ci-das
 daslang utils/internal/preflight/main.das -- --skip tests-aot --full
+
+# pre-push lint gate: the changed-set lint without the -exe rail (rails and
+# cost: skills/internal/preflight.md, the lint row)
+daslang utils/internal/preflight/main.das -- --only lint --lint-skip-exe-rail
 ```
 
 A complete `--full` run requires a Release host and fails immediately when
