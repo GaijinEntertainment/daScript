@@ -1,0 +1,170 @@
+# Qwen3-VL plan — the qwen vision legs (Omni-30B + dense Qwen3-VL + Qwen2.5-Omni)
+
+## Direction
+
+The last big image leg: qwen vision, ALL living tower variations (Boris 2026-08-21: "we need
+to support all variations of qwen image tower"). The anchor is the `qwen3vlmoe` decoder
+dasLLAMA already serves for text and audio (`Qwen3-Omni-30B-A3B-Instruct-Q8_0`, arch in
+`dasllama_arch_qwen3moe.das`, audio tower in `dasllama_qwen3a.das`) — finishing its image
+half makes Omni-30B the flagship any-to-text carrier: text + image + audio in ONE chat turn
+(`add_user_audio_` and the audio template splice already exist). The dense Qwen3-VL models
+(deepstack) and Qwen2.5-Omni (window-attention ViT) complete the family.
+
+## The tower matrix (tensor-dump-verified where a file is on disk)
+
+| Tower | Carriers | Shape | New mechanisms | Files |
+|---|---|---|---|---|
+| `qwen3vl_merger`, no deepstack | Qwen3-Omni-30B-A3B | 27 blk, 1152w, patch 16, LayerNorm, plain GELU FFN, fused qkv, learned pos (48×48, bilinear-resized) | vision-mrope; decoder IMROPE | on disk ✓ |
+| `qwen3vl_merger` + deepstack | Qwen3-VL dense 2B/4B/8B/32B, VL-MoE 30B/235B | same graph + `v.deepstack.{8,16,24}.{norm,fc1,fc2}` mergers | + deepstack: tower emits (1+3)×proj-dim wide rows; decoder adds slice il+1 after layer il<3 (image rows only) | 4B+8B Q8 + F16 mmprojs FETCHED this arc |
+| `qwen2.5o` (= qwen25vl) | Qwen2.5-Omni 3B/7B, Qwen2.5-VL | 32 blk, patch 14, RMSNorm, gated-silu FFN, separate q/k/v, NO learned pos, **window attention** (n_wa_pattern 8) | window attn in the tower; decoder MROPE (non-interleaved sections, `qwen2vl` arch) | mmproj on disk ✓ (`mmproj-omni-3b-f32`); 3B Q8 decoder + official f16 mmproj FETCHED this arc |
+| `qwen2vl` legacy | Qwen2-VL | superseded by 2.5 | — | SKIP — no carrier value |
+
+Two genuinely new mechanisms, both rope-shaped:
+
+1. **Decoder IMROPE** (`GGML_ROPE_TYPE_IMROPE`, sections `[24,20,20,0]` from
+   `qwen3vlmoe.rope.dimension_sections`, interleaved t,t,y,x in NEOX ordering): image rows
+   rope with per-row int positions (t=pos₀, x=pos₀+i%nx, y=pos₀+i/nx, z unused); text rows
+   use equal positions in every section, which collapses IMROPE to the standard NEOX rope —
+   this is why today's text/audio serving is already correct, and why the text-only
+   bit-match regression is writable BEFORE any new code.
+2. **Vision-mrope in the ViT** (`GGML_ROPE_TYPE_VISION`, sections d_head/4 = 18×4,
+   n_dims = d_head/2 = 36, θ=10000) — the tower's 2D rope.
+
+**The mask is NOT new.** llama.cpp's causal mask is position-based and every image row
+shares t=pos₀, so the image span is bidirectional-within-span, causal outside — exactly the
+uniform-span mask the fused-image-span arc shipped (PR 3815: `Session.attn_uniform_lo/end`,
+`AttnArgs.ulo/uend`, CPU per-row select + Metal span eval). Qwen never sets
+`mtmd_decode_use_non_causal`; the equal-t positions ARE its non-causality. The span rail is
+reused as-is; only the rope angles inside it change.
+
+**Omni has NO deepstack.** Its mmproj carries `clip.vision.is_deepstack_layers` flags
+(8/16/24) but ZERO `v.deepstack.*` tensors — converter boilerplate, the same
+metadata-vs-tensor-list trap the gemma arc documented; `has_deepstack()` is tensor-driven in
+clip.cpp, so the oracle graph never takes that branch for this file. Deepstack is real on the
+DENSE Qwen3-VL carriers and lands as its own slice: three extra merger MLPs in the tower
+(concat along the feature dim → (1+3)×proj-dim wide soft tokens) plus the decoder add — after
+layer il < 3, slice il+1 of the row's wide embedding is added to the hidden state
+(`src/models/qwen3vl.cpp:147`); image rows only, text rows carry zero slices, decode
+untouched.
+
+Scope: the three towers above, stills only, ONE image per user turn, CPU towers + CPU
+image-span prefill first (Metal IMROPE is a scheduled slice, not a decline-forever). Ladder
+order: Omni core (no new tower mask, decoder already serving) → dense deepstack (same graph
++ mergers + the decoder add + `qwen3vl` dense arch registration) → qwen2.5o (new tower shape:
+window attention, RMS, gated FFN; decoder MROPE non-interleaved on the `qwen2vl` arch — this
+also completes `omni-3b`, whose audio half already serves). Oracle = llama.cpp mtmd
+(`llama-mtmd-cli` / the patched `llama-mtmd-debug` with the vision-oracle rig from the gemma
+arc — fnv1a64 pixel dumps, per-token embedding lines, all reusable unchanged).
+
+## Recon facts (2026-08-21, tensor dumps + source reads — slice A re-verifies via oracle)
+
+- **mmproj** (`mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf`, 860 tensors, both towers):
+  vision = 27 blocks × (ln1/ln2 + fused `attn_qkv` w+b + `attn_out` w+b + `ffn_up`/`ffn_down`
+  w+b — NO gate, GELU), `v.patch_embd.weight` + `.1` [16,16,3,1152] **F32** (temporal pair),
+  `v.patch_embd.bias`, `v.position_embd.weight` [1152, 2304] **F32** (48×48 grid),
+  `v.post_ln` (+ NO pre_ln), merger `mm.0` [4608→4608] + `mm.2` [4608→2048] BF16, GELU
+  between. Audio = the 32-block `qwen3a` conformer already served.
+- **Meta**: width 1152, heads 16 (d_head 72), ffn 4304, patch 16, merge 2, image_size 768,
+  image_mean = image_std = [0.5,0.5,0.5] (normalize = x·2−1, NOT gemma's identity),
+  vision eps 1e-6, projector `qwen3vl_merger`, projection_dim 2048.
+- **ViT graph** (`tools/mtmd/models/qwen3vl.cpp`): temporal-merge conv (still image: conv₀(img)
+  + conv₁(img) — for stills this is ONE conv with pre-summed weights W₀+W₁, a load-time fold)
+  → spatial-merge REORDER of the token stream before the blocks (2×2 merge partners made
+  adjacent) → +patch_bias → +position embeds (48×48 table bilinearly resized to the actual
+  grid, then the same merge reorder) → 27 pre-LN blocks with vision-mrope on q/k, full
+  attention (no windows) → post_ln → reshape ×4 → merger MLP → 2048-wide soft tokens.
+- **Decoder positions** (`mtmd.cpp: mtmd_image_tokens_get_decoder_pos` /
+  `mtmd_image_tokens_get_n_pos`): image token i of an nx×ny MERGED grid gets
+  (t=pos₀, x=pos₀+i%nx, y=pos₀+i/nx, z=0); the sequence position then advances by
+  **max(nx,ny)**, not the token count — the Session needs a rope-position rail decoupled
+  from the KV row index from this point on. Audio chunks are mrope_1d = all sections
+  sequential (today's behavior, unchanged).
+- **Template markers**: `<|vision_start|>` / `<|vision_end|>` around the soft-token span
+  (mtmd.cpp:461); exact ids + stream shape pinned at slice A from the oracle run.
+- **Preproc**: qwen dynamic resolution — stretch resize (no letterbox) to multiples of
+  patch×merge = 32 inside a min/max token budget; exact rounding + resize algo pinned at
+  slice A by oracle pixel dumps, not source-read guesswork (the gemma lesson: the reference's
+  arithmetic is part of the contract).
+
+## Downloads (fetched 2026-08-21, sha256-verified against the HF API, .sha pins minted)
+
+The Omni core needs nothing — decoder Q8 (31 GB) + mmproj bf16 on disk and pinned. Fetched
+for the other two towers (~21 GB, `fetch_models.das` manifest entries owed in the arc):
+
+- `Qwen/Qwen3-VL-8B-Instruct-GGUF`: `Qwen3VL-8B-Instruct-Q8_0.gguf` (8.7 GB) +
+  `mmproj-Qwen3VL-8B-Instruct-F16.gguf` (1.2 GB) — the deepstack record carrier.
+- `Qwen/Qwen3-VL-4B-Instruct-GGUF`: `Qwen3VL-4B-Instruct-Q8_0.gguf` (4.3 GB) +
+  `mmproj-Qwen3VL-4B-Instruct-F16.gguf` (0.8 GB) — the small dev vehicle.
+- `ggml-org/Qwen2.5-Omni-3B-GGUF`: `Qwen2.5-Omni-3B-Q8_0.gguf` (3.6 GB) +
+  `mmproj-Qwen2.5-Omni-3B-f16.gguf` (2.6 GB) — the qwen2.5o carrier; the official f16 mmproj
+  also gives the locally-converted `mmproj-omni-3b-f32` a re-fetchable provenance twin.
+
+Minted locally at slice A: f32-widened mmproj twins (`mint_f32_mmproj.py` pattern) for honest
+tier-1 gates on the bf16 Omni mmproj (the F16 mmprojs widen exactly — twins only if measured
+noise demands them).
+
+## Slices (commit ladder, single PR; each lands its REVIEW.md entries with it)
+
+- **A. Oracle rig**: qwen3vl oracle dir beside the gemma one (`mint.sh` pattern, every dump
+  carries its invocation); geometry cases oracle-verified (square/non-square/up/downscale +
+  the budget clamp); pixel dumps for tier-0; per-token encode dumps (bf16 + f32-widened twin)
+  for tier-1; `cli.cats.log` (temp 0) for tier-2; token ids + stream shape + suppress-token
+  check; the ViT vision-mrope exact dim pattern and the preproc rounding pinned from source +
+  probe. Predictions scored against this rig.
+- **B. Text-only IMROPE regression FIRST**: the decoder rope path gains the
+  sections/int4-positions machinery with all sections equal — output must bit-match master's
+  qwen35/qwen3vlmoe truth tsvs before any image code exists (branch-test rule: the refactor
+  carries its own witness).
+- **C. Preproc**: qwen geometry + stretch resize + ×2−1 normalize in `dasllama_vision.das`
+  (new arms beside the gemma letterbox path, selected per family); tier-0 bit-exact gates.
+- **D. Tower**: `dasllama_qwen3v.das` — mmproj load (W₀+W₁ fold, per-tensor plane types:
+  F32 stays f32, BF16 stays halfwords — the gemma slice-G rule), merge reorder, pos-embed
+  bilinear resize, 27 blocks (fused-qkv split, vision-mrope, GELU MLP), merger; tier-1
+  parity vs the f32-widened twin.
+- **E. Decoder image span**: per-row int positions through the CPU prefill rope arms inside
+  the existing uniform-span rail; Session rope-position offset (advance by max(nx,ny), decode
+  continues from the offset counter); chat arm (`<|vision_start|>` splice via
+  `render_prompt_media`), `add_user_image_` routed by family, `ask --image`; tier-2 greedy
+  parity + tier-3 captions; the SHOWCASE test: one turn with image + audio + text.
+- **F. Server**: the `PendingReq` media rail (gemma slice F) gains the mrope position walk in
+  its one-quantum prefill; page unchanged (sticky image already works).
+- **G. Metal IMROPE**: positions plane + sections into the prefill rope kernels (rope_store
+  family) and the span eval from 3815; decode-side scalar offset; DASLLAMA_VERSION bump;
+  parity arm vs CPU. Until G lands, image turns take CPU prefill by an explicit named
+  decline (loud, per followup #28's spirit — not silent).
+- **H. Deepstack (dense Qwen3-VL)**: `qwen3vl` dense arch registration (qwen3 dense +
+  IMROPE sections + the deepstack hparam); tower gains the three merger MLPs and the wide-row
+  output; prefill adds slice il+1 to image rows after layer il < 3; 4B is the dev vehicle,
+  8B the record carrier; own oracle dumps + tier-1/2/3 gates (the deepstack add is exactly
+  the class a caption test alone would miss — a zeroed-slices negative control pins it).
+- **I. qwen2.5o (Qwen2.5-Omni-3B)**: the window-attention ViT (32 blk, patch 14, RMSNorm,
+  gated-silu FFN, rope-only positions, full-attn every 8th block per `n_wa_pattern`) +
+  decoder MROPE (non-interleaved sections) on the `qwen2vl` arch; completes omni-3b to
+  text + image + audio; own oracle dumps + gates.
+- **J. Bench + records**: `lcpp_bench --image` rows for all new carriers (img:enc / img:pp /
+  img:tg), lcpp pairs via the patched mtmd-cli, `gen_bench_records -w image` cells, board
+  refresh; the gemma-3-4b CPU image row re-mint rides this slice (owed from 3815's tails).
+- **K. Docs**: README support matrix, ENVIRONMENT regen if knobs appear, PERF_LEDGER entries,
+  this plan's findings section, predictions scored.
+
+## Predictions (registered before implementation, per the prediction game)
+
+1. Slice B bit-matches on the first honest attempt — the collapse-to-NEOX identity is exact,
+   so any diff is an implementation bug in the section walk, not arithmetic.
+2. Tier-0 preproc goes bit-exact only after one convention surprise in the RESIZE (algo or
+   rounding — the gemma arc's fmadd/roundi class), not in the geometry.
+3. Oracle arithmetic (the lesson the gemma arc demanded): the stock bf16 encode dumps carry
+   activation-rounding noise ~3e-2 maxdiff; against the f32-widened twin das tier-1 lands
+   ≤ 1e-4. Both numbers get measured, only the twin gates.
+4. The biggest debug sink is the decoder POSITION RAIL (the offset bookkeeping through
+   prefill/decode/server), not the tower and not the mask.
+5. CPU encode of a ~300-token still on the M1 lands 0.5–2 s bf16 (27 blocks, 543 M params —
+   between gemma4uv's 54 ms linear and a whisper-large encode).
+6. The showcase turn (image+audio+text, one prompt) works on the first session after slice E
+   with no scheduler change.
+7. Deepstack (slice H) is the CHEAPEST leg — under a session end to end, because both halves
+   are adds to an already-green rail; its only red will be a slice-indexing bug caught by the
+   zeroed-slices control, not a math bug.
+8. qwen2.5o (slice I) costs more than deepstack but less than the Omni core; the window
+   attention masks land right on the first attempt (they are index arithmetic), and the
+   surprise, if any, is again in the reference's preproc arithmetic (patch-14 geometry).
