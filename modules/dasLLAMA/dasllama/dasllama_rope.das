@@ -117,6 +117,29 @@ def build_rope_tabs_imrope(@scratch var cos_tab : array<float>; @scratch var sin
     }
 }
 
+//! The mrope position map of one image-span prefill quantum (mtmd's decoder walk verbatim):
+//! head rows sequential from ``base``; span row i = (pos0, pos0+i/nx, pos0+i%nx, 0); tail rows
+//! sequential from pos0 + max(nx, ny) — an image advances the position by its grid's long side.
+def mrope_span_positions(@scratch var out : array<int4>; base, npos, span_lo, span_hi, nx, ny : int64) {
+    if (span_hi - span_lo != nx * ny) {
+        panic("mrope_span_positions: span [{span_lo},{span_hi}) is {span_hi - span_lo} rows but the grid is {nx}x{ny}")
+    }
+    out |> resize(npos)
+    for (r in range64(span_lo)) {
+        let p = int(base + r)
+        out[r] = int4(p, p, p, p)
+    }
+    let pos0 = int(base + span_lo)
+    for (i in range64(span_hi - span_lo)) {
+        out[span_lo + i] = int4(pos0, pos0 + int(i / nx), pos0 + int(i % nx), 0)
+    }
+    let tail0 = pos0 + int(max(nx, ny))
+    for (r in range64(span_hi, npos)) {
+        let p = tail0 + int(r - span_hi)
+        out[r] = int4(p, p, p, p)
+    }
+}
+
 //! The qwen3vl ViT's VISION-mode rope table (ggml rope VISION): row pi's hs/2 slots = the h
 //! ladder (grid row) then the w ladder RESTARTED, freq divisor hs/2 — slot j reads
 //! θ^(−2·(j%(hs/4))/(hs/2)). Apply full-head NEOX (rope_scaled_neox_tab); positions2 = (h, w).

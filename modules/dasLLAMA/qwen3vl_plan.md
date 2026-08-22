@@ -173,11 +173,24 @@ noise demands them).
   ≤1e-4 claim was WRONG for a LUT-activation tower (right for gemma4uv's linear embedder,
   the wrong prior here); prediction 2's "surprise in the resize" landed as the -fa
   discovery — oracle-side, as predicted by the gemma pattern.
-- **E. Decoder image span**: per-row int positions through the CPU prefill rope arms inside
-  the existing uniform-span rail; Session rope-position offset (advance by max(nx,ny), decode
-  continues from the offset counter); chat arm (`<|vision_start|>` splice via
-  `render_prompt_media`), `add_user_image_` routed by family, `ask --image`; tier-2 greedy
-  parity + tier-3 captions; the SHOWCASE test: one turn with image + audio + text.
+- **E1. The decoder mrope rail (DONE 2026-08-22)**: `Config.rope_sections` (loader-read from
+  `{arch}.rope.dimension_sections`, validated 2×sum == rotary span), Session
+  `rope_pos_delta` (+ at EVERY rope-angle site — table and classic, decode and prefill —
+  never at KV indexing) and the transient per-quantum `mrope_pos` int4 map
+  (`mrope_span_positions` in dasllama_rope, the mtmd walk verbatim, model-free-tested);
+  `eval_embd_span_mrope_` rides the uniform-span rail fused AND spliced (per-slice map
+  views); an mrope quantum declines the GPU prefill override loudly and is exempt from the
+  CPU-prefill tripwire; the delta flows into the CPU-built rope tables, which the Metal
+  DECODE consumes — post-image GPU decode ropes correctly for free. Gates (stories15M +
+  stamped sections): fused == splice BIT-exact, delta = max(grid) − rows, map-reaches-math
+  (0.14 logits shift vs sequential; 11×2 vs 2×11 differ), existing span gates unregressed.
+  NOTE for slice F: batched-decode positions come from scheduler stream state — a post-image
+  stream needs its per-stream delta plumbed there.
+- **E2. Chat splice**: the qwen template arm (`<|vision_start|>` 151652 / `<|vision_end|>`
+  151653 media pair), `VisionEmbedder` union arm for qwen3v, `add_user_image_` routing +
+  `render_turn_image_` driving `eval_embd_span_mrope_` for mrope arches, `ask --image` on
+  omni; tier-2 greedy parity vs `DASLLAMA_IDS` (cats, 300 tokens, advance 20) + tier-3
+  captions; the SHOWCASE test: one turn with image + audio + text.
 - **F. Server**: the `PendingReq` media rail (gemma slice F) gains the mrope position walk in
   its one-quantum prefill; page unchanged (sticky image already works).
 - **G. Metal IMROPE**: positions plane + sections into the prefill rope kernels (rope_store

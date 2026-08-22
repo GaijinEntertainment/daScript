@@ -11,6 +11,7 @@ require dasllama/dasllama_attn_prefill   // prefill_attention — the head-threa
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert
+require dasllama/dasllama_rope     // mrope_span_positions — the image-span position map
 require dasllama/dasllama_kv_codec   // fwht_signs_row/fwht_unsign_row — the Hadamard rotation in gated attention
 require dasllama/dasllama_env       // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require math
@@ -1629,6 +1630,53 @@ def private eval_embd_slice_(t : Model; var s : Session; embd : array<float>; lo
     }
     forward_prefill_embd(t, s, embd, n, s.n_past, non_causal, src_off = lo, skip_logits = !last)
     s.n_past += n
+}
+
+//! `eval_embd_span_`'s qwen mrope twin: the span rows are an nx×ny image grid roping on the
+//! mtmd decoder walk (t = pos0, per-row h/w, position advance max(nx, ny)); surrounding text
+//! ropes sequentially at delta'd positions. Same uniform-span mask; only the angles differ.
+def eval_embd_span_mrope_(t : Model; var s : Session; embd : array<float>; npos, span_lo, span_hi, nx, ny : int64) {
+    if (npos <= 0l) {
+        return
+    }
+    if (span_lo < 0l || span_hi > npos || span_hi <= span_lo) {
+        panic("eval_embd_span_mrope_: span [{span_lo},{span_hi}) outside [0,{npos})")
+    }
+    let sect = t.config.rope_sections
+    if (sect.x + sect.y + sect.z + sect.w == 0) {
+        panic("eval_embd_span_mrope_: the model carries no rope.dimension_sections - not an mrope arch")
+    }
+    let base = s.n_past + s.rope_pos_delta
+    if (span_fusable()) {
+        mrope_span_positions(s.mrope_pos, base, npos, span_lo, span_hi, nx, ny)
+        forward_prefill_embd(t, s, embd, npos, s.n_past, span_lo = span_lo, span_hi = span_hi)
+        s.n_past += npos
+        s.mrope_pos |> clear()
+    } else {
+        var whole : array<int4>
+        mrope_span_positions(whole, base, npos, span_lo, span_hi, nx, ny)
+        eval_embd_slice_mrope_(t, s, whole, embd, 0l, span_lo, false, false)
+        eval_embd_slice_mrope_(t, s, whole, embd, span_lo, span_hi, true, span_hi >= npos)
+        eval_embd_slice_mrope_(t, s, whole, embd, span_hi, npos, false, true)
+        delete whole
+    }
+    s.rope_pos_delta += max(nx, ny) - (span_hi - span_lo)
+}
+
+// a splice slice carries its own view of the quantum map (positions are quantum-absolute)
+def private eval_embd_slice_mrope_(t : Model; var s : Session; whole : array<int4>; embd : array<float>;
+                                   lo, hi : int64; non_causal, last : bool) {
+    let n = hi - lo
+    if (n <= 0l) {
+        return
+    }
+    s.mrope_pos |> resize(n)
+    for (i in range64(n)) {
+        s.mrope_pos[i] = whole[lo + i]
+    }
+    forward_prefill_embd(t, s, embd, n, s.n_past, non_causal, src_off = lo, skip_logits = !last)
+    s.n_past += n
+    s.mrope_pos |> clear()
 }
 
 //! Mean-pooled, L2-normalized sentence embedding for `tokens` into `out`: last-layer hidden state
