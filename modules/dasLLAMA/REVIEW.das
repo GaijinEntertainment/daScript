@@ -181,7 +181,10 @@ def private family_owned_names(fam : string; fam_path : string; var out : array<
 def private check_audio_family_seams() {
     for (fam in carried_families()) {
         let fam_path = "modules/dasLLAMA/dasllama/{fam}.das"
-        continue if (!fexist(fam_path))
+        if (!fexist(fam_path)) {
+            gate_finding(CARRIER, "AudioKind arm {fam} has no {fam_path} - the carrier names a family the module does not carry, and its seams would go unpoliced")
+            continue
+        }
         var inscope names : array<string>
         family_owned_names(fam, fam_path, names)
         for (folder in ["modules/dasLLAMA/dasllama", "utils/dasllama-server", "utils/dasllama-convert", "tutorials/dasLLAMA"]) {

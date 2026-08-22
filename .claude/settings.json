@@ -11,6 +11,19 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Monitor|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -c -f \".claude/hooks/monitor_guard.jq\"",
+            "timeout": 15,
+            "statusMessage": "PR-watch guard: pr-babysit is the tool"
+          }
+        ]
+      }
     ]
   }
 }
