@@ -207,6 +207,31 @@ def normalize_indent_code_blocks(md_body: str) -> str:
     return ''.join(out_lines)
 
 
+# GFM — where the posts are drafted and previewed — lets a list start on
+# the line right after a paragraph; Python-Markdown requires a blank line
+# and otherwise swallows the bullets into the paragraph text. Insert the
+# blank only when the previous line is a plain column-0 paragraph line:
+# indented lines are list continuations, and a blank there would turn a
+# tight list loose. Ordered lists interrupt only at "1." (CommonMark rule).
+LIST_INTERRUPT_RE = re.compile(r'^ {0,3}(?:[-*+]|1\.)\s')
+LIST_ITEM_RE = re.compile(r'^ {0,3}(?:[-*+]|\d+\.)\s')
+
+def normalize_list_spacing(md_body: str) -> str:
+    out = []
+    in_fence = False
+    prev = ''
+    for line in md_body.splitlines():
+        if line.lstrip().startswith('```'):
+            in_fence = not in_fence
+        elif (not in_fence and LIST_INTERRUPT_RE.match(line)
+              and prev.strip() and prev == prev.lstrip()
+              and not LIST_ITEM_RE.match(prev)):
+            out.append('')
+        out.append(line)
+        prev = line
+    return '\n'.join(out)
+
+
 def split_excerpt(md_body: str) -> tuple[str, str]:
     """Split on <!-- more -->. Returns (excerpt, full)."""
     if '<!-- more -->' in md_body:
@@ -252,6 +277,7 @@ def render_post(entry: Entry, prev: Entry | None, next: Entry | None, md, posts_
     body_md = expand_post_links(entry.body_md, posts_by_slug)
     body_md = normalize_rst_code_blocks(body_md)
     body_md = normalize_indent_code_blocks(body_md)
+    body_md = normalize_list_spacing(body_md)
     md.reset()
     body_html = md.convert(body_md)
     tags_html = ''
@@ -322,7 +348,7 @@ def render_index(posts: list[Entry], md) -> str:
     items = []
     for p in posts:
         md.reset()
-        excerpt_html = md.convert(p.excerpt_md) if p.excerpt_md else ''
+        excerpt_html = md.convert(normalize_list_spacing(p.excerpt_md)) if p.excerpt_md else ''
         tags_html = '<br>'.join(html.escape(t) for t in p.tags) if p.tags else html.escape(p.tag)
         items.append(f"""        <div class="forge-blog-item">
             <div class="forge-blog-item__date">{html.escape(p.date)}</div>
@@ -388,7 +414,7 @@ def render_changelist(news: list[Entry]) -> str:
 
 def render_news_page(entry: Entry, md) -> str:
     md.reset()
-    body_html = md.convert(entry.body_md)
+    body_html = md.convert(normalize_list_spacing(entry.body_md))
     return f"""    <article class="forge-post">
         <div class="forge-container">
             <div class="forge-post__meta">

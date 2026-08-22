@@ -107,6 +107,22 @@
     line-height: 1.2;
 }
 
+/* Unseen-content dot, injected by blog-counter.js / news-counter.js when a
+   "N NEW" chip sits inside a closed dropdown (or behind the mobile burger). */
+.forge-nav__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex: none;
+}
+.forge-nav__burger { position: relative; }
+.forge-nav__burger .forge-nav__dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+}
+
 /* Mobile: inside the collapsed `.forge-nav.is-open` panel, flatten each
    group into a static labelled block (no floating dropdown). */
 @media (max-width: 767px) {
