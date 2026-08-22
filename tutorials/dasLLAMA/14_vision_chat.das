@@ -5,6 +5,7 @@ options fast_math = true  // ggml-parity FP laxity; drop for bit-exact work
 require dasllama/dasllama
 require daslib/jobque_boost
 require strings
+require math
 
 // Tutorial dasLLAMA-14: Vision Chat
 //
@@ -150,6 +151,53 @@ def section_by_hand(m : Model; decoder_mmproj : string; image_path : string; pro
     delete emb
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Section 3 — The qwen twist: grid-roped image positions (M-RoPE)
+// ──────────────────────────────────────────────────────────────────────────
+//
+// The qwen families (Qwen3-Omni, Qwen3-VL, Qwen2.5-Omni) rope image rows by
+// their 2D patch position instead of by sequence order: after the encode,
+// vision_mrope_grid reports the merged grid, and eval_embd_span_mrope
+// prefills the same non-causal span with grid-shaped angles. The position
+// advance after the image is max(grid.x, grid.y) — not the row count — and
+// the session tracks that delta for every later eval. A gemma pair reports a
+// zero grid, so this section falls back to the plain span shape there.
+
+def section_mrope(m : Model; decoder_mmproj : string; image_path : string; prompt : string) {
+    var inscope img <- load_image_rgb(image_path)
+    var emb <- load_vision_embedder(decoder_mmproj)
+    var scratch = VisionState()
+    var img_rows : array<float>
+    let n_img = encode_image(emb, scratch, img, "tut14m", img_rows)
+    var chat = create_chat_renderer(m, "", N_GEN)
+    add_user(chat, prompt)
+    var head : array<int64>
+    var tail : array<int64>
+    render_turn_image(m, chat, head, tail)
+    let n_head = long_length(head)
+    let np = n_head + n_img + long_length(tail)
+    var rows : array<float>
+    rows |> resize(np * m.config.dim)
+    embed_text_rows(m, head, rows, 0l)
+    for (i in range64(n_img * m.config.dim)) {
+        rows[n_head * m.config.dim + i] = img_rows[i]
+    }
+    embed_text_rows(m, tail, rows, n_head + n_img)
+    var s = create_session(m)
+    let grid = vision_mrope_grid(emb, scratch)
+    if (grid.x > 0) {
+        eval_embd_span_mrope(m, s, rows, np, n_head, n_head + n_img, grid)
+        print("mrope span: grid {grid.x}x{grid.y} ropes {n_img} rows, position advance {max(grid.x, grid.y)}\n")
+    } else {
+        print("this family ropes image rows sequentially (zero grid) - the plain span serves it\n")
+        eval_embd_span(m, s, rows, np, n_head, n_head + n_img)
+    }
+    print("next token after the mrope-framed turn: '{piece(m, sample(s, SamplingParams()))}'\n\n")
+    delete s
+    delete chat
+    delete emb
+}
+
 def is_image_path(p : string) : bool {
     let low = to_lower(p)
     return ends_with(low, ".png") || ends_with(low, ".jpg") || ends_with(low, ".jpeg") || ends_with(low, ".bmp")
@@ -180,6 +228,7 @@ def main() {
         setup_dasllama_jobque()
         section_easy(m, ggufs[1], image_path, prompt)
         section_by_hand(m, ggufs[1], image_path, prompt)
+        section_mrope(m, ggufs[1], image_path, prompt)
     }
     delete m
 }
