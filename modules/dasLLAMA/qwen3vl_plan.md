@@ -140,10 +140,16 @@ noise demands them).
     ViT, projection 2560, flags AGREE with tensors on dense files.
   Note for regeneration: never edit mint.sh while it is running (bash re-reads by offset —
   this bit once).
-- **B. Text-only IMROPE regression FIRST**: the decoder rope path gains the
-  sections/int4-positions machinery with all sections equal — output must bit-match master's
-  qwen35/qwen3vlmoe truth tsvs before any image code exists (branch-test rule: the refactor
-  carries its own witness).
+- **B. IMROPE table builder (DONE 2026-08-22)**: das rope is TABLE-based (angle generation
+  single-sourced in `dasllama_rope`, application kernels read cos/sin rows), so IMROPE is one
+  new builder — `build_rope_tabs_imrope` (per-row int4 positions + sections, the ggml sector
+  walk verbatim, same float order as the siblings) — and the TEXT PATH IS UNTOUCHED: the
+  planned tsv-level regression dissolved into a stronger, cheaper gate. `test_rope.das`
+  gained three model-free tests: the (p,p,p,p) collapse BIT-matches `build_rope_tabs_rows`
+  (prediction 1: CORRECT, first attempt), an image row matches a per-element ggml-order
+  reference including the tail quirk (61/62 → e, unrotated at e=0), and an h-only
+  perturbation moves exactly the h dims. Negative control run: a poisoned axis walk reds
+  both gates.
 - **C. Preproc**: qwen geometry constants (align 32, budget 8–4096 tokens) + ×2−1 normalize
   in `dasllama_vision.das`, riding the EXISTING gemma geometry + letterbox path (per-family
   parameters, not a new code path); tier-0 bit-exact gates against the post-normalize dumps.
