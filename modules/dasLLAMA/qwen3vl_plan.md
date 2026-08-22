@@ -231,10 +231,24 @@ noise demands them).
   with `content` honestly empty (the cell now pins `enable_thinking: false`), and the
   two-image 400 was renamed "one media clip per request" by the audio arc while the cell
   still grepped the old wording. Suite 4/4 green.
-- **G. Metal IMROPE**: positions plane + sections into the prefill rope kernels (rope_store
-  family) and the span eval from 3815; decode-side scalar offset; DASLLAMA_VERSION bump;
-  parity arm vs CPU. Until G lands, image turns take CPU prefill by an explicit named
-  decline (loud, per followup #28's spirit — not silent).
+- **G. Metal IMROPE (DONE 2026-08-22)**: the plan's "positions plane + sections into the
+  kernels" premise was WRONG — Metal's prefill rope (`enc_rope`) is a pure TABLE consumer
+  (per-token cos/sin rows, memcpy'd from `s.rope_cos` each quantum), and E1's
+  `prefill_rope_tables` already builds those rows from the mrope map. So G is a capability
+  gate, not a kernel change (no MSL touched, no DASLLAMA_VERSION bump): new seat
+  `register_prefill_override_mrope_tables` (the split-span seat's twin) — Metal registers it
+  and serves the quantum; an unregistered override (vulkan: scalar-position angles) declines
+  it to the CPU loop by name; the CPU-prefill tripwire's mrope exemption is REMOVED (a
+  CPU-served mrope quantum on a Metal build is the silent-sink class again). Gates:
+  prefill-parity arm `span-mrope` (Llama-3.2-1B blob twin, stamped sections, 6×4 grid over
+  24 rows) — ONE GPU prefill (counter; the capability knockout reds it via the blob-only
+  panic), token-exact vs the all-CPU control, and a same-backend grid-vs-sequential
+  prefill-logits witness (measured 6.03 — greedy tokens TIE on the counting fixture, logits
+  are the honest discriminator); tripwire suite gains the mrope cell (mutation-controlled:
+  restoring the exemption reds it); span/span-fused arms + test_vision_chat 12/12 + the
+  vision server suite 4/4 unregressed. NOTE: the server-test harness maps the planar flavor
+  by design, so the Omni-on-Metal E2E (and its prefill win) lands with slice J's bench
+  cells, which run the metal rail.
 - **H. Deepstack (dense Qwen3-VL)**: `qwen3vl` dense arch registration (qwen3 dense +
   IMROPE sections + the deepstack hparam); tower gains the three merger MLPs and the wide-row
   output; prefill adds slice il+1 to image rows after layer il < 3; 4B is the dev vehicle,

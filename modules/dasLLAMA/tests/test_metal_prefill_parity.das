@@ -188,6 +188,78 @@ def private span_fused_prefill_logits(trp : Model; head, media, tail : array<int
     return <- lg
 }
 
+// span_fused_greedy's mrope twin: the media rows rope as a grid through
+// eval_embd_span_mrope_ (the per-row table map), then n greedy steps on trd — the CPU
+// control and the GPU run share it verbatim, delta'd decode included
+def private span_mrope_greedy(trp, trd : Model; head, media, tail : array<int64>; grid : int2;
+                              kdt : KVDtype; nsteps : int) : array<int64> {
+    var ids : array<int64>
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s = make_run_state(trp.config, kdt, kdt)
+        let nh = long_length(head)
+        let nm = long_length(media)
+        let npos = nh + nm + long_length(tail)
+        var rows : array<float>
+        rows |> reserve(npos * trp.config.dim)
+        rows |> resize(npos * trp.config.dim)
+        embed_text_rows(trp, head, rows, 0l)
+        embed_text_rows(trp, media, rows, nh)
+        embed_text_rows(trp, tail, rows, nh + nm)
+        eval_embd_span_mrope_(trp, s, rows, npos, nh, nh + nm, int64(grid.x), int64(grid.y))
+        let vocab = trp.config.vocab_size
+        var cur = 0l
+        for (v in range64(1l, vocab)) {
+            if (s.logits[v] > s.logits[cur]) {
+                cur = v
+            }
+        }
+        for (_i in range(nsteps)) {
+            ids |> push(cur)
+            var one <- [cur]
+            eval_(trd, s, one)
+            delete one
+            cur = 0l
+            for (v in range64(1l, vocab)) {
+                if (s.logits[v] > s.logits[cur]) {
+                    cur = v
+                }
+            }
+        }
+        delete rows
+        delete s
+    }
+    return <- ids
+}
+
+// span_fused_prefill_logits' mrope twin — the grid-vs-sequential witness reads these on the
+// SAME backend, where the table upload is the only difference
+def private span_mrope_prefill_logits(trp : Model; head, media, tail : array<int64>; grid : int2;
+                                      kdt : KVDtype) : array<float> {
+    var lg : array<float>
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s = make_run_state(trp.config, kdt, kdt)
+        let nh = long_length(head)
+        let nm = long_length(media)
+        let npos = nh + nm + long_length(tail)
+        var rows : array<float>
+        rows |> reserve(npos * trp.config.dim)
+        rows |> resize(npos * trp.config.dim)
+        embed_text_rows(trp, head, rows, 0l)
+        embed_text_rows(trp, media, rows, nh)
+        embed_text_rows(trp, tail, rows, nh + nm)
+        eval_embd_span_mrope_(trp, s, rows, npos, nh, nh + nm, int64(grid.x), int64(grid.y))
+        lg |> resize(long_length(s.logits))
+        for (i in range64(long_length(s.logits))) {
+            lg[i] = s.logits[i]
+        }
+        delete rows
+        delete s
+    }
+    return <- lg
+}
+
 // prompt-to-continuation: prefill on trp (the arm's subject — GPU when the override is
 // selected and trp is the blob twin), then n_gen greedy decode steps on trd (the planar
 // model = the shared CPU decode both runs ride, preserving the prefill-isolation property).
@@ -506,6 +578,63 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete ftail
                 delete trf
                 delete trfg
+            }
+
+            // span-mrope arm: the qwen image turn's grid-roped ONE-eval shape. The metal
+            // override consumes the SAME per-row tables prefill_rope_tables builds from the
+            // grid map, so the quantum serves as ONE GPU prefill (the mrope decline is gone),
+            // token-exact vs the all-CPU control — and the grid must MOVE the GPU stream vs
+            // the sequential span, or the map never reached the uploaded angles.
+            if (arm_on(t, "span-mrope")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                var trm <- load_model_(path, QuantMode.q8)
+                if (trm.config.seq_len > 2048l) {
+                    trm.config.seq_len = 2048l
+                }
+                trm.config.rope_sections = int4(12, 10, 10, 0)   // stamp: the 1B is not an mrope arch (rotary 64 -> half 32)
+                var trmg <- blob_twin(t, path, 2048l)
+                trmg.config.rope_sections = int4(12, 10, 10, 0)
+                let mh = 20l
+                let nm = 24l   // a 6x4 merged grid; position advance 6, delta -18
+                let mgrid = int2(6, 4)
+                var mhead <- [for (i in range64(mh)); prompt[i]]
+                var mmedia <- [for (i in range64(mh, mh + nm)); prompt[i]]
+                var mtail <- [for (i in range64(mh + nm, mh + nm + 20l)); prompt[i]]
+                for (kdt in [KVDtype.f16, KVDtype.q8_0]) {
+                    var cpu_m <- span_mrope_greedy(trm, trm, mhead, mmedia, mtail, mgrid, kdt, 24)
+                    select_prefill_override("metal")
+                    let pfm0 = metal_prefill_stats().prefills
+                    var gpu_m <- span_mrope_greedy(trmg, trm, mhead, mmedia, mtail, mgrid, kdt, 24)
+                    t |> success(metal_prefill_stats().prefills - pfm0 == 1l,
+                        "{kdt} mrope turn served as ONE GPU prefill (no decline)")
+                    // the map must reach the uploaded angles: the same GPU eval at sequential
+                    // span positions moves the prefill logits (greedy tokens can tie on the
+                    // counting fixture, so logits are the discriminator; E1's CPU shift ~0.14)
+                    var lg_m <- span_mrope_prefill_logits(trmg, mhead, mmedia, mtail, mgrid, kdt)
+                    var lg_s <- span_fused_prefill_logits(trmg, mhead, mmedia, mtail, kdt)
+                    select_prefill_override("")
+                    var gdiff = 0.0
+                    for (i in range64(min(long_length(lg_m), long_length(lg_s)))) {
+                        gdiff = max(gdiff, abs(lg_m[i] - lg_s[i]))
+                    }
+                    to_log(LOG_INFO, "span-mrope/{kdt} grid-vs-sequential GPU prefill-logits maxdiff = {gdiff}\n")
+                    t |> success(gdiff > 1e-3, "{kdt} the grid moves the GPU prefill logits ({gdiff})")
+                    log_gen_texts(trm, "span-mrope/{kdt}", cpu_m, gpu_m)
+                    t |> success(same(cpu_m, gpu_m), "{kdt} mrope turn matches the all-CPU control")
+                    delete cpu_m
+                    delete gpu_m
+                    delete lg_m
+                    delete lg_s
+                }
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                delete mhead
+                delete mmedia
+                delete mtail
+                delete trm
+                delete trmg
             }
 
             // dim-4096 arm (M2.6): past the fused add+rms+quant slab (dim <= 3072) the prefill

@@ -3444,6 +3444,7 @@ def dasllama_metal_prefill_register() {
     // registered but dormant: only select_prefill_override("metal") (env rail
     // DASLLAMA_PIN_PREFILL) activates it, and unsupported shapes decline per call
     register_prefill_override("metal", @@metal_prefill_forward)
+    register_prefill_override_mrope_tables("metal")   // enc_rope reads the per-token table rows, so the mrope grid map serves unchanged
     register_ple_gpu_gate(@@metal_ple_pre_gpu_gate)
     g_pf_env_mulmm = g_env_metal.mulmm
     g_pf_env_span = g_env_metal.span

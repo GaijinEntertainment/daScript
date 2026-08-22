@@ -56,6 +56,18 @@ def test_cpu_prefill_tripwire(t : T?) {
                 tripped = true
             }
             t |> success(tripped, "an undeclared {NROWS}-row causal prefill still panics")
+            // an mrope quantum is no longer exempt: metal serves it (the per-row-table
+            // capability), so a CPU-served one is the same silent fallback as any other
+            tr.config.rope_sections = int4(8, 8, 8, 0)   // stamp: the toy is not an mrope arch (rotary 48 -> half 24)
+            var mrope_tripped = false
+            try {
+                var s3 <- make_run_state(tr.config)
+                eval_embd_span_mrope(tr, s3, rows, NROWS, 8l, 32l, int2(6, 4))
+                delete s3
+            } recover {
+                mrope_tripped = true
+            }
+            t |> success(mrope_tripped, "an undeclared {NROWS}-row MROPE quantum panics like any other")
             delete s
         }
         delete rows
