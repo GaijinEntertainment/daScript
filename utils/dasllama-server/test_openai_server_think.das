@@ -36,11 +36,11 @@ let GPTOSS_PATH = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
 
 def private model_missing(t : T?; path : string) : bool {
     if (!jit_enabled()) {
-        t |> success(true, "skipped: interpreted (dasLLAMA server test is JIT-only)")
+        t |> skip("interpreted (dasLLAMA server test is JIT-only)")
         return true
     }
     if (!stat(path).is_valid) {
-        t |> success(true, "skipped: {base_name(path)} not present (set DASLLAMA_MODELS_DIR)")
+        t |> skip("{base_name(path)} not present (set DASLLAMA_MODELS_DIR)")
         return true
     }
     return false
@@ -326,7 +326,7 @@ def test_think_gemma4(t : T?) {
 [test]
 def test_think_gptoss(t : T?) {
     if (!g_env_test.parity_full) {
-        t |> success(true, "skipped: gpt-oss-20b is large-tier (11 GB) — set DASLLAMA_PARITY_FULL=1 to run")
+        t |> skip("gpt-oss-20b is large-tier (11 GB) — set DASLLAMA_PARITY_FULL=1 to run")
         return
     }
     if (model_missing(t, GPTOSS_PATH)) {
@@ -419,7 +419,7 @@ def test_tools_gemma4(t : T?) {
 [test]
 def test_tools_gptoss(t : T?) {
     if (!g_env_test.parity_full) {
-        t |> success(true, "skipped: gpt-oss-20b is large-tier (11 GB) — set DASLLAMA_PARITY_FULL=1 to run")
+        t |> skip("gpt-oss-20b is large-tier (11 GB) — set DASLLAMA_PARITY_FULL=1 to run")
         return
     }
     if (model_missing(t, GPTOSS_PATH)) {

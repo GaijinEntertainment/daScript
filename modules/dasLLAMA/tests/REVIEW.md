@@ -68,10 +68,11 @@ gate, not the iteration loop. Here the spelling is `model_available` (`_model_ti
 serving leg, which cannot require this folder's fixtures, open-codes the same gate. Check what a
 test loads first.
 
-**A suite loads decoders with `load_model_` (`dasllama/dasllama_load.das`), never
-`load_model`, `load_model_cached`, or `load_model_image` — the `.dlim` image rail** (towers
-and embedders load through their family loaders). Image-rail coverage — mint, map, GC,
-flavors — belongs to `test_model_image.das` and `test_model_image_vulkan.das` alone.
+**Every suite but `test_model_image.das` and `test_model_image_vulkan.das` — the image-rail
+coverage pair (mint, map, GC, flavors) — loads each carrier through its own loader, never the
+`.dlim` image rail (`load_model`, `load_model_cached`, `load_model_image`):** decoders through
+`load_model_` (`../dasllama/dasllama_load.das`); towers, embedders, and union carriers through
+their family or carrier loaders.
 
 **A function that gains a parameter, or a parameter that gains an accepted value, ships a
 test feeding the new value and checking the result.** "The model still runs" is not that
@@ -126,21 +127,21 @@ for that leg — `set_metal_tower(false)`, `set_metal_wdec(false)`, `set_metal_w
 — and restores it after** — never relies on the driver's runtime decline. The mechanism (why
 the hooks flip legs silently) is `CLAUDE.md`'s "Metal fixtures" section.
 
-**A cell that encodes, preprocesses, or asserts on vision image bytes — pixels, not a `.dlim`
-model image — with no model loaded builds its image procedurally and pins its expectations
-in-repo.**
+**A cell that encodes, preprocesses, or asserts on media bytes an encoder consumes — pixels
+or audio samples, not a `.dlim` model image — with no model loaded builds its fixture
+procedurally and pins its expectations in-repo.**
 
-**Any image a test feeds an embedder is a fixture the test builds, or is previewable via
-`DASLLAMA_VISION_DUMP`** — a red never requires adding instrumentation before a human can
-see what the model saw.
+**Any media a test feeds an embedder — an image or an audio clip — is a fixture the test
+builds, or is previewable via `DASLLAMA_VISION_DUMP` (images)** — a red never requires adding
+instrumentation before a human can see what the model consumed.
 
-**A tier-1 vision fixture — one an embedder-parity cell regenerates in-test and compares
+**A tier-1 media fixture — one an embedder-parity cell regenerates in-test and compares
 against an oracle dump — has an exact-value generator.** A generator running libm
 transcendentals is not float-portable and its cell is a defect; orientation coverage uses
 shaped exact fixtures.
 
-**A vision embedding-parity cell names its fixture and logs the measured maxdiff on green as
-well as red.**
+**An embedding-parity cell names its fixture and logs the measured maxdiff on green as well
+as red.**
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** — the wire-shape pins, the render pins, and a live server leg gated on the family's
