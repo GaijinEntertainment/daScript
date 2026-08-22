@@ -510,3 +510,12 @@
     "weakening that gate is a defect" residue form. Also owed: a re-mint of the gemma-3-4b cpu
     image row (hand-minted in the gemma3v arc; still stamps `parsec` + a pre-branch sha, and
     the image sweep's catalog does not reach it).
+
+41. **Audio-in-chat serves the whisper-class `AudioTower` families only — the qwen3a conformer
+    (Qwen3-Omni) and gemma4a have no chat splice.** Surfaced by the omni showcase test (the
+    vision arc): `add_user_audio_`/`create_chat_(model, tower)` ride `AudioTower`
+    (qwen2a/ultravox/voxtral); `load_audio_tower` reads the legacy `clip.projector_type` key
+    the dual-tower Omni mmproj does not carry, and the qwen3a conformer is a different type
+    (`Qwen3aTower`) served through the ASR route. Done = an audio-encoder seam the chat layer
+    can hold for either type (the `VisionEmbedder` union pattern), `add_user_audio_` routed
+    by family, and the Omni showcase upgraded to the one-session three-modality form.

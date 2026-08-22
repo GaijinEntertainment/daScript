@@ -186,11 +186,23 @@ noise demands them).
   (0.14 logits shift vs sequential; 11×2 vs 2×11 differ), existing span gates unregressed.
   NOTE for slice F: batched-decode positions come from scheduler stream state — a post-image
   stream needs its per-stream delta plumbed there.
-- **E2. Chat splice**: the qwen template arm (`<|vision_start|>` 151652 / `<|vision_end|>`
-  151653 media pair), `VisionEmbedder` union arm for qwen3v, `add_user_image_` routing +
-  `render_turn_image_` driving `eval_embd_span_mrope_` for mrope arches, `ask --image` on
-  omni; tier-2 greedy parity vs `DASLLAMA_IDS` (cats, 300 tokens, advance 20) + tier-3
-  captions; the SHOWCASE test: one turn with image + audio + text.
+- **E2. Chat splice (DONE 2026-08-22)**: the vision pair on the SHARED ChatML template
+  (`<|vision_start|>`/`<|vision_end|>`, the gemma3-on-gemma_chat precedent — text-only
+  vocabs refuse at the image_vocab_ok gate); the qwen3v `VisionEmbedder` union arm +
+  `vision_mrope_grid` (merged grid from the tower state; (0,0) on gemma families);
+  ChatSession carries `image_grid`, `generate_embd_` gained the grid param routing the span
+  through `eval_embd_span_mrope_` (facade twin added); the dual-arm
+  `create_chat_(model, tower, embedder)` for one session serving all media. `ask --image`
+  works UNCHANGED (union-routed). Tier-2/3 follow the house caption-floor convention
+  (freeform token parity is banned — tests/CLAUDE.md): the Omni leg in test_vision_chat.das
+  pins the stream shape (markers 151652/151653, media-first), 300 rows, grid int2(20,15),
+  the caption, and `rope_pos_delta == 20 − 300` after the turn — GREEN 10/10 with every
+  gemma leg unregressed; the Omni's greedy caption correctly describes the cats fixture.
+  `test_omni_showcase`: ONE session — an image turn, then a text turn whose answer needs the
+  image turn's history across the mrope delta. The three-modality form is BLOCKED on a
+  standing gap the test surfaced: audio-in-chat rides the whisper-class `AudioTower` only —
+  the qwen3a conformer has no chat splice (`followup_general.md` #41; prediction 6 scores
+  WRONG on its premise — `add_user_audio_` existed but never served this family).
 - **F. Server**: the `PendingReq` media rail (gemma slice F) gains the mrope position walk in
   its one-quantum prefill; page unchanged (sticky image already works).
 - **G. Metal IMROPE**: positions plane + sections into the prefill rope kernels (rope_store

@@ -211,7 +211,7 @@ def generate_embd(model : Model; var session : Session; embd : array<float>; npo
     //! ``generate``'s embedding-prefill twin: prefill ``npos`` pre-built embedding rows (the
     //! multimodal splice — see ``eval_embd``), then stream-sample exactly like ``generate``. The
     //! chat layer's audio turns run on this; use it directly for custom multimodal prompts.
-    return generate_embd_(model, session, embd, npos, params, max_tokens, 0l, 0l, blk)
+    return generate_embd_(model, session, embd, npos, params, max_tokens, 0l, 0l, int2(0), blk)
 }
 
 def generate_embd(model : Model; var session : Session; embd : array<float>; npos : int64;
@@ -220,7 +220,15 @@ def generate_embd(model : Model; var session : Session; embd : array<float>; npo
     //! ``generate_embd`` with a NON-CAUSAL span: rows ``[span_lo, span_hi)`` prefill as an image
     //! span (every query attends the whole span), the text around them causally — the gemma
     //! vision decode shape. The chat layer's image turns run on this.
-    return generate_embd_(model, session, embd, npos, params, max_tokens, span_lo, span_hi, blk)
+    return generate_embd_(model, session, embd, npos, params, max_tokens, span_lo, span_hi, int2(0), blk)
+}
+
+def generate_embd(model : Model; var session : Session; embd : array<float>; npos : int64;
+                  params : SamplingParams; max_tokens : int64; span_lo, span_hi : int64; grid : int2;
+                  blk : block<(id : int64; piece : string) : bool>) : int64 {
+    //! The span form with an mrope GRID (qwen vision): the span rows rope at grid positions
+    //! (merged nx×ny; the sequence position advances by max(nx, ny)) — the qwen image shape.
+    return generate_embd_(model, session, embd, npos, params, max_tokens, span_lo, span_hi, grid, blk)
 }
 
 // ===== Embeddings =====

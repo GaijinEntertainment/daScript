@@ -4465,6 +4465,11 @@ def chatml_chat(var ct : ChatTemplate) {
     ct.think_mode = ThinkMode.symmetric   // reply-side: <think> ... </think>, thinking fine-tunes only
     ct.think_open = "<think>"
     ct.think_close = "</think>"
+    // qwen vision (mtmd: <|vision_start|> ... embeddings ... <|vision_end|>). Declared on the
+    // SHARED ChatML shape like gemma3's on gemma_chat: a text-only vocab lacks the markers and
+    // the chat layer's image_vocab_ok gate refuses the pair there.
+    ct.image_pre.parts <- [chat_special("<|vision_start|>")]
+    ct.image_post.parts <- [chat_special("<|vision_end|>")]
     ct.stop <- ["<|im_end|>", "<|endoftext|>"]
 }
 

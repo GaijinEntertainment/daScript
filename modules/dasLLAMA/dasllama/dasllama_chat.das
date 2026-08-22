@@ -66,6 +66,7 @@ struct ChatSession {
     embedder_scratch : VisionState = VisionState()
     image_rows : array<float>             // encoded image soft tokens awaiting the next respond()
     n_image_rows : int64                  // row count in image_rows (each vision.proj_dim wide)
+    image_grid : int2                     // the merged nx×ny when the family ropes with grid positions (qwen mrope); (0,0) = sequential
 }
 
 // Stated rather than inferred: the tower holds borrowed planes, and a generated teardown
@@ -613,6 +614,7 @@ def private consume_pending_(var c : ChatSession) {
     c.n_audio_rows = 0l                // an assistant-path consume must not leave rows armed
     c.image_rows |> clear()
     c.n_image_rows = 0l
+    c.image_grid = int2(0)
     c.turn_open = false                // ditto the leaked-turn close; re-set AFTER consume where a call leaves it open
 }
 
@@ -702,6 +704,7 @@ def create_chat_(model : Model; var embedder : VisionEmbedder; system : string =
     return <- c
 }
 
+
 //! Queue an image for the next respond() — geometry, letterbox and embedder run NOW, spliced at
 //! the head of the next user turn (before its text). ONE image per turn in v1: a second call
 //! before respond() panics. Call inside with_job_que() (the embedder threads its GEMMs).
@@ -716,6 +719,7 @@ def add_user_image_(var c : ChatSession; img : VisionImage) {
         panic("dasLLAMA chat: audio already queued this turn - one media kind per turn")
     }
     c.n_image_rows = encode_image_(c.embedder, c.embedder_scratch, img, "turn{length(c.history)}", c.image_rows)
+    c.image_grid = vision_mrope_grid(c.embedder, c.embedder_scratch)
 }
 
 //! Queue audio (16 kHz mono f32 PCM) for the next respond() — encoded to soft tokens NOW,
@@ -1394,7 +1398,7 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         // audio projector is causal, so the audio turn passes an empty span
         let span_lo = is_image ? n_head : 0l
         let span_hi = is_image ? n_head + n_media : 0l
-        generate_embd_(m, c.session, embd, npos, params, c.max_new, span_lo, span_hi) $(id, piece) {
+        generate_embd_(m, c.session, embd, npos, params, c.max_new, span_lo, span_hi, is_image ? c.image_grid : int2(0)) $(id, piece) {
             for (sid in stops) {
                 return false if (id == sid)
             }
@@ -1404,7 +1408,7 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         c.audio_rows |> clear()
         c.n_audio_rows = 0l
         c.image_rows |> clear()
-        c.n_image_rows = 0l
+        c.n_image_rows = 0l; c.image_grid = int2(0)
     } else {
         var inscope pre : array<int64>
         render_prompt(m, c, pre)
