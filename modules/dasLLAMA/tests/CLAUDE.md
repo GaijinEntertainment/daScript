@@ -258,11 +258,16 @@ same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which i
 cannot live in test_attn_span — that file arms it in `[init]`, and why it stays out of the
 runner's `model-free` suite — the runner sets `DASLLAMA_CPU_PREFILL=1`). Metal-capable builds
 only; plain dastest only.
-`test_vision_chat.das` — the image chat turn end to end, three families / four legs: the 12B
-gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`), the E2B gemma4v pair (E2B Q8
-decoder + bf16 mmproj — small tier, runs without the flag), the gemma-3-4b gemma3v pair (small
-tier), and the gemma-3-12b pair (the same SigLIP tower at projection 3840 — large tier,
-`DASLLAMA_PARITY_FULL=1`): the prompt stream shape around the splice
+`test_vision_chat.das` — the image chat turn end to end, four families / five legs plus the
+showcase: the 12B gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`), the E2B
+gemma4v pair (E2B Q8 decoder + bf16 mmproj — small tier, runs without the flag), the
+gemma-3-4b gemma3v pair (small tier), the gemma-3-12b pair (the same SigLIP tower at
+projection 3840 — large tier, `DASLLAMA_PARITY_FULL=1`), and the Qwen3-Omni qwen3v pair
+(large tier — the mrope leg: grid reaches the chat, the session's rope delta reflects the
+grid advance) plus `test_omni_showcase` (one Omni session: an image turn, then a text turn
+whose answer needs the image turn across the mrope position delta; qwen3a audio-in-chat is a
+standing gap — the chat AudioTower serves the whisper-class families only):
+the prompt stream shape around the splice
 (marker ids, media-first, span length from the geometry) and the greedy caption, logged in
 full. NOT token-parity with
 llama-mtmd-cli — the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4

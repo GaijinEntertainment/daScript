@@ -8,6 +8,7 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_gemma4uv public   // re-exported: a requirer that carries the union must see both families to delete it
 require dasllama/dasllama_gemma4v public
 require dasllama/dasllama_gemma3v public
+require dasllama/dasllama_qwen3v public
 require dasllama/dasllama_vision public     // VisionImage — the decoded-pixel input every family takes
 require dasllama/dasllama_gguf
 require dasllama/dasllama_image   // image_family_tag — a prepared .dlim routes on its baked tag
@@ -23,6 +24,7 @@ enum VisionKind {
     gemma4uv    // the gemma-4 dense embedder (no attention)
     gemma4v     // the gemma-4 E-series ViT tower
     gemma3v     // the gemma-3 SigLIP tower (fixed 896² canvas)
+    qwen3v      // the qwen3vl SigLIP-geometry ViT (Qwen3-Omni; mrope decoder positions)
 }
 
 struct VisionEmbedder {
@@ -30,6 +32,7 @@ struct VisionEmbedder {
     gemma4uv : Gemma4uvEmbedder = Gemma4uvEmbedder()
     gemma4v : Gemma4vTower = Gemma4vTower()
     gemma3v : Gemma3vTower = Gemma3vTower()
+    qwen3v : Qwen3vTower = Qwen3vTower()
 }
 
 //! Per-encode scratch for whichever family the embedder carries (caller-owned, reused).
@@ -37,6 +40,7 @@ struct VisionState {
     gemma4uv : Gemma4uvState = Gemma4uvState()
     gemma4v : Gemma4vState = Gemma4vState()
     gemma3v : Gemma3vState = Gemma3vState()
+    qwen3v : Qwen3vState = Qwen3vState()
 }
 
 // Stated rather than inferred: the family carriers hold borrowed planes, and a generated
@@ -45,12 +49,14 @@ def finalize(var e : VisionEmbedder) {
     delete e.gemma4uv
     delete e.gemma4v
     delete e.gemma3v
+    delete e.qwen3v
 }
 
 def finalize(var s : VisionState) {
     delete s.gemma4uv
     delete s.gemma4v
     delete s.gemma3v
+    delete s.qwen3v
 }
 
 //! Soft-token width the embedder projects to (must equal the decoder width); 0 = no vision arm.
@@ -58,6 +64,7 @@ def vision_proj_dim(e : VisionEmbedder) : int64 {
     if (e.kind == VisionKind.gemma4uv) return e.gemma4uv.proj_dim
     if (e.kind == VisionKind.gemma4v) return e.gemma4v.proj_dim
     if (e.kind == VisionKind.gemma3v) return e.gemma3v.proj_dim
+    if (e.kind == VisionKind.qwen3v) return e.qwen3v.proj_dim
     return 0l
 }
 
@@ -66,6 +73,7 @@ def vision_align(e : VisionEmbedder) : int64 {
     if (e.kind == VisionKind.gemma4uv) return e.gemma4uv.patch
     if (e.kind == VisionKind.gemma4v) return e.gemma4v.patch * e.gemma4v.merge
     if (e.kind == VisionKind.gemma3v) return e.gemma3v.patch * e.gemma3v.merge
+    if (e.kind == VisionKind.qwen3v) return e.qwen3v.patch * e.qwen3v.merge
     return 0l
 }
 
@@ -75,6 +83,7 @@ def vision_family(e : VisionEmbedder) : string {
     if (e.kind == VisionKind.gemma4uv) return "gemma4uv"
     if (e.kind == VisionKind.gemma4v) return "gemma4v"
     if (e.kind == VisionKind.gemma3v) return "gemma3v"
+    if (e.kind == VisionKind.qwen3v) return "qwen3v"
     return ""
 }
 
@@ -128,8 +137,23 @@ def load_vision_embedder(path : string) : VisionEmbedder {
         e.gemma3v <- load_gemma3v_tower(path)
         return <- e
     }
-    panic("dasLLAMA vision: '{path}' is projector '{proj}' - no vision family serves it (gemma4uv, gemma4v, gemma3)")
+    if (proj == "qwen3vl_merger" || proj == "qwen3v") {   // the gguf spells qwen3vl_merger; the image lane bakes qwen3v
+        var e = VisionEmbedder(kind = VisionKind.qwen3v)
+        e.qwen3v <- load_qwen3v_tower(path)
+        return <- e
+    }
+    panic("dasLLAMA vision: '{path}' is projector '{proj}' - no vision family serves it (gemma4uv, gemma4v, gemma3, qwen3vl_merger)")
     return <- VisionEmbedder()
+}
+
+//! The MERGED image grid of the last encode when the carried family ropes the decoder with
+//! grid positions (qwen mrope): (nx, ny) soft-token columns/rows; (0, 0) = sequential
+//! positions (every gemma family). Valid right after ``encode_image_``.
+def vision_mrope_grid(e : VisionEmbedder; s : VisionState) : int2 {
+    if (e.kind == VisionKind.qwen3v) {
+        return int2(int(s.qwen3v.grid_w / e.qwen3v.merge), int(s.qwen3v.grid_h / e.qwen3v.merge))
+    }
+    return int2(0)
 }
 
 //! The whole image path for the carried family: geometry → letterbox → normalize → the family's
@@ -139,6 +163,7 @@ def encode_image_(e : VisionEmbedder; var s : VisionState; img : VisionImage; ta
     if (e.kind == VisionKind.gemma4uv) return encode_image_(e.gemma4uv, s.gemma4uv, img, tag, out)
     if (e.kind == VisionKind.gemma4v) return encode_image_(e.gemma4v, s.gemma4v, img, tag, out)
     if (e.kind == VisionKind.gemma3v) return encode_image_(e.gemma3v, s.gemma3v, img, tag, out)
+    if (e.kind == VisionKind.qwen3v) return encode_image_(e.qwen3v, s.qwen3v, img, tag, out)
     panic("dasLLAMA vision: encode_image_ on an embedder with no vision arm")
     return 0l
 }
