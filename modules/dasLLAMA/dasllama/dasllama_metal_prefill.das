@@ -2422,6 +2422,11 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bdnqg = c.q_gated ? pool_acquire(g_pf_pool, g_dev, bytes_dn_qg) : null
     var bdngate = c.q_gated ? pool_acquire(g_pf_pool, g_dev, bytes_q) : null
     var batt = pool_acquire(g_pf_pool, g_dev, bytes_att)
+    // deepstack (qwen3vl dense): the wide quantum's tail slices upload as PER-SLICE contiguous
+    // planes so the per-layer add is the existing enc_add at a slice offset — a repack, no kernel
+    let nds = s.ds_active ? c.n_deepstack : 0l
+    let bytes_ds = uint64(npos * nds * dim * 4l)
+    var bds = nds > 0l ? pool_acquire_untracked(g_pf_upool, g_dev, bytes_ds) : null
     var bcos = pool_acquire_untracked(g_pf_upool, g_dev, bytes_tab)
     var bsin = pool_acquire_untracked(g_pf_upool, g_dev, bytes_tab)
     let dual_rope = has_dual_rope(c)
@@ -2498,6 +2503,15 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         if (dual_rope) {
             memcpy(metal_buffer_contents(bcos_swa), addr < void? >(s.rope_cos_swa[0]), npos * half_sw * 4l)
             memcpy(metal_buffer_contents(bsin_swa), addr < void? >(s.rope_sin_swa[0]), npos * half_sw * 4l)
+        }
+        if (nds > 0l) {   // [npos × nds·dim] row-major -> slice-major [nds][npos × dim]
+            var dsp = reinterpret<float?>(metal_buffer_contents(bds))
+            let srp = addr<float const?>(s.ds_embd[0])
+            for (sl in range64(nds)) {
+                for (r in range64(npos)) {
+                    copy_floats(dsp + (sl * npos + r) * dim, srp + r * nds * dim + sl * dim, dim)
+                }
+            }
         }
     }
     // continuation: gather the session's existing rows [0, start_pos) into every layer's panel
@@ -3145,6 +3159,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
                     }
                     enc_add(enc, bx, 0ul, bxb, 0ul, u_total_dim, npos * dim, bosc)
+                    if (l < nds) {   // deepstack: slice l adds to the layer output (every row; text tails are zero)
+                        enc_add(enc, bx, 0ul, bds, uint64(l * npos * dim * 4l), u_total_dim, npos * dim)
+                    }
                 }
             }
         }
@@ -3326,6 +3343,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_upool, u_dim2, 4ul)
         pool_release(g_pf_upool, u_wm_tot, 4ul)
     }
+    if (nds > 0l) {
+        pool_release(g_pf_upool, bds, bytes_ds)
+    }
     pool_release(g_pf_upool, bcos, bytes_tab)
     if (dual_rope) {
         pool_release(g_pf_upool, bcos_swa, bytes_tab_sw)
@@ -3445,6 +3465,7 @@ def dasllama_metal_prefill_register() {
     // DASLLAMA_PIN_PREFILL) activates it, and unsupported shapes decline per call
     register_prefill_override("metal", @@metal_prefill_forward)
     register_prefill_override_mrope_tables("metal")   // enc_rope reads the per-token table rows, so the mrope grid map serves unchanged
+    register_prefill_override_ds_adds("metal")   // the per-layer slice adds encode via enc_add over the uploaded slice planes
     register_ple_gpu_gate(@@metal_ple_pre_gpu_gate)
     g_pf_env_mulmm = g_env_metal.mulmm
     g_pf_env_span = g_env_metal.span

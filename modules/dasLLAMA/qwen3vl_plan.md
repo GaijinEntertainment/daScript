@@ -323,11 +323,14 @@ noise demands them).
 
 ### Arc followups (owed by this arc, after K)
 
-- **Metal deepstack add** (owed BEFORE slice J's 8B Metal image rows): the per-layer slice
-  add is three elementwise-add dispatches over an uploaded plane inside the Metal prefill
-  stack + a capability seat mirroring `register_prefill_override_mrope_tables`; until it
-  lands, ds quanta decline to the CPU loop by name and an 8B Metal img:pp cell would
-  measure CPU prefill.
+- **Metal deepstack add — DONE 2026-08-22**: NO new kernel — the ds plane repacks CPU-side
+  into slice-major contiguous planes, uploads once, and each layer l < n_ds encodes one more
+  `enc_add` at the slice offset after the layer-out residual; capability seat
+  `register_prefill_override_ds_adds` (metal registers, others decline by name); the
+  CPU-prefill tripwire's ds exemption removed (+ its cell). Gate: prefill arm `span-ds` —
+  ONE GPU prefill + token parity + the add-CONTRIBUTION witness (lg(tails)−lg(zero) per
+  backend: the skipped-add mutation reds it at contribution 0 where greedy tokens TIE on
+  the counting fixture; clean dd = 10–13% of the 3.6 contribution, bar 0.5×).
 
 - **qwen3a/gemma4a audio-in-chat** (= `followup_general.md` #41, pulled onto this arc): the
   chat `AudioTower` serves whisper-class projectors only — the conformer families have no

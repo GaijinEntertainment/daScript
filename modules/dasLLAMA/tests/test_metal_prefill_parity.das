@@ -260,6 +260,101 @@ def private span_mrope_prefill_logits(trp : Model; head, media, tail : array<int
     return <- lg
 }
 
+// the DEEPSTACK turn: wide (1+n_ds)·dim rows — slice 0 = the tokens' own embedding rows,
+// tails = small deterministic pseudo-random values (nonzero, so a skipped per-layer add
+// diverges) — one eval_embd_span_ call, then n greedy steps on trd; CPU control and GPU run
+// share it verbatim
+def private span_ds_greedy(trp, trd : Model; head, media, tail : array<int64>; kdt : KVDtype; nsteps : int) : array<int64> {
+    var ids : array<int64>
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s = make_run_state(trp.config, kdt, kdt)
+        let dim = trp.config.dim
+        let nds = trp.config.n_deepstack
+        let rw = (1l + nds) * dim
+        let nh = long_length(head)
+        let nm = long_length(media)
+        let npos = nh + nm + long_length(tail)
+        var rows : array<float>
+        rows |> reserve(npos * rw)
+        rows |> resize(npos * rw)
+        embed_text_rows_strided(trp, head, rows, 0l, rw)
+        embed_text_rows_strided(trp, media, rows, nh, rw)
+        embed_text_rows_strided(trp, tail, rows, nh + nm, rw)
+        var state = 0xBEEFu
+        for (r in range64(npos)) {
+            for (i in range64(nds * dim)) {
+                state = state * 1664525u + 1013904223u
+                rows[r * rw + dim + i] = (float(state >> 8u) / float(1 << 24) - 0.5) * 0.05
+            }
+        }
+        eval_embd_span_(trp, s, rows, npos, nh, nh + nm)
+        let vocab = trp.config.vocab_size
+        var cur = 0l
+        for (v in range64(1l, vocab)) {
+            if (s.logits[v] > s.logits[cur]) {
+                cur = v
+            }
+        }
+        for (_i in range(nsteps)) {
+            ids |> push(cur)
+            var one <- [cur]
+            eval_(trd, s, one)
+            delete one
+            cur = 0l
+            for (v in range64(1l, vocab)) {
+                if (s.logits[v] > s.logits[cur]) {
+                    cur = v
+                }
+            }
+        }
+        delete rows
+        delete s
+    }
+    return <- ids
+}
+
+// the deepstack turn's prefill logits alone: same assembly as span_ds_greedy, tails present
+// or zeroed — the witness reads the DIFFERENCE of the two on one backend (the add's own
+// contribution), where backend noise cancels
+def private span_ds_prefill_logits(trp : Model; head, media, tail : array<int64>; kdt : KVDtype;
+                                   with_tails : bool) : array<float> {
+    var lg : array<float>
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s = make_run_state(trp.config, kdt, kdt)
+        let dim = trp.config.dim
+        let nds = trp.config.n_deepstack
+        let rw = (1l + nds) * dim
+        let nh = long_length(head)
+        let nm = long_length(media)
+        let npos = nh + nm + long_length(tail)
+        var rows : array<float>
+        rows |> reserve(npos * rw)
+        rows |> resize(npos * rw)
+        embed_text_rows_strided(trp, head, rows, 0l, rw)
+        embed_text_rows_strided(trp, media, rows, nh, rw)
+        embed_text_rows_strided(trp, tail, rows, nh + nm, rw)
+        if (with_tails) {
+            var state = 0xBEEFu
+            for (r in range64(npos)) {
+                for (i in range64(nds * dim)) {
+                    state = state * 1664525u + 1013904223u
+                    rows[r * rw + dim + i] = (float(state >> 8u) / float(1 << 24) - 0.5) * 0.05
+                }
+            }
+        }
+        eval_embd_span_(trp, s, rows, npos, nh, nh + nm)
+        lg |> resize(long_length(s.logits))
+        for (i in range64(long_length(s.logits))) {
+            lg[i] = s.logits[i]
+        }
+        delete rows
+        delete s
+    }
+    return <- lg
+}
+
 // prompt-to-continuation: prefill on trp (the arm's subject — GPU when the override is
 // selected and trp is the blob twin), then n_gen greedy decode steps on trd (the planar
 // model = the shared CPU decode both runs ride, preserving the prefill-isolation property).
@@ -637,6 +732,73 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete mtail
                 delete trm
                 delete trmg
+            }
+
+            // span-ds arm: the deepstack quantum on the GPU — the per-layer slice adds encode
+            // via enc_add over uploaded slice-major planes. ONE GPU prefill (the decline is
+            // gone), token-exact vs the all-CPU control; nonzero tails make a skipped or
+            // misaligned add diverge immediately.
+            if (arm_on(t, "span-ds")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                var trd_ <- load_model_(path, QuantMode.q8)
+                if (trd_.config.seq_len > 2048l) {
+                    trd_.config.seq_len = 2048l
+                }
+                trd_.config.n_deepstack = 3l   // stamp: the 1B is not a deepstack arch
+                var trdg <- blob_twin(t, path, 2048l)
+                trdg.config.n_deepstack = 3l
+                let dh = 20l
+                let dm = 24l
+                var dhead <- [for (i in range64(dh)); prompt[i]]
+                var dmedia <- [for (i in range64(dh, dh + dm)); prompt[i]]
+                var dtail <- [for (i in range64(dh + dm, dh + dm + 20l)); prompt[i]]
+                for (kdt in [KVDtype.f16, KVDtype.q8_0]) {
+                    var cpu_d <- span_ds_greedy(trd_, trd_, dhead, dmedia, dtail, kdt, 24)
+                    select_prefill_override("metal")
+                    let pfd0 = metal_prefill_stats().prefills
+                    var gpu_d <- span_ds_greedy(trdg, trd_, dhead, dmedia, dtail, kdt, 24)
+                    t |> success(metal_prefill_stats().prefills - pfd0 == 1l,
+                        "{kdt} deepstack turn served as ONE GPU prefill (no decline)")
+                    log_gen_texts(trd_, "span-ds/{kdt}", cpu_d, gpu_d)
+                    t |> success(same(cpu_d, gpu_d), "{kdt} deepstack turn matches the all-CPU control")
+                    // the add's own contribution, per backend: lg(tails) − lg(zero-tails) on ONE
+                    // backend cancels its noise (greedy tokens TIE on the counting fixture, so a
+                    // skipped or misaligned GPU add needs this witness, not token equality)
+                    var g_t <- span_ds_prefill_logits(trdg, dhead, dmedia, dtail, kdt, true)
+                    var g_z <- span_ds_prefill_logits(trdg, dhead, dmedia, dtail, kdt, false)
+                    select_prefill_override("")
+                    var c_t <- span_ds_prefill_logits(trd_, dhead, dmedia, dtail, kdt, true)
+                    var c_z <- span_ds_prefill_logits(trd_, dhead, dmedia, dtail, kdt, false)
+                    var a_gpu = 0.0
+                    var dd = 0.0
+                    for (i in range64(min(long_length(g_t), long_length(c_t)))) {
+                        let ag = g_t[i] - g_z[i]
+                        let ac = c_t[i] - c_z[i]
+                        a_gpu = max(a_gpu, abs(ag))
+                        dd = max(dd, abs(ag - ac))
+                    }
+                    to_log(LOG_INFO, "span-ds/{kdt} GPU add-contribution max = {a_gpu}, GPU-vs-CPU contribution maxdiff = {dd}\n")
+                    // clean dd measures 10-13% of a_gpu (the layer-0..2 add propagates 30+ layers,
+                    // so cross-backend noise rides the Jacobian); a skipped add is a_gpu = 0 and a
+                    // misaligned one lands dd at a_gpu's own scale - 0.5x separates both ways
+                    t |> success(a_gpu > 0.01, "{kdt} the slice adds reach the GPU prefill logits ({a_gpu})")
+                    t |> success(dd < 0.5 * a_gpu, "{kdt} the GPU add contribution matches the CPU's ({dd} vs {a_gpu})")
+                    delete g_t
+                    delete g_z
+                    delete c_t
+                    delete c_z
+                    delete cpu_d
+                    delete gpu_d
+                }
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                delete dhead
+                delete dmedia
+                delete dtail
+                delete trd_
+                delete trdg
             }
 
             // dim-4096 arm (M2.6): past the fused add+rms+quant slab (dim <= 3072) the prefill
