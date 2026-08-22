@@ -28,6 +28,6 @@ passes review once and never runs again.
 a model file, a GPU, a network service — has a compile-only row in
 `.github/workflows/extended_checks.yml` (repo root) or the tool's own workflow.**
 
-**A compile-only-rowed test ships with its executed run recorded in the PR description**: the
-machine the assertions ran on, the gate it satisfied (the model file, GPU, or service
-present), and the pass count.
+**A new or changed test that takes a compile-only row ships with its executed run recorded
+in the PR description**: the machine the assertions ran on, the gate it satisfied (the model
+file, GPU, or service present), and the pass count.

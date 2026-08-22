@@ -115,9 +115,9 @@ per-family gate file covers.
 
 **A diff that adds a tower family the Metal tower driver serves — one whose bring-up
 registers a `*_gpu` hook in `dasllama/dasllama_metal_tower.das` — or gives the tower driver a
-newly borrowed kernel class or kargs struct, adds that gate file or that name — in the same
-change — to the rule in this checklist whose trigger names
-`dasllama/dasllama_metal_tower.das`.**
+newly borrowed kernel class or kargs struct, adds that family's per-family GPU oracle gate
+file, or that borrowed name, in the same change, to the trigger of the rule in this
+checklist that requires the per-family GPU oracle gates and the `mtower` image run.**
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq

@@ -315,7 +315,7 @@ def test_attn_span_fused(t : T?) {
 }
 
 [test]
-def test_attn_span_guards(t : T?) {
+def test_attn_span_guards(t : T?) {   // nolint:STYLE038 — one sequential guard story over one loaded toy: panics → seats → declines → refusals
     t |> run("the guards and the split-span capability seat") @(tt : T?) {
         if (!stat(MODEL_PATH).is_valid) {
             tt |> skip("stories15M.bin not present at {MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
@@ -387,7 +387,51 @@ def test_attn_span_guards(t : T?) {
             eval_embd_span_(tr, s5, embd_a, NPOS, SPAN_LO, SPAN_HI)
             delete s5
             tt |> equal(g_probe_calls, 1, "a fused-capable override sees ONE prefill call")
+            // the mrope seat: an override without it declines the WHOLE quantum by name -
+            // the CPU loop serves it, the override is never asked, and the logits match the
+            // no-override run bit-exact
+            tr.config.rope_sections = int4(8, 8, 8, 0)
             select_prefill_override("")
+            var s6 <- make_run_state(tr.config)
+            eval_embd_span_mrope_(tr, s6, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+            select_prefill_override("test-fused")
+            g_probe_calls = 0
+            var s7 <- make_run_state(tr.config)
+            eval_embd_span_mrope_(tr, s7, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+            tt |> equal(g_probe_calls, 0, "a seat-less override never sees an mrope quantum (declined by name)")
+            tt |> equal(arr_maxdiff(s6.logits, s7.logits), 0.0, "the declined mrope quantum serves on the CPU loop, bit-exact")
+            // the deepstack seat: same decline shape for a wide-row quantum
+            tr.config.n_deepstack = 2l
+            var inscope wide6 <- make_wide_embd(tr.config.dim, 2l, 1)
+            g_probe_calls = 0
+            var s8 <- make_run_state(tr.config)
+            eval_embd_(tr, s8, wide6, NPOS)
+            tt |> equal(g_probe_calls, 0, "a seat-less override never sees a deepstack quantum (declined by name)")
+            tr.config.n_deepstack = 0l
+            delete s6
+            delete s7
+            delete s8
+            select_prefill_override("")
+            // the mrope refusals: inverted span bounds, and a config with no rope sections
+            var tripped6 = false
+            var s9 <- make_run_state(tr.config)
+            try {
+                eval_embd_span_mrope_(tr, s9, embd_a, NPOS, 9l, 5l, 2l, 2l)
+            } recover {
+                tripped6 = true
+            }
+            tt |> success(tripped6, "an inverted mrope span [9,5) panics")
+            delete s9
+            tr.config.rope_sections = int4(0, 0, 0, 0)
+            tripped6 = false
+            var s10 <- make_run_state(tr.config)
+            try {
+                eval_embd_span_mrope_(tr, s10, embd_a, NPOS, SPAN_LO, SPAN_HI, 11l, 2l)
+            } recover {
+                tripped6 = true
+            }
+            tt |> success(tripped6, "an mrope span without rope.dimension_sections panics")
+            delete s10
         }
         delete tr
     }

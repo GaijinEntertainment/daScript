@@ -3,9 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `README.md`.
 
-**A diff calling any `modules/dasLLAMA` module symbol (a `dasllama_*` def) or naming one of
-its structs in this folder applies `modules/dasLLAMA/REVIEW.md` (repo root) too** — its gate
-polices the family seams here.
+**A diff to a file that requires a `dasllama/*` module applies `modules/dasLLAMA/REVIEW.md`
+(repo root) too** — its gate polices the family seams here.
 
 **A fixture under `tests/fixtures/` carries the bytes of a real server run with machine-local
 paths normalized, and is never otherwise written or edited by hand** — the capture rail is

@@ -13,23 +13,30 @@ a model row pins) anywhere under the module, answer to `performance/REVIEW.md`.
 
 **Every `dasllama/` change applies `tests/REVIEW.md` for the test obligation it names.**
 
-**Kind-routed companions sit beside this file:** a GPU kernel, driver, dispatch-class, or
-K/V-mirror change applies `REVIEW_GPU.md`. A change to `dasllama/dasllama_audio.das`,
-`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_audio_embedder.das`,
-`dasllama/dasllama_asr.das`, `dasllama/dasllama_asr_types.das`,
-`dasllama/dasllama_vad.das`, or an ASR family file — one `dasllama/dasllama_<family>.das`
-holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
-`dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
+**A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
+
+**A change to `dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_io.das`,
+`dasllama/dasllama_audio_embedder.das`, `dasllama/dasllama_asr.das`,
+`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR family file — one
+`dasllama/dasllama_<family>.das` holding a single speech model family — applies
+`REVIEW_AUDIO.md`.**
+
+**A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file — one
 `dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
 path (one that runs inside the program under review, not a spawned child process) that
 splices a stream carrying decoded media — pixels or audio samples — into a prompt or
-schedules such a stream, applies `REVIEW_VISION.md`. A `dasllama/dasllama_tower.das` change —
-the shared encoder-tower home — applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family
-file that only CALLS a shared rail does not thereby pick up the other modality's checklist. A
-change to the tune sidecar's schema or emitter, wherever it lands, answers to
-`modules/dasLLVM/REVIEW.md`. A routed file applies BOTH the checklist it routes to and this
-one; every other file under `modules/dasLLAMA/` applies this one.
+schedules such a stream, applies `REVIEW_VISION.md`.**
+
+**A `dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
+`REVIEW_AUDIO.md` and `REVIEW_VISION.md`;** a family file that only CALLS a shared rail does
+not thereby pick up the other modality's checklist.
+
+**A change to the tune sidecar's schema or emitter, wherever it lands, answers to
+`modules/dasLLVM/REVIEW.md`.**
+
+**A routed file applies BOTH the checklist it routes to and this one; every other file under
+`modules/dasLLAMA/` applies this one.**
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same change.** Kernel
 work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
@@ -192,10 +199,9 @@ the same change.**
 
 **A def of `dasllama/dasllama.das` — and a new OVERLOAD of one — is TAUGHT: demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
-`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** The gate keys on the def NAME, so a
-new overload rides an existing green — the reviewer checks the new signature is the one a
-tutorial actually calls. A mention that only names it (a comment, a passing reference) is a
-defect the gate cannot see.
+`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** The gate matches def NAMES only, so
+an overload passes on a sibling's tutorial — the reviewer confirms a tutorial calls the NEW
+signature, and a mention that only names it (a comment, a passing reference) does not count.
 
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
 struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;
@@ -239,17 +245,19 @@ renderer.** A family whose template or vocab lacks them has no arm for that medi
 `create_chat_` panics at create, not at render.
 
 **No signature in `dasllama/dasllama_tower.das` — the shared encoder-tower home — takes a
-type `dasllama/dasllama_audio.das` or a family file declares, and it requires neither.** A
-doc comment naming the family a helper was built for is fine; the code stays family-blind.
+type `dasllama/dasllama_audio.das` or a family file declares, and the file requires neither
+`dasllama/dasllama_audio.das` nor any family file.** A doc comment naming the family a
+helper was built for is fine; the code stays family-blind.
 
-**A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's file
-unless `ARCHITECTURE.md` §1's tower charter names it** — the charter line is what sanctions a
-single-caller helper as tower-worthy.
+**A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's
+file** — a single-caller helper sanctioned as tower-worthy is ledgered on `ARCHITECTURE.md`
+§1's tower charter line, not argued in review.
 
-**A weight plane's element type follows its SOURCE tensors, per weight REGION.** A carrier
-picks each region's plane type from that region's own tensors (a shipped file mixes types
-across regions), refuses a region whose tensors disagree in a message naming the tensor and
-both element types, and never converts silently.
+**A weight plane's element type follows its SOURCE tensors, per weight region — the set of
+source tensors a carrier stores in one plane (a block stack, a merger/projector).** A
+carrier picks each weight region's plane type from that region's own tensors (a shipped
+file mixes types across regions), refuses a weight region whose tensors disagree in a
+message naming the offending tensor and both element types, and never converts silently.
 
 **A harness that prints output for another tool to compare fails loudly when it has nothing to
 print.** A run that ends without its comparison lines — wrong flags, failed load — exits
@@ -270,5 +278,5 @@ engine files, HTTP in the server, writer logic in the writer's own file.
 registrations, GPU tiers, every module requiring the engine back; it sits in
 `dasllama/dasllama_common.das` only if engine code needs it.
 
-**An architecture file (`dasllama_arch_*.das`) is declarative registration only.** An
+**An architecture file (`dasllama/dasllama_arch_*.das`) is declarative registration only.** An
 architecture that changes a forward loop, or tests a family name on a shared path, is a defect.

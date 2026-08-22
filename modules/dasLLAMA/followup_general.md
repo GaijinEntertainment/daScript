@@ -530,3 +530,12 @@
     CPU decoder entries with the findings triaged, covering the mrope/deepstack loops
     (`build_rope_tabs_imrope`/`_mrope`, `mrope_span_positions`, `ds_add_slice`,
     `prefill_rope_tables`, `eval_embd_span_mrope_`) the vision arc added.
+
+43. **The tier-1 tower gates (test_qwen3v, test_qwen25v, and the gemma siblings) silently
+    serve a prepared `.dlim` beside the mmproj, bypassing the gguf load path they claim.**
+    Surfaced by the qwen3vl TDD round: dropping the conv-pair fold left both qwen tier-1
+    gates bit-identically green on a box holding the prepared images; the same mutation reds
+    at 10.1 under `DASLLAMA_IMAGE=0`. No in-process lever exists (`g_env_engine` loads once
+    at context init, immutably — by design). Done = a `DASLLAMA_IMAGE=0` leg (runner or
+    per-file env plumbing) or a cold-mint arm in the tier-1 gates, so a loader mutation reds
+    on any box.

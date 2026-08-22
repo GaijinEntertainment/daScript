@@ -12,8 +12,7 @@ one-arm fix into an afternoon.
 ```
 
 Never invoke `dastest/dastest.das --test modules/dasLLAMA/tests/...` directly for the metal suites.
-`--full` is REFUSED while the Metal build-out is in progress ("please narrow the scope...") —
-scope every gate with `--arm` to the arms the change can actually affect (a whole-zoo pass
+`--full` is REFUSED ("please narrow the scope...") — scope every gate with `--arm` to the arms the change can actually affect (a whole-zoo pass
 buys soak time, not coverage; e.g. a driver change gates on `--arm arm,batch --suite decode`).
 The runner refuses any suite but `model-free` without exactly one of `--arm` / `--full`
 (`--suite model-free` takes neither — it is the whole gate), tees the COMPLETE output
@@ -68,12 +67,12 @@ fam-qwen35/fam-qwen35moe are deltanet hybrids whose batch cell asserts the per-r
 shape — metal batch steps 0, both rows served on the single-decode path; fam-qwen2moe's
 batch cell asserts the `graph` DECLINE on the planar model — shexp has no batch arm, and a
 blob twin's CPU batch fallback would trip the blob-only panic). The
-`kernels` suite (7 files: test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels —
+`kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels —
 model-less per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has
 no arms; remember it exists — kernel uniform/binding changes MUST update its hand-bound
 dispatches. Shared fixtures (buf helpers, eyeball-dump compares, kq plane + q8 blob
-builders) live in `_metal_kernel_common.das`; the prefill file predates it and keeps only its
-tag-less mismatch compares local (same arity would collide — the buf_* twins are retired).
+builders) live in `_metal_kernel_common.das`; `test_metal_prefill_kernels.das` keeps its tag-less
+mismatch compares local — a same-arity twin would collide with the shared tagged one.
 `_mtl_toy.das` is the `[metal_dispatch]` multi-kernel (kernel=) fixture — its gate in
 the misc file dispatches through the GENERATED builders (kn_ rail), not hand binds.
 A new gate gets a NEGATIVE CONTROL before its first commit (poison the oracle → red
@@ -82,7 +81,7 @@ every derived-truth compare its own poison. A kernel with `@workgroup` state nee
 `metal_set_threadgroup_memory_length` in the gate exactly as in its production encoder —
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
-carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
+carrier, model-free — the one image-suite arm that runs with no model stocked) `smol metal gemma tower whisper voxtral parakeet qwen3a canary
 canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e mtower`; `gemma4e` is the E2B metal-blob
 mint+map arm — the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
 embedding table's plane is short) runs after the blob plane borrows, so a fresh mint and a warm
@@ -129,8 +128,8 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 A model-free file — one with at least one cell that runs, not skips, when no model is present
 and `DASLLAMA_CPU_PREFILL=1` is set in the environment (the runner sets it for every child) —
 runs under plain dastest (still `-jit`) or as a set through `run.das -- --suite model-free`,
-the per-PR gate. The `model-free` list in `run.das` is the census of those files; the entries below map the
-ones whose coverage cannot be read off the file name. A file in a model suite (every suite but `model-free`) is listed in that
+the per-PR gate. `run.das`'s `model-free` list is the complete census; an entry below is required only for a
+file whose name does not name what it covers. A file in a model suite (every suite but `model-free`) is listed in that
 suite's file list in `run.das` instead.
 `test_bench_records_schema.das` — model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
@@ -288,7 +287,7 @@ same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which i
 cannot live in test_attn_span — that file arms it in `[init]`, and why it stays out of the
 runner's `model-free` suite — the runner sets `DASLLAMA_CPU_PREFILL=1`). Metal-capable builds
 only; plain dastest only.
-`test_vision_chat.das` — the image chat turn end to end, one pair per vision family plus the
+`test_vision_chat.das` — the image chat turn end to end, one pair per vision carrier plus the
 showcase: the 12B gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`), the E2B
 gemma4v pair (E2B Q8 decoder + bf16 mmproj — small tier, runs without the flag), the
 gemma-3-4b gemma3v pair (small tier), the gemma-3-12b pair (the same SigLIP tower at
@@ -301,8 +300,7 @@ ignores the slices), the Qwen2.5-Omni-3B qwen25v pair (small tier — the window
 qwen2vl NON-interleaved MROPE decoder; the vocab spells the span markers
 `<|vision_bos|>`/`<|vision_eos|>`, resolved by the chat layer's vocab-driven fallback)
 plus the `test_omni_showcase` cell in the same file (one Omni session: an image turn, then a text turn
-whose answer needs the image turn across the mrope position delta; qwen3a audio-in-chat is a
-standing gap — the chat AudioTower serves the whisper-class families only):
+whose answer needs the image turn across the mrope position delta; the chat AudioTower serves the whisper-class families only):
 the prompt stream shape around the splice
 (marker ids, media-first, span length from the geometry) and the greedy caption, logged in
 full. NOT token-parity with
