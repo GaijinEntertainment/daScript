@@ -133,11 +133,8 @@ def private check_tutorial_floor(tut_texts, rst_texts : array<string>) {
 let private AUDIO_CARRIER = "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das"
 let private VISION_CARRIER = "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das"
 
-// Files licensed to name a carrier-carried audio family outside its own file: the carrier and
-// the ASR facade (their union fields and one-line arms), the metal family hooks, the per-family
-// bake tool, and tests.
+// The licensed family namers per modality - ARCHITECTURE.md §1 ledgers each with its reason.
 var private AUDIO_SEAM_EXEMPT <- {
-    "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das",
     "modules/dasLLAMA/dasllama/dasllama_asr.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_asr_dec.das",
@@ -145,14 +142,10 @@ var private AUDIO_SEAM_EXEMPT <- {
     "utils/dasllama-convert/main.das"
 }
 
-// Files licensed to name a carrier-carried vision family outside its own file: the carrier
-// (union fields and one-line arms) and the metal family hooks; tests are outside the scan.
 var private VISION_SEAM_EXEMPT <- {
-    "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das"
 }
 
-// the carried set is the carrier's kind enum itself: every arm but `none` is a family
 def private carried_families(carrier, kind_enum : string) : array<string> {
     var fams : array<string>
     var in_kind = false
@@ -171,8 +164,6 @@ def private carried_families(carrier, kind_enum : string) : array<string> {
     return <- fams
 }
 
-// what the family owns: its public structs, and every public def carrying the family's name
-// (load_gemma4a_encoder, gemma4a_probe_proj_dim, stage_gemma4uv_embedder, set_gemma4v_q8, ...)
 def private family_owned_names(fam : string; fam_path : string; var out : array<string>) {
     let prefix = slice(fam, length("dasllama_"))
     for (line in split(fread(fam_path), "\n")) {
@@ -180,6 +171,7 @@ def private family_owned_names(fam : string; fam_path : string; var out : array<
             out |> push(ident_prefix(slice(line, 7)))
         } elif (starts_with(line, "def ") && !starts_with(line, "def private ") && !starts_with(line, "def operator")) {
             let name = ident_prefix(slice(line, 4))
+            // not a prefix test - the family word sits mid-identifier (stage_gemma4uv_embedder, set_gemma4v_q8)
             if (find(name, prefix) >= 0) {
                 out |> push(name)
             }
@@ -215,7 +207,7 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
             collect_das_files(folder, files)
         }
         for (p in files) {
-            continue if (p == fam_path || key_exists(exempt, p))
+            continue if (p == fam_path || p == carrier || key_exists(exempt, p))
             let text = strip_line_comments(fread(p))
             for (n in names) {
                 if (contains_word(text, n)) {

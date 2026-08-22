@@ -307,7 +307,7 @@ def test_fused_decode_pre_post_norm(t : T?) {
                 if (!stat(path).is_valid) {
                     // deliberately NOT `t |> skip` — it would mark the WHOLE arm skipped even
                     // when the loop goes on to exercise the models that ARE present
-                    t |> skip("{path} not present")
+                    t |> success(true, "skipped: {path} not present")
                     continue
                 }
                 var tr <- load_gguf(path, QuantMode.q8)
@@ -342,12 +342,12 @@ def test_fused_decode_kquant(t : T?) {
                 let path = path_join(models_dir(), name)
                 if (!stat(path).is_valid) {
                     // deliberately NOT `t |> skip` — the loop goes on to the models that ARE present
-                    t |> skip("{path} not present")
+                    t |> success(true, "skipped: {path} not present")
                     continue
                 }
                 var tr <- load_gguf(path, QuantMode.q8)
                 if (!tr.kq_repacked) {
-                    t |> skip("active backend has no kq rows cores")
+                    t |> success(true, "skipped: active backend has no kq rows cores")
                 } else {
                     fused_vs_std_bit_exact(t, tr)
                 }
@@ -383,7 +383,7 @@ def test_fused_decode_moe_chain(t : T?) {
             set_target_chunk_work(1l)
             var tr <- load_gguf(path, QuantMode.q8)
             if (!kernel_backend_has_mx4_rows()) {
-                t |> skip("active backend has no mx4 rows core")
+                t |> success(true, "skipped: active backend has no mx4 rows core")
             } else {
                 fused_vs_std_bit_exact(t, tr)
             }

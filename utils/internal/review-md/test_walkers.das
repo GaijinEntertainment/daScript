@@ -89,6 +89,10 @@ def test_pilot_gate_fixtures(t : T?) {
 
 def make_dasllama_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama.das", "options gen2\n\ndef covered_fn() \{\n\}\n")
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das", "enum AudioKind \{\n    none\n    toyfam\n\}\n")
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das", "enum VisionKind \{\n    none\n    toyvis\n\}\n")
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_toyfam.das", "struct ToyfamThing \{\n\}\n\ndef set_toyfam_q8(on : bool) \{\n\}\n")
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_toyvis.das", "struct ToyvisTower \{\n\}\n")
     write_at(t, root, "modules/dasLLAMA/REVIEW.md", "rules\n")
     write_at(t, root, "tutorials/dasLLAMA/01_demo.das", "covered_fn()\n// prose beside the call stays harmless\n")
     write_at(t, root, "doc/source/reference/tutorials/dasLLAMA_01_demo.rst", "``covered_fn`` narrated\n")
@@ -113,17 +117,22 @@ def test_dasllama_gate_fixtures(t : T?) {
     t |> equal(0, green.rc, "covered fixture is green: {green.out}")
     t |> success(find(green.out, "REVIEW.das dasllama: OK") >= 0, "green verdict printed")
 
-    // one violation per miss class: a def no tutorial demonstrates, and a word-boundary
-    // near-miss (bound_fnx must not count as a mention of bound_fn)
+    // one violation per miss class - the needle list is the census
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama.das",
         "options gen2\n\ndef covered_fn() \{\n\}\n\ndef hidden_fn() \{\n\}\n\ndef bound_fn() \{\n\}\n")
     write_at(t, fixture, "tutorials/dasLLAMA/02_demo.das", "// bound_fnx is a different identifier\n// hidden_fn taught only in this comment must not count\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das", "enum AudioKind \{\n    none\n    toyfam\n    ghostfam\n\}\n")
+    write_at(t, fixture, "modules/dasLLAMA/benchmarks/asr/bench_probe.das", "set_toyfam_q8(true)\n")
+    write_at(t, fixture, "tutorials/dasLLAMA/03_vis.das", "var tw : ToyvisTower\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(1, red.rc, "planted fixture is red")
     for (needle in ["facade def hidden_fn appears in no tutorials/dasLLAMA/*.das",
                     "facade def hidden_fn appears in no doc/source/reference/tutorials/dasLLAMA_*.rst",
-                    "facade def bound_fn appears in no tutorials/dasLLAMA/*.das"]) {
+                    "facade def bound_fn appears in no tutorials/dasLLAMA/*.das",
+                    "bench_probe.das: names set_toyfam_q8, which the dasllama_toyfam family owns",
+                    "03_vis.das: names ToyvisTower, which the dasllama_toyvis family owns",
+                    "AudioKind arm dasllama_ghostfam has no modules/dasLLAMA/dasllama/dasllama_ghostfam.das"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }
 
@@ -132,9 +141,9 @@ def test_dasllama_gate_fixtures(t : T?) {
 
 def make_server_fixture(t : T?; tree, root : string) {
     write_at(t, root, "utils/dasllama-server/openai_server.das",
-        "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        ANY(\"*\") <| $() \{\n        \}\n    \}\n\}\n")
-    write_at(t, root, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc`\n")
-    write_at(t, root, "doc/source/reference/utils/dasllama_server.rst", "``/v1/models`` and ``/gc``\n")
+        "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        STREAM(\"/sse\") <| $() \{\n        \}\n        ANY(\"*\") <| $() \{\n        \}\n    \}\n\}\n")
+    write_at(t, root, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc` and `/sse`\n")
+    write_at(t, root, "doc/source/reference/utils/dasllama_server.rst", "``/v1/models`` and ``/gc`` and ``/sse``\n")
     write_at(t, root, "utils/dasllama-server/control.html", "<script>fetch(\"/gc\")</script>\n")
     var err : string
     t |> success(copy_file(path_join(tree, "utils/dasllama-server/REVIEW.das"), path_join(root, "utils/dasllama-server/REVIEW.das"), true, err), "copied the real server gate")
@@ -157,18 +166,19 @@ def test_server_gate_fixtures(t : T?) {
     t |> equal(0, green.rc, "consistent fixture is green: {green.out}")
     t |> success(find(green.out, "REVIEW.das dasllama-server: OK") >= 0, "green verdict printed")
 
-    // one violation per direction: an undocumented served route, a documented dead route, and
-    // a page consuming a route the server does not register
+    // one violation per direction - the needle list is the census
     write_at(t, fixture, "utils/dasllama-server/openai_server.das",
-        "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        POST(\"/vad\") <| $() \{\n        \}\n    \}\n\}\n")
-    write_at(t, fixture, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc` and `/dead`\n")
+        "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        STREAM(\"/sse\") <| $() \{\n        \}\n        POST(\"/vad\") <| $() \{\n        \}\n    \}\n\}\n")
+    write_at(t, fixture, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc` and `/sse` and `/dead`\n")
+    write_at(t, fixture, "doc/source/reference/utils/dasllama_server.rst", "``/v1/models`` and ``/gc`` and ``/sse`` and ``/rstdead``\n")
     write_at(t, fixture, "utils/dasllama-server/control.html", "<script>fetch(\"/gc\");fetch(\"/nope\")</script>\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "utils/dasllama-server/REVIEW.das")])
     t |> equal(1, red.rc, "planted fixture is red")
     for (needle in ["served route /vad has no `/vad` mention",
                     "served route /vad has no ``/vad`` mention",
-                    "documents route /dead, which the server does not register",
+                    "README.md: documents route /dead, which the server does not register",
+                    "dasllama_server.rst: documents route /rstdead, which the server does not register",
                     "the control page consumes route /nope, which the server does not register"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }

@@ -598,7 +598,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     t |> equal(int(resp.status_code), int(http_status.OK), "the text-only degraded slot serves")
                 }
             } else {
-                t |> skip("runtime-load cells: SmolLM2-135M not present")
+                t |> success(true, "skipped the runtime-load cells: SmolLM2-135M not present")
             }
             remove(junk)
             // POST /restart — LAST in the block: the server starts draining after this. The exit-4

@@ -10,16 +10,17 @@ require dastest/review_gate
 // repo root). Run from the repo root: bin/daslang utils/dasllama-server/REVIEW.das.
 // Fixtures are captured wire bytes: every JSON fixture must parse, carry no latin-1 round-trip
 // mojibake (the raw Â pair or its \u00c2 escape spelling — the PowerShell/cp1252 trap), and
-// hold no machine-local username (the rail normalizes captures to C:/Users/user).
+// hold no machine-local username (the rail normalizes captures to C:/Users/user). Every route
+// the server registers appears in the README and rst endpoint tables, and no surface documents
+// or consumes a route the server does not register.
 
 let FIXTURES_DIR = "utils/dasllama-server/tests/fixtures"
 let SERVER_DAS = "utils/dasllama-server/openai_server.das"
 let README_MD = "utils/dasllama-server/README.md"
-let RST_PAGE = "doc/source/reference/utils/dasllama_server.rst"
+let SERVER_RST = "doc/source/reference/utils/dasllama_server.rst"
 let CONTROL_HTML = "utils/dasllama-server/control.html"
 
-// browser assets the docs need not table: the control page itself and its tab icon
-var BROWSER_ASSET_ROUTES <- {
+var DOC_EXEMPT_ROUTES <- {
     "/",
     "/favicon.ico"
 }
@@ -28,21 +29,22 @@ def is_route_byte(b : int) : bool {
     return is_alnum(b) || b == '/' || b == '_' || b == '-'
 }
 
-// every path registered in onInit: GET("...") / POST("...") / STREAM("...") rows, "*" excluded
+// every path registered in onInit; the scan reads only GET( / POST( / STREAM( rows
 def served_routes() : table<string> {
     var routes : table<string>
     for (raw in split(fread(SERVER_DAS), "\n")) {
         let line = strip(raw)
-        var at = -1
+        var open_at = -1
         for (m in ["GET(\"", "POST(\"", "STREAM(\""]) {
             if (line |> starts_with(m)) {
-                at = length(m)
+                open_at = length(m)
+                break
             }
         }
-        continue if (at < 0)
-        let close = find(line, "\"", at)
-        continue if (close <= at)
-        let path = slice(line, at, close)
+        continue if (open_at < 0)
+        let close_at = find(line, "\"", open_at)
+        continue if (close_at <= open_at)
+        let path = slice(line, open_at, close_at)
         if (path |> starts_with("/")) {
             routes |> insert(path)
         }
@@ -50,28 +52,28 @@ def served_routes() : table<string> {
     return <- routes
 }
 
-// route-shaped inline literals: `.../path...` between the given quote marks, "*" globs skipped
+// route-shaped inline literals between the given quote marks
 def quoted_routes(text : string; quote : string; var out : table<string>) {
     let ql = length(quote)
     var lits : array<string>
     peek_data(text) $(d) {
         var from = 0
         while (true) {
-            let a = find(d, quote, from)
-            break if (a < 0)
-            let b = find(d, quote, a + ql)
-            break if (b < 0)
-            from = b + ql
-            continue if (b - (a + ql) < 2 || int(d[a + ql]) != '/')
+            let open_at = find(d, quote, from)
+            break if (open_at < 0)
+            let close_at = find(d, quote, open_at + ql)
+            break if (close_at < 0)
+            from = close_at + ql
+            continue if (close_at - (open_at + ql) < 2 || int(d[open_at + ql]) != '/')
             var ok = true
-            for (i in range(a + ql + 1, b)) {
+            for (i in range(open_at + ql + 1, close_at)) {
                 if (!is_route_byte(int(d[i]))) {
                     ok = false
                 }
             }
             if (ok) {
                 var lit = ""
-                for (i in range(a + ql, b)) {
+                for (i in range(open_at + ql, close_at)) {
                     lit += to_char(int(d[i]))
                 }
                 lits |> push(lit)
@@ -86,34 +88,34 @@ def quoted_routes(text : string; quote : string; var out : table<string>) {
 def check_routes_in_surfaces() {
     var inscope served <- served_routes()
     let readme = fread(README_MD)
-    let rst = fread(RST_PAGE)
+    let rst = fread(SERVER_RST)
     for (path in keys(served)) {
-        continue if (key_exists(BROWSER_ASSET_ROUTES, path))
+        continue if (key_exists(DOC_EXEMPT_ROUTES, path))
         if (find(readme, "`{path}`") < 0) {
             gate_finding(README_MD, "served route {path} has no `{path}` mention - every route the server registers gets its row in the README endpoint table")
         }
         if (find(rst, "``{path}``") < 0) {
-            gate_finding(RST_PAGE, "served route {path} has no ``{path}`` mention - every route the server registers gets its row in the shipped endpoint table")
+            gate_finding(SERVER_RST, "served route {path} has no ``{path}`` mention - every route the server registers gets its row in the shipped endpoint table")
         }
     }
     var inscope in_readme : table<string>
     quoted_routes(readme, "`", in_readme)
     for (path in keys(in_readme)) {
-        if (!key_exists(served, path) && !key_exists(BROWSER_ASSET_ROUTES, path)) {
+        if (!key_exists(served, path) && !key_exists(DOC_EXEMPT_ROUTES, path)) {
             gate_finding(README_MD, "documents route {path}, which the server does not register - a documented-but-dead route misleads every client")
         }
     }
     var inscope in_rst : table<string>
     quoted_routes(rst, "``", in_rst)
     for (path in keys(in_rst)) {
-        if (!key_exists(served, path) && !key_exists(BROWSER_ASSET_ROUTES, path)) {
-            gate_finding(RST_PAGE, "documents route {path}, which the server does not register - a documented-but-dead route misleads every client")
+        if (!key_exists(served, path) && !key_exists(DOC_EXEMPT_ROUTES, path)) {
+            gate_finding(SERVER_RST, "documents route {path}, which the server does not register - a documented-but-dead route misleads every client")
         }
     }
-    var inscope in_page : table<string>
-    quoted_routes(fread(CONTROL_HTML), "\"", in_page)
-    for (path in keys(in_page)) {
-        if (!key_exists(served, path) && !key_exists(BROWSER_ASSET_ROUTES, path)) {
+    var inscope in_control : table<string>
+    quoted_routes(fread(CONTROL_HTML), "\"", in_control)
+    for (path in keys(in_control)) {
+        if (!key_exists(served, path) && !key_exists(DOC_EXEMPT_ROUTES, path)) {
             gate_finding(CONTROL_HTML, "the control page consumes route {path}, which the server does not register")
         }
     }
