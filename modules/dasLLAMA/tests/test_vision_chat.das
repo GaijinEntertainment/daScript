@@ -470,6 +470,31 @@ def test_vision_chat_qwen25o(t : T?) {
     }
 }
 
+// The bench/scheduler shape: a PLAIN chat (no embedder attached) renders the image span, so
+// the Omni vocab-spelling fallback must live at the renderer, not only in the vision
+// constructor (lcpp_bench --image builds exactly this turn and panicked on <|vision_start|>).
+[test]
+def test_render_image_span_qwen25o(t : T?) {
+    t |> run("a plain chat renders the Omni image span via the vocab's own spelling") @(tt : T?) {
+        let dec = path_join(models_dir(), DEC_25O)
+        if (!model_available(tt, dec)) {
+            return
+        }
+        var m <- load_model_(dec, QuantMode.q8)
+        var chat <- create_chat_(m, "", 8l)
+        add_user_(chat, "describe this image")
+        var head : array<int64>
+        var tail : array<int64>
+        render_turn_image_(m, chat, head, tail)
+        tt |> success(!empty(head) && !empty(tail), "both spans render")
+        tt |> equal(head[length(head) - 1], special_id(m, "<|vision_bos|>"), "the head closes on the vocab's bos marker")
+        delete head
+        delete tail
+        delete chat
+        delete m
+    }
+}
+
 // The multi-turn showcase: ONE Omni session — an image turn, then a text follow-up whose
 // answer requires the image turn's history across the mrope position delta. Audio-in-chat
 // for the qwen3a conformer is a standing gap (the chat AudioTower serves the whisper-class

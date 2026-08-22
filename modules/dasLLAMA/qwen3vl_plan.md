@@ -392,3 +392,26 @@ noise demands them).
    the prediction named the right neighborhood (reference-side arithmetic) and the wrong
    organ (fixtures, not preproc). Honorable mention: the vocab spells the span markers
    `<|vision_bos|>`/`<|vision_eos|>`, which no prediction saw coming.
+
+### Measurement predictions (registered 2026-08-22 BEFORE the J numbers; das vs llama.cpp,
+### M1 Max t=8, coco fixture, `lcpp_bench --image` vs patched llama-mtmd-cli, r=3)
+
+Context the predictions price in: the Metal tower serves gemma3v/gemma4v ONLY — every qwen
+tower encodes on the CPU even on the das Metal leg (slice J's deferred Metal-tower work),
+while mtmd offloads the mmproj to Metal unless told not to.
+
+9.  **Qwen3VL-4B** (dense q8 decoder + ~430 M qwen3v tower): decoder cells land gemma-shaped —
+    Metal tg das LEADS 10–25%, Metal pp within ±10%, CPU pp das leads 15–40%. img:enc is the
+    known loser: das enc (CPU tower both legs) 3–8 s vs mtmd Metal enc ≤ 0.4 s (≥ 10×
+    against das); on the CPU pair (mtmd pinned --no-mmproj-offload) das enc is within 2×
+    of mtmd's CPU enc, either side.
+10. **Qwen3VL-8B** (same tower class, ~580 M): the 4B shape scaled — Metal tg das leads
+    10–25%, enc verdicts identical to P9.
+11. **Qwen3-Omni-30B-A3B q8** (MoE, 3B active; 32.5 GB fits the 64 GB box on BOTH legs):
+    Metal tg das leads 10–30% (the wave-C MoE arm), Metal pp ±15%; CPU pp das leads; enc =
+    the 543 M tower on CPU, 4–10 s das.
+12. **Qwen2.5-Omni-3B q8** (the biggest tower in the set, ~1.3 B window ViT): das enc 8–20 s
+    both legs, mtmd Metal enc beats das by ≥ 20×; decoder (3B dense) Metal tg das leads
+    10–25%, pp ±10%.
+13. Cross-cut: at least one of the 8 pairs voids on cv > 3% and takes a settle + re-run;
+    zero das crashes across all cells (every rail in the sweep is mutation-gated).

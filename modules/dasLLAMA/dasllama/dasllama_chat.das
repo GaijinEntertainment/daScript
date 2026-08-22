@@ -623,6 +623,14 @@ def private consume_pending_(var c : ChatSession) {
 //! whole prompt holding tokens only, no cache memory. Do not eval/respond on it.
 def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 = 256l) : ChatSession {
     var c = ChatSession(tmpl <- chat_template(model), system = system, max_new = max_new)
+    if (!empty(c.tmpl.image_pre.parts) && !image_vocab_ok(model, c.tmpl)
+            && special_id(model, "<|vision_bos|>") >= 0l && special_id(model, "<|vision_eos|>") >= 0l) {
+        // Qwen2.5-Omni spells the SAME marker ids <|vision_bos|>/<|vision_eos|> where the VL
+        // vocabs spell <|vision_start|>/<|vision_end|> - resolve by the vocab HERE so every
+        // render path serves them (mtmd hardcodes the VL spelling and feeds plain text there)
+        c.tmpl.image_pre.parts <- [chat_special("<|vision_bos|>")]
+        c.tmpl.image_post.parts <- [chat_special("<|vision_eos|>")]
+    }
     c.enable_thinking = c.tmpl.think_default
     c.think_vocab = think_vocab_ok(model, c.tmpl)
     c.gate_ok = gate_vocab_ok(model, c.tmpl)
@@ -701,14 +709,8 @@ def create_chat_(model : Model; var embedder : VisionEmbedder; system : string =
         panic("dasLLAMA chat: this model's chat template declares no image span markers - it has no vision arm")
     }
     if (!image_vocab_ok(model, c.tmpl)) {
-        // Qwen2.5-Omni spells the SAME marker ids <|vision_bos|>/<|vision_eos|> where the VL
-        // vocabs spell <|vision_start|>/<|vision_end|> - resolve by the vocab, not the family
-        // (mtmd hardcodes the VL spelling and silently feeds it as plain text there)
-        c.tmpl.image_pre.parts <- [chat_special("<|vision_bos|>")]
-        c.tmpl.image_post.parts <- [chat_special("<|vision_eos|>")]
-        if (!image_vocab_ok(model, c.tmpl)) {
-            panic("dasLLAMA chat: an image span marker is missing from this checkpoint's vocab - it has no vision arm")
-        }
+        // the renderer already tried the vocab-spelling fallback - nothing resolves this pair
+        panic("dasLLAMA chat: an image span marker is missing from this checkpoint's vocab - it has no vision arm")
     }
     c.embedder <- embedder
     return <- c
