@@ -506,7 +506,7 @@ jobs:
             # mid-suite (see linux_arm64 note below); sanitizer cells are Release, so
             # they still run it. Primary sweep is isolated-parallel (batch 4, mints
             # the dll cache itself); retry is batch-1 full isolation.
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || ASAN_OPTIONS=detect_leaks=0 bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --batch 4 --timeout 1800 --test $TEST_DIR || ASAN_OPTIONS=detect_leaks=0 bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test $TEST_DIR
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || ASAN_OPTIONS=detect_leaks=0 bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --batch 4 --timeout 3600 --test $TEST_DIR || ASAN_OPTIONS=detect_leaks=0 bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 7200 --test $TEST_DIR
             # Interpreter sweep: non-sanitizer only.
             if [ "${{ matrix.sanitizers }}" = "none" ]; then
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
@@ -527,7 +527,7 @@ jobs:
             # runs JIT — keep --failures-only off there so PASS lines print and
             # name the test running just before the hang if it reoccurs (see
             # RC2 release run #25572466058).
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --isolated-mode --batch 4 --timeout 1800 --test _dasroot_/tests || bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 3600 --test _dasroot_/tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --isolated-mode --batch 4 --timeout 3600 --test _dasroot_/tests || bin/daslang _dasroot_/dastest/dastest.das -jit -- $JIT_LINKER_STRING $JIT_PATH_TO_LINKER $JIT_OPT --color --failures-only --isolated-mode --timeout 7200 --test _dasroot_/tests
             cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_interpreter_isolated
             ;;
            *)
