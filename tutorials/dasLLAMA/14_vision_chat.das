@@ -193,10 +193,26 @@ def section_mrope(m : Model; decoder_mmproj : string; image_path : string; promp
         eval_embd_span(m, s, rows, np, n_head, n_head + n_img)
     }
     print("next token after the mrope-framed turn: '{piece(m, sample(s, SamplingParams()))}'\n\n")
+    // the one-call form: generate_embd prefills the same spliced turn (grid included) and
+    // streams the reply - what respond() runs under the hood for a media turn
+    var s2 = create_session(m)
+    let stop_ids <- effective_stop_ids(chat)
+    generate_embd(m, s2, rows, np, SamplingParams(), N_GEN, n_head, n_head + n_img, grid) $(id, piece_text) {
+        if (find_index(stop_ids, id) >= 0) {
+            return false
+        }
+        print("{piece_text}")
+        return true
+    }
+    print("\n\n")
     delete s
+    delete s2
     delete chat
     delete emb
 }
+// A deepstack pair (dense Qwen3-VL) encodes WIDER rows - (1 + n_deepstack) x dim floats each;
+// the narrow splice above still captions (the extra slices are additive refinement the decoder
+// then runs without), and create_chat(model, embedder) is the path that carries them in full.
 
 def is_image_path(p : string) : bool {
     let low = to_lower(p)

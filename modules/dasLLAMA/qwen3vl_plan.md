@@ -417,25 +417,25 @@ while mtmd offloads the mmproj to Metal unless told not to.
     known loser: das enc (CPU tower both legs) 3–8 s vs mtmd Metal enc ≤ 0.4 s (≥ 10×
     against das); on the CPU pair (mtmd pinned --no-mmproj-offload) das enc is within 2×
     of mtmd's CPU enc, either side.
-    **SCORED: HALF.** Metal tg +21% ✓, CPU pp +16% ✓, enc-vs-Metal 29× ✓; Metal pp −16%
+    **SCORED: HALF** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). Metal tg +21% ✓, CPU pp +16% ✓, enc-vs-Metal 29× ✓; Metal pp −16%
     (outside ±10%, wrong side) ✗; CPU enc 4.6× against das ✗ — mtmd's clip CPU encode is
     genuinely ~5× faster than the das CPU tower, not within 2×.
 10. **Qwen3VL-8B** (same tower class, ~580 M): the 4B shape scaled — Metal tg das leads
     10–25%, enc verdicts identical to P9.
-    **SCORED: MOSTLY.** Metal tg +12% ✓ (bottom of band), enc verdicts identical ✓ (5.3× CPU,
+    **SCORED: MOSTLY** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). Metal tg +12% ✓ (bottom of band), enc verdicts identical ✓ (5.3× CPU,
     15× Metal); unpredicted: Metal pp worsens to −30% (vs the 4B's −16%) — the deepstack
     Metal cell (CPU repack + per-layer enc_adds) is the suspect, unprofiled.
 11. **Qwen3-Omni-30B-A3B q8** (MoE, 3B active; 32.5 GB fits the 64 GB box on BOTH legs):
     Metal tg das leads 10–30% (the wave-C MoE arm), Metal pp ±15%; CPU pp das leads; enc =
     the 543 M tower on CPU, 4–10 s das.
-    **SCORED: HALF, sandbagged the lead.** CPU pp das leads ✓ but by 6× (not "leads"), CPU tg
+    **SCORED: HALF, sandbagged the lead** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). CPU pp das leads ✓ but by 6× (not "leads"), CPU tg
     +45%, Metal tg +159% (band said 10–30%) — mtmd's Metal MoE decode is far weaker than
     predicted; Metal pp −41% ✗ (outside ±15%); enc 6.3 s ✓, and mtmd's own CPU encode
     collapsing to 59 s was unpredicted.
 12. **Qwen2.5-Omni-3B q8** (the biggest tower in the set, ~1.3 B window ViT): das enc 8–20 s
     both legs, mtmd Metal enc beats das by ≥ 20×; decoder (3B dense) Metal tg das leads
     10–25%, pp ±10%.
-    **SCORED: HALF.** enc 12.1 s ✓; mtmd Metal enc 17.5× (near the ≥20× claim); Metal tg +45%
+    **SCORED: HALF** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). enc 12.1 s ✓; mtmd Metal enc 17.5× (near the ≥20× claim); Metal tg +45%
     (above band), Metal pp −12% (just outside). Direction right everywhere, magnitudes off.
 13. Cross-cut: at least one of the 8 pairs voids on cv > 3% and takes a settle + re-run;
     zero das crashes across all cells (every rail in the sweep is mutation-gated).

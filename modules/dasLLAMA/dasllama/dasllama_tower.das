@@ -294,6 +294,21 @@ def tower_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var wblob
     }
 }
 
+//! Read a temporal patch-conv PAIR folded for still images: conv0(img) + conv1(img) = (W0+W1)·img,
+//! so ``base`` lands at ``off`` and ``base.1`` accumulates into the same plane region.
+def tower_read_conv_pair_folded(m : GGUFMeta; b : array<uint8> | #; base : string;
+                                var blob : array<float>; off, n_elem : int64) {
+    gguf_read_tensor_f32(m, b, base, blob, off, n_elem)
+    var w1 : array<float>
+    w1 |> reserve(n_elem)
+    w1 |> resize(n_elem)
+    gguf_read_tensor_f32(m, b, "{base}.1", w1, 0l, n_elem)
+    for (i in range64(n_elem)) {
+        blob[off + i] += w1[i]
+    }
+    delete w1
+}
+
 //! Per-op activation-quant calibration range (mtmd ClippableLinear): clamp(x, imin, imax) before
 //! the matmul, clamp the result to (omin, omax) after. ``active`` false = no sidecar scalars on
 //! disk, which mtmd treats as ±FLT_MAX — an identity clamp, so callers may skip the pass.

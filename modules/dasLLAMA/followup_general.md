@@ -520,3 +520,13 @@
     can hold for either type (the `VisionEmbedder` union pattern), `add_user_audio_` routed
     by family, and the Omni showcase upgraded to the one-session three-modality form.
     OWNED BY the qwen3vl arc (`qwen3vl_plan.md` §Arc followups) — it lands there, not here.
+
+42. **The CPU decoder prefill chain carries no `[hot_path]` region entry, so its mid-runtime
+    loops ride uncovered by the perf-lint contracts.** Surfaced by the qwen3vl review round:
+    the region-entry rule now names the CPU decoder's `forward_*` entries as region entries,
+    but annotating them (`forward_prefill_body` / `forward_prefill_embd` / `generate_`) arms
+    the allocation contracts down a large existing call graph — a lint-burn-down of its own,
+    not a ride-along on a feature arc. Done = `[hot_path]` (or the narrower contracts) on the
+    CPU decoder entries with the findings triaged, covering the mrope/deepstack loops
+    (`build_rope_tabs_imrope`/`_mrope`, `mrope_span_positions`, `ds_add_slice`,
+    `prefill_rope_tables`, `eval_embd_span_mrope_`) the vision arc added.

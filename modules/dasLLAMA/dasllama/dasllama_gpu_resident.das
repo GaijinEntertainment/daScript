@@ -747,7 +747,7 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     g_rdec_tmp |> resize(npos * hs)   // the rope-row batch borrows the scratch row
     var cb & = g_rdec_tmp
     for (p in range64(npos)) {
-        rdec_rope_row(t, p, hs, half, cb, p * hs)
+        rdec_rope_row(t, p + s.rope_pos_delta, hs, half, cb, p * hs)
     }
     rdec_prefill(s.x_b, cb, npos, s.logits)
     g_rdec_cnt = npos   // the mirror now holds [0, npos) — the decode's continuity witness

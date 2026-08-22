@@ -224,7 +224,11 @@ that a question answered for one backend has an obvious address in the other. Th
   second capability seat (`register_prefill_override_mrope_tables`): Metal's `enc_rope` reads
   the per-token table rows `prefill_rope_tables` builds from the grid map, so it serves mrope
   unchanged and registers the seat; an override without it (vulkan builds angles from a scalar
-  position) declines the quantum to the CPU loop by name.
+  position) declines the quantum to the CPU loop by name. The deepstack quantum is the third
+  seat (`register_prefill_override_ds_adds`): Metal repacks the wide rows' tails CPU-side into
+  slice-major planes, uploads once, and encodes one `enc_add` at the slice offset after each
+  tapped layer's residual — no new kernel; an override without the seat declines deepstack
+  quanta by name, so Metal serves them and Vulkan does not.
 - **Per-layer FFN widths (MatFormer E-series, at most two — `ffn_second_hidden`) serve on Metal
   only**: the decode and prefill drivers bind the width per layer (dense trunks, no MTP; batch
   keeps the layer-0 hoist behind its uniformity decline). The Vulkan tier has no PLE arm, so
@@ -334,9 +338,11 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   vision tower: the oracle-exact activations (erf / tanh-LUT / quick-LUT gelu, swiglu, geglu),
   the LayerNorm/RMS row forms, bias and residual row adds, the
   `mm_blob_b`/`mm_bf16_b`/`mm_plane_b` GEMM wrappers, `Clamp`/`read_clamp`,
-  `im2col_rgb_patches`, `rope_neox_2d_rows`, `avg_pool2d_rows`, blocked `attention_bidir`, and
-  the encode-stage prof rail. The one home: a family file that re-implements one of these is a
-  defect, and nothing here names a family type.
+  `im2col_rgb_patches`, `rope_neox_2d_rows`, `rope_neox_tab_rows`, `avg_pool2d_rows`,
+  `interpolate_grid_bilinear_aa`, `tower_read_conv_pair_folded`, blocked `attention_bidir` and
+  its per-window form `attention_bidir_windows`, and the encode-stage prof rail. The one home:
+  a family file that re-implements one of these is a defect, and nothing here names a family
+  type.
 - **`dasllama_audio.das`** — the audio encoder tower: the mel front-ends (mtmd and whisper.cpp
   flavors), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`, and the
   whisper-class encode + block loop with its GPU hooks. Composes `dasllama_tower.das`.
@@ -399,7 +405,10 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   merger, the decoder adds slice l+1 after layer l. The family token budget [8, 4096] is
   mtmd's, not the gemma-scoped DASLLAMA_VISION_* knobs; image_mean/std (0.5) is
   PREPROCESSING like gemma3v. Composes `dasllama_tower.das`; owns only its layout, the
-  reorder walk, and the block loop.
+  reorder walk, and the block loop. SANCTIONED over the 1 GiB staged-mint line (this family
+  and qwen25v): the Omni (2.1 GB) and Qwen2.5-Omni (2.6 GB) mmprojs stage source+image at
+  once with no cap — the same shape their audio halves already stage — until
+  `followup_general.md` 24's streaming mint covers towers.
 - **`dasllama_qwen25v.das`** — the qwen2.5 window-attention ViT (Qwen2.5-Omni/VL, projector
   `qwen2.5o`): 32 RMS-normed blocks with separate biased q/k/v GEMMs and a gated-silu FFN
   whose hidden width comes from the TENSOR dims (the metadata's feed_forward_length lies);

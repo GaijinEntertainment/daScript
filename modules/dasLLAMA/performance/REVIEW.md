@@ -55,14 +55,16 @@ name — uniqueness itself is `../tests/test_model_specs.das`'s to enforce.
 **`fetch_models.das --fetch` downloads only.** A convert, a bench, or a tune-state write
 added to it is a defect.
 
-**A change to a provenance field on a model row (`url`, `bytes`, `sha256`, `recipe`, a
-`companions` entry in `model_specs.das` or `profile_common.das`), or to `fetch_models.das`
-other than its comments, records its settling evidence in the PR description.** For a change
-that affects which bytes verify, the evidence is a `fetch_models.das --` run ending
-`0 pending, 0 failed` on a box that HOLDS the changed pins. For a url-only re-pin (bytes and
-sha unchanged) that run proves nothing — the verify never reads the url of a file already on
-disk — so the evidence is a fetch through the new url into a scratch dir, or a documented
-resolve of the pinned revision's size and content sha against the row's canonical values.
+**A model row's provenance fields — `url`, `bytes`, `sha256`, `recipe`, a `companions` entry
+in `model_specs.das` or `profile_common.das` — added or changed, or a change to
+`fetch_models.das` other than its comments, records its settling evidence in the PR
+description: a `fetch_models.das --` run ending `0 pending, 0 failed` on a box that HOLDS
+the pins.**
+
+**A url-only re-pin (bytes and sha unchanged) settles differently** — the verify never reads
+the url of a file already on disk, so the evidence is a fetch through the new url into a
+scratch dir, or a documented resolve of the pinned revision's size and content sha against
+the row's canonical values.
 
 **A refreshed `last_known_good_sidecar.json` is one complete mint from the box its provenance
 names, at the current `dasllama_version` — never a hand-edited copy.** `REVIEW.das` (beside
