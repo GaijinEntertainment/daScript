@@ -69,6 +69,21 @@ def test_cpu_prefill_tripwire(t : T?) {
                 mrope_tripped = true
             }
             t |> success(mrope_tripped, "an undeclared {NROWS}-row MROPE quantum panics like any other")
+            // a deepstack quantum is no longer exempt either: metal performs the slice adds
+            tr.config.n_deepstack = 3l
+            var wide : array<float>
+            wide |> reserve(NROWS * 4l * tr.config.dim)
+            wide |> resize(NROWS * 4l * tr.config.dim)
+            var ds_tripped = false
+            try {
+                var s4 <- make_run_state(tr.config)
+                eval_embd(tr, s4, wide, NROWS)
+                delete s4
+            } recover {
+                ds_tripped = true
+            }
+            t |> success(ds_tripped, "an undeclared {NROWS}-row DEEPSTACK quantum panics like any other")
+            delete wide
             delete s
         }
         delete rows

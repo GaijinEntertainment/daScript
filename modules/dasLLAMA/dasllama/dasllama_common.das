@@ -211,6 +211,7 @@ var private g_prefill_override : PrefillOverrideFn
 var private g_prefill_override_name = ""
 var private g_prefill_split_span : table<string; bool>
 var private g_prefill_mrope_tables : table<string; bool>
+var private g_prefill_ds_adds : table<string; bool>
 
 def register_prefill_override(name : string; fn : PrefillOverrideFn) {
     g_prefill_overrides[name] = fn
@@ -236,6 +237,16 @@ def register_prefill_override_mrope_tables(name : string) {
 
 def active_prefill_serves_mrope : bool {
     return g_prefill_mrope_tables?[g_prefill_override_name] ?? false
+}
+
+//! Registered beside the override: `true` = this override performs the deepstack per-layer
+//! slice adds (Session.ds_embd). Unregistered overrides decline ds quanta to the CPU loop.
+def register_prefill_override_ds_adds(name : string) {
+    g_prefill_ds_adds[name] = true
+}
+
+def active_prefill_serves_ds : bool {
+    return g_prefill_ds_adds?[g_prefill_override_name] ?? false
 }
 
 //! Activate a registered whole-prefill override by name ("" deactivates). false = unknown name.
@@ -4865,15 +4876,15 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
     g_prefill_logits_done = false
     if (!empty(g_prefill_override_name) && !empty(s.mrope_pos) && !active_prefill_serves_mrope()) {
         to_log(LOG_INFO, "dasLLAMA: mrope image quantum ({npos} rows) declined to the CPU prefill loop - the `{g_prefill_override_name}` override does not rope from per-row tables\n")   // nolint:PERF026,PERF028 — once per image quantum, never per token
-    } elif (!empty(g_prefill_override_name) && s.ds_active) {
-        to_log(LOG_INFO, "dasLLAMA: deepstack image quantum ({npos} rows) declined to the CPU prefill loop - no GPU arm for the per-layer slice adds yet\n")   // nolint:PERF026,PERF028 — once per image quantum, never per token
+    } elif (!empty(g_prefill_override_name) && s.ds_active && !active_prefill_serves_ds()) {
+        to_log(LOG_INFO, "dasLLAMA: deepstack image quantum ({npos} rows) declined to the CPU prefill loop - the `{g_prefill_override_name}` override has no per-layer slice-add arm\n")   // nolint:PERF026,PERF028 — once per image quantum, never per token
     } elif (!empty(g_prefill_override_name)) {
         stack_done = invoke(g_prefill_override, t, s, npos, start_pos)
     }
     if (!stack_done) {
         blob_only_panic(t, "prefill stack")
         // Metal-capable build about to chew a real prompt on the CPU stack — the silent profiling-time sink, not a serving path; fail loud unless CPU intent was declared.
-        if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed() && !s.ds_active) {
+        if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed()) {
             panic("dasLLAMA: CPU batched prefill of {npos} tokens on a Metal-capable build (override `{g_prefill_override_name}` {empty(g_prefill_override_name) ? "not selected" : "declined"}) - select the metal prefill (set_metal_mode / DASLLAMA_PIN_PREFILL=metal), or declare CPU intent: allow_cpu_prefill() / DASLLAMA_CPU_PREFILL=1")
         }
         for (l in range64(c.n_layers)) {

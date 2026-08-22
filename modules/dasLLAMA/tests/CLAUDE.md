@@ -45,12 +45,15 @@ arm6-churn arm7-q8kv arm7b-tq4kv arm8-s16 arm9-reload arm10-kq arm11-depth arm12
 arm13-conc arm14-poison` (arm14 = the shared-region collision gate: a foreign GPU prefill must
 not degrade a later forced-feed decode — Qwen2.5-0.5B, its own `[test]` block),
 batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`. Prefill parity: `base s16
-kq cont span span-fused span-mrope dim qkv` (span = the non-causal media eval shape, head + embd span,
+kq cont span span-fused span-mrope span-ds dim qkv` (span = the non-causal media eval shape, head + embd span,
 per codec; span-fused = the image turn's ONE-eval shape — causal head + media rows + causal
 tail through the per-query mask, one GPU prefill, with a same-backend fused-vs-splice logits
 witness on poison-calibrated per-codec bars; span-mrope = the qwen grid-roped turn — one GPU
 prefill via the per-row-table capability, token-exact vs the all-CPU control, plus a
-same-backend grid-vs-sequential prefill-logits witness).
+same-backend grid-vs-sequential prefill-logits witness; span-ds = the deepstack turn — one
+GPU prefill via the slice-add capability, token parity plus the add-CONTRIBUTION witness:
+lg(tails)−lg(zero) per backend — the GPU contribution must be nonzero and within 0.5× of the
+CPU's, because greedy tokens tie on the counting fixture and a skipped add hides from them).
 Support matrix: `cells-q8 window cells-s16 mode kq tensor dim8b dim70b` + the
 family matrix `fam-qwen3 fam-qwen2 fam-phi3 fam-gemma2 fam-gemma3 fam-gemma4 fam-qwen3moe
 fam-gemma4moe fam-gptoss fam-gemma4e fam-qwen35 fam-qwen35moe fam-qwen2moe` (needs-derivation pins +
