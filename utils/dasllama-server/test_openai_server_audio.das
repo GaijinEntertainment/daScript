@@ -76,6 +76,49 @@ def private jfk_b64() : string {
     return empty(bytes) ? "" : base64_encode(bytes)
 }
 
+// a valid PCM16 mono 16 kHz wav of n zero samples — decodes non-empty, sub-frame for the encoder
+def private tiny_wav_b64(n_samples : int) : string {
+    let data_bytes = n_samples * 2
+    var b : array<uint8>
+    b |> reserve(44 + data_bytes)
+    for (c in "RIFF") {
+        b |> push(uint8(c))
+    }
+    let riff_size = 36 + data_bytes
+    for (i in range(4)) {
+        b |> push(uint8((riff_size >> (8 * i)) & 0xFF))
+    }
+    for (c in "WAVEfmt ") {
+        b |> push(uint8(c))
+    }
+    for (v in [16, 0, 0, 0, 1, 0, 1, 0]) {   // fmt size 16, PCM, mono
+        b |> push(uint8(v))
+    }
+    let rate = 16000
+    for (i in range(4)) {
+        b |> push(uint8((rate >> (8 * i)) & 0xFF))
+    }
+    let byte_rate = rate * 2
+    for (i in range(4)) {
+        b |> push(uint8((byte_rate >> (8 * i)) & 0xFF))
+    }
+    for (v in [2, 0, 16, 0]) {   // block align 2, bits 16
+        b |> push(uint8(v))
+    }
+    for (c in "data") {
+        b |> push(uint8(c))
+    }
+    for (i in range(4)) {
+        b |> push(uint8((data_bytes >> (8 * i)) & 0xFF))
+    }
+    for (_i in range(data_bytes)) {
+        b |> push(uint8(0))
+    }
+    let out = base64_encode(b)
+    delete b
+    return out
+}
+
 def private audio_chat_body(b64 : string; text : string) : string {
     return "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{b64}\",\"format\":\"wav\"}},\{\"type\":\"text\",\"text\":\"{text}\"}]}]}"
 }
@@ -149,6 +192,12 @@ def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one live server 
                 t |> success(find(string(resp.body), "did not decode") >= 0, "the async decode failure reaches the client as a named 400")
             }
             delete junk
+            // pins the encoder's padding contract: a sub-frame clip still yields >= 1 soft token
+            // (probed down to 1 sample), so the turn ALWAYS splices audio — a zero-token render
+            // that silently drops the clip cannot happen for gemma4a
+            POST("{base_url}/v1/chat/completions", audio_chat_body(tiny_wav_b64(320), "hi")) $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK), "a sub-frame clip pads to a soft token and serves")
+            }
             // live unload of the towers-armed slot: the async drop job frees its encoders in the
             // media worker (name-keyed tables, no bounce), and the tower-less new default 400s audio
             let tiny = to_generic_path(path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"))
