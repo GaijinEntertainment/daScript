@@ -1622,23 +1622,23 @@
         },
         "tests":{
           "img:enc":{
-            "ms":10.321
+            "ms":10.342000000000001
           },
           "img:pp":{
-            "tok_s":139.60318689018689
+            "tok_s":266.80577052993442
           },
           "img:tg":{
-            "tok_s":35.409238424258099,
+            "tok_s":35.363234229150684,
             "text":"Two tabby cats are lying on a pink surface, with one cat on the left and the other on the right."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"fd1239bd9",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
-        "dasllama_version":6,
+        "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6184eac1527f5d36731e9e188d3943f52f86b6c7383f7213c742e07f84af0972",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4uv f32; weights k4/k6/q8 native; q8 activations; f32 scales; metal blob",
@@ -1685,23 +1685,23 @@
         },
         "tests":{
           "img:enc":{
-            "ms":53.770000000000003
+            "ms":53.720999999999997
           },
           "img:pp":{
-            "tok_s":61.85154993640392
+            "tok_s":66.465735635092884
           },
           "img:tg":{
-            "tok_s":14.624624051783886,
+            "tok_s":14.585412811572954,
             "text":"Two tabby cats are lying on a pink surface, with one cat on the left and the other on the right."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"fd1239bd9",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
-        "dasllama_version":6,
+        "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6184eac1527f5d36731e9e188d3943f52f86b6c7383f7213c742e07f84af0972",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4uv f32; weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
@@ -1748,23 +1748,23 @@
         },
         "tests":{
           "img:enc":{
-            "ms":15.853999999999999
+            "ms":15.709
           },
           "img:pp":{
-            "tok_s":62.350742913098649
+            "tok_s":66.90945649362709
           },
           "img:tg":{
-            "tok_s":14.651995135537614,
+            "tok_s":14.533750672185969,
             "text":"Two tabby cats are lying on a pink surface, with one cat on the left and one on the right."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"fd1239bd9",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
-        "dasllama_version":6,
+        "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6184eac1527f5d36731e9e188d3943f52f86b6c7383f7213c742e07f84af0972",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4uv f32; weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
@@ -1811,13 +1811,13 @@
         },
         "tests":{
           "img:enc":{
-            "ms":145
+            "ms":144
           },
           "img:pp":{
-            "tok_s":268.08295397066263
+            "tok_s":270.96114519427402
           },
           "img:tg":{
-            "tok_s":26.077744275120203
+            "tok_s":26.193009740525497
           }
         },
         "workload":"image-chat",
@@ -1869,10 +1869,10 @@
             "ms":245
           },
           "img:pp":{
-            "tok_s":58.36147408603729
+            "tok_s":58.453733318627997
           },
           "img:tg":{
-            "tok_s":13.790725736941907
+            "tok_s":13.542680604342122
           }
         },
         "workload":"image-chat",
@@ -1924,10 +1924,10 @@
             "ms":244
           },
           "img:pp":{
-            "tok_s":57.194244604316545
+            "tok_s":57.795063792664756
           },
           "img:tg":{
-            "tok_s":13.810366406283718
+            "tok_s":13.74216267285064
           }
         },
         "workload":"image-chat",
@@ -2867,23 +2867,23 @@
         },
         "tests":{
           "img:enc":{
-            "ms":91.340999999999994
+            "ms":92.066000000000003
           },
           "img:pp":{
-            "tok_s":361.530385933687
+            "tok_s":706.10600642737518
           },
           "img:tg":{
-            "tok_s":51.947545965461373,
+            "tok_s":51.289777626757875,
             "text":"The user wants a one-sentence description of the provided image.\nThe image contains two cats lying on a pink surface.\n\nPlan: Describe the main subjects"
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"fd1239bd9",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
-        "dasllama_version":6,
+        "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6184eac1527f5d36731e9e188d3943f52f86b6c7383f7213c742e07f84af0972",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; metal blob",
@@ -2930,23 +2930,23 @@
         },
         "tests":{
           "img:enc":{
-            "ms":420.517
+            "ms":417.28699999999998
           },
           "img:pp":{
-            "tok_s":197.00974566799565
+            "tok_s":219.08789216381595
           },
           "img:tg":{
-            "tok_s":21.922913555211487,
+            "tok_s":21.873447070701133,
             "text":"The user wants a one-sentence description of the provided image.\nThe image contains two cats lying on a pink surface.\n\nPlan: Describe the main subjects"
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"fd1239bd9",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
-        "dasllama_version":6,
+        "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6184eac1527f5d36731e9e188d3943f52f86b6c7383f7213c742e07f84af0972",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v q8; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
@@ -2993,23 +2993,23 @@
         },
         "tests":{
           "img:enc":{
-            "ms":433.82299999999998
+            "ms":475.10000000000002
           },
           "img:pp":{
-            "tok_s":201.03429567763376
+            "tok_s":227.43807050871774
           },
           "img:tg":{
-            "tok_s":21.935582050387403,
+            "tok_s":21.889726398941633,
             "text":"The user wants a one-sentence description of the provided image.\nThe image contains two cats lying on a pink surface.\n\nPlan: Describe the main subjects"
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"fd1239bd9",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
-        "dasllama_version":6,
+        "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6184eac1527f5d36731e9e188d3943f52f86b6c7383f7213c742e07f84af0972",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
@@ -3059,10 +3059,10 @@
             "ms":134
           },
           "img:pp":{
-            "tok_s":658.11258278145692
+            "tok_s":662.5
           },
           "img:tg":{
-            "tok_s":47.386346808825714
+            "tok_s":47.562425683709876
           }
         },
         "workload":"image-chat",
@@ -3114,10 +3114,10 @@
             "ms":19951
           },
           "img:pp":{
-            "tok_s":160.58983941016083
+            "tok_s":158.76185721417872
           },
           "img:tg":{
-            "tok_s":20.387359836901123
+            "tok_s":20.239074062361649
           }
         },
         "workload":"image-chat",
@@ -3166,13 +3166,13 @@
         },
         "tests":{
           "img:enc":{
-            "ms":19946
+            "ms":19955
           },
           "img:pp":{
-            "tok_s":158.69847290148695
+            "tok_s":158.65096787068438
           },
           "img:tg":{
-            "tok_s":20.167643536900485
+            "tok_s":20.023778236656032
           }
         },
         "workload":"image-chat",
@@ -13982,23 +13982,23 @@
         },
         "tests":{
           "img:enc":{
-            "ms":91.426000000000002
+            "ms":91.099999999999994
           },
           "img:pp":{
-            "tok_s":687.20045108542433
+            "tok_s":1399.6177966785992
           },
           "img:tg":{
-            "tok_s":93.050377474364623,
+            "tok_s":92.822356573988699,
             "text":": This is an image of two tabby cats lying on a pink surface."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"fd1239bd9",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
-        "dasllama_version":6,
+        "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6184eac1527f5d36731e9e188d3943f52f86b6c7383f7213c742e07f84af0972",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; metal blob",
@@ -14045,23 +14045,23 @@
         },
         "tests":{
           "img:enc":{
-            "ms":412.88600000000002
+            "ms":420.45400000000001
           },
           "img:pp":{
-            "tok_s":361.9246036809588
+            "tok_s":408.11307871611814
           },
           "img:tg":{
-            "tok_s":43.011862671724863,
+            "tok_s":42.84392244678785,
             "text":": This is an image of two tabby cats lying on a pink surface."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"fd1239bd9",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
-        "dasllama_version":6,
+        "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6184eac1527f5d36731e9e188d3943f52f86b6c7383f7213c742e07f84af0972",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v q8; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
@@ -14108,23 +14108,23 @@
         },
         "tests":{
           "img:enc":{
-            "ms":476.57999999999998
+            "ms":498.50599999999997
           },
           "img:pp":{
-            "tok_s":377.51099258771688
+            "tok_s":425.93158883403959
           },
           "img:tg":{
-            "tok_s":43.20164511864612,
+            "tok_s":43.098122933085854,
             "text":": This is an image of two tabby cats lying on a pink surface."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"fd1239bd9",
+        "sha":"b59eae7ec",
         "version":"0.6.4",
-        "dasllama_version":6,
+        "dasllama_version":7,
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6184eac1527f5d36731e9e188d3943f52f86b6c7383f7213c742e07f84af0972",
+        "tune_sha":"c4661c5868f569c025287c3caf3c6ff5aeb4fe984f378ecb131c1e29a1571a91",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
@@ -14174,10 +14174,10 @@
             "ms":116
           },
           "img:pp":{
-            "tok_s":1101.1080332409974
+            "tok_s":1109.5603628750871
           },
           "img:tg":{
-            "tok_s":75.955376216472814
+            "tok_s":73.988439306358387
           }
         },
         "workload":"image-chat",
@@ -14226,13 +14226,13 @@
         },
         "tests":{
           "img:enc":{
-            "ms":19949
+            "ms":19931
           },
           "img:pp":{
-            "tok_s":305.88687956906546
+            "tok_s":304.94821634062055
           },
           "img:tg":{
-            "tok_s":38.591413410516161
+            "tok_s":38.512456372608014
           }
         },
         "workload":"image-chat",
@@ -14281,13 +14281,13 @@
         },
         "tests":{
           "img:enc":{
-            "ms":19946
+            "ms":19956
           },
           "img:pp":{
-            "tok_s":305.53420445810832
+            "tok_s":305.94573792572595
           },
           "img:tg":{
-            "tok_s":38.068046633357127
+            "tok_s":37.995725480883401
           }
         },
         "workload":"image-chat",
