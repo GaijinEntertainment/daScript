@@ -6,6 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_audio_embedder
 require daslib/fio
+require strings
 require _model_tier   // models_dir() + model_available() gate
 
 // the audio twin of test_vision_embedder
@@ -63,5 +64,19 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
         delete rows
         delete samples
         delete st
+        var image_path = ""
+        dir(models_dir()) $(name) {
+            if (empty(image_path) && starts_with(name, "{base_name(mm)}.0x") && ends_with(name, ".dlim")) {
+                image_path = path_join(models_dir(), name)
+            }
+        }
+        if (empty(image_path)) {
+            t |> skip("no prepared {base_name(mm)}.0x*.dlim beside the mmproj - the direct image route needs a baked image")
+        } else {
+            t |> equal(audio_probe_proj_dim(image_path), 0l, "the gguf probe answers 0 on a .dlim by pinned contract")
+            var inscope ei <- load_audio_embedder(image_path)
+            t |> equal(audio_family(ei), "gemma4a", "a prepared image routes on its baked family tag, not the probe")
+            t |> equal(audio_proj_dim(ei), 1536l, "the image-loaded carrier reports the same width")
+        }
     }
 }

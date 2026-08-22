@@ -109,10 +109,10 @@ family-neutral encoder a scheduler owns. Probe the mmproj with
 ``audio_probe_proj_dim`` (0 means no carrier-served audio tower), load it with
 ``load_audio_embedder``, and ``encode_audio`` turns 16 kHz PCM into the
 soft-token rows that splice between the two spans — ``encode_image``'s audio
-twin, and exactly what the server's media worker does per clip. The tutorial's
-``section_carrier_encode`` runs this path when the mmproj carries a
-carrier-served tower (the gemma-4 E-series file), and says so and skips when
-it does not.
+twin, and exactly what the server's media worker does per clip. The tutorial
+probes the mmproj first: a carrier-served file (the gemma-4 E-series) takes the
+carrier rail — ``section_render_spans`` plus ``section_carrier_encode`` — while
+every ``load_audio_tower`` pair takes the chat rail above.
 
 .. seealso::
 

@@ -23,7 +23,7 @@ holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
 `dasllama/dasllama_vision_embedder.das`, a vision family file — one
 `dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
 path (one that runs inside the program under review, not a spawned child process) that
-splices a stream carrying decoded media into a prompt or schedules such a stream, applies
+splices a stream carrying decoded pixels into a prompt or schedules such a stream, applies
 `REVIEW_VISION.md`. A `dasllama/dasllama_tower.das` change — the shared encoder-tower home —
 applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
 thereby pick up the other modality's checklist. A change to the tune sidecar's schema or
@@ -81,9 +81,10 @@ rename is not new** (annotations follow the name in the same change).
 (`benchmarks/lcpp_bench.das`) for the affected backend** — the instrument is the scaling
 ratio across the size ladder, and superlinear is a defect.
 
-**A change reaching `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
-`dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das` records a
-`tests/test_tokenizer.das` run with its cases EXECUTED, not skipped.**
+**A change to `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
+`dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
+template strings any of them look up, records a `tests/test_tokenizer.das` run with its cases
+EXECUTED, not skipped.**
 
 **An override announces itself where it changes the outcome.** An override is an environment
 knob — an env variable or its programmatic setter — that moves a gate, policy, or threshold
@@ -176,9 +177,10 @@ A `require ... public` that re-exports an engine module OUT of an escaped file, 
 that consumer's ruled charter (`ARCHITECTURE.md` §1) grants, is the same defect wearing a
 different line.
 
-**Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, exempting a
-name, widening an exempt list, or a finding text that no longer names what failed. What the
-gate enforces is read from the gate itself; each check's finding text states its own rule.
+**Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, adding a name to
+a shipped check's exempt list, or a finding text that no longer names what failed. A new
+check's licensed set ships with it, ledgered in `ARCHITECTURE.md` §1. What the gate enforces
+is read from the gate itself; each check's finding text states its own rule.
 
 **A def of `dasllama/dasllama.das` is TAUGHT where the gate finds it named — demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a

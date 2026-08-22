@@ -143,24 +143,37 @@ var private SEAM_EXEMPT <- {
     "utils/dasllama-convert/main.das"
 }
 
+// the carried set is the AudioKind enum itself: every arm but `none` is a family
 def private carried_families() : array<string> {
     var fams : array<string>
+    var in_kind = false
     for (line in split(fread(CARRIER), "\n")) {
-        continue if (!starts_with(line, "require dasllama/dasllama_"))
-        let name = ident_prefix(slice(line, length("require dasllama/")))
-        if (name != "dasllama_lint" && name != "dasllama_image") {
-            fams |> push(name)
+        if (starts_with(line, "enum AudioKind")) {
+            in_kind = true
+        } elif (in_kind && starts_with(line, "}")) {
+            break
+        } elif (in_kind) {
+            let name = ident_prefix(slice(line, 4))
+            if (!empty(name) && name != "none") {
+                fams |> push("dasllama_{name}")
+            }
         }
     }
     return <- fams
 }
 
-def private family_owned_names(fam_path : string; var out : array<string>) {
+// what the family owns: its public structs, and every def carrying the family's name prefix
+// (load_gemma4a_encoder, gemma4a_probe_proj_dim, gemma4a_encode_all, ...)
+def private family_owned_names(fam : string; fam_path : string; var out : array<string>) {
+    let prefix = slice(fam, length("dasllama_"))
     for (line in split(fread(fam_path), "\n")) {
         if (starts_with(line, "struct ") && !starts_with(line, "struct private ")) {
             out |> push(ident_prefix(slice(line, 7)))
-        } elif (starts_with(line, "def load_")) {
-            out |> push(ident_prefix(slice(line, 4)))
+        } elif (starts_with(line, "def ") && !starts_with(line, "def private ") && !starts_with(line, "def operator")) {
+            let name = ident_prefix(slice(line, 4))
+            if (starts_with(name, "{prefix}_") || starts_with(name, "load_{prefix}")) {
+                out |> push(name)
+            }
         }
     }
 }
@@ -170,8 +183,8 @@ def private check_audio_family_seams() {
         let fam_path = "modules/dasLLAMA/dasllama/{fam}.das"
         continue if (!fexist(fam_path))
         var inscope names : array<string>
-        family_owned_names(fam_path, names)
-        for (folder in ["modules/dasLLAMA/dasllama", "utils/dasllama-server", "tutorials/dasLLAMA"]) {
+        family_owned_names(fam, fam_path, names)
+        for (folder in ["modules/dasLLAMA/dasllama", "utils/dasllama-server", "utils/dasllama-convert", "tutorials/dasLLAMA"]) {
             dir(folder) $(fname) {
                 return if (!ends_with(fname, ".das"))
                 let p = "{folder}/{fname}"

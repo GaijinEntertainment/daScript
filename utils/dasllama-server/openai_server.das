@@ -3817,7 +3817,7 @@ struct private MediaJob {
                                 // so an unload's index shift never reaches the worker
     file_bytes : array<uint8>   // the base64-decoded media FILE (image or audio); the worker decodes + encodes
     tag : string                // DASLLAMA_VISION_DUMP artifact name (image jobs)
-    is_audio : bool             // audio job: decode to 16 kHz PCM, encode via the slot's gemma4a encoder
+    is_audio : bool             // audio job: decode to 16 kHz PCM, encode via the slot's audio embedder
     max_audio_frames : int
 }
 

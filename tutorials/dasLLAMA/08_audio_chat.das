@@ -145,7 +145,7 @@ def read_wav_pcm16_mono(path : string) : array<float> {
 }
 
 [export]
-def main {
+def main {  // nolint:STYLE038 - one linear tutorial walkthrough; the carrier rail is its first fork
     let cmd <- get_command_line_arguments()
     var ggufs : array<string>
     var audio_path = ""
@@ -171,8 +171,24 @@ def main {
     // The decoder is any chat model dasLLAMA runs. The tower is that model's mmproj —
     // the pair must match: the tower projects into the decoder's embedding width, and
     // create_chat panics on a mismatched pair rather than degrading.
+    //
+    // Two rails, decided by the mmproj: a carrier-served file (the gemma-4 E-series —
+    // audio_probe_proj_dim answers its width) demos the scheduler-side carrier path and
+    // returns, because load_audio_tower does not serve that family; every load_audio_tower
+    // pair takes the chat rail below.
     var m <- load_model(ggufs[0], QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, 4096l)
+    if (audio_probe_proj_dim(ggufs[1]) > 0l) {
+        allow_cpu_prefill()
+        let carrier_samples <- read_wav_pcm16_mono(audio_path)
+        with_job_que() {
+            setup_dasllama_jobque()
+            section_render_spans(m, prompt)
+            section_carrier_encode(ggufs[1], carrier_samples)
+        }
+        print("this mmproj serves through the AudioEmbedder carrier (the server rail) - the create_chat sections need a load_audio_tower pair (qwen2a / omni / ultravox / voxtral)\n")
+        return
+    }
     var tower <- load_audio_tower(ggufs[1])
     allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
 
@@ -219,6 +235,5 @@ def main {
 
         section_splice(m)
         section_render_spans(m, prompt)
-        section_carrier_encode(ggufs[1], samples)
     }
 }
