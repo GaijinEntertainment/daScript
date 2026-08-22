@@ -66,6 +66,7 @@ struct ChatSession {
     embedder_scratch : VisionState = VisionState()
     image_rows : array<float>             // encoded image soft tokens awaiting the next respond()
     n_image_rows : int64                  // row count in image_rows (each vision.proj_dim wide)
+    image_grid : int2                     // the merged nx×ny when the family ropes with grid positions (qwen mrope); (0,0) = sequential
 }
 
 // Stated rather than inferred: the tower holds borrowed planes, and a generated teardown
@@ -613,6 +614,7 @@ def private consume_pending_(var c : ChatSession) {
     c.n_audio_rows = 0l                // an assistant-path consume must not leave rows armed
     c.image_rows |> clear()
     c.n_image_rows = 0l
+    c.image_grid = int2(0)
     c.turn_open = false                // ditto the leaked-turn close; re-set AFTER consume where a call leaves it open
 }
 
@@ -621,6 +623,14 @@ def private consume_pending_(var c : ChatSession) {
 //! whole prompt holding tokens only, no cache memory. Do not eval/respond on it.
 def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 = 256l) : ChatSession {
     var c = ChatSession(tmpl <- chat_template(model), system = system, max_new = max_new)
+    if (!empty(c.tmpl.image_pre.parts) && !image_vocab_ok(model, c.tmpl)
+            && special_id(model, "<|vision_bos|>") >= 0l && special_id(model, "<|vision_eos|>") >= 0l) {
+        // Qwen2.5-Omni spells the SAME marker ids <|vision_bos|>/<|vision_eos|> where the VL
+        // vocabs spell <|vision_start|>/<|vision_end|> - resolve by the vocab HERE so every
+        // render path serves them (mtmd hardcodes the VL spelling and feeds plain text there)
+        c.tmpl.image_pre.parts <- [chat_special("<|vision_bos|>")]
+        c.tmpl.image_post.parts <- [chat_special("<|vision_eos|>")]
+    }
     c.enable_thinking = c.tmpl.think_default
     c.think_vocab = think_vocab_ok(model, c.tmpl)
     c.gate_ok = gate_vocab_ok(model, c.tmpl)
@@ -688,6 +698,9 @@ def create_chat_(model : Model; var embedder : VisionEmbedder; system : string =
     if (vision_proj_dim(embedder) != model.config.dim) {
         panic("dasLLAMA chat: mmproj projects to {vision_proj_dim(embedder)} but the decoder is {model.config.dim}-wide - mismatched pair")
     }
+    if (vision_deepstack(embedder) != model.config.n_deepstack) {
+        panic("dasLLAMA chat: mmproj carries {vision_deepstack(embedder)} deepstack slices but the decoder expects {model.config.n_deepstack} - mismatched pair")
+    }
     if (model.config.recr_mask != 0ul) {
         panic("dasLLAMA chat: a non-causal image span cannot apply to recurrent layers - this architecture has no vision arm")
     }
@@ -696,11 +709,13 @@ def create_chat_(model : Model; var embedder : VisionEmbedder; system : string =
         panic("dasLLAMA chat: this model's chat template declares no image span markers - it has no vision arm")
     }
     if (!image_vocab_ok(model, c.tmpl)) {
+        // the renderer already tried the vocab-spelling fallback - nothing resolves this pair
         panic("dasLLAMA chat: an image span marker is missing from this checkpoint's vocab - it has no vision arm")
     }
     c.embedder <- embedder
     return <- c
 }
+
 
 //! Queue an image for the next respond() — geometry, letterbox and embedder run NOW, spliced at
 //! the head of the next user turn (before its text). ONE image per turn in v1: a second call
@@ -716,6 +731,7 @@ def add_user_image_(var c : ChatSession; img : VisionImage) {
         panic("dasLLAMA chat: audio already queued this turn - one media kind per turn")
     }
     c.n_image_rows = encode_image_(c.embedder, c.embedder_scratch, img, "turn{length(c.history)}", c.image_rows)
+    c.image_grid = vision_mrope_grid(c.embedder, c.embedder_scratch)
 }
 
 //! Queue audio (16 kHz mono f32 PCM) for the next respond() — encoded to soft tokens NOW,
@@ -1363,6 +1379,38 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
     if (!c.has_pending && c.n_audio_rows == 0l && c.n_image_rows == 0l) {
         return ""
     }
+    return respond_media_or_text_(m, c, params, blk)
+}
+
+// the media-quantum embd rows: head/tail text around the spliced media. Deepstack decoders
+// take (1+n)·dim-wide rows — text tails stay zero (the eval seam splits slice 0 and adds the
+// rest per layer); audio rows are dim-wide on every family, zero-tailed like text.
+def private assemble_media_embd(m : Model; c : ChatSession; head, tail : array<int64>;
+                                is_image : bool; var embd : array<float>) {
+    let dim = m.config.dim
+    let rw = dim * (1l + m.config.n_deepstack)
+    let n_head = long_length(head)
+    let n_media = is_image ? c.n_image_rows : c.n_audio_rows
+    let npos = n_head + n_media + long_length(tail)
+    embd |> ensure_capacity(npos * rw)
+    embd |> resize(npos * rw)
+    embed_text_rows_strided(m, head, embd, 0l, rw)
+    if (is_image) {   // the embedder's rows match rw (the create_chat pair check)
+        for (i in range64(n_media * rw)) {
+            embd[n_head * rw + i] = c.image_rows[i]
+        }
+    } else {
+        for (r in range64(n_media)) {
+            for (i in range64(dim)) {
+                embd[(n_head + r) * rw + i] = c.audio_rows[r * dim + i]
+            }
+        }
+    }
+    embed_text_rows_strided(m, tail, embd, n_head + n_media, rw)
+}
+
+def private respond_media_or_text_(m : Model; var c : ChatSession; params : SamplingParams;
+                                   blk : block<(piece : string) : bool>) : string {
     // local clone so the streaming callback captures no part of `c` (c.session is passed to generate)
     var inscope stops <- effective_stop_ids_(c)
     var inscope reply_parts : array<string>
@@ -1377,24 +1425,15 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
             render_prompt_audio(m, c, head, tail)
         }
         render_think_suppress(m, c, tail)
-        let dim = m.config.dim
         let n_head = long_length(head)
-        let n_tail = long_length(tail)
         let n_media = is_image ? c.n_image_rows : c.n_audio_rows
-        let npos = n_head + n_media + n_tail
+        let npos = n_head + n_media + long_length(tail)
         var inscope embd : array<float>
-        embd |> ensure_capacity(npos * dim)
-        embd |> resize(npos * dim)
-        embed_text_rows(m, head, embd, 0l)
-        for (i in range64(n_media * dim)) {
-            embd[n_head * dim + i] = is_image ? c.image_rows[i] : c.audio_rows[i]
-        }
-        embed_text_rows(m, tail, embd, n_head + n_media)
-        // gemma vision decodes the image span NON-CAUSALLY (mtmd_decode_use_non_causal); every
-        // audio projector is causal, so the audio turn passes an empty span
+        assemble_media_embd(m, c, head, tail, is_image, embd)
+        // image span = non-causal (mtmd_decode_use_non_causal); audio is causal - empty span
         let span_lo = is_image ? n_head : 0l
         let span_hi = is_image ? n_head + n_media : 0l
-        generate_embd_(m, c.session, embd, npos, params, c.max_new, span_lo, span_hi) $(id, piece) {
+        generate_embd_(m, c.session, embd, npos, params, c.max_new, span_lo, span_hi, is_image ? c.image_grid : int2(0)) $(id, piece) {
             for (sid in stops) {
                 return false if (id == sid)
             }
@@ -1404,7 +1443,7 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         c.audio_rows |> clear()
         c.n_audio_rows = 0l
         c.image_rows |> clear()
-        c.n_image_rows = 0l
+        c.n_image_rows = 0l; c.image_grid = int2(0)
     } else {
         var inscope pre : array<int64>
         render_prompt(m, c, pre)
@@ -1419,8 +1458,7 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
     }
     consume_pending_(c)
     let reply = join(reply_parts, "")
-    // a tool conversation tracks its own reply's calls (the next result turn pairs names to them);
-    // a gemma-4 reply ENDING in a call leaves the model turn open — the responses continue it
+    // a reply ENDING in a tool call leaves the model turn open - the responses continue it
     let reply_ends_open = empty(c.tools_json) ? false : track_reply_calls_(c, reply)
     if (reply_ends_open) {
         c.turn_open = true
@@ -1430,9 +1468,7 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         render_parts(m, c.close_parts, "", close)
         eval_(m, c.session, close)
     }
-    // history holds only the answer — the per-arch reasoning span strips; families with no
-    // declared reply format keep the legacy unconditional <think> strip (a thinking fine-tune
-    // served under a non-thinking arch — R1-distills on `llama` — must not bloat history)
+    // history holds only the answer - reasoning spans strip (legacy <think> strip on undeclared)
     let stored = (c.tmpl.think_mode == ThinkMode.none ? strip_think(reply)
         : split_reasoning_(c.tmpl, reply).content)
     c.history |> push(Message(role = Role.assistant, content = stored))

@@ -18,6 +18,11 @@ let ALIGN = 48
 let MIN_TOKENS = 40
 let MAX_TOKENS = 280
 
+// the qwen towers (qwen3vl_merger, qwen2.5o): patch 16 x merge 2, budget 8..4096 tokens
+let Q_ALIGN = 32
+let Q_MIN_TOKENS = 8
+let Q_MAX_TOKENS = 4096
+
 def make_fixture(kind : string; w, h : int) : VisionImage {
     var img = VisionImage(width = w, height = h)
     img.rgb |> reserve(w * h * 3)
@@ -74,18 +79,29 @@ def fnv1a64_f32(planes : array<float>) : uint64 {
     return h
 }
 
-def preproc_hash(t : T?; kind : string; w, h : int; want_w, want_h : int; want_hash : uint64) {
+def preproc_hash_p(t : T?; kind : string; w, h : int; want_w, want_h : int; want_hash : uint64;
+                   align, min_tokens, max_tokens : int; mean, std : float; oracle_dir : string) {
     let src <- make_fixture(kind, w, h)
-    let target = vision_target_size(w, h, ALIGN, MIN_TOKENS, MAX_TOKENS)
+    let target = vision_target_size(w, h, align, min_tokens, max_tokens)
     t |> equal(target.x, want_w, "{kind} {w}x{h} target width")
     t |> equal(target.y, want_h, "{kind} {w}x{h} target height")
     let boxed <- vision_letterbox(src, target)
-    let planes <- vision_normalize(boxed)
+    let planes <- vision_normalize(boxed, mean, std)
     t |> equal(length(planes), want_w * want_h * 3, "{kind} plane count")
     let hash = fnv1a64_f32(planes)
     if (hash != want_hash) {
-        t |> failure("{kind} {w}x{h}: fnv1a64 {hash} != oracle {want_hash} - preproc diverged from mtmd; regenerate via gemma4-vision-oracle/mint.sh and diff probes")
+        t |> failure("{kind} {w}x{h}: fnv1a64 {hash} != oracle {want_hash} - preproc diverged from mtmd; regenerate via {oracle_dir}/mint.sh and diff probes")
     }
+}
+
+def preproc_hash(t : T?; kind : string; w, h : int; want_w, want_h : int; want_hash : uint64) {
+    preproc_hash_p(t, kind, w, h, want_w, want_h, want_hash,
+        ALIGN, MIN_TOKENS, MAX_TOKENS, 0.0, 1.0, "gemma4-vision-oracle")
+}
+
+def preproc_hash_q(t : T?; kind : string; w, h : int; want_w, want_h : int; want_hash : uint64) {
+    preproc_hash_p(t, kind, w, h, want_w, want_h, want_hash,
+        Q_ALIGN, Q_MIN_TOKENS, Q_MAX_TOKENS, 0.5, 0.5, "qwen3vl-vision-oracle")
 }
 
 [test]
@@ -148,6 +164,50 @@ def test_vision_preproc_bit_exact(t : T?) {
     }
 }
 
+[test]
+def test_vision_geometry_qwen(t : T?) {
+    t |> run("qwen dynamic-resolution geometry matches the oracle table") @(t : T?) {
+        t |> equal(vision_target_size(640, 640, Q_ALIGN, Q_MIN_TOKENS, Q_MAX_TOKENS), int2(640, 640))
+        t |> equal(vision_target_size(800, 480, Q_ALIGN, Q_MIN_TOKENS, Q_MAX_TOKENS), int2(800, 480))
+        t |> equal(vision_target_size(100, 100, Q_ALIGN, Q_MIN_TOKENS, Q_MAX_TOKENS), int2(96, 96))
+        t |> equal(vision_target_size(650, 487, Q_ALIGN, Q_MIN_TOKENS, Q_MAX_TOKENS), int2(640, 480))
+        // 528/32 = 16.5: round-half-away gives 544; a half-even port would give 512
+        t |> equal(vision_target_size(528, 528, Q_ALIGN, Q_MIN_TOKENS, Q_MAX_TOKENS), int2(544, 544))
+        // beta downscale over the 4096-token budget, floor-aligned
+        t |> equal(vision_target_size(4000, 3000, Q_ALIGN, Q_MIN_TOKENS, Q_MAX_TOKENS), int2(2336, 1760))
+        // the cats fixture's grid: 640x480 -> 20x15 merged tokens, position advance 20
+        t |> equal(vision_token_count(int2(640, 480), Q_ALIGN), 300)
+    }
+    t |> run("an extreme aspect ratio still holds the qwen token budget") @(t : T?) {
+        for (wh in [int2(300000, 32), int2(32, 1000000)]) {
+            let tgt = vision_target_size(wh.x, wh.y, Q_ALIGN, Q_MIN_TOKENS, Q_MAX_TOKENS)
+            t |> success(vision_token_count(tgt, Q_ALIGN) <= Q_MAX_TOKENS, "{wh.x}x{wh.y} -> {tgt} within {Q_MAX_TOKENS} tokens")
+        }
+    }
+}
+
+[test]
+def test_vision_preproc_bit_exact_qwen(t : T?) {
+    t |> run("aligned squares pass through, post-normalize planes hash exactly") @(t : T?) {
+        t |> preproc_hash_q("gray", 640, 640, 640, 640, 0x0c3357530ace2325ul)
+        t |> preproc_hash_q("white", 640, 640, 640, 640, 0x5cfec60ce4d02325ul)
+        t |> preproc_hash_q("black", 640, 640, 640, 640, 0xcccd29117cd02325ul)
+        t |> preproc_hash_q("cb", 640, 640, 640, 640, 0xe621282ef8d02325ul)
+    }
+    t |> run("non-square aligned and nearest-multiple rounding") @(t : T?) {
+        t |> preproc_hash_q("cb", 800, 480, 800, 480, 0xae77bad205854325ul)
+        t |> preproc_hash_q("gray", 480, 800, 480, 800, 0x96d8c37a6a636325ul)
+        t |> preproc_hash_q("cb", 650, 487, 640, 480, 0x1151ab22c92870deul)
+    }
+    t |> run("rounding tie and the small grid") @(t : T?) {
+        t |> preproc_hash_q("cb", 528, 528, 544, 544, 0x9ade9ed5e1ea325bul)
+        t |> preproc_hash_q("cb", 100, 100, 96, 96, 0xbe14fe445e5254d9ul)
+    }
+    t |> run("beta downscale letterboxes with black pad rows") @(t : T?) {
+        t |> preproc_hash_q("white", 4000, 3000, 2336, 1760, 0x1696789516ee4325ul)
+    }
+}
+
 def count_byte_diffs(a, b : array<uint8>) : int {
     if (length(a) != length(b)) {
         return max(length(a), length(b))
@@ -182,6 +242,26 @@ def private tmp_path(name : string) : string {
 def cleanup_temp_dir {
     if (_tmp_dir_inited && !empty(_tmp_dir)) {
         rmdir_rec(_tmp_dir)
+    }
+}
+
+[test]
+def test_vision_normalize3_channels(t : T?) {
+    t |> run("per-channel CLIP normalize picks mean/std by channel, not by a shared scalar") @(t : T?) {
+        var img = VisionImage(width = 2, height = 1)
+        img.rgb <- [uint8(255), uint8(0), uint8(51), uint8(102), uint8(153), uint8(204)]
+        let mean = float3(0.5, 0.25, 0.75)
+        let std = float3(0.5, 0.2, 0.4)
+        let planes <- vision_normalize3(img, mean, std)
+        t |> equal(length(planes), 6, "plane count")
+        for (i in range(6)) {
+            let c = i % 3
+            let want = (float(int(img.rgb[i])) / 255.0 - mean[c]) / std[c]
+            t |> success(abs(planes[i] - want) < 1e-6, "channel {c} at {i}: {planes[i]} vs {want}")
+        }
+        // a channel swap must MOVE the values (the R and B params differ on purpose)
+        t |> success(abs(planes[0] - (float(255) / 255.0 - mean[2]) / std[2]) > 1e-3, "R rides channel 0's params, not channel 2's")
+        delete img
     }
 }
 

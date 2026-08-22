@@ -153,6 +153,10 @@ struct Args {
     @clarg_doc = "Image cell: the question asked about the picture (default: a short describe prompt)"
     image_prompt : string = ""
 
+    @clarg_name = "image-think"
+    @clarg_doc = "Image cell: leave thinking at the template default instead of pinning it off (for a checkpoint whose think-suppress form derails its greedy reply, e.g. Qwen3-Omni-30B-Instruct)"
+    image_think : bool
+
     @clarg_doc = "Tokenizer cell mode: encode/decode throughput of -m's tokenizer over corpus x size ladders (no weights loaded; txt output only; --ref here is a llama-tokenize binary)"
     tok : bool
 
@@ -438,7 +442,7 @@ struct private ImageTurn {
 }
 
 def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : VisionImage;
-                               prompt : string; reps : int) : ImageTurn {
+                               prompt : string; reps : int; think : bool) : ImageTurn {
     var r = ImageTurn()
     var st = VisionState()
     var rows : array<float>
@@ -447,7 +451,7 @@ def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : Vision
         r.n_rows = encode_image_(emb, st, img, "bench", rows)
         r.enc_ms = min(r.enc_ms, double(get_time_usec(t_enc)) / 1000.0lf)
         var chat <- create_chat_(m, "", int64(image_turn_steps()))
-        set_thinking_(chat, false)   // the timed shape is the answer, not a scratchpad
+        set_thinking_(chat, think)   // default off: the timed shape is the answer, not a scratchpad
         add_user_(chat, prompt)
         var head : array<int64>
         var tail : array<int64>
@@ -467,7 +471,7 @@ def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : Vision
         // the same stop protocol respond_ runs: without it a stray channel marker rides into the
         // timed text, and the row would price a reply the product would never have shown
         var stops <- effective_stop_ids_(chat)
-        generate_embd_(m, chat.session, embd, npos, SamplingParams(), int64(image_turn_steps()), n_head, n_head + r.n_rows) $(id, piece) {
+        generate_embd_(m, chat.session, embd, npos, SamplingParams(), int64(image_turn_steps()), n_head, n_head + r.n_rows, vision_mrope_grid(emb, st)) $(id, piece) {
             for (sid in stops) {
                 return false if (id == sid)
             }
@@ -491,7 +495,7 @@ def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : Vision
 }
 
 // The --image entry: load the pair, time the turn, emit the same cell JSON the LLM rows emit.
-def private image_cell_main(model, mmproj, image, prompt, json_path : string; reps, threads : int; gpu, accel : bool) : bool {
+def private image_cell_main(model, mmproj, image, prompt, json_path : string; reps, threads : int; gpu, accel, think : bool) : bool {
     // the metal arm serves the whole turn on the driver with the tripwire ARMED, so a CPU
     // fallback reds the row instead of sandbagging it
     if (gpu) {
@@ -541,9 +545,15 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
         } elif (pic.width == 0) {
             print("lcpp_bench --image: could not decode '{image}'\n")
         } else {
-            var inscope warm <- measure_image_turn(m, emb, pic, ask, 1)   // warm: JIT + first touch
-            var inscope turn <- measure_image_turn(m, emb, pic, ask, reps)
-            var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp(accel ? "accel" : "tuned"),
+            var inscope warm <- measure_image_turn(m, emb, pic, ask, 1, think)   // warm: JIT + first touch
+            var inscope turn <- measure_image_turn(m, emb, pic, ask, reps, think)
+            if (empty(turn.text)) {
+                // a duration over zero answer tokens prices nothing - refuse the cell by name
+                // (the Omni-30B greedy-flipped to an immediate stop under its own think-suppress
+                // form; --image-think prices that model's template-default turn instead)
+                print("lcpp_bench --image: the timed reply is EMPTY - no cell minted (try --image-think for a model whose suppress form derails it)\n")
+            } else {
+                var run = BenchRun(engine = "das", backend = gpu ? "metal" : "cpu", flavor = flavor_stamp(accel ? "accel" : "tuned"),
                 exec_fmt = "tower {vision_family(emb)} {vision_exec_fmt(emb)}; {model_exec_fmt(m)}",
                 workload = "image-chat", box = box_name(), threads = threads,
                 date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
@@ -562,6 +572,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
                                   size_bytes = int64(stat(model).size))
             cell.runs |> emplace(run)
             jsonModels |> emplace(cell)
+            }
         }
         delete pic
         delete emb
@@ -1350,7 +1361,7 @@ def main() : int {
             return 1
         }
         return image_cell_main(cfg.model, cfg.image_mmproj, cfg.image, cfg.image_prompt,
-                               cfg.json_path, reps, threads, gpu, cfg.accel) ? 0 : 1
+                               cfg.json_path, reps, threads, gpu, cfg.accel, cfg.image_think) ? 0 : 1
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag

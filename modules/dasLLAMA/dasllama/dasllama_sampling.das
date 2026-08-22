@@ -193,15 +193,17 @@ def generate_(t : Model; var s : Session; prompt : array<int64>; params : Sampli
     return nout
 }
 
-//! generate_'s embedding-prefill twin: prefill `npos` pre-built embedding rows (the multimodal
-//! splice — see eval_embd_), then stream-sample exactly like generate_. Rows [span_lo, span_hi)
-//! prefill as a NON-CAUSAL image span; span_hi <= span_lo is the plain all-causal prefill.
+//! generate_'s embedding-prefill twin: prefill `npos` pre-built rows, then stream-sample like
+//! generate_. Rows [span_lo, span_hi) prefill as a NON-CAUSAL image span (span_hi <= span_lo
+//! = plain causal); a non-zero merged `grid` routes the span through `eval_embd_span_mrope_`.
 def generate_embd_(t : Model; var s : Session; embd : array<float>; npos : int64; params : SamplingParams;
-                   max_tokens : int64; span_lo : int64 = 0l; span_hi : int64 = 0l;
+                   max_tokens : int64; span_lo : int64 = 0l; span_hi : int64 = 0l; grid : int2 = int2(0);
                    blk : block<(id : int64; piece : string) : bool>) : int64 {
     s.recent |> clear()
     let t_pre = ref_time_ticks()
-    if (span_hi > span_lo) {
+    if (span_hi > span_lo && grid.x > 0) {
+        eval_embd_span_mrope_(t, s, embd, npos, span_lo, span_hi, int64(grid.x), int64(grid.y))
+    } elif (span_hi > span_lo) {
         eval_embd_span_(t, s, embd, npos, span_lo, span_hi)
     } else {
         eval_embd_(t, s, embd, npos)

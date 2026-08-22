@@ -11,6 +11,7 @@ require dasllama/dasllama_attn_prefill   // prefill_attention — the head-threa
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert
+require dasllama/dasllama_rope     // mrope_span_positions — the image-span position map
 require dasllama/dasllama_kv_codec   // fwht_signs_row/fwht_unsign_row — the Hadamard rotation in gated attention
 require dasllama/dasllama_env       // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require math
@@ -1503,7 +1504,7 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
 
 def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64;
                          non_causal : bool = false; src_off : int64 = 0l; skip_logits : bool = false;
-                         span_lo : int64 = -1l; span_hi : int64 = -1l) {
+                         span_lo : int64 = -1l; span_hi : int64 = -1l; ds_wide : bool = false) {
     if (npos <= 0l) {
         return
     }
@@ -1519,16 +1520,40 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     if (span_lo >= 0l && (span_hi <= span_lo || span_hi > npos)) {
         panic("forward_prefill_embd: span [{span_lo},{span_hi}) outside [0,{npos})")
     }
-    if (long_length(embd) < (src_off + npos) * t.config.dim) {
-        panic("forward_prefill_embd: embd has {long_length(embd)} floats - rows [{src_off},{src_off + npos}) of dim={t.config.dim} need {(src_off + npos) * t.config.dim}")
+    // ds_wide (qwen3vl deepstack): every row is (1+n_deepstack)·dim wide — slice 0 is the
+    // residual input, the tail slices stash for the per-layer adds (text rows carry zeros)
+    let n_ds = ds_wide ? t.config.n_deepstack : 0l
+    if (ds_wide && n_ds <= 0l) {
+        panic("forward_prefill_embd: ds_wide rows on a model with no deepstack layers")
+    }
+    let stride = (1l + n_ds) * t.config.dim
+    if (long_length(embd) < (src_off + npos) * stride) {
+        panic("forward_prefill_embd: embd has {long_length(embd)} floats - rows [{src_off},{src_off + npos}) of width {stride} need {(src_off + npos) * stride}")
     }
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)
     let dim = t.config.dim
     let ts_embed = prof_ticks()
-    let base = src_off * dim
-    for (i in range64(npos * dim)) {
-        s.x_b[i] = embd[base + i]
+    if (ds_wide) {
+        if (long_length(s.ds_embd) < npos * n_ds * dim) {   // inline: PERF026 can't see @scratch through reserve_resize
+            s.ds_embd |> reserve(npos * n_ds * dim)
+            s.ds_embd |> resize(npos * n_ds * dim)
+        }
+        for (r in range64(npos)) {
+            let rb = (src_off + r) * stride
+            for (i in range64(dim)) {
+                s.x_b[r * dim + i] = embd[rb + i]
+            }
+            for (i in range64(n_ds * dim)) {
+                s.ds_embd[r * n_ds * dim + i] = embd[rb + dim + i]
+            }
+        }
+        s.ds_active = true
+    } else {
+        let base = src_off * dim
+        for (i in range64(npos * dim)) {
+            s.x_b[i] = embd[base + i]
+        }
     }
     prof_add("embed", ts_embed)
     if (has_ple(t.config)) {  // gemma-4 E-series: PLE side input (padding-token gather for the media path)
@@ -1551,6 +1576,21 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     forward_prefill_body(t, s, npos, start_pos, skip_logits)
     s.attn_uniform_lo = 0l
     s.attn_uniform_end = 0l
+    s.ds_active = false
+}
+
+//! ``embed_text_rows`` at a wider row stride (deepstack quanta): each token's dim-wide
+//! embedding lands at ``dst[(at+p)·row_w]``; the row tails stay as-is (zero for text rows).
+def embed_text_rows_strided(t : Model; tokens : array<int64>; var dst : array<float>; at, row_w : int64) {
+    let dim = t.config.dim
+    for (p in range64(long_length(tokens))) {
+        unsafe {
+            embed_row(t, tokens[p], addr(dst[(at + p) * row_w]))
+            if (t.config.embed_scale != 1.0) {
+                scale_inplace(addr(dst[(at + p) * row_w]), t.config.embed_scale, dim)
+            }
+        }
+    }
 }
 
 //! Fill ``dst[at*dim ..]`` with the embedding rows of ``tokens`` (embed_scale applied) — the
@@ -1573,7 +1613,7 @@ def eval_embd_(t : Model; var s : Session; embd : array<float>; npos : int64; no
     if (npos <= 0l) {
         return
     }
-    forward_prefill_embd(t, s, embd, npos, s.n_past, non_causal)
+    forward_prefill_embd(t, s, embd, npos, s.n_past, non_causal, ds_wide = embd_is_ds_wide(t, embd, npos))
     s.n_past += npos
 }
 
@@ -1611,24 +1651,81 @@ def eval_embd_span_(t : Model; var s : Session; embd : array<float>; npos, span_
         panic("eval_embd_span_: span [{span_lo},{span_hi}) outside [0,{npos})")
     }
     if (span_fusable()) {
-        forward_prefill_embd(t, s, embd, npos, s.n_past, span_lo = span_lo, span_hi = span_hi)
+        forward_prefill_embd(t, s, embd, npos, s.n_past, span_lo = span_lo, span_hi = span_hi,
+                             ds_wide = embd_is_ds_wide(t, embd, npos))
         s.n_past += npos
         return
     }
     // slices read embd in place via src_off; only the last non-empty slice produces logits
-    eval_embd_slice_(t, s, embd, 0l, span_lo, false, false)
-    eval_embd_slice_(t, s, embd, span_lo, span_hi, true, span_hi >= npos)
-    eval_embd_slice_(t, s, embd, span_hi, npos, false, true)
+    let wide = embd_is_ds_wide(t, embd, npos)
+    eval_embd_slice_(t, s, embd, 0l, span_lo, false, false, wide)
+    eval_embd_slice_(t, s, embd, span_lo, span_hi, true, span_hi >= npos, wide)
+    eval_embd_slice_(t, s, embd, span_hi, npos, false, true, wide)
+}
+
+// exact-length wide detection: a deepstack model's image quantum carries (1+n_ds)·dim-wide rows
+// (text rows zero-tailed); every other embd buffer is exactly npos·dim
+def private embd_is_ds_wide(t : Model; embd : array<float>; npos : int64) : bool {
+    return (t.config.n_deepstack > 0l
+        && long_length(embd) == npos * (1l + t.config.n_deepstack) * t.config.dim)
 }
 
 def private eval_embd_slice_(t : Model; var s : Session; embd : array<float>; lo, hi : int64;
-                             non_causal, last : bool) {
+                             non_causal, last : bool; ds_wide : bool = false) {
     let n = hi - lo
     if (n <= 0l) {
         return
     }
-    forward_prefill_embd(t, s, embd, n, s.n_past, non_causal, src_off = lo, skip_logits = !last)
+    forward_prefill_embd(t, s, embd, n, s.n_past, non_causal, src_off = lo, skip_logits = !last, ds_wide = ds_wide)
     s.n_past += n
+}
+
+//! `eval_embd_span_`'s qwen mrope twin: the span rows are an nx×ny image grid roping on the
+//! mtmd decoder walk (t = pos0, per-row h/w, position advance max(nx, ny)); surrounding text
+//! ropes sequentially at delta'd positions. Same uniform-span mask; only the angles differ.
+def eval_embd_span_mrope_(t : Model; var s : Session; embd : array<float>; npos, span_lo, span_hi, nx, ny : int64) {
+    if (npos <= 0l) {
+        return
+    }
+    if (span_lo < 0l || span_hi > npos || span_hi <= span_lo) {
+        panic("eval_embd_span_mrope_: span [{span_lo},{span_hi}) outside [0,{npos})")
+    }
+    let sect = t.config.rope_sections
+    if (sect.x + sect.y + sect.z + sect.w == 0) {
+        panic("eval_embd_span_mrope_: the model carries no rope.dimension_sections - not an mrope arch")
+    }
+    let base = s.n_past + s.rope_pos_delta
+    let wide = embd_is_ds_wide(t, embd, npos)
+    if (span_fusable()) {
+        mrope_span_positions(s.mrope_pos, base, npos, span_lo, span_hi, nx, ny)
+        forward_prefill_embd(t, s, embd, npos, s.n_past, span_lo = span_lo, span_hi = span_hi, ds_wide = wide)
+        s.n_past += npos
+        s.mrope_pos |> clear()
+    } else {
+        var whole : array<int4>
+        mrope_span_positions(whole, base, npos, span_lo, span_hi, nx, ny)
+        eval_embd_slice_mrope_(t, s, whole, embd, 0l, span_lo, false, false, wide)
+        eval_embd_slice_mrope_(t, s, whole, embd, span_lo, span_hi, true, span_hi >= npos, wide)
+        eval_embd_slice_mrope_(t, s, whole, embd, span_hi, npos, false, true, wide)
+        delete whole
+    }
+    s.rope_pos_delta += max(nx, ny) - (span_hi - span_lo)
+}
+
+// a splice slice carries its own view of the quantum map (positions are quantum-absolute)
+def private eval_embd_slice_mrope_(t : Model; var s : Session; whole : array<int4>; embd : array<float>;
+                                   lo, hi : int64; non_causal, last : bool; ds_wide : bool = false) {
+    let n = hi - lo
+    if (n <= 0l) {
+        return
+    }
+    s.mrope_pos |> resize(n)
+    for (i in range64(n)) {
+        s.mrope_pos[i] = whole[lo + i]
+    }
+    forward_prefill_embd(t, s, embd, n, s.n_past, non_causal, src_off = lo, skip_logits = !last, ds_wide = ds_wide)
+    s.n_past += n
+    s.mrope_pos |> clear()
 }
 
 //! Mean-pooled, L2-normalized sentence embedding for `tokens` into `out`: last-layer hidden state

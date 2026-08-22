@@ -43,7 +43,7 @@ require dasllama/dasllama_load   // the GGUF load walk (load_gguf/load_model_/lo
 // config-derived. A loader change that alters which tensors load leaves a structurally VALID stale
 // image that silently represents a different model; only this version catches it. Mismatch
 // regenerates from the gguf, never migrates.
-let IMAGE_VERSION = 9   // v9: the gemma4uv vision embedder joins the rail (bf16 / f32 plane flavors)
+let IMAGE_VERSION = 11   // v11: header byte 48 carries the meta-layout fingerprint (layout changes now auto-refuse)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -713,6 +713,37 @@ def count_meta_fields(var t) : int {
     return n
 }
 
+//! The reflected-layout fingerprint the image header pins beside IMAGE_VERSION: every field's
+//! name + full type name + byte size in order, recursing into struct fields and array-element
+//! structs — any meta-closure shape change refuses by name; IMAGE_VERSION covers behavior.
+def layout_fingerprint(var t) : uint64 {
+    var d = ""
+    layout_describe(t, d)
+    return hash(d)
+}
+
+def private layout_describe(var t; var d : string&) {
+    apply(t) $(name : string; var field) {
+        d += "{name}:{typeinfo typename(field)}:{typeinfo sizeof(field)};"
+        static_if (typeinfo is_struct(field)) {
+            layout_describe(field, d)
+            d += "^"   // close the nesting so sibling boundaries stay unambiguous
+        } static_elif (typeinfo is_array(field)) {
+            layout_describe_elem(field, d)
+        }
+    }
+}
+
+// an array field's ELEMENT struct also serializes element-wise — its shape is load-bearing
+def private layout_describe_elem(var a : array<auto(TT)>; var d : string&) {
+    static_if (typeinfo is_struct(type<TT>)) {
+        var tmp : TT
+        layout_describe(tmp, d)
+        d += "^"
+        delete tmp
+    }
+}
+
 //! Model's post-read fix-up: blocks re-bind from the registry. Deliberately NOT resolve_arch —
 //! its configure would clobber serialized gguf overrides with the arch's fallbacks. Public for
 //! the same `_::` reason as serialize_image_meta.
@@ -755,7 +786,7 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
 //! lands in: planes page-aligned raw (borrowed back at load), everything else archived. `plane`
 //! gets first refusal on each plane by name; `consume` frees each owned plane as it lands.
 def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
-                        tag : string; quant : string; consume : bool;
+                        tag : string; quant : string; consume : bool; layout : uint64;
                         plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
     // one config snapshot serves the meta embed AND the header hash — they must agree
     let dcfg = dlim_config_current(quant)
@@ -875,6 +906,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
         store_u64(hdr, 24, meta_bytes)
         store_u64(hdr, 32, fend)
         store_u64(hdr, 40, hash(ident))
+        store_u64(hdr, 48, layout)
         w.ok = w_header(w, dst, hdr)
         if (!w.ok) {
             to_log(LOG_ERROR, "dasLLAMA image: '{dst}' header write failed - image build aborted\n")
@@ -922,10 +954,10 @@ def private tmp_name_for(path : string) : string {
     return "{path}.{ref_time_ticks()}.tmp"   // clock: control — unique temp-name suffix, not timing
 }
 
-def private save_image_to_file(var t; path : string; extra : uint64; tag : string; quant : string;
+def private save_image_to_file(var t; path : string; extra : uint64; tag : string; quant : string; layout : uint64;
                                plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     let tmp_path = tmp_name_for(path)
-    let w = build_image(t, tmp_path, false, extra, tag, quant, false, plane)
+    let w = build_image(t, tmp_path, false, extra, tag, quant, false, layout, plane)
     return promote_tmp(tmp_path, path, w.ok, w.cur)
 }
 
@@ -947,7 +979,7 @@ def private write_chunk(base : void?; bytes : uint64; path : string) : bool {
 //! Serialize a loaded weight-carrying struct as a prepared image on disk (see build_image).
 def save_image(var t; path : string; tag : string = ""; quant : string = "q8") : bool {
     // no plane wants special handling — the walk writes them all from RAM
-    return save_image_to_file(t, path, 0ul, tag, quant) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
+    return save_image_to_file(t, path, 0ul, tag, quant, layout_fingerprint(t)) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
         return false
     }
 }
@@ -982,8 +1014,8 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
                                var jobs : array<FillJob>; path : string; tag : string = ""; quant : string = "q8") : bool {
     var regs : array<StreamReg>
     stream_collect_regions(t, regs)
-    let ok = save_image_to_file(t, path, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
-                                                                                    var w : ImgWriter; var sections : array<ImgSection>) {
+    let ok = save_image_to_file(t, path, stream_extra_bytes(t, jobs), tag, quant, layout_fingerprint(t)) $(name : string;
+                                                                                                           var w : ImgWriter; var sections : array<ImgSection>) {
         let want = stream_plane_bytes(t, jobs, name)
         if (want <= 0l) {
             // a blob build's kq scale strips take their device form as each one's turn comes —
@@ -1080,6 +1112,10 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
     // section table always rides there, and addr(meta_blob[0]) needs a nonzero resize)
     if (file_bytes != msize || meta_bytes == 0ul || meta_bytes > msize || meta_off > msize - meta_bytes || meta_bytes > uint64(INT_MAX)) {
         to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - header says {file_bytes} bytes / meta {meta_off}+{meta_bytes}, mapped {msize}\n")
+        return false
+    }
+    if (read_u64(bp, 48l) != layout_fingerprint(t)) {
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - meta layout fingerprint {read_u64(bp, 48l)} vs this build's {layout_fingerprint(t)} (a struct in the meta closure changed shape) - regenerate from the source\n")
         return false
     }
     let want_ident = image_identity(tag, quant)
@@ -1244,7 +1280,7 @@ def private adopt_image(base : void?; msize : uint64; src : string; var t; tag :
 def private chunk_rail(var t; var out; save_to : string; extra : uint64; tag : string; quant : string;
                        plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     let ts = ref_time_ticks()
-    var w = build_image(t, "", true, extra, tag, quant, true, plane)
+    var w = build_image(t, "", true, extra, tag, quant, true, layout_fingerprint(out), plane)
     if (!w.ok) {
         // failing to get the chunk is the only decline that precedes the walk — `t` is whole and
         // the caller can still serve it. Failing after it means the sizing pass and the walk
@@ -1413,7 +1449,7 @@ def cache_via_image_staged_hooked(var st; var out; img : string; extra : uint64;
                                   plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     if (img != "" && image_save_enabled()) {
         let ts = ref_time_ticks()
-        if (save_image_to_file(st, img, extra, tag, quant, plane)) {
+        if (save_image_to_file(st, img, extra, tag, quant, layout_fingerprint(out), plane)) {
             to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms - {img}\n")
             delete st   // before the map, not after: holding both is what makes a cold load peak twice
             if (!load_image(img, out, tag, quant)) {
@@ -1440,7 +1476,7 @@ def private cache_via_image_(var m; var out; img : string; tag : string; quant :
         return false
     }
     let ts = ref_time_ticks()
-    if (!save_image_to_file(m, img, 0ul, tag, quant, plane)) {
+    if (!save_image_to_file(m, img, 0ul, tag, quant, layout_fingerprint(out), plane)) {
         to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' - serving the carrier as loaded\n")
         out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
         return false

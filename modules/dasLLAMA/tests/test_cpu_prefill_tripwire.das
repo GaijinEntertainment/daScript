@@ -56,6 +56,34 @@ def test_cpu_prefill_tripwire(t : T?) {
                 tripped = true
             }
             t |> success(tripped, "an undeclared {NROWS}-row causal prefill still panics")
+            // an mrope quantum is no longer exempt: metal serves it (the per-row-table
+            // capability), so a CPU-served one is the same silent fallback as any other
+            tr.config.rope_sections = int4(8, 8, 8, 0)   // stamp: the toy is not an mrope arch (rotary 48 -> half 24)
+            tr.config.mrope_interleaved = true
+            var mrope_tripped = false
+            try {
+                var s3 <- make_run_state(tr.config)
+                eval_embd_span_mrope(tr, s3, rows, NROWS, 8l, 32l, int2(6, 4))
+                delete s3
+            } recover {
+                mrope_tripped = true
+            }
+            t |> success(mrope_tripped, "an undeclared {NROWS}-row MROPE quantum panics like any other")
+            // a deepstack quantum is no longer exempt either: metal performs the slice adds
+            tr.config.n_deepstack = 3l
+            var wide : array<float>
+            wide |> reserve(NROWS * 4l * tr.config.dim)
+            wide |> resize(NROWS * 4l * tr.config.dim)
+            var ds_tripped = false
+            try {
+                var s4 <- make_run_state(tr.config)
+                eval_embd(tr, s4, wide, NROWS)
+                delete s4
+            } recover {
+                ds_tripped = true
+            }
+            t |> success(ds_tripped, "an undeclared {NROWS}-row DEEPSTACK quantum panics like any other")
+            delete wide
             delete s
         }
         delete rows

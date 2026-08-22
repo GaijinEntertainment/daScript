@@ -294,6 +294,21 @@ def tower_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var wblob
     }
 }
 
+//! Read a temporal patch-conv PAIR folded for still images: conv0(img) + conv1(img) = (W0+W1)·img,
+//! so ``base`` lands at ``off`` and ``base.1`` accumulates into the same plane region.
+def tower_read_conv_pair_folded(m : GGUFMeta; b : array<uint8> | #; base : string;
+                                var blob : array<float>; off, n_elem : int64) {
+    gguf_read_tensor_f32(m, b, base, blob, off, n_elem)
+    var w1 : array<float>
+    w1 |> reserve(n_elem)
+    w1 |> resize(n_elem)
+    gguf_read_tensor_f32(m, b, "{base}.1", w1, 0l, n_elem)
+    for (i in range64(n_elem)) {
+        blob[off + i] += w1[i]
+    }
+    delete w1
+}
+
 //! Per-op activation-quant calibration range (mtmd ClippableLinear): clamp(x, imin, imax) before
 //! the matmul, clamp the result to (omin, omax) after. ``active`` false = no sidecar scalars on
 //! disk, which mtmd treats as ±FLT_MAX — an identity clamp, so callers may skip the pass.
@@ -487,6 +502,86 @@ def rope_neox_2d_rows(var v : array<float>; npos, n_head, hs : int64;
     }
 }
 
+//! Full-head NEOX RoPE over token-major rows [npos × n_head·hs], in place, ONE table pair per
+//! row (every head of a row shares its angles — the qwen3vl ViT's vision-mrope, tables from
+//! ``build_rope_tabs_vision``): row r applies cos/sin row r across all heads.
+def rope_neox_tab_rows(var v : array<float>; npos, n_head, hs : int64; cos_t, sin_t : array<float>) {
+    if (npos <= 0l) return
+    let d = n_head * hs
+    let half = hs / 2l
+    unsafe {
+        var vp = addr(v[0])
+        let ct = addr<float const?>(cos_t[0])
+        let st = addr<float const?>(sin_t[0])
+        maybe_parallel_for(0, int(npos), lanes_for_work(npos * d * 4l, 0)) $(rb, re) {
+            unsafe {
+                for (r in range64(int64(rb), int64(re))) {
+                    rope_scaled_neox_tab(vp + r * d, hs, d, ct + r * half, st + r * half)
+                }
+            }
+        }
+    }
+}
+
+//! ggml's antialiased bilinear (BILINEAR | ANTIALIAS, the mtmd pos-embed resize): resample a
+//! channel-inner grid [sh×sw rows × d] to [dh×dw rows × d] — triangle filter, support
+//! max(1, 1/scale), weights normalized per pixel, f32 accumulation in ggml's (sy, sx) order.
+def interpolate_grid_bilinear_aa(@scratch var out : array<float>; src : PlaneF; src_off : int64;
+                                 sw, sh, dw, dh, d : int64) {
+    if (long_length(out) < dw * dh * d) {
+        out |> reserve(dw * dh * d)
+        out |> resize(dw * dh * d)
+    }
+    let sf0 = float(dw) / float(sw)
+    let sf1 = float(dh) / float(sh)
+    let support0 = max(1.0, 1.0 / sf0)
+    let support1 = max(1.0, 1.0 / sf1)
+    let invscale0 = 1.0 / support0
+    let invscale1 = 1.0 / support1
+    unsafe {
+        let sp = plane_at(src, src_off)
+        var op = addr(out[0])
+        maybe_parallel_for(0, int(dh), lanes_for_work(dw * dh * d * 8l, 0)) $(yb, ye) {
+            unsafe {
+                for (i1 in range64(int64(yb), int64(ye))) {
+                    let y = (float(i1) + 0.5) / sf1
+                    let y_min = max(int64(y - support1 + 0.5), 0l)
+                    let y_max = min(int64(y + support1 + 0.5), sh)
+                    for (i0 in range64(dw)) {
+                        let x = (float(i0) + 0.5) / sf0
+                        let x_min = max(int64(x - support0 + 0.5), 0l)
+                        let x_max = min(int64(x + support0 + 0.5), sw)
+                        var orow = op + (i1 * dw + i0) * d
+                        for (c in range64(d)) {
+                            orow[c] = 0.0
+                        }
+                        var total_weight = 0.0
+                        for (sy in range64(y_min, y_max)) {
+                            let weight_y = max(1.0 - abs((float(sy) - y + 0.5) * invscale1), 0.0)
+                            for (sx in range64(x_min, x_max)) {
+                                let weight = max(1.0 - abs((float(sx) - x + 0.5) * invscale0), 0.0) * weight_y
+                                if (weight <= 0.0) {
+                                    continue
+                                }
+                                let srow = sp + (sy * sw + sx) * d
+                                for (c in range64(d)) {
+                                    orow[c] += srow[c] * weight
+                                }
+                                total_weight += weight
+                            }
+                        }
+                        if (total_weight > 0.0) {
+                            for (c in range64(d)) {
+                                orow[c] /= total_weight
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! Average pool k×k, stride k, over a patch grid held token-major (row = gy·gw + gx, d channels):
 //! out row (oy·(gw/k) + ox) = mean of the k×k window (ky outer, kx inner — ggml's POOL_2D
 //! accumulation order, then one divide). Ragged edges are dropped. Returns the output row count.
@@ -618,6 +713,84 @@ def attention_bidir(var out : array<float>; qq, kk, vv : array<float>; @scratch 
             }
         }
         asr_prof_add("enc.attn.blocks", tp)
+    }
+}
+
+//! ``attention_bidir`` restricted to CONTIGUOUS row windows: ``win_lo`` = each window's first
+//! row plus a total-row sentinel; every window attends only within itself (the qwen2.5 ViT's
+//! block-diagonal mask in its window-sorted row order). Units = (window, head), per-slot scratch.
+def attention_bidir_windows(var out : array<float>; qq, kk, vv : array<float>; @scratch var hp : array<float>;
+                            @scratch var att : array<float>; win_lo : array<int64>; d, n_head : int64; scale : float) {
+    let hs = d / n_head
+    let nwin = long_length(win_lo) - 1l
+    var max_wr = 0l
+    for (i in range64(nwin)) {
+        max_wr = max(max_wr, win_lo[i + 1l] - win_lo[i])
+    }
+    let nu = int(nwin * n_head)
+    // per-slot scratch: q [wr×hs], kT [hs×wr], v [wr×hs], o [wr×hs] + the att block [wr×wr]
+    let slot_hp = 4l * max_wr * hs
+    let hpNeed = int64(get_dispatch_slot_bound()) * slot_hp
+    if (long_length(hp) < hpNeed) {   // inline: PERF026 can't see @scratch through reserve_resize
+        hp |> reserve(hpNeed)
+        hp |> resize(hpNeed)
+    }
+    let attNeed = int64(get_dispatch_slot_bound()) * max_wr * max_wr
+    if (long_length(att) < attNeed) {
+        att |> reserve(attNeed)
+        att |> resize(attNeed)
+    }
+    unsafe {
+        let qp = addr<float const?>(qq[0])
+        let kp = addr<float const?>(kk[0])
+        let vp = addr<float const?>(vv[0])
+        let wp = addr<int64 const?>(win_lo[0])
+        var hpp = addr(hp[0])
+        var attp = addr(att[0])
+        var aop = addr(out[0])
+        maybe_parallel_for_indexed(0, nu, nu) $(slot, ub, ue) {
+            unsafe {
+                var qh = hpp + int64(slot) * slot_hp
+                var ah = attp + int64(slot) * max_wr * max_wr
+                for (u in range(ub, ue)) {
+                    let wi = int64(u) / n_head
+                    let h = int64(u) % n_head
+                    let hoff = h * hs
+                    let r0 = wp[wi]
+                    let wr = wp[wi + 1l] - r0
+                    var kt = qh + wr * hs
+                    var vh = kt + wr * hs
+                    var oh = vh + wr * hs
+                    for (p in range64(wr)) {
+                        for (j in range64(hs)) {
+                            qh[p * hs + j] = qp[(r0 + p) * d + hoff + j]
+                            kt[j * wr + p] = kp[(r0 + p) * d + hoff + j]
+                            vh[p * hs + j] = vp[(r0 + p) * d + hoff + j]
+                        }
+                    }
+                    for (i in range64(wr * wr)) {
+                        ah[i] = 0.0
+                    }
+                    gemm_f32(ah, qh, kt, wr, hs, wr)
+                    for (r in range64(wr)) {
+                        var row = ah + r * wr
+                        for (i in range64(wr)) {
+                            row[i] *= scale
+                        }
+                        softmax(row, wr)
+                    }
+                    for (i in range64(wr * hs)) {
+                        oh[i] = 0.0
+                    }
+                    gemm_f32(oh, ah, vh, wr, wr, hs)
+                    for (p in range64(wr)) {
+                        for (j in range64(hs)) {
+                            aop[(r0 + p) * d + hoff + j] = oh[p * hs + j]
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

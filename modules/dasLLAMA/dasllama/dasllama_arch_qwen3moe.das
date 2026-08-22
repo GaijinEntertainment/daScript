@@ -21,6 +21,11 @@ def private configure_qwen3moe(var c : Config) {
     c.norm_topk_prob = true
 }
 
+def private configure_qwen3vlmoe(var c : Config) {
+    configure_qwen3moe(c)
+    c.mrope_interleaved = true   // qwen3vl-family image spans rope IMROPE; qwen2vl's MROPE stays contiguous
+}
+
 [init]
 def register_arch_qwen3moe() {
     var d = ArchDesc(name = "qwen3moe", configure = @@configure_qwen3moe)
@@ -30,7 +35,7 @@ def register_arch_qwen3moe() {
     // Qwen3-Omni-30B's thinker converts as `qwen3vlmoe` — qwen3moe + M-RoPE + deepstack; for text/audio
     // input every M-RoPE coord equals linear position, so it's bit-identical to plain qwen3moe here.
     // (Clone the template BEFORE register_arch moves `d`.)
-    var dv = ArchDesc(name = "qwen3vlmoe", configure = @@configure_qwen3moe)
+    var dv = ArchDesc(name = "qwen3vlmoe", configure = @@configure_qwen3vlmoe)
     dv.blocks = moe_blocks()
     dv.chat := d.chat
     // audio markers on `dv` ONLY: qwen3-family audio models convert as vl; base-arch audio
