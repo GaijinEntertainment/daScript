@@ -381,6 +381,18 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   ONE f32 plane (F32/F16/BF16 widen exactly; anything else refuses by name at stage) instead of
   gemma4v's per-tensor plane split — the Metal leg runs the f32 mulmm, so there is no bf16
   plane to preserve.
+- **`dasllama_qwen3v.das`** — the qwen3vl vision tower (Qwen3-Omni; the deepstack-less
+  `qwen3vl_merger` — a dense Qwen3-VL mmproj refuses by tensor scan until its slice lands):
+  mmproj load (per-tensor bf16/f32 planes; the temporal patch-conv PAIR folds to one f32 GEMM
+  at stage — a still evaluates both convs on one frame, so conv₀+conv₁ = (W₀+W₁)·img) and the
+  27-block pre-LN forward — fused-qkv biased GEMMs, vision-mrope (h/w ladder tables from
+  `build_rope_tabs_vision`, full-head NEOX apply), scaled bidirectional attention, GELU-tanh —
+  after a spatial-merge REORDER of the patch stream with the 48×48 learned position table
+  resized to the grid by ggml's antialiased bilinear; then post-LN and the 2×2 merger MLP
+  (the ×4 reshape is free — merge partners are already adjacent). The family token budget
+  [8, 4096] is mtmd's, not the gemma-scoped DASLLAMA_VISION_* knobs; image_mean/std (0.5) is
+  PREPROCESSING like gemma3v. Composes `dasllama_tower.das`; owns only its layout, the
+  reorder walk, and the block loop.
 - **`dasllama_vision_embedder.das`** — the vision carrier: `VisionEmbedder` / `VisionState`, the
   `AsrModel` shape for vision — one union through every seam, the family sniffed from the mmproj
   (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a
@@ -398,8 +410,9 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 Vision oracle provenance (the convention `REVIEW.md`'s fixture rule points at): real image
 fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated
 (their `performance/fetch_models.das` entries are the checkable pins); the mtmd reference dumps
-live beside them in `gemma4-vision-oracle/` and `gemma3-vision-oracle/`, whose `mint.sh`
-(gemma4uv), `mint_e2b.sh` / `mint_e4b.sh` (gemma4v) and `mint_gemma3.sh` (gemma3v) record the
+live beside them in `gemma4-vision-oracle/`, `gemma3-vision-oracle/` and
+`qwen3vl-vision-oracle/`, whose `mint.sh` (gemma4uv, qwen3v), `mint_e2b.sh` / `mint_e4b.sh`
+(gemma4v) and `mint_gemma3.sh` (gemma3v) record the
 exact `llama-mtmd-debug` / `llama-mtmd-cli` invocation that minted each
 dump, so regeneration is a command, not archaeology. An encode oracle dump is minted on the
 CPU, `-fa off`, from the f32-widened mmproj twin — the only true-f32 reference arm (the

@@ -227,7 +227,9 @@ def test_rope_gen_imrope_reference(t : T?) {
             let pos = p4[0][axis]
             let freq = 1.0 / pow(1000000.0, float(2 * j) / 128.0)
             let angle = float(pos) * 1.0 * freq
-            same &&= ct[j] == cos(angle) && st[j] == sin(angle)
+            // 1e-5, not bit-equal: under -jit the builder's cos and this recomputed one live in
+            // different compilation units and drift by ulps; a wrong AXIS moves angles by O(1)
+            same &&= abs(ct[j] - cos(angle)) < 1e-5 && abs(st[j] - sin(angle)) < 1e-5
         }
         t |> success(same, "every half-dim must read its IMROPE axis")
         t |> equal(imrope_axis_ref(60, 24, 20, 20, 0), 0)
@@ -276,6 +278,31 @@ def test_rope_gen_imrope_shape(t : T?) {
         delete sa
         delete cb
         delete sb
+    }
+}
+
+[test]
+def test_rope_gen_vision(t : T?) {
+    // The qwen3vl ViT table: hs/2 slots per row — the h ladder then the w ladder restarted,
+    // freq divisor hs/2 (ggml VISION mode with sections hs/4 x4 and indep_sects).
+    t |> run("vision table matches the per-element ladder reference") @(t : T?) {
+        var p2 <- [int2(3, 11), int2(0, 0)]
+        var ct : array<float>
+        var st : array<float>
+        build_rope_tabs_vision(ct, st, 10000.0, p2, 2l, 72l)
+        var same = true
+        for (j in range(36)) {
+            let jj = j % 18
+            let freq = 1.0 / pow(10000.0, float(2 * jj) / 36.0)
+            let a0 = float(j < 18 ? 3 : 11) * freq
+            // 1e-5, not bit-equal: cross-compilation-unit cos drifts by ulps under -jit
+            same &&= abs(ct[j] - cos(a0)) < 1e-5 && abs(st[j] - sin(a0)) < 1e-5
+            same &&= ct[36 + j] == 1.0 && st[36 + j] == 0.0
+        }
+        t |> success(same, "h slots then a restarted w ladder; (0,0) is the identity row")
+        delete p2
+        delete ct
+        delete st
     }
 }
 
