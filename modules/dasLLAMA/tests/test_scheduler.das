@@ -25,11 +25,11 @@ let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
 def private model_missing(t : T?) : bool {
     if (!jit_enabled()) {
-        t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
         return true
     }
     if (!stat(MODEL_PATH).is_valid) {
-        t |> success(true, "skipped: {MODEL_PATH} not present")
+        t |> skip("{MODEL_PATH} not present")
         return true
     }
     return false
@@ -511,11 +511,11 @@ let MTP_MODEL_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
 def test_scheduler_mtp(t : T?) {
     t |> run("scheduler mtp: self-spec greedy stream == plain scheduler, chunked prefill + paged (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
         if (!jit_enabled()) {
-            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
         if (!stat(MTP_MODEL_PATH).is_valid) {
-            t |> success(true, "skipped: {MTP_MODEL_PATH} not present")
+            t |> skip("{MTP_MODEL_PATH} not present")
             return
         }
         // pin the bit-exact kernels (same reasoning as test_mtp): the spec arm's verify rides the

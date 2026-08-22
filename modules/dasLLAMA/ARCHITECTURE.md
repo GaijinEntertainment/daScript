@@ -385,14 +385,15 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   `AsrModel` shape for vision — one union through every seam, the family sniffed from the mmproj
   (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a
   family's own file, a family type is named only here, in `dasllama_metal_tower.das`'s family
-  hooks, and in files under `tests/`.
+  hooks, and in files under `tests/` — the set `REVIEW.das`'s seam check enforces.
 - **`dasllama_audio_embedder.das`** — the audio carrier: `AudioEmbedder` / `AudioState`, the
   vision carrier's audio twin — one union through every seam (server media worker, facade
   `encode_audio`, tutorials), the family probed from the mmproj's audio tensor (or a `.dlim`'s
   baked tag) at load, one-line arms. Outside a family's own file, an audio family type is named
   only here, in `dasllama_asr.das`'s union field and one-line arms (the ASR rail's own carrier),
   in the metal family hooks (`dasllama_metal_tower.das`, `dasllama_metal_asr_dec.das`), in
-  `utils/dasllama-convert/main.das` (the per-family `.dlim` bake tool dispatches on family by
+  `benchmarks/asr/asr_bench.das` (the ASR bench pins a family serving knob for its correctness
+  rail), in `utils/dasllama-convert/main.das` (the per-family `.dlim` bake tool dispatches on family by
   design), and in files under `tests/` — the set `REVIEW.das`'s seam check enforces.
 
 Vision oracle provenance (the convention `REVIEW.md`'s fixture rule points at): real image
@@ -478,11 +479,12 @@ start on purpose, under the tiebreak in §3. `cache_via_image` is that handoff f
 carrier; the streaming forms transcode planes from the gguf mapping straight into the image so they
 never materialize at all.
 
-**Suites load with `load_model_`, never the image rail.** `load_model` / `load_model_cached` mint
-identity-stamped `.dlim` flavors and GC-purge siblings. A suite child's pinned identity (backend
-pin, wscale, tune manifest) differs from the serving rig's, so a suite on the rail both re-mints
-multi-GB images the rig cannot use and purges the flavors the rig depends on. Image-rail coverage
-belongs to the image suites alone.
+**Suites load each carrier through its own loader — decoders via `load_model_`, towers and
+embedders via their family or carrier loaders — never the image rail.** `load_model` /
+`load_model_cached` mint identity-stamped `.dlim` flavors and GC-purge siblings. A suite
+child's pinned identity (backend pin, wscale, tune manifest) differs from the serving rig's,
+so a suite on the rail both re-mints multi-GB images the rig cannot use and purges the flavors
+the rig depends on. Image-rail coverage belongs to the image suites alone.
 
 **An image is judged only where its identity can be recomputed — the LANE rule.** An identity's
 (quant, tag) pair is its lane, and lanes coexist by design: a bake proves dead only its OWN lane's

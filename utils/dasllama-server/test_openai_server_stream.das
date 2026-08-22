@@ -33,11 +33,11 @@ let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
 def private model_missing(t : T?) : bool {
     if (!jit_enabled()) {
-        t |> success(true, "skipped: interpreted (dasLLAMA server test is JIT-only)")
+        t |> skip("interpreted (dasLLAMA server test is JIT-only)")
         return true
     }
     if (!stat(MODEL_PATH).is_valid) {
-        t |> success(true, "skipped: {MODEL_PATH} not present")
+        t |> skip("{MODEL_PATH} not present")
         return true
     }
     return false
