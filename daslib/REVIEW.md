@@ -2,6 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `daslib/ARCHITECTURE.md`. Planned work: `daslib/followup_comment_sweep.md`.
+A diff touching the linq family — `linq*.das`, `sql_linq.das` — applies `REVIEW_LINQ.md` too.
 
 **A lint report path (`perf_warning` / `style_warning` / `lint_error`) checks suppression BEFORE
 its dedup insert.** A nolint'd finding that takes the (rule, location) slot silences a

@@ -1,3 +1,2 @@
-# The sweep ships dormant: the linq-family strip lands in its own PR, and that PR flips this on.
 [format]
-force_clean_comments = false
+force_clean_comments = true

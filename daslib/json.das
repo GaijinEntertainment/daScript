@@ -396,7 +396,7 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                 }
                 var num = string(str)
                 if (!anyNumbers) {
-                    yield TokenAt(value = Token(_error = "invalid number {num}"), line = line, row = row)
+                    yield TokenAt(value = Token(_error = "number {num} is invalid"), line = line, row = row)
                     return false
                 }
                 if (is_integer && fits_int64(num)) {
@@ -406,7 +406,8 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                     var consumed = 0
                     let wide = double(num, conversion, consumed)
                     if (conversion != ConversionResult.ok || consumed != length(num)) {
-                        yield TokenAt(value = Token(_error = "number {num} is out of range"), line = line, row = row)
+                        let verdict = conversion == ConversionResult.out_of_range ? "out of range" : "invalid"
+                        yield TokenAt(value = Token(_error = "number {num} is {verdict}"), line = line, row = row)
                         return false
                     }
                     yield TokenAt(value = Token(_number = wide), line = line, row = row)

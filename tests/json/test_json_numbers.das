@@ -106,6 +106,13 @@ def expect_number_error(t : T?; text : string) {
     t |> success(!empty(error), "{text} reports an error instead of panicking")
 }
 
+def expect_number_error_matching(t : T?; text, fragment : string) {
+    var error : string
+    var js = read_json(text, error)
+    t |> success(js == null, "{text} is rejected")
+    t |> success(error |> find(fragment) >= 0, "{text}: got <{error}>")
+}
+
 [test]
 def test_floats_past_double_range_error(t : T?) {
     t |> run("exponent overflow") @(t : T?) {
@@ -128,6 +135,20 @@ def test_floats_within_range_still_parse(t : T?) {
         for (text in ["3.14", "-0.5", "1.5e10", "2.5E-3", "1.7e308", "-1.7e308", "1e-320", "0.0"]) {
             var js = parse(t, text)
             t |> success(js is _number, "{text} is a number")
+        }
+    }
+}
+
+[test]
+def test_number_error_messages_distinguish_invalid_from_range(t : T?) {
+    t |> run("truncated exponents are invalid, not out of range") @(t : T?) {
+        for (text in ["1e", "1e+", "1.5e-", "[1e]"]) {
+            expect_number_error_matching(t, text, "is invalid")
+        }
+    }
+    t |> run("true overflow stays out of range") @(t : T?) {
+        for (text in ["1e400", "1e-400", "2.5e308"]) {
+            expect_number_error_matching(t, text, "is out of range")
         }
     }
 }

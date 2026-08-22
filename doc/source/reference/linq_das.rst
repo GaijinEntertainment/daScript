@@ -566,16 +566,19 @@ Current limitations
 
 The following are not yet supported:
 
-- **Multi-key ``orderby``** (``orderby a, b descending``) — a single sort key
-  only, for now.
-- **``group … by`` over a SQL source**, and the ``group … into`` aggregate
-  continuation (SQL grouping rides ``into``).
-- **Composite / multiple / group joins** — ``join`` is a single inner equi-join
-  with one key; composite keys (``a equals b && c equals d``), ``join … into``
-  group-joins, and more than one ``join`` per query are rejected.
+- **Composite / multiple joins** — ``join`` is a single equi-join with one key;
+  composite keys (``a equals b && c equals d``) and more than one ``join`` per
+  query are rejected.
+- **Group-join pushdown and non-array group joins** — ``join … into`` is
+  select-terminal and array sources only; over a SQL source it rejects, and
+  decs / XML / JSON group joins are not yet fused.
 - **Post-join ``where`` / ``orderby`` / ``group`` over a SQL source** — these use
   the transparent-identifier carry, which is in-memory only; select-terminal
   joins and pre-join ``where`` push down.
+- **Member-keeping ``group`` over a SQL source** — a bare ``group c by k`` (and
+  an identity ``select g`` continuation) keeps whole rows and has no SQL form;
+  aggregate-only group continuations push down to ``GROUP BY``
+  (see :ref:`linq_das_into`).
 - **Correlated multiple ``from`` over a non-array source** — the *flattening*
   SelectMany (``from l in o.lines``) is supported for **in-memory array** sources;
   a SQL source rejects it (no table for the per-row collection), and XML / decs
@@ -586,5 +589,3 @@ The following are not yet supported:
   **uncorrelated** form (independent second source → cross product) is supported
   on all sources (see :ref:`linq_das_multifrom`). N-ary ``from … from … from`` and
   ``from … from`` combined with ``join`` are also rejected.
-- **``into`` continuations** — not yet supported (``let`` bindings *are*
-  supported; see :ref:`linq_das_let`).
