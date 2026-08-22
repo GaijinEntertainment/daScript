@@ -153,6 +153,45 @@ Endpoints
    * - ``GET``
      - ``/v1/streams``
      - Per-stream states + text tails, prefix-cache chains, recent ASR jobs
+   * - ``GET``
+     - ``/v1/images``
+     - Per-slot prepared-image (``.dlim``) inventory: source path, mapped flavor, each image's info
+   * - ``POST``
+     - ``/vad``
+     - Silero speech spans over an uploaded clip — the control page's waveform overlay (≤120 s)
+   * - ``GET``
+     - ``/catalog``
+     - The curated model list with local presence and per-entry download state
+   * - ``POST``
+     - ``/catalog/download``
+     - ``{"name": <entry>}`` — start one catalog download (sha-verified; ``"tower"`` pulls a vision/asr companion)
+   * - ``GET`` / ``POST``
+     - ``/bench``
+     - Read bench state and log / start the quiesced A/B benchmark against the configured llama.cpp binary (loopback-only)
+   * - ``GET`` / ``POST``
+     - ``/bake``
+     - Read bake state and log / bake the slot's prepared ``.dlim`` image via ``dasllama-convert`` (loopback-only)
+   * - ``GET`` / ``POST``
+     - ``/config``
+     - Effective config with per-key source / validate and save an authoritative TOML, applied on the next restart (loopback-only)
+   * - ``GET``
+     - ``/exchange``
+     - The tune-sidecar exchange surface: policy plus the current sidecar's identity and share state
+   * - ``GET``
+     - ``/exchange/matches``
+     - Live lookup of this box against the exchange (a network call — seconds)
+   * - ``POST``
+     - ``/exchange/apply``
+     - ``{"sha": ...}`` — download, validate, and adopt that sidecar, then drain and restart
+   * - ``POST``
+     - ``/exchange/submit``
+     - Privacy-strip and submit this box's own tune to the exchange
+   * - ``POST``
+     - ``/exchange/retune``
+     - Arm a local re-tune and restart — the next boot races this box
+   * - ``POST``
+     - ``/gc``
+     - Schedule a validated collection at the next lifecycle safe point; concurrent requests coalesce
    * - ``POST``
      - ``/restart``
      - Drain, then exit 4 — the watchdog relaunches with the saved config

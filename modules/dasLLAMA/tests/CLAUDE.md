@@ -267,9 +267,10 @@ encodes delta (GPU-served), then a knob-off chat repeats the turn on the CPU emb
 must clear the same caption bar — the caption names the cats and is a description, not a
 fragment — with zero tower dispatches and the knob decline counted.
 
-## Model loads — never the image rail (REVIEW: "A suite loads decoders with `load_model_`, never the image rail")
+## Model loads — never the image rail (REVIEW: "loads each carrier through its own loader, never the `.dlim` image rail")
 
-Suites load models with `load_model_` (the direct gguf load) — never `load_model` /
+Suites load decoders with `load_model_` (the direct gguf load) and towers, embedders, and
+union carriers through their family or carrier loaders — never `load_model` /
 `load_model_cached` (the `.dlim` image rail). The rail stamps every mint with the box
 identity (backend pin, wscale, tune manifest) and GC-purges sibling flavors; a suite child's
 pinned identity differs from the serving rig's, so a suite on the rail both re-mints multi-GB

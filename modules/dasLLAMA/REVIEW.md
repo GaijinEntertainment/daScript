@@ -24,13 +24,12 @@ holding a single speech model family — applies `REVIEW_AUDIO.md`. A change to
 `dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
 path (one that runs inside the program under review, not a spawned child process) that
 splices a stream carrying decoded media — pixels or audio samples — into a prompt or
-schedules such a stream, applies
-`REVIEW_VISION.md`. A `dasllama/dasllama_tower.das` change — the shared encoder-tower home —
-applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family file that only CALLS a shared rail does not
-thereby pick up the other modality's checklist. A change to the tune sidecar's schema or
-emitter, wherever it lands, answers to `modules/dasLLVM/REVIEW.md`. A routed file applies BOTH
-the checklist it routes to and this one; every other file under `modules/dasLLAMA/` applies
-this one.
+schedules such a stream, applies `REVIEW_VISION.md`. A `dasllama/dasllama_tower.das` change —
+the shared encoder-tower home — applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`; a family
+file that only CALLS a shared rail does not thereby pick up the other modality's checklist. A
+change to the tune sidecar's schema or emitter, wherever it lands, answers to
+`modules/dasLLVM/REVIEW.md`. A routed file applies BOTH the checklist it routes to and this
+one; every other file under `modules/dasLLAMA/` applies this one.
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same change.** Kernel
 work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
@@ -226,6 +225,11 @@ lens/dispatch macro file.
 
 **A family quirk lands in the family file; a piece two families need moves UP into the
 concern's shared file (its own file when none exists)** — never sideways into a sibling.
+
+**A family gaining an arm for a media kind adds that kind's span markers — the template text
+that opens and closes the media rows — to that family's chat template, never a second
+renderer.** A family whose template or vocab lacks them has no arm for that media kind —
+`create_chat_` panics at create, not at render.
 
 **Nothing in `dasllama/dasllama_tower.das` — the shared encoder-tower home — names a family: no
 signature there takes a type `dasllama/dasllama_audio.das` or a family file declares, and it

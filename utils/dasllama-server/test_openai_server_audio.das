@@ -125,12 +125,12 @@ def private audio_chat_body(b64 : string; text : string) : string {
 def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one live server session per test: every endpoint assertion runs against that one boot
     t |> run("native audio: input_audio -> gemma4a soft tokens -> a transcription (needs E2B + its mmproj)") @(t : T?) {
         if (!jit_enabled()) {
-            t |> success(true, "skipped: interpreted (dasLLAMA server tests are JIT-only)")
+            t |> skip("interpreted (dasLLAMA server tests are JIT-only)")
             return
         }
         for (p in [DEC_PATH, MM_PATH, JFK_PATH]) {
             if (!stat(p).is_valid) {
-                t |> success(true, "skipped: {base_name(p)} not present (set DASLLAMA_MODELS_DIR)")
+                t |> skip("{base_name(p)} not present (set DASLLAMA_MODELS_DIR)")
                 return
             }
         }
@@ -210,7 +210,7 @@ def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one live server 
                     t |> success(find(string(resp.body), "no audio arm") >= 0, "the 400 names the missing arm")
                 }
             } else {
-                t |> success(true, "skipped the live-unload cells: tinyllama not present")
+                t |> skip("live-unload cells: tinyllama not present")
             }
         }
     }

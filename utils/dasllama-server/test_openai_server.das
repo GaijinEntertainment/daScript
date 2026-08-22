@@ -125,11 +125,11 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
 def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server session per test: every endpoint assertion runs against that one boot
     t |> run("OpenAI server: models + embeddings + chat (needs tinyllama q8)") @(t : T?) {
         if (!jit_enabled()) {
-            t |> success(true, "skipped: interpreted (dasLLAMA server test is JIT-only)")
+            t |> skip("interpreted (dasLLAMA server test is JIT-only)")
             return
         }
         if (!stat(MODEL_PATH).is_valid) {
-            t |> success(true, "skipped: {base_name(MODEL_PATH)} not present (set DASLLAMA_MODELS_DIR)")
+            t |> skip("{base_name(MODEL_PATH)} not present (set DASLLAMA_MODELS_DIR)")
             return
         }
         with_llama_server(MODEL_PATH, TEST_PORT) $(base_url) {
@@ -598,7 +598,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     t |> equal(int(resp.status_code), int(http_status.OK), "the text-only degraded slot serves")
                 }
             } else {
-                t |> success(true, "skipped the runtime-load cells: SmolLM2-135M not present")
+                t |> skip("runtime-load cells: SmolLM2-135M not present")
             }
             remove(junk)
             // POST /restart — LAST in the block: the server starts draining after this. The exit-4
@@ -671,11 +671,11 @@ def test_asr_worker_panic_boundary(t : T?) {
 def test_openai_server_metal_mode(t : T?) {
     t |> run("OpenAI server: metal mode when_available serves (the --metal flag's engine effect)") @(t : T?) {
         if (!jit_enabled()) {
-            t |> success(true, "skipped: interpreted (dasLLAMA server test is JIT-only)")
+            t |> skip("interpreted (dasLLAMA server test is JIT-only)")
             return
         }
         if (!stat(MODEL_PATH).is_valid) {
-            t |> success(true, "skipped: {base_name(MODEL_PATH)} not present (set DASLLAMA_MODELS_DIR)")
+            t |> skip("{base_name(MODEL_PATH)} not present (set DASLLAMA_MODELS_DIR)")
             return
         }
         // when_available: engages the GPU where the gates pass (Apple), quietly stays CPU
@@ -856,11 +856,11 @@ def private with_llama_server2(path_a, path_b : string; port : int; blk : block<
 def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live two-slot server session per test: the routing assertions share that one boot
     t |> run("multi-model: routing + per-slot caches (needs tinyllama + SmolLM2-135M q8)") @(t : T?) {
         if (!jit_enabled()) {
-            t |> success(true, "skipped: interpreted (dasLLAMA server test is JIT-only)")
+            t |> skip("interpreted (dasLLAMA server test is JIT-only)")
             return
         }
         if (!stat(MODEL_PATH).is_valid || !stat(MODEL2_PATH).is_valid) {
-            t |> success(true, "skipped: tinyllama/SmolLM2-135M not present (set DASLLAMA_MODELS_DIR)")
+            t |> skip("tinyllama/SmolLM2-135M not present (set DASLLAMA_MODELS_DIR)")
             return
         }
         with_llama_server2(MODEL_PATH, MODEL2_PATH, TEST_PORT_MM) $(base_url) {

@@ -30,7 +30,7 @@ def test_cpu_prefill_tripwire(t : T?) {
             return
         }
         if (!has_prefill_override("metal")) {
-            t |> success(true, "skipped: not a Metal-capable build - the tripwire never arms")
+            t |> skip("not a Metal-capable build - the tripwire never arms")
             return
         }
         var tr <- load_checkpoint(MODEL_PATH)

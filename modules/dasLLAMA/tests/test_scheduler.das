@@ -25,11 +25,11 @@ let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
 def private model_missing(t : T?) : bool {
     if (!jit_enabled()) {
-        t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
         return true
     }
     if (!stat(MODEL_PATH).is_valid) {
-        t |> success(true, "skipped: {MODEL_PATH} not present")
+        t |> skip("{MODEL_PATH} not present")
         return true
     }
     return false
@@ -195,7 +195,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
                 delete ref3
                 delete stops
             } else {
-                t |> success(true, "no unique stop candidate in 10 greedy tokens - stop arm skipped")
+                t |> skip("stop arm: no unique stop candidate in 10 greedy tokens")
             }
             delete got
             delete gotp
@@ -430,7 +430,7 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
                 delete close
                 delete stops
             } else {
-                t |> success(true, "no unique stop candidate in 8 greedy tokens - continuation arm skipped")
+                t |> skip("continuation arm: no unique stop candidate in 8 greedy tokens")
             }
             delete ref3
             delete prompt3
@@ -511,11 +511,11 @@ let MTP_MODEL_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
 def test_scheduler_mtp(t : T?) {
     t |> run("scheduler mtp: self-spec greedy stream == plain scheduler, chunked prefill + paged (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
         if (!jit_enabled()) {
-            t |> success(true, "skipped: interpreted (dasLLAMA model tests are JIT-only)")
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
         if (!stat(MTP_MODEL_PATH).is_valid) {
-            t |> success(true, "skipped: {MTP_MODEL_PATH} not present")
+            t |> skip("{MTP_MODEL_PATH} not present")
             return
         }
         // pin the bit-exact kernels (same reasoning as test_mtp): the spec arm's verify rides the

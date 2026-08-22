@@ -8,9 +8,12 @@ shared encoder-tower home serves both), `dasllama/dasllama_audio.das`,
 holding a single speech model family — applies this list with the master's.**
 `REVIEW_COMMON.md` (repo root) binds this file too. Architecture doc: `ARCHITECTURE.md`.
 
-**A verb arm in `dasllama/dasllama_asr.das` is one forwarding call.** A new family touches the facade
-only at the union field, the finalize line, the `AsrKind` value, and the one-line arms; a
-prompt, a decode loop, a caps value, or a language rule in the facade is a defect.
+**A verb arm in `dasllama/dasllama_asr.das` or `dasllama/dasllama_audio_embedder.das` — the
+union carriers that fan a facade verb across family arms — is one forwarding call.** The
+loader's format or family sniff that picks the arm is the dispatch, not an arm. A new family
+touches the carrier only at the union field, the finalize line, the kind value, and the
+one-line arms; a prompt, a decode loop, a caps value, or a language rule in the carrier is a
+defect.
 
 **A GEMM in an ASR family file goes through a `*_mm` wrapper or `mm_blob_b`.** A hand-written
 dot-product loop beside them is a defect.

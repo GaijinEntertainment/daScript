@@ -100,17 +100,17 @@ def private bmp_header_stub(w, h : int) : array<uint8> {
 def test_openai_server_vision(t : T?) {   // nolint:STYLE038 — one server boot, every route-proof cell against it
     t |> run("the image route: data URI -> soft tokens -> a caption (needs gemma-4-12B + its mmproj)") @(t : T?) {
         if (!jit_enabled()) {
-            t |> success(true, "skipped: interpreted (dasLLAMA server tests are JIT-only)")
+            t |> skip("interpreted (dasLLAMA server tests are JIT-only)")
             return
         }
         for (p in [DEC_PATH, MM_PATH, CATS_PATH]) {
             if (!stat(p).is_valid) {
-                t |> success(true, "skipped: {base_name(p)} not present (set DASLLAMA_MODELS_DIR)")
+                t |> skip("{base_name(p)} not present (set DASLLAMA_MODELS_DIR)")
                 return
             }
         }
         if (!g_env_test.parity_full) {   // 6.87 GiB decoder: over the 6 GiB tier line
-            t |> success(true, "skipped: the 12B pair runs under DASLLAMA_PARITY_FULL=1 (final pre-PR gate, not the iteration loop)")
+            t |> skip("the 12B pair runs under DASLLAMA_PARITY_FULL=1 (final pre-PR gate, not the iteration loop)")
             return
         }
         let uri = cats_data_uri()

@@ -11,14 +11,16 @@ paths normalized, and is never otherwise written or edited by hand** — the cap
 `tests/fixtures/README.md`; a schema change re-captures the file rather than editing it. A diff
 that changes fixture VALUES without a capture behind it is a defect.
 
-**Weakening `REVIEW.das` (beside this file) is a defect.** The gate machine-checks the
-mechanical half of "never otherwise written or edited by hand"; each check's finding text
-states what it enforces.
+**Weakening `REVIEW.das` (beside this file) is a defect** — dropping a check, narrowing what
+one scans, adding a name to a check's licensed set (the names that check does not flag), or a
+finding text that no longer names what failed. What the gate enforces is read from the gate
+itself; each check's finding text states its own rule.
 
 **A route added, removed, or reshaped (its path, method, or request/response JSON shape)
 updates every surface that documents or consumes it in the same change**: the `README.md`
 route row, the endpoint table in `doc/source/reference/utils/dasllama_server.rst` (repo root),
-and `control.html` where the page consumes it.
+and `control.html` where the page consumes it. A surface still describing the old path,
+method, or shape is a defect of the change.
 
 **A stats or streams wire key added, removed, or renamed re-captures its fixtures under
 `tests/fixtures/` in the same change** — the fixtures are the recorded wire shape.

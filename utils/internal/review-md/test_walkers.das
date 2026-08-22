@@ -130,6 +130,52 @@ def test_dasllama_gate_fixtures(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
+def make_server_fixture(t : T?; tree, root : string) {
+    write_at(t, root, "utils/dasllama-server/openai_server.das",
+        "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        ANY(\"*\") <| $() \{\n        \}\n    \}\n\}\n")
+    write_at(t, root, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc`\n")
+    write_at(t, root, "doc/source/reference/utils/dasllama_server.rst", "``/v1/models`` and ``/gc``\n")
+    write_at(t, root, "utils/dasllama-server/control.html", "<script>fetch(\"/gc\")</script>\n")
+    var err : string
+    t |> success(copy_file(path_join(tree, "utils/dasllama-server/REVIEW.das"), path_join(root, "utils/dasllama-server/REVIEW.das"), true, err), "copied the real server gate")
+}
+
+[test]
+def test_server_gate_fixtures(t : T?) {
+    let tree = getcwd()
+    if (!fexist(path_join(tree, "utils/dasllama-server/REVIEW.das"))) {
+        t |> skip("not run from the repo root")
+        return
+    }
+    let fixture_r = create_temp_directory_result("review_server")
+    t |> success(fixture_r is value, "temp fixture dir created")
+    if (!(fixture_r is value)) return
+    let fixture = unsafe(fixture_r.value)
+    make_server_fixture(t, tree, fixture)
+
+    let green = spawn_at(fixture, [path_join(fixture, "utils/dasllama-server/REVIEW.das")])
+    t |> equal(0, green.rc, "consistent fixture is green: {green.out}")
+    t |> success(find(green.out, "REVIEW.das dasllama-server: OK") >= 0, "green verdict printed")
+
+    // one violation per direction: an undocumented served route, a documented dead route, and
+    // a page consuming a route the server does not register
+    write_at(t, fixture, "utils/dasllama-server/openai_server.das",
+        "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        POST(\"/vad\") <| $() \{\n        \}\n    \}\n\}\n")
+    write_at(t, fixture, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc` and `/dead`\n")
+    write_at(t, fixture, "utils/dasllama-server/control.html", "<script>fetch(\"/gc\");fetch(\"/nope\")</script>\n")
+
+    let red = spawn_at(fixture, [path_join(fixture, "utils/dasllama-server/REVIEW.das")])
+    t |> equal(1, red.rc, "planted fixture is red")
+    for (needle in ["served route /vad has no `/vad` mention",
+                    "served route /vad has no ``/vad`` mention",
+                    "documents route /dead, which the server does not register",
+                    "the control page consumes route /nope, which the server does not register"]) {
+        t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
+    }
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
 [test]
 def test_all_and_main_walker_wiring(t : T?) {
     let tree = getcwd()
