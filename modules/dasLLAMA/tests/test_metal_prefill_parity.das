@@ -593,8 +593,10 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     trm.config.seq_len = 2048l
                 }
                 trm.config.rope_sections = int4(12, 10, 10, 0)   // stamp: the 1B is not an mrope arch (rotary 64 -> half 32)
+                trm.config.mrope_interleaved = true
                 var trmg <- blob_twin(t, path, 2048l)
                 trmg.config.rope_sections = int4(12, 10, 10, 0)
+                trmg.config.mrope_interleaved = true
                 let mh = 20l
                 let nm = 24l   // a 6x4 merged grid; position advance 6, delta -18
                 let mgrid = int2(6, 4)

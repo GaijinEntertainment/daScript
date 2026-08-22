@@ -118,6 +118,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_program_roots.das",
                     "modules/dasLLAMA/tests/test_quant.das",
                     "modules/dasLLAMA/tests/test_qwen3v.das",
+                    "modules/dasLLAMA/tests/test_qwen25v.das",
                     "modules/dasLLAMA/tests/test_repack.das",
                     "modules/dasLLAMA/tests/test_repack_lane_context.das",
                     "modules/dasLLAMA/tests/test_rmsnorm.das",

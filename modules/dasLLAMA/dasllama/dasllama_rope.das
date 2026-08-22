@@ -117,6 +117,43 @@ def build_rope_tabs_imrope(@scratch var cos_tab : array<float>; @scratch var sin
     }
 }
 
+//! ``build_rope_tabs_imrope``'s NON-interleaved twin (ggml MROPE, the qwen2vl decoder): the
+//! half-dim sections read as CONTIGUOUS ranges — j < x reads t, then y reads h, then z reads
+//! w, then e — with the frequency ladder running continuously across them (never restarting).
+def build_rope_tabs_mrope(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
+                          theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
+                          positions4 : array<int4>; sections : int4; nrows, head_size : int64) {
+    let half = head_size / 2l
+    let has_ff = use_ff && !empty(rope_freqs)
+    let sec_h = int64(sections.x)
+    let sec_w = int64(sections.x + sections.y)
+    let sec_e = int64(sections.x + sections.y + sections.z)
+    cos_tab |> resize(nrows * half)
+    sin_tab |> resize(nrows * half)
+    unsafe {
+        var cp = addr(cos_tab[0])
+        var sp = addr(sin_tab[0])
+        let pp = addr<int4 const?>(positions4[0])
+        let ffp = has_ff ? addr<float const?>(rope_freqs[0]) : null
+        for (j in range64(half)) {
+            let freq = rope_freq_j(j, head_size, theta, ffp)
+            var axis = 0
+            if (j >= sec_e) {
+                axis = 3
+            } elif (j >= sec_w) {
+                axis = 2
+            } elif (j >= sec_h) {
+                axis = 1
+            }
+            for (pi in range64(nrows)) {
+                let angle = float(pp[pi][axis]) * fscale * freq
+                cp[pi * half + j] = cos(angle) * mscale
+                sp[pi * half + j] = sin(angle) * mscale
+            }
+        }
+    }
+}
+
 //! The mrope position map of one image-span prefill quantum (mtmd's decoder walk verbatim):
 //! head rows sequential from ``base``; span row i = (pos0, pos0+i/nx, pos0+i%nx, 0); tail rows
 //! sequential from pos0 + max(nx, ny) — an image advances the position by its grid's long side.

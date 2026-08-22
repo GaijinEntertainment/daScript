@@ -174,3 +174,17 @@ def public vision_normalize(img : VisionImage; mean : float = 0.0; std : float =
     }
     return <- planes
 }
+
+//! ``vision_normalize``'s per-channel twin (CLIP-normalized families — qwen2.5's image
+//! mean/std differ per channel); the interleaved RGB layout picks mean/std by ``i % 3``.
+[no_env, no_io]
+def public vision_normalize3(img : VisionImage; mean, std : float3) : array<float> {
+    var planes : array<float>
+    planes |> reserve(length(img.rgb))
+    planes |> resize(length(img.rgb))
+    for (i in range64(long_length(planes))) {
+        let c = int(i % 3l)
+        planes[i] = (float(img.rgb[i]) / 255.0 - mean[c]) / std[c]
+    }
+    return <- planes
+}

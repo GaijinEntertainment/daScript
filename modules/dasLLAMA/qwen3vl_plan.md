@@ -277,10 +277,32 @@ noise demands them).
   prefill logits 10.4). The 8B record carrier smoked end-to-end via `ask --image` ("Two
   cats.", 321-token prompt). The Config field add shifts every Model dlim's meta layout —
   the v11 fingerprint auto-refuses and re-mints (observed on the 8B/4B first loads).
-- **I. qwen2.5o (Qwen2.5-Omni-3B)**: the window-attention ViT (32 blk, patch 14, RMSNorm,
-  gated-silu FFN, rope-only positions, full-attn every 8th block per `n_wa_pattern`) +
-  decoder MROPE (non-interleaved sections) on the `qwen2vl` arch; completes omni-3b to
-  text + image + audio; own oracle dumps + gates.
+- **I. qwen2.5o (DONE 2026-08-22)**: `dasllama_qwen25v.das` — the window-attention ViT (32
+  RMS-normed blocks, separate biased q/k/v, gated-silu FFN whose hidden comes from the
+  TENSOR dims [3420] — the metadata's feed_forward_length lies [1280]; rope-only positions;
+  temporal-pair conv fold; per-channel CLIP normalize via new `vision_normalize3`). The
+  window machinery: rows sort by 112 px windows of 2×2-merged groups (the same (gy,gx,sy,sx)
+  merge walk as qwen3v composed under the window sort), non-full blocks run
+  `attention_bidir_windows` (new tower helper: per-(window, head) units over CONTIGUOUS row
+  ranges — no mask tensor), every `n_wa_pattern`-th block attends in full, and the merger
+  un-sorts back to group-row-major. Decoder = the ALREADY-registered `qwen2vl` arch +
+  `Config.mrope_interleaved` (new flag; qwen3vl/qwen3vlmoe configures set it TRUE — the
+  qwen3vlmoe MISS would have silently flipped the Omni-30B to the wrong walk, caught in
+  review) + `build_rope_tabs_mrope` (the NON-interleaved twin: contiguous section ranges,
+  continuous frequency ladder). Vocab quirk: the Omni vocab spells the span markers
+  `<|vision_bos|>`/`<|vision_eos|>` at the SAME ids the VL vocabs call
+  `<|vision_start|>`/`<|vision_end|>` — the chat layer resolves by VOCAB with a fallback
+  (mtmd hardcodes the VL spelling and silently feeds it as plain text on the Omni). Oracle:
+  `mint_25o.sh` (6 preproc + 5 encode dumps + cli caption; geometry = the shared code at
+  align 28, verified 518→532 round-half-away, 4000×3000→2044×1540). ORACLE LESSON: every
+  stock debug fixture is window-SYMMETRIC (uniform/periodic), so an all-full-attention
+  poison PASSED tier-1 untouched — the patch grew the `quad` generator (four exact-value
+  quadrants), which reds the same poison at 10.7 (1300×). Gates: tier-1 5/5 first-run green
+  (3.9e-4–7.6e-3 on 2e-4 + 1e-2·rms), test_rope's non-interleaved cells (collapse bit-exact,
+  contiguous-axis reference, interleaved-vs-contiguous divergence), and
+  test_vision_chat_qwen25o (small tier) — the 3B captions the cats ("pink couch with two
+  cats… two remote controls"), grid 23×17, delta 23−391. omni-3b now serves text + image
+  (audio already served standalone; audio-IN-CHAT stays followup #41).
 - **J. Bench + records**: `lcpp_bench --image` rows for all new carriers (img:enc / img:pp /
   img:tg), lcpp pairs via the patched mtmd-cli, `gen_bench_records -w image` cells, board
   refresh; the gemma-3-4b CPU image row re-mint rides this slice (owed from 3815's tails).

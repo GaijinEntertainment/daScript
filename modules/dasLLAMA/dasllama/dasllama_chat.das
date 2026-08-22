@@ -701,7 +701,14 @@ def create_chat_(model : Model; var embedder : VisionEmbedder; system : string =
         panic("dasLLAMA chat: this model's chat template declares no image span markers - it has no vision arm")
     }
     if (!image_vocab_ok(model, c.tmpl)) {
-        panic("dasLLAMA chat: an image span marker is missing from this checkpoint's vocab - it has no vision arm")
+        // Qwen2.5-Omni spells the SAME marker ids <|vision_bos|>/<|vision_eos|> where the VL
+        // vocabs spell <|vision_start|>/<|vision_end|> - resolve by the vocab, not the family
+        // (mtmd hardcodes the VL spelling and silently feeds it as plain text there)
+        c.tmpl.image_pre.parts <- [chat_special("<|vision_bos|>")]
+        c.tmpl.image_post.parts <- [chat_special("<|vision_eos|>")]
+        if (!image_vocab_ok(model, c.tmpl)) {
+            panic("dasLLAMA chat: an image span marker is missing from this checkpoint's vocab - it has no vision arm")
+        }
     }
     c.embedder <- embedder
     return <- c

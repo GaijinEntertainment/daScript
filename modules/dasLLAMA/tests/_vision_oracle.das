@@ -87,6 +87,23 @@ def make_planes(kind : string; w, h : int) : array<float> {
                 planes[p + 2] = v
             }
         }
+    } elif (kind == "quad") {
+        // four exact-value quadrants (TL 0, TR 1, BL 0.25, BR 0.75): the window-attention
+        // discriminator — uniform/periodic fixtures make every window statistically identical
+        for (y in range(h)) {
+            for (x in range(w)) {
+                var v = 0.0
+                if (y < h / 2) {
+                    v = x < w / 2 ? 0.0 : 1.0
+                } else {
+                    v = x < w / 2 ? 0.25 : 0.75
+                }
+                let p = (y * w + x) * 3
+                planes[p] = v
+                planes[p + 1] = v
+                planes[p + 2] = v
+            }
+        }
     } elif (kind == "red" || kind == "green" || kind == "blue") {
         let c = kind == "red" ? 0 : (kind == "green" ? 1 : 2)
         for (y in range(h)) {
