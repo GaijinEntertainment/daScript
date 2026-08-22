@@ -19,11 +19,10 @@ require strudel/strudel_player
 require daslib/strings_boost
 require live_stub   // playground shim: replaces the live/* + live_host stack (window, clock, no-op [live_command])
 
-// Music is OFF on the web build: the game's strudel music uses the THREADED
-// player (strudel_init/strudel_play), which needs the jobque worker that wasm
-// stubs out. SFX (play_sound_from_pcm) is single-threaded and stays on. Flip to
-// true once the music is ported to main-thread strudel (strudel_tick).
-let MUSIC_ENABLED = false
+// Music uses the THREADED strudel player (strudel_init/strudel_play). The runtime
+// gate in init() turns it on only where the audio backend is threaded — wasm64 and
+// native; a single-threaded backend keeps music off and SFX (play_sound_from_pcm) on.
+var music_enabled = false
 
 // ===== Constants =====
 
@@ -226,14 +225,14 @@ def strudel_music_main() {
 }
 
 def stop_all_music(fade : float) {
-    return if (!MUSIC_ENABLED)
+    return if (!music_enabled)
     strudel_command("stop:drums:{fade}")
     strudel_command("stop:bass:{fade}")
     strudel_command("stop:lead:{fade}")
 }
 
 def start_menu_music() {
-    return if (!MUSIC_ENABLED)
+    return if (!music_enabled)
     strudel_set_bpm(120.0lf)
     strudel_command("play:drums:<bd ~ sd ~> <bd [hh hh] sd hh>:0.4")
     strudel_command("note:bass:<[c2 c2] ~ [g2 g2] ~> <[c2 c2] ~ [f2 f2] [g2 g2]>:square:0.25")
@@ -241,7 +240,7 @@ def start_menu_music() {
 }
 
 def start_play_music() {
-    return if (!MUSIC_ENABLED)
+    return if (!music_enabled)
     strudel_set_bpm(140.0lf)
     strudel_command("play:drums:<bd [hh hh] sd [hh hh]> <bd [hh hh] sd [hh cp]>:0.5")
     strudel_command("note:bass:<[c2 c2] [c2 c2] [f2 f2] [g2 g2]> <[c2 c2] [e2 e2] [f2 f2] [e2 e2]>:square:0.28")
@@ -249,7 +248,7 @@ def start_play_music() {
 }
 
 def start_flee_music() {
-    return if (!MUSIC_ENABLED)
+    return if (!music_enabled)
     strudel_set_bpm(180.0lf)
     strudel_command("play:drums:<bd [hh hh hh hh] sd [hh hh]>:0.6")
     strudel_command("note:bass:<[c3 c3 c3 c3] [f3 f3 f3 f3]> <[g3 g3 g3 g3] [e3 e3 f3 g3]>:square:0.3")
@@ -257,7 +256,7 @@ def start_flee_music() {
 }
 
 def start_gameover_music() {
-    return if (!MUSIC_ENABLED)
+    return if (!music_enabled)
     strudel_set_bpm(80.0lf)
     strudel_command("play:drums:<bd ~ ~ ~> <~ ~ bd ~>:0.2")
     strudel_command("note:bass:<c2 ~ bb1 ~> <ab1 ~ g1 ~>:sine:0.3")
@@ -1090,7 +1089,8 @@ def init() {
         audio_initialized = true
         init_audio_samples()
     }
-    if (MUSIC_ENABLED && !music_initialized) {
+    music_enabled = !audio_is_single_threaded()
+    if (music_enabled && !music_initialized) {
         strudel_init(@@strudel_music_main)
         strudel_set_volume(0.4, 0.0)
         music_initialized = true
@@ -1237,19 +1237,23 @@ def update() {  // nolint:STYLE038 -- game frame: input, sim, and render phases 
 
 [export]
 def shutdown() {
-    if (MUSIC_ENABLED) {
+    if (music_enabled) {
         strudel_shutdown()
     }
     audio_system_finalize(asch.command, asch.next_sid)
     live_destroy_window()
 }
 
+// Entry point for the standalone cross-compiled build (daslang -exe → .wasm).
+// eval_main_loop drives the block once per frame: a blocking while-loop natively,
+// emscripten_set_main_loop (rAF) on the web — so the same main runs in the browser
+// without blocking. Returns false to end the loop.
 [export]
 def main() {
     init()
-    while (!exit_requested()) {
+    eval_main_loop() {
         update()
-        maybe_collect_gc()
+        return !exit_requested()
     }
     shutdown()
 }

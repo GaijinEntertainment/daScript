@@ -877,7 +877,7 @@ def update_music() {
 
 def setup_camera() {
     let aspect = display_h != 0 ? float(display_w) / float(display_h) : 1.0
-    v_projection = perspective_rh_opengl(50.0 * PI / 180.0, aspect, 0.1, 200.0)
+    v_projection = perspective_rh_minus1_to_1(50.0 * PI / 180.0, aspect, 0.1, 200.0)
     v_view = look_at_rh(CAM_EYE, CAM_TARGET, float3(0.0, 1.0, 0.0))
     f_Eye = CAM_EYE
     let t = get_uptime()
