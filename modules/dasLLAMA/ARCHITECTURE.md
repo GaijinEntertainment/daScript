@@ -15,7 +15,7 @@ in two of them will drift:
 | `REVIEW.md` | `/code-review`, and us while writing | criteria checkable against a diff |
 
 **References flow one way: REVIEW cites ARCHITECTURE, never the reverse.** Sections here are
-numbered so they can be cited (`ARCHITECTURE sec.2.2`). Nothing here may cite a REVIEW rule -
+numbered so they can be cited (`ARCHITECTURE sec.2.2`). Nothing here may cite a REVIEW rule - 
 those are unnumbered review criteria by design, and a citation to one is a dangling pointer the
 moment the checklist is reordered.
 
@@ -186,7 +186,7 @@ that a question answered for one backend has an obvious address in the other. Th
 | `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
 | `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates - no GPU C++ require, so any box can bake | device calls |
-| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops, the whisper-class block loop, the conv frontends + the qwen3a padded-weight slab) - no session, no KV, no mirror; registers the gemma4uv, gemma4v, gemma3v, encoder_blocks, tower-conv and qwen3a-conv hooks | kernel bodies, decoder state |
+| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT, gemma3v SigLIP and qwen3v block loops - qwen3v adds the vision NEOX rope, the fused-qkv weight-offset GEMMs, and the inline deepstack tap + tail merger chains - the whisper-class block loop, the conv frontends + the qwen3a padded-weight slab) - no session, no KV, no mirror; registers the gemma4uv, gemma4v, gemma3v, qwen3v, encoder_blocks, tower-conv and qwen3a-conv hooks | kernel bodies, decoder state |
 | the ASR-decoder driver<br>`dasllama_metal_asr_dec` | the whisper decoder on Metal: the 34B weight blob, the f16 resident cross/self K/V, window-granular cross-KV + decode-step serves; registers the whisper cross-KV and decode hooks (family registries in `dasllama_whisper`) | kernel bodies, LLM session state |
 | the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan - the `[vk_dispatch]` macro derives access per class) | the kernel-access macro | anything else |
 
@@ -207,15 +207,16 @@ that a question answered for one backend has an obvious address in the other. Th
 - **Backend-only capabilities live in their matching ROLE file, not in new grab-bags** - vulkan's
   weight arena, streamed mirrors, heat cache, host-import, coopmat; metal's blob transform and MTP.
 - **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,
-  posadd, the gemma4v clamp / rope2d / GEGLU-quick, the gemma3v head restride) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
+  posadd, the gemma4v clamp / rope2d / GEGLU-quick, the head restride - gemma3v's and, offset-bound, the qwen3v/prefill slicers) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
   releases them like every other registry PSO; the borrowed prefill builders (`pf_enc_bf16_mm`,
-  `enc_add_bias_rows`, the attention trio via `enc_qk_mm`/`enc_av_mm`) come up through
+  `enc_add_bias_rows`, `enc_rope` - the qwen3v vision NEOX apply - and the attention trio via
+  `enc_qk_mm`/`enc_av_mm`) come up through
   `metal_prefill_pso_init`, prefill's public bring-up seat, and `plane_buffer` in common is
   public for the same wrap-a-plane reason. The tower's own objects (the ones buffer, its
   scratch pool) release through `metal_tower_shutdown`.
 - **The tower driver is a Metal-only role** - Vulkan has no tower twin; audio/vision encodes
-  on the Vulkan tier stay CPU (the gemma4v ViT and gemma3v SigLIP block loops included: on
-  Vulkan and on plain CPU boxes those towers serve their q8 lanes). Likewise the non-causal media span: Metal serves it through
+  on the Vulkan tier stay CPU (the gemma4v ViT, gemma3v SigLIP and qwen3v block loops
+  included: on Vulkan and on plain CPU boxes those towers serve their q8 lanes). Likewise the non-causal media span: Metal serves it through
   `AttnArgs.uend` - including the FUSED image turn (head + media rows + tail as ONE eval, the
   per-query mask through `AttnArgs.ulo`); the Vulkan resident prefill declines span evals
   (`followup_general.md` #23's remaining half) and registers the split-span capability
@@ -225,10 +226,12 @@ that a question answered for one backend has an obvious address in the other. Th
   the per-token table rows `prefill_rope_tables` builds from the grid map, so it serves mrope
   unchanged and registers the seat; an override without it (vulkan builds angles from a scalar
   position) declines the quantum to the CPU loop by name. The deepstack quantum is the third
-  seat (`register_prefill_override_ds_adds`): Metal repacks the wide rows' tails CPU-side into
-  slice-major planes, uploads once, and encodes one `enc_add` at the slice offset after each
-  tapped layer's residual - no new kernel; an override without the seat declines deepstack
-  quanta by name, so Metal serves them and Vulkan does not.
+  seat (`register_prefill_override_ds_adds`): Metal uploads the caller's wide quantum WHOLE
+  (the `Session.wide_src` borrow), slices x and the slice-major ds planes on-device through
+  the offset-bound head restride, and encodes one `enc_add` at the slice offset after each
+  tapped layer's residual - no new kernel (the CPU-side split, `ds_split_quantum`, survives
+  as the CPU-loop fallback and the warm/MTP edge); an override without the seat declines
+  deepstack quanta by name, so Metal serves them and Vulkan does not.
 - **Per-layer FFN widths (MatFormer E-series, at most two - `ffn_second_hidden`) serve on Metal
   only**: the decode and prefill drivers bind the width per layer (dense trunks, no MTP; batch
   keeps the layer-0 hoist behind its uniformity decline). The Vulkan tier has no PLE arm, so
@@ -237,7 +240,7 @@ that a question answered for one backend has an obvious address in the other. Th
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class - "the builder needs the driver module" is never a placement reason. Prefill's
   prefill-only classes are convergence debt, not precedent.
-- **Retired: the single-pass whisper-decoder attention (`MetalWdecAttn`/`enc_wdec_attn`)** -
+- **Retired: the single-pass whisper-decoder attention (`MetalWdecAttn`/`enc_wdec_attn`)** - 
   deleted in the metal-asr review round (2026-08-17, the `bbatkin/metal-asr` PR; the kernel is
   in git history). The chunked part/comb pair replaced it during bring-up (1470->709 ms on the
   turbo decode) and its `float[1504]` tgmem bound was the only reason for the driver's old
@@ -292,8 +295,11 @@ entry here:**
   Both tiers ENTER from the transformer umbrella (`?das_metal` requires; the single `?vulkan`
   require of the `dasllama_math_vulkan` facade); the inversion that remains is the
   kernels<->common require DIRECTION, and it is why their seam shapes differ.
-- **UMA vs discrete VRAM**: Metal never grows residency machinery (memory is memory); arenas,
-  upload economics, mirrors and hydration are Vulkan's alone.
+- **UMA vs discrete VRAM**: Metal never grows Vulkan's VRAM machinery - arenas, upload
+  economics, mirrors and hydration are Vulkan's alone. Metal's ONE residency artifact is the
+  `MTLResidencySet` pin in `_common` (`DASLLAMA_METAL_RESIDENCY`, sec.2.12): it pins the served
+  working set so the per-commit tracked-set pass stays warm - a driver-cost shield, not a
+  placement mechanism; memory is still memory.
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes - Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants; the
   class-kernel arc retired the hand-built 6-slot set ladders outright) - and both speak the
@@ -339,9 +345,10 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   the LayerNorm/RMS row forms, bias and residual row adds, the
   `mm_blob_b`/`mm_bf16_b`/`mm_plane_b` GEMM wrappers, `Clamp`/`read_clamp`,
   `im2col_rgb_patches`, `rope_neox_2d_rows`, `rope_neox_tab_rows`, `avg_pool2d_rows`,
-  `interpolate_grid_bilinear_aa`, `tower_read_conv_pair_folded`, the q8-lane stage readers
-  (`tower_read_gemm_q8`, `tower_stage_q8_zero_rows`/`tower_stage_q8_pad_cols` - the padded pair
-  for FFN widths that are not 32-aligned - and `tower_zero_span`), blocked `attention_bidir` and
+  `interpolate_grid_bilinear_aa`, `tower_read_conv_pair_folded`, the padded stage readers
+  (`tower_read_gemm_q8`, `tower_stage_q8_zero_rows`/`tower_stage_q8_pad_cols` and their f32
+  twins `tower_stage_f32_zero_rows`/`tower_stage_f32_pad_cols` - the load-scope padded
+  stagers for FFN widths that are not 32-aligned - and `tower_zero_span`), blocked `attention_bidir` and
   its per-window form `attention_bidir_windows`, and the encode-stage prof rail. The one home:
   a family file that re-implements one of these is a defect, and nothing here names a family
   type.
@@ -407,9 +414,13 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   merger, the decoder adds slice l+1 after layer l. The family token budget [8, 4096] is
   mtmd's, not the gemma-scoped DASLLAMA_VISION_* knobs; image_mean/std (0.5) is
   PREPROCESSING like gemma3v. CPU serving default: the block GEMMs serve as Q8_0 planes
-  (read-time transcode, the gemma3v recipe; the FFN pair pads to ff_pad in the q8 layout
-  ONLY - the exact bf16/f32 lane keeps the file's widths as the parity rail); pin knobs
-  `set_qwen3v_q8`/`reset_qwen3v_q8`, two image tags. Composes `dasllama_tower.das`; owns
+  (read-time transcode, the gemma3v recipe); the exact lane stages EVERYTHING f32-in-blob at
+  ff_pad both dims - blocks, mergers, and taps - because the Metal tower (`register_qwen3v_gpu`,
+  blocks + rope + taps + tail on-device, tap/tail proj outputs land in `ds_stash`/`ds_slice`)
+  and the float-batch tier both read f32 planes, and the same lane is the parity rail (the
+  f32 sites are this charter's sanction, not a fallback). Pin knobs
+  `set_qwen3v_q8`/`reset_qwen3v_q8`, two image tags; the lane policy prefers f32 when the
+  GPU tower or accel serves. Composes `dasllama_tower.das`; owns
   only its layout, the reorder walk, and the block loop. SANCTIONED over the 1 GiB staged-mint line (this family
   and qwen25v): the Omni (2.1 GB) and Qwen2.5-Omni (2.6 GB) mmprojs stage source+image at
   once with no cap - the same shape their audio halves already stage - until
@@ -605,7 +616,7 @@ reason: flat one-call-per-item runs (a registration or release list with one lin
 GPU kernel bodies whose phases are coupled by barriers, cooperative-matrix ops or register
 residency and so cannot cross a function boundary without changing the shader.
 
-Split only where a real seam exists - genuine duplication, a distinct phase, a self-contained arm -
+Split only where a real seam exists - genuine duplication, a distinct phase, a self-contained arm - 
 and only when the extracted helper stands on its own. Two corollaries this module keeps tripping
 over: **a kargs fold that grows an already-over-cap kernel body is not a reason to abandon the
 fold** (unpacking N fields adds N lines; take the growth and ledger the real seam), and **never
@@ -729,7 +740,7 @@ the documentation and to the registry test. The sanctioned forms beyond a plain 
 - **The config loads once at context init**, so `set_env_variable` mid-process is invisible to
   the running config: arm a child process's environment instead.
 - **A write of a foreign library's knob** (`set_env_variable` with a literal name) is allowed
-  only before that library first reads it, and the name must be a declared `[EnvConfig]` knob -
+  only before that library first reads it, and the name must be a declared `[EnvConfig]` knob - 
   the registry test scans writes too, so a re-spelled name fails it.
 
 `tests/test_env_registry.das` enforces the lot in both directions (declared <-> documented,
@@ -769,6 +780,29 @@ harness paths. Reused buffers take `@scratch`; debug and profiling legs take `[c
 The tokenizer encode/decode path is sanctioned UNCOVERED by the region contracts - its perf
 gate is the `--tok` scaling rows, whose instrument (the size-ladder ratio) catches what the
 contracts cannot.
+
+### 2.12 The post-CPU-burn GPU ramp cannot be pre-paid - do not build a warm-up
+
+Figures in this section: M1 Max, 2026-08-23 - probes are quiet `-jit` runs with the rig's
+tune manifest; cells are the released `lcpp_bench` exe (`--image --image-think -r 3 -t 8
+--ngl 99`); full tables in `qwen3vl_plan.md` slices M/J.
+
+After a CPU-only phase, the first Metal submission runs degraded - host-side between commit
+and execution, one time per window (probe-verified 2026-08-23): ~40 ms after even a
+tens-of-ms window, saturating ~70-130 ms after multi-second burns, scaling with the model.
+The mechanism is Metal's per-commit dependency pass over the TRACKED working set running
+cold (the same pass that cost ~70 ms/prefill before the weights went untracked - see the
+region-upload comment in `dasllama_metal_common`); making the prefill pools untracked reds
+parity, so the tracking is load-bearing, and the scoped fix is a per-buffer tracking audit.
+Every pre-payment is REFUTED by measurement (`PERF_LEDGER.md`'s OPEN entry): empty command
+buffers and driver round-trips (0.107 ms - never asleep), single-dispatch kernels, per-page
+touch kernels, light pulse-trains through the burn - a warm-up always pays its own cost ON
+TOP of the slack it was meant to hide. Do not re-attempt one. The `MTLResidencySet` pin
+(`DASLLAMA_METAL_RESIDENCY`, on by default) is the ONE measured partial: it holds the
+short-window case (the tower's first submission after its CPU stem, -15 ms/encode) but not
+long windows. The structural fixes are removing the CPU phase (serve encoders on the GPU - 
+the Metal tower) and the tracking audit. Related, same ledger: merely arming Metal makes a
+CPU q8 tower encode ~1.7x slower - mechanism unnamed, deleted by a GPU-served tower.
 
 ---
 

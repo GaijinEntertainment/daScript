@@ -2001,6 +2001,7 @@ def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool 
         }
         return false
     }
+    residency_flush()   // pin/commit before the step's submission (the post-CPU-window slack)
     if (!(g_pre.valid && g_pre.uid == s.uid && g_pre.pos == pos &&
             g_pre.kdt == s.kv_dtype_k && g_pre.s16 == t.wscale_f16 &&
             g_pre.arena_epoch == g_arena_epoch)) {
@@ -2188,6 +2189,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         }
         return false
     }
+    residency_flush()   // pin/commit before the step's submission (the post-CPU-window slack)
     // a parked single-stream pre-step may reference a batch row's mirror slice — retire it first
     discard_pre()
     // encode-ahead readiness: with a step in flight, mirror_prepare must stay on its fast path

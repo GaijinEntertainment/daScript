@@ -58,7 +58,7 @@ struct PendingReq {
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
     // prefill BETWEEN prompt[media_at-1] and prompt[media_at] — the render seam hands the two
     // token spans and the encoder hands the rows. Zero rows = an ordinary text request.
-    media_embd : array<float>               // n_media * model.config.dim soft-token rows
+    media_embd : array<float>               // n_media rows: dim-wide (audio), dim*(1+n_deepstack)-wide (images — what encode_image emits)
     n_media : int64
     media_at : int64                        // prompt index the rows splice at (0 <= media_at <= |prompt|)
     media_non_causal : bool                 // the rows attend each other in full (gemma vision); audio is causal
@@ -194,8 +194,12 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
         if (req.media_at < 0l || req.media_at > np) {
             panic("dasllama_scheduler: media splice at {req.media_at} outside the {np}-token prompt (stream {req.id})")
         }
-        if (long_length(req.media_embd) < req.n_media * model.config.dim) {
-            panic("dasllama_scheduler: {req.n_media} media rows need {req.n_media * model.config.dim} floats, got {length(req.media_embd)} (stream {req.id})")
+        // image rows on a deepstack decoder must arrive (1+n)·dim-wide (what the tower's
+        // encode_image emits) — a narrow feed would silently skip the per-layer slice adds
+        let media_ds = req.media_non_causal ? model.config.n_deepstack : 0l
+        let media_need = req.n_media * model.config.dim * (1l + media_ds)
+        if (long_length(req.media_embd) != media_need) {
+            panic("dasllama_scheduler: {req.n_media} media rows need {media_need} floats ({media_ds} deepstack slices at dim {model.config.dim}), got {length(req.media_embd)} (stream {req.id})")
         }
         if (min(req.media_grid.x, req.media_grid.y) < 0 || ((req.media_grid.x > 0) != (req.media_grid.y > 0))) {
             panic("dasllama_scheduler: media_grid {req.media_grid} is neither (0,0) nor a positive grid (stream {req.id})")

@@ -67,7 +67,7 @@ fam-qwen35/fam-qwen35moe are deltanet hybrids whose batch cell asserts the per-r
 shape - metal batch steps 0, both rows served on the single-decode path; fam-qwen2moe's
 batch cell asserts the `graph` DECLINE on the planar model - shexp has no batch arm, and a
 blob twin's CPU batch fallback would trip the blob-only panic). The
-`kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels -
+`kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels - 
 model-less per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has
 no arms; remember it exists - kernel uniform/binding changes MUST update its hand-bound
 dispatches. Shared fixtures (buf helpers, eyeball-dump compares, kq plane + q8 blob
@@ -78,7 +78,7 @@ the misc file dispatches through the GENERATED builders (kn_ rail), not hand bin
 The control obligation for a new gate or bar is `REVIEW.md`'s (a control the bar reds, same
 change); the sizing mechanics: an additive poison beats rel*env at the longest dot, and
 every derived-truth compare gets its own poison. A kernel with `@workgroup` state needs
-`metal_set_threadgroup_memory_length` in the gate exactly as in its production encoder -
+`metal_set_threadgroup_memory_length` in the gate exactly as in its production encoder - 
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free - the one image-suite arm that runs with no model stocked) `smol metal gemma tower whisper voxtral parakeet qwen3a canary
@@ -92,7 +92,7 @@ tower-blocks gate, Apple builds only - whisper tiny + large-v3-turbo transcript-
 qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter deltas, plus
 the tower q8-decline (the serving default never dispatches the TOWER), required-mode panic, and
 Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv` cell in
-`test_model_image.das` -
+`test_model_image.das` - 
 GPU cross-KV on the q8 serving default, transcript-exact against the CPU chain with
 window/step counter deltas and the knob and quant_mode declines, required-mode, step-floor and shutdown-re-arm
 contract; the voxtral arm re-saves a
@@ -126,7 +126,7 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 ## Model-free / no-arm tests
 
 A model-free file - one with at least one cell that runs, not skips, when no model is present
-and `DASLLAMA_CPU_PREFILL=1` is set in the environment (the runner sets it for every child) -
+and `DASLLAMA_CPU_PREFILL=1` is set in the environment (the runner sets it for every child) - 
 runs under plain dastest (still `-jit`) or as a set through `run.das -- --suite model-free`,
 the per-PR gate. `run.das`'s `model-free` list is the complete census; an entry below is required only for a
 file whose name does not name what it covers. A file in a model suite (every suite but `model-free`) is listed in that
@@ -166,7 +166,7 @@ prefill intent.
 filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle gates
 (ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles - CPU-claim cells, tower knob
 pinned OFF per the fixtures section) and the `test_encoder_blocks_gpu` cell, the qwen2audio +
-voxtral 32-layer CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas -
+voxtral 32-layer CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas - 
 Apple builds, `-jit`; skips honestly without the qwen2audio / voxtral mmprojs.
 `test_whisper.das` - suite-less, model-gated: the whisper/parakeet/canary/gemma4a/omni oracle
 cells, the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed f32-enc/q8-dec
@@ -222,7 +222,7 @@ fixture by the encodes counter.
 minted on the f32-widened mmproj, CPU, `-fa off` (`mint_e2b.sh` / `mint_e4b.sh`): eight E2B
 fixtures (96^2 cb through 672x336) on the scale-relative bar 2e-4 + 4e-3*token-rms, the measured
 maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed through the
-staging planes must miss the oracle - the sidecar scalars are load-bearing); plus the E4B rung -
+staging planes must miss the oracle - the sidecar scalars are load-bearing); plus the E4B rung - 
 the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam subset
 with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps.
 `test_gemma3v.das` - the gemma3 SigLIP tower (gemma-3-4b mmproj) tier-1 parity vs the
@@ -238,24 +238,31 @@ restride to the attention tiles' 128 on the driver). Skips honestly without the 
 `test_qwen3v.das` - the qwen3v tower tier-1 parity vs the `-p encode` dumps minted on
 f32-widened mmprojs, CPU (`qwen3vl-vision-oracle/mint.sh` + `mint_4b.sh`): the Omni leg
 (`qwen3vl_merger` no deepstack) on seven fixtures (cb96 = the pos-table downscale arm,
-cb640x320 = the merge-reorder/transposed-grid gate) at 2e-4 + 1e-2*token-rms, plus the
+cb640x320 = the merge-reorder/transposed-grid gate) at 2e-4 + 1.5e-2*token-rms (the ff_pad
+width regroups the down GEMM's f32 accumulation; the live exact-lane zero-layer poison reds
+the bar at 0.87), plus the
 merged-patch-grid panic gate; and the Qwen3-VL 4B DEEPSTACK leg (taps 5/11/17, wide
 10240-float rows) on four fixtures at 2e-4 + 4e-2*rms - the 4B dumps carry q1/q2/q3 quarter-offset probe
 fields - the compare applies them when the dump has them - hitting each concatenated
 slice's first element (a skipped-tap poison lands at 6.9-9.7 on them, 600x; mean+v0..v3
-alone are BLIND to a zeroed slice). The q8 serving lane (the CPU policy default when no
-accelerate float-batch tier is active) gets its own cells, each bar carrying its own
+alone are BLIND to a zeroed slice). The q8 serving lane (the CPU policy default when
+neither the Metal tower nor the accelerate float-batch tier serves - 
+`qwen3v_gpu_would_serve()` is the driver clause) gets its own cells, each bar carrying its own
 must-EXCEED poison leg - a block's qblob region zeroed through the staging planes, scored
 by `encode_excess`: the Omni leg on gray448 + cb448 + cb96 at its measured 5.2e-1*rms bar,
 poisoned at a mid-stack block; the deepstack leg on cb448 + cb96 at 6.5e-1, poisoned at
 the TAP-1 block so the zero hits both the main path and a served slice - gray's tap-slice
 probes measure 7.9*rms because the taps sample mid-network residuals, so gray stays on the
 exact lane's set, and the proof that the served slices still carry signal is the
-zeroed-slices decoder control in `test_vision_chat.das`; and a model-free lane-knob cell.
-The model-gated cells skip honestly without the mmprojs or dumps.
+zeroed-slices decoder control in `test_vision_chat.das`; a METAL tower cell (both towers,
+tower pinned ON, its own GPU bars 4e-2 / 8e-2*rms per the gemma3v f16-tile precedent, gray
+off the GPU-ds set like the q8-ds cell, engage proven by encode/block counter deltas per
+GATED fixture, and its own GPU-lane zero-layer poison); and a model-free lane-knob cell.
+The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
+gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - the qwen25v tower (Qwen2.5-Omni's window-attention ViT, projector
 `qwen2.5o`) tier-1 parity vs the `-p encode` dumps minted on the f32-widened dual-tower
-mmproj, CPU (`qwen3vl-vision-oracle/mint_25o.sh`): five fixtures, four of them shaped -
+mmproj, CPU (`qwen3vl-vision-oracle/mint_25o.sh`): five fixtures, four of them shaped - 
 cb112 = the single-window arm, cb448 = four full windows, cb616x336 = ragged window edges, and quad448 = the WINDOW
 DISCRIMINATOR (four exact-value quadrants; uniform/periodic fixtures make every window
 statistically identical, so an all-full-attention poison hides under them - quad reds it at
@@ -308,7 +315,10 @@ projection 3840 - large tier, `DASLLAMA_PARITY_FULL=1`), and the Qwen3-Omni qwen
 grid advance), the Qwen3-VL 4B deepstack pair (small tier - wide 10240-float rows through
 the chat, the caption, and the zeroed-slices decoder control: tails zeroed on the same rows
 must move the prefill logits, measured 10.4 - a caption alone cannot see a decoder that
-ignores the slices), the Qwen2.5-Omni-3B qwen25v pair (small tier - the window ViT + the
+ignores the slices), the rows-seam cell (same 4B pair - pre-encoded wide rows through
+`add_user_image_rows_` on a plain chat reproduce the embedder walk token-for-token; the seam
+lcpp_bench prices, where a hand-splice once fed deepstack decoders a narrow scrambled span),
+the Qwen2.5-Omni-3B qwen25v pair (small tier - the window ViT + the
 qwen2vl NON-interleaved MROPE decoder; the vocab spells the span markers
 `<|vision_bos|>`/`<|vision_eos|>`, resolved by the chat layer's vocab-driven fallback)
 plus the `test_omni_showcase` cell in the same file (one Omni session: an image turn, then a text turn
@@ -337,7 +347,7 @@ images the rig cannot use and purges the flavors the rig depends on. Image-rail 
 ## Metal fixtures - driver knobs and the two-model pattern
 
 (REVIEW: "A cell pins every driver hook and serving-lane knob its claim depends on, and
-restores it after") The
+restores it before returning") The
 hooks are on by default: they flip a q8 leg to the GPU silently, and an f32 leg records a
 quant_mode decline that panics under required mode - either way the cell stops measuring what
 its name says. The family serving-lane pins (`set_<family>_q8`) are the same trap in the
@@ -383,7 +393,7 @@ batched code paths get their parity on small models via pins (e.g.
 
 ## Log discipline
 
-Always capture COMPLETE logs (the runner does this); grep afterwards, never at capture time -
+Always capture COMPLETE logs (the runner does this); grep afterwards, never at capture time - 
 a capture-time filter can hide the exact proof line the run exists to produce, and the silent
 capture reads as success.
 When a fixture claims a size/depth property ("2030 tokens", "crosses 2048"), assert the

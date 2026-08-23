@@ -13,6 +13,7 @@ require dasllama/dasllama_metal_shapes
 require dasllama/dasllama_gemma4uv
 require dasllama/dasllama_gemma4v   // Gemma4vTower/Gemma4vState — the ViT block loop
 require dasllama/dasllama_gemma3v   // Gemma3vTower/Gemma3vState — the SigLIP block loop
+require dasllama/dasllama_qwen3v   // Qwen3vTower/Qwen3vState — the qwen3vl ViT block loop (+ deepstack stashes)
 require dasllama/dasllama_audio   // AudioTower/EncoderState — the whisper-class block loop
 require dasllama/dasllama_qwen3a   // Qwen3aTower — the conv2d frontend hook
 require metal/das_metal_boost
@@ -66,6 +67,7 @@ def private tw_decline(why : MetalTowerDecline) : bool {
 //! leak-gate rail, beside metal_decode_shutdown. The borrowed and registry PSOs are owned by
 //! their homes; lazily re-initializes on the next served encode.
 def metal_tower_shutdown {
+    residency_reset()   // the set references pooled buffers the drain below releases
     if (g_tw_ones != null) {
         metal_release(g_tw_ones)
         g_tw_ones = null
@@ -82,6 +84,7 @@ def metal_tower_shutdown {
 
 [cold_path]   // per-encode bring-up: the registry/prefill inits are latched-flag cheap
 def private metal_tower_init : bool {
+    weight_caches_flush_on_reload()   // an embedder load/delete recycles staged-blob addresses — the address-keyed regions must not survive it
     // the registry owns the tower PSOs (metal_decode_init compiles them, via the prefill seat)
     if (g_tw_failed || !metal_common_init() || !metal_prefill_pso_init() || g_pso_ln == null) {
         return false
@@ -114,12 +117,13 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
     let mp = (npos + 31l) / 32l * 32l
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
-    var bx0 = pool_acquire(g_tw_pool, g_dev, uint64(mp * t.patch_dim * 4l))
-    var bx1 = pool_acquire(g_tw_pool, g_dev, uint64(mp * d * 4l))
-    var bout = pool_acquire(g_tw_pool, g_dev, uint64(mp * t.proj_dim * 4l))
+    var bx0 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.patch_dim * 4l))
+    var bx1 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * d * 4l))
+    var bout = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.proj_dim * 4l))
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx0))
         memcpy(p, addr(s.x0[0]), npos * t.patch_dim * 4l)
@@ -206,6 +210,7 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
     let mp = (npos + 31l) / 32l * 32l
     let nk64 = (npos + 63l) / 64l * 64l
     let ff = t.n_ff
@@ -214,14 +219,14 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     let bytes_row = uint64(mp * d * 4l)
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 4l)
-    var bx = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb2 = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bq = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bk = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bv = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bh = pool_acquire(g_tw_pool, g_dev, bytes_h)
-    var batt = pool_acquire(g_tw_pool, g_dev, bytes_att)
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
+    var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx))
         memcpy(p, addr(s.x[0]), npos * d * 4l)
@@ -323,6 +328,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
     let mp = (npos + 31l) / 32l * 32l
     let nk64 = (npos + 63l) / 64l * 64l
     let pairs = hs / 4l   // rotated pairs per rope axis = one packed table row
@@ -333,16 +339,16 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 4l)
     let bytes_tabs = uint64(npos * 4l * pairs * 4l)
-    var bx = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb2 = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bq = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bk = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bv = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bhg = pool_acquire(g_tw_pool, g_dev, bytes_h)
-    var bhu = pool_acquire(g_tw_pool, g_dev, bytes_h)
-    var batt = pool_acquire(g_tw_pool, g_dev, bytes_att)
-    var btabs = pool_acquire(g_tw_pool, g_dev, bytes_tabs)
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bhg = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
+    var bhu = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
+    var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
+    var btabs = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tabs)
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx))
         memcpy(p, addr(s.x[0]), npos * d * 4l)
@@ -494,6 +500,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
     let mp = (npos + 31l) / 32l * 32l
     let nk64 = (npos + 63l) / 64l * 64l
     let dp = t.n_head * hs_pad   // the padded attention width
@@ -503,16 +510,16 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     let bytes_rowp = uint64(mp * dp * 4l)
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 4l)
-    var bx = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb2 = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var braw = pool_acquire(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of the head restride
-    var bq = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
-    var bk = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
-    var bv = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
-    var bo_p = pool_acquire(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
-    var bh = pool_acquire(g_tw_pool, g_dev, bytes_h)
-    var batt = pool_acquire(g_tw_pool, g_dev, bytes_att)
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var braw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of the head restride
+    var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bo_p = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
+    var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
+    var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx))
         memcpy(p, addr(s.x[0]), npos * d * 4l)
@@ -542,17 +549,17 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
             enc_ln(enc, bx, bblob, uint64(o.ln1_w * 4l), bblob, uint64(o.ln1_b * 4l), bxb, u_d, u_eps, npos)
             enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_Q] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_Q] * 4l), u_d, u_totd, npos * d)
-            enc_head_restride(enc, braw, bq, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_K] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_K] * 4l), u_d, u_totd, npos * d)
-            enc_head_restride(enc, braw, bk, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_V] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_V] * 4l), u_d, u_totd, npos * d)
-            enc_head_restride(enc, braw, bv, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_head_restride(enc, braw, 0ul, bv, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
             enc_softmax(enc, batt, ka, null, npos, t.n_head)
             enc_av_mm(enc, batt, bv, bo_p, ka, mp, t.n_head, hs_pad)
-            enc_head_restride(enc, bo_p, bxb2, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
+            enc_head_restride(enc, bo_p, 0ul, bxb2, 0ul, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
             enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_O] * 4l), bxb2, bxb, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_O] * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
@@ -600,6 +607,198 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     return true
 }
 
+// The qwen3vl ViT: gemma3v's chain + the vision NEOX rope (enc_rope on compact q/k) + the
+// fused qkv as three weight-offset GEMMs; tap chains encode inline over the live residual
+// (hazard-ordered), the tail merger follows, ONE readback lands proj outputs for the scatter.
+[hot_path]
+def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    if (t.q8) {
+        return tw_decline(MetalTowerDecline.quant_mode)
+    }
+    let d = t.n_embd
+    let hs = d / t.n_head
+    let ff = t.ff_pad
+    let proj = t.proj_dim
+    let hs_pad = hs <= 64l ? 64l : 128l
+    // %4 npos: the x4 merge reshape is the tap/tail GEMMs' row view
+    if (d % 64l != 0l || ff % 64l != 0l || hs > 128l || hs % 2l != 0l || proj % 64l != 0l || npos % 4l != 0l) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
+        return tw_decline(MetalTowerDecline.device)
+    }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
+    let mp = (npos + 31l) / 32l * 32l
+    let nk64 = (npos + 63l) / 64l * 64l
+    let dp = t.n_head * hs_pad   // the padded attention width
+    let half = hs / 2l
+    let nout = npos / 4l
+    let mp4 = (nout + 31l) / 32l * 32l
+    let rows_ext = max(mp, mp4 * 4l)   // bx/bxb double as the [nout x 4d] merged view - pad rows beyond mp
+    let mapped = t.image_map != null
+    var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
+    let bytes_row = uint64(rows_ext * d * 4l)
+    let bytes_rowp = uint64(mp * dp * 4l)
+    let bytes_h = uint64(mp * ff * 4l)
+    let bytes_att = uint64(t.n_head * mp * nk64 * 4l)
+    let bytes_tab = uint64(npos * half * 4l)
+    let bytes_m4 = uint64(mp4 * 4l * d * 4l)
+    let bytes_pr = uint64(mp4 * proj * 4l)
+    let nds = t.n_deepstack
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var braw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of rope + the head restride
+    var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bo_p = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
+    var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
+    var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
+    var bcos = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tab)
+    var bsin = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tab)
+    var bm4 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_m4)     // tap/tail LN out, the [nout x 4d] merged view
+    var bm4b = pool_acquire_pinned(g_tw_pool, g_dev, bytes_m4)    // fc1/mm0 out, GELU'd in place
+    var btail = pool_acquire_pinned(g_tw_pool, g_dev, bytes_pr)
+    var btap = nds > 0l ? pool_acquire_pinned(g_tw_pool, g_dev, uint64(nds) * bytes_pr) : null
+    unsafe {
+        var p = reinterpret<uint8?>(metal_buffer_contents(bx))
+        memcpy(p, addr(s.x[0]), npos * d * 4l)
+        if (rows_ext > npos) {   // DEFENSIVE pad zero (controls stay green without it): guards stale-Inf pool reuse
+            var zp = reinterpret<float?>(p + npos * d * 4l)
+            for (i in range64((rows_ext - npos) * d)) {
+                zp[i] = 0.0
+            }
+        }
+        memcpy(metal_buffer_contents(bcos), addr(s.cos_t[0]), npos * half * 4l)
+        memcpy(metal_buffer_contents(bsin), addr(s.sin_t[0]), npos * half * 4l)
+    }
+    var u_d = uniform_u32(uint(d))
+    var u_d4 = uniform_u32(uint(4l * d))
+    var u_ff = uniform_u32(uint(ff))
+    var u_pr = uniform_u32(uint(proj))
+    var u_hs = uniform_u32(uint(hs))
+    var u_hsp = uniform_u32(uint(hs_pad))
+    var u_eps = uniform_f32(t.eps)
+    var u_totd = uniform_u32(uint(npos * d))
+    var u_totff = uniform_u32(uint(npos * ff))
+    var u_totp = uniform_u32(uint(npos * t.n_head * hs_pad))   // restride total, pad direction
+    var u_totc = uniform_u32(uint(npos * t.n_head * hs))       // restride total, compact direction
+    var u_tot4 = uniform_u32(uint(nout * 4l * d))
+    var u_totpr = uniform_u32(uint(nout * proj))
+    var u_np_rope = uniform_u32(uint(npos * d / 2l))           // rope pairs over a compact q/k buffer
+    var u_neox = uniform_u32(1u)
+    var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
+        npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
+        qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
+    residency_flush()   // commit THIS encode's own notes before its first submission
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        for (l in range64(t.n_layer)) {
+            let o = qwen3v_block_offs(t, l)
+            enc_ln(enc, bx, bblob, uint64(o.ln1_w * 4l), bblob, uint64(o.ln1_b * 4l), bxb, u_d, u_eps, npos)
+            let wq = uint64(o.w[QWEN3V_GEMM_QKV] * 4l)   // the fused qkv rows: q, then k at d·d, v at 2d·d
+            enc_f32_mm(enc, bblob, wq, bxb, braw, 0ul, u_d, u_d, mp, d)
+            enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.qkv_b * 4l), u_d, u_totd, npos * d)
+            enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, null, npos * d / 2l)
+            enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_f32_mm(enc, bblob, wq + uint64(d * d * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
+            enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + d) * 4l), u_d, u_totd, npos * d)
+            enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, null, npos * d / 2l)
+            enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_f32_mm(enc, bblob, wq + uint64(2l * d * d * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
+            enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + 2l * d) * 4l), u_d, u_totd, npos * d)
+            enc_head_restride(enc, braw, 0ul, bv, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
+            enc_softmax(enc, batt, ka, null, npos, t.n_head)
+            enc_av_mm(enc, batt, bv, bo_p, ka, mp, t.n_head, hs_pad)
+            enc_head_restride(enc, bo_p, 0ul, bxb2, 0ul, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
+            enc_f32_mm(enc, bblob, uint64(o.w[QWEN3V_GEMM_O] * 4l), bxb2, bxb, 0ul, u_d, u_d, mp, d)
+            enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(o.out_b * 4l), u_d, u_totd, npos * d)
+            enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
+            enc_ln(enc, bx, bblob, uint64(o.ln2_w * 4l), bblob, uint64(o.ln2_b * 4l), bxb, u_d, u_eps, npos)
+            enc_f32_mm(enc, bblob, uint64(o.w[QWEN3V_GEMM_UP] * 4l), bxb, bh, 0ul, u_d, u_ff, mp, ff)
+            enc_add_bias_rows(enc, bh, 0ul, bblob, uint64(o.up_b * 4l), u_ff, u_totff, npos * ff)
+            enc_gelu_lut(enc, bh, 0ul, u_totff, npos * ff)
+            enc_f32_mm(enc, bblob, uint64(o.w[QWEN3V_GEMM_DOWN] * 4l), bh, bxb2, 0ul, u_ff, u_d, mp, d)
+            enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(o.down_b * 4l), u_d, u_totd, npos * d)
+            enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
+            let k = l == t.ds_l0 ? 0l : l == t.ds_l1 ? 1l : l == t.ds_l2 ? 2l : -1l
+            if (k >= 0l) {   // the tap merger chain over the live residual's [nout x 4d] merged view
+                let fo = t.ds_f + k * t.ds_f_stride
+                let wo = t.ds_w + k * t.ds_w_stride
+                enc_ln(enc, bx, bblob, uint64(fo * 4l), bblob, uint64((fo + 4l * d) * 4l), bm4, u_d4, u_eps, nout)
+                enc_f32_mm(enc, bblob, uint64(wo * 4l), bm4, bm4b, 0ul, u_d4, u_d4, mp4, 4l * d)
+                enc_add_bias_rows(enc, bm4b, 0ul, bblob, uint64((fo + 8l * d) * 4l), u_d4, u_tot4, nout * 4l * d)
+                enc_gelu_lut(enc, bm4b, 0ul, u_tot4, nout * 4l * d)
+                enc_f32_mm(enc, bblob, uint64((wo + 16l * d * d) * 4l), bm4b, btap, uint64(k * mp4 * proj * 4l), u_d4, u_pr, mp4, proj)
+                enc_add_bias_rows(enc, btap, uint64(k * mp4 * proj * 4l), bblob, uint64((fo + 12l * d) * 4l), u_pr, u_totpr, nout * proj)
+            }
+        }
+        // the tail: post-LN over [npos x d], then the merger MLP over the [nout x 4d] view
+        enc_ln(enc, bx, bblob, uint64(t.post_ln_w * 4l), bblob, uint64(t.post_ln_b * 4l), bxb, u_d, u_eps, npos)
+        enc_f32_mm(enc, bblob, uint64(t.mm0_w * 4l), bxb, bm4b, 0ul, u_d4, u_d4, mp4, 4l * d)
+        enc_add_bias_rows(enc, bm4b, 0ul, bblob, uint64(t.mm0_b * 4l), u_d4, u_tot4, nout * 4l * d)
+        enc_gelu_lut(enc, bm4b, 0ul, u_tot4, nout * 4l * d)
+        enc_f32_mm(enc, bblob, uint64(t.mm2_w * 4l), bm4b, btail, 0ul, u_d4, u_pr, mp4, proj)
+        enc_add_bias_rows(enc, btail, 0ul, bblob, uint64(t.mm2_b * 4l), u_pr, u_totpr, nout * proj)
+    }
+    var served = false
+    if (ran) {
+        unsafe {
+            memcpy(addr(s.ds_slice[0]), metal_buffer_contents(btail), uint64(nout * proj * 4l))
+            for (k in range64(nds)) {
+                memcpy(addr(s.ds_stash[k * nout * proj]),
+                       reinterpret<uint8?>(metal_buffer_contents(btap)) + k * mp4 * proj * 4l, uint64(nout * proj * 4l))
+            }
+        }
+        g_tower_encodes++
+        g_tower_rows += npos
+        g_tower_blocks += t.n_layer
+        served = true
+    }
+    pool_release(g_tw_pool, bx, bytes_row)
+    pool_release(g_tw_pool, bxb, bytes_row)
+    pool_release(g_tw_pool, bxb2, bytes_row)
+    pool_release(g_tw_pool, braw, bytes_row)
+    pool_release(g_tw_pool, bq, bytes_rowp)
+    pool_release(g_tw_pool, bk, bytes_rowp)
+    pool_release(g_tw_pool, bv, bytes_rowp)
+    pool_release(g_tw_pool, bo_p, bytes_rowp)
+    pool_release(g_tw_pool, bh, bytes_h)
+    pool_release(g_tw_pool, batt, bytes_att)
+    pool_release(g_tw_pool, bcos, bytes_tab)
+    pool_release(g_tw_pool, bsin, bytes_tab)
+    pool_release(g_tw_pool, bm4, bytes_m4)
+    pool_release(g_tw_pool, bm4b, bytes_m4)
+    pool_release(g_tw_pool, btail, bytes_pr)
+    if (btap != null) {
+        pool_release(g_tw_pool, btap, uint64(nds) * bytes_pr)
+    }
+    pool_release(g_upool, u_d, 4ul)
+    pool_release(g_upool, u_d4, 4ul)
+    pool_release(g_upool, u_ff, 4ul)
+    pool_release(g_upool, u_pr, 4ul)
+    pool_release(g_upool, u_hs, 4ul)
+    pool_release(g_upool, u_hsp, 4ul)
+    pool_release(g_upool, u_eps, 4ul)
+    pool_release(g_upool, u_totd, 4ul)
+    pool_release(g_upool, u_totff, 4ul)
+    pool_release(g_upool, u_totp, 4ul)
+    pool_release(g_upool, u_totc, 4ul)
+    pool_release(g_upool, u_tot4, 4ul)
+    pool_release(g_upool, u_totpr, 4ul)
+    pool_release(g_upool, u_np_rope, 4ul)
+    pool_release(g_upool, u_neox, 4ul)
+    if (!served) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
 // The whisper conv frontend for one mel chunk: im2col + conv GEMMs + bias + GELU + pos-add,
 // one command buffer, s.x readback. BEST-EFFORT inside the tower knob: any decline is a
 // silent false (no counter noise — the CPU conv serves and the blocks still ride the GPU).
@@ -625,11 +824,11 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     let bytes_y1 = uint64(mp1 * d * 4l)
     let bytes_x2 = uint64(mp2 * 3l * d * 4l)
     let bytes_xo = uint64(mp2 * d * 4l)
-    var bmel = pool_acquire(g_tw_pool, g_dev, bytes_mel)
-    var bx1 = pool_acquire(g_tw_pool, g_dev, bytes_x1)
-    var by1 = pool_acquire(g_tw_pool, g_dev, bytes_y1)
-    var bx2 = pool_acquire(g_tw_pool, g_dev, bytes_x2)
-    var bxo = pool_acquire(g_tw_pool, g_dev, bytes_xo)
+    var bmel = pool_acquire_pinned(g_tw_pool, g_dev, bytes_mel)
+    var bx1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x1)
+    var by1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y1)
+    var bx2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x2)
+    var bxo = pool_acquire_pinned(g_tw_pool, g_dev, bytes_xo)
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(mel.data[0]), bytes_mel)
     }
@@ -785,11 +984,11 @@ def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     let bytes_y1 = uint64(3200l * ncp * 4l)
     let bytes_y2 = uint64(800l * ncp * 4l)
     let bytes_y3 = uint64(n_chunks * mp3 * ncp * 4l)
-    var bxin = pool_acquire(g_tw_pool, g_dev, bytes_xin)
-    var bcol = pool_acquire(g_tw_pool, g_dev, bytes_col)
-    var by1 = pool_acquire(g_tw_pool, g_dev, bytes_y1)
-    var by2 = pool_acquire(g_tw_pool, g_dev, bytes_y2)
-    var by3 = pool_acquire(g_tw_pool, g_dev, bytes_y3)
+    var bxin = pool_acquire_pinned(g_tw_pool, g_dev, bytes_xin)
+    var bcol = pool_acquire_pinned(g_tw_pool, g_dev, bytes_col)
+    var by1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y1)
+    var by2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y2)
+    var by3 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y3)
     unsafe {   // the per-chunk [ih][iw] extract from the window's mel-major plane, straight into the mapped slab
         var p = reinterpret<float?>(metal_buffer_contents(bxin))
         for (ci in range64(n_chunks)) {
@@ -882,6 +1081,7 @@ def dasllama_metal_tower_register {
     register_gemma4uv_gpu(@@metal_gemma4uv_encode)
     register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_tower_serves)
     register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_tower_serves)
+    register_qwen3v_gpu(@@metal_qwen3v_blocks, @@metal_tower_serves)
     register_tower_blocks_gpu(@@metal_tower_blocks)
     register_tower_conv_gpu(@@metal_conv_frontend)
     register_qwen3a_conv_gpu(@@metal_q3a_convs)

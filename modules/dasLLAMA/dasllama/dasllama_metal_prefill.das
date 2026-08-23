@@ -1793,6 +1793,7 @@ def public metal_prefill_pso_init : bool {
 //! next served prefill.
 def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-release-per-PSO list
     kcov_fold()   // PSO pointers recycle across re-init — counts fold into names first
+    residency_reset()   // the set references pooled buffers the drains below release
     pool_drain(g_pf_pool)
     pool_drain(g_pf_upool)
     if (g_pf_pso_moe_mm_q8_t != null) {
@@ -2315,6 +2316,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         }
         return false
     }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
     let ts_all = ref_time_ticks()
     let c = t.config
     let dim = c.dim
@@ -2375,12 +2377,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let bytes_att = uint64(n_heads * mp * nk64 * 4l)   // per-head score slabs: mp queries x nk64 keys
     let bytes_tab = uint64(npos * half * 4l)
     let bytes_tab_sw = uint64(npos * half_sw * 4l)   // the swa pair's row width is ITS class's hs/2
-    var bx = pool_acquire(g_pf_pool, g_dev, bytes_x)
-    var bxb = pool_acquire(g_pf_pool, g_dev, bytes_xb)
-    var bxb2 = pool_acquire(g_pf_pool, g_dev, bytes_x)
-    var bq = pool_acquire(g_pf_pool, g_dev, bytes_q)
-    var bhb = pool_acquire(g_pf_pool, g_dev, bytes_h)
-    var bhb2 = pool_acquire(g_pf_pool, g_dev, bytes_h)
+    var bx = pool_acquire_pinned(g_pf_pool, g_dev, bytes_x)
+    var bxb = pool_acquire_pinned(g_pf_pool, g_dev, bytes_xb)
+    var bxb2 = pool_acquire_pinned(g_pf_pool, g_dev, bytes_x)
+    var bq = pool_acquire_pinned(g_pf_pool, g_dev, bytes_q)
+    var bhb = pool_acquire_pinned(g_pf_pool, g_dev, bytes_h)
+    var bhb2 = pool_acquire_pinned(g_pf_pool, g_dev, bytes_h)
     // MoE (Wave C stage 2b): per-position routing + padded bucket panels (32-row tiles/expert);
     // g4moe adds the router-input/acc panel (bxb2 doubles as the pre_ffn2 expert input — the
     // serial encoder makes the reuse safe)
@@ -2395,16 +2397,16 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let bytes_minv = uint64(mtot * 4l)
     let bytes_mg = uint64(mpad * c.n_ff_exp * 4l)
     let bytes_mdn = uint64(mpad * dim * 4l)
-    var bmlg = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mlg) : null
-    var bmsel = moe ? pool_acquire(g_pf_pool, g_dev, bytes_msel) : null
-    var bmcnt = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mcsr) : null
-    var bmbase = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mcsr) : null
-    var bmbkt = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mbkt) : null
-    var bminv = moe ? pool_acquire(g_pf_pool, g_dev, bytes_minv) : null
-    var bmg = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mg) : null
-    var bmg2 = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mg) : null
-    var bmdn = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mdn) : null
-    var bmg4rt = g4moe ? pool_acquire(g_pf_pool, g_dev, bytes_x) : null
+    var bmlg = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mlg) : null
+    var bmsel = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_msel) : null
+    var bmcnt = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mcsr) : null
+    var bmbase = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mcsr) : null
+    var bmbkt = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mbkt) : null
+    var bminv = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_minv) : null
+    var bmg = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mg) : null
+    var bmg2 = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mg) : null
+    var bmdn = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mdn) : null
+    var bmg4rt = g4moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_x) : null
     // deltanet scratch (recurrent layers) — GEMM outputs pad to mp rows like every panel
     let cd_dn = dn ? dn_conv_dim(c) : 0l
     let di_dn = dn ? c.ssm_d_inner : 0l
@@ -2413,25 +2415,35 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let bytes_dn_di = uint64(mp * di_dn * 4l)
     let bytes_dn_h = uint64(mp * nvh_dn * 4l)
     let bytes_dn_qg = uint64(mp * 2l * qd * 4l)
-    var bdnqkv = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_cd) : null
-    var bdncv = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_cd) : null
-    var bdnz = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_di) : null
-    var bdno = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_di) : null
-    var bdnb = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_h) : null
-    var bdng = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_h) : null
-    var bdnqg = c.q_gated ? pool_acquire(g_pf_pool, g_dev, bytes_dn_qg) : null
-    var bdngate = c.q_gated ? pool_acquire(g_pf_pool, g_dev, bytes_q) : null
-    var batt = pool_acquire(g_pf_pool, g_dev, bytes_att)
+    var bdnqkv = dn ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_dn_cd) : null
+    var bdncv = dn ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_dn_cd) : null
+    var bdnz = dn ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_dn_di) : null
+    var bdno = dn ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_dn_di) : null
+    var bdnb = dn ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_dn_h) : null
+    var bdng = dn ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_dn_h) : null
+    var bdnqg = c.q_gated ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_dn_qg) : null
+    var bdngate = c.q_gated ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_q) : null
+    var batt = pool_acquire_pinned(g_pf_pool, g_dev, bytes_att)
     // deepstack (qwen3vl dense): the wide quantum's tail slices upload as PER-SLICE contiguous
     // planes so the per-layer add is the existing enc_add at a slice offset — a repack, no kernel
     let nds = s.ds_active ? c.n_deepstack : 0l
+    // the wide borrow: upload the caller's quantum whole and slice it on-device (bds turns
+    // GPU-written, so it must ride the TRACKED pool); the CPU-split arm survives for the
+    // warm/MTP edge, which reads x_b host-side
+    let wide = nds > 0l   // a ds quantum always arrives as the wide borrow (forward_prefill_embd arms it with ds_active)
+    if (wide && s.wide_src == null) {
+        panic("metal_prefill_forward: ds_active with no wide borrow - forward_prefill_embd's contract broke")
+    }
+    let wide_stride = s.wide_stride
     let bytes_ds = uint64(npos * nds * dim * 4l)
-    var bds = nds > 0l ? pool_acquire_untracked(g_pf_upool, g_dev, bytes_ds) : null
-    var bcos = pool_acquire_untracked(g_pf_upool, g_dev, bytes_tab)
-    var bsin = pool_acquire_untracked(g_pf_upool, g_dev, bytes_tab)
+    let bytes_wide = uint64(npos * wide_stride * 4l)
+    var bds = wide ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_ds) : null   // GPU-written by the extract - the TRACKED pool
+    var bwide = wide ? pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_wide) : null
+    var bcos = pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_tab)
+    var bsin = pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_tab)
     let dual_rope = has_dual_rope(c)
-    var bcos_swa = dual_rope ? pool_acquire_untracked(g_pf_upool, g_dev, bytes_tab_sw) : null
-    var bsin_swa = dual_rope ? pool_acquire_untracked(g_pf_upool, g_dev, bytes_tab_sw) : null
+    var bcos_swa = dual_rope ? pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_tab_sw) : null
+    var bsin_swa = dual_rope ? pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_tab_sw) : null
     var bks & = unsafe(g_pf_bks)
     var bvs & = unsafe(g_pf_bvs)
     bks |> clear()
@@ -2451,8 +2463,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
             continue
         }
         let bytes_kv_l = uint64(kvrows * layer_kv_dim(c, l) * 4l)   // per-layer panels: each class's width
-        bks |> push(pool_acquire(g_pf_pool, g_dev, bytes_kv_l))
-        bvs |> push(pool_acquire(g_pf_pool, g_dev, bytes_kv_l))
+        bks |> push(pool_acquire_pinned(g_pf_pool, g_dev, bytes_kv_l))
+        bvs |> push(pool_acquire_pinned(g_pf_pool, g_dev, bytes_kv_l))
     }
     // E-series PLE: side input uploaded LAYER-major ([l][p][ple] — the flat geglu ⊙ reads layer l's
     // block at one offset); gate outputs pad to mp rows like every GEMM panel
@@ -2468,11 +2480,11 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bple_proj : MetalBuffer?
     var bple_tok : MetalBuffer?
     if (plef) {
-        bpleg = pool_acquire(g_pf_pool, g_dev, bytes_ple_g)
+        bpleg = pool_acquire_pinned(g_pf_pool, g_dev, bytes_ple_g)
         if (ple_gpu) {
-            bple = pool_acquire(g_pf_pool, g_dev, bytes_ple_side)
-            bple_proj = pool_acquire(g_pf_pool, g_dev, bytes_ple_proj)
-            bple_tok = pool_acquire_untracked(g_pf_upool, g_dev, uint64(npos * 4l))
+            bple = pool_acquire_pinned(g_pf_pool, g_dev, bytes_ple_side)
+            bple_proj = pool_acquire_pinned(g_pf_pool, g_dev, bytes_ple_proj)
+            bple_tok = pool_acquire_untracked_pinned(g_pf_upool, g_dev, uint64(npos * 4l))
             unsafe {
                 var tp = reinterpret<uint?>(metal_buffer_contents(bple_tok))
                 for (p in range64(npos)) {
@@ -2480,7 +2492,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
             }
         } else {
-            bple = pool_acquire_untracked(g_pf_upool, g_dev, bytes_ple_side)
+            bple = pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_ple_side)
             unsafe {
                 // transpose s.ple_inp (position-major, p*all + l*ple) into layer-major blocks
                 var dst = reinterpret<float?>(metal_buffer_contents(bple))
@@ -2497,21 +2509,16 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // upload the embedded rows + this prefill's rope table(s) (built for the chunk's GLOBAL
     // positions — build_rope_table takes start_pos; dual-rope: the sliding class's pair too)
     unsafe {
-        memcpy(metal_buffer_contents(bx), addr < void? >(s.x_b[0]), npos * dim * 4l)
+        if (wide) {   // ONE wide upload; bx and the bds slices extract on-device at encode time
+            memcpy(metal_buffer_contents(bwide), reinterpret<void const?>(s.wide_src + s.wide_soff * wide_stride), npos * wide_stride * 4l)
+        } else {
+            memcpy(metal_buffer_contents(bx), addr < void? >(s.x_b[0]), npos * dim * 4l)
+        }
         memcpy(metal_buffer_contents(bcos), addr < void? >(s.rope_cos[0]), npos * half * 4l)
         memcpy(metal_buffer_contents(bsin), addr < void? >(s.rope_sin[0]), npos * half * 4l)
         if (dual_rope) {
             memcpy(metal_buffer_contents(bcos_swa), addr < void? >(s.rope_cos_swa[0]), npos * half_sw * 4l)
             memcpy(metal_buffer_contents(bsin_swa), addr < void? >(s.rope_sin_swa[0]), npos * half_sw * 4l)
-        }
-        if (nds > 0l) {   // [npos × nds·dim] row-major -> slice-major [nds][npos × dim]
-            var dsp = reinterpret<float?>(metal_buffer_contents(bds))
-            let srp = addr<float const?>(s.ds_embd[0])
-            for (sl in range64(nds)) {
-                for (r in range64(npos)) {
-                    copy_floats(dsp + (sl * npos + r) * dim, srp + r * nds * dim + sl * dim, dim)
-                }
-            }
         }
     }
     // continuation: gather the session's existing rows [0, start_pos) into every layer's panel
@@ -2561,6 +2568,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let has_qkn = c.qk_norm
     let vfromk = c.v_from_k_mask != 0ul
     var u_total_dim = uniform_u32(uint(npos * dim))
+    var u_wide_rw = wide ? uniform_u32(uint(wide_stride)) : null
+    var u_wide_dim = wide ? uniform_u32(uint(dim)) : null
     var u_total_h = uniform_u32(uint(npos * hidden))
     var u_total_h2 = hid2 > 0l ? uniform_u32(uint(npos * hid2)) : null
     var u_moe_ne = moe ? uniform_u32(uint(c.n_expert)) : null
@@ -2610,8 +2619,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let gpu_logits = (!g_pf_logits_cpu && g_pf_env_logits &&
         !tied_f32 &&
         t.wcls_off >= 0l)
-    var bxf = gpu_logits ? pool_acquire(g_pf_pool, g_dev, uint64(dim * 4l)) : null
-    var blog = gpu_logits ? pool_acquire(g_pf_pool, g_dev, uint64(c.vocab_size * 4l)) : null
+    var bxf = gpu_logits ? pool_acquire_pinned(g_pf_pool, g_dev, uint64(dim * 4l)) : null
+    var blog = gpu_logits ? pool_acquire_pinned(g_pf_pool, g_dev, uint64(c.vocab_size * 4l)) : null
     var u_vocab = gpu_logits ? uniform_u32(uint(c.vocab_size)) : null
     var u_flcap = (gpu_logits && c.final_logit_softcap > 0.0) ? uniform_f32(c.final_logit_softcap) : null
     // suppressed token ids pin to -1e30 AFTER the cap (gemma4) — the CPU classifier's order
@@ -2619,7 +2628,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bsupp : MetalBuffer?
     var u_nsupp : MetalBuffer?
     if (gpu_logits && nsupp > 0l) {
-        bsupp = pool_acquire_untracked(g_pf_upool, g_dev, uint64(nsupp * 4l))
+        bsupp = pool_acquire_untracked_pinned(g_pf_upool, g_dev, uint64(nsupp * 4l))
         unsafe {
             var sp = reinterpret<uint?>(metal_buffer_contents(bsupp))
             for (i in range64(nsupp)) {
@@ -2641,12 +2650,15 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_dim2 : MetalBuffer?
     var u_wm_tot : MetalBuffer?
     if (warm) {
-        bwm_res = pool_acquire(g_pf_pool, g_dev, uint64(npos * dim * 4l))
-        bwm_emb = pool_acquire(g_pf_pool, g_dev, uint64(npos * dim * 4l))
-        bwm_cat = pool_acquire(g_pf_pool, g_dev, uint64(mp * 2l * dim * 4l))
-        bwm_tmp = pool_acquire(g_pf_pool, g_dev, uint64(npos * dim * 4l))
+        bwm_res = pool_acquire_pinned(g_pf_pool, g_dev, uint64(npos * dim * 4l))
+        bwm_emb = pool_acquire_pinned(g_pf_pool, g_dev, uint64(npos * dim * 4l))
+        bwm_cat = pool_acquire_pinned(g_pf_pool, g_dev, uint64(mp * 2l * dim * 4l))
+        bwm_tmp = pool_acquire_pinned(g_pf_pool, g_dev, uint64(npos * dim * 4l))
         u_dim2 = uniform_u32(uint(2l * dim))
         u_wm_tot = uniform_u32(uint(npos * dim))
+        if (wide) {   // this edge reads x_b host-side - split the borrow first
+            ds_split_quantum(t, s, npos)
+        }
         // shifted embeds: row p pairs the NEXT position's embed with hidden p — s.x_b still
         // holds the window's embed panel here; the garbage last row reuses row 0
         unsafe {
@@ -2675,6 +2687,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // keeps capture order; DASLLAMA_METAL_PF_CAPTURE=0 = the direct serial-encode rollback.
     let cap = g_pf_env_capture
     var cbs & = unsafe(g_pf_cbs)
+    residency_flush()   // commit THIS eval's own notes before its first submission
     cbs |> clear()
     cbs |> reserve(ncb)
     var cb : MetalCommandBuffer?
@@ -2696,6 +2709,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 enc = cap ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
                 if (cap) {
                     gr_arm(true)
+                }
+            }
+            if (l == 0l && wide) {   // slice the wide quantum on-device: x, then the slice-major ds planes
+                enc_head_restride(enc, bwide, 0ul, bx, 0ul, u_wide_rw, u_wide_dim, u_total_dim, npos * dim)
+                for (sl in range64(nds)) {
+                    enc_head_restride(enc, bwide, uint64((sl + 1l) * dim * 4l), bds, uint64(sl * npos * dim * 4l), u_wide_rw, u_wide_dim, u_total_dim, npos * dim)
                 }
             }
             if (l == 0l && ple_gpu) {
@@ -3343,8 +3362,11 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_upool, u_dim2, 4ul)
         pool_release(g_pf_upool, u_wm_tot, 4ul)
     }
-    if (nds > 0l) {
-        pool_release(g_pf_upool, bds, bytes_ds)
+    if (bds != null) {
+        pool_release(g_pf_pool, bds, bytes_ds)
+    }
+    if (bwide != null) {
+        pool_release(g_pf_upool, bwide, bytes_wide)
     }
     pool_release(g_pf_upool, bcos, bytes_tab)
     if (dual_rope) {
@@ -3410,6 +3432,10 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_upool, u_nsupp, 4ul)
     }
     pool_release(g_pf_upool, u_total_dim, 4ul)
+    if (wide) {
+        pool_release(g_pf_upool, u_wide_rw, 4ul)
+        pool_release(g_pf_upool, u_wide_dim, 4ul)
+    }
     pool_release(g_pf_upool, u_total_h, 4ul)
     if (u_total_h2 != null) {
         pool_release(g_pf_upool, u_total_h2, 4ul)

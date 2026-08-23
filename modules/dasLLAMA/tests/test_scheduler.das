@@ -760,7 +760,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
 // ===== media validation: submit refuses malformed shapes by panic =====
 
 [test]
-def test_scheduler_media_validation(t : T?) {
+def test_scheduler_media_validation(t : T?) {   // nolint:STYLE038 — one flat story: each malformed shape probes the same submit guard
     t |> run("submit panics on malformed media shapes (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
             return
@@ -812,6 +812,28 @@ def test_scheduler_media_validation(t : T?) {
                 tripped = true
             }
             t |> success(tripped, "media rows with n_media == 0 panic instead of dropping silently")
+            tripped = false
+            try {
+                var bad <- PendingReq(id = 13l, params = greedy, max_new = 4l, media_at = 1l, n_media = 2l)
+                bad.prompt := prompt
+                bad.media_embd |> resize(3l * m.config.dim)   // oversized: the exact-width guard refuses slop
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "oversized media rows panic")
+            tripped = false
+            try {
+                m.config.n_deepstack = 3l   // a deepstack decoder: image rows arrive (1+n)·dim-wide
+                var bad <- PendingReq(id = 14l, params = greedy, max_new = 4l, media_at = 1l, n_media = 2l, media_non_causal = true)
+                bad.prompt := prompt
+                bad.media_embd |> resize(2l * m.config.dim)   // narrow feed = the slice adds would silently skip
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            m.config.n_deepstack = 0l
+            t |> success(tripped, "narrow image rows on a deepstack decoder panic")
             unsafe {
                 delete sch
             }

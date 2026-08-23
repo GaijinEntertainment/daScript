@@ -9,6 +9,9 @@ require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads t
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
 require ?das_metal dasllama/dasllama_metal_prefill  // min-npos setter + stats + the shutdown/leak rail
 require ?das_metal dasllama/dasllama_metal_decode  // decode shutdown (the kq/quantized-KV arms touch the decode driver)
+require ?das_metal dasllama/dasllama_metal_common   // g_dev + residency_* — the pin witness probes the API directly
+require ?das_metal das_metal   // metal_new_residency_set/metal_release — the availability probe
+require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — g_env_metal.residency, read only inside the das_metal static_if half
 require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
@@ -443,6 +446,23 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     return
                 }
                 t |> success(same(cpu, gpu), "40-token continuation matches the CPU control (blob mul_mm, f32 activations)")
+                // the residency witness: a served prefill under the default knob pins the working
+                // set. Availability probes the API DIRECTLY, so a dead machinery cannot hide
+                // behind the macOS-<15 skip on a box whose OS serves the API.
+                var api_probe = metal_new_residency_set(dasllama_metal_common::g_dev)
+                if (api_probe != null) {
+                    metal_release(api_probe)
+                }
+                if (g_env_metal.residency) {
+                    if (api_probe != null) {
+                        t |> success(residency_active(), "the residency set is live on an API-serving OS")
+                        t |> success(residency_pinned() > 0l, "the served prefill pinned {residency_pinned()} buffers in the residency set")
+                    } else {
+                        t |> skip("MTLResidencySet unavailable (macOS < 15) - the pin witness has no API to observe")
+                    }
+                } else {
+                    t |> equal(residency_pinned(), 0l, "DASLLAMA_METAL_RESIDENCY=0 pins nothing")
+                }
             }
 
             // s16 arm (W2): the DEFAULT-load scale plane — blobs read raw f16 scales, the

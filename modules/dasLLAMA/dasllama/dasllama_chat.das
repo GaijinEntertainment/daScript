@@ -734,6 +734,28 @@ def add_user_image_(var c : ChatSession; img : VisionImage) {
     c.image_grid = vision_mrope_grid(c.embedder, c.embedder_scratch)
 }
 
+//! Queue PRE-ENCODED image soft-token rows (what `encode_image` emits — deepstack models:
+//! ``(1+n)·dim``-wide, length-checked) with the family's mrope `grid` ((0,0) = sequential) for
+//! the next respond(). MOVES `rows`; works on a plain chat — no embedder needed.
+def add_user_image_rows_(m : Model; var c : ChatSession; var rows : array<float>; n_rows : int64; grid : int2) {
+    if (c.n_image_rows > 0l) {
+        panic("dasLLAMA chat: one image per turn in v1 - respond() before adding another")
+    }
+    if (c.n_audio_rows > 0l) {
+        panic("dasLLAMA chat: audio already queued this turn - one media kind per turn")
+    }
+    if (empty(c.tmpl.image_pre.parts) || !image_vocab_ok(m, c.tmpl)) {
+        panic("dasLLAMA chat: this model's chat template declares no usable image span markers - it has no vision arm")
+    }
+    let rw = m.config.dim * (1l + m.config.n_deepstack)
+    if (long_length(rows) != n_rows * rw) {
+        panic("dasLLAMA chat: {n_rows} image rows need {n_rows * rw} floats ({m.config.n_deepstack} deepstack slices at dim {m.config.dim}), got {length(rows)}")
+    }
+    c.image_rows <- rows
+    c.n_image_rows = n_rows
+    c.image_grid = grid
+}
+
 //! Queue audio (16 kHz mono f32 PCM) for the next respond() — encoded to soft tokens NOW,
 //! spliced at the head of the next user turn (before its text). Composes with add_user in the
 //! same turn; call inside with_job_que() (the encoder threads its kernels).
