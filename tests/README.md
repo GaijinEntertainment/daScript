@@ -42,6 +42,8 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_variant_alias_aot.das | AOT variant-alias codegen (#3269) — delete of handled variant alias, builtin push of a variant element | |
 | test_int64_ptr_index.das | AOT raw-pointer indexing by int64/uint64 (#3391) — at/safe_at through non-var (`T * const`), var (`T *`), and const-pointee pointers | |
 | test_range64_ctor_args.das | AOT most-vexing-parse — a for-source of constructor-style casts only (`range64(int64(a), int64(b))`) must emit a variable, not a function declaration | |
+| test_op2_operand_order_emit.das | AOT binary-op operand sequencing — impure-operand ops wrap in `das_ordered2` (braced init = left-to-right), pure and short-circuit ops don't | |
+| _ordered_op2_fixture.das | *(helper)* the op2 shapes the sequencing test emits — impure policy/plain/xor, pure, `&&`/`\|\|` | |
 
 ## apply/
 
@@ -298,6 +300,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | _fixture_pass.das | *(helper)* Passing test fixture | |
 | _fixture_skip.das | *(helper)* Skipped test fixture | |
 | test_json_output.das | dastest JSON output — `--json-file` report format, suite results, pass/fail/skip counts | |
+| test_dasfmt_exclude_mask.das | das-fmt `--exclude-mask` — masked build-dir files are excluded (separator-normalized) and reported; unmasked verify stays red | |
 
 ## debug/
 

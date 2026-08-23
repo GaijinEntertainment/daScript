@@ -15,4 +15,13 @@ the hot set; its cost is judged against the allocate/copy/rehash it rides.
 The ledger the checklist's hot-path rule routes to. Each entry: what was added, where, why
 correctness required it, and the alternative that was rejected.
 
-(none)
+- **`das_ordered2`** (`aot.h`) — a two-member aggregate the AOT emitter wraps around any
+  binary op whose operands are not both side-effect-free, because braced aggregate init is
+  the C++ construct that guarantees left-to-right evaluation; a plain call argument list or
+  binary operator is unsequenced, and the interpreter and JIT both evaluate left-then-right.
+  Optimized builds flatten the wrapper to nothing (full-corpus A/B: regen + compile of all
+  AOT TUs is timing-neutral); an unoptimized AOT build pays a copy of both operand values
+  plus an immediately-invoked lambda frame per wrapped op. Ops whose policy operands need a
+  ref cast decline the wrapper and keep the plain unordered emission. Rejected alternative:
+  hoisting operands to named temporaries in the emitter, which needs statement-position
+  rewriting the textual visitor cannot do inside an expression.

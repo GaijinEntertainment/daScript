@@ -195,6 +195,17 @@ namespace das {
         }
     };
 
+    // Sequenced operand capture: braced aggregate init is guaranteed left-to-right,
+    // restoring the interpreter's operand evaluation order where a C++ call argument
+    // list or binary operator leaves it unsequenced. Emitted by daslib/aot_cpp.das
+    // for binary ops with impure operands.
+    template <typename LT, typename RT>
+    struct das_ordered2 {
+        LT left;
+        RT right;
+    };
+    template <typename LT, typename RT> das_ordered2 ( LT, RT ) -> das_ordered2<LT,RT>;
+
     template <typename TT>
     __forceinline void das_zero ( TT & a ) {
         using TTNC = typename remove_const<TT>::type;

@@ -1951,9 +1951,71 @@ class public CppAot : AstVisitor {
                 "<<=", ">>=", "<<<=", ">>>="
                 ]._any(_ == op)
     }
+    def needsOrderedOperands(that : ExprOp2?) {
+        if ((that.left.flags.noSideEffects && that.right.flags.noSideEffects)
+                || !that.func.flags.builtIn || that.func.flags.callBased
+                || isRefPolicyOp(that) || isShortCircuitBoolOp(that)) return false;
+        if (isOpPolicy2(that)) {
+            assume pt = opPolicyBase(that);
+            if (policyRefArg(pt, that.left._type) || policyRefArg(pt, that.right._type)) return false;
+        }
+        return true;
+    }
+    def isShortCircuitBoolOp(that : ExprOp2?) {
+        if (isOpPolicy2(that) || that._type.baseType != Type.tBool) return false;
+        let op = string(that.op);
+        return op == "&&" || op == "||";
+    }
+    def policyRefArg(pt, argType : TypeDeclPtr) {
+        return policyArgNeedCast(pt, argType) && argType.isRefType;
+    }
+    def plainOp2Text(that : ExprOp2?) : string {
+        if (that._type.baseType == Type.tBool) {
+            let that_op = string(that.op)
+            match (that_op) {
+                if ("&") { return "&&"; }
+                if ("|") { return "||"; }
+                if ("^" || "^^") { return "!="; }
+            }
+        }
+        return string(that.op);
+    }
+    def writeOrderedPolicyArg(pt, argType : TypeDeclPtr; argExpr : string) {
+        if (policyArgNeedCast(pt, argType)) {
+            let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
+            let type_str = describeCppType(argType, cfg);
+            write(*ss, "cast<{type_str}>::from({argExpr})");
+        } else {
+            write(*ss, argExpr);
+        }
+    }
 
     def override preVisitExprOp2(var that : ExprOp2?) {
         if (!noBracket(that)) write(*ss, "(");
+        if (needsOrderedOperands(that)) {
+            write(*ss, "[&](auto && __lr) \{ return ");
+            if (isOpPolicy2(that)) {
+                assume pt = opPolicyBase(that);
+                if (policyResultNeedCast(pt, that._type)) {
+                    let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
+                    let type_str = describeCppType(that._type, cfg);
+                    write(*ss, "cast<{type_str}>::to(");
+                }
+                outPolicy(pt);
+                write(*ss, "::{opPolicyName(that)}(");
+                writeOrderedPolicyArg(pt, that.left._type, "__lr.left");
+                write(*ss, ",");
+                writeOrderedPolicyArg(pt, that.right._type, "__lr.right");
+                write(*ss, ",*__context__,nullptr)");
+                if (policyResultNeedCast(pt, that._type)) {
+                    write(*ss, ")");
+                }
+            } else {
+                write(*ss, "(__lr.left {plainOp2Text(that)} __lr.right)");
+            }
+            write(*ss, "; \}(das_ordered2\{ ");
+            return ;
+        }
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             that.arguments |> clear();
             var left := that.left;
@@ -1993,6 +2055,10 @@ class public CppAot : AstVisitor {
         }
     }
     def override preVisitExprOp2Right(that : ExprOp2?; right : ExpressionPtr) {
+        if (needsOrderedOperands(that)) {
+            write(*ss, ", ");
+            return ;
+        }
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             CallFunc_visitCallArg(that, that.left, false);
             CallFunc_preVisitCallArg(that, that.right, true);
@@ -2020,22 +2086,17 @@ class public CppAot : AstVisitor {
         } elif (isSetBool(that)) {
             write(*ss, "),(");
         } else {
-            if (that._type.baseType == Type.tBool) {
-                var op = "";
-                let that_op = string(that.op)
-                match (that_op) {
-                    if ("&") { op = "&&"; }
-                    if ("|") { op = "||"; }
-                    if ("^" || "^^") { op = "!="; }
-                    if (_) { op = that_op; }
-                }
-                write(*ss, " {op} ");
-            } else {
-                write(*ss, " {that.op} ");
-            }
+            write(*ss, " {plainOp2Text(that)} ");
         }
     }
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
+        if (needsOrderedOperands(that)) {
+            write(*ss, " \})");
+            if (!noBracket(that)) {
+                write(*ss, ")");
+            }
+            return that;
+        }
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             CallFunc_visitCallArg(that, that.right, true);
             CallFunc_visit(that);
