@@ -315,13 +315,10 @@ def private g3v_layout(var t : Gemma3vTower; var off : int64&; var qo : int64&) 
 def private g3v_stage_up(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma3vStaging;
                          @scratch var wscratch : array<float>; wo : int64) {
     let d = st.t.n_embd
-    let file_n = st.t.n_ff * d
-    let served = st.t.ff_pad * d
     if (st.t.q8) {
         tower_stage_q8_zero_rows(m, b, name, st.qblob, st.qscales, wscratch, wo, st.t.n_ff, st.t.ff_pad, d, "dasLLAMA gemma3v q8")
     } else {
-        gguf_read_tensor_f32(m, b, name, st.blob, wo, file_n)
-        tower_zero_span(st.blob, wo + file_n, served - file_n)
+        tower_stage_f32_zero_rows(m, b, name, st.blob, wo, st.t.n_ff, st.t.ff_pad, d)
     }
 }
 
@@ -336,25 +333,7 @@ def private g3v_stage_down(m : GGUFMeta; b : array<uint8> | #; name : string; va
         tower_stage_q8_pad_cols(m, b, name, st.qblob, st.qscales, wscratch, rowscratch, wo, d, ff, fp, "dasLLAMA gemma3v q8")
         return
     }
-    if (long_length(rowscratch) < d * ff) {
-        rowscratch |> reserve(d * ff)
-        rowscratch |> resize(d * ff)
-    }
-    gguf_read_tensor_f32(m, b, name, rowscratch, 0l, d * ff)
-    g3v_expand_rows(st.blob, wo, rowscratch, d, ff, fp)
-}
-
-def private g3v_expand_rows(var dst : array<float>; at : int64; src : array<float>; rows, ff, fp : int64) {
-    unsafe {
-        var dp = addr(dst[at])
-        let sp = addr(src[0])
-        for (r in range64(rows)) {
-            memcpy(dp + r * fp, sp + r * ff, ff * 4l)
-            for (i in range64(ff, fp)) {
-                dp[r * fp + i] = 0.0
-            }
-        }
-    }
+    tower_stage_f32_pad_cols(m, b, name, st.blob, rowscratch, wo, d, ff, fp)
 }
 
 // the reads, in layout order — the per-block f32 region is ln1 w/b ln2 w/b, then the six GEMM

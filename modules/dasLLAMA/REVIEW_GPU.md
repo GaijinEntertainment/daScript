@@ -55,11 +55,14 @@ not count.
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
 
-**A backend-only capability goes in that backend's file for the matching role** — the
-per-role files every backend has a twin of: the kernel home, `_common` (device state and
-plumbing), `_decode`, `_prefill`, `_shapes` (portable servability gates), and the
-kernel-access lens. A capability with no matching role gets its own role file; anything else
-is a grab-bag, and a grab-bag file is a defect.
+**A backend-only capability goes in that backend's file for the matching role.** The roles a
+backend's files partition into: the kernel home (`_kernels` on Metal, `_classes` on Vulkan),
+`_common` (device state and plumbing), `_decode`, `_prefill`, `_shapes` (portable
+servability gates), `_tower` (the encoder-tower driver), `_asr_dec` (the ASR-decoder
+driver), and the kernel-access lens (`_lens` on Metal, `_dispatch` on Vulkan); a backend
+carries a role's file only once it has the capability. A capability with no matching role
+gets its own role file — and adds its role to this list and to `ARCHITECTURE.md` §1.5 in
+the same change; anything else is a grab-bag, and a grab-bag file is a defect.
 
 **A GPU family shares ONE device and queue from `dasllama/dasllama_<gpu>_common.das`'s
 init.** A module creating its own is a defect.
@@ -81,9 +84,10 @@ per driver.** A string-typed metal decline is a defect.
 **Decline counting lives in `dasllama/dasllama_metal_common.das`.** A counter beside the
 decline site is a defect.
 
-**A diff that adds or removes a Metal-only or Vulkan-only hook, role, or served path lands its
-`ARCHITECTURE.md` §1.5 edit in the same change — including when §1.5 already carries that class
-of asymmetry, and including §1.5's per-driver lists of registered hooks and borrowed kernels.**
+**A diff that adds, removes, or changes the mechanism of a Metal-only or Vulkan-only hook,
+role, served path, or backend-only capability lands its `ARCHITECTURE.md` §1.5 edit in the
+same change — including when §1.5 already carries that class of asymmetry, and including
+§1.5's per-driver lists of registered hooks and borrowed kernels.**
 §1.5 is the closed list; an asymmetry it does not carry does not exist.
 
 **A Vulkan pipeline is created only by a `[vk_dispatch]`-generated `ensure_*` and torn down by
@@ -92,32 +96,31 @@ of asymmetry, and including §1.5's per-driver lists of registered hooks and bor
 **A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its size
 is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized wrong.
 
-**A change to a GPU decode or prefill driver — `dasllama/dasllama_metal_decode.das`,
+**A change to a GPU decode or prefill driver (`dasllama/dasllama_metal_decode.das`,
 `dasllama/dasllama_metal_prefill.das`, `dasllama/dasllama_vulkan_decode.das`,
-`dasllama/dasllama_vulkan_prefill.das`, the servability gate that admits models to them
-(`dasllama/dasllama_metal_shapes.das`), or the resident rail in
-`dasllama/dasllama_gpu_resident.das` (`resident_upload`, `resident_plan`, and the decode,
-batch-decode and prefill overrides it registers) — ships with `harness/parity.das` GPU-vs-CPU
-runs on one q8 and one kq model, with `--kv` matching the armed mirror codec.** The Metal arm is
-`--ngl`; the vulkan arm is `DASLLAMA_GPU=1`, never `--ngl`, and its driver declines
-codec-mismatched sessions silently, so that log must show `resident driver armed`.
+`dasllama/dasllama_vulkan_prefill.das`), to the servability gates in
+`dasllama/dasllama_metal_shapes.das`, or to the residency rail's serving paths in
+`dasllama/dasllama_gpu_resident.das` — the upload, plan, and decode/batch-decode/prefill
+override paths a session runs through, never the bake paths — ships `harness/parity.das`
+GPU-vs-CPU runs on one q8 and one kq model, with `--kv` matching the armed mirror codec.**
 
-**A change to the tower driver `dasllama/dasllama_metal_tower.das` — or to the `AttnArgs`
-kargs struct, or to any kernel class dispatched through `enc_qk_mm`, `enc_softmax`,
-`enc_av_mm`, `pf_enc_bf16_mm`, or `enc_add_bias_rows` — ships two runs: the per-family GPU
-oracle gates `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, and `tests/test_gemma3v.das`,
-for every family the changed code is reachable from and all three when the change touches
-state or setup the whole driver shares rather than one family's path (any module-level
-`g_tw_*` variable in that file, `metal_tower_init`, or `dasllama_metal_tower_register`); and
-a `tests/test_model_image.das` run with the `mtower` arm, with `metal_tower_stats()`'s encode
-count rising across the run.** The image run is the parity instrument for the families no
-per-family gate file covers.
+**A `harness/parity.das` run arms its backend: the Metal arm is `--ngl`; the Vulkan arm is
+`DASLLAMA_GPU=1`, never `--ngl`, and its log shows `resident driver armed`.** The Vulkan
+driver declines codec-mismatched sessions silently.
 
-**A diff that adds a tower family the Metal tower driver serves — one whose bring-up
-registers a `*_gpu` hook in `dasllama/dasllama_metal_tower.das` — or gives the tower driver a
-newly borrowed kernel class or kargs struct, adds that family's per-family GPU oracle gate
-file, or that borrowed name, in the same change, to the trigger of the rule in this
-checklist that requires the per-family GPU oracle gates and the `mtower` image run.**
+**A change to `dasllama/dasllama_metal_tower.das`, to the `AttnArgs` kargs struct, or to any
+kernel class the tower dispatches — the builders its own kernel classes declare, plus the
+prefill builders it borrows (`enc_qk_mm`, `enc_softmax`, `enc_av_mm`, `pf_enc_bf16_mm`,
+`enc_add_bias_rows`, `enc_rope`) — ships the per-family GPU oracle gate of every family the
+changed code is reachable from (`tests/test_gemma4uv.das`, `tests/test_gemma4v.das`,
+`tests/test_gemma3v.das`, `test_qwen3v_tier1_metal` in `tests/test_qwen3v.das`), ALL of them
+when the change touches state or setup the whole driver shares (any module-level `g_tw_*`
+variable, `metal_tower_init`, or `dasllama_metal_tower_register`); and a
+`tests/test_model_image.das` run with the `mtower` arm, with `metal_tower_stats()`'s encode
+count rising across the run.** A `register_<fam>_gpu` call in `dasllama_metal_tower_register`
+where `dasllama/dasllama_<fam>.das` is a family file names a family; a registered family whose
+gate file this rule does not name, and a prefill builder the tower borrows that this rule
+does not name, are the rule's defects to fix in the same change.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq

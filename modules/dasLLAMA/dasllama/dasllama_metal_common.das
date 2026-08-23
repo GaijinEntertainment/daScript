@@ -558,6 +558,88 @@ def mirror_release(var mr : KVMirror) {
 //! re-initializes on the next served step; all mirrors rebuild from the CPU caches on demand.
 
 
+// ===== the residency pin (ggml-metal's model; the mechanism + figures: ARCHITECTURE.md 2.12) =====
+// The first submission after a CPU-only window repays the per-commit residency pass over the
+// resident bytes; a committed+requested MTLResidencySet keeps it a no-op.
+var private g_rset : MetalResidencySet?
+var private g_rset_tried = false
+var private g_rset_dirty = false
+var private g_rset_count = 0l
+var private @scratch g_rset_seen : table<uint64; bool>   // buffer handles already pinned - grow-only, reused across evals (pool recycles re-note)
+
+//! Pin one buffer that lives until the next reset (weight regions/planes, pool buffers — the
+//! binding has no remove, so per-session mirrors and the rebuild-prone arena stay out). Cheap
+//! and idempotent; a no-op until `residency_flush` creates the set.
+def residency_note(buf : MetalBuffer?) {
+    if (buf == null || g_rset == null) {
+        return
+    }
+    let key = intptr(buf)
+    if (g_rset_seen?[key] ?? false) {
+        return
+    }
+    metal_residency_set_add_buffer(g_rset, buf)
+    g_rset_seen[key] = true
+    g_rset_count++
+    g_rset_dirty = true
+}
+
+//! Driver-entry hook: create the set on the first served step, then commit+request any
+//! pending adds. Cheap when clean.
+def residency_flush {
+    if (g_rset == null) {
+        if (g_rset_tried || !g_env_metal.residency) {
+            return
+        }
+        g_rset_tried = true
+        g_rset = metal_new_residency_set(g_dev)
+        if (g_rset == null) {   // the API answers null below macOS 15 - stay on the old behavior
+            return
+        }
+        residency_note(g_signs)
+    }
+    if (g_rset_dirty) {
+        metal_residency_set_commit(g_rset)
+        metal_residency_set_request(g_rset)
+        g_rset_dirty = false
+    }
+}
+
+//! Buffers pinned so far (0 = off or not yet created) — the knob's test witness.
+def residency_pinned : int64 => g_rset_count
+
+//! True when a residency set is live (knob on AND the OS serves the API — macOS 15+).
+def residency_active : bool => g_rset != null
+
+[cold_path]   // rides the region flush/teardown legs AND both driver shutdowns: pinned buffers die with their pools
+def residency_reset {
+    if (g_rset != null) {
+        metal_release(g_rset)
+        g_rset = null
+    }
+    unsafe {
+        delete g_rset_seen
+    }
+    g_rset_tried = false
+    g_rset_dirty = false
+    g_rset_count = 0l
+}
+
+//! `pool_acquire` + a residency note: the pin home for every recycled prefill/decode pool
+//! buffer (they live until drain, which rides the reset legs).
+def pool_acquire_pinned(var pool : MetalBufferPool; dev : MetalDevice?; bytes : uint64) : MetalBuffer? {
+    var b = pool_acquire(pool, dev, bytes)
+    residency_note(b)
+    return b
+}
+
+//! The untracked twin (uniforms, upload staging) — same pin, same lifecycle.
+def pool_acquire_untracked_pinned(var pool : MetalBufferPool; dev : MetalDevice?; bytes : uint64) : MetalBuffer? {
+    var b = pool_acquire_untracked(pool, dev, bytes)
+    residency_note(b)
+    return b
+}
+
 [cold_path]   // first touch (or a wider re-touch) of a region — the upload, not the per-dispatch path
 def private region_upload_new(key : uint64; src : void?; bytes : uint64) : MetalBuffer? {
     // UNTRACKED: weights are GPU-read-only (written once, before any commit) — tracking ~450 of them made scheduler dependency analysis the dominant non-GPU cost (~70ms/prefill on 3B)
@@ -565,6 +647,7 @@ def private region_upload_new(key : uint64; src : void?; bytes : uint64) : Metal
     unsafe {
         memcpy(metal_buffer_contents(buf), src, bytes)
     }
+    residency_note(buf)
     g_regions[key] = RegionEntry(buf = buf, bytes = bytes)
     return buf
 }
@@ -595,6 +678,7 @@ def private region_upload_cat3_new(key : uint64; p0 : void?; b0 : uint64; p1 : v
             memcpy(reinterpret<void?>(d + (b0 + b1)), p2, b2)
         }
     }
+    residency_note(buf)
     g_regions_cat3[key] = RegionEntry(buf = buf, bytes = b0 + b1 + b2)
     return buf
 }
@@ -644,6 +728,7 @@ def plane_buffer(dev : MetalDevice?; base : void?; bytes : uint64; mapped : bool
             }
         }
     }
+    residency_note(buf)
     g_regions[key] = RegionEntry(buf = buf, bytes = bytes)
     return buf
 }
@@ -1810,6 +1895,7 @@ def weight_caches_stale() : bool {
 
 [cold_path]   // regions release + retire drain — the shared tail of the flush/teardown legs
 def private regions_release_all {
+    residency_reset()   // pinned buffers are dying with the regions - the set goes first
     for (e in values(g_regions)) {
         if (e.buf != null) {
             metal_release(e.buf)

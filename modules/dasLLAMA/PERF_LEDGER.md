@@ -12,6 +12,33 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **OPEN (narrowed by slice J) — the first Metal submission after a CPU-only window repays
+  the per-commit tracked-set pass (measured 2026-08-23, M1 Max; probes = quiet `-jit` runs
+  with the rig's tune manifest, cells = the released `lcpp_bench` exe, `--image --image-think
+  -r 3 -t 8 --ngl 99`; plan: `qwen3vl_plan.md` slices M/J).** The pre-J reds (released-rig
+  cells: 3B −12%, 4B −16%, 8B −29%, 30B −41%) were mostly this: das TEXT prefill at the same
+  padded M is at parity (rig `-p` + `--ref`: 4B +2.7%, 8B −6.2%) and the whole image-eval
+  machinery prices +10 ms (probe). The slice-J Metal tower deleted the multi-second CPU
+  encode burns; the residual (post-J rig cells: 4B/8B −16%, 30B −5%) is a ~40 ms one-time
+  commit→execution slack after ANY CPU-only window. Refuted by probe: driver wake (empty cb
+  round-trips 0.107 ms), per-page faults, light pulse-trains, denormals, affinity, cb-split
+  counts, queue identity. The MTLResidencySet pin (shipped, `DASLLAMA_METAL_RESIDENCY`)
+  holds the SHORT-window case — released-rig A/B ×2: encode 177/180 ms pinned vs 194/194
+  unpinned on the 4B image cell — but not long windows; making the prefill pools untracked
+  reds `test_metal_prefill_parity`, so the tracking is load-bearing. **The scoped fix is a
+  per-buffer tracking audit** (which pool buffers need Metal's tracker vs the capture rail's
+  own barriers). Until then, media-turn pp keeps the slack wherever a CPU window precedes
+  the prefill (qwen25v exact-only and the conformer audio encoders keep the full CPU-burn
+  form).
+
+- **OPEN — arming Metal makes the CPU q8 tower encode ~1.7x slower (measured 2026-08-23,
+  M1 Max, 8B qwen3v tower: 3.26-3.45 s with MetalMode.required vs 1.90 s on the CPU leg,
+  same t=8; probe = a quiet `-jit` run with the rig's tune manifest, leg = the released
+  `lcpp_bench` exe).** Reproduces in the quiet probe, so it is not the bench harness. Mechanism
+  unnamed — worker placement / QoS when the Metal queue is live is the suspect class.
+  Costs every Metal-leg image cell ~1.4-1.6 s of encode today; the Metal tower deletes the
+  arm entirely, but the mechanism matters wherever a CPU encoder coexists with Metal serving.
+
 - **RULED AND LANDED — the spliced image prefill trailed llama.cpp on Metal; the fused span
   eval closed it (measured 2026-08-21, M1 Max, the fused-image-span arc).** The record-grade
   gap was das/lcpp **0.52–0.62×** `img:pp` across all three vision models (E2B 687 vs 1101,

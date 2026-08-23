@@ -16,7 +16,7 @@ mmproj, or an image or audio fixture) a recorded row or manifest pins, answers t
 `performance/REVIEW.md`.** A test or tool merely opening a stocked model file by name does
 not route.
 
-**Every `dasllama/` change applies `tests/REVIEW.md` for the test obligation it names.**
+**Every `dasllama/` change applies `tests/REVIEW.md`.**
 
 **A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
 
@@ -40,20 +40,22 @@ not thereby pick up the other modality's checklist.
 **A routed file applies BOTH the checklist it routes to and this one; every other file under
 `modules/dasLLAMA/` applies this one.**
 
-**Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same change.** Kernel
-work is whatever changes the compiled compute a sidecar's winners were measured over: a kernel
-body, a variant set, or a `[tune]` / `[tune_perm]` / `[tune_companion]` grid. `[tune_scope]`
-metadata (`covers=`, `tuner=`, `version_of=`) is not kernel work.
+**Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same
+change.** Kernel work is whatever changes the generated kernel source, or the set of compiled
+pipeline variants (PSOs) built from it — a kernel body, a variant set, or a `[tune]` /
+`[tune_perm]` / `[tune_companion]` grid. A host-side bind or dispatch-argument change (an
+`@off` binding, a uniform value) is not, and neither is `[tune_scope]` metadata (`covers=`,
+`tuner=`, `version_of=`).
 
 **A `DASLLAMA_VERSION` bump with neither the kernel roster — the set of `[tune]`-scoped
 kernels a sidecar carries winners for — nor sidecar interchangeability changed is a
 defect**: equal versions mean an equal kernel roster and an interchangeable sidecar set
 (the exchange keys validity on version and box).
 
-**A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel, can
-this value change between dispatches? If yes it is data and belongs in a uniform or a kargs
-struct; if no it is shape and must not reach the kernel as a uniform, a kargs field, or a
-helper parameter.
+**A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel,
+can this value change between dispatches? If yes it is data and belongs in a uniform, a kargs
+field, or an `@off` bind offset; if no it is shape and must not reach the kernel as a uniform,
+a kargs field, an `@off` bind offset, or a helper parameter.
 
 **Peak memory wins ties against load cost.** A change to an allocation reached from a load,
 bake, or convert path (judge a shared helper at each call site) that trades footprint for speed
@@ -105,10 +107,9 @@ EXECUTED, not skipped.**
 **An override announces itself where it changes the outcome.** An override is an environment
 knob or an exported runtime setter that moves a gate, policy, or threshold off its default;
 a CLI flag is never an override under this rule. Where one changes an observable outcome of
-the run — what it measures, writes, reads, or mints — a printed line names it by its own
-spelling (the env variable name, or the setter's function name); set-but-inert stays silent,
-per-site repeats are fine. Adding one, or giving one a new effect, without the announce is a
-defect.
+the run — what it writes, reads, or mints — a printed line names it by its own spelling (the
+env variable name, or the setter's function name); set-but-inert stays silent, per-site
+repeats are fine. Adding one, or giving one a new effect, without the announce is a defect.
 
 **A self-measured served-turn time — tok/s, a turn wall — entering
 `performance/records/<box>.json` or `PERF_LEDGER.md` comes from the released `lcpp_bench`
@@ -119,8 +120,10 @@ tutorial's printed wall-clock is teaching output, feeding no board.
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
-`PROFILE.md` section. A modality, a family, or a serving path a user can wait on counts; a new
-family inside an existing cell owes a recorded row on at least one box.
+`PROFILE.md` section. A servable capability is a modality, a family, or a serving path — a
+lane a user's turn can be served through, a q8 or f32 serving lane and a GPU tower included;
+a new family or serving path landing inside an existing cell re-mints that cell's row on at
+least one box instead.
 
 **A timing figure describing a served turn as a whole — tok/s, latency, a whole-turn model
 or engine comparison — is a defect wherever it is written down with no cell behind it: a
@@ -131,9 +134,10 @@ delta, a noise floor, tuner timing — is settled by the sidecar or manifest sta
 
 **A figure measuring one engine stage inside a served turn — a stage wall, a stage share, a
 stage speedup, or a cross-engine comparison of one stage; never a board cell's `pp`/`tg`
-rate — names the harness and flags that produced it in the same sentence (a table heading
-naming them covers its rows), wherever it is written down: a checked-in doc, a ledger, a
-code comment, or a PR description.**
+rate — names the harness and flags that produced it, wherever it is written down: a
+checked-in doc, a ledger, a code comment, or a PR description.** The naming rides the
+figure's own sentence, a table heading that covers the table's rows, or a section-level
+provenance line that covers the paragraphs under it.
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
 `parse_image`'s mapping, and going live does no real work — repacking, quantizing, folding,
@@ -227,8 +231,7 @@ which file is the checklist's own).
 **A disk-order → compute-order transform lands per scope: kernel-layout in
 `dasllama/dasllama_repack.das`, load-scope in `dasllama/dasllama_layout.das`.**
 
-**When placement rules disagree on one function, `ARCHITECTURE.md` §1's charter decides; a
-diff that adds or moves such a function lands the charter line with it.**
+**When placement rules disagree on one function, `ARCHITECTURE.md` §1's charter decides.**
 
 **A CPU KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`,
 its format family kept whole.** GPU twins land in their backend kernel file.
@@ -258,13 +261,15 @@ file** — a single-caller helper sanctioned as tower-worthy is ledgered on `ARC
 
 **On the lane that serves the file's own planes, a weight plane's element type follows its
 SOURCE tensors, per weight region — the set of source tensors a carrier stores in one plane
-(a block stack, a merger/projector).** A
-carrier picks each weight region's plane type from that region's own tensors (a shipped
-file mixes types across regions), refuses a weight region whose tensors disagree in a
-message naming the offending tensor and both element types, and never converts silently. A
-lane that requantizes those planes (a q8 block-GEMM lane) is a separate flavor under its own
-image tag, and the load that picks it prints which lane it picked — not a silent conversion
-of the file's own planes.
+(a block stack, a merger/projector).**
+
+**A weight region — the set of source tensors a carrier stores in one plane — whose source
+tensors disagree on element type is refused in a message naming the offending tensor and
+both element types.**
+
+**A lane that requantizes or converts the file's planes (a q8 block-GEMM lane, an f32
+serving restage) is a separate flavor under its own image identity, and the load that picks
+it prints which lane it picked.**
 
 **A harness that prints output for another tool to compare fails loudly when it has nothing to
 print.** A run that ends without its comparison lines — wrong flags, failed load — exits

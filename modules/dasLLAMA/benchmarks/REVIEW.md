@@ -3,12 +3,11 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `../PROFILE.md`.
 
-**A timed rep that runs model or tower kernels — any `eval*` / `generate*` / `forward*` call
-on a `Model`, or any `encode_image*` / `encode_audio*` call on a vision or audio embedder or
-tower, all under `../dasllama/` — calls `tune_gate()` (`../performance/profile_common.das`)
-before its first timed rep**, or it measures fallback kernels silently. Tokenizing and
-detokenizing (`encode` / `encode_` / `decode` / `decode_`, on a `Model` or a `Tokenizer`)
-are not forward passes.
+**A timed rep that runs a forward pass — decoder or encoder kernels, however the rep enters
+them, the shipped facades (`respond_`, `transcribe`) included — calls `tune_gate()`
+(`../performance/profile_common.das`) before its first timed rep**, or it measures fallback
+kernels silently. Tokenizing and detokenizing (`encode` / `encode_` / `decode` / `decode_`,
+on a `Model` or a `Tokenizer`) run no forward pass.
 
 **A kernel A/B lab — a rig whose output selects between two implementations of the same
 compute — times both variants interleaved in one process with one instrument.** A board bench
@@ -43,6 +42,7 @@ tool on a board workload.
 **A number derived by subtracting one measured wall from another prints both raw walls, not
 only the difference.**
 
-**A change to the corpus input of the `--tok` measurement cell (`lcpp_bench.das`) ships
-before/after `--tok` rows from `lcpp_bench.das --tok` for each affected corpus, or a
-statement that the corpus bytes are unchanged.**
+**A change to the timed body or the measured input of a cell whose numbers are reported as
+evidence — a cell that mints rows into `../performance/records/<box>.json`, or the `--tok`
+ladder (`lcpp_bench.das`) — ships comparable before/after rows for each affected cell and
+corpus, or a statement that the measured quantity is unchanged.**

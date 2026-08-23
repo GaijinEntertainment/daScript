@@ -3,12 +3,12 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE.md`.
 
-**Routed from `REVIEW.md`: a diff touching `dasllama/dasllama_vision.das`,
-`dasllama/dasllama_vision_io.das`, `dasllama/dasllama_vision_embedder.das`,
-`dasllama/dasllama_tower.das` (the shared encoder-tower home), a vision family file — one
-`dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
-path that splices decoded media into a prompt or schedules such a stream, applies this list
-with the master's.**
+**This checklist governs `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
+`dasllama/dasllama_vision_embedder.das`, `dasllama/dasllama_tower.das` (the shared
+encoder-tower home), a vision family file — one `dasllama/dasllama_<family>.das` holding a
+single vision projector family — and any path that runs inside the program under review, not
+a spawned child process, and splices or schedules a stream carrying decoded media — pixels
+or audio samples; routed files apply this list with `REVIEW.md`'s.**
 
 **A GEMM in a vision family file goes through a shared batch-GEMM entry point — `mm_blob_b`,
 `mm_bf16_b`, `mm_plane_b` (`dasllama/dasllama_tower.das`) or `matmul_q8q8_batch`
@@ -18,7 +18,9 @@ with the master's.**
 carries `@exact_size` when its size follows the input — patch count, pixel count, clip
 frames — and `@scratch` when it is reused across encodes rather than freshly allocated; a
 buffer that is both carries both.** The annotation goes on the declaration, or on the callee
-parameter it grows through. A nolint where an annotation fits is a defect.
+parameter it grows through; a buffer grown ONLY through such a callee — one whose parameter
+carries `@scratch` and that reserves before it resizes — carries none of its own. A nolint
+where an annotation fits is a defect.
 
 **A debug or profiling leg in `dasllama/dasllama_vision_embedder.das` or a vision family file
 is `[cold_path]`.** A nolint where it fits is a defect.
@@ -42,8 +44,10 @@ loop, or splitting command buffers per layer, is not a split, and whether the on
 carries the surrounding head and tail tokens is free.
 
 **A media splice is expressed as two token spans plus a row block, everywhere it appears** — so
-BPE merges never cross the media. The engine, the scheduler, and the server all carry the same
-shape; any other representation at the seam is a defect.
+BPE merges never cross the media. Any other representation at the seam is a defect.
+
+**A change to the media row-block shape re-checks every out-of-module carrier of that shape
+in the same change** — `utils/dasllama-server/openai_server.das`.
 
 **A family gaining an arm for a media kind reaches the layer stack only through
 `forward_prefill_embd`** — a second prefill BODY for it is a defect; a sibling

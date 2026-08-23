@@ -1713,6 +1713,12 @@ struct Session {
     // [npos × n_deepstack·dim] — slice l adds to x_b after layer l while ds_active
     @scratch ds_embd : array<float>
     ds_active : bool
+    // transient, one prefill call: a BORROWED view of the caller's wide quantum (row stride
+    // wide_stride, first row wide_soff) — a wide-capable override uploads it whole and
+    // extracts slices on the GPU; the CPU fallback splits it via ds_split_quantum
+    @do_not_delete wide_src : float const?   // a borrow, never owned
+    wide_stride : int64
+    wide_soff : int64
     // MoE scratch (sized in make_run_state when n_expert > 0; empty for dense arches)
     moe_logits : array<float>   // router logits, then probs (n_expert)
     moe_w : array<float>        // the selected top-k weights (n_expert_used)
@@ -4817,6 +4823,29 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
 }
 
 // the deepstack add: x_b[r] += ds[r][slice l] for every row (dst dim-wide, ds n_ds·dim-wide)
+//! Split a borrowed wide quantum (`Session.wide_src`) into `x_b` + row-major `ds_embd` — the
+//! CPU-side half of the wide-borrow contract; a no-op with no borrow armed.
+def ds_split_quantum(t : Model; var s : Session; npos : int64) {
+    if (s.wide_src == null) {
+        return
+    }
+    let dim = t.config.dim
+    let n_ds = t.config.n_deepstack
+    let stride = s.wide_stride
+    if (long_length(s.ds_embd) < npos * n_ds * dim) {   // inline: PERF026 can't see @scratch through reserve_resize
+        s.ds_embd |> reserve(npos * n_ds * dim)
+        s.ds_embd |> resize(npos * n_ds * dim)
+    }
+    unsafe {
+        let src = s.wide_src
+        for (r in range64(npos)) {
+            let rb = (s.wide_soff + r) * stride
+            copy_floats(addr(s.x_b[r * dim]), src + rb, dim)
+            copy_floats(addr(s.ds_embd[r * n_ds * dim]), src + rb + dim, n_ds * dim)
+        }
+    }
+}
+
 def private ds_add_slice(var x_b : array<float>; ds : array<float>; l, n_ds, dim, npos : int64) {
     unsafe {
         var xp = addr(x_b[0])
@@ -4882,6 +4911,11 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
         stack_done = invoke(g_prefill_override, t, s, npos, start_pos)
     }
     if (!stack_done) {
+        if (s.ds_active && s.wide_src != null) {   // the wide borrow was for an override that declined
+            let ts_split = prof_ticks()
+            ds_split_quantum(t, s, npos)
+            prof_add("embed", ts_split)
+        }
         blob_only_panic(t, "prefill stack")
         // Metal-capable build about to chew a real prompt on the CPU stack — the silent profiling-time sink, not a serving path; fail loud unless CPU intent was declared.
         if (npos > CPU_PREFILL_PANIC_NPOS && has_prefill_override("metal") && !cpu_prefill_allowed()) {

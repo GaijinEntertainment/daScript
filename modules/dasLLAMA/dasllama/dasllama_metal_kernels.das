@@ -4762,8 +4762,8 @@ class MetalClamp {
 // compacts the AV output back; zero pads keep both directions exact.
 [metal_dispatch(name = "enc_head_restride", pso = "g_pso_head_restride", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalHeadRestride {
-    @ssbo @binding = 0 @role = "read" src : array<float>
-    @ssbo @binding = 1 @role = "write" dst : array<float>
+    @ssbo @binding = 0 @role = "read" @off = "soff" src : array<float>
+    @ssbo @binding = 1 @role = "write" @off = "doff" dst : array<float>
     @uniform @binding = 2 hs_src : uint
     @uniform @binding = 3 hs_dst : uint
     @uniform @binding = 4 total : uint   // npos * n_head * hs_dst

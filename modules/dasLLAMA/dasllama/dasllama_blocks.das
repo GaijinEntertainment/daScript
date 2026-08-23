@@ -1535,19 +1535,13 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     let dim = t.config.dim
     let ts_embed = prof_ticks()
     if (ds_wide) {
-        if (long_length(s.ds_embd) < npos * n_ds * dim) {   // inline: PERF026 can't see @scratch through reserve_resize
-            s.ds_embd |> reserve(npos * n_ds * dim)
-            s.ds_embd |> resize(npos * n_ds * dim)
+        // arm the wide BORROW instead of splitting: a wide-capable override uploads the whole
+        // quantum and extracts slices on the GPU; the CPU fallback splits via ds_split_quantum
+        unsafe {
+            s.wide_src = addr < float const? >(embd[0])
         }
-        for (r in range64(npos)) {
-            let rb = (src_off + r) * stride
-            for (i in range64(dim)) {
-                s.x_b[r * dim + i] = embd[rb + i]
-            }
-            for (i in range64(n_ds * dim)) {
-                s.ds_embd[r * n_ds * dim + i] = embd[rb + dim + i]
-            }
-        }
+        s.wide_stride = stride
+        s.wide_soff = src_off
         s.ds_active = true
     } else {
         let base = src_off * dim
@@ -1577,6 +1571,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     s.attn_uniform_lo = 0l
     s.attn_uniform_end = 0l
     s.ds_active = false
+    s.wide_src = null   // the borrow dies with the call
 }
 
 //! ``embed_text_rows`` at a wider row stride (deepstack quanta): each token's dim-wide
