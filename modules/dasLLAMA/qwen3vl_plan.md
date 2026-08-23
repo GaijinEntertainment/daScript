@@ -765,3 +765,41 @@ ds-WIDE decoder tax (+23/+13 ms wide-quantum staging in the PREFILL) + span atte
 decoder-side lever (dasllama_metal_prefill), not tower work; the no-ds 30B hitting parity is
 the discriminating witness. P28 rescored: enc BEAT the band; pp within ±8% on the no-ds
 model only. Captions correct on all three.
+
+#### Slice J round 3 (2026-08-23): the parity hunt — wide borrow, residency pin, and the named residual
+
+**Landed:** (1) the WIDE BORROW — `forward_prefill_embd` arms a borrowed view of the caller's
+wide quantum instead of splitting it (Session.wide_src/stride/soff; `ds_split_quantum` is the
+CPU fallback's lazy half and the warm/MTP edge's); the Metal prefill uploads the quantum WHOLE
+and slices it on-device via `enc_head_restride` (which gained src/dst offsets — dispatch-time
+binds, no MSL change); bds turns tracked when GPU-written. (2) the RESIDENCY PIN v2 —
+MTLResidencySet over weight regions/planes + every recycled pool buffer
+(`pool_acquire_pinned` twins, seen-table idempotence, reset rides regions_release_all;
+DASLLAMA_METAL_RESIDENCY=0 is the A/B rail, witness cell in test_metal_prefill_parity):
+**measured A/B ×2: encode −15 ms reproducible (177/180 vs 194/194) — the tower's first
+submission after its CPU stem; pp unmoved.** Gates: parity + attn_span (hazard-strict) +
+qwen3v 12/12.
+
+**The pp residual, fully audited (the probe ladder):** the das GPU work at the exact bench
+turn shape = 333 ms (963 tok/s, text-parity); the bench context adds a ~40 ms one-time
+commit→execution slack on the first submission after ANY CPU-only window (ncb-invariant,
+affinity-invariant, mint-invariant, unpindable — pools pinned changed nothing; denormals,
+page faults, queue identity, decode aftermath, assemble bursts all REFUTED by probe). The
+tracked-pools→untracked experiment REDDED parity — the hazard tracking is load-bearing, so
+the per-commit dependency pass (line-563 lore: ~70 ms/prefill before the weights went
+untracked) stays, and runs cold after CPU windows. **The remaining fix is a per-buffer
+tracking audit** (which pool buffers need Metal's tracking vs the capture rail's own
+barriers) — its own slice. P30 (wide borrow recovers the gap) WRONG — the split was ~2 ms;
+P31 (pool pins remove the slack) WRONG for pp, RIGHT for enc.
+
+**The final board (released rig, Metal, r=3, honest walk):**
+
+| model | enc das | enc ref | das vs ref | img:pp das | ref | gap |
+|---|---|---|---|---|---|---|
+| 4B (ds) | **178.8 ms** | ~250 | **+40%** | 851.8 | ~1009 | −16% |
+| 8B (ds) | **257.1 ms** | ~508 | **+98%** | 473.7 | ~566 | −16% |
+| 30B | **240.5 ms** | ~250 | +4% | 776.8 | ~815 | −5% |
+
+From the arc's start: enc 2194/3446/6411 → 179/257/241 (12-27x); pp −16/−29/−41% →
+−16/−16/−5%. das leads every qwen3v Metal encode; the pp residual is ONE named mechanism
+with a scoped fix.

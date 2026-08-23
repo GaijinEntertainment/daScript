@@ -9,6 +9,7 @@ require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads t
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
 require ?das_metal dasllama/dasllama_metal_prefill  // min-npos setter + stats + the shutdown/leak rail
 require ?das_metal dasllama/dasllama_metal_decode  // decode shutdown (the kq/quantized-KV arms touch the decode driver)
+require dasllama/dasllama_env   // g_env_metal.residency — the pin witness reads the knob it asserts
 require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
@@ -443,6 +444,17 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     return
                 }
                 t |> success(same(cpu, gpu), "40-token continuation matches the CPU control (blob mul_mm, f32 activations)")
+                // the residency witness: a served prefill under the default knob pins the working
+                // set (the measured win is the tower's first submission after its CPU stem)
+                if (g_env_metal.residency) {
+                    if (residency_active()) {
+                        t |> success(residency_pinned() > 0l, "the served prefill pinned {residency_pinned()} buffers in the residency set")
+                    } else {
+                        t |> skip("MTLResidencySet unavailable (macOS < 15) - the pin witness has no API to observe")
+                    }
+                } else {
+                    t |> equal(residency_pinned(), 0l, "DASLLAMA_METAL_RESIDENCY=0 pins nothing")
+                }
             }
 
             // s16 arm (W2): the DEFAULT-load scale plane — blobs read raw f16 scales, the

@@ -115,12 +115,13 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
     let mp = (npos + 31l) / 32l * 32l
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
-    var bx0 = pool_acquire(g_tw_pool, g_dev, uint64(mp * t.patch_dim * 4l))
-    var bx1 = pool_acquire(g_tw_pool, g_dev, uint64(mp * d * 4l))
-    var bout = pool_acquire(g_tw_pool, g_dev, uint64(mp * t.proj_dim * 4l))
+    var bx0 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.patch_dim * 4l))
+    var bx1 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * d * 4l))
+    var bout = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.proj_dim * 4l))
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx0))
         memcpy(p, addr(s.x0[0]), npos * t.patch_dim * 4l)
@@ -207,6 +208,7 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
     let mp = (npos + 31l) / 32l * 32l
     let nk64 = (npos + 63l) / 64l * 64l
     let ff = t.n_ff
@@ -215,14 +217,14 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     let bytes_row = uint64(mp * d * 4l)
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 4l)
-    var bx = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb2 = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bq = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bk = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bv = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bh = pool_acquire(g_tw_pool, g_dev, bytes_h)
-    var batt = pool_acquire(g_tw_pool, g_dev, bytes_att)
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
+    var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx))
         memcpy(p, addr(s.x[0]), npos * d * 4l)
@@ -324,6 +326,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
     let mp = (npos + 31l) / 32l * 32l
     let nk64 = (npos + 63l) / 64l * 64l
     let pairs = hs / 4l   // rotated pairs per rope axis = one packed table row
@@ -334,16 +337,16 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 4l)
     let bytes_tabs = uint64(npos * 4l * pairs * 4l)
-    var bx = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb2 = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bq = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bk = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bv = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bhg = pool_acquire(g_tw_pool, g_dev, bytes_h)
-    var bhu = pool_acquire(g_tw_pool, g_dev, bytes_h)
-    var batt = pool_acquire(g_tw_pool, g_dev, bytes_att)
-    var btabs = pool_acquire(g_tw_pool, g_dev, bytes_tabs)
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bhg = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
+    var bhu = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
+    var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
+    var btabs = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tabs)
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx))
         memcpy(p, addr(s.x[0]), npos * d * 4l)
@@ -495,6 +498,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
     let mp = (npos + 31l) / 32l * 32l
     let nk64 = (npos + 63l) / 64l * 64l
     let dp = t.n_head * hs_pad   // the padded attention width
@@ -504,16 +508,16 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     let bytes_rowp = uint64(mp * dp * 4l)
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 4l)
-    var bx = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb2 = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var braw = pool_acquire(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of the head restride
-    var bq = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
-    var bk = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
-    var bv = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
-    var bo_p = pool_acquire(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
-    var bh = pool_acquire(g_tw_pool, g_dev, bytes_h)
-    var batt = pool_acquire(g_tw_pool, g_dev, bytes_att)
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var braw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of the head restride
+    var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bo_p = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
+    var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
+    var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx))
         memcpy(p, addr(s.x[0]), npos * d * 4l)
@@ -543,17 +547,17 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
             enc_ln(enc, bx, bblob, uint64(o.ln1_w * 4l), bblob, uint64(o.ln1_b * 4l), bxb, u_d, u_eps, npos)
             enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_Q] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_Q] * 4l), u_d, u_totd, npos * d)
-            enc_head_restride(enc, braw, bq, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_K] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_K] * 4l), u_d, u_totd, npos * d)
-            enc_head_restride(enc, braw, bk, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_V] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_V] * 4l), u_d, u_totd, npos * d)
-            enc_head_restride(enc, braw, bv, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_head_restride(enc, braw, 0ul, bv, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
             enc_softmax(enc, batt, ka, null, npos, t.n_head)
             enc_av_mm(enc, batt, bv, bo_p, ka, mp, t.n_head, hs_pad)
-            enc_head_restride(enc, bo_p, bxb2, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
+            enc_head_restride(enc, bo_p, 0ul, bxb2, 0ul, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
             enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_O] * 4l), bxb2, bxb, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_O] * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
@@ -624,6 +628,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
     let mp = (npos + 31l) / 32l * 32l
     let nk64 = (npos + 63l) / 64l * 64l
     let dp = t.n_head * hs_pad   // the padded attention width
@@ -641,22 +646,22 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     let bytes_m4 = uint64(mp4 * 4l * d * 4l)
     let bytes_pr = uint64(mp4 * proj * 4l)
     let nds = t.n_deepstack
-    var bx = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var bxb2 = pool_acquire(g_tw_pool, g_dev, bytes_row)
-    var braw = pool_acquire(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of rope + the head restride
-    var bq = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
-    var bk = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
-    var bv = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
-    var bo_p = pool_acquire(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
-    var bh = pool_acquire(g_tw_pool, g_dev, bytes_h)
-    var batt = pool_acquire(g_tw_pool, g_dev, bytes_att)
-    var bcos = pool_acquire(g_tw_pool, g_dev, bytes_tab)
-    var bsin = pool_acquire(g_tw_pool, g_dev, bytes_tab)
-    var bm4 = pool_acquire(g_tw_pool, g_dev, bytes_m4)     // tap/tail LN out, the [nout x 4d] merged view
-    var bm4b = pool_acquire(g_tw_pool, g_dev, bytes_m4)    // fc1/mm0 out, GELU'd in place
-    var btail = pool_acquire(g_tw_pool, g_dev, bytes_pr)
-    var btap = nds > 0l ? pool_acquire(g_tw_pool, g_dev, uint64(nds) * bytes_pr) : null
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var braw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of rope + the head restride
+    var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bo_p = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
+    var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
+    var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
+    var bcos = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tab)
+    var bsin = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tab)
+    var bm4 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_m4)     // tap/tail LN out, the [nout x 4d] merged view
+    var bm4b = pool_acquire_pinned(g_tw_pool, g_dev, bytes_m4)    // fc1/mm0 out, GELU'd in place
+    var btail = pool_acquire_pinned(g_tw_pool, g_dev, bytes_pr)
+    var btap = nds > 0l ? pool_acquire_pinned(g_tw_pool, g_dev, uint64(nds) * bytes_pr) : null
     unsafe {
         var p = reinterpret<uint8?>(metal_buffer_contents(bx))
         memcpy(p, addr(s.x[0]), npos * d * 4l)
@@ -697,18 +702,18 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
             enc_f32_mm(enc, bblob, wq, bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.qkv_b * 4l), u_d, u_totd, npos * d)
             enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, u_rot, npos * d / 2l)
-            enc_head_restride(enc, braw, bq, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_f32_mm(enc, bblob, wq + uint64(d * d * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + d) * 4l), u_d, u_totd, npos * d)
             enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, u_rot, npos * d / 2l)
-            enc_head_restride(enc, braw, bk, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_f32_mm(enc, bblob, wq + uint64(2l * d * d * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + 2l * d) * 4l), u_d, u_totd, npos * d)
-            enc_head_restride(enc, braw, bv, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            enc_head_restride(enc, braw, 0ul, bv, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
             enc_softmax(enc, batt, ka, null, npos, t.n_head)
             enc_av_mm(enc, batt, bv, bo_p, ka, mp, t.n_head, hs_pad)
-            enc_head_restride(enc, bo_p, bxb2, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
+            enc_head_restride(enc, bo_p, 0ul, bxb2, 0ul, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
             enc_f32_mm(enc, bblob, uint64(o.w[QWEN3V_GEMM_O] * 4l), bxb2, bxb, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(o.out_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
@@ -818,11 +823,11 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     let bytes_y1 = uint64(mp1 * d * 4l)
     let bytes_x2 = uint64(mp2 * 3l * d * 4l)
     let bytes_xo = uint64(mp2 * d * 4l)
-    var bmel = pool_acquire(g_tw_pool, g_dev, bytes_mel)
-    var bx1 = pool_acquire(g_tw_pool, g_dev, bytes_x1)
-    var by1 = pool_acquire(g_tw_pool, g_dev, bytes_y1)
-    var bx2 = pool_acquire(g_tw_pool, g_dev, bytes_x2)
-    var bxo = pool_acquire(g_tw_pool, g_dev, bytes_xo)
+    var bmel = pool_acquire_pinned(g_tw_pool, g_dev, bytes_mel)
+    var bx1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x1)
+    var by1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y1)
+    var bx2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x2)
+    var bxo = pool_acquire_pinned(g_tw_pool, g_dev, bytes_xo)
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(mel.data[0]), bytes_mel)
     }
@@ -978,11 +983,11 @@ def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     let bytes_y1 = uint64(3200l * ncp * 4l)
     let bytes_y2 = uint64(800l * ncp * 4l)
     let bytes_y3 = uint64(n_chunks * mp3 * ncp * 4l)
-    var bxin = pool_acquire(g_tw_pool, g_dev, bytes_xin)
-    var bcol = pool_acquire(g_tw_pool, g_dev, bytes_col)
-    var by1 = pool_acquire(g_tw_pool, g_dev, bytes_y1)
-    var by2 = pool_acquire(g_tw_pool, g_dev, bytes_y2)
-    var by3 = pool_acquire(g_tw_pool, g_dev, bytes_y3)
+    var bxin = pool_acquire_pinned(g_tw_pool, g_dev, bytes_xin)
+    var bcol = pool_acquire_pinned(g_tw_pool, g_dev, bytes_col)
+    var by1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y1)
+    var by2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y2)
+    var by3 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y3)
     unsafe {   // the per-chunk [ih][iw] extract from the window's mel-major plane, straight into the mapped slab
         var p = reinterpret<float?>(metal_buffer_contents(bxin))
         for (ci in range64(n_chunks)) {
