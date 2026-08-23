@@ -2545,7 +2545,7 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "_builtin_table_clear",
             SideEffects::modifyArgument, "builtin_table_clear")
                 ->args({"table","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length",
+        addExternInline<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length",
             SideEffects::none, "builtin_table_size")
                 ->arg("table");
         addExtern<DAS_BIND_FUN(builtin_table_empty)>(*this, lib, "empty",
@@ -2782,7 +2782,7 @@ namespace das
             SideEffects::none, "builtin_empty")->arg("str");
         addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty",
             SideEffects::none, "builtin_empty_das_string")->arg("str");
-        addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length",
+        addExternInline<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length",
             SideEffects::none, "builtin_string_length")->args({"str","context"});
         addExtern<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
             SideEffects::none, "builtin_ext_string_length")->arg("str");

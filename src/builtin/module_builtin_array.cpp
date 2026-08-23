@@ -173,7 +173,7 @@ namespace das {
         addExtern<DAS_BIND_FUN(builtin_array_clear)>(*this, lib, "__builtin_array_clear",
             SideEffects::modifyArgument, "builtin_array_clear")
                 ->args({"array","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_array_size)>(*this, lib, "length",
+        addExternInline<DAS_BIND_FUN(builtin_array_size)>(*this, lib, "length",
             SideEffects::none, "builtin_array_size")
                 ->arg("array");
         addExtern<DAS_BIND_FUN(builtin_array_empty)>(*this, lib, "empty",
@@ -216,10 +216,10 @@ namespace das {
         addExtern<DAS_BIND_FUN(builtin_array_push_zero)>(*this, lib, "__builtin_array_push_zero",
             SideEffects::modifyArgument, "builtin_array_push_zero")
                 ->args({"array","index","stride","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_array_push_back)>(*this, lib, "__builtin_array_push_back",
+        addExternInline<DAS_BIND_FUN(builtin_array_push_back)>(*this, lib, "__builtin_array_push_back",
             SideEffects::modifyArgument, "builtin_array_push_back")
                 ->args({"array","stride","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_array_push_back_zero)>(*this, lib, "__builtin_array_push_back_zero",
+        addExternInline<DAS_BIND_FUN(builtin_array_push_back_zero)>(*this, lib, "__builtin_array_push_back_zero",
             SideEffects::modifyArgument, "builtin_array_push_back_zero")
                 ->args({"array","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_erase)>(*this, lib, "__builtin_array_erase",

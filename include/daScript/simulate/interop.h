@@ -3,11 +3,6 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
-#ifndef DAS_INTEROP_DETAILS
-// enabling it requires removing -fno-rtti from CMakeCommon.txt and such
-#define DAS_INTEROP_DETAILS 0
-#endif
-
 namespace das
 {
     template <typename TT>
@@ -68,43 +63,6 @@ namespace das
         return CallStaticFunction(fn,ctx,args,make_index_sequence<sizeof...(Args)>());
     }
 
-    template <typename FunctionType>
-    struct ImplCallStaticFunction;
-
-    template <typename R, typename ...Args>
-    struct ImplCallStaticFunction<R (*)(Args...)> {
-        static _msc_inline_bug vec4f call( R (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            // The function is attempting to return result by value,
-            // which type is not compatible with the current binding (missing cast<>).
-            // To bind functions that return non-vec4f types by value on the stack,
-            // you need to use the SimNode_ExtFuncCallAndCopyOrMove template argument
-            // to copy or move the returned value.
-            return cast_res<R>::from(CallStaticFunction<R,Args...>(fn,ctx,args),&ctx);
-        }
-    };
-
-    template <typename R, typename ...Args>
-    struct ImplCallStaticFunction<smart_ptr<R> (*)(Args...)> {
-        static __forceinline vec4f call ( smart_ptr<R> (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            return cast<R *>::from(CallStaticFunction<smart_ptr<R>,Args...>(fn,ctx,args).orphan());
-        }
-    };
-
-    template <typename R, typename ...Args>
-    struct ImplCallStaticFunction<smart_ptr_raw<R> (*)(Args...)> {
-        static __forceinline vec4f call ( smart_ptr_raw<R> (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            return cast<R *>::from(CallStaticFunction<smart_ptr_raw<R>,Args...>(fn,ctx,args).get());
-        }
-    };
-
-    template <typename ...Args>
-    struct ImplCallStaticFunction<void (*)(Args...)> {
-        static __forceinline vec4f call ( void (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            CallStaticFunction<void,Args...>(fn,ctx,args);
-            return v_zero();
-        }
-    };
-
     template <typename T>
     struct is_any_pointer {
         enum { value = is_pointer<T>::value || is_smart_ptr<T>::value };
@@ -152,130 +110,6 @@ namespace das
         };
     };
 
-    template <typename CType, bool Pointer, bool IsEnum, typename Result, typename ...Args>
-    struct ImplCallStaticFunctionImpl {
-        static __forceinline CType call( Result (*fn)(Args...), Context & context, SimNode ** args ) {
-            using WrapResult = typename WrapType<Result>::rettype;
-            if constexpr ( !is_workhorse_type<Result>::value && is_same<WrapResult,CType>::value) {
-                // if we match a WrapType, we can call it directly (with just the cast)
-                return static_cast<CType>(CallStaticFunction<Result,Args...>(fn,context,args));
-            } else if constexpr ( is_lattice_interop_type<Result>::value && is_workhorse_type<CType>::value ) {
-                // lattice result consumed through a typed eval slot — only cross-kind value
-                // reinterpret compiles this shape; round-trip the vec4f slot exactly like a
-                // local hop would (the prune-based lattice casts are byte-preserving)
-                return cast<CType>::to(cast_res<Result>::from(CallStaticFunction<Result,Args...>(fn,context,args),&context));
-            } else if constexpr ( !is_workhorse_type<Result>::value && is_same<WrapResult,Result>::value ) {
-                // if the WrapType is the same as Result, we are missing WrapType implementation, or its not included
-                #if DAS_INTEROP_DETAILS
-                    context.throw_error_ex("internal integration error, missing WrapType implementation %s or it's not included",
-                        typeid(WrapResult).name());
-                #else
-                    context.throw_error("internal integration error, missing WrapType implementation or it's not included");
-                #endif
-                return CType();
-            } else if constexpr ( !is_workhorse_type<Result>::value ) {
-                // we should never be here, since we are asking for a WrapResult which is not the same as CType
-                #if DAS_INTEROP_DETAILS
-                    context.throw_error_ex("internal integration error. WrapType %s is not the same as CType %s",
-                                        typeid(WrapResult).name(), typeid(CType).name());
-                #else
-                    context.throw_error("internal integration error, WrapType is not the same as CType");
-                #endif
-                return CType();
-            } else {
-                // this is workhorse <-> workhorse cross-pollination. somehow. like wrong node implementation or something
-                #if DAS_INTEROP_DETAILS
-                    context.throw_error_ex("internal integration error. %s <-> %s workhorse cross-pollination",
-                                            typeid(WrapResult).name(), typeid(CType).name());
-                #else
-                    context.throw_error("internal integration error, workhorse cross-pollination");
-                #endif
-                return CType();
-            }
-        }
-    };
-
-    template <typename CType, typename Result, typename ...Args>   // smart_ptr
-    struct ImplCallStaticFunctionImpl<CType, true, false, smart_ptr<Result>, Args...> {
-        static __forceinline CType call ( smart_ptr<Result> (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            return (CType) CallStaticFunction<smart_ptr<Result>,Args...>(fn,ctx,args).orphan();
-        }
-    };
-
-    template <typename CType, typename Result, typename ...Args>   // smart_ptr_raw
-    struct ImplCallStaticFunctionImpl<CType, true, false, smart_ptr_raw<Result>, Args...> {
-        static __forceinline CType call ( smart_ptr_raw<Result> (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            return (CType) CallStaticFunction<smart_ptr_raw<Result>,Args...>(fn,ctx,args).get();
-        }
-    };
-
-    template <typename CType, typename Result, typename ...Args>   // any pointer
-    struct ImplCallStaticFunctionImpl<CType, true, false, Result, Args...> {
-        static __forceinline CType call ( Result (*fn)(Args...), Context & ctx, SimNode ** args) {
-            return (CType) CallStaticFunction<Result,Args...>(fn,ctx,args);
-        }
-    };
-
-
-    template <typename CType, typename Result, typename ...Args>   // any enum
-    struct ImplCallStaticFunctionImpl<CType, false, true, Result, Args...> {
-        static __forceinline CType call ( Result (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            return (CType) CallStaticFunction<Result,Args...>(fn,ctx,args);
-        }
-    };
-
-    template <typename Result, typename ...Args>
-    struct ImplCallStaticFunctionImpl<Result, false, false, Result, Args...> {   // no cast
-        static __forceinline Result call ( Result (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            return CallStaticFunction<Result,Args...>(fn,ctx,args);;
-        }
-    };
-
-    // note: this is here because SimNode_At and such can call evalInt, while index is UInt
-    //  this is going to be allowed for now, since the fix will result either in duplicating SimNode_AtU or a cast node
-    template <typename ...Args>
-    struct ImplCallStaticFunctionImpl<int32_t, false, false, uint32_t, Args...> {   // int <- uint
-        static __forceinline int32_t call ( uint32_t (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            return CallStaticFunction<uint32_t,Args...>(fn,ctx,args);;
-        }
-    };
-
-    // note: those two are here because int64_t and uint64_t types are long long on windows and long on e.g. linux
-    // so any long long return type is not handled correctly on platforms where int64 is long
-    template <typename ...Args>
-    struct ImplCallStaticFunctionImpl<int64_t, false, false, long long, Args...> {
-        static __forceinline int64_t call ( long long (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            return (int64_t) CallStaticFunction<long long, Args...>(fn,ctx,args);;
-        }
-    };
-
-    template <typename ...Args>
-    struct ImplCallStaticFunctionImpl<uint64_t, false, false, unsigned long long, Args...> {
-        static __forceinline uint64_t call ( unsigned long long (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            return (uint64_t) CallStaticFunction<unsigned long long, Args...>(fn,ctx,args);;
-        }
-    };
-
-    template <bool Pointer, bool IsEnum, typename ...Args> // void
-    struct ImplCallStaticFunctionImpl<void,Pointer,IsEnum,void,Args...> {
-        static __forceinline void call ( void (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            CallStaticFunction<void,Args...>(fn,ctx,args);
-        }
-    };
-
-    template <typename FuncType, typename CType>
-    struct ImplCallStaticFunctionImm;
-
-    template <typename R, typename ...Args, typename CType>
-    struct ImplCallStaticFunctionImm<R (*)(Args...),CType>
-        : ImplCallStaticFunctionImpl<
-            CType,
-            is_any_pointer<R>::value && is_any_pointer<CType>::value,
-            is_enum<R>::value,
-            R,
-            Args...> {
-    };
-
     template <typename FunctionType>
     struct ImplCallStaticFunctionAndCopy;
 
@@ -319,55 +153,296 @@ namespace das
         }
     };
 
-#if DAS_SLOW_CALL_INTEROP
-    template <typename FuncT>
-#else
-    template <typename FuncT, FuncT fn>
-#endif
-    struct SimNode_ExtFuncCall : SimNode_ExtFuncCallBase {
-        enum { IS_CMRES = false };
-#if DAS_SLOW_CALL_INTEROP
-        FuncT  fn;
-        SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName, FuncT fnp )
-            : SimNode_ExtFuncCallBase(at,fnName), fn(fnp) { }
-#else
-        SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName )
+    // ---- return-carrier mapping -------------------------------------------
+    // The carrier is the one typed-eval slot a return type legitimately owns.
+    // Scalars own their slot, every pointer flavor owns Ptr, void owns none,
+    // lattice values own the vec4f box WITH typed-slot reads, and everything
+    // else vec4f-boxed (vector types, ranges, cast<> handled types) owns the
+    // vec4f eval alone.
+
+    // carrier tag for vec4f-boxed results that do NOT license typed-slot reads
+    struct vec4f_boxed {};
+
+    template <typename R>
+    struct ext_ret_carrier {
+        using RR = typename remove_const<R>::type;
+        static_assert(!is_same<RR,void>::value, "void handled by specialization");
+        // WrapType routes handle-like C++ types (distinct ints, Handle<T>, Time)
+        // to the scalar slot they are ABI-identical to; plain types wrap to
+        // themselves, so the scalar chain below keys on WR
+        using WR = typename WrapType<RR>::rettype;
+        using type =
+            typename conditional<is_same<RR,bool>::value,     bool,
+            typename conditional<is_any_pointer<RR>::value,   char *,
+            typename conditional<is_enum<RR>::value,
+                typename conditional<sizeof(RR)==8, int64_t, int32_t>::type,
+            typename conditional<is_same<WR,float>::value,    float,
+            typename conditional<is_same<WR,double>::value,   double,
+            typename conditional<is_integral<WR>::value && sizeof(WR)==4,
+                typename conditional<is_signed<WR>::value, int32_t, uint32_t>::type,
+            typename conditional<is_integral<WR>::value && sizeof(WR)==8,
+                typename conditional<is_signed<WR>::value, int64_t, uint64_t>::type,
+            typename conditional<is_lattice_interop_type<RR>::value, vec4f,
+            vec4f_boxed>::type>::type>::type>::type>::type>::type>::type>::type;
+    };
+
+    template <>
+    struct ext_ret_carrier<void> {
+        using type = void;
+    };
+
+    // the value type a carrier's computeExt slot traffics in (the boxed tag
+    // itself never crosses an ABI — it stands for a vec4f payload)
+    template <typename C> struct ext_carrier_value { using type = C; };
+    template <> struct ext_carrier_value<vec4f_boxed> { using type = vec4f; };
+
+    // R -> carrier value conversion (pointers decay, smart pointers orphan/get,
+    // enums widen to their slot's integer)
+    template <typename R, typename Carrier>
+    struct ext_ret_to_carrier {
+        static __forceinline Carrier from ( R v ) { return (Carrier) v; }
+    };
+    template <typename R>
+    struct ext_ret_to_carrier<smart_ptr<R>, char *> {
+        static __forceinline char * from ( smart_ptr<R> v ) { return (char *) v.orphan(); }
+    };
+    template <typename R>
+    struct ext_ret_to_carrier<smart_ptr_raw<R>, char *> {
+        static __forceinline char * from ( smart_ptr_raw<R> v ) { return (char *) v.get(); }
+    };
+    template <typename R>
+    struct ext_ret_to_carrier<R *, char *> {
+        static __forceinline char * from ( R * v ) { return (char *) v; }
+    };
+
+    // ---- cross-slot plumbing ----------------------------------------------
+    // A typed eval hitting a node of a different carrier kind. Signedness pairs
+    // forward (the compiler reads uint-returning externs via evalInt in indexing
+    // shapes, and enum-backed calls may read either signedness); everything else
+    // is a wrong-signature call and throws through this ONE shared path.
+
+    [[noreturn]] inline void ext_wrong_slot ( Context & ctx, const char * fnName ) {
+        ctx.throw_error_ex("typed eval on wrong extern return kind, %s", fnName ? fnName : "<unknown>");
+        abort();
+    }
+
+    template <typename Carrier, typename Slot>
+    struct ext_slot_cast {
+        enum { valid = false };
+        static __forceinline Slot to ( Carrier ) { return Slot(); }
+    };
+    template <typename Same>
+    struct ext_slot_cast<Same,Same> {
+        enum { valid = true };
+        static __forceinline Same to ( Same v ) { return v; }
+    };
+    template <> struct ext_slot_cast<uint32_t,int32_t> {
+        enum { valid = true };
+        static __forceinline int32_t to ( uint32_t v ) { return (int32_t) v; }
+    };
+    template <> struct ext_slot_cast<int32_t,uint32_t> {
+        enum { valid = true };
+        static __forceinline uint32_t to ( int32_t v ) { return (uint32_t) v; }
+    };
+    template <> struct ext_slot_cast<uint64_t,int64_t> {
+        enum { valid = true };
+        static __forceinline int64_t to ( uint64_t v ) { return (int64_t) v; }
+    };
+    template <> struct ext_slot_cast<int64_t,uint64_t> {
+        enum { valid = true };
+        static __forceinline uint64_t to ( int64_t v ) { return (uint64_t) v; }
+    };
+
+    // ---- per-carrier bases (11 total in the whole binary) -----------------
+    // The bases carry the typed-eval matrix WITHOUT touching the callee: the
+    // matching slot and eval() are overridden by the direct layer below, so a
+    // base slot body only runs for cross-slot plumbing (round-trips the boxed
+    // eval) or a wrong-signature call (one shared throw).
+
+    template <typename Carrier>
+    struct SimNode_ExtFuncCallRet : SimNode_ExtFuncCallBase {
+        SimNode_ExtFuncCallRet(const LineInfo & at, const char * fnName)
             : SimNode_ExtFuncCallBase(at,fnName) { }
-#endif
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
-            DAS_PROFILE_NODE
-            return ImplCallStaticFunction<FuncT>::call(*fn, context, arguments);
-        }
-#if !(DAS_SLOW_CALL_INTEROP)
-#define EVAL_NODE(TYPE,CTYPE)\
+#define EVAL_NODE(TYPE,CTYPE) \
         virtual CTYPE eval##TYPE ( Context & context ) override { \
-                DAS_PROFILE_NODE \
-                return ImplCallStaticFunctionImm<FuncT,CTYPE>::call(*fn, context, arguments); \
+            if constexpr ( ext_slot_cast<Carrier,CTYPE>::valid ) { \
+                return ext_slot_cast<Carrier,CTYPE>::to(cast<Carrier>::to(this->eval(context))); \
+            } else { \
+                ext_wrong_slot(context, extFnName); \
+            } \
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE
-#endif
     };
 
-#if DAS_SLOW_CALL_INTEROP
+    template <>
+    struct SimNode_ExtFuncCallRet<vec4f> : SimNode_ExtFuncCallBase {
+        SimNode_ExtFuncCallRet(const LineInfo & at, const char * fnName)
+            : SimNode_ExtFuncCallBase(at,fnName) { }
+        // lattice results consumed through a typed slot round-trip the vec4f
+        // box exactly like a local hop would
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+            return cast<CTYPE>::to(this->eval(context)); \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    // boxed results that do NOT license typed reads (vector/range workhorse
+    // types, wrapped structs): eval works, every typed slot throws untouched
+    template <>
+    struct SimNode_ExtFuncCallRet<vec4f_boxed> : SimNode_ExtFuncCallBase {
+        SimNode_ExtFuncCallRet(const LineInfo & at, const char * fnName)
+            : SimNode_ExtFuncCallBase(at,fnName) { }
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+            ext_wrong_slot(context, extFnName); \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    template <>
+    struct SimNode_ExtFuncCallRet<void> : SimNode_ExtFuncCallBase {
+        SimNode_ExtFuncCallRet(const LineInfo & at, const char * fnName)
+            : SimNode_ExtFuncCallBase(at,fnName) { }
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+            ext_wrong_slot(context, extFnName); \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    // ---- the direct slot layer --------------------------------------------
+    // CRTP over the leaf: eval() and the ONE slot matching the carrier call
+    // the leaf's non-virtual computeDirect, so a consumed extern costs exactly
+    // one virtual call — same profile as the classic NTTP nodes.
+
+    template <typename LeafT, typename Carrier>
+    struct SimNode_ExtFuncCallDirect;
+
+#define EVAL_NODE(TYPE,CTYPE) \
+    template <typename LeafT> \
+    struct SimNode_ExtFuncCallDirect<LeafT, CTYPE> : SimNode_ExtFuncCallRet<CTYPE> { \
+        SimNode_ExtFuncCallDirect(const LineInfo & at, const char * fnName) \
+            : SimNode_ExtFuncCallRet<CTYPE>(at,fnName) { } \
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
+            return cast<CTYPE>::from(static_cast<LeafT *>(this)->computeDirect(context)); \
+        } \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+            DAS_PROFILE_NODE \
+            return static_cast<LeafT *>(this)->computeDirect(context); \
+        } \
+    };
+    DAS_EVAL_NODE
+#undef  EVAL_NODE
+
+    template <typename LeafT>
+    struct SimNode_ExtFuncCallDirect<LeafT, vec4f> : SimNode_ExtFuncCallRet<vec4f> {
+        SimNode_ExtFuncCallDirect(const LineInfo & at, const char * fnName)
+            : SimNode_ExtFuncCallRet<vec4f>(at,fnName) { }
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            return static_cast<LeafT *>(this)->computeDirect(context);
+        }
+    };
+
+    template <typename LeafT>
+    struct SimNode_ExtFuncCallDirect<LeafT, vec4f_boxed> : SimNode_ExtFuncCallRet<vec4f_boxed> {
+        SimNode_ExtFuncCallDirect(const LineInfo & at, const char * fnName)
+            : SimNode_ExtFuncCallRet<vec4f_boxed>(at,fnName) { }
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            return static_cast<LeafT *>(this)->computeDirect(context);
+        }
+    };
+
+    template <typename LeafT>
+    struct SimNode_ExtFuncCallDirect<LeafT, void> : SimNode_ExtFuncCallRet<void> {
+        SimNode_ExtFuncCallDirect(const LineInfo & at, const char * fnName)
+            : SimNode_ExtFuncCallRet<void>(at,fnName) { }
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            static_cast<LeafT *>(this)->computeDirect(context);
+            return v_zero();
+        }
+    };
+
+    // ---- shared compute body ----------------------------------------------
+
+    template <typename R, typename ...Args>
+    __forceinline typename ext_carrier_value<typename ext_ret_carrier<R>::type>::type
+    ext_compute ( R (*fnp)(Args...), Context & context, SimNode ** args ) {
+        using Carrier = typename ext_ret_carrier<R>::type;
+        if constexpr ( is_same<Carrier,vec4f>::value || is_same<Carrier,vec4f_boxed>::value ) {
+            return cast_res<R>::from(CallStaticFunction<R,Args...>(fnp,context,args),&context);
+        } else if constexpr ( is_same<R,void>::value ) {
+            CallStaticFunction<void,Args...>(fnp,context,args);
+        } else {
+            return ext_ret_to_carrier<R,Carrier>::from(CallStaticFunction<R,Args...>(fnp,context,args));
+        }
+    }
+
+    // ---- the per-signature nodes ------------------------------------------
+    // fn is a runtime member, so all binds of one signature share a single
+    // instantiation; the typed-eval matrix lives in the per-carrier base
+
     template <typename FuncT>
-#else
+    struct SimNode_ExtFuncCall;
+
+    template <typename R, typename ...Args>
+    struct SimNode_ExtFuncCall<R (*)(Args...)>
+        : SimNode_ExtFuncCallDirect<SimNode_ExtFuncCall<R (*)(Args...)>, typename ext_ret_carrier<R>::type> {
+        using FuncT = R (*)(Args...);
+        using Carrier = typename ext_ret_carrier<R>::type;
+        using BaseT = SimNode_ExtFuncCallDirect<SimNode_ExtFuncCall<R (*)(Args...)>, Carrier>;
+        enum { IS_CMRES = false };
+        FuncT fn;
+        SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName, FuncT fnp )
+            : BaseT(at,fnName), fn(fnp) { }
+        __forceinline typename ext_carrier_value<Carrier>::type computeDirect ( Context & context ) {
+            return ext_compute<R,Args...>(fn, context, this->arguments);
+        }
+    };
+
+    // ---- the per-function NTTP node (opt-in via addExternInline) ----------
+    // fn is a template constant, so the callee can inline into computeDirect;
+    // reserved for hot, inline-friendly binds — everything else shares the
+    // per-signature member flavor above
+
     template <typename FuncT, FuncT fn>
-#endif
-    struct SimNode_ExtFuncCallAndCopyOrMove : SimNode_ExtFuncCallBase {
+    struct SimNode_ExtFuncCallInline;
+
+    template <typename R, typename ...Args, R (*fn)(Args...)>
+    struct SimNode_ExtFuncCallInline<R (*)(Args...), fn>
+        : SimNode_ExtFuncCallDirect<SimNode_ExtFuncCallInline<R (*)(Args...), fn>, typename ext_ret_carrier<R>::type> {
+        using Carrier = typename ext_ret_carrier<R>::type;
+        using BaseT = SimNode_ExtFuncCallDirect<SimNode_ExtFuncCallInline<R (*)(Args...), fn>, Carrier>;
+        enum { IS_CMRES = false };
+        SimNode_ExtFuncCallInline ( const LineInfo & at, const char * fnName )
+            : BaseT(at,fnName) { }
+        __forceinline typename ext_carrier_value<Carrier>::type computeDirect ( Context & context ) {
+            return ext_compute<R,Args...>(fn, context, this->arguments);
+        }
+    };
+
+    template <typename FuncT>
+    struct SimNode_ExtFuncCallAndCopyOrMove;
+
+    template <typename R, typename ...Args>
+    struct SimNode_ExtFuncCallAndCopyOrMove<R (*)(Args...)> : SimNode_ExtFuncCallBase {
+        using FuncT = R (*)(Args...);
         enum { IS_CMRES = true };
-#if DAS_SLOW_CALL_INTEROP
-        FuncT  fn;
+        FuncT fn;
         SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at, const char * fnName, FuncT fnp )
             : SimNode_ExtFuncCallBase(at,fnName), fn(fnp) { }
-#else
-        SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at, const char * fnName )
-            : SimNode_ExtFuncCallBase(at,fnName) { }
-#endif
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             void * cmres = cmresEval->evalPtr(context);
-            ImplCallStaticFunctionAndCopy<FuncT>::call(*fn, context, cmres, arguments);
+            ImplCallStaticFunctionAndCopy<FuncT>::call(fn, context, cmres, arguments);
             return cast<void *>::from(cmres);
         }
     };
@@ -436,25 +511,20 @@ namespace das
         }
     };
 
-#if DAS_SLOW_CALL_INTEROP
     template <typename FuncT>
-#else
-    template <typename FuncT, FuncT fn>
-#endif
-    struct SimNode_ExtFuncCallRef : SimNode_ExtFuncCallBase {
+    struct SimNode_ExtFuncCallRef;
+
+    template <typename R, typename ...Args>
+    struct SimNode_ExtFuncCallRef<R (*)(Args...)> : SimNode_ExtFuncCallBase {
+        using FuncT = R (*)(Args...);
         DAS_PTR_NODE;
         enum { IS_CMRES = false };
-#if DAS_SLOW_CALL_INTEROP
-        FuncT  fn;
+        FuncT fn;
         SimNode_ExtFuncCallRef ( const LineInfo & at, const char * fnName, FuncT fnp )
             : SimNode_ExtFuncCallBase(at,fnName), fn(fnp) { }
-#else
-        SimNode_ExtFuncCallRef ( const LineInfo & at, const char * fnName )
-            : SimNode_ExtFuncCallBase(at,fnName) { }
-#endif
         __forceinline char * compute(Context & context) {
             DAS_PROFILE_NODE
-            return ImplCallStaticFunctionRef<FuncT>::call(*fn, context, arguments);
+            return ImplCallStaticFunctionRef<FuncT>::call(fn, context, arguments);
         }
     };
 
@@ -474,5 +544,3 @@ namespace das
 }
 
 #include "daScript/simulate/simulate_visit_op_undef.h"
-
-
