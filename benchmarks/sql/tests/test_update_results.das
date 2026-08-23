@@ -7,7 +7,7 @@ require daslib/strings_boost
 require strings
 
 // Settles the _update_results.das contract: cells parse (including a JSON line carrying a
-// leaked ANSI-escape prefix), absent lanes stay em-dashes / nulls, the site record and
+// leaked ANSI-escape prefix), absent lanes stay dashes / nulls, the site record and
 // results.md agree, and a failed run leaves BOTH outputs untouched (site/REVIEW.md).
 
 def private tool_path() : string {
@@ -84,8 +84,8 @@ def test_update_results_tool(tt : T?) {
         let code = run_tool("--interp {interpPath} --jit {jitPath} --date 2026-01-01 --results {resultsPath} --site-json {recordPath} --machine \"TEST BOX\"", output)
         t |> equal(code, 0, "tool exit code; output:\n{output}")
         let md = read_file(resultsPath)
-        t |> success(md |> contains("| `alpha` | 50.0 | 12.3 | — |"), "alpha row: escaped m1 cell parsed, m4 dash; got:\n{md}")
-        t |> success(md |> contains("| `beta` | — | 25.0 | — |"), "beta row present")
+        t |> success(md |> contains("| `alpha` | 50.0 | 12.3 | - |"), "alpha row: escaped m1 cell parsed, m4 dash; got:\n{md}")
+        t |> success(md |> contains("| `beta` | - | 25.0 | - |"), "beta row present")
         var err = ""
         let rec = read_json(read_file(recordPath), err)
         t |> success(rec != null, "record parses: {err}")
