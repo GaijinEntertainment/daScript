@@ -457,6 +457,11 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     if (api_probe != null) {
                         t |> success(residency_active(), "the residency set is live on an API-serving OS")
                         t |> success(residency_pinned() > 0l, "the served prefill pinned {residency_pinned()} buffers in the residency set")
+                        if (g_env_metal.heartbeat_s > 0) {
+                            t |> success(metal_residency_heartbeat_live(), "the residency heartbeat is armed after a served step")
+                        } else {
+                            t |> success(!metal_residency_heartbeat_live(), "DASLLAMA_METAL_HEARTBEAT_S=0 leaves the heartbeat unarmed")
+                        }
                     } else {
                         t |> skip("MTLResidencySet unavailable (macOS < 15) - the pin witness has no API to observe")
                     }

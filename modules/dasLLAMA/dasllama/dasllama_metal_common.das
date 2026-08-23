@@ -603,6 +603,12 @@ def residency_flush {
         metal_residency_set_request(g_rset)
         g_rset_dirty = false
     }
+    if (g_env_metal.heartbeat_s > 0) {
+        // keep-alive kick: a requested set still un-wires over a long CPU-only window, and the
+        // next submission repays the whole tracked-set pass — the background re-request keeps
+        // the pages wired for heartbeat_s after the last served step (ARCHITECTURE.md 2.12)
+        metal_residency_set_heartbeat(g_rset, g_env_metal.heartbeat_s)
+    }
 }
 
 //! Buffers pinned so far (0 = off or not yet created) — the knob's test witness.

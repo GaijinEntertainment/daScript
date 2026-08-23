@@ -12,24 +12,30 @@ what it costs today and what the fix would change.
 
 ## Entries
 
-- **OPEN (narrowed by slice J) - the first Metal submission after a CPU-only window repays
-  the per-commit tracked-set pass (measured 2026-08-23, M1 Max; probes = quiet `-jit` runs
-  with the rig's tune manifest, cells = the released `lcpp_bench` exe, `--image --image-think
-  -r 3 -t 8 --ngl 99`; plan: `qwen3vl_plan.md` slices M/J).** The pre-J reds (released-rig
-  cells: 3B -12%, 4B -16%, 8B -29%, 30B -41%) were mostly this: das TEXT prefill at the same
-  padded M is at parity (rig `-p` + `--ref`: 4B +2.7%, 8B -6.2%) and the whole image-eval
-  machinery prices +10 ms (probe). The slice-J Metal tower deleted the multi-second CPU
-  encode burns; the residual (post-J rig cells: 4B/8B -16%, 30B -5%) is a ~40 ms one-time
-  commit->execution slack after ANY CPU-only window. Refuted by probe: driver wake (empty cb
-  round-trips 0.107 ms), per-page faults, light pulse-trains, denormals, affinity, cb-split
-  counts, queue identity. The MTLResidencySet pin (shipped, `DASLLAMA_METAL_RESIDENCY`)
-  holds the SHORT-window case - released-rig A/B x2: encode 177/180 ms pinned vs 194/194
-  unpinned on the 4B image cell - but not long windows; making the prefill pools untracked
-  reds `test_metal_prefill_parity`, so the tracking is load-bearing. **The scoped fix is a
-  per-buffer tracking audit** (which pool buffers need Metal's tracker vs the capture rail's
-  own barriers). Until then, media-turn pp keeps the slack wherever a CPU window precedes
-  the prefill (qwen25v exact-only and the conformer audio encoders keep the full CPU-burn
-  form).
+- **MOSTLY LANDED (was OPEN, narrowed by slice J) - the first Metal submission after a
+  CPU-only window repaid the kernel-side driver window; the residency-set HEARTBEAT removes
+  ~85% of it (measured 2026-08-23, M1 Max; probe = `harness/residency_ramp_probe.das`, the
+  qwen3v Metal tower encode after controlled CPU burns, submission split via
+  `das_metal_boost`'s `metal_submit_trace`; plan: `qwen3vl_plan.md` slices M/J).**
+  The four-timestamp split localized the whole ramp to drv = kernelStart->kernelEnd (queue
+  and GPU execution FLAT): warm 0.11 ms, 200-1000 ms burn ~1.2 ms, 3000 ms burn 17.7 ms.
+  The long-window mechanism is the OS collecting a committed+requested `MTLResidencySet`
+  during inactivity - llama.cpp's comment names it verbatim, and their cure is a background
+  thread re-calling `requestResidency` every 5 ms (`ggml-metal-device.m`). Copied:
+  `metal_residency_set_heartbeat` in dasMetal (5 ms cadence, keep-alive countdown), kicked
+  from `residency_flush` per served step, knob `DASLLAMA_METAL_HEARTBEAT_S` (default 180 s,
+  0 = A/B rail). Probe ladder at the 3000 ms burn (drv ms, x2 each): baseline 17.7/17.8,
+  heartbeat 2.95/3.01, whole-map anchor buffer 18.5/18.1, heartbeat+anchor 2.94/3.00 - the
+  heartbeat takes the win alone. REFUTED by that ladder: the whole-map no-copy anchor (one
+  pinned unbound buffer over the full mapping - page pre-wiring changes NOTHING in either
+  arm, so neither the collect nor the residual is host-page work) and the previously
+  proposed **per-buffer tracking audit** (resource count is not the lever; DEMOTED).
+  Earlier refutations stand: driver wake (empty cb 0.107 ms), per-page faults, light
+  pulse-trains, denormals, affinity, cb-split counts, queue identity; prefill pools stay
+  tracked (untracked reds `test_metal_prefill_parity`). **OPEN residual:** ~1-3 ms drv on
+  the first submission after a multi-hundred-ms window, scaling with window length,
+  insensitive to residency cadence AND page pinning - the driver/GPU idle-state wake class;
+  no user-space lever found (pulse trains already refuted), live with it.
 
 - **OPEN - arming Metal makes the CPU q8 tower encode ~1.7x slower (measured 2026-08-23,
   M1 Max, 8B qwen3v tower: 3.26-3.45 s with MetalMode.required vs 1.90 s on the CPU leg,
@@ -89,7 +95,7 @@ what it costs today and what the fix would change.
   buckets of a `-jit` probe (`gemma4v_encode` on a 624x480 canvas, `DASLLAMA_CPU_PREFILL=1`,
   three reps, direction only): the exact-plane CPU lane through `matmul_bf16_batch`'s per-row
   `dot_bf16` loop costs ~ 1.9 s per encode (GEMMs ~ 90 %, ~ 92 GMAC/s aggregate - ~10x under
-  the q8xq8 prefill kernels), the q8 lane ~ 0.43 s (GEMMs 238 ms, the attention core 163 ms - 
+  the q8xq8 prefill kernels), the q8 lane ~ 0.43 s (GEMMs 238 ms, the attention core 163 ms -
   now the #2 bucket), and the Metal block loop ~ 89 ms with the stem (10 ms) and tail (2 ms) on
   the CPU. Prediction P2 (0.9-1.8 s, >= 12 % of the turn, for the exact CPU lane): the share held
   by a wide margin, the absolute landed just above the band. **Ruled and landed in the arc:** the
@@ -122,7 +128,7 @@ what it costs today and what the fix would change.
   (mapped pages are shared and evictable across processes; a 190 MB owned bf16->f32 widening is
   neither) and zero load-time work - not the load wall. **Both are DONE (2026-08-14, the same arc's slices I and J).** The rail
   landed: the embedder stages, mints and maps like the audio towers, and the prepared image maps
-  with no load-time work (mmap). Plane format settled as **per-GEMM, following each source tensor's on-disk type** - 
+  with no load-time work (mmap). Plane format settled as **per-GEMM, following each source tensor's on-disk type** -
   and the premise that the mmproj is uniformly bf16 was HALF WRONG: gemma-4's shipped "BF16"
   mmproj carries an **F32** patch embedder (26.5M params) and a **BF16** projection (14.7M), so a
   both-or-neither rule bought nothing. Per-GEMM gives 200 MB -> 170 MB with tier-1 unmoved to the
@@ -294,10 +300,10 @@ what it costs today and what the fix would change.
   kernel itself to fuse the activation (ledger-class). Still open from the plan: [tune]
   schedule axes (thin until fusion adds real choices), batch-rail unification (R4), dasMetal
   promotion of the graph/lens machinery;
-  (2) the q51 w2 MoE kernel at 224 wGB/s in-lab - 
+  (2) the q51 w2 MoE kernel at 224 wGB/s in-lab -
   the integer-compose form (q | hbit<<4 pre-convert, replacing the select chain) TESTED + REFUTED
   2026-07-23: 226 vs 224 wGB/s (+1%), bit-exact but the dot stays issue-bound in the shift/mask
-  decode regardless of compose shape; kept as the lab's w2_ic negative control, do not re-chase - 
+  decode regardless of compose shape; kept as the lab's w2_ic negative control, do not re-chase -
   a real q51 win needs a different decode strategy (per-thread multi-block amortization or an
   upload-time qh transpose, both ledger-class); (3) WO ~0.2ms slack; (4) MetalMoeGemvK5 carries the same
   scalar-x block - mechanical sibling of the shipped fix, prove via a lab arm first. Lab kept as
@@ -350,7 +356,7 @@ what it costs today and what the fix would change.
   (dasllama_metal_decode.das:164) is a pure CAPABILITY test - it engages the greedy spec chain for
   any tied-k6 classifier with no BENEFICIAL condition, so a big pure-k6 file eats the spec-chain
   work where it is a net loss. Cost today: gemma4-12B Q6_K B=1 greedy runs 26.81 t/s with spec on
-  vs 27.11 spec-off (~+1%; `DASLLAMA_METAL_SPEC=0` recovers). This was the board's "0.81x" cell - 
+  vs 27.11 spec-off (~+1%; `DASLLAMA_METAL_SPEC=0` recovers). This was the board's "0.81x" cell -
   RE-PAIRED to 0.977 on / 0.988 off in a clean quiet window (the 0.81 was window-skew; spec-on had
   drifted 22.4->26.8). Fix: a size/format beneficial-gate (decline spec on pure-k6 above a
   param/layer threshold, picked at the 4B-wins / 12B-loses crossover) in spec_cls_capable or the
@@ -412,7 +418,7 @@ what it costs today and what the fix would change.
   0.92->0.95, gemma2-2b 0.93->0.96, gemma3-1b 1.22->1.24; parity green (fam-gemma3/gemma4 +
   arm1-basic swiglu regression). STILL OPEN: the batch fuse13 rail (b2/b4 PSOs) keeps the
   hardcoded silu epilogue, and prefill's legacy fused rail (`enc_swiglu_quant` has no gelu twin,
-  and the deferred-W2-add trick has no post-ffn-norm slot, so `fused` stands down entirely - 
+  and the deferred-W2-add trick has no post-ffn-norm slot, so `fused` stands down entirely -
   mm-path prefill, the default, is unaffected).
   (2) *pre_post_norm sites are composed, not fused* - each post-norm is a separate in-place rms
   dispatch before the residual add (+2 dispatches/layer on every path). Fix: a `post_add_rms`
@@ -456,7 +462,7 @@ what it costs today and what the fix would change.
   `embed_forward` primitive - but that breaks the facade-only invariant, so the overload is the
   clean path). Both are backlog; the server is serial and embeddings are low-frequency.
 - **q8 GEMV loses to fp32 on cache-resident weights without VNNI (zen2 whisper decoder,
-  2026-07-08).** Decoder-q8 stage A/B on zen2 tiny/jfk: logits GEMV 3.8x faster (76 MB - 
+  2026-07-08).** Decoder-q8 stage A/B on zen2 tiny/jfk: logits GEMV 3.8x faster (76 MB -
   bandwidth-bound, the q8 win) but per-layer decoder GEMVs +7-21% SLOWER q8 (~2.3 MB mats,
   L2/L3-hot across the serial decode steps; AVX2 int8-dot + per-step requant loses to plain
   FMA when there's no memory traffic to save). Cost today: whisper-tiny zen2 decode leaves
@@ -570,7 +576,7 @@ what it costs today and what the fix would change.
   the w2-input requant moves to 256-row stage-0 groups and the wo-input requant to HEAD GROUPS
   of 256/head_size heads (Qwen3's 128 = head pairs) so every Q8_K quantize covers whole
   superblocks. Gates: dim % 256 for any kq weight, hidden % 256 for a kq down-proj, qd % 256 +
-  head-size divisibility for a kq wo (all real kq models pass). Bit-exact vs the per-op path - 
+  head-size divisibility for a kq wo (all real kq models pass). Bit-exact vs the per-op path -
   test_fused_decode grew a kq arm (Qwen3-4B Q5_K_M = k5+k6+head-pairs, gemma-2-2b Q4_K_M =
   k4+k6+softcap/post-norm; ids + full logits EXACT). Measured (M1 Max steady-state): Q6 tg
   30.5 -> 31.1 (+2.1%), Q5 ~flat (33.8, within run wobble), Q4 control flat; decode_prof
@@ -588,7 +594,7 @@ what it costs today and what the fix would change.
   **THE LESSON (measured, do not re-learn):** pure byte-expanded DRAM planes (no scratch)
   win the same pp but cost tg -30%/-20% on Q5/Q6 - M1 Max decode is DRAM-bound at the
   model level (~90 GB/s effective), so plane bytes ARE decode time; k4 stays nibble-packed
-  everywhere for the same reason. Residual headroom, ledgered: (a) k6 tile 76 vs k4 95 - 
+  everywhere for the same reason. Residual headroom, ledgered: (a) k6 tile 76 vs k4 95 -
   the per-16 SIGNED sub-scale fold pays 2 scale-row sexts + 4 muls per block vs k4/k5's 1;
   (b) k5 unpack still ~6% of production tile (the broadcast+carry deposit - a generated
   NEON tbl/cmtst unpack kernel would close it).
@@ -607,7 +613,7 @@ what it costs today and what the fix would change.
   ~155-158 vs 172 = 0.90x.
 - **DONE RACED (zen2, 2026-07-12 PM^2, 16 affinity-pinned cores both sides, ABBA before=52a22a39b
   after=3d78ca8ef, Qwen3-4B): das WINS Q5 pp 1.84x / Q6 1.32x vs lcpp; the kq v2+v3 arc itself
-  is ~NEUTRAL on the maddubs lattice.** pp512 das-after/lcpp: Q4 161-180 vs 168.3 (~parity - 
+  is ~NEUTRAL on the maddubs lattice.** pp512 das-after/lcpp: Q4 161-180 vs 168.3 (~parity -
   their one AVX2 K-quant repack), Q5 158-161 vs 87.0 (**1.84x**), Q6 128-130 vs 98.0
   (**1.32x**); tg64 ~ lcpp parity all three (19.3/16.6/14.5 vs 19.25/16.87/14.69). ABBA
   before->after: Q4/Q5 pp par-to-+3%, **Q6 pp -4.6%** (135.2->129.0 median), tg within noise
@@ -665,7 +671,7 @@ what it costs today and what the fix would change.
   3072 - an unfused rms+quant pair would re-admit it); GPU-side per-row greedy argmax for the
   batch (the single-stream spec chain already carries the kernel) if greedy batch serving ever
   matters. Sized honestly: closing to lcpp's curve is worth up to ~2.1x at B=4, ~1.7x at B=8,
-  ~1.34x at B=16 on M1. UPDATE (2026-07-14 late): (a) LANDED as the x-staged fixed-B forms - 
+  ~1.34x at B=16 on M1. UPDATE (2026-07-14 late): (a) LANDED as the x-staged fixed-B forms -
   lab b2x 326-363 wGB/s (+40-88%), b4x 188-217 (~2x, above lcpp's ~186 at ne11=4); driver
   same-window A/B B=4 +19.2%, B=2 +1.8% (B=2's step is residual/dispatch-bound: knockout says
   GEMV+cls is 11.7ms of the 16.7ms gpu step at B=2, 21.4 of 27.6 at B=4 - the rest is the
@@ -726,7 +732,7 @@ what it costs today and what the fix would change.
   (Spotted wave 4.)
 - **DONE (MXFP4 arc, 2026-07-02): native-MXFP4 expert stacks + repacked TBL/SDOT kernels + the
   MoE dispatch fuse.** Was: gpt-oss-20b's 4.25-bit expert stacks ran as Q8 (2x resident, 2x
-  decode traffic). Now: the stacks stay as raw nibble + E8M0 planes (mxq/mxs, exact disk bits - 
+  decode traffic). Now: the stacks stay as raw nibble + E8M0 planes (mxq/mxs, exact disk bits -
   the old dequant->requant amax error is gone), decoded in-register by new aarch64_neon
   intrinsics (tbl16_lo/tbl16_hi = vqtbl1q_s8 of the doubled-e2m1 LUT; sdot4_w / sdot4_laneq_w
   take the tbl result as a VALUE) through dot_mx4q8 ([tuned], row-major) and dot_mx4q8_laneq4
@@ -779,7 +785,7 @@ what it costs today and what the fix would change.
   rows => bit-exact vs inline, gated by test_forward), behind `g_decode_attn_par_threshold`
   (profile `runtime.decode_attn_par_threshold`). Quiet-box sweep (M1 Max, inline-vs-threaded
   interleaved at 32..2048 ctx on Llama-3.2-1B and gemma-4-12B): crossover at ~200-260K work on
-  BOTH; below it threading costs <=2%, above it wins reach +74% (1B) / +89% (12B) at 2048 ctx - 
+  BOTH; below it threading costs <=2%, above it wins reach +74% (1B) / +89% (12B) at 2048 ctx -
   the derived 4M default was ~15x too conservative (the 12B ran inline below ctx 512). Default
   is now the measured 262144. (Spotted tune audit, 2026-07-02.)
 - **LOW PRIORITY: `sample_` top-k is O(top_k x vocab) scalar selection.** Each of the top_k
@@ -796,9 +802,9 @@ what it costs today and what the fix would change.
   trustworthy on this box, single-window absolutes swing +/-10-15%). The pre-fuse 4x1 dispatch
   shape measures 63-72 GB/s - the dispatch fuse was worth ~30% and is confirmed load-bearing.
   Follow-up landed: **expert bias vectors fold into the groupn workers' stores** (bp/boffs on the
-  groupn contract; bit-identical to the post-pass add_bias, minus its serial ~36us/layer) - 
+  groupn contract; bit-identical to the post-pass add_bias, minus its serial ~36us/layer) -
   decode 34.7 -> **35.2 t/s @ ctx 8 / 33.8 @ ctx 512** (llama.cpp same-window anchor 41.1 ->
-  0.86x). Also swept: decode-attn threshold 0-vs-262144 under the spinner at ctx 8/512 - 
+  0.86x). Also swept: decode-attn threshold 0-vs-262144 under the spinner at ctx 8/512 -
   a WASH at both depths (the low-ctx attention is memory-latency-bound; threading's dispatch
   cost ~ its serial cost), so the measured default stands; moe_reduce/rope threading rejected
   (~8us/layer each, below dispatch cost). What remains vs llama.cpp is their continuous-polling
@@ -807,7 +813,7 @@ what it costs today and what the fix would change.
 - **MXFP4 grouped prefill pays a per-touched-expert Q8 expansion (~120MB of traffic each, half of
   it the repack scratch copy).** `expand_mx4_region_q8` writes exact row-major Q8 then runs the
   load-time `repack_q8q8_weight` (temp copy + interleave) so the laneq batch GEMM applies. Levers,
-  in effort order: (a) expand DIRECTLY into the interleaved layout (folds the repack's copy away - 
+  in effort order: (a) expand DIRECTLY into the interleaved layout (folds the repack's copy away -
   needs a backend-provided expand-repack, not a layout hardcode in common); (b) a native MXFP4
   batch GEMM (mx4 twin of the laneq 4x4 tile - halves the GEMM's weight streaming too, likely wins
   outright); (c) the `npos * k >= 8 * n_expert` tiny-batch guard is an ESTIMATED breakeven
@@ -822,7 +828,7 @@ what it costs today and what the fix would change.
   speculatively. (Spotted tune audit, 2026-07-02.)
 - **DONE (GEMV hunt, 2026-07-03): the decode "kernel top-end gap" was chunk-count misalignment,
   not the kernel.** A 12-variant GEMV race (`bench_gemv_decode.das` + the matmul_variants decode
-  cells: unroll/ILP/fma-flush/dual-group/inline-scale) proved every kernel micro-opt a wash - 
+  cells: unroll/ILP/fma-flush/dual-group/inline-scale) proved every kernel micro-opt a wash -
   llama.cpp's live M1 kernel (`ggml_gemv_q8_0_4x4_q8_0`; their 4x8 tier needs i8mm) is the same
   shape as `dot_q8q8_laneq4`. The real delta: njobs = `get_total_hw_jobs()*k` sized chunks to the
    7 WORKERS, but 8 lanes serve them (workers + caller - team by design, fifo via main-steal), so
@@ -847,7 +853,7 @@ what it costs today and what the fix would change.
   writing [4xfp16 d | 128 qs] blocks + the GEMV/batch/group3/groupn kernels reading it; (c) the
   element-offset plumbing moves from plane offsets to block strides (loader `w*_off` math, groupn
   offs contracts). Sized: dasLLVM intrinsic + codegen bump, ~4 kernel twins, loader/offset sweep,
-  fixture risk LOW (same math, scales exact fp16 round-trip of what the loader already computes - 
+  fixture risk LOW (same math, scales exact fp16 round-trip of what the loader already computes -
   but the quantizer would store fp16-rounded scales, so oracle fixtures need a refreeze check).
   Expected: cls 1.12x -> ~1.06x, ffn 1.04x -> ~parity; decode e2e ~+2-3%. NOT this PR - needs its
   own arc. (Spotted GEMV hunt, 2026-07-03.)
@@ -882,7 +888,7 @@ group; wording kept.
 - **AMX tile family - arc CLOSED (slice I built it, slice K's SPR session 4 adjudicated it,
   2026-07-05).** amx is 0.36-0.55x the biased-busd512 champion across all four ladder models and
   the best cell ever measured sits below the plain AVX2 maddubs tier; the bill is the kstep=1
-  Q8-scale-boundary fold (~256KB of C-spill per 32-row x 32-token unit vs 64KB of weight traffic - 
+  Q8-scale-boundary fold (~256KB of C-spill per 32-row x 32-token unit vs 64KB of weight traffic -
   codegen, frequency license, and dispatch all separately exonerated). Family stays grid-resident,
   `spr_manifest` unchanged; revisit only on Granite-Rapids-class silicon or a cache-resident
   serving regime. Conditional-only tail: an **amx kstep=2 fold** (K=64 tiles, two scale segments
@@ -903,7 +909,7 @@ group; wording kept.
   plan's "subsume, then delete dasllama_tune's `[tuned]`/box_profile rail" is not done.
 - **OPEN - per-slot perms.** Unimplemented: no per-slot perm plumbing exists in llvm_tune or
   `dasllama_math_gen.das`; the phrase appears only in plan prose and in the unrelated per-slot
-  *backend* pin (`x64_arch.md`, `dasllama_math.das`). What landed instead is per-FORMAT families - 
+  *backend* pin (`x64_arch.md`, `dasllama_math.das`). What landed instead is per-FORMAT families -
   separate `[tune]` brackets for k4 / k5 / k6 / q40 / q8q8 / q51 in `dasllama_math_gen.das`, each
   its own manifest entry. Per-slot perms remains the named escalation if a box ever flips the amx
   end-to-end verdict, or if biased-vs-plain gemv turns out to matter under an amx stamp.
@@ -934,7 +940,7 @@ group; wording kept.
 
 ### From `audio_models_plan.md` (Findings; correctness, not perf)
 
-- **RESOLVED (87ffe39fe) - the v0.3 Mistral `[INST]` template's derived close was ` [/INST]` - 
+- **RESOLVED (87ffe39fe) - the v0.3 Mistral `[INST]` template's derived close was ` [/INST]` -
   wrong for multi-turn.** Fixed: `mistral_instruct_template`'s `assistant_close` is `</s>`, like
   v7-tekken's. Spotted in audio session B while adding `ChatTemplate.assistant_close`.
 
@@ -964,7 +970,7 @@ group; wording kept.
   encoder becomes a measured bottleneck vs mtmd. *(This is the later of the doc's two takes; the
   earlier "q8 the 6 GEMM families + projector at load" phrasing is the same lever, already carried
   by the "Audio arc: the fp32 encoder is the whole ASR cost" entry above.)*
-- prefill 1518 pos (1500 audio) ~ 16.4 s on M1 for the 7B q8 decoder (~93 t/s); decode ~11 t/s - 
+- prefill 1518 pos (1500 audio) ~ 16.4 s on M1 for the 7B q8 decoder (~93 t/s); decode ~11 t/s -
   normal 7B-on-M1 numbers, no audio-specific cost.
 - mel/DFT-GEMM is noise, leave it: single-threaded `gemm_f32`, ~0.13 s per clip, and the
   Mel-as-GEMM twiddle matrices are f32 fblob consts (~410 KB) - quantizing them is noise, skip.

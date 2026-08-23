@@ -15,6 +15,9 @@
 #include <vector>
 #include <unordered_map>
 #include <map>
+#include <thread>
+#include <chrono>
+#include <algorithm>
 
 #if !__has_feature(objc_arc)
 #error "dasMetal.mm must be compiled with ARC (-fobjc-arc)"
@@ -424,6 +427,76 @@ namespace das {
 #endif
     }
 
+    // ===== residency heartbeat =====
+    // A committed+requested set still un-wires after a long CPU-only window (the OS collects
+    // it); the next submission repays the kernel-side pass over the whole set. ggml-metal's
+    // cure, copied: a background thread re-calls requestResidency on every registered set every
+    // few ms, for keep_alive_s after the last kick. Registered handles are raw (the das side
+    // owns the retain); metal_release_residency_set unregisters under the same mutex before
+    // releasing, so the loop never touches a dead set.
+    struct ResidencyHeartbeat {
+        std::mutex mx;
+        std::vector<void *> sets;
+        std::atomic<bool> stop{false};
+        std::atomic<int64_t> loops_left{0};
+        std::thread thr;
+        bool started = false;
+        static const int interval_ms = 5;
+        ~ResidencyHeartbeat() {
+            stop.store(true, std::memory_order_relaxed);
+            if ( thr.joinable() ) thr.join();
+        }
+    };
+    static ResidencyHeartbeat g_rsetHeartbeat;
+
+    static void residency_heartbeat_loop () {
+#if defined(DASMETAL_HAS_RESIDENCY_SETS)
+        if ( @available(macOS 15.0, iOS 18.0, *) ) {
+            auto & hb = g_rsetHeartbeat;
+            while ( !hb.stop.load(std::memory_order_relaxed) ) {
+                if ( hb.loops_left.load(std::memory_order_relaxed) > 0 ) {
+                    {
+                        std::lock_guard<std::mutex> guard(hb.mx);
+                        for ( void * h : hb.sets ) {
+                            [(__bridge id<MTLResidencySet>) h requestResidency];
+                        }
+                    }
+                    hb.loops_left.fetch_sub(1, std::memory_order_relaxed);
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(ResidencyHeartbeat::interval_ms));
+            }
+        }
+#endif
+    }
+
+    void metal_residency_set_heartbeat ( MetalResidencySet * rset, int32_t keep_alive_s, Context * ctx, LineInfoArg * at ) {
+        if ( !rset ) ctx->throw_error_at(at, "metal_residency_set_heartbeat: null residency set");
+#if defined(DASMETAL_HAS_RESIDENCY_SETS)
+        if ( @available(macOS 15.0, iOS 18.0, *) ) {
+            auto & hb = g_rsetHeartbeat;
+            {
+                std::lock_guard<std::mutex> guard(hb.mx);
+                if ( std::find(hb.sets.begin(), hb.sets.end(), (void *) rset) == hb.sets.end() ) {
+                    hb.sets.push_back((void *) rset);
+                }
+                if ( !hb.started ) {
+                    hb.started = true;
+                    hb.thr = std::thread(residency_heartbeat_loop);
+                }
+            }
+            hb.loops_left.store(int64_t(keep_alive_s) * 1000 / ResidencyHeartbeat::interval_ms, std::memory_order_relaxed);
+        }
+#else
+        (void) keep_alive_s;
+#endif
+    }
+
+    // the heartbeat's test witness: thread running with keep-alive remaining
+    bool metal_residency_heartbeat_live () {
+        std::lock_guard<std::mutex> guard(g_rsetHeartbeat.mx);
+        return g_rsetHeartbeat.started && g_rsetHeartbeat.loops_left.load(std::memory_order_relaxed) > 0;
+    }
+
     void metal_set_pipeline ( MetalComputeEncoder * enc, MetalComputePipeline * pso, Context * ctx, LineInfoArg * at ) {
         if ( !enc ) ctx->throw_error_at(at, "metal_set_pipeline: null encoder");
         if ( !pso ) ctx->throw_error_at(at, "metal_set_pipeline: null pipeline");
@@ -566,7 +639,14 @@ namespace das {
     void metal_release_residency_set ( MetalResidencySet * h ) {
 #if defined(DASMETAL_HAS_RESIDENCY_SETS)
         if ( @available(macOS 15.0, iOS 18.0, *) ) {
-            if ( h ) [(__bridge id<MTLResidencySet>)(void *) h endResidency];
+            if ( h ) {
+                {
+                    std::lock_guard<std::mutex> guard(g_rsetHeartbeat.mx);
+                    auto & v = g_rsetHeartbeat.sets;
+                    v.erase(std::remove(v.begin(), v.end(), (void *) h), v.end());
+                }
+                [(__bridge id<MTLResidencySet>)(void *) h endResidency];
+            }
         }
 #endif
         release_handle(h);
@@ -748,6 +828,11 @@ namespace das {
             addExtern<DAS_BIND_FUN(metal_residency_set_request)>(*this, lib, "metal_residency_set_request",
                 SideEffects::modifyExternal, "metal_residency_set_request")
                     ->args({"residency_set", "context", "at"});
+            addExtern<DAS_BIND_FUN(metal_residency_set_heartbeat)>(*this, lib, "metal_residency_set_heartbeat",
+                SideEffects::modifyExternal, "metal_residency_set_heartbeat")
+                    ->args({"residency_set", "keep_alive_s", "context", "at"});
+            addExtern<DAS_BIND_FUN(metal_residency_heartbeat_live)>(*this, lib, "metal_residency_heartbeat_live",
+                SideEffects::accessExternal, "metal_residency_heartbeat_live");
 
             addExtern<DAS_BIND_FUN(metal_release_device)>(*this, lib, "metal_release",
                 SideEffects::modifyExternal, "metal_release_device")->args({"handle"});
