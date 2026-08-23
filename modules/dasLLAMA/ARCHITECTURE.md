@@ -186,7 +186,7 @@ that a question answered for one backend has an obvious address in the other. Th
 | `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
 | `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates — no GPU C++ require, so any box can bake | device calls |
-| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops, the whisper-class block loop, the conv frontends + the qwen3a padded-weight slab) — no session, no KV, no mirror; registers the gemma4uv, gemma4v, gemma3v, encoder_blocks, tower-conv and qwen3a-conv hooks | kernel bodies, decoder state |
+| the tower driver<br>`dasllama_metal_tower` | one-shot embedder/encoder encodes (gemma4uv chain, the gemma4v ViT, gemma3v SigLIP and qwen3v block loops — qwen3v adds the vision NEOX rope, the fused-qkv weight-offset GEMMs, and the inline deepstack tap + tail merger chains — the whisper-class block loop, the conv frontends + the qwen3a padded-weight slab) — no session, no KV, no mirror; registers the gemma4uv, gemma4v, gemma3v, qwen3v, encoder_blocks, tower-conv and qwen3a-conv hooks | kernel bodies, decoder state |
 | the ASR-decoder driver<br>`dasllama_metal_asr_dec` | the whisper decoder on Metal: the 34B weight blob, the f16 resident cross/self K/V, window-granular cross-KV + decode-step serves; registers the whisper cross-KV and decode hooks (family registries in `dasllama_whisper`) | kernel bodies, LLM session state |
 | the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan — the `[vk_dispatch]` macro derives access per class) | the kernel-access macro | anything else |
 
@@ -407,9 +407,13 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   merger, the decoder adds slice l+1 after layer l. The family token budget [8, 4096] is
   mtmd's, not the gemma-scoped DASLLAMA_VISION_* knobs; image_mean/std (0.5) is
   PREPROCESSING like gemma3v. CPU serving default: the block GEMMs serve as Q8_0 planes
-  (read-time transcode, the gemma3v recipe; the FFN pair pads to ff_pad in the q8 layout
-  ONLY — the exact bf16/f32 lane keeps the file's widths as the parity rail); pin knobs
-  `set_qwen3v_q8`/`reset_qwen3v_q8`, two image tags. Composes `dasllama_tower.das`; owns
+  (read-time transcode, the gemma3v recipe); the exact lane stages EVERYTHING f32-in-blob at
+  ff_pad both dims — blocks, mergers, and taps — because the Metal tower (`register_qwen3v_gpu`,
+  blocks + rope + taps + tail on-device, tap/tail proj outputs land in `ds_stash`/`ds_slice`)
+  and the float-batch tier both read f32 planes, and the same lane is the parity rail (the
+  f32 sites are this charter's sanction, not a fallback). Pin knobs
+  `set_qwen3v_q8`/`reset_qwen3v_q8`, two image tags; the lane policy prefers f32 when the
+  GPU tower or accel serves. Composes `dasllama_tower.das`; owns
   only its layout, the reorder walk, and the block loop. SANCTIONED over the 1 GiB staged-mint line (this family
   and qwen25v): the Omni (2.1 GB) and Qwen2.5-Omni (2.6 GB) mmprojs stage source+image at
   once with no cap — the same shape their audio halves already stage — until
@@ -772,20 +776,22 @@ contracts cannot.
 
 ### 2.12 The post-CPU-burn GPU ramp cannot be pre-paid — do not build a warm-up
 
-After a multi-second CPU-saturating phase (a CPU tower encode), the first sustained-bandwidth
-GPU submission runs degraded for tens of ms (~70 ms on an 8B, scaling with the model's
-bandwidth demand), one time per burn — a memory/GPU governor ramp, host-side between commit
-and execution (probe-verified 2026-08-23). Every cheap remedy is REFUTED by measurement, in
-`PERF_LEDGER.md`'s OPEN entry: empty command buffers and driver round-trips (the driver is
-never asleep — 0.107 ms), `MTLResidencySet` pinning of the whole working set (zero effect),
-single-dispatch kernels, per-page touch kernels, and light pulse-trains held through the burn.
-Only full-weight-stream work absorbs it — meaning the ramp rides whatever heavy work comes
-first, and a warm-up always pays its own cost ON TOP of the ramp it was meant to hide. Do not
-re-attempt a warm-up, a keepalive, or a residency pin against this penalty; the fix that works
-is removing the burn — serve the encoder on the GPU (the Metal tower). A family whose encoder
-stays on the CPU keeps the ramp as a ledgered cost of that arm, not as an engine defect.
-Related, same ledger: merely arming Metal makes a CPU q8 tower encode ~1.7x slower —
-mechanism unnamed, also deleted by a GPU-served tower.
+After a CPU-only phase, the first Metal submission runs degraded — host-side between commit
+and execution, one time per window (probe-verified 2026-08-23): ~40 ms after even a
+tens-of-ms window, saturating ~70-130 ms after multi-second burns, scaling with the model.
+The mechanism is Metal's per-commit dependency pass over the TRACKED working set running
+cold (the same pass that cost ~70 ms/prefill before the weights went untracked — see the
+region-upload comment in `dasllama_metal_common`); making the prefill pools untracked reds
+parity, so the tracking is load-bearing, and the scoped fix is a per-buffer tracking audit.
+Every pre-payment is REFUTED by measurement (`PERF_LEDGER.md`'s OPEN entry): empty command
+buffers and driver round-trips (0.107 ms — never asleep), single-dispatch kernels, per-page
+touch kernels, light pulse-trains through the burn — a warm-up always pays its own cost ON
+TOP of the slack it was meant to hide. Do not re-attempt one. The `MTLResidencySet` pin
+(`DASLLAMA_METAL_RESIDENCY`, on by default) is the ONE measured partial: it holds the
+short-window case (the tower's first submission after its CPU stem, −15 ms/encode) but not
+long windows. The structural fixes are removing the CPU phase (serve encoders on the GPU —
+the Metal tower) and the tracking audit. Related, same ledger: merely arming Metal makes a
+CPU q8 tower encode ~1.7x slower — mechanism unnamed, deleted by a GPU-served tower.
 
 ---
 
