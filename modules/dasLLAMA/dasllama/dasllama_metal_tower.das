@@ -13,6 +13,7 @@ require dasllama/dasllama_metal_shapes
 require dasllama/dasllama_gemma4uv
 require dasllama/dasllama_gemma4v   // Gemma4vTower/Gemma4vState — the ViT block loop
 require dasllama/dasllama_gemma3v   // Gemma3vTower/Gemma3vState — the SigLIP block loop
+require dasllama/dasllama_qwen3v   // Qwen3vTower/Qwen3vState — the qwen3vl ViT block loop (+ deepstack stashes)
 require dasllama/dasllama_audio   // AudioTower/EncoderState — the whisper-class block loop
 require dasllama/dasllama_qwen3a   // Qwen3aTower — the conv2d frontend hook
 require metal/das_metal_boost
@@ -600,6 +601,180 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     return true
 }
 
+// The qwen3vl ViT block loop: gemma3v's dispatch chain + the vision NEOX rope (the prefill's
+// enc_rope on compact q/k, per-row tables uploaded once) + the fused qkv as three
+// weight-offset GEMMs; segments at the tap layers stash each residual for the CPU tap mergers.
+[hot_path]
+def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    if (t.q8) {
+        return tw_decline(MetalTowerDecline.quant_mode)
+    }
+    let d = t.n_embd
+    let hs = d / t.n_head
+    let ff = t.ff_pad
+    let hs_pad = hs <= 64l ? 64l : 128l
+    if (d % 64l != 0l || ff % 64l != 0l || hs > 128l || hs % 2l != 0l) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
+        return tw_decline(MetalTowerDecline.device)
+    }
+    let mp = (npos + 31l) / 32l * 32l
+    let nk64 = (npos + 63l) / 64l * 64l
+    let dp = t.n_head * hs_pad   // the padded attention width
+    let half = hs / 2l
+    let mapped = t.image_map != null
+    var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
+    let bytes_row = uint64(mp * d * 4l)
+    let bytes_rowp = uint64(mp * dp * 4l)
+    let bytes_h = uint64(mp * ff * 4l)
+    let bytes_att = uint64(t.n_head * mp * nk64 * 4l)
+    let bytes_tab = uint64(npos * half * 4l)
+    var bx = pool_acquire(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire(g_tw_pool, g_dev, bytes_row)
+    var bxb2 = pool_acquire(g_tw_pool, g_dev, bytes_row)
+    var braw = pool_acquire(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of rope + the head restride
+    var bq = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
+    var bk = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
+    var bv = pool_acquire(g_tw_pool, g_dev, bytes_rowp)
+    var bo_p = pool_acquire(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
+    var bh = pool_acquire(g_tw_pool, g_dev, bytes_h)
+    var batt = pool_acquire(g_tw_pool, g_dev, bytes_att)
+    var bcos = pool_acquire(g_tw_pool, g_dev, bytes_tab)
+    var bsin = pool_acquire(g_tw_pool, g_dev, bytes_tab)
+    unsafe {
+        var p = reinterpret<uint8?>(metal_buffer_contents(bx))
+        memcpy(p, addr(s.x[0]), npos * d * 4l)
+        if (mp > npos) {   // DEFENSIVE pad zero (controls stay green without it): guards stale-Inf pool reuse
+            var zp = reinterpret<float?>(p + npos * d * 4l)
+            for (i in range64((mp - npos) * d)) {
+                zp[i] = 0.0
+            }
+        }
+        memcpy(metal_buffer_contents(bcos), addr(s.cos_t[0]), npos * half * 4l)
+        memcpy(metal_buffer_contents(bsin), addr(s.sin_t[0]), npos * half * 4l)
+    }
+    var u_d = uniform_u32(uint(d))
+    var u_ff = uniform_u32(uint(ff))
+    var u_hs = uniform_u32(uint(hs))
+    var u_hsp = uniform_u32(uint(hs_pad))
+    var u_eps = uniform_f32(t.eps)
+    var u_totd = uniform_u32(uint(npos * d))
+    var u_totff = uniform_u32(uint(npos * ff))
+    var u_totp = uniform_u32(uint(npos * t.n_head * hs_pad))   // restride total, pad direction
+    var u_totc = uniform_u32(uint(npos * t.n_head * hs))       // restride total, compact direction
+    var u_np_rope = uniform_u32(uint(npos * d / 2l))           // rope pairs over a compact q/k buffer
+    var u_neox = uniform_u32(1u)
+    var u_rot = uniform_u32(uint(hs))                          // full rope across the head
+    var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
+        npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
+        qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
+    // segment ends: after each deepstack tap layer (the tap reads that residual), then the top
+    var seg_end : int64[4]
+    var nseg = 0
+    if (t.ds_l0 >= 0l) {
+        seg_end[nseg] = t.ds_l0 + 1l
+        nseg++
+    }
+    if (t.ds_l1 >= 0l) {
+        seg_end[nseg] = t.ds_l1 + 1l
+        nseg++
+    }
+    if (t.ds_l2 >= 0l) {
+        seg_end[nseg] = t.ds_l2 + 1l
+        nseg++
+    }
+    seg_end[nseg] = t.n_layer
+    nseg++
+    var served = true
+    var l0 = 0l
+    var err = ""
+    for (si in range(nseg)) {
+        let l1 = seg_end[si]
+        if (served && l1 > l0) {
+            let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+                for (l in range64(l0, l1)) {
+                    let o = qwen3v_block_offs(t, l)
+                    enc_ln(enc, bx, bblob, uint64(o.ln1_w * 4l), bblob, uint64(o.ln1_b * 4l), bxb, u_d, u_eps, npos)
+                    let wq = uint64(o.w[QWEN3V_GEMM_QKV] * 4l)   // the fused qkv rows: q, then k at d·d, v at 2d·d
+                    enc_f32_mm(enc, bblob, wq, bxb, braw, 0ul, u_d, u_d, mp, d)
+                    enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.qkv_b * 4l), u_d, u_totd, npos * d)
+                    enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, u_rot, npos * d / 2l)
+                    enc_head_restride(enc, braw, bq, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+                    enc_f32_mm(enc, bblob, wq + uint64(d * d * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
+                    enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + d) * 4l), u_d, u_totd, npos * d)
+                    enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, u_rot, npos * d / 2l)
+                    enc_head_restride(enc, braw, bk, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+                    enc_f32_mm(enc, bblob, wq + uint64(2l * d * d * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
+                    enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + 2l * d) * 4l), u_d, u_totd, npos * d)
+                    enc_head_restride(enc, braw, bv, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+                    enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
+                    enc_softmax(enc, batt, ka, null, npos, t.n_head)
+                    enc_av_mm(enc, batt, bv, bo_p, ka, mp, t.n_head, hs_pad)
+                    enc_head_restride(enc, bo_p, bxb2, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
+                    enc_f32_mm(enc, bblob, uint64(o.w[QWEN3V_GEMM_O] * 4l), bxb2, bxb, 0ul, u_d, u_d, mp, d)
+                    enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(o.out_b * 4l), u_d, u_totd, npos * d)
+                    enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
+                    enc_ln(enc, bx, bblob, uint64(o.ln2_w * 4l), bblob, uint64(o.ln2_b * 4l), bxb, u_d, u_eps, npos)
+                    enc_f32_mm(enc, bblob, uint64(o.w[QWEN3V_GEMM_UP] * 4l), bxb, bh, 0ul, u_d, u_ff, mp, ff)
+                    enc_add_bias_rows(enc, bh, 0ul, bblob, uint64(o.up_b * 4l), u_ff, u_totff, npos * ff)
+                    enc_gelu_lut(enc, bh, 0ul, u_totff, npos * ff)
+                    enc_f32_mm(enc, bblob, uint64(o.w[QWEN3V_GEMM_DOWN] * 4l), bh, bxb2, 0ul, u_ff, u_d, mp, d)
+                    enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(o.down_b * 4l), u_d, u_totd, npos * d)
+                    enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
+                }
+            }
+            if (!ran) {
+                served = false
+            } elif (si < nseg - 1) {   // a tap boundary: stash this residual for the CPU tap merger
+                unsafe {
+                    memcpy(addr(s.ds_stash[int64(si) * npos * d]), metal_buffer_contents(bx), uint64(npos * d * 4l))
+                }
+            }
+        }
+        l0 = l1
+    }
+    if (served) {
+        unsafe {
+            memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
+        }
+        g_tower_encodes++
+        g_tower_rows += npos
+        g_tower_blocks += t.n_layer
+    }
+    pool_release(g_tw_pool, bx, bytes_row)
+    pool_release(g_tw_pool, bxb, bytes_row)
+    pool_release(g_tw_pool, bxb2, bytes_row)
+    pool_release(g_tw_pool, braw, bytes_row)
+    pool_release(g_tw_pool, bq, bytes_rowp)
+    pool_release(g_tw_pool, bk, bytes_rowp)
+    pool_release(g_tw_pool, bv, bytes_rowp)
+    pool_release(g_tw_pool, bo_p, bytes_rowp)
+    pool_release(g_tw_pool, bh, bytes_h)
+    pool_release(g_tw_pool, batt, bytes_att)
+    pool_release(g_tw_pool, bcos, bytes_tab)
+    pool_release(g_tw_pool, bsin, bytes_tab)
+    pool_release(g_upool, u_d, 4ul)
+    pool_release(g_upool, u_ff, 4ul)
+    pool_release(g_upool, u_hs, 4ul)
+    pool_release(g_upool, u_hsp, 4ul)
+    pool_release(g_upool, u_eps, 4ul)
+    pool_release(g_upool, u_totd, 4ul)
+    pool_release(g_upool, u_totff, 4ul)
+    pool_release(g_upool, u_totp, 4ul)
+    pool_release(g_upool, u_totc, 4ul)
+    pool_release(g_upool, u_np_rope, 4ul)
+    pool_release(g_upool, u_neox, 4ul)
+    pool_release(g_upool, u_rot, 4ul)
+    if (!served) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
 // The whisper conv frontend for one mel chunk: im2col + conv GEMMs + bias + GELU + pos-add,
 // one command buffer, s.x readback. BEST-EFFORT inside the tower knob: any decline is a
 // silent false (no counter noise — the CPU conv serves and the blocks still ride the GPU).
@@ -882,6 +1057,7 @@ def dasllama_metal_tower_register {
     register_gemma4uv_gpu(@@metal_gemma4uv_encode)
     register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_tower_serves)
     register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_tower_serves)
+    register_qwen3v_gpu(@@metal_qwen3v_blocks, @@metal_tower_serves)
     register_tower_blocks_gpu(@@metal_tower_blocks)
     register_tower_conv_gpu(@@metal_conv_frontend)
     register_qwen3a_conv_gpu(@@metal_q3a_convs)

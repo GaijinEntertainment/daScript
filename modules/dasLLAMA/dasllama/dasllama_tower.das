@@ -382,6 +382,28 @@ def tower_repack_q8_blocks(var qblob : array<int8>; var qscales : array<float>;
     }
 }
 
+//! The f32 twin of ``tower_stage_q8_pad_cols``: stage a ``[rows × ff]`` GEMM into its padded
+//! ``[rows × fp]`` f32 region — each file row lands first, then ``fp − ff`` zero tail columns
+//! (the pads multiply the up GEMM's zero pad outputs, bit-identical).
+def tower_stage_f32_pad_cols(m : GGUFMeta; b : array<uint8> | #; name : string; var blob : array<float>;
+                             @scratch var rowscratch : array<float>; wo, rows, ff, fp : int64) {
+    if (long_length(rowscratch) < rows * ff) {
+        rowscratch |> reserve(rows * ff)
+        rowscratch |> resize(rows * ff)
+    }
+    gguf_read_tensor_f32(m, b, name, rowscratch, 0l, rows * ff)
+    unsafe {
+        var dp = addr(blob[wo])
+        let sp = addr(rowscratch[0])
+        for (r in range64(rows)) {
+            memcpy(dp + r * fp, sp + r * ff, ff * 4l)
+            for (i in range64(ff, fp)) {
+                dp[r * fp + i] = 0.0
+            }
+        }
+    }
+}
+
 //! Zero ``n`` floats at ``at`` — pad tails of staged planes.
 def tower_zero_span(var a : array<float>; at, n : int64) {
     if (n <= 0l) {

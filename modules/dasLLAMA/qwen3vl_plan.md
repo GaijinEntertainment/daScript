@@ -686,3 +686,57 @@ The remedy is slice J's deferred **Metal tower for the qwen ViTs** — GPU encod
 domain loaded, delete the 2-12 s CPU encodes AND the ramp, and also delete the still-open
 1.7x metal-armed-CPU-encode anomaly. Until a family's tower serves on GPU (qwen25v, the
 conformer audio encoders), its image/audio-turn pp keeps the ramp — ledgered.
+
+### Slice J (opened 2026-08-23, Boris: "lets do J - and see where we are at"): the qwen3v
+### Metal tower — predictions 26-29 registered BEFORE implementation
+
+Design (the gemma3v recipe, converged): the exact lane re-stages the block GEMMs as
+**f32-in-blob at ff_pad both dims** (gemma3v's "%64 fits Metal tiles, %32 quantizes" law;
+bf16 blk lane retired — mergers/taps keep their planes); `q3v_serve_q8` gains the
+gpu-serves clause + `register_qwen3v_gpu` hook, so the lane ladder matches g3v: q8 CPU
+default / f32 exact when the Metal tower or accel serves. The Metal encode: stem + reorder +
+pos stay CPU; the block loop rides `metal_gemma3v_blocks`' dispatch chain + `enc_rope`
+(NEOX, per-token table rows = `s.cos_t/s.sin_t` uploaded once per grid) on q/k compact
+before head-restride; the fused qkv serves as THREE `enc_f32_mm` at weight row offsets
+(0, d*d, 2d*d); shapes pass the existing gates (d 1152%64=0, ff_pad 4352%64=0, hs 72 →
+hs_pad 128). Deepstack taps + the tail merger ride the same chain on GPU — the ×4 merge
+reshape is a flat reinterpretation of the row buffer, so tap input = the residual buffer
+read as [npos/4 × 4d]; compact tap/tail outputs read back and scatter into the wide out on
+the CPU. Identity: verify the layout change shifts the dlim identity (offsets serialize);
+if the meta hash misses it, bump the family tag — the slice-L stale-dlim lesson.
+
+26. The qwen3v Metal blocks land with ZERO new Metal kernels — enc_rope covers the vision
+    rope, weight-offset GEMMs cover the fused qkv, the existing LN/mm/gelu chain covers the
+    taps and tail.
+27. Tier-1 exact cells pass on the FIRST honest run after the f32 re-stage at equal-or-
+    tighter maxdiff than the bf16 lane's; the likely red, if any, is the rope table
+    addressing against the merge reorder, not the GEMM chain.
+28. Measured 4B Metal encode (coco, 300 tok): 250-500 ms (today 2194 ms; mtmd Metal ~250);
+    the Metal-leg img:pp recovers to within +/-8% of lcpp — the burn and its ramp gone.
+29. The 1.7x metal-armed-CPU-encode anomaly goes moot on qwen3v and stays reproducible on
+    qwen25v — it rides the CPU-encode-under-Metal context, not the family.
+
+#### Slice J checkpoint (2026-08-23, released rig, Metal cells, r=3, coco)
+
+**LANDED (branch, 12/12 test_qwen3v):** the qwen3v Metal tower — the exact lane re-staged
+f32+ff_pad both dims (IMAGE_VERSION 12: the identity hashes knobs+version+tag, never offset
+values — a served-layout change without a bump maps stale images, third strike, rule now on
+the constant), `register_qwen3v_gpu` + the lane's driver clause, `metal_qwen3v_blocks`
+(gemma3v's chain + enc_rope NEOX on compact q/k + the fused qkv as three weight-offset GEMMs
++ tap-layer segments stashing residuals for the CPU tap mergers — ZERO new Metal kernels,
+P26 CORRECT). Tier-1: CPU f32 floor moved (ff_pad regroups the down GEMM's accumulation;
+red448 3.2e-3 → TIER1_REL 1.5e-2 with a LIVE exact zero-layer poison, excess 0.87); the
+Metal arm gates on its own GPU bars (the gemma3v f16-tile precedent; gray stays off the
+GPU-ds set — the q8-ds precedent; engage evidence +6 encodes/+153 blocks/0 declines).
+P27 HALF: first-honest-run needed the bar recalibrations, and the miss was accumulation
+grouping + the ds-gray tap slices, not rope.
+
+**Measured (das Metal leg, before → after):** 4B enc 2194 → **512 ms** (4.3x; mtmd Metal
+~250), 8B enc 3446 → **752 ms** (4.6x; ref ~508). img:pp: 8B 402 → **445** (−29% → −21% vs
+ref ~566); 4B 841 → **849** (−16% unchanged). tg unchanged; captions correct both models
+(pink couch). **P28 HALF**: enc inside the predicted band, pp did NOT fully recover — the
+encode still ENDS with a CPU burst (the taps + tail merger: ~8.6 GFLOP all-core right before
+the prefill), so the §2.12 ramp re-arms. **The named next lever: the taps + tail merger onto
+the GPU chain** (same dispatch vocabulary over the flat-reinterpreted merged rows) — cuts
+the enc gap vs mtmd AND deletes the trailing burn that keeps pp from parity. P29 untested
+(qwen25v arm not re-run).

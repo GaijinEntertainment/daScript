@@ -43,7 +43,7 @@ require dasllama/dasllama_load   // the GGUF load walk (load_gguf/load_model_/lo
 // config-derived. A loader change that alters which tensors load leaves a structurally VALID stale
 // image that silently represents a different model; only this version catches it. Mismatch
 // regenerates from the gguf, never migrates.
-let IMAGE_VERSION = 11   // v11: header byte 48 carries the meta-layout fingerprint (layout changes now auto-refuse)
+let IMAGE_VERSION = 12   // v12: qwen3v serves f32+ff_pad exact planes. BUMP ON ANY SERVED-LAYOUT CHANGE: the identity hashes knobs+version+tag, never offset values, so a layout change without a bump maps stale images (three strikes)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and

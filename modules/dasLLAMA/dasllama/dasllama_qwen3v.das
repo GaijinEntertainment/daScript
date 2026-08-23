@@ -29,7 +29,8 @@ require math
 //! the files carry no ClippableLinear sidecars. Oracle: llama-mtmd-debug -p encode on the
 //! f32-widened mmproj (`qwen3vl_plan.md`, dumps in models/qwen3vl-vision-oracle/).
 //! CPU serving default: the block GEMMs serve as Q8_0 planes (read-time transcode, the
-//! gemma3v recipe); the exact bf16/f32 lane is the parity rail.
+//! gemma3v recipe); the f32 exact lane serves the Metal tower / float-batch tier and is the
+//! parity rail.
 
 let QWEN3V_ROPE_THETA = 10000.0   // models/qwen3vl.cpp hardcodes it — not in the gguf
 // the family's dynamic-resolution token budget (mtmd set_limit_image_tokens for qwen)
@@ -59,10 +60,10 @@ struct Qwen3vTower {
     blk_bf16 : bool
     mm_bf16 : bool
     // q8: the 4·n_layer block GEMMs SERVE as Q8_0 planes (read-time transcode) and layer_w
-    // indexes qblob; the FFN pair serves padded to ff_pad (n_ff is not 32-aligned). The exact
-    // lane serves the file's widths — only the q8 layout pads.
+    // indexes qblob; the exact lane serves them as f32 in blob (the Metal tower / float-batch
+    // read). The FFN pair serves padded to ff_pad in BOTH lanes (n_ff is not 32-aligned).
     q8 : bool
-    ff_pad : int64       // n_ff rounded up to 64 — the q8 lane's served FFN width
+    ff_pad : int64       // n_ff rounded up to 64 — the served FFN width, both lanes
     blob : PlaneF = PlaneF()
     wblob : PlaneU16 = PlaneU16()
     qblob : PlaneI8 = PlaneI8()
@@ -77,7 +78,7 @@ struct Qwen3vTower {
     mm2_b : int64
     layer_f : int64      // per-block f32 region; stride: ln1 w+b, ln2 w+b [d ×4], qkv_b [3d], out_b [d], up_b [ff_pad, zero tail], down_b [d]
     layer_f_stride : int64
-    layer_w : int64      // per-block GEMM region (qblob when q8, wblob when blk_bf16, else blob); stride layer_w_stride
+    layer_w : int64      // per-block GEMM region (qblob when q8, else f32 in blob); stride layer_w_stride
     layer_w_stride : int64
     // deepstack (dense Qwen3-VL): up to three tap mergers — output rows widen to
     // (1+n_deepstack)·proj_dim; 0 taps = the Omni tower, narrow rows
@@ -112,6 +113,7 @@ struct Qwen3vState {
     @exact_size ds_slice : array<float>  // deepstack tap / main-merger staging [nout × proj]
     @scratch @exact_size pos_rs : array<float>   // the pos table resized to the grid [npos × d]
     @exact_size cos_t : array<float>; @exact_size sin_t : array<float>
+    @exact_size ds_stash : array<float>  // GPU arm: the residual at each tap layer [n_ds × npos × d]
     @scratch @exact_size xqi : array<int8>    // q8 lane: the requantized GEMM input, grown per site
     @scratch @exact_size xsi : array<float>   // its per-32-block scales
     @scratch pos2 : array<int2>      // per reordered row: (patch row, patch column)
@@ -143,6 +145,7 @@ def finalize(var s : Qwen3vState) {
     delete s.m0
     delete s.ds_mid
     delete s.ds_slice
+    delete s.ds_stash
     delete s.pos_rs
     delete s.cos_t
     delete s.sin_t
@@ -232,21 +235,35 @@ def private register_qwen3v_image_tags {
     register_image_family_tag(QWEN3V_TAG_Q8)
 }
 
-// the lane policy follows the fastest GEMM path on the box: the armed accelerate float-batch
-// tier wants the file's planes; else q8. No Metal tower serves this family yet, so there is
-// no driver clause. A pin overrides.
+// the lane policy follows the fastest GEMM path on the box: the Metal tower or the armed
+// accelerate float-batch tier wants f32 planes; else q8. A pin overrides.
 enum private Q3vLane {
     unset    // the policy decides
-    exact    // the file's planes
+    exact    // f32 planes
     q8
 }
 var private g_q3v_q8_pin = Q3vLane.unset
+
+typedef Qwen3vGpuBlocksFn = function<(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool>
+typedef Qwen3vGpuServesFn = function<() : bool>
+var private g_q3v_gpu : Qwen3vGpuBlocksFn
+var private g_q3v_gpu_serves : Qwen3vGpuServesFn
+var private g_q3v_gpu_set = false
+
+//! The Metal tower's qwen3v block-loop seat ([init]): the blocks fn runs the stack over `s.x`
+//! (rope tables prebuilt) and fills `s.ds_stash` at the tap layers — false = decline, the CPU
+//! loop serves; `serves` answers the knob so the lane policy can prefer f32 planes.
+def register_qwen3v_gpu(fn : Qwen3vGpuBlocksFn; serves : Qwen3vGpuServesFn) {
+    g_q3v_gpu = fn
+    g_q3v_gpu_serves = serves
+    g_q3v_gpu_set = true
+}
 
 def private q3v_serve_q8() : bool {
     if (g_q3v_q8_pin != Q3vLane.unset) {
         return g_q3v_q8_pin == Q3vLane.q8
     }
-    return !float_batch_override_active()
+    return !((g_q3v_gpu_set && invoke(g_q3v_gpu_serves)) || float_batch_override_active())
 }
 
 //! Pin the qwen3v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
@@ -263,17 +280,22 @@ def reset_qwen3v_q8() {
 //! Would the next load serve the block GEMMs as q8 — the pin when set, the policy otherwise.
 def qwen3v_serves_q8() : bool => q3v_serve_q8()
 
+//! Would the registered GPU tower take the f32 lane — the policy's driver clause, for tests.
+def qwen3v_gpu_would_serve() : bool => g_q3v_gpu_set && invoke(g_q3v_gpu_serves)
+
 def private q3v_tag() : string => q3v_serve_q8() ? QWEN3V_TAG_Q8 : QWEN3V_TAG
 
 // the lane changes what a load mints and serves, so the load says which and why
 def private q3v_announce_lane() {
-    var why = "the CPU default (no accelerate tier)"
+    var why = "the CPU default (DASLLAMA_METAL_TOWER off / no accelerate tier)"
     if (g_q3v_q8_pin != Q3vLane.unset) {
         why = "pinned via set_qwen3v_q8"
+    } elif (g_q3v_gpu_set && invoke(g_q3v_gpu_serves)) {
+        why = "DASLLAMA_METAL_TOWER on: the Metal tower serves f32 planes"
     } elif (float_batch_override_active()) {
-        why = "DASLLAMA_ACCEL on: the float-batch tier serves the file's planes"
+        why = "DASLLAMA_ACCEL on: the float-batch tier serves f32 planes"
     }
-    to_log(LOG_INFO, "dasLLAMA qwen3v: block GEMM lane {q3v_serve_q8() ? "q8" : "exact planes"} - {why}\n")
+    to_log(LOG_INFO, "dasLLAMA qwen3v: block GEMM lane {q3v_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
 }
 
 // the block GEMM tensors in QWEN3V_GEMM_* order; every per-GEMM list follows it
@@ -328,8 +350,7 @@ def private q3v_verify_tensors(m : GGUFMeta; t : Qwen3vTower; gemm_sizes : array
 
 def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&; var qo : int64&) {
     let d = t.n_embd
-    let ff = t.n_ff
-    let ffs = t.q8 ? t.ff_pad : ff   // the served FFN width — only the q8 layout pads
+    let ffs = t.ff_pad   // the served FFN width, BOTH lanes: %64 fits Metal tiles, %32 quantizes
     t.patch_w = off; off += t.patch_dim * d
     t.patch_b = off; off += d
     t.pos_w = off; off += t.pos_side * t.pos_side * d
@@ -346,7 +367,9 @@ def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&;
         t.layer_w = qo
         qo += t.n_layer * t.layer_w_stride
     } else {
-        t.layer_w = take_cursor(t.blk_bf16, off, woff, t.n_layer * t.layer_w_stride)
+        // f32-in-blob whatever the file dtype — the Metal tower / float-batch read f32 planes
+        t.layer_w = off
+        off += t.n_layer * t.layer_w_stride
     }
     if (t.n_deepstack > 0l) {
         t.ds_f_stride = 12l * d + t.proj_dim
@@ -401,7 +424,14 @@ def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwe
         for (g in range64(QWEN3V_GEMMS)) {
             let wname = "{p}.{Q3V_BLK_GEMM_NAMES[g]}.weight"
             if (!st.t.q8) {
-                tower_read_gemm(m, bytes, wname, st.wblob, st.blob, st.t.blk_bf16, wo, gemm_sizes[g])
+                if (g == QWEN3V_GEMM_UP) {
+                    gguf_read_tensor_f32(m, bytes, wname, st.blob, wo, ff * d)
+                    tower_zero_span(st.blob, wo + ff * d, (st.t.ff_pad - ff) * d)   // zero pad rows
+                } elif (g == QWEN3V_GEMM_DOWN) {
+                    tower_stage_f32_pad_cols(m, bytes, wname, st.blob, rowscratch, wo, d, ff, st.t.ff_pad)
+                } else {
+                    gguf_read_tensor_f32(m, bytes, wname, st.blob, wo, gemm_sizes[g])
+                }
             } elif (g == QWEN3V_GEMM_UP) {
                 tower_stage_q8_zero_rows(m, bytes, wname, st.qblob, st.qscales, wscratch, wo, ff, st.t.ff_pad, d, "dasLLAMA qwen3v q8")
             } elif (g == QWEN3V_GEMM_DOWN) {
@@ -506,7 +536,7 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
         st.t.ff_pad = (st.t.n_ff + 63l) / 64l * 64l   // %64 fits future GPU tiles, %32 quantizes
         let file_sizes <- q3v_gemm_sizes(d, st.t.n_ff)
         q3v_verify_tensors(m, st.t, file_sizes)
-        let serve_sizes <- q3v_gemm_sizes(d, st.t.q8 ? st.t.ff_pad : st.t.n_ff)
+        let serve_sizes <- q3v_gemm_sizes(d, st.t.ff_pad)   // both lanes pad the FFN pair
         var off = 0l
         var woff = 0l
         var qo = 0l
@@ -578,7 +608,7 @@ def mint_qwen3v_tower(var st : Qwen3vStaging; var out : Qwen3vTower) {
 // the bind walk skips a missing section silently, so the flag=>plane invariant must be checked
 // once the carrier is live, or the kernel derefs null
 def private q3v_check_planes(t : Qwen3vTower; src : string) {
-    if (((t.blk_bf16 && !t.q8) || t.mm_bf16) && empty(t.wblob)) {
+    if (t.mm_bf16 && empty(t.wblob)) {
         panic("dasLLAMA qwen3v: '{src}' declares bf16 planes but carries no wblob section - the image is corrupt or hand-edited")
     }
     if (t.q8 && (empty(t.qblob) || empty(t.qscales))) {
@@ -635,7 +665,7 @@ def qwen3v_block_offs(t : Qwen3vTower; l : int64) : Qwen3vBlockOffs {
     let fo = t.layer_f + l * t.layer_f_stride
     var o = Qwen3vBlockOffs(ln1_w = fo, ln1_b = fo + d, ln2_w = fo + 2l * d, ln2_b = fo + 3l * d,
         qkv_b = fo + 4l * d, out_b = fo + 7l * d, up_b = fo + 8l * d, down_b = fo + 8l * d + t.ff_pad)
-    let sizes <- q3v_gemm_sizes(d, t.q8 ? t.ff_pad : t.n_ff)   // the SERVED sizes — the q8 FFN pair pads
+    let sizes <- q3v_gemm_sizes(d, t.ff_pad)   // the SERVED sizes — the FFN pair pads both lanes
     var at = t.layer_w + l * t.layer_w_stride
     for (g in range64(QWEN3V_GEMMS)) {
         o.w[g] = at
@@ -652,7 +682,7 @@ def private q3v_gemm_blk(var y : array<float>; t : Qwen3vTower; var s : Qwen3vSt
         requant_rows_q8_sized(x, n, npos, s.xqi, s.xsi)
         matmul_q8q8_batch(y, t.qblob, t.qscales, off, s.xqi, s.xsi, n, d_out, npos)
     } else {
-        mm_plane_b(y, t.blk_bf16, t.wblob, t.blob, off, x, n, d_out, npos)
+        mm_plane_b(y, false, t.wblob, t.blob, off, x, n, d_out, npos)   // exact lane = f32 in blob
     }
 }
 
@@ -677,7 +707,7 @@ def private q3v_split_qkv(var s : Qwen3vState; d, npos : int64) {
 // one pre-LN block over the residual stream s.x (npos rows)
 def private q3v_block(t : Qwen3vTower; var s : Qwen3vState; l, npos : int64) {
     let d = t.n_embd
-    let ff = t.q8 ? t.ff_pad : t.n_ff   // the served FFN width — the q8 pad lanes are zero by construction
+    let ff = t.ff_pad   // the served FFN width — the pad lanes are zero by construction
     let hd = d / t.n_head
     let o = qwen3v_block_offs(t, l)
     var tp = ref_time_ticks()
@@ -726,7 +756,7 @@ def private q3v_stem(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>
     ensure_length(s.qq, npos * d)
     ensure_length(s.kk, npos * d)
     ensure_length(s.vv, npos * d)
-    ensure_length(s.hu, npos * (t.q8 ? t.ff_pad : t.n_ff))
+    ensure_length(s.hu, npos * t.ff_pad)
     ensure_length(s.m0, (npos / 4l) * 4l * d)
     mm_plane_b(s.xn, false, t.wblob, t.blob, t.patch_w, s.x0, t.patch_dim, d, npos)
     var pos_base = t.pos_w
@@ -757,14 +787,14 @@ def private q3v_stem(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>
 //! The soft-token row width this tower emits: proj_dim, widened by the deepstack slices.
 def qwen3v_row_width(t : Qwen3vTower) : int64 => t.proj_dim * (1l + t.n_deepstack)
 
-// one deepstack tap merger over the CURRENT residual stream (rows merge-adjacent, so the ×4
+// one deepstack tap merger over the tap layer's residual `x` (rows merge-adjacent, so the ×4
 // reshape is flat): LayerNorm → fc1 → GELU → fc2 into the wide out at slice k+1
-def private q3v_deepstack_tap(t : Qwen3vTower; var s : Qwen3vState; k, npos : int64; var out : array<float>) {
+def private q3v_deepstack_tap(t : Qwen3vTower; var s : Qwen3vState; x : array<float>; k, npos : int64; var out : array<float>) {
     let d = t.n_embd
     let nout = npos / 4l
     let fo = t.ds_f + k * t.ds_f_stride
     let wo = t.ds_w + k * t.ds_w_stride
-    layernorm_batch(s.ds_mid, s.x, t.blob, fo, fo + 4l * d, 4l * d, nout, t.eps)
+    layernorm_batch(s.ds_mid, x, t.blob, fo, fo + 4l * d, 4l * d, nout, t.eps)
     mm_plane_b(s.m0, t.mm_bf16, t.wblob, t.blob, wo, s.ds_mid, 4l * d, 4l * d, nout)
     add_bias_rows(s.m0, t.blob, fo + 8l * d, 4l * d, nout)
     gelu_tanh_lut_batch(s.m0, 4l * d, nout)
@@ -822,12 +852,28 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
         ensure_length(s.ds_mid, (npos / 4l) * 4l * t.n_embd)
         ensure_length(s.ds_slice, (npos / 4l) * t.proj_dim)
     }
-    for (l in range64(t.n_layer)) {
-        q3v_block(t, s, l, npos)
+    var gpu_served = false
+    if (!t.q8 && g_q3v_gpu_set && invoke(g_q3v_gpu_serves)) {
         if (nds > 0l) {
-            let k = l == t.ds_l0 ? 0l : l == t.ds_l1 ? 1l : l == t.ds_l2 ? 2l : -1l
-            if (k >= 0l) {
-                q3v_deepstack_tap(t, s, k, npos, out)
+            ensure_length(s.ds_stash, nds * npos * t.n_embd)
+        }
+        gpu_served = invoke(g_q3v_gpu, t, s, npos)   // the block stack over s.x; tap residuals into ds_stash
+    }
+    if (gpu_served) {
+        for (k in range64(nds)) {
+            unsafe {   // stash slice k -> the xb2 scratch: the tap reads a plain [npos × d] source
+                memcpy(addr(s.xb2[0]), addr(s.ds_stash[k * npos * t.n_embd]), npos * t.n_embd * 4l)
+            }
+            q3v_deepstack_tap(t, s, s.xb2, k, npos, out)
+        }
+    } else {
+        for (l in range64(t.n_layer)) {
+            q3v_block(t, s, l, npos)
+            if (nds > 0l) {
+                let k = l == t.ds_l0 ? 0l : l == t.ds_l1 ? 1l : l == t.ds_l2 ? 2l : -1l
+                if (k >= 0l) {
+                    q3v_deepstack_tap(t, s, s.x, k, npos, out)
+                }
             }
         }
     }

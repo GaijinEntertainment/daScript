@@ -21,11 +21,12 @@ require _vision_oracle   // the mtmd dump parser, fixture generators, per-token 
 
 let private TIER1_ABS = 2e-4
 // x token rms. Poison-calibrated: 27 blocks whose GELU rides ggml's f16 LUT quantize the
-// summation-order drift between das GEMMs and the reference's to a measured 0.6-2.7e-3 floor
-// (the solid-color fixtures sit at low rms, where the floor shows; preproc, the pos-table
-// antialias resize, and the rope tables are each independently bit-exact vs their references).
-// A swapped rope-ladder poison lands at 0.71-0.85 maxdiff - 300x this bar.
-let private TIER1_REL = 1e-2
+// summation-order drift between das GEMMs and the reference's to a measured floor of
+// 0.6-3.2e-3 (the ff_pad width regroups the down GEMM's f32 accumulation - red448 tops the
+// set; the solid-color fixtures sit at low rms, where the floor shows; preproc, the
+// pos-table antialias resize, and the rope tables are each independently bit-exact vs their
+// references). The live zero-layer poison leg below reds this bar at 100x+.
+let private TIER1_REL = 1.5e-2
 
 // the deepstack leg runs FOUR GELU-LUT'd merger chains per wide row (main + three taps) where
 // the Omni runs one, and the q-probes read individual slice values - the compounded
@@ -36,6 +37,16 @@ let private TIER1_REL_DS = 4e-2
 // x token rms - the q8 serving lane vs the f32 oracle: measured 0.42 x rms worst (gray448) -
 // the qwen ViT's mid-network outlier channels roughly double gemma3v's 0.22-0.25 q8 floor.
 // The zero-layer poison leg proves the bar still discriminates; the caption is the product gate.
+// the Metal tower legs: the f32 mulmm stages f16 tiles (the gemma3v precedent, its own
+// TIER1_REL_GPU = 4e-2), so the GPU chain's floor runs ~6x the CPU chain's on the low-rms
+// uniform fixtures - measured 8.9e-3 worst on the Omni (gray448). The deepstack leg reads
+// mid-network tap slices where that noise arrives unwashed by the final post-LN, so - the
+// q8-ds precedent one bar up - the uniform gray fixture stays on the CPU set only and the
+// GPU-ds legs run the structured fixtures (measured 0.8-1.0e-2). The live poison legs red
+// these bars at 10-150x (exact zero-layer 0.87, q8 zero-layer 0.73, zeroed tap 11.4).
+let private TIER1_REL_GPU = 4e-2
+let private TIER1_REL_GPU_DS = 8e-2
+
 let private TIER1_REL_Q8 = 5.2e-1
 // the deepstack q8 leg reads tap slices SAMPLED MID-NETWORK (blocks 5/11/17), where the q8
 // outlier noise arrives unwashed by the final post-LN: cb fixtures measure 0.51 x rms; the
@@ -90,7 +101,7 @@ def test_qwen3v_tier1(t : T?) {
         tt |> equal(int(tw.n_ff), 4304, "ffn width")
         tt |> equal(int(tw.proj_dim), 2048, "soft-token width")
         tt |> equal(int(tw.pos_side), 48, "pos-table side")
-        tt |> success(tw.blk_bf16 && tw.mm_bf16, "block and merger GEMMs bf16 as the file has them")
+        tt |> success(tw.blk_bf16 && tw.mm_bf16, "the file carries bf16 GEMMs (the exact lane serves the blocks f32)")
         tt |> gate_encode(tw, st, "cb", 96, 96, "encode.cb96.log")   // 9 tokens: the pos-table DOWNSCALE arm
         tt |> gate_encode(tw, st, "gray", 448, 448, "encode.gray448.log")
         tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log")
@@ -111,8 +122,72 @@ def test_qwen3v_tier1(t : T?) {
             ragged_tripped = true
         }
         tt |> success(ragged_tripped, "a canvas off the 32 px merged-patch grid panics by name")
+        // negative control for the exact bar: layer 13's f32 layer_w region zeroed through the
+        // staging planes must red the same fixture on the same bar (the loosened-bar rule)
+        var o = OracleEncode()
+        if (load_oracle_encode(path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), "encode.gray448.log"), o)) {
+            set_qwen3v_q8(false)
+            var inscope pst <- stage_qwen3v_tower(mm)
+            reset_qwen3v_q8()
+            let base = pst.t.layer_w + 13l * pst.t.layer_w_stride
+            for (i in range64(pst.t.layer_w_stride)) {
+                pst.blob[base + i] = 0.0
+            }
+            var ptw = Qwen3vTower()
+            mint_qwen3v_tower(pst, ptw)
+            let planes <- make_planes("gray", 448, 448)
+            var pout : array<float>
+            with_job_que() {
+                setup_dasllama_jobque_()
+                qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
+            }
+            let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL)
+            to_log(LOG_INFO, "qwen3v exact poison leg: zero layer 13 -> excess {excess} over the bar\n")
+            tt |> success(excess > 0.0, "a zeroed mid-layer f32 region reds the exact bar (excess {excess})")
+            delete pout
+            delete ptw
+        }
         delete st
         delete tw
+    }
+}
+
+// The Metal tower arm: the SAME fixtures and bars, tower pinned ON — the GPU chain's parity
+// gate, with engage evidence (encode/block counter deltas), never "the model ran".
+[test]
+def test_qwen3v_tier1_metal(t : T?) {
+    t |> run("tier-1 on the Metal tower (Omni-30B narrow + 4B deepstack)") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
+            let mm4 = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
+            if (!model_available(tt, mm) || !model_available(tt, mm4)) {
+                return
+            }
+            set_qwen3v_q8(false)   // the Metal tower serves the f32 exact planes
+            var tw <- load_qwen3v_tower(mm)
+            var tw4 <- load_qwen3v_tower(mm4)
+            reset_qwen3v_q8()
+            set_metal_tower(true)
+            var st = Qwen3vState()
+            let s0 = metal_tower_stats()
+            tt |> gate_encode(tw, st, "gray", 448, 448, "encode.gray448.log", TIER1_REL_GPU)
+            tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_GPU)
+            tt |> gate_encode(tw, st, "cb", 640, 320, "encode.cb640x320.log", TIER1_REL_GPU)
+            var st4 = Qwen3vState()
+            tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)
+            tt |> gate_encode(tw4, st4, "cb", 640, 320, "encode4b.cb640x320.log", TIER1_REL_GPU_DS)
+            tt |> gate_encode(tw4, st4, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_GPU_DS)
+            let s1 = metal_tower_stats()
+            to_log(LOG_INFO, "qwen3v metal tier-1: +{s1.encodes - s0.encodes} encodes, +{s1.blocks - s0.blocks} blocks, +{s1.declines - s0.declines} declines\n")
+            tt |> success(s1.encodes - s0.encodes >= 6l, "every encode served on the Metal tower ({s1.encodes - s0.encodes} of 6)")
+            tt |> equal(s1.blocks - s0.blocks, 3l * 27l + 3l * 24l, "the block counters advanced (3 Omni x 27 + 3 deepstack x 24)")
+            delete st
+            delete st4
+            delete tw
+            delete tw4
+        } else {
+            tt |> skip("no das_metal on this build - the Metal tower arm has no device to serve")
+        }
     }
 }
 
@@ -264,12 +339,12 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
 [test]
 def test_qwen3v_lane_knob(t : T?) {
     t |> run("the q8 lane pin and policy default") @(tt : T?) {
-        tt |> equal(qwen3v_serves_q8(), !float_batch_override_active(), "the policy default follows the accelerate tier")
+        tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_would_serve() || float_batch_override_active()), "the policy default follows the Metal tower and the accelerate tier")
         set_qwen3v_q8(true)
         tt |> success(qwen3v_serves_q8(), "pinned q8")
         set_qwen3v_q8(false)
         tt |> success(!qwen3v_serves_q8(), "pinned exact")
         reset_qwen3v_q8()   // from the EXACT pin, so a no-op reset cannot pass as the (q8) policy default
-        tt |> equal(qwen3v_serves_q8(), !float_batch_override_active(), "reset returns to the policy default")
+        tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_would_serve() || float_batch_override_active()), "reset returns to the policy default")
     }
 }
