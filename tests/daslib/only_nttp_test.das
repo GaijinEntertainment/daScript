@@ -7,7 +7,7 @@ require daslib/rtti
 require strings
 
 def fixture_path(name : string) : string {
-    return "{get_das_root()}/tests/daslib/only_nttp_fixture_{name}.das"
+    return "{get_das_root()}/tests/daslib/{name}.das"
 }
 
 def compile_fixture(name : string; blk : block<(ok : bool; issues : string) : void>) {
@@ -25,12 +25,12 @@ def compile_fixture(name : string; blk : block<(ok : bool; issues : string) : vo
 [test]
 def test_only_nttp_annotation(t : T?) {
     t |> run("kernel calling only inline-bound externs compiles") @(t : T?) {
-        compile_fixture("good") $(ok, issues) {
+        compile_fixture("only_nttp_fixture_good") $(ok, issues) {
             t |> success(ok, "expected clean compile, got: {issues}")
         }
     }
     t |> run("kernel calling a member-bound extern fails naming the call") @(t : T?) {
-        compile_fixture("bad") $(ok, issues) {
+        compile_fixture("cant_only_nttp_fixture") $(ok, issues) {
             t |> success(!ok, "expected compile failure, fixture compiled clean")
             t |> success(issues |> find("only_nttp") >= 0, "diagnostic must name the annotation: {issues}")
             t |> success(issues |> find("get_env_variable") >= 0, "diagnostic must name the offending call: {issues}")
