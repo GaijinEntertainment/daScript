@@ -75,9 +75,9 @@ builders) live in `_metal_kernel_common.das`; `test_metal_prefill_kernels.das` k
 mismatch compares local — a same-arity twin would collide with the shared tagged one.
 `_mtl_toy.das` is the `[metal_dispatch]` multi-kernel (kernel=) fixture — its gate in
 the misc file dispatches through the GENERATED builders (kn_ rail), not hand binds.
-A new gate gets a NEGATIVE CONTROL before its first commit (poison the oracle → red
-with dumps → revert); size an additive poison to beat rel·env at the longest dot, and give
-every derived-truth compare its own poison. A kernel with `@workgroup` state needs
+The control obligation for a new gate or bar is `REVIEW.md`'s (a control the bar reds, same
+change); the sizing mechanics: an additive poison beats rel·env at the longest dot, and
+every derived-truth compare gets its own poison. A kernel with `@workgroup` state needs
 `metal_set_threadgroup_memory_length` in the gate exactly as in its production encoder —
 missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
@@ -242,25 +242,37 @@ cb640x320 = the merge-reorder/transposed-grid gate) at 2e-4 + 1e-2·token-rms, p
 merged-patch-grid panic gate; and the Qwen3-VL 4B DEEPSTACK leg (taps 5/11/17, wide
 10240-float rows) on four fixtures at 2e-4 + 4e-2·rms — the 4B dumps carry q1/q2/q3 quarter-offset probe
 fields — the compare applies them when the dump has them — hitting each concatenated
-slice's first element (a skipped-tap poison
-lands at 6.9–9.7 on them, 600×; mean+v0..v3 alone are BLIND to a zeroed slice). Skips
-honestly without the mmprojs or dumps.
+slice's first element (a skipped-tap poison lands at 6.9–9.7 on them, 600×; mean+v0..v3
+alone are BLIND to a zeroed slice). The q8 serving lane (the CPU policy default when no
+accelerate float-batch tier is active) gets its own cells, each bar carrying its own
+must-EXCEED poison leg — a block's qblob region zeroed through the staging planes, scored
+by `encode_excess`: the Omni leg on gray448 + cb448 + cb96 at its measured 5.2e-1·rms bar,
+poisoned at a mid-stack block; the deepstack leg on cb448 + cb96 at 6.5e-1, poisoned at
+the TAP-1 block so the zero hits both the main path and a served slice — gray's tap-slice
+probes measure 7.9·rms because the taps sample mid-network residuals, so gray stays on the
+exact lane's set, and the proof that the served slices still carry signal is the
+zeroed-slices decoder control in `test_vision_chat.das`; and a model-free lane-knob cell.
+The model-gated cells skip honestly without the mmprojs or dumps.
 `test_qwen25v.das` — the qwen25v tower (Qwen2.5-Omni's window-attention ViT, projector
 `qwen2.5o`) tier-1 parity vs the `-p encode` dumps minted on the f32-widened dual-tower
 mmproj, CPU (`qwen3vl-vision-oracle/mint_25o.sh`): five fixtures, four of them shaped —
 cb112 = the single-window arm, cb448 = four full windows, cb616x336 = ragged window edges, and quad448 = the WINDOW
 DISCRIMINATOR (four exact-value quadrants; uniform/periodic fixtures make every window
 statistically identical, so an all-full-attention poison hides under them — quad reds it at
-10.7 vs the 2e-4 + 1e-2·rms bar) — plus the merged-patch-grid panic gate. Skips honestly
-without the mmproj or dumps.
-`_vision_oracle.das` is the shared dump parser / fixture generator /
-per-token compare all vision tier-1 tests use (the `quad` generator and the q1/q2/q3
-quarter-offset probe fields live here).
+10.7 vs the 2e-4 + 1e-2·rms bar) — plus the merged-patch-grid panic gate. No q8 lane in
+this tower, so no q8-lane cells (`../ARCHITECTURE.md`, the `dasllama_qwen25v.das` entry).
+Skips honestly without the mmproj or dumps.
+`_vision_oracle.das` is the shared dump parser / fixture generator / per-token compare /
+over-bar scorer (the must-EXCEED half of a poison leg) all vision tier-1 tests use (the
+`quad` generator and the q1/q2/q3 quarter-offset probe fields live here).
 `test_audio_embedder.das` — model-free: the `AudioEmbedder` carrier's own arms — the no-audio
 refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on the E2B mmproj,
 carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft token).
-`test_vision_embedder.das` — model-free: the `VisionEmbedder` carrier's own arms — the sniffed
-family tag and the none-carrier refusals — over constructed carriers.
+`test_vision_embedder.das` — model-free: the `VisionEmbedder` carrier's own arms over
+constructed carriers — the text-only (none) shape, the loader's refusals by name (missing
+file, audio-only mmproj), and the `vision_exec_fmt` lane stamp (the qwen3v q8 flag reaching
+it; qwen25v exact-only); model-gated: the gemma4uv arm on the 12B mmproj — the sniffed
+family tag, the 48 px align, the 3840 projection width.
 `test_ple_check.das` — model-free: the PLE go-live tripwire (`ple_check_table`) on synthetic
 Model shells — short plane trips per format arm, full plane passes, non-PLE exempt.
 `test_ple_modes.das` — suite-less, model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE
@@ -324,12 +336,12 @@ images the rig cannot use and purges the flavors the rig depends on. Image-rail 
 
 ## Metal fixtures — driver knobs and the two-model pattern
 
-(REVIEW: "A cell whose claim is a CPU-served or f32-decoder leg pins every default-ON driver
-hook OFF for that leg — `set_metal_tower(false)`, `set_metal_wdec(false)`,
-`set_metal_wdec_step(false)` — and restores it after") The
+(REVIEW: "A cell pins every driver hook and serving-lane knob its claim depends on, and
+restores it after") The
 hooks are on by default: they flip a q8 leg to the GPU silently, and an f32 leg records a
 quant_mode decline that panics under required mode — either way the cell stops measuring what
-its name says.
+its name says. The family serving-lane pins (`set_<family>_q8`) are the same trap in the
+other direction: an unpinned lane cell measures whichever lane the box's policy picked.
 
 The Metal drivers serve ONLY blob-form models (`convert_model_to_metal_blob` /
 metal-flavor images), and CPU inference on a blob model PANICS. Every CPU-vs-GPU arm

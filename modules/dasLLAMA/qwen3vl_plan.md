@@ -444,3 +444,76 @@ while mtmd offloads the mmproj to Metal unless told not to.
     crashes" held literally but missed the real failure mode: TWO silent-wrong classes (the
     grid never passed; the suppress-form derail) — the sweep's value was finding them, and
     the prediction's frame ("crashes") was looking at the wrong hazard.
+
+### Slice L — the CPU encode gap: qwen towers get the q8 block-GEMM lane (predictions
+### registered 2026-08-22 BEFORE implementation; the agreed first post-merge slice; every
+### enc figure below = released `lcpp_bench --image`, CPU, --image-think, r=3, t=8, M1 Max)
+
+Design: port gemma3v's q8 serving lane (Q8_0 transcode at read, requant + q8q8 batch at
+encode, its own image tag, pin knobs, policy = q8 unless the accelerate float-batch tier is
+armed) to dasllama_qwen3v + dasllama_qwen25v. Block GEMMs only; conv/mergers/deepstack stay
+on file planes. qwen3v ff=4304 is not 32-aligned → the gemma3v ff_pad treatment (zero up
+rows / down cols), Q8 LANE ONLY so the exact bf16 lane stays byte-identical to today.
+tower_read_gemm_q8 hoists into dasllama_tower (g3v+g4v+two new = four copies otherwise).
+
+14. The q8 lane speeds the das CPU encode 3.5–5.5× per qwen tower (gemma4v's measured 4.8×
+    CPU-tower factor, same block-GEMM dominance): Omni-30B enc 6.3→1.2–1.8 s, VL-4B
+    5.1→1.0–1.5 s, VL-8B ~6→1.1–1.7 s, Omni-3B 12.1→2.2–3.5 s.
+15. Post-change das CPU enc vs mtmd's clip CPU enc: das lands within 1.5× either side on the
+    three dense towers (from 4.6–5.3× behind), and the 30B lead (mtmd 59 s collapse) widens
+    past 30×.
+16. Greedy coco captions at the bench prompt change on at most 1 of the 4 models vs the
+    exact lane (gemma experience: the q8 tower is caption-stable; near-ties may flip).
+17. Tier-1 q8 error vs the f32 oracle lands 0.15–0.35 × token rms on both qwen towers
+    (gemma3v measured 0.22–0.25 at 27 blocks; qwen3v is 27 blocks, qwen25v 32 windowed).
+
+#### Slice L findings (2026-08-22, the tier-1 + probe round BEFORE any perf measurement)
+
+The port went in as designed for BOTH towers; the tier-1 gates then split them:
+
+- **qwen3v (Omni-30B + VL dense): SHIPS.** q8 error 0.42 x rms worst (gray448; cb fixtures
+  0.1-0.3) — roughly double gemma3v's 0.22-0.25 floor, the qwen ViT's outlier channels.
+  Bar 5.2e-1; the zero-layer-13 poison reds it by +0.73 (2.4x discrimination). Deepstack q8
+  cells run cb-only at 6.5e-1 (the uniform gray fixture measures 7.9 x rms on the tap-slice
+  probes — taps sample mid-network residuals where the outlier noise arrives unwashed); the
+  zeroed-slices decoder control (10.4) is the gate that proves the slices still carry.
+  Captions: VL-4B deepstack q8 caption full and correct.
+- **qwen25v (Omni-3B): DOES NOT SHIP — the lane is reverted, exact serving stays.** The q8q8
+  lane measured 2.0 x rms vs the oracle, and the zero-layer poison sat BELOW any bar wide
+  enough to admit the clean encode (excess -0.38): the gate cannot distinguish q8 noise from
+  a deleted layer. Localization: weights are fine (weight-only Q8 rounding = 0.0067 x rms);
+  per-site chains on random x are fine (q8q8 3-7% worst-element, down float-x 2.4%); the
+  disease is per-32-block ACTIVATION requant on the Qwen2-VL-lineage ViT's outlier rows
+  (±100 channels), at every site — the gated-FFN down input (silu(gate)·up) worst (its
+  float-activation form, `matmul_q8_batch` w8xf32, recovered only 2.0 -> 1.38 x rms; probed,
+  then removed with the lane). An all-float-activation q8 lane wins nothing on CPU: these
+  GEMMs are compute-bound and the 4-5x IS the int8xint8 SIMD. Options if the Omni-3B CPU
+  encode ever matters: outlier-aware activation quant (SmoothQuant-style folds, needs
+  calibration) or the Metal tower (the planned other factor).
+
+Prediction scoring (14-17):
+14. **HALF.** The mechanism and the recipe landed, but only for qwen3v; qwen25v excluded
+    (unpredicted — the prediction assumed all qwen towers quantize alike; the Qwen2-VL
+    activation-outlier lore was known and not priced in). Speedups not yet measured.
+15. Not yet measurable (perf round pending); qwen25v arm VOID (no q8 lane).
+16. On track — VL-4B q8 caption unchanged-quality; full sweep pending.
+17. **WRONG on both sides**: qwen3v landed ABOVE the band (0.42 vs 0.15-0.35) and qwen25v
+    landed at 2.0 — the band assumed gemma-like activation statistics; the per-family
+    outlier ladder (gemma 0.25 -> qwen3v 0.42 -> qwen25v 2.0) was the real story.
+
+#### Slice L measurement (2026-08-22, released rig, CPU cells, --image-think, r=3, t=8, M1 Max)
+
+| model | das enc J (exact) | das enc now (q8) | speedup | vs mtmd clip CPU (J) |
+|---|---|---|---|---|
+| Qwen3VL-4B | 5.1 s | **1.084 s** | 4.7x | ~1.11 s — TIE (das -2%) |
+| Qwen3VL-8B | ~10 s | **1.895 s** | ~5.3x | ~1.89 s — TIE |
+| Qwen3-Omni-30B | 6.3 s | **1.496 s** | 4.2x | 59 s — das 39x ahead |
+
+Captions all correct at template-default thinking (cats + couch + remotes; the 30B its terse
+form). Cells stamp `(qwen3v q8)`. Qwen2.5-Omni-3B unmeasured — no q8 lane (slice-L findings).
+
+14. **CORRECT** (for the towers that shipped): 4.2-5.3x inside the 3.5-5.5x band.
+15. **CORRECT** (for the shipped towers): the dense pairs land at mtmd-clip parity (predicted
+    "within 1.5x either side"), and the 30B lead is 39x (predicted past 30x). qwen25v VOID.
+16. **CORRECT so far**: captions unchanged-quality on all three measured models (+ the 4B
+    chat-suite caption). 4 of 4 checked, 0 flips.

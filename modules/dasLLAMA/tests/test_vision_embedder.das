@@ -57,6 +57,20 @@ def test_vision_embedder_none(t : T?) {
 }
 
 [test]
+def test_vision_embedder_exec_fmt(t : T?) {
+    t |> run("the qwen3v q8 flag reaches the exec_fmt stamp") @(t : T?) {
+        var e3 = VisionEmbedder(kind = VisionKind.qwen3v)
+        t |> equal(vision_exec_fmt(e3), "f32", "qwen3v exact stamps f32")
+        e3.qwen3v.q8 = true
+        t |> equal(vision_exec_fmt(e3), "q8", "qwen3v q8 stamps q8")
+        var e25 = VisionEmbedder(kind = VisionKind.qwen25v)
+        t |> equal(vision_exec_fmt(e25), "f32", "qwen25v stamps f32 - the outlier ViT serves exact only")
+        delete e3
+        delete e25
+    }
+}
+
+[test]
 def test_vision_embedder_gemma4uv_arms(t : T?) {
     t |> run("the 12B mmproj sniffs as gemma4uv and reports its geometry") @(t : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")

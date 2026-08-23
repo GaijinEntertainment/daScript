@@ -1,22 +1,24 @@
-# dasLLAMA vision and media rules
+# dasLLAMA Vision Code Review Checklist
 
-**Routed from `REVIEW.md`: a diff touching a media splice or its eval shape
-(any `eval_embd_span*` entry in `dasllama/dasllama_blocks.das`, `forward_prefill_embd`'s
-span bounds, or `encode_image_`),
-`dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`, a media-carrying
-scheduler path, `dasllama/dasllama_vision_embedder.das`, `dasllama/dasllama_tower.das` (with
-`REVIEW_AUDIO.md` — the shared encoder-tower home serves both), or a vision family file — one
-`dasllama/dasllama_<family>.das` holding a single vision projector family — applies this list
-with the master's.** `REVIEW_COMMON.md` (repo root) binds this file too. Architecture doc:
-`ARCHITECTURE.md`.
+**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
+doc: `ARCHITECTURE.md`.
+
+**Routed from `REVIEW.md`: a diff touching `dasllama/dasllama_vision.das`,
+`dasllama/dasllama_vision_io.das`, `dasllama/dasllama_vision_embedder.das`,
+`dasllama/dasllama_tower.das` (the shared encoder-tower home), a vision family file — one
+`dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
+path that splices decoded media into a prompt or schedules such a stream, applies this list
+with the master's.**
 
 **A GEMM in a vision family file goes through a shared batch-GEMM entry point — `mm_blob_b`,
 `mm_bf16_b`, `mm_plane_b` (`dasllama/dasllama_tower.das`) or `matmul_q8q8_batch`
 (`dasllama/dasllama_math.das`).** A hand-written dot-product loop beside them is a defect.
 
-**A per-encode reused buffer in `dasllama/dasllama_vision_embedder.das` or a vision family
-file is `@scratch` — on its declaration, or on the callee parameter it grows through.** A
-nolint where the annotation fits is a defect.
+**A per-encode buffer in `dasllama/dasllama_vision_embedder.das` or a vision family file
+carries `@exact_size` when its size follows the input — patch count, pixel count, clip
+frames — and `@scratch` when it is reused across encodes rather than freshly allocated; a
+buffer that is both carries both.** The annotation goes on the declaration, or on the callee
+parameter it grows through. A nolint where an annotation fits is a defect.
 
 **A debug or profiling leg in `dasllama/dasllama_vision_embedder.das` or a vision family file
 is `[cold_path]`.** A nolint where it fits is a defect.
@@ -28,9 +30,10 @@ clamp where the file carries none.
 
 **A vision family whose forward applies no clamp at all says so in its file header.**
 
-**A tower piece two tower families both need lives in `dasllama/dasllama_tower.das`** (the
-encoder-tower home — its inventory is `ARCHITECTURE.md` §1.7); a family file that re-implements
-one is a defect.
+**Code two tower families both need — compute, stage/read, or load-orchestration code that
+names no family type — lives in `dasllama/dasllama_tower.das` (the encoder-tower home); a
+second copy in a family file is a defect.** Per-family serving state — a family's exported
+runtime setter and the module global it writes — stays in the family file.
 
 **A media splice's rows reach `forward_prefill_embd` in ONE call** — splitting them across
 calls, or letting a driver chunk them by row, is a defect: the span bounds are call-relative,

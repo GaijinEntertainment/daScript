@@ -118,6 +118,34 @@ def make_planes(kind : string; w, h : int) : array<float> {
 }
 
 
+// the compare's walk without the assert: the worst excess over the bar (<= 0 means every
+// token holds it) - the must-EXCEED half of a poison leg, where compare_encode would red
+def encode_excess(out : array<float>; d : int; o : OracleEncode; abs_tol, rel_tol : float) : float {
+    var max_excess = -1e30
+    for (p in range(o.npos)) {
+        var sq = 0.0
+        var mean = 0.0
+        for (i in range(d)) {
+            mean += out[p * d + i]
+            sq += out[p * d + i] * out[p * d + i]
+        }
+        mean /= float(d)
+        let bound = abs_tol + rel_tol * sqrt(sq / float(d))
+        var diffs <- [ abs(mean - o.means[p]), abs(out[p * d + 0] - o.v0[p]), abs(out[p * d + 1] - o.v1[p]),
+                       abs(out[p * d + 2] - o.v2[p]), abs(out[p * d + 3] - o.v3[p]) ]
+        if (length(o.q1) == o.npos) {
+            diffs |> push(abs(out[p * d + d / 4] - o.q1[p]))
+            diffs |> push(abs(out[p * d + d / 2] - o.q2[p]))
+            diffs |> push(abs(out[p * d + 3 * (d / 4)] - o.q3[p]))
+        }
+        for (diff in diffs) {
+            max_excess = max(max_excess, diff - bound)
+        }
+        delete diffs
+    }
+    return max_excess
+}
+
 // the per-token compare: mean and v0..v3 of every token against the dump, on the bar
 // abs_tol + rel_tol * token_rms (token_rms = sqrt(mean(out[p]^2)) per token); logs the maxdiff under tag
 def compare_encode(t : T?; tag : string; out : array<float>; d : int; o : OracleEncode; abs_tol, rel_tol : float) : float {

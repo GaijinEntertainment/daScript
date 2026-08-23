@@ -11,7 +11,6 @@ require daslib/apply
 require daslib/archive
 require dasllama/dasllama_gguf
 require dasllama/dasllama_math   // matmul_q8q8_batch + the backend repack — the q8 block-GEMM lane
-require dasllama/dasllama_convert   // quantize_q8_0_into — the q8 lane's read-time transcode
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — re-exported so requirers can delete a tower
@@ -311,30 +310,6 @@ def private g3v_layout(var t : Gemma3vTower; var off : int64&; var qo : int64&) 
     }
 }
 
-// q8 GEMM read: the file's f16 tensor widens to f32 scratch, then quantizes to Q8_0 straight
-// into qblob/qscales at the 32-aligned region (wo/32 indexes the scales)
-def private g3v_read_gemm_q8(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma3vStaging;
-                             @scratch var wscratch : array<float>; wo, n_elem : int64) {
-    if (n_elem % 32l != 0l || wo % 32l != 0l) {
-        panic("dasLLAMA gemma3v q8: GEMM tensor '{name}' ({n_elem} elements at {wo}) is not 32-aligned")
-    }
-    if (long_length(wscratch) < n_elem) {
-        wscratch |> reserve(n_elem)
-        wscratch |> resize(n_elem)
-    }
-    gguf_read_tensor_f32(m, b, name, wscratch, 0l, n_elem)
-    quantize_q8_0_into(wscratch, n_elem, st.qblob, st.qscales, wo, wo / 32l)
-}
-
-def private g3v_zero_span(var a : array<float>; at, n : int64) {
-    unsafe {
-        var p = addr(a[at])
-        for (i in range64(n)) {
-            p[i] = 0.0
-        }
-    }
-}
-
 // stage the up GEMM into its padded region: the file's [ff × d] rows land first, then ff_pad−ff
 // zero weight rows — the pad outputs are exactly zero
 def private g3v_stage_up(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma3vStaging;
@@ -343,16 +318,10 @@ def private g3v_stage_up(m : GGUFMeta; b : array<uint8> | #; name : string; var 
     let file_n = st.t.n_ff * d
     let served = st.t.ff_pad * d
     if (st.t.q8) {
-        if (long_length(wscratch) < served) {
-            wscratch |> reserve(served)
-            wscratch |> resize(served)
-        }
-        gguf_read_tensor_f32(m, b, name, wscratch, 0l, file_n)
-        g3v_zero_span(wscratch, file_n, served - file_n)
-        quantize_q8_0_into(wscratch, served, st.qblob, st.qscales, wo, wo / 32l)
+        tower_stage_q8_zero_rows(m, b, name, st.qblob, st.qscales, wscratch, wo, st.t.n_ff, st.t.ff_pad, d, "dasLLAMA gemma3v q8")
     } else {
         gguf_read_tensor_f32(m, b, name, st.blob, wo, file_n)
-        g3v_zero_span(st.blob, wo + file_n, served - file_n)
+        tower_zero_span(st.blob, wo + file_n, served - file_n)
     }
 }
 
@@ -363,22 +332,16 @@ def private g3v_stage_down(m : GGUFMeta; b : array<uint8> | #; name : string; va
     let d = st.t.n_embd
     let ff = st.t.n_ff
     let fp = st.t.ff_pad
-    let served = d * fp
+    if (st.t.q8) {
+        tower_stage_q8_pad_cols(m, b, name, st.qblob, st.qscales, wscratch, rowscratch, wo, d, ff, fp, "dasLLAMA gemma3v q8")
+        return
+    }
     if (long_length(rowscratch) < d * ff) {
         rowscratch |> reserve(d * ff)
         rowscratch |> resize(d * ff)
     }
     gguf_read_tensor_f32(m, b, name, rowscratch, 0l, d * ff)
-    if (st.t.q8) {
-        if (long_length(wscratch) < served) {
-            wscratch |> reserve(served)
-            wscratch |> resize(served)
-        }
-        g3v_expand_rows(wscratch, 0l, rowscratch, d, ff, fp)
-        quantize_q8_0_into(wscratch, served, st.qblob, st.qscales, wo, wo / 32l)
-    } else {
-        g3v_expand_rows(st.blob, wo, rowscratch, d, ff, fp)
-    }
+    g3v_expand_rows(st.blob, wo, rowscratch, d, ff, fp)
 }
 
 def private g3v_expand_rows(var dst : array<float>; at : int64; src : array<float>; rows, ff, fp : int64) {
@@ -427,14 +390,14 @@ def private g3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gem
             } elif (g == GEMMA3V_GEMM_DOWN) {
                 g3v_stage_down(m, bytes, wname, st, wscratch, rowscratch, wo)
             } elif (st.t.q8) {
-                g3v_read_gemm_q8(m, bytes, wname, st, wscratch, wo, gemm_sizes[g])
+                tower_read_gemm_q8(m, bytes, wname, st.qblob, st.qscales, wscratch, wo, gemm_sizes[g], "dasLLAMA gemma3v q8")
             } else {
                 gguf_read_tensor_f32(m, bytes, wname, st.blob, wo, gemm_sizes[g])
             }
             wo += gemm_sizes[g]
             gguf_read_tensor_f32(m, bytes, "{p}.{names[g]}.bias", st.blob, fo, bias_sizes[g])
             if (g == GEMMA3V_GEMM_UP) {
-                g3v_zero_span(st.blob, fo + ff, fp - ff)   // the padded up bias: zero tail
+                tower_zero_span(st.blob, fo + ff, fp - ff)   // the padded up bias: zero tail
                 fo += fp
             } else {
                 fo += bias_sizes[g]
@@ -463,21 +426,13 @@ def private g3v_read_projection(m : GGUFMeta; bytes : array<uint8> | #; var st :
     delete pscratch
 }
 
-// repack every block GEMM region for the active backend's q8q8 kernels — per-row alignment (the
-// region's input width) keeps blocks from straddling rows
 def private g3v_repack_all(var st : Gemma3vStaging; gemm_sizes : array<int64>) {
-    if (!st.t.q8 || !select_matmul_backend_for_load_()) {
+    if (!st.t.q8) {
         return
     }
     let d = st.t.n_embd
     let widths <- [ d, d, d, d, d, st.t.ff_pad ]   // q k v o up down: the input width of each
-    for (l in range64(st.t.n_layer)) {
-        var wo = st.t.layer_w + l * st.t.layer_w_stride
-        for (g in range64(GEMMA3V_GEMMS)) {
-            repack_q8q8_weight(st.qblob, st.qscales, wo, widths[g], gemm_sizes[g] / widths[g])
-            wo += gemm_sizes[g]
-        }
-    }
+    tower_repack_q8_blocks(st.qblob, st.qscales, st.t.layer_w, st.t.layer_w_stride, st.t.n_layer, widths, gemm_sizes)
 }
 
 //! Read the tower off an mmproj gguf into owned staging arrays — the mint side of the image rail,
