@@ -62,6 +62,43 @@ def test_zero_length_matches_are_reported(t : T?) {
     }
 }
 
+// Accept/reject is green on any build; the value is under the asan AOT cell, where the
+// literal matcher scanning a tail SHORTER than the literal is a deliberate, multi-byte
+// out-of-bounds read if the matcher ever compares fixed-length again (a block compare
+// reads past the terminator whenever the terminator falls before the literal's last byte).
+[test]
+def test_literal_longer_than_tail_stays_in_bounds(t : T?) {
+    t |> run("case-sensitive literal scanned over short matching tails") @(t : T?) {
+        var re <- regex_compile("abcdef")
+        for (subject in ["zzzab", "za", "ab", "a", "abcde"]) {
+            let spans <- collect_spans(re, subject)
+            t |> equal(length(spans), 0, "no match of `abcdef` scanning `{subject}`")
+        }
+        let hit <- collect_spans(re, "zabcdefz")
+        t |> equal(length(hit), 2, "full literal still matches mid-string")
+    }
+    t |> run("case-insensitive literal scanned over short matching tails") @(t : T?) {
+        var re <- regex_compile("abcdef", true)
+        for (subject in ["zzzAB", "zA", "AB", "A", "ABCDE"]) {
+            let spans <- collect_spans(re, subject)
+            t |> equal(length(spans), 0, "no ci match of `abcdef` scanning `{subject}`")
+        }
+        let hit <- collect_spans(re, "zABCDEFz")
+        t |> equal(length(hit), 2, "full ci literal still matches mid-string")
+    }
+    t |> run("a literal carrying an embedded NUL never matches past the terminator") @(t : T?) {
+        // string concat drops the NUL while textLen counts it, so the compiled literal is
+        // 3 long over 2 text bytes; before the terminator guard this MATCHED "ab" with
+        // span length 3 - one past the subject's terminator
+        var re <- regex_compile("a\\x00b")
+        t |> equal(regex_match(re, "ab"), -1, "no phantom 3-byte match on a 2-byte subject")
+        let spans <- collect_spans(re, "ab")
+        t |> equal(length(spans), 0, "no scan hit either")
+        var reci <- regex_compile("a\\x00b", true)
+        t |> equal(regex_match(reci, "AB"), -1, "ci twin rejects the same way")
+    }
+}
+
 [test]
 def test_early_out_survives_where_it_is_sound(t : T?) {
     t |> run("empty-matchable patterns clear the early-out") @(t : T?) {
