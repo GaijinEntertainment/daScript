@@ -121,8 +121,13 @@ def private drop_excluded_files(args : array<string>; var files : array<string>)
     collect_input_paths(args, "--exclude-mask", excludeMasks)
     var idx = length(files) - 1
     while (idx >= 0) {
-        let path = files[idx]
-        for (excludePath in excludeMasks) {
+        let path = files[idx] |> replace("\\", "/")
+        for (rawMask in excludeMasks) {
+            var excludePath = rawMask |> replace("\\", "/")
+            if (excludePath |> starts_with("./")) {
+                excludePath = slice(excludePath, 2)
+            }
+            continue if (empty(excludePath))
             if (path |> find(excludePath) >= 0) {
                 log::info("Excluding file '{path}' mask '{excludePath}'")
                 files |> erase(idx)

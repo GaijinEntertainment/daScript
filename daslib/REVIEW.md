@@ -31,12 +31,10 @@ sibling loop's exit path and unbalances its counter.
 **Per-function visitor state resets in `preVisitFunction`, ahead of any early return.**
 A latch that skips the template early-return poisons the next function.
 
-**A daslib predicate that replicates a C++ compiler decision changes in lockstep with its
-C++ side.** The pairs: `lint022_optimized` / `lint022_calls_may_be_inlined` ↔
-`Program::getOptimize` / `Program::patchInline`; `stale_scan_line` ↔
-`rtti_is_nolint_suppressed`; `is_inline_temp_name` ↔ `INLINE_TEMP_PREFIX`; the
-STYLE024/025 unsafe map ↔ infer's `unsafe_*` rules; `style036_inert_contract` ↔ infer's
-contract clearing. Nothing fails when one side moves alone.
+**A daslib predicate or emitted identifier whose correctness depends on a C++-side
+definition records the pairing in `ARCHITECTURE.md`, in its module's section, in the same
+diff that creates it — and the two sides change in lockstep.** Nothing fails when one side
+moves alone.
 
 **Weakening the nolint-window tests is a defect** — `tests/lint/test_nolint_suppression.das`
 pins that a string literal, a URL, and a mid-comment `nolint:` do not suppress while a
@@ -92,8 +90,9 @@ subtree unbalances the count; the balance panic in each entry point is the tripw
 growing either overload set without the cap is a silently missed finding, the reverse a
 suggestion that does not compile.
 
-**AOT emit is fail-closed: every entry point tests `macroException`/`failToCompile` BEFORE
-materializing output.** A codegen exception mid-visit leaves partial C++.
+**AOT emit is fail-closed: `run_aot` and `run_aot_function` test
+`macroException`/`failToCompile` BEFORE materializing output; a visitor override never gates
+on them.** A codegen exception mid-visit leaves partial C++.
 
 **An unreachable emit state writes `#error` into the output, never `panic`** —
 `runMacroFunction` swallows a panic, so the emitter never reports through it.

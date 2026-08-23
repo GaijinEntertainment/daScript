@@ -194,7 +194,7 @@ def private gate_jit_smoke(daslang : string) : bool {
     }
     for (test in ["tests/jit_tests/array.das", "tests/decs/test_bulk_create.das"]) {
         var out = ""
-        let rc = run([daslang, "-jit", test], out, 600.0)
+        let rc = run([daslang, "dastest/dastest.das", "-jit", "--", "--jit-opt-level=3", "--failures-only", "--test", test], out, 600.0)
         if (find(to_lower(out), "verifier") >= 0 || find(out, "Both operands") >= 0) {
             to_log(LOG_ERROR, "jit-smoke: verifier error in {test}\n{out}\n")
             return false
@@ -204,7 +204,7 @@ def private gate_jit_smoke(daslang : string) : bool {
             return false
         }
     }
-    to_log(LOG_INFO, "jit-smoke: no verifier errors (clang-cl link failures are local-only and ignored)\n")
+    to_log(LOG_INFO, "jit-smoke: smoke files pass under JIT, no verifier errors (clang-cl link failures are local-only and ignored)\n")
     return true
 }
 

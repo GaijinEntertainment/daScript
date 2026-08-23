@@ -19,7 +19,7 @@ require dastest/testing_boost public
 [test]
 def test_last_or_default_non_copyable(t : T?) {
     t |> run("array<int> default — empty source returns default") @(tt : T?) {
-        var src : array<array<int>>
+        let src : array<array<int>>
         var dflt <- [100, 200]
         let r <- _fold(each(src).last_or_default(dflt))
         tt |> equal(length(r), 2, "non-copyable default returned via clone_to_move")
@@ -31,7 +31,7 @@ def test_last_or_default_non_copyable(t : T?) {
 [test]
 def test_single_or_default_non_copyable_empty(t : T?) {
     t |> run("array<int> default — empty source returns default") @(tt : T?) {
-        var src : array<array<int>>
+        let src : array<array<int>>
         var dflt : array<int>
         dflt |> push(7)
         let r <- _fold(each(src).single_or_default(dflt))

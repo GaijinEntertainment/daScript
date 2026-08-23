@@ -209,6 +209,12 @@ an entry lands here only when no name, shape, or test can carry it.
   `to_cpp_double`'s named non-finite tokens (mirrors `src/builtin/runtime_string.cpp` and
   moves with it), elaborated `struct X`, double parens around `das_iterator` sources
   (most vexing parse), non-const value loop variables (`first()`/`next()` write into it).
+- **Sequenced binary operands**: any op2 whose operands are not both side-effect-free is
+  emitted through `das_ordered2{ L, R }` + an immediately-invoked lambda — braced aggregate
+  init is the C++ construct that guarantees left-to-right evaluation, matching the
+  interpreter and JIT. The struct and its member names live in
+  `include/daScript/simulate/aot.h` and move with the emitter's `__lr.left`/`__lr.right`
+  spellings.
 - **Stack-frame `new`/ascend**: per-block storage declared once, the USE site
   re-initializes per evaluation (memset for `new`, whole-value overwrite for ascend) —
   dropping the reinit reuses the previous iteration's value.
@@ -482,6 +488,12 @@ an entry lands here only when no name, shape, or test can carry it.
 
 ## misc module contracts
 
+- **C++ mirror pairs (lint family)**: `lint022_optimized` / `lint022_calls_may_be_inlined`
+  ↔ `Program::getOptimize` / `Program::patchInline`; `stale_scan_line` ↔
+  `rtti_is_nolint_suppressed`; `is_inline_temp_name` ↔ `INLINE_TEMP_PREFIX`; the
+  STYLE024/025 unsafe map ↔ infer's `unsafe_*` rules; `style036_inert_contract` ↔ infer's
+  contract clearing. Each pair changes in lockstep; nothing fails when one side moves
+  alone.
 - **interfaces**: the implements-marker IS the generated getter field — `is`/`as`/`?as`
   key purely on its presence; parent interfaces get their own deduped getter fields.
   The const getter's `unsafe(addr<$t(st)? -const>(self))` is the one blessed const-strip

@@ -1,11 +1,13 @@
 # Workflows Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
-doc: `skills/internal/preflight.md` (repo root).
+**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.**
+Architecture doc: `skills/internal/preflight.md` (repo root).
 
-**Removing or neutering a per-PR gate step in `doc.yml` or `extended_checks.yml` — deleting
-the step, adding `continue-on-error`, narrowing its `if:`, or substituting a weaker target or
-command — is a defect.** Each such step machine-enforces an invariant with no reviewer
-involved (the gate map: `skills/internal/preflight.md` (repo root)).
+**A per-PR gate step in `doc.yml` or `extended_checks.yml` keeps checking every tracked source
+it checked before the diff — deleting the step, adding `continue-on-error`, narrowing its
+`if:`, weakening its command, or shrinking the tracked-source set it covers is a defect.**
+Each such step machine-enforces an invariant with no reviewer involved —
+`skills/internal/preflight.md` §"doc.yml — the gates", §"extended_checks.yml".
 
-**A per-PR gate step in `doc.yml` fails the lane on a doc defect and only on a doc defect.**
+**A per-PR gate step in `doc.yml` or `extended_checks.yml` fails the lane on a defect in
+what it checks, and only on such a defect.**

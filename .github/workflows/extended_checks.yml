@@ -334,7 +334,8 @@ jobs:
       run: |
         set -eux
         cmake --build ./build --config Release --target check_format
-        $BIN/das-fmt.exe --path ./ --verify
+        # build/doc_verify holds .das extracted verbatim from RST by the doc-verify step above - not authored source
+        $BIN/das-fmt.exe --path ./ --verify --exclude-mask build/
 
     - name: "Run lint on changed .das files"
       if: matrix.target == 'linux'

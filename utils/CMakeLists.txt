@@ -2,7 +2,7 @@
 # daslang interpreted (no LLVM), so define them before the DAS_LLVM_DISABLED
 # early-return below.
 add_custom_target(check_format
-    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/das-fmt/dasfmt.das -- --path ${PROJECT_SOURCE_DIR}/ --verify
+    COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/das-fmt/dasfmt.das -- --path ${PROJECT_SOURCE_DIR}/ --verify --exclude-mask ${CMAKE_BINARY_DIR}
     DEPENDS daslang
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Verifying .das formatting (das-fmt --verify)"
