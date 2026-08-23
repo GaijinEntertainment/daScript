@@ -1097,7 +1097,7 @@ def private finish_draft_step(t : Model; var s : Session; r : StepRes; seam : bo
 def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam : bool = false) : bool {
     let c = t.config
     if (g_dev == null || !t.metal_blob || c.n_layer_nextn <= 0l || pos < 1l ||
-            weight_caches_stale() || !key_exists(g_mirrors, s.uid)) {
+            !key_exists(g_mirrors, s.uid)) {
         return false
     }
     finish_pending_step()
@@ -1983,10 +1983,6 @@ def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool 
     // mixed batch/single schedules: a pipelined batch step may still own this session's KV row
     // and logits — land it before reading anything session-side (no-op when nothing pends)
     finish_pending_step()
-    if (weight_caches_stale()) {   // a model (re)load may have recycled cached weight addresses
-        discard_pre()
-        weight_caches_flush_on_reload()
-    }
     g_lp_err = false
     var why = decode_decline(t, s, pos)
     if (why == MetalDecodeDecline.none && !metal_decode_init()) {
@@ -2171,10 +2167,6 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
 //! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
 [hot_path]
 def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {   // nolint:STYLE037,STYLE038 — the batch step driver; encode/commit/stash share the whole step's state
-    if (weight_caches_stale()) {   // a model (re)load may have recycled cached weight addresses
-        discard_pre()
-        weight_caches_flush_on_reload()
-    }
     var why = batch_decode_decline(t, ws, sessions, nrows)
     if (why == MetalDecodeDecline.none && !metal_decode_init()) {
         why = MetalDecodeDecline.device
@@ -3176,6 +3168,7 @@ def dasllama_metal_decode_register() {
     // shapes decline per call
     register_decode_override("metal", @@metal_decode_forward)
     register_batch_decode_override("metal", @@metal_batch_decode_forward)
+    register_reload_prep(@@discard_pre)   // a reload orphans the speculative pre-step — retire it before the regions drop
     register_mtp_spec_override("metal", @@metal_mtp_spec_eval)
     register_mtp_seam_override("metal", @@metal_mtp_seam_row)
     g_env_logits = g_env_metal.logits

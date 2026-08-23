@@ -1890,14 +1890,40 @@ def metal_common_init : bool {
     return true
 }
 
-// ===== the weights-epoch guard =====
-// g_regions keys by host address; a model reload makes those keys lie (see
-// weights_epoch). Drivers flush at entry when the epoch moved, after quiescing in-flight work.
-var g_weight_cache_epoch = -1l
+// ===== the weights-epoch drop =====
+// g_regions keys by host address; a model reload makes those keys lie (see weights_epoch).
+// The bump PUSHES the drop here via the registered listener — drivers never participate.
+var private g_reload_preps : array<function<void>>
 
-def weight_caches_stale() : bool {
-    return weights_epoch() != g_weight_cache_epoch
+//! A driver's extra reload reaction (decode retires its speculative pre-step); runs BEFORE the
+//! shared quiesce+release so an in-flight speculative cb never sees released regions.
+def register_reload_prep(f : function<void>) {
+    g_reload_preps |> push(f)
 }
+
+[init]
+def private metal_weights_listener_register {
+    register_weights_epoch_listener(@@metal_weights_drop)
+}
+
+[cold_path]   // fires only at load/map boundaries (bump_weights_epoch)
+def private metal_weights_drop {
+    for (f in g_reload_preps) {
+        invoke(f)
+        g_reload_preps_run++
+    }
+    finish_pending_step()
+    regions_release_all()
+}
+
+//! Address-keyed weight regions currently cached (both tables) — the epoch-drop test witness.
+def weight_regions_cached() : int64 => int64(length(g_regions) + length(g_regions_cat3))
+
+var private g_reload_preps_run : int64
+
+//! Lifetime count of reload-prep invocations through the drop — the registration witness
+//! (deltas compose across readers): a dropped register_reload_prep line keeps it flat.
+def reload_preps_run() : int64 => g_reload_preps_run
 
 [cold_path]   // regions release + retire drain — the shared tail of the flush/teardown legs
 def private regions_release_all {
@@ -1926,16 +1952,6 @@ def private regions_release_all {
         }
     }
     g_region_retire |> clear()   // released above — delete of array<T?> would double-free the pointees
-}
-
-[cold_path]   // live-reload only
-def weight_caches_flush_on_reload {
-    if (!weight_caches_stale()) {
-        return
-    }
-    finish_pending_step()
-    regions_release_all()
-    g_weight_cache_epoch = weights_epoch()
 }
 
 def metal_common_release {

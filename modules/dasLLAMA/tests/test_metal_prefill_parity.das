@@ -461,6 +461,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                             t |> success(metal_residency_heartbeat_live(), "the residency heartbeat is armed after a served step")
                         } else {
                             t |> success(!metal_residency_heartbeat_live(), "DASLLAMA_METAL_HEARTBEAT_S=0 leaves the heartbeat unarmed")
+                            t |> equal(metal_residency_heartbeat_sets(), 0l, "DASLLAMA_METAL_HEARTBEAT_S=0 registers nothing (the kick is skipped, not zero-length)")
                         }
                     } else {
                         t |> skip("MTLResidencySet unavailable (macOS < 15) - the pin witness has no API to observe")
@@ -468,6 +469,14 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 } else {
                     t |> equal(residency_pinned(), 0l, "DASLLAMA_METAL_RESIDENCY=0 pins nothing")
                 }
+                // the weights-epoch push contract: a bump alone (what every load/map does) drops
+                // the address-keyed region caches — no driver entry participates, so a driver
+                // that never flushes cannot serve a recycled address's stale buffers
+                t |> success(weight_regions_cached() > 0l, "the served prefill cached {weight_regions_cached()} weight regions")
+                let preps0 = reload_preps_run()
+                bump_weights_epoch()
+                t |> equal(weight_regions_cached(), 0l, "a weights-epoch bump alone drops the address-keyed region caches")
+                t |> success(reload_preps_run() > preps0, "the drop ran the registered reload preps (decode's discard_pre reached through the registry)")
             }
 
             // s16 arm (W2): the DEFAULT-load scale plane — blobs read raw f16 scales, the

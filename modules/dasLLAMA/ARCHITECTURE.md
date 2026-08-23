@@ -209,8 +209,9 @@ that a question answered for one backend has an obvious address in the other. Th
 - **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,
   posadd, the gemma4v clamp / rope2d / GEGLU-quick, the head restride - gemma3v's and, offset-bound, the qwen3v/prefill slicers) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
   releases them like every other registry PSO; the borrowed prefill builders (`pf_enc_bf16_mm`,
-  `enc_add_bias_rows`, `enc_rope` - the qwen3v vision NEOX apply - and the attention trio via
-  `enc_qk_mm`/`enc_av_mm`) come up through
+  `enc_add_bias_rows`, `enc_rope` - the qwen3v vision NEOX apply - and the attention trio
+  `enc_qk_mm`/`enc_softmax`/`enc_av_mm`; this list is the closed borrowed set REVIEW_GPU.md's
+  tower rules key on) come up through
   `metal_prefill_pso_init`, prefill's public bring-up seat, and `plane_buffer` in common is
   public for the same wrap-a-plane reason. The tower's own objects (the ones buffer, its
   scratch pool) release through `metal_tower_shutdown`.
@@ -296,10 +297,17 @@ entry here:**
   require of the `dasllama_math_vulkan` facade); the inversion that remains is the
   kernels<->common require DIRECTION, and it is why their seam shapes differ.
 - **UMA vs discrete VRAM**: Metal never grows Vulkan's VRAM machinery - arenas, upload
-  economics, mirrors and hydration are Vulkan's alone. Metal's ONE residency artifact is the
-  `MTLResidencySet` pin in `_common` (`DASLLAMA_METAL_RESIDENCY`, sec.2.12): it pins the served
-  working set so the per-commit tracked-set pass stays warm - a driver-cost shield, not a
+  economics, mirrors and hydration are Vulkan's alone. Metal's residency artifacts are the
+  `MTLResidencySet` pin in `_common` (`DASLLAMA_METAL_RESIDENCY`) plus its keep-alive
+  heartbeat (`DASLLAMA_METAL_HEARTBEAT_S`, a dasMetal background re-request that stops the OS
+  collecting the set over a CPU-only window, sec.2.12) - a driver-cost shield, not a
   placement mechanism; memory is still memory.
+- **The weights-epoch drop is Metal-only.** `bump_weights_epoch`'s listener seat
+  (`register_weights_epoch_listener`) has one subscriber: `_common`'s `metal_weights_drop`,
+  which runs the registered reload preps (`register_reload_prep`; the decode driver registers
+  `discard_pre`), quiesces, and releases the address-keyed region caches. Vulkan's reload
+  story is the unmap notify (`set_moe_gpu_unmap_notify`) - a different seam for a different
+  ownership model.
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes - Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants; the
   class-kernel arc retired the hand-built 6-slot set ladders outright) - and both speak the

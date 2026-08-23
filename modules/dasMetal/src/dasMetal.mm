@@ -439,6 +439,7 @@ namespace das {
         std::vector<void *> sets;
         std::atomic<bool> stop{false};
         std::atomic<int64_t> loops_left{0};
+        std::atomic<int64_t> ticks{0};
         std::thread thr;
         bool started = false;
         static const int interval_ms = 5;
@@ -462,6 +463,7 @@ namespace das {
                         }
                     }
                     hb.loops_left.fetch_sub(1, std::memory_order_relaxed);
+                    hb.ticks.fetch_add(1, std::memory_order_relaxed);
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(ResidencyHeartbeat::interval_ms));
             }
@@ -495,6 +497,17 @@ namespace das {
     bool metal_residency_heartbeat_live () {
         std::lock_guard<std::mutex> guard(g_rsetHeartbeat.mx);
         return g_rsetHeartbeat.started && g_rsetHeartbeat.loops_left.load(std::memory_order_relaxed) > 0;
+    }
+
+    // the effect witnesses: sets currently registered (release unregisters; a knob-0 process
+    // never registers), and lifetime loop passes that requested residency (deltas compose)
+    int64_t metal_residency_heartbeat_sets () {
+        std::lock_guard<std::mutex> guard(g_rsetHeartbeat.mx);
+        return (int64_t) g_rsetHeartbeat.sets.size();
+    }
+
+    int64_t metal_residency_heartbeat_ticks () {
+        return g_rsetHeartbeat.ticks.load(std::memory_order_relaxed);
     }
 
     void metal_set_pipeline ( MetalComputeEncoder * enc, MetalComputePipeline * pso, Context * ctx, LineInfoArg * at ) {
@@ -833,6 +846,10 @@ namespace das {
                     ->args({"residency_set", "keep_alive_s", "context", "at"});
             addExtern<DAS_BIND_FUN(metal_residency_heartbeat_live)>(*this, lib, "metal_residency_heartbeat_live",
                 SideEffects::accessExternal, "metal_residency_heartbeat_live");
+            addExtern<DAS_BIND_FUN(metal_residency_heartbeat_sets)>(*this, lib, "metal_residency_heartbeat_sets",
+                SideEffects::accessExternal, "metal_residency_heartbeat_sets");
+            addExtern<DAS_BIND_FUN(metal_residency_heartbeat_ticks)>(*this, lib, "metal_residency_heartbeat_ticks",
+                SideEffects::accessExternal, "metal_residency_heartbeat_ticks");
 
             addExtern<DAS_BIND_FUN(metal_release_device)>(*this, lib, "metal_release",
                 SideEffects::modifyExternal, "metal_release_device")->args({"handle"});

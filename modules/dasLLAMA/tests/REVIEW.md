@@ -40,8 +40,9 @@ complete census, the `CLAUDE.md` map is deliberately partial.
 filter mechanics" section in the same change** - an arm the census does not name is
 unreachable to whoever is choosing what to run.
 
-**Weakening `test_program_roots.das` - dropping a root from its sweep, loosening its
-`options stack = 524288` assert, or relaxing its prefill-intent assert - is a defect.**
+**Weakening `test_program_roots.das` - dropping a directory from its `ROOT_DIRS` sweep,
+loosening its `options stack = 524288` assert, or relaxing its prefill-intent assert - is a
+defect.**
 
 **Weakening `test_env_registry.das` is a defect.** It enforces the knob contract that
 `../ENVIRONMENT.md` describes.
@@ -125,12 +126,17 @@ dump.**
 **A test that reads a vision encode oracle dump names the minting arm in its header - the
 backend, the flash-attention setting, and the mmproj precision the dump came from.**
 
-**A cell pins every driver hook and serving-lane knob its claim depends on, and restores it
-before returning** - the hooks have no read-back, so a cell that pins one OFF sets it back
-ON (the driver hooks `set_metal_tower`, `set_metal_wdec`, `set_metal_wdec_step`); a family
-serving-lane pin `set_<family>_q8` is undone with `reset_<family>_q8` - never a runtime
-decline standing in for a pin. The mechanism (why the hooks flip legs silently) is
+**A cell establishes every driver hook and serving-lane knob its claim depends on, and
+restores it before returning** - the hooks have no read-back, so a cell that pins one OFF
+sets it back ON (the driver hooks `set_metal_tower`, `set_metal_wdec`, `set_metal_wdec_step`);
+a family serving-lane pin `set_<family>_q8` is undone with `reset_<family>_q8` - never a
+runtime decline standing in for a pin. The mechanism (why the hooks flip legs silently) is
 `CLAUDE.md`'s "Metal fixtures" section.
+
+**A knob a cell can reach only through the environment is armed in the environment of a
+process started after the arming - a child the cell spawns, or the runner's own - and needs
+no restore; a cell that cannot arm it names in its assert text the value it asserts under.**
+An in-cell set is invisible to the running config, which is read once at context init.
 
 **A cell asserting the UNPINNED default lane compares against the predicates the lane policy
 itself consults - `float_batch_override_active()` and the family's `<family>_gpu_would_serve()`
@@ -154,9 +160,10 @@ shaped exact fixtures.
 **An embedding-parity cell names its fixture and logs the measured maxdiff on green as well
 as red.**
 
-**A new or loosened tolerance bar ships a control the bar reds - a poison, a knockout, or a
-cross-lane witness - in the same change.** A bar nothing has ever exceeded is not known to
-discriminate.
+**A new gate, or a new or loosened tolerance bar, ships a control that reds it - a poison, a
+knockout, a disconnected mechanism, or a cross-lane witness - in the same change.** A bar
+nothing has ever exceeded is not known to discriminate, and a gate that reads state the same
+code path wrote can be a tautology - only the control proves either can fail.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server leg gated on the family's

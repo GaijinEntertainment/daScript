@@ -83,6 +83,8 @@ namespace das {
     // the collect). Idempotent per set; call again to reset the countdown. Release unregisters.
     DAS_MOD_API void metal_residency_set_heartbeat ( MetalResidencySet * rset, int32_t keep_alive_s, Context * ctx, LineInfoArg * at );
     DAS_MOD_API bool metal_residency_heartbeat_live ();
+    DAS_MOD_API int64_t metal_residency_heartbeat_sets ();
+    DAS_MOD_API int64_t metal_residency_heartbeat_ticks ();
 
     // each registers as a das-side `metal_release` overload; C++ names differ
     // because DAS_BIND_FUN cannot take an overload set

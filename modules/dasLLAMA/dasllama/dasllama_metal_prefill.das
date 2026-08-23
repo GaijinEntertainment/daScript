@@ -2299,7 +2299,6 @@ def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int
 
 [hot_path]
 def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) : bool {   // nolint:STYLE037,STYLE038 — the prefill step driver; the layer stack's phases are hz-barrier coupled
-    weight_caches_flush_on_reload()
     var why = prefill_decline(t, s, npos, start_pos)
     if (why == MetalPrefillDecline.none && !metal_prefill_init()) {
         why = MetalPrefillDecline.device

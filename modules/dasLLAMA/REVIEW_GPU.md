@@ -61,8 +61,8 @@ backend's files partition into: the kernel home (`_kernels` on Metal, `_classes`
 servability gates), `_tower` (the encoder-tower driver), `_asr_dec` (the ASR-decoder
 driver), and the kernel-access lens (`_lens` on Metal, `_dispatch` on Vulkan); a backend
 carries a role's file only once it has the capability. A capability with no matching role
-gets its own role file - and adds its role to this list and to `ARCHITECTURE.md` sec.1.5 in
-the same change; anything else is a grab-bag, and a grab-bag file is a defect.
+gets its own role file - and adds its role to this list in the same change; anything else
+is a grab-bag, and a grab-bag file is a defect.
 
 **A GPU family shares ONE device and queue from `dasllama/dasllama_<gpu>_common.das`'s
 init.** A module creating its own is a defect.
@@ -99,7 +99,8 @@ is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that w
 **A change to a GPU decode or prefill driver (`dasllama/dasllama_metal_decode.das`,
 `dasllama/dasllama_metal_prefill.das`, `dasllama/dasllama_vulkan_decode.das`,
 `dasllama/dasllama_vulkan_prefill.das`), to the servability gates in
-`dasllama/dasllama_metal_shapes.das`, or to the residency rail's serving paths in
+`dasllama/dasllama_metal_shapes.das`, to the weight-region cache and residency paths in
+`dasllama/dasllama_metal_common.das`, or to the residency rail's serving paths in
 `dasllama/dasllama_gpu_resident.das` - the upload, plan, and decode/batch-decode/prefill
 override paths a session runs through, never the bake paths - ships `harness/parity.das`
 GPU-vs-CPU runs on one q8 and one kq model, with `--kv` matching the armed mirror codec.**
@@ -109,25 +110,31 @@ GPU-vs-CPU runs on one q8 and one kq model, with `--kv` matching the armed mirro
 driver declines codec-mismatched sessions silently.
 
 **A change to `dasllama/dasllama_metal_tower.das`, to the `AttnArgs` kargs struct, or to any
-kernel class the tower dispatches - the builders its own kernel classes declare, plus the
-prefill builders it borrows (`enc_qk_mm`, `enc_softmax`, `enc_av_mm`, `pf_enc_bf16_mm`,
-`enc_add_bias_rows`, `enc_rope`) - ships the per-family GPU oracle gate of every family the
-changed code is reachable from (`tests/test_gemma4uv.das`, `tests/test_gemma4v.das`,
-`tests/test_gemma3v.das`, `test_qwen3v_tier1_metal` in `tests/test_qwen3v.das`), ALL of them
-when the change touches state or setup the whole driver shares (any module-level `g_tw_*`
-variable, `metal_tower_init`, or `dasllama_metal_tower_register`); and a
-`tests/test_model_image.das` run with the `mtower` arm, with `metal_tower_stats()`'s encode
-count rising across the run.** A `register_<fam>_gpu` call in `dasllama_metal_tower_register`
-where `dasllama/dasllama_<fam>.das` is a family file names a family; a registered family whose
-gate file this rule does not name, and a prefill builder the tower borrows that this rule
-does not name, are the rule's defects to fix in the same change.
+kernel class the tower dispatches or builder it borrows (the borrowed set is the tower entry
+in `ARCHITECTURE.md` sec.1.5) ships the gate of every registered tower hook the changed code
+is reachable from: the family gates `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`,
+`tests/test_gemma3v.das`, and `test_qwen3v_tier1_metal` in `tests/test_qwen3v.das`; the
+encoder-blocks leg's `tests/test_whisper.das`; the conv legs' `tests/test_audio.das` and
+`tests/test_audio_embedder.das`.** A hook registered in `dasllama_metal_tower_register` whose
+gate this rule does not name is the rule's defect to fix in the same change.
+
+**A tower change that touches state or setup the whole driver shares - any module-level
+`g_tw_*` variable, `metal_tower_init`, or `dasllama_metal_tower_register` - ships ALL the
+gates above.**
+
+**A change the tower serves - the driver file, its kargs, a dispatched kernel class, or a
+borrowed builder - ships a `tests/test_model_image.das` run with the `mtower` arm, with
+`metal_tower_stats()`'s encode count rising across the run.**
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq
 model.** Parity runs never reach it.
 
-**A change to `dasllama/dasllama_metal_asr_dec.das` ships a `tests/test_model_image.das` run
-with the `mtower` arm** - its CPU-vs-GPU transcript cells are that driver's parity instrument.
+**A change to `dasllama/dasllama_metal_asr_dec.das`, or any change to
+`dasllama/dasllama_metal_common.das`, ships a `tests/test_model_image.das` run with the
+`mtower` arm** - its CPU-vs-GPU transcript cells are the ASR-decoder driver's parity
+instrument, and the shared common paths reach that driver with no line of its own file
+touched.
 
 **A kernel that reads or writes the residency rail's `k_mirror`/`v_mirror` slabs leaves
 neither codec unserved: it is stamped from a `[|> template_struct_instance]` codec template

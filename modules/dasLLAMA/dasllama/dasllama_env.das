@@ -225,7 +225,7 @@ struct public MetalEnv {
     @clarg_doc = "Pin the served working set (weight regions, planes, the recycled pool buffers) in an MTLResidencySet, macOS 15+: the per-commit residency pass stays a no-op, so the first submission after a CPU-only window stops repaying it (~15 ms/encode on the M1 Max released-rig image cell; ARCHITECTURE.md 2.12); 0 is the A/B rail."
     residency : bool = true
 
-    @clarg_doc = "Seconds the residency-set heartbeat keeps re-requesting residency after the last served step (a requested set still un-wires over a long CPU-only window; the ggml-metal keep-alive, ARCHITECTURE.md 2.12); 0 disables the heartbeat — the A/B rail."
+    @clarg_doc = "Seconds the residency-set heartbeat keeps re-requesting residency after the last served step (a requested set still un-wires over a long CPU-only window; the ggml-metal keep-alive, ARCHITECTURE.md 2.12); 0 disables the heartbeat - the A/B rail."
     heartbeat_s : int = 180
 
     @clarg_doc = "Barrier at every dispatch instead of at tracker-detected hazards (correctness bisect)."
