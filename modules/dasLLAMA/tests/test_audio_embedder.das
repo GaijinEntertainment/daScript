@@ -68,7 +68,9 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
         var image_path = ""
         dir(models_dir()) $(name) {
             // the mmproj bakes one dlim PER ARM (gemma4a audio, gemma4v vision) — select by the
-            // baked family tag, or directory order hands this audio cell a vision image
+            // baked family tag, or directory order hands this audio cell a vision image. The
+            // load above already minted the gemma4a arm when the image rail is on, so this
+            // scan only skips under DASLLAMA_IMAGE=0 — a model gate, not an artifact gate
             if (empty(image_path) && starts_with(name, "{base_name(mm)}.0x") && ends_with(name, ".dlim")) {
                 let cand = path_join(models_dir(), name)
                 if (image_family_tag(cand) |> starts_with("gemma4a-")) {

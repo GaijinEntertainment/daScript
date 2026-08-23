@@ -315,13 +315,10 @@ def private g3v_layout(var t : Gemma3vTower; var off : int64&; var qo : int64&) 
 def private g3v_stage_up(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma3vStaging;
                          @scratch var wscratch : array<float>; wo : int64) {
     let d = st.t.n_embd
-    let file_n = st.t.n_ff * d
-    let served = st.t.ff_pad * d
     if (st.t.q8) {
         tower_stage_q8_zero_rows(m, b, name, st.qblob, st.qscales, wscratch, wo, st.t.n_ff, st.t.ff_pad, d, "dasLLAMA gemma3v q8")
     } else {
-        gguf_read_tensor_f32(m, b, name, st.blob, wo, file_n)
-        tower_zero_span(st.blob, wo + file_n, served - file_n)
+        tower_stage_f32_zero_rows(m, b, name, st.blob, wo, st.t.n_ff, st.t.ff_pad, d)
     }
 }
 

@@ -238,21 +238,28 @@ restride to the attention tiles' 128 on the driver). Skips honestly without the 
 `test_qwen3v.das` — the qwen3v tower tier-1 parity vs the `-p encode` dumps minted on
 f32-widened mmprojs, CPU (`qwen3vl-vision-oracle/mint.sh` + `mint_4b.sh`): the Omni leg
 (`qwen3vl_merger` no deepstack) on seven fixtures (cb96 = the pos-table downscale arm,
-cb640x320 = the merge-reorder/transposed-grid gate) at 2e-4 + 1e-2·token-rms, plus the
+cb640x320 = the merge-reorder/transposed-grid gate) at 2e-4 + 1.5e-2·token-rms (the ff_pad
+width regroups the down GEMM's f32 accumulation; the live exact-lane zero-layer poison reds
+the bar at 0.87), plus the
 merged-patch-grid panic gate; and the Qwen3-VL 4B DEEPSTACK leg (taps 5/11/17, wide
 10240-float rows) on four fixtures at 2e-4 + 4e-2·rms — the 4B dumps carry q1/q2/q3 quarter-offset probe
 fields — the compare applies them when the dump has them — hitting each concatenated
 slice's first element (a skipped-tap poison lands at 6.9–9.7 on them, 600×; mean+v0..v3
-alone are BLIND to a zeroed slice). The q8 serving lane (the CPU policy default when no
-accelerate float-batch tier is active) gets its own cells, each bar carrying its own
+alone are BLIND to a zeroed slice). The q8 serving lane (the CPU policy default when
+neither the Metal tower nor the accelerate float-batch tier serves —
+`qwen3v_gpu_would_serve()` is the driver clause) gets its own cells, each bar carrying its own
 must-EXCEED poison leg — a block's qblob region zeroed through the staging planes, scored
 by `encode_excess`: the Omni leg on gray448 + cb448 + cb96 at its measured 5.2e-1·rms bar,
 poisoned at a mid-stack block; the deepstack leg on cb448 + cb96 at 6.5e-1, poisoned at
 the TAP-1 block so the zero hits both the main path and a served slice — gray's tap-slice
 probes measure 7.9·rms because the taps sample mid-network residuals, so gray stays on the
 exact lane's set, and the proof that the served slices still carry signal is the
-zeroed-slices decoder control in `test_vision_chat.das`; and a model-free lane-knob cell.
-The model-gated cells skip honestly without the mmprojs or dumps.
+zeroed-slices decoder control in `test_vision_chat.das`; a METAL tower cell (both towers,
+tower pinned ON, its own GPU bars 4e-2 / 8e-2·rms per the gemma3v f16-tile precedent, gray
+off the GPU-ds set like the q8-ds cell, engage proven by encode/block counter deltas per
+GATED fixture, and its own GPU-lane zero-layer poison); and a model-free lane-knob cell.
+The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
+gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` — the qwen25v tower (Qwen2.5-Omni's window-attention ViT, projector
 `qwen2.5o`) tier-1 parity vs the `-p encode` dumps minted on the f32-widened dual-tower
 mmproj, CPU (`qwen3vl-vision-oracle/mint_25o.sh`): five fixtures, four of them shaped —
@@ -340,7 +347,7 @@ images the rig cannot use and purges the flavors the rig depends on. Image-rail 
 ## Metal fixtures — driver knobs and the two-model pattern
 
 (REVIEW: "A cell pins every driver hook and serving-lane knob its claim depends on, and
-restores it after") The
+restores it before returning") The
 hooks are on by default: they flip a q8 leg to the GPU silently, and an f32 leg records a
 quant_mode decline that panics under required mode — either way the cell stops measuring what
 its name says. The family serving-lane pins (`set_<family>_q8`) are the same trap in the

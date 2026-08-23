@@ -477,6 +477,35 @@ def test_vision_chat_rows_seam(t : T?) {
             }
             to_log(LOG_INFO, "rows-seam replies: embedder '{replace(r1, "\n", "\\n")}' vs rows '{replace(r2, "\n", "\\n")}'\n")
             tt |> equal(r1, r2, "greedy replies match token-for-token")
+            // the seam's guards: a wrong-width quantum and a second image both refuse by panic
+            var tripped = false
+            try {
+                var chat3 <- create_chat_(m, "", 8l)
+                var bad : array<float>
+                bad |> resize(nr * m.config.dim)   // narrow rows on a deepstack decoder - the old bench defect's exact shape
+                add_user_image_rows_(m, chat3, bad, nr, int2(20, 15))
+                delete bad
+                delete chat3
+            } recover {
+                tripped = true
+            }
+            tt |> success(tripped, "narrow rows on a deepstack decoder panic at the seam")
+            tripped = false
+            try {
+                var rows3 : array<float>
+                let nr3 = encode_image(emb2, st, img, "rows-seam-2", rows3)
+                var chat4 <- create_chat_(m, "", 8l)
+                add_user_image_rows_(m, chat4, rows3, nr3, vision_mrope_grid(emb2, st))
+                var rows4 : array<float>
+                let nr4 = encode_image(emb2, st, img, "rows-seam-3", rows4)
+                add_user_image_rows_(m, chat4, rows4, nr4, vision_mrope_grid(emb2, st))
+                delete rows4
+                delete rows3
+                delete chat4
+            } recover {
+                tripped = true
+            }
+            tt |> success(tripped, "a second image before respond() panics at the seam")
             delete chat2
             delete rows
             delete st

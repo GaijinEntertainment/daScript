@@ -12,25 +12,29 @@ what it costs today and what the fix would change.
 
 ## Entries
 
-- **OPEN — the qwen Metal image-turn pp reds are the CPU encode's aftermath (measured
-  2026-08-23, M1 Max, the slice-M dig; plan: `qwen3vl_plan.md` slice M).** Record-grade
-  `img:pp` das/lcpp on the honest walk: 3B −12%, 4B −16%, 8B −29%, 30B MoE −41% (unprobed)
-  — while das TEXT prefill at the same padded M is at parity (4B +2.7%, 8B −6.2%) and the
-  whole image-eval machinery (wide ds rows, mrope tables, span mask) prices +10 ms. The
-  mechanism: after the multi-second CPU tower encode, the first ~70 ms (8B; scales with
-  bandwidth demand) of sustained GPU work runs degraded — a memory/GPU governor ramp.
-  Refuted by probe: driver wake (empty cb round-trips in 0.107 ms), MTLResidencySet pinning
-  (146 buffers, zero effect — implemented and reverted), per-page faults (page-touch kernel
-  repays nothing), light pulse-trains through the burn. Only full-weight-stream work absorbs
-  it (a 1-token decode: 100 ms after-burn vs 28 warm), i.e. the ramp rides whatever heavy
-  work comes first — no warm-up can net-win. **The fix is the deferred Metal tower for the
-  qwen ViTs** (also deletes the 2-12 s CPU encodes and the open 1.7x metal-armed-CPU-encode
-  anomaly below). Until a family's tower serves on GPU (qwen25v exact-only, the conformer
-  audio encoders), its media-turn pp keeps the ramp.
+- **OPEN (narrowed by slice J) — the first Metal submission after a CPU-only window repays
+  the per-commit tracked-set pass (measured 2026-08-23, M1 Max; probes = quiet `-jit` runs
+  with the rig's tune manifest, cells = the released `lcpp_bench` exe, `--image --image-think
+  -r 3 -t 8 --ngl 99`; plan: `qwen3vl_plan.md` slices M/J).** The pre-J reds (released-rig
+  cells: 3B −12%, 4B −16%, 8B −29%, 30B −41%) were mostly this: das TEXT prefill at the same
+  padded M is at parity (rig `-p` + `--ref`: 4B +2.7%, 8B −6.2%) and the whole image-eval
+  machinery prices +10 ms (probe). The slice-J Metal tower deleted the multi-second CPU
+  encode burns; the residual (post-J rig cells: 4B/8B −16%, 30B −5%) is a ~40 ms one-time
+  commit→execution slack after ANY CPU-only window. Refuted by probe: driver wake (empty cb
+  round-trips 0.107 ms), per-page faults, light pulse-trains, denormals, affinity, cb-split
+  counts, queue identity. The MTLResidencySet pin (shipped, `DASLLAMA_METAL_RESIDENCY`)
+  holds the SHORT-window case — released-rig A/B ×2: encode 177/180 ms pinned vs 194/194
+  unpinned on the 4B image cell — but not long windows; making the prefill pools untracked
+  reds `test_metal_prefill_parity`, so the tracking is load-bearing. **The scoped fix is a
+  per-buffer tracking audit** (which pool buffers need Metal's tracker vs the capture rail's
+  own barriers). Until then, media-turn pp keeps the slack wherever a CPU window precedes
+  the prefill (qwen25v exact-only and the conformer audio encoders keep the full CPU-burn
+  form).
 
 - **OPEN — arming Metal makes the CPU q8 tower encode ~1.7x slower (measured 2026-08-23,
   M1 Max, 8B qwen3v tower: 3.26-3.45 s with MetalMode.required vs 1.90 s on the CPU leg,
-  same t=8).** Reproduces in a quiet -jit probe, so it is not the bench harness. Mechanism
+  same t=8; probe = a quiet `-jit` run with the rig's tune manifest, leg = the released
+  `lcpp_bench` exe).** Reproduces in the quiet probe, so it is not the bench harness. Mechanism
   unnamed — worker placement / QoS when the Metal queue is live is the suspect class.
   Costs every Metal-leg image cell ~1.4-1.6 s of encode today; the Metal tower deletes the
   arm entirely, but the mechanism matters wherever a CPU encoder coexists with Metal serving.

@@ -222,7 +222,7 @@ struct public MetalEnv {
     @clarg_doc = "Ceiling in MiB for the device-side KV mirror, clamped 64..4096."
     kv_mirror_mb : int = 4096
 
-    @clarg_doc = "Pin the served working set (weight regions, planes, the recycled pool buffers) in an MTLResidencySet, macOS 15+: the per-commit residency pass stays a no-op, so the first submission after a CPU-only window stops repaying it (~40 ms on an image turn); 0 is the A/B rail."
+    @clarg_doc = "Pin the served working set (weight regions, planes, the recycled pool buffers) in an MTLResidencySet, macOS 15+: the per-commit residency pass stays a no-op, so the first submission after a CPU-only window stops repaying it (~15 ms/encode on the M1 Max released-rig image cell; ARCHITECTURE.md 2.12); 0 is the A/B rail."
     residency : bool = true
 
     @clarg_doc = "Barrier at every dispatch instead of at tracker-detected hazards (correctness bisect)."

@@ -67,6 +67,7 @@ def private tw_decline(why : MetalTowerDecline) : bool {
 //! leak-gate rail, beside metal_decode_shutdown. The borrowed and registry PSOs are owned by
 //! their homes; lazily re-initializes on the next served encode.
 def metal_tower_shutdown {
+    residency_reset()   // the set references pooled buffers the drain below releases
     if (g_tw_ones != null) {
         metal_release(g_tw_ones)
         g_tw_ones = null
@@ -83,6 +84,7 @@ def metal_tower_shutdown {
 
 [cold_path]   // per-encode bring-up: the registry/prefill inits are latched-flag cheap
 def private metal_tower_init : bool {
+    weight_caches_flush_on_reload()   // an embedder load/delete recycles staged-blob addresses — the address-keyed regions must not survive it
     // the registry owns the tower PSOs (metal_decode_init compiles them, via the prefill seat)
     if (g_tw_failed || !metal_common_init() || !metal_prefill_pso_init() || g_pso_ln == null) {
         return false
@@ -693,6 +695,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
+    residency_flush()   // commit THIS encode's own notes before its first submission
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         for (l in range64(t.n_layer)) {
@@ -701,11 +704,11 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
             let wq = uint64(o.w[QWEN3V_GEMM_QKV] * 4l)   // the fused qkv rows: q, then k at d·d, v at 2d·d
             enc_f32_mm(enc, bblob, wq, bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.qkv_b * 4l), u_d, u_totd, npos * d)
-            enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, u_rot, npos * d / 2l)
+            enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, null, npos * d / 2l)
             enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_f32_mm(enc, bblob, wq + uint64(d * d * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + d) * 4l), u_d, u_totd, npos * d)
-            enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, u_rot, npos * d / 2l)
+            enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, null, npos * d / 2l)
             enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_f32_mm(enc, bblob, wq + uint64(2l * d * d * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + 2l * d) * 4l), u_d, u_totd, npos * d)
@@ -791,7 +794,6 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     pool_release(g_upool, u_totpr, 4ul)
     pool_release(g_upool, u_np_rope, 4ul)
     pool_release(g_upool, u_neox, 4ul)
-    pool_release(g_upool, u_rot, 4ul)
     if (!served) {
         return tw_decline(MetalTowerDecline.gpu_error)
     }

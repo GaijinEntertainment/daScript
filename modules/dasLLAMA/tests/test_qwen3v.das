@@ -122,6 +122,9 @@ def test_qwen3v_tier1(t : T?) {
             ragged_tripped = true
         }
         tt |> success(ragged_tripped, "a canvas off the 32 px merged-patch grid panics by name")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)   // restore the module default the pin above flipped
+        }
         // negative control for the exact bar: layer 13's f32 layer_w region zeroed through the
         // staging planes must red the same fixture on the same bar (the loosened-bar rule)
         var o = OracleEncode()
@@ -170,17 +173,60 @@ def test_qwen3v_tier1_metal(t : T?) {
             set_metal_tower(true)
             var st = Qwen3vState()
             let s0 = metal_tower_stats()
-            tt |> gate_encode(tw, st, "gray", 448, 448, "encode.gray448.log", TIER1_REL_GPU)
-            tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_GPU)
-            tt |> gate_encode(tw, st, "cb", 640, 320, "encode.cb640x320.log", TIER1_REL_GPU)
+            var omni_gated = 0l
+            var ds_gated = 0l
+            if (tt |> gate_encode(tw, st, "gray", 448, 448, "encode.gray448.log", TIER1_REL_GPU)) {
+                omni_gated++
+            }
+            if (tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_GPU)) {
+                omni_gated++
+            }
+            if (tt |> gate_encode(tw, st, "cb", 640, 320, "encode.cb640x320.log", TIER1_REL_GPU)) {
+                omni_gated++
+            }
             var st4 = Qwen3vState()
-            tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)
-            tt |> gate_encode(tw4, st4, "cb", 640, 320, "encode4b.cb640x320.log", TIER1_REL_GPU_DS)
-            tt |> gate_encode(tw4, st4, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_GPU_DS)
+            if (tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)) {
+                ds_gated++
+            }
+            if (tt |> gate_encode(tw4, st4, "cb", 640, 320, "encode4b.cb640x320.log", TIER1_REL_GPU_DS)) {
+                ds_gated++
+            }
+            if (tt |> gate_encode(tw4, st4, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_GPU_DS)) {
+                ds_gated++
+            }
             let s1 = metal_tower_stats()
-            to_log(LOG_INFO, "qwen3v metal tier-1: +{s1.encodes - s0.encodes} encodes, +{s1.blocks - s0.blocks} blocks, +{s1.declines - s0.declines} declines\n")
-            tt |> success(s1.encodes - s0.encodes >= 6l, "every encode served on the Metal tower ({s1.encodes - s0.encodes} of 6)")
-            tt |> equal(s1.blocks - s0.blocks, 3l * 27l + 3l * 24l, "the block counters advanced (3 Omni x 27 + 3 deepstack x 24)")
+            to_log(LOG_INFO, "qwen3v metal tier-1: +{s1.encodes - s0.encodes} encodes, +{s1.blocks - s0.blocks} blocks, +{s1.declines - s0.declines} declines ({omni_gated}+{ds_gated} fixtures gated)\n")
+            if (omni_gated + ds_gated == 0l) {
+                tt |> skip("no oracle dumps present - the GPU parity fixtures all skipped")
+            } else {
+                tt |> success(s1.encodes - s0.encodes >= omni_gated + ds_gated, "every gated encode served on the Metal tower")
+                tt |> equal(s1.blocks - s0.blocks, omni_gated * 27l + ds_gated * 24l, "the block counters advanced per gated fixture")
+            }
+            // negative control for the GPU bars: the same zero-layer-13 poison, GPU-served,
+            // must red TIER1_REL_GPU (the loosened-bar rule wants the control ON THIS lane)
+            var po = OracleEncode()
+            if (load_oracle_encode(path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), "encode.gray448.log"), po)) {
+                set_qwen3v_q8(false)
+                var inscope pst <- stage_qwen3v_tower(mm)
+                reset_qwen3v_q8()
+                let base = pst.t.layer_w + 13l * pst.t.layer_w_stride
+                for (i in range64(pst.t.layer_w_stride)) {
+                    pst.blob[base + i] = 0.0
+                }
+                var ptw = Qwen3vTower()
+                mint_qwen3v_tower(pst, ptw)
+                let planes <- make_planes("gray", 448, 448)
+                var pout : array<float>
+                with_job_que() {
+                    setup_dasllama_jobque_()
+                    qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
+                }
+                let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), po, TIER1_ABS, TIER1_REL_GPU)
+                to_log(LOG_INFO, "qwen3v GPU-lane poison leg: zero layer 13 -> excess {excess} over the GPU bar\n")
+                tt |> success(excess > 0.0, "a zeroed mid-layer reds the GPU bar on the GPU-served lane (excess {excess})")
+                delete pout
+                delete ptw
+            }
             delete st
             delete st4
             delete tw
@@ -219,6 +265,9 @@ def test_qwen3v_tier1_deepstack(t : T?) {
         tt |> gate_encode(tw, st, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_DS)
         tt |> gate_encode(tw, st, "cb", 640, 320, "encode4b.cb640x320.log", TIER1_REL_DS)   // non-square: merge-reorder + transposed-grid
         tt |> gate_encode(tw, st, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_DS)   // 9 tokens: the pos-table DOWNSCALE arm
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            set_metal_tower(true)   // restore the module default the pin above flipped
+        }
         delete st
         delete tw
     }

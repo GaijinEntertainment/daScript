@@ -803,3 +803,16 @@ P31 (pool pins remove the slack) WRONG for pp, RIGHT for enc.
 From the arc's start: enc 2194/3446/6411 → 179/257/241 (12-27x); pp −16/−29/−41% →
 −16/−16/−5%. das leads every qwen3v Metal encode; the pp residual is ONE named mechanism
 with a scoped fix.
+
+**Validation-round catch (make_pr battery): the tower missed the weights-epoch flush.**
+`test_vision_chat` deepstack cell red — the cats turn captioned a nonexistent eye, CPU lane
+green. Root cause: `plane_buffer`/`upload_region` key resident regions by HOST ADDRESS with a
+`weights_epoch` guard that decode (`metal_decode.das:1986`) and prefill
+(`metal_prefill_forward` entry) honor — the tower never called it, so a deleted gemma
+embedder's mapped blob address, recycled by the next qwen3v mmap, served GEMMA weights to the
+qwen3v encode (probe: gemma3v encode → qwen3v encode = every row wrong, maxdiff 1571; without
+the warm-up encode = float noise, 3 rows ≤0.134). Latent since the first tower family —
+exposed by qwen3v being the first cross-family GPU tower sequence in one process. Fix:
+`weight_caches_flush_on_reload()` at `metal_tower_init` entry (the prefill's exact seam).
+Regression witness: the deepstack cell itself (red without the line, green with — both
+proven). Re-gate: vision_chat 16/16, qwen3v 12/12, gemma4uv/4v/3v, mtower — all green.

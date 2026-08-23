@@ -207,15 +207,16 @@ that a question answered for one backend has an obvious address in the other. Th
 - **Backend-only capabilities live in their matching ROLE file, not in new grab-bags** — vulkan's
   weight arena, streamed mirrors, heat cache, host-import, coopmat; metal's blob transform and MTP.
 - **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,
-  posadd, the gemma4v clamp / rope2d / GEGLU-quick, the gemma3v head restride) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
+  posadd, the gemma4v clamp / rope2d / GEGLU-quick, the head restride — gemma3v's and, offset-bound, the qwen3v/prefill slicers) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
   releases them like every other registry PSO; the borrowed prefill builders (`pf_enc_bf16_mm`,
-  `enc_add_bias_rows`, the attention trio via `enc_qk_mm`/`enc_av_mm`) come up through
+  `enc_add_bias_rows`, `enc_rope` — the qwen3v vision NEOX apply — and the attention trio via
+  `enc_qk_mm`/`enc_av_mm`) come up through
   `metal_prefill_pso_init`, prefill's public bring-up seat, and `plane_buffer` in common is
   public for the same wrap-a-plane reason. The tower's own objects (the ones buffer, its
   scratch pool) release through `metal_tower_shutdown`.
 - **The tower driver is a Metal-only role** — Vulkan has no tower twin; audio/vision encodes
-  on the Vulkan tier stay CPU (the gemma4v ViT and gemma3v SigLIP block loops included: on
-  Vulkan and on plain CPU boxes those towers serve their q8 lanes). Likewise the non-causal media span: Metal serves it through
+  on the Vulkan tier stay CPU (the gemma4v ViT, gemma3v SigLIP and qwen3v block loops
+  included: on Vulkan and on plain CPU boxes those towers serve their q8 lanes). Likewise the non-causal media span: Metal serves it through
   `AttnArgs.uend` — including the FUSED image turn (head + media rows + tail as ONE eval, the
   per-query mask through `AttnArgs.ulo`); the Vulkan resident prefill declines span evals
   (`followup_general.md` #23's remaining half) and registers the split-span capability
@@ -225,10 +226,12 @@ that a question answered for one backend has an obvious address in the other. Th
   the per-token table rows `prefill_rope_tables` builds from the grid map, so it serves mrope
   unchanged and registers the seat; an override without it (vulkan builds angles from a scalar
   position) declines the quantum to the CPU loop by name. The deepstack quantum is the third
-  seat (`register_prefill_override_ds_adds`): Metal repacks the wide rows' tails CPU-side into
-  slice-major planes, uploads once, and encodes one `enc_add` at the slice offset after each
-  tapped layer's residual — no new kernel; an override without the seat declines deepstack
-  quanta by name, so Metal serves them and Vulkan does not.
+  seat (`register_prefill_override_ds_adds`): Metal uploads the caller's wide quantum WHOLE
+  (the `Session.wide_src` borrow), slices x and the slice-major ds planes on-device through
+  the offset-bound head restride, and encodes one `enc_add` at the slice offset after each
+  tapped layer's residual — no new kernel (the CPU-side split, `ds_split_quantum`, survives
+  as the CPU-loop fallback and the warm/MTP edge); an override without the seat declines
+  deepstack quanta by name, so Metal serves them and Vulkan does not.
 - **Per-layer FFN widths (MatFormer E-series, at most two — `ffn_second_hidden`) serve on Metal
   only**: the decode and prefill drivers bind the width per layer (dense trunks, no MTP; batch
   keeps the layer-0 hoist behind its uniformity decline). The Vulkan tier has no PLE arm, so
@@ -292,8 +295,11 @@ entry here:**
   Both tiers ENTER from the transformer umbrella (`?das_metal` requires; the single `?vulkan`
   require of the `dasllama_math_vulkan` facade); the inversion that remains is the
   kernels↔common require DIRECTION, and it is why their seam shapes differ.
-- **UMA vs discrete VRAM**: Metal never grows residency machinery (memory is memory); arenas,
-  upload economics, mirrors and hydration are Vulkan's alone.
+- **UMA vs discrete VRAM**: Metal never grows Vulkan's VRAM machinery — arenas, upload
+  economics, mirrors and hydration are Vulkan's alone. Metal's ONE residency artifact is the
+  `MTLResidencySet` pin in `_common` (`DASLLAMA_METAL_RESIDENCY`, §2.12): it pins the served
+  working set so the per-commit tracked-set pass stays warm — a driver-cost shield, not a
+  placement mechanism; memory is still memory.
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes — Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants; the
   class-kernel arc retired the hand-built 6-slot set ladders outright) — and both speak the
@@ -339,9 +345,10 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   the LayerNorm/RMS row forms, bias and residual row adds, the
   `mm_blob_b`/`mm_bf16_b`/`mm_plane_b` GEMM wrappers, `Clamp`/`read_clamp`,
   `im2col_rgb_patches`, `rope_neox_2d_rows`, `rope_neox_tab_rows`, `avg_pool2d_rows`,
-  `interpolate_grid_bilinear_aa`, `tower_read_conv_pair_folded`, the q8-lane stage readers
-  (`tower_read_gemm_q8`, `tower_stage_q8_zero_rows`/`tower_stage_q8_pad_cols` — the padded pair
-  for FFN widths that are not 32-aligned — and `tower_zero_span`), blocked `attention_bidir` and
+  `interpolate_grid_bilinear_aa`, `tower_read_conv_pair_folded`, the padded stage readers
+  (`tower_read_gemm_q8`, `tower_stage_q8_zero_rows`/`tower_stage_q8_pad_cols` and their f32
+  twins `tower_stage_f32_zero_rows`/`tower_stage_f32_pad_cols` — the load-scope padded
+  stagers for FFN widths that are not 32-aligned — and `tower_zero_span`), blocked `attention_bidir` and
   its per-window form `attention_bidir_windows`, and the encode-stage prof rail. The one home:
   a family file that re-implements one of these is a defect, and nothing here names a family
   type.
@@ -775,6 +782,10 @@ gate is the `--tok` scaling rows, whose instrument (the size-ladder ratio) catch
 contracts cannot.
 
 ### 2.12 The post-CPU-burn GPU ramp cannot be pre-paid — do not build a warm-up
+
+Figures in this section: M1 Max, 2026-08-23 — probes are quiet `-jit` runs with the rig's
+tune manifest; cells are the released `lcpp_bench` exe (`--image --image-think -r 3 -t 8
+--ngl 99`); full tables in `qwen3vl_plan.md` slices M/J.
 
 After a CPU-only phase, the first Metal submission runs degraded — host-side between commit
 and execution, one time per window (probe-verified 2026-08-23): ~40 ms after even a

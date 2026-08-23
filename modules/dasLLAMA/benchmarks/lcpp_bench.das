@@ -22,7 +22,7 @@ require dasllama/dasllama_chat   // --image: the chat renderer + the two-span im
 require dasllama/dasllama_vision_embedder   // --image: the vision embedder (any family) + encode_image_
 require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
 require dasllama/dasllama_vision_io   // --image: decode the picture to RGB8
-require dasllama/dasllama_sampling   // --image: generate_embd_ over the spliced prompt
+require dasllama/dasllama_sampling   // --image: SamplingParams + stats_ around the respond_ walk
 require daslib/module_path            // get_this_module_dir — the default prompt corpus beside this bench
 require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses on a build without the marker rail
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module

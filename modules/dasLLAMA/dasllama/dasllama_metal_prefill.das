@@ -1793,6 +1793,7 @@ def public metal_prefill_pso_init : bool {
 //! next served prefill.
 def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-release-per-PSO list
     kcov_fold()   // PSO pointers recycle across re-init — counts fold into names first
+    residency_reset()   // the set references pooled buffers the drains below release
     pool_drain(g_pf_pool)
     pool_drain(g_pf_upool)
     if (g_pf_pso_moe_mm_q8_t != null) {
@@ -2429,14 +2430,14 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // the wide borrow: upload the caller's quantum whole and slice it on-device (bds turns
     // GPU-written, so it must ride the TRACKED pool); the CPU-split arm survives for the
     // warm/MTP edge, which reads x_b host-side
-    let wide = nds > 0l && s.wide_src != null
+    let wide = nds > 0l   // a ds quantum always arrives as the wide borrow (forward_prefill_embd arms it with ds_active)
+    if (wide && s.wide_src == null) {
+        panic("metal_prefill_forward: ds_active with no wide borrow - forward_prefill_embd's contract broke")
+    }
     let wide_stride = s.wide_stride
     let bytes_ds = uint64(npos * nds * dim * 4l)
     let bytes_wide = uint64(npos * wide_stride * 4l)
-    var bds : MetalBuffer?
-    if (nds > 0l) {
-        bds = wide ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_ds) : pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_ds)
-    }
+    var bds = wide ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_ds) : null   // GPU-written by the extract - the TRACKED pool
     var bwide = wide ? pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_wide) : null
     var bcos = pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_tab)
     var bsin = pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_tab)
@@ -2518,15 +2519,6 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         if (dual_rope) {
             memcpy(metal_buffer_contents(bcos_swa), addr < void? >(s.rope_cos_swa[0]), npos * half_sw * 4l)
             memcpy(metal_buffer_contents(bsin_swa), addr < void? >(s.rope_sin_swa[0]), npos * half_sw * 4l)
-        }
-        if (nds > 0l && !wide) {   // the split arm: [npos × nds·dim] row-major -> slice-major [nds][npos × dim]
-            var dsp = reinterpret<float?>(metal_buffer_contents(bds))
-            let srp = addr<float const?>(s.ds_embd[0])
-            for (sl in range64(nds)) {
-                for (r in range64(npos)) {
-                    copy_floats(dsp + (sl * npos + r) * dim, srp + r * nds * dim + sl * dim, dim)
-                }
-            }
         }
     }
     // continuation: gather the session's existing rows [0, start_pos) into every layer's panel
@@ -2695,6 +2687,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // keeps capture order; DASLLAMA_METAL_PF_CAPTURE=0 = the direct serial-encode rollback.
     let cap = g_pf_env_capture
     var cbs & = unsafe(g_pf_cbs)
+    residency_flush()   // commit THIS eval's own notes before its first submission
     cbs |> clear()
     cbs |> reserve(ncb)
     var cb : MetalCommandBuffer?
@@ -3369,12 +3362,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_upool, u_dim2, 4ul)
         pool_release(g_pf_upool, u_wm_tot, 4ul)
     }
-    if (nds > 0l) {
-        if (wide) {
-            pool_release(g_pf_pool, bds, bytes_ds)
-        } else {
-            pool_release(g_pf_upool, bds, bytes_ds)
-        }
+    if (bds != null) {
+        pool_release(g_pf_pool, bds, bytes_ds)
     }
     if (bwide != null) {
         pool_release(g_pf_upool, bwide, bytes_wide)

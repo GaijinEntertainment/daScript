@@ -558,16 +558,14 @@ def mirror_release(var mr : KVMirror) {
 //! re-initializes on the next served step; all mirrors rebuild from the CPU caches on demand.
 
 
-// ===== the residency pin (ggml-metal's model) =====
-// Metal re-validates per-commit residency over the referenced working set; the first
-// submission after a CPU-only window repays it (~40 ms on a 4B image turn, scaling with the
-// resident bytes — weights AND the recycled pool buffers). A committed+requested
-// MTLResidencySet keeps the pass a no-op; ggml-metal pins exactly this way.
+// ===== the residency pin (ggml-metal's model; the mechanism + figures: ARCHITECTURE.md 2.12) =====
+// The first submission after a CPU-only window repays the per-commit residency pass over the
+// resident bytes; a committed+requested MTLResidencySet keeps it a no-op.
 var private g_rset : MetalResidencySet?
 var private g_rset_tried = false
 var private g_rset_dirty = false
 var private g_rset_count = 0l
-var private g_rset_seen : table<uint64; bool>   // buffer handles already pinned (pool recycles re-note)
+var private @scratch g_rset_seen : table<uint64; bool>   // buffer handles already pinned - grow-only, reused across evals (pool recycles re-note)
 
 //! Pin one buffer that lives until the next reset (weight regions/planes, pool buffers — the
 //! binding has no remove, so per-session mirrors and the rebuild-prone arena stay out). Cheap
@@ -576,7 +574,7 @@ def residency_note(buf : MetalBuffer?) {
     if (buf == null || g_rset == null) {
         return
     }
-    let key = uint64(intptr(buf))
+    let key = intptr(buf)
     if (g_rset_seen?[key] ?? false) {
         return
     }
@@ -613,8 +611,8 @@ def residency_pinned : int64 => g_rset_count
 //! True when a residency set is live (knob on AND the OS serves the API — macOS 15+).
 def residency_active : bool => g_rset != null
 
-[cold_path]   // rides the region flush/teardown legs: pinned buffers are dying with the regions
-def private residency_reset {
+[cold_path]   // rides the region flush/teardown legs AND both driver shutdowns: pinned buffers die with their pools
+def residency_reset {
     if (g_rset != null) {
         metal_release(g_rset)
         g_rset = null

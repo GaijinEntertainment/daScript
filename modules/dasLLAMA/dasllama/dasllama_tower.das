@@ -382,6 +382,15 @@ def tower_repack_q8_blocks(var qblob : array<int8>; var qscales : array<float>;
     }
 }
 
+//! The f32 twin of ``tower_stage_q8_zero_rows``: stage a ``[file_rows × width]`` GEMM into its
+//! padded region — the file's rows land first, then ``pad_rows − file_rows`` zero weight rows
+//! (the pad outputs are exactly zero).
+def tower_stage_f32_zero_rows(m : GGUFMeta; b : array<uint8> | #; name : string; var blob : array<float>;
+                              wo, file_rows, pad_rows, width : int64) {
+    gguf_read_tensor_f32(m, b, name, blob, wo, file_rows * width)
+    tower_zero_span(blob, wo + file_rows * width, (pad_rows - file_rows) * width)
+}
+
 //! The f32 twin of ``tower_stage_q8_pad_cols``: stage a ``[rows × ff]`` GEMM into its padded
 //! ``[rows × fp]`` f32 region — each file row lands first, then ``fp − ff`` zero tail columns
 //! (the pads multiply the up GEMM's zero pad outputs, bit-identical).

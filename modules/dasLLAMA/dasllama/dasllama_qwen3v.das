@@ -427,8 +427,7 @@ def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwe
             let wname = "{p}.{Q3V_BLK_GEMM_NAMES[g]}.weight"
             if (!st.t.q8) {
                 if (g == QWEN3V_GEMM_UP) {
-                    gguf_read_tensor_f32(m, bytes, wname, st.blob, wo, ff * d)
-                    tower_zero_span(st.blob, wo + ff * d, (st.t.ff_pad - ff) * d)   // zero pad rows
+                    tower_stage_f32_zero_rows(m, bytes, wname, st.blob, wo, ff, st.t.ff_pad, d)
                 } elif (g == QWEN3V_GEMM_DOWN) {
                     tower_stage_f32_pad_cols(m, bytes, wname, st.blob, rowscratch, wo, d, ff, st.t.ff_pad)
                 } else {

@@ -126,16 +126,17 @@ dump.**
 backend, the flash-attention setting, and the mmproj precision the dump came from.**
 
 **A cell pins every driver hook and serving-lane knob its claim depends on, and restores it
-after** — the Metal driver hooks `set_metal_tower`, `set_metal_wdec`, `set_metal_wdec_step`
-(OFF for a CPU-served or f32-decoder claim) and the family serving-lane pins
-`set_<family>_q8` (false for an exact-plane claim, true for a q8 claim) — never a runtime
+before returning** — the hooks have no read-back, so a cell that pins one OFF sets it back
+ON (the driver hooks `set_metal_tower`, `set_metal_wdec`, `set_metal_wdec_step`); a family
+serving-lane pin `set_<family>_q8` is undone with `reset_<family>_q8` — never a runtime
 decline standing in for a pin. The mechanism (why the hooks flip legs silently) is
 `CLAUDE.md`'s "Metal fixtures" section.
 
-**A cell asserting the UNPINNED default lane compares against
-`float_batch_override_active()`, never against a hardcoded lane** — the accelerate
-float-batch tier moves the default per box; the assert is on the lane the tier selects, not
-on the predicate's own value.
+**A cell asserting the UNPINNED default lane compares against the predicates the lane policy
+itself consults — `float_batch_override_active()` and the family's `<family>_gpu_would_serve()`
+where one exists — never against a hardcoded lane**; the accelerate tier and the GPU tower move the
+default per box, and the assert is on the lane the policy selects, not on one predicate's
+own value.
 
 **A cell that encodes, preprocesses, or asserts on media bytes an encoder consumes — pixels
 or audio samples, not a `.dlim` model image — with no model loaded builds its fixture
