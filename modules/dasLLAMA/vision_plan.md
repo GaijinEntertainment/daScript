@@ -65,7 +65,7 @@ Naming: `dasllama_vision*` - `dasllama_image.das` is the dlim model-image file, 
    patch: effective `patch_size = 16 x 3 = 48`, `n_merge = 1`, so `align = 48` and
    N = (w/48)x(h/48). Oracle-verified: 640x640->624x624 (169 tok), 640x480->624x480 (130
    tok), 800x480->816x480, 3000x2000->960x624, 100x100->336x336.
-   **Deliberate divergence from mtmd:** dasLLAMA clamps the long side until N <= max_tokens - 
+   **Deliberate divergence from mtmd:** dasLLAMA clamps the long side until N <= max_tokens -
    mtmd's per-side align floor can defeat the area constraint at extreme aspect ratios
    (300000x48 wants 1322 columns against the 1120-entry pos table). No oracle shape changes
    (probe-verified); the clamp is max-wins, so a narrow user min/max band can undershoot min.
@@ -263,7 +263,7 @@ invariant - a transposed patch grid is only visible per-token).
   Metal-build CPU-prefill guard fires and takes the process with it (verified live: SmolLM2,
   190-token prompt, `JOB EXCEPTION`). `--gpu metal` works. The guard is deliberate (catch the
   silent CPU sink), but fatal-in-a-server is the wrong shape.
-  (2) **`test_program_roots.das` accepts a bare `set_metal_mode(` as declaring prefill intent** - 
+  (2) **`test_program_roots.das` accepts a bare `set_metal_mode(` as declaring prefill intent** -
   the detector cannot see the argument, so it passes while the program dies. It is the drift
   detector for exactly this failure, so a hole in it is a defect in the detector.
   **Both fixed.** The detector now reads CODE (a tail comment naming `set_metal_mode` can no longer
@@ -400,7 +400,7 @@ oracle's arithmetic, not only about the port.
   weights per block, clamps before AND after each GEMM). Same markers, geometry, limits,
   and non-causal decode as gemma4uv - the whole v1 rail except the embedder is reused.
   **The prize (verified 2026-08-14 by full tensor dump of the on-disk E2B mmproj): that one
-  file carries BOTH towers, complete.** 1411 tensors - 
+  file carries BOTH towers, complete.** 1411 tensors -
   **audio** 751 tensors / 305 M params / **12 blocks** (macaron FFN pair, conv module
   pw1+dw(k=5)+pw2 with its norms, attn q/k/v/out + `attn_k_rel` + `per_dim_scale`, pre/post
   norms) plus the front end (`a.conv1d.{0,1}` subsample + norms -> `a.input_projection` ->
@@ -411,12 +411,12 @@ oracle's arithmetic, not only about the port.
   `has_audio_encoder=1`, projector types `gemma4v`/`gemma4a`, block counts 16/12, 128 mel
   bins) - unlike the 12B, where only the metadata claims audio.
   The audio half is **ALREADY DONE** (`dasllama_gemma4a.das`, `AsrKind.gemma4a`,
-  oracle-verified), so this leg is the vision half of a file whose audio half ships today - 
+  oracle-verified), so this leg is the vision half of a file whose audio half ships today -
   and finishing it makes **E2B** the first model dasLLAMA serves as text + image + audio at
   once. [!] **E4B is NOT verified and NOT interchangeable**: no E4B mmproj is on this box, and
   the E2B one cannot substitute - it projects to 1536 while the E4B decoder is 2560 wide, the
   exact mismatch `load_asr_model` panics on. Upstream `ggml-org/gemma-4-E4B-it-GGUF` does list
-  `mmproj-gemma-4-E4B-it-{BF16,Q8_0}.gguf` (992 MB / 560 MB), so it is a download, not a gap - 
+  `mmproj-gemma-4-E4B-it-{BF16,Q8_0}.gguf` (992 MB / 560 MB), so it is a download, not a gap -
   but claim E4B only after dumping the downloaded file. Note also that the size classes
   disagree about what "gemma-4 vision" means: 12B = `gemma4uv`, ten read tensors of linear
   projection; E-series = a real 16-block ViT. Two encoders, one family name - not a config
@@ -454,8 +454,8 @@ oracle's arithmetic, not only about the port.
 - **Metal/Vulkan**: uniform-bound non-causal prefill kernels - `followup_general.md` #23
   (the span serves on the CPU by decline until then; blob models refuse a vision arm at
   create). Metal embedder is likely pointless (2 GEMMs, ~245 ms CPU). The Metal leg is also
-  blocked on `followup_general.md` #22 (the unexplained `--gpu metal` sidecar rejection) - 
+  blocked on `followup_general.md` #22 (the unexplained `--gpu metal` sidecar rejection) -
   **do not measure the Metal arm until #22 is understood.**
 - Multi-image turns, remote URL fetch, video.
-- (Dead claim from the original plan, for the record: nothing in gemma-4 uses MobileNet - 
+- (Dead claim from the original plan, for the record: nothing in gemma-4 uses MobileNet -
   that's gemma3n's `gemma3nv`.)

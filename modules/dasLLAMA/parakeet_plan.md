@@ -42,7 +42,7 @@ was freq). VERIFY vs a stage probe.
 ## Rel-pos attention (global path :1771 - local_attn only past 8192 enc frames ~ 10.9 min;
 v1 = global only, panic beyond with a clear message)
 
-window W = 2*n_time - 1. Runtime inputs (fill code in parakeet_encode_internal :1929-2057 - 
+window W = 2*n_time - 1. Runtime inputs (fill code in parakeet_encode_internal :1929-2057 -
 COPY EXACTLY): pos_freqs [d_half=512], rel_positions [W], attn_mask [n_time or W x n_time].
 pos_emb[W]: theta = freqs*rel_pos; row = INTERLEAVED (sin0,cos0,sin1,cos1,...) via the
 [1,d_half](+)[1,d_half] dim0-concat + reshape (ne0=2 fastest).

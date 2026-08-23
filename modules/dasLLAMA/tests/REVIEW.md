@@ -12,7 +12,7 @@ corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 listed in `run.das`'s `model-free` suite in the same change it is added.**
 
 **A test file in no `run.das` model suite (every suite but `model-free`), whose every cell is
-model-gated, is listed in the `model-free` suite too and skips honestly without its models** - 
+model-gated, is listed in the `model-free` suite too and skips honestly without its models** -
 the per-PR gate then runs it wherever the models are stocked.
 
 **A test file in a `run.das` model suite (every suite but `model-free`) runs only through

@@ -11,7 +11,7 @@ instrument anything, compile in anything, and emit any metadata we want.
   - impl + wrapper functions get `DISubprogram`s; every expression carries a
     `DILocation` (file/line/column from the das AST `LineInfo`);
   - `DICompileUnit` per DIBuilder, `"Debug Info Version"` + `"CodeView"` module flags
-    (CodeView gated on windows triples via `LLVMGetDefaultTargetTriple()` - 
+    (CodeView gated on windows triples via `LLVMGetDefaultTargetTriple()` -
     `host_jit_triple()` is "" on MSVC hosts, it only disambiguates mingw arches);
   - lld-link gets `/DEBUG` -> a real PDB lands beside the jitted DLL in
     `.jitted_scripts/`, auto-discovered by cdb/WinDbg/VS via the embedded path;
@@ -29,7 +29,7 @@ instrument anything, compile in anything, and emit any metadata we want.
   with PDB-grade names/lines when `--jit-debug` was on; WER minidump; watchdog
   bundles dump + jitted DLL + `.map` + tune manifest per crash. `/MAP` is always on:
   map + retained COFF object are the fallback decode when there is no PDB.
-- **das-stack-in-crash-handler** (`src/hal/project_specific_crash_handler.cpp`) - 
+- **das-stack-in-crash-handler** (`src/hal/project_specific_crash_handler.cpp`) -
   rbp-window scan for magic-validated `Context*`, prints `getStackWalk()`.
   Interpreter-only today: the frame filter matches `"SimNode"` symbols. See roadmap.
 - **Hardware breakpoints** - already work. With PDB line info they compose into

@@ -159,7 +159,7 @@ unsafe { delete view }          // frees only the buffer
 Interpreted, the bad free reports `deleting <ptr>, which is not a chunk pointer` at the delete;
 optimized and JIT-ed, it corrupts the heap silently and crashes later at an unrelated allocation.
 
-The pointee-free happens only when `T` lives on the das heap. A **handled** (C++-bound) pointee - 
+The pointee-free happens only when `T` lives on the das heap. A **handled** (C++-bound) pointee -
 every `daslib/ast` node is one - is not a heap chunk, so the same `delete` frees the buffer alone
 and the pointees outlive it under their own ownership. Read the element type before trusting the
 spelling: on das-heap pointers the `delete` is load-bearing, on handled ones it claims an
@@ -196,7 +196,7 @@ with_job_que() {
 ### Strings
 
 `string` is a pointer into the context's string heap; `var b = a` copies the pointer. `var c := a`
-clones only when the source is a temporary (`#`) string or `options multiple_contexts` is set - 
+clones only when the source is a temporary (`#`) string or `options multiple_contexts` is set -
 otherwise it is the same pointer copy as `=`; the reliable cross-context copy is `clone_string(a)`,
 which allocates in the *current* context's heap. A `var s : string` parameter is a writable local
 copy that does not propagate; `var s : string&` writes through to the caller. Interpolation

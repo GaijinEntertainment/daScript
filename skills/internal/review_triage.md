@@ -73,7 +73,7 @@ for the same defect pattern before pushing; one sweep saves one round.
 
 ## Presenting to the user - report decisions, ask questions
 
-Comments the rules decide arrive as a report, not a question: a per-comment verdict list - 
+Comments the rules decide arrive as a report, not a question: a per-comment verdict list -
 class, one-line evidence, and for defects the disposition.
 
 Ask exactly where a rule says ask, and ask the decision, not permission:

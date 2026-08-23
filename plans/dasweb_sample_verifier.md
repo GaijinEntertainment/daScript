@@ -118,7 +118,7 @@ deploy - verify presence during P1).
 - *Graphics/audio* -> page rail: poll for `iframe.pg-page-frame` src (artifact URL on
   run.daslang.io) OR failure text in `#output` (builder message becomes the FAIL detail).
   The embedded frame is CROSS-origin (deliberate security boundary) -> do NOT probe it;
-  **open the artifact URL as a top-level playwright page** (the arc's verification method - 
+  **open the artifact URL as a top-level playwright page** (the arc's verification method -
   full access, `crossOriginIsolated: true` confirmed live). Install the GL-error watcher via
   `context.addInitScript` (hook canvas.getContext -> wrap the returned GL context's getError /
   poll per frame) BEFORE navigation - the page shell has no built-in watcher and adding one
@@ -126,7 +126,7 @@ deploy - verify presence during P1).
 - Build budget: fresh page builds measured 2.5-4 min (INITIAL_MEMORY asset embeds); poll
   every 4-5 s, budget 6 min, cache hits resolve in seconds.
 - Serial, one sample at a time - don't hammer buildd.
-- A cached FAILED build for identical content+toolchain is a correct verdict, not staleness - 
+- A cached FAILED build for identical content+toolchain is a correct verdict, not staleness -
   never cache-bust in the verifier.
 
 ## Recovery + reporting

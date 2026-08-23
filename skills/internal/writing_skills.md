@@ -19,7 +19,7 @@ Two skills covering one topic is worse than one long skill, and the collision is
 miss because the names differ by a word. Check:
 
 - Does an existing skill already own this topic? Extend it.
-- Does a `doc/source/**` page already own it? Then the content should have ONE source - 
+- Does a `doc/source/**` page already own it? Then the content should have ONE source -
   see the pattern in `skills/design_philosophy.md` (markdown is the source; the `.rst`
   includes it).
 - Is your new name a near-duplicate of an existing one? `detect_dupe.md` (agent-facing,

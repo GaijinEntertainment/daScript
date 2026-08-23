@@ -13,7 +13,7 @@ Process and criteria: `skills/internal/doc_archiving.md`.
   on as the nightly daspkg-index cron)
 - `dasLLAMA/` - closed dasLLAMA arc docs (superseded hand-written AVX tier matrix, EPYC
   fleet measurements, the model-expansion wave plan; the 2026-07-29 doc-reorg sweep added
-  the API_REWORK plan half - its living ledger split to `modules/dasLLAMA/PERF_LEDGER.md` - 
+  the API_REWORK plan half - its living ledger split to `modules/dasLLAMA/PERF_LEDGER.md` -
   plus the public-bench, GEMM-generator, x64, KV-codec, lens and audio-wave plan/research
   docs; the vulkan class-kernel arc added its plan + the per-family walkthrough record);
   `dasLLAMA/benchmarks/` - retired model-speed bench scripts, all superseded by the

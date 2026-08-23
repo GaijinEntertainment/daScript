@@ -127,7 +127,7 @@ annotation-info merge), then:
   Without this, every lowered qmacro callsite inflates its CALLER's stack frame (sum of
   construction temporaries), which is fatal in recursive macros - flatten's `lower_stmt`
   overflowed any reasonable stack. With it, the big frame is a single non-recursive leaf.
-- **FULL tests/ tree, lowering forced: 10103 tests, 10097 passed, 0 failed, 6 skipped - 
+- **FULL tests/ tree, lowering forced: 10103 tests, 10097 passed, 0 failed, 6 skipped -
   byte-identical verdict to the unlowered baseline.** (92.6s vs 57.7s wall - the forced
   mode pays QuotePass + giant-tree inference; fine for a debug/audit mode.)
 - **resolve_file_info**: per-file interned dummy FileInfo (module-global table in quote.das,
@@ -306,7 +306,7 @@ replacing the misleading "Internal jit error" panic). The QuotePass gate stays
       second file is just the next deliberate-panic test the abort moves to); CI is the
       authoritative gate.
 - [x] **Third trap, found only by the full sweep (order-dependent linq failures):** a
-      module that is macro-CALLED but not itself a macro module (daslib/linq_fold_decs - 
+      module that is macro-CALLED but not itself a macro module (daslib/linq_fold_decs -
       plain functions invoked from linq_boost's fold macros) has `needMacroModule ==
       false`, so it DOES lower under the jit trigger - and its lowered quotes then
       evaluate at macro-apply time on the calling macro module's macro-context stack:

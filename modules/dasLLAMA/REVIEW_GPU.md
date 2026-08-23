@@ -7,7 +7,7 @@ doc: `ARCHITECTURE.md`.
 mirrors applies this list with the master's.**
 
 **The EMITTED shader contains no indirection.** No function pointers, no vtables. A
-`class template` / `def abstract` / `def override` splice is compile-time and conforms - 
+`class template` / `def abstract` / `def override` splice is compile-time and conforms -
 check the emission, not the das spelling.
 
 **The `*_decline_caps` predicates take only the model and the call shape; window-setup state
@@ -34,7 +34,7 @@ copy-pasted twin, or a dummy-bound field where a gate serves, is a defect.
 **A `[metal_dispatch]` / `[vk_dispatch]` field carries `@role = "weight"` exactly when its
 memory is load-once - a model plane, or an `upload_region` upload never written after
 arming.** A load-once field with no `@role` is a defect even when the kernel compiles and
-passes parity; `weight` on per-encode data - a pooled buffer the host refills each encode - 
+passes parity; `weight` on per-encode data - a pooled buffer the host refills each encode -
 is one too, it drops the hazard staging. A per-encode field either omits `@role` or names the
 access its body performs.
 

@@ -162,7 +162,7 @@ Visitor override methods that return an AST pointer (`visitFunction` ->
 `VariablePtr`, `visitEnumeration` -> `EnumerationPtr`,
 `visitExpression*` -> `ExpressionPtr`, etc.) can use either
 `return fun` or `return <- fun`. Both are correct: every AST type is
-now a raw pointer (gc_node), so `<-` is a memcpy on a pointer slot - 
+now a raw pointer (gc_node), so `<-` is a memcpy on a pointer slot -
 harmless. The codebase is mixed: `ast_cursor.das` uses `return fun`,
 `ast_print.das` / `lint.das` / `perf_lint.das` use `return <- fun`.
 

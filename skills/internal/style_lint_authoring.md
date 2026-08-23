@@ -19,7 +19,7 @@ header, and the runner command; only the STYLE-specific parts are repeated here.
 The macro calls `style_lint(prog, true, build_lint_macro_disabled(prog), [comment_hygiene = <options
 _comment_hygiene>])`. Comment hygiene defaults on for sources under `daslib/`
 (`comment_hygiene_for`); `options _comment_hygiene` overrides in either direction. Public entry
-points mirror the PERF set - `style_lint`, `style_lint_collect`, `style_lint_collect_issues` - 
+points mirror the PERF set - `style_lint`, `style_lint_collect`, `style_lint_collect_issues` -
 each with an optional `comment_hygiene` flag. STYLE005 is gated by the shared policy
 (`seed_default_disabled`), never by a function parameter.
 
@@ -28,7 +28,7 @@ each with an optional `comment_hygiene` flag. STYLE005 is gated by the shared po
 1. Take the next free `STYLEnnn`.
 2. Override the visitor method that sees the shape - `preVisitExprCall`, `preVisitExprOp2`,
    `preVisitExprField`, `preVisitExprIfThenElse`, or a source-line read (below).
-3. Report with `style_warning("STYLEnnn: what it is; the fix", expr.at)`. Call it **bare** - 
+3. Report with `style_warning("STYLEnnn: what it is; the fix", expr.at)`. Call it **bare** -
    `self->style_warning(...)` trips STYLE028, this module's own rule.
 4. Write `utils/lint/tests/styleNNN_<name>.das` with a bad example and a good one, using the
    fixture header from the PERF authoring skill (`expect 31209:N` here). A default-off rule needs
@@ -63,7 +63,7 @@ each with an optional `comment_hygiene` flag. STYLE005 is gated by the shared po
   on function entry and on `blockFlags.isClosure` entry, popped and checked on exit. A closure body
   gets a fresh slot: an outer `unsafe` does not propagate into a separate context, and a metric
   belongs to the host.
-- **Accumulated state** (STYLE024/025). Unsafe-ness is folded child-to-parent - 
+- **Accumulated state** (STYLE024/025). Unsafe-ness is folded child-to-parent -
   `preVisitExpression` pushes an `UnsafeFrame`, `visitExpression` pops it and adds its count to the
   parent - so a rule asks "how many nodes under this statement needed unsafe" instead of
   re-walking. Inherently-unsafe node kinds mark the stack; `genFlags.generated` subtrees are
@@ -83,7 +83,7 @@ each with an optional `comment_hygiene` flag. STYLE005 is gated by the shared po
   whose bodies are verbatim user AST. Emit gates admit them via `is_user_authored_body`
   (`daslib/lint_config.das`), so every rule reaches them EXCEPT the metric rules: STYLE037/038
   leave carriers unmetered, because a `` _lambda_... `` name means nothing to the reader.
-- **STYLE040's engine invariants** are in the module docstring of `daslib/dupe_detect.das` - 
+- **STYLE040's engine invariants** are in the module docstring of `daslib/dupe_detect.das` -
   read it before touching the hashing. Hashes only pick candidates; `subtree_equal` decides, so no
   collision can produce a finding, and `payload_key` is the single reader of per-node payload used
   by both hashing and verification so the two cannot drift.

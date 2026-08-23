@@ -30,7 +30,7 @@ deleted with a decision it never made.
 `../PERF_LEDGER.md`** - they settle the adoption decision in the lab's own report and the PR
 that lands the kernel; the board learns the winner only through a re-measured cell row.
 
-**An out-of-process observer - a script that measures a benchmark process from outside - 
+**An out-of-process observer - a script that measures a benchmark process from outside -
 measures only what a process cannot measure about itself; its numbers may enter
 `../PERF_LEDGER.md` and no record file.**
 

@@ -221,7 +221,7 @@ or reinterpret to `uint8?` first. (probe-verified 2026-08-16)
 **Writing through a pointer needs both const positions open** - a non-const pointee *and* a
 `var` handle: `def f(var p : float?)` stores, while a plain `p : float?` parameter is
 `float? const` and rejects the store. Const flows from the handle through deref, index, and
-field access. Never take a writable pointer as `T const?` and `reinterpret` the const away - 
+field access. Never take a writable pointer as `T const?` and `reinterpret` the const away -
 the const type already licensed optimizations that can delete the write. Declare `var T?`
 (memory.md).
 

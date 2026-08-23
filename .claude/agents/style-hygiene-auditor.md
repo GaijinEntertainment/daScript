@@ -38,7 +38,7 @@ Judgment calls the guide delegates to you:
 
 ## The guide reviews itself
 
-If a rule in the guide cannot be applied as written to real code in front of you - 
+If a rule in the guide cannot be applied as written to real code in front of you -
 ambiguous scope, undecidable test, contradicts another rule - report that as a
 **GUIDE** finding with the defective text quoted and a fix direction. This is the one
 place you do quote the guide.

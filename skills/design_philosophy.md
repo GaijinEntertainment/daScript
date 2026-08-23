@@ -49,7 +49,7 @@ The entire developer experience revolves around the idea that you should never h
 **Explicit, not implicit.**
 daslang does not do work "under the hood". There are no hidden type conversions (not even `int` to `float`),
 no silent allocations, no auto-casting outside of type inference.
-If the code does not say it, it does not happen. `options log` prints the full output of the compiler - 
+If the code does not say it, it does not happen. `options log` prints the full output of the compiler -
 total transparency about what your code becomes. Macros can add behavior; the base language does not.
 
 **99% safe, not 100%.**
@@ -108,7 +108,7 @@ Static typing was chosen for two reasons:
 - **Bug prevention.** Restricting the input space eliminates whole classes of errors before the code runs.
 
 **Aggressive type inference** (`auto`) is a deliberate "best of both worlds" choice. You get the safety
-of static typing without the annotation burden of C++. Most intermediate types are irrelevant to the programmer - 
+of static typing without the annotation burden of C++. Most intermediate types are irrelevant to the programmer -
 the compiler infers them, and `static_if` with `typeinfo` provides compile-time reflection when you need
 to branch on types.
 
@@ -123,7 +123,7 @@ Gen2 was created entirely from user feedback. Two distinct groups of programmers
 The intent is to eventually transition fully to gen2 (avoiding the maintenance cost of two parsers),
 but gen1 may persist indefinitely. Gen2 also has a simpler parser, which is a practical advantage.
 
-Even in gen2, some significant whitespace remains - for example, automatic semicolon insertion at end-of-line - 
+Even in gen2, some significant whitespace remains - for example, automatic semicolon insertion at end-of-line -
 so gen1's legacy is not entirely gone.
 
 ## AI-Driven Syntax Evolution
@@ -162,7 +162,7 @@ But the language is expanding:
 
 ## The Rename: daScript to daslang
 
-The original name "daScript" caused people to assume it was a scripting language in the traditional sense - 
+The original name "daScript" caused people to assume it was a scripting language in the traditional sense -
 interpreted, dynamically typed, slow. It is none of those things. The rename to **daslang** signals
 that this is a full programming language: statically typed, AOT-compiled, with JIT and standalone binary support.
 

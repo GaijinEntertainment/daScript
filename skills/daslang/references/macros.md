@@ -217,7 +217,7 @@ Tags: `$e(v)` captures a cloned sub-expression, `$i(v)` an identifier name, `$f(
 `auto` in a type position matches any type; generic instantiations match by their original
 (unmangled) name; a module-qualified call name matches an unqualified pattern on its last segment.
 
-Both matchers see through the `ExprRef2Value` wrapper the typer inserts around field reads - 
+Both matchers see through the `ExprRef2Value` wrapper the typer inserts around field reads -
 hand-written analyzers must peel it themselves. `daslib/match` is the complementary matcher, for
 patterns spelled as node classes and fields rather than as source syntax.
 

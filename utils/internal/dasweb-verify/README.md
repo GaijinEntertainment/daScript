@@ -1,6 +1,6 @@
 # dasweb-verify
 
-Batch verifier for the curated playground samples. Tier 1 - the compile check - 
+Batch verifier for the curated playground samples. Tier 1 - the compile check -
 lives here today: it reads the manifest the playground ships
 (`web/examples/ui/samples/data.json`), and compile+simulates every sample's
 entry file with the host binary's own compiler, in process. Every listed file

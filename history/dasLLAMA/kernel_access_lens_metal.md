@@ -50,7 +50,7 @@ globals are read and which are written. Mechanics:
 
 **`dasllama/dasllama_vulkan_lens.das`** - the consumer shape to copy:
 
-- a `[call_macro]` (`vk_kernel_access_spec()`) that fires during infer of the requiring module - 
+- a `[call_macro]` (`vk_kernel_access_spec()`) that fires during infer of the requiring module -
   the whole module is parsed by then, so it can scan every kernel with zero per-kernel markup
   and no add-function timing games
 - it splices the result as a **spec string constant** (`"kernel=readmask,writemask;..."`,

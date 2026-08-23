@@ -1,7 +1,7 @@
 # Tests in the daslang repo (repo-only)
 
 Read this alongside `skills/writing_tests.md` when adding or moving tests **inside the
-daslang repository**. `writing_tests.md` covers how to write a dastest test anywhere - 
+daslang repository**. `writing_tests.md` covers how to write a dastest test anywhere -
 that half ships in the SDK. This file is the repo's own harness: AOT registration, the
 `tests/.das_test` gating filter, and the deep-engine model-test rules. None of it applies
 to a test written against an installed SDK.
@@ -13,7 +13,7 @@ It builds+runs on the NIGHTLY CI cron and in `preflight --full` - per-PR CI only
 `tests/language` subset (`test_aot_subset`) as a compile gate, so a missing registration
 passes PR CI and fails the nightly. Creating a new test directory => register it in
 `tests/aot/CMakeLists.txt` - for a plain suite that is one entry in `set(DAS_AOT_SUITES ...)`;
-see `skills/internal/aot_testing.md` sec. "Registering a New Test Directory" for the irregular cases - 
+see `skills/internal/aot_testing.md` sec. "Registering a New Test Directory" for the irregular cases -
 or the nightly/preflight fails with `error[50101]: AOT link failed`.
 
 If a specific file genuinely can't AOT (emitter bug, interpreted-only by design): put
@@ -29,7 +29,7 @@ directory filter below instead.)
 `tests/.das_test` is a daslang script dastest compiles per run; its `can_visit_folder`
 pinvoke gates whole directories per mode - e.g. `no_aot/`, `ast/`, `ast_match/` are
 skipped under `--use-aot`, module dirs (dasSQLITE, dasPUGIXML...) skip when the
-module isn't built in. **The filter is looked up only at the `--test` ROOT path** - 
+module isn't built in. **The filter is looked up only at the `--test` ROOT path** -
 `--test tests` finds and applies it, but `--test tests/flatten` looks for
 `tests/flatten/.das_test` (absent) and walks into `no_aot/` unfiltered, producing
 false `error[50101]` / JIT failures. For AOT/JIT validation, sweep `--test tests`
@@ -60,7 +60,7 @@ sweep does NOT prove a lifted skip is sound - Debug CI is the oracle.
 ## Module-owned test homes
 
 Some modules keep their tests inside the module folder, governed by that folder's
-`REVIEW.md`: dasImgui tests live under `modules/dasImgui/tests` (never `tests/dasImgui` - 
+`REVIEW.md`: dasImgui tests live under `modules/dasImgui/tests` (never `tests/dasImgui` -
 do not create that folder), dasLLAMA's under `modules/dasLLAMA/tests` (see its
 `tests/CLAUDE.md`). When adding a test for such a module, put it in the module's own home.
 

@@ -46,7 +46,7 @@ For each branch, in order of preference:
 2. **When reading can't settle it, run the negative control**: break the branch (invert
    the condition, comment the body, return the wrong arm), run the one candidate test,
    watch it FAIL, restore the code exactly, and verify the tree is back to its
-   pre-mutation state. A test that stays green under the mutation distinguishes nothing - 
+   pre-mutation state. A test that stays green under the mutation distinguishes nothing -
    the branch is untested no matter what coverage says.
 3. **Nothing fails under mutation -> the branch is untested.** The fix is a test, written
    in the same change - not a follow-up promise.
@@ -100,7 +100,7 @@ For each, run the **reverse control**: the OLD test against the NEW code.
 
 ## Reporting
 
-Per branch: `BRANCH` (file:line, one-line description) and `VERDICT` - 
+Per branch: `BRANCH` (file:line, one-line description) and `VERDICT` -
 
 - `DISTINGUISHED by <test>` - named from reading, with the one-line reasoning;
 - `CONTROLLED by <test>` - negative control run: the mutation, the test, the observed
@@ -109,7 +109,7 @@ Per branch: `BRANCH` (file:line, one-line description) and `VERDICT` -
   would settle it;
 - `UNTESTED` - the mutations tried and the tests that stayed green.
 
-Per test edit the cheat check caught: `TEST EDIT` (file:case, what changed) and `VERDICT` - 
+Per test edit the cheat check caught: `TEST EDIT` (file:case, what changed) and `VERDICT` -
 `JUSTIFIED` (the stated reason, or the reverse control passed and the edit did not reduce
 the instrument),
 `RETUNED` (the old test fails against the new code and the change states no reason - the

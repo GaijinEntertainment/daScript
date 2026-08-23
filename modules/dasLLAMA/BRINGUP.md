@@ -259,7 +259,7 @@ Expected wall-clock (M1 Max, NVMe ~6 GB/s image writes, catalog of 9): a FULL re
 flavors is **~6 minutes total**. Per model: bake time is dominated by reading + transcoding
 the GGUF, not the write - the 22 GB 35B ~ 19 s planar / 10 s metal, the 16-19 GB class ~ 7-15 s
 per flavor, the 7-8 GB class ~ 4-7 s. A re-run over valid images completes in ~2 minutes of
-verify-and-skip. The ASR set adds **~1 minute** (measured M1: the 31 GB Omni decoder 40 s - 
+verify-and-skip. The ASR set adds **~1 minute** (measured M1: the 31 GB Omni decoder 40 s -
 34 s eager load + 5 s write at 6 GB/s; every other file 0.2-5 s) and removes the eager loads
 from EVERY subsequent `--workload asr` sweep, which then maps all seven models in milliseconds.
 
@@ -304,7 +304,7 @@ fail bar as "suspicious - verify"). Exit is nonzero on any FAIL.
 - Default is stop-at-first-FAIL (fail fast mid-refactor); `--oracle-keep-going` runs the full
   board. `-o substr` narrows to one model; `-w llm|asr|image` narrows the modality.
 - A FAIL auto-triggers ONE solo re-run of that cell after `--oracle-retry-settle` seconds
-  (default 180 - thermal recovery takes ~3 minutes; 0 disables), and the RETRY verdict stands - 
+  (default 180 - thermal recovery takes ~3 minutes; 0 disables), and the RETRY verdict stands -
   the board shows both attempts. This
   is the tail-cell discipline (below) as tool behavior; a FAIL that survives its solo retry is
   a real regression.

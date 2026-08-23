@@ -15,7 +15,7 @@
 - **A change that can alter the machine code emitted for identical inputs bumps
   `LLVM_JIT_CODEGEN_VERSION`** (`daslib/llvm_jit_run.das`; what counts as emitting:
   `ARCHITECTURE.md` sec.1.2). An edit inside an `EMITTER_FILES` file
-  (`tests-cpp/small/test_jit_emitter_pin.cpp`, repo root) that provably emits identical code - 
+  (`tests-cpp/small/test_jit_emitter_pin.cpp`, repo root) that provably emits identical code -
   a comment, a nolint, a same-value rewrite - re-pins `LLVM_JIT_EMITTER_HASH` only. A change
   that only SELECTS among existing generators' `[llvm_code]` arguments - the `[tune]`
   stamping - needs neither: stamped arguments fold into the cache keys per function.

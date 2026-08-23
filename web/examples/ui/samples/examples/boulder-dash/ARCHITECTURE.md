@@ -17,7 +17,7 @@ scan, three whole-grid passes run in order - amoeba, magic, exit - so they see t
 settled result, and the diamond collected during the scan opens the exit the same tick.
 
 `move_tile` clears the source cell before writing the destination. When one tick performs
-two moves sharing a cell, the move whose SOURCE is the shared cell must run first - 
+two moves sharing a cell, the move whose SOURCE is the shared cell must run first -
 `try_push` moves the boulder, then the player; reversed, the player would be erased.
 
 ## The virtual steel boundary
@@ -83,7 +83,7 @@ reflects upward - several bank entries use it deliberately. Every effect ends in
 fade to silence; there is no attack ramp, which gives short effects their click transient.
 The bank encodes a language: downward sweeps are mass and loss, upward sweeps are value and
 gain, duration tracks event weight (per-tick chatter 0.035-0.09 s, once-per-life events
-0.25-0.7 s), and the two fanfares sit a fourth apart. `gen_noise_burst` uses a fixed seed - 
+0.25-0.7 s), and the two fanfares sit a fourth apart. `gen_noise_burst` uses a fixed seed -
 every explosion is byte-identical. `AUDIO_RATE` sizes the buffers AND is the rate passed to
 playback; both live in `sfx_gen` so they cannot diverge.
 

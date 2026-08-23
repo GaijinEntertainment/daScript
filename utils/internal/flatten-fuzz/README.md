@@ -116,6 +116,6 @@ Two value domains, selected by `--bool`:
   (`RunFolding`) simulates and evaluates it - `SimNode_ForGoodArray1<1>::eval`
   reads `list[0]` with `list == null` (no `total == 0` guard for an empty body).
   Surfaced on the very first `--bool` sweep (the integer domain never hit it; bool
-  loop bodies DSE to empty and bool functions are pure + const-arg + foldable - 
+  loop bodies DSE to empty and bool functions are pure + const-arg + foldable -
   exactly what `RunFolding` const-folds). **Fix in a follow-up** - guard
   `total == 0` in the for-node `eval` family.

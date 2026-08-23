@@ -41,7 +41,7 @@ For each rule, decide one of:
 - **N/A** - nothing in the diff touches what the rule governs. Say why in a few words.
 
 One delegation: the constitutional opening clause ("New functionality ships with tests - same
-PR...") is audited branch-by-branch by the sibling `tdd-auditor` agent across the whole diff - 
+PR...") is audited branch-by-branch by the sibling `tdd-auditor` agent across the whole diff -
 mark it `N/A (owned by tdd-auditor)` rather than duplicating that work. Your checklist's own
 module-specific test rules (placement, which suite runs, platform gates) are still yours.
 

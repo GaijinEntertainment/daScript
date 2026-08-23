@@ -89,7 +89,7 @@ which is why `daslib/linq.das` constifies only `all` and `contains`. Did not rep
 
 ## Lint interaction worth knowing
 
-The `daslib/builtin.das` shape for a bare `var x : TT` inside a generic - 
-`static_if (typeinfo is_unsafe_when_uninitialized(type<TT>)) { unsafe { ... } } else { ... }` - 
+The `daslib/builtin.das` shape for a bare `var x : TT` inside a generic -
+`static_if (typeinfo is_unsafe_when_uninitialized(type<TT>)) { unsafe { ... } } else { ... }` -
 needs `// nolint:STYLE025` on the `unsafe {` line: STYLE025 sees exactly one statement needing
 unsafe at any single instantiation and cannot reason across the static_if branches.

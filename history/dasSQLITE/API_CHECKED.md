@@ -93,7 +93,7 @@ For every tutorial example (and ideally every test) that contains a
 
 ## Scope
 
-Every tutorial under `tutorials/sql/` whose body contains `_sql(...)` - 
+Every tutorial under `tutorials/sql/` whose body contains `_sql(...)` -
 roughly tutorials 06 onward. The chains-without-`_sql` story isn't
 documented in any tutorial today (it's stated implicitly via the
 `_sql_text` debug macro), and the harness is what would let a future
@@ -396,10 +396,10 @@ resolves cleanly. linq's `clone_to_move` no longer hits the deep error;
 no `static_if` guard is needed.
 
 **Coverage** (`tests/dasSQLITE/`):
-- [parity_check_14_order_after_group.das](../../tests/dasSQLITE/parity_check_14_order_after_group.das) - 
+- [parity_check_14_order_after_group.das](../../tests/dasSQLITE/parity_check_14_order_after_group.das) -
   flipped from `expect 30304:1` divergence pin to a positive 3-mode
   parity test on the exact `_having |> _order_by` chain.
-- [parity_check_14_group_by.das](../../tests/dasSQLITE/parity_check_14_group_by.das) - 
+- [parity_check_14_group_by.das](../../tests/dasSQLITE/parity_check_14_group_by.das) -
   `sort_by_city` post-sort workaround removed; 5 of 6 tests now use
   inline `|> _order_by(_._0)`. The multi-key test stays on post-sort
   (with a local `sort_by_city_age` helper) because the `_sql` analyzer's

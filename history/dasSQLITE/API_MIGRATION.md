@@ -23,7 +23,7 @@ Captured from the discussion that opens this doc, before walking scenarios.
 A DB file holds *schema* (tables, columns, indexes) and *data* (rows). When
 v1 of the app ships, it creates the schema; users start producing data. When
 v2 ships with a new `Email` column, the user's `app.db` on disk still has the
-v1 schema. v2's code that queries `Email` panics on the very first call - 
+v1 schema. v2's code that queries `Email` panics on the very first call -
 "no such column."
 
 You can't unconditionally `CREATE TABLE` (table already exists for upgrades),
@@ -341,7 +341,7 @@ unaffected - only one migration sequence ever ships.
 
 **Decision (locked 2026-05-04) - no `migrate_to(version=N)` in v1.**
 
-Migrating *backward* is meaningless without rewinding the binary too - 
+Migrating *backward* is meaningless without rewinding the binary too -
 the struct describes the latest schema; running with v=2 against a
 binary expecting v=3 means code that doesn't compile or runs against a
 column that's not there. Defer indefinitely; `migrate_to_version` ships
@@ -509,7 +509,7 @@ def migration_004(db : SqlRunner) { ... }
 - If both flags are present anywhere in the batch: ANALYZE runs first,
   then VACUUM (cheap-then-expensive order).
 - Both can fail (disk full, locked, etc.). Failure is logged via
-  `to_log(LOG_WARNING, ...)` but does **not** roll back any migration - 
+  `to_log(LOG_WARNING, ...)` but does **not** roll back any migration -
   the schema changes are already committed and durable. `migrate_to_latest`
   still returns success; `try_migrate_to_latest` still returns `Ok`.
   Rationale: VACUUM/ANALYZE are *optimizations*, not *correctness*.
@@ -633,7 +633,7 @@ deferred list; ship if real demand surfaces.
 **Decision (locked 2026-05-04) - downgrade detection: warn from `migrate_to_latest`, no predicate.**
 
 If `current_schema_version > MAX(registered_version)` - i.e. the audit
-table has rows for versions the running binary doesn't know about - 
+table has rows for versions the running binary doesn't know about -
 `migrate_to_latest` emits a `to_log(LOG_WARNING, ...)` and returns 0
 (nothing to migrate forward; the DB is already past the current
 binary's knowledge).
@@ -716,7 +716,7 @@ def try_baseline(db : SqlRunner, version : int) : Result<int, string>
      for retroactive history).
 4. **`applied_at`** = stamping time, not the historical apply time
    (we don't know the historical time). Document this in tut 30.
-5. **Reject `baseline(db, version=N)` where `N > registered_max`** - 
+5. **Reject `baseline(db, version=N)` where `N > registered_max`** -
    almost certainly a typo. `try_baseline` returns `Result::Err`;
    `baseline` panics.
 
@@ -877,7 +877,7 @@ ecosystem matures.
 **Setup.** DB at v3. Dev ships a release with v4, v5, v6. v5's body has
 a bug; some statement inside it panics (NOT NULL violation, unknown SQL
 function, disk full, FK constraint, etc.). Atomicity story locked from
-Scenarios 1-3 + alpha-shape from Scenario 8: **whole-call txn rolls back - 
+Scenarios 1-3 + alpha-shape from Scenario 8: **whole-call txn rolls back -
 v4's effects, v5's partial effects, audit inserts for v4 + v5 - all
 gone**. DB stays at v3 (the version it was at before this
 `migrate_to_latest` call), fail-fast (v6 doesn't run), re-run on next
@@ -919,7 +919,7 @@ to be reset.
 ```
 
 `try_migrate_to_latest` returns the same enriched message in
-`Result::Err`. The "DB does not need to be reset" line is high-value - 
+`Result::Err`. The "DB does not need to be reset" line is high-value -
 devs who haven't seen this before often think a failed migration leaves
 the DB in a corrupt half-applied state and start nuking files. Saying
 so explicitly heads off the panic.
@@ -1019,7 +1019,7 @@ note) and recommend keeping long backfills in their own
    holds RESERVED at a time. Other processes' `BEGIN IMMEDIATE` calls
    block (up to `busy_timeout`) until release. We don't implement an
    advisory lock; SQLite + the filesystem do it.
-2. **`with_latest_sqlite` auto-applies `apply_recommended_pragmas`** - 
+2. **`with_latest_sqlite` auto-applies `apply_recommended_pragmas`** -
    from chunk 10's tut 33. Sets `busy_timeout = 5000ms` (5-second
    wait), `journal_mode = WAL`, etc. Concurrent runners get a sane
    default wait window before erroring; user can override via explicit
@@ -1138,7 +1138,7 @@ those:
 > Backup API (tut 34) or just stop the app and copy the file. Then
 > rerun migrations against the restored DB. If you want to skip the
 > bad v7 entirely (because you've fixed it forward as v8): manually
-> INSERT a row into `__schema_version` for v7 to mark it 'applied' - 
+> INSERT a row into `__schema_version` for v7 to mark it 'applied' -
 > v8's logic now runs against the restored-pre-v7 state and gets the
 > right outcome. This is operator-intervention territory, not a
 > command we ship."
@@ -1202,7 +1202,7 @@ need to revisit.
 
 If a future contributor wants `recreate_table(db, type<T>, copy_from=...)`
 for *other* reasons - e.g. type-system-driven schema reshuffling, or
-because someone exposes a future provider whose ALTER is more limited - 
+because someone exposes a future provider whose ALTER is more limited -
 that's a separate design conversation, not a residue of this one.
 
 **Decision (locked 2026-05-04) - tut 30 has a one-liner on SQLite version baseline.**

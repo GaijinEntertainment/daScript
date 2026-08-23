@@ -3,7 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `../README.md`.
 
-**Every pure helper in this folder - data in, data out, no playwright, no DOM, no network - 
+**Every pure helper in this folder - data in, data out, no playwright, no DOM, no network -
 has a `node:test` case in `protocol.test.mjs`, wherever the diff puts the helper.**
 `runner.mjs` and `probe.mjs` hold only browser- and playwright-bound code, which the nightly
 proves.

@@ -55,7 +55,7 @@ registry, and B calling A's accessor reads **B's** copy: silently empty, no erro
 macro module must read travels through the **AST** (annotations and stamps a pass can walk),
 **files**, or **env** - never a shared macro global.
 
-To contribute macro-time state into A's registry the contributor must compile into A's context - 
+To contribute macro-time state into A's registry the contributor must compile into A's context -
 **A `require`s the contributor**, never the reverse. Make that inverted dependency conditional with
 two pieces: an optional require (`require ?<guard> <target>`; a plain `require` resolves before
 `static_if`, so `static_if` alone cannot gate it), plus
@@ -80,7 +80,7 @@ those symbols by name - that resolves at the user's splice site and is unaffecte
 - A `[pre_infer_macro]` fires before EVERY inference pass; `canVisitPass(prog, mod, index)`
   gates it per pass (`skills/daslang/references/macros.md`) - `daslib/ast_verify` answers `false`
   to all of them under `--ast-verify-batch`.
-- `[post_compile_macro]` is the only hook running after the module's gc root is collected - 
+- `[post_compile_macro]` is the only hook running after the module's gc root is collected -
   everything earlier still sees the garbage inference left behind, so orphan hunting and gc
   bookkeeping belong there. Use its `prog` argument; `compiling_program()` throws by then.
 
@@ -101,7 +101,7 @@ only-one restriction is for handled-type annotations.
   function reference. Prefer unquoted when the value IS an identifier. The formatter never re-quotes.
 - **Annotation argument NAMES accept only three keywords** - `type`, `in`, `default`. Any other
   keyword or type token is `error[30151] syntax error, unexpected <token>, expecting type or in or
-  default or name`, and the same whitelist governs field annotations, so `@range = 5` fails too - 
+  default or name`, and the same whitelist governs field annotations, so `@range = 5` fails too -
   pick a synonym (`span`, `kind`, `fallback`). (probe-verified 2026-08-16)
   Extending the whitelist is one `src/parser/ds2_parser.ypp` line plus the twin `_annotation_argument_name` line in `tree-sitter-daslang/grammar.js`; keep both grammars in lockstep. (repo-only)
 - **`add_structure_field(st, name, type, default)`** (in `daslib/templates_boost`, not `ast`)

@@ -69,7 +69,7 @@ engines, pinned. One rule for every box: 8 on M1 Max, 10 on M4 Pro, 4 on M3 Air,
 big x86 parts. On x86 both sides pin to distinct physical cores (das through the job queue's
 hard affinity mask, llama-bench via `--cpu-mask ... --cpu-strict 1`); unpinned, SMT placement
 makes prefill bimodal. Apple boxes run the performance cores; there is no pin API, so the job
-queue's mode 2 instead classifies das workers via QoS - the dasLLAMA darwin default - 
+queue's mode 2 instead classifies das workers via QoS - the dasLLAMA darwin default -
 because unclassified workers lose several percent of big-model decode under ambient load.
 
 There is deliberately no per-engine thread detection and no thread matrix: probed-optimal

@@ -1,6 +1,6 @@
 # Claude Code hooks
 
-Hooks for agent sessions in this repo. **A hook reads only its stdin payload - 
+Hooks for agent sessions in this repo. **A hook reads only its stdin payload -
 no daslang, no config reads - and returns in tens of milliseconds.** It must
 work when the das binary is down.
 
@@ -22,7 +22,7 @@ run bare in a background Bash (exit code is the verdict). A single un-looped
 ## Registration
 
 The tracked `.claude/settings.json` registers hooks for every checkout;
-machine-local permissions live in `.claude/settings.local.json` (gitignored) - 
+machine-local permissions live in `.claude/settings.local.json` (gitignored) -
 the two merge. Commands run relative to the session's start directory - start
 sessions at the tree root. Claude Code asks once before running a project's
 hooks. Active from the next session start.

@@ -330,7 +330,7 @@ npx playwright test                     # full suite, requires WASM at site/play
 
 CI runs the no-WASM subset on every PR via
 [`.github/workflows/playground-e2e.yml`](../.github/workflows/playground-e2e.yml).
-The `@wasm`-tagged specs are gated on the WASM build being present locally - 
+The `@wasm`-tagged specs are gated on the WASM build being present locally -
 no dedicated CI tier yet.
 
 ## Common gotchas

@@ -104,7 +104,7 @@ the A set.
 - **`ltrim` needs no phase-1 change** - it already always-allocates and is temp-marked.
   The passthrough set is **5 cases across 3 functions**: `rtrim(s)` exact alias,
   `rtrim(s,chars)` on nothing-trimmed AND on empty/null `chars` (line 763 - reachable from
-  das), `trim(s)` exact alias, `trim(s)` **interior alias** (`s + k` after leading-ws skip - 
+  das), `trim(s)` exact alias, `trim(s)` **interior alias** (`s + k` after leading-ws skip -
   `delete_string(trim(s))` frees mid-buffer), `replace(s,"",x)` empty-pattern alias.
   `replace` has NO no-match passthrough (line 606 allocates on miss).
 - **Atomicity constraint**: `MarkTempStrings`/`WrapLetTempStrings`

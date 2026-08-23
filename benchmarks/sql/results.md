@@ -31,7 +31,7 @@ are stable now).
 `benchmarks/README.md`; the splice arms each fires are in `doc/source/reference/linq_fold_patterns.rst`.
 
 **Current tables: AMD Ryzen Threadripper 3990X (Windows, Release build), single sweep.**
-Absolute cells move with the capture box and run-to-run within ~10-30% on the small ones - 
+Absolute cells move with the capture box and run-to-run within ~10-30% on the small ones -
 the cross-lane ratios are the signal, not the second decimal. (On Apple silicon the JIT
 column is additionally high-variance run-to-run; read INTERP as the reliable signal there.)
 
@@ -235,7 +235,7 @@ Each empty cell's reason is also in the bench `.das` file's comment; SQL gaps ar
 
 ## Accepted floors
 
-A few m4 (decs) cells stay >=1.5x their m3f (array) INTERP counterpart for structural reasons - 
+A few m4 (decs) cells stay >=1.5x their m3f (array) INTERP counterpart for structural reasons -
 decs columnar storage fetches all N columns per element (`last_match`, `select_where`), and
 `order_distinct_take` pays `unique_key` string hashing on struct keys. Structural, not splice/emit
 gaps; not chased further.

@@ -19,7 +19,7 @@ change, never cleanup.** The guard's position encodes which rules are meaningful
 lambda; the per-rule policy is in `ARCHITECTURE.md` sec. perf_lint.
 
 **A lint warning anchors at the code its fix rewrites.** A remedy that deletes a statement
-reports the statement; a remedy that edits one variable's initializer reports the variable - 
+reports the statement; a remedy that edits one variable's initializer reports the variable -
 an anchor chosen for implementation convenience instead is a defect.
 
 **Visitor state scoped to a construct is reset or restored on every exit path of that
@@ -62,13 +62,13 @@ check never runs.
 `preVisitExprVar`.** The LHS's variable fires before the RHS is walked; an early record
 lets the RHS's own read clear the store it just recorded.
 
-**A rule identifying a callee by name matches the root generic, not the instance** - 
+**A rule identifying a callee by name matches the root generic, not the instance** -
 instantiation mangles names and strips witness arguments.
 
 **A rule never fires inside the module whose idiom it advertises** - a rule advertising
 module M's idiom firing on M's own dispatch is a defect.
 
-**A collapse suggestion compiles and preserves semantics for the exact shape reported** - 
+**A collapse suggestion compiles and preserves semantics for the exact shape reported** -
 gate on receiver type, arity, cloneability, and duplicate constant keys.
 
 **Exactly one sibling rule fires on a shape several collapse rules can match.** Overlaps
@@ -77,7 +77,7 @@ declarations over STYLE033, and STYLE033's chain-receiver check leaves a plain-v
 receiver to STYLE033's variable-form check, so the two never double-fire.
 
 **The lint message text is the rule-code transport: the code is everything before the
-FIRST colon.** Suppression, disable lists, and dedup all parse it from the message - 
+FIRST colon.** Suppression, disable lists, and dedup all parse it from the message -
 rewording a message so the code is not the leading colon-delimited token makes the rule
 unsuppressable and self-colliding.
 
@@ -94,7 +94,7 @@ suggestion that does not compile.
 `macroException`/`failToCompile` BEFORE materializing output; a visitor override never gates
 on them.** A codegen exception mid-visit leaves partial C++.
 
-**An unreachable emit state writes `#error` into the output, never `panic`** - 
+**An unreachable emit state writes `#error` into the output, never `panic`** -
 `runMacroFunction` swallows a panic, so the emitter never reports through it.
 
 **`aotStructName` and the `VarInfo` emitter's inline `aotSuffixNameEx(info.name, "_S", ...)`
@@ -156,7 +156,7 @@ dse -> ssa-rename - and a diff that reorders them is a defect.** Each pass produ
 one's input; a reorder leaves scaffolding in the generated `<name>_flat` twin, which must
 come out branchless and call-free.
 
-**`lift_expr` and the lowering it drives use plain recursion, never `make_visitor`** - 
+**`lift_expr` and the lowering it drives use plain recursion, never `make_visitor`** -
 inlining recurses back through the pipeline, and a nested visitor traversal corrupts the
 visitor machinery.
 
@@ -164,7 +164,7 @@ visitor machinery.
 first** - re-splicing re-evaluates a call once per splice; a lock/unlock pair then releases
 a different temporary than it took.
 
-**Every `[sql_table]` helper pair registers its 2-arg form BEFORE the 1-arg form** - 
+**Every `[sql_table]` helper pair registers its 2-arg form BEFORE the 1-arg form** -
 `find_struct_helper_fn` keeps the LAST match, and the finish pass rewrites the helper it
 returns; swapped, index DDL attaches to the wrong overload.
 
@@ -192,7 +192,7 @@ array silently.
 macro-application time, so a generated `if ($v(flag))` keeps its dead arm and type-checks
 it. Branch in daslang and emit only the taken arm.
 
-**Every buffer-I/O overload returns before taking `addr(buf[0])` on an empty buffer** - 
+**Every buffer-I/O overload returns before taking `addr(buf[0])` on an empty buffer** -
 the address is out of bounds and the call sits inside `unsafe`; a new overload without the
 guard passes every non-empty test.
 

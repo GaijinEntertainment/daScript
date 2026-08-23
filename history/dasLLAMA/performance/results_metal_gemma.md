@@ -156,7 +156,7 @@ V-copy->ones-RMS fusion + split-K un-gated under hetero via the per-class twins)
 remaining column tail is structural and named: B=1 0.90x (was 0.83x - the w13-gelu ew
 fusion this pass gained +6.3%, fusing gemma's geglu into the w1|w3 kernel: -2 dispatches
 /layer) = the Q8 dispatch-tail class (the q8 GEMV is at the M1 bandwidth ceiling; the
-residual gap is the per-step elementwise dispatch tail lcpp's norm-chain fusion avoids - 
+residual gap is the per-step elementwise dispatch tail lcpp's norm-chain fusion avoids -
 post_add_rms still ledgered), and the same dispatch-tail class plus
 GEMM-tier scheduling noise holds the B=8/16 residue (the K-quant ladders' B=8/16 are
 rep-stable to 0.1%; Q8's wobble 8-11% between reps - a scope D datapoint). lcpp's Q8 is

@@ -26,7 +26,7 @@ beside the tool, keys = flag names; precedence defaults < toml < explicit CLI fl
 `authoritative = true`. A wrong-typed key is a startup error. The effective config is logged at
 startup with per-key provenance; the token is reported set/unset only.
 
-Deployed values on zen4: `server_url = "https://daslang.io"`, the real `token` (toml-only - 
+Deployed values on zen4: `server_url = "https://daslang.io"`, the real `token` (toml-only -
 a CLI flag would put the secret in the process list; it must equal the playground's
 `build_token`), `worktree` = the dedicated wasm worktree, `build_cmd = "bash run_build.sh"`.
 The service refuses to start without a token and a build command.
@@ -114,7 +114,7 @@ the native module registered), and their `DT_NEEDED` X11/GL libs must resolve in
 container or the dlopen fails and every graphics sample reports `missing prerequisite`.
 
 The box environment (`DASWEB_WASM_WORKTREE`, pinned emsdk, the worktree's own
-`web/build_wasm_host.sh` host build, the sandbox image) is documented in `~/SETUP.md` on zen4 - 
+`web/build_wasm_host.sh` host build, the sandbox image) is documented in `~/SETUP.md` on zen4 -
 the wasm worktree is dedicated because wasm and native builds poison each other's `bin/` and
 `lib/` (`plans/dasweb_wasm_pipeline.md` has the postmortem). Build the sandbox image once per
 `Containerfile` change (bump the tag here, in `Containerfile`, and in `run_build.sh` together):

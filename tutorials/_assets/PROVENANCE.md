@@ -18,5 +18,5 @@ recorded for provenance and so the set can be regenerated.
 - `concrete_cat_statue.obj` (6863 verts / 11950 tris) converted from the 2K glTF by `gltf_to_obj.py`
   (a dependency-free glTF->OBJ extractor - re-run after re-downloading the glTF + .bin to regenerate).
 - `textures/concrete_cat_statue_{diff,nor_gl,arm}_2k.jpg` - diffuse, OpenGL normal, and ARM
-  (Ambient-occlusion / Roughness / Metallic packed in R/G/B). Organic form with deep concavities - 
+  (Ambient-occlusion / Roughness / Metallic packed in R/G/B). Organic form with deep concavities -
   good for normal mapping + screen-space AO (deferred tut 10).

@@ -35,7 +35,7 @@ def main() {
 }
 ```
 
-`[export]` makes `main` callable from outside the compiled context - 
+`[export]` makes `main` callable from outside the compiled context -
 entry points need it. `options gen2` selects the current syntax
 generation; all documentation and new code use it.
 

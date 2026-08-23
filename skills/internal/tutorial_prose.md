@@ -44,7 +44,7 @@ academic - a hacker showing a friend a neat trick, not a thesis defense.
    does not appear in prose before the reader has met it in code or been
    introduced ("the heart of the file is one function, `forward`").
 8. **Flip it - when in doubt, flip it.** Mechanism/story first, the NAME
-   lands last as a conclusion: "...a running sum of differences - residuals - 
+   lands last as a conclusion: "...a running sum of differences - residuals -
    is why `x` is called the residual stream." Never "X is called Y. The name
    means...".
 9. **Every name gets its why, in one clause.** Classifier (classifies among
@@ -74,7 +74,7 @@ academic - a hacker showing a friend a neat trick, not a thesis defense.
     the math") may inventory; it may not define.
 14. **Concrete over abstract.** Ground every number at its use (48 = one
     head's slice; "floats 0 and 1 are the first pair"). No algebra symbols
-    (`W`, `d`) in prose without an on-ramp. No "N-dimensional space" talk - 
+    (`W`, `d`) in prose without an on-ramp. No "N-dimensional space" talk -
     "a vector of 288 floats", "closer", "the pattern of all 288".
 15. **Intuition owns the flow; rigor gets one marked sentence.** When a
     passage must satisfy both a cold reader and a verifier, the airtight step

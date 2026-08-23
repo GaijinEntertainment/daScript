@@ -33,7 +33,7 @@ bare-aggregate `GROUP BY`), and renamed projection entries declare
 `AS "<alias>"` so ordering over them resolves on strict engines.
 
 **Current tables: AMD Ryzen Threadripper 3990X (Windows, Release build), single sweep,
-local PostgreSQL server on the same box.** Absolute cells move with the capture box - 
+local PostgreSQL server on the same box.** Absolute cells move with the capture box -
 the cross-engine ratios are the signal, not the second decimal.
 
 <!-- BENCH:TABLES BEGIN -->

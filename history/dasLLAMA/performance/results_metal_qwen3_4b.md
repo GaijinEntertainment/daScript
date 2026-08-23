@@ -63,7 +63,7 @@ phase anomaly class before the rewiring.
 
 B=1 was 0.85x pre-chase (greedy 66.6): the tied-k6 classifier gated the spec chain OFF, so
 every greedy step paid the ~1ms CPU tail PLUS the 607KB logits scan's DRAM contention right
-at the k6 stream's bandwidth wall. The kq spec chain (chase round 1) closed it to 0.99x - 
+at the k6 stream's bandwidth wall. The kq spec chain (chase round 1) closed it to 0.99x -
 the fused H-form rope-store (chase round 2: bias+norm+rope+store in ONE
 head-cooperative dispatch on f16 mirrors) closed the last point to a dead tie.
 
@@ -97,7 +97,7 @@ the line (0.98-1.00x). **B=1 after chase rounds 1+2: 1.09 / 0.95 / 1.00 / 1.02**
    shape, -9..-11% vs b2r and under the lcpp wall) is production for n < 3072 / small-d
    sites; b2r keeps n >= 3072. Q5 gpu/step 15.87 -> 14.84ms.
 3. **The fused H-form rope-store** (round 2, the former ledger item): on QK-norm x f16
-   mirrors, bias + per-head RMS + rope + store run as ONE head-cooperative dispatch - 
+   mirrors, bias + per-head RMS + rope + store run as ONE head-cooperative dispatch -
    the prepass dispatch and its q/k round trip disappear (+~1% on Q4/Q5/Q6; other KV
    codecs keep prepass + flat).
 

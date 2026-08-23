@@ -151,9 +151,9 @@ ln -sfn releases/<sha> /srv/apps/dasweb-playground/current && systemctl restart 
 - **Launch with cwd = bundle dir** - a relocated exe's `get_das_root()` degrades to cwd
   (`src/misc/sysos.cpp:666-693`), which is what makes `logs/`, module resolution, and
   `get_this_module_dir()` land right. systemd `WorkingDirectory=` handles it.
-- **No top-level `let` calling Context-allocating builtins** (`get_this_module_dir()` etc.) - 
+- **No top-level `let` calling Context-allocating builtins** (`get_this_module_dir()` etc.) -
   known `-exe` ASLR bake bug; call from functions only.
-- The build costs seconds-to-a-minute on the VPS (JIT codegen + link of a small server - 
+- The build costs seconds-to-a-minute on the VPS (JIT codegen + link of a small server -
   NOT a C++ build); zen4 is not needed for deploys.
 
 CPU-target note: with no `[llvm_code]` kernels the `-exe` targets generic x86-64 => the bundle
@@ -197,12 +197,12 @@ struct Sample {
 }
 ```
 
-Migrations via `sqlite/sqlite_migrate` from day one (`[sql_migration(version=1)]` raw-SQL body - 
+Migrations via `sqlite/sqlite_migrate` from day one (`[sql_migration(version=1)]` raw-SQL body -
 frozen once shipped). Worked precedent in-tree: the dictation bot
 (`examples/telegram/dictation/cadmus_history.das`) - follow its shape, don't invent. Startup =
-`with_latest_sqlite(path)` equivalent bound to the server thread (SqlRunner is context-bound - 
+`with_latest_sqlite(path)` equivalent bound to the server thread (SqlRunner is context-bound -
 open INSIDE the server thread).
-Dedup is free: same source => same hash => INSERT OR IGNORE semantics (`insert` on PK conflict - 
+Dedup is free: same source => same hash => INSERT OR IGNORE semantics (`insert` on PK conflict -
 treat conflict as success, return the hash).
 
 ### Hashing
@@ -317,7 +317,7 @@ own plan doc before implementation; the contour:
   `.github/workflows/pages.yml` "Build: Daslang host" step comments + `web/CMakeLists.txt`
   (`web/README.md` documents only the wasm32 path). The load-bearing specifics:
   - Cross-compile host daslang built with **libc++ + `-DDAS_ENABLE_EXCEPTIONS=1`** (clang, not
-    gcc/libstdc++): the host JIT-codegens the samples and bakes C++ handled-type layouts - 
+    gcc/libstdc++): the host JIT-codegens the samples and bakes C++ handled-type layouts -
     a libstdc++/setjmp host bakes WRONG offsets (std::string 32 vs 24 B, mutex 80 vs 40 B) =>
     wasm heap corruption. Host==target stdlib/exception config is the whole trick that makes
     the cross-compile "close". Host ptr width == target ptr width (wasm64 => 64-bit host).
@@ -337,7 +337,7 @@ own plan doc before implementation; the contour:
   every divergence, dumps all and aborts. Builder protocol: a new `toolchain_id` goes live
   ONLY after a canary sample built with `--jit-check-abi` runs clean; result (including the
   full divergence dump on failure) goes in the log. Guard the known silent path: web/
-  CMakeLists.txt WARNS-not-fails when the host compiler isn't clang ("degraded but builds") - 
+  CMakeLists.txt WARNS-not-fails when the host compiler isn't clang ("degraded but builds") -
   `build_wasm_host.sh` hard-requires clang so that degradation cannot happen quietly on zen4.
   - The box environment is Boris's profiling rig first - he leaves a .md on the box documenting
     what lives where; the wasm toolchain install (notably **emsdk**, pinned to the same version

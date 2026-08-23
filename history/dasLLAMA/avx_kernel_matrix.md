@@ -1,7 +1,7 @@
 # AVX kernel matrix - VNNI / AVX-512 tiers (default OFF, unmeasured)
 
 > **HISTORICAL (superseded 2026-07-04).** The whole matrix - and its host file
-> `dasllama_math_x64_avx.das`, plus `harness/avx_matrix_probe.das` / `mx4x64_probe.das` - 
+> `dasllama_math_x64_avx.das`, plus `harness/avx_matrix_probe.das` / `mx4x64_probe.das` -
 > was DELETED after the generated GEMM family (`x64-gen`, per-ISA fallback chains incl.
 > VNNI/AVX-512 bias128 tiles) out-performed every hand tier on EPYC and SPR silicon.
 > Kept as the design record of the hand-tier exploration.
@@ -97,7 +97,7 @@ source so a pin-A/B isolates the dot alone).
   - z16 tiers: `x64-avx512vnni` == `x64-avx512bw` bit-exact; `x64-avx512bw` vs portable
     rel < 1e-5 (the acc8/ps float-shape class); plus the bit-exact strip-expansion contract
     (same-backend mx4-batch vs Q8-batch-on-exact-expansion).
-  - Shapes: (n=64,d=8,ntok=4,R=5), (n=96 - odd nb, exercises z16/dequant64 odd-block tails - 
+  - Shapes: (n=64,d=8,ntok=4,R=5), (n=96 - odd nb, exercises z16/dequant64 odd-block tails -
     d=10 -> d%4 row tails, ntok=3, R=4), (n=2880,d=20,ntok=5,R=3 - grp4x2 + TB + threaded).
 - Default-off contract: no env -> `backends: [portable, x64-avx2, x64-avx2-ps, x64-avx2-acc8,
   x64-avx2-repack]` - matrix invisible. Suite `modules/dasLLAMA/tests` 171/171 under `-jit`.
@@ -133,7 +133,7 @@ tiers. Verify first: `cpu_supports` probe (all five names + `avx2`/`fma`).
    FMA-port pair (Zen2's int-flush-rides-free story may invert on Intel port layouts);
    z16 halves blocks/instr but doubles per-instr latency exposure; acc8 was the 1-core winner
    on Zen2 (+50% over ggml) - VNNI may re-balance it; grp4x2-vnni is the prefill GEMM cell;
-   `mx4_dequant64` halves dequant ops in the z-strip cell. All priorities are placeholders - 
+   `mx4_dequant64` halves dequant ops in the z-strip cell. All priorities are placeholders -
    set by measurement, then promote winners into the shipped set / delete losers.
 
 ## Gotchas hit this session

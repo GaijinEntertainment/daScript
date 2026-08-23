@@ -90,7 +90,7 @@ parent-driven, and **pre-fold `ExprRef2Value` is the explicit load marker** - cl
 
 A parent that needs a **value** (op operand, call arg, store RHS, branch cond) reads `e2id` of the child;
 the child is either already a value, or is the `ExprRef2Value` that loaded it. A parent that needs a
-**pointer** (store target `ExprCopy.left`, `ExprAt` base, `ExprField` base) reads `e2ptr` of the child - 
+**pointer** (store target `ExprCopy.left`, `ExprAt` base, `ExprField` base) reads `e2ptr` of the child -
 and the AST guarantees store targets / access-chain bases are NOT wrapped in `ExprRef2Value`, so the
 pointer is there. This is the precise pre-fold analogue of llvm_jit's `r2v`-flag load/pointer split.
 
@@ -157,7 +157,7 @@ llvm_jit). Terminator state lives in `ctx.terminated`, set/cleared at the same p
   - **For-source `range()` interception (the sharp edge):** the visitor would otherwise visit the
     `range(...)` call and `visitExprCall` would error ("unsupported call 'range'"). Mitigation modeled on
     llvm_jit: in `preVisitExprFor` record `fr.sources[0]` into `for_src`; let the visitor visit the call's
-    **arguments** normally (so `range(lo,hi)` endpoint ids land in `e2id` and runtime bounds Just Work - 
+    **arguments** normally (so `range(lo,hi)` endpoint ids land in `e2id` and runtime bounds Just Work -
     a case the constant-only fixtures don't currently cover, see sec.7), but in `visitExprCall` short-circuit
     when the call is in `for_src` (emit nothing). `ExprConstRange` has no sub-calls; read its `int2`
     value directly in `preVisitExprFor`.
@@ -218,7 +218,7 @@ every other backend already has, which dasSpirv joins here.
 - **6.0 Spike (GATE - de-risks the whole port).** Minimal `SpirvEmit` handling only the `square` subset
   (var/let/at/store/IMul/builtin-load/return), driven via `make_visitor` at **patch stage** over
   `fn.body`. Proves the two open risks: (a) an `AstVisitor` can run during `patch()` and (b) the
-  pre-fold node shapes (`ExprRef2Value` present, `fieldIndex == -1`, r2v) are walkable as designed - 
+  pre-fold node shapes (`ExprRef2Value` present, `fieldIndex == -1`, r2v) are walkable as designed -
   confirm `visit`/`visit_expression` over just the body (not the whole function, so `generate_spirv`
   keeps owning the OpFunction scaffold). Output must be census+spirv-val-equal to today's `square`.
   **If the spike fails (visitor unrunnable at patch / shapes wrong), STOP and report - the hand-walker may
@@ -245,7 +245,7 @@ positively:
    The port is viable; the hand-walker fallback is not needed.
 2. **Pre-fold shapes - RESOLVED yes, as designed.** For `data[i] = i * i`: the store-target `data[i]` is a
    bare `ExprAt` (NOT wrapped), while the index `i` and both `i*i` operands are each wrapped in
-   `ExprRef2Value` over an `ExprVar`. This is exactly the lvalue/rvalue split sec.3.2 builds on - 
+   `ExprRef2Value` over an `ExprVar`. This is exactly the lvalue/rvalue split sec.3.2 builds on -
    `ExprRef2Value` is the load marker; unwrapped lvalue nodes are pointers. `gl_GlobalInvocationID` reads
    as a global (`local=arg=_block=false`), `i` as a local; swizzle-of-global has `ref=true`.
 

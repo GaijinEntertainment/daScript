@@ -93,7 +93,7 @@ Require-root registration is manifest-driven: a file not named in the module's
 - `error[20605] missing prerequisite 'foo/bar'` - the descriptor has no matching
   `register_native_path("foo", "bar", ...)`, or the DLL registration is missing
 - `das_is_dll_build()` reports at runtime which binary is running
-- `.shared_module` is the C++ DLL extension; `.das_module` is the descriptor script - 
+- `.shared_module` is the C++ DLL extension; `.das_module` is the descriptor script -
   they are different things
 
 Module resolution in both binaries and the CMake macros behind it: `skills/internal/dynamic_modules_plumbing.md` (repo-only).

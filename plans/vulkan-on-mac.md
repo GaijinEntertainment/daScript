@@ -47,10 +47,10 @@ local one-off commit is superseded); the module descriptor is parked as
 `dasModuleVulkan.shared_module.stale-jul28` and gets renamed back.
 
 Expected shape of the work: build the module on macOS, get a device up, then capability-gated
-declines - no coopmat, the 32 KB `maxComputeSharedMemorySize` declining the dn/at chains - 
+declines - no coopmat, the 32 KB `maxComputeSharedMemorySize` declining the dn/at chains -
 and bisect the known `ffn_vs_ref` red per-kernel via the model-less kernel-unit suite.
 Finish line: kernel suite + `test_vulkan_tier*` + `image_vulkan` honest-green (declines are
-honest), and a couple of the small models we actually run serving "on vulkan and sane" - 
+honest), and a couple of the small models we actually run serving "on vulkan and sane" -
 no perf bar. Note followup item 16: vulkan arms need direct dastest + `-load_module`, never
 `run.das`.
 
@@ -82,7 +82,7 @@ no perf bar. Note followup item 16: vulkan arms need direct dastest + `-load_mod
   filed - maintainers ask follow-ups, and deleting an untracked file is unrecoverable);
   (2) GPU-vs-GPU suite arms (ar twin-vs-seam) are vacuous-prone - when both kernels
   are dead they match trivially (bit us under the 1.4.1 cliff); sentinel-prefill them;
-  (3) a `--quant kq` parity run vacuously "passed" on empty streams before the wc -l check - 
+  (3) a `--quant kq` parity run vacuously "passed" on empty streams before the wc -l check -
   the harness should exit non-zero when GEN_IDS was never printed.
 
 ## Leg (oracles) - per-class CPU oracles for the metal corpus, loud and eyeballable

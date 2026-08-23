@@ -87,7 +87,7 @@ GREEN - proven and load-bearing for the design:
    parent also sidesteps the debug-info verify `!st.isTemplate`
    (`ast_debug_info_helper.cpp:188`) that a kept template-parent trips.
 9. **`static_if` needs NO reifier folding** (Boris's position, now with evidence): MSL
-   emission runs at the `fixup` annotation stage (`msl_shader.das` -> `generate_msl`) - 
+   emission runs at the `fixup` annotation stage (`msl_shader.das` -> `generate_msl`) -
    post-infer, after `visit(ExprIfThenElse)` has already folded static branches
    (`ast_infer_type.cpp:4793`). The emitter only ever sees the taken branch. Residual
    stage-2 note only: the metal lens derives roles pre-infer and would see BOTH branches
@@ -154,11 +154,11 @@ Landed deltas vs the stage-0 spec (each probe-verified):
   collision check); tests cover default, `@@` rebind, string rebind, and `@@` address
   targets through a function-pointer taker; negative fixture for a non-callee init.
 
-Tests (`tests/typemacro/`, 25/25 green interp AND `-jit`; AOT emits folded bodies - 
+Tests (`tests/typemacro/`, 25/25 green interp AND `-jit`; AOT emits folded bodies -
 `ToyNarrow`gated` compiles to `return x + 100`): `test_template_struct_instance.das`
 (class rail incl. static_if fold + override-wins + const defaults arm, struct rail with
 two instances + const in field init, template-with-base arm, cross-module arm via
-`_template_struct_instance_mod.das`); negatives `failed_tsi_unbound_alias` (expect 30826 - 
+`_template_struct_instance_mod.das`); negatives `failed_tsi_unbound_alias` (expect 30826 -
 infer reports the unbound name at first use since the eager check retired) /
 `_not_template_parent` / `_nonconst` (expect 20800) + `_field_collision` (expect 20503,
 parser-level). `tests/aot/CMakeLists.txt` typemacro glob now excludes `failed_*`.
@@ -225,7 +225,7 @@ before the `skills/make_pr.md` checklist:
 5. Call-parameter axis (`@template_call`, IMPLEMENTED same round): the field name is
    what template bodies call, the init (`@@name` or string) is the default target,
    instances redirect with `override sdot = @@ssdot`. Rides the rules engine's
-   existing `renameCall`/call2name, which rewrites calls AND `@@` address targets - 
+   existing `renameCall`/call2name, which rewrites calls AND `@@` address targets -
    erased like a constant, direct call in the stamped class. Replaces the closed-set
    `static_if` route for callee selection with an open one (a new instance can route
    to a function the template never names).
@@ -281,7 +281,7 @@ accidental - they will merge.
 
 ### Tonight's sweep COMPLETE (2026-08-08): the free merges are exhausted
 
-**Stamped:** SqAttn 23->10 templates + 3 combs (all five tiers); RopeStore float pairs - 
+**Stamped:** SqAttn 23->10 templates + 3 combs (all five tiers); RopeStore float pairs -
 `MetalRopeStore{F16,F32}` + `MetalRopeStoreB{F16,F32}` from 2 templates (typedef KT +
 `@template_constant CLAMP16` gating the store block via `static_if`). **The static_if
 fold emits byte-identical MSL - zero trace, lets and all** (probe-verified both branch
@@ -294,7 +294,7 @@ cover correctness only):
   staging + block stride would static_if-duplicate most of the body (the 43-49%-different
   measurement stands). BUT the mul_mm and B8 shapes merged on exactly that axis - see below.
 - ~~MoeMulMm K6~~ **JOINED 2026-08-08** (021fffd87, Boris ruling "measure and refactor"):
-  the scalar cache measured SLOWER than reload-per-kb (gmm6 lab, -2.4% ms/mm x3 launches) - 
+  the scalar cache measured SLOWER than reload-per-kb (gmm6 lab, -2.4% ms/mm x3 launches) -
   the stateless stage_a is both the join and a -2.0% win vs the old standalone.
 - ~~MoeMulMm Q8/Mx4~~ **measured OUT 2026-08-08** (gmm8 lab section): the stateless
   index-math stage_a form is +3.4-3.6% vs Q8's production carried-pointer walk (3/3
@@ -355,7 +355,7 @@ KqMvArgs contract; 3 launches per question, interleaved, cls3b = the DRAM-honest
 3. **Dead-decl preview** (production text + an unused colbase line - the static_if stamp's
    only residue): +/-0.1% everywhere. Free.
 
-Restamp (46a6252f7): `MetalKqMvK4T/K5T/K6T`, NR/NRU width constants (int + uint spellings - 
+Restamp (46a6252f7): `MetalKqMvK4T/K5T/K6T`, NR/NRU width constants (int + uint spellings -
 fixed-array dims and `range()` take the int, colbase math the uint; `float[NR]` substitution
 works). K4T/K6T carry `TILED` static_if branch-duplicating ONLY the b-loop + writeback tail:
 B4 stamps byte-identical, B2 stamps = production + the dead decl. K5T keeps one colbase
@@ -398,7 +398,7 @@ stamp twins stay distinguishable in GPU captures; explicit `name=` behavior unch
 
 **Parse-order false positive -> check removal:** the eager check could only treat as
 "bound" names already parsed, so `struct SqAttnArgs` declared below the instances
-false-errored (the args structs moved above the kernel section as the immediate fix - 
+false-errored (the args structs moved above the kernel section as the immediate fix -
 now pure layout preference). This plus the blocklist fragility led to the Decision-4
 supersede: the eager check and `late_bind` are REMOVED; unbound names fall through to
 infer.

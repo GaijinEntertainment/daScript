@@ -103,7 +103,7 @@ environment-supplied value never conflicts.
 ## `[EnvConfig]` - ambient library knobs
 
 `[EnvConfig(env_prefix = "MYLIB")]` - same `@clarg_doc` / `@clarg_env` vocabulary and name
-derivation, `bool` / `int` / `int64` / `float` / `string` fields, field initializers as defaults - 
+derivation, `bool` / `int` / `int64` / `float` / `string` fields, field initializers as defaults -
 generates `env_config(type<T>) : T` plus `get_env_config_info(type<T>)` for documentation
 generators.
 

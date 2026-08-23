@@ -213,7 +213,7 @@ embd 2048, ff 6144, 32Q/4KV heads (head_size 128), **128 experts top-8**, expert
 - **Counting 40/40 token-for-token** (`harness/parity.sh`), both grouped + reference prefill paths,
   bit-identical. Fixture `test_parity_qwen3moe_30b` (reuses `QWEN3_PROMPT`/`QWEN3_GEN`, large-tier).
 - **NO double-RMS needed** (vs gemma-26B). Margin analysis (`simple_ids_margin`) on a prose probe:
-  das tracks the oracle through margins as tight as **0.08 logits** with no systematic router flips - 
+  das tracks the oracle through margins as tight as **0.08 logits** with no systematic router flips -
   the shared float `ffn_norm` already matches ggml's double-accumulated norm closely enough for the
   top-8-of-128 pick. Prose diverges only at the model's OWN first near-tie (oracle top-1/top-2 gap
   **0.04 at step 6**, das picks the oracle's #2 - a coin-flip, not a bug). Better than gemma-26B
@@ -288,7 +288,7 @@ converter" premise is wrong for this checkpoint; convert from safetensors direct
   **factor 8** (pre_encode.conv.{0,2,3,5,6}/out - same shapes as parakeet: feat 4096=16*256),
   `self_attention_model='rel_pos'`, conv_kernel 9, batch_norm, `att_context_size=[-1,-1]`
   (**full global** attention). **DELTA vs parakeet:** canary has `self_attn.linear_{q,k,v,out}.bias`
-  and `feed_forward*.linear{1,2}.bias` (parakeet has NO qkv biases, only `pos_bias_u/v`) - 
+  and `feed_forward*.linear{1,2}.bias` (parakeet has NO qkv biases, only `pos_bias_u/v`) -
   the converter + forward must carry them. Drop the whole TDT predictor/joint (canary has none).
 - **Projector** = `perception.proj` linear **[2048,1024] + bias** (audio d_model 1024 -> LLM
   hidden 2048). `modality_adapter` is `IdentityConnector` (no-op). Mel: `perception.preprocessor.featurizer.fb`
@@ -421,7 +421,7 @@ shipped**:
 - **Audio tower = AuT (`qwen3a`)** - the SAME encoder family as the already-shipped **Qwen3-ASR**
   (`dasllama_qwen3a.das`), not whisper-based. The mtmd `qwen3a` preprocessor + graph are
   architecturally fixed (chunk 100, window 800), so the data-driven dasLLAMA tower loaded
-  Qwen3-Omni's bigger AuT (d_model 1280, 32 blocks, 20 heads, ff 5120, proj 2048) **verbatim** - 
+  Qwen3-Omni's bigger AuT (d_model 1280, 32 blocks, 20 heads, ff 5120, proj 2048) **verbatim** -
   zero encoder code. proj 2048 = the thinker's n_embd.
 
 Net slice: register the `qwen3vlmoe` alias (+audio markers) in `dasllama_arch_qwen3moe.das`, and add

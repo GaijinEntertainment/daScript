@@ -7,7 +7,7 @@ file together with its own list.** `REVIEW_COMMON.md` (repo root) binds this fil
   the CPU - that CPU run is the test oracle. What cannot run on the CPU does not enter
   the emitter.
 
-- **Everything outside the lowered subset is a clean compile error naming the construct** - 
+- **Everything outside the lowered subset is a clean compile error naming the construct** -
   never a silently wrong kernel.
 
 - **A shape constant never enters a kernel as a runtime value.** The capability ships a

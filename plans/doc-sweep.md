@@ -1,7 +1,7 @@
 # 0.6.4 documentation sweep - authored RST verification
 
 Goal: every authored RST page (NOT das2rst-generated) carries code that compiles and prose
-that matches the implementation, verified mechanically where possible, by agents where not - 
+that matches the implementation, verified mechanically where possible, by agents where not -
 and a nightly lane that keeps it that way.
 
 ## Scope
@@ -27,7 +27,7 @@ a wrong require spelling - the dry-run produced false drift verdicts from both c
 Each page's das blocks concatenate in order into one synthetic module:
 
 - `require`/`options`/`module` lines hoisted (deduped); preamble taken from the page's
-  companion `.das` (`tutorials/<fam>/NN_x.das`, hyphen variant too) when one exists - 
+  companion `.das` (`tutorials/<fam>/NN_x.das`, hyphen variant too) when one exists -
   never from a hand table when a companion is present
 - decl chunks (def/struct/class/enum/...) at module scope; stmt chunks appended in order
   into one function so locals flow block-to-block
@@ -127,7 +127,7 @@ From the sql (13/13 green) and classes (green) agents - fix BEFORE the full fan-
    collides.
 7. Marker-vocabulary: a `fragment` marker distinct from `skip` ("valid syntax, no chain
    root / no context") so `skip` stays auditable as "never code".
-8. Contract note: requires stated in `::` literal blocks are invisible to the extractor - 
+8. Contract note: requires stated in `::` literal blocks are invisible to the extractor -
    pages must use `code-block:: das` for anything the checker should see (docs-authoring
    rule for skills/doc_sweep.md).
 
@@ -135,7 +135,7 @@ From the sql (13/13 green) and classes (green) agents - fix BEFORE the full fan-
 
 RULED by Boris 2026-08-11 - all follow-up work AFTER the sweep PR:
 
-- DONE FIXED (bbatkin/original-operators): tuple destructuring bypasses the shadowing check - 
+- DONE FIXED (bbatkin/original-operators): tuple destructuring bypasses the shadowing check -
   `let x = 1; let x = 2` is error[30704], but `let (ok, a) = p1(); let (ok, b) = p2()`
   compiled and SILENTLY rebound `ok`. Now `expandTupleName` enforces the same shadowing
   rules as `let`: alias collisions (incl. within-pattern repeats) are same-scope
@@ -218,7 +218,7 @@ RULED by Boris 2026-08-11 - all follow-up work AFTER the sweep PR:
   when ALL errors sit in a required module (peg agent: block likely lacks context).
 - `wrap <prefix>` marker idea (peg agent): synthesize a `def f(input; blk) { parse(input) {` shell
   around macro-DSL excerpts so grammar rules compile instead of going fragment.
-- `alt` on a hoist-only block is a vacuous pass (checked++ fires, flush early-returns empty) - 
+- `alt` on a hoist-only block is a vacuous pass (checked++ fires, flush early-returns empty) -
   make alt refuse to count an empty segment. `expect` blocks append unrenamed - run them
   through the page renamer (or the isolation redesign). `given member <field>` idea (macros
   agent): inject a FIELD into the member-marker subclass for base-method-parameter context
@@ -241,7 +241,7 @@ RULED by Boris 2026-08-11 - all follow-up work AFTER the sweep PR:
 - [!] SPATIAL-AUDIO CONVENTION CONTRADICTION (needs a listening test): companion
   tutorials/dasAudio/04_spatial_audio.das:60-73 + `g_head_direction` default (+Y,
   audio_boost.das:662) vs the engine's own pan math (`pan = nrxy.y`, MIT HRTF azimuth
-  sign, volume_mixer.h pan law) and the HRTF demo's "-Y = forward, +X = right" comment - 
+  sign, volume_mixer.h pan law) and the HRTF demo's "-Y = forward, +X = right" comment -
   a +X source pans LEFT for a +Y-facing listener by the math, RIGHT per the companion.
   One of the two is wrong. The RST (dasAudio_04) now follows the engine math + demo.
 - audio_boost.das:1528 `set_position(sid; pos; dir : float3)` - third param named `dir`

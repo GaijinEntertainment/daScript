@@ -111,7 +111,7 @@ Each phase gets decided in detail when reached.
   over the same core. (b) kq site mm: the MetalKqMulMmK45T stamps (K4/K5/K6, kernels) +
   K4T/K5T/K6T (prefill) -> `enc_kq_mm_k{4,5,6}[_t]_c`; `pf_enc_kq_site_mm` = 6-arm pick,
   decode `enc_kq_gemm_mm_b` = 3-arm rider. The shared base template's slot-0 scale-view
-  offset is the NEUTRAL param `s0off` (k4/k5 pass soff again, k6 passes the d-plane doff) - 
+  offset is the NEUTRAL param `s0off` (k4/k5 pass soff again, k6 passes the d-plane doff) -
   one field annotation cannot carry two names across stamps. (c) kq gemv: MetalKqGemvK4/K5/K6
   (kernels) -> `enc_kq_k{4,5,6}_c`; `pf_enc_kq_gemv` = 3-arm pick (grew an `n` param for the
   exact x span). Decode's `enc_kq_gemv`/`enc_kq_mvb` keep their hand bodies (k5c/b8 select
@@ -158,7 +158,7 @@ Each phase gets decided in detail when reached.
   (@default) and the batch's derived hz_read(rt) (staging the hand encoder omitted).
   Gates: typemacro 37/37 (dastest, incl. failed_*); kernels suite 7/7 (attn gate hand-binds
   renumbered - the independent witness of the new layout; swiglu gates on stamped sources);
-  decode arm1-basic + arm11-depth (chunked single comb) + batch (batchB7-partd/batchB8-kq - 
+  decode arm1-basic + arm11-depth (chunked single comb) + batch (batchB7-partd/batchB8-kq -
   batch comb via the generated builder); prefill parity base; fam-gptoss PARITY_FULL maxd
   bit-identical (swiglu single via enc_ew2 + Pf via prefill + sinks through comb @default).
   CombB window>0 model-level note: covered at the kernel-unit tier (the attn gate's window
@@ -182,7 +182,7 @@ Each phase gets decided in detail when reached.
   sites are the A/B race harnesses, bench-only by design). (b) Decode's enc_kq_gemv rides the
   P2 base builders: MetalKqGemvK5C got the sibling @off/@span set + `enc_kq_k5c_c`
   (grid "rows/2"); the wrapper is the 4-arm pick, select condition unchanged. (c) Decode's
-  enc_kq_mvb rides 9 newly-lensed mv stamps (B2/B4 x k4/k5/k6 + the B8 trio; tgmem on B8 - 
+  enc_kq_mvb rides 9 newly-lensed mv stamps (B2/B4 x k4/k5/k6 + the B8 trio; tgmem on B8 -
   the lens folds the tgmem global to its constant; KqMvArgs as kargs@5; B4 stamps take the
   2-D grid "rows/8, gcols"); the wrapper keeps the two/b8/fmt select. Stamped MSL names were
   already the PSO-compile names - zero rename/census churn. (d) Item 14 CLOSED:
@@ -238,7 +238,7 @@ Each phase gets decided in detail when reached.
   - **Dump-proof delta taxonomy (all builders proven, 36 total):** statement-identical;
     ceil-div where the padding invariant holds (gemm SK d/32 - d is a 32-multiple by the
     kernel's exact ntileN decomposition, the P0-accepted class); int64-vs-uint grid math
-    (mv d - value-equal below 2^31); binds reordered to @binding order (w13sw - 
+    (mv d - value-equal below 2^31); binds reordered to @binding order (w13sw -
     slot-addressed, order-free); derived-hz additions (strictly more correct); the gated
     ascale bind dropped (byte-diff-gated).
   - **Gates:** kernels 7/7 x4 rounds; decode arm1+batch (and the BCD round added

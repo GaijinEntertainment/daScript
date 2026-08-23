@@ -230,7 +230,7 @@ the handoff is seamless, then destroys the old one after.
 
 ## The skipped command / struct tail
 
-The struct emitter skips ~182 composites and the command emitter ~124 commands - 
+The struct emitter skips ~182 composites and the command emitter ~124 commands -
 the irregular long tail: structs/commands whose params are flags-output, raw
 `PFN_*` function pointers, foreign/opaque types, or other shapes the uniform
 vk_view / classifier rules don't cover. Each is logged at generation time. Most

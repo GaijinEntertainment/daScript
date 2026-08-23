@@ -15,7 +15,7 @@ in two of them will drift:
 | `REVIEW.md` | `/code-review`, and us while writing | criteria checkable against a diff |
 
 **References flow one way: REVIEW cites ARCHITECTURE, never the reverse.** Sections here are
-numbered so they can be cited (`ARCHITECTURE sec.2.2`). Nothing here may cite a REVIEW rule - 
+numbered so they can be cited (`ARCHITECTURE sec.2.2`). Nothing here may cite a REVIEW rule -
 those are unnumbered review criteria by design, and a citation to one is a dangling pointer the
 moment the checklist is reordered.
 
@@ -237,7 +237,7 @@ that a question answered for one backend has an obvious address in the other. Th
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class - "the builder needs the driver module" is never a placement reason. Prefill's
   prefill-only classes are convergence debt, not precedent.
-- **Retired: the single-pass whisper-decoder attention (`MetalWdecAttn`/`enc_wdec_attn`)** - 
+- **Retired: the single-pass whisper-decoder attention (`MetalWdecAttn`/`enc_wdec_attn`)** -
   deleted in the metal-asr review round (2026-08-17, the `bbatkin/metal-asr` PR; the kernel is
   in git history). The chunked part/comb pair replaced it during bring-up (1470->709 ms on the
   turbo decode) and its `float[1504]` tgmem bound was the only reason for the driver's old
@@ -605,7 +605,7 @@ reason: flat one-call-per-item runs (a registration or release list with one lin
 GPU kernel bodies whose phases are coupled by barriers, cooperative-matrix ops or register
 residency and so cannot cross a function boundary without changing the shader.
 
-Split only where a real seam exists - genuine duplication, a distinct phase, a self-contained arm - 
+Split only where a real seam exists - genuine duplication, a distinct phase, a self-contained arm -
 and only when the extracted helper stands on its own. Two corollaries this module keeps tripping
 over: **a kargs fold that grows an already-over-cap kernel body is not a reason to abandon the
 fold** (unpacking N fields adds N lines; take the growth and ledger the real seam), and **never
@@ -729,7 +729,7 @@ the documentation and to the registry test. The sanctioned forms beyond a plain 
 - **The config loads once at context init**, so `set_env_variable` mid-process is invisible to
   the running config: arm a child process's environment instead.
 - **A write of a foreign library's knob** (`set_env_variable` with a literal name) is allowed
-  only before that library first reads it, and the name must be a declared `[EnvConfig]` knob - 
+  only before that library first reads it, and the name must be a declared `[EnvConfig]` knob -
   the registry test scans writes too, so a re-spelled name fails it.
 
 `tests/test_env_registry.das` enforces the lot in both directions (declared <-> documented,

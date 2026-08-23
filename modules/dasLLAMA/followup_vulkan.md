@@ -37,7 +37,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    sandwich norms), gpt-oss (sinks, swiglu_oai). The vulkan kernels for MoE/deltanet already
    exist in the cooperative tier - the work is resident-driver plumbing, not new shaders.
    Walkthrough datum (2026-08-06): qwen35-0.8B serves CORRECTLY on the per-op rails but the
-   per-layer submit+fence cadence caps it at 35% tg / 8% pp of llama.cpp's whole-graph run - 
+   per-layer submit+fence cadence caps it at 35% tg / 8% pp of llama.cpp's whole-graph run -
    the hybrid-ladder extension is the fix, and the carrier conversion already made
    dn_step_cls a TokMeta class kernel, so recurrent layers can encode straight into the
    recorded token cmd; what remains is ladder plumbing (recurrent roles in rd_record_token,
@@ -62,7 +62,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
 9. **Class-level vulkan kernels - SHIPPED (the `bbatkin/vulkan-class-kernels` arc).** The
    Metal kernel model is ported to the SPIR-V emitter: a kernel is a class with
    `@ssbo`/`@uniform`/`@workgroup` members and ordinary methods (`[spirv_kernel]`), the
-   `[vk_dispatch]` lens generates the ensure/set/enc surface per class, and the old world - 
+   `[vk_dispatch]` lens generates the ensure/set/enc surface per class, and the old world -
    module-global kernels, the `vk_set6` ladders, the `vk_meta` word maps, the shared 6-slot
    layout - is deleted outright. Serving is 100% class kernels (the `coverage-vk` census is
    the evidence); every kernel carries a CPU-oracle parity gate in `test_vulkan_kernels.das`.
@@ -81,7 +81,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    corpus where families exist, fix the metal lens's grid-literal infer trap. (c) Hoist the
    ~80 lines of dispatch-lens micro-grammar/validation the `[vk_dispatch]` and
    `[metal_dispatch]` lenses duplicate (`mk_uint_cast`, `is_digit_tok`, `role_ok`,
-   `derived_role`, the `mk_grid_dim` core, `param_type`) into `dasllama_kernel_access` - 
+   `derived_role`, the `mk_grid_dim` core, `param_type`) into `dasllama_kernel_access` -
    INVENTORY's designated shared Metal<->Vulkan component, which both lenses already require.
    They diverged at birth (vulkan's grid folds any integer literal, metal's only "1"); one
    owner ends that, and (b) rides on the hoisted core.
@@ -106,7 +106,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    (b) per-device tile tuning - fold the l/m/split picks into the tune rail (item 7);
    (c) mode selection defaults - `has_coopmat2` should pick cm2 by itself instead of the
    `DASLLAMA_COOPMAT` env force (gate: cm2 must first beat mm on the serving models);
-   (d) decode_vector (`VK_NV_cooperative_matrix_decode_vector`, V=4 f16vec4 decode) - 
+   (d) decode_vector (`VK_NV_cooperative_matrix_decode_vector`, V=4 f16vec4 decode) -
    DRIVER-BLOCKED on this box (610.74 lacks the extension; probe 2026-08-07); revisit on a
    driver that exposes it. Emit-time arm only, never SPIR-V patching.
    Methodology (Boris, 2026-08-06): benchmark per CAPABILITY TIER, like-for-like - ours:

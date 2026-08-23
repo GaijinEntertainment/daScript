@@ -27,7 +27,7 @@ a dialect.
 
 ## Settled decisions (from the discussion, 2026-08-02)
 
-1. **Full port, one PR.** Refactor-arc style: the daScript PR lands when the dust settles - 
+1. **Full port, one PR.** Refactor-arc style: the daScript PR lands when the dust settles -
    kernels, both drivers, seams, tests. Internal sequencing exists (below) but no intermediate PRs.
    One corresponding **dasVulkan PR** carries that repo's fixes. Branch policy: everything on one
    branch (`bbatkin/vulkan-class-kernels`), no side branches.
@@ -120,7 +120,7 @@ a dialect.
   per-class layout creation, the cached set-builder, `enc_*` functions - get-or-build set -> bind ->
   push params -> declare hazard bits -> dispatch with derived groups. `grid=`/`params=` micro-grammar
   copied from Metal's.
-- Access derivation: `dasllama_kernel_access.das` `fieldMode` already handles `self.<name>` roots - 
+- Access derivation: `dasllama_kernel_access.das` `fieldMode` already handles `self.<name>` roots -
   wire it as the vulkan lens's classifier for classes; `@role` stays a cross-checked assertion.
 - Per-class pipeline creation (+ spec-constant feed for declared-tunable kernels); pipelines still
   register with the hazard rail (`hz_pipe_register` analog keyed per class/method).
@@ -214,7 +214,7 @@ a dialect.
    method; spirv-val VALID on every emitted module.
 3. Tier level: vulkan_tier / cm2 / gpu_tier / slot_swap / image_vulkan on zen2; bit-parity probe
    master-vs-branch on tinyllama (the extraction-gate pattern).
-4. Perf: lcpp_bench canonical rows (Qwen3-4B Q8, tinyllama, 35B MoE @13000) vs banked records - 
+4. Perf: lcpp_bench canonical rows (Qwen3-4B Q8, tinyllama, 35B MoE @13000) vs banked records -
    no-regression bar, quiet box, Boris flags first.
 5. M1: tier suites over ssh with capability declines; per-kernel bisection results recorded either
    as fixes or as the handoff doc.

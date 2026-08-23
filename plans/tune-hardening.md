@@ -70,7 +70,7 @@ noise was unobservable until it ruined a measurement. This plan makes the tuner 
 ### 6. The two documents
 
 - **6a. BRINGUP.md rewritten** around the sequence for a box with existing data: (1) delete all
-  `.dlim`, (2) paranoid mint as part of building the exe (`.bak` + logged diff), (3) oracle set - 
+  `.dlim`, (2) paranoid mint as part of building the exe (`.bak` + logged diff), (3) oracle set -
   LLM and audio - plus one big model (fastest known-good) on CPU, human+AI review, anything out
   of the ordinary = stop and discuss. New box adds (4): the same big model vs llama.cpp - the
   RATIO is the known quantity when absolute numbers have no history.

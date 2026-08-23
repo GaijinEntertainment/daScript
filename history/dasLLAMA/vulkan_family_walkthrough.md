@@ -40,7 +40,7 @@ placement. The doesn't-fit MoE class is a das WIN on coopmat2 hardware: strategy
 gpt-oss-20b not measured: mx4 device kernels are CPU/Metal-only (followup item 6) - a known
 decline, nothing to learn from the row.
 
-gemma-4-26B-A4B Q4_K_M not measured (not really supported: q51 stacks are CPU-only, item 6) - 
+gemma-4-26B-A4B Q4_K_M not measured (not really supported: q51 stacks are CPU-only, item 6) -
 but its load CRASHED the tier (assert "kq row length must be a superblock multiple" via the
 image-rail would-accept probe) and that got FIXED in-walkthrough: row-length servability is
 now a decline at every entry (vk_moe_upload_stack, vk_arena_place, resident sizing walk,

@@ -84,7 +84,7 @@ All examples require `options debugger = true`.
 ## pathTracer/ - Path Tracer Demo
 
 A toy path tracer implemented in daslang, with OpenGL visualization variants.
-Requires the `stbimage` module and (for OpenGL variants) `dasGlfw` / `dasImgui` - 
+Requires the `stbimage` module and (for OpenGL variants) `dasGlfw` / `dasImgui` -
 all ship in-tree, so a default build has them.
 
 | File | Description |

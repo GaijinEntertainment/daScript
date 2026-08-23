@@ -31,7 +31,7 @@ same way an untimed phase does.
 Under `--jit-split-modules` (`run_split_codegen` in `llvm_jit_run.das`) the same labels map
 differently: **declare** reads ~zero (declaration moves inside the partition loop), **irgen**
 covers partitioning plus every partition's declare/irgen/ctor work, **optimize** carries the
-`jit_par_emit_run` pool wall - per-job passes AND object emission interleave on the workers - 
+`jit_par_emit_run` pool wall - per-job passes AND object emission interleave on the workers -
 plus the post-optimize verifies and the partition teardown, and **emit+link** is the
 `link_dll_from_objects` link plus the DLL reopen only. The finer steps print per the contract:
 one `LLVM JIT time: job {obj} passes ... emit ...` line per partition (from the pool, under the
@@ -43,7 +43,7 @@ cached` line prints unconditionally beside the split announce, and per-partition
 
 ### 1.2 The codegen tier
 
-Code that EMITS machine code - the surface whose changes bump `LLVM_JIT_CODEGEN_VERSION` - 
+Code that EMITS machine code - the surface whose changes bump `LLVM_JIT_CODEGEN_VERSION` -
 is IR generation, target-machine setup, the `[llvm_code]` generator bodies, and the jit call
 ABI: the generated function signatures, name scheme, prologue, and the externs the install
 phase binds. The file set that carries this surface is `EMITTER_FILES` in

@@ -28,10 +28,10 @@ shared cell runs first** - `move_tile` clears source before writing destination,
 reversed order erases the object written there (`try_push`: boulder first, then player).
 
 **A new `Cave` field that records something that happened during a tick gains an
-assignment in `reset_tick_events` and an arm in `play_tick_sfx` in the same change** - 
+assignment in `reset_tick_events` and an arm in `play_tick_sfx` in the same change** -
 missing the first latches the event across ticks; missing the second makes it silent.
 
-**A diff that adds, removes, or reorders a random draw on `generate_cave`'s path - 
+**A diff that adds, removes, or reorders a random draw on `generate_cave`'s path -
 `paint_interior` and everything it calls, plus `finish_cave` - says in the PR that it
 reshuffles every cave of every seed.** Generation is a pure function of
 `(world_seed, cave_index)`, and that purity is the retry-after-death mechanism

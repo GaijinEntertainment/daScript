@@ -26,7 +26,7 @@ top). Repro: full ramp's 8-worker stage final wave (96-tok streams, queue + admi
 racing finishes) - 3/3 reproductions incl. a fresh cold child dying ~3 s after listening under
 the ramp tail. Does NOT repro: solo, 2-concurrent, constant-4 x 48 tok, cache donate+attach.
 tinyllama survived the identical ramp. **UPDATE: crashed on Qwen too (23:06 bundle) with the
-IDENTICAL address/instruction/frames, only the garbage pointer differs (0x7a vs 0x1735) - 
+IDENTICAL address/instruction/frames, only the garbage pointer differs (0x7a vs 0x1735) -
 MODEL-INDEPENDENT, one deterministic site in the serving path. Boris suspects team-mode
 dispatch or config interplay. BREAKTHROUGH 23:16: a third occurrence surfaced as a SYMBOLIZED
 das panic - `array index out of range at dasllama_common.das:7155` = `addr(t.qblob[off])` in
@@ -207,7 +207,7 @@ scheduler 12/12, server 17/17 live (post-work stats assertions), page via mock+p
   transcript into the input box.
 
 ### S6 - ASR previews + stats
-- Waveform rendered client-side (the page holds the mic/upload audio); **VAD spans** overlaid - 
+- Waveform rendered client-side (the page holds the mic/upload audio); **VAD spans** overlaid -
   from the serving path if silero already runs there, else one tiny preview endpoint.
 - **Segment timeline** from verbose transcription under the waveform; click a segment -> play
   that span in-browser.

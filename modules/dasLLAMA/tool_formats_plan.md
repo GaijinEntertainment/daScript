@@ -115,7 +115,7 @@ single-turn requests; the review round moved it out of the [INST] frame, CR10); 
 defs block prefixed into the FIRST user turn.
 
 **Replay per mode** (render_assistant_calls_): harmony = ` to=functions.NAME` + `<|channel|>`
-`commentary json` + `<|message|>` + args, closed by `<|call|>` (NOT the derived `<|end|>` - 
+`commentary json` + `<|message|>` + args, closed by `<|call|>` (NOT the derived `<|end|>` -
 per-mode close suppression); gemma4 = `<|tool_call>` DSL blocks, turn stays OPEN (a
 `turn_open` session flag; results continue the same model turn); mistral = `[TOOL_CALLS]`
 special + JSON array text + `</s>`; llama_json = the bare JSON object + `<|eot_id|>`.
@@ -143,7 +143,7 @@ Sources: opus /code-review (10 confirmed), REVIEW.md audit (4V/2U/4S), Copilot (
    no longer 400. FIX: resolve `tool_vocab_ok` per mode at create (mirror think_vocab);
    effective mode falls to none when the mode's control specials are absent - the server 400s
    honestly again (this also makes REVIEW's inert-declaration exemption TRUE).
-3. (a) [user, asst(calls), tool, user] replay: add_user overwrites the queued results - 
+3. (a) [user, asst(calls), tool, user] replay: add_user overwrites the queued results -
    dropped on ALL families (partly pre-existing for hermes). FIX: flush the queued results
    turn (render, no assistant_open) before add_user when both queue in render_chat_suffix's
    walk - needs a chat-layer flush seam. (b) gemma4 close_turn=false leaks an open turn on

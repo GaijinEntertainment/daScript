@@ -44,7 +44,7 @@ function groups the public symbols by regex (`group_by_regex`) and emits a `.rst
 therefore mostly **"add a `document_module_spirv`"**: hook the dasSpirv public surface (the `[*_shader]`
 annotations, the `spirv_reflect` types/functions, the `spirv_grammar` enums if we want them) into
 das2rst with grouped regexes, the same way `document_module_pugixml`/`_openai`/`_stbimage` do. This
-shrinks Phase 9 to: (a) the das2rst hook (the bulk, mechanical), plus two hand-written prose pages - 
+shrinks Phase 9 to: (a) the das2rst hook (the bulk, mechanical), plus two hand-written prose pages -
 (b) overview and (c) the mapping page. dasVulkan keeps its **own** `vulkan2rst` for its API; the
 main-tree dasSpirv reference links out to the dasVulkan tutorials.
 

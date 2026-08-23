@@ -21,11 +21,11 @@ Stage B findings:
   right of the key-equality run at most once on both paths - no purity gate needed on the
   residual (pinned by a bump-counter regression test); a conjunct LEFT of it runs per scan
   element vs once in the probe, so that order declines and stays the bench's scan control.
-- Dead-generality lesson: a where-run coalescing loop in the matcher was written, then deleted - 
+- Dead-generality lesson: a where-run coalescing loop in the matcher was written, then deleted -
   `collapse_chained_wheres` already merges consecutive wheres at flatten time, so the matcher can
   never see two `where_` entries. The conjunct peel alone covers both spellings.
 - m7 (2026-06-11 sweep): `point_lookup_residual` (the shape that was a full scan before stage B)
-  466 ns/op INTERP vs the `point_lookup_scan` control's 9967 (~21x); 1270 vs 9049 JIT (~7x) - 
+  466 ns/op INTERP vs the `point_lookup_scan` control's 9967 (~21x); 1270 vs 9049 JIT (~7x) -
   both normalize to 0.0 ns/elem in the matrix, same cell as the bare probe. The residual probe
   costs ~2x the bare one per op (the hit path binds the kv pair, copying the value for the
   residual to read) - still O(1), invisible next to the walk.
@@ -55,7 +55,7 @@ Stage 6 findings:
   `it.value` (the element tuple's real field names), not positional `._0`/`._1` - the row-usage
   scanner maps named fields only, and an unmapped reference leaves the bind var undeclared.
   A `(k => v)` MakeTuple projection splits so each side evaluates exactly once.
-- **`to_table_move` is not a chain terminator**: over an iterator there is nothing to steal - 
+- **`to_table_move` is not a chain terminator**: over an iterator there is nothing to steal -
   elements are yielded temporaries, so "move" reduces to clone. The consuming builtin
   `to_table_move(array)` forms still serve materialized arrays (the bench staged baseline uses
   exactly that); a fused move of non-copyable select-temps stays a deferred edge
@@ -126,7 +126,7 @@ Stage 3 findings:
 - A rejecting `from_in` leaves the chain head unresolved, so `_fold`'s "expecting linq expression"
   verify lands on the same generated line with the same cerr - the error report collapses the pair
   to ONE 50503 (`+1 more on this line`); failed-test `expect` counts are post-collapse.
-- **Joins over tables already work on either side** (tier-2; the kv pair is that side's row) - 
+- **Joins over tables already work on either side** (tier-2; the kv pair is that side's row) -
   tested both directions. Stage 5's probe will optimize the table-as-srcB case.
 - The non-copyable-value gate composes through the reader unchanged: fused dispatch declines,
   tier-2 instantiates the real `each_kv`, one clean 31400.
@@ -135,7 +135,7 @@ Stage 2 findings:
 - m7 INTERP profile (2026-06-10 sweep): pruned scans sit between array and XML - `sum_aggregate`
   13.4 ns/elem (array 2.1, XML 54.3, JSON 146.7), `contains_match` 6.6 via the keys-pruned walk,
   pure-select `count` hits the O(1) shortcut (0.0). Deferred markers: `groupby_count` 162.6 /
-  `groupby_sum` 192.8 / `join_count` 195.0 / `join_where_count` 229.1 / `reverse_take` 58.7 - 
+  `groupby_sum` 192.8 / `join_count` 195.0 / `join_where_count` 229.1 / `reverse_take` 58.7 -
   the tier-2 cells stages 4-5 erase.
 - The qmacro grammar only allows `$i()` in the FIRST iterator slot of a multi-source `for` - the
   kv zip header uses literal `_tab_kv_key_` / `_tab_kv_value_` names (ZipAdapter's itA/itB trade).
@@ -297,7 +297,7 @@ das-vector scrutinees - revisit if the library grows them). Toolbox doc:
 - **Mangler ICE 50609** (iterator element-const collision) - `each_kv` yields `-const` non-ref
   tuples; the known footgun lives in iterator-typed generic params on the tier-2 side;
   mitigation (const-qualify) is known.
-- **Lock semantics unchanged**: fused loops use the same builtin iterators as hand code - 
+- **Lock semantics unchanged**: fused loops use the same builtin iterators as hand code -
   mutating the table mid-chain panics exactly as today.
 - `values()` on `table<K>` already concept-asserts, so set-form `each_kv` errors cleanly for
   free.
@@ -319,7 +319,7 @@ das-vector scrutinees - revisit if the library grows them). Toolbox doc:
   probes instead of N value copies. The table handle is its key; clean fit for the existing
   4-hook surface. Revisit once m7 numbers show whether it matters.
 - **decs/xml/json lead x table srcB probe**: those leads keep their own `emit_join_hook`
-  (nested-callback walks) and hash a table srcB like any iterator. Correct, just unprobed - 
+  (nested-callback walks) and hash a table srcB like any iterator. Correct, just unprobed -
   port `build_join_probe_pieces` into their hooks if a real chain wants it.
 - **Group-join probe**: a table srcB group join could bind a 0/1-element bucket from the probe
   instead of hashing; the result lambda consumes `array<B>`, so it needs a synthesized

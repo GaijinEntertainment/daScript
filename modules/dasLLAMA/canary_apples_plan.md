@@ -120,7 +120,7 @@ UNCHANGED on the full q8 rail** (encoder + decoder both quantized - no id re-fre
 point in this arc so far); canary-f32 image cell still element-exact; new canary-q8 image
 cell element-exact (qblob/qscales/compact blob).
 
-gb1 stage split (full q8): cn.encode 35193 (79.7%) / cn.prefill 5562 / cn.decode 3427 - 
+gb1 stage split (full q8): cn.encode 35193 (79.7%) / cn.prefill 5562 / cn.decode 3427 -
 encoder 1.71x faster; the residual encoder time is the fp32 per-head attention
 (gemm_f32 sc/rl/oh) + depthwise - Phase 3's target.
 
@@ -215,7 +215,7 @@ clean build, JIT green first try. fetch_models: 14/14 registry files (149 GB, ~3
 all 4 conversions reproduced ON x86 - parakeet v2/v3 f32 and canary encoder **sha-identical
 to the M1 bytes** (the repack-canonical claim now proven cross-OS/arch), decoder differs
 per-arch as declared (transcript parity gate still owed - needs a das inference pass).
-Corpus 5/5 after the gb1 fix + M1 wav copies (zen4 ffmpeg decodes ogg to different bytes - 
+Corpus 5/5 after the gb1 fix + M1 wav copies (zen4 ffmpeg decodes ogg to different bytes -
 the manifest gate caught it, exactly its job). ASR rig COMPLETE (NeMo-on-Linux-x86 venv came
 up clean); lcpp reference pair built @ ebd048f. **Paranoid mint WORKED first try**: 561.6 s
 tune, noise=ok, box identity correct, validation passed, sidecar + ~/.tune-history archive +
@@ -277,7 +277,7 @@ Predictions BEFORE the first box run (2026-08-04):
 - **Boris**: some kind of unoptimized loop on both x86 boxes, fp32-flavored; the Mac either
   repacks or is simply better on fallback - either way fine.
 - **Claude**: P1 60% - the census shows the 26B's kq expert layers on the PER-POSITION
-  reference path (`kq_grouped_ok` false; pick: `kq_repacked` never set on the x86 load - 
+  reference path (`kq_grouped_ok` false; pick: `kq_repacked` never set on the x86 load -
   the "arm64: ... returns false off-ARM" legacy at dasllama_load.das:2168 is the suspect
   seam). P2 25% - grouped engages but `kq_batch` runs an untuned/fallback perm at the
   expert shapes (E=128 k=8 nfe=704 dim=2816). P3 15% - dispatch clean; real kernel gap,
@@ -303,7 +303,7 @@ which the controls share, so the deltas are tune-independent):
   q51/q8 groupn slots present; blocks.das:1079 accepts q51). PROPOSED FIX: port the
   fused_kq arm into the gemma4 twin.
 - Prediction scoring: Boris called the shape ("some kind of unoptimized loop" - the
-  per-expert loop is exactly that; not fp32 though). Claude P1 (per-position path) WRONG - 
+  per-expert loop is exactly that; not fp32 though). Claude P1 (per-position path) WRONG -
   census showed 30/30 layers grouped; P2 (missing crowns) wrong - k4/k5/k6/q40/q8q8 tiles
   all crowned; P3 (real lane gap named by profile) is what stood, via TWO instrumentation
   holes that had to be fixed first.
@@ -331,7 +331,7 @@ FUSED ARM LANDED + THE SECOND ONION LAYER (same night, Boris greenlit "obviously
   lone k4/k4/q8 layer keeps the per-expert chain (generic gate excludes q8, same as blocks).
   **PARITY GREEN on zen2**: test_parity_gemma4_26b_q4km grew a fused-off leg - both arms
   token-for-token vs the pinned oracle (74.9s, rc=0).
-- **Verdict on the fused arm**: kq gate/up now ~290 GMAC/s (faster than Qwen's aggregate - 
+- **Verdict on the fused arm**: kq gate/up now ~290 GMAC/s (faster than Qwen's aggregate -
   the port works). But pp128 got mildly WORSE (36-37 vs 40.9): the down split (mm_moe_dn
   bucket) shows why - **the q51 batch lane is the real kernel hole: 2.79s = 21 GMAC/s, 14x
   slower than the kq tile beside it**, and it poisoned BOTH arms all along (per-expert

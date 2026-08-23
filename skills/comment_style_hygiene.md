@@ -31,9 +31,9 @@ an existing lint, the lint compels - an unnoted rule is the reviewer's.
 ## Comments
 
 **.das outside teaching code: ABSOLUTELY NO comments that are not documentation or lint
-suppression.** The kept set is exactly: `//!` docs on a contract a CALLER must know - 
+suppression.** The kept set is exactly: `//!` docs on a contract a CALLER must know -
 public API always, a private helper only when callers inside the module need the contract
-(narration of an implementation goes to a name, a test, or the module's `.md`) - 
+(narration of an implementation goes to a name, a test, or the module's `.md`) -
 `// nolint:CODE` / `@nolint` suppressions carrying their one-line why, `//fmt:` formatter
 directives, license comments (Copyright / SPDX), and the file's leading header block (which
 may sit below the `options` / `module` / `require` preamble). Everything else - narration,
@@ -81,7 +81,7 @@ meaning-list dissolves into them at every use site.
 
 **`can` / `is` / `has` document a lot.** `can` = would the operation succeed, `is` =
 property of the thing, `has` = containment scan. A predicate named as its question
-needs no header; a vague name (`fragile`, `worthIt`) is what forces the essay on top - 
+needs no header; a vague name (`fragile`, `worthIt`) is what forces the essay on top -
 rename first, then see what's left to say.
 
 **One name per concept** - in identifiers, comments, and messages alike. Three
@@ -89,7 +89,7 @@ synonyms for one idea ("timeout" / "deadline" / "budget") are three chances to
 misread; pick the accurate one and sweep the rest.
 
 **One mechanism, one family word.** When one mechanism surfaces as several public
-names - a verb and its variants, a flag and the helpers that set it for one call - 
+names - a verb and its variants, a flag and the helpers that set it for one call -
 one word runs through every member (`push` / `push_clone` / `push_from`). A member
 named out of a second vocabulary makes the reader hunt for a difference that isn't
 there.

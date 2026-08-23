@@ -110,7 +110,7 @@ submission funnel (paste into a prefilled GitHub issue).
 ## Fleet & catalog
 
 Boxes: M1 Max, M3 (ssh), M5 (incoming), zen2 (3990X), rented Zen 3/4, rented Intel.
-Catalog: community-popular GGUFs, one popular quant each (not the internal quant matrix) - 
+Catalog: community-popular GGUFs, one popular quant each (not the internal quant matrix) -
 Qwen3-30B-A3B (MoE), gemma-3 sizes, a Llama-3.x-8B, Qwen3-4B/8B, a small-end model; final list
 fixed at first sweep. Measurement discipline per the standing protocol: one model process at a
 time, quiesced box, batch cells into one invocation, interleave engines per cell.

@@ -49,7 +49,7 @@ It goes through `daslib/lint_config.das`, shared by all three passes:
 | a `while` condition | the `in_while_cond` flag set in `preVisitExprWhile` |
 | anything loop-scoped | `loop_depth > 0`, the `loop_variables` / `var_stack` state |
 
-3. Report with `perf_warning("PERFnnn: what it is; the fix", expr.at)`. Call it **bare** - 
+3. Report with `perf_warning("PERFnnn: what it is; the fix", expr.at)`. Call it **bare** -
    `self->perf_warning(...)` trips this tree's own STYLE028. The method covers both compile-time
    and runtime (print) modes, and dedups by location.
 4. Write `utils/lint/tests/perfNNN_<name>.das` with a bad example and a good one:
@@ -88,7 +88,7 @@ so `expr._type.baseType` is reliable.
   source struct's line with no way to act on it.
 - **Self-implementation.** When the suggested replacement is itself written in terms of the
   pattern (`empty(arr)` IS `length(arr) == 0`), gate the rule on
-  `current_function.name == "<callee>" || (fromGeneric != null && fromGeneric.name == "<callee>")` - 
+  `current_function.name == "<callee>" || (fromGeneric != null && fromGeneric.name == "<callee>")` -
   the second arm catches instantiations.
 - **Hot-path rules (PERF026-028) are annotation-gated**, so their cost is a closure walk from
   annotated roots only. Keep it that way: the five markers are registered C++-side as

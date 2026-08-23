@@ -19,11 +19,11 @@ a rescue.
 **The first rescue is a rename.** When the comment's whole payload fits in an identifier,
 the rescue is a refactor suggestion, not prose: `// index of the last fused token` on
 `idx` becomes `rename idx -> last_fused_token`; same for enumerations, structures, fields,
-functions. Prefer this over both lifeboats whenever it carries the full information - 
+functions. Prefer this over both lifeboats whenever it carries the full information -
 a name is read at every use site, a document only when someone opens it. Mark each
 suggestion public (API/doc surface moves with it) or private (free).
 
-**HARD LIMIT - documented symbols are frozen.** A symbol carrying `//!` documentation - 
+**HARD LIMIT - documented symbols are frozen.** A symbol carrying `//!` documentation -
 therefore published in the daslib reference RST (generated under `doc/source/stdlib/` in
 this repo) - canNOT be renamed: its name is API surface. Verify before suggesting (grep
 the symbol under `doc/source/`); for a frozen symbol the rescue falls back to the

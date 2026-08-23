@@ -102,7 +102,7 @@ result into SQL.** Skipping the first silently drops a `_distinct_by` dedup; ski
 second leaves LIMIT/OFFSET on the aggregate.
 
 **`q.innerSql` and `q.innerBindExprs` have exactly one producer per query.** Installing a
-wrap over an already-populated `innerSql` drops the earlier subquery and orphans its binds - 
+wrap over an already-populated `innerSql` drops the earlier subquery and orphans its binds -
 a bind/placeholder mismatch, not an error.
 
 **Every projection slot pushes one entry into each of the five index-parallel projection
@@ -127,7 +127,7 @@ a `>` that tails `|>`, `=>` or `->`.** Narrowing that exclusion lets an in-body 
 keyword that legitimately follows a generic bracket or a comparison from being found at all.
 
 **Every substituting linq_das scanner shares one token model and changes with the
-others** - 
+others** -
 `substitute_idents`, `mentions_ident`, `rewrite_group_var`: plain `"..."` content is verbatim,
 a `{...}` interpolation body is CODE (scanned and substituted), one level of nested string
 literal inside an interpolation is verbatim again, and identifier POSITION classifies the

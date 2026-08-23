@@ -180,7 +180,7 @@ everything the gate admits deletes safely, so the banner needs no
   (finalize `[newSize, oldSize)` before `__builtin_array_resize`);
   `pop` rides resize.
 - Table: `erase(key)` - find first, finalize the value, then erase (the
-  second lookup is paid only by finalizable value types); `clear` - 
+  second lookup is paid only by finalizable value types); `clear` -
   iterate values, finalize, then clear.
 - The pointer carve-out IS the design decision: for `array<T?>`,
   finalize means DELETE THE POINTEES, and `arr |> clear()` before
@@ -233,7 +233,7 @@ time. Four files:
    tuple-of-pointers shape, and `Probe?` (counter stays 0) all survive
    erase/clear while `delete` still owns. One heap-delta assert anchors
    actual release (array clear).
-   (AMENDED: heap deltas first read as broken under dastest - 
+   (AMENDED: heap deltas first read as broken under dastest -
    `delete arr[i]` moved `heap_bytes_allocated` not at all where the same
    code from the CLI freed 4096. Not a bug: **the default linear (bump)
    heap does not track individual frees**, and the CLI runs persistent

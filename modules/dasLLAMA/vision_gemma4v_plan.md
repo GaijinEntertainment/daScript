@@ -195,7 +195,7 @@ green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder
   the block loop as one command buffer (stem and tail stay CPU), three new kernels
   (`enc_clamp` reading the blob's clamp record, `enc_rope2d` on the CPU's packed tables,
   `enc_geglu_quick` in the f16-table form), each unit-gated with a negative control; the
-  tier-1 GPU gate + counters + the knob-off leg. **G0 (F demanded it)** the q8 CPU lane first - 
+  tier-1 GPU gate + counters + the knob-off leg. **G0 (F demanded it)** the q8 CPU lane first -
   the gemma4a/parakeet recipe (Q8_0 GEMM planes + per-row requant), its own tier-1 gate on a
   relative bar; **H.** the bug-fix round + docs.
 
@@ -230,7 +230,7 @@ green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder
   fixtures; the ladder was never consulted. The prediction over-weighted the rope/scale risk:
   with the helpers unit-tested against in-test references (slice B) the tower had no untested
   seam left to be wrong at.
-- P5 (decoder): once tier-1 passes, the E2B cats caption passes tier-3 on the first try - 
+- P5 (decoder): once tier-1 passes, the E2B cats caption passes tier-3 on the first try -
   the splice, span and decoder are v1's, the E2B decoder already renders the markers.
 - P6 (rail): the gemma4v dlim stages in one pass under the 1 GiB cap at ~ 0.35 GB and maps in
   0 ms; IMAGE_VERSION 10 invalidates nothing but the two vision tags.

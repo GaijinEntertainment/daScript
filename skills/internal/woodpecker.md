@@ -56,7 +56,7 @@ Findings come back P-ranked (P1 highest). Every finding is a hypothesis:
   comment nits, or CI plumbing never re-arms one.
 - **Never loop it to quiescence.** The raw finding rate never reaches zero; past the
   first round the stream turns tail-heavy and a fix loop chasing it starts minting its
-  own regressions. Judge a round's worth by how many of its findings verify real - 
+  own regressions. Judge a round's worth by how many of its findings verify real -
   never by whether the stream empties.
 - **Past the defaults, keep going only where failure is silent** - a break no user
   would report. Where failure is loud, users and CI are also detection channels;

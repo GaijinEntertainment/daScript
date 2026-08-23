@@ -51,7 +51,7 @@ retire/keep decision rather than kernel work.
 
 ## Exposure (who actually hits it)
 
-Board catalog (records/*.json exec_fmt across every box): q51 appears in EXACTLY ONE model - 
+Board catalog (records/*.json exec_fmt across every box): q51 appears in EXACTLY ONE model -
 gemma-4-26B-A4B Q4_K_M (ffn_down_exps Q5_1 on 29/30 layers). k5 only in the Qwen3.6 pair
 (covered), q40 in no published row, `f32/q8` rows are the audio towers (next arc). Wild
 models: any Q5_1-expert recipe hits the same lanes (knob-gated); Q5_0 recipes stay exact-q8
@@ -75,7 +75,7 @@ pays the same portable batch lanes (verify once, low priority).
    `q51_layout` in the x64 block. The family already emits, races, and CROWNS on x86 mints
    (zen2 sidecar carries `q51q8_gemv_gen -> mr8` that never dispatches). One registration
    diff; fixes 26B decode on zen boards and un-deadens the crown.
-3. **Day-1 mitigation (already implemented, policy-only)**: `set_kq_q51_native(false)` - 
+3. **Day-1 mitigation (already implemented, policy-only)**: `set_kq_q51_native(false)` -
    the exact q8-requant A/B rail (~1.4x expert memory, ~+2GB on the 26B) puts the 26B on
    crowned q8 tiles TODAY. Candidate default until (1) lands - per-platform call is Boris's.
 4. **Mint hygiene rule**: a [tune] family that races on a platform where no backend wires it
@@ -104,7 +104,7 @@ pays the same portable batch lanes (verify once, low priority).
   `q51q8_batch_kernel_gen` + `q51q8_batch_groupn_gen` drivers (in-driver per-32 asum planes);
   full q51 family wired on BOTH gen backends; the generator's sdot-only decline removed
   (emit_block_q51 dots ride kq_dot_lane - every lattice leg emits).
-- **v1 grid is 128-bit**: the 256-bit maddubs stamp died mid-emission ("Failed to get IR" - 
+- **v1 grid is 128-bit**: the 256-bit maddubs stamp died mid-emission ("Failed to get IR" -
   emit_block_q51 has no wide block arm; 16B loads + te.rv-lane shuffles are invalid at width
   256). Grid = arm mr4/mr8(/nrsplit) + maddubs width=128 mr4/mr8; fallback
   `dot_maddubs_width128_mr8;mr4`.
@@ -143,7 +143,7 @@ The x86 audio gap has the same anatomy as the q51 hole, in the fp32 lane:
 
 1. **Tower GEMMs ride a dot loop, not a tile.** gemma4a's projections (attn q/k/v/o, ffn
    up/down, conv pw1/pw2, inproj, RPE) all funnel via mm_blob_b/g4a_mm_clamped ->
-   `matmul_batch_core` (dasllama_math.das:547) = parallel tuned-`dot` per (row, token) - 
+   `matmul_batch_core` (dasllama_math.das:547) = parallel tuned-`dot` per (row, token) -
    weight row hoisted, but no register blocking, activations re-read d times. The tiled
    `gemm_f32_uk_4x16` [tune] ukernel EXISTS in the same file (crowned on zen2) and IS used
    by some audio call sites (canary/audio/attn_prefill) - per-site inventory owed: which
@@ -157,7 +157,7 @@ The x86 audio gap has the same anatomy as the q51 hole, in the fp32 lane:
    k=5 conv, im2col, and a hand residual loop where `add_scale_inplace` (a crowned kernel)
    exists. rmsnorm/softmax/silu DO ride tuned kernels.
 4. **The tower q8 asymmetry**: canary/whisper encoders were q8'd (canary arc) - their mms
-   ride the crowned q8 tile machinery; gemma4a and the Qwen-Omni/ASR towers stayed fp32 - 
+   ride the crowned q8 tile machinery; gemma4a and the Qwen-Omni/ASR towers stayed fp32 -
    the dot-loop lane, and the board rows that read `f32/q8`.
 5. **DECIDED (Boris 2026-08-05): force the stragglers to q8 - no fp32/bf16 weight lane,
    ever.** q8-everything is the standing loader rule; the fp32 towers predate its
@@ -200,7 +200,7 @@ The x86 audio gap has the same anatomy as the q51 hole, in the fp32 lane:
   BYTE-IDENTICAL on jfk. The stale qwen3a image roundtrip (still pinned to the f32 tag
   from before the q8 default) was rewritten on the gemma4a pattern: q8 lane element-exact
   incl. qblob/qscales + the f32 A/B tail. (b) LANDED 2026-08-05: the cblob GEMM trio
-  (cout/mm1/mm2) serves q8 from whole-cblob qcblob/qcscales planes (the core's recipe - 
+  (cout/mm1/mm2) serves q8 from whole-cblob qcblob/qcscales planes (the core's recipe -
   offsets stay valid, trio regions tw_repack'd; convs/positions/biases stay fp32);
   requant scratch is the conv state's own grow-only pair, deliberately NOT the core's
   pre-sized s.xqi (shrinking that under the encoder would be a heap overrun). Gates:
@@ -209,7 +209,7 @@ The x86 audio gap has the same anatomy as the q51 hole, in the fp32 lane:
   3.2% -> ~4%; it FELL to 2.44% (maxdiff 0.014 -> 0.0076). Unconfirmed candidates:
   yesterday's 3.2% retained residual stale-dlim corruption (today both lanes re-minted
   from scratch), or the q8 trio's integer-exact block dots vs long fp32 reduction chains
-  change the leg's noise structure. Struct layout grew (meta 17+2, two new sections) - 
+  change the leg's noise structure. Struct layout grew (meta 17+2, two new sections) -
   stale tower dlims (ASR x2 + Omni x1) deleted by hand; identity does not see code changes.
 ## Review response (PR #3629, six-agent Opus review, 2026-08-05)
 
@@ -225,7 +225,7 @@ The x86 audio gap has the same anatomy as the q51 hole, in the fp32 lane:
   rewritten at quantize (formulaic layers got a q8-branch offset formula; whisper's tied
   te keeps an fp32 copy for row lookups + a q8 copy for the logits GEMV). The STREAMED
   whisper mint got the same split (job-filtered per-plane walks + offsets-only twins);
-  the streamed-vs-staged image cell is the consistency gate between the two builders - 
+  the streamed-vs-staged image cell is the consistency gate between the two builders -
   it caught the first attempt's length mismatch exactly as designed. Measured images:
   Omni tower 3167 -> 708 MB (-78%), qwen3a tower 911 -> 212 MB (-77%), whisper tiny
   185 -> 120 MB; large-v3-turbo re-mints at next use (projected ~3954 -> ~1.2 GB).

@@ -88,7 +88,7 @@ a long-live-range destructured computation, revisit then, with that shader as th
 
 ## Backend suggestion (EdenSpark's call)
 
-A **horizontal-reduce node** `reduce(b, c, CONST) = Sum b_i*c_i*CONST_i` (a generalized dot - 
+A **horizontal-reduce node** `reduce(b, c, CONST) = Sum b_i*c_i*CONST_i` (a generalized dot -
 sum / weighted-sum / dot all fall out of it) collapses every unpack-at-a-reduction
 (voronoi's min, plasma's sum) from `W splats + (W-1) ops` to **one node**, lowering the
 break-even for packing. We suggest it; the backend is EdenSpark's.

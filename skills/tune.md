@@ -365,7 +365,7 @@ application (or `DAS_TUNE_VERBOSITY` directly):
 
 ### Progress events
 
-The display is driven by events the tuner emits as prefixed lines on stdout - 
+The display is driven by events the tuner emits as prefixed lines on stdout -
 a pipe is the only channel that spans the process chain:
 
 ```text

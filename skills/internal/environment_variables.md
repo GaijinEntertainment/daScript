@@ -1,6 +1,6 @@
 # daslang environment variables
 
-Every environment variable daslang itself reads. Module-specific knobs live with their module - 
+Every environment variable daslang itself reads. Module-specific knobs live with their module -
 dasLLAMA's ~146 are in `modules/dasLLAMA/ENVIRONMENT.md`, generated from `[EnvConfig]` struct
 declarations in `dasllama/dasllama_env.das` (daslib/clargs) - each knob is a struct field loaded
 once at context init; read sites touch `g_env_*` fields, never the environment.

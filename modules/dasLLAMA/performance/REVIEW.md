@@ -3,7 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
 
-**`../dasllama/dasllama_exchange_schema.das` is the single validator for exchange submissions - 
+**`../dasllama/dasllama_exchange_schema.das` is the single validator for exchange submissions -
 record stores and tune sidecars.** A second validator is a defect. The engine-free half (no
 `dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
 that gate is a defect.
@@ -43,7 +43,7 @@ provenance, or parity fixtures is a defect** - a new list is written as a view o
 two: it recomputes from them on every call and stores no `url`/`bytes`/`sha256` of its own.
 
 **A model file named by any file under `modules/dasLLAMA/` carries its provenance on its own
-row in `model_specs()` (`model_specs.das`) or `asr_catalog()` (`profile_common.das`) - 
+row in `model_specs()` (`model_specs.das`) or `asr_catalog()` (`profile_common.das`) -
 directly, or through one named accessor call: a function in `model_specs.das` whose body
 carries the `url` + `bytes` + `sha256` itself (one hop - an accessor forwarding to another
 accessor, or an unnamed table lookup, does not count) - or a `recipe` a reader can run.**
@@ -61,7 +61,7 @@ added to it is a defect.
 its settling evidence in the PR description: a `fetch_models.das --` run ending
 `0 pending, 0 failed` on a box that HOLDS the pins.**
 
-**A url-only re-pin - a row's `url` changed with its `bytes` and `sha256` unchanged - 
+**A url-only re-pin - a row's `url` changed with its `bytes` and `sha256` unchanged -
 records its settling evidence in the PR description: a fetch through the new url into a
 scratch dir, or a documented resolve of the pinned revision's size and content sha against
 the row's canonical values** - the verify never reads the url of a file already on disk.

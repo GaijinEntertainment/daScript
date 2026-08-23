@@ -22,7 +22,7 @@ Then the map-vs-territory checks, each with evidence:
 1. **Every line's file exists.** `ls` the folder; a line naming a missing file is stale.
 2. **Every file has a line.** List the folder's committed files (skip generated and gitignored
    ones - check `.gitignore` and generation markers); a file with no line is unmapped. Test
-   files covered by a tests-location rule, and data fixtures, may be legitimately absent - 
+   files covered by a tests-location rule, and data fixtures, may be legitimately absent -
    say so rather than flagging blindly.
 3. **Spot-check owns/never claims against the code.** For each never-claim that is greppable
    ("Zero network", "no SQL", "zero filesystem", "no HTTP"), grep the file for the obvious

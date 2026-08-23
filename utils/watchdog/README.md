@@ -26,7 +26,7 @@ That works because the watchdog resolves what to supervise in this order, first 
    guess.
 
 Both in-tree programs are discoverable, so their `watchdog.json` only pins the identity that the
-log, pid file and notifications key on (`cadmus`, `dasllama`) plus whatever discovery cannot know - 
+log, pid file and notifications key on (`cadmus`, `dasllama`) plus whatever discovery cannot know -
 that the bot has no HTTP health endpoint, for instance.
 
 From the source tree the watchdog no longer sits beside what it supervises, so pass `--cwd`:
@@ -51,7 +51,7 @@ tray-requested stop relaunches immediately with the policy the user picked (belo
 ## Startup stages
 
 A cold JIT start takes minutes (DLL cache miss, codegen, per-box tuning, model load), which used to
-look like a hang punctuated by health-check spam. The watchdog now tracks ranked, monotonic stages - 
+look like a hang punctuated by health-check spam. The watchdog now tracks ranked, monotonic stages -
 `jit_cached`, `jit_codegen`, `jit_linked`, `exchange_lookup`, `tuning`, `tune_restart`,
 `model_load`, `asr_init`, `ready` - and logs a `stage` event on each forward move, with how long
 the previous stage took.
@@ -83,7 +83,7 @@ no ETA is published and none should be synthesized from these numbers.
 
 dasllama's exchange client emits `@sidecar <kind> k=v ...` on the same contract (`lookup`,
 `none`, `offer`, `apply`, `pending_submit`, `submitted`); the watchdog folds them into
-`STATE["sidecar"]` and logs each one. Balloons announce a decision but never carry the action - 
+`STATE["sidecar"]` and logs each one. Balloons announce a decision but never carry the action -
 the tray menu and the control page do:
 
 - **Use available sidecar instead (stops tuning)** - visible while a tune is in flight AND an
@@ -124,7 +124,7 @@ program alive outranks being able to reconfigure it.
 `host.read_state()` publishes supervision state (`child_pid`, `child_started_at`,
 `child_exit_code`, `restart_delay`, `stage`, `healthy`, `serving_since`, `tune`, `sidecar`,
 `tuning_disabled`) for the plugin's status route. Transient control keys (`tune_stop`,
-`sticky_env`, `resume_tuning`) also live in `STATE` but are consumed by the supervision loop - 
+`sticky_env`, `resume_tuning`) also live in `STATE` but are consumed by the supervision loop -
 a status route should not surface them.
 
 ## Shipping it

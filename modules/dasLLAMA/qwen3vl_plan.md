@@ -24,7 +24,7 @@ Two genuinely new mechanisms, both rope-shaped:
 1. **Decoder IMROPE** (`GGML_ROPE_TYPE_IMROPE`, sections `[24,20,20,0]` from
    `qwen3vlmoe.rope.dimension_sections`, interleaved t,t,y,x in NEOX ordering): image rows
    rope with per-row int positions (t=pos_0, x=pos_0+i%nx, y=pos_0+i/nx, z unused); text rows
-   use equal positions in every section, which collapses IMROPE to the standard NEOX rope - 
+   use equal positions in every section, which collapses IMROPE to the standard NEOX rope -
    this is why today's text/audio serving is already correct, and why the text-only
    bit-match regression is writable BEFORE any new code.
 2. **Vision-mrope in the ViT** (`GGML_ROPE_TYPE_VISION`, sections d_head/4 = 18x4,
@@ -82,12 +82,12 @@ arc - fnv1a64 pixel dumps, per-token embedding lines, all reusable unchanged).
 - **Template markers**: `<|vision_start|>` (151652) / `<|vision_end|>` (151653) around the
   soft-token span, `<|image_pad|>` = 151655 (mtmd.cpp:461); NO suppress-token list (unlike
   gemma); stream shape pinned from the tier-2 log.
-- **Preproc** (slice-A oracle-verified 2026-08-22): `calc_size_preserved_ratio` 4-arg - 
+- **Preproc** (slice-A oracle-verified 2026-08-22): `calc_size_preserved_ratio` 4-arg -
   round each side to the nearest multiple of align = patchxmerge = 32 with round-half-AWAY
   (528->544, the discriminating case), beta-scale into the [8, 4096]-token budget (x32^2 px;
   4000x3000 -> 2336x1760) - then the SAME PAD_CEIL letterbox as gemma (content scale =
   min ratio, centered, BLACK pad). The plan's first read of `dyn_size` as "stretch, no
-  letterbox" was WRONG: PAD_CEIL is the clip-model.h DEFAULT and qwen never overrides it - 
+  letterbox" was WRONG: PAD_CEIL is the clip-model.h DEFAULT and qwen never overrides it -
   verified by the white4000x3000 probes (corners -1, mean (1752-8)/1760 = 0.990909).
   Normalize = (x-0.5)/0.5, and the oracle preproc dumps are POST-normalize f32, so tier-0
   gates compare normalized buffers (gemma's identity normalize hid this distinction). das
@@ -113,7 +113,7 @@ noise demands them).
 
 ## Slices (commit ladder, single PR; each lands its REVIEW.md entries with it)
 
-- **A. Oracle rig (DONE 2026-08-22)**: `~/Work/llama.cpp/models/qwen3vl-vision-oracle/` - 
+- **A. Oracle rig (DONE 2026-08-22)**: `~/Work/llama.cpp/models/qwen3vl-vision-oracle/` -
   `mint.sh` + 17 dumps (10 preproc, 7 encode vs the f32-widened twin) + `cli.cats.log`;
   the gemma dasdebug patch worked unchanged. Facts pinned:
   - Geometry oracle-verified: 640->640, 100->96, 650x487->640x480, 528->544 (round-half-AWAY,
@@ -138,7 +138,7 @@ noise demands them).
     "fused Gated Delta Net enabled" line in the log is a vacuous capability print).
   - Deepstack carrier verified (4B mmproj): mergers at layers 5/11/17, 24-block 1024-wide
     ViT, projection 2560, flags AGREE with tensors on dense files.
-  Note for regeneration: never edit mint.sh while it is running (bash re-reads by offset - 
+  Note for regeneration: never edit mint.sh while it is running (bash re-reads by offset -
   this bit once).
 - **B. IMROPE table builder (DONE 2026-08-22)**: das rope is TABLE-based (angle generation
   single-sourced in `dasllama_rope`, application kernels read cos/sin rows), so IMROPE is one
@@ -150,7 +150,7 @@ noise demands them).
   reference including the tail quirk (61/62 -> e, unrotated at e=0), and an h-only
   perturbation moves exactly the h dims. Negative control run: a poisoned axis walk reds
   both gates.
-- **C. Preproc (DONE 2026-08-22)**: `vision_normalize` gained mean/std defaults (0/1 - 
+- **C. Preproc (DONE 2026-08-22)**: `vision_normalize` gained mean/std defaults (0/1 -
   gemma bit-identical by IEEE; qwen passes 0.5/0.5 in clip's own `(x/255 - mean)/std` order);
   geometry and letterbox needed NO code - only constants (align 32, budget 8-4096).
   `test_vision.das`: qwen geometry table (incl. 528->544 and the 2336x1760 clamp), the
@@ -159,7 +159,7 @@ noise demands them).
   a poisoned std reds all ten.
 - **D. Tower (DONE 2026-08-22)**: `dasllama_qwen3v.das` - image-rail load (per-tensor
   bf16/f32 planes; W_0+W_1 conv fold at stage; deepstack refused by TENSOR scan), merge
-  reorder, the antialiased pos-embed resize (`interpolate_grid_bilinear_aa` in tower - 
+  reorder, the antialiased pos-embed resize (`interpolate_grid_bilinear_aa` in tower -
   verified BIT-identical to a NumPy port of ggml's loop on the real table), 27 blocks
   (fused-qkv, vision-mrope via `build_rope_tabs_vision` + full-head NEOX apply, scaled
   bidir attention, GELU-tanh-LUT FFN), 2x2 merger. Tier-1 (`test_qwen3v.das`): all seven
@@ -175,7 +175,7 @@ noise demands them).
   discovery - oracle-side, as predicted by the gemma pattern.
 - **E1. The decoder mrope rail (DONE 2026-08-22)**: `Config.rope_sections` (loader-read from
   `{arch}.rope.dimension_sections`, validated 2xsum == rotary span), Session
-  `rope_pos_delta` (+ at EVERY rope-angle site - table and classic, decode and prefill - 
+  `rope_pos_delta` (+ at EVERY rope-angle site - table and classic, decode and prefill -
   never at KV indexing) and the transient per-quantum `mrope_pos` int4 map
   (`mrope_span_positions` in dasllama_rope, the mtmd walk verbatim, model-free-tested);
   `eval_embd_span_mrope_` rides the uniform-span rail fused AND spliced (per-slice map
@@ -200,7 +200,7 @@ noise demands them).
   gemma leg unregressed; the Omni's greedy caption correctly describes the cats fixture.
   `test_omni_showcase`: ONE session - an image turn, then a text turn whose answer needs the
   image turn's history across the mrope delta. The three-modality form is BLOCKED on a
-  standing gap the test surfaced: audio-in-chat rides the whisper-class `AudioTower` only - 
+  standing gap the test surfaced: audio-in-chat rides the whisper-class `AudioTower` only -
   the qwen3a conformer has no chat splice (`followup_general.md` #41; prediction 6 scores
   WRONG on its premise - `add_user_audio_` existed but never served this family).
 - **F. Server (DONE 2026-08-22)**: `PendingReq`/`Stream` gained `media_grid : int2` ((0,0) =
@@ -275,7 +275,7 @@ noise demands them).
   test_qwen3v 4B tier-1 4/4, test_vision_chat_deepstack (small tier: wide rows through the
   chat, caption names the cats, delta 20-300, and the zeroed-slices decoder control moves
   prefill logits 10.4). The 8B record carrier smoked end-to-end via `ask --image` ("Two
-  cats.", 321-token prompt). The Config field add shifts every Model dlim's meta layout - 
+  cats.", 321-token prompt). The Config field add shifts every Model dlim's meta layout -
   the v11 fingerprint auto-refuses and re-mints (observed on the 8B/4B first loads).
 - **I. qwen2.5o (DONE 2026-08-22)**: `dasllama_qwen25v.das` - the window-attention ViT (32
   RMS-normed blocks, separate biased q/k/v, gated-silu FFN whose hidden comes from the
@@ -333,7 +333,7 @@ noise demands them).
   pipeline (the generated dir is gitignored - the source edits are the deliverable). No new
   env knobs (ENVIRONMENT untouched). Predictions 1-8 all scored in place. PERF_LEDGER
   entries ride slice J's numbers. The sec.04 vision NUMBERS on that page turned out to be the
-  real staleness (the 3815 re-mint updated records/ but not the committed site merge) - 
+  real staleness (the 3815 re-mint updated records/ but not the committed site merge) -
   FIXED + GATED 2026-08-22: `gen_site_records --verify` and `test_site_records.das`
   (model-free suite) red any records commit that skips the site merge, and the live-page
   refresh rides `bbatkin/site-image-records-refresh` off master. Slice J's qwen image
@@ -345,7 +345,7 @@ noise demands them).
   into slice-major contiguous planes, uploads once, and each layer l < n_ds encodes one more
   `enc_add` at the slice offset after the layer-out residual; capability seat
   `register_prefill_override_ds_adds` (metal registers, others decline by name); the
-  CPU-prefill tripwire's ds exemption removed (+ its cell). Gate: prefill arm `span-ds` - 
+  CPU-prefill tripwire's ds exemption removed (+ its cell). Gate: prefill arm `span-ds` -
   ONE GPU prefill + token parity + the add-CONTRIBUTION witness (lg(tails)-lg(zero) per
   backend: the skipped-add mutation reds it at contribution 0 where greedy tokens TIE on
   the counting fixture; clean dd = 10-13% of the 3.6 contribution, bar 0.5x).
@@ -374,7 +374,7 @@ noise demands them).
    qwen3vlmoe interleave-flag miss) - none was tower or mask. What made it cheap instead of
    a sink was the E1 law "delta at every rope-angle site, never KV" turning each gap into a
    grep, plus mutation-controlled gates.
-5. CPU encode of a ~300-token still on the M1 lands 0.5-2 s bf16 (27 blocks, 543 M params - 
+5. CPU encode of a ~300-token still on the M1 lands 0.5-2 s bf16 (27 blocks, 543 M params -
    between gemma4uv's 54 ms linear and a whisper-large encode).
    **SCORED: WRONG on the high side of usage.** The tier-1 448^2 encode (196 tok) runs ~3 s
    and the server's off-thread 300-token cats encode measured 42 s on the SINGLE-threaded
@@ -400,7 +400,7 @@ noise demands them).
    **SCORED: CORRECT on cost and on the mask** - tier-1 went 5/5 green on the first run,
    windows included. The surprise was NOT preproc (align-28 geometry passed via the shared
    code) but the ORACLE'S FIXTURES: every stock debug image is window-symmetric, so an
-   all-full-attention poison passed tier-1 untouched until the `quad` generator landed - 
+   all-full-attention poison passed tier-1 untouched until the `quad` generator landed -
    the prediction named the right neighborhood (reference-side arithmetic) and the wrong
    organ (fixtures, not preproc). Honorable mention: the vocab spells the span markers
    `<|vision_bos|>`/`<|vision_eos|>`, which no prediction saw coming.
@@ -412,7 +412,7 @@ Context the predictions price in: the Metal tower serves gemma3v/gemma4v ONLY - 
 tower encodes on the CPU even on the das Metal leg (slice J's deferred Metal-tower work),
 while mtmd offloads the mmproj to Metal unless told not to.
 
-9.  **Qwen3VL-4B** (dense q8 decoder + ~430 M qwen3v tower): decoder cells land gemma-shaped - 
+9.  **Qwen3VL-4B** (dense q8 decoder + ~430 M qwen3v tower): decoder cells land gemma-shaped -
     Metal tg das LEADS 10-25%, Metal pp within +/-10%, CPU pp das leads 15-40%. img:enc is the
     known loser: das enc (CPU tower both legs) 3-8 s vs mtmd Metal enc <= 0.4 s (>= 10x
     against das); on the CPU pair (mtmd pinned --no-mmproj-offload) das enc is within 2x

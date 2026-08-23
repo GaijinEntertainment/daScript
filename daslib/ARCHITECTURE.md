@@ -1,7 +1,7 @@
 # daslib architecture notes
 
 Design rationale a maintainer cannot recover from the code alone. One section per
-module; entries are anchored to symbols. Grown by the comment-sweep rescue passes - 
+module; entries are anchored to symbols. Grown by the comment-sweep rescue passes -
 an entry lands here only when no name, shape, or test can carry it.
 
 ## perf_lint
@@ -15,8 +15,8 @@ an entry lands here only when no name, shape, or test can carry it.
   the loop depth at each inline-block entry because a `return` there unwinds only to that
   depth: loops at or below it keep re-invoking the block, so only barrier 0 proves the
   body runs once.
-- **Closure-guard placement is load-bearing, per rule.** Four idioms coexist - 
-  `in_closure > 0` early return, `in_closure == 0` gate, `in_deferred == 0` gate, no guard - 
+- **Closure-guard placement is load-bearing, per rule.** Four idioms coexist -
+  `in_closure > 0` early return, `in_closure == 0` gate, `in_deferred == 0` gate, no guard -
   and the guard's POSITION inside a visitor method encodes which rules are meaningful
   inside a lambda. PERF001 deliberately has no guard: `loop_depth` never advances inside
   closures, so its loop check is already scoped; syntactic rules (PERF003, PERF021) fire
@@ -36,7 +36,7 @@ an entry lands here only when no name, shape, or test can carry it.
   two flat arrays; `sinks_span_by_fn` doubles as the presence key and the two tables are
   strictly co-populated (one insert site each, adjacent). The visited set keys on
   (callee hash, `nearest_root_file_site` pointer): reaching one callee from two root-file
-  call sites must report twice, so a function is re-walked once per distinct anchor - 
+  call sites must report twice, so a function is re-walked once per distinct anchor -
   a cost taken for per-call-site diagnostics. Generated/generic frames re-anchor to the
   caller side because their own `at` points into the template. A call to any function
   with a `@scratch` parameter prunes that callee's whole subtree from the walk - the
@@ -61,7 +61,7 @@ an entry lands here only when no name, shape, or test can carry it.
   protect there; the default protects rules that collapse duplicated subexpressions from
   changing evaluation counts.
 - **`report_key` bit layout**: line in the low 20 bits, column shifted above it, XOR'd with
-  the FNV-64-prime-mixed `fileInfo` pointer and the rule-code hash. Lines past 2^20 alias - 
+  the FNV-64-prime-mixed `fileInfo` pointer and the rule-code hash. Lines past 2^20 alias -
   accepted; a collision silently drops one warning.
 - **`parse_range_leg` operator polarity**: `upper_op` is the var-on-left operator marking
   the upper-bound leg (`<=` closed-in-range, `>` open-out-of-range), `lower_op` the lower
@@ -84,7 +84,7 @@ an entry lands here only when no name, shape, or test can carry it.
   module in the require chain, so an uncached read re-parses the repo file N times per
   compilation; the file is repo policy and cannot change mid-compilation, so
   `ensure_cache_loaded` splits it once into off/on/path-exclude caches.
-- **`LINT019` in a line's nolint list exempts the WHOLE line from stale-checking** - 
+- **`LINT019` in a line's nolint list exempts the WHOLE line from stale-checking** -
   chosen tradeoff: the in-tree escape hatch is `nolint:PERF006,LINT019` on lines whose
   code fires only in downstream compiles; per-code vouching would need new syntax.
 
@@ -184,7 +184,7 @@ an entry lands here only when no name, shape, or test can carry it.
   rule in the other regime.
 - **`expr.canShadow` on a for-variable exempts it from LINT002/003/004** - the flag marks
   macro-generated loops, and lint does not judge names the user never spelled.
-- **The `expect` probe scans the whole file while `lint-skip-file` is header-capped** - 
+- **The `expect` probe scans the whole file while `lint-skip-file` is header-capped** -
   an `expect` directive anywhere makes the file a compile-error fixture (its position is
   semantic to dastest), whereas `lint-skip-file` deeper than the header would let quoted
   prose unlint a file.
@@ -216,7 +216,7 @@ an entry lands here only when no name, shape, or test can carry it.
   `include/daScript/simulate/aot.h` and move with the emitter's `__lr.left`/`__lr.right`
   spellings.
 - **Stack-frame `new`/ascend**: per-block storage declared once, the USE site
-  re-initializes per evaluation (memset for `new`, whole-value overwrite for ascend) - 
+  re-initializes per evaluation (memset for `new`, whole-value overwrite for ascend) -
   dropping the reinit reuses the previous iteration's value.
 - **fp16 and the 8/16-bit lattice ride the vec4f policy ABI**: `SimPolicy_HalfVec` is
   vec4f-shaped even at width 1, so scalar fp16 always casts across the policy boundary,
@@ -245,7 +245,7 @@ an entry lands here only when no name, shape, or test can carry it.
 - **`__flat_ret` carries `safeWhenUninitialized` only while every write is a
   self-referential select** - a lowering change that makes the bare-decl read observable
   turns the flag into a real uninitialized read.
-- **CSE is local value numbering over one converged basic block, and it is complete** - 
+- **CSE is local value numbering over one converged basic block, and it is complete** -
   pure subtrees keyed by `describe()`; value-stability = reads no reassigned name; a store
   through index/field/swizzle destabilizes its base; an unrecognized node fails closed as
   mutable-reading. Uniform duplicates route to the preshader.
@@ -298,7 +298,7 @@ an entry lands here only when no name, shape, or test can carry it.
   every `visitExprXXX`, so a derived visit that erased again would erase nothing - a
   derived visit returns its node and leaves the path alone.
 - **The two passes' skip sets are complementary**: pre-infer skips `generated` (filled in
-  across passes); post-infer skips only `[template]` bodies and dasbind `[extern]` stubs - 
+  across passes); post-infer skips only `[template]` bodies and dasbind `[extern]` stubs -
   so generated bodies ARE checked post-infer, by nothing else.
 - **Each check's licensing C++ site** (the checklist requires one per check; record new ones
   here): `ExprOp1.subexpr` - `SimulateVisitor::visit(ExprOp1*)` dereferences;
@@ -328,7 +328,7 @@ an entry lands here only when no name, shape, or test can carry it.
   the delete. Pick one form per local and read the declaration before adding a delete.
 - **`apply_template` returns a possibly-NEW root.** `apply_template(rules, at, expr,
   forceAt)` takes `expr` by value, and the block-form overloads take `Expression?&` only to
-  forward it - none writes the new root back. A substitution that replaces the ROOT node - 
+  forward it - none writes the new root back. A substitution that replaces the ROOT node -
   an identity key body, `_order_by(_)` - is visible only through the return value; non-root
   replacements leave the pointer unchanged. Always reassign from the return value, or the
   identity case silently keeps the unsubstituted node.
@@ -538,7 +538,7 @@ an entry lands here only when no name, shape, or test can carry it.
 - **archive**: `MemSerializer.write` grows capacity eagerly because under a
   very_safe_context each doubling generation is abandoned, not reused; no alias into
   `data` survives a write.
-- **json**: `is_json_white_space` is deliberately not the shared `is_white_space` - 
+- **json**: `is_json_white_space` is deliberately not the shared `is_white_space` -
   RFC 8259 admits exactly space/tab/CR/LF.
 - **jsonrpc**: parsing a request is a SCOPE, not a value. `ParsedRequest.params` is a
   borrowed view into the parse tree, so the tree has to outlive the handler and cannot
@@ -558,7 +558,7 @@ an entry lands here only when no name, shape, or test can carry it.
   a "duplicate" silently re-routes conversions.
 - **fio**: the glob matcher follows POSIX fnmatch on degenerate patterns (unterminated
   `[`, `]` as first class member, `**/` slash rules) - conformance, not quirks.
-- **decs**: component finalizers are lambdas over the component's own untyped storage - 
+- **decs**: component finalizers are lambdas over the component's own untyped storage -
   deleting the lambda IS the finalization event; capacity checks compare the highest
   allocated value (`base + count - 1`), not the exclusive end.
 - **builtin**: `_table_index_and_init` exists for infer's `default_init_containers`

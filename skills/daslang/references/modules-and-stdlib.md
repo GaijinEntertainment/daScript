@@ -169,7 +169,7 @@ Diagnostic dumps (`log`, `log_infer_passes`, `log_compile_time`, ...) are all bo
 ## Built-in modules
 
 `builtin` is always in scope with no `require`: `print`, `assert`/`verify`, `panic`, `invoke`,
-`clone`, all container operations, `length`/`empty` on strings, and `to_log(LOG_INFO, msg)` - 
+`clone`, all container operations, `length`/`empty` on strings, and `to_log(LOG_INFO, msg)` -
 level-tagged output (`LOG_WARNING`, `LOG_ERROR`, ...) a host can filter, unlike `print`. Everything
 else is a require.
 

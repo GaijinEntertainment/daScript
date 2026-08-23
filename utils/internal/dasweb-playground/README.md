@@ -29,7 +29,7 @@ The checked-in toml holds development values, because it is discovered automatic
 module. The deployed values on `dasweb-1` are `db = "/srv/dasweb-playground/samples.db"`,
 `base_url = "https://daslang.io"`,
 `curated_dir = "/srv/daslang.io/current/playground/samples"`,
-`blobs_dir = "/srv/dasweb-playground/blobs"`, and a real `build_token` (toml-only there - 
+`blobs_dir = "/srv/dasweb-playground/blobs"`, and a real `build_token` (toml-only there -
 a CLI flag would put the secret in the process list); that file and `watchdog.json` are
 operator-owned - shipped only when absent, and carried across upgrades by `deploy.sh`.
 
@@ -106,7 +106,7 @@ never served. `caddy.snippet` carries the 64MB transport cap for `/api/build/*` 
 A build's **mode** is decided here at request time by scanning the stored source's requires
 (`detect_build_mode` in `build_queue.das`): a native graphics/audio namespace (glfw, opengl,
 audio, ...) makes it a `page` build - a standalone `sample.{html,js,wasm}` emscripten page,
-because GL and audio live in emscripten's JS glue that a bare wasi module cannot carry - 
+because GL and audio live in emscripten's JS glue that a bare wasi module cannot carry -
 everything else stays a `module` build (one `sample.wasm` the playground runtime
 instantiates). Status responses carry `kind` so the playground knows how to run the result.
 

@@ -15,7 +15,7 @@ much for the agent as for the human).
 3. New Session launcher must be a MODAL DIALOG, not dockable; while
    any dialog is up the rest of the UI is disabled and dimmed (darker
    background), standard modal behavior. (Reverses the dockable call.)
-4. Agent session launch: (a) terminal colors wrong; (b) env leak - 
+4. Agent session launch: (a) terminal colors wrong; (b) env leak -
    child Claude Code inherits CLAUDE_CODE_CHILD_SESSION -> transcript
    saving off -> Relaunch/`--continue` broken.
 5. Launch button doesn't close the launcher.
@@ -25,11 +25,11 @@ much for the agent as for the human).
    is 0 - no retained scrollback data either; data + UI fix.)
 9. Git surfaces don't aim at the attached session's worktree
    ("select a worktree" despite known origin).
-10. Mixed path separators in herd records (`D:/...\.codex/...`) - 
+10. Mixed path separators in herd records (`D:/...\.codex/...`) -
     string identity matches (aim, conflicts, joins) silently fail.
     Investigated live: agent work was in the right worktree all along;
     surfaces were aimed elsewhere + PR tab counts commits only.
-11. Launcher: chose an EXISTING worktree, a new one was created - 
+11. Launcher: chose an EXISTING worktree, a new one was created -
     "Create a dedicated worktree" default-on makes "Start from" mean
     "base for new", not "run here". Semantics must be explicit.
 12. Ctrl+wheel zoom is global; should zoom the view under the cursor.
@@ -55,7 +55,7 @@ much for the agent as for the human).
     editable keyboard shortcuts first.
 24. Settings stays a dock tab; zoom is PER WINDOW and persisted;
     settings write-through on every change.
-25. Multiple terminals (or instant switching with preserved state) - 
+25. Multiple terminals (or instant switching with preserved state) -
     scenario 1 is several agents at once.
 26. "Agent needs me": surface blocked-at-prompt / waiting-for-input on
     cards, not just explicit Attention.
@@ -103,7 +103,7 @@ P0 - broken core flows:
   (utils/internal/das-herd/mcp_main.das - whoami/inbox/outbox/bundle/repository
   tools over the watcher HTTP API, wired into .mcp.json by the
   supervisor's emit-config; CLI stays as human/fallback). Env scrub +
-  transcript persistence landed earlier with 4b. Codex rides MCP - 
+  transcript persistence landed earlier with 4b. Codex rides MCP -
   no AGENTS.md shadow (tracked-file checkout collision).
 - 4a terminal colors (blocked on 30b tooling)
 
@@ -116,7 +116,7 @@ P1 - tooling bugs by the parity rule (agent-blindness is a defect):
   input MERGE unless set_user_control(false) explicitly detaches the
   GLFW callbacks - nothing in dasHerd manages that today, and OS
   window chrome is never suppressible from ImGui anyway). Fix shape:
-  an explicit UI input lease mirroring the terminal controller lease - 
+  an explicit UI input lease mirroring the terminal controller lease -
   agent driving detaches real input + shows a visible "agent driving"
   banner with a human takeover gesture; semantic rails (Wave 0)
   sidestep the race entirely and stay the preferred path.
@@ -154,7 +154,7 @@ build order within what remains.
 
 Findings while landing Wave 0:
 - 32. Sessions-list loop crash (FIXED): bare `same_line()` inside the
-  per-session row loop - single-global widget renders once per frame - 
+  per-session row loop - single-global widget renders once per frame -
   crashed update() the first time TWO interactive sessions were
   visible at once. Latent since the state-glyph slice; the multi-agent
   scenario would have hit it immediately.
@@ -287,7 +287,7 @@ detaches the GLFW layer imgui_click itself injects through - use the
 imgui_mouse_* bypass commands while input is detached.
 
 39. (Boris, end of round) Opening a portal (nested-repo) file from the
-    Project view in sticky Diff mode shows a SILENT EMPTY inspector - 
+    Project view in sticky Diff mode shows a SILENT EMPTY inspector -
     reads as stuck. Forensics (live, while stuck): the app was fine
     (frames advancing); diff_row_count/old/new byte counts all 0 with
     prepare_outcome "ready", status "" - the parent repo's git cannot
@@ -384,7 +384,7 @@ imgui_mouse_* bypass commands while input is detached.
   lazily lists the FILESYSTEM (skipping .git), children recurse as
   portals, hidden tier applies, only the portal root carries the tag,
   and children sort with the active mode. Verified live: dasVulkan in
-  MAIN expands to .github/_build/cmake/daslib/doc/examples/generator - 
+  MAIN expands to .github/_build/cmake/daslib/doc/examples/generator -
   contents no git listing can see. LIMITATION: a GITIGNORED nested
   repo (modules/dasImgui inside worktrees, .gitignore:108) produces
   no status entry at all, so no portal root exists - discovery for
@@ -637,7 +637,7 @@ whole arc merged), BEFORE Boris's play session - filed, not fixed.
   zoom (90% -> 19 text lines in an 790px band; 180% -> 8 lines, inked
   rows 202 -> 483) and matches chrome size at the same setting.
   SIBLING, still open: rich_git_ui.das:864 lane_spacing sizes the commit
-  graph from the base zoom inside window_zoom_scope("git-activity") - 
+  graph from the base zoom inside window_zoom_scope("git-activity") -
   same miss, drawn geometry rather than text.
 - 55b: (Boris, same session) the first fix was still wrong in MODEL: it made
   Ctrl+wheel scale the whole inspector WINDOW, chrome included. "nop. only
@@ -673,7 +673,7 @@ whole arc merged), BEFORE Boris's play session - filed, not fixed.
   in the block below.
 - 61: (Boris, live) SWITCHING TO A BIG FILE TOOK 21 SECONDS. Clicking
   codex.cmd then utils/gen1-to-gen2/ds_parser.cpp: "it takes forever to
-  switch." Measured on the perf rail, which answered it outright - 
+  switch." Measured on the perf rail, which answered it outright -
   `inspect_ready prep_ms=21662` and `21029` for ds_parser.cpp against
   `prep_ms=0` for codex.cmd. The inspector state named the cause:
   `view_syntax_span_count 148590` on a 716,680-byte file that git reports
@@ -687,7 +687,7 @@ whole arc merged), BEFORE Boris's play session - filed, not fixed.
   prep 21029 ms -> 327 ms, ready 24788 ms -> 617 ms, view text still fully
   present at 737,857 characters. Every hand-written source file in the tree is
   well under the cap and still highlights.
-- 58/60 FIXED 2026-07-27 (not yet proven live). 58: the facts exist now - 
+- 58/60 FIXED 2026-07-27 (not yet proven live). 58: the facts exist now -
   `upstream_ref` off the status branch line, `unmerged_*` against
   origin/master with an origin/main retry and an honest "unknown", and a
   `repository_worktree_delete_tier` verdict on the row, in its tooltip, in
@@ -705,7 +705,7 @@ whole arc merged), BEFORE Boris's play session - filed, not fixed.
   Boris set the same day: "if u ever hear 'delete' from me - slap me.
   boris never delets. boris may forget to save, but stories stay."
   Today (herd_sessions.das:492) it does `g_herd |> erase(index)` and
-  saves, so the session vanishes from the registry while its artifacts - 
+  saves, so the session vanishes from the registry while its artifacts -
   events.jsonl, mailbox.jsonl, bundles.jsonl, the ptyhost journal and
   host log - stay on disk ORPHANED: still written, no longer reachable
   through the app. That is the worst of both. Fix: retiring a session

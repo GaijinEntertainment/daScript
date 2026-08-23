@@ -28,7 +28,7 @@ require daslib/regex_boost
 | Pad, repeat, reverse, join | `pad_left(s, w, ' ')` / `pad_right`, `repeat(unit, n)`, `reverse(s)`, `join(items, ", ")` *(all boost except `repeat` / `reverse`)* |
 | Edit distance | `levenshtein_distance(a, b)`, or `levenshtein_distance_fast` for short strings |
 
-`replace_multiple(s, [(text="a", replacement="b"), (text="b", replacement="a")])` swaps a and b - 
+`replace_multiple(s, [(text="a", replacement="b"), (text="b", replacement="a")])` swaps a and b -
 replacements never see each other's output. `join(items, ", ") $(var w, elem) { ... }` is the
 custom-formatter form.
 

@@ -138,7 +138,7 @@ Suppress it per file with `options _no_linq_perf_warn = true`.
 
 One style per transformation. A comprehension is complete: don't drop `_select` / `_where` / `_fold`
 onto its result, don't feed it into a sequence-consuming primitive (LINQ `join` / `concat` / `zip` /
-`aggregate`, or string `join(arr, sep)`) - the moment one appears, the upstream should be LINQ too - 
+`aggregate`, or string `join(arr, sep)`) - the moment one appears, the upstream should be LINQ too -
 and don't drop a comprehension mid-chain.
 
 ```das

@@ -1,7 +1,7 @@
 # lineinfo-audit
 
 Validates AST `LineInfo` against actual source bytes across a corpus of `.das`
-files. Exists to keep ranges trustworthy for tooling that splices source text - 
+files. Exists to keep ranges trustworthy for tooling that splices source text -
 lint auto-fix, extract-method/refactoring in the VSCode plugin, LSP features.
 
 ```

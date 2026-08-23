@@ -221,7 +221,7 @@ lives in `modules/dasMetal/MASTERPLAN.md` under the same heading.
 **Done this session:**
 - `spirv_headers/` vendored: core 1.6 rev4 (871 instructions) + GLSL.std.450 v100 rev2 (81),
   from Vulkan SDK 1.4.350.0.
-- `generator/gen_spirv_grammar.das` -> `spirv/spirv_grammar.das`: typed `enum : uint` - 
+- `generator/gen_spirv_grammar.das` -> `spirv/spirv_grammar.das`: typed `enum : uint` -
   `SpvOp` (871) + `SPV_OP_NAMES` table (871, for the disassembler) + 57 operand enums
   (`SpvStorageClass`/`SpvDecoration`/`SpvBuiltIn`/`SpvCapability`/... = 1077 enumerants) +
   `GLSLstd450` (81). Compiles + loads clean. **Correction:** an earlier pass used `let`
@@ -246,7 +246,7 @@ lives in `modules/dasMetal/MASTERPLAN.md` under the same heading.
 Uniform/`BufferBlock`, and it omits glslang's redundant legacy `gl_WorkGroupSize` composite.
 Pure-daslang emission of valid Vulkan SPIR-V is proven. No `GC APP LEAK`.
 
-**Byte-match correction (plan amendment):** byte-matching glslang's `.spv` is infeasible - 
+**Byte-match correction (plan amendment):** byte-matching glslang's `.spv` is infeasible -
 glslang stamps a different generator-magic word, SPIR-V version, and id-numbering, and adds
 debug `OpName`/`OpSource`. The honest Phase-0 oracle is **spirv-val clean + structural
 disassembly equivalence + (Phase 1) GPU `out[i]==i*i`**, plus a byte-snapshot of *our own*
@@ -440,7 +440,7 @@ runs (exit 0) with `VULKAN_SDK` set. Registered in `tests/aot/CMakeLists.txt` (5
    gate ran against a binary lacking the spirv module -> false `spirv/* file not found`. Run preflight
    with `DASLANG` set inline to the worktree's `bin/Release/daslang.exe`.
 
-**NEXT:** dasVulkan `run_compute_spirv` GPU gate (`out[i]==i*i` on local real GPU + lavapipe CI) - 
+**NEXT:** dasVulkan `run_compute_spirv` GPU gate (`out[i]==i*i` on local real GPU + lavapipe CI) -
 the cross-repo Phase-1 piece. Then Phase 2 (control flow + arithmetic). Dev binary: the worktree's
 LLVM-enabled `bin/Release/daslang.exe`.
 
@@ -586,7 +586,7 @@ vertex/fragment structure, lint + format clean.
 - **Tests:** `tests/spirv/test_raster.das` - vertex passthrough (`@in`/`@out` + Location, `gl_Position`,
   `float4(vec2, s, s)`), fragment passthrough (`OriginUpperLeft`, `float4(vec3, s)`), vertex
   builtins (`gl_VertexIndex`/`gl_InstanceIndex`), fragment math (`gl_FragCoord` + dot/sqrt/clamp). The
-  EntryPoint execution model is asserted via a new `op_first_operand` helper in `spirv_dis` (positional - 
+  EntryPoint execution model is asserted via a new `op_first_operand` helper in `spirv_dis` (positional -
   `op_has_operand` is unreliable because `Vertex == 0` collides with the name's NUL word). Census gate
   extended to `phase3_emitter_opcodes` = Phase-2 set + `CompositeConstruct`/`Dot`/`ExtInstImport`/
   `ExtInst`, unioned over the four new fixtures.
@@ -724,7 +724,7 @@ MVP vertex shader, lint + format clean.
   to `phase4b_emitter_opcodes` (= 4a set + TypeMatrix/MatrixTimesMatrix/MatrixTimesVector/VectorTimesScalar/
   VectorShuffle/CompositeExtract), unioned over the `mvp_vert` fixture.
 
-**Finding:** `float4 * float` (vectorxscalar) and `M * v` both arrive as **`ExprOp2`** (not `ExprCall`) - 
+**Finding:** `float4 * float` (vectorxscalar) and `M * v` both arrive as **`ExprOp2`** (not `ExprCall`) -
 `ExprOp2 : ExprOp : ExprCallFunc`, so the operator resolves to a `.func` but the node stays `ExprOp2` with
 `.left`/`.right`. So matrix/vector `*` is intercepted in the emitter's existing `ExprOp2` path, before the
 scalar-class `binop_code` (which returns ok=false on the `tHandle`/mismatched-shape operands).
@@ -851,7 +851,7 @@ today but carries a standing liability: when the AST gains a new `Expression`/`S
 `Visitor` interface gains a method/`canVisit*` gate, every Visitor-based backend gets a compile error or an
 unhandled-gate that *forces* the author of the AST change to deal with it - **except dasSpirv**, which
 silently walks past the new node and emits wrong (or no) SPIR-V. That breaks the codegen-fail-closed
-principle and means dasSpirv needs a *separate* manual refactor on someone else's unrelated AST change - 
+principle and means dasSpirv needs a *separate* manual refactor on someone else's unrelated AST change -
 discovered at the worst possible time. The port makes dasSpirv participate in the same fail-closed contract
 as every other emitter.
 
@@ -862,7 +862,7 @@ result side-map populated post-order: `visit()` reads children's already-compute
 `llvm_jit.das` is a near-exact template (same IR shape, same value-threading, same basic-block emission for
 control flow) - model `SpirvEmit` on it rather than inventing.
 
-**The one genuine ergonomic cost to get right.** The clean value/pointer duality (`emit_ptr` for lvalues - 
+**The one genuine ergonomic cost to get right.** The clean value/pointer duality (`emit_ptr` for lvalues -
 store targets, OpAccessChain bases) becomes parent-driven in a Visitor: lvalue-ness is learned from the
 parent (an assignment computes LHS-as-pointer, RHS-as-value) or a "want pointer" flag, not a dedicated
 function. llvm_jit lives with exactly this for GEP-on-store; it's where a naive port would regress, so it's
@@ -1149,7 +1149,7 @@ of `run_compute_spirv`) + `assert_pixels_exact` (full-frame exact compare, first
    (Six goldens churn on every `_gen_golden` run and must be reverted each slice.)
 2. **Two real lowering gaps surfaced (out of Phase-7 scope, deferred):** float4+float4 **vector add** (the
    `+` ExprOp2 path is scalar/component-wise only - vector add not wired) and a **folded all-const vector
-   operand** (`float2(0.5,0.5)` as a call arg folds to `ExprConstFloat2`, which `value_of` doesn't lower) - 
+   operand** (`float2(0.5,0.5)` as a call arg folds to `ExprConstFloat2`, which `value_of` doesn't lower) -
    the first texlod fixture leaned on both; rewritten to scalar ops on a runtime uv. These are Phase-8
    (language completeness) work, not 7.x.
 3. **Scalar conversions were entirely unsupported before 7.1** (the cast handler rejected, and `float(x)` as
@@ -1260,7 +1260,7 @@ compute-particle tutorial consumes this on a real driver).
    decoration differ. This is why `build_block_struct` could be shared rather than forked.
 2. **`block` is a reserved keyword** (block-type syntax) - a parameter named `block` is a parse error
    ("expecting $i or name"); used `as_block`.
-3. **Scope guards (fail-closed):** a bare matrix runtime-array element is rejected (wrap it in a struct - 
+3. **Scope guards (fail-closed):** a bare matrix runtime-array element is rejected (wrap it in a struct -
    keeps the element-layout helper focused); nested-struct and array members inside an SSBO struct are
    rejected by `build_block_struct` (std430 array/nested padding is a later slice if a tutorial needs it).
 
@@ -1463,7 +1463,7 @@ helper proving single-emission, ref-param copy-in/out, a helper reading a global
 spirv-val) and 5 new `_fail_closed` fixtures (recursion, mutual recursion, bad param, bad return, unmapped
 builtin). The census now declares the three new opcodes and matches exactly. **Real-GPU behavioral gate:**
 temporarily routing dasVulkan's `out[i]=i*i` square through a value-param helper `sq(x)` AND a ref-param
-helper `accumulate_into(acc&, v)` still produced the correct result for all 256 elements on real hardware - 
+helper `accumulate_into(acc&, v)` still produced the correct result for all 256 elements on real hardware -
 i.e. the copy-out genuinely lands the value back through the reference.
 
 **Findings (load-bearing):**

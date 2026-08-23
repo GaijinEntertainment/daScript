@@ -78,7 +78,7 @@ def q8q8_batch_8x4(w : uint8 const?; ws : float const?; ...) {
 
 The tune machinery (`dasllama_tune.das` - `[tuned]`/`[dasllama_grid]`) migrates to dasLLVM
 and becomes the stub factory. Example: given `add(a?, b?, count)`, a **tune macro**
-generates a family of named stubs - `add_vector`, `add_unroll`, `add_vec4_unroll2`, ... - 
+generates a family of named stubs - `add_vector`, `add_unroll`, `add_vec4_unroll2`, ... -
 each carrying `[llvm_code(name = "addunroller", ...)]` with different arguments.
 
 **Three modes:**
@@ -204,7 +204,7 @@ Hand-emit one sdot register tile (M0-informed shape) as a single `[llvm_code]` s
 hard-coded generator - no tune framework yet; the generator IS what the real generator
 would produce for that one perm. Bit-exact vs the reference body; iso ABBA on kv/qo/w13/w2/cls
 shapes at 1-core and multi-thread vs the laneq batch baseline. **Gate: the hand perm beats
-or matches laneq on >=1 slot shape. If it can't even match a hand kernel, stop and rethink - 
+or matches laneq on >=1 slot shape. If it can't even match a hand kernel, stop and rethink -
 we've spent one kernel, not a framework.**
 
 **M3 - parts 2 + 3 proper.**
@@ -225,7 +225,7 @@ the generated family covers them. Repack generation lands here (needed as soon a
 ## M0/M1 results (2026-07-04, M1 Max, LLVM 22.1.5)
 
 **M0 ceiling table** - single-thread, best-of-6, ntok=128, GMAC/s. lcpp = `kernel_bench`
-(direct `ggml_gemm_q8_0_4x4_q8_0` / `ggml_gemv_q8_0_4x4_q8_0` calls, repacked, dotprod tier - 
+(direct `ggml_gemm_q8_0_4x4_q8_0` / `ggml_gemv_q8_0_4x4_q8_0` calls, repacked, dotprod tier -
 what the repack traits select on M1); ours = `gemm_1core_probe` (now platform-aware: enumerates
 registered backends, per-backend repack copies, gemv column).
 
@@ -278,7 +278,7 @@ swapped), `harness/gen_parity_probe.das` (the exactness gate).
   a production slice - identical fold order => identical bits, not a tolerance pass.
 - **Machine code:** 96 sdot / **0 dup** in the tile loop - the indexed-sdot fold held in
   production; firing proven by the generator's named blocks in `--jit-dump`.
-- **Iso (gemm_1core_probe, interleaved best-of-6, GMAC/s):** generated vs hand laneq batch - 
+- **Iso (gemm_1core_probe, interleaved best-of-6, GMAC/s):** generated vs hand laneq batch -
   kv 130.4 vs 131.2 (-0.6%), qo **129.4 vs 126.8 (+2.1%)**, w13 **129.9 vs 128.8 (+0.9%)**,
   w2 **133.7 vs 131.7 (+1.5%)**. Matches-or-beats on all four shapes; all above lcpp's
   118-122. Gate ("beat or match laneq on >=1 shape") passed with margin - **M3 is a go.**
@@ -286,7 +286,7 @@ swapped), `harness/gen_parity_probe.das` (the exactness gate).
 Notes for M3: the impl inlines into its public wrapper (and the batch worker) for free; the
 das-side const model wants IR-handle helper params spelled `var` (`LLVMOpaqueValue?` non-var
 constifies the whole value chain - llvm_boost's `*Aligned` wrappers were fixed to return
-non-const for the same reason); LLVM's verifier enforces phi-grouping in merge blocks - 
+non-const for the same reason); LLVM's verifier enforces phi-grouping in merge blocks -
 create all phis before any other instruction. The `llvm_user_modules.das` dasllama require was
 branch-local wiring at M2; the `require ?` gate landed with M3 (see below) - dasLLVM no longer
 hard-depends on dasLLAMA.
@@ -334,11 +334,11 @@ emitter (`dot != "sdot"` on this leg), illegal perm values, q-reg budget
 reference body's grp4 semantics ARE the stub contract).
 
 **Gates, all green:**
-- *Generated == hand-emitted for the M2 perm:* disasm of the kstep2 tile vs the M2 baseline - 
+- *Generated == hand-emitted for the M2 perm:* disasm of the kstep2 tile vs the M2 baseline -
   291/291 instructions identical (only objdump symbol-name annotations differ, from the stub
   rename); 96 sdot / 0 dup preserved.
 - *Neighbors bit-exact + genuinely generated:* test mode = all 8 rows exact vs the hand-laneq
-  oracle on nb-even, nb-odd, production slice; per-variant disasm proves distinct shapes - 
+  oracle on nb-even, nb-odd, production slice; per-variant disasm proves distinct shapes -
   kstep1/2/4 = 32/96/224 sdots, nrsplit2 = 96 sdots across two loop skeletons, and all three
   decline rows instruction-identical to the reference body (the rejection rail, machine-code
   proven).
@@ -411,7 +411,7 @@ while kstep2 was exact - the AArch64 machine combiner had regrouped the fold's
 `(af*s4)*qs` into `af*(s4*qs)` in those loop shapes, licensed by the blanket `fast` flags
 (`_jit_fast_math` stamps 0x7f on every FP instruction pre-opt). Fix in two halves:
 `apply_fast_math_to_module` now fills ONLY instructions with unset flags (authored FMF wins),
-and the generator authors `0x7e` (contract kept, reassoc cleared) on the fold's fmul/fadd - 
+and the generator authors `0x7e` (contract kept, reassoc cleared) on the fold's fmul/fadd -
 the fold order is the exactness contract, so it lives in the IR flags, not in optimizer luck.
 fmla fusion is untouched (contract), and the shipped kstep2 machine code is bit-identical
 before/after (289/289 disasm gate below).
@@ -435,7 +435,7 @@ before/after (289/289 disasm gate below).
 
 ## M4 slice B (2026-07-04, M1 Max) - the sweep: a perm the hand tier never had wins
 
-**FP-laxity policy (Boris, same day):** bit-exactness across variants is NOT the standard - 
+**FP-laxity policy (Boris, same day):** bit-exactness across variants is NOT the standard -
 llama.cpp holds no cross-kernel bit-parity, and `_jit_fast_math` is already declared
 non-bit-exact program-wide. The reassoc pin measured as -2.5% on the kstep4-mr8 shape (the
 machine combiner's regroup is a critical-path optimization), so it's dropped: generated folds
@@ -517,7 +517,7 @@ select, refused by pin).
 
 `emission_bench` gained the `DASLLAMA_PIN_BACKEND` rail its siblings had plus a
 `backend:` log line (the sweep evidence). Batch-pin note: the donor layout guard compares
-repack function POINTERS, so laneq<->gen cross-pins are rejected even at byte-identical mr=4 - 
+repack function POINTERS, so laneq<->gen cross-pins are rejected even at byte-identical mr=4 -
 no current config needs them; revisit if a real pin does.
 
 **Gates:** language 1087/1087 (+2 path-guard rows), jit 305/305, dasLLAMA suite 179/179 (under
@@ -552,7 +552,7 @@ POST-fix (the pre-fix C numbers were garbage-but-fast and are not reported). pp 
 | gemma-4-12B | 74 | 75 | 1.01 | 75 | 1.01 | 7.2 | 7.2 | 0.99 | 7.3 | 1.01 |
 | gpt-oss-20b (mx4) | 155 | 158 | 1.01 | 77 | 0.49 | 35.1 | 36.3 | 1.03 | 33.1 | 0.94 |
 
-Ratios: **B/A pp median 1.01 (0.97-1.11), B/A emit median 1.00 (0.96-1.03)** - 
+Ratios: **B/A pp median 1.01 (0.97-1.11), B/A emit median 1.00 (0.96-1.03)** -
 **the promotion is perf-neutral; the gen backend supersedes arm64-laneq as the load-select
 tier at zero cost.** C/A pp median 1.01 (0.49-1.25), C/A emit median 0.98 (0.54-1.05).
 
@@ -732,7 +732,7 @@ previously cache-hit a host run of the same program).
 **What is deliberately NOT proven here (needs x64 silicon):** semantics of the live x64 stamps
 (`DAS_TUNE_MODE=test` gen_tune_probe on Zen2/EPYC - zero extra wiring, the grid + oracle run
 as-is; small test fixtures bumped d 8 -> 32 so mr16/mr32 rows have groups to cover), perf
-(tune mode sweep -> manifest), and runtime selection (no `x64-gen` backend is registered yet - 
+(tune mode sweep -> manifest), and runtime selection (no `x64-gen` backend is registered yet -
 see below).
 
 **Queued for the Zen2/EPYC bring-up session (in order):**
@@ -941,10 +941,10 @@ plain busd512-kstep2 is 105.7 GMAC/s where the scout VM said 88.3.
 
 **bias128 first silicon - everything the emission gates predicted, plus margin:**
 
-- **Grid (DAS_TUNE_MODE=test): 35/35 rows, every row maxdiff 0** (tile+gemv+mx4) - 
+- **Grid (DAS_TUNE_MODE=test): 35/35 rows, every row maxdiff 0** (tile+gemv+mx4) -
   first-ever bias128 execution. All five biased rows live+exact; maddubs-bias declines by
   design; bssd declines per cpuid.
-- **Sweep: biased busd512-kstep2-gkstep2 tile = 157.9 GMAC/s vs 105.7 plain (+49%)** - 
+- **Sweep: biased busd512-kstep2-gkstep2 tile = 157.9 GMAC/s vs 105.7 plain (+49%)** -
   above the 120-150 prediction. Biased 256 = 120.5 vs 84.6 (+42%). The biased
   kstep4_nrsplit2@512 diagnostic = 137.0: still loses to kstep2 (weight-stream doubling
   remains) but by less (-13% vs -17%), exactly the slice H verdict. GEMV hot: 58.3 biased
@@ -1037,7 +1037,7 @@ manifest stamp, vs the same lcpp-AMX build, prefill AND emit per cell:
 (reg-resident 3546 GMAC/s = 22x the biased-busd512 tier; 196 GMAC/s at DRAM zero-reuse =
 GEMV break-even). gemv/mm_rows slots stay vector.
 
-**The layout is already ours.** TDPBSSD wants B[k-group][4*n+j] (VNNI 4-byte interleave) - 
+**The layout is already ours.** TDPBSSD wants B[k-group][4*n+j] (VNNI 4-byte interleave) -
 that is byte-for-byte the `grp<mr>` plane at mr=16: `repack_q8q8_grp` writes
 `[kg][r][4 bytes]` per row-group, so one 32-k block's 8 k-groups are a contiguous 512-byte
 region per group (`tileloadd64(rows=8, colsb=64, ptr=gbase + b*512, stride=64)`). ZERO new
@@ -1056,7 +1056,7 @@ amx path uses. `tilezero` re-arms C. (Deferred fold via kstep>1 is unsound acros
 boundaries - kstep stays 1 in perm terms.)
 
 **Macro-kernel = 2x2 tiles, exactly 8 tmm.** A0,A1 (two 16-token tiles) x B0,B1 (two
-adjacent grp16 row-groups, plane offset +16*n) -> C00..C11: 4 tdpbssd per 2A+2B loads - 
+adjacent grp16 row-groups, plane offset +16*n) -> C00..C11: 4 tdpbssd per 2A+2B loads -
 double weight-tile reuse, 32 tok x 32 rows per k-block. Perm mapping: `dot="amx_int8"`,
 mr=16 (the layout), nrsplit=2 =^ row-group count, kstep=1 pinned; declines = new cpuid tier
 `amx_int8` (leaf-7 EDX bits 24/25 tile+int8) + geometry (probe fixtures need ntok>=32 rows
@@ -1252,7 +1252,7 @@ reads it instead).
 (`bi*mr*32 + g*8*mr + rp*16`); A operands from the token chunk loads via 4 byte-shuffles per
 token pair (zip1/zip2.2d shapes - `[0..7,16..23]` / `[8..15,24..31]` masks, reused across all
 row pairs); MMA lattice `m[tp][rp] = smmla(m[tp][rp], A[tp][g], B[g][rp])`; then a per-block
-2-shuffle i32 transpose per (token pair, row quad) - `[0,1,4,5]`/`[2,3,6,7]` = uzp1/uzp2.2d - 
+2-shuffle i32 transpose per (token pair, row quad) - `[0,1,4,5]`/`[2,3,6,7]` = uzp1/uzp2.2d -
 back into the token-major `a[token][rowquad]` accumulators, so the per-block scale fold and
 the store machinery are byte-for-byte the existing ones (fold order preserved -> the one grp4
 oracle still serves). Register budget is the sdot formula unchanged (w 2mr + acc nrsplit*mr/4
@@ -1370,7 +1370,7 @@ counts + native grid maxdiff + suite + oracle parity - amx rows decline on M1, e
 gates still prove the asm). **Then the SPR respin (ami-067fe7f4a0b6c2be5), on box until
 we're happy:** P1 frequency probe (turbostat: das-amx / das-vnni / lcpp-amx @T24 - decompose
 the license component of the 1-core-win/e2e-loss inversion); P2 dispatch probe (team-prof +
-per-op on an amx-stamped pp run - quantify the 18-chunk starvation); then the A/B ladder - 
+per-op on an amx-stamped pp run - quantify the 18-chunk starvation); then the A/B ladder -
 each arm in isolation, then cumulative - re-run the arch-ladder row, flip or permanently
 close the amx verdict with attributable data. Piggyback: vector-walk batch_grid_2d pin A/B
 (zen2 winner = wave-aligned knob 2), the confirm pass's SPR outing, and bake a FRESH AMI at
@@ -1394,7 +1394,7 @@ grid 48 rows lockstep (all 4 new rows decline cleanly off-silicon), suite + 1B p
 - **I1 `latch=1`** - implemented as the RAW immediate-tmm intrinsics (`llvm.x86.tdpbssd`
   etc.), NOT the `.internal` SSA form: the backend's fast-tile-config insertion
   (entry ldtilecfg + exit tilerelease) has no C-API off-switch, and raw ops are exactly
-  lcpp's user-managed mode. Fixed register plan C=tmm0-3 (r*nt+ts) / A=tmm4-5 / B=tmm6-7 - 
+  lcpp's user-managed mode. Fixed register plan C=tmm0-3 (r*nt+ts) / A=tmm4-5 / B=tmm6-7 -
   bonus over `.internal`: LLVM's RA was serializing all four C chains through one tmm4.
   Config = NINTH companion `q8q8_amx_cfg_gen` (`() : void`; latch rows emit one LDTILECFG
   of a 64-byte private-constant palette, every other row a bare ret), called by the batch
@@ -1407,7 +1407,7 @@ grid 48 rows lockstep (all 4 new rows decline cleanly off-silicon), suite + 1B p
   tokq = ts) behind the same batch_grid_2d pin; shared `q8q8_batch_amx_cell_gen` walk
   (1-D arm = old body verbatim with the full token range). Tail rule made cell-safe: the
   overlapped tail macro fires only when `tbe - ts >= tb0` (identical to the old absolute
-  check at tb0=0), so an overlap can never reach into a concurrent cell's token range - 
+  check at tb0=0), so an overlap can never reach into a concurrent cell's token range -
   race-free by construction, no reliance on division proofs.
 - **I3 `bias=128`** - the dot is **TDPBSUD** (signed A tiles x unsigned w^0x80 B plane):
   feeding biased bytes to TDPBSSD is NOT linearly correctable (s8 reinterpretation of
@@ -1440,7 +1440,7 @@ maddubs tier. The family stays grid-resident; spr_manifest unchanged. Arc CLOSED
 The decomposition (no mysteries left):
 
 - **Codegen exonerated** (Boris's "llvm producing god knows what" check): objdump of the
-  production JIT DLL (the sweep cells' own artifact) shows exactly the designed shape - 
+  production JIT DLL (the sweep cells' own artifact) shows exactly the designed shape -
   pipelined 2x2 macro (8 loads / 8 dots / 8 zero / 8 spill), raw tmm on the fixed C=tmm0-3
   / A=tmm4-5 / B=tmm6-7 plan, ONE ldtilecfg in the whole object (the cfg companion), rolled
   k-loop (single back-branch), ~115-165 fold insns between dot chains = the lcpp cadence.

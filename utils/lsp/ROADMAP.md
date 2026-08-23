@@ -38,7 +38,7 @@ The supervisor kills an in-flight validate when a newer edit for the same URI ar
 
 ## Registration
 
-Claude Code has **no plugin-less LSP path** (no root `.lsp.json`, no settings key - 
+Claude Code has **no plugin-less LSP path** (no root `.lsp.json`, no settings key -
 unlike `.mcp.json`). The vehicle is one checked-in manifest:
 
 ```
@@ -97,7 +97,7 @@ Deliverable: probe notes in this file; wave 1 scope locked by answers, not docs.
    `hello.das: no [Line 1:1] <message> (<source>)` (1-based display). First-edit
    injection confirmed end-to-end.
 3. **Doc sync**: lazy - first Edit of a file sends `didOpen` with the **post-edit**
-   text; each subsequent Edit sends `didChange` (FULL text, `version` increments - 
+   text; each subsequent Edit sends `didChange` (FULL text, `version` increments -
    honors `change:1`) followed by `didSave`. No open at session start, no
    watched-files. So: validate on didOpen + debounced didChange; didSave can be a
    no-op (didChange already fired).
@@ -111,7 +111,7 @@ Deliverable: probe notes in this file; wave 1 scope locked by answers, not docs.
 6. **maxRestarts semantics**: answered in the wave-1 kill probe - CC v2.1.198 does
    NOT restart a dead LSP server mid-session (killed the supervisor, then edited a
    compile error in: one `startup` in the log, no respawn, no diagnostics ever again,
-   no signal to the model). Supervisor death is silent until the session restarts - 
+   no signal to the model). Supervisor death is silent until the session restarts -
    so the supervisor must never die: `handle()` is exception-guarded, and subtool
    crashes are already isolated in the child process.
 
@@ -211,11 +211,11 @@ and CC converts to 0-based LSP before they reach the server.
 - Protocol tests: `tests/lsp/test_lsp_protocol.das` drives
   `python3 lsp_supervisor.py` over `popen_argv_pipe` - initialize handshake ->
   didOpen with BROKEN buffer text while the committed fixture stays clean
-  (publishDiagnostics must carry the buffer's 30341 at the exact range - 
+  (publishDiagnostics must carry the buffer's 30341 at the exact range -
   overlay proven through the wire) -> didChange back to clean (empty publish)
   -> definition at the call site (exact def location) -> shutdown/exit rc 0.
   Frame bodies read byte-exact via `fread(f, array<uint8>)`; headers via
-  `fgets`. Probes `python3` then `python` (output must start with "Python" - 
+  `fgets`. Probes `python3` then `python` (output must start with "Python" -
   dodges the Windows Store alias) and skips with a log notice when neither
   exists. AOT-registered in `tests/aot/CMakeLists.txt`.
   The test immediately caught a real bug: `find_compiler` accepted a relative
@@ -279,7 +279,7 @@ PR for the whole branch AFTER wave 4 (single preflight + CI round).
 
 #### Session adoption - PROVEN (2026-07-02, CC v2.1.198)
 
-- Vehicle: `.claude/skills/daslang-lsp/.claude-plugin/plugin.json`, committed - 
+- Vehicle: `.claude/skills/daslang-lsp/.claude-plugin/plugin.json`, committed -
   the documented "skills-directory plugin" path (loads as `daslang-lsp@skills-dir`
   on workspace trust). Headless probe from the repo root with NO `--plugin-dir`
   got the exact 30341 diagnostic end-to-end; supervisor log shows one startup

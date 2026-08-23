@@ -67,6 +67,6 @@ Catalog/setup fixtures (same server, booted with NO model for the setup ones):
 
 After capture, mechanically normalize machine-local paths (model dirs ->
 `D:/models`, the capture TOML path -> `D:/models/dasllama-server.toml`, the capture user's
-home -> `C:/Users/user`) - 
+home -> `C:/Users/user`) -
 paths are the ONE permitted edit; every other byte stays as served. The
 hardware/box identity lines stay as captured.

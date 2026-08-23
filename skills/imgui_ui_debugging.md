@@ -10,7 +10,7 @@ non-negotiables that keep you honest. Read it before touching imgui UI behavior.
 ## The loop - every step, in order
 
 1. **Reproduce, and screenshot the bug.** Get it failing first - ideally a `dastest` (`with_imgui_app`
-   for a GL test, or headless for pure logic). **Take a `screenshot` of the broken state regardless** - 
+   for a GL test, or headless for pure logic). **Take a `screenshot` of the broken state regardless** -
    the "before." A bug you can't reproduce on demand isn't fixed when it merely stops happening.
 
 2. **Make the bug observable in STRUCTURED state.** `imgui_snapshot` is ground truth - it dumps every
@@ -34,7 +34,7 @@ non-negotiables that keep you honest. Read it before touching imgui UI behavior.
 
 - **Model state != rendered state.** A `cmd_*` model dump can be perfectly correct while the widget on
   screen shows the wrong thing. Verify the **rendered** layer (the widget's snapshot payload), not just
-  the model. Canonical trap: an `input_text` whose `value` holds the right string while its `buffer` - 
+  the model. Canonical trap: an `input_text` whose `value` holds the right string while its `buffer` -
   the thing that actually renders - is empty.
 - **A screenshot is for humans, not for proof.** Downscaled framebuffers can't resolve small text or
   numeric fields. Use screenshots for the before/after story; take the *verdict* from `imgui_snapshot`'s

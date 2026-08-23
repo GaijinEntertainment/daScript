@@ -296,7 +296,7 @@ probe (flattered - caller self-serves; real-work cost higher but orders cheaper 
 | Llama-1B decode knee | - | **97 @ T=24** (70% of lcpp 139) |
 | Llama-1B prefill-512 @default | 495 | **969** (37% of lcpp 2605; N=256: 1120) |
 
-**Decode residual:** ~~lcpp holds 139 via GEMV grain 64 => ~32 effective threads, emergent~~ - 
+**Decode residual:** ~~lcpp holds 139 via GEMV grain 64 => ~32 effective threads, emergent~~ -
 WRONG inference, corrected session 2 against the source: a decode GEMV lands in ggml's
 anti-fragmentation FALLBACK (grid < nth*4 => exactly-nth equal chunks, `ggml-cpu.c:1403`), so
 ALL 96 threads work ~22-row slices; grain 64 is a strategy *selector*, not a lane cap, and
@@ -316,7 +316,7 @@ decision) + decode-lane knob (ledger).
 | 24 | 790.4 | 137.6 | 97 (0.70x) |
 | 96 | 2605.0 | 139.1 | 43 (0.31x) |
 
-**The decomposition that matters:** lcpp decode PLATEAUS 24->96 (surplus threads cost nothing - 
+**The decomposition that matters:** lcpp decode PLATEAUS 24->96 (surplus threads cost nothing -
 spin-barrier lockstep); ours PEAKS at 24 and FALLS (every thread costs a rendezvous share).
 Below the knee we are at parity or better -> kernels/memory path fine; the whole remaining gap
 is scheduler-overhead growth. Next levers: decode-lane capping / GEMV grain 64 (+13-15%
@@ -393,7 +393,7 @@ decode @ defaults:
 | seq isolated, op+remaining paired | 50.0 | 31.6 |
 | ditto + entry-only peek | 56.4 | 33.9 |
 **Every padded layout LOSES to the unpadded original** (-8-18% @ g128). The co-located slot is
-load-bearing, not accidental. Also: the g16 CONTROL itself swung 47.5->34.1 across brackets - 
+load-bearing, not accidental. Also: the g16 CONTROL itself swung 47.5->34.1 across brackets -
 fine-grain (192-chunk) decode is chaotically sensitive to box state after hours of load; g128 is
 stable (58.7-61.4). Coarse grain buys *stability*, not just speed. Always bracket controls.
 
@@ -456,7 +456,7 @@ kernels (hand intrinsics, not `[tuned]` templates), and the real wins live in ~1
 buckets (rmsnorm, rope). The profile is still right: no-harm + big wins for portable-tier
 consumers. Runtime section hand-carries `matmul_min_chunk_rows_gemv=128`; the tuner writer
 now snapshots both grain knobs (was missing - predates session 2).
-**Note absolute drift again:** T=24 ~89 t/s tonight vs 94-96 this afternoon, same code - 
+**Note absolute drift again:** T=24 ~89 t/s tonight vs 94-96 this afternoon, same code -
 cross-session absolutes remain polluted; only in-bracket deltas count.
 
 ### Session 3b: per-op breakdown vs instrumented llama.cpp + THE ISA LADDER - portable+tuned WINS
@@ -510,7 +510,7 @@ Four readings:
 `DASLLAMA_PIN_BACKEND` support (mirrors llama3_perf) for the prefill-side validation of the pin.
 
 ### Session 3c: the pin's prefill cost + the strictly-dominant hybrid candidate
-prefill_perf ABBA @512 (defaults threads): auto=repack 1009/1003 vs portable 871/865 - 
+prefill_perf ABBA @512 (defaults threads): auto=repack 1009/1003 vs portable 871/865 -
 **portable pays -14% prefill** (repack's batch tier earns its keep... or so it seemed).
 Follow-up point: **x64-avx2-acc8 prefill 1047 vs auto ctrl 1018** - the ROW-MAJOR acc8 batch
 matches/beats the grp4 repack tier on Genoa (repack = no value on this box, delete-side
@@ -525,7 +525,7 @@ be per-slot pins in box_profile runtime (e.g. `"batch_backend"`), not a hardcode
 Same ladder-lite on the M1 Max dev box (worktree binary rebuilt, tuner re-run, defaults =
 9 workers, 1B decode): auto=arm64-laneq controls 79.7/75.5, arm64-sdot 78.0, portable-tuned
 77.8, portable-untuned 76.9 - **all inside the control bracket; decode is backend-invariant
-on M1** (bandwidth saturates; machine was in interactive use, hence the 5% control swing - 
+on M1** (bandwidth saturates; machine was in interactive use, hence the 5% control swing -
 deltas only). Tuned~untuned on M1 (~1%): the shipped fallbacks WERE the M1 hand-tune - except
 rmsnorm, where `plain` was wrong on both platforms (M1 sweep: vec8 +89%, mirroring EPYC).
 M1 tuner's other finds: dot_mx4q8 u8 +10.3%, rope vec4_u4 +5.3%; dot_q8q8 HOLDS vec16
@@ -583,7 +583,7 @@ Only the DEFAULT path is total-lane-shaped (cores-1 workers + caller = cores). g
 TOTAL threads. So every "T=24" compare above ran ours on 25 lanes vs lcpp's 24. Re-measured
 fair: 23w+caller (24 lanes) = **100.6** vs 24w+caller (25 lanes) = 95.5, same bracket - knee is
 bandwidth-bound, the extra lane is worthless; the 75%-of-lcpp headline HOLDS at true parity.
-**RULE: fair vs `llama-bench -t N` = `DAS_JOBQUE_THREADS=N-1`.** (Env semantics left as-is - 
+**RULE: fair vs `llama-bench -t N` = `DAS_JOBQUE_THREADS=N-1`.** (Env semantics left as-is -
 too much measurement history keyed to it; flag if we ever want env = total lanes.)
 
 ### Session 3f: WAVE FILL (Boris's rule) - +14% at the knee

@@ -61,7 +61,7 @@ Compiler lookup order: `initializationOptions.compiler` ->
 (`bin/Release/daslang[.exe]`, `bin/daslang[.exe]`, `build/daslang`,
 `build/bin/daslang`) under the workspace and the supervisor's own tree ->
 `daslang` on `PATH`. All option paths (`compiler`, `project`, `project_root`,
-`load_module`) are absolutized against the workspace root at initialize - 
+`load_module`) are absolutized against the workspace root at initialize -
 subtools spawn with a per-request cwd, so relative paths would otherwise
 re-resolve per file.
 

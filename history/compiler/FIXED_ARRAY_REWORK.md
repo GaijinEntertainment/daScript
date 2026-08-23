@@ -251,7 +251,7 @@ Exit: full CI green with aot_cpp.das / llvm_jit.das / macro daslib UNMODIFIED (r
   the bound dims at every use-site (bare `TT` <- `int[3]` was the ELEMENT `int`; `TT[4]`
   REPLACED to `int[4]`; strip applied even through `array<auto(TT)>`) - an artifact of
   one node carrying both element and dims; Boris: wrong, makes generics clumsy and
-  unsupportable. (A master-compat peel was implemented first and reverted same-day - 
+  unsupportable. (A master-compat peel was implemented first and reverted same-day -
   the probe matrix in D:/Work/fa_scratch/alias_dim_probe*.das documents both worlds.)
   IMPORTANT INVARIANT that keeps most of daslib working unchanged: `auto(TT)[]` (the
   explicit `[]` suffix) still binds TT to the ELEMENT - the `[]` eats one dim level in
@@ -287,7 +287,7 @@ Exit: full CI green with aot_cpp.das / llvm_jit.das / macro daslib UNMODIFIED (r
   new `fa_element` clone-walk helper (clone-walks so the result is non-const whatever
   flavor the caller holds - bare field-walks inherit const and break downstream calls).
   TDim<TDim<float,3>,2> nesting verified; full test_aot regen+compile+run green.
-  BUILD GOTCHA: genaot custom-commands and the consuming compile are separate vcxprojs - 
+  BUILD GOTCHA: genaot custom-commands and the consuming compile are separate vcxprojs -
   when emitter output CHANGES, one `--target test_aot` pass can compile stale outputs;
   run the build twice (second pass converges). Plus MSBuild skipped relinking
   test_aot.exe after a deleted-output (stale .tlog) - delete build/test_aot.dir/Release/
@@ -379,11 +379,11 @@ inferAlias + inferPartialAliases OR it into the constant merge. Stored instance 
 stay canonical (no inner-node const -> no mangled-name churn); the instancing alias MAP
 still clears const (master parity - sibling `b : TT` params take use-site quals).
 KNOWN LINT GAP surfaced by the var-param test probe (pre-existing on master, NOT
-FA-specific): LINT003 suggests `let` for a var passed to a never-writing `var` param - 
+FA-specific): LINT003 suggests `let` for a var passed to a never-writing `var` param -
 access_ref only sets via SideEffects::modifyArgument, and the write-tracking is
 optimizer-shared (conservative marking would cascade modifyArgument up the call graph).
 Proper fix = new access flag (PR-#2736-style 4-site checklist + serializer bump).
-FILED as issue #3090 (Boris: "lets file an issue, fix it follow up at some point") - 
+FILED as issue #3090 (Boris: "lets file an issue, fix it follow up at some point") -
 follow-up outside this rework; the test exercises its var param instead (mutable row
 copy through the peeled binding, a real assertion).
 
@@ -411,7 +411,7 @@ not chased here). LLVM_JIT_CODEGEN_VERSION 0x23->0x24. Gates: full-tree dastest 
 leaks, zero crashes; lint+format clean on all four files.
 
 ### Stage 4 - daslib payoff
-~~Delete the `[]` workaround families in builtin.das~~ + ~~get_key subtest enablement~~ - 
+~~Delete the `[]` workaround families in builtin.das~~ + ~~get_key subtest enablement~~ -
 DONE EARLY in 1g (see above), archive.das collapse included. Remaining here: generalize
 `each`/`sort`/`find_index`/`subarray`/`finalize_dim` (multi-dim/typedef'd sources through
 one overload where natural nesting allows). Un-reject fixed arrays in apply.das /
@@ -542,7 +542,7 @@ and post-deletion 326b9f925 (worktree A/B/C builds). All 8 are the converter's o
 verify-compile environment (conversion text correct; same texts compile via
 daslang.exe); zero CI coverage. Tool is migration-era, rarely used.
 
-AFTER THE LAST STAGE (Boris, Stage-2 review): VSCode plugin fixes - 
+AFTER THE LAST STAGE (Boris, Stage-2 review): VSCode plugin fixes -
 `D:\DASPKG\daScript-plugin`. Sweep it for rework fallout (TypeDecl dim/dimExpr
 consumers, describe/typename output expectations) once everything else has landed.
 

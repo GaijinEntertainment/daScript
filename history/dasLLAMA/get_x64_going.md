@@ -103,7 +103,7 @@ Mirror `aarch64_neon.das` exactly (the full pattern with line refs is in `x64_ar
 4. The emitter: loads -> (sign-trick unless `vpdpbssd`) -> the VNNI intrinsic call. Verify the
    exact intrinsic name against your LLVM with an `llc` probe first.
 5. Host features: on x64 `LLVMGetHostCPUFeatures()` is populated, so the forced-feature branch
-   (`llvm_jit_common.das:999-1004`, the macOS `+dotprod` workaround) should be unnecessary - 
+   (`llvm_jit_common.das:999-1004`, the macOS `+dotprod` workaround) should be unnecessary -
    add an x64 branch only if instruction selection fails.
 6. **Bump `LLVM_JIT_CODEGEN_VERSION`** (`llvm_jit_run.das:36`).
 
@@ -146,7 +146,7 @@ actually emitted, not the fallback loop.
 Re-run step 2's benches with `x64-vnni` active. If isolated GEMM still trails llama.cpp
 meaningfully (their x64 CPU path *does* repack - `cpu_repack_buffer_type`), mirror the laneq
 tier: a 4x4-interleave `repack_q8q8_x64` + a token-blocked batch kernel reading
-`effective_token_block(g_q8_token_block, n)` (the shared L2 cliff-guard - 
+`effective_token_block(g_q8_token_block, n)` (the shared L2 cliff-guard -
 `dasllama_math.das:301`), registered as `"x64-vnni-repack"`, priority 20,
 `needs_repack = true`. The loader handshake (`select_matmul_backend_for_load`) then picks it
 up with **zero loader edits**. The M1 history says the big win here was the token-blocking

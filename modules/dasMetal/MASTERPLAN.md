@@ -210,7 +210,7 @@ Three behavioral layers + enforcement gates:
   space, `threadgroup_barrier(mem_flags)`, `simd_sum`/`simd_shuffle*`, the remaining
   builtin attributes (`thread_position_in_threadgroup`, `threadgroup_position_in_grid`,
   `threads_per_threadgroup`). The Metal value-add real kernels need.
-- **Phase 4 - 16/8-bit lattice.** `half` (native in MSL), short/ushort/uchar vectors - 
+- **Phase 4 - 16/8-bit lattice.** `half` (native in MSL), short/ushort/uchar vectors -
   extend `msl_types`, conformance fixtures parity vs the CPU lattice and the
   dasSpirv/dasGlsl shader-lattice rails (`tests/type_lattice` discipline).
 - **Phase 5 - `simdgroup_matrix` + host perf plumbing.** `simdgroup_float8x8` et al. (the
@@ -218,13 +218,13 @@ Three behavioral layers + enforcement gates:
   cache. Sized when we get there; a dasLLAMA offload experiment is the driver.
 - **Phase 6 - full-GPU-resident prefill for ONE model (Llama-3.2-1B), chase the 3960.**
   Mandate (Boris, 2026-07-11, after the Phase-5 clean round): cover the one model end to end
-  and see how close we get to llama.cpp full-Metal (pp512 3960 t/s vs our hybrid's 1055 - 
+  and see how close we get to llama.cpp full-Metal (pp512 3960 t/s vs our hybrid's 1055 -
   the gap is residency: per-GEMM sync submits + activation/output memcpys + CPU attention).
   Sized at session start; expected legs: emitter math-builtin whitelist growth (exp/sqrt/
   rsqrt/min/max - rmsnorm + softmax kernels need them), attention/norm/rope kernels over the
   Phase-3/5 constructs, activations resident in MTLBuffers across the layer loop (one encoder
   per prefill via `with_compute_encoder`, unified memory hands the KV cache back to the CPU
-  decode path), integration above the batch-slot seam (the per-arch prefill blocks - 
+  decode path), integration above the batch-slot seam (the per-arch prefill blocks -
   `ArchBlocks` - or a whole-prefill override behind the same env-pin discipline).
   **Sizing (2026-07-11 session start, from the forward-path map).** The 7 per-layer q8 GEMMs
   (Q/K/V/O/W1/W3/W2) already route through the batch slot; the CPU remainder is `rms_batch`,
@@ -310,7 +310,7 @@ that both emitters read class members. Current entries:
    inherited from dasSpirv review hardening: every dispatch validates its input and errors
    cleanly - never a silent bad kernel, never a panic.
 4. **Class-method annotation plumbing.** `[metal_kernel]` must fire on a class method
-   (function_macro apply/fixup on methods; `@ssbo` field annotations on class members) - 
+   (function_macro apply/fixup on methods; `@ssbo` field annotations on class members) -
    unproven; probed first thing in Phase 1 before any emitter work. Fallback if it fights:
    the struct-param form (`[metal_kernel] def mul_ab(var k : MulAB)` - free function,
    resources still grouped in one type), same emitter, only the frontend scan differs.
@@ -354,7 +354,7 @@ on the `.mm`, Metal+Foundation frameworks); `.das_module` descriptor (silent 2-a
 `register_dynamic_module` - skips cleanly on non-Apple); root `DAS_METAL_DISABLED` option
 (default OFF). Scaffold `_handrolled_mul.das` green on M1 Max (macOS 26.4, arm64):
 - **Readback exact** - a*b over 256 floats via BOTH `metal_dispatch_threadgroups` and
-  `metal_dispatch_threads` (exact-grid fast path confirmed working on Apple-family GPU - 
+  `metal_dispatch_threads` (exact-grid fast path confirmed working on Apple-family GPU -
   risk 7 half-resolved; paravirtual still unknown).
 - **Bad-MSL probe** - `undeclared_identifier` fixture surfaces the real Metal compiler
   log (with source line + caret) as a clean das error string; no crash, no nil deref.
@@ -501,7 +501,7 @@ result type) - widen `int4(byte4)`, truncating narrow `byte4(int4)` (MSL convers
 C-truncation matches das), splat `half3(scalar)`, fp16 converts `half2(float2)`/`float2(half2)`,
 and `*_sat` -> `char4(clamp(v, -128, 127))`-style clamp+convert; fp16 closed arithmetic and the
 f16 broadcast ride the existing operator paths via lattice-aware census classes
-({f,i,u}{32,16,8}[v]). Census 143 -> 178 kinds. Tests: `tests/msl` 48 -> 57 (three fixtures - 
+({f,i,u}{32,16,8}[v]). Census 143 -> 178 kinds. Tests: `tests/msl` 48 -> 57 (three fixtures -
 HalfArith / LatticeConvert / PackedVec3 - shape asserts + goldens + census both directions;
 fail-closed grew `_fc_lattice_wide` (@ssbo half8) + `_fc_lattice_wide_local` (short8 local) +
 `_fc_packed_partial` (component store into packed)); `tests/metal` 20 -> 26 on M1 Max, all
@@ -534,9 +534,9 @@ write-set pre-scan. Fail-closed: `.data` access in a kernel, @ssbo of tiles, non
 source, threadgroup store. Census 178->192. tests/msl 65/65 (SgMatTile + SgMatTiled fixtures);
 tests/metal 32/32 on M1 Max - single-tile f32+f16 vs sequential replay AND the
 threadgroup-staged mixed-mac tiled GEMM vs a direct CPU matmul, all BIT-EXACT
-(exact-by-construction integer values). **(5b) host plumbing, zero new externs** - 
+(exact-by-construction integer values). **(5b) host plumbing, zero new externs** -
 `MetalPipelineCache` (hit allocates nothing), `MetalBufferPool` (pow2 buckets; re-acquire reuses),
-`with_compute_encoder` (N dispatches, one commit+wait; default hazard tracking orders them) - 
+`with_compute_encoder` (N dispatches, one commit+wait; default hazard tracking orders them) -
 all proven through the live-object counter in `test_metal_plumbing.das`. MTLSharedEvent +
 MTLBinaryArchive DEFERRED by measurement: prefill offload is ~112 synchronous dispatches per
 multi-second prefill (~30 ms round-trip tax) and the das-side cache covers the kernel count.
@@ -582,7 +582,7 @@ also signed-int) + min/max (numeric) - das math-module names ARE the MSL spellin
 half-away on both sides, probe-verified); + the quantize-kernel converts cvt.f32.i8/cvt.i8.f32.
 Census 192->221; msl 70/70, metal 34/34 (math fixture pins fastmath=false - fast::sin/cos's
 ~2^-11 ABSOLUTE envelope swamps the 1e-4 oracle). **(6b kernels)** `dasllama_metal_prefill.das`:
-metal_q8_quant / metal_rmsnorm (simd_sum + tg partials) / metal_rope (table-driven NORM pairs - 
+metal_q8_quant / metal_rmsnorm (simd_sum + tg partials) / metal_rope (table-driven NORM pairs -
 build_rope_table already hoists all trig) / metal_swiglu / metal_add + attention; unit tests vs
 the dasLLAMA CPU twins on-device (quantize bit-exact under planted +/-127 amax). **(6c driver)**
 ONE command buffer per prefill - 21 dispatches/layer, default hazard tracking orders, one
@@ -615,7 +615,7 @@ per threadgroup, wider k-steps - iterate via bench_gemm_iso, not full prefills. 
 **2026-07-11 - pipeline: fixup-set global inits now infer; dasSpirv blob fill patch->fixup**
 (rides this branch - surfaced reviewing dasMetal's apply/fixup model). Boris called dasSpirv's
 patch+astChanged blob fill a workaround for a compiler gap; confirmed and fixed. Diagnosis
-(both repro'd): `fixupAnnotations()` ran post-optimize and nothing inferred what fixup created - 
+(both repro'd): `fixupAnnotations()` ran post-optimize and nothing inferred what fixup created -
 a call-shaped init (`to_array_move` from the `array<uint>` literal) died with 50607; and a naive
 re-infer at that old position re-tripped already-folded unsafe (31013 in daslib generics) because
 `foldUnsafe` strips the wrappers - the exact ordering constraint the scope_free comment documents.
@@ -645,7 +645,7 @@ kernel time to dequant staging** (per-element scale reloads + scalar loads), NOT
 256 threads (worse) - on M1 Max occupancy is brutally sensitive to threadgroup-memory growth
 *while staging is expensive*. The two changes that compose into the win: **run-staging** (one
 thread = one contiguous 16-element run = ONE scale load + four `byte4` device loads, +40%) and
-THEN the **64x64 C block** (halves both device re-read directions, 16 macs per 8 tile loads - 
+THEN the **64x64 C block** (halves both device re-read directions, 16 macs per 8 tile loads -
 the tile-size rematch only wins once staging is cheap: +64% total, 3390-3650 GMAC/s vs the old
 kernel's 2090-2200; math-only ceiling ~4900). **Shipped as a two-kernel dispatch** in
 dasllama_math_metal: `metal_q8_gemm` (32x32, run-staged vec4) + `metal_q8_gemm64` (64x64),
@@ -674,7 +674,7 @@ CPU control (arm64-gen), best-of-3: **N=512 2395 vs 823 tok/s = 2.91x; N=256 200
 2.36x**; N=64 336 vs 798 - CPU keeps small batches (each fresh process pays the one-time PSO
 compile + lazy weight upload there; min_npos=64 default unchanged since a served process pays
 it once). Anchors (stored from the 2026-07-11 clean window, per the no-baseline-reprofiling
-rule): llama.cpp CPU pp512 813 (das CPU 823 yes sane window); **llama.cpp full-Metal pp512 3960 - 
+rule): llama.cpp CPU pp512 813 (das CPU 823 yes sane window); **llama.cpp full-Metal pp512 3960 -
 das GPU-resident is now 1.65x away** (hybrid clean was 3.75x, resident-with-old-kernel dirty
 2.5x). Clean best == the dirty single-shot (2395 vs 2398) - the box was quiet.
 
@@ -697,7 +697,7 @@ WRONG - Metal pipelines back-to-back dispatches; the ew bucket is real kernel ti
 fused rms+quant's 12KB tg stage gives the saving back in occupancy); kept for the smaller
 graph; DASLLAMA_METAL_FUSE=0 is the A/B rail. GEMM kernel round 2 (lab, 3B shapes kv3b/q3b/
 w13_3b/w2_3b added): **three structural variants ALL LOST to v13** - v18 32-elem runs (-1%),
-v19 row-major-B + transposed sgload + tg_store_half4 (-1.3%; the two NEW emitter constructs - 
+v19 row-major-B + transposed sgload + tg_store_half4 (-1.3%; the two NEW emitter constructs -
 simdgroup_load transpose-flag overload and tg_store_half4 - are GPU-validated bit-exact and
 stay as surface), v20 device-direct f16 B panels (-6-9%; strided transposed device loads beat
 by staging). v13 (run-staging + 64x64) holds a ~3480-3590 GMAC/s plateau vs the staging-
@@ -706,7 +706,7 @@ removed ceiling 4600-4950 at 3B shapes; lcpp's implied kernel rate ~4400-4500 (f
 **Parity ledger (needs BOTH):** kernel 3590 -> ~4400 (next ideas: faithful ggml
 kernel_mul_mm geometry port - 64x32, 2x4 sg layout, their exact staging shape - as a lab
 variant; simdgroup async device->tg copies; f16-accumulate risk analysis) AND the ~90ms
-non-GEMM tail -> ~35 (next: commit-to-done slack attribution beyond resource tracking - 
+non-GEMM tail -> ~35 (next: commit-to-done slack attribution beyond resource tracking -
 retainedReferences=NO, split command buffers, concurrent encoder + coarse barriers; attention
 f16; readback overlap). (Labeled DIRTY when logged; Boris 2026-07-13: Parsec was OFF for
 these windows - treat the numbers as clean. The ~50-70ms slack band variance is real
@@ -743,7 +743,7 @@ masterplan's step-2 idea, now de-risked - the win is proven in OUR harness, not 
 their walls). Repro: `DASMETAL_LAB_VARIANTS=v0_prod32,v0b_prod64,lcpp_mulmm bin/daslang -jit
 dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/matmul/bench_metal_gemm_kernels.das`.
 
-**2026-07-13 - Phase 7 (session 2b): the ggml geometry port (v21) + the attribution ledger - 
+**2026-07-13 - Phase 7 (session 2b): the ggml geometry port (v21) + the attribution ledger -
 +19% over v0_prod32, beats BOTH production kernels, still 13-19% behind verbatim.**
 `v21_ggmlgeo` (+`v21sct` scale-transpose flavor): ggml's exact geometry on our planar contract
  - 64-output x 32-token tile, tile-major 8x8 shared blocks (every sgload = one contiguous
@@ -828,7 +828,7 @@ zeroed at staging (0*NaN guard); K pads need NO guard (their scores land in colu
 causal softmax zeroes). Softmax unchanged. Default at head_size % 64 == 0; rail
 DASLLAMA_METAL_ATTN=0 pins the trio (also serves other hs). Attention 28 -> 14.2ms
 (QK 5.2 + AV 6.3 + softmax 3.5); GPU window ~374ms; our wall 376ms vs their fa=0 379ms.
-Gates: causal-GQA oracle hs64-GQA2 + hs128-GQA3 within the half-staging envelope (2e-2 - 
+Gates: causal-GQA oracle hs64-GQA2 + hs128-GQA3 within the half-staging envelope (2e-2 -
 the honest envelope of half-staged scores through softmax, same as lcpp's), parity 40/40
 exact both modes. Framing re-measured same-run: ~10ms (logits 3.7 + embed 0.7 + alloc ~5),
 NOT the 33ms cross-run wobble suggested. GEMM chain check: 1.44 TMAC / 343ms = 4190 GMAC/s =
@@ -893,7 +893,7 @@ tests/metal test_metal_sgmat_rolled GPU-vs-CPU bit-exact (36/36). Lab: `v25_das_
 das-AUTHORED kernel on the production 34B contract - q3b 4028 / w13_3b 4112 / w2_3b 4034 GMAC/s
 = 97.6-98.6% of verbatim (4101/4201/4132), == the hand-MSL v24g reference, +11-12% over v22.
 One-shot morph probes pruned post-verdict; v22/v23/v24_roll/v24g/v24h1/v25 kept as the
-reproducible A/B family. PRODUCTION CALL (for PR review): verbatim stays the default GEMM - 
+reproducible A/B family. PRODUCTION CALL (for PR review): verbatim stays the default GEMM -
 the last ~2% is AGX-backend scheduling even hand-MSL in the same shape can't reach, and ~2%
 GEMM ~= ~1% pp512 = the margin by which das beats lcpp fa=0. The das v25 kernel + constructs
 are the retirement PATH once the last 2% closes (ISA-level chase, priced separately).
@@ -902,7 +902,7 @@ are the retirement PATH once the last 2% closes (ISA-level chase, priced separat
 **2026-07-13 - Phase 7 (session 5b): logits-on-GPU - 3B pp512 -5.5ms (interleaved, rock-steady
 across 5 rounds: 377.3 vs 382.9 ms/prefill, ~+1.5%).** The final rmsnorm (one row, bx bound at
 the last position's byte offset into the existing rms PSO) + a new classifier GEMV kernel
-(`metal_q8_gemv`: one simdgroup per output row, lanes stride byte4s, 4-blocks-in-flight unroll - 
+(`metal_q8_gemv`: one simdgroup per output row, lanes stride byte4s, 4-blocks-in-flight unroll -
 the rolled x1 form measured only ~140 GB/s; per-byte4 scale product, simd_sum reduce, row < ddim
 tail guard) ride the END of the last command buffer; s.logits reads back with the residual copy.
 The saving EXCEEDS the ~3.7ms CPU logits it replaces because the GEMV overlaps the interleaved
@@ -935,7 +935,7 @@ process-fresh prefill_perf runs + one interleaved lab sweep).** llama-3.2-3B pp5
 best** (median 1256; GPU window 375.4-378.9 ms, tight; e2e spread is commit-wait slack 15-35 ms);
 pp256 best 1256. Anchors: lcpp -ngl 99 fa=1 = 1402 (0.93x), fa=0 = ~1351 (0.96x) - GPU-window-vs-
 GPU-window we hold the session-3 fa=0 win (375-379 vs their 379). llama-3.2-1B pp512: **3467 t/s
-best** (median 3440; GPU 137.1-138.4 ms); pp256 best 3173; lcpp full-Metal anchor 3960 (0.88x) - 
+best** (median 3440; GPU 137.1-138.4 ms); pp256 best 3173; lcpp full-Metal anchor 3960 (0.88x) -
 vs Phase-6's 1054 clean hybrid = 3.3x across Phase 7. Lab GEMM (GMAC/s, das v25 vs verbatim lcpp):
 kv 3197/3326, q 3959/3999, w13 4099/4184, w2 4010/4069, cls 4161/4245, kv3b 3898/3890 (das WINS),
 q3b 4028/4102, w13_3b 4115/4200, w2_3b 4047/4132 - the das-authored kernel at 96-100% of verbatim
@@ -946,14 +946,14 @@ dispatches; the t/s headline is the honest cross-session metric.
 
 **2026-07-13 - Phase 7 REWORK step 1 (PR #3456 closed for redesign): `unroll_range` deleted,
 loop hints ride das's existing `for [hint] (...)` annotation surface.** Boris's call: the
-iterator-function spelling was a construct where the language already had the right one - 
+iterator-function spelling was a construct where the language already had the right one -
 `ExprFor/ExprWhile.annotations` (the per-loop hint list the JIT lowers to !llvm.loop.*
 metadata). The emitter now lowers the SAME vocabulary to clang loop pragmas: `[unroll]` ->
 unroll(enable), `[unroll_full]` -> unroll(full), `[unroll_disable]` -> unroll(disable),
 `[unroll_count=N]` -> unroll_count(N); unknown hints fail closed. Works on `for` and `while`.
 Kernels/fixtures rewritten to `for [unroll_full] (i in range(N))`; emitted MSL is byte-identical
 (msl goldens unchanged, 73/73). One spelling, per-backend lowering - CPU JIT gets LLVM metadata,
-Metal gets pragmas, interp ignores. REMAINING REWORK (design session): tg_cursor/dev_cursor - 
+Metal gets pragmas, interp ignores. REMAINING REWORK (design session): tg_cursor/dev_cursor -
 likely emitter-automatic LSR so natural source gets the pointer form; then das GEMM as default.
 
 **2026-07-13 - Phase 7 REWORK step 2: @workgroup -> dynamic shmem lowering - the das GEMM now
@@ -970,7 +970,7 @@ SHORTER than verbatim's 165). Emitter change: @workgroup members lower to ONE dy
 threadgroup(0) param + derived pointers (scalars deref a derived pointer), name-sorted
 16B-aligned layout, total published as the `_tgmem` companion; `run_compute_1d` takes it,
 drivers pass it per dispatch. Every wg-bearing kernel inherits the codegen with zero source
-changes. Lab (interleaved, bit-exact): das v25 4128-4292 GMAC/s vs verbatim 4002-4201 - 
+changes. Lab (interleaved, bit-exact): das v25 4128-4292 GMAC/s vs verbatim 4002-4201 -
 **+2.2-3.2% on all six big shapes**; emitted == hand morph exactly. Parity token-for-token.
 **NEXT: swap the production GEMM default to the das kernel (retiring the 33KB verbatim MSL to a
 rail), re-run the clean round, reopen the PR.**
@@ -1024,7 +1024,7 @@ epilogue fusion - element pairs (2r, 2r+1) ARE weight-row pairs, so rope+KV-stor
 dispatch (q ropes to the buffer, k ropes straight into the mirror, v stores raw) and
 silu(gate)*up rides the W1|W3 dispatch (gate row r + up row r+hidden in one simdgroup); fused
 add+rms feeding the NEXT layer's norm; (3) f16 weight-scale GEMV twins (qscales16, lcpp q8_0
-byte parity, -5.6% stream); (4) 1024-wide 1-tg rms/addrms; (5) SPECULATIVE GREEDY CHAINING - 
+byte parity, -5.6% stream); (4) 1024-wide 1-tg rms/addrms; (5) SPECULATIVE GREEDY CHAINING -
 the predicted next step's cb commits during the current GPU run and OPENS with GPU argmax
 (CPU tie-break) + the winner's embed gather (cls_q8 linear plane) + a driver-built rope row
 (`build_decode_rope_row` seam), so the GPU flows cb-to-cb with no CPU in the gap; mispredicts
@@ -1112,7 +1112,7 @@ preamble, the member becomes `constant KArgs& ka [[buffer(N)]]`, and `ka.field` 
 
 **Fields are `int`/`uint`/`float` only.** That restriction is the whole feature: a struct of
 4-byte scalars is the same bytes in das and in MSL, with no padding rules to keep in sync, so
-the host writes its own struct straight through `setBytes` (`metal_set_bytes`, already bound - 
+the host writes its own struct straight through `setBytes` (`metal_set_bytes`, already bound -
 Metal caps it at 4KB and a kargs struct is well under). A `float4` field would be 16-byte
 aligned in MSL and shift every field after it; a nested struct brings its own alignment. Both
 are refused (`tests/msl/_fail_closed/_fc_ustruct_{field,nested}.das`).

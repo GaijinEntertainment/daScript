@@ -28,7 +28,7 @@ No muted layers (the batch guards each layer's solo-peak).
 ## THE headline finding: the fit metric optimizes spectral distance, not perceptual identity
 
 The fitter (level-invariant dB log-spectrogram distance + envelope) happily **moves the
-fundamental by octaves** or **merges modal partials into unison** if it shaves spectral error - 
+fundamental by octaves** or **merges modal partials into unison** if it shaves spectral error -
 but those moves destroy exactly what makes a drum recognizable. So **high fit % != sounds right.**
 
 Concrete evidence this session:

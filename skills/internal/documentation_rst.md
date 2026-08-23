@@ -81,9 +81,9 @@ An above-def `//!` extracts NOTHING and says nothing - bare signature on the pag
 Structs: `//!` inside the struct body, `//!<` per field. A `//!` above the `module` decl does not
 reach the page either; the module header text comes from handmade `module-<name>.rst`.
 
-**STYLE014 on an intentionally long `//!` block:** put `//!@nolint` on its first line - 
+**STYLE014 on an intentionally long `//!` block:** put `//!@nolint` on its first line -
 `rst_comment.das` drops only that marker line, so the rest still reaches `generated/detail/`. For
-`//` blocks (no doc-comment) use `// nolint:STYLE014` / `// nolint:STYLE015` on the first line - 
+`//` blocks (no doc-comment) use `// nolint:STYLE014` / `// nolint:STYLE015` on the first line -
 those bypass lint without involving the doc generator.
 
 ## RST Editing Conventions
@@ -141,8 +141,8 @@ Areas: `language`, `macros`, `integration/c`, `integration/cpp`, `sql`, `dasAudi
 | C++ integration | `doc/source/reference/tutorials/` | `tutorials/integration/cpp/` | `.. _tutorial_integration_cpp_<topic>:` | `Tutorial; C++ Integration; <Topic>` | `.cpp` + `.das` |
 | macros | `doc/source/reference/tutorials/macros/` | `tutorials/macros/` | `.. _tutorial_macro_<topic>:` | `Tutorial; Macros; <Topic>` | module + usage `.das` |
 
-- Every RST ends with `.. seealso::` carrying those downloads - 
-  ``Full source: :download:`tutorials/language/XX_name.das <../../../../tutorials/language/XX_name.das>` `` - 
+- Every RST ends with `.. seealso::` carrying those downloads -
+  ``Full source: :download:`tutorials/language/XX_name.das <../../../../tutorials/language/XX_name.das>` `` -
   plus ``Next tutorial: :ref:`tutorial_next_name` `` (except the last) and related `:ref:` links
 - Toctree: `doc/source/reference/tutorials.rst`; macro tutorials go under its "Macro Tutorials"
   section (label `tutorials_macros`)

@@ -80,7 +80,7 @@ there is no model-pointer lifetime to manage. `respond` renders the turn, prefil
 through the callback block (return `false` to stop), terminates the turn in the KV cache, appends both
 turns to `chat.history`, and returns the full reply text; `stats(chat.session)` reports its timing.
 **Context cap:** the session's KV cache is sized to `model.config.seq_len`, so a caller loading a
-large-context model (Llama-3/Phi = 131072) must cap `model.config.seq_len` first (as every REPL does) - 
+large-context model (Llama-3/Phi = 131072) must cap `model.config.seq_len` first (as every REPL does) -
 the full cache would exceed the 4 GB per-array limit.
 
 ## The two backend seams
@@ -151,7 +151,7 @@ for [vectorize, vectorize_width = 8, unroll_count = 2] (j in range64(n)) { ... }
 ```
 These live throughout `dasllama_math.das` (dot / axpy / add / mul / scale / copy / silu /
 softmax / rope) and `_aarch64_neon.das`, and the `8` / `2` / `4` / `16` are **literal ints
-today**. `vectorize` / `vectorize_width` / `unroll_count` are **not** grammar keywords - 
+today**. `vectorize` / `vectorize_width` / `unroll_count` are **not** grammar keywords -
 they're generic `for [...]` annotation-args recognized semantically.
 
 The tune macro must **load a box config at compile time and emit the right numbers into
@@ -216,7 +216,7 @@ Each phase is a mergeable PR; all oracles stay green; dense path bit-identical u
    streaming `generate()`. Examples collapsed: `chat.das` (one REPL, any model) + `run.das` (one
    completion + stats); the 4 other chat REPLs + 2 runners deleted, their oracles migrated into
    `test_parity.das` (TinyLlama-v0.3, Llama-3.2-1B). Full suite 100/100 JIT + AOT.
-6. **Arch files + kernel-backend registry** *(done)* - 
+6. **Arch files + kernel-backend registry** *(done)* -
    - **Arch files (done):** split the `dasllama_transformer.das` monolith so each architecture lives
      in its own `dasllama_arch_*.das` (config setter + `[init]` registration + chat template). The
      shared engine is `dasllama_common.das`; `dasllama_transformer.das` is now a thin umbrella

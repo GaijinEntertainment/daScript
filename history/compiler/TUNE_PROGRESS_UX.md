@@ -143,7 +143,7 @@ and enters backoff restart.
 
 The watchdog comment at watchdog.py:518-521 also notes it already has to defend against tuner
 output volume ("the JIT lines fire hundreds of times mid-tune and would otherwise flap the
-stage"). So it is currently regexing human prose to recover structure the tuner never emitted - 
+stage"). So it is currently regexing human prose to recover structure the tuner never emitted -
 the event stream is the proper fix, and migrating `STARTUP_STAGES` onto it is part of this work,
 not a follow-up.
 

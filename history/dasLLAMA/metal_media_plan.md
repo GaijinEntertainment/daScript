@@ -25,7 +25,7 @@ QK block-skip (`:1131-1136`, mm twins), softmax `cnt` (`:1204`), AV `jlimit`/`kl
 (`:1302`, `:1564`, mm twin). AV's bound is correctness, not optimization.
 
 **The CPU contract the GPU must mirror** (the 21-clause list, key ones):
-- Upper bound lifts to `uniform_end`; the SWA LOWER bound stays query-based - 
+- Upper bound lifts to `uniform_end`; the SWA LOWER bound stays query-based -
   `[sliding floor, uniform_end)`, never `[0, end)` (`dasllama_attn_prefill.das:243-245`,
   `vision_plan.md` doctrine, matches llama.cpp `is_masked_swa`).
 - `uniform_end` is always exactly `start_pos + npos` (foreign values panic,
@@ -162,7 +162,7 @@ NaNs past ~44, the exp-identity form saturates - keep it), im2col/pool/stack (CP
 initially), and the gemma4uv 2-axis pos add (~10 lines).
 
 **The prize, priced by the ledger:** gemma4a das encode 16x mtmd (1888 vs 117 ms - deferred
-with the Conformers), Omni/qwen3a ~4.8x encode gap, whisper-large-v3-turbo xRT 5.6-11.8 - 
+with the Conformers), Omni/qwen3a ~4.8x encode gap, whisper-large-v3-turbo xRT 5.6-11.8 -
 all "fp32 scalar tower, no perf pass". The das record rows carry no `encode_ms` (field
 postdates the sweep) - slice G re-instruments the split before per-family predictions.
 
@@ -193,7 +193,7 @@ slice, possibly post-PR).
 - Weights: one `plane_buffer` per plane (zero-copy when `image_map != null`), tensors bound
   at byte offsets; `upload_region` for LN weight/bias rows. Uploaded once, resident.
 - Buffers: `g_tw_pool` (tracked activations, sized to ceil64 rows) + `g_tw_upool`
-  (untracked uniforms). ONE command buffer, one commit/wait (no KV readback to interleave - 
+  (untracked uniforms). ONE command buffer, one commit/wait (no KV readback to interleave -
   `ncb` chunking only if encode-CPU shows on 32-block towers); capture rail armed so the hz
   oracle derives barriers.
 - Stats: `metal_tower_stats() : (encodes, blocks, rows, declines)` +
@@ -241,7 +241,7 @@ caught the gate's own 106 MB fixture (reserve added).
   rel_l2 <= 4e-3, cos >= 1-1e-5, norm_dev <= 4e-3, all derived from the 2-GEMM f16-stage
   model at 5x headroom, all logged on green); tier-1 ATTEMPT in test_gemma4uv (ladder:
   hold 2e-4 -> else bf16 tensor lane -> else scale-relative 2e-4 + 4e-3*rms with the CPU
-  constant untouched); the caption floor in test_vision_chat (forced-feed logits form - 
+  constant untouched); the caption floor in test_vision_chat (forced-feed logits form -
   freeform token parity is banned).
 - **Tower gates**: ONE new arm token `mtower`, five family blocks in test_model_image, all
   on the f32 rail both sides; depth-scaled numeric bar `3e-3*sqrt(L)` (whisper tiny at
@@ -408,7 +408,7 @@ Ground facts the design leans on (scouted 2026-08-16):
   no Session/Model - the TOWER hook pattern fits, not `DecodeOverrideFn`. qwen3a and canary
   decode through the LLM path and already inherit the metal decode override.
 - The decoder serves Q8-NATIVE on GPU (Boris ruling 2026-08-16, after the whisper.cpp scout:
-  whisper.cpp serves q8_0 decoder mms on Metal INCLUDING the tied-embedding logits GEMV - 
+  whisper.cpp serves q8_0 decoder mms on Metal INCLUDING the tied-embedding logits GEMV -
   decode is GEMV/weight-bandwidth-bound, so an f32 lane concedes ~4x on the dominant
   per-token term). The dense compact q8 planes (`dqblob`/`dqscales` from
   `whisper_dec_quantize`) are the upload; f32 stays the numeric-oracle rail. Numerics note:
@@ -476,7 +476,7 @@ q8 CPU decoder) takes the serve to ~6.0 s with ZERO new kernels - folded in as t
 first step of N/O, since the hooks land on the q8 decoder anyway; (c) the GPU decoder's
 marginal win over q8-CPU decode is ~0.5-0.7 s on gb1 - the knob split is half the chunk's
 e2e win, stated honestly. GPU decode still carries the arc's point (all-Metal, frees the
-CPU, and non-turbo large-v3 has 8x the decoder layers; tiny's decode is 36% of ITS wall - 
+CPU, and non-turbo large-v3 has 8x the decoder layers; tiny's decode is 36% of ITS wall -
 logits alone 42% of tiny's decode).
 
 hp0x2, large-v3-turbo, f32 arm: encode 12107 (blocks.gpu 8683, conv 3409) / decode 8263
@@ -496,7 +496,7 @@ turbo, debug-grade): the mixed serve sums to **6.01 s vs 9.38 all-f32** - decode
 (was 3.55), cross_kv 0.19 (was 1.60), encode unchanged - F1's ~6.0 s call EXACT, and das is
 at whisper-cli parity (5.80) before any new kernel. Tiny decode 476 ms (was 826). Gates
 green: the knob cell (test_whisper - mixed vs q8-default token-identical on jfk, exec_fmt
-"f32/q8", 35/0) and the mixed-flavor roundtrip leg (image suite `--arm whisper`, 24/0 - 
+"f32/q8", 35/0) and the mixed-flavor roundtrip leg (image suite `--arm whisper`, 24/0 -
 dq planes element-exact streamed-vs-staged, enc.fblob full-layout exact, facade .dlim tag
 route).
 
@@ -514,7 +514,7 @@ matmul - slice O rides the same attach). Knob `DASLLAMA_METAL_WDEC` + `set_metal
 `MetalWdecDecline` (q8-NATIVE: the f32 oracle rail declines quant_mode); counters in
 metal_common (windows + declines-by-reason).
 
-**Measured (probe, gb1, turbo, debug-grade): cross_kv 191 -> 63 ms (f32-CPU paid 1600) - 
+**Measured (probe, gb1, turbo, debug-grade): cross_kv 191 -> 63 ms (f32-CPU paid 1600) -
 P11 HELD; the mixed serve bucket sum lands at 5.86 s ~ whisper-cli's 5.80 before slice O.**
 
 FINDING F2 - the alignment trap the gates caught: whisper tiny's ODD vocab (51865) leaves
@@ -563,7 +563,7 @@ graph node count - sub-2 ms/step is PROVEN reachable, so our 3.1 ms is kernel-le
 not an architecture wall. Today: our GPU decode ~ 1.9 s wall vs the CPU q8 decoder's 1.54 s
 (tiny: 1.5 s vs 0.48 - small decoders lose hard to the latency floor). Their encode is
 3.38 s vs our 3.0 s GPU blocks - we already win encode; their conv rides the GPU (slice P
-closes exactly that gap). Their default is beam-5 (2457 sampled tokens vs our greedy 523) - 
+closes exactly that gap). Their default is beam-5 (2457 sampled tokens vs our greedy 523) -
 quality regimes differ in their favor on the same wall.
 
 ## Slice O2 record - the tuning round DONE 2026-08-16 (format parity, then the real term)
@@ -585,7 +585,7 @@ each step measured on turbo gb1 (GPU-busy, 517 steps):
   beam-5; our conv is still CPU - slice P).
 
 SHIPPED POSTURE: `DASLLAMA_METAL_WDEC_STEP` default ON with a serving floor
-`n_text_state >= 1024` (measured: d=1280 wins 1.6x, d=384 tiny still loses to its CPU - 
+`n_text_state >= 1024` (measured: d=1280 wins 1.6x, d=384 tiny still loses to its CPU -
 the `small` decline is policy-class, cross-KV still serves; `set_metal_wdec_step_min_d` is
 the test seat). The lcpp `--asr` CPU rows pin the driver OFF (a CPU row means CPU - the
 bench-level hook-flip trap). Gates: the pc pair's unit cells with a recorded control, the
@@ -614,7 +614,7 @@ blocks-parity suite re-run gates them.
 
 `MetalIm2col2d` (k=3 s=2 p=1, conv2d_s2's exact walk, K-padded rows + strided source) + the
 f32 TILE GEMM via a driver-owned PADDED weight buffer (`q3a_wpad_attach`: out-channels
-480 -> ncp 512 for the ndim%64 grid, conv1's K 9 -> 32 for kdim%32, biases zero-padded - 
+480 -> ncp 512 for the ndim%64 grid, conv1's K 9 -> 32 for kdim%32, biases zero-padded -
 minted once per tower, ~18 MB). One command buffer per WINDOW (all chunks x three stages);
 the shuffle/conv_out tail stays CPU; strided readback slices nch of ncp per row. Hook
 `register_qwen3a_conv_gpu` - and because the conv planes are f32 regardless of the q8 tower,
@@ -651,7 +651,7 @@ whisper conv). The classification:
   decoder attention - now the GPU step's fallback; the q8-tower CPU attention micro-GEMMs;
   prefill attention; the deltanet chain; the FFT twiddle GEMMs).
 - **Oracle rails**: the QuantMode.fp32 / `set_asr_fp32` paths, by definition.
-The q8-tower CPU attention (85% of a q8-CPU encode) stays the one big LEDGERED f32 cost - 
+The q8-tower CPU attention (85% of a q8-CPU encode) stays the one big LEDGERED f32 cost -
 rule-compliant (no twin exists), GPU-served under `--ngl`, a PERF ledger item for the CPU rail.
 
 **qwen3a, gb1, q8 default**: encode 9838 = conv 8617 (88% - the slice-G ad-hoc figure
@@ -660,7 +660,7 @@ confirmed) + blocks 798 + proj 21 + mel 384. Conv split: **mm 7914 (92%) vs im2c
 conv GEMMs (K = 9*n_ch shapes), the exact f32-fallback pattern the new REVIEW rule names.
 Slice Q design update: the GEMM offload is the win; im2col threading is a rider.
 
-P-judgments so far: P14 HELD (wh.mel 0.32% of the gb1 wall; q3a.mel 3.9% of its encode - 
+P-judgments so far: P14 HELD (wh.mel 0.32% of the gb1 wall; q3a.mel 3.9% of its encode -
 under the bar). P11's bar RESTATED vs the q8-CPU 191 ms - the raw win is marginal; GPU
 cross_kv's real point is kx/vx residency for the GPU decoder. P12's bar restated vs
 1.54 s q8-CPU.
@@ -707,7 +707,7 @@ cross_kv's real point is kx/vx residency for the GPU decoder. P12's bar restated
   demands (the tune gate refuses the v3 sidecar by name) - debug-grade leg validation runs
   under DASLLAMA_ALLOW_UNTUNED, stamped debug, never stored.
   DEBUG-GRADE LEG VALIDATION DONE (turbo, -r 1, untuned, parsec stamped on - wiring truth,
-  not record truth): CPU row gb1 16.85 s / hp0x2 47.4 s (the historical q8-CPU baseline - 
+  not record truth): CPU row gb1 16.85 s / hp0x2 47.4 s (the historical q8-CPU baseline -
   the CPU-row wdec pin proven); GPU row jfk 449 ms / jfk3 925 / **gb1 4.05 s (xRT 49)** /
   hp0 5.84 / **hp0x2 11.24 s (xRT 48.6)** - anti-sandbag passed, transcripts full and
   correct. From chunk 2's close (9.32/25.2) another 2.3x; vs the q8-CPU default 4.16x e2e;

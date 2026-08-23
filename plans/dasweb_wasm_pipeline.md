@@ -253,7 +253,7 @@ compiler prevents it (the games prove a multi-file root compiles); it was a UI-s
 tied to naming the artifact after a single source file. Content-addressing removes that
 constraint - the artifact is named by hash, not by basename.
 
-Keep a CI compile-gate job proving the curated set still builds (a test that publishes nothing) - 
+Keep a CI compile-gate job proving the curated set still builds (a test that publishes nothing) -
 a broken sample should red CI, not the production queue.
 
 ## Checkpoints

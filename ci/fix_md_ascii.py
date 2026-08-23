@@ -120,6 +120,7 @@ def transliterate(text: str):
         out.append(ch)
         residual.add(ch)
     text = "".join(out)
+    text = re.sub(" ?" + SENTINEL + " ?(?=\n|$)", " -", text)  # line-end dash: no trailing space
     text = re.sub(" ?" + SENTINEL + " ?", " - ", text)
     return text, residual
 

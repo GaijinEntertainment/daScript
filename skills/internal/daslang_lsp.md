@@ -41,7 +41,7 @@ works for development and wins over the checked-in copy (name-keyed dedup).
 ## Coordinate conventions (probed + lexer-verified)
 
 - daslang `LineInfo`: **1-based lines, 0-based BYTE columns, end-exclusive**
-  (`das_yycolumn = 0` at line start, `last_column = column + yyleng` - 
+  (`das_yycolumn = 0` at line start, `last_column = column + yyleng` -
   ds2_lexer.lpp). `Function.at` points at the NAME token; `Structure.at` is
   one column left of the name (cosmetic).
 - LSP: 0-based lines, 0-based UTF-16 code units, end-exclusive. Conversions
@@ -88,6 +88,6 @@ skips with a `to_log` notice when neither exists. AOT-registered in
   infer, so fidelity is unchanged; lint needs the unoptimized AST.
 - dastest expect-files: validate emits one Information note and suppresses
   diagnostics (intentional errors are not noise to report).
-- The plugin manifest spawns `python3`; Windows may only have `python` - 
+- The plugin manifest spawns `python3`; Windows may only have `python` -
   README documents the local edit. Don't hardcode a fallback chain in the
   manifest (no such mechanism).

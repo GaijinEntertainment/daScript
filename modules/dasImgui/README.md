@@ -2,14 +2,14 @@
 
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
-[Dear ImGui](https://github.com/ocornut/imgui) bindings for [daslang](https://daslang.io/) - 
+[Dear ImGui](https://github.com/ocornut/imgui) bindings for [daslang](https://daslang.io/) -
 part of the daslang tree, built in by default.
 
 Provides the `imgui` binding, the v2 `widgets/` macro layer (`[widget]`/`[container]`/`with_*`), and the `imgui_harness` runtime for building GUI applications with daslang.
 
 ## Part of the daslang tree
 
-dasImgui lives at `modules/dasImgui` and builds with the normal daslang build - 
+dasImgui lives at `modules/dasImgui` and builds with the normal daslang build -
 no package install. It is enabled by default (root CMake option
 `DAS_IMGUI_DISABLED`, default `OFF`) and needs the in-tree dasGlfw and
 dasClipboard modules (also on by default).

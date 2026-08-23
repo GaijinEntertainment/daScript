@@ -6,7 +6,7 @@ without fooling yourself. The second part is the important one: **the make-or-br
 tuner is measurement, not codegen.** Every "breakthrough" we later retracted was a
 measurement artifact; every real win survived the discipline below.
 
-Companion docs (archived in the daslang repo under `history/dasLLAMA/`): `x64_arch.md` (what's universal vs per-box), `get_x64_going.md` (bring-up - 
+Companion docs (archived in the daslang repo under `history/dasLLAMA/`): `x64_arch.md` (what's universal vs per-box), `get_x64_going.md` (bring-up -
 finish it first; tuning an incorrect kernel is worse than pointless). For the tune *framework*
 itself (the `[tune]`/`[tune_scope]`/`[tune_policy]` annotations, the manifest format, the mode
 contract) see `doc/source/reference/tune.rst`; this doc is the dasLLAMA-specific application of
@@ -256,7 +256,7 @@ other models. This is the kernel scoreboard; `benchmarks/lcpp_bench.das` is the 
   Caveat: `mm_gemm`/`mm_requant`
   are inner-leaf timers of the batched matmuls and double-count against the `mm_*` site
   buckets - compare within a tier, don't sum across tiers.
-- **Theirs (the recipe that found the M1 gap, now shipped):** `harness/ggml_op_profile.patch` - 
+- **Theirs (the recipe that found the M1 gap, now shipped):** `harness/ggml_op_profile.patch` -
   apply to llama.cpp with `git apply --ignore-whitespace` and rebuild. It times thread-0 wall
   per graph node in `ggml_graph_compute_thread` (ggml-cpu.c) into buckets NAMED LIKE OURS
   (MUL_MATs split by tensor name: Qcur/Kcur/Vcur -> mm_qkv, kqv_out -> mm_wo, ffn_* -> mm_ffn,
@@ -292,7 +292,7 @@ other models. This is the kernel scoreboard; `benchmarks/lcpp_bench.das` is the 
    bench to see if it moved anything. **A "neutral" verdict here is only valid per-backend:
    `[tuned]` perms bite ONLY on the portable-tier kernels, so an intrinsic auto-backend
    (e.g. `x64-gen`) masks the profile entirely. Run the backend ladder
-   (`DASLLAMA_PIN_BACKEND` per rung, profile ON, bracketed controls) before concluding - 
+   (`DASLLAMA_PIN_BACKEND` per rung, profile ON, bracketed controls) before concluding -
    on the EPYC 9654 the profile was "neutral" under auto but +34% on portable
    (77->104 t/s), flipping portable from worst backend to best and beating auto by ~15%.
    Record the in-model winner in the profile's `runtime.backend` pin.

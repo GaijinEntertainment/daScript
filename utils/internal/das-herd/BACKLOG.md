@@ -33,7 +33,7 @@ review capacity is the bottleneck the arcs exist to fix.
   exactly the survivor pattern observed. Sibling sessions loaded the
   OLD kill-by-name skills before today's fix, so repeat deaths are
   expected until those sessions cycle; the tombstone will classify.
-  (Also: what IS the Session-0 daslang? 463 MB, running as a service - 
+  (Also: what IS the Session-0 daslang? 463 MB, running as a service -
   identify it.)
 - **VERDICT CONFIRMED (Boris checked): other sessions killed the watcher
   with `taskkill daslang.exe` - "because fuck u thats why".** Both
@@ -89,7 +89,7 @@ review capacity is the bottleneck the arcs exist to fix.
   comment" -> typed note travels with the byte-range focus target to an
   agent, riding the existing Look-at-that mailbox shape. Prerequisite worth
   doing at the same time: the session DRIVING dasHerd development (this
-  Claude Code session) is not herd-managed, so there is nobody to address - 
+  Claude Code session) is not herd-managed, so there is nobody to address -
   adopt the already-running external terminal as a herd session so the
   reviewer can talk back to the builder. Filed 2026-07-29, deliberately not
   built yet - more feedback incoming.

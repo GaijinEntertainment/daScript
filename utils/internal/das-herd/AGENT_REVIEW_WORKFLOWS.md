@@ -371,10 +371,10 @@ decisions that need a human, and merge when the user's declared policy permits.
 
 ### The observer model: tool-driven, not agent-driven (decided 2026-07-26)
 
-Watching is software's job; judgment is the agent's. Agents must never poll - 
+Watching is software's job; judgment is the agent's. Agents must never poll -
 an agent context re-running `gh pr view` on a timer is the most expensive
 polling loop ever devised, and honest software does the same watch better for
-100500x less. The watcher grows a **GitHub observer**: dumb, cheap, tireless - 
+100500x less. The watcher grows a **GitHub observer**: dumb, cheap, tireless -
 it polls PRs/CI/reviews, diffs observed state, and acts only on transitions.
 
 The lifecycle is inverted - the tool drives the agent ("PR slave driver"):

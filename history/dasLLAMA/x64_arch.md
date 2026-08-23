@@ -10,10 +10,10 @@
 
 **Audience:** the instance bringing up x64 kernels on an x64 desktop. This doc is the map;
 `get_x64_going.md` is the step-by-step runbook; `tune_for_this_box.md` is the per-box tuning
-guide (read it *after* the kernels are correct). Line numbers are as of the PR #3340 tip - 
+guide (read it *after* the kernels are correct). Line numbers are as of the PR #3340 tip -
 symbols are the durable reference, lines will drift.
 
-**The one-sentence brief:** everything platform-specific already sits behind two registries - 
+**The one-sentence brief:** everything platform-specific already sits behind two registries -
 a **kernel-backend registry** in `dasllama_math.das` and a **name-keyed JIT-intrinsic table**
 in dasLLVM - and the ARM NEON backend is the worked example of both. x64 bring-up = mirror the
 NEON files, register at `[init]`, never edit the core.
@@ -88,7 +88,7 @@ the core dispatch changes when a backend is added.**
 - Function-pointer typedefs (:321-326): `MatmulQ8Q8Fn` (single token), `MatmulQ8Q8BatchFn`
   (`... ntok`), `MatmulQ8Q8Group3Fn` (fused Q/K/V, three outputs, one activation),
   `RepackQ8Q8Fn` (in-place repack of one `[d x n]` Q8 region; `n % 32 == 0`).
-- `struct KernelBackend` (:331): `name, mm, batch, group3, repack, needs_repack, priority` - 
+- `struct KernelBackend` (:331): `name, mm, batch, group3, repack, needs_repack, priority` -
   copyable, lives in `g_kernel_backends : table<string; KernelBackend>`.
 - Active pointers `g_mm_q8q8 / g_mm_q8q8_batch / g_mm_q8q8_group3 / g_repack_q8q8` (:343-346)
   start as **panic stubs** ("no Q8*Q8 kernel backend registered - require
@@ -106,7 +106,7 @@ the core dispatch changes when a backend is added.**
    zero load step.
 2. **`select_matmul_backend_for_load()`** (:415) - called by the loader on the Q8 path. Picks
    the best backend **overall**, including `needs_repack` ones, and returns whether the loader
-   must repack every weight region. This is the *only* path that activates a repack backend - 
+   must repack every weight region. This is the *only* path that activates a repack backend -
    activating one eagerly at registration would run the interleaved kernel on row-major data
    (garbage), which is why registration deliberately skips them.
 
@@ -193,7 +193,7 @@ for both new files (`llvm/daslib/x64_avx.das` carries the intrinsics + emitters)
 **The pattern** (`modules/dasLLVM/daslib/aarch64_neon.das` is 57 lines - read it whole):
 
 - The daslang side is a plain function with a **portable scalar fallback body** and *no*
-  annotation: `def sdot4(acc : int4; w : int8 const?; x : int8 const?) : int4` (:20-34) - 
+  annotation: `def sdot4(acc : int4; w : int8 const?; x : int8 const?) : int4` (:20-34) -
   each of the 4 dword lanes accumulates a dot of 4 int8s (exactly one `v16i8 x v16i8 -> v4i32`
   dot-product instruction). `sdot4_laneq(acc, w, x, lane)` (:43-57) reuses one 4-byte group of
   `x` across all rows - `lane` must be a compile-time constant.
@@ -304,7 +304,7 @@ The ARM SMMLA experiment is **not in the tree**; it's preserved on branch
 
 **The `exp(floatN)` queued decision - RESOLVED (znver2, 2026-07-02): keep the aarch64 gate.**
 Measured on real x64 hardware, the guarded polynomial (`build_vector_expf`) is a loss: 1.12x
-scalar libm (vs ~2.9x on M1) - the always-computed branchless guard tree dominates on SSE/AVX2 - 
+scalar libm (vs ~2.9x on M1) - the always-computed branchless guard tree dominates on SSE/AVX2 -
 while dasLLAMA's unguarded `exp4` runs 4.3x. Even adding the fast-path branch would only reach
 exp4 parity, so the gate stays aarch64-only by measurement and `exp4` stays. (Side finding, out
 of scope here: interp/const-fold `exp(float4)` is the unguarded fast path - it returns `-0`

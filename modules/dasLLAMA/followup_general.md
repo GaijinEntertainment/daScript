@@ -46,7 +46,7 @@
    `prefill_decline` / `metal_prefill_init` ordering) - the PLE pre-step silently runs its CPU
    fallback (`ple_pre_prefill`) on every metal prefill window. Done = instrument the gate legs,
    find the refusing one, fix or document it, and the census E4B row counts all three kernels.
-   One hypothesis is ELIMINATED: the census is not blind to graph-captured dispatches - 
+   One hypothesis is ELIMINATED: the census is not blind to graph-captured dispatches -
    `kn_pipeline` counts on the immediate path and `gr_encode_node` counts again on replay
    (`dasllama_metal_common.das:1402`), so a captured dispatch is still tallied. The zero is real.
    Consequence for reviewers: these three kernels have NO runtime coverage, so a change to them
@@ -122,7 +122,7 @@
    half remains in the new shape: both stages' rope encoders are lens-generated now, but
    prefill's `MetalRope` instance names `g_pf_pso_rope` compiled from the same
    `metal_rope_msl` source decode compiles into its own PSO. The ownership rule is written
-   (REVIEW.md: the class-owning file compiles/releases; instances may share a pso handle - 
+   (REVIEW.md: the class-owning file compiles/releases; instances may share a pso handle -
    the MetalRmsNorm x3 / tensor-twin precedent), so Done = prefill's rope instance either
    names decode's pso global the shared-handle way or a comment says why stage-local is
    intended.
@@ -302,7 +302,7 @@
     names its reason (stale-binary with both dates / foreign-box / version / missing
     entries / absent / unreadable), `DAS_TUNE_MANIFEST` at an untuned-reading file warns
     loudly instead of silently stamping fallbacks, and `[tune_scope] version_of=` pins the
-    scope to `DASLLAMA_VERSION` so a copy-restored old sidecar (fresh mtime, old winners - 
+    scope to `DASLLAMA_VERSION` so a copy-restored old sidecar (fresh mtime, old winners -
     the trap the forensics surfaced) refuses by name. Metal-arm measurement is unblocked;
     bringup owes the standing fresh quiet-box mint, which also refreshes
     `performance/last_known_good_sidecar.json` and the `performance/<box>.tune.json` rig
@@ -315,7 +315,7 @@
     all refuse `s.attn_uniform_end != 0`, and metal-blob models refuse a vision arm outright
     at create (no CPU weights to fall back on). Done = the GPU prefill chains take the
     uniform bound, the three declines and the blob refusals are deleted, and the kernel
-    coverage suite dispatches the non-causal arm. Scheduled for the Metal arc's tail - 
+    coverage suite dispatches the non-causal arm. Scheduled for the Metal arc's tail -
     pulled forward only if CPU-fallback vision proves a blocker (Boris 2026-08-14).
     **Metal half DONE (metal-media chunk 1, 2026-08-16):** the trio takes the bound as
     `AttnArgs.uend` (no separate kernel - the census criterion is moot), the declines and
@@ -469,7 +469,7 @@
     detached-master run (54 tests, that one red); the arm now runs as
     `pinned-greedy parity: Mistral-7B-Instruct-v0.3-Q8_0.gguf` inside `test_parity_specs`.
     PARITY_FULL-gated, so per-PR CI never sees it. The eyeball rail now shows the shape:
-    38/40 match, then "...interest in the technology" (oracle) vs "...in the field" (das) - 
+    38/40 match, then "...interest in the technology" (oracle) vs "...in the field" (das) -
     a prose-tail near-tie of the "Once upon a time" prompt, the exact class the fixture
     header disallows. Needs its own session: regression vs upstream re-upload vs stale
     expectation (stash-and-rerun, then the model-file sha against the manifest); the likely
@@ -542,7 +542,7 @@
 
 44. **The qwen25v (Qwen2.5-Omni/VL window ViT) CPU encode stays ~4.6x behind mtmd's clip
     (released `lcpp_bench --image` vs patched llama-mtmd-cli, CPU, --image-think, r=3, t=8,
-    M1 Max) - 
+    M1 Max) -
     the tower is ruled exact-only (ARCHITECTURE.md 1.7b: per-32-block activation requant
     cannot represent its outlier rows; a q8q8 lane measured 2.0 x rms where a deleted layer
     measures less).** Two honest paths if that encode ever matters: the Metal tower for the

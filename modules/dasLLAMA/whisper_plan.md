@@ -153,7 +153,7 @@ f16->f32-converted weights.
   greedy on jfk.wav** (26 text tokens + eot). tiny: 23/24 - the sole divergence is the first
   comma, a genuine knife-edge (oracle p(",")=0.3465 vs runner-up " ask"; our logit gap
   -0.050 the other way). whisper.cpp's own ARM CPU path computes every mul_mat as f16xf16
-  with fp16 vector accumulation (GGML_SIMD vfmaq_f16) and keeps K/V caches f16 (`itype`) - 
+  with fp16 vector accumulation (GGML_SIMD vfmaq_f16) and keeps K/V caches f16 (`itype`) -
   its logits carry ~1e-2-scale noise vs exact f32 math, so sub-0.05-logit ties can land
   either way per implementation. Not chased: mirroring fp16 accumulation would make our
   compute strictly WORSE to match noise; the flagship gate is the arc's claim.
@@ -162,7 +162,7 @@ f16->f32-converted weights.
 - `no_context` defaults to TRUE (whisper.h 5939) - stock cli does NOT carry rolling context
   between windows; multi-window in notimestamps mode = independent windows.
 - **Family sweep (jfk, +timestamps, greedy)**: tiny, base.en, small, medium, large-v3,
-  large-v3-turbo all TOKEN-FOR-TOKEN (base.en also validates the non-multilingual path - 
+  large-v3-turbo all TOKEN-FOR-TOKEN (base.en also validates the non-multilingual path -
   no lang/task prompt tokens, unshifted special ids). base diverges at ONE step: the
   force-timestamp rule's logsumexp-vs-max-text comparison lands 2e-4 logits apart
   (35.469856 vs 35.469654) while the oracle's own p(" ask") = 0.495 - both engines sit

@@ -180,7 +180,7 @@ modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-ben
 modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench --asr -m "Whisper large" --ngl 1 -r 3  # the f32 Metal tower rail
 ```
 
-Same executable rule as the image cell: the released exe, never the `-jit` script - 
+Same executable rule as the image cell: the released exe, never the `-jit` script -
 `--for-debug-purposes` rows are debug instruments, not measurements.
 
 - One `asr:<clip>.wav` key per corpus bucket: best-of-`-r` transcribe ms, the clip seconds,
@@ -223,7 +223,7 @@ bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- --tok -m <model.g
 
 Every measurement above runs under a sidecar GENERATION, and the rails enforce it:
 
-- **Session start / external-box profiling:** mint as part of building the exe - 
+- **Session start / external-box profiling:** mint as part of building the exe -
   `daspkg release ...`. Release ALWAYS mints; the noise probes stamp the box's cv (only a
   busy box refuses), validation re-races every changed kernel against its fallback and
   demotes a winner that lost its margin, the previous sidecar snapshots to `.bak` with a

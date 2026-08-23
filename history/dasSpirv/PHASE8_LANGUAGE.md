@@ -16,7 +16,7 @@ The original masterplan Phase-8 list named `OpSwitch`, `do { } while`, and label
 **daslang has none of these, by design** (Boris, 2026-06-15) - the only loop/branch keywords are
 `while`/`for`/`break`/`continue` (Phase 2, done), plus the ternary `?:` and unstructured
 `goto`+numeric `label:`. `goto`/`label` are already fail-closed-rejected and cannot lower to SPIR-V's
-*structured* CFG. So those three bullets have no source construct and are dropped (not deferred - 
+*structured* CFG. So those three bullets have no source construct and are dropped (not deferred -
 they will never exist). The real Phase-8 content is the four items below.
 
 ## Scope (four items)

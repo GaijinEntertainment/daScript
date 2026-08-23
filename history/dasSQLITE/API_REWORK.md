@@ -222,7 +222,7 @@ matrix.
 
 ## Shipped - chunk 6: write side - UPDATE / DELETE / Transactions (branch `dassqlite-chunk6-update-delete-tx`)
 
-Chunk 6 ships **tutorials 19 (UPDATE), 20 (DELETE), 22 (Transactions)** - 
+Chunk 6 ships **tutorials 19 (UPDATE), 20 (DELETE), 22 (Transactions)** -
 the write-side counterpart to chunks 2-5's read-side `_sql(...)` flagship.
 Tut 21 (UPSERT) is deferred to chunk 7 because it carries its own
 substantial new surface (the `_excluded` AST sentinel, multi-column
@@ -248,12 +248,12 @@ function wrappers.
 
 ### New `[sql_table]` generated helpers
 
-- `_sql_update_by_pk_sql(typ : T) : string` - 
+- `_sql_update_by_pk_sql(typ : T) : string` -
   `UPDATE "T" SET "c1"=?, "c2"=?, ... WHERE "pk"=?`. PK-only or PK-less
   structs emit a stub that panics at call time with a clear message
   (concept_assert fires unconditionally during structure-macro apply,
   so a runtime panic is the workable shape).
-- `_sql_delete_by_pk_sql(typ : T) : string` - 
+- `_sql_delete_by_pk_sql(typ : T) : string` -
   `DELETE FROM "T" WHERE "pk"=?`.
 - `_sql_bind_row_for_update(stmt, row)` - binds non-PK columns first
   (positional 1..N), then the PK column at index N+1 - matches the SET-
@@ -280,7 +280,7 @@ function wrappers.
     `with_transaction(db, mode, blk)` - two distinct overloads (per
     tut 22 plan; trailing-block convention forbids an optional middle
     parameter).
-  - `try_transaction(db, blk)` and `try_transaction(db, mode, blk)` - 
+  - `try_transaction(db, blk)` and `try_transaction(db, mode, blk)` -
     return `SqlError` (`Option<string>`) rather than `Result<void, E>`
     because daslang's `Result<T, E>` does not yet support `void`
     payloads. `none = success`; `some(errmsg) = SQL failure at BEGIN
@@ -349,7 +349,7 @@ malformed-call diagnostics. Total dasSQLITE suite: **271 tests passing**
   variadic shape.
 - **Optimistic concurrency** (`@sql_concurrency_token`) - open question
   in API_MISSING sec. 15; defer until a real ask.
-- **Multi-table DELETE** (PG `DELETE ... USING` / MySQL JOIN-DELETE) - 
+- **Multi-table DELETE** (PG `DELETE ... USING` / MySQL JOIN-DELETE) -
   dialect-divergent, deliberately skipped per API_MISSING sec. 16.
 - **Projection-side `_select` after `_sql_update_returning`** - for
   RETURNING column projection, post-process the result with a chain
@@ -369,7 +369,7 @@ needs `[sql_index(unique = true, ...)]` from tut 24.
 - `_sql_upsert(row, on_conflict, do_update)` - INSERT ... ON CONFLICT ...
   DO UPDATE SET ..., returns rows-affected `int`.
 - `_sql_try_upsert(...)` - same, returns `Result<int, string>`.
-- `_sql_upsert_returning(...)` / `_sql_try_upsert_returning(...)` - 
+- `_sql_upsert_returning(...)` / `_sql_try_upsert_returning(...)` -
   capture the post-merge row(s) as `array<T>` (always one row in
   practice; the array shape mirrors `_sql_update_returning`).
 - `on_conflict` accepts `_.Col` (single) or `tuple(_.A, _.B, ...)`
@@ -449,13 +449,13 @@ Validation rules enforced at `[sql_table]` apply (each emits
 
 ### Tutorials
 
-- [tutorials/sql/21-upsert.das](../../tutorials/sql/21-upsert.das) - 
+- [tutorials/sql/21-upsert.das](../../tutorials/sql/21-upsert.das) -
   `insert_or_ignore` / `_or_replace`, single + composite `_sql_upsert`,
   `_sql_upsert_returning`, `_sql_try_upsert`.
 - [tutorials/sql/23-foreign_keys.das](../../tutorials/sql/23-foreign_keys.das)
   - CASCADE delete, SET NULL with `Option<T>`, FK violation through
   `try_insert`.
-- [tutorials/sql/24-indexes.das](../../tutorials/sql/24-indexes.das) - 
+- [tutorials/sql/24-indexes.das](../../tutorials/sql/24-indexes.das) -
   unique + composite + named indexes, query-side transparency, UNIQUE
   violation through `try_insert`.
 - [tutorials/sql/25-defaults_computed.das](../../tutorials/sql/25-defaults_computed.das)
@@ -521,7 +521,7 @@ dasSQLITE suite: **309 tests passing** (271 pre-chunk-7 + 38 new).
     5. **12-way `canVisitArgument` cluster** across
        `Sql{Update,TryUpdate,UpdateReturning,TryUpdateReturning,
        Delete,TryDelete,DeleteReturning,TryDeleteReturning,
-       Upsert,TryUpsert,UpsertReturning,TryUpsertReturning}Macro` - 
+       Upsert,TryUpsert,UpsertReturning,TryUpsertReturning}Macro` -
        every override returns `argIndex == 0`. Class-hierarchy
        fan-out can't share without a parent class. Introduce
        `class abstract OuterArgZeroMacro : AstCallMacro` (or
@@ -581,13 +581,13 @@ annotation. No new core macro work was needed.
 
 ### Side bug fixes
 
-- **`sqlite3_bind_blob` wrapper had a hardcoded `index = 1`** - 
+- **`sqlite3_bind_blob` wrapper had a hardcoded `index = 1`** -
   pre-existing; never noticed because nothing tested BLOB from
   `[sql_table]` before. Now uses the caller's `index` parameter.
 - **Empty `array<uint8>` bind** - guarded with
   `length == 0 -> sqlite3_bind_zeroblob(stmt, index, 0)` to avoid
   `addr(data[0])` panic on zero-length arrays.
-- **`is_const_or_captured_var` missed enum / bitfield literals** - 
+- **`is_const_or_captured_var` missed enum / bitfield literals** -
   `_where(_.Status == OrderStatus.Paid)` was emitting incomplete SQL
   (`WHERE "Status" = ` with no bind). Added `ExprConstEnumeration`,
   `ExprConstBitfield`, and the missing int8/16 / uint8/16 forms to
@@ -598,11 +598,11 @@ annotation. No new core macro work was needed.
 1. **`validate_outer_args(prog, call, rootT, expected_arity, sig_text)`**
    - collapses `validate_outer_update_args` /
    `validate_outer_delete_args`. All 8 callers updated.
-2. **`make_insert_sql_fn(st, name, fields, include_pk : bool)`** - 
+2. **`make_insert_sql_fn(st, name, fields, include_pk : bool)`** -
    collapses `make_insert_with_pk_sql_fn` / `make_insert_no_pk_sql_fn`.
    Emitted helper names stay stable
    (`_sql_insert_with_pk_sql` / `_sql_insert_no_pk_sql`).
-3. **`find_annotation(args, argn, default_value : auto(TT)) : TT`** - 
+3. **`find_annotation(args, argn, default_value : auto(TT)) : TT`** -
    collapses `find_bool_annotation` / `find_string_annotation` via
    `static_if (typeinfo is_string(default_value))` dispatch on
    `tString` / `tBool`. ~20 call sites updated.
@@ -610,7 +610,7 @@ annotation. No new core macro work was needed.
    dupe agent but already factored: both are 1-line wrappers around
    `try_collect_rows` with different `err_prefix`. The existing
    factoring IS the dedupe; no code change needed.
-5. **`OuterArgZeroMacro` / `OuterArgTwoMacro` parents** - 
+5. **`OuterArgZeroMacro` / `OuterArgTwoMacro` parents** -
    `class private OuterArgZeroMacro : AstCallMacro` (overrides
    `canVisitArgument` -> `argIndex == 0`) and
    `class private OuterArgTwoMacro : AstCallMacro`
@@ -626,7 +626,7 @@ annotation. No new core macro work was needed.
   - `DateTime` via INTEGER, `Guid` via BLOB, enum auto-roundtrip,
   `query_scalar` through adapters, `Option<DateTime>`, enum-in-where
   predicate, DDL storage-type derivation.
-- [tutorials/sql/27-blob.das](../../tutorials/sql/27-blob.das) - 
+- [tutorials/sql/27-blob.das](../../tutorials/sql/27-blob.das) -
   `array<uint8>` round-trip; derived from inherited
   `tutorial/07-insert_image.das` + `08-read_image.das`.
 
@@ -634,7 +634,7 @@ annotation. No new core macro work was needed.
 
 3 new test files: `test_61_custom_types.das` (7 tests),
 `test_62_blob.das` (6 tests), `test_63_exec_params.das` (6 tests).
-Plus 2 new entries in `failed_sql_macro.das` (`bad20` / `bad21` - 
+Plus 2 new entries in `failed_sql_macro.das` (`bad20` / `bad21` -
 the `_.Col == none()` fixit). Total dasSQLITE suite: **328 tests
 passing** (309 pre-chunk-8 + 19 new).
 
@@ -768,7 +768,7 @@ foundation.
   (daslang generators reject `while`); yield as the LAST statement in
   the for body.
 - **Cleanup via `finally`:** the generator's `finally { sqlite3_finalize(stmt) }`
-  runs on normal exhaustion, early `break`, outer return, and panic - 
+  runs on normal exhaustion, early `break`, outer return, and panic -
   no leaked stmt blocks subsequent writes on the same connection.
   Captured-local binds work (CREATE-VIEW-style inlining is NOT needed
   since `?` placeholders are honored at run time).
@@ -1015,7 +1015,7 @@ sec.09-column_names, and sec.10-list_tables.
 - **Witness machinery** in `sqlite_boost`: `sql_storage_enum_witness`
   (mirror of `sql_storage_type_witness`) + `sql_storage_enum_for(type<T>)`
   resolves the enum at infer time via `_::sql_bind`'s return type.
-- **Provider helper** `sqlite_sql_type(t : SqlType) : string` - 
+- **Provider helper** `sqlite_sql_type(t : SqlType) : string` -
   `INTEGER`/`REAL`/`TEXT`/`BLOB`/`NULL`. Future
   `postgres_sql_type`, `mysql_sql_type` ship next to their respective
   boost modules.
@@ -1174,7 +1174,7 @@ the inner parameter sidesteps it; the macro recognizes the body as
   and subqueries.
 - **`_join` / `_left_join`** (tuts 15-16) - multi-source FROM,
   equi-join predicate extraction.
-- **Subqueries - `_in` / `_not_in` / `_any` / `_none`** (tut 17) - 
+- **Subqueries - `_in` / `_not_in` / `_any` / `_none`** (tut 17) -
   nested SqlQuery walker, outer-lambda-param classifier for
   correlated columns, scalar-subquery embedding in predicates.
 - **`_then_by` and multi-key ordering protocol (D1)** - needs an
@@ -1323,7 +1323,7 @@ the 5 peel-divert sites + the SELECT one (which uses a tighter
 
 ### v2.1 shipped
 
-- **Outer WHERE on a JOIN's projected alias** - 
+- **Outer WHERE on a JOIN's projected alias** -
   `_join(...) |> _where(_.outerAlias)` and
   `_join(_join(A, B, ...), C, ...) |> _where(_.outerAlias)`. The WHERE peel
   now snapshots the analyzed q in place (`snapshot_q_to_subquery_wrap`
@@ -1475,7 +1475,7 @@ Table rows marked `?` are pending the per-tut audit. Finalized rows
 correspond to locked tutorials (see per-tutorial sections below).
 
 **Pattern observation** (2026-04-24): the "`!expr` isn't AST-walkable"
-constraint means every negated SQL form needs its own explicit name - 
+constraint means every negated SQL form needs its own explicit name -
 `_none` for NOT EXISTS, `_not_in` for NOT IN. Expect similar explicit
 positive/negative pairs for any future predicate primitives (is_null /
 is_not_null come up in tut 25). Naming convention: negative form gets
@@ -1775,7 +1775,7 @@ level, pattern-matches on the known operators (`_where`, `_select_new`,
    type's field layout -> `array<Row>` (or `Row`, or scalar, depending on
    the terminal operator).
 
-This is the C# LINQ-to-SQL / EF model - full expression-tree translation - 
+This is the C# LINQ-to-SQL / EF model - full expression-tree translation -
 implemented via `qmacro` / AST visitors the same way `_fold` already does
 for daslib/linq.
 
@@ -1897,7 +1897,7 @@ checks rc, frees errmsg, closes DB. Two rc-check/close/return cycles.
    this is 8 fsyncs in a tutorial meant to demonstrate "insert some
    rows". The idiomatic API should batch automatically when given an
    array.
-3. **Multi-statement SQL via `sqlite3_exec`** is a footgun for params - 
+3. **Multi-statement SQL via `sqlite3_exec`** is a footgun for params -
    `sqlite3_exec` doesn't support bind params. Any user-supplied value
    has to be interpolated into the string (SQL injection, type errors).
 4. **Zero reuse** - nothing stops you from typing `Naem` in both the
@@ -2069,7 +2069,7 @@ def main() {
 
 **What the user writes today**: opens `test.db`, calls `sqlite3_exec`
 with `"SELECT * FROM Cars"` and a callback that receives `values` +
-`columns` arrays and prints them raw. No typing, no struct mapping - 
+`columns` arrays and prints them raw. No typing, no struct mapping -
 just parallel string arrays per row.
 
 **Observations:**
@@ -2236,7 +2236,7 @@ raw-SQL tutorial swaps `?` for `@id` and `sqlite3_bind_int(stmt, 1, v)` for
 `sqlite3_bind_parameter_index(stmt, "@id")` + `sqlite3_bind_int(stmt, idx, v)`.
 Nothing else differs.
 
-**Under `_sql`:** the LINQ form is byte-for-byte tutorial 05 - 
+**Under `_sql`:** the LINQ form is byte-for-byte tutorial 05 -
 `_sql(db |> select_from(type<Car>)._where(_.Id == target)._first())`.
 Placeholder style is a codegen detail the user never sees. EF Core has no
 user-facing knob for this either; the provider picks `@p0` / `?` / `$1`
@@ -2571,7 +2571,7 @@ transaction automatically) or start an explicit one.
   block rolls back the whole thing and re-raises the panic. Matches
   daslang's `with_*` idiom (same family as `with_sqlite`).
 - **Two overloads, not one optional-parameter function.**
-  - `with_transaction(db : SqlRunner, blk : block<():void>)` - 
+  - `with_transaction(db : SqlRunner, blk : block<():void>)` -
     abstract, lives in `daslib/sql`.
   - `with_transaction(db : SqlRunner, mode : SqliteTxnMode, blk :
     block<():void>)` - SQLite-specific, lives in `sqlite/sqlite_boost`.
@@ -2602,7 +2602,7 @@ transaction automatically) or start an explicit one.
   ```
   Lives in `sqlite/sqlite_boost` alongside the 3-arg overload. Other
   providers (PG, MySQL, MSSQL) will ship their own enums for *their*
-  BEGIN modifiers (ISOLATION LEVEL / READ ONLY / DEFERRABLE / etc.) - 
+  BEGIN modifiers (ISOLATION LEVEL / READ ONLY / DEFERRABLE / etc.) -
   deliberately *not* pre-pollinated into the abstract layer, because
   guessing the cross-provider contract before having the second
   provider in hand is exactly the kind of mistake the forward-looking
@@ -2684,7 +2684,7 @@ Full prerequisite list in sec. "SQL read-side prerequisites" above.
   downstream `_select` body. Under `_sql` emits `GROUP BY` + aggregate
   columns in the SELECT clause.
 
-- `_group_by_lazy(key)` - IGrouping shape. 1-arg key. **No fusion** - 
+- `_group_by_lazy(key)` - IGrouping shape. 1-arg key. **No fusion** -
   yields `tuple<Key; iterator<T>>` per group, leaving the per-bucket
   processing to the caller. For use cases that don't map to SQL
   (top-N-per-group, group-scoped filtering, grouped JSON emission).
@@ -2748,7 +2748,7 @@ combined reporting query, and `_try_sql` non-panic variant.
 
 ### 23-joins - "one-to-many across tables" (decided 2026-04-24)
 
-**Verdict:** bucket B. **First tut that grows `daslib/linq` itself** - 
+**Verdict:** bucket B. **First tut that grows `daslib/linq` itself** -
 one new fn, 5-10 lines on top of `group_join`. Everything else is
 `daslib/linq_boost` macro-only. Full additions recorded in sec. "SQL
 read-side prerequisites" above.
@@ -3228,7 +3228,7 @@ transaction.
            name="explicit_name")]   // default auto-generated
 ```
 
-Composite index: `fields=["ColA", "ColB"]`. Stackable - 
+Composite index: `fields=["ColA", "ColB"]`. Stackable -
 multiple `[sql_index]` attributes on one struct each emit a
 separate CREATE INDEX.
 
@@ -3587,7 +3587,7 @@ the 95% path.
 - **No registration API.** Removed from the original strawman.
 - **No runtime `SqlType` enum** (was `SqlType.Integer |
   SqlType.Real | SqlType.Text | SqlType.Blob` in API_MISSING's
-  strawman). The return type of `sql_bind` replaces it - 
+  strawman). The return type of `sql_bind` replaces it -
   daslang's type system is the enum.
 - **No third function `sql_column_type(type<T>)`.** Folded into
   lock 2 (storage type read from `sql_bind`'s return type).
@@ -3756,7 +3756,7 @@ audit row is written). `success` column from the original 2026-04-24
 design dropped per Q1=A lock in API_MIGRATION Scenario 1.
 
 One row per successfully-applied migration. Multi-row (not
-single-row-with-current-version) so the audit trail survives - 
+single-row-with-current-version) so the audit trail survives -
 matches Flyway's ergonomics at zero extra cost.
 
 **Ten locks:**
@@ -4019,7 +4019,7 @@ shape, deferred list.
 ~80% shared with `[sql_table]`); `_sql` translator learns to
 accept `type<V>` where `type<T : sql_table>` would go;
 mutation-path macros add the "is this a view?" check and
-reject if so; one new call macro `_create_view` (~50 lines - 
+reject if so; one new call macro `_create_view` (~50 lines -
 wraps `_sql`'s SELECT-string emitter with a `CREATE VIEW name
 AS` prefix + column-match check against the `[sql_view]`
 struct); one new function `drop_view_if_exists(type<V>)`
@@ -4126,7 +4126,7 @@ lock 6 + the "future `[sql_function]` extension" note below.
 1. **Lives in `sqlite/sqlite_boost`, not `daslib/sql`.** No
    cross-provider abstraction. The function, its C++ binding,
    and the trampoline are all provider-local. Tut opens with
-   an explicit "this feature doesn't port to PG/MySQL/MSSQL - 
+   an explicit "this feature doesn't port to PG/MySQL/MSSQL -
    those providers need server-side DDL in their own
    procedural dialects" paragraph.
 2. **Scalar functions only in v1.** No aggregates
@@ -4208,7 +4208,7 @@ Three wins over the v1 manual path:
    `register_function` call per `with_sqlite`; the macro
    threads the registration into connection setup.
 3. **Single source of truth.** The function annotation
-   declares the SQL name, determinism, direct-only flag - 
+   declares the SQL name, determinism, direct-only flag -
    no drift between the definition and the registration site.
 
 **Ships when a user asks, or when aggregates follow-up lands
@@ -4440,7 +4440,7 @@ All thin wrappers over `exec` / `sqlite3_exec`.
   in `apply_recommended_pragmas` at CLOSE time (not at connection
   setup). Deferred to tut 34's operational-hygiene scope.
 - **`[sql_pragma]` annotation** for module-scoped preferences.
-  Parallel to tut 32's `[sql_function]` future macro. Defer - 
+  Parallel to tut 32's `[sql_function]` future macro. Defer -
   runtime API is the MVP.
 
 **Running totals after tut 33:**
@@ -4525,7 +4525,7 @@ def try_optimize(db : SqlRunner) : Result<void, string>
 3. **`vacuum` is runtime-guarded against in-transaction use.**
    Strict form panics with a clear message ("VACUUM cannot run
    inside an active transaction; commit or rollback first");
-   `try_vacuum` returns Err. Compile-time check deferred - 
+   `try_vacuum` returns Err. Compile-time check deferred -
    `with_transaction` lexical-scope awareness in the macro is
    too brittle across lambdas / forwarding.
 4. **`vacuum_into(db, path)` ships alongside** for the compact-
@@ -4546,7 +4546,7 @@ def try_optimize(db : SqlRunner) : Result<void, string>
 6. **`optimize(db)` ships as a standalone function** - NOT
    auto-bundled into `apply_recommended_pragmas` (tut 33).
    `PRAGMA optimize` needs to run AFTER queries have built
-   planner stats, so the natural call site is close time - 
+   planner stats, so the natural call site is close time -
    opposite of setup-time pragmas. User opts in; no
    paternalistic auto-run.
 7. **Backup progress callback deferred.** The C API supports
@@ -4925,7 +4925,7 @@ def sql_extract (v : array<uint8>; type<T>) : T {
   annotation is the design call. Tuple/struct columns without
   `@sql_json` or `@sql_blob` remain tut 29 lock 7 compile errors.
 - **`CHECK(json_valid(col))` auto-DDL** - see lock 7.
-- **`@sql_json_index("$.path")` typed expression index** - 
+- **`@sql_json_index("$.path")` typed expression index** -
   dialect-divergent; ships after a second provider lands.
 - **`@sql_json(fast)` fast-path using `json_sprint` /
   `json_sscan`** - profile-driven opt-in; ships when asked.
@@ -5165,7 +5165,7 @@ trio with LIKE emission + escape, FTS5 table declaration,
 non-FTS5 struct, panic demo on unsupported in-memory query
 syntax, 5-row choice table, 7 gotchas, 10-item deferred list.
 
-**Phase-0 impact:** adds **Phase 0.4** - 
+**Phase-0 impact:** adds **Phase 0.4** -
 `daslib/strings_boost::text_match`. Useful standalone; not
 SQL-specific. Zero linq.das/linq_boost additions.
 

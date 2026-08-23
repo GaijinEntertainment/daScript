@@ -250,7 +250,7 @@ first when the pointers are non-owning.
   `pass`, `explicit`, `capture`, `deref`, `template` are keywords; `range`, `urange`,
   `range64`, `urange64`, `block`, `function`, `lambda`, `iterator`, and the small-vector type
   names (`half2`, `short4`, `byte16`, ...) are type tokens. Using any as a
-  variable/parameter/field/function or annotation-argument name is a syntax error - 
+  variable/parameter/field/function or annotation-argument name is a syntax error -
   including `@range = 5` on a field.
 - **A statement-level expression must fit one line** unless wrapped in `(...)`: a
   continuation line starting with `+` or `-` parses as a separate unary statement and is

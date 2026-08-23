@@ -2,7 +2,7 @@
 
 Provider-neutral tests for the `daslib/sql_boost` + `daslib/sql_linq` contract
 (see [modules/dasSQLITE/PROVIDER_CONTRACT.md](https://github.com/GaijinEntertainment/daScript/blob/master/modules/dasSQLITE/PROVIDER_CONTRACT.md)).
-Every test goes through the shim in [`_conformance_provider.das`](_conformance_provider.das) - 
+Every test goes through the shim in [`_conformance_provider.das`](_conformance_provider.das) -
 the ONE file a provider swaps to run the suite against its own runner. In-tree the shim
 is SQLite; an external provider repo (dasDuckDB, dasPostgreSQL) copies this directory and
 rewrites only the shim:

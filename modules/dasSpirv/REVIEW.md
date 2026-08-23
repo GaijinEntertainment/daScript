@@ -10,7 +10,7 @@ Architecture doc: `MASTERPLAN.md`.
 - **A new rejection path ships its `_fail_closed/` fixture,** with its error needle asserted
   in `tests/spirv/test_fail_closed.das`.
 
-- **A capability that serves a downstream consumer lands with a behavioral arm there** - 
+- **A capability that serves a downstream consumer lands with a behavioral arm there** -
   dasVulkan `tests/integration` or the dasLLAMA vulkan kernel suite - where the kernel runs
   on a device against its CPU oracle.
 

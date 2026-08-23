@@ -138,5 +138,5 @@ its line here, with its tests, in the same change.**
   reads the filesystem; no store mutation that bypasses `samples_store` functions.
 - `admin.das` - operator CLI (listing curation). Talks to the store the same way the server
   does; no second implementation of a store operation.
-- `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh`, `caddy.snippet` - 
+- `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh`, `caddy.snippet` -
   packaging, deployment, and the public route boundary.

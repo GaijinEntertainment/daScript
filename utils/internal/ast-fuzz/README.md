@@ -142,7 +142,7 @@ Expression types (`expr.type`) are not walked by the visitor either, so the pass
 records them as whole trees from `preVisitExpression`, along with the type slots
 the expression visits skip (`ascType`, `recordType`, `bitfieldType`,
 `assumeType`, a non-closure block's `returnType`) and the `typeMacroExpr` /
-`fixedDimExpr` payloads. A slot the walk itself enters is left alone - 
+`fixedDimExpr` payloads. A slot the walk itself enters is left alone -
 `ExprMakeLocal::visit` walks `makeType`, so recording it here would read as an
 alias of the node the walk is about to reach.
 
@@ -210,7 +210,7 @@ Two compiler-side hooks, both no-ops unless the module is loaded:
 
 A macro that re-breaks the same node every pass never converges: the verifier
 repairs, the macro breaks it again, and the compile ends in `error[30507]: type
-inference exceeded maximum allowed number of passes`. That is the macro's bug - 
+inference exceeded maximum allowed number of passes`. That is the macro's bug -
 break the node once.
 
 ## Self-test

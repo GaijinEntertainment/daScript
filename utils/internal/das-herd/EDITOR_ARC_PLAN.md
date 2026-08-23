@@ -41,7 +41,7 @@ node-level access the native surface lacked - ONE new extern in
 dasTreeSitter (`_tree_sitter_structure`: parse + cursor walk, callback per
 named multi-line node with type/bytes/rows, mirroring `_tree_sitter_highlight`'s
 shape) + its `syntax_structure` das wrapper. Foldable node types stay
-das-side data (`g_fold_types` per language in `imgui_text_tree_sitter`) - 
+das-side data (`g_fold_types` per language in `imgui_text_tree_sitter`) -
 the "config" Boris asked about is a table in the module, not a file.
 
 **Fold slice status (shipped 2026-07-30):** source view folds das/C/C++/
@@ -94,7 +94,7 @@ multi-editor invocation routing by context field deferred; the base
 replace rides the find bar. Find module: replace row (toggle chevron,
 input, Replace/All buttons; Enter = replace one, Ctrl+Alt+Enter =
 replace all; Esc closes), request counters the host applies, per-match
-template expansion in regex mode ($0/$&, $1-$9, ${n}/${name}, $$ - 
+template expansion in regex mode ($0/$&, $1-$9, ${n}/${name}, $$ -
 mirrors daslib/regex's private expand_replacement). Editor: byte<->
 (line,column) mapping over the LF-joined `text_edit_text` domain,
 `text_edit_replace_range` / `text_edit_replace_all` (ascending spans
@@ -151,7 +151,7 @@ undo units carry serials; `text_edit_mark_saved` records the save point and
 point clears it; divergence makes it unreachable - VS Code semantics, three
 model tests); `text_edit_byte_of_position` added (inverse byte mapping).
 App: per-document edit state; enter by typing (printable char pre-arms the
-editor's keyboard and the widget's own drain consumes the queued chars - 
+editor's keyboard and the widget's own drain consumes the queued chars -
 a manual replay double-typed, probe-caught), Ctrl+E, footer Edit/Done, or
 View menu; plain/code = single pane, markdown = side-by-side with live
 preview (debounced `md_parse` of the LF buffer into SEPARATE preview state
@@ -215,7 +215,7 @@ behind "live preview proves insufficient in use".
 
 ### The API is the product (Boris, 2026-07-30)
 
-Every editing capability is a PUBLIC, programmatic verb on the state - 
+Every editing capability is a PUBLIC, programmatic verb on the state -
 `undo`, `redo`, `delete`, `select`, `type`/`insert`, `navigate_to`, word
 moves, line ops, search/replace - usable by anyone building their own
 editor on the component, with no ImGui frame required. The keymap is just
@@ -256,7 +256,7 @@ gets its binding.
 - Operation journal: `{kind = insert | remove, line, column, text}` with
   inverse application; typing runs coalesce (same line, adjacent column,
   no boundary event); cursor jumps, paste, and edit-type changes start a
-  new group. Redo stack cleared on new edits. Undo depth unbounded - 
+  new group. Redo stack cleared on new edits. Undo depth unbounded -
   operations are small and the journal is the future basis for
   edit-tracking features.
 
@@ -280,7 +280,7 @@ gets its binding.
 
 ### Rendering
 
-- Virtualised: visible lines only, drawlist text runs per style cell - 
+- Virtualised: visible lines only, drawlist text runs per style cell -
   the exact discipline that took the terminal from 3 to 120 FPS. Gutter
   with line numbers; current-line tint; selection rects; a blinking
   cursor drawn from the style's cursor color.
@@ -336,7 +336,7 @@ highlight inside code blocks lands with the selection work in E2/E4.
   6. Leftover Tier-2: join lines, double-click-drag word-granular extend,
      drag-and-drop selection move.
   7. **Inline color embed** (tail of E4): `0x12AF2A` literals (with and
-     without alpha) get a swatch + real ImGui color dialog writing back - 
+     without alpha) get a swatch + real ImGui color dialog writing back -
      the proof case that the editor embeds live widgets over source
      ranges.
   Settled in discussion (2026-07-30, no pushback): language profile is a
@@ -346,7 +346,7 @@ highlight inside code blocks lands with the selection work in E2/E4.
   `"{"` must not count); ghost-text completion defaults ON with a
   per-language kill switch. All revisable if it feels wrong in use.
   Settled 2026-07-31 (Boris: "now, for sure"): the E6 provider interface
-  is built IN E4 as the completion carrier from day one - 
+  is built IN E4 as the completion carrier from day one -
   document-words+keywords is provider #1; LSP and LLM slot in later
   without touching the editor, and the interface grows hover/definition
   arms in E6. The language profile ABSORBS the per-language data already
@@ -413,7 +413,7 @@ highlight inside code blocks lands with the selection work in E2/E4.
   Shape section, right after E5 while the markdown machinery is hot;
   E6/E7 numbering unchanged.
   **STATUS: SHIPPED (2026-08-02, one PR on codex/e5-preview-caret).**
-  What landed, in dependency order: (1) editor range-core - 
+  What landed, in dependency order: (1) editor range-core -
   `text_source_edit_segment` + `TextEditSegmentSpec` draw any line range
   at a composition offset, classic widget = the defaults call; (2)
   markdown view begin/render/end split + partial block rendering

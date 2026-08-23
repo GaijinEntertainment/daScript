@@ -14,7 +14,7 @@ shape measures -36B vs +1.6MB for every conversion shape, 200k calls).
 - **419 sites are the let-local form** `let s = string(...)` - this is what f2s does
   (`web/examples/ui/samples/examples/f2s.das:19`): NOT direct-arg. The motivating benchmark
   is only caught by the live-range phase (P3), not the direct-arg phase.
-- ~57 sites are the direct-nested form `find(string(...))` / `length(string(...))` - 
+- ~57 sites are the direct-nested form `find(string(...))` / `length(string(...))` -
   mostly dasHV/dasllama-server tests (`find(string(resp.body), ...)`); a few daslib/utils.
   Many of those are `string(das_string)` clones = PERF007/PERF012 territory (drop the
   conversion entirely) - not counted as wrapper gain.
@@ -66,7 +66,7 @@ shape measures -36B vs +1.6MB for every conversion shape, 200k calls).
   per consuming call (`!policyBased && !invoke && !captureString`), mark/wrap only the
   **rightmost eligible argument overall** - builder OR flagged call. Two scans would
   dangle: wrapper on arg0 conversion + builder temp on arg1 flushes arg0 before the call.
-- **P1 FINDING (2026-08-07): the old per-call rightmost-builder rule was ALREADY unsound - 
+- **P1 FINDING (2026-08-07): the old per-call rightmost-builder rule was ALREADY unsound -
   a live silent miscompile on master.** Extern (interop) argument evaluation order is
   UNSPECIFIED (the templated pack expansion - right-to-left on MSVC; ast_allocate_stack's
   own "order of evaluation for interop functions is not specified" comment). So a nested
@@ -173,10 +173,10 @@ budgeted work, not a blocker discovered mid-PR.
 Batches (non-overlapping file ownership, one Opus agent each):
 1. C++ flag batches, each = audit-then-flag every string-returning extern in its files
    (the replace/rtrim passthrough check is THE step that cannot be skipped):
-   a. module_builtin_runtime + misc_types remainder;  b. module_builtin_fio (path helpers - 
+   a. module_builtin_runtime + misc_types remainder;  b. module_builtin_fio (path helpers -
    hot in tool loops);  c. module_builtin_ast + rtti + debugger;  d. external modules
    (dasHV response/header getters, dasLLAMA, dasImgui, dasTerminal).
-2. das-side `[temp_string_result]` annotations in daslib (strings_boost format/join etc.) - 
+2. das-side `[temp_string_result]` annotations in daslib (strings_boost format/join etc.) -
    but FIRST probe what the propagation already proves; annotate only actual gaps.
 3. Site cleanups: the ~57 direct-arg `string(das_string)` hits = PERF007/PERF012 fixes
    (drop the conversion), mostly dasHV/dasllama-server tests.
@@ -206,7 +206,7 @@ batch A finding): rewritten sites plug into the existing rightmost-builder temp 
 free. Semantics: fires only for the resolved builtin (no promotion in das => no formatting
 divergence), L2R order preserved, both-empty->null agrees. Placement: post-infer, before
 optimization (all-const builders still fold). Carry-over rule: builder eval computes ALL
-element values before writing any, so only the LAST element could ever host a queue site - 
+element values before writing any, so only the LAST element could ever host a queue site -
 v1 keeps element interiors site-free.
 
 ## Risks / notes
@@ -251,7 +251,7 @@ v1 keeps element interiors site-free.
   probe-verified (AST flag probe + runtime heap check); ~40 functions confirmed covered
   by propagation with no annotation; declines recorded (pad/trim/wide/ansi passthroughs,
   cast_to_string bit-pun). Finding: strings_boost.das:97 join(var iterator; sep; blk)
-  overload is uncompilable today (error 30939 via join_implement's non-var param) - 
+  overload is uncompilable today (error 30939 via join_implement's non-var param) -
   pre-existing, reported, not fixed in this arc.
 - Sweep verification rows: tests/strings/temp_string_reclaim_sweep.das (flatness per
   batch family + identity-input passthrough traps for md_escape/to_generic_path/

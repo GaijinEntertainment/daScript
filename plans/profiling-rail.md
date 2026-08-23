@@ -106,7 +106,7 @@ readers' silent-default.
 - **ASR family stays runtime-armed - census overturned the plan here.** All 68
   `asr_prof_add` sites back the encode-split DELIVERABLE (`lcpp_bench` samples
   `asr_prof_ms(ebucket)` on every ASR cell, rail or no rail), so compile-time erasure would
-  break site records on off-builds. Its always-on start ticks are ~0.01-0.03% of an encode - 
+  break site records on off-builds. Its always-on start ticks are ~0.01-0.03% of an encode -
   unresolvable; left exactly as-is.
 - **C1 `// clock: control` (marked):** prefix-cache `last_hit_at`/`born_at` (LRU eviction
   ordering) + the image tmp-name tick (uniqueness suffix, not timing).
@@ -163,7 +163,7 @@ Interleaved A -> B-off -> B-on x3 per bench, strictly serial, arm A via git-chec
 6. **AMX-for-ASR audit - the M1 leg ran 2026-08-06 (structural + measured), M4 leg remains.**
    Structural: the override seam is exactly `matmul_batch` (f32) + `matmul_bf16_batch`
    (bf16); every ASR tower GEMM reaches it through `tw_mm`'s fp32 fork, but the SHIPPED q8
-   towers take `matmul_q8q8_batch` (NEON, seam-invisible by the #3562 crossover verdict) - 
+   towers take `matmul_q8q8_batch` (NEON, seam-invisible by the #3562 crossover verdict) -
    only conv1 and non-32-multiple projectors ride the seam by default. The BNNS-f16 lane is
    UNREACHABLE from ASR (bf16 seam only; towers have no bf16 planes) - the M4-crowning hope
    needs a small f32->f16 fp-seam lane (the `f16_plane_ptr` conversion cache generalizes).
@@ -227,7 +227,7 @@ genuinely non-constant conds still refuse).
 
 ## Side-arc follow-ups (miniature, next stopping point)
 
-- **dastest: always name who timed out.** The tsan lane's batch pass reported "1 errors - 
+- **dastest: always name who timed out.** The tsan lane's batch pass reported "1 errors -
   Test timed out after 1800s" with NO test name (--failures-only + 80 worker subprocesses),
   so a timeout costs a full serial rerun just to attribute it. The timeout error line must
   carry the test file/name in every mode. (Hit live babysitting PR #3643, 2026-08-07.)

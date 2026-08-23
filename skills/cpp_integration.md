@@ -58,7 +58,7 @@ a namespace use the namespace-safe pair instead: `DECLARE_MODULE(ClassName)` /
 `DECLARE_ALL_DEFAULT_MODULES` at file scope, `PULL_MODULE(ClassName)` /
 `PULL_ALL_DEFAULT_MODULES` inside the namespace (`tutorials/integration/cpp/22_namespace_integration.cpp`).
 
-A C++ module also needs a `.das_module` descriptor to load into the DLL binary - 
+A C++ module also needs a `.das_module` descriptor to load into the DLL binary -
 `skills/dynamic_modules.md`.
 
 ## Binding functions - `addExtern` + `DAS_BIND_FUN`
@@ -134,7 +134,7 @@ signature-checked, while untyped `Lambda` maps to `lambda<>` and will **not** ma
 typed `lambda<(x:int):int>`. Anything that invokes a script callback takes
 `SideEffects::invoke`.
 
-Calling into daslang from C++ goes through the same helpers - 
+Calling into daslang from C++ goes through the same helpers -
 `das_invoke_function<Ret>::invoke(ctx, at, fnPtr, args...)` marshals arguments for you and
 is preferred over raw `cast<>` plus `evalWithCatch`.
 

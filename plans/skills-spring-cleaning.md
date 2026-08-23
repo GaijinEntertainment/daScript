@@ -55,7 +55,7 @@ no MCP, no repo paths; stripped lint material folds into CLAUDE.md policy or die
   `daslib_modules.md` (cut to ~35 - conventions only), `writing_tests.md`,
   `memory_leak_detection.md`, `jobque_debugging.md`, `profiler.md`,
   `project_overview.md`, `design_philosophy.md` (RST include), `perf_lint.md` +
-  `style_lint.md` (split: interpretation half stays root - keeps the link closure - 
+  `style_lint.md` (split: interpretation half stays root - keeps the link closure -
   authoring half internal), `tdd_audit.md`, `comment_style_hygiene.md` (trimmed),
   `review_md.md`, `imgui_application.md`, `imgui_ui_debugging.md`, `imgui_migration.md`,
   `dynamic_modules.md` (split: .das_module authoring root, CMake/static plumbing
@@ -104,7 +104,7 @@ splitting the idiom table at ~line 425.
   semantics; the ASCII caveat dies). Add `.claude/skills/daslang` + `.claude/agents/dragon.md`
   installs (precedent: the LSP manifest block). Ship REVIEW_COMMON.md to the SDK root.
 - `ci/check_shipped_skills.py`: os.walk; folder-derived shipped-set; explicit
-  `skills/internal/` link ban (the current SKILL_REF regex is BLIND to internal/ links - 
+  `skills/internal/` link ban (the current SKILL_REF regex is BLIND to internal/ links -
   fix); daslang/ purity checks (repo paths, bin/, MCP, CI, lint IDs; no repo-only escape
   there); dead-link resolution gains dirname-first (or references/ links all report
   dead); trigger-row presence check vs install/CLAUDE.md; extend the dead-link walk to
@@ -152,7 +152,7 @@ splitting the idiom table at ~line 425.
   param is NAMED `file` though it is argument text - a rename would kill the trap at the root.
 - New probe (2026-08-16): one-line enum body takes commas - `enum E { A; B }` is
   error[30151] -> one line for `references/types.md`.
-- `filesystem.md`'s `parse_file_list(file, ...)` param is argument TEXT, not a path - 
+- `filesystem.md`'s `parse_file_list(file, ...)` param is argument TEXT, not a path -
   carried with annotation; fix the root source too if it survives.
 
 ## Wave-2c residuals
@@ -170,7 +170,7 @@ Listed by agent C, deleted from nowhere yet - each needs a probe before entering
 (bundle rule) or a placement edit (root skill). Place during wave 4/5:
 - `notify` vs `notify_and_release` (lambda-captured channel holds an extra ref) +
   child-script channel ops need `require daslib/jobque_boost` and `compile_file` +
-  `make_file_access("")` -> home: `skills/jobque_debugging.md` (root, no probe needed - 
+  `make_file_access("")` -> home: `skills/jobque_debugging.md` (root, no probe needed -
   behavioral claims carried from the deleted text, verify against daslib/jobque_boost).
 - `logger_install_hook()` - process-wide debug agent diverting print/to_log; mandatory for
   stdio-transport processes; one install covers `new_thread` workers -> bundle
@@ -230,7 +230,7 @@ single-call-site assertion.
 
 Ruling 5 (dasLLAMA master) EXECUTED same day, then largely SUPERSEDED at the rebase:
 master had its own parallel grooming of the same rules (the version split, a concrete
-`*_decline_caps` rule, the EMITTED-shader indirection form, the entry-point split) - 
+`*_decline_caps` rule, the EMITTED-shader indirection form, the entry-point split) -
 master's text won wholesale; what survives from our round is the mechanical layer
 (21 engine-filename `dasllama/` qualifications + the routing-block count drop). Same at
 the checklist-round commit for REVIEW_GPU's role-file and decline rules. The

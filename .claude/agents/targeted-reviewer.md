@@ -26,5 +26,5 @@ Rules of engagement:
   REFUTE it first; report CONFIRMED only with a reproduction or a read that excludes the
   alternative explanations, else PLAUSIBLE with what is missing.
 - **Output**: findings ranked most-severe first, each self-contained (no references to your
-  process, other findings' numbering, or tools used); end with a one-line coverage note - 
+  process, other findings' numbering, or tools used); end with a one-line coverage note -
   what you read and what you deliberately did not.

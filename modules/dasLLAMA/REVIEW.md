@@ -244,7 +244,7 @@ concern's shared file (its own file when none exists)** - never sideways into a 
 
 **A family gaining an arm for a media kind adds that kind's span markers - the template text
 that opens and closes the media rows - to that family's chat template, never a second
-renderer.** A family whose template or vocab lacks them has no arm for that media kind - 
+renderer.** A family whose template or vocab lacks them has no arm for that media kind -
 `create_chat_` panics at create, not at render.
 
 **No signature in `dasllama/dasllama_tower.das` - the shared encoder-tower home - takes a

@@ -61,7 +61,7 @@ before adding anything.
   "not a git repository" -> `remove --force` -> `prune` is expressed), and
   `tolerate` (non-zero is a normal outcome, e.g. `git diff --quiet`).
 - Port `remove` and `commit_wip` onto it FIRST and re-run their tests green
-  before writing any new action. This is a refactor with existing coverage - 
+  before writing any new action. This is a refactor with existing coverage -
   do not mix it with new behaviour in one commit.
 
 Keep `step_index` / `step_count` semantics intact; the dialog already renders
@@ -116,7 +116,7 @@ Rules that must hold:
 - Discard runs on the operation rail, not the single-flight file action: it can
   touch thousands of files.
 - **One rail for everything that touches the index (note, 2026-07-28).** The
-  single-flight file action and the operation rail are independent gates - 
+  single-flight file action and the operation rail are independent gates -
   nothing stops a discard launching while a stage is in flight, and `git add`
   and `git checkout --` both take `.git/index.lock`. Put ALL index-touching
   actions on the operation rail (stage/unstage become one-step operations) so

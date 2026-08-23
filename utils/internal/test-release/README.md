@@ -1,6 +1,6 @@
 # test-release - the release-audit batch runner
 
-Points at an EXTRACTED release bundle and proves it sane using the bundle's own binary - 
+Points at an EXTRACTED release bundle and proves it sane using the bundle's own binary -
 no repo files, no build tree. This is the tool tier of the release audit (tools -> agents ->
 people, fail-fix at every layer); agent and human testing start only on a bundle this tool
 passes.
@@ -49,7 +49,7 @@ passes.
 ## expected_compile.txt / expected_utils.txt
 
 `<bundle-relative-path-or-row-name> <reason>`, one per line, `#` comments. Discipline: an entry is a
-RULING (why this file legitimately cannot compile from a bare bundle), not a mute button - 
+RULING (why this file legitimately cannot compile from a bare bundle), not a mute button -
 `SHIP-DEFECT(...)` reasons mark known defects awaiting a fix and must disappear when the
 fix lands; the stale-expected check reds the gate if an entry starts passing, so the list
 can only shrink truthfully.

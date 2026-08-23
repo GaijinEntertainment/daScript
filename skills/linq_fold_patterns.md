@@ -33,7 +33,7 @@ document) twice:
    == null``, i.e. the source is **not** a decs eager bridge. Top is
    first `peel_each`-unwrapped. Decs chains never reach this pass:
    if the Decs pass above cascades on every row, control falls
-   through to `fold_linq_default` instead. (This is deliberate - 
+   through to `fold_linq_default` instead. (This is deliberate -
    `peel_each` does not strip the eager-bridge `ExprInvoke`, so
    without this gate the `decs_source` predicate would still
    succeed on a decs source in the Array pass and decs-only rows
@@ -96,7 +96,7 @@ what would otherwise be many lookalike chains:
   (cascade always evaluates inner once per element). Chains with
   `%` / `/` / user-call inner cascade to tier-2 (output remains
   correct). Also bails (cascades) when either selector is not a
-  peelable single-arg, single-return `ExprMakeBlock` lambda - 
+  peelable single-arg, single-return `ExprMakeBlock` lambda -
   multi-statement projection bodies, captured/non-trivial lambda
   shapes, and function-pointer arguments all skip collapse.
   `plan_loop_or_count`, `plan_group_by_core`, and `plan_decs_unroll`
@@ -419,18 +419,18 @@ primitive (`int*` / `uint*` / `float` / `double` / `bool` /
 
 ### Array-array equi-join
 
-`emit_array_join` is the array-source mirror of `emit_decs_join` - 
+`emit_array_join` is the array-source mirror of `emit_decs_join` -
 hashed equi-join over two array / iterator sources. Algorithm is
 identical (collect srcb into `table<KEY; array<TUPB>>` in one pass,
 then walk srca and probe via `table.get`) but the lead iteration
 comes from the adapter (`wrap_source_loop` / `bind_name` /
-`invoke_param_type`), so any direct-return loop source rides it - 
+`invoke_param_type`), so any direct-return loop source rides it -
 `ArrayAdapter` frames a plain `for (elem in src)`, `TableAdapter`
 its pruned slot walk (vs `for_each_archetype + build_decs_inner_for`
 on the decs side). Both sources bind as invoke parameters (2-source
 wrap, mirrors `Zip`). Same primitive equi-key gate as the decs side;
 non-primitive keys cascade to `join_impl_const`. When srcB is a
-table walked on its bare key, the internal hash is skipped entirely - 
+table walked on its bare key, the internal hash is skipped entirely -
 see the table-source row above and the probe row below.
 
 ```{list-table}
@@ -626,7 +626,7 @@ feeding `order_by(K).take(10)` builds 10 rows, not 1000.
   null for the `group_join` literal.
 - **Non-primitive join keys** / **non-array srcB** - the same gate as the array /
   decs join (tuple keys cascade to `join_impl`).
-- **Correlated nested-collection flatten** (`from o ... from l in o.lines`) - 
+- **Correlated nested-collection flatten** (`from o ... from l in o.lines`) -
   `from_xml_node` reads scalar attributes only; there is no nested collection to
   flatten.
 - **Mixed-source operators** (`union` / `except` / `intersect` / `concat`)
@@ -716,7 +716,7 @@ before falling through to `fold_linq_default`: it destructures
 only when `calls` is non-empty (a real cascade is about to run) and
 `extract_decs_bridge(top)` is non-null (the source IS a
 `from_decs_template` bridge). Bare
-`_fold(from_decs_template(...))` with no chain ops is skipped - 
+`_fold(from_decs_template(...))` with no chain ops is skipped -
 there's no cascade, just the bridge's own materialization. When
 fired, a `*warning*` goes to the compiler log naming the call
 site:

@@ -127,7 +127,7 @@ part re-uses the same [sql_table] from Part 1.
     INTERSECT / EXCEPT) **deferred to chunk 5** alongside joins and
     subqueries - they need a multi-source emitter. Covers API_MISSING sec.22.
     **Shipped:** [tutorials/sql/12-distinct.das](../../tutorials/sql/12-distinct.das) (chunk 4).
-13. **Aggregates - `count` / `sum` / `average` / `min` / `max`** - 
+13. **Aggregates - `count` / `sum` / `average` / `min` / `max`** -
     scalar terminal aggregates on the whole source. `count` stands
     alone; the four column-driven aggregates compose with
     `_select(_.Col)` upstream. `_aggregate($(rows) => (...))` returns

@@ -6,7 +6,7 @@ entirely in daslang over the public dasLLAMA facade + the `dasHV` HTTP layer. Po
 client (opencode, Open WebUI, the `llm` CLI, the `openai` Python SDK, ...) at `http://127.0.0.1:<port>/v1`.
 
 It reaches **only** public facade verbs (`load_model` / `create_chat_renderer` / `add_user` /
-`render_assistant` / `render_turn` / `eval_batch` via `dasllama_scheduler` / `transcribe` / `embed`) - 
+`render_assistant` / `render_turn` / `eval_batch` via `dasllama_scheduler` / `transcribe` / `embed`) -
 that is the point: the server is the acceptance test for the API rework. If it builds with no
 reach into engine internals, the facade is complete.
 
@@ -78,7 +78,7 @@ models.
 
 Catalog entries carry their **towers**: a vision-capable row offers its pinned mmproj
 (download -> **enable vision** -> restart wires `image_mmproj`), and a **dictation** strip
-under the table offers the ASR tower (parakeet v3; wires the `asr` key the same way) - 
+under the table offers the ASR tower (parakeet v3; wires the `asr` key the same way) -
 `POST /catalog/download` takes `{"name", "tower": "vision"}` or `{"tower": "asr"}` on the
 same one-at-a-time rail. Setup-mode **serve this model** wires any tower already on disk
 automatically. Each row also wears a **fit badge** (fits gpu / fits / tight / too big) from
@@ -109,7 +109,7 @@ backend = "cpu"    # never touches the device - alternating with the GPU slot co
 Chat and completion requests **batch continuously** (`dasllama/dasllama_scheduler.das`): up to `--streams`
 generations run concurrently through one `eval_batch` decode step per tick, with long prompts
 prefilled in `--chunk`-token slices so a new arrival never stalls running streams for more than
-one chunk. Requests beyond `--streams` queue (up to 32; then 503). KV is **paged** by default - 
+one chunk. Requests beyond `--streams` queue (up to 32; then 503). KV is **paged** by default -
 cache memory tracks each stream's actual context, and finished streams donate their pages to a
 **prefix cache**, so a repeated prompt prefix (a shared system prompt, the next turn of the same
 conversation) attaches instead of re-prefilling - time-to-first-token collapses on warm prompts.
@@ -162,7 +162,7 @@ Full watchdog reference - config keys, discovery rules, control plugins: `utils/
 ## Deploying (daspkg release)
 
 `release_requires_jit()` makes `daspkg release` refuse this package outright: baking a `-exe`
-would drop the per-box JIT kernels and ship a broken binary. Deploy by staging the JIT bundle - 
+would drop the per-box JIT kernels and ship a broken binary. Deploy by staging the JIT bundle -
 `main.das`, `bin/Release/daslang.exe` plus the runtime DLLs and shared modules, `watchdog.py`,
 `watchdog.json`, `control.html` - into the target directory, and keep the deployed
 `dasllama-server.toml` and `dasllama-server.tune.json` across upgrades. Stop a running server first;
@@ -286,7 +286,7 @@ bin/daslang utils/dasllama-server/demo_load.das -- -n 4 -r 10                   
 
 ### Sampling parameters
 
-Both completion routes accept the OpenAI sampling fields plus the llama.cpp-style extensions - 
+Both completion routes accept the OpenAI sampling fields plus the llama.cpp-style extensions -
 absent fields keep the greedy default (`temperature: 0`):
 
 | Field | Default | Meaning |
@@ -308,7 +308,7 @@ mode too. E.g. Qwen3.6's instruct-mode card settings: `"temperature": 0.7, "top_
 ### Thinking control and `reasoning_content`
 
 `enable_thinking` is tri-state: ABSENT leaves the family's own default in force (the
-Qwen3/3.5/3.6, GLM, gemma-4, and gpt-oss families all think by default), and a present bool - 
+Qwen3/3.5/3.6, GLM, gemma-4, and gpt-oss families all think by default), and a present bool -
 top-level or the llama.cpp spelling
 `"chat_template_kwargs": {"enable_thinking": ...}` - overrides it. `false` on a
 `<think>`-family appends the template's empty think block so the model answers directly;
@@ -317,7 +317,7 @@ for models whose vocab has no think tokens.
 
 A thinking reply's reasoning span comes back as **`reasoning_content`** (the
 DeepSeek/llama.cpp framing) with `content` clean of the family's markers: on the
-`chat.completion` message for buffered requests, and as `delta.reasoning_content` chunks - 
+`chat.completion` message for buffered requests, and as `delta.reasoning_content` chunks -
 streamed before the `delta.content` chunks - for `stream: true`. Tool-calling replies split
 reasoning first, so a thinking model that calls tools returns `reasoning_content` AND
 `tool_calls` in one response. The field is absent (never empty) when the model did not think.
@@ -342,7 +342,7 @@ Qwen3 family - `<tools>` system block, `<tool_call>` JSON), **harmony** (gpt-oss
 TypeScript namespace defs, commentary-channel recipient calls; reasoning and calls come from one
 channel walk), **gemma4** (gemma-4 - declaration/call/response DSL with the `<|"|>` quote token),
 **mistral** (v0.3+ - `[AVAILABLE_TOOLS]` defs, `[TOOL_CALLS]` array, bare-array replies
-tolerated since the SPM stream suppresses control-token pieces), and **llama_json** (llama-3.x - 
+tolerated since the SPM stream suppresses control-token pieces), and **llama_json** (llama-3.x -
 the whole reply is one `{"name","parameters"}` object, results on the `ipython` role). A model
 whose chat template declares no tool format (GLM until its zen2 leg) gets an honest 400.
 Streaming with tools buffers the native envelope and emits the parsed calls as one

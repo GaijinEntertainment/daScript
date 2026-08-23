@@ -21,13 +21,13 @@ as a lean binary - the probe catches both.
 
 ```bash
 bin/daslang utils/internal/doc-verify/main.das                      # full corpus, report.json + exit code
-bin/daslang utils/internal/doc-verify/main.das -- --page 53_clargs  # one page (substring filter - 
+bin/daslang utils/internal/doc-verify/main.das -- --page 53_clargs  # one page (substring filter -
                                                            #   suffix with .rst to disambiguate)
 ```
 
 Default out dir `build/doc_verify/`; use a private `--out` when iterating so parallel runs
 don't clobber each other, and `rm` the report before a run you intend to read (a crashed
-run leaves a stale report silently). Per-page synthetic modules land in `<out>/pages/` - 
+run leaves a stale report silently). Per-page synthetic modules land in `<out>/pages/` -
 read the emitted `.das` to understand an error. Cascade tip: a missing `given` can surface
 as macro exceptions (`error[31206]`) listed before the real
 `error[30838] can't locate variable` - scan down the list first.
@@ -89,9 +89,9 @@ RST comment on its own line directly above the block; invisible when rendered.
    never mark around a tool defect).
 2. Prose re-sweep: mechanical green does not verify prose. Scope the agent-read pass to
    pages whose subject area changed since the last sweep (git-dateable), with probe access
-   and the same GENUINE/MARKER discipline. Companions' comments are not compile-gated - 
+   and the same GENUINE/MARKER discipline. Companions' comments are not compile-gated -
    when a page and its companion carry the same wrong claim, fix both.
-3. Regen traps: check `plans/doc-sweep.md`'s ledger before re-running any doc generator - 
+3. Regen traps: check `plans/doc-sweep.md`'s ledger before re-running any doc generator -
    `doc/reflections/gen_module_examples.py` in particular would revert the handmade
    fragments wholesale.
 

@@ -1482,7 +1482,7 @@ db |> insert_stream(type<Event>) <| $(yield) {
   bulk forms.** Top-level `insert_select(...)` / `bulk_update(...)` /
   `bulk_delete(...)` would just be sugar over the chain terminals; not
   worth the duplication. Naming follows the `_sql_` prefix rule for
-  SQL-only chain terminals (cross-cutting sec. E). All three are terminal - 
+  SQL-only chain terminals (cross-cutting sec. E). All three are terminal -
   return `int` (rows-affected) by default, `array<T>` when called with
   `returning=type<T>` (per tut 15's RETURNING decision).
 - **Transaction sizing for huge inserts.** A million-row insert in one

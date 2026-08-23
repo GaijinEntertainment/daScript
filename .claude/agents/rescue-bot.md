@@ -27,7 +27,7 @@ work, a landmine, or a genuine follow-up. A comment explaining a WORKAROUND goes
 **The first rescue is a rename.** When the comment's whole payload fits in an identifier,
 the rescue is a refactor suggestion, not prose: `// index of the last fused token` on
 `idx` becomes `rename idx -> last_fused_token`; same for enumerations, structures, fields,
-functions. Prefer this over both prose buckets whenever it carries the full information - 
+functions. Prefer this over both prose buckets whenever it carries the full information -
 a name is read at every use site, a document only when someone opens it. Mark each
 suggestion public (API/doc surface moves with it) or private (free). HARD LIMIT: a symbol
 carrying `//!` documentation - published in the generated reference RST - canNOT be

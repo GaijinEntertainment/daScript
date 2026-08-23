@@ -134,7 +134,7 @@ Kinds: `insert`, `insert_space`, `delete_back`, `delete_forward`, `other`.
 2. **Kind changed** - with the two VS Code refinements: consecutive spaces
    bucket together, and the FIRST space after a word does not break (so one
    unit ~ one word: `abc ` then `d` breaks between `abc ` and `d`).
-   Backspace interleaved with typing DOES break (delete_back != insert) - 
+   Backspace interleaved with typing DOES break (delete_back != insert) -
    stricter than RichEdit, matches VS Code; keeps units word-sized.
 3. **Adjacency broke** (fork 3): the edit does not start where the last
    edit ended - clicks, arrows, jumps all break the run with zero extra
@@ -197,7 +197,7 @@ editor drains chars FIRST and skips keypad nav bindings on any frame whose
 char queue was non-empty - NumLock ON types digits, NumLock OFF navigates,
 no lock-state API needed. **Known Windows hazard to probe empirically:**
 with NumLock ON, Windows injects a synthetic Shift-release around
-Shift+keypad presses, so `io.KeyShift` may read false during Shift+KP8 - 
+Shift+keypad presses, so `io.KeyShift` may read false during Shift+KP8 -
 verify on our stack; if it bites, Shift+keypad selection gets documented as
 NumLock-OFF-only (matching stock Windows controls).
 

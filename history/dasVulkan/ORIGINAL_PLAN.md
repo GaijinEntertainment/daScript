@@ -2,7 +2,7 @@
 
 > Preserved verbatim for history. This is the plan that drove the boost-layer
 > build-out (it followed an earlier round that already had the raw `vulkan`
-> binding + offscreen triangle working). **Almost all of it is now implemented** - 
+> binding + offscreen triangle working). **Almost all of it is now implemented** -
 > all 9 boost phases, the examples, the dastest suite, and the Linux lavapipe CI
 > shipped, followed by array-of-struct marshalling, a resizable swapchain, the
 > independent-count model, and the documentation site. For what remains, see
