@@ -691,7 +691,6 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var u_totpr = uniform_u32(uint(nout * proj))
     var u_np_rope = uniform_u32(uint(npos * d / 2l))           // rope pairs over a compact q/k buffer
     var u_neox = uniform_u32(1u)
-    var u_rot = uniform_u32(uint(hs))                          // full rope across the head
     var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
