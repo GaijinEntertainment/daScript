@@ -499,3 +499,20 @@ Prediction scoring (14-17):
 17. **WRONG on both sides**: qwen3v landed ABOVE the band (0.42 vs 0.15-0.35) and qwen25v
     landed at 2.0 — the band assumed gemma-like activation statistics; the per-family
     outlier ladder (gemma 0.25 -> qwen3v 0.42 -> qwen25v 2.0) was the real story.
+
+#### Slice L measurement (2026-08-22, released rig, CPU cells, --image-think, r=3, t=8, M1 Max)
+
+| model | das enc J (exact) | das enc now (q8) | speedup | vs mtmd clip CPU (J) |
+|---|---|---|---|---|
+| Qwen3VL-4B | 5.1 s | **1.084 s** | 4.7x | ~1.11 s — TIE (das -2%) |
+| Qwen3VL-8B | ~10 s | **1.895 s** | ~5.3x | ~1.89 s — TIE |
+| Qwen3-Omni-30B | 6.3 s | **1.496 s** | 4.2x | 59 s — das 39x ahead |
+
+Captions all correct at template-default thinking (cats + couch + remotes; the 30B its terse
+form). Cells stamp `(qwen3v q8)`. Qwen2.5-Omni-3B unmeasured — no q8 lane (slice-L findings).
+
+14. **CORRECT** (for the towers that shipped): 4.2-5.3x inside the 3.5-5.5x band.
+15. **CORRECT** (for the shipped towers): the dense pairs land at mtmd-clip parity (predicted
+    "within 1.5x either side"), and the 30B lead is 39x (predicted past 30x). qwen25v VOID.
+16. **CORRECT so far**: captions unchanged-quality on all three measured models (+ the 4B
+    chat-suite caption). 4 of 4 checked, 0 flips.
