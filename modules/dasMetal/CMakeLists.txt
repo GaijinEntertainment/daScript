@@ -6,11 +6,7 @@ SET(DAS_METAL_DETECTED TRUE)
 IF (NOT DAS_METAL_DAS_INCLUDED)
     SET(DAS_METAL_DAS_INCLUDED TRUE)
 
-    ADD_MODULE_DAS(metal metal msl_types)
-    ADD_MODULE_DAS(metal metal metal_builtins)
-    ADD_MODULE_DAS(metal metal msl_emit)
-    ADD_MODULE_DAS(metal metal msl_shader)
-    ADD_MODULE_DAS(metal metal das_metal_boost)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(metal metal)
 
     # AOT-able sources (for test_aot / any consumer); empty when disabled.
     SET(DASMETAL_AOT_FILES

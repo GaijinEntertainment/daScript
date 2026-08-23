@@ -604,11 +604,21 @@ If your module is part of the main daScript repository (under
    former at file scope and the latter in their initialization function.
 
 ``ADD_MODULE_DAS(category, subfolder, native)``
-   Registers a pure-das module in ``external_resolve.inc`` for static
-   binary resolution.
+   Adds one pure-das module row to ``external_resolve.inc``.  Both
+   binaries consult these compiled-in rows first, before the
+   ``.das_module`` scan.
 
-These macros handle the dual static/dynamic build automatically.  You
-still need to write a ``.das_module`` descriptor for the dynamic build.
+``ADD_MODULE_DAS_FROM_DESCRIPTOR(category, subfolder)``
+   Derives one ``ADD_MODULE_DAS`` row per module name the ``.das_module``
+   descriptor registers for ``category``, so the descriptor is the single
+   registration surface for both binaries.  Called once per
+   (category, subfolder) pair; a candidate name counts only when
+   ``<subfolder>/<name>.das`` exists.
+
+These macros handle the dual static/dynamic build automatically.  The
+``.das_module`` descriptor is required either way: it serves the dynamic
+build directly, and the ``ADD_MODULE_DAS_FROM_DESCRIPTOR`` rows are
+derived from it.
 
 For modules outside the daScript tree, use ``find_package(DAS)``
 and link against ``DAS::libDaScriptDyn`` as shown above.

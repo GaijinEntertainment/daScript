@@ -67,7 +67,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/internal/benchmarks_in_repo.md` | Adding or moving a file under `benchmarks/` |
 | `skills/daspkg.md` | Running daspkg commands, `.das_package` manifests |
 | `skills/dynamic_modules.md` | `.das_module` descriptors, `register_native_path`, module resolution |
-| `skills/internal/dynamic_modules_plumbing.md` | Adding a module under this repo's `modules/` tree — static-binary resolution, the `ADD_MODULE_*` CMake macros |
+| `skills/internal/dynamic_modules_plumbing.md` | Adding a module under this repo's `modules/` tree — module resolution rows, the `ADD_MODULE_*` CMake macros |
 | `skills/external_module_debugging.md` | Working on an external daslang module locally — run/lint/test before push-to-CI; junctions + `project_root` |
 | `skills/internal/install_instructions.md` | Updating `install/CLAUDE.md` or `install/skills/` for the shipped SDK |
 | `skills/internal/skill_taxonomy.md` | Deciding where a skill lives and whether it ships |

@@ -82,7 +82,7 @@ dasSpirv and is reused as-is.
 | `metal/msl_emit.das` | hand | The text emitter: `[macro_function] generate_msl(fn, var errors, cfg, var census) : string`. Manual recursion (`emit_value`/`emit_stmt`, mirroring `spirv_emit`). Kernel-signature synthesis from `@ssbo` globals (the one structural novelty — below). Records the construct census at every emit site. |
 | `metal/msl_shader.das` | hand | `[metal_kernel]` function-macro (`MetalKernel : AstFunctionAnnotation`, modeled on `SpirvShader`), applied to a **class method**; args: `name`, `fastmath` (default **true**, surfaced to the host via a companion ``{name}`msl_fastmath : bool`` global feeding the pipeline-compile options). `apply` declares the public ``{name}`msl : string`` global; **`fixup` fills `glob.init = new ExprConstString(...)`** — string capture is call-free, so fixup suffices (dasGlsl precedent; the patch/astChanged dance dasSpirv needed for `array<uint>` does not apply). Does `require spirv/spirv_builtins public`. |
 | `metal/das_metal_boost.das` | hand | Host sugar over `das_metal`: `with_metal_device`, `pipeline_from_kernel` (compile + error surfacing), unified-memory buffer helpers, `run_compute_1d` one-liner, live-object leak assert. `require das_metal` → usable only where the C++ module exists. |
-| `CMakeLists.txt` | hand | `ADD_MODULE_DAS(metal metal …)` unconditional (emitter everywhere); `IF(APPLE)`: `ADD_MODULE_CPP(DasMetal)` + `ADD_MODULE_LIB` + frameworks. Install rule mirrors dasSpirv's. |
+| `CMakeLists.txt` | hand | `ADD_MODULE_DAS_FROM_DESCRIPTOR(metal metal)` unconditional (rows derived from `.das_module`, emitter everywhere); `IF(APPLE)`: `ADD_MODULE_CPP(DasMetal)` + `ADD_MODULE_LIB` + frameworks. Install rule mirrors dasSpirv's. |
 
 **Extern surface (PoC-complete).** `metal_create_system_default_device`; device name +
 unified-memory query; `metal_new_command_queue`; `metal_new_library_from_source(dev, src,
@@ -386,8 +386,8 @@ emission byte-for-byte (modulo param-wrap indent + defensive parens). Gates gree
 and `tests/metal` (emitted MSL on GPU == CPU-reference run of the same method — the driver
 loop feeds `gl_GlobalInvocationID` — plus leak gate, 2/2); both suites pass through the
 dynamic AND static binaries. Phase-0 scaffold deleted on schedule. Wiring: unconditional
-`ADD_MODULE_DAS` + dasSpirv-style install rule; `.das_module` `register_native_path` for
-the four metal files; `tests/msl` + `tests/metal` registered in `tests/aot/CMakeLists.txt`
+`ADD_MODULE_DAS_FROM_DESCRIPTOR` + dasSpirv-style `install(DIRECTORY ...)` rule;
+`.das_module` `register_native_path` for the `metal/` files it names; `tests/msl` + `tests/metal` registered in `tests/aot/CMakeLists.txt`
 (fixture `_msl_common` AOT_LIB'd per the `_spirv_common` precedent; macro-only metal
 modules deliberately not AOT'd, per the spirv_emit precedent).
 Probe results (annotation plumbing — risk 4 CLOSED, no struct-param fallback needed):

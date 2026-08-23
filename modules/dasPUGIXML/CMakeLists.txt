@@ -22,8 +22,7 @@ IF ((NOT DAS_PUGIXML_INCLUDED) AND ((NOT ${DAS_PUGIXML_DISABLED}) OR (NOT DEFINE
 	)
 
 	ADD_MODULE_CPP(PUGIXML)
-	ADD_MODULE_DAS(pugixml daslib PUGIXML_boost)
-	ADD_MODULE_DAS(pugixml daslib linq_fold_xml)
+	ADD_MODULE_DAS_FROM_DESCRIPTOR(pugixml daslib)
 
 	# AOT-able sources (for test_aot / any consumer); empty when disabled.
 	SET(DASPUGIXML_AOT_FILES

@@ -6,15 +6,9 @@ IF(NOT DAS_OPENGL_INCLUDED)
     # `require opengl` (the raw gl* + GL_ constants layer), which is provided by
     # either the desktop pure-das module (opengl.das, ELSE branch) or the native
     # C++ module (EMSCRIPTEN branch).
-    ADD_MODULE_DAS(opengl opengl opengl_boost_internal)
-    ADD_MODULE_DAS(opengl opengl opengl_boost)
-    ADD_MODULE_DAS(opengl opengl opengl_state)
-    ADD_MODULE_DAS(opengl opengl opengl_ttf)
-    ADD_MODULE_DAS(opengl opengl opengl_gen)
-    ADD_MODULE_DAS(opengl opengl opengl_cache)
-    ADD_MODULE_DAS(opengl opengl opengl_imgui_driver)
-    ADD_MODULE_DAS(live opengl opengl_live)
-    ADD_MODULE_DAS(glsl glsl glsl_opengl)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(opengl opengl)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(live opengl)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(glsl glsl)
 
     # ===== Native C++ GLES3 binding (generated via bind/bind_opengl.das from =====
     # web_include/GLES3/gl3.h). The raw gl* layer bound with exact GLES3 types; wasm

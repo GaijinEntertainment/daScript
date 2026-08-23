@@ -93,6 +93,8 @@ def make_dasllama_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das", "enum VisionKind \{\n    none\n    toyvis\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_toyfam.das", "struct ToyfamThing \{\n\}\n\ntypedef ToyfamFn = int\n\ndef set_toyfam_q8(on : bool) \{\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_toyvis.das", "struct ToyvisTower \{\n\}\n")
+    write_at(t, root, "modules/dasLLAMA/.das_module",
+        "\"dasllama\", \"dasllama_audio_embedder\", \"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_toyvis\"\n")
     write_at(t, root, "modules/dasLLAMA/REVIEW.md", "rules\n")
     write_at(t, root, "tutorials/dasLLAMA/01_demo.das", "covered_fn()\n// prose beside the call stays harmless\n")
     write_at(t, root, "doc/source/reference/tutorials/dasLLAMA_01_demo.rst", "``covered_fn`` narrated\n")
@@ -124,6 +126,9 @@ def test_dasllama_gate_fixtures(t : T?) {
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das", "enum AudioKind \{\n    none\n    toyfam\n    ghostfam\n\}\n")
     write_at(t, fixture, "modules/dasLLAMA/benchmarks/asr/bench_probe.das", "set_toyfam_q8(true)\nvar fn : ToyfamFn\n")
     write_at(t, fixture, "tutorials/dasLLAMA/03_vis.das", "var tw : ToyvisTower\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_unlisted.das", "options gen2\n")
+    write_at(t, fixture, "modules/dasLLAMA/.das_module",
+        "\"dasllama\", \"dasllama_audio_embedder\", \"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_gone\"\n// \"dasllama_toyvis\" commented out must not count\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(1, red.rc, "planted fixture is red")
@@ -133,7 +138,52 @@ def test_dasllama_gate_fixtures(t : T?) {
                     "bench_probe.das: names set_toyfam_q8, which the dasllama_toyfam family owns",
                     "bench_probe.das: names ToyfamFn, which the dasllama_toyfam family owns",
                     "03_vis.das: names ToyvisTower, which the dasllama_toyvis family owns",
-                    "AudioKind arm dasllama_ghostfam has no modules/dasLLAMA/dasllama/dasllama_ghostfam.das"]) {
+                    "AudioKind arm dasllama_ghostfam has no modules/dasLLAMA/dasllama/dasllama_ghostfam.das",
+                    "dasllama_unlisted.das: absent from modules/dasLLAMA/.das_module",
+                    "dasllama_toyvis.das: absent from modules/dasLLAMA/.das_module",
+                    "names dasllama_gone, but no census dir (modules/dasLLAMA/dasllama) holds dasllama_gone.das"]) {
+        t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
+    }
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
+def make_vulkan_fixture(t : T?; tree, root : string) {
+    write_at(t, root, "modules/dasVulkan/daslib/vulkan_toy.das", "options gen2\n")
+    write_at(t, root, "modules/dasVulkan/daslib/vulkan_toy_boost.das", "options gen2\n")
+    write_at(t, root, "modules/dasVulkan/.das_module",
+        "\"vulkan\", \"Module_dasVULKAN\", \"vulkan_toy\", \"vulkan_toy_boost\"\n")
+    write_at(t, root, "modules/dasVulkan/REVIEW.md", "rules\n")
+    var err : string
+    t |> success(copy_file(path_join(tree, "modules/dasVulkan/REVIEW.das"), path_join(root, "modules/dasVulkan/REVIEW.das"), true, err), "copied the real dasvulkan gate")
+}
+
+[test]
+def test_vulkan_gate_fixtures(t : T?) {
+    let tree = getcwd()
+    if (!fexist(path_join(tree, "modules/dasVulkan/REVIEW.das"))) {
+        t |> skip("not run from the repo root")
+        return
+    }
+    let fixture_r = create_temp_directory_result("review_vulkan")
+    t |> success(fixture_r is value, "temp fixture dir created")
+    if (!(fixture_r is value)) return
+    let fixture = unsafe(fixture_r.value)
+    make_vulkan_fixture(t, tree, fixture)
+
+    let green = spawn_at(fixture, [path_join(fixture, "modules/dasVulkan/REVIEW.das")])
+    t |> equal(0, green.rc, "covered fixture is green (category + DLL-class tokens ignored): {green.out}")
+    t |> success(find(green.out, "REVIEW.das dasvulkan: OK") >= 0, "green verdict printed")
+
+    write_at(t, fixture, "modules/dasVulkan/daslib/vulkan_unlisted.das", "options gen2\n")
+    write_at(t, fixture, "modules/dasVulkan/.das_module",
+        "\"vulkan\", \"Module_dasVULKAN\", \"vulkan_toy\", \"vulkan_gone\"\n// \"vulkan_toy_boost\" commented out must not count\n")
+
+    let red = spawn_at(fixture, [path_join(fixture, "modules/dasVulkan/REVIEW.das")])
+    t |> equal(1, red.rc, "planted fixture is red")
+    for (needle in ["vulkan_unlisted.das: absent from modules/dasVulkan/.das_module",
+                    "vulkan_toy_boost.das: absent from modules/dasVulkan/.das_module",
+                    "names vulkan_gone, but no census dir (modules/dasVulkan/daslib) holds vulkan_gone.das"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }
 

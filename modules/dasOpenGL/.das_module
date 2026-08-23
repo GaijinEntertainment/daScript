@@ -3,7 +3,18 @@ require daslib/fio
 
 [export]
 def initialize(project_path : string) {
+    // the boost layer; the raw gl* module (opengl.das) stays registration-free here on
+    // purpose - on web the native C++ module provides Module("opengl"), and a registered
+    // path would resolve the pure-das late-extern layer over it
+    register_native_path("opengl", "opengl_boost_internal", "{project_path}/opengl/opengl_boost_internal.das")
+    register_native_path("opengl", "opengl_boost", "{project_path}/opengl/opengl_boost.das")
+    register_native_path("opengl", "opengl_state", "{project_path}/opengl/opengl_state.das")
+    register_native_path("opengl", "opengl_ttf", "{project_path}/opengl/opengl_ttf.das")
+    register_native_path("opengl", "opengl_gen", "{project_path}/opengl/opengl_gen.das")
+    register_native_path("opengl", "opengl_cache", "{project_path}/opengl/opengl_cache.das")
+    register_native_path("opengl", "opengl_imgui_driver", "{project_path}/opengl/opengl_imgui_driver.das")
     register_native_path("live", "opengl_live", "{project_path}/opengl/opengl_live.das")
+    register_native_path("glsl", "glsl_opengl", "{project_path}/glsl/glsl_opengl.das")
     // Register the native C++ opengl module ONLY when this host is cross-compiling for
     // the web. The desktop host then has Module("opengl")'s signatures to emit handled-
     // extern dispatch for the wasm target (ensure_module registers it there; emcc links

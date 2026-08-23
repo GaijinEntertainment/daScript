@@ -1,0 +1,11 @@
+options gen2
+require daslib/fio
+
+[export]
+def initialize(project_path : string) {
+    let spirv_paths = ["spirv_grammar", "spirv_builder", "spirv_types", "spirv_reflect",
+        "spirv_dis", "spirv_emit", "spirv_builtins", "spirv_shader"]
+    for (path in spirv_paths) {
+        register_native_path("spirv", "{path}", "{project_path}/spirv/{path}.das")
+    }
+}

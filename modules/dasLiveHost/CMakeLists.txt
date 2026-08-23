@@ -12,14 +12,7 @@ IF ((NOT DAS_LIVE_HOST_INCLUDED) AND ((NOT ${DAS_LIVE_HOST_DISABLED}) OR (NOT DE
     SOURCE_GROUP_FILES("source" DAS_LIVE_HOST_MODULE_SRC)
 
     ADD_MODULE_CPP(LiveHost)
-    ADD_MODULE_DAS(live live live_gc)
-    ADD_MODULE_DAS(live live live_commands)
-    ADD_MODULE_DAS(live live live_vars)
-    ADD_MODULE_DAS(live live live_api_builtins)
-    ADD_MODULE_DAS(live live live_api)
-    ADD_MODULE_DAS(live live live_api_stdio)
-    ADD_MODULE_DAS(live live live_watch)
-    ADD_MODULE_DAS(live live decs_live)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(live live)
 
     # AOT-able sources (for test_aot / any consumer); empty when disabled.
     SET(DASLIVEHOST_AOT_FILES

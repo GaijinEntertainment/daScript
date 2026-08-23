@@ -7,4 +7,5 @@ def initialize(project_path : string) {
         register_dynamic_module("{project_path}/dasModulePUGIXML.shared_module", "Module_PUGIXML")
     }
     register_native_path("pugixml", "PUGIXML_boost", "{project_path}/daslib/PUGIXML_boost.das")
+    register_native_path("pugixml", "linq_fold_xml", "{project_path}/daslib/linq_fold_xml.das")
 }

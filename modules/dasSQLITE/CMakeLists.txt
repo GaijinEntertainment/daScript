@@ -94,12 +94,7 @@ IF ((NOT DAS_SQLITE_INCLUDED) AND ((NOT ${DAS_SQLITE_DISABLED}) OR (NOT DEFINED 
 		target_link_libraries(sqlite_shell PRIVATE m)
 	endif()
 
-    # static-binary registration — keep in lockstep with .das_module's sqlite_paths
-    ADD_MODULE_DAS(sqlite daslib sql_provider)
-    ADD_MODULE_DAS(sqlite daslib sqlite_provider)
-    ADD_MODULE_DAS(sqlite daslib sqlite_boost)
-    ADD_MODULE_DAS(sqlite daslib sqlite_linq)
-    ADD_MODULE_DAS(sqlite daslib sqlite_migrate)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(sqlite daslib)
 
     # AOT-able sources (for test_aot / any consumer); empty when disabled.
     SET(DASSQLITE_AOT_FILES

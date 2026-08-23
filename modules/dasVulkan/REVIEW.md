@@ -6,9 +6,9 @@
 checklist. A generator change — any `generator/*.das` emitter or `generator/skip_report.txt` —
 answers to the `generator/` subfolder's checklist.
 
-**A new or renamed `daslib/*.das` file lands both of its registration points in the same change** —
-an `ADD_MODULE_DAS(vulkan daslib <name>)` line in `CMakeLists.txt` and a `<name>` entry in the
-`boost_paths` list in `.das_module`. One without the other resolves in only one build flavor.
+**Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, adding a name to
+its ignore set, or a finding text that no longer names what failed. What the gate enforces is
+read from the gate itself.
 
 **Generated sources are never hand-edited — change `generator/` and regenerate instead.** A diff
 touching any `src/dasVULKAN.gen*` file, or any `daslib/*.das` whose first line reads

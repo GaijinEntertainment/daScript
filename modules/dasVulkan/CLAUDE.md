@@ -55,7 +55,7 @@ bin/Release/daslang -project_root . modules/dasVulkan/examples/offscreen_triangl
 
 `vulkan_runtime` (hand) ← `vulkan_ctors` (gen) ← `vulkan_handles` (gen) ← `vulkan_structs` (gen) ← `vulkan_commands` (gen creators) ← `vulkan_cmds` (gen plain commands) / `vulkan_boost` (hand) / `vulkan_window` (hand). Each file is `module <name>` + `require vulkan public`.
 
-**Every daslib file has TWO registration points**, and they must stay in sync: `ADD_MODULE_DAS(vulkan daslib <name>)` in `CMakeLists.txt` (the static in-tree build) and a `<name>` entry in the `boost_paths` list in `.das_module` (the DLL / daspkg flow). A file registered in only one resolves in only one build flavor.
+**A daslib file registers in ONE place: the `boost_paths` list in `.das_module`.** CMake derives the compiled-in resolver rows from the descriptor at configure (`ADD_MODULE_DAS_FROM_DESCRIPTOR(vulkan daslib)` in `CMakeLists.txt`), and `REVIEW.das`'s descriptor census fails review on a daslib `.das` the list misses or a listed name whose file is gone.
 
 ## Docs
 

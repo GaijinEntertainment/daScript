@@ -58,29 +58,9 @@ IF((NOT DAS_VULKAN_INCLUDED) AND ((NOT ${DAS_VULKAN_DISABLED}) OR (NOT DEFINED D
 
         # Static lib links into the app via ${DAS_MODULES_LIBS}; ADD_MODULE_CPP
         # emits NEED/DECLARE/PULL(Module_dasVULKAN) so the app needs no manual
-        # registration, and each ADD_MODULE_DAS registers a boost path so
-        # `require vulkan/<name>` resolves in-tree (getDasRoot()/modules/
-        # dasVulkan/daslib/<name>.das).  KEEP IN SYNC with the
-        # register_native_path list in .das_module (the DLL/daspkg flow) —
-        # every new daslib file has these two registration points.
+        # registration; the daslib resolver rows come from .das_module.
         ADD_MODULE_CPP(dasVULKAN)
-        ADD_MODULE_DAS(vulkan daslib vulkan_runtime)
-        ADD_MODULE_DAS(vulkan daslib vulkan_ctors)
-        ADD_MODULE_DAS(vulkan daslib vulkan_handles)
-        ADD_MODULE_DAS(vulkan daslib vulkan_structs)
-        ADD_MODULE_DAS(vulkan daslib vulkan_commands)
-        ADD_MODULE_DAS(vulkan daslib vulkan_cmds)
-        ADD_MODULE_DAS(vulkan daslib vulkan_boost)
-        ADD_MODULE_DAS(vulkan daslib vulkan_window)
-        ADD_MODULE_DAS(vulkan daslib vulkan_reflect)
-        ADD_MODULE_DAS(vulkan daslib vulkan_lint_data)
-        ADD_MODULE_DAS(vulkan daslib vulkan_lint)
-        ADD_MODULE_DAS(vulkan daslib spirv_vulkan_shader)
-        ADD_MODULE_DAS(vulkan daslib vulkan_assets)
-        ADD_MODULE_DAS(vulkan daslib vulkan_gltf)
-        ADD_MODULE_DAS(vulkan daslib vulkan_live)
-        ADD_MODULE_DAS(vulkan daslib vulkan_imgui_driver)
-        ADD_MODULE_DAS(vulkan daslib vulkan_imgui_app)
+        ADD_MODULE_DAS_FROM_DESCRIPTOR(vulkan daslib)
         ADD_DAS_STATIC_MODULE_LIB(libDasModuleVulkan ${DAS_VULKAN_MODULE_SRC})
 
         MACRO(SETUP_VULKAN vulkan_mod_lib)

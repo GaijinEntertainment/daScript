@@ -46,8 +46,8 @@ compute test as a ready-made end-to-end gate.
 ## Architecture
 
 `modules/dasSpirv` is **pure daslang** (mirrors dasGlsl: a `spirv/` subdir of `.das` files +
-a CMake `ADD_MODULE_DAS` rule; no `.shared_module`, no C++). dasVulkan consumes it via
-`require dasSpirv/…` and feeds the emitted `array<uint>` (SPIR-V words) to `create_shader_module`.
+CMake resolver rows derived from `.das_module`; no `.shared_module`, no C++). dasVulkan
+consumes it via `require spirv/…` and feeds the emitted `array<uint>` (SPIR-V words) to `create_shader_module`.
 
 | File | Gen/Hand | Purpose |
 |---|---|---|
@@ -59,7 +59,7 @@ a CMake `ADD_MODULE_DAS` rule; no `.shared_module`, no C++). dasVulkan consumes 
 | `spirv/spirv_dis.das` | hand | Minimal disassembler + opcode-census helper (self-delimiting walk: word0 = `(wordCount<<16)\|opcode`). Symbolic via `spirv_grammar`'s opcode→name table. |
 | `generator/gen_spirv_grammar.das` | hand | The mini-generator: reads vendored grammar JSON → emits `spirv/spirv_grammar.das`. |
 | `spirv_headers/*.json` | vendored | Pinned `spirv.core.grammar.json` + `extinst.glsl.std.450.grammar.json` (provenance + commit recorded below). |
-| `CMakeLists.txt` | hand | `ADD_MODULE_DAS(spirv …)` + install rule, modeled on `modules/dasGlsl/CMakeLists.txt`. |
+| `CMakeLists.txt` | hand | `ADD_MODULE_DAS_FROM_DESCRIPTOR(spirv spirv)` (rows derived from `.das_module`) + install rule, modeled on `modules/dasGlsl/CMakeLists.txt`. |
 
 **SSA backend (llvm_jit template).** `SpirvEmit` carries `e2v : table<Expression?;uint>`
 (Expression→result-id), `v2v : table<Variable?;uint>` (Variable→pointer-id),
@@ -373,8 +373,8 @@ def square { let i = gl_GlobalInvocationID.x; data[i] = i * i }
 ## Phase 1 — test suite + module registration LANDED (2026-06-13)
 
 The emitter is now wired into the main-tree test + AOT machinery. `modules/dasSpirv/CMakeLists.txt`
-registers the seven `spirv/*.das` files via `ADD_MODULE_DAS(spirv spirv <name>)`, so consumers
-`require spirv/spirv_shader` etc. `tests/spirv/` holds the kept dastests (the dev scaffolds
+registers every `spirv/*.das` file named by `.das_module` via `ADD_MODULE_DAS_FROM_DESCRIPTOR(spirv
+spirv)`, so consumers `require spirv/spirv_shader` etc. `tests/spirv/` holds the kept dastests (the dev scaffolds
 `_emit_square` / `_square_typed` / `_types_unit` / `_handbuild_square` were converted and deleted):
 
 - `_spirv_common.das` — shared module: the `[compute_shader] square` fixture (→ public `square_spv`

@@ -2,13 +2,7 @@ IF(NOT DAS_GLTF_INCLUDED)
     SET(DAS_GLTF_INCLUDED TRUE)
     MESSAGE(STATUS "dasGLTF module included.")
 
-    ADD_MODULE_DAS(gltf gltf gltf_types)
-    ADD_MODULE_DAS(gltf gltf gltf_accessor)
-    ADD_MODULE_DAS(gltf gltf gltf_parse)
-    ADD_MODULE_DAS(gltf gltf gltf_scene)
-    ADD_MODULE_DAS(gltf gltf gltf_boost)
-    ADD_MODULE_DAS(gltf gltf gltf_gl)
-    ADD_MODULE_DAS(gltf gltf gltf_pbr)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(gltf gltf)
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasGLTF/gltf
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasGLTF

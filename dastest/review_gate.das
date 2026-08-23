@@ -95,6 +95,110 @@ def private is_ident_byte(b : int) : bool {
     return is_alnum(b) || b == '_'
 }
 
+//! `text` with every // comment cut to end-of-line (string-literal-aware, so a "//" inside
+//! a quoted URL survives). Use before scanning sources or descriptors: a name mentioned
+//! only in a comment must not count.
+def strip_line_comments(text : string) : string {
+    return build_string() $(var b : StringBuilderWriter) {
+        for (line in split(text, "\n")) {
+            var cut = -1
+            peek_data(line) $(d) {
+                var in_str = false
+                var i = 0
+                while (i < length(d)) {
+                    let c = int(d[i])
+                    if (in_str) {
+                        if (c == '\\') {
+                            i++
+                        } elif (c == '"') {
+                            in_str = false
+                        }
+                    } elif (c == '"') {
+                        in_str = true
+                    } elif (c == '/' && i + 1 < length(d) && int(d[i + 1]) == '/') {
+                        cut = i
+                        break
+                    }
+                    i++
+                }
+            }
+            b |> write(cut >= 0 ? slice(line, 0, cut) : line)
+            b |> write("\n")
+        }
+    }
+}
+
+def private quoted_ident_tokens(text : string) : array<string> {
+    var out : array<string>
+    var inside = false
+    for (seg in split(text, "\"")) {
+        if (inside && !empty(seg)) {
+            var all_ident = true
+            peek_data(seg) $(d) {
+                for (i in range(length(d))) {
+                    if (!is_ident_byte(int(d[i]))) {
+                        all_ident = false
+                        break
+                    }
+                }
+            }
+            if (all_ident) {
+                out |> push(seg)
+            }
+        }
+        inside = !inside
+    }
+    return <- out
+}
+
+//! Descriptor census for a module whose CMake derives its resolver rows from `.das_module`
+//! (ADD_MODULE_DAS_FROM_DESCRIPTOR), both directions: every `.das` in `census_dirs` is
+//! named by a quoted token in the descriptor, and every identifier-shaped quoted token
+//! outside `non_module_tokens` (e.g. the require category, a DLL registration class)
+//! names a file in some census dir. Neither direction has a build-time signal - a gate
+//! built on this is the only enforcer.
+def gate_descriptor_census(descriptor_path : string; census_dirs : array<string>; non_module_tokens : table<string>) {
+    if (!fexist(descriptor_path)) {
+        gate_finding(descriptor_path, "missing - the descriptor is the module's one registration surface")
+        return
+    }
+    let descriptor = strip_line_comments(fread(descriptor_path))
+    for (folder in census_dirs) {
+        dir(folder) $(name) {
+            if (name |> ends_with(".das")) {
+                let base = slice(name, 0, length(name) - 4)
+                if (find(descriptor, "\"{base}\"") < 0) {
+                    gate_finding("{folder}/{name}",
+                        "absent from {descriptor_path} - the descriptor is the one registration surface (the resolver rows derive from it), so an unlisted file resolves in neither the static binary nor the DLL/daspkg flow")
+                }
+            }
+        }
+    }
+    let dirs_text = join(census_dirs, ", ")
+    for (tok in quoted_ident_tokens(descriptor)) {
+        continue if (key_exists(non_module_tokens, tok))
+        if (!any_dir_holds(census_dirs, "{tok}.das")) {
+            gate_finding(descriptor_path,
+                "names {tok}, but no census dir ({dirs_text}) holds {tok}.das - a stale registration is a silently dropped resolver row")
+        }
+    }
+}
+
+def private any_dir_holds(census_dirs : array<string>; fname : string) : bool {
+    for (folder in census_dirs) {
+        if (fexist("{folder}/{fname}")) {
+            return true
+        }
+    }
+    return false
+}
+
+//! Census with nothing ignored - for descriptors whose every quoted token is a module name.
+def gate_descriptor_census(descriptor_path : string; census_dirs : array<string>) {
+    let no_ignored_tokens : table<string>
+    gate_descriptor_census(descriptor_path, census_dirs, no_ignored_tokens)
+}
+
 //! Every `command( ... )` invocation in CMake text, paren-balanced, with `#` comments and
 //! double-quoted strings respected. Each result is the full block text, command name included.
 def cmake_command_blocks(text : string; command : string) : array<string> {

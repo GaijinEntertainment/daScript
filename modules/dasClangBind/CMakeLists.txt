@@ -142,7 +142,7 @@ IF(WIN32)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasClangBind/LICENSE.TXT DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LLVM.LICENSE)
 ENDIF()
 
-    ADD_MODULE_DAS(cbind cbind cbind_boost)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(cbind cbind)
 
 	SETUP_CPP11(libDasModuleClangBind)
 	SETUP_CPP11(dasModuleClangBind)

@@ -10,7 +10,7 @@ IF ((NOT DAS_TERMINAL_INCLUDED) AND (NOT DAS_TERMINAL_DISABLED))
         ${DAS_TERMINAL_DIR}/src/dasTerminal.cpp)
 
     ADD_MODULE_CPP(Terminal)
-    ADD_MODULE_DAS(terminal daslib terminal)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(terminal daslib)
     ADD_EXAMPLE_RUN(modules/dasTerminal/tests/snapshot_smoke.das)
     ADD_EXAMPLE_RUN(modules/dasTerminal/tests/terminal_semantics.das)
     ADD_EXAMPLE_RUN(modules/dasTerminal/tests/ownership_semantics.das)

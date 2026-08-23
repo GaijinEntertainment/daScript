@@ -50,7 +50,7 @@ IF ((NOT DAS_CLIPBOARD_INCLUDED) AND ((NOT ${DAS_CLIPBOARD_DISABLED}) OR (NOT DE
     )
 
     ADD_MODULE_CPP(Clipboard)
-    ADD_MODULE_DAS(clipboard daslib clipboard)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(clipboard daslib)
     ADD_MODULE_LIB(libDasModuleClipboard dasModuleClipboard ${DAS_CLIPBOARD_MODULE_SRC})
 
     MACRO(SETUP_CLIPBOARD target)
