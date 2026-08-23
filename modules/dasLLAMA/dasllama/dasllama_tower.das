@@ -319,8 +319,9 @@ def tower_stage_q8_zero_rows(m : GGUFMeta; b : array<uint8> | #; name : string; 
                              wo, file_rows, pad_rows, width : int64; family : string) {
     let file_n = file_rows * width
     let served = pad_rows * width
-    if (served % 32l != 0l || wo % 32l != 0l) {
-        panic("{family}: GEMM tensor '{name}' ({served} served elements at {wo}) is not 32-aligned")
+    // the row width itself must quantize: repack and the row requant both take n % 32 == 0
+    if (width % 32l != 0l || served % 32l != 0l || wo % 32l != 0l) {
+        panic("{family}: GEMM tensor '{name}' ({served} served elements, width {width}, at {wo}) is not 32-aligned")
     }
     if (long_length(wscratch) < served) {
         wscratch |> reserve(served)
@@ -337,8 +338,9 @@ def tower_stage_q8_pad_cols(m : GGUFMeta; b : array<uint8> | #; name : string; v
                             var qscales : array<float>; @scratch var wscratch : array<float>;
                             @scratch var rowscratch : array<float>; wo, rows, ff, fp : int64; family : string) {
     let served = rows * fp
-    if (served % 32l != 0l || wo % 32l != 0l) {
-        panic("{family}: GEMM tensor '{name}' ({served} served elements at {wo}) is not 32-aligned")
+    // the padded row width itself must quantize: repack and the row requant both take n % 32 == 0
+    if (fp % 32l != 0l || served % 32l != 0l || wo % 32l != 0l) {
+        panic("{family}: GEMM tensor '{name}' ({served} served elements, padded width {fp}, at {wo}) is not 32-aligned")
     }
     if (long_length(rowscratch) < rows * ff) {
         rowscratch |> reserve(rows * ff)
@@ -360,6 +362,24 @@ def tower_stage_q8_pad_cols(m : GGUFMeta; b : array<uint8> | #; name : string; v
         }
     }
     quantize_q8_0_into(wscratch, served, qblob, qscales, wo, wo / 32l)
+}
+
+//! Repack every block-GEMM region of a staged q8 layout for the active backend's q8q8 kernels —
+//! per-row alignment (each region's input width, ``widths``/``sizes`` in the family's GEMM
+//! order) keeps blocks from straddling rows; no repack backend selected = the flat image serves.
+def tower_repack_q8_blocks(var qblob : array<int8>; var qscales : array<float>;
+                           layer_w, layer_w_stride, n_layer : int64;
+                           widths : array<int64>; sizes : array<int64>) {
+    if (!select_matmul_backend_for_load_()) {
+        return
+    }
+    for (l in range64(n_layer)) {
+        var wo = layer_w + l * layer_w_stride
+        for (w, sz in widths, sizes) {
+            repack_q8q8_weight(qblob, qscales, wo, w, sz / w)
+            wo += sz
+        }
+    }
 }
 
 //! Zero ``n`` floats at ``at`` — pad tails of staged planes.

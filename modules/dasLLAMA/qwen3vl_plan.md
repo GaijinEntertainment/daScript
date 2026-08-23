@@ -446,7 +446,8 @@ while mtmd offloads the mmproj to Metal unless told not to.
     the prediction's frame ("crashes") was looking at the wrong hazard.
 
 ### Slice L — the CPU encode gap: qwen towers get the q8 block-GEMM lane (predictions
-### registered 2026-08-22 BEFORE implementation; the agreed first post-merge slice)
+### registered 2026-08-22 BEFORE implementation; the agreed first post-merge slice; every
+### enc figure below = released `lcpp_bench --image`, CPU, --image-think, r=3, t=8, M1 Max)
 
 Design: port gemma3v's q8 serving lane (Q8_0 transcode at read, requant + q8q8 batch at
 encode, its own image tag, pin knobs, policy = q8 unless the accelerate float-batch tier is

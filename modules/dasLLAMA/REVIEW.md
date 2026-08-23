@@ -3,13 +3,17 @@
 **Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`.
 
-**`tests/`, `benchmarks/`, and `performance/` carry their own checklists, and they govern by
-KIND, not location:** a dasLLAMA `[test]` file, wherever the diff puts it, answers to this
-module's `tests/REVIEW.md`; a timing rig — a script whose output is a measured wall or rate — and any
-kernel A/B lab, wherever the diff puts them, answer to `benchmarks/REVIEW.md`; a change to what
-enters `performance/records/` or its manifests, an exchange or provenance-manifest change,
-and a diff naming a model file (a `.gguf`, a `.dlim`, an mmproj, or an image or audio fixture
-a model row pins) anywhere under the module, answer to `performance/REVIEW.md`.
+**A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
+`tests/REVIEW.md`.**
+
+**A timing rig — a script whose output is a measured wall or rate — and any kernel A/B lab,
+wherever the diff puts them, answer to `benchmarks/REVIEW.md`.**
+
+**A change to what enters `performance/records/` or its manifests, an exchange or
+provenance-manifest change, or a change to WHICH model file (a `.gguf`, a `.dlim`, an
+mmproj, or an image or audio fixture) a recorded row or manifest pins, answers to
+`performance/REVIEW.md`.** A test or tool merely opening a stocked model file by name does
+not route.
 
 **Every `dasllama/` change applies `tests/REVIEW.md` for the test obligation it names.**
 
@@ -31,9 +35,6 @@ schedules such a stream, applies `REVIEW_VISION.md`.**
 **A `dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
 `REVIEW_AUDIO.md` and `REVIEW_VISION.md`;** a family file that only CALLS a shared rail does
 not thereby pick up the other modality's checklist.
-
-**A change to the tune sidecar's schema or emitter, wherever it lands, answers to
-`modules/dasLLVM/REVIEW.md`.**
 
 **A routed file applies BOTH the checklist it routes to and this one; every other file under
 `modules/dasLLAMA/` applies this one.**
@@ -75,18 +76,19 @@ a defect in engine code — instrumentation goes through the sanctioned rails, a
 value feeds logic is marked `// clock: control`. The rails, and where free-hand timing is
 legal, are `ARCHITECTURE.md` §2.10.
 
-**Every new kernel or mid-runtime loop is COVERED by an annotated region entry** — `[hot_path]`,
-any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts, or `[cold_path]` on its only
-reaching entry (a one-time transform is covered by being declared cold). Covered means an annotated entry
-reaches it: the contracts arm down the call graph, so an interior function carries nothing of
-its own. A region entry is the outermost function the runtime re-enters per token, per frame,
-or per prefill quantum (a kernel `*_encode` / `*_decode`, a step driver, the CPU decoder's
-`forward_*` entries); the tokenizer encode/decode path is out of scope
-(`ARCHITECTURE.md` §2.11).
+**Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
+quantum is COVERED by an annotated region entry** — `[hot_path]`, any of the `[no_alloc]` /
+`[no_env]` / `[no_io]` contracts, or `[cold_path]` on its only reaching entry. Covered means
+an annotated entry reaches it: the contracts arm down the call graph, so an interior
+function carries nothing of its own. A region entry is the outermost such function (a kernel
+`*_encode` / `*_decode`, a step driver, the CPU decoder's `forward_*` entries); a loop
+reached only from a load, stage, bake, or convert path is not one, and the tokenizer
+encode/decode path's sanction is `ARCHITECTURE.md` §2.11's.
 
-**A new function that no annotated entry reaches but the runtime enters — a step driver, or
-a backend entry called from dispatch or harness paths — carries its annotation itself; a
-rename is not new** (annotations follow the name in the same change).
+**A new function that no annotated entry reaches but the runtime re-enters per token, per
+frame, or per prefill quantum — a step driver, or a backend entry called from dispatch or
+harness paths — carries its annotation itself; a rename is not new** (annotations follow
+the name in the same change).
 
 **A change to `encode`/`bpe_encode` or anything they reach in `dasllama/dasllama_spm.das` /
 `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das` ships before/after `--tok` rows
@@ -99,11 +101,12 @@ template strings any of them look up, records a `tests/test_tokenizer.das` run w
 EXECUTED, not skipped.**
 
 **An override announces itself where it changes the outcome.** An override is an environment
-knob — an env variable or its programmatic setter — that moves a gate, policy, or threshold
-off its default; a CLI flag is never an override under this rule. Where one changes an
-observable outcome of the run — what it measures, writes, reads, or mints — a printed line
-names it by the env spelling; set-but-inert stays silent, per-site repeats are fine. Adding
-one, or giving one a new effect, without the announce is a defect.
+knob or an exported runtime setter that moves a gate, policy, or threshold off its default;
+a CLI flag is never an override under this rule. Where one changes an observable outcome of
+the run — what it measures, writes, reads, or mints — a printed line names it by its own
+spelling (the env variable name, or the setter's function name); set-but-inert stays silent,
+per-site repeats are fine. Adding one, or giving one a new effect, without the announce is a
+defect.
 
 **A self-measured served-turn time — tok/s, a turn wall — entering
 `performance/records/<box>.json` or `PERF_LEDGER.md` comes from the released `lcpp_bench`
@@ -117,16 +120,17 @@ tutorial's printed wall-clock is teaching output, feeding no board.
 `PROFILE.md` section. A modality, a family, or a serving path a user can wait on counts; a new
 family inside an existing cell owes a recorded row on at least one box.
 
-**A timing figure describing served output — tok/s, latency, a model-level comparison — is a
-defect wherever it is written down with no cell behind it: a checked-in doc, a ledger, a code
-comment, or a PR description.** The cell states its quant mode and stamps box and engine
-provenance, so a number can never silently describe a format nobody serves or a kernel set
-nobody ships. A rig-internal measurement margin — a crown delta, a noise floor, tuner
-timing — is settled by the sidecar or manifest stamp it rides in.
+**A timing figure describing a served turn as a whole — tok/s, latency, a whole-turn model
+or engine comparison — is a defect wherever it is written down with no cell behind it: a
+checked-in doc, a ledger, a code comment, or a PR description.** The cell states its quant
+mode and stamps box and engine provenance, so a number can never silently describe a format
+nobody serves or a kernel set nobody ships. A rig-internal measurement margin — a crown
+delta, a noise floor, tuner timing — is settled by the sidecar or manifest stamp it rides in.
 
-**A figure measuring one engine stage inside a served turn — a stage wall, a stage share, or
-a stage speedup, never a board cell's `pp`/`tg` rate — names the harness and flags that
-produced it in the same sentence, wherever it is written down: a checked-in doc, a ledger, a
+**A figure measuring one engine stage inside a served turn — a stage wall, a stage share, a
+stage speedup, or a cross-engine comparison of one stage; never a board cell's `pp`/`tg`
+rate — names the harness and flags that produced it in the same sentence (a table heading
+naming them covers its rows), wherever it is written down: a checked-in doc, a ledger, a
 code comment, or a PR description.**
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
@@ -253,11 +257,15 @@ helper was built for is fine; the code stays family-blind.
 file** — a single-caller helper sanctioned as tower-worthy is ledgered on `ARCHITECTURE.md`
 §1's tower charter line, not argued in review.
 
-**A weight plane's element type follows its SOURCE tensors, per weight region — the set of
-source tensors a carrier stores in one plane (a block stack, a merger/projector).** A
+**On the lane that serves the file's own planes, a weight plane's element type follows its
+SOURCE tensors, per weight region — the set of source tensors a carrier stores in one plane
+(a block stack, a merger/projector).** A
 carrier picks each weight region's plane type from that region's own tensors (a shipped
 file mixes types across regions), refuses a weight region whose tensors disagree in a
-message naming the offending tensor and both element types, and never converts silently.
+message naming the offending tensor and both element types, and never converts silently. A
+lane that requantizes those planes (a q8 block-GEMM lane) is a separate flavor under its own
+image tag, and the load that picks it prints which lane it picked — not a silent conversion
+of the file's own planes.
 
 **A harness that prints output for another tool to compare fails loudly when it has nothing to
 print.** A run that ends without its comparison lines — wrong flags, failed load — exits

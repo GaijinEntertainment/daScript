@@ -394,23 +394,14 @@ def private g4v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gem
     }
 }
 
-// repack every block GEMM region for the active backend's q8q8 kernels — per-row alignment (the
-// region's input width), not just n_elem, keeps blocks from straddling rows; without a selected
-// backend matmul_q8q8_batch reads the flat Q8_0 image as-is
 def private g4v_repack_all(var st : Gemma4vStaging; gemm_sizes : array<int64>) {
-    if (!st.t.q8 || !select_matmul_backend_for_load_()) {
+    if (!st.t.q8) {
         return
     }
     let d = st.t.n_embd
     let ff = st.t.n_ff
     let widths <- [ d, d, d, d, d, d, ff ]   // q k v o gate up down: the input width of each
-    for (l in range64(st.t.n_layer)) {
-        var wo = st.t.layer_w + l * st.t.layer_w_stride
-        for (g in range64(GEMMA4V_GEMMS)) {
-            repack_q8q8_weight(st.qblob, st.qscales, wo, widths[g], gemm_sizes[g] / widths[g])
-            wo += gemm_sizes[g]
-        }
-    }
+    tower_repack_q8_blocks(st.qblob, st.qscales, st.t.layer_w, st.t.layer_w_stride, st.t.n_layer, widths, gemm_sizes)
 }
 
 //! Read the tower off an mmproj gguf into owned staging arrays — the mint side of the image rail,

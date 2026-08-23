@@ -75,7 +75,7 @@ struct Qwen3vTower {
     mm0_b : int64
     mm2_w : int64        // [4·n_embd → proj_dim]
     mm2_b : int64
-    layer_f : int64      // per-block f32 region; stride: ln1 w+b, ln2 w+b [d ×4], qkv_b [3d], out_b [d], up_b [ff], down_b [d]
+    layer_f : int64      // per-block f32 region; stride: ln1 w+b, ln2 w+b [d ×4], qkv_b [3d], out_b [d], up_b [ff_pad, zero tail], down_b [d]
     layer_f_stride : int64
     layer_w : int64      // per-block GEMM region (qblob when q8, wblob when blk_bf16, else blob); stride layer_w_stride
     layer_w_stride : int64
@@ -269,7 +269,7 @@ def private q3v_tag() : string => q3v_serve_q8() ? QWEN3V_TAG_Q8 : QWEN3V_TAG
 def private q3v_announce_lane() {
     var why = "the CPU default (no accelerate tier)"
     if (g_q3v_q8_pin != Q3vLane.unset) {
-        why = "pinned"
+        why = "pinned via set_qwen3v_q8"
     } elif (float_batch_override_active()) {
         why = "DASLLAMA_ACCEL on: the float-batch tier serves the file's planes"
     }
@@ -416,21 +416,13 @@ def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwe
     delete rowscratch
 }
 
-// repack every block GEMM region for the active backend's q8q8 kernels — per-row alignment (the
-// region's input width) keeps blocks from straddling rows
 def private q3v_repack_all(var st : Qwen3vStaging; gemm_sizes : array<int64>) {
-    if (!st.t.q8 || !select_matmul_backend_for_load_()) {
+    if (!st.t.q8) {
         return
     }
     let d = st.t.n_embd
     let widths <- [ d, d, d, st.t.ff_pad ]   // qkv o up down: the input width of each
-    for (l in range64(st.t.n_layer)) {
-        var wo = st.t.layer_w + l * st.t.layer_w_stride
-        for (g in range64(QWEN3V_GEMMS)) {
-            repack_q8q8_weight(st.qblob, st.qscales, wo, widths[g], gemm_sizes[g] / widths[g])
-            wo += gemm_sizes[g]
-        }
-    }
+    tower_repack_q8_blocks(st.qblob, st.qscales, st.t.layer_w, st.t.layer_w_stride, st.t.n_layer, widths, gemm_sizes)
 }
 
 // collect the deepstack tap layers from the TENSOR list, never the metadata (is_deepstack_layers
@@ -460,6 +452,7 @@ def private q3v_scan_deepstack(m : GGUFMeta; var t : Qwen3vTower; path : string)
 //! rail. No staged-size cap: the Omni mmproj (2.1 GB, both towers in one file) already stages
 //! its audio half the same way; the streaming mint is followup_general #24's item.
 def stage_qwen3v_tower(path : string) : Qwen3vStaging {
+    q3v_announce_lane()   // the lane decides what this stage MINTS - announce on every entry
     var st = Qwen3vStaging()
     st.t.q8 = q3v_serve_q8()
     let f = fopen(path, "rb")

@@ -28,10 +28,12 @@ instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
 
 **A test file in this folder is registered in no `CMakeLists.txt`.**
 
-**A `model-free`-listed or suite-less test file whose name does not name what it covers has
-an accurate `CLAUDE.md` entry, kept true in the same change** — added when such a file is
-added, corrected when a mapped file's coverage is renamed or re-scoped; `run.das`'s
-`model-free` list is the complete census, the `CLAUDE.md` map is deliberately partial.
+**A change that re-scopes a test file with a `CLAUDE.md` entry keeps that entry true in the
+same change.**
+
+**A new `model-free`-listed or suite-less test file whose name does not say what it covers
+gets a `CLAUDE.md` entry in the same change** — `run.das`'s `model-free` list is the
+complete census, the `CLAUDE.md` map is deliberately partial.
 
 **A new, renamed, or dropped arm name — the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches — updates the arm census in `CLAUDE.md`'s "Arm
@@ -83,8 +85,8 @@ test.
 one machine — is tested through the argv it gates or the mode it selects**, never through the
 predicate's value.
 
-**A moved or edited registration's test observes reachability** — the registered thing is
-reached through the registry, not called directly.
+**An added, moved, or edited registration's test observes reachability** — the registered
+thing is reached through the registry, not called directly.
 
 **A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
 naming the `ggml-vocab-*.gguf` fixture.**
@@ -123,10 +125,17 @@ dump.**
 **A test that reads a vision encode oracle dump names the minting arm in its header — the
 backend, the flash-attention setting, and the mmproj precision the dump came from.**
 
-**A cell whose claim is a CPU-served or f32-decoder leg pins every default-ON driver hook OFF
-for that leg — `set_metal_tower(false)`, `set_metal_wdec(false)`, `set_metal_wdec_step(false)`
-— and restores it after** — never relies on the driver's runtime decline. The mechanism (why
-the hooks flip legs silently) is `CLAUDE.md`'s "Metal fixtures" section.
+**A cell pins every driver hook and serving-lane knob its claim depends on, and restores it
+after** — the Metal driver hooks `set_metal_tower`, `set_metal_wdec`, `set_metal_wdec_step`
+(OFF for a CPU-served or f32-decoder claim) and the family serving-lane pins
+`set_<family>_q8` (false for an exact-plane claim, true for a q8 claim) — never a runtime
+decline standing in for a pin. The mechanism (why the hooks flip legs silently) is
+`CLAUDE.md`'s "Metal fixtures" section.
+
+**A cell asserting the UNPINNED default lane compares against
+`float_batch_override_active()`, never against a hardcoded lane** — the accelerate
+float-batch tier moves the default per box; the assert is on the lane the tier selects, not
+on the predicate's own value.
 
 **A cell that encodes, preprocesses, or asserts on media bytes an encoder consumes — pixels
 or audio samples, not a `.dlim` model image — with no model loaded builds its fixture
@@ -143,6 +152,10 @@ shaped exact fixtures.
 
 **An embedding-parity cell names its fixture and logs the measured maxdiff on green as well
 as red.**
+
+**A new or loosened tolerance bar ships a control the bar reds — a poison, a knockout, or a
+cross-lane witness — in the same change.** A bar nothing has ever exceeded is not known to
+discriminate.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** — the wire-shape pins, the render pins, and a live server leg gated on the family's

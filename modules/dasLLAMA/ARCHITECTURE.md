@@ -766,6 +766,9 @@ interior kernels stay bare. A new function needs the annotation itself only when
 entry reaches it: a new entry point carries it, and a new backend entry (kernel-backend
 override, batch donor) carries it too, because backends are also reached from un-annotated
 harness paths. Reused buffers take `@scratch`; debug and profiling legs take `[cold_path]`.
+The tokenizer encode/decode path is sanctioned UNCOVERED by the region contracts — its perf
+gate is the `--tok` scaling rows, whose instrument (the size-ladder ratio) catches what the
+contracts cannot.
 
 ---
 
