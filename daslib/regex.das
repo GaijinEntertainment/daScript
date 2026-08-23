@@ -916,7 +916,10 @@ def private re_match2_char(var regex : Regex; var node : ReNode?; str : uint8 co
     }
     if (*str == 0u8) return null
     unsafe {
-        if (memcmp(reinterpret<uint8?>(node.text), str, node.textLen) != 0) return null
+        for (i in range(node.textLen)) {
+            let c = int(*(str + i))
+            if (c == 0 || character_uat(node.text, i) != c) return null
+        }
         var tail = str + node.textLen
         node.tail = tail
         var node2 = node.next
@@ -958,7 +961,8 @@ def private re_match2_char_ci(var regex : Regex; var node : ReNode?; str : uint8
     if (*str == 0u8) return null
     unsafe {
         for (i in range(node.textLen)) {
-            if (ci_lower(character_uat(node.text, i)) != ci_lower(int(*(str + i)))) return null
+            let c = int(*(str + i))
+            if (c == 0 || ci_lower(character_uat(node.text, i)) != ci_lower(c)) return null
         }
         var tail = str + node.textLen
         node.tail = tail

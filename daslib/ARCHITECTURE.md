@@ -508,7 +508,10 @@ an entry lands here only when no name, shape, or test can carry it.
 - **coverage**: instrumentation is `generated` (lint-invisible, inliner-safe) and asserts
   become verify so their spliced counters survive release.
 - **regex**: zero-width nodes (lookahead, Bos/Eos, word boundaries) leave `subexpr.next`
-  null on purpose — chaining them would consume the continuation.
+  null on purpose — chaining them would consume the continuation. The literal matchers
+  compare byte-by-byte and return on the first mismatch — a fixed-`textLen` block compare
+  (memcmp) reads past the terminator whenever the terminator falls before the literal's
+  last byte (the tail at least two bytes shorter than the literal).
 - **debugger**: `g_installed_agents` is the GC root for every installed agent — the C++
   adapter holds a raw classPtr the das GC cannot see.
 - **typemacro_boost**: the parser does not run annotation `apply` for macro-added
