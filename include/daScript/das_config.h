@@ -114,7 +114,6 @@ using das_safe_set = std::set<K,C>;
 
 #define DAS_STD_HAS_BIND 1
 
-
 #ifndef DAS_MAX_FUNCTION_ARGUMENTS
 #define DAS_MAX_FUNCTION_ARGUMENTS 32
 #endif

@@ -1,13 +1,20 @@
 # Builtin Modules Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
-`include/daScript/simulate/ARCHITECTURE.md`.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
+`ARCHITECTURE.md`.
 
-- **Every plain value-returning extern bind in builtin (`$`), math, and strings uses
-  `addExternInline`/`addExternInlineEx`; every other module binds member-flavor
-  (`addExtern`)** — the core trio is on every interpreter hot path so its binds carry the
-  NTTP node, while everything else shares per-signature nodes for size. cmres,
-  ref-returning, and interop binds are exempt by construction; `ast_handle`'s generic
-  container helpers are NTTP in whatever module they instantiate into.
-  `src/builtin/REVIEW.das` enforces this; a violation the gate reports is fixed by
-  switching the bind, not by editing the gate.
+- **A bind added or changed under this folder binds by module.** In builtin (`$`), math,
+  and strings, a bind whose result is a plain value - not a reference, and not a result
+  the callee writes into the caller's result slot - and that is not an interop bind
+  (`addInterop`) uses `addExternInline` or `addExternInlineEx`; every other module uses
+  an `addExtern...` entry point whose name does not contain `Inline`. Binds of the generic
+  container and equality helpers declared in `include/daScript/ast/ast_handle.h` (repo
+  root) - the `das_vector_*`, `das_equ*`, `das_nequ*`, `das_handle_equ*` and
+  `das_handle_nequ*` families - belong to that header, not to the module that
+  instantiates them, and this rule does not decide their flavor. These three modules run
+  on every interpreter step, so each of their binds gets its own node the callee inlines
+  into, while elsewhere binds share one node per signature to keep binaries small.
+
+- **Weakening `src/builtin/REVIEW.das`'s bind-flavor scan is a defect** - a bind the gate
+  reports is fixed by switching the bind, never by editing the gate and never by dropping
+  a module from `review_nttp.das`'s coverage requires, which are the scan's reach.

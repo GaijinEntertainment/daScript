@@ -4,45 +4,57 @@ module review_nttp private
 require daslib/ast
 require daslib/ast_boost
 require daslib/macro_boost
-require math
-require strings
-require daslib/fio
-require daslib/rtti
+require math // nolint:STYLE030 — coverage require: pulls the module into the scanned registry
+require strings // nolint:STYLE030 — coverage require
+require daslib/fio // nolint:STYLE030 — coverage require
+require daslib/rtti // nolint:STYLE030 — coverage require
+require daslib/jobque_boost // nolint:STYLE030 — coverage require
+require daslib/network // nolint:STYLE030 — coverage require
+require daslib/uriparser_boost // nolint:STYLE030 — coverage require
+require daslib/debug // nolint:STYLE030 — coverage require
 
-// Compile-time half of the src/builtin gate: in builtin ($), math and strings
-// every plain value-returning extern bind is NTTP (addExternInline); every
-// other module stays member. Exempt by construction: policy-node builtins
-// (not callBased), interop, cmres (non-ref reference-type results) and
-// ref-returning binds. Violations surface as compile errors.
+// Bind flavor exists only in the compiled module registry, so this check runs at
+// compile time; the policy and its exemptions are src/builtin/REVIEW.md's rule.
 
-def private is_flavor_checked(func : FunctionPtr) : bool {
+def private is_plain_value_bind(func : FunctionPtr) : bool {
     if (!func.flags.builtIn || !func.flags.callBased || func.flags.interopFn) {
         return false
     }
-    if (func.result == null || func.result.isRefType || func.result.flags.ref) {
-        return false
-    }
-    return true
+    return !(func.result == null || func.result.isRefType || func.result.flags.ref)
+}
+
+def private is_shared_generic_helper(cppName : string) : bool {
+    return (
+        (cppName |> starts_with("das_vector_"))
+        || (cppName |> starts_with("das_equ"))
+        || (cppName |> starts_with("das_nequ"))
+        || (cppName |> starts_with("das_handle_equ"))
+        || (cppName |> starts_with("das_handle_nequ")))
 }
 
 [_macro]
 def check_nttp_policy {
-    let trio <- {"$", "math", "strings"}
+    let inlineOnlyModules <- {"$", "math", "strings"}
+    var matched : table<string>
     program_for_each_module(compiling_program()) $(mod) {
-        let inTrio = trio |> key_exists("{mod.name}")
+        let inInlineOnly = inlineOnlyModules |> key_exists("{mod.name}")
+        if (inInlineOnly) {
+            matched |> insert("{mod.name}")
+        }
         for_each_function(mod, "") $(func) {
-            return if (!is_flavor_checked(func))
-            // ast_handle's generic container/equality helpers are NTTP in every module
-            // they instantiate into — hottest plumbing everywhere, one call site serves all
-            let cppName = "{(func as BuiltInFunction).cppName}"
-            return if (cppName |> starts_with("das_vector_"))
-            return if (cppName |> starts_with("das_equ") || cppName |> starts_with("das_nequ"))
-            return if (cppName |> starts_with("das_handle_equ") || cppName |> starts_with("das_handle_nequ"))
-            if (inTrio && !func.moreFlags2.nttp) {
-                macro_error(compiling_program(), func.at, "REVIEW policy: {mod.name}::{func.name} must bind via addExternInline (trio is 100% NTTP)")
-            } elif (!inTrio && func.moreFlags2.nttp) {
-                macro_error(compiling_program(), func.at, "REVIEW policy: {mod.name}::{func.name} must not bind via addExternInline (only builtin/math/strings are NTTP)")
+            return if (!is_plain_value_bind(func) || is_shared_generic_helper("{(func as BuiltInFunction).cppName}"))
+            if (inInlineOnly && !func.moreFlags2.nttp) {
+                macro_error(compiling_program(), func.at, "REVIEW policy: {mod.name}::{func.name} is bound with addExtern; builtin/math/strings binds use addExternInline")
+            } elif (!inInlineOnly && func.moreFlags2.nttp) {
+                macro_error(compiling_program(), func.at, "REVIEW policy: {mod.name}::{func.name} is bound with addExternInline; only builtin/math/strings binds are NTTP")
             }
+        }
+    }
+    // fail closed: a policy module name that matched nothing means the scan
+    // silently skipped it (typo or module rename) — the gate must not stay green
+    for (name in keys(inlineOnlyModules)) {
+        if (!(matched |> key_exists(name))) {
+            panic("review_nttp: policy module '{name}' not found in the scanned registry — gate coverage is broken")
         }
     }
 }

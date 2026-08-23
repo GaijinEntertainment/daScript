@@ -492,8 +492,11 @@ an entry lands here only when no name, shape, or test can carry it.
   ↔ `Program::getOptimize` / `Program::patchInline`; `stale_scan_line` ↔
   `rtti_is_nolint_suppressed`; `is_inline_temp_name` ↔ `INLINE_TEMP_PREFIX`; the
   STYLE024/025 unsafe map ↔ infer's `unsafe_*` rules; `style036_inert_contract` ↔ infer's
-  contract clearing. Each pair changes in lockstep; nothing fails when one side moves
-  alone.
+  contract clearing; `only_nttp`'s `moreFlags2.nttp` read ↔ `ExternalFnInline`'s
+  `this->nttp = true` (`include/daScript/ast/ast_interop.h`) plus the positional
+  `MoreFunctionFlags2` argNames list (`src/builtin/module_builtin_ast_flags.cpp`) that
+  gives the bit its daslang name. Each pair changes in lockstep; nothing fails when one
+  side moves alone.
 - **interfaces**: the implements-marker IS the generated getter field — `is`/`as`/`?as`
   key purely on its presence; parent interfaces get their own deduped getter fields.
   The const getter's `unsafe(addr<$t(st)? -const>(self))` is the one blessed const-strip

@@ -153,10 +153,8 @@ namespace das
         }
     };
 
-    // the carrier is the one typed-eval slot a return type owns: scalars their slot,
-    // pointers Ptr, void none, lattice the vec4f box with typed reads, all else boxed
-
-    // carrier tag for vec4f-boxed results that do NOT license typed-slot reads
+    // the carrier is the one typed-eval slot a return type owns; this tag carries
+    // vec4f-boxed results that do NOT license typed-slot reads
     struct vec4f_boxed {};
 
     template <typename R>
@@ -214,7 +212,7 @@ namespace das
     // read via evalInt in indexing shapes); anything else throws through one shared path
 
     [[noreturn]] inline void ext_wrong_slot ( Context & ctx, const char * fnName ) {
-        ctx.throw_error_ex("typed eval on wrong extern return kind, %s", fnName ? fnName : "<unknown>");
+        ctx.throw_error_ex("internal binding error: typed eval on wrong extern return kind, %s", fnName ? fnName : "<unknown>");
         abort();
     }
 
@@ -245,7 +243,7 @@ namespace das
         static __forceinline uint64_t to ( int64_t v ) { return (uint64_t) v; }
     };
 
-    // per-carrier bases, 11 in the whole binary; a base slot body only runs for
+    // one base per carrier kind, not per bind; a base slot body only runs for
     // cross-slot plumbing or the shared wrong-slot throw — the direct layer owns the rest
 
     template <typename Carrier>
@@ -278,8 +276,6 @@ namespace das
 #undef  EVAL_NODE
     };
 
-    // boxed results that do NOT license typed reads (vector/range workhorse
-    // types, wrapped structs): eval works, every typed slot throws untouched
     template <>
     struct SimNode_ExtFuncCallRet<vec4f_boxed> : SimNode_ExtFuncCallBase {
         SimNode_ExtFuncCallRet(const LineInfo & at, const char * fnName)
@@ -392,8 +388,6 @@ namespace das
         }
     };
 
-    // fn is a template constant so the callee can inline into computeDirect;
-    // opt-in via addExternInline for hot, inline-friendly binds
 
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCallInline;
