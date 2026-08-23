@@ -55,6 +55,12 @@ matrix between rounds.
 5. Pushed a new tip → re-request now. No push → the existing review already covers the tip.
 6. Repeat until Section 0 holds; **only then** wait for CI green and merge.
 
+**Every push that changes a `.das` file since the last push runs the pre-push lint gate
+first**: `daslang utils/internal/preflight/main.das -- --only lint --lint-skip-exe-rail`
+(rails and cost: `skills/internal/preflight.md`, the lint row). MCP `lint` on the file just
+edited is NOT this gate: this run lints every `.das` the branch changed against
+`origin/master`, exactly as CI does, so a clean single-file lint still pushes red.
+
 CI runs the whole time — watch it, don't block on it. Red early is a free signal: fix, push,
 re-request. Red after Copilot is dry: fix, then back into the loop. Green early means nothing
 until Copilot is dry.
@@ -70,8 +76,9 @@ cannot see it — poll that one with `gh run view <runID> --json jobs`.
 2. `gh pr checks <PR>` gives the URL; `gh run view <runID> --log-failed` the log.
 3. Fix policy is Step 2 of `skills/internal/make_pr.md`: own change → fix; obvious
    pre-existing → fix; non-obvious pre-existing → ask the user.
-4. Reproduce the lane locally when practical, run focused gates for the changed surface —
-   never the full preflight; CI is the authoritative complete rerun.
+4. Reproduce the lane locally when practical, run focused gates for the changed surface plus
+   the pre-push lint gate (a subset run, not the full preflight); CI is the authoritative
+   complete rerun.
 5. Push, then back into the Copilot loop.
 
 ## 3. Fix, reply, resolve
@@ -83,8 +90,8 @@ Applying the accepted fixes:
 
 - **Scan for contradictory comments** describing the affected surface — a bug fix often
   strands the prose next to it.
-- Focused gates + `git diff --check` + any directly applicable formatter/generator check. A
-  round touching `//!` doc-comments re-runs the docs gates per
+- Focused gates + the pre-push lint gate + `git diff --check` + any directly applicable
+  formatter/generator check. A round touching `//!` doc-comments re-runs the docs gates per
   `skills/internal/documentation_rst.md`.
 - Amend and `git push --force-with-lease` (never `--force`) to keep a squashed branch
   squashed.
