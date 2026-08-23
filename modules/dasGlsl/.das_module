@@ -1,0 +1,9 @@
+options gen2
+require daslib/fio
+
+[export]
+def initialize(project_path : string) {
+    register_native_path("glsl", "glsl_common", "{project_path}/glsl/glsl_common.das")
+    register_native_path("glsl", "glsl_internal", "{project_path}/glsl/glsl_internal.das")
+    register_native_path("geometry", "geom_gen", "{project_path}/glsl/geom_gen.das")
+}

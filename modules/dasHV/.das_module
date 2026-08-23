@@ -6,4 +6,5 @@ def initialize(project_path : string) {
     if (das_is_dll_build()) {
         register_dynamic_module("{project_path}/dasModuleHV.shared_module", "Module_HV")
     }
+    register_native_path("dashv", "dashv_boost", "{project_path}/dashv/dashv_boost.das")
 }

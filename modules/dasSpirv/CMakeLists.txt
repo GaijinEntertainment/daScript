@@ -2,14 +2,7 @@ IF(NOT DAS_SPIRV_INCLUDED)
     SET(DAS_SPIRV_INCLUDED TRUE)
     MESSAGE(STATUS "dasSpirv module included.")
 
-    ADD_MODULE_DAS(spirv spirv spirv_grammar)
-    ADD_MODULE_DAS(spirv spirv spirv_builder)
-    ADD_MODULE_DAS(spirv spirv spirv_types)
-    ADD_MODULE_DAS(spirv spirv spirv_reflect)
-    ADD_MODULE_DAS(spirv spirv spirv_dis)
-    ADD_MODULE_DAS(spirv spirv spirv_emit)
-    ADD_MODULE_DAS(spirv spirv spirv_builtins)
-    ADD_MODULE_DAS(spirv spirv spirv_shader)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(spirv spirv)
 
     # AOT-able sources (for test_aot / any consumer); empty when disabled.
     SET(DASSPIRV_AOT_FILES
@@ -29,5 +22,8 @@ IF(NOT DAS_SPIRV_INCLUDED)
         FILES_MATCHING
         PATTERN "*.das"
         PATTERN "_*" EXCLUDE
+    )
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasSpirv/.das_module
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasSpirv
     )
 ENDIF()

@@ -22,8 +22,7 @@ IF ((NOT DAS_STBIMAGE_INCLUDED) AND (NOT ${DAS_STBIMAGE_DISABLED}))
 	ADD_MODULE_CPP(StbImage)
 	ADD_MODULE_CPP(Raster)
 	ADD_MODULE_CPP(StbTrueType)
-	ADD_MODULE_DAS(stbimage stbimage stbimage_boost)
-	ADD_MODULE_DAS(stbimage stbimage stbimage_ttf)
+	ADD_MODULE_DAS_FROM_DESCRIPTOR(stbimage stbimage)
 
 	# AOT-able sources (for test_aot / any consumer); empty when disabled.
 	SET(DASSTBIMAGE_AOT_FILES

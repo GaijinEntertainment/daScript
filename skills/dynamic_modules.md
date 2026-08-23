@@ -96,4 +96,4 @@ Require-root registration is manifest-driven: a file not named in the module's
 - `.shared_module` is the C++ DLL extension; `.das_module` is the descriptor script —
   they are different things
 
-Static-binary module resolution and the CMake macros behind it: `skills/internal/dynamic_modules_plumbing.md` (repo-only).
+Module resolution in both binaries and the CMake macros behind it: `skills/internal/dynamic_modules_plumbing.md` (repo-only).

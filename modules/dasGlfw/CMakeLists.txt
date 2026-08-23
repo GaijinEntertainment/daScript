@@ -54,8 +54,8 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 		MESSAGE(STATUS "dasGlfw: emscripten/web build (link-time -sUSE_GLFW=3, no GLFW source build).")
 		SET(GLFW_INCLUDE_DIR ${DAS_GLFW_DIR}/web_include)
 		ADD_MODULE_CPP(dasGLFW)
-		ADD_MODULE_DAS(glfw dasglfw glfw_boost)
-		ADD_MODULE_DAS(live dasglfw glfw_live)
+		ADD_MODULE_DAS_FROM_DESCRIPTOR(glfw dasglfw)
+		ADD_MODULE_DAS_FROM_DESCRIPTOR(live dasglfw)
 		# glfw_emscripten_stubs.c backfills the GLFW 3.4 entry points missing from
 		# emcc's JS GLFW so the binding's unconditional registrations link — a
 		# das-visible function absent from the wasm-side module is a startup fatal
@@ -170,8 +170,8 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	)
 
 	ADD_MODULE_CPP(dasGLFW)
-	ADD_MODULE_DAS(glfw dasglfw glfw_boost)
-	ADD_MODULE_DAS(live dasglfw glfw_live)
+	ADD_MODULE_DAS_FROM_DESCRIPTOR(glfw dasglfw)
+	ADD_MODULE_DAS_FROM_DESCRIPTOR(live dasglfw)
 	ADD_MODULE_LIB(libDasModuleGlfw dasModuleGlfw ${DAS_GLFW_BIND_MODULE_SRC})
 	MACRO(SETUP_GLFW glfw_mod_lib glfw_target)
 		ADD_DEPENDENCIES(${glfw_mod_lib} ${glfw_target})

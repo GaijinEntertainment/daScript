@@ -57,39 +57,6 @@ def private word_in_any(texts : array<string>; name : string) : bool {
     return false
 }
 
-// `text` with every // comment cut to end-of-line (string-literal-aware, so a "//" inside a
-// quoted URL survives): a facade def mentioned ONLY in a comment must not satisfy the floor.
-def private strip_line_comments(text : string) : string {
-    return build_string() $(var b : StringBuilderWriter) {
-        for (line in split(text, "\n")) {
-            var cut = -1
-            peek_data(line) $(d) {
-                var in_str = false
-                var i = 0
-                while (i < length(d)) {
-                    let c = int(d[i])
-                    if (in_str) {
-                        if (c == '\\') {
-                            i++
-                        } elif (c == '"') {
-                            in_str = false
-                        }
-                    } elif (c == '"') {
-                        in_str = true
-                    } elif (c == '/' && i + 1 < length(d) && int(d[i + 1]) == '/') {
-                        cut = i
-                        break
-                    }
-                    i++
-                }
-            }
-            b |> write(cut >= 0 ? slice(line, 0, cut) : line)
-            b |> write("\n")
-        }
-    }
-}
-
-// .das sources arrive comment-stripped: a name mentioned only in a comment must not count
 def private read_das_stripped(folder : string; var out : array<string>) {
     dir(folder) $(name) {
         if (name |> ends_with(".das")) {
@@ -231,6 +198,7 @@ def main() : int {
     var inscope rst_texts : array<string>
     read_rst(RST_DIR, "dasLLAMA_", rst_texts)
     check_tutorial_floor(tut_texts, rst_texts)
+    gate_descriptor_census("modules/dasLLAMA/.das_module", ["modules/dasLLAMA/dasllama"])
     check_family_seams(AUDIO_CARRIER, "AudioKind", AUDIO_SEAM_EXEMPT,
         "load_audio_embedder / encode_audio / audio_probe_proj_dim")
     check_family_seams(VISION_CARRIER, "VisionKind", VISION_SEAM_EXEMPT,

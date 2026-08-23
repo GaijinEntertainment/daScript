@@ -82,7 +82,7 @@ IF ((NOT DAS_TREE_SITTER_INCLUDED) AND (NOT DAS_TREE_SITTER_DISABLED))
         ${DAS_TREE_SITTER_DIR}/src/dasTreeSitter.cpp)
 
     ADD_MODULE_CPP(TreeSitter)
-    ADD_MODULE_DAS(tree_sitter daslib tree_sitter)
+    ADD_MODULE_DAS_FROM_DESCRIPTOR(tree_sitter daslib)
     ADD_MODULE_LIB(libDasModuleTreeSitter dasModuleTreeSitter
         ${DAS_TREE_SITTER_MODULE_SRC})
 

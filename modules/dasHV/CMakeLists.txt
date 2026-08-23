@@ -260,7 +260,7 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		ENDIF()
 	ENDIF()
 
-	ADD_MODULE_DAS(dashv dashv dashv_boost)
+	ADD_MODULE_DAS_FROM_DESCRIPTOR(dashv dashv)
 
 	# AOT-able sources (for test_aot / any consumer); empty when disabled. The test-side
 	# fixture (_dashv_test_common) is appended by tests/aot, it is not a module source.

@@ -9,8 +9,9 @@
 **A timing rig — a script whose output is a measured wall or rate — and any kernel A/B lab,
 wherever the diff puts them, answer to `benchmarks/REVIEW.md`.**
 
-**A change to what enters `performance/records/` or its manifests, an exchange or
-provenance-manifest change, or a change to WHICH model file (a `.gguf`, a `.dlim`, an
+**A change to what enters `performance/records/` or its manifests, an exchange change — the client or
+schema for the sidecar exchange that boxes download tune winners from and submit winners
+to — or a provenance-manifest change, or a change to WHICH model file (a `.gguf`, a `.dlim`, an
 mmproj, or an image or audio fixture) a recorded row or manifest pins, answers to
 `performance/REVIEW.md`.** A test or tool merely opening a stocked model file by name does
 not route.
@@ -63,7 +64,8 @@ f32 fallback is for correctness rails only.** A new call to an f32 matmul (`matm
 `mm_blob_b`, per-head `gemm_f32`, or an f32 GPU mm) outside a parity or oracle rail, where a
 faster-format twin already serves the same weights and shape, is a defect. Weights with no
 faster twin (unquantized planes) are out of scope; a site that must stay f32 for another
-reason is ledgered in `ARCHITECTURE.md`, not commented into compliance.
+reason is ledgered on the site's `ARCHITECTURE.md` §1 charter line, not commented into
+compliance.
 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
 file.** A platform-neutral engine file carrying it is a defect.
@@ -211,9 +213,6 @@ signature, and a mention that only names it (a comment, a passing reference) doe
 struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;
 a struct the renderer emits but the registry does not is caught by
 `tests/test_env_registry.das`.
-
-**A new `.das` under `dasllama/` is registered in `.das_module` in the same change.** Module
-files shipped from other subfolders resolve by relative path and register nothing.
 
 **`dasllama/dasllama_unicode.das`'s RANGES/WS tables are generated — retranscoded from llama.cpp's
 `unicode-data.cpp`; hand-editing them is a defect.**
