@@ -740,3 +740,28 @@ the prefill), so the §2.12 ramp re-arms. **The named next lever: the taps + tai
 the GPU chain** (same dispatch vocabulary over the flat-reinterpreted merged rows) — cuts
 the enc gap vs mtmd AND deletes the trailing burn that keeps pp from parity. P29 untested
 (qwen25v arm not re-run).
+
+#### Slice J round 2 (2026-08-23): taps + tail merger on the GPU chain
+
+The tap chains encode INLINE over the live residual (hazard tracking orders them against the
+next block's writes — the segments and stashes died), the tail merger follows the loop, and
+ONE readback lands compact proj outputs for the CPU scatter. The merger/tap planes unified to
+f32-in-blob (the bf16 GEMM arm dies; the Omni tail widens 61 MB) → IMAGE_VERSION 13. The
+[nout × 4d] merged view doubles the row buffers' size demand (rows_ext = max(mp, 4·ceil32(nout))).
+test_qwen3v 12/12 unchanged bars.
+
+**Measured (released rig, Metal leg, r=3; "before" = pre-J):**
+
+| model | enc before → NOW | ref enc | img:pp before → NOW | ref pp |
+|---|---|---|---|---|
+| 4B (ds) | 2194 → **193 ms** (11.4x) | ~250 | 841 → 847 (−16%) | ~1009 |
+| 8B (ds) | 3446 → **277 ms** (12.4x) | ~508 | 402 → **468** (−17%) | ~566 |
+| 30B (no ds) | 6411 → **240 ms** (26.7x) | ~250 | 481 → **779** (−4%) | ~815 |
+
+**das now LEADS every qwen3v Metal encode**, and the 30B image pp is at parity — its −41%
+was almost entirely the §2.12 ramp (P22 scores WRONG: no MoE-lane mechanism remained once
+the burn died). The 4B/8B pp residual (−16/−17%) matches the slice-M non-ramp terms — the
+ds-WIDE decoder tax (+23/+13 ms wide-quantum staging in the PREFILL) + span attention — a
+decoder-side lever (dasllama_metal_prefill), not tower work; the no-ds 30B hitting parity is
+the discriminating witness. P28 rescored: enc BEAT the band; pp within ±8% on the no-ds
+model only. Captions correct on all three.

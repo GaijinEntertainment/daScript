@@ -65,7 +65,7 @@ struct Qwen3vTower {
     q8 : bool
     ff_pad : int64       // n_ff rounded up to 64 — the served FFN width, both lanes
     blob : PlaneF = PlaneF()
-    wblob : PlaneU16 = PlaneU16()
+    wblob : PlaneU16 = PlaneU16()   // empty since the f32 unification - kept for the meta/section shape
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
     patch_w : int64      // [n_embd × patch_dim] f32 — W0 + W1 folded (stills eval both convs on one frame)
@@ -113,7 +113,7 @@ struct Qwen3vState {
     @exact_size ds_slice : array<float>  // deepstack tap / main-merger staging [nout × proj]
     @scratch @exact_size pos_rs : array<float>   // the pos table resized to the grid [npos × d]
     @exact_size cos_t : array<float>; @exact_size sin_t : array<float>
-    @exact_size ds_stash : array<float>  // GPU arm: the residual at each tap layer [n_ds × npos × d]
+    @exact_size ds_stash : array<float>  // GPU arm: each tap merger's proj output [n_ds × nout × proj]
     @scratch @exact_size xqi : array<int8>    // q8 lane: the requantized GEMM input, grown per site
     @scratch @exact_size xsi : array<float>   // its per-32-block scales
     @scratch pos2 : array<int2>      // per reordered row: (patch row, patch column)
@@ -250,9 +250,9 @@ var private g_q3v_gpu : Qwen3vGpuBlocksFn
 var private g_q3v_gpu_serves : Qwen3vGpuServesFn
 var private g_q3v_gpu_set = false
 
-//! The Metal tower's qwen3v block-loop seat ([init]): the blocks fn runs the stack over `s.x`
-//! (rope tables prebuilt) and fills `s.ds_stash` at the tap layers — false = decline, the CPU
-//! loop serves; `serves` answers the knob so the lane policy can prefer f32 planes.
+//! The Metal tower's qwen3v seat ([init]): the fn runs blocks + tap mergers + the tail on the
+//! GPU, landing proj outputs in `s.ds_stash`/`s.ds_slice` (caller-sized) — false = decline,
+//! the CPU loop serves; `serves` answers the knob so the lane policy can prefer f32 planes.
 def register_qwen3v_gpu(fn : Qwen3vGpuBlocksFn; serves : Qwen3vGpuServesFn) {
     g_q3v_gpu = fn
     g_q3v_gpu_serves = serves
@@ -348,6 +348,7 @@ def private q3v_verify_tensors(m : GGUFMeta; t : Qwen3vTower; gemm_sizes : array
     }
 }
 
+[unused_argument(woff)]   // the f32 unification left no wblob planes; the cursor stays for the stage's shape
 def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&; var qo : int64&) {
     let d = t.n_embd
     let ffs = t.ff_pad   // the served FFN width, BOTH lanes: %64 fits Metal tiles, %32 quantizes
@@ -356,9 +357,9 @@ def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&;
     t.pos_w = off; off += t.pos_side * t.pos_side * d
     t.post_ln_w = off; off += d
     t.post_ln_b = off; off += d
-    t.mm0_w = take_cursor(t.mm_bf16, off, woff, 16l * d * d)
+    t.mm0_w = off; off += 16l * d * d   // merger/tap GEMMs stage f32-in-blob like the blocks
     t.mm0_b = off; off += 4l * d
-    t.mm2_w = take_cursor(t.mm_bf16, off, woff, 4l * d * t.proj_dim)
+    t.mm2_w = off; off += 4l * d * t.proj_dim
     t.mm2_b = off; off += t.proj_dim
     t.layer_f_stride = 4l * d + 3l * d + d + t.ff_pad + d   // the up-bias slot is ff_pad both lanes (zero tail)
     t.layer_f = off; off += t.n_layer * t.layer_f_stride
@@ -375,7 +376,8 @@ def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&;
         t.ds_f_stride = 12l * d + t.proj_dim
         t.ds_f = off; off += t.n_deepstack * t.ds_f_stride
         t.ds_w_stride = 16l * d * d + 4l * d * t.proj_dim
-        t.ds_w = take_cursor(t.mm_bf16, off, woff, t.n_deepstack * t.ds_w_stride)
+        t.ds_w = off
+        off += t.n_deepstack * t.ds_w_stride
     }
 }
 
@@ -391,9 +393,9 @@ def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwe
     gguf_read_tensor_f32(m, bytes, "v.position_embd.weight", st.blob, st.t.pos_w, st.t.pos_side * st.t.pos_side * d)
     gguf_read_tensor_f32(m, bytes, "v.post_ln.weight", st.blob, st.t.post_ln_w, d)
     gguf_read_tensor_f32(m, bytes, "v.post_ln.bias", st.blob, st.t.post_ln_b, d)
-    tower_read_gemm(m, bytes, "mm.0.weight", st.wblob, st.blob, st.t.mm_bf16, st.t.mm0_w, 16l * d * d)
+    gguf_read_tensor_f32(m, bytes, "mm.0.weight", st.blob, st.t.mm0_w, 16l * d * d)
     gguf_read_tensor_f32(m, bytes, "mm.0.bias", st.blob, st.t.mm0_b, 4l * d)
-    tower_read_gemm(m, bytes, "mm.2.weight", st.wblob, st.blob, st.t.mm_bf16, st.t.mm2_w, 4l * d * st.t.proj_dim)
+    gguf_read_tensor_f32(m, bytes, "mm.2.weight", st.blob, st.t.mm2_w, 4l * d * st.t.proj_dim)
     gguf_read_tensor_f32(m, bytes, "mm.2.bias", st.blob, st.t.mm2_b, st.t.proj_dim)
     for (k in range64(st.t.n_deepstack)) {
         let dl = k == 0l ? st.t.ds_l0 : k == 1l ? st.t.ds_l1 : st.t.ds_l2
@@ -404,8 +406,8 @@ def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwe
         gguf_read_tensor_f32(m, bytes, "{p}.fc1.bias", st.blob, dfo, 4l * d); dfo += 4l * d
         gguf_read_tensor_f32(m, bytes, "{p}.fc2.bias", st.blob, dfo, st.t.proj_dim)
         let dwo = st.t.ds_w + k * st.t.ds_w_stride
-        tower_read_gemm(m, bytes, "{p}.fc1.weight", st.wblob, st.blob, st.t.mm_bf16, dwo, 16l * d * d)
-        tower_read_gemm(m, bytes, "{p}.fc2.weight", st.wblob, st.blob, st.t.mm_bf16, dwo + 16l * d * d, 4l * d * st.t.proj_dim)
+        gguf_read_tensor_f32(m, bytes, "{p}.fc1.weight", st.blob, dwo, 16l * d * d)
+        gguf_read_tensor_f32(m, bytes, "{p}.fc2.weight", st.blob, dwo + 16l * d * d, 4l * d * st.t.proj_dim)
     }
     for (l in range64(st.t.n_layer)) {
         let p = "v.blk.{l}"
@@ -608,9 +610,6 @@ def mint_qwen3v_tower(var st : Qwen3vStaging; var out : Qwen3vTower) {
 // the bind walk skips a missing section silently, so the flag=>plane invariant must be checked
 // once the carrier is live, or the kernel derefs null
 def private q3v_check_planes(t : Qwen3vTower; src : string) {
-    if (t.mm_bf16 && empty(t.wblob)) {
-        panic("dasLLAMA qwen3v: '{src}' declares bf16 planes but carries no wblob section - the image is corrupt or hand-edited")
-    }
     if (t.q8 && (empty(t.qblob) || empty(t.qscales))) {
         panic("dasLLAMA qwen3v: '{src}' declares q8 block GEMMs but carries no qblob/qscales sections - the image is corrupt or hand-edited")
     }
@@ -795,19 +794,19 @@ def private q3v_deepstack_tap(t : Qwen3vTower; var s : Qwen3vState; x : array<fl
     let fo = t.ds_f + k * t.ds_f_stride
     let wo = t.ds_w + k * t.ds_w_stride
     layernorm_batch(s.ds_mid, x, t.blob, fo, fo + 4l * d, 4l * d, nout, t.eps)
-    mm_plane_b(s.m0, t.mm_bf16, t.wblob, t.blob, wo, s.ds_mid, 4l * d, 4l * d, nout)
+    mm_plane_b(s.m0, false, t.wblob, t.blob, wo, s.ds_mid, 4l * d, 4l * d, nout)
     add_bias_rows(s.m0, t.blob, fo + 8l * d, 4l * d, nout)
     gelu_tanh_lut_batch(s.m0, 4l * d, nout)
-    mm_plane_b(s.ds_slice, t.mm_bf16, t.wblob, t.blob, wo + 16l * d * d, s.m0, 4l * d, t.proj_dim, nout)
+    mm_plane_b(s.ds_slice, false, t.wblob, t.blob, wo + 16l * d * d, s.m0, 4l * d, t.proj_dim, nout)
     add_bias_rows(s.ds_slice, t.blob, fo + 12l * d, t.proj_dim, nout)
     q3v_scatter_slice(t, s.ds_slice, out, k + 1l, nout)
 }
 
-// copy a [nout × proj] slice into the wide out rows at slice index `sl`
-def private q3v_scatter_slice(t : Qwen3vTower; src : array<float>; var out : array<float>; sl, nout : int64) {
+// copy a [nout × proj] slice (at `soff` in src) into the wide out rows at slice index `sl`
+def private q3v_scatter_slice(t : Qwen3vTower; src : array<float>; var out : array<float>; sl, nout : int64; soff : int64 = 0l) {
     let w = qwen3v_row_width(t)
     unsafe {
-        let sp = addr<float const?>(src[0])
+        let sp = addr<float const?>(src[soff])
         var op = addr(out[0])
         for (r in range64(nout)) {
             copy_floats(op + r * w + sl * t.proj_dim, sp + r * t.proj_dim, t.proj_dim)
@@ -821,11 +820,11 @@ def private q3v_tail(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out
     let d = t.n_embd
     let nout = npos / 4l
     layernorm_batch(s.xb, s.x, t.blob, t.post_ln_w, t.post_ln_b, d, npos, t.eps)
-    mm_plane_b(s.m0, t.mm_bf16, t.wblob, t.blob, t.mm0_w, s.xb, 4l * d, 4l * d, nout)
+    mm_plane_b(s.m0, false, t.wblob, t.blob, t.mm0_w, s.xb, 4l * d, 4l * d, nout)
     add_bias_rows(s.m0, t.blob, t.mm0_b, 4l * d, nout)
     gelu_tanh_lut_batch(s.m0, 4l * d, nout)
     ensure_length(out, nout * t.proj_dim)
-    mm_plane_b(out, t.mm_bf16, t.wblob, t.blob, t.mm2_w, s.m0, 4l * d, t.proj_dim, nout)
+    mm_plane_b(out, false, t.wblob, t.blob, t.mm2_w, s.m0, 4l * d, t.proj_dim, nout)
     add_bias_rows(out, t.blob, t.mm2_b, t.proj_dim, nout)
     return nout
 }
@@ -854,18 +853,28 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
     }
     var gpu_served = false
     if (!t.q8 && g_q3v_gpu_set && invoke(g_q3v_gpu_serves)) {
+        let nout4 = npos / 4l
+        ensure_length(s.ds_slice, nout4 * t.proj_dim)
         if (nds > 0l) {
-            ensure_length(s.ds_stash, nds * npos * t.n_embd)
+            ensure_length(s.ds_stash, nds * nout4 * t.proj_dim)
         }
-        gpu_served = invoke(g_q3v_gpu, t, s, npos)   // the block stack over s.x; tap residuals into ds_stash
+        gpu_served = invoke(g_q3v_gpu, t, s, npos)   // blocks + taps + tail on GPU: proj outputs land in ds_stash/ds_slice
     }
     if (gpu_served) {
-        for (k in range64(nds)) {
-            unsafe {   // stash slice k -> the xb2 scratch: the tap reads a plain [npos × d] source
-                memcpy(addr(s.xb2[0]), addr(s.ds_stash[k * npos * t.n_embd]), npos * t.n_embd * 4l)
+        let nout4 = npos / 4l
+        if (nds > 0l) {
+            for (k in range64(nds)) {
+                q3v_scatter_slice(t, s.ds_stash, out, k + 1l, nout4, k * nout4 * t.proj_dim)
             }
-            q3v_deepstack_tap(t, s, s.xb2, k, npos, out)
+            q3v_scatter_slice(t, s.ds_slice, out, 0l, nout4)
+        } else {
+            ensure_length(out, nout4 * t.proj_dim)
+            unsafe {
+                memcpy(addr(out[0]), addr(s.ds_slice[0]), nout4 * t.proj_dim * 4l)
+            }
         }
+        asr_prof_add("q3v.tail", tp)
+        return nout4
     } else {
         for (l in range64(t.n_layer)) {
             q3v_block(t, s, l, npos)
