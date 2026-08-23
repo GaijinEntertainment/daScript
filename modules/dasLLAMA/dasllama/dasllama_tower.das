@@ -294,6 +294,87 @@ def tower_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var wblob
     }
 }
 
+//! Read one GEMM weight transcoded to Q8_0 — the q8 serving lane's read: the file's tensor
+//! (any f32-widenable type) widens into ``wscratch``, then quantizes into qblob/qscales at the
+//! 32-aligned region (``wo/32`` indexes the scales). ``family`` names the panic.
+def tower_read_gemm_q8(m : GGUFMeta; b : array<uint8> | #; name : string; var qblob : array<int8>;
+                       var qscales : array<float>; @scratch var wscratch : array<float>;
+                       wo, n_elem : int64; family : string) {
+    if (n_elem % 32l != 0l || wo % 32l != 0l) {
+        panic("{family}: GEMM tensor '{name}' ({n_elem} elements at {wo}) is not 32-aligned")
+    }
+    if (long_length(wscratch) < n_elem) {   // inline: PERF026 can't see @scratch through reserve_resize
+        wscratch |> reserve(n_elem)
+        wscratch |> resize(n_elem)
+    }
+    gguf_read_tensor_f32(m, b, name, wscratch, 0l, n_elem)
+    quantize_q8_0_into(wscratch, n_elem, qblob, qscales, wo, wo / 32l)
+}
+
+//! Stage a [file_rows × width] GEMM into a q8 region padded to [pad_rows × width] with zero
+//! rows appended — their quantized outputs are exactly zero, so a non-32-aligned FFN's up/gate
+//! half can emit the padded width its down partner consumes.
+def tower_stage_q8_zero_rows(m : GGUFMeta; b : array<uint8> | #; name : string; var qblob : array<int8>;
+                             var qscales : array<float>; @scratch var wscratch : array<float>;
+                             wo, file_rows, pad_rows, width : int64; family : string) {
+    let file_n = file_rows * width
+    let served = pad_rows * width
+    if (served % 32l != 0l || wo % 32l != 0l) {
+        panic("{family}: GEMM tensor '{name}' ({served} served elements at {wo}) is not 32-aligned")
+    }
+    if (long_length(wscratch) < served) {
+        wscratch |> reserve(served)
+        wscratch |> resize(served)
+    }
+    gguf_read_tensor_f32(m, b, name, wscratch, 0l, file_n)
+    tower_zero_span(wscratch, file_n, served - file_n)
+    quantize_q8_0_into(wscratch, served, qblob, qscales, wo, wo / 32l)
+}
+
+//! Stage a [rows × ff] GEMM into a q8 region with each row zero-padded to [rows × fp] — the
+//! down half: the pad columns multiply the up pad's zero outputs, so the padded dot is exact.
+def tower_stage_q8_pad_cols(m : GGUFMeta; b : array<uint8> | #; name : string; var qblob : array<int8>;
+                            var qscales : array<float>; @scratch var wscratch : array<float>;
+                            @scratch var rowscratch : array<float>; wo, rows, ff, fp : int64; family : string) {
+    let served = rows * fp
+    if (served % 32l != 0l || wo % 32l != 0l) {
+        panic("{family}: GEMM tensor '{name}' ({served} served elements at {wo}) is not 32-aligned")
+    }
+    if (long_length(rowscratch) < rows * ff) {
+        rowscratch |> reserve(rows * ff)
+        rowscratch |> resize(rows * ff)
+    }
+    gguf_read_tensor_f32(m, b, name, rowscratch, 0l, rows * ff)
+    if (long_length(wscratch) < served) {
+        wscratch |> reserve(served)
+        wscratch |> resize(served)
+    }
+    unsafe {
+        var dp = addr(wscratch[0])
+        let sp = addr(rowscratch[0])
+        for (r in range64(rows)) {
+            memcpy(dp + r * fp, sp + r * ff, ff * 4l)
+            for (i in range64(ff, fp)) {
+                dp[r * fp + i] = 0.0
+            }
+        }
+    }
+    quantize_q8_0_into(wscratch, served, qblob, qscales, wo, wo / 32l)
+}
+
+//! Zero ``n`` floats at ``at`` — pad tails of staged planes.
+def tower_zero_span(var a : array<float>; at, n : int64) {
+    if (n <= 0l) {
+        return
+    }
+    unsafe {
+        var p = addr(a[at])
+        for (i in range64(n)) {
+            p[i] = 0.0
+        }
+    }
+}
+
 //! Read a temporal patch-conv PAIR folded for still images: conv0(img) + conv1(img) = (W0+W1)·img,
 //! so ``base`` lands at ``off`` and ``base.1`` accumulates into the same plane region.
 def tower_read_conv_pair_folded(m : GGUFMeta; b : array<uint8> | #; base : string;

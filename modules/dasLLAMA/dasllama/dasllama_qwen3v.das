@@ -28,6 +28,8 @@ require math
 //! the output rows widen to (1+n_deepstack)·proj_dim (slice 0 = the main merger). No clamp —
 //! the files carry no ClippableLinear sidecars. Oracle: llama-mtmd-debug -p encode on the
 //! f32-widened mmproj (`qwen3vl_plan.md`, dumps in models/qwen3vl-vision-oracle/).
+//! CPU serving default: the block GEMMs serve as Q8_0 planes (read-time transcode, the
+//! gemma3v recipe); the exact bf16/f32 lane is the parity rail.
 
 let QWEN3V_ROPE_THETA = 10000.0   // models/qwen3vl.cpp hardcodes it — not in the gguf
 // the family's dynamic-resolution token budget (mtmd set_limit_image_tokens for qwen)
@@ -56,8 +58,15 @@ struct Qwen3vTower {
     // of two on-disk tensors is a computed plane, not the file's bytes)
     blk_bf16 : bool
     mm_bf16 : bool
+    // q8: the 4·n_layer block GEMMs SERVE as Q8_0 planes (read-time transcode) and layer_w
+    // indexes qblob; the FFN pair serves padded to ff_pad (n_ff is not 32-aligned). The exact
+    // lane serves the file's widths — only the q8 layout pads.
+    q8 : bool
+    ff_pad : int64       // n_ff rounded up to 64 — the q8 lane's served FFN width
     blob : PlaneF = PlaneF()
     wblob : PlaneU16 = PlaneU16()
+    qblob : PlaneI8 = PlaneI8()
+    qscales : PlaneF = PlaneF()
     patch_w : int64      // [n_embd × patch_dim] f32 — W0 + W1 folded (stills eval both convs on one frame)
     patch_b : int64      // [n_embd]
     pos_w : int64        // [pos_side² × n_embd] f32, row = y·side + x
@@ -68,7 +77,7 @@ struct Qwen3vTower {
     mm2_b : int64
     layer_f : int64      // per-block f32 region; stride: ln1 w+b, ln2 w+b [d ×4], qkv_b [3d], out_b [d], up_b [ff], down_b [d]
     layer_f_stride : int64
-    layer_w : int64      // per-block GEMM region (wblob when blk_bf16, else blob); stride layer_w_stride
+    layer_w : int64      // per-block GEMM region (qblob when q8, wblob when blk_bf16, else blob); stride layer_w_stride
     layer_w_stride : int64
     // deepstack (dense Qwen3-VL): up to three tap mergers — output rows widen to
     // (1+n_deepstack)·proj_dim; 0 taps = the Omni tower, narrow rows
@@ -103,6 +112,8 @@ struct Qwen3vState {
     @exact_size ds_slice : array<float>  // deepstack tap / main-merger staging [nout × proj]
     @scratch @exact_size pos_rs : array<float>   // the pos table resized to the grid [npos × d]
     @exact_size cos_t : array<float>; @exact_size sin_t : array<float>
+    @scratch @exact_size xqi : array<int8>    // q8 lane: the requantized GEMM input, grown per site
+    @scratch @exact_size xsi : array<float>   // its per-32-block scales
     @scratch pos2 : array<int2>      // per reordered row: (patch row, patch column)
     grid_w : int64
     grid_h : int64
@@ -135,12 +146,14 @@ def finalize(var s : Qwen3vState) {
     delete s.pos_rs
     delete s.cos_t
     delete s.sin_t
+    delete s.xqi
+    delete s.xsi
     delete s.pos2
 }
 
-// serialize_image_meta(Qwen3vTower) covers 33 fields; image_map + image_bytes are deliberate
+// serialize_image_meta(Qwen3vTower) covers 35 fields; image_map + image_bytes are deliberate
 // skips (the two planes are sections, not meta)
-let private QWEN3V_META_FIELDS = 33 + 2
+let private QWEN3V_META_FIELDS = 35 + 2
 
 def private serialize_image_meta(var arch : Archive; var t : Qwen3vTower) {
     verify(count_meta_fields(t) == QWEN3V_META_FIELDS)   // grew Qwen3vTower? extend this list
@@ -156,6 +169,8 @@ def private serialize_image_meta(var arch : Archive; var t : Qwen3vTower) {
     arch |> serialize_raw(t.eps)
     arch |> serialize_raw(t.blk_bf16)
     arch |> serialize_raw(t.mm_bf16)
+    arch |> serialize_raw(t.q8)
+    arch |> serialize_raw(t.ff_pad)
     arch |> serialize_raw(t.patch_w)
     arch |> serialize_raw(t.patch_b)
     arch |> serialize_raw(t.pos_w)
@@ -187,6 +202,8 @@ struct Qwen3vStaging {
     t : Qwen3vTower = Qwen3vTower()
     blob : array<float>
     wblob : array<uint16>
+    qblob : array<int8>       // q8 lane: the block GEMMs as Q8_0 (repacked for the active backend)
+    qscales : array<float>
 }
 
 def private serialize_image_meta(var arch : Archive; var st : Qwen3vStaging) {
@@ -196,17 +213,67 @@ def private serialize_image_meta(var arch : Archive; var st : Qwen3vStaging) {
 def finalize(var st : Qwen3vStaging) {
     delete st.blob
     delete st.wblob
+    delete st.qblob
+    delete st.qscales
     delete st.t
 }
 
 [unused_argument(st)]
 def private image_post_load(var st : Qwen3vStaging) {}
 
+// two lanes: "qwen3v-q8" serves the block GEMMs as Q8_0 (the CPU serving default); "qwen3v"
+// keeps every plane as the file has it (the parity rail)
 let private QWEN3V_TAG = "qwen3v"
+let private QWEN3V_TAG_Q8 = "qwen3v-q8"
 
 [init]
 def private register_qwen3v_image_tags {
     register_image_family_tag(QWEN3V_TAG)
+    register_image_family_tag(QWEN3V_TAG_Q8)
+}
+
+// the lane policy follows the fastest GEMM path on the box: the armed accelerate float-batch
+// tier wants the file's planes; else q8. No Metal tower serves this family yet, so there is
+// no driver clause. A pin overrides.
+enum private Q3vLane {
+    unset    // the policy decides
+    exact    // the file's planes
+    q8
+}
+var private g_q3v_q8_pin = Q3vLane.unset
+
+def private q3v_serve_q8() : bool {
+    if (g_q3v_q8_pin != Q3vLane.unset) {
+        return g_q3v_q8_pin == Q3vLane.q8
+    }
+    return !float_batch_override_active()
+}
+
+//! Pin the qwen3v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
+//! vs the file's own planes (the parity rail). Each lane is its own prepared image.
+//! ``reset_qwen3v_q8`` returns to the policy default.
+def set_qwen3v_q8(on : bool) {
+    g_q3v_q8_pin = on ? Q3vLane.q8 : Q3vLane.exact
+}
+
+def reset_qwen3v_q8() {
+    g_q3v_q8_pin = Q3vLane.unset
+}
+
+//! Would the next load serve the block GEMMs as q8 — the pin when set, the policy otherwise.
+def qwen3v_serves_q8() : bool => q3v_serve_q8()
+
+def private q3v_tag() : string => q3v_serve_q8() ? QWEN3V_TAG_Q8 : QWEN3V_TAG
+
+// the lane changes what a load mints and serves, so the load says which and why
+def private q3v_announce_lane() {
+    var why = "the CPU default (no accelerate tier)"
+    if (g_q3v_q8_pin != Q3vLane.unset) {
+        why = "pinned"
+    } elif (float_batch_override_active()) {
+        why = "DASLLAMA_ACCEL on: the float-batch tier serves the file's planes"
+    }
+    to_log(LOG_INFO, "dasLLAMA qwen3v: block GEMM lane {q3v_serve_q8() ? "q8" : "exact planes"} - {why}\n")
 }
 
 // the block GEMM tensors in QWEN3V_GEMM_* order; every per-GEMM list follows it
@@ -259,9 +326,10 @@ def private q3v_verify_tensors(m : GGUFMeta; t : Qwen3vTower; gemm_sizes : array
     }
 }
 
-def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&) {
+def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&; var qo : int64&) {
     let d = t.n_embd
     let ff = t.n_ff
+    let ffs = t.q8 ? t.ff_pad : ff   // the served FFN width — only the q8 layout pads
     t.patch_w = off; off += t.patch_dim * d
     t.patch_b = off; off += d
     t.pos_w = off; off += t.pos_side * t.pos_side * d
@@ -271,10 +339,15 @@ def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&)
     t.mm0_b = off; off += 4l * d
     t.mm2_w = take_cursor(t.mm_bf16, off, woff, 4l * d * t.proj_dim)
     t.mm2_b = off; off += t.proj_dim
-    t.layer_f_stride = 4l * d + 3l * d + d + ff + d
+    t.layer_f_stride = 4l * d + 3l * d + d + t.ff_pad + d   // the up-bias slot is ff_pad both lanes (zero tail)
     t.layer_f = off; off += t.n_layer * t.layer_f_stride
-    t.layer_w_stride = 4l * d * d + 2l * d * ff
-    t.layer_w = take_cursor(t.blk_bf16, off, woff, t.n_layer * t.layer_w_stride)
+    t.layer_w_stride = 4l * d * d + 2l * d * ffs
+    if (t.q8) {
+        t.layer_w = qo
+        qo += t.n_layer * t.layer_w_stride
+    } else {
+        t.layer_w = take_cursor(t.blk_bf16, off, woff, t.n_layer * t.layer_w_stride)
+    }
     if (t.n_deepstack > 0l) {
         t.ds_f_stride = 12l * d + t.proj_dim
         t.ds_f = off; off += t.n_deepstack * t.ds_f_stride
@@ -283,9 +356,13 @@ def private q3v_layout(var t : Qwen3vTower; var off : int64&; var woff : int64&)
     }
 }
 
+// gemm_sizes here are the SERVED sizes (the q8 lane's FFN pair at ff_pad); the file expectations
+// were checked with the file's own sizes in q3v_verify_tensors
 def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwen3vStaging; gemm_sizes : array<int64>) {
     let d = st.t.n_embd
     let ff = st.t.n_ff
+    var wscratch : array<float>   // the q8 transcode's f32 staging, one GEMM at a time
+    var rowscratch : array<float>   // the down GEMM's unpadded file rows ahead of the expand
     tower_read_conv_pair_folded(m, bytes, "v.patch_embd.weight", st.blob, st.t.patch_w, st.t.patch_dim * d)
     gguf_read_tensor_f32(m, bytes, "v.patch_embd.bias", st.blob, st.t.patch_b, d)
     gguf_read_tensor_f32(m, bytes, "v.position_embd.weight", st.blob, st.t.pos_w, st.t.pos_side * st.t.pos_side * d)
@@ -316,11 +393,41 @@ def private q3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qwe
         gguf_read_tensor_f32(m, bytes, "{p}.ln2.bias", st.blob, fo, d); fo += d
         gguf_read_tensor_f32(m, bytes, "{p}.attn_qkv.bias", st.blob, fo, 3l * d); fo += 3l * d
         gguf_read_tensor_f32(m, bytes, "{p}.attn_out.bias", st.blob, fo, d); fo += d
-        gguf_read_tensor_f32(m, bytes, "{p}.ffn_up.bias", st.blob, fo, ff); fo += ff
+        gguf_read_tensor_f32(m, bytes, "{p}.ffn_up.bias", st.blob, fo, ff)
+        tower_zero_span(st.blob, fo + ff, st.t.ff_pad - ff)   // the padded up bias: zero tail
+        fo += st.t.ff_pad
         gguf_read_tensor_f32(m, bytes, "{p}.ffn_down.bias", st.blob, fo, d)
         var wo = st.t.layer_w + l * st.t.layer_w_stride
         for (g in range64(QWEN3V_GEMMS)) {
-            tower_read_gemm(m, bytes, "{p}.{Q3V_BLK_GEMM_NAMES[g]}.weight", st.wblob, st.blob, st.t.blk_bf16, wo, gemm_sizes[g])
+            let wname = "{p}.{Q3V_BLK_GEMM_NAMES[g]}.weight"
+            if (!st.t.q8) {
+                tower_read_gemm(m, bytes, wname, st.wblob, st.blob, st.t.blk_bf16, wo, gemm_sizes[g])
+            } elif (g == QWEN3V_GEMM_UP) {
+                tower_stage_q8_zero_rows(m, bytes, wname, st.qblob, st.qscales, wscratch, wo, ff, st.t.ff_pad, d, "dasLLAMA qwen3v q8")
+            } elif (g == QWEN3V_GEMM_DOWN) {
+                tower_stage_q8_pad_cols(m, bytes, wname, st.qblob, st.qscales, wscratch, rowscratch, wo, d, ff, st.t.ff_pad, "dasLLAMA qwen3v q8")
+            } else {
+                tower_read_gemm_q8(m, bytes, wname, st.qblob, st.qscales, wscratch, wo, gemm_sizes[g], "dasLLAMA qwen3v q8")
+            }
+            wo += gemm_sizes[g]
+        }
+    }
+    delete wscratch
+    delete rowscratch
+}
+
+// repack every block GEMM region for the active backend's q8q8 kernels — per-row alignment (the
+// region's input width) keeps blocks from straddling rows
+def private q3v_repack_all(var st : Qwen3vStaging; gemm_sizes : array<int64>) {
+    if (!st.t.q8 || !select_matmul_backend_for_load_()) {
+        return
+    }
+    let d = st.t.n_embd
+    let widths <- [ d, d, d, st.t.ff_pad ]   // qkv o up down: the input width of each
+    for (l in range64(st.t.n_layer)) {
+        var wo = st.t.layer_w + l * st.t.layer_w_stride
+        for (g in range64(QWEN3V_GEMMS)) {
+            repack_q8q8_weight(st.qblob, st.qscales, wo, widths[g], gemm_sizes[g] / widths[g])
             wo += gemm_sizes[g]
         }
     }
@@ -354,6 +461,7 @@ def private q3v_scan_deepstack(m : GGUFMeta; var t : Qwen3vTower; path : string)
 //! its audio half the same way; the streaming mint is followup_general #24's item.
 def stage_qwen3v_tower(path : string) : Qwen3vStaging {
     var st = Qwen3vStaging()
+    st.t.q8 = q3v_serve_q8()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
@@ -402,14 +510,20 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
         }
         st.t.blk_bf16 = gguf_tensor_type(m, "v.blk.0.attn_qkv.weight") == GGML_TYPE_BF16
         st.t.mm_bf16 = gguf_tensor_type(m, "mm.0.weight") == GGML_TYPE_BF16
-        let gemm_sizes <- q3v_gemm_sizes(d, st.t.n_ff)
-        q3v_verify_tensors(m, st.t, gemm_sizes)
+        st.t.ff_pad = (st.t.n_ff + 63l) / 64l * 64l   // %64 fits future GPU tiles, %32 quantizes
+        let file_sizes <- q3v_gemm_sizes(d, st.t.n_ff)
+        q3v_verify_tensors(m, st.t, file_sizes)
+        let serve_sizes <- q3v_gemm_sizes(d, st.t.q8 ? st.t.ff_pad : st.t.n_ff)
         var off = 0l
         var woff = 0l
-        q3v_layout(st.t, off, woff)
+        var qo = 0l
+        q3v_layout(st.t, off, woff, qo)
         st.blob |> reserve_resize(off)
         st.wblob |> reserve_resize(woff)
-        q3v_read_planes(m, bytes, st, gemm_sizes)
+        st.qblob |> reserve_resize(qo)
+        st.qscales |> reserve_resize(qo / 32l)
+        q3v_read_planes(m, bytes, st, serve_sizes)
+        q3v_repack_all(st, serve_sizes)
     }
     fclose(f)
     return <- st
@@ -418,23 +532,31 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
 //! Load the qwen3v tower, image-backed (`dasllama_gemma4v`'s load shape: a prepared `.dlim`
 //! maps and every plane borrows; missing or stale, one is minted from the source mmproj).
 def load_qwen3v_tower(path : string) : Qwen3vTower {
+    var tag = q3v_tag()
+    // a .dlim named directly: no mmproj to regenerate from, so a wrong identity panics; the lane is
+    // the file's (its baked tag), not the pin's - a served tower reads its q8 flag from the meta
     if (path |> ends_with(".dlim")) {
+        let baked = image_family_tag(path)
+        if (baked == QWEN3V_TAG || baked == QWEN3V_TAG_Q8) {
+            tag = baked
+        }
         apply_box_profile_runtime()
         let ts_img = ref_time_ticks()
         var t = Qwen3vTower()
-        if (!load_image(path, t, QWEN3V_TAG)) {
-            panic("dasLLAMA: '{path}' is not a prepared qwen3v-tower image for this box/knobs (identity {image_identity(QWEN3V_TAG)}) - regenerate it from the source mmproj gguf")
+        if (!load_image(path, t, tag)) {
+            panic("dasLLAMA: '{path}' is not a prepared qwen3v-tower image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
         }
         to_log(LOG_INFO, "dasLLAMA: prepared qwen3v-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
         q3v_check_planes(t, path)
         return <- t
     }
+    q3v_announce_lane()
     if (g_env_engine.image) {
-        apply_box_profile_runtime()
-        let img = image_path_for(path, QWEN3V_TAG)
+        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
+        let img = image_path_for(path, tag)
         let ts_img = ref_time_ticks()
         var t = Qwen3vTower()
-        if (load_image(img, t, QWEN3V_TAG)) {
+        if (load_image(img, t, tag)) {
             to_log(LOG_INFO, "dasLLAMA: prepared qwen3v-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
             q3v_check_planes(t, img)
             return <- t
@@ -442,8 +564,8 @@ def load_qwen3v_tower(path : string) : Qwen3vTower {
         delete t
         var inscope st <- stage_qwen3v_tower(path)
         var built = Qwen3vTower()
-        if (cache_via_image_staged(st, built, img, QWEN3V_TAG)) {
-            dlim_gc_stale(path, QWEN3V_TAG)
+        if (cache_via_image_staged(st, built, img, tag)) {
+            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead
         }
         q3v_check_planes(built, img)
         return <- built
@@ -457,12 +579,17 @@ def load_qwen3v_tower(path : string) : Qwen3vTower {
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites.
 def mint_qwen3v_tower(var st : Qwen3vStaging; var out : Qwen3vTower) {
-    cache_via_image_staged(st, out, "", QWEN3V_TAG)
+    cache_via_image_staged(st, out, "", st.t.q8 ? QWEN3V_TAG_Q8 : QWEN3V_TAG)
 }
 
+// the bind walk skips a missing section silently, so the flag=>plane invariant must be checked
+// once the carrier is live, or the kernel derefs null
 def private q3v_check_planes(t : Qwen3vTower; src : string) {
-    if ((t.blk_bf16 || t.mm_bf16) && empty(t.wblob)) {
+    if (((t.blk_bf16 && !t.q8) || t.mm_bf16) && empty(t.wblob)) {
         panic("dasLLAMA qwen3v: '{src}' declares bf16 planes but carries no wblob section - the image is corrupt or hand-edited")
+    }
+    if (t.q8 && (empty(t.qblob) || empty(t.qscales))) {
+        panic("dasLLAMA qwen3v: '{src}' declares q8 block GEMMs but carries no qblob/qscales sections - the image is corrupt or hand-edited")
     }
 }
 
@@ -512,17 +639,28 @@ struct Qwen3vBlockOffs {
 
 def qwen3v_block_offs(t : Qwen3vTower; l : int64) : Qwen3vBlockOffs {
     let d = t.n_embd
-    let ff = t.n_ff
     let fo = t.layer_f + l * t.layer_f_stride
     var o = Qwen3vBlockOffs(ln1_w = fo, ln1_b = fo + d, ln2_w = fo + 2l * d, ln2_b = fo + 3l * d,
-        qkv_b = fo + 4l * d, out_b = fo + 7l * d, up_b = fo + 8l * d, down_b = fo + 8l * d + ff)
-    let sizes <- q3v_gemm_sizes(d, ff)
+        qkv_b = fo + 4l * d, out_b = fo + 7l * d, up_b = fo + 8l * d, down_b = fo + 8l * d + t.ff_pad)
+    let sizes <- q3v_gemm_sizes(d, t.q8 ? t.ff_pad : t.n_ff)   // the SERVED sizes — the q8 FFN pair pads
     var at = t.layer_w + l * t.layer_w_stride
     for (g in range64(QWEN3V_GEMMS)) {
         o.w[g] = at
         at += sizes[g]
     }
     return o
+}
+
+// one block GEMM on the lane the load picked: requant + the q8q8 batch kernel when q8, the
+// file's bf16/f32 plane otherwise
+def private q3v_gemm_blk(var y : array<float>; t : Qwen3vTower; var s : Qwen3vState; off : int64;
+                         x : array<float>; n, d_out, npos : int64) {
+    if (t.q8) {
+        requant_rows_q8_sized(x, n, npos, s.xqi, s.xsi)
+        matmul_q8q8_batch(y, t.qblob, t.qscales, off, s.xqi, s.xsi, n, d_out, npos)
+    } else {
+        mm_plane_b(y, t.blk_bf16, t.wblob, t.blob, off, x, n, d_out, npos)
+    }
 }
 
 // split the fused qkv rows [npos × 3d] into contiguous q/k/v [npos × d]
@@ -546,14 +684,14 @@ def private q3v_split_qkv(var s : Qwen3vState; d, npos : int64) {
 // one pre-LN block over the residual stream s.x (npos rows)
 def private q3v_block(t : Qwen3vTower; var s : Qwen3vState; l, npos : int64) {
     let d = t.n_embd
-    let ff = t.n_ff
+    let ff = t.q8 ? t.ff_pad : t.n_ff   // the served FFN width — the q8 pad lanes are zero by construction
     let hd = d / t.n_head
     let o = qwen3v_block_offs(t, l)
     var tp = ref_time_ticks()
     layernorm_batch(s.xb, s.x, t.blob, o.ln1_w, o.ln1_b, d, npos, t.eps)
     asr_prof_add("q3v.norm", tp)
     tp = ref_time_ticks()
-    mm_plane_b(s.qkv, t.blk_bf16, t.wblob, t.blob, o.w[QWEN3V_GEMM_QKV], s.xb, d, 3l * d, npos)
+    q3v_gemm_blk(s.qkv, t, s, o.w[QWEN3V_GEMM_QKV], s.xb, d, 3l * d, npos)
     add_bias_rows(s.qkv, t.blob, o.qkv_b, 3l * d, npos)
     asr_prof_add("q3v.attn_mm", tp)
     tp = ref_time_ticks()
@@ -565,7 +703,7 @@ def private q3v_block(t : Qwen3vTower; var s : Qwen3vState; l, npos : int64) {
     attention_bidir(s.xb2, s.qq, s.kk, s.vv, s.hp, s.att, npos, d, t.n_head, 1.0 / sqrt(float(hd)))
     asr_prof_add("q3v.attn_core", tp)
     tp = ref_time_ticks()
-    mm_plane_b(s.xb, t.blk_bf16, t.wblob, t.blob, o.w[QWEN3V_GEMM_O], s.xb2, d, d, npos)
+    q3v_gemm_blk(s.xb, t, s, o.w[QWEN3V_GEMM_O], s.xb2, d, d, npos)
     add_bias_rows(s.xb, t.blob, o.out_b, d, npos)
     add_inplace_rows(s.x, s.xb, npos * d)
     asr_prof_add("q3v.attn_mm", tp)
@@ -573,10 +711,10 @@ def private q3v_block(t : Qwen3vTower; var s : Qwen3vState; l, npos : int64) {
     layernorm_batch(s.xb, s.x, t.blob, o.ln2_w, o.ln2_b, d, npos, t.eps)
     asr_prof_add("q3v.norm", tp)
     tp = ref_time_ticks()
-    mm_plane_b(s.hu, t.blk_bf16, t.wblob, t.blob, o.w[QWEN3V_GEMM_UP], s.xb, d, ff, npos)
+    q3v_gemm_blk(s.hu, t, s, o.w[QWEN3V_GEMM_UP], s.xb, d, ff, npos)
     add_bias_rows(s.hu, t.blob, o.up_b, ff, npos)
     gelu_tanh_lut_batch(s.hu, ff, npos)
-    mm_plane_b(s.xb, t.blk_bf16, t.wblob, t.blob, o.w[QWEN3V_GEMM_DOWN], s.hu, ff, d, npos)
+    q3v_gemm_blk(s.xb, t, s, o.w[QWEN3V_GEMM_DOWN], s.hu, ff, d, npos)
     add_bias_rows(s.xb, t.blob, o.down_b, d, npos)
     add_inplace_rows(s.x, s.xb, npos * d)
     asr_prof_add("q3v.ffn", tp)
@@ -595,7 +733,7 @@ def private q3v_stem(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>
     ensure_length(s.qq, npos * d)
     ensure_length(s.kk, npos * d)
     ensure_length(s.vv, npos * d)
-    ensure_length(s.hu, npos * t.n_ff)
+    ensure_length(s.hu, npos * (t.q8 ? t.ff_pad : t.n_ff))
     ensure_length(s.m0, (npos / 4l) * 4l * d)
     mm_plane_b(s.xn, false, t.wblob, t.blob, t.patch_w, s.x0, t.patch_dim, d, npos)
     var pos_base = t.pos_w

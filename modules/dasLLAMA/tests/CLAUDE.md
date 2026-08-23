@@ -243,7 +243,13 @@ merged-patch-grid panic gate; and the Qwen3-VL 4B DEEPSTACK leg (taps 5/11/17, w
 10240-float rows) on four fixtures at 2e-4 + 4e-2·rms — the 4B dumps carry q1/q2/q3 quarter-offset probe
 fields — the compare applies them when the dump has them — hitting each concatenated
 slice's first element (a skipped-tap poison
-lands at 6.9–9.7 on them, 600×; mean+v0..v3 alone are BLIND to a zeroed slice). Skips
+lands at 6.9–9.7 on them, 600×; mean+v0..v3 alone are BLIND to a zeroed slice). The q8
+serving lane (the CPU default) gets its own cells: the Omni leg on its measured 5.2e-1·rms
+bar with a zero-layer staging-poison must-EXCEED leg (`encode_excess`), the deepstack leg
+cb-only at 6.5e-1 (gray's tap-slice probes measure 7.9·rms — taps sample mid-network
+residuals; the zeroed-slices decoder control in test_vision_chat carries that claim), and a
+model-free lane-knob cell; exact-lane cells pin `set_qwen3v_q8(false)`. qwen25v has NO q8
+lane by ruling (ARCHITECTURE.md 1.7b: activation outliers). Skips
 honestly without the mmprojs or dumps.
 `test_qwen25v.das` — the qwen25v tower (Qwen2.5-Omni's window-attention ViT, projector
 `qwen2.5o`) tier-1 parity vs the `-p encode` dumps minted on the f32-widened dual-tower

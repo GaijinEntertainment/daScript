@@ -339,7 +339,9 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   the LayerNorm/RMS row forms, bias and residual row adds, the
   `mm_blob_b`/`mm_bf16_b`/`mm_plane_b` GEMM wrappers, `Clamp`/`read_clamp`,
   `im2col_rgb_patches`, `rope_neox_2d_rows`, `rope_neox_tab_rows`, `avg_pool2d_rows`,
-  `interpolate_grid_bilinear_aa`, `tower_read_conv_pair_folded`, blocked `attention_bidir` and
+  `interpolate_grid_bilinear_aa`, `tower_read_conv_pair_folded`, the q8-lane stage readers
+  (`tower_read_gemm_q8`, `tower_stage_q8_zero_rows`/`tower_stage_q8_pad_cols` — the padded pair
+  for FFN widths that are not 32-aligned — and `tower_zero_span`), blocked `attention_bidir` and
   its per-window form `attention_bidir_windows`, and the encode-stage prof rail. The one home:
   a family file that re-implements one of these is a defect, and nothing here names a family
   type.
@@ -404,8 +406,11 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   proj_dim slice, and the output rows widen to (1+n_deepstack)·proj_dim — slice 0 = the main
   merger, the decoder adds slice l+1 after layer l. The family token budget [8, 4096] is
   mtmd's, not the gemma-scoped DASLLAMA_VISION_* knobs; image_mean/std (0.5) is
-  PREPROCESSING like gemma3v. Composes `dasllama_tower.das`; owns only its layout, the
-  reorder walk, and the block loop. SANCTIONED over the 1 GiB staged-mint line (this family
+  PREPROCESSING like gemma3v. CPU serving default: the block GEMMs serve as Q8_0 planes
+  (read-time transcode, the gemma3v recipe; the FFN pair pads to ff_pad in the q8 layout
+  ONLY — the exact bf16/f32 lane keeps the file's widths as the parity rail); pin knobs
+  `set_qwen3v_q8`/`reset_qwen3v_q8`, two image tags. Composes `dasllama_tower.das`; owns
+  only its layout, the reorder walk, and the block loop. SANCTIONED over the 1 GiB staged-mint line (this family
   and qwen25v): the Omni (2.1 GB) and Qwen2.5-Omni (2.6 GB) mmprojs stage source+image at
   once with no cap — the same shape their audio halves already stage — until
   `followup_general.md` 24's streaming mint covers towers.
@@ -418,7 +423,12 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   block attends in full, and the merger un-sorts back to group-row-major. Its decoder is the
   `qwen2vl` arch whose plain MROPE reads the rope sections as contiguous ranges
   (`Config.mrope_interleaved` false → `build_rope_tabs_mrope`; the qwen3vl family sets the
-  flag and keeps the interleaved walk).
+  flag and keeps the interleaved walk). This tower serves the file's planes ONLY — no q8
+  lane: its residual rows carry the Qwen2-VL-lineage outlier channels that per-32-block
+  activation requant cannot represent (a q8q8 lane measures 2.0 x rms vs the oracle, where a
+  DELETED layer measures less — the gate cannot discriminate; the weights themselves
+  quantize fine at 0.007 x rms, and a float-activation q8 GEMM wins nothing on these
+  compute-bound shapes since the CPU speedup IS the int8xint8 dot).
 - **`dasllama_vision_embedder.das`** — the vision carrier: `VisionEmbedder` / `VisionState`, the
   `AsrModel` shape for vision — one union through every seam, the family sniffed from the mmproj
   (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a

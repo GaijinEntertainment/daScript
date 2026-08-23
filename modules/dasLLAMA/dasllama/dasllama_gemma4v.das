@@ -11,7 +11,6 @@ require daslib/apply
 require daslib/archive
 require dasllama/dasllama_gguf
 require dasllama/dasllama_math   // matmul_q8q8_batch + the backend repack — the q8 block-GEMM lane
-require dasllama/dasllama_convert   // quantize_q8_0_into / requant_rows_q8
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
 require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — re-exported so requirers can delete a tower
@@ -384,7 +383,7 @@ def private g4v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gem
         for (g in range64(GEMMA4V_GEMMS)) {
             let base = "{p}.{G4V_BLK_GEMM_NAMES[g]}"
             if (st.t.q8) {
-                g4v_read_gemm_q8(m, bytes, "{base}.weight", st, wscratch, wo, gemm_sizes[g])
+                tower_read_gemm_q8(m, bytes, "{base}.weight", st.qblob, st.qscales, wscratch, wo, gemm_sizes[g], "dasLLAMA gemma4v q8")
             } else {
                 tower_read_gemm(m, bytes, "{base}.weight", st.wblob, st.blob, st.t.blk_bf16, wo, gemm_sizes[g])
             }
@@ -393,21 +392,6 @@ def private g4v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gem
             fo += GEMMA4V_CLAMP_F
         }
     }
-}
-
-// q8 GEMM read: the file's tensor (bf16 or f32) widens to f32 scratch, then quantizes to Q8_0
-// straight into qblob/qscales at the 32-aligned region (wo/32 indexes the scales)
-def private g4v_read_gemm_q8(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma4vStaging;
-                             @scratch var wscratch : array<float>; wo, n_elem : int64) {
-    if (n_elem % 32l != 0l || wo % 32l != 0l) {
-        panic("dasLLAMA gemma4v q8: GEMM tensor '{name}' ({n_elem} elements at {wo}) is not 32-aligned")
-    }
-    if (long_length(wscratch) < n_elem) {
-        wscratch |> reserve(n_elem)
-        wscratch |> resize(n_elem)
-    }
-    gguf_read_tensor_f32(m, b, name, wscratch, 0l, n_elem)
-    quantize_q8_0_into(wscratch, n_elem, st.qblob, st.qscales, wo, wo / 32l)
 }
 
 // repack every block GEMM region for the active backend's q8q8 kernels — per-row alignment (the

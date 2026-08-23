@@ -110,7 +110,8 @@ def vision_family(e : VisionEmbedder) : string {
 //! The tower's precision half of an image cell's ``<tower>/<decoder>`` exec_fmt stamp (the ASR
 //! spelling): "f32" = every plane as the file has it (exact), "q8" = the Q8_0 block-GEMM lane.
 def vision_exec_fmt(e : VisionEmbedder) : string {
-    if ((e.kind == VisionKind.gemma4v && e.gemma4v.q8) || (e.kind == VisionKind.gemma3v && e.gemma3v.q8)) {
+    if ((e.kind == VisionKind.gemma4v && e.gemma4v.q8) || (e.kind == VisionKind.gemma3v && e.gemma3v.q8)
+            || (e.kind == VisionKind.qwen3v && e.qwen3v.q8)) {
         return "q8"
     }
     return "f32"
@@ -157,7 +158,7 @@ def load_vision_embedder(path : string) : VisionEmbedder {
         e.gemma3v <- load_gemma3v_tower(path)
         return <- e
     }
-    if (proj == "qwen3vl_merger" || proj == "qwen3v") {   // the gguf spells qwen3vl_merger; the image lane bakes qwen3v
+    if (proj == "qwen3vl_merger" || proj == "qwen3v" || proj == "qwen3v-q8") {   // the gguf spells qwen3vl_merger; the two image lanes bake qwen3v*
         var e = VisionEmbedder(kind = VisionKind.qwen3v)
         e.qwen3v <- load_qwen3v_tower(path)
         return <- e
