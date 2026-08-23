@@ -30,9 +30,8 @@ namespace das
         static_assert ( is_base_of<SimNode_CallBase, SimNodeT>::value, "only call-based nodes allowed" );
     public:
         FuncT fn;
-        // the JIT-callable address, captured at the bind site where fn is still a
-        // compile-time constant: the raw fn for plain-ABI binds, an ImplWrapCall
-        // wrapper for cmres and vector-ABI binds
+        // JIT-callable address captured at the bind site: the raw fn for plain-ABI
+        // binds, an ImplWrapCall wrapper for cmres and vector-ABI binds
         void * jitAddress = nullptr;
         // out-of-line on purpose: the construction body is per-signature COMDAT,
         // so each bind site costs a call, not an inlined copy of constructExternal
@@ -52,9 +51,7 @@ namespace das
         }
     };
 
-    // captures the JIT-callable address for a bind while fn is a compile-time
-    // constant; the per-function wrapper code only materializes for cmres and
-    // vector-ABI signatures
+    // per-function wrapper code only materializes for cmres and vector-ABI signatures
     template <typename SimNodeType, typename FuncT, FuncT fn>
     __forceinline void * makeJitAddress () {
         return ImplWrapCall<SimNodeType::IS_CMRES, NeedVectorWrap<FuncT>::value, FuncT, fn>::get_builtin_address();
@@ -288,9 +285,8 @@ namespace das
         return fnX;
     }
 
-    // the NTTP flavor: same contract as addExtern, but the bind gets its own
-    // SimNode_ExtFuncCallInline<FuncT, fn> so the callee can inline into the
-    // interpreter's call node; opt-in for hot, inline-friendly functions
+    // same contract as addExtern, but the bind gets its own NTTP node so the
+    // callee can inline into it; opt-in for hot, inline-friendly functions
     template <typename FuncT, FuncT fn, typename QQ = defaultTempFn>
     inline auto addExternInline ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,
                                   const char * cppName = nullptr, QQ && tempFn = QQ() ) {

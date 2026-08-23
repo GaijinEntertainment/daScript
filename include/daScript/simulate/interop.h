@@ -153,12 +153,8 @@ namespace das
         }
     };
 
-    // ---- return-carrier mapping -------------------------------------------
-    // The carrier is the one typed-eval slot a return type legitimately owns.
-    // Scalars own their slot, every pointer flavor owns Ptr, void owns none,
-    // lattice values own the vec4f box WITH typed-slot reads, and everything
-    // else vec4f-boxed (vector types, ranges, cast<> handled types) owns the
-    // vec4f eval alone.
+    // the carrier is the one typed-eval slot a return type owns: scalars their slot,
+    // pointers Ptr, void none, lattice the vec4f box with typed reads, all else boxed
 
     // carrier tag for vec4f-boxed results that do NOT license typed-slot reads
     struct vec4f_boxed {};
@@ -167,9 +163,8 @@ namespace das
     struct ext_ret_carrier {
         using RR = typename remove_const<R>::type;
         static_assert(!is_same<RR,void>::value, "void handled by specialization");
-        // WrapType routes handle-like C++ types (distinct ints, Handle<T>, Time)
-        // to the scalar slot they are ABI-identical to; plain types wrap to
-        // themselves, so the scalar chain below keys on WR
+        // WrapType routes handle-like types (distinct ints, Handle<T>, Time) to the
+        // scalar slot they are ABI-identical to, so the scalar chain keys on WR
         using WR = typename WrapType<RR>::rettype;
         using type =
             typename conditional<is_same<RR,bool>::value,     bool,
@@ -191,7 +186,7 @@ namespace das
         using type = void;
     };
 
-    // the value type a carrier's computeExt slot traffics in (the boxed tag
+    // the value type a carrier's computeDirect traffics in (the boxed tag
     // itself never crosses an ABI — it stands for a vec4f payload)
     template <typename C> struct ext_carrier_value { using type = C; };
     template <> struct ext_carrier_value<vec4f_boxed> { using type = vec4f; };
@@ -215,11 +210,8 @@ namespace das
         static __forceinline char * from ( R * v ) { return (char *) v; }
     };
 
-    // ---- cross-slot plumbing ----------------------------------------------
-    // A typed eval hitting a node of a different carrier kind. Signedness pairs
-    // forward (the compiler reads uint-returning externs via evalInt in indexing
-    // shapes, and enum-backed calls may read either signedness); everything else
-    // is a wrong-signature call and throws through this ONE shared path.
+    // cross-slot typed evals: signedness pairs forward (uint-returning externs are
+    // read via evalInt in indexing shapes); anything else throws through one shared path
 
     [[noreturn]] inline void ext_wrong_slot ( Context & ctx, const char * fnName ) {
         ctx.throw_error_ex("typed eval on wrong extern return kind, %s", fnName ? fnName : "<unknown>");
@@ -253,11 +245,8 @@ namespace das
         static __forceinline uint64_t to ( int64_t v ) { return (uint64_t) v; }
     };
 
-    // ---- per-carrier bases (11 total in the whole binary) -----------------
-    // The bases carry the typed-eval matrix WITHOUT touching the callee: the
-    // matching slot and eval() are overridden by the direct layer below, so a
-    // base slot body only runs for cross-slot plumbing (round-trips the boxed
-    // eval) or a wrong-signature call (one shared throw).
+    // per-carrier bases, 11 in the whole binary; a base slot body only runs for
+    // cross-slot plumbing or the shared wrong-slot throw — the direct layer owns the rest
 
     template <typename Carrier>
     struct SimNode_ExtFuncCallRet : SimNode_ExtFuncCallBase {
@@ -315,10 +304,8 @@ namespace das
 #undef  EVAL_NODE
     };
 
-    // ---- the direct slot layer --------------------------------------------
-    // CRTP over the leaf: eval() and the ONE slot matching the carrier call
-    // the leaf's non-virtual computeDirect, so a consumed extern costs exactly
-    // one virtual call — same profile as the classic NTTP nodes.
+    // CRTP over the leaf: eval() and the carrier's slot call the non-virtual
+    // computeDirect, so a consumed extern costs exactly one virtual call
 
     template <typename LeafT, typename Carrier>
     struct SimNode_ExtFuncCallDirect;
@@ -371,8 +358,6 @@ namespace das
         }
     };
 
-    // ---- shared compute body ----------------------------------------------
-
     template <typename R, typename ...Args>
     __forceinline typename ext_carrier_value<typename ext_ret_carrier<R>::type>::type
     ext_compute ( R (*fnp)(Args...), Context & context, SimNode ** args ) {
@@ -386,7 +371,6 @@ namespace das
         }
     }
 
-    // ---- the per-signature nodes ------------------------------------------
     // fn is a runtime member, so all binds of one signature share a single
     // instantiation; the typed-eval matrix lives in the per-carrier base
 
@@ -408,10 +392,8 @@ namespace das
         }
     };
 
-    // ---- the per-function NTTP node (opt-in via addExternInline) ----------
-    // fn is a template constant, so the callee can inline into computeDirect;
-    // reserved for hot, inline-friendly binds — everything else shares the
-    // per-signature member flavor above
+    // fn is a template constant so the callee can inline into computeDirect;
+    // opt-in via addExternInline for hot, inline-friendly binds
 
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCallInline;
