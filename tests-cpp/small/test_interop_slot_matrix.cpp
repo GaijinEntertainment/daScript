@@ -21,10 +21,11 @@ enum class E64 : uint64_t { A = 41 };
 E64      t_enum64 ( int32_t a )  { return (E64)(uint64_t)(a); }
 
 LineInfo g_at;
+NodeAllocator g_code;   // SimNode dtors are protected; nodes die with the allocator
 
 template <typename NodeT, typename... CtorArgs>
 NodeT * make_call_node ( SimNode ** args, int nArgs, CtorArgs&&... ctorArgs ) {
-    auto node = new NodeT(g_at, std::forward<CtorArgs>(ctorArgs)...);
+    auto node = g_code.makeNode<NodeT>(g_at, std::forward<CtorArgs>(ctorArgs)...);
     node->arguments = args;
     node->nArguments = nArgs;
     return node;
@@ -40,9 +41,9 @@ bool throws_wrong_slot ( Context & ctx, const FN & call ) {
 
 TEST_CASE("interop slot matrix: member-flavor extern nodes") {
     Context ctx(4 * 1024 * 1024);
-    SimNode * argi[1] = { new SimNode_ConstValue(g_at, cast<int32_t>::from(41)) };
-    SimNode * argf[1] = { new SimNode_ConstValue(g_at, cast<float>::from(1.5f)) };
-    SimNode * argi64[1] = { new SimNode_ConstValue(g_at, cast<int64_t>::from(int64_t(39))) };
+    SimNode * argi[1] = { g_code.makeNode<SimNode_ConstValue>(g_at, cast<int32_t>::from(41)) };
+    SimNode * argf[1] = { g_code.makeNode<SimNode_ConstValue>(g_at, cast<float>::from(1.5f)) };
+    SimNode * argi64[1] = { g_code.makeNode<SimNode_ConstValue>(g_at, cast<int64_t>::from(int64_t(39))) };
 
     SUBCASE("matching slots return the callee's value") {
         auto ni = make_call_node<SimNode_ExtFuncCall<decltype(&t_int)>>(argi, 1, "t_int", &t_int);
