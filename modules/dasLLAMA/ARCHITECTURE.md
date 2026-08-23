@@ -770,6 +770,23 @@ The tokenizer encode/decode path is sanctioned UNCOVERED by the region contracts
 gate is the `--tok` scaling rows, whose instrument (the size-ladder ratio) catches what the
 contracts cannot.
 
+### 2.12 The post-CPU-burn GPU ramp cannot be pre-paid — do not build a warm-up
+
+After a multi-second CPU-saturating phase (a CPU tower encode), the first sustained-bandwidth
+GPU submission runs degraded for tens of ms (~70 ms on an 8B, scaling with the model's
+bandwidth demand), one time per burn — a memory/GPU governor ramp, host-side between commit
+and execution (probe-verified 2026-08-23). Every cheap remedy is REFUTED by measurement, in
+`PERF_LEDGER.md`'s OPEN entry: empty command buffers and driver round-trips (the driver is
+never asleep — 0.107 ms), `MTLResidencySet` pinning of the whole working set (zero effect),
+single-dispatch kernels, per-page touch kernels, and light pulse-trains held through the burn.
+Only full-weight-stream work absorbs it — meaning the ramp rides whatever heavy work comes
+first, and a warm-up always pays its own cost ON TOP of the ramp it was meant to hide. Do not
+re-attempt a warm-up, a keepalive, or a residency pin against this penalty; the fix that works
+is removing the burn — serve the encoder on the GPU (the Metal tower). A family whose encoder
+stays on the CPU keeps the ramp as a ledgered cost of that arm, not as an engine defect.
+Related, same ledger: merely arming Metal makes a CPU q8 tower encode ~1.7x slower —
+mechanism unnamed, also deleted by a GPU-served tower.
+
 ---
 
 ## 3. Inherited invariants
