@@ -434,6 +434,58 @@ def test_vision_chat_deepstack(t : T?) {   // nolint:STYLE038 — one sequential
     }
 }
 
+// The bench shape: pre-encoded rows injected into a PLAIN chat (no embedder attached) must
+// walk the very turn the embedder chat walks — lcpp_bench prices this seam, and a hand-splice
+// here once fed deepstack decoders a narrow scrambled span that still captioned the cats.
+[test]
+def test_vision_chat_rows_seam(t : T?) {
+    t |> run("pre-encoded wide rows through add_user_image_rows_ reproduce the embedder walk") @(tt : T?) {
+        let mm = path_join(models_dir(), MM_4B)
+        let dec = path_join(models_dir(), DEC_4B)
+        let cats = path_join(models_dir(), CATS)
+        if (!model_available(tt, mm) || !model_available(tt, dec)) {
+            return
+        }
+        if (!stat(cats).is_valid) {
+            tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
+            return
+        }
+        let img <- load_image_rgb(cats)
+        var m <- load_model_(dec, QuantMode.q8)
+        allow_cpu_prefill()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var params = SamplingParams()
+            params.temp = 0.0
+            var emb <- load_vision_embedder(mm)
+            var chat1 <- create_chat_(m, emb, "", 24l)
+            add_user_image_(chat1, img)
+            add_user_(chat1, "describe this image")
+            let r1 = respond_(m, chat1, params) $(piece : string) {
+                return true
+            }
+            delete chat1
+            var emb2 <- load_vision_embedder(mm)
+            var st = VisionState()
+            var rows : array<float>
+            let nr = encode_image(emb2, st, img, "rows-seam", rows)
+            var chat2 <- create_chat_(m, "", 24l)
+            add_user_image_rows_(m, chat2, rows, nr, vision_mrope_grid(emb2, st))
+            add_user_(chat2, "describe this image")
+            let r2 = respond_(m, chat2, params) $(piece : string) {
+                return true
+            }
+            to_log(LOG_INFO, "rows-seam replies: embedder '{replace(r1, "\n", "\\n")}' vs rows '{replace(r2, "\n", "\\n")}'\n")
+            tt |> equal(r1, r2, "greedy replies match token-for-token")
+            delete chat2
+            delete rows
+            delete st
+            delete emb2
+        }
+        delete m
+    }
+}
+
 [test]
 def test_vision_chat_qwen25o(t : T?) {
     t |> run("the Qwen2.5-Omni image turn: window ViT + the NON-interleaved MROPE decoder, then the caption") @(tt : T?) {

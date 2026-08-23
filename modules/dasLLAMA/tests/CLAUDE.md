@@ -308,7 +308,10 @@ projection 3840 — large tier, `DASLLAMA_PARITY_FULL=1`), and the Qwen3-Omni qw
 grid advance), the Qwen3-VL 4B deepstack pair (small tier — wide 10240-float rows through
 the chat, the caption, and the zeroed-slices decoder control: tails zeroed on the same rows
 must move the prefill logits, measured 10.4 — a caption alone cannot see a decoder that
-ignores the slices), the Qwen2.5-Omni-3B qwen25v pair (small tier — the window ViT + the
+ignores the slices), the rows-seam cell (same 4B pair — pre-encoded wide rows through
+`add_user_image_rows_` on a plain chat reproduce the embedder walk token-for-token; the seam
+lcpp_bench prices, where a hand-splice once fed deepstack decoders a narrow scrambled span),
+the Qwen2.5-Omni-3B qwen25v pair (small tier — the window ViT + the
 qwen2vl NON-interleaved MROPE decoder; the vocab spells the span markers
 `<|vision_bos|>`/`<|vision_eos|>`, resolved by the chat layer's vocab-driven fallback)
 plus the `test_omni_showcase` cell in the same file (one Omni session: an image turn, then a text turn

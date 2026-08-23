@@ -452,41 +452,17 @@ def private measure_image_turn(var m : Model; emb : VisionEmbedder; img : Vision
         r.enc_ms = min(r.enc_ms, double(get_time_usec(t_enc)) / 1000.0lf)
         var chat <- create_chat_(m, "", int64(image_turn_steps()))
         set_thinking_(chat, think)   // default off: the timed shape is the answer, not a scratchpad
+        // the SHIPPED walk end to end: the rows seam takes the pre-encoded (possibly
+        // deepstack-wide) rows, respond_ assembles the quantum and runs the stop protocol —
+        // nothing here re-derives what the chat layer already owns
+        add_user_image_rows_(m, chat, rows, r.n_rows, vision_mrope_grid(emb, st))
         add_user_(chat, prompt)
-        var head : array<int64>
-        var tail : array<int64>
-        render_turn_image_(m, chat, head, tail)
-        let dim = m.config.dim
-        let n_head = long_length(head)
-        let npos = n_head + r.n_rows + long_length(tail)
-        var inscope embd : array<float>
-        embd |> ensure_capacity(npos * dim)
-        embd |> resize(npos * dim)
-        embed_text_rows(m, head, embd, 0l)
-        for (i in range64(r.n_rows * dim)) {
-            embd[n_head * dim + i] = rows[i]
-        }
-        embed_text_rows(m, tail, embd, n_head + r.n_rows)
-        var parts : array<string>
-        // the same stop protocol respond_ runs: without it a stray channel marker rides into the
-        // timed text, and the row would price a reply the product would never have shown
-        var stops <- effective_stop_ids_(chat)
-        generate_embd_(m, chat.session, embd, npos, SamplingParams(), int64(image_turn_steps()), n_head, n_head + r.n_rows, vision_mrope_grid(emb, st)) $(id, piece) {
-            for (sid in stops) {
-                return false if (id == sid)
-            }
-            parts |> push(piece)
+        r.text = respond_(m, chat, SamplingParams()) $(_piece : string) {
             return true
         }
-        delete stops
         let sres = stats_(chat.session)
         r.pp_tok_s = max(r.pp_tok_s, sres.prefill_tps)
         r.tg_tok_s = max(r.tg_tok_s, sres.gen_tps)
-        r.text = join(parts, "")
-        delete parts
-        delete embd
-        delete head
-        delete tail
         delete chat
     }
     delete rows

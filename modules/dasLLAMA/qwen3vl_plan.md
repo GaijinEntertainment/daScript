@@ -517,3 +517,139 @@ form). Cells stamp `(qwen3v q8)`. Qwen2.5-Omni-3B unmeasured — no q8 lane (sli
     "within 1.5x either side"), and the 30B lead is 39x (predicted past 30x). qwen25v VOID.
 16. **CORRECT so far**: captions unchanged-quality on all three measured models (+ the 4B
     chat-suite caption). 4 of 4 checked, 0 flips.
+
+### Slice M — the Metal image-turn pp gap (dig opened 2026-08-23; Boris: separate PR)
+
+**Target:** slice J's Metal `img:pp` reds — das/lcpp 3B −12%, 4B −16%, 8B −30%, 30B MoE
+−41% — while das leads or ties every gemma Metal image cell post-3815.
+
+**FOUND FIRST (before any timing): the bench's image cell feeds deepstack decoders a NARROW
+scrambled span.** `measure_image_turn` copies `n_rows * dim` floats into an `npos * dim`
+buffer, but a qwen3v ds tower emits `n_rows × dim*(1+n_ds)` wide rows (probe: the 4B mmproj
+scans n_deepstack=3, row_width=10240, nout=300, len/nout=10240). The copy flattens the first
+75 wide rows into 300 narrow slots: content scrambled, ds adds never active (`embd_is_ds_wide`
+keys on length), das doing LESS prefill work than the lcpp leg it lost to. Every 4B/8B
+img:pp/img:tg cell in the J sweep priced that walk; the clean captions survived on content
+redundancy — the greedy-tie gate lesson's third strike. Blast radius: plan figures only (no
+cards ruled, nothing committed to records/). 30B and qwen25o have no ds slices → their cells
+stand. Fix: the chat gains `add_user_image_rows_` (pre-encoded rows in, width-checked), the
+bench drives `respond_` through it — the cell prices the literal shipped walk, and the
+hand-splice divergence class dies.
+
+### Slice M predictions (18 registered before the row-width probe ran; 19-22 before any
+### re-measurement or decomposition; das vs llama.cpp, M1 Max t=8, coco fixture)
+
+18. The scramble hypothesis: the 4B mmproj scans ds=3 and emits wide rows, so the bench
+    span is scrambled and ds-less. **SCORED: CORRECT** (probe above; called before running).
+19. On the fixed bench the das 4B/8B img:pp cells get SLOWER — the Metal gap widens by
+    3-10 points (ds adds + 4x embd staging) — and at least one of the two models' captions
+    changes text vs the scrambled run. CPU img:pp moves the same direction; enc unchanged.
+20. The dominant term of the (fixed) 4B/8B Metal pp gap is NOT image plumbing: a text-only
+    control at matched npos (~320) on the same decoders reproduces >= 2/3 of the gap, and
+    skip-family knockouts attribute >= 60% of the das wall to the gemm family.
+21. The gap shrinks with M: at npos 512+ das text prefill on the VL-4B/8B decoders is within
+    +/-5% of lcpp (the board's dense text history) — short-M efficiency, not raw throughput.
+22. The 30B MoE −41% is its own mechanism — the MoE expert batched-prefill path: knockouts
+    attribute >= 50% of its das wall to the moe/gemm family, and its per-token deficit vs
+    lcpp at image-turn M is >= 1.5x the dense models'.
+
+#### Slice M progress (2026-08-23)
+
+**Fix landed (uncommitted yet): the bench prices the shipped walk.** The chat gained
+`add_user_image_rows_` (pre-encoded rows in, exact-width panic against `dim*(1+n_ds)`,
+one-media-kind + marker checks; `respond_` consumes them identically to the embedder walk —
+`test_vision_chat_rows_seam` pins token-for-token parity on the 4B ds pair). The bench's
+`measure_image_turn` now drives create_chat_ → add_user_image_rows_ → respond_ — the
+hand-splice, its private stop protocol, and the narrow copy are gone. The scheduler's media
+guard tightened to exact width (narrow image rows on a ds decoder now panic — the same silent
+class through the server seam; two new panic cells in test_scheduler). Sibling find:
+test_audio_embedder's dlim scan took the FIRST sibling by directory order and grabbed the
+gemma4v vision image — now selects by baked `gemma4a-` family tag (pre-existing red the
+vision re-mints exposed).
+
+**Re-measure (released rig rebuilt --quick, same J protocol, r=3 t=8):** the honest walk
+timings are statistically UNCHANGED — 4B Metal img:pp 841.1 (J scrambled 847.6; a first
+688.0 run was an outlier, re-run confirmed), 8B Metal 402.1 (396.0), 3B control 1231.0
+(1229.9), 4B CPU 251.3 (250.9), 8B CPU 136.4 (139.3). tg unchanged everywhere. Captions on
+the fixed span now match the chat walk (pink couch/blanket, richer detail) where the
+scrambled span said red. **P18 CORRECT; P19 WRONG on cost** (predicted 3-10 point widening;
+ds staging + wide upload price ≈ 0 — 3 enc_adds and ~15 MB staging on a 400-850 ms wall);
+the caption-changes half was right. **Consequences: the J gap magnitudes stand on the honest
+walk, and deepstack staging is EXONERATED as the 8B suspect — the −30% exists with ds adds
+active and cost-free.** Metal-leg encode note: both VL Metal cells now ride the q8 tower
+(enc 4B 2194 ms / 8B 3446 ms vs CPU-leg 1085/1902 — the Metal-leg CPU encode runs ~2x the
+CPU-leg's; unexplained, parked — encode is slice-J/L territory).
+
+#### Slice M decomposition (2026-08-23, released rig, 4B/3B Metal; walls at ~equal mp pad)
+
+**Turn shapes verified equal both engines** (Boris's "same formats" check): das image npos =
+4 head + 300 rows + 17 tail = **321**; the mtmd ref's repriced rows = 41 + (300−20) = 321.
+Both engines KV f16; llama-bench/mtmd fa auto(on for Metal); same Q8_0 gguf (das planar
+repack = the das lane by design). llama.cpp build 98c4764b6 (2026-08-13).
+
+**Text-M control (rig -p + --ref, same padded GEMM shapes as the image turn):** das text
+prefill is at parity — 4B p341 das 1038.3 vs ref 1011.3 (+2.7%), p512 +1.3%; 8B p341 −6.2%,
+p512 +0.3%; 3B p412 −5.3% (cv 4.6%, over bar — flag). **P20/P21 land WRONG in the
+informative direction: the image gap does NOT reproduce in text** — das's own image turn runs
+~16% below das text at the same padded M (4B: wall 381.6 vs 328.4 ms), while lcpp's image
+turn runs AT its text rate. The mechanism is das-side, image-turn-specific.
+
+**Span-fuse A/B:** fused 841.1 vs splice 687.7 (DASLLAMA_SPAN_FUSE=0) — the fuse works,
++22%. ⚠ the first fixed-cell run measured 688.0 ≈ the splice number exactly with NO
+SPAN_FUSE set and fused announce absent — unexplained single occurrence, parked (if a
+silent fuse-decline exists it is worth a witness).
+
+**Knockout ladders (DASLLAMA_METAL_PREFILL_SKIP, walls in ms, image−text at equal mp):**
+
+| model | total Δ | gemm Δ | attn Δ | ew Δ | nongemm Δ | floor Δ (all-gemm-skipped) |
+|---|---|---|---|---|---|---|
+| 4B (ds) | +53 | **+23** | +4.4 | −1.6 | +7.3 | **+30** (51.4 vs 21.4) |
+| 3B (no ds) | +18 | **≈0** (298.3 vs 299.6) | — | — | — | **+19** (36.4 vs 17.4) |
+
+Two mechanisms:
+1. **The staging floor (every mrope model, +19..30 ms/turn):** survives skipping every GPU
+   kernel family — the embd quantum's CPU-side assemble + upload + per-turn setup (wide
+   splice, ds repack, mrope tables/positions). lcpp pays no such delta.
+2. **The ds-wide gemm tax (deepstack models only, ~7.5% of gemm):** same padded shapes, same
+   weights, +23 ms of gemm — only on the wide-quantum models; the 3B control acquits mrope
+   and the span mask. Suspect: the wide quantum's x staging / slice-0 split path.
+Attention's non-causal span block is real but small (+4.4 ms ≈ the extra 300² pairs).
+Consistency: 3B −5.3% text − 5.6% floor ≈ its −12% cell; 4B par text − 16% overhead ≈ −16%.
+8B ladder running; 30B MoE arm unprobed (P22 open).
+
+#### Slice M mechanism (2026-08-23, stage-stats probe, 8B, synthetic wide quantum)
+
+The image-turn overhead is NOT in the eval: tokens / narrow-embd / wide-mrope-span all run
+~600-609 ms in a quiet process (gpu_us ≈ wall; the whole wide+ds+mrope quantum costs +10 ms
+over tokens). The bench-context penalty reproduces by running the CPU tower ENCODE first:
+**wide-span-after-encode = 680 ms, +70 ms with gpu_us up only 4 ms — host-side latency
+between submit and execution on the FIRST Metal submission after the burn.** A 400 ms idle
+cooldown recovers nothing; **a sacrificial second eval after the same encode runs clean
+(608.9 ms)** — a one-time residency/driver-state repayment, not thermal, not scheduler decay.
+Every real image turn pays it because every turn starts with the CPU encode; lcpp never pays
+it (their mmproj encodes on the GPU). Knockout floors scale with pool size: 3B +19, 4B +30,
+8B +133 ms.
+
+**The qwen Metal img:pp gap decomposes as:** post-encode first-submission penalty (dominant,
+scales with model) + ds-wide gemm tax (+13-23 ms, 4B/8B) + non-causal span attention (+4 ms,
+intrinsic) + text-lane ≈ parity. 30B MoE (−41%) unprobed — its 6.4 s burn + biggest pools
+fit the same profile; a MoE-lane term may remain (P22 open).
+
+**Levers:** (1) the slice-J Metal tower for qwen ViTs deletes the burn AND its aftermath —
+one fix for both enc (2-12 s → sub-second) and most of the pp gap; (2) available today: a
+tiny warm-up submission between encode and prefill eats the one-time penalty on the das side
+(~70 ms back on 8B) — a real serving-path improvement, not bench cosmetics; (3) the ds-wide
+gemm staging tax, small follow-up. ALSO FOUND, unexplained: arming Metal makes the CPU q8
+tower encode ~1.7x slower (probe 3.26 s vs CPU-leg 1.90 s on the 8B) — its own dig; the
+Metal tower deletes it too.
+
+### Slice M warm-up lever (Boris 2026-08-23: "lets do warmup and see how it turns out");
+### predictions 23-25 registered BEFORE the warm-up probes
+
+23. The empty-command-buffer warm-up repays under 30% of the +70 ms (the post-encode eval
+    stays >= 650 ms on the 8B): the cost is residency of the big buffers, not driver wake.
+24. A 1-position throwaway prefill as the warm-up repays >= 80% (following eval <= 620 ms);
+    its own GPU cost <= 40 ms, hideable behind the real quantum's CPU staging.
+25. Wired at the prefill seam (fire when > ~1 s since the last Metal submission), the
+    re-measured Metal img:pp lands 8B −7..−13% vs ref (from −29%) and 4B −3..−9% (from
+    −16%); CPU cells and tg unchanged.

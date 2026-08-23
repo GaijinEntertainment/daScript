@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_audio_embedder
+require dasllama/dasllama_image   // image_family_tag — the per-arm dlim selection
 require daslib/fio
 require strings
 require _model_tier   // models_dir() + model_available() gate
@@ -66,12 +67,17 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
         delete st
         var image_path = ""
         dir(models_dir()) $(name) {
+            // the mmproj bakes one dlim PER ARM (gemma4a audio, gemma4v vision) — select by the
+            // baked family tag, or directory order hands this audio cell a vision image
             if (empty(image_path) && starts_with(name, "{base_name(mm)}.0x") && ends_with(name, ".dlim")) {
-                image_path = path_join(models_dir(), name)
+                let cand = path_join(models_dir(), name)
+                if (image_family_tag(cand) |> starts_with("gemma4a-")) {
+                    image_path = cand
+                }
             }
         }
         if (empty(image_path)) {
-            t |> skip("no prepared {base_name(mm)}.0x*.dlim beside the mmproj - the direct image route needs a baked image")
+            t |> skip("no prepared gemma4a-tagged {base_name(mm)}.0x*.dlim beside the mmproj - the direct image route needs a baked image")
         } else {
             t |> equal(audio_probe_proj_dim(image_path), 0l, "the gguf probe answers 0 on a .dlim by pinned contract")
             var inscope ei <- load_audio_embedder(image_path)
