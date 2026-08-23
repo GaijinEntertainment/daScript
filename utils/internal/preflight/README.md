@@ -1,6 +1,6 @@
 # preflight
 
-Run CI's gates locally before pushing. The CI-lane ↔ gate mapping and the
+Run CI's gates locally before pushing. The CI-lane <-> gate mapping and the
 manual commands this tool automates live in
 [skills/internal/preflight.md](https://github.com/GaijinEntertainment/daScript/blob/master/skills/internal/preflight.md).
 
@@ -10,7 +10,7 @@ manual commands this tool automates live in
 # minutes), clang frontend pass on changed C++ (full src+tests-cpp sweep when a header changed)
 daslang utils/internal/preflight/main.das
 
-# full tier: adds the untracked-files gate (working tree carries none — commit,
+# full tier: adds the untracked-files gate (working tree carries none - commit,
 # delete, or ignore each), dasgen freshness, CI-only-das compile sweep, the
 # six doc gates, ctest -L small, interpreter/JIT/AOT suites, sequence smoke
 daslang utils/internal/preflight/main.das -- --full
@@ -49,9 +49,9 @@ Without a machine setting, JIT isolation uses half the logical CPUs, clamped
 to 4..32 workers. `--jit-jobs=0` requests that automatic rule explicitly.
 
 Cross-platform (Windows / macOS / Linux+WSL): subprocesses go through
-`popen_argv` (no shell) — except the sequence gate, which by design runs CI's
+`popen_argv` (no shell) - except the sequence gate, which by design runs CI's
 own smoke scripts under pwsh/bash. The C++ pass uses `clang-cl /Zs` on
-Windows (preferring the VS-bundled clang — the same binary CI's ClangCL
+Windows (preferring the VS-bundled clang - the same binary CI's ClangCL
 toolset uses) and `clang -fsyntax-only` elsewhere; both are frontend-only
 (parse + semantic analysis + template instantiation, no codegen), which keeps
 even the full ~160-TU header-change sweep at ~15-30 s. A gate whose host tool
@@ -66,5 +66,5 @@ remains the separate deadlock guard.
 
 `ci_only_das.txt` lists the in-repo das surface that no default local build
 compiles (dasOpenGL today); see the header comment there before adding
-entries — surfaces that pull external daspkg packages belong to the
+entries - surfaces that pull external daspkg packages belong to the
 `sequence` gate, not the compile sweep.

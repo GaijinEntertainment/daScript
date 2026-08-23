@@ -1,21 +1,21 @@
-# dasLLAMA on x64 — architecture handoff
+# dasLLAMA on x64 - architecture handoff
 
 > **HISTORICAL (superseded 2026-07-04).** The hand x64 backends this doc describes
 > (`dasllama_math_x64_avx.das`: `x64-avx2*`, `x64-vnni*`, `x64-avx512*`) and the hand
-> `arm64-laneq` tier were DELETED — the generated GEMM family (`dasllama_math_gen.das`,
+> `arm64-laneq` tier were DELETED - the generated GEMM family (`dasllama_math_gen.das`,
 > backends `arm64-gen`/`x64-gen`, tiles stamped by llvm_tune from manifest > per-ISA
-> fallback chain) proved 1.65-4.3× faster on silicon and is now the only repack tier.
+> fallback chain) proved 1.65-4.3x faster on silicon and is now the only repack tier.
 > The registry architecture, seam map, and measurement discipline below remain accurate;
 > the specific backend names/files do not.
 
 **Audience:** the instance bringing up x64 kernels on an x64 desktop. This doc is the map;
 `get_x64_going.md` is the step-by-step runbook; `tune_for_this_box.md` is the per-box tuning
-guide (read it *after* the kernels are correct). Line numbers are as of the PR #3340 tip —
+guide (read it *after* the kernels are correct). Line numbers are as of the PR #3340 tip - 
 symbols are the durable reference, lines will drift.
 
-**The one-sentence brief:** everything platform-specific already sits behind two registries —
+**The one-sentence brief:** everything platform-specific already sits behind two registries - 
 a **kernel-backend registry** in `dasllama_math.das` and a **name-keyed JIT-intrinsic table**
-in dasLLVM — and the ARM NEON backend is the worked example of both. x64 bring-up = mirror the
+in dasLLVM - and the ARM NEON backend is the worked example of both. x64 bring-up = mirror the
 NEON files, register at `[init]`, never edit the core.
 
 ---
@@ -25,14 +25,14 @@ NEON files, register at `[init]`, never edit the core.
 - **Always `-jit`.** dasLLAMA perf work is JIT-tier only; interpreted runs are orders of
   magnitude too slow and loop hints/intrinsics don't exist there. Test command:
   `bin/daslang -jit dastest/dastest.das -- --test modules/dasLLAMA/tests/`. (The MCP `run_test` tool is
-  interpreted — don't use it for model runs.)
+  interpreted - don't use it for model runs.)
 - **Correctness before speed, token-for-token.** The engine is validated against external
   oracles (llama2.c + llama.cpp `simple_ids`, see `README.md` "How to verify a new model").
   Every new kernel must pass the full suite + the oracles *with the new backend active* before
   any perf claim.
 - **Token-exact oracle tests pin the bit-exact path** (classic attention, scalar activation);
   approximate/fast paths get separate tolerance tests. Don't reroute an oracle test through a
-  non-bit-exact default — it will pass on the machine it was frozen on and flip elsewhere.
+  non-bit-exact default - it will pass on the machine it was frozen on and flip elsewhere.
 - **AOT is correct-but-untuned by design.** The AOT C++ emitter (`daslib/aot_cpp.das`) drops
   loop hints entirely, and intrinsics compile as their portable fallback bodies. The AOT gate
   (`bin/test_aot -use-aot dastest/dastest.das -- --test modules/dasLLAMA/tests/`) is a compile+link+run
@@ -44,41 +44,41 @@ NEON files, register at `[init]`, never edit the core.
 
 ```
 modules/dasLLAMA/dasllama/
-  dasllama_math.das               float/Q8/Q4 primitives + the Q8·Q8 KernelBackend registry (the seam)
-  dasllama_math_default.das       "portable" backend — the fallback everywhere, priority 0
-  dasllama_math_aarch64_neon.das  "arm64-sdot" + "arm64-laneq" backends — THE FILE TO MIRROR
+  dasllama_math.das               float/Q8/Q4 primitives + the Q8*Q8 KernelBackend registry (the seam)
+  dasllama_math_default.das       "portable" backend - the fallback everywhere, priority 0
+  dasllama_math_aarch64_neon.das  "arm64-sdot" + "arm64-laneq" backends - THE FILE TO MIRROR
   dasllama_tune.das               per-box loop-hint tuner macros ([tuned], [dasllama_grid])
   dasllama_par.das                maybe_parallel_for (jobque fork threading)
   dasllama_quant.das              Q8_0 / Q4_0 (de)quantization
-  dasllama_common.das             engine core — Config/Model/Session, loader, forward, sample
+  dasllama_common.das             engine core - Config/Model/Session, loader, forward, sample
   dasllama_arch_*.das             per-arch config + [init] registration (llama/qwen2/phi3/gemma2)
-  dasllama_transformer.das        thin umbrella — what consumers require
+  dasllama_transformer.das        thin umbrella - what consumers require
 modules/dasLLVM/daslib/
-  aarch64_neon.das                sdot4/sdot4_laneq intrinsics — THE OTHER FILE TO MIRROR
+  aarch64_neon.das                sdot4/sdot4_laneq intrinsics - THE OTHER FILE TO MIRROR
   llvm_jit_intrin.das             intrinsic emitters + the per-target lookup tables
   llvm_jit_common.das             target machine, host features, g_target_is_aarch64
   llvm_jit_run.das                JIT DLL cache key, LLVM_JIT_CODEGEN_VERSION
 ```
 
-**The Q8·Q8 path** (where all the prefill GEMM time goes): Q8_0 = blocks of 32 int8 + one
+**The Q8*Q8 path** (where all the prefill GEMM time goes): Q8_0 = blocks of 32 int8 + one
 float scale. The loader (QuantMode.q8) quantizes weights once; each forward quantizes the
-activations; the kernel does exact int8·int8 integer MACs per 32-block, then accumulates
+activations; the kernel does exact int8*int8 integer MACs per 32-block, then accumulates
 `float(block_sum) * wscale * xscale`. Prefill uses the *batch* kernel (token-major Y,
-`[ntok × d]`); decode uses the single-token kernel; QKV uses a fused 3-output *group3* kernel.
+`[ntok x d]`); decode uses the single-token kernel; QKV uses a fused 3-output *group3* kernel.
 
 **Threading:** kernels own their threading via `maybe_parallel_for` (`dasllama_par.das`);
 dispatch through the backend function pointers happens at whole-matmul level (the pointer is
 never read inside a worker). Worker count (`src/misc/job_que.cpp`): the
 `DAS_JOBQUE_THREADS` env var overrides everything; Apple Silicon gets `P-cores - 1` workers,
-everything else `cores - 1` — parallel_for's calling thread executes chunks itself
+everything else `cores - 1` - parallel_for's calling thread executes chunks itself
 (main-steal), so workers + main == compute cores either way (`DAS_MAX_HW_JOBS` caps at 4 on
-**wasm only** — fixed 2026-07-02; it used to default to 4 everywhere, so distrust any pre-fix
+**wasm only** - fixed 2026-07-02; it used to default to 4 everywhere, so distrust any pre-fix
 "threaded" x64 number).
-For profiling, pin the count per run via `DAS_JOBQUE_THREADS` — see `get_x64_going.md` step 0.
+For profiling, pin the count per run via `DAS_JOBQUE_THREADS` - see `get_x64_going.md` step 0.
 
 ---
 
-## Seam 1 — the KernelBackend registry (`dasllama_math.das`)
+## Seam 1 - the KernelBackend registry (`dasllama_math.das`)
 
 `dasllama_math.das` owns the abstraction; ISA modules self-register at `[init]`; **nothing in
 the core dispatch changes when a backend is added.**
@@ -87,12 +87,12 @@ the core dispatch changes when a backend is added.**
 
 - Function-pointer typedefs (:321-326): `MatmulQ8Q8Fn` (single token), `MatmulQ8Q8BatchFn`
   (`... ntok`), `MatmulQ8Q8Group3Fn` (fused Q/K/V, three outputs, one activation),
-  `RepackQ8Q8Fn` (in-place repack of one `[d × n]` Q8 region; `n % 32 == 0`).
-- `struct KernelBackend` (:331): `name, mm, batch, group3, repack, needs_repack, priority` —
+  `RepackQ8Q8Fn` (in-place repack of one `[d x n]` Q8 region; `n % 32 == 0`).
+- `struct KernelBackend` (:331): `name, mm, batch, group3, repack, needs_repack, priority` - 
   copyable, lives in `g_kernel_backends : table<string; KernelBackend>`.
 - Active pointers `g_mm_q8q8 / g_mm_q8q8_batch / g_mm_q8q8_group3 / g_repack_q8q8` (:343-346)
-  start as **panic stubs** ("no Q8·Q8 kernel backend registered — require
-  dasllama/dasllama_math_default") — any q8·q8 consumer must require the default backend
+  start as **panic stubs** ("no Q8*Q8 kernel backend registered - require
+  dasllama/dasllama_math_default") - any q8*q8 consumer must require the default backend
   (`dasllama_common.das:8` does).
 - Public wrappers `matmul_q8q8 / matmul_q8q8_batch / matmul_q8q8_group3` (:455-489) `invoke`
   the active pointers; `repack_q8q8_weight` (:446) forwards to the active repack (scale offset
@@ -100,13 +100,13 @@ the core dispatch changes when a backend is added.**
 
 **Two selection tiers** (this is the part to get right):
 
-1. **`register_kernel_backend(be)`** (:380) — auto-activates the registrant only if it is the
-   highest-priority **no-repack** backend so far (and no pin is set). Direct callers — tests,
-   benches, row-major weights — always get the best kernel that works on unrepacked data, with
+1. **`register_kernel_backend(be)`** (:380) - auto-activates the registrant only if it is the
+   highest-priority **no-repack** backend so far (and no pin is set). Direct callers - tests,
+   benches, row-major weights - always get the best kernel that works on unrepacked data, with
    zero load step.
-2. **`select_matmul_backend_for_load()`** (:415) — called by the loader on the Q8 path. Picks
+2. **`select_matmul_backend_for_load()`** (:415) - called by the loader on the Q8 path. Picks
    the best backend **overall**, including `needs_repack` ones, and returns whether the loader
-   must repack every weight region. This is the *only* path that activates a repack backend —
+   must repack every weight region. This is the *only* path that activates a repack backend - 
    activating one eagerly at registration would run the interleaved kernel on row-major data
    (garbage), which is why registration deliberately skips them.
 
@@ -124,46 +124,46 @@ of it.
 | `arm64-laneq` | `dasllama_math_aarch64_neon.das` | 20 | **yes** | same |
 | `x64-avx2` | `dasllama_math_x64_avx.das` | 10 | no | `x86_64 && jit_enabled() && cpu_supports("avx2")` |
 | `x64-avx2-repack` | `dasllama_math_x64_avx.das` | 20 | **yes** | same |
-| `x64-avx2-acc8` | `dasllama_math_x64_avx.das` | 9 | no | same — pinnable experiment |
-| `x64-avx2-ps` | `dasllama_math_x64_avx.das` | 8 | no | same — pinnable experiment |
-| `x64-vnni256` | `dasllama_math_x64_avx.das` | 7 | no | avx2 gate && (`avxvnni` \|\| `avx512vnni`+`vl`) — matrix, pin-only |
-| `x64-vnni256-acc8` | `dasllama_math_x64_avx.das` | 6 | no | same — matrix, pin-only |
-| `x64-vnni256-repack` | `dasllama_math_x64_avx.das` | 5 | **yes** | same — matrix, pin-only |
-| `x64-avx512bw` | `dasllama_math_x64_avx.das` | 4 | no | avx2 gate && `avx512f`+`bw` — matrix, pin-only |
-| `x64-avx512vnni` | `dasllama_math_x64_avx.das` | 3 | no | same && `avx512vnni` — matrix, pin-only |
+| `x64-avx2-acc8` | `dasllama_math_x64_avx.das` | 9 | no | same - pinnable experiment |
+| `x64-avx2-ps` | `dasllama_math_x64_avx.das` | 8 | no | same - pinnable experiment |
+| `x64-vnni256` | `dasllama_math_x64_avx.das` | 7 | no | avx2 gate && (`avxvnni` \|\| `avx512vnni`+`vl`) - matrix, pin-only |
+| `x64-vnni256-acc8` | `dasllama_math_x64_avx.das` | 6 | no | same - matrix, pin-only |
+| `x64-vnni256-repack` | `dasllama_math_x64_avx.das` | 5 | **yes** | same - matrix, pin-only |
+| `x64-avx512bw` | `dasllama_math_x64_avx.das` | 4 | no | avx2 gate && `avx512f`+`bw` - matrix, pin-only |
+| `x64-avx512vnni` | `dasllama_math_x64_avx.das` | 3 | no | same && `avx512vnni` - matrix, pin-only |
 
 The `jit_enabled()` half of the gate matters: off-JIT the intrinsic functions run their scalar
-fallback bodies, which are *slower* than the vectorized portable kernels — so interp/AOT stay
+fallback bodies, which are *slower* than the vectorized portable kernels - so interp/AOT stay
 on `portable` on every platform.
 
 The `cpu_supports("avx2")` half (a cpuid builtin, OSXSAVE-honest) exists because AVX2 is NOT
-universal on x86-64 — unlike arm64 dotprod, which the JIT force-appends. It mirrors the JIT's
+universal on x86-64 - unlike arm64 dotprod, which the JIT force-appends. It mirrors the JIT's
 own emitter gate (`g_target_x64_avx2` in `llvm_jit_common.das`): without it the emitter would
-issue `llvm.x86.avx2.*` against a TargetMachine whose cpuid features lack `+avx2` — a fatal
+issue `llvm.x86.avx2.*` against a TargetMachine whose cpuid features lack `+avx2` - a fatal
 "Cannot select" at codegen that would kill EVERY dasLLAMA program under `-jit` on such a box,
 since the umbrella requires this module and the JIT compiles the whole program up-front. With
 the gate, an AVX2-less x64 box compiles the intrinsics' portable fallback bodies (correct,
 slow) and keeps `portable` selected. The same rail answers the higher ISA tiers: the AVX
 kernel matrix below gates on `cpu_supports("avxvnni"/"avx512f"/"avx512bw"/"avx512vl"/
-"avx512vnni")` — the builtin knows the leaf-7 map, and unknown names fail closed.
+"avx512vnni")` - the builtin knows the leaf-7 map, and unknown names fail closed.
 
 **Hybrid backend (per-slot pin):** decode (GEMV) and prefill (batch GEMM) can prefer different
-backends — on the EPYC 9654, `[tuned]` portable wins decode (+15% over every intrinsic backend)
+backends - on the EPYC 9654, `[tuned]` portable wins decode (+15% over every intrinsic backend)
 while row-major acc8 wins batch. `select_batch_backend(name)` (profile `runtime.batch_backend`)
 overrides only the batch-shaped slots from a layout-compatible donor; the pin is sticky across
 later (re)selection. A repack donor on a row-major active backend (or vice versa, or a different
-repack layout) is rejected with a warning — the planes are physically one layout.
+repack layout) is rejected with a warning - the planes are physically one layout.
 
 **The AVX kernel matrix (2026-07, correctness-proven on EPYC 9654):** VNNI / AVX-512 twins of
 the shipped kernels, built to be measured on bare metal (the 3990X has none of the tiers).
 Registration is unconditional per-tier (cpuid-gated, no master switch); priorities all sit
-below the shipped backends, so nothing auto-selects — A/B via
+below the shipped backends, so nothing auto-selects - A/B via
 `DASLLAMA_PIN_BACKEND`. `DASLLAMA_AVX_MATRIX_FORCE=1` registers tiers the box lacks (they run
-the delegating fallbacks — correct, for probe/validation only). Intrinsics (in
+the delegating fallbacks - correct, for probe/validation only). Intrinsics (in
 `llvm/daslib/x64_avx.das`, each an exact twin of its donor): `dot32_vnni` / `dot32_acc8_vnni` /
 `dot32_mx4_vnni` = ONE `VPDPBUSD` ymm replacing the `VPMADDUBSW+VPMADDWD` pair (integer
 identity); `dot64_acc16(_vnni)` = TWO blocks per call on zmm into a float[16] memory
-accumulator (`VPSIGNB` has no 512-bit form — sign application is compare+negate+select, lowered
+accumulator (`VPSIGNB` has no 512-bit form - sign application is compare+negate+select, lowered
 to `VPMOVB2M`+masked `VPSUBB`); `mx4_dequant64` = two-block MXFP4 dequant via ONE zmm `VPSHUFB`.
 JIT gates `g_target_x64_vnni256 / _avx512bw / _avx512vnni` (llvm_jit_common) mirror the cpuid
 truth per tier; `DAS_JIT_X64_FORCE_FEATURES=avxvnni,avx512f,avx512bw,avx512vl,avx512vnni`
@@ -171,41 +171,41 @@ appends target features for EMISSION-ONLY disasm verification on a box without t
 into the DLL cache key; never execute forced artifacts). Exactness gates live in
 `harness/avx_matrix_probe.das`: every vnni backend is BIT-EXACT vs its donor; z16 tiers gate
 rel<1e-5 vs portable (the acc8/ps float-shape class) + a bit-exact strip-expansion contract.
-Full detail — intrinsic/emitter facts, backend/slot map, validation status, the rented-box
-measurement runbook, and the PR-time TODO — lives in **`history/dasLLAMA/avx_kernel_matrix.md`** (archived; formerly next to this
+Full detail - intrinsic/emitter facts, backend/slot map, validation status, the rented-box
+measurement runbook, and the PR-time TODO - lives in **`history/dasLLAMA/avx_kernel_matrix.md`** (archived; formerly next to this
 file).
 
 **The x64 backends** (all in `dasllama_math_x64_avx.das`, shipped 2026-07): `x64-avx2` =
 row-major dot4x4 over the `dot32` ymm intrinsic (the auto row-major default); `x64-avx2-repack` =
 grp4 4-row block-interleave + token-blocked batch GEMM (picked by
 `select_matmul_backend_for_load`, mirrors arm64-laneq); `x64-avx2-acc8` = llama.cpp's exact
-per-block shape (`dot32_acc8` float[8] memory accumulator, LICM-promoted to 4 ymm regs) — the
+per-block shape (`dot32_acc8` float[8] memory accumulator, LICM-promoted to 4 ymm regs) - the
 fastest kernel at LOW thread counts (+50% over ggml at 1 core) but a wash at 32T, so priority 9
-keeps it pin-only; `x64-avx2-ps` = fused float epilogue (`dot32_ps`), −13% on Zen2 (port-bound),
+keeps it pin-only; `x64-avx2-ps` = fused float epilogue (`dot32_ps`), -13% on Zen2 (port-bound),
 priority 8, kept for A/B archaeology. The 5-spot wiring checklist (dasllama_common require,
 `.das_module`, module CMakeLists, `tests/aot/CMakeLists.txt` leaf-order, README tree) is done
 for both new files (`llvm/daslib/x64_avx.das` carries the intrinsics + emitters).
 
 ---
 
-## Seam 2 — JIT intrinsics (dasLLVM)
+## Seam 2 - JIT intrinsics (dasLLVM)
 
-**The pattern** (`modules/dasLLVM/daslib/aarch64_neon.das` is 57 lines — read it whole):
+**The pattern** (`modules/dasLLVM/daslib/aarch64_neon.das` is 57 lines - read it whole):
 
 - The daslang side is a plain function with a **portable scalar fallback body** and *no*
-  annotation: `def sdot4(acc : int4; w : int8 const?; x : int8 const?) : int4` (:20-34) —
-  each of the 4 dword lanes accumulates a dot of 4 int8s (exactly one `v16i8 × v16i8 → v4i32`
+  annotation: `def sdot4(acc : int4; w : int8 const?; x : int8 const?) : int4` (:20-34) - 
+  each of the 4 dword lanes accumulates a dot of 4 int8s (exactly one `v16i8 x v16i8 -> v4i32`
   dot-product instruction). `sdot4_laneq(acc, w, x, lane)` (:43-57) reuses one 4-byte group of
-  `x` across all rows — `lane` must be a compile-time constant.
+  `x` across all rows - `lane` must be a compile-time constant.
 - The emitter recognizes calls **by qualified name** at JIT codegen
   (`llvm_jit_intrin.das:145-148`): `g_aarch64_intrin_lookup <- { "aarch64_neon::sdot4" => @@intrinsic_sdot4, ... }`.
-  The table is consulted only when `g_target_is_aarch64` — two gate sites: `has_intrinsic`
+  The table is consulted only when `g_target_is_aarch64` - two gate sites: `has_intrinsic`
   (:150-177) and `lookup_intinsic` (:179-193; yes, the typo is the real symbol name).
 - `intrinsic_sdot4` (:1431-1451): cast args to `v16i8*`, unaligned loads,
   `LLVMLookupIntrinsicID("llvm.aarch64.neon.sdot")` + `LLVMGetIntrinsicDeclaration` overloaded
   on `[v4i32, v16i8]`, one `LLVMBuildCall2`. The laneq variant (:1460-1496) additionally
   validates the constant lane and splats it with `LLVMBuildShuffleVector`.
-- **Off-target the call is just a normal function** — the fallback body compiles verbatim
+- **Off-target the call is just a normal function** - the fallback body compiles verbatim
   (interpreter, AOT, non-matching JIT). Correct everywhere, fast only where the emitter fires.
 
 **Target features:** `with_default_target_machine` (`llvm_jit_common.das:966`) plumbs
@@ -213,7 +213,7 @@ for both new files (`llvm/daslib/x64_avx.das` carries the intrinsics + emitters)
 The aarch64 branch at :999-1004 force-appends `+dotprod` because **macOS returns an empty host
 feature string** (features are implied by the CPU name, and an unrecognized-CPU fallback to
 "generic" would abort SDOT selection). On Linux/Windows x64 `LLVMGetHostCPUFeatures()` is
-populated (cpuid-derived), so VNNI should arrive automatically — only add a forced-feature
+populated (cpuid-derived), so VNNI should arrive automatically - only add a forced-feature
 branch if instruction selection actually fails.
 
 **Arch detection:** `g_target_is_aarch64` is set in `init_jit`
@@ -222,46 +222,46 @@ triple prefix (cross path). The x64 mirror is a `g_target_is_x64` set from `"x86
 `starts_with(triple, "x86_64")`.
 
 **Cache invalidation:** `LLVM_JIT_CODEGEN_VERSION` (`llvm_jit_run.das:36`, currently `0x2e`)
-seeds the JIT DLL cache key — **bump it** when the port changes emitted IR for existing
+seeds the JIT DLL cache key - **bump it** when the port changes emitted IR for existing
 programs (new intrinsic table, feature-string change, triple change). The key also folds each
-function's AOT hash, all loop-hint annotations (`fold_loop_hints`, :99-118 — this is why
+function's AOT hash, all loop-hint annotations (`fold_loop_hints`, :99-118 - this is why
 re-tuning `box_profile.json` re-keys the DLL automatically), opt/size levels, and
 `g_jit_fast_math`.
 
 **What x64 adds:** `modules/dasLLVM/daslib/x64_avx.das` (module `x64_avx`) mirroring
-`aarch64_neon.das` — e.g. `vnni_dot4` with the *identical* signature and fallback body as
-`sdot4` — plus a `g_x64_intrin_lookup` table and `g_target_is_x64` checks at the two gate
+`aarch64_neon.das` - e.g. `vnni_dot4` with the *identical* signature and fallback body as
+`sdot4` - plus a `g_x64_intrin_lookup` table and `g_target_is_x64` checks at the two gate
 sites, an `intrinsic_vnni_dot4` emitter, and the version bump.
 
 ---
 
 ## Why x64 is already correct with zero work
 
-Three deliberate layers make the tree x64-safe *today* — verify them before changing anything:
+Three deliberate layers make the tree x64-safe *today* - verify them before changing anything:
 
-1. **Registration gate** — the NEON `[init]` never fires off-arm, so `portable` stays active
+1. **Registration gate** - the NEON `[init]` never fires off-arm, so `portable` stays active
    and every model run on x64 is correct (just unoptimized).
-2. **Scalar fallbacks** — even a direct call to `sdot4` off-arm computes the right answer via
+2. **Scalar fallbacks** - even a direct call to `sdot4` off-arm computes the right answer via
    its fallback body; only the JIT emitter lowers it to hardware.
-3. **Tests drive public wrappers** — the suite dispatches through the active backend, and
+3. **Tests drive public wrappers** - the suite dispatches through the active backend, and
    `test_kernel_backend.das` asserts only that `portable` is registered and *a* row-major
    default is active (never an arch-specific name), so the suite is green on any ISA.
 
 **The known gap:** harnesses that *pin* a specific ISA backend (`harness/tune_tb.das`,
 `benchmarks/matmul/bench_matmul_laneq.das`) are JIT-gated but measure the portable path off
-their arch — meaningless numbers, not wrong ones. `tune_tb.das:173-175` shows the fix pattern:
+their arch - meaningless numbers, not wrong ones. `tune_tb.das:173-175` shows the fix pattern:
 skip cleanly when `active_kernel_backend()` isn't the pinned one.
 
 ---
 
-## Universal vs per-box — what to keep, what to re-derive
+## Universal vs per-box - what to keep, what to re-derive
 
 | | What | Where |
 |---|---|---|
-| **Universal (keep)** | token-blocked batch loop nest (token-block → group → tokens-in-block); the 4×4 repack *concept*; the batch/group3 kernel shapes; `effective_token_block` clamp; all float4 elementwise/attention kernels; loop-hint machinery (target-agnostic, `llvm_jit.das:6993-7009`; only wasm skips hints) | shared files |
-| **Per-box (re-derive on x64)** | ISA backend choice; `vectorize_width × unroll_count` per kernel (`box_profile.json`); `TB` (`set_q8_token_block`, default 128); L2 budget (`set_q8_l2_budget`, default 4 MB — **provisional, measured on one M1 Max**); thread count | `tune_for_this_box.md` |
+| **Universal (keep)** | token-blocked batch loop nest (token-block -> group -> tokens-in-block); the 4x4 repack *concept*; the batch/group3 kernel shapes; `effective_token_block` clamp; all float4 elementwise/attention kernels; loop-hint machinery (target-agnostic, `llvm_jit.das:6993-7009`; only wasm skips hints) | shared files |
+| **Per-box (re-derive on x64)** | ISA backend choice; `vectorize_width x unroll_count` per kernel (`box_profile.json`); `TB` (`set_q8_token_block`, default 128); L2 budget (`set_q8_l2_budget`, default 4 MB - **provisional, measured on one M1 Max**); thread count | `tune_for_this_box.md` |
 
-The M1-stamped defaults are *good defaults*, not deletions — `vec8_u2`
+The M1-stamped defaults are *good defaults*, not deletions - `vec8_u2`
 (`[vectorize, vectorize_width = 8, unroll_count = 2]`) is the shipped permutation everywhere,
 and the grid already carries `vec16`/`vec32` rows specifically because 512-bit AVX-512 may
 prefer them (M1's NEON is 128-bit; width-8 = 2 registers is its FMA sweet spot).
@@ -270,44 +270,44 @@ prefer them (M1's NEON is 128-bit; width-8 = 2 registers is its FMA sweet spot).
 
 ## The kernel that actually needs porting
 
-Only the **Q8·Q8 integer dot** is ISA-specific. Everything float is portable `float4` SIMD
+Only the **Q8*Q8 integer dot** is ISA-specific. Everything float is portable `float4` SIMD
 (maps to SSE on x64 automatically) or loop-hint-driven autovectorization.
 
-**SDOT → VNNI, and the one real x64 gotcha:** ARM `sdot` is natively signed×signed.
+**SDOT -> VNNI, and the one real x64 gotcha:** ARM `sdot` is natively signedxsigned.
 The mainstream x64 analog `vpdpbusd` (AVX512-VNNI, and VEX-encoded AVX-VNNI on client cores)
-is **unsigned×signed** (u8 × s8). The standard exact fix (ggml uses it):
+is **unsignedxsigned** (u8 x s8). The standard exact fix (ggml uses it):
 
 ```
 dot(a, b) == dot(|a| as u8, sign(a) applied to b)      // integer identity, exact
 ```
 
 `|a|` goes on the *unsigned* operand because `|-128| = 128` fits u8 but not s8. Products fit
-s16, four-product sums fit s32, `vpdpbusd` accumulates without saturation → the kernel stays
-exact. Newest cores also have AVX-VNNI-INT8 (`vpdpbssd`, natively s8×s8 — no trick needed);
+s16, four-product sums fit s32, `vpdpbusd` accumulates without saturation -> the kernel stays
+exact. Newest cores also have AVX-VNNI-INT8 (`vpdpbssd`, natively s8xs8 - no trick needed);
 check `LLVMGetHostCPUFeatures()` on the actual box before choosing. Verify the exact LLVM
 intrinsic name for your LLVM version with an `llc` probe (the method that validated the exp
 intrinsic) rather than trusting docs.
 
-**The laneq blueprint** (mirror only if row-major VNNI measures short of llama.cpp — that's
+**The laneq blueprint** (mirror only if row-major VNNI measures short of llama.cpp - that's
 what closed the last 18% on M1): `repack_q8q8_neon` (`dasllama_math_aarch64_neon.das:242-281`)
 interleaves 4 weight rows per group so one k-quad of 4 rows is 16 contiguous bytes, with
 float4-per-block interleaved scales; `q8q8_batch_kernel_neon_laneq` (:306-353) then runs
-`parallel_for over groups → while token-block (TB = effective_token_block(g_q8_token_block, n),
-:315) → group loop → 4-token tiles` (`dot_q8q8_laneq4x4`, 4 independent accumulators,
+`parallel_for over groups -> while token-block (TB = effective_token_block(g_q8_token_block, n),
+:315) -> group loop -> 4-token tiles` (`dot_q8q8_laneq4x4`, 4 independent accumulators,
 `[unroll_count = 2]`, weight loads CSE'd across tokens). The TB slice of activations staying
-L2-resident across a thread's groups is the whole point — that structure is universal; only
+L2-resident across a thread's groups is the whole point - that structure is universal; only
 the numbers are M1's.
 
-**Not a target:** AMX tiles (the true `smmla` analog, Sapphire Rapids+) — Tier-3/deferred.
+**Not a target:** AMX tiles (the true `smmla` analog, Sapphire Rapids+) - Tier-3/deferred.
 The ARM SMMLA experiment is **not in the tree**; it's preserved on branch
 `bbatkin/dasllama-smmla-i8mm` for future i8mm hardware.
 
-**The `exp(floatN)` queued decision — RESOLVED (znver2, 2026-07-02): keep the aarch64 gate.**
-Measured on real x64 hardware, the guarded polynomial (`build_vector_expf`) is a loss: 1.12×
-scalar libm (vs ~2.9× on M1) — the always-computed branchless guard tree dominates on SSE/AVX2 —
-while dasLLAMA's unguarded `exp4` runs 4.3×. Even adding the fast-path branch would only reach
+**The `exp(floatN)` queued decision - RESOLVED (znver2, 2026-07-02): keep the aarch64 gate.**
+Measured on real x64 hardware, the guarded polynomial (`build_vector_expf`) is a loss: 1.12x
+scalar libm (vs ~2.9x on M1) - the always-computed branchless guard tree dominates on SSE/AVX2 - 
+while dasLLAMA's unguarded `exp4` runs 4.3x. Even adding the fast-path branch would only reach
 exp4 parity, so the gate stays aarch64-only by measurement and `exp4` stays. (Side finding, out
-of scope here: interp/const-fold `exp(float4)` is the unguarded fast path — it returns `-0`
+of scope here: interp/const-fold `exp(float4)` is the unguarded fast path - it returns `-0`
 past overflow instead of `+inf`.) dasLLAMA's `exp4`/`swiglu4`/`geglu4`/`softcap4`/`hmax` are
 plain portable float4 and work on x64 as-is.
 
@@ -318,8 +318,8 @@ plain portable float4 and work on x64 as-is.
 llama.cpp CPU-only on the same box is the yardstick (`llama-bench -p 512,1024,2048 -n 0 -t N`,
 plus the token-for-token oracles from `README.md`). Two fairness notes from the M1 campaign:
 ggml is not `-ffast-math` but hand-codes equivalent FP laxity (FMA intrinsics, ~2ulp exp poly,
-reassociated reductions) — our `options _jit_fast_math = true` (already on the runners and
+reassociated reductions) - our `options _jit_fast_math = true` (already on the runners and
 end-to-end benches, **never on tests**) is the apples-to-apples configuration; and llama.cpp's
 x64 CPU path uses repacked weight layouts (`cpu_repack_buffer_type`), so compare row-major
-VNNI against it knowing that. Measurement methodology — interleaved A/B, correctness gates,
-the ggml per-op-timing patch — lives in `tune_for_this_box.md`.
+VNNI against it knowing that. Measurement methodology - interleaved A/B, correctness gates,
+the ggml per-op-timing patch - lives in `tune_for_this_box.md`.

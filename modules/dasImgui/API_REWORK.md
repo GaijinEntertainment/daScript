@@ -1,8 +1,8 @@
-# dasImgui Boost API Rework — Master Plan
+# dasImgui Boost API Rework - Master Plan
 
 **Status:** design-locked, pre-implementation. Created 2026-05-08.
 
-This is the master plan-doc for the dasImgui boost-API redesign. It captures every pinned decision from the kickoff discussion plus the phased implementation plan. Living document — update as decisions evolve.
+This is the master plan-doc for the dasImgui boost-API redesign. It captures every pinned decision from the kickoff discussion plus the phased implementation plan. Living document - update as decisions evolve.
 
 Companion docs (when they appear):
 - Per-chunk plans live under `~/.claude/plans/dasimgui_*.md`
@@ -12,15 +12,15 @@ Companion docs (when they appear):
 
 ## 1. Goals
 
-The current `daslib/imgui_boost` is **anemic** — ~500 lines of `Begin`/`Menu`/`MenuItem`/`HelpMarker` block-arg wrappers and a handful of callback-shim structs (`ImGuiInputTextBuffer`, `ImGuiComboGetter`, `ImGuiPlotGetter`, `ImGuiSizeConstraints`) whose layouts are pinned to C++-side structs in `bind/`. There is no widget-state model, no telemetry hook, no identifier-as-id discipline. Examples write idiomatic-C++-style ImGui inside daslang — manual `Begin`/`End` pairs, `static_let` for per-widget state (a historical macro-day artifact), `unsafe(addr(field))` everywhere. We need a daslang-native API. **The migration is full-rewrite, not additive** — the block-arg wrappers re-emerge from `define_widget`, and the ABI-paired shims get rewritten with their C++ partners updated in lockstep.
+The current `daslib/imgui_boost` is **anemic** - ~500 lines of `Begin`/`Menu`/`MenuItem`/`HelpMarker` block-arg wrappers and a handful of callback-shim structs (`ImGuiInputTextBuffer`, `ImGuiComboGetter`, `ImGuiPlotGetter`, `ImGuiSizeConstraints`) whose layouts are pinned to C++-side structs in `bind/`. There is no widget-state model, no telemetry hook, no identifier-as-id discipline. Examples write idiomatic-C++-style ImGui inside daslang - manual `Begin`/`End` pairs, `static_let` for per-widget state (a historical macro-day artifact), `unsafe(addr(field))` everywhere. We need a daslang-native API. **The migration is full-rewrite, not additive** - the block-arg wrappers re-emerge from `define_widget`, and the ABI-paired shims get rewritten with their C++ partners updated in lockstep.
 
 While we're at it, we ship five adjacent capabilities:
 
-1. **Idiomatic boost API** — block-arg containers, declarative state, ergonomic loops.
-2. **Telemetry** — runtime introspection: which widgets are on screen, in what state. Plus interactive control surface: press buttons, move sliders, edit text, open/close windows.
-3. **Transport** — explicit `send_imgui_command` / `receive_imgui_command` wired to a default (daslang-live) transport, with a swappable wrapper for custom transports.
-4. **Playwright** — scriptable UI testing on top of telemetry + transport.
-5. **Visual aids** — mouse trail, element highlight, tutorial narration overlays. Built-in video recording is *deferred* (no test_engine, see §3).
+1. **Idiomatic boost API** - block-arg containers, declarative state, ergonomic loops.
+2. **Telemetry** - runtime introspection: which widgets are on screen, in what state. Plus interactive control surface: press buttons, move sliders, edit text, open/close windows.
+3. **Transport** - explicit `send_imgui_command` / `receive_imgui_command` wired to a default (daslang-live) transport, with a swappable wrapper for custom transports.
+4. **Playwright** - scriptable UI testing on top of telemetry + transport.
+5. **Visual aids** - mouse trail, element highlight, tutorial narration overlays. Built-in video recording is *deferred* (no test_engine, see sec.3).
 
 ---
 
@@ -28,12 +28,12 @@ While we're at it, we ship five adjacent capabilities:
 
 These shape every decision below.
 
-- **Defaults secure.** No telemetry unless the app explicitly calls `imgui_telemetry_serve()`. No remote attack surface unless the user opted in. "No install — no telemetry — game does not get hacked."
+- **Defaults secure.** No telemetry unless the app explicitly calls `imgui_telemetry_serve()`. No remote attack surface unless the user opted in. "No install - no telemetry - game does not get hacked."
 - **Defaults idiomatic.** The 80% case writes one line per widget, no boilerplate. Ceremony is opt-in, not opt-out.
 - **No internal-only paths.** Anything the boost layer's built-ins can do, user-defined widgets can do. `define_widget` is the contract; `button` and `slider` are *examples* of using it.
 - **Identifier is identity.** Widgets are addressed by their daslang identifier (which is also their telemetry path), never by 32-bit hashes. Magic numbers are unacceptable in scripts and tutorials.
 - **Class is so not daslang.** The transport interface and other extension seams are lambdas / structs of function pointers, not virtual classes. (Classes exist in daslang because users want them, not because the language is class-oriented.)
-- **State lives in daslang, not imgui.** Widget values are real daslang globals — grep-able, RTTI-walkable, hot-reload-friendly via `@live`, persistable via existing serialization. ImGui never owns user-visible state.
+- **State lives in daslang, not imgui.** Widget values are real daslang globals - grep-able, RTTI-walkable, hot-reload-friendly via `@live`, persistable via existing serialization. ImGui never owns user-visible state.
 - **Boost wrappers do the registry work.** Since we wrap every widget call, we naturally know its bbox/hover/focus post-call (via public `GetItemRectMin/Max` + `IsItemHovered/Active/Focused`). No hooking ImGui internals.
 
 ---
@@ -42,7 +42,7 @@ These shape every decision below.
 
 - **`imgui_test_engine` is off-limits.** Gaijin's annual turnover exceeds the $2M free-license threshold. Cannot vendor, link, or include. A reference-only checkout at `E:\imgui_test_engine\` is allowed for clean-room reimplementation guidance.
 - **Public `imgui.h` only.** `imgui_internal.h` (with `ItemAdd`, `ButtonBehavior`, etc.) is *not* bound today. The `InvisibleButton + DrawList` pattern covers ~95% of custom widgets without it. Add internal binding only when a real use case bumps into it.
-- **No CI on dasImgui repo.** Branches are for backup, not for review. Review happens in fresh Claude sessions playing "better copilot" — see §11.
+- **No CI on dasImgui repo.** Branches are for backup, not for review. Review happens in fresh Claude sessions playing "better copilot" - see sec.11.
 - **GLFW main-thread requirement.** The imgui app runs the frame loop on the GLFW thread. All multi-threading (HTTP server, command queue) is around it, not on it.
 
 ---
@@ -87,7 +87,7 @@ The `slider(IDENT, ...)` macro emits at module scope:
 @live variable private RPS_SLIDER : SliderState<float> = SliderState(value=0.1f, min=0.0f, max=10.0f)
 ```
 
-…then rewrites the call to `slider_render(unsafe(addr(RPS_SLIDER)), label="RPS") $(rps) { ... }`.
+...then rewrites the call to `slider_render(unsafe(addr(RPS_SLIDER)), label="RPS") $(rps) { ... }`.
 
 Both block and return forms are supported. Block form is idiomatic for tight side-effect coupling; return form for "value flows to N consumers without N levels of nesting."
 
@@ -113,17 +113,17 @@ text_show(STATUS_TEXT)
 
 `text_show` mirrors `text_input` for the read-only direction. Tests assert via `expect_value(app, STATUS_TEXT, "saved")`. The state global holds the displayed string; raw `imgui::Text(s)` calls *don't* register and aren't telemetry-visible.
 
-### 4.4 Loops — array and table forms
+### 4.4 Loops - array and table forms
 
-The macro dispatches on the index expression's type. **Both forms use `table<K; T>` storage** — int and string just differ in key type. Uniform insert-on-read semantics, no auto-grow asymmetry between dense and sparse indexing:
+The macro dispatches on the index expression's type. **Both forms use `table<K; T>` storage** - int and string just differ in key type. Uniform insert-on-read semantics, no auto-grow asymmetry between dense and sparse indexing:
 
 ```das
-// integer index → table<int; SliderState>
+// integer index -> table<int; SliderState>
 for (i in range(8)) {
     slider(CHANNEL_VOL[i], label="Vol", 0..1, init=0.5f) $(v) { ... }
 }
 
-// string index → table<string; SliderState>
+// string index -> table<string; SliderState>
 for (track in tracks) {
     slider(TRACK_VOL[track.name], label="Vol", 0..1, init=0.5f) $(v) { ... }
 }
@@ -133,16 +133,16 @@ Telemetry path: `Mixer/CHANNEL_VOL[3]` or `Mixer/TRACK_VOL[lead_synth]`. (Dense 
 
 Auto-grows on first access to a new index.
 
-**Single-global widget renders exactly once per frame — period.** Two failure modes collapse into one rule:
+**Single-global widget renders exactly once per frame - period.** Two failure modes collapse into one rule:
 
 1. Single-global widget inside a `for` loop (would render N times).
 2. Single-global widget called from two distinct sites (e.g. shown in two windows simultaneously).
 
-Both → **runtime panic** at end-of-frame when the registry detects N>1 renders of the same global. When the macro can see the misuse lexically (e.g. `slider(IDENT, ...)` directly inside a `for` where `IDENT` is declared as a single global, not subscripted), it `macro_error`s at expansion with a fixit pointing to `IDENT[i]` / `IDENT[key]`. When the misuse is hidden behind helpers, generators, or block-args the macro can't trace, runtime catches it. Loud, not a warning — telemetry needs an unambiguous path → widget mapping or test commands can't locate the right widget. Want the same widget kind in two places? Use the array/table form.
+Both -> **runtime panic** at end-of-frame when the registry detects N>1 renders of the same global. When the macro can see the misuse lexically (e.g. `slider(IDENT, ...)` directly inside a `for` where `IDENT` is declared as a single global, not subscripted), it `macro_error`s at expansion with a fixit pointing to `IDENT[i]` / `IDENT[key]`. When the misuse is hidden behind helpers, generators, or block-args the macro can't trace, runtime catches it. Loud, not a warning - telemetry needs an unambiguous path -> widget mapping or test commands can't locate the right widget. Want the same widget kind in two places? Use the array/table form.
 
 ### 4.5 Identifier flags (dotted suffix)
 
-Widget identifiers are conventionally `UPPER_SNAKE_CASE`. The macro takes its first argument **unparsed** and splits on `.` — the leading token is the identifier (and telemetry path component); trailing tokens are flags on the generated global:
+Widget identifiers are conventionally `UPPER_SNAKE_CASE`. The macro takes its first argument **unparsed** and splits on `.` - the leading token is the identifier (and telemetry path component); trailing tokens are flags on the generated global:
 
 ```das
 slider(RPS, ...)                  // default: variable private, @live
@@ -180,7 +180,7 @@ Two-region helpers (`split_h`, `split_v`) take exactly two block args. Variable-
 
 ### 4.7 Style helpers (block-scoped)
 
-`with_style` is a `[call_macro]` taking a variadic list of `(key, value)` tuples. Each tuple dispatches to `PushStyleColor` or `PushStyleVar` based on the key's enum type (`ImGuiCol_` → color, `ImGuiStyleVar` → var). One block-scoped push/pop pair total, regardless of N styles:
+`with_style` is a `[call_macro]` taking a variadic list of `(key, value)` tuples. Each tuple dispatches to `PushStyleColor` or `PushStyleVar` based on the key's enum type (`ImGuiCol_` -> color, `ImGuiStyleVar` -> var). One block-scoped push/pop pair total, regardless of N styles:
 
 ```das
 with_style(
@@ -212,7 +212,7 @@ with_id("section_a") {
 
 ### 4.9 User-extensible widgets
 
-The boost provides the **`[widget]` function-annotation** as the canonical extension mechanism. **Every built-in is defined using it** — no internal-only path. (Original sketches in earlier drafts of this section used a `define_widget(name, State) $(state, label)` block-arg shape; daslang call_macros only fire inside expressions, not at top-level `def`, so the function-annotation form is what actually shipped.)
+The boost provides the **`[widget]` function-annotation** as the canonical extension mechanism. **Every built-in is defined using it** - no internal-only path. (Original sketches in earlier drafts of this section used a `define_widget(name, State) $(state, label)` block-arg shape; daslang call_macros only fire inside expressions, not at top-level `def`, so the function-annotation form is what actually shipped.)
 
 ```das
 // shipped with the boost (widgets/imgui_widgets_builtin.das)
@@ -238,7 +238,7 @@ def knob(var state : VolumeKnobState; text : string) : bool {
         state.value = state.pending_value
         state.has_pending = false
     }
-    // InvisibleButton + DrawList — the canonical pattern.
+    // InvisibleButton + DrawList - the canonical pattern.
     InvisibleButton(text, ImVec2(72.0f, 96.0f))
     if (IsItemActive()) { /* update state.value from GetIO().MouseDelta */ }
     /* drawlist primitives: AddCircleFilled, AddLine, AddText */
@@ -247,19 +247,19 @@ def knob(var state : VolumeKnobState; text : string) : bool {
 }
 ```
 
-**Contract** — the `[widget]` annotation injects:
+**Contract** - the `[widget]` annotation injects:
 
 - `widget_ident : string` parameter at position 1 (between `state` and user-facing args). The body passes it to the finalize call.
-- `widget_prelude(widget_ident)` at the top of the body — pushes ImGui ID, applies pending focus.
+- `widget_prelude(widget_ident)` at the top of the body - pushes ImGui ID, applies pending focus.
 - Registers a per-kind `WidgetCallMacro` that intercepts `<kind>(IDENT, ...)` call sites, auto-emits the named global on first use, and parses dotted-suffix flags (`.PUBLIC` / `.NOTLIVE`).
 
 `pending_value_finalize(widget_ident, kind, state)` (in `widgets/imgui_boost_runtime.das`) does:
 
 - bbox / hex_id / hover / active / focus capture from the **last ImGui item** (your `InvisibleButton` or stock call).
 - Registry insert keyed on the widget path.
-- Installs serializer (drives `imgui_snapshot`) + dispatcher (drives `imgui_force_set`) lambdas — both generic on the state-struct type, picking up every field via `typedecl`.
+- Installs serializer (drives `imgui_snapshot`) + dispatcher (drives `imgui_force_set`) lambdas - both generic on the state-struct type, picking up every field via `typedecl`.
 
-Power users can hand-write `<kind>_finalize` directly if `pending_value_finalize` doesn't fit (boolean toggles, multi-action widgets, plots) — `click_finalize` / `toggle_finalize` / `plot_finalize` in `widgets/imgui_widgets_builtin.das` are the in-tree templates.
+Power users can hand-write `<kind>_finalize` directly if `pending_value_finalize` doesn't fit (boolean toggles, multi-action widgets, plots) - `click_finalize` / `toggle_finalize` / `plot_finalize` in `widgets/imgui_widgets_builtin.das` are the in-tree templates.
 
 See **:ref:`tutorial_custom_widgets`** for the full walkthrough.
 
@@ -300,21 +300,21 @@ Always-full on demand, served as JSON:
 }
 ```
 
-- **`globals`** — RTTI walk over module globals of UI-state types (auto-discovered via `widget_state_types` registry populated by `define_widget`).
-- **Per-frame registry fields** (bbox, hover, active, focus, hex_id) — captured by every boost wrapper after the underlying ImGui call, into a frame-local table.
-- **`io`** — `ImGuiIO` mirror: mouse pos / buttons, active widget id, focused window.
-- **`extras`** — widget-kind-specific read-only metadata (text-input cursor, scroll offset, tree expansion, tooltip content). Populated per widget kind.
-- **`hex_id`** — `ImGui::GetID()` value for every widget. Lets clients (Claude, scripts) target widgets the user never named.
+- **`globals`** - RTTI walk over module globals of UI-state types (auto-discovered via `widget_state_types` registry populated by `define_widget`).
+- **Per-frame registry fields** (bbox, hover, active, focus, hex_id) - captured by every boost wrapper after the underlying ImGui call, into a frame-local table.
+- **`io`** - `ImGuiIO` mirror: mouse pos / buttons, active widget id, focused window.
+- **`extras`** - widget-kind-specific read-only metadata (text-input cursor, scroll offset, tree expansion, tooltip content). Populated per widget kind.
+- **`hex_id`** - `ImGui::GetID()` value for every widget. Lets clients (Claude, scripts) target widgets the user never named.
 
 ### 5.2 Sync semantics for commands
 
-**Client-polling model.** Server reports `{quiescent, frame, pending_coroutines, active_id}` per `imgui_await` probe; the client (`await_imgui` in `widgets/imgui_transport`) drives the wait loop until quiescent (no active drag, popups settled, animations done) with a 5s default timeout. The dispatch handler runs on the GLFW main thread between frames (§3 invariant), so a server-side `while (!quiescent) sleep(...)` would deadlock the loop that advances frames — server-side blocking is structurally unavailable.
+**Client-polling model.** Server reports `{quiescent, frame, pending_coroutines, active_id}` per `imgui_await` probe; the client (`await_imgui` in `widgets/imgui_transport`) drives the wait loop until quiescent (no active drag, popups settled, animations done) with a 5s default timeout. The dispatch handler runs on the GLFW main thread between frames (sec.3 invariant), so a server-side `while (!quiescent) sleep(...)` would deadlock the loop that advances frames - server-side blocking is structurally unavailable.
 
 Per-command override modifiers extracted at the dispatch boundary by `with_await(input, payload)` in `imgui_boost_runtime.das`:
-- `await=N` — surfaces `await_frames: N` in the response so the client polls for `g_frame ≥ baseline + N`
-- `await_until=<predicate>` — surfaces in the response; today only `"quiescent"` is implemented
-- `timeout_sec=N` (default 5.0) — surfaces in the response wrap; client honors as the poll deadline
-- `fire_and_forget=true` — server skips the merge entirely; response is the raw payload, no `await_*` keys, no client-side wait
+- `await=N` - surfaces `await_frames: N` in the response so the client polls for `g_frame >= baseline + N`
+- `await_until=<predicate>` - surfaces in the response; today only `"quiescent"` is implemented
+- `timeout_sec=N` (default 5.0) - surfaces in the response wrap; client honors as the poll deadline
+- `fire_and_forget=true` - server skips the merge entirely; response is the raw payload, no `await_*` keys, no client-side wait
 
 On timeout: the client returns `false` from `await_imgui` (no panic). Test harnesses that want hard-fail on hang wrap the await in their own assertion.
 
@@ -322,9 +322,9 @@ On timeout: the client returns `false` from `await_imgui` (no panic). Test harne
 
 ## 6. Transport and commands
 
-### 6.1 Server side — reuse `live_api`
+### 6.1 Server side - reuse `live_api`
 
-No new HTTP server. The dasLiveHost `live_api` debug agent (port 9090 by default) handles transport. **No new command queue either** — `live_dispatch_command` (in `dasLiveHost/live/live_commands.das`) already drains posted commands on the main context at frame boundaries. Imgui commands ride that same queue; the GLFW main-thread requirement (§3) is satisfied by the existing infrastructure. The boost ships imgui-flavored `[live_command]` functions reachable via `POST /command` with `{"name":"imgui_<verb>","args":{...}}`:
+No new HTTP server. The dasLiveHost `live_api` debug agent (port 9090 by default) handles transport. **No new command queue either** - `live_dispatch_command` (in `dasLiveHost/live/live_commands.das`) already drains posted commands on the main context at frame boundaries. Imgui commands ride that same queue; the GLFW main-thread requirement (sec.3) is satisfied by the existing infrastructure. The boost ships imgui-flavored `[live_command]` functions reachable via `POST /command` with `{"name":"imgui_<verb>","args":{...}}`:
 
 | Command | Action |
 |---|---|
@@ -348,9 +348,9 @@ def init() {
 }
 ```
 
-**No install → no telemetry → no remote control.**
+**No install -> no telemetry -> no remote control.**
 
-### 6.2 Client side — lambda transport
+### 6.2 Client side - lambda transport
 
 ```das
 // transport is a lambda
@@ -370,15 +370,15 @@ await_imgui(transport, until="quiescent")
 
 ### 6.3 How clicks and value-writes actually work
 
-Two strategies — faithful input vs. bypass:
+Two strategies - faithful input vs. bypass:
 
-- **Faithful synth input (L1).** `AddMousePosEvent` + `AddMouseButtonEvent` (both public in `imgui.h`). Move cursor to the widget bbox center, push down, next frame push up — a real click through ImGui's own input path. Works for *anything*; warps the cursor briefly; needs ≥2 frames. `imgui_click` **always** takes this path, so every widget (boost-wrapped or not) behaves exactly as under a hardware click — buttons fire, checkbox/selectable/menu_item toggle and auto-close their popup. No per-widget click short-circuit.
-- **Direct state mutation (L3 — bypass).** Write the widget's state field directly. Sliders/checkboxes/inputs paint the new value next frame; ImGui never knows it was driven externally. This is `imgui_force_set` — a deliberate bypass for what a user can't do (exact value, off-screen / inactive widget).
+- **Faithful synth input (L1).** `AddMousePosEvent` + `AddMouseButtonEvent` (both public in `imgui.h`). Move cursor to the widget bbox center, push down, next frame push up - a real click through ImGui's own input path. Works for *anything*; warps the cursor briefly; needs >=2 frames. `imgui_click` **always** takes this path, so every widget (boost-wrapped or not) behaves exactly as under a hardware click - buttons fire, checkbox/selectable/menu_item toggle and auto-close their popup. No per-widget click short-circuit.
+- **Direct state mutation (L3 - bypass).** Write the widget's state field directly. Sliders/checkboxes/inputs paint the new value next frame; ImGui never knows it was driven externally. This is `imgui_force_set` - a deliberate bypass for what a user can't do (exact value, off-screen / inactive widget).
 
 Mapping:
-- `imgui_force_set(target, value)` → **L3 / bypass**
-- `imgui_click(IDENT)` / `imgui_click(hex_id)` → **L1** (real synthetic click; resolves the bbox either way)
-- multi-frame interactions (drag, type) → playwright `drag` / `type_text`, composed over the `imgui_mouse_play` / `imgui_key_type` timelines
+- `imgui_force_set(target, value)` -> **L3 / bypass**
+- `imgui_click(IDENT)` / `imgui_click(hex_id)` -> **L1** (real synthetic click; resolves the bbox either way)
+- multi-frame interactions (drag, type) -> playwright `drag` / `type_text`, composed over the `imgui_mouse_play` / `imgui_key_type` timelines
 
 Default rule: `imgui_click` for clicks (faithful); `imgui_force_set` only when the value itself is the goal.
 
@@ -390,9 +390,9 @@ Default rule: `imgui_click` for clicks (faithful); `imgui_force_set` only when t
 
 Everything ships in the **dasImgui repo** (not daslang):
 
-- `example/` — user-facing demo apps. Already exists; gets new entries in Phase 0b.
-- `tutorials/` — RST + `.das` step-by-step lessons (analog to daslang's `tutorials/<area>/`). New in a later phase.
-- `tests/` — playwright tests. Use **dastest** as the runner; reference example apps by relative path (e.g. `../example/save_demo/main.das`). Examples double as test fixtures.
+- `example/` - user-facing demo apps. Already exists; gets new entries in Phase 0b.
+- `tutorials/` - RST + `.das` step-by-step lessons (analog to daslang's `tutorials/<area>/`). New in a later phase.
+- `tests/` - playwright tests. Use **dastest** as the runner; reference example apps by relative path (e.g. `../example/save_demo/main.das`). Examples double as test fixtures.
 
 Tests import the boost: `require imgui/imgui_boost`. Imperative API:
 
@@ -410,11 +410,11 @@ def test_save_flow(t : T?) {
 }
 ```
 
-The Phase 3 surface settled on a block-form lifecycle (`with_imgui_app <| $(app) { ... }`) rather than the originally-sketched noun form (`launch_imgui_app(...)` + `defer() { app |> shutdown() }`): daslang-live IS the launcher, and `popen_argv` inside the block already runs it. `expect_value` takes an explicit `field` arg (4-arg form) — no per-kind default-field table. `type_text` auto-focuses its target before sending characters. As of the coroutine-pump-in-harness change, `harness_begin_frame()` calls `advance_coroutines()` automatically, so any harness-using demo gets coroutine support for free (previously the demo had to opt in).
+The Phase 3 surface settled on a block-form lifecycle (`with_imgui_app <| $(app) { ... }`) rather than the originally-sketched noun form (`launch_imgui_app(...)` + `defer() { app |> shutdown() }`): daslang-live IS the launcher, and `popen_argv` inside the block already runs it. `expect_value` takes an explicit `field` arg (4-arg form) - no per-kind default-field table. `type_text` auto-focuses its target before sending characters. As of the coroutine-pump-in-harness change, `harness_begin_frame()` calls `advance_coroutines()` automatically, so any harness-using demo gets coroutine support for free (previously the demo had to opt in).
 
 ### 7.2 Process model
 
-**Out-of-process only.** `launch_imgui_app(...)` spawns a daslang-live subprocess, drives it via the transport. In-process testing is "open transport to yourself" — same API surface, lambda transport routes to local function calls. No special architectural mode.
+**Out-of-process only.** `launch_imgui_app(...)` spawns a daslang-live subprocess, drives it via the transport. In-process testing is "open transport to yourself" - same API surface, lambda transport routes to local function calls. No special architectural mode.
 
 ### 7.3 Headless / CI
 
@@ -424,7 +424,7 @@ Hidden-window via `glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE)` plus offscreen FBO.
 
 ## 8. Visual aids (tutorial mode)
 
-Separate opt-in: `imgui_visual_aids_serve()`. Distinct from telemetry — telemetry is for tests + dashboards; visual aids are for tutorial videos.
+Separate opt-in: `imgui_visual_aids_serve()`. Distinct from telemetry - telemetry is for tests + dashboards; visual aids are for tutorial videos.
 
 **Auto-highlight on every command** (toggleable). When a command targets a widget, draw a colored rect around its bbox for N frames. Plus explicit:
 
@@ -436,9 +436,9 @@ narrate("Click here to save your work", target="Setup/SAVE_BTN", duration=3s)
 
 `narrate` draws a callout box pointing to the widget's bbox with the given text.
 
-All overlays use `ImGui::GetForegroundDrawList()` — public API, no test_engine.
+All overlays use `ImGui::GetForegroundDrawList()` - public API, no test_engine.
 
-**Recording — done (Phase 5).** Streaming APNG video recording lives in `live/opengl_live` as three live commands: `record_start` / `record_stop` / `record_status`. Pure live-host concern (works for every daslang-live'd app, not just dasImgui), backed by a new APNG writer in `dasStbImage` (`stbi_apng_begin/frame/end/dropped`). Encode + file I/O run on a worker thread; render-loop overhead per captured frame is just glReadPixels + memcpy to a bounded queue. Output is single-file, lossless, plays natively in Chrome / Firefox / Safari.
+**Recording - done (Phase 5).** Streaming APNG video recording lives in `live/opengl_live` as three live commands: `record_start` / `record_stop` / `record_status`. Pure live-host concern (works for every daslang-live'd app, not just dasImgui), backed by a new APNG writer in `dasStbImage` (`stbi_apng_begin/frame/end/dropped`). Encode + file I/O run on a worker thread; render-loop overhead per captured frame is just glReadPixels + memcpy to a bounded queue. Output is single-file, lossless, plays natively in Chrome / Firefox / Safari.
 
 ---
 
@@ -446,7 +446,7 @@ All overlays use `ImGui::GetForegroundDrawList()` — public API, no test_engine
 
 ### 9.1 Hot-reload preservation
 
-Macro emits `@live` on every widget global by default. Window positions, slider values, tree state survive `live_api` reloads. Opt out per-widget with the `.NOTLIVE` flag (see §4.5): `slider(RUN_TIMER.NOTLIVE, ...)` rebinds on every reload.
+Macro emits `@live` on every widget global by default. Window positions, slider values, tree state survive `live_api` reloads. Opt out per-widget with the `.NOTLIVE` flag (see sec.4.5): `slider(RUN_TIMER.NOTLIVE, ...)` rebinds on every reload.
 
 **Value vs bounds.** State globals split user-editable value from source-defined config:
 
@@ -462,13 +462,13 @@ When source edits a slider's `range(0,10)` to `range(0,20)`, the new bounds flow
 
 ### 9.2 Persistent UI state across runs
 
-Use ImGui's built-in `imgui.ini` for window/dock/tree/tab state. App-specific widget values are plain daslang globals — users serialize them themselves if they want config persistence. Don't bake.
+Use ImGui's built-in `imgui.ini` for window/dock/tree/tab state. App-specific widget values are plain daslang globals - users serialize them themselves if they want config persistence. Don't bake.
 
 ### 9.3 Visibility of generated globals
 
-Default `variable private`. Cross-module reads opt in via the `.PUBLIC` flag on the identifier (see §4.5): `slider(RPS.PUBLIC, ...)` makes the generated global `[export]`-equivalent.
+Default `variable private`. Cross-module reads opt in via the `.PUBLIC` flag on the identifier (see sec.4.5): `slider(RPS.PUBLIC, ...)` makes the generated global `[export]`-equivalent.
 
-### 9.4 Backwards compatibility — hard cutover at v2.0
+### 9.4 Backwards compatibility - hard cutover at v2.0
 
 The rewrite ships as **dasImgui v2.0**. There is no compat shim:
 
@@ -477,7 +477,7 @@ The rewrite ships as **dasImgui v2.0**. There is no compat shim:
 - daspkg index pins existing users to v1.x until they migrate; new projects get v2.0+.
 - No deprecation phase, no warn-on-import bridge. v1 stays installable via explicit version pin for as long as it's useful.
 
-Migration burden is on downstream callers. Justified because v1.x is anemic enough that most callers reach past it into raw `imgui::*` anyway — there's not much "v1 surface" to migrate, just paths.
+Migration burden is on downstream callers. Justified because v1.x is anemic enough that most callers reach past it into raw `imgui::*` anyway - there's not much "v1 surface" to migrate, just paths.
 
 ---
 
@@ -487,15 +487,15 @@ Each phase lands as a branch in `D:\DASPKG\dasImgui`, pushed for backup. Reviewe
 
 | Phase | Scope | Out |
 |---|---|---|
-| **00 — proof of concept** | Tiny imgui_app, one button, hand-written everything (no macros): `ButtonState` global, `render_demo_btn()` capturing bbox/hex_id/hover/clicked into per-frame registry, **hand-rolled snapshot for that one widget** (no RTTI walk), pending-click flag (L2 short-circuit), `[live_command] imgui_snapshot` + `imgui_click` via existing `live_api`. End-to-end demo: curl click → next-frame button reports clicked. | macros, multi-widget, L1, L3, await, visual aids, playwright, RTTI snapshot |
-| **0a — define_widget core** | `define_widget` macro shipping; migrate `button` and `slider` as proof-of-concept built-ins. State globals, identifier-as-id, block-arg auto-end. Migrate one example. | other widgets |
-| **0b — built-ins migrated** | All of imgui's widget surface migrated to `define_widget`: checkbox, radio, combo, list_box, input_text/int/float, color_edit/picker, drag, slider variants, plot_lines, tree_node, collapsing_header, menu, tab_bar/item, popup/modal, tooltip, etc. **ABI-paired shims rewritten in lockstep with their C++ partners** in `bind/` — `ImGuiInputTextBuffer`, `ImGuiComboGetter`, `ImGuiPlotGetter`, `ImGuiSizeConstraints` all get redesigned around the new state-global model (no more `addr` of a stack `var buf`). Update all examples. Breaking change for downstream `require dasImgui/daslib/imgui_boost` users — coordinate with `daspkg` index. | new capabilities |
-| **1 — registry + snapshot** | Per-frame registry table populated by every boost wrapper; **RTTI walk replaces the hand-rolled snapshot from Phase 00** — auto-discovers globals of any registered widget-state type; per-widget `extras` for kinds that have them (text-input cursor, scroll offset, tree expansion). `imgui_snapshot` returns the full picture. | commands beyond snapshot |
-| **2 — full command set** | `imgui_force_set` (L3 bypass), `imgui_click` (L1 real click, by path or hex_id), `imgui_drag`, `imgui_type_text`, `imgui_focus`, `imgui_open`/`close`, `imgui_await` with predicate support. Lambda transport interface, `live_api_transport` default impl. | playwright |
-| **3 — playwright boost** | **DONE 2026-05-10.** Public `imgui/imgui_playwright` (sibling module, not folded into `imgui_boost`). Block-form `with_imgui_app <| $(app) { ... }`, `click`, `type_text` (auto-focus target, 2-frame settle), `force_set_value`, `open_widget`/`close_widget`, `drag`, `focus`, `await_probe`, `post_command`, `reload`, full poll-until family (`wait_until` + typed sugars + `wait_for_payload_value`), snapshot navigation (`find_widget`/`widget_exists`/`widget_payload_field`/`widget_rendered`). New assertion helpers panic on timeout with focused failure UX: `expect_value` (4-arg, explicit field), `expect_render`, `await_quiescent`. 27→28 dastest cases green (added `test_save_demo`); 27 prior tests cut over from private `tests/integration/live_driver.das` (deleted, no compat shim per §9.4). Raw-curl smoke ships as cross-tool diagnostic (`smoke_curl.ps1` / `smoke_curl.sh`). **Deferred:** noun-form `launch_imgui_app` (daslang-live IS the launcher; block form satisfies every test); hidden-window / offscreen FBO (rolls into Phase 4 where FBO is needed anyway); programmatic negative-path tests for assertion panic UX (`try/recover` ruled out — panic semantics, lint rule incoming). | visual aids |
-| **4 — visual aids** | `imgui_visual_aids_serve()`, auto-highlight on commands, mouse trail, explicit `imgui_highlight`, `narrate` callouts. | recording |
-| **5 — recording / extras** | **APNG recording — DONE 2026-05-11.** Streaming APNG writer in `dasStbImage` (`stbi_apng_begin/frame/end/dropped`, ~300 lines reusing stb's CRC32+zlib internals, worker thread + bounded queue). Live commands `record_start` / `record_stop` / `record_status` in `live/opengl_live` (sibling to `screenshot`, fps throttle + max_seconds auto-stop). dastest covers C-API correctness (chunk parse, default-image fallback, RGB+RGBA, error paths, overflow drops, parallel writers); end-to-end smoke recorded 225 frames at 15fps over visual_aids_tour with 0 drops. Theme/layout helpers not yet shipped — final polish. | doc generation |
-| **6 — docs + website** | `imgui2rst` tool (parallel to daslang's `doc/reflections/das2rst.das`) generating RST from `//!` comments in dasImgui modules. Stitches in tutorials. Output linked from the main daslang website (module catalog with per-module docs). | n/a |
+| **00 - proof of concept** | Tiny imgui_app, one button, hand-written everything (no macros): `ButtonState` global, `render_demo_btn()` capturing bbox/hex_id/hover/clicked into per-frame registry, **hand-rolled snapshot for that one widget** (no RTTI walk), pending-click flag (L2 short-circuit), `[live_command] imgui_snapshot` + `imgui_click` via existing `live_api`. End-to-end demo: curl click -> next-frame button reports clicked. | macros, multi-widget, L1, L3, await, visual aids, playwright, RTTI snapshot |
+| **0a - define_widget core** | `define_widget` macro shipping; migrate `button` and `slider` as proof-of-concept built-ins. State globals, identifier-as-id, block-arg auto-end. Migrate one example. | other widgets |
+| **0b - built-ins migrated** | All of imgui's widget surface migrated to `define_widget`: checkbox, radio, combo, list_box, input_text/int/float, color_edit/picker, drag, slider variants, plot_lines, tree_node, collapsing_header, menu, tab_bar/item, popup/modal, tooltip, etc. **ABI-paired shims rewritten in lockstep with their C++ partners** in `bind/` - `ImGuiInputTextBuffer`, `ImGuiComboGetter`, `ImGuiPlotGetter`, `ImGuiSizeConstraints` all get redesigned around the new state-global model (no more `addr` of a stack `var buf`). Update all examples. Breaking change for downstream `require dasImgui/daslib/imgui_boost` users - coordinate with `daspkg` index. | new capabilities |
+| **1 - registry + snapshot** | Per-frame registry table populated by every boost wrapper; **RTTI walk replaces the hand-rolled snapshot from Phase 00** - auto-discovers globals of any registered widget-state type; per-widget `extras` for kinds that have them (text-input cursor, scroll offset, tree expansion). `imgui_snapshot` returns the full picture. | commands beyond snapshot |
+| **2 - full command set** | `imgui_force_set` (L3 bypass), `imgui_click` (L1 real click, by path or hex_id), `imgui_drag`, `imgui_type_text`, `imgui_focus`, `imgui_open`/`close`, `imgui_await` with predicate support. Lambda transport interface, `live_api_transport` default impl. | playwright |
+| **3 - playwright boost** | **DONE 2026-05-10.** Public `imgui/imgui_playwright` (sibling module, not folded into `imgui_boost`). Block-form `with_imgui_app <| $(app) { ... }`, `click`, `type_text` (auto-focus target, 2-frame settle), `force_set_value`, `open_widget`/`close_widget`, `drag`, `focus`, `await_probe`, `post_command`, `reload`, full poll-until family (`wait_until` + typed sugars + `wait_for_payload_value`), snapshot navigation (`find_widget`/`widget_exists`/`widget_payload_field`/`widget_rendered`). New assertion helpers panic on timeout with focused failure UX: `expect_value` (4-arg, explicit field), `expect_render`, `await_quiescent`. 27->28 dastest cases green (added `test_save_demo`); 27 prior tests cut over from private `tests/integration/live_driver.das` (deleted, no compat shim per sec.9.4). Raw-curl smoke ships as cross-tool diagnostic (`smoke_curl.ps1` / `smoke_curl.sh`). **Deferred:** noun-form `launch_imgui_app` (daslang-live IS the launcher; block form satisfies every test); hidden-window / offscreen FBO (rolls into Phase 4 where FBO is needed anyway); programmatic negative-path tests for assertion panic UX (`try/recover` ruled out - panic semantics, lint rule incoming). | visual aids |
+| **4 - visual aids** | `imgui_visual_aids_serve()`, auto-highlight on commands, mouse trail, explicit `imgui_highlight`, `narrate` callouts. | recording |
+| **5 - recording / extras** | **APNG recording - DONE 2026-05-11.** Streaming APNG writer in `dasStbImage` (`stbi_apng_begin/frame/end/dropped`, ~300 lines reusing stb's CRC32+zlib internals, worker thread + bounded queue). Live commands `record_start` / `record_stop` / `record_status` in `live/opengl_live` (sibling to `screenshot`, fps throttle + max_seconds auto-stop). dastest covers C-API correctness (chunk parse, default-image fallback, RGB+RGBA, error paths, overflow drops, parallel writers); end-to-end smoke recorded 225 frames at 15fps over visual_aids_tour with 0 drops. Theme/layout helpers not yet shipped - final polish. | doc generation |
+| **6 - docs + website** | `imgui2rst` tool (parallel to daslang's `doc/reflections/das2rst.das`) generating RST from `//!` comments in dasImgui modules. Stitches in tutorials. Output linked from the main daslang website (module catalog with per-module docs). | n/a |
 
 ---
 
@@ -506,7 +506,7 @@ Per `~/.claude/projects/d--Work-daScript/memory/project_dasimgui_workflow.md`:
 - **Branch per chunk** in `D:\DASPKG\dasImgui` (canonical work copy). Push to remote for backup, not for review.
 - **Fresh-session review** between chunks. New Claude session reads the diff and gives independent feedback (no working memory of writing the code). Plays "better copilot."
 - **Per-chunk plans** in `~/.claude/plans/dasimgui_<phase>.md`.
-- **No PRs, no CI, no Copilot threads** — dasImgui has none of those. Don't try to use that machinery.
+- **No PRs, no CI, no Copilot threads** - dasImgui has none of those. Don't try to use that machinery.
 - **Re-install workflow:** edit in `D:\DASPKG\dasImgui`, then `daspkg install --global --force <path>` to update the daslang-tree's `modules/dasImgui/` copy. Or push to github + `daspkg upgrade --global dasImgui`.
 
 ---
@@ -515,18 +515,18 @@ Per `~/.claude/projects/d--Work-daScript/memory/project_dasimgui_workflow.md`:
 
 These are known unknowns. We pick when they bite.
 
-- **In-process transport contract** — when the lambda is "loop back to local handler", what's the threading model? Probably "queue at frame boundary, drain like remote".
-- **`imgui_internal.h` binding** — only when a real custom widget needs `ItemAdd` etc.
-- **Recording approach** — external tools first; PNG-sequence fallback if they fail.
-- **MCP integration shape** — direct daslang MCP tools (`mcp__daslang__imgui_*`) that wrap the transport. Land alongside Phase 2.
+- **In-process transport contract** - when the lambda is "loop back to local handler", what's the threading model? Probably "queue at frame boundary, drain like remote".
+- **`imgui_internal.h` binding** - only when a real custom widget needs `ItemAdd` etc.
+- **Recording approach** - external tools first; PNG-sequence fallback if they fail.
+- **MCP integration shape** - direct daslang MCP tools (`mcp__daslang__imgui_*`) that wrap the transport. Land alongside Phase 2.
 
 ---
 
 ## 13. Out of scope (won't ship)
 
-- `imgui_test_engine` integration — license blocks Gaijin (>$2M turnover).
-- `imgui_capture_tool` — same license.
+- `imgui_test_engine` integration - license blocks Gaijin (>$2M turnover).
+- `imgui_capture_tool` - same license.
 - Declarative layout DSL.
 - Declarative theme system.
 - Built-in cross-platform video recording (deferred indefinitely; PNG-sequence is the likely fallback).
-- Auto-magic `imgui_telemetry_serve()` activation when `imgui_app` runs — must be explicit.
+- Auto-magic `imgui_telemetry_serve()` activation when `imgui_app` runs - must be explicit.

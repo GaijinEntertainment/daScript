@@ -483,6 +483,12 @@ jobs:
         set -eux
         python3 ci/test_check_shipped_skills.py
 
+    - name: "Markdown ASCII gate (python)"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        python3 ci/fix_md_ascii.py --check
+
     - name: "Test watchdog tray wording (python)"
       if: matrix.target == 'linux'
       run: |

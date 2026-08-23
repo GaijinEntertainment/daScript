@@ -5,24 +5,24 @@ Daslang (formerly daScript) is a high-performance, statically typed programming 
 [![build](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml)
 [![wasm_build](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml)
 
-[Getting Started](GETTING_STARTED.md) · [Website](https://daslang.io/) · [Documentation](https://daslang.io/doc/) · [Blog](https://borisbat.github.io/dascf-blog) · [Try Online](https://gaijinentertainment.github.io/try-dascript/)
+[Getting Started](GETTING_STARTED.md) * [Website](https://daslang.io/) * [Documentation](https://daslang.io/doc/) * [Blog](https://borisbat.github.io/dascf-blog) * [Try Online](https://gaijinentertainment.github.io/try-dascript/)
 
 ## Why Daslang?
 
-Daslang was created at [Gaijin Entertainment](https://gaijin.net/) to solve a real problem: **interop overhead** between scripting languages and C++ was eating the frame budget in their ECS game engine. Lua (via LuaJIT) and Squirrel both hit the same wall — marshaling data back and forth was too expensive.
+Daslang was created at [Gaijin Entertainment](https://gaijin.net/) to solve a real problem: **interop overhead** between scripting languages and C++ was eating the frame budget in their ECS game engine. Lua (via LuaJIT) and Squirrel both hit the same wall - marshaling data back and forth was too expensive.
 
-Daslang's data layout matches C++. There is no marshaling, no boxing, no conversion — script↔C++ calls are near-zero cost.
+Daslang's data layout matches C++. There is no marshaling, no boxing, no conversion - script<->C++ calls are near-zero cost.
 
 **Core principles:**
-- **Iteration speed is king** — a full production game recompiles in ~5 seconds; hot reload is built in
-- **Explicit, not implicit** — no hidden type conversions, no silent allocations; `options log` shows exactly what the compiler produces
-- **99% safe, not 100%** — eliminates real-world C++ bugs pragmatically, without Rust-level restrictions
-- **If it gets slow, you can fix it** — manual `delete` to reduce GC pressure, AOT to C++ for native speed
-- **The language reflects the problem** — a compile-time macro system lets libraries reshape syntax to match the domain
+- **Iteration speed is king** - a full production game recompiles in ~5 seconds; hot reload is built in
+- **Explicit, not implicit** - no hidden type conversions, no silent allocations; `options log` shows exactly what the compiler produces
+- **99% safe, not 100%** - eliminates real-world C++ bugs pragmatically, without Rust-level restrictions
+- **If it gets slow, you can fix it** - manual `delete` to reduce GC pressure, AOT to C++ for native speed
+- **The language reflects the problem** - a compile-time macro system lets libraries reshape syntax to match the domain
 
 **Three execution tiers** (all planned from day one):
-fast tree-based **interpreter** → **AOT** compilation to C++ (required for consoles) → **JIT** via LLVM.
-Hybrid mode uses semantic hashing: unchanged functions stay AOT, changed ones fall back to the interpreter — ship a hotfix without a full rebuild.
+fast tree-based **interpreter** -> **AOT** compilation to C++ (required for consoles) -> **JIT** via LLVM.
+Hybrid mode uses semantic hashing: unchanged functions stay AOT, changed ones fall back to the interpreter - ship a hotfix without a full rebuild.
 
 See the [design philosophy](doc/source/reference/design_philosophy.rst) for the full story.
 
@@ -73,7 +73,7 @@ and `libDaScriptDyn`. For an example of using daslang as an external project
 
 ## Package manager (daspkg)
 
-A built-in package manager in [`utils/daspkg/`](utils/daspkg/) handles installing, updating, and building daslang packages — both pure-daslang and C++ native modules.
+A built-in package manager in [`utils/daspkg/`](utils/daspkg/) handles installing, updating, and building daslang packages - both pure-daslang and C++ native modules.
 
 ```sh
 # Install a package from the index
@@ -91,8 +91,8 @@ See [`utils/daspkg/README.md`](utils/daspkg/README.md) for the full command refe
 
 ## VS Code extensions
 
-- [daScript](https://marketplace.visualstudio.com/items?itemName=eguskov.dascript) — syntax highlighting for `.das` files
-- [daScript language support](https://marketplace.visualstudio.com/items?itemName=profelis.dascript-plugin) — language server, linting, debugging, and snippets
+- [daScript](https://marketplace.visualstudio.com/items?itemName=eguskov.dascript) - syntax highlighting for `.das` files
+- [daScript language support](https://marketplace.visualstudio.com/items?itemName=profelis.dascript-plugin) - language server, linting, debugging, and snippets
 
 ## MCP server (AI tool integration)
 
@@ -105,9 +105,9 @@ No extra build dependencies (stdio transport). See [`utils/mcp/README.md`](utils
 A full tree-sitter grammar for daslang lives in [`tree-sitter-daslang/`](tree-sitter-daslang/). It parses 99.4% of the codebase (all valid files) and is built automatically by CMake as a shared library.
 
 Use it for:
-- **Syntax highlighting** — `queries/highlights.scm` included, works in editors that support tree-sitter (Neovim, Helix, Zed)
-- **Parse-aware search** — via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search across `.das` files
-- **Editor extensions** — `tree-sitter-daslang/zed-daslang/` includes a Zed extension
+- **Syntax highlighting** - `queries/highlights.scm` included, works in editors that support tree-sitter (Neovim, Helix, Zed)
+- **Parse-aware search** - via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search across `.das` files
+- **Editor extensions** - `tree-sitter-daslang/zed-daslang/` includes a Zed extension
 
 Build the grammar:
 ```sh

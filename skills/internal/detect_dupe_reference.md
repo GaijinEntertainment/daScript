@@ -13,7 +13,7 @@ near-identical functions across it. One engine behind two interfaces: the CLI
 ## What it reports
 
 * **Exact-clone clusters** --- canonical token streams byte-identical.
-* **Fuzzy near-duplicates** --- pairs scored `sqrt(jaccard × len_ratio)` over a
+* **Fuzzy near-duplicates** --- pairs scored `sqrt(jaccard x len_ratio)` over a
   64-slot MinHash signature, gated on `len_ratio >= threshold`. The geometric mean
   admits a Jaccard somewhat below `threshold` when lengths match closely --- a
   deliberate recall bias.
@@ -25,11 +25,11 @@ Invocation is `bin/daslang utils/detect-dupe/main.das -- <flags>`.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `-p / --path` | required† | File or directory to scan; repeatable |
+| `-p / --path` | required+ | File or directory to scan; repeatable |
 | `--paths-from` | off | Newline-delimited path list from a file (`#`-comments and blanks skipped); composes with `-p`; entries may be directories |
 | `--paths-stdin` | off | Same, from stdin. Mutually exclusive with `--against-from-stdin` (one stdin reader per run) |
 | `-j / --workers` | 0 (auto) | Workers for `--export-functions`; 0 = hardware threads, 1 = sequential. Ignored without `--export-functions` |
-| `-t / --threshold` | 0.7 | Fuzzy floor (0..1) on `sqrt(jaccard × len_ratio)`, plus a hard `len_ratio >= threshold` gate |
+| `-t / --threshold` | 0.7 | Fuzzy floor (0..1) on `sqrt(jaccard x len_ratio)`, plus a hard `len_ratio >= threshold` gate |
 | `-n / --top` | 20 | Top-N entries in the stdout summary |
 | `--json` | off | Path for the full JSON report |
 | `-x / --no-fuzzy` | off | Skip the MinHash pass --- exact clusters only |
@@ -47,7 +47,7 @@ Invocation is `bin/daslang utils/detect-dupe/main.das -- <flags>`.
 | `-v / --verbose` | off | Per-file progress |
 | `-?` | | Show help |
 
-† one of `-p`, `--paths-from`, `--paths-stdin`, `--import-functions` or `--against`
++ one of `-p`, `--paths-from`, `--paths-stdin`, `--import-functions` or `--against`
 is required.
 
 `builtin.das`, `daslib/debugger.das`, `daslib/profiler.das`, and any path containing
@@ -56,7 +56,7 @@ the two daslib files install thread-local debug agents at compile time, which ab
 the scanner on the second use.
 
 Files whose compile fails on `missing prerequisite` (a module this build/platform does not
-carry — e.g. Apple-only Metal benchmarks on Windows) are skipped loudly (`SKIP <file>` + a
+carry - e.g. Apple-only Metal benchmarks on Windows) are skipped loudly (`SKIP <file>` + a
 count), never counted as compile failures: export refuses only on files that are genuinely
 broken.
 
@@ -71,8 +71,8 @@ default.
 | Name | Detects | Why it's boilerplate |
 |---|---|---|
 | `visitor` | Class-method whose hook name starts with `visit`, `preVisit`, `postVisit`, `before` or `after` (by name, regardless of body) | `AstVisitor` overrides --- one method per AST node type is the dispatch contract, so cross-class duplication is structural, not actionable |
-| `dispatch` | Body is N >= 2 byte-identical top-level statement chunks | dastest `t \|> run("X") @(t) { … }` outer functions, `t \|> bench(…)`, repeated-init blocks, any uniform call list. Lambda bodies collapse to `ADDR` upstream, so two `run` calls look identical |
-| `test_wrapper` | Name starts `test_`, body is one top-level `CALL:run` statement carrying at least one `ADDR` (a lambda) | dastest `[test]` shells --- one `t \|> run(…) @(t) { … }` per test; the lambda collapses to `ADDR`, so every such wrapper looks identical |
+| `dispatch` | Body is N >= 2 byte-identical top-level statement chunks | dastest `t \|> run("X") @(t) { ... }` outer functions, `t \|> bench(...)`, repeated-init blocks, any uniform call list. Lambda bodies collapse to `ADDR` upstream, so two `run` calls look identical |
+| `test_wrapper` | Name starts `test_`, body is one top-level `CALL:run` statement carrying at least one `ADDR` (a lambda) | dastest `[test]` shells --- one `t \|> run(...) @(t) { ... }` per test; the lambda collapses to `ADDR`, so every such wrapper looks identical |
 | `emit` | 1..6 top-level statements, each a single trivial `CALL:foo(...)` (literal/var/field args only --- no nested calls, no control flow) or a `RET ...` | Emitter shells like `def visitX(...) { write(*ss, ")") ; return that }` --- free-function variants the name-based `visitor` matcher doesn't cover |
 
 Match order in `classify()` is name-first (`visitor`), then body-shape (`dispatch`,
@@ -95,7 +95,7 @@ def double(a:int) { return a*2 }
   FN ARG <var_0> TYP BODY BLK STMT RET OP2:* <var_0> LIT ENDBLK ENDFN
 ```
 
-User identifiers become `<var_0>`, `<var_1>`, …; all types collapse to `TYP`; all
+User identifiers become `<var_0>`, `<var_1>`, ...; all types collapse to `TYP`; all
 literals to `LIT`; field/swizzle names use `.FLD` / `.SWZ`. Called function names
 are kept --- `CALL:push` vs `CALL:emplace` is real signal.
 
@@ -233,7 +233,7 @@ candidates pattern-filtered out".
 | `report.das` | JSON + stdout summary writer |
 | `main.das` | CLI (`daslib/clargs`), file scan, compile-and-collect orchestration |
 | `pipeline.das` | `compile_and_collect` / `collect_from_program`, shared by `main.das` and the tests; also `apply_pattern_filter` and the filesystem scan helpers |
-| `patterns.das` | `classify(name, canonical) → PatternHit` |
+| `patterns.das` | `classify(name, canonical) -> PatternHit` |
 | `exchange.das` | On-disk JSON schema + writer/reader for `--export-functions` / `--import-functions` |
 | `fixture/synth.das`, `fixture/canonical_cases.das`, `fixture/generics_cases.das` | End-to-end visitor smoke fixture; one-function-per-concern `CanonicalVisitor` unit fixture; called / never-called generic-template records |
 | `fixture/ast-fuzz/selftest/victim.das` | The auto-skip fixture the scan cells walk |

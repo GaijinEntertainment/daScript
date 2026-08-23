@@ -1,4 +1,4 @@
-# Boulder Dash — daslang-live Example
+# Boulder Dash - daslang-live Example
 
 Tribute clone of classic Boulder Dash cave physics. Not original First Star cave data.
 
@@ -21,24 +21,24 @@ bin/Release/daslang.exe dastest/dastest.das -- --test examples/games/boulder-das
 
 ## Controls
 
-- **Arrow keys** — one tap is one cell. Motion starts on press and lands on the next cave tick. A new direction after motion has started waits for the following cell. Hold ~0.3s to keep walking.
-- **Z** or **Ctrl** — grab: dig/collect the adjacent tile without stepping (also queued)
-- **Space** — start / resume after game over / skip cave-cleared pause
-- **Escape** — pause / unpause
+- **Arrow keys** - one tap is one cell. Motion starts on press and lands on the next cave tick. A new direction after motion has started waits for the following cell. Hold ~0.3s to keep walking.
+- **Z** or **Ctrl** - grab: dig/collect the adjacent tile without stepping (also queued)
+- **Space** - start / resume after game over / skip cave-cleared pause
+- **Escape** - pause / unpause
 
 ## Gameplay
 
-- 40×22 cave, 8 Hz scan-line physics, movers interpolated between ticks
+- 40x22 cave, 8 Hz scan-line physics, movers interpolated between ticks
 - Dirt, boulders, diamonds, brick, steel, fireflies, butterflies, amoeba, magic wall, expanding wall, slime
 - Collect the quota to open the exit; timer kills; 3 lives
-- Caves are generated from `(seed, cave_index)` — Liepa-style random fill plus rectangular patches
+- Caves are generated from `(seed, cave_index)` - Liepa-style random fill plus rectangular patches
 
 ## Architecture
 
-- `cave.das` — tiles, scan tick, ASCII I/O (no GLFW)
-- `cave_gen.das` — seeded generator
-- `main.das` — GLFW/OpenGL, audio, HUD, live commands
-- `test_*.das` — headless dastest
+- `cave.das` - tiles, scan tick, ASCII I/O (no GLFW)
+- `cave_gen.das` - seeded generator
+- `main.das` - GLFW/OpenGL, audio, HUD, live commands
+- `test_*.das` - headless dastest
 
 ASCII legend lives next to `TILE_CH` in `cave.das`.
 

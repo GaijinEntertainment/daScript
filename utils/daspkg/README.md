@@ -1,4 +1,4 @@
-# daspkg — daslang package manager
+# daspkg - daslang package manager
 
 Package manager for [daslang](https://daslang.io/). Installs, updates, builds, and manages daslang modules from git repositories or a central package index.
 
@@ -57,11 +57,11 @@ All package commands accept `--global` / `-g` to operate on global modules.
 | `--branch <name>`, `-b <name>` | Install from a git branch (e.g. `master`) instead of a tag |
 | `--out <path>` | Output directory for `release` (default: current directory) |
 | `--paranoid` | Accepted for compatibility; the tuner runs one margin-decided protocol and this flag no longer changes the budget |
-| `--quick` | During `release`, accept a complete existing sidecar instead of re-minting (an incomplete or stale scope still mints — an exe never ships unmeasured). Forgetting it costs one re-mint, never correctness |
+| `--quick` | During `release`, accept a complete existing sidecar instead of re-minting (an incomplete or stale scope still mints - an exe never ships unmeasured). Forgetting it costs one re-mint, never correctness |
 
 ## Global modules
 
-Large packages (e.g. dasImgui) can be installed **globally** — once under `{das_root}/modules/` — shared across all projects using that SDK. Avoids redundant clones and builds.
+Large packages (e.g. dasImgui) can be installed **globally** - once under `{das_root}/modules/` - shared across all projects using that SDK. Avoids redundant clones and builds.
 
 ```bash
 daspkg install --global dasImgui        # install to das_root/modules/
@@ -127,12 +127,12 @@ Use `release_include_if_missing` for editable deployment files. They are copied 
 excluded from `.daspkg_release.manifest`, and preserved even when upgrading from an older manifest
 that previously treated the same path as release-owned.
 
-All functions except `package()` are optional. A repo without `.das_package` gets a "dumb clone" — no version resolution, no deps, no build.
+All functions except `package()` are optional. A repo without `.das_package` gets a "dumb clone" - no version resolution, no deps, no build.
 
 ## Install flow
 
 1. Shallow-clone from default branch
-2. Run `.das_package` `resolve()` → checkout resolved tag/branch (or re-clone on redirect)
+2. Run `.das_package` `resolve()` -> checkout resolved tag/branch (or re-clone on redirect)
 3. Move to `modules/<name>/`
 4. Record in `daspkg.lock`
 5. Install transitive dependencies
@@ -181,10 +181,10 @@ my_project/
 }
 ```
 
-- **root** — `true` if user-installed, `false` if transitive dependency
-- **tag/branch** — resolved git ref
-- **local** — installed from local path
-- **global** — resolved from global install (no local copy)
+- **root** - `true` if user-installed, `false` if transitive dependency
+- **tag/branch** - resolved git ref
+- **local** - installed from local path
+- **global** - resolved from global install (no local copy)
 
 The global lock file (`{das_root}/modules/.daspkg_global.lock`) uses the same format.
 
@@ -192,11 +192,11 @@ The global lock file (`{das_root}/modules/.daspkg_global.lock`) uses the same fo
 
 | File | Description |
 |------|-------------|
-| `main.das` | CLI entry point — parses args, dispatches to commands |
+| `main.das` | CLI entry point - parses args, dispatches to commands |
 | `commands.das` | Command implementations: install, remove, update, upgrade, build, check, doctor |
 | `index.das` | Package index: fetch, search, introduce, withdraw |
 | `lockfile.das` | `LockFile` / `PackageEntry` structs, JSON serialization |
-| `package_runner.das` | In-process `.das_package` compiler — compiles, simulates, extracts metadata |
+| `package_runner.das` | In-process `.das_package` compiler - compiles, simulates, extracts metadata |
 | `utils.das` | Shared utilities: `run_cmd`, `force_rmdir`, path helpers |
 | `daslib/daspkg.das` | API module that `.das_package` scripts `require` |
 
@@ -204,7 +204,7 @@ The **package runner** compiles `.das_package` scripts in-process using `compile
 
 ## Tests
 
-Review gates live in [REVIEW.md](REVIEW.md) — run the unit suite on every change.
+Review gates live in [REVIEW.md](REVIEW.md) - run the unit suite on every change.
 
 | File | Count | Type |
 |------|-------|------|
@@ -212,10 +212,10 @@ Review gates live in [REVIEW.md](REVIEW.md) — run the unit suite on every chan
 | `test_daspkg_git.das` | 70 | Integration tests (git clone, version resolve, index, global modules) |
 
 ```bash
-# unit tests — fast, no network
+# unit tests - fast, no network
 daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das
 
-# integration tests — requires network
+# integration tests - requires network
 daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das
 ```
 
@@ -231,25 +231,25 @@ daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das
 ## Design rationale
 
 ### Why git-based (like Go modules)?
-- Packages are git repositories — no centralized registry server to maintain
+- Packages are git repositories - no centralized registry server to maintain
 - Version = git tag. `resolve()` maps version requests to tags.
 - Index is a curated JSON file in a git repo. Authors add via PR (`daspkg introduce`).
 
 ### Why executable manifests?
 - Authors can put version-conditional logic in `resolve()` and `dependencies()`
-- Same pattern as `.das_module` — familiar to daslang authors
+- Same pattern as `.das_module` - familiar to daslang authors
 - daspkg provides registration functions via `daslib/daspkg`; `.das_package` just calls them
 
 ### Why per-project by default?
-- Game projects need reproducible builds — `modules/` is self-contained
+- Game projects need reproducible builds - `modules/` is self-contained
 - Global install (`--global`) for large shared modules (dasImgui, etc.)
 - Runtime already scans both `das_root/modules/` and project `modules/`
 
 ### Version model
-- **Package version** — semver, resolved via `.das_package` `resolve()`
-- **SDK version** — `resolve()` receives it, can return different tags per SDK
-- **Dependency constraints** — operators `>=`, `>`, `<=`, `<`, `=`, comma AND: `">=1.0,<2.0"`
-- **Diamond deps** — first installed wins (single `require` namespace). Manual upgrade with `--force`.
+- **Package version** - semver, resolved via `.das_package` `resolve()`
+- **SDK version** - `resolve()` receives it, can return different tags per SDK
+- **Dependency constraints** - operators `>=`, `>`, `<=`, `<`, `=`, comma AND: `">=1.0,<2.0"`
+- **Diamond deps** - first installed wins (single `require` namespace). Manual upgrade with `--force`.
 
 ### Transport
 - Only external dependency: `git` CLI. No HTTP library needed.
@@ -258,8 +258,8 @@ daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das
 
 ## Requirements
 
-- **git** — required for all remote operations
-- **cmake** — required for building C/C++ packages
-- **gh** (GitHub CLI) — optional, only for `introduce`/`withdraw`
+- **git** - required for all remote operations
+- **cmake** - required for building C/C++ packages
+- **gh** (GitHub CLI) - optional, only for `introduce`/`withdraw`
 
 Run `daspkg doctor` to check your environment.

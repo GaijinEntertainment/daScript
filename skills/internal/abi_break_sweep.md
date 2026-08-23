@@ -1,8 +1,8 @@
-# ABI-break sweep — keeping external modules green
+# ABI-break sweep - keeping external modules green
 
 Read this when a PR changes what external module repos compile against:
 public C++ API under `include/daScript/`, AST node layout (fields added,
-deleted, renamed — e.g. the fixed-array rework deleting `TypeDecl::dim`),
+deleted, renamed - e.g. the fixed-array rework deleting `TypeDecl::dim`),
 signatures of daslib generics that externals instantiate, or the
 `.das_module` / serialization surface.
 
@@ -11,7 +11,7 @@ signatures of daslib generics that externals instantiate, or the
 The external ABI canaries are **dasImguiImplot** and **dasImguiNodeEditor**
 (dasImgui itself is in-tree now and builds per-PR like any other module).
 `nightly_daspkg_index.yml` daspkg-installs every daspkg-index package at its
-default-branch HEAD against daslang master each night — and a
+default-branch HEAD against daslang master each night - and a
 `workflow_dispatch` from your branch runs the same sweep on demand for an
 ABI-touching PR. A breaking change produces a red sweep step that looks
 unrelated (`no member named 'dim'` inside dasImguiNodeEditor), and the naive
@@ -20,7 +20,7 @@ compatible, and an externals fix that *requires* the new daslang can't merge
 until the daslang PR lands.
 
 The scope of "externals" is the [daspkg-index](https://github.com/borisbat/daspkg-index)
-package list — that is the universe of repos any user (and the planned nightly
+package list - that is the universe of repos any user (and the planned nightly
 cron) builds against daslang master.
 
 ## The checklist
@@ -28,31 +28,31 @@ cron) builds against daslang master.
 1. **Identify the breaking surface.** List every symbol removed, renamed, or
    re-typed. In-repo impact: `cpp_grep_usage` / `grep_usage` MCP tools.
 2. **Sweep external usage.** Grep each daspkg-index package (your local
-   checkouts, or GitHub code search) for those symbols — including
+   checkouts, or GitHub code search) for those symbols - including
    field-access shapes (`->dim`, `.dim`, `dimExpr`), not just call sites.
-3. **Pick the compatibility strategy** — in preference order:
+3. **Pick the compatibility strategy** - in preference order:
    1. **Both-worlds spelling** (the `isArray()` precedent). Find a predicate or
       accessor that exists with the SAME meaning in both the old and new
-      world — `TypeDecl::isArray()` meant "is a fixed array" both pre-rework
+      world - `TypeDecl::isArray()` meant "is a fixed array" both pre-rework
       (`(bool)dim.size()`) and post-rework (`baseType == tFixedArray`).
       Rewrite the externals to that spelling: their PRs merge FIRST,
       independently, green against both daslang versions. No feature macro,
       no lockstep, no red-master window.
-   2. **Shim in daslang** — keep the old name as a forwarding alias for one
+   2. **Shim in daslang** - keep the old name as a forwarding alias for one
       release when no shared spelling exists.
-   3. **Feature macro / version check** in the external — last resort; it
+   3. **Feature macro / version check** in the external - last resort; it
       forces lockstep merges and rots into dead branches.
 4. **Land order: externals first.** Because the daspkg-index sweep pulls
    externals' master, the external fix must be MERGED (not just PR'd) before
-   the sweep can go green. Merge externals → dispatch
-   `nightly_daspkg_index.yml` from your branch to confirm → merge daslang.
-5. **Verify locally before pushing** — the external-module junction pattern
+   the sweep can go green. Merge externals -> dispatch
+   `nightly_daspkg_index.yml` from your branch to confirm -> merge daslang.
+5. **Verify locally before pushing** - the external-module junction pattern
    (`skills/external_module_debugging.md`), rebuild order **daslang first,
    then each module**. Stale-DLL trap: a `.shared_module` built against the
    old daslang fails to load *silently* and surfaces as a misleading
-   `error[20605]: missing prerequisite` — after rebuilding daslang, delete the
+   `error[20605]: missing prerequisite` - after rebuilding daslang, delete the
    external module's `_build/` and rebuild before trusting any 20605.
 6. **Post-merge sweep.** Build every remaining daspkg-index package against
-   the new master and fix drift (unrelated rot surfaces here too — budget for
+   the new master and fix drift (unrelated rot surfaces here too - budget for
    it). The nightly index cron (`history/ci/COVERAGE_GAP.md` Stage 4) will turn this
    into a standing signal.

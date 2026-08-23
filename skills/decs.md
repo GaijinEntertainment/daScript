@@ -1,12 +1,12 @@
-# DECS — daslang Entity Component System
+# DECS - daslang Entity Component System
 
-Read this skill before writing or editing any `.das` code that uses `decs`, `decs_boost`, or the `from_decs` linq bridge. The companion tutorial is [tutorials/language/34_decs.das](tutorials/language/34_decs.das) — runnable examples of every pattern below. Module sources: [daslib/decs.das](daslib/decs.das), [daslib/decs_boost.das](daslib/decs_boost.das), [daslib/decs_state.das](daslib/decs_state.das).
+Read this skill before writing or editing any `.das` code that uses `decs`, `decs_boost`, or the `from_decs` linq bridge. The companion tutorial is [tutorials/language/34_decs.das](tutorials/language/34_decs.das) - runnable examples of every pattern below. Module sources: [daslib/decs.das](daslib/decs.das), [daslib/decs_boost.das](daslib/decs_boost.das), [daslib/decs_state.das](daslib/decs_state.das).
 
 ## What DECS is
 
-A pure-daslang ECS runtime with archetypal storage. Entities are an `EntityId` (id + generation). Components are name-keyed typed values. Entities with the same set of component names share an **archetype** — a SoA bucket where each component is stored in its own contiguous `array<uint8>` indexed by entity slot. Queries iterate archetype-at-a-time, so the cost is proportional to matching archetypes, not entity count.
+A pure-daslang ECS runtime with archetypal storage. Entities are an `EntityId` (id + generation). Components are name-keyed typed values. Entities with the same set of component names share an **archetype** - a SoA bucket where each component is stored in its own contiguous `array<uint8>` indexed by entity slot. Queries iterate archetype-at-a-time, so the cost is proportional to matching archetypes, not entity count.
 
-All mutations (`create_entity`, `delete_entity`, `update_entity`) are **deferred** — they're queued as lambdas in a global action list and applied on `commit()`. The two bulk creators (`create_entities`, `create_entities\`T`) are the exception: they're immediate. None of these may be called from inside a query.
+All mutations (`create_entity`, `delete_entity`, `update_entity`) are **deferred** - they're queued as lambdas in a global action list and applied on `commit()`. The two bulk creators (`create_entities`, `create_entities\`T`) are the exception: they're immediate. None of these may be called from inside a query.
 
 ## `require`
 
@@ -14,11 +14,11 @@ All mutations (`create_entity`, `delete_entity`, `update_entity`) are **deferred
 require daslib/decs_boost
 ```
 
-`decs_boost` re-exports `decs` publicly — **never `require` both**. `decs_boost` adds the `query` / `find_query` / `from_decs` call macros, the `[decs_template]` structure macro, the `[decs(stage = ...)]` function macro, and the `REQUIRE` / `REQUIRE_NOT` block annotations. `decs_state` is a separate optional module that wires DECS into the DAP debugger; require it only when you want live archetype/request inspection.
+`decs_boost` re-exports `decs` publicly - **never `require` both**. `decs_boost` adds the `query` / `find_query` / `from_decs` call macros, the `[decs_template]` structure macro, the `[decs(stage = ...)]` function macro, and the `REQUIRE` / `REQUIRE_NOT` block annotations. `decs_state` is a separate optional module that wires DECS into the DAP debugger; require it only when you want live archetype/request inspection.
 
 ## Creating entities
 
-`create_entity` queues a deferred build. The block receives the future `EntityId` and a mutable `ComponentMap`. Use `:=` to set components — the operator is overloaded for every workhorse type and dispatches to `make_component`, which captures the daslang type info needed to clone, serialize, dump, and GC-mark the value.
+`create_entity` queues a deferred build. The block receives the future `EntityId` and a mutable `ComponentMap`. Use `:=` to set components - the operator is overloaded for every workhorse type and dispatches to `make_component`, which captures the daslang type info needed to clone, serialize, dump, and GC-mark the value.
 
 ```das
 let player = create_entity() @(eid, cmp) {
@@ -29,11 +29,11 @@ let player = create_entity() @(eid, cmp) {
 commit()  // entity now visible to queries
 ```
 
-Returns an `EntityId` you can keep — generation is set on creation, so the id is valid for `update_entity` / `delete_entity` / `query(eid, ...)` even before `commit()` runs (the queries themselves see nothing until commit).
+Returns an `EntityId` you can keep - generation is set on creation, so the id is valid for `update_entity` / `delete_entity` / `query(eid, ...)` even before `commit()` runs (the queries themselves see nothing until commit).
 
-`set(cmp, "name", value)` and `cmp |> set("name", value)` are the longhand forms; `cmp.name := value` is the dot/`:=` shorthand. For an existing component slot they overwrite in place; type mismatch panics. The names "eid" and the implicit `eid` component are managed by the runtime — don't set "eid" yourself.
+`set(cmp, "name", value)` and `cmp |> set("name", value)` are the longhand forms; `cmp.name := value` is the dot/`:=` shorthand. For an existing component slot they overwrite in place; type mismatch panics. The names "eid" and the implicit `eid` component are managed by the runtime - don't set "eid" yourself.
 
-## Queries — the workhorse
+## Queries - the workhorse
 
 ```das
 query() $(name : string; hp : int; pos : float3) {
@@ -41,12 +41,12 @@ query() $(name : string; hp : int; pos : float3) {
 }
 ```
 
-Each block argument is a component name + type. The macro expands to `for_each_archetype(req_hash, req_factory) $(arch) { for (...) { ... } }` — one outer pass per matching archetype, one inner per-entity loop pulling each component as a temp `array<T>` view. Cost stays archetype-proportional even when only a handful of archetypes match.
+Each block argument is a component name + type. The macro expands to `for_each_archetype(req_hash, req_factory) $(arch) { for (...) { ... } }` - one outer pass per matching archetype, one inner per-entity loop pulling each component as a temp `array<T>` view. Cost stays archetype-proportional even when only a handful of archetypes match.
 
 **EntityId in queries:** The entity id component is stored internally as `"eid"`. The query parameter name is the component key, so you **must** name it `eid` to match it. Any other name silently matches zero entities. To use a different local name, use `aka`:
 
 ```das
-query() $(eid : EntityId; pos : float3) {         // correct — binds the "eid" component
+query() $(eid : EntityId; pos : float3) {         // correct - binds the "eid" component
     delete_entity(eid)
 }
 
@@ -101,7 +101,7 @@ query <| $ [REQUIRE_NOT(shield)] (name : string) {
 
 ## Defaults and optionals
 
-A parameter with a default value applies that default when the entity lacks the component. **Default-valued parameters must be `const`** — no `var`, no `&`. The macro routes them through `get_default_ro`, which falls back to a `repeat_ref` iterator yielding the default.
+A parameter with a default value applies that default when the entity lacks the component. **Default-valued parameters must be `const`** - no `var`, no `&`. The macro routes them through `get_default_ro`, which falls back to a `repeat_ref` iterator yielding the default.
 
 ```das
 query() $(name : string; alpha : float = 0.5) {
@@ -109,28 +109,28 @@ query() $(name : string; alpha : float = 0.5) {
 }
 ```
 
-**Optional pointer parameters** are different — annotate the argument as `@optional` and declare it as a pointer:
+**Optional pointer parameters** are different - annotate the argument as `@optional` and declare it as a pointer:
 
 ```das
-options relaxed_pointer_const     // required — see below
+options relaxed_pointer_const     // required - see below
 
 query() $(name : string; @optional shield : bool?) {
     if (shield != null) { ... }
 }
 ```
 
-**A file that uses `@optional` query parameters must declare `options relaxed_pointer_const`.** Without it the build fails with `error[30915] can only copy compatible type ... can't copy constant to non-constant pointer`, pointed at `daslib/functional.das` — the `repeat` generator behind `get_optional`. The error names neither decs nor your query, so it reads like an unrelated library bug.
+**A file that uses `@optional` query parameters must declare `options relaxed_pointer_const`.** Without it the build fails with `error[30915] can only copy compatible type ... can't copy constant to non-constant pointer`, pointed at `daslib/functional.das` - the `repeat` generator behind `get_optional`. The error names neither decs nor your query, so it reads like an unrelated library bug.
 
-`@optional` arguments cannot have default values and must be pointer types. Internally these route to `get_optional`, returning `null` for entities that lack the component. Don't confuse the two forms — the default-value form is for "use X when missing", the optional-pointer form is for "tell me whether it was missing".
+`@optional` arguments cannot have default values and must be pointer types. Internally these route to `get_optional`, returning `null` for entities that lack the component. Don't confuse the two forms - the default-value form is for "use X when missing", the optional-pointer form is for "tell me whether it was missing".
 
 ## `[decs_template]`
 
 A struct annotated with `[decs_template]` becomes a bundle of components. The macro generates four functions:
 
-- `apply_decs_template(cmp, src)` — sets each field on a `ComponentMap` with prefix `StructName_`
-- ``remove_decs_template`StructName(cmp, src)`` — removes those components. The generated name carries the struct in a backtick suffix, unlike `apply_decs_template`; the unsuffixed spelling is `error[30341] no matching functions or generics`
-- `apply_decs_template_arch(arch, eidx, eid, src, cache)` — direct archetype write with cached indices
-- `create_entities\`T(count, blk)` — bulk creator using the cache, no per-entity ComponentMap
+- `apply_decs_template(cmp, src)` - sets each field on a `ComponentMap` with prefix `StructName_`
+- ``remove_decs_template`StructName(cmp, src)`` - removes those components. The generated name carries the struct in a backtick suffix, unlike `apply_decs_template`; the unsuffixed spelling is `error[30341] no matching functions or generics`
+- `apply_decs_template_arch(arch, eidx, eid, src, cache)` - direct archetype write with cached indices
+- `create_entities\`T(count, blk)` - bulk creator using the cache, no per-entity ComponentMap
 
 ```das
 [decs_template]
@@ -151,11 +151,11 @@ query() $(var p : Particle) {        // expands to particle_pos, particle_vel, p
 }
 ```
 
-When a template struct appears as a query parameter the macro expands the parameter into one binding per field (with the `StructName_` prefix). It also auto-fills `REQUIRE` with all the field names — you don't need to add a `[REQUIRE(...)]` block.
+When a template struct appears as a query parameter the macro expands the parameter into one binding per field (with the `StructName_` prefix). It also auto-fills `REQUIRE` with all the field names - you don't need to add a `[REQUIRE(...)]` block.
 
-**Custom prefix:** `[decs_template(prefix = "particle")]` overrides the default. `[decs_template(prefix)]` (no value) yields an empty prefix — components are named exactly the field names.
+**Custom prefix:** `[decs_template(prefix = "particle")]` overrides the default. `[decs_template(prefix)]` (no value) yields an empty prefix - components are named exactly the field names.
 
-**Kaboom rule:** inside a template-using query, the struct *variable* (e.g. `p`) does not exist as a value — only `p.field` is rewritten. Trying to use `p` itself (assigning, passing to a function) emits a static error: "decs_template variables can only be accessed by fields". This is intentional; the struct is a compile-time fiction.
+**Kaboom rule:** inside a template-using query, the struct *variable* (e.g. `p`) does not exist as a value - only `p.field` is rewritten. Trying to use `p` itself (assigning, passing to a function) emits a static error: "decs_template variables can only be accessed by fields". This is intentional; the struct is a compile-time fiction.
 
 ## `update_entity`
 
@@ -205,7 +205,7 @@ def update_ai(eid : EntityId; var turret : Turret; pos : float3) { ... }
 
 Two flavors. Both are immediate (no commit needed) and both panic if called from inside a query.
 
-**`create_entities(count, blk)`** — ComponentMap-based, all entities must share the archetype shape. The first entity's components establish the archetype; subsequent entities are checked against that hash. Pre-resizes component arrays once for the whole batch.
+**`create_entities(count, blk)`** - ComponentMap-based, all entities must share the archetype shape. The first entity's components establish the archetype; subsequent entities are checked against that hash. Pre-resizes component arrays once for the whole batch.
 
 ```das
 create_entities(100) $(eid : EntityId; i : int; var cmp : ComponentMap) {
@@ -213,7 +213,7 @@ create_entities(100) $(eid : EntityId; i : int; var cmp : ComponentMap) {
 }
 ```
 
-**`create_entities\`T(count, blk)`** — the macro-generated form, ~7× faster at scale. The block receives a pre-allocated mutable struct instance — just write fields. The macro caches archetype indices on first call and writes directly into archetype storage on subsequent ones.
+**`create_entities\`T(count, blk)`** - the macro-generated form, ~7x faster at scale. The block receives a pre-allocated mutable struct instance - just write fields. The macro caches archetype indices on first call and writes directly into archetype storage on subsequent ones.
 
 ```das
 create_entities`Particle(1000) $(eid : EntityId; i : int; var p : Particle) {
@@ -225,9 +225,9 @@ create_entities`Particle(1000) $(eid : EntityId; i : int; var p : Particle) {
 
 Use the backtick form for any hot-path bulk creation. Use the ComponentMap form only when the per-entity component set varies (mixed templates, runtime-decided fields).
 
-## `from_decs` — the linq bridge
+## `from_decs` - the linq bridge
 
-`from_decs` materializes a query as `iterator<tuple<...>>` you can feed into a linq chain. It runs the query immediately, pushes each match as a tuple into a backing array, and returns that array as a sequence. The block receives the same parameter list as `query` — same default/optional rules — but its body is empty (the macro fills it in).
+`from_decs` materializes a query as `iterator<tuple<...>>` you can feed into a linq chain. It runs the query immediately, pushes each match as a tuple into a backing array, and returns that array as a sequence. The block receives the same parameter list as `query` - same default/optional rules - but its body is empty (the macro fills it in).
 
 ```das
 require daslib/linq_boost
@@ -241,13 +241,13 @@ let qq <- _fold(
 )
 ```
 
-Tuple field names match the query parameter names — you can write `_.index`, `_.text`, etc. inside `_<op>` shorthands.
+Tuple field names match the query parameter names - you can write `_.index`, `_.text`, etc. inside `_<op>` shorthands.
 
-**Wrap the chain in `_fold(...)`.** The decs adapter (`daslib/linq_fold_decs.das`) pattern-matches the post-expansion bridge and splices the chain directly into the `for_each_archetype` walk — no intermediate array. When a chain shape it doesn't recognize survives every splice arm, `_fold` says so on the compiler log ("the bridge materializes a temp `res` array") rather than silently degrading. **Unwrapped**, `from_decs` is a materializing terminal: it evaluates the whole query into an `array<tuple>` up front, forfeiting the archetype-pass-with-tight-inner-loop performance of plain `query`.
+**Wrap the chain in `_fold(...)`.** The decs adapter (`daslib/linq_fold_decs.das`) pattern-matches the post-expansion bridge and splices the chain directly into the `for_each_archetype` walk - no intermediate array. When a chain shape it doesn't recognize survives every splice arm, `_fold` says so on the compiler log ("the bridge materializes a temp `res` array") rather than silently degrading. **Unwrapped**, `from_decs` is a materializing terminal: it evaluates the whole query into an `array<tuple>` up front, forfeiting the archetype-pass-with-tight-inner-loop performance of plain `query`.
 
 For pure side-effects (mutate components, accumulate a sum, count matches), keep using `query`. Reach for `from_decs` when the consumer is genuinely a linq chain (`_where` + `_order_by` + `take` + `to_array`) or when you want the result as a value to return / pass / persist.
 
-**`from_decs_template(type<Foo>)`** is the same bridge over a `[decs_template]` struct — it reads the template's prefix and field list, so the record tuple carries the field names automatically instead of you respelling the parameter list. It is the primary source the `_fold` decs adapter dispatches on. Full pattern reference: `skills/linq_fold_patterns.md`.
+**`from_decs_template(type<Foo>)`** is the same bridge over a `[decs_template]` struct - it reads the template's prefix and field list, so the record tuple carries the field names automatically instead of you respelling the parameter list. It is the primary source the `_fold` decs adapter dispatches on. Full pattern reference: `skills/linq_fold_patterns.md`.
 
 ## Component access on archetypes
 
@@ -262,7 +262,7 @@ Inside `for_each_archetype` (which is what `query` expands to), the component ar
 
 These are the primitives the query macro lowers to. Use them directly only when writing macros or low-level archetype iteration. For everything else, write `query()`.
 
-`find_component_index(arch, name)` returns the index in `arch.components`, and `set_direct_at(arch, idx, eidx, value)` writes by pre-resolved index — used by `apply_decs_template_arch` and the bulk-creator macros. `set_direct(arch, name, eidx, value)` does the lookup per call.
+`find_component_index(arch, name)` returns the index in `arch.components`, and `set_direct_at(arch, idx, eidx, value)` writes by pre-resolved index - used by `apply_decs_template_arch` and the bulk-creator macros. `set_direct(arch, name, eidx, value)` does the lookup per call.
 
 ## Single-entity reads outside a query
 
@@ -274,7 +274,7 @@ let pos = get_component(hero, "pos", float3(0))    // returns float3
 let dead = get_component(deleted_eid, "hp", -999)  // -999
 ```
 
-`is_alive(eid)` — `false` for `INVALID_ENTITY_ID`, dead entities, or stale generation IDs. `entity_count()` returns total alive entities across all archetypes and **panics past `INT_MAX`**; `long_entity_count() : int64` is the int64-safe sibling. Same `length` / `long_length` contract as everywhere else.
+`is_alive(eid)` - `false` for `INVALID_ENTITY_ID`, dead entities, or stale generation IDs. `entity_count()` returns total alive entities across all archetypes and **panics past `INT_MAX`**; `long_entity_count() : int64` is the int64-safe sibling. Same `length` / `long_length` contract as everywhere else.
 
 ## Serialization
 
@@ -288,25 +288,25 @@ restart()
 mem_archive_load(data, decsState)
 ```
 
-Components serialize through the type-info `serializer` callback that `make_component` set up — no per-component registration is needed. Stride mismatches on load panic with a clear "stride mismatch" message.
+Components serialize through the type-info `serializer` callback that `make_component` set up - no per-component registration is needed. Stride mismatches on load panic with a clear "stride mismatch" message.
 
 ## Common gotchas
 
-- **`commit()` / `restart()` / bulk creators / `before_gc` / `after_gc` cannot be called from inside a query.** They check `insideQuery != 0` and panic. If you need to schedule work seen by a query, queue it on `update_entity` / `delete_entity` / `create_entity` (all deferred — safe inside queries) and let the next commit apply it.
+- **`commit()` / `restart()` / bulk creators / `before_gc` / `after_gc` cannot be called from inside a query.** They check `insideQuery != 0` and panic. If you need to schedule work seen by a query, queue it on `update_entity` / `delete_entity` / `create_entity` (all deferred - safe inside queries) and let the next commit apply it.
 - **Don't set `"eid"` yourself.** The runtime injects an `eid` component automatically. Explicit `cmp.eid := someEid` only happens in serialization paths.
-- **Two `[]` lookups on a hash table inside a single expression invalidate references.** This applies to `decsState.archetypeLookup` and `decsState.entityLookup` if you ever index them by hand — bind the lookup to a local first.
-- **`query(eid)` returns nothing if the eid is dead** — the loop simply does not run. There is no "returned false" signal. Use `is_alive(eid)` first if you need to distinguish.
-- **Default-valued parameter or `@optional` pointer — pick one.** The validator rejects either combined incorrectly: optional with a default → "optional argument {name} can't have a default value"; optional non-pointer → "optional argument {name} must be a pointer"; default + `var` or `&` → "argument {name} has default value, it can't be & or var".
-- **Template-struct query parameters expand by field — the variable itself is not a value.** Touching `p` instead of `p.field` triggers a `static_assert_false` at compile time. If you want a real struct, copy out: `var pp = Particle(pos = p.pos, vel = p.vel, life = p.life)`.
+- **Two `[]` lookups on a hash table inside a single expression invalidate references.** This applies to `decsState.archetypeLookup` and `decsState.entityLookup` if you ever index them by hand - bind the lookup to a local first.
+- **`query(eid)` returns nothing if the eid is dead** - the loop simply does not run. There is no "returned false" signal. Use `is_alive(eid)` first if you need to distinguish.
+- **Default-valued parameter or `@optional` pointer - pick one.** The validator rejects either combined incorrectly: optional with a default -> "optional argument {name} can't have a default value"; optional non-pointer -> "optional argument {name} must be a pointer"; default + `var` or `&` -> "argument {name} has default value, it can't be & or var".
+- **Template-struct query parameters expand by field - the variable itself is not a value.** Touching `p` instead of `p.field` triggers a `static_assert_false` at compile time. If you want a real struct, copy out: `var pp = Particle(pos = p.pos, vel = p.vel, life = p.life)`.
 - **`create_entities` requires identical archetypes for every entity in the batch.** A divergent component set on entity `i` panics with "all entities must have the same components". Use `create_entity` in a loop if shapes vary, or split into per-archetype batches.
-- **Threaded contexts.** `decsState` is a per-context module-level `var` — DECS is not thread-safe across contexts. If you fork a thread context, run a separate DECS world there or marshal data through messages.
+- **Threaded contexts.** `decsState` is a per-context module-level `var` - DECS is not thread-safe across contexts. If you fork a thread context, run a separate DECS world there or marshal data through messages.
 
 ## Reference
 
-- Tutorial — read first: [tutorials/language/34_decs.das](tutorials/language/34_decs.das)
-- decs ↔ linq tutorial: [tutorials/language/55_linq_decs.das](tutorials/language/55_linq_decs.das)
+- Tutorial - read first: [tutorials/language/34_decs.das](tutorials/language/34_decs.das)
+- decs <-> linq tutorial: [tutorials/language/55_linq_decs.das](tutorials/language/55_linq_decs.das)
 - daslib sources: [daslib/decs.das](daslib/decs.das), [daslib/decs_boost.das](daslib/decs_boost.das), [daslib/decs_state.das](daslib/decs_state.das)
-- Tests as worked examples (repo-only): [tests/decs/](tests/decs/) — `test_queries.das`, `test_create_update_remove.das`, `test_bulk_create.das`, `test_optional_values.das`, `test_default_values.das`, `test_stages.das`, `test_serialize.das`
+- Tests as worked examples (repo-only): [tests/decs/](tests/decs/) - `test_queries.das`, `test_create_update_remove.das`, `test_bulk_create.das`, `test_optional_values.das`, `test_default_values.das`, `test_stages.das`, `test_serialize.das`
 - Linq bridge test (repo-only): [tests/linq/test_linq_from_decs.das](tests/linq/test_linq_from_decs.das)
 - Linq operators reference: `skills/daslang/references/queries.md`
 - Bulk-create benchmark (repo-only): [benchmarks/decs/bench_bulk_create.das](benchmarks/decs/bench_bulk_create.das)

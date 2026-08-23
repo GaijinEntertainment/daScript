@@ -1,4 +1,4 @@
-# daslang — WebAssembly
+# daslang - WebAssembly
 
 Daslang supports WASM interpreter and direct compilation to WASM via LLVM JIT.
 
@@ -7,8 +7,8 @@ Outputs land in `output/`: `daslang.wasm`, `daslang_static.wasm`, `das-fmt.wasm`
 
 ## Prerequisites
 
-- **CMake ≥ 3.16**, **Ninja**, **Python 3**
-- **Emscripten** — `emcc` / `em++` / `emcmake` on `PATH`. Install via your package manager (easiest) or pin a specific version via `emsdk` (CI does this).
+- **CMake >= 3.16**, **Ninja**, **Python 3**
+- **Emscripten** - `emcc` / `em++` / `emcmake` on `PATH`. Install via your package manager (easiest) or pin a specific version via `emsdk` (CI does this).
 
 ## Install Emscripten
 
@@ -51,7 +51,7 @@ WASM files require a local HTTP server (browsers block `file://` for WASM).
 python3 -m http.server 8080 -d output/
 ```
 
-Open http://localhost:8080 — the in-browser daslang IDE loads.
+Open http://localhost:8080 - the in-browser daslang IDE loads.
 
 Or serve with any static server (Node `serve`, nginx, etc.).
 
@@ -85,12 +85,12 @@ Outputs land in `web/output/samples/examples/`. CI builds these in the
 
 ## Troubleshooting
 
-**`emcc: not found`** — package-manager install: open a new shell or re-run your shell init. emsdk install: `source ./emsdk/emsdk_env.sh` in the current shell.
+**`emcc: not found`** - package-manager install: open a new shell or re-run your shell init. emsdk install: `source ./emsdk/emsdk_env.sh` in the current shell.
 
-**CMake can't find Emscripten** — use `emcmake cmake ...` (not bare `cmake`), or verify `EMSDK`/`EMSCRIPTEN` env vars are set: `echo $EMSDK $EMSCRIPTEN`.
+**CMake can't find Emscripten** - use `emcmake cmake ...` (not bare `cmake`), or verify `EMSDK`/`EMSCRIPTEN` env vars are set: `echo $EMSDK $EMSCRIPTEN`.
 
-**`emcc: unrecognized option '-sWASM_LEGACY_EXCEPTIONS=0'` or similar** — distro emscripten is too old. Switch to emsdk install (Option B) and pin a current version.
+**`emcc: unrecognized option '-sWASM_LEGACY_EXCEPTIONS=0'` or similar** - distro emscripten is too old. Switch to emsdk install (Option B) and pin a current version.
 
-**Build fails with SIGSEGV / stack overflow** — use Release build or increase stack size; Debug stack is much larger.
+**Build fails with SIGSEGV / stack overflow** - use Release build or increase stack size; Debug stack is much larger.
 
-**Browser shows blank page** — must serve via HTTP, not `file://`.
+**Browser shows blank page** - must serve via HTTP, not `file://`.

@@ -8,11 +8,11 @@ Read this skill before writing or editing `.das` code that parses, builds, queri
 require pugixml/PUGIXML_boost
 ```
 
-`PUGIXML_boost` re-exports the C++ `pugixml` module — never `require` both.
+`PUGIXML_boost` re-exports the C++ `pugixml` module - never `require` both.
 
-The module is gated by the CMake option `DAS_PUGIXML_DISABLED`, which defaults to `OFF` in the standard top-level build — dasPUGIXML is built by default. Set it to `ON` only to opt out; there is nothing to turn on for ordinary use. (The `web/` wasm host build is the exception: it defaults the option to `ON`.)
+The module is gated by the CMake option `DAS_PUGIXML_DISABLED`, which defaults to `OFF` in the standard top-level build - dasPUGIXML is built by default. Set it to `ON` only to opt out; there is nothing to turn on for ordinary use. (The `web/` wasm host build is the exception: it defaults the option to `ON`.)
 
-## Loading & parsing — RAII blocks
+## Loading & parsing - RAII blocks
 
 All three entry points take a block that runs with a live document; the document is freed automatically at block exit.
 
@@ -34,13 +34,13 @@ with_doc() $(doc) {
 }
 ```
 
-**Always check `ok` first** — pugixml returns errors as a bool flag, not exceptions. Reading from a doc whose parse failed is undefined.
+**Always check `ok` first** - pugixml returns errors as a bool flag, not exceptions. Reading from a doc whose parse failed is undefined.
 
 **Don't escape document/node pointers past the block.** They become dangling once the RAII block exits. Materialize what you need (strings, structs, your own data) inside the block, and return that.
 
 ## Iteration
 
-Two styles for the same iteration — pick whichever reads cleaner at the call site:
+Two styles for the same iteration - pick whichever reads cleaner at the call site:
 
 ```das
 // Iterator (preferred for plain reads)
@@ -63,7 +63,7 @@ Like their forward siblings, `each_child[_reverse]` (unnamed) yield **all** chil
 
 Manual `node.first_child` / `node.next_sibling` walking still works but is rarely the right choice.
 
-## LINQ source — `from_xml_node`
+## LINQ source - `from_xml_node`
 
 `from_xml_node(root, type<Row>)` is a typed, lazy iterator over `root`'s child elements: each child is materialized into a `Row` by reading **same-named attributes**, so comprehensions and `daslib/linq_boost` queries run straight over an XML document.
 
@@ -83,9 +83,9 @@ let cars <- unsafe(from_xml_node(root, "car", type<Car>)) |> to_array()   // tag
 
 - **Field mapping (v1):** every struct field reads from an attribute of the same name. Supported scalar types: `int`, `uint`, `float`, `double`, `bool`, `string`. Fields of other types keep their default. Child-element / text mapping (via `@xml_*` field annotations) is a planned growth path.
 - **Defaults:** a missing attribute leaves the field at its declared default (`year : int = 2000` above), because the field value is passed as the accessor's fallback.
-- **Lifetime-safe:** rows are owned values — string fields are cloned out of the document — so results collected with `to_array` / a comprehension stay valid **past** the `parse_xml` / `open_xml` RAII block. (Contrast: a raw `xml_node` must not escape the block.)
-- **`unsafe` outside a `for`:** `from_xml_node` is `[unsafe_outside_of_for]`. A `for` loop and a comprehension are safe; piping it into `to_array` / `linq_boost` outside a `for` needs `unsafe(...)` **around the source call only** — expression-form `unsafe` does not reach into nested call arguments, so `unsafe(from_xml_node(...) |> to_array())` still fails at the inner call.
-- **Fused `_fold` lane (pass 2a/2b):** `_fold(unsafe(from_xml_node(root, type<Row>))._where(...)._select(...).count()/sum()/min()/max()/average()/any()/first()/take(N)...)` emits an inlined DOM child-walk via `XmlAdapter` (`require ?pugixml pugixml/linq_fold_xml`, gated by `static_if (typeinfo builtin_module_exists(pugixml))` in `daslib/linq_fold`) — no generator, no intermediate array. Pass the node by value (`var root`, not `let root`) since `_fold`'s macro-arg inference skips the const&→value copy. **Field-pruning (pass 2b):** the walk reads only the `Row` fields the chain actually references (via `read_xml_field` into scalar locals) — unread fields, especially `string` fields whose `clone_string` is the alloc cost, are never touched, so a float-only chain is alloc-free and JIT beats the equivalent SQLite query. A whole-row escape (`to_array` / identity `_select(_)` / pass-to-fn) falls back to the full `build_xml_row`. Cascade shapes (order_by / distinct / group_by / join) fuse via the cascade arms (`wrap_source_loop` / `build_group_by_adapter`). **Reverse** has backward-DOM fast paths: `reverse |> take(N)` and no-predicate `last()` / `reverse |> first` walk `last_child` / `previous_sibling`, visiting only the kept tail (reverse-take m5f went 88.9 → 0.0 ns/op) — while predicated `[where] |> last` deliberately stays on the forward walk, since reverse DOM traversal is ~2× cache-hostile per node and a deep match would regress. All shapes produce the same result as plain array linq (a full parity suite under `tests/dasPUGIXML/parity_xml_*.das`, repo-only, asserts `m5f ≡ m3f ≡ m3` across the whole `loop_or_count` + cascade surface). A `from_xml_node` source can also be **joined / union'd with an in-memory array** directly (`from_xml_node(...) |> _join(dealersArray, ...)`) via linq's mixed `(iterator, array)` overloads. See [tutorials/dasPUGIXML/05_linq_over_xml.das](tutorials/dasPUGIXML/05_linq_over_xml.das).
+- **Lifetime-safe:** rows are owned values - string fields are cloned out of the document - so results collected with `to_array` / a comprehension stay valid **past** the `parse_xml` / `open_xml` RAII block. (Contrast: a raw `xml_node` must not escape the block.)
+- **`unsafe` outside a `for`:** `from_xml_node` is `[unsafe_outside_of_for]`. A `for` loop and a comprehension are safe; piping it into `to_array` / `linq_boost` outside a `for` needs `unsafe(...)` **around the source call only** - expression-form `unsafe` does not reach into nested call arguments, so `unsafe(from_xml_node(...) |> to_array())` still fails at the inner call.
+- **Fused `_fold` lane (pass 2a/2b):** `_fold(unsafe(from_xml_node(root, type<Row>))._where(...)._select(...).count()/sum()/min()/max()/average()/any()/first()/take(N)...)` emits an inlined DOM child-walk via `XmlAdapter` (`require ?pugixml pugixml/linq_fold_xml`, gated by `static_if (typeinfo builtin_module_exists(pugixml))` in `daslib/linq_fold`) - no generator, no intermediate array. Pass the node by value (`var root`, not `let root`) since `_fold`'s macro-arg inference skips the const&->value copy. **Field-pruning (pass 2b):** the walk reads only the `Row` fields the chain actually references (via `read_xml_field` into scalar locals) - unread fields, especially `string` fields whose `clone_string` is the alloc cost, are never touched, so a float-only chain is alloc-free and JIT beats the equivalent SQLite query. A whole-row escape (`to_array` / identity `_select(_)` / pass-to-fn) falls back to the full `build_xml_row`. Cascade shapes (order_by / distinct / group_by / join) fuse via the cascade arms (`wrap_source_loop` / `build_group_by_adapter`). **Reverse** has backward-DOM fast paths: `reverse |> take(N)` and no-predicate `last()` / `reverse |> first` walk `last_child` / `previous_sibling`, visiting only the kept tail (reverse-take m5f went 88.9 -> 0.0 ns/op) - while predicated `[where] |> last` deliberately stays on the forward walk, since reverse DOM traversal is ~2x cache-hostile per node and a deep match would regress. All shapes produce the same result as plain array linq (a full parity suite under `tests/dasPUGIXML/parity_xml_*.das`, repo-only, asserts `m5f == m3f == m3` across the whole `loop_or_count` + cascade surface). A `from_xml_node` source can also be **joined / union'd with an in-memory array** directly (`from_xml_node(...) |> _join(dealersArray, ...)`) via linq's mixed `(iterator, array)` overloads. See [tutorials/dasPUGIXML/05_linq_over_xml.das](tutorials/dasPUGIXML/05_linq_over_xml.das).
 
 ## Quick accessors (with defaults)
 
@@ -106,8 +106,8 @@ These read; they do not mutate. Missing data returns the supplied default.
 
 ```das
 let x_attr = root["x"]                          // xml_attribute
-let x_val  = root["x"] as int                   // 0 if missing — does NOT crash
-let lbl    = root["label"] as string            // `label` is a reserved word — name the local something else
+let x_val  = root["x"] as int                   // 0 if missing - does NOT crash
+let lbl    = root["label"] as string            // `label` is a reserved word - name the local something else
 
 // Existence check on attribute / non-empty check on text
 if (root["x"] is int)        { ... }
@@ -117,9 +117,9 @@ if (count_node.text is int)  { let n = count_node.text as int }
 let xml_string = (some_node as string)
 ```
 
-A missing attribute reads as a "falsy" `xml_attribute` (its `.ok` field is false) — typed `as` returns the type's default rather than erroring.
+A missing attribute reads as a "falsy" `xml_attribute` (its `.ok` field is false) - typed `as` returns the type's default rather than erroring.
 
-## Building XML — the `tag` / `attr` EDSL
+## Building XML - the `tag` / `attr` EDSL
 
 `tag()` appends a child and runs a block inside it. `attr()` appends an attribute and returns its parent for chaining. Both pipe naturally.
 
@@ -138,11 +138,11 @@ with_doc() $(doc) {
 }
 ```
 
-- `tag(name, blk)` — append child, run block on it, return the child.
-- `tag(name, text)` — append child with text content (no nested block).
-- `tag(name)` — append a bare child.
-- `attr(name, value)` — string / int / float / bool overloads; returns the parent for chaining.
-- Low-level: `add_child`, `add_child_ex`, `add_attr` — use only when the EDSL doesn't fit.
+- `tag(name, blk)` - append child, run block on it, return the child.
+- `tag(name, text)` - append child with text content (no nested block).
+- `tag(name)` - append a bare child.
+- `attr(name, value)` - string / int / float / bool overloads; returns the parent for chaining.
+- Low-level: `add_child`, `add_child_ex`, `add_attr` - use only when the EDSL doesn't fit.
 
 ## Serializing
 
@@ -172,36 +172,36 @@ with_xpath("book[@in_stock='true']") $(q) {
 
 `for_each_select` auto-frees the result set; the block parameter is an `xpath_node` (`.node` is the underlying `xml_node`). Compile a query once with `with_xpath` if you'll evaluate it many times.
 
-## Struct ↔ XML
+## Struct <-> XML
 
 Round-trip arbitrary struct values:
 
 ```das
 let player = Player(name = "Hero", hp = 100)
 let xml_str = to_XML(player, "player")               // string
-let restored = from_XML(xml_str, type<Player>)       // string → struct
-let same_via_node = from_XML(some_node, type<Player>) // node → struct
+let restored = from_XML(xml_str, type<Player>)       // string -> struct
+let same_via_node = from_XML(some_node, type<Player>) // node -> struct
 ```
 
 Supports nested structs, enums, arrays, tables, tuples, variants, vector types (`floatN`, `intN`). The same field annotations as JSON apply (`@rename`, `@enum_as_int`, `@unescape`).
 
 ## Common gotchas
 
-- **Errors are `ok` bool flags, not exceptions** — always branch on the second block parameter before using `doc`.
-- **No escape past the RAII block** — `xml_document?` and any `xml_node` derived from it are valid only inside the block. Returning them past the block exit is use-after-free.
+- **Errors are `ok` bool flags, not exceptions** - always branch on the second block parameter before using `doc`.
+- **No escape past the RAII block** - `xml_document?` and any `xml_node` derived from it are valid only inside the block. Returning them past the block exit is use-after-free.
 - **Missing attributes don't error**: `root["does_not_exist"] as int` returns `0`. Use the `is` test if you need to distinguish "missing" from "zero".
-- **Build flag**: if `require pugixml/PUGIXML_boost` fails at compile time, this build turned the module off — `DAS_PUGIXML_DISABLED` was set to `ON` (the top-level build defaults it to `OFF`; the `web/` wasm host defaults it to `ON`).
-- **CMake install for tutorial data**: a tutorial that ships sample XML (e.g. [tutorials/dasPUGIXML/books.xml](tutorials/dasPUGIXML/books.xml)) needs a `*.xml` glob in its install rule, not just `*.das` — the dasPUGIXML rule in `tutorials/CMakeLists.txt` globs both for exactly this reason. Data-only files are the easy thing to forget.
+- **Build flag**: if `require pugixml/PUGIXML_boost` fails at compile time, this build turned the module off - `DAS_PUGIXML_DISABLED` was set to `ON` (the top-level build defaults it to `OFF`; the `web/` wasm host defaults it to `ON`).
+- **CMake install for tutorial data**: a tutorial that ships sample XML (e.g. [tutorials/dasPUGIXML/books.xml](tutorials/dasPUGIXML/books.xml)) needs a `*.xml` glob in its install rule, not just `*.das` - the dasPUGIXML rule in `tutorials/CMakeLists.txt` globs both for exactly this reason. Data-only files are the easy thing to forget.
 
 ## Reference
 
 - Tutorials (read in order, runnable):
-  - [tutorials/dasPUGIXML/01_parsing_and_navigation.das](tutorials/dasPUGIXML/01_parsing_and_navigation.das) — parsing, iteration, quick accessors, `is`/`as`
-  - [tutorials/dasPUGIXML/02_building_xml.das](tutorials/dasPUGIXML/02_building_xml.das) — `with_doc`, `tag`/`attr` EDSL, serialization
-  - [tutorials/dasPUGIXML/03_xpath.das](tutorials/dasPUGIXML/03_xpath.das) — XPath queries, compiled XPath
-  - [tutorials/dasPUGIXML/04_serialization.das](tutorials/dasPUGIXML/04_serialization.das) — `to_XML`/`from_XML` round-trip
-  - [tutorials/dasPUGIXML/05_linq_over_xml.das](tutorials/dasPUGIXML/05_linq_over_xml.das) — `from_xml_node` LINQ source (typed rows from attributes)
+  - [tutorials/dasPUGIXML/01_parsing_and_navigation.das](tutorials/dasPUGIXML/01_parsing_and_navigation.das) - parsing, iteration, quick accessors, `is`/`as`
+  - [tutorials/dasPUGIXML/02_building_xml.das](tutorials/dasPUGIXML/02_building_xml.das) - `with_doc`, `tag`/`attr` EDSL, serialization
+  - [tutorials/dasPUGIXML/03_xpath.das](tutorials/dasPUGIXML/03_xpath.das) - XPath queries, compiled XPath
+  - [tutorials/dasPUGIXML/04_serialization.das](tutorials/dasPUGIXML/04_serialization.das) - `to_XML`/`from_XML` round-trip
+  - [tutorials/dasPUGIXML/05_linq_over_xml.das](tutorials/dasPUGIXML/05_linq_over_xml.das) - `from_xml_node` LINQ source (typed rows from attributes)
 - daslib helpers (the source of truth for the EDSL): [modules/dasPUGIXML/daslib/PUGIXML_boost.das](modules/dasPUGIXML/daslib/PUGIXML_boost.das)
 - C++ binding, for adding new functions (repo-only): [modules/dasPUGIXML/src/dasPUGIXML.h](modules/dasPUGIXML/src/dasPUGIXML.h), `dasPUGIXML.cpp`
-- Tests with patterns (repo-only): [tests/dasPUGIXML/](tests/dasPUGIXML/) — `test_pugixml_core.das`, `test_pugixml_mutation.das`, `test_pugixml_boost.das`, `test_serial_*.das`
+- Tests with patterns (repo-only): [tests/dasPUGIXML/](tests/dasPUGIXML/) - `test_pugixml_core.das`, `test_pugixml_mutation.das`, `test_pugixml_boost.das`, `test_serial_*.das`
 - Auto-generated RST (repo-only): `doc/source/stdlib/handmade/function-pugixml-*.rst`, `structure_annotation-pugixml-*.rst`, `Variable-pugixml-*.rst`

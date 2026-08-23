@@ -89,7 +89,7 @@ explicit triple is passed).
 ### How it works
 `-exe` mode usually emits a host object via LLVM and links it with the host linker (`lld-link` on Windows-MSVC, `c++`/`clang` elsewhere).
 When a cross-compile target is selected, dasLLVM instead:
-1. Initializes the WebAssembly LLVM target (lazy — no JIT-startup overhead when unused).
+1. Initializes the WebAssembly LLVM target (lazy - no JIT-startup overhead when unused).
 2. Builds a `TargetMachine` for the requested triple and pins the module's data
    layout / triple so codegen sizes pointers as 32-bit.
 3. Emits a `wasm32` object file via `LLVMTargetMachineEmitToFile`.
@@ -101,19 +101,19 @@ The runtime archive is auto-located at
 `<das_root>/web/output/lib/liblibDaScript_runtime.a` and is produced by the
 existing emscripten build (`web/CMakeLists.txt`). If a program references
 runtime symbols but the archive is missing, the link still proceeds and emits
-a warning — the resulting `.wasm` will fail at load time on unresolved
+a warning - the resulting `.wasm` will fail at load time on unresolved
 imports for every runtime symbol that is actually used.
 
 ### Linker tools
 The wasm link always goes through `emcc`. dasLLVM resolves it in this order:
 1. Explicit override (set `cop.jit_path_to_linker` programmatically).
-2. `<das_root>/bin/emcc[.bat]` — bundled next to `daslang`.
+2. `<das_root>/bin/emcc[.bat]` - bundled next to `daslang`.
 3. `emcc` on `PATH` (typically provided by an activated emsdk).
 
 ### Building libDaScript_runtime for wasm
 The runtime archive needed by the emcc path is a side-effect of the
 emscripten build documented in `web/README.md`. One-time setup (assumes
-`emcc` is on `PATH` — see `web/README.md` for install options, e.g.
+`emcc` is on `PATH` - see `web/README.md` for install options, e.g.
 `sudo apt install emscripten` on Ubuntu):
 
 ```sh
@@ -145,7 +145,7 @@ def add(a, b : int) : int { return a + b; }
 [export] def main() : int { return add(2, 3); }
 ```
 Pick a triple via either the script or the CLI (only one is required; both
-are optional — CLI wins when both present):
+are optional - CLI wins when both present):
 
 **Script-level option:**
 ```
@@ -169,7 +169,7 @@ For pure-arithmetic programs (no runtime linked):
 node -e 'WebAssembly.instantiate(require("fs").readFileSync("add.wasm"),{env:new Proxy({},{get:()=>()=>0})}).then(r=>console.log(r.instance.exports.main()))'
 ```
 Prints `5`.
-The `Proxy` supplies a `()=>0` stub for every wasm import — needed because
+The `Proxy` supplies a `()=>0` stub for every wasm import - needed because
 `--allow-undefined` leaves daslang-runtime symbols as imports.
 
 For programs that pull in `libDaScript_runtime` (auto-detected, see *How it
@@ -177,7 +177,7 @@ works*), the output is `-sSTANDALONE_WASM` and the only imports are wasi
 syscalls. Run under any wasi-capable host:
 ```
 wasmtime add.wasm
-# or with Node ≥ 20:
+# or with Node >= 20:
 node --experimental-wasi-unstable-preview1 -e \
   'const {WASI}=require("node:wasi");const fs=require("fs");\
    const w=new WASI({version:"preview1"});\

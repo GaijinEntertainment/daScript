@@ -7,18 +7,18 @@ directory; nothing in it assumes this repository, the SDK layout, MCP tools, or 
 particular embedding.
 
 It is NOT one of the repo's task skills (`skills/*.md`) and is not read by in-repo agent
-sessions — the repo's own CLAUDE.md supersedes it here.
+sessions - the repo's own CLAUDE.md supersedes it here.
 
 ## Rules for editing
 
 - **Every code example is probe-verified**: it was compiled (and, for semantic claims, run)
-  against the current binary before landing. Keep that bar — no example or behavioral claim
+  against the current binary before landing. Keep that bar - no example or behavioral claim
   goes in without a probe. Probes live in session scratchpads, not in the tree.
 - **SDK-free**: no repo paths, no `bin/`, no MCP, no CI, no lint rule IDs, no tutorials
   paths. Idioms are stated as best practice, not as house lint policy.
 - **gen2 only.** gen1 gets one mention (the `options gen2 = false` opt-out) and no examples.
 - When the grammar or stdlib changes (new syntax, renamed daslib symbols, changed defaults),
-  update the affected file in the same arc — this bundle rots exactly like the scraped
+  update the affected file in the same arc - this bundle rots exactly like the scraped
   third-party bundle it replaced, unless it is maintained with the language.
 - The version/date stamp at the bottom of `SKILL.md` is updated whenever content is
   re-verified against a new daslang version.
@@ -31,5 +31,5 @@ Zip the `daslang/` directory itself (so the archive root is `daslang/SKILL.md`):
 Compress-Archive -Path skills/daslang -DestinationPath daslang-skill.zip
 ```
 
-(When packaging, exclude this README — it is repo-facing; SKILL.md and references/ are the
+(When packaging, exclude this README - it is repo-facing; SKILL.md and references/ are the
 product.)

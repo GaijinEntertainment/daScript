@@ -7,7 +7,7 @@ transform, animation playback and lighting from two ImGui windows.
 
 ## Run
 
-dasImgui ships in-tree with daslang — no package install needed, a bare build suffices:
+dasImgui ships in-tree with daslang - no package install needed, a bare build suffices:
 
 ```sh
 daslang -project_root examples/gltf/mesh_viewer_opengl examples/gltf/mesh_viewer_opengl/main.das
@@ -24,9 +24,9 @@ daslang -project_root examples/gltf/mesh_viewer_opengl \
 
 ## Controls
 
-- **Drag** — orbit the camera. **Scroll** — zoom.
-- **Model** window — animation clip + play/scrub, model rotation / scale, auto-rotate.
-- **Lighting** window — directional light direction / intensity / color, ambient, and environment amount.
+- **Drag** - orbit the camera. **Scroll** - zoom.
+- **Model** window - animation clip + play/scrub, model rotation / scale, auto-rotate.
+- **Lighting** window - directional light direction / intensity / color, ambient, and environment amount.
 
-Metals reflect an equirect HDR environment (`tutorials/_assets/hdri/cannon_2k.hdr`, CC0 — the same
+Metals reflect an equirect HDR environment (`tutorials/_assets/hdri/cannon_2k.hdr`, CC0 - the same
 map tutorial 12 uses); the **Environment** slider scales it, 0 falls back to flat ambient.

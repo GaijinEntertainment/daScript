@@ -1,4 +1,4 @@
-# test_data — fixtures for `[sql_table(schema_from=...)]` tests
+# test_data - fixtures for `[sql_table(schema_from=...)]` tests
 
 Pre-built tiny SQLite databases consumed at compile time by the
 `schema_from` test suite. Each `.db` has a sibling `.sql` showing the

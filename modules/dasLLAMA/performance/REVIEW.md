@@ -1,34 +1,34 @@
 # dasLLAMA performance Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
 
-**`../dasllama/dasllama_exchange_schema.das` is the single validator for exchange submissions —
+**`../dasllama/dasllama_exchange_schema.das` is the single validator for exchange submissions - 
 record stores and tune sidecars.** A second validator is a defect. The engine-free half (no
 `dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
 that gate is a defect.
 
 **A row entering `records/` names a quiet box: its `hardware.remote_desktop` is `off`.** A
-`parsec` row is a defect — re-mint on a box with no remote-desktop session.
+`parsec` row is a defect - re-mint on a box with no remote-desktop session.
 
 **A row or sidecar entering `records/` names commits a reader can resolve: the row's `sha`
 and the sidecar's `provenance.engine_sha` name commits reachable from the branch under
 review, and the sidecar's `provenance.dasllama_version` equals `DASLLAMA_VERSION`
 (`../dasllama/dasllama_version.das`) at the commit its `engine_sha` names.** A stamp naming
-no reachable commit, or a version mismatch, is a defect — re-mint.
+no reachable commit, or a version mismatch, is a defect - re-mint.
 
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
-`../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** — the
+`../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the
 validator ignores run keys it does not know, so an unvalidated field ships silently.
 
-**`../dasllama/dasllama_exchange.das` is the single exchange client — every HTTP call to
+**`../dasllama/dasllama_exchange.das` is the single exchange client - every HTTP call to
 the sidecar exchange (lookup, download, submit) goes through it.** A second HTTP path is a
 defect; the mechanical half (no second `dashv` requirer under the module) is `REVIEW.das`'s
 to enforce.
 
 **Weakening the exchange download gate (content sha, schema, `DASLLAMA_VERSION`), the
 submission strip, or the submit rails that keep exchange-sourced and foreign-box sidecars
-from going back up is a defect** — `utils/dasllama-server/test_exchange_client.das` enforces
+from going back up is a defect** - `utils/dasllama-server/test_exchange_client.das` enforces
 all three.
 
 **Every submission goes through `exchange_strip_private`.** A submission path around it is a
@@ -39,34 +39,34 @@ fails is a defect.
 
 **`model_specs.das`'s `model_specs()` (text) and `profile_common.das`'s `asr_catalog()`
 (audio) are the model set; a third list of model files, quants, board membership,
-provenance, or parity fixtures is a defect** — a new list is written as a view over those
+provenance, or parity fixtures is a defect** - a new list is written as a view over those
 two: it recomputes from them on every call and stores no `url`/`bytes`/`sha256` of its own.
 
 **A model file named by any file under `modules/dasLLAMA/` carries its provenance on its own
-row in `model_specs()` (`model_specs.das`) or `asr_catalog()` (`profile_common.das`) —
+row in `model_specs()` (`model_specs.das`) or `asr_catalog()` (`profile_common.das`) - 
 directly, or through one named accessor call: a function in `model_specs.das` whose body
-carries the `url` + `bytes` + `sha256` itself (one hop — an accessor forwarding to another
-accessor, or an unnamed table lookup, does not count) — or a `recipe` a reader can run.**
+carries the `url` + `bytes` + `sha256` itself (one hop - an accessor forwarding to another
+accessor, or an unnamed table lookup, does not count) - or a `recipe` a reader can run.**
 
 **A companion artifact (an mmproj, an image fixture) rides the `companions` of the row that
 pins its carrier.** A companion several rows consume is referenced from the other rows by
-name — uniqueness itself is `../tests/test_model_specs.das`'s to enforce.
+name - uniqueness itself is `../tests/test_model_specs.das`'s to enforce.
 
 **`fetch_models.das --fetch` downloads only.** A convert, a bench, or a tune-state write
 added to it is a defect.
 
-**A change to a model row's provenance that alters which bytes verify — `bytes`, `sha256`,
+**A change to a model row's provenance that alters which bytes verify - `bytes`, `sha256`,
 `recipe`, a new row or a new `companions` entry in `model_specs.das` or
-`profile_common.das` — or a change to `fetch_models.das` other than its comments, records
+`profile_common.das` - or a change to `fetch_models.das` other than its comments, records
 its settling evidence in the PR description: a `fetch_models.das --` run ending
 `0 pending, 0 failed` on a box that HOLDS the pins.**
 
-**A url-only re-pin — a row's `url` changed with its `bytes` and `sha256` unchanged —
+**A url-only re-pin - a row's `url` changed with its `bytes` and `sha256` unchanged - 
 records its settling evidence in the PR description: a fetch through the new url into a
 scratch dir, or a documented resolve of the pinned revision's size and content sha against
-the row's canonical values** — the verify never reads the url of a file already on disk.
+the row's canonical values** - the verify never reads the url of a file already on disk.
 
 **A refreshed `last_known_good_sidecar.json` is one complete mint from the box its provenance
-names, at the current `dasllama_version` — never a hand-edited copy.** `REVIEW.das` (beside
+names, at the current `dasllama_version` - never a hand-edited copy.** `REVIEW.das` (beside
 this file) machine-checks the age-independent half (`noise` `ok`, `validation` `ok`, every
 `race` winner equal to its `kernels` value); weakening that gate is a defect.

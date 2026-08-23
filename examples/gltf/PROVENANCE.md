@@ -1,4 +1,4 @@
-# dasGLTF sample assets — provenance
+# dasGLTF sample assets - provenance
 
 Every `.glb` / `.gltf` here comes from the Khronos **glTF-Sample-Assets** repository
 (<https://github.com/KhronosGroup/glTF-Sample-Assets>), taken from each model's
@@ -6,7 +6,7 @@ Every `.glb` / `.gltf` here comes from the Khronos **glTF-Sample-Assets** reposi
 [`GLTF_SAMPLE_ASSETS.LICENSE`](GLTF_SAMPLE_ASSETS.LICENSE) and summarized below; that file
 ships with the SDK because the Fox rig/animation is CC-BY 4.0 (attribution required).
 
-## Shipped with the SDK — `examples/gltf/media/`
+## Shipped with the SDK - `examples/gltf/media/`
 
 | File | Size | License | Exercises | Viewer |
 |---|---|---|---|---|
@@ -16,7 +16,7 @@ ships with the SDK because the Fox rig/animation is CC-BY 4.0 (attribution requi
 BoomBox is the static PBR showcase; Fox is the skinned-animation showcase. Both viewers
 default to the shipped model and accept an override path as `argv[1]`.
 
-## Parse/skin unit-test fixtures — `tests/dasGLTF/models/` (not installed)
+## Parse/skin unit-test fixtures - `tests/dasGLTF/models/` (not installed)
 
 Small deterministic fixtures, all **CC0 1.0**, kept in-repo for `tests/dasGLTF`:
 
@@ -28,10 +28,10 @@ Small deterministic fixtures, all **CC0 1.0**, kept in-repo for `tests/dasGLTF`:
 
 ## Not shipped (deliberately)
 
-- **BrainStem** — Poser EULA, redistribution restricted.
-- **CesiumMan / DamagedHelmet** — CC-BY but redundant (Fox covers skinning, BoomBox covers PBR).
+- **BrainStem** - Poser EULA, redistribution restricted.
+- **CesiumMan / DamagedHelmet** - CC-BY but redundant (Fox covers skinning, BoomBox covers PBR).
 
 ## Regenerating
 
 Re-download the per-model `.glb` from the Khronos repo above (paths as noted). The dasGLTF
-loader consumes `.glb` and `.gltf` directly — no conversion step.
+loader consumes `.glb` and `.gltf` directly - no conversion step.

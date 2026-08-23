@@ -1,7 +1,7 @@
-# LAWS.md — Boris's rulings
+# LAWS.md - Boris's rulings
 
 Append-only intent provenance for rule-document edits in this folder's documents (the
-mechanism: CLAUDE.md § "Boris's rulings get a `LAWS.md` sidecar"). Never groomed,
+mechanism: CLAUDE.md sec. "Boris's rulings get a `LAWS.md` sidecar"). Never groomed,
 compacted, or cited as rules.
 
 | Date | Document | The ask |

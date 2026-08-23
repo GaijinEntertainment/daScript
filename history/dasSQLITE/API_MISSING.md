@@ -1,12 +1,12 @@
-# dasSQLITE API Rework — Missing Tutorials (15+)
+# dasSQLITE API Rework - Missing Tutorials (15+)
 
-Companion to `API_REWORK.md`. The existing zetcode-port tutorials (01–14)
+Companion to `API_REWORK.md`. The existing zetcode-port tutorials (01-14)
 exercise only the C API surface: open/close, prepare/step, INSERT, SELECT,
 parameter binding, BLOB round-trip, schema introspection, transactions.
 That covers the C-binding layer but barely scratches what an EF-Core /
 LINQ-to-SQL inspired API needs.
 
-This doc invents the *next* tutorials — 15 onward — for SQL features the
+This doc invents the *next* tutorials - 15 onward - for SQL features the
 existing tutorials don't touch. Each entry is written as if the tutorial
 already existed: what it would teach, the EF Core / LINQ analog (so the
 unfamiliar features have a reference point), a strawman daslang shape
@@ -18,57 +18,57 @@ APIs that don't exist yet and do not compile. The purpose is to anchor the
 "what should this look like?" conversation against concrete syntax.
 
 **Order matches the natural design dependency chain:** CRUD completion
-first (15–17), then query power (18–22), then multi-table (23–26), then
-schema richness (27–29), then operations (30–33), then production-grade
-concerns (34–37), then specialized features (38–41).
+first (15-17), then query power (18-22), then multi-table (23-26), then
+schema richness (27-29), then operations (30-33), then production-grade
+concerns (34-37), then specialized features (38-41).
 
 ---
 
 ## CRUD completion
 
 The existing tutorials cover Create (02 INSERT) and Read (04 SELECT). They
-say nothing about Update, Delete, or Upsert — the other half of the four
+say nothing about Update, Delete, or Upsert - the other half of the four
 verbs every CRUD app needs.
 
-### 15-update — "change existing rows" (**SHIPPED in chunk 6**)
+### 15-update - "change existing rows" (**SHIPPED in chunk 6**)
 
 > **Update:** Shipped as tutorial 19 in chunk 6. Macro form named
 > `_sql_update` / `_sql_try_update` / `_sql_update_returning` /
 > `_sql_try_update_returning` (the `_sql_` prefix overrides the bare
 > `_update` from the strawman below). Function form: `update(row)` /
-> `try_update(row)`. See [API_REWORK.md § "Shipped — chunk 6"] for the
+> `try_update(row)`. See [API_REWORK.md sec. "Shipped - chunk 6"] for the
 > implementation summary, [tutorials/sql/19-update.das] for the live
 > tutorial, and tests/dasSQLITE/test_43..45 for runtime coverage.
 > Open questions below remain accurate as **future** considerations:
 > optimistic concurrency tokens (deferred), bulk RETURNING projection
-> (deferred — post-process with `_select`), `exec` parameter binding
+> (deferred - post-process with `_select`), `exec` parameter binding
 > (deferred to a small follow-up chunk).
 
 
-**What it teaches.** `UPDATE` — three flavors. (a) Update one row by primary
+**What it teaches.** `UPDATE` - three flavors. (a) Update one row by primary
 key: `UPDATE users SET email=? WHERE id=?`. (b) Update many rows matching a
 predicate: `UPDATE users SET active=0 WHERE last_seen<?`. (c) Capture the
 number of rows affected (`sqlite3_changes`).
 
 **Why.** Inserts and reads alone don't make an app. Marking an order paid,
-bumping a counter, renaming a row — all UPDATE.
+bumping a counter, renaming a row - all UPDATE.
 
 **EF Core.** Two distinct shapes:
 - *Tracked update.* Load the entity, mutate a property, call
   `SaveChanges()`. EF's change tracker diffs the entity and emits
-  `UPDATE … SET email=@p WHERE id=@p2`. Requires a `DbContext` that
-  remembers what it loaded. **Not LINQ** — the mutation is plain object
+  `UPDATE ... SET email=@p WHERE id=@p2`. Requires a `DbContext` that
+  remembers what it loaded. **Not LINQ** - the mutation is plain object
   assignment; the SQL is emitted by `SaveChanges()` on the context.
 - *Bulk update* (EF Core 7+, Nov 2022). `db.Users.Where(u => u.Active)
   .ExecuteUpdate(s => s.SetProperty(u => u.LastSeen, DateTime.UtcNow))`
-  — single SQL UPDATE, no entity load, no tracker. **This is the only
+  - single SQL UPDATE, no entity load, no tracker. **This is the only
   LINQ-UPDATE precedent in the entire .NET ecosystem.** Vanilla LINQ has
   no UPDATE operator; `ExecuteUpdate` lives only on `IQueryable<T>`
   (provider-translatable), never on `IEnumerable<T>` (in-memory).
 
 We deliberately don't have change tracking (no `DbContext`-style unit of
 work), so the tracked form is awkward to mimic. The bulk form maps onto
-our `update`/`_update` function/macro pair (cross-cutting § E) — but as
+our `update`/`_update` function/macro pair (cross-cutting sec. E) - but as
 a *standalone* call, not a chain terminal. UPDATE is a single SQL
 statement, not a chain; the chain shape would be a syntactic crutch
 borrowed from EF that doesn't fit how SQL actually works.
@@ -76,28 +76,28 @@ borrowed from EF that doesn't fit how SQL actually works.
 **Strawman daslang shape:**
 
 ```das
-// (a) by PK — pass a row, generates UPDATE … WHERE pk=?
+// (a) by PK - pass a row, generates UPDATE ... WHERE pk=?
 db |> update(User(Id=42, Name="alice", Email="a@b.com"))
 // => UPDATE users SET name=?, email=? WHERE id=? ; returns int (rows affected, here 1)
 
-// (b) bulk update — standalone fn with two trailing blocks (where, set).
+// (b) bulk update - standalone fn with two trailing blocks (where, set).
 //     Macro `_update` sugars _ as the row placeholder.
 let n = db |> _update(type<User>,
     _.LastSeen < cutoff,
     (Active=false, LastTouchedAt=now()))
 // => UPDATE users SET active=?, last_touched_at=? WHERE last_seen<? ; returns rows-affected
 
-// (c) bulk update RETURNING — sibling fn returning array<T> (RETURNING *)
+// (c) bulk update RETURNING - sibling fn returning array<T> (RETURNING *)
 let revived <- db |> _update_returning(type<User>,
     _.Id == 4,
     (Active=true, LastSeen=now()))
 // => array<User> of post-update rows
 
-// (d) raw escape hatch — no [sql_table] needed
+// (d) raw escape hatch - no [sql_table] needed
 db |> exec("UPDATE users SET email=? WHERE id=?", "x@y.com", 42)
 ```
 
-**Function-form signatures** (per cross-cutting § E):
+**Function-form signatures** (per cross-cutting sec. E):
 
 ```das
 // by-PK (single row, generated by [sql_table])
@@ -108,7 +108,7 @@ def update(db : SqlRunner; tt : type<auto(T)>;
            where : block<(arg : T -&) : bool>;
            set   : block<(arg : T -&) : auto>) : int
 
-// bulk RETURNING — distinct name, returns array<T> (RETURNING *)
+// bulk RETURNING - distinct name, returns array<T> (RETURNING *)
 def update_returning(db : SqlRunner; tt : type<auto(T)>;
                      where : block<(arg : T -&) : bool>;
                      set   : block<(arg : T -&) : auto>) : array<T>
@@ -119,10 +119,10 @@ expression into `$(_) => expr` and forward positionally.
 
 **Open questions:**
 
-- **`update(row)` semantics — full-row or PK-only-WHERE-and-rest-as-SET?**
+- **`update(row)` semantics - full-row or PK-only-WHERE-and-rest-as-SET?**
   The strawman writes every non-PK column. That's safe but emits more SQL
   than the user changed. A partial form (`db |> _update(type<User>,
-  _.Id == 42, (Email="…"))`) is the bulk-with-narrow-predicate
+  _.Id == 42, (Email="..."))`) is the bulk-with-narrow-predicate
   shape; sticking to that for "I want to change one column on one row"
   is honest and avoids inventing a third call shape.
 - **Optimistic concurrency.** EF supports `[Timestamp]` /
@@ -131,16 +131,16 @@ expression into `$(_) => expr` and forward positionally.
   failure. Worth a `@sql_concurrency_token` annotation now or defer until
   someone needs it?
 - **Argument order: `where, set`** (filter first, then describe the
-  change) — matches the chain idiom in SELECT (`._where(...)._select(...)`)
+  change) - matches the chain idiom in SELECT (`._where(...)._select(...)`)
   even though we're standalone here. Reverse order (SQL token order:
-  `SET ... WHERE`) was considered and rejected — predicate-first reads
+  `SET ... WHERE`) was considered and rejected - predicate-first reads
   more like how the user thinks ("which rows? then what to do").
 - **For projections of RETURNING.** `_update_returning` always returns
   `array<T>` (full row). For a column projection, post-process with
   `_select`: `db |> _update_returning(...) |> _select(_.Name)`. Avoids
   yet-another-function-name like `update_returning_select`.
 
-### 16-delete — "remove rows" (**SHIPPED in chunk 6**)
+### 16-delete - "remove rows" (**SHIPPED in chunk 6**)
 
 > **Update:** Shipped as tutorial 20 in chunk 6. Macro form named
 > `_sql_delete` / `_sql_try_delete` / `_sql_delete_returning` /
@@ -148,37 +148,37 @@ expression into `$(_) => expr` and forward positionally.
 > `delete_by_id(type<T>, id)` plus `try_*` variants. The CASCADE FK
 > example from the original strawman is deferred to tutorial 23
 > (foreign keys), since `@sql_references` is chunk 8+ surface.
-> See [API_REWORK.md § "Shipped — chunk 6"] for the implementation
+> See [API_REWORK.md sec. "Shipped - chunk 6"] for the implementation
 > summary and tests/dasSQLITE/test_46..48 for runtime coverage.
 
 
-**What it teaches.** `DELETE` — by PK, by predicate, in bulk; observing
+**What it teaches.** `DELETE` - by PK, by predicate, in bulk; observing
 ON DELETE CASCADE side effects through declared foreign keys.
 
 **Why.** "D" of CRUD. Pairs naturally with 15.
 
 **EF Core.** `db.Users.Remove(user); SaveChanges()` for tracked, or
 `db.Users.Where(u => u.Banned).ExecuteDelete()` for bulk. Same
-LINQ/non-LINQ split as 15 — `ExecuteDelete` (EF Core 7+) is the only
+LINQ/non-LINQ split as 15 - `ExecuteDelete` (EF Core 7+) is the only
 LINQ-DELETE precedent in .NET, and like `ExecuteUpdate` it's
 `IQueryable`-only.
 
 **Strawman:**
 
 ```das
-// by PK — pass a row, only the PK is read.
+// by PK - pass a row, only the PK is read.
 // `delete_` has trailing underscore because `delete` is a daslang
-// keyword (per cross-cutting § E, mirror of daslib/linq's `where_`).
+// keyword (per cross-cutting sec. E, mirror of daslib/linq's `where_`).
 db |> delete_(User(Id=42))                        // DELETE FROM users WHERE id=?
 db |> delete_by_id(type<User>, 42)                // shortcut, no row needed
-                                                  // (no underscore — no keyword clash)
+                                                  // (no underscore - no keyword clash)
 
-// bulk delete — standalone fn with one trailing block (where).
+// bulk delete - standalone fn with one trailing block (where).
 // Macro `_delete` sugars _ as the row placeholder.
 let n = db |> _delete(type<User>, _.Banned)
 // => DELETE FROM users WHERE banned=1 ; returns rows-affected
 
-// bulk delete RETURNING — sibling fn, returns array<T> (RETURNING *)
+// bulk delete RETURNING - sibling fn, returns array<T> (RETURNING *)
 let removed <- db |> _delete_returning(type<User>, _.Active == false)
 // => array<User> of just-deleted rows
 
@@ -186,7 +186,7 @@ let removed <- db |> _delete_returning(type<User>, _.Active == false)
 db |> exec("DELETE FROM users WHERE last_seen < ?", cutoff)
 ```
 
-**Function-form signatures** (per cross-cutting § E):
+**Function-form signatures** (per cross-cutting sec. E):
 
 ```das
 // by-PK (single row, generated by [sql_table])
@@ -197,7 +197,7 @@ def delete_by_id(db : SqlRunner; tt : type<auto(T)>; id : auto(K)) : int
 def delete_(db : SqlRunner; tt : type<auto(T)>;
             where : block<(arg : T -&) : bool>) : int
 
-// bulk RETURNING — distinct name, returns array<T>
+// bulk RETURNING - distinct name, returns array<T>
 def delete_returning(db : SqlRunner; tt : type<auto(T)>;
                      where : block<(arg : T -&) : bool>) : array<T>
 ```
@@ -215,50 +215,50 @@ leading underscore already disambiguates from the keyword.
   Ship both; teach `delete_by_id` as default for the "I have the id" case
   and `delete_(row)` for "I just loaded this row, now drop it."
 - **`try_delete_` for "row may not exist".** 0 rows-affected is *not* an
-  error — the row simply wasn't there. Reserve `Err` for genuine SQL
+  error - the row simply wasn't there. Reserve `Err` for genuine SQL
   failures (constraint, IO, BUSY). Caller checks the returned `int` if
   "the row had to exist" matters semantically. Mirrors `try_update`.
 - **What can be expressed in `_delete`'s where-block.** Captured locals
   become bind params; `_.Foo` references columns. Subqueries via tut 24's
   `_in` / `_any` work inside the predicate. `JOIN`-style multi-table
-  DELETE (PG `DELETE … USING`, MySQL `DELETE FROM t JOIN …`) is *not*
-  supported — syntax diverges sharply per backend; for "delete users
+  DELETE (PG `DELETE ... USING`, MySQL `DELETE FROM t JOIN ...`) is *not*
+  supported - syntax diverges sharply per backend; for "delete users
   without orders," use a subquery in `_where` (see tut 24).
 - **CASCADE / SET NULL.** Declarative on the FK annotation (see 26) and
   emitted in DDL. SQLite respects them only when `PRAGMA foreign_keys=ON`
   (see 33). The tutorial demonstrates the trap explicitly: a parent
   delete that *should* cascade silently doesn't if the PRAGMA isn't set.
 
-### 17-upsert — "INSERT, but if it collides, do something"
+### 17-upsert - "INSERT, but if it collides, do something"
 
 **What it teaches.** Three SQLite shapes for "insert or fix":
 `INSERT OR IGNORE`, `INSERT OR REPLACE`, and the modern
-`INSERT … ON CONFLICT(col) DO UPDATE SET …` (3.24+). Common in caches,
+`INSERT ... ON CONFLICT(col) DO UPDATE SET ...` (3.24+). Common in caches,
 sync, idempotent ingest pipelines.
 
 **Why.** Flagged "deferred" in tut 03 ("`INSERT OR REPLACE` / `ON CONFLICT`
-… add later"). Show up almost immediately in real apps — anything that
+... add later"). Show up almost immediately in real apps - anything that
 processes a stream of records that may already be in the DB needs upsert.
 
 **EF Core.** No native upsert (community libraries fill the gap). SQLite's
-`ON CONFLICT … DO UPDATE` is strictly more powerful than EF Core's
-ecosystem solutions — no LINQ precedent to anchor on, free design.
+`ON CONFLICT ... DO UPDATE` is strictly more powerful than EF Core's
+ecosystem solutions - no LINQ precedent to anchor on, free design.
 
 **Strawman:**
 
 ```das
-// (a) INSERT OR IGNORE — silent no-op on conflict. No blocks needed.
+// (a) INSERT OR IGNORE - silent no-op on conflict. No blocks needed.
 db |> insert_or_ignore(User(Id=42, Name="alice"))
 // => INSERT OR IGNORE INTO users VALUES(?, ?, ...)
 // returns int rows-affected (0 if ignored, 1 if inserted)
 
-// (b) INSERT OR REPLACE — wipe-and-reinsert on conflict.
+// (b) INSERT OR REPLACE - wipe-and-reinsert on conflict.
 //     CAUTION: loses any column not in the new row (defaults applied).
 db |> insert_or_replace(User(Id=42, Name="alice"))
 
-// (c) ON CONFLICT … DO UPDATE — the proper merge. Two trailing blocks:
+// (c) ON CONFLICT ... DO UPDATE - the proper merge. Two trailing blocks:
 //     on_conflict (which column(s) define a conflict) and do_update
-//     (how to merge — sees existing row + proposed row).
+//     (how to merge - sees existing row + proposed row).
 //     Macro `_upsert` sugars _ as the existing row and _excluded as
 //     the proposed row.
 db |> _upsert(User(Id=42, Name="alice", Hits=1),
@@ -267,32 +267,32 @@ db |> _upsert(User(Id=42, Name="alice", Hits=1),
 // => INSERT INTO users(id, name, hits) VALUES(?, ?, ?)
 //    ON CONFLICT(id) DO UPDATE SET hits = users.hits + 1, name = excluded.name
 
-// multi-column conflict target — pass a tuple of column refs
+// multi-column conflict target - pass a tuple of column refs
 db |> _upsert(User(Id=1, Email="x@y.com", Name="alice", Tenant="acme"),
     tuple(_.Email, _.Tenant),
     (Name = _excluded.Name))
 
-// (d) RETURNING — sibling fn, returns array<T> (post-merge row)
+// (d) RETURNING - sibling fn, returns array<T> (post-merge row)
 let after <- db |> _upsert_returning(WordHit(Id=1, Hits=1),
     _.Id,
     (Hits = _.Hits + 1))
 
-// (e) bulk upsert — array overload of (c), single transaction
+// (e) bulk upsert - array overload of (c), single transaction
 db |> _upsert(big_batch, _.Id,
     (Hits = _.Hits + 1, Last = _excluded.Last))
 ```
 
-**Function-form signatures** (per cross-cutting § E):
+**Function-form signatures** (per cross-cutting sec. E):
 
 ```das
-// no-block forms — simple function calls
+// no-block forms - simple function calls
 def insert_or_ignore  (db : SqlRunner; row : auto(T))                   : int
 def insert_or_ignore  (db : SqlRunner; rows : array<auto(T)>)           : int
 def insert_or_replace (db : SqlRunner; row : auto(T))                   : int
 def insert_or_replace (db : SqlRunner; rows : array<auto(T)>)           : int
 def insert_or_replace_returning(db : SqlRunner; row : auto(T))          : T
 
-// upsert — two-block merge form
+// upsert - two-block merge form
 def upsert(db : SqlRunner; row : auto(T);
            on_conflict : block<(arg : T -&) : auto>;
            do_update   : block<(existing : T -&; excluded : T -&) : auto>) : int
@@ -301,36 +301,36 @@ def upsert(db : SqlRunner; rows : array<auto(T)>;
            on_conflict : block<(arg : T -&) : auto>;
            do_update   : block<(existing : T -&; excluded : T -&) : auto>) : int
 
-// upsert RETURNING — distinct name
+// upsert RETURNING - distinct name
 def upsert_returning(db : SqlRunner; row : auto(T);
                      on_conflict : block<(arg : T -&) : auto>;
                      do_update   : block<(existing : T -&; excluded : T -&) : auto>) : array<T>
 ```
 
 `_upsert` macro detects `_excluded` in `do_update`'s AST and synthesizes
-`$(_; _excluded) => …` (two-arg block) instead of `$(_) => …`. The
+`$(_; _excluded) => ...` (two-arg block) instead of `$(_) => ...`. The
 `on_conflict` block stays one-arg.
 
 **Open questions:**
 
-- **`on_conflict = _.Id` for the conflict target — column reference vs
+- **`on_conflict = _.Id` for the conflict target - column reference vs
   expression.** SQL `ON CONFLICT(col)` requires a column name (or list),
   not an arbitrary expression. The macro accepts the block but
   pattern-matches on its body to extract column reference(s):
-  - `_.Id` → `ON CONFLICT(Id)`
-  - `tuple(_.Email, _.Tenant)` → `ON CONFLICT(Email, Tenant)`
-  - `_.Hits + 1` → `macro_error` ("conflict target must be column ref(s)")
+  - `_.Id` -> `ON CONFLICT(Id)`
+  - `tuple(_.Email, _.Tenant)` -> `ON CONFLICT(Email, Tenant)`
+  - `_.Hits + 1` -> `macro_error` ("conflict target must be column ref(s)")
   Strict pattern-match keeps the macro honest; arbitrary expressions
   would be silently dropped or mis-translated by SQLite.
 - **`_excluded` AST sentinel** rather than a two-arg lambda
   `(existing, proposed) => tuple(...)`. Symmetry with SQL's `excluded`
-  pseudo-table name is the deciding factor — users porting SQL knowledge
+  pseudo-table name is the deciding factor - users porting SQL knowledge
   recognize it; users learning fresh see the SQL emitted and the
   daslang sugar map 1:1. The two-arg lambda alternative was tempting
   but introduces an arbitrary name choice (existing? old? row? cur?)
   with no SQL precedent.
-- **Bulk upsert array overload.** Same pattern as `insert([…])` from tut
-  02 — auto-wraps in a transaction. Cheap to support; mechanical macro
+- **Bulk upsert array overload.** Same pattern as `insert([...])` from tut
+  02 - auto-wraps in a transaction. Cheap to support; mechanical macro
   expansion.
 - **`INSERT OR ABORT` / `INSERT OR FAIL` / `INSERT OR ROLLBACK`.**
   SQLite has five conflict resolutions (`ABORT`, `FAIL`, `IGNORE`,
@@ -339,8 +339,8 @@ def upsert_returning(db : SqlRunner; row : auto(T);
   semantics (`ABORT` is the default; `FAIL` differs from `ABORT` only in
   intermediate-row-handling; `ROLLBACK` only matters inside an explicit
   transaction). Add later only if a real use case appears.
-- **Composite WHERE in DO UPDATE clause.** SQLite supports `… DO UPDATE
-  SET col = … WHERE ...` to skip the merge conditionally. Rare; defer.
+- **Composite WHERE in DO UPDATE clause.** SQLite supports `... DO UPDATE
+  SET col = ... WHERE ...` to skip the merge conditionally. Rare; defer.
   If we add it, fourth optional block-arg or sibling
   `upsert_where(row, on_conflict, do_update, where)`.
 
@@ -353,25 +353,25 @@ primary key (05/06). Real queries do more: count, sum, group, sort by
 multiple keys, page, dedupe. Without these in the API, every non-trivial
 query falls into the raw-SQL escape hatch.
 
-### 18-aggregates — "count, sum, min, max, avg"
+### 18-aggregates - "count, sum, min, max, avg"
 
 **Covered by existing daslib/linq + `_sql` translator. No mockup file,
 no new API.** All aggregates already exist as the function/macro pair
-convention (cross-cutting § E):
+convention (cross-cutting sec. E):
 
 | In daslib/linq | Where |
 |---|---|
 | `count` (no-pred / with-pred) / `_count` | linq.das:648, 662 / linq_boost.das:171 |
-| `sum`, `average` | linq.das:1339, 1384 (no block — no macro form needed) |
+| `sum`, `average` | linq.das:1339, 1384 (no block - no macro form needed) |
 | `min`, `max` | linq.das:1061, 1145 |
 | `min_by`, `max_by` / `_min_by`, `_max_by` | linq.das:1103, 1187 / linq_boost.das:91, 101 |
-| `min_max`, `min_max_average` (+ `_by` macro forms) | combo terminals — single-pass |
+| `min_max`, `min_max_average` (+ `_by` macro forms) | combo terminals - single-pass |
 | `any` (no-pred / with-pred) / `_any` | linq.das:1697, 1725 / linq_boost.das:161 |
 | `all` / `_all` | linq.das:1750 / linq_boost.das:151 |
 | `aggregate` | linq.das:1303 |
 
 Bare `_sum` / `_min` / `_max` / `_average` macros don't exist (and
-aren't needed) because the underlying functions take no block — no `_`
+aren't needed) because the underlying functions take no block - no `_`
 to sugar over.
 
 The `_sql(...)` translator recognizes these when applied to a chain
@@ -392,7 +392,7 @@ aggregate. Translation map:
 | `select_from(type<Order>) \|> _select(_.Status) \|> distinct() \|> count()` | `SELECT COUNT(DISTINCT Status) FROM Orders` |
 
 The "scalar-projection-then-aggregate" idiom (`_select(_.Col) |> sum()`)
-is the natural shape for column aggregates — daslib/linq doesn't have
+is the natural shape for column aggregates - daslib/linq doesn't have
 `sum_by` / `average_by` because those would just be sugar over the
 two-step form.
 
@@ -400,19 +400,19 @@ two-step form.
 
 - **`average` return type.** linq.das's `average` returns `TT` (input
   type), but SQL `AVG` always yields floating point. For an
-  `iterator<int>`, `average()` returns `int` today — `_sql` translation
+  `iterator<int>`, `average()` returns `int` today - `_sql` translation
   should widen the result type to `double` to match SQL semantics.
   Either `_sql` rewrites the return type at translation time, or we
   ship `average_double` as a daslib/linq companion.
-- **Empty-set semantics.** `sum` / `count` over zero rows → `0` (matches
-  linq's behavior). `min` / `max` / `average` over zero rows → SQL NULL,
+- **Empty-set semantics.** `sum` / `count` over zero rows -> `0` (matches
+  linq's behavior). `min` / `max` / `average` over zero rows -> SQL NULL,
   daslang panics on the strict form (matches linq's `min(empty_iter)`
   panic). The `Option<T>` return shape lives in tut 25.
 - **`_any()` translation detail.** `_sql` should emit `EXISTS (SELECT
-  1 …)` — short-circuits on the first hit, dramatically cheaper than
+  1 ...)` - short-circuits on the first hit, dramatically cheaper than
   `COUNT(*) > 0`. Macro-side optimization, not user-facing.
 
-### 19-group_by — "aggregate per bucket"
+### 19-group_by - "aggregate per bucket"
 
 **What it teaches.** `GROUP BY` + `HAVING`. "Sales per region", "users
 per signup-month", "orders per status". Reporting queries that would
@@ -431,13 +431,13 @@ let by_city = _sql(db |> select_from(type<User>)
 // => array<tuple<City:string; N:int; AvgAge:float>>
 // => SELECT city, COUNT(*), AVG(age) FROM users GROUP BY city
 
-// HAVING — filter on the aggregate
+// HAVING - filter on the aggregate
 let popular = _sql(db |> select_from(type<User>)
     ._group_by(_.City)
     ._having(_count() > 100)
     ._select((City=_.City, N=_count())))
 
-// multi-key grouping — falls out of the named-tuple support
+// multi-key grouping - falls out of the named-tuple support
 let by_city_year = _sql(db |> select_from(type<User>)
     ._group_by((City=_.City, Year=year(_.SignupDate)))
     ._select((City=_.City, Year=year(_.SignupDate), N=_count())))
@@ -449,32 +449,32 @@ let by_city_year = _sql(db |> select_from(type<User>)
   permits group keys + aggregates in the projection. Should the macro
   reject `_.SomeNonGroupedField` at compile time, or trust SQLite's runtime
   error? Compile-time rejection is the daslang ethos.
-- **LINQ's `IGrouping<K, E>`.** LINQ's `GroupBy(k, e => …)` returns a group
+- **LINQ's `IGrouping<K, E>`.** LINQ's `GroupBy(k, e => ...)` returns a group
   object you can iterate per-bucket. That's a fundamentally different
   shape from "flat row of key + aggregates". Do we ship only the flat
   form, or also a `_group_by_lazy` that materializes per-group rows?
 - **`HAVING` predicates with captured vars.** `._having(_count() >
-  threshold)` where `threshold` is a local — the macro's captured-var-
+  threshold)` where `threshold` is a local - the macro's captured-var-
   to-bind-param machinery already handles this for `_where`; reuse should
   be free. Confirm.
 
-### 20-order_by — "direction, multi-column, then_by"
+### 20-order_by - "direction, multi-column, then_by"
 
 **What it teaches.** Sort with explicit ASC/DESC, sort by multiple keys
 (primary then secondary), sort by an *expression* not a column.
 
-**Why.** Tutorials 04–08 used a single `_order_by(_.X)`. Real lists almost
+**Why.** Tutorials 04-08 used a single `_order_by(_.X)`. Real lists almost
 always sort by name asc *then* date desc, or "last name then first name."
 
 **Strawman:**
 
 ```das
-// chained terminals — LINQ's shape
+// chained terminals - LINQ's shape
 db |> select_from(type<User>)
     ._order_by(_.Name)              // ASC by default
     ._then_by_desc(_.SignupDate)    // tiebreak
 
-// or — composite-key form using asc()/desc() wrappers
+// or - composite-key form using asc()/desc() wrappers
 db |> select_from(type<User>)
     ._order_by(tuple(asc(_.Name), desc(_.SignupDate)))
 
@@ -491,7 +491,7 @@ db |> select_from(type<User>)
   and composes via tuples. The named-arg-tuple form fits daslang's idiom
   better; the chained form fits LINQ users' muscle memory. Ship both?
 - **Sort-by-expression and the SQL function table.** `lower(_.Name)`
-  translates to `ORDER BY LOWER(name)` — but only if the macro knows
+  translates to `ORDER BY LOWER(name)` - but only if the macro knows
   `lower` is a SQL-translatable function. See tut 32 (custom functions);
   this tutorial probably needs a built-in baseline of `lower`/`upper`/
   `length`/`abs` etc.
@@ -502,7 +502,7 @@ db |> select_from(type<User>)
   3.30+; defaults differ from PG. Likely defer to a future tutorial; flag
   as a known per-provider divergence.
 
-### 21-pagination — "skip, take, keyset"
+### 21-pagination - "skip, take, keyset"
 
 **What it teaches.** `LIMIT n` / `LIMIT n OFFSET m` for "first N rows" or
 "page N". Then the keyset (cursor) pattern that's faster for deep pages.
@@ -515,21 +515,21 @@ less famous but materially better.
 **Strawman:**
 
 ```das
-// classic offset pagination — page 5 of 20
+// classic offset pagination - page 5 of 20
 let page = _sql(db |> select_from(type<User>)
     ._order_by(_.Id)
     ._skip(80)
     ._take(20))
-// => SELECT … FROM users ORDER BY id LIMIT 20 OFFSET 80
+// => SELECT ... FROM users ORDER BY id LIMIT 20 OFFSET 80
 
-// keyset pagination — much faster for deep pages
+// keyset pagination - much faster for deep pages
 let next_page = _sql(db |> select_from(type<User>)
     ._where(_.Id > last_seen_id)
     ._order_by(_.Id)
     ._take(20))
-// => SELECT … FROM users WHERE id > ? ORDER BY id LIMIT 20
+// => SELECT ... FROM users WHERE id > ? ORDER BY id LIMIT 20
 
-// take-only — no skip
+// take-only - no skip
 let top10 = _sql(db |> select_from(type<Order>)._order_by_desc(_.Total)._take(10))
 ```
 
@@ -538,7 +538,7 @@ let top10 = _sql(db |> select_from(type<Order>)._order_by_desc(_.Total)._take(10
 - **`_take` without `_skip`.** Special-case fast path emitting just
   `LIMIT n`? Falls out naturally from the macro; non-issue.
 - **`_take(0)`.** Reject at compile time? SQL accepts it (returns no
-  rows). Probably let it through — empty take has legitimate uses in
+  rows). Probably let it through - empty take has legitimate uses in
   generic templated code.
 - **Total count alongside the page.** The dreaded "X of Y results."
   Older SQLite has no `COUNT() OVER()` window function for this; the
@@ -549,11 +549,11 @@ let top10 = _sql(db |> select_from(type<Order>)._order_by_desc(_.Total)._take(10
   Should the macro warn / require an `_order_by` whenever `_skip` is
   present? Strong opinion territory.
 
-### 22-distinct — "DISTINCT and set operations"
+### 22-distinct - "DISTINCT and set operations"
 
 **What it teaches.** `SELECT DISTINCT city FROM users` for dedupe. Set
 operations across two queries: `UNION` (set), `UNION ALL` (multiset, no
-dedupe — much faster), `INTERSECT`, `EXCEPT`.
+dedupe - much faster), `INTERSECT`, `EXCEPT`.
 
 **Why.** DISTINCT comes up constantly (autocomplete suggestions, tag
 clouds). Set ops less often, but real for "users *or* contacts" / "users
@@ -565,12 +565,12 @@ clouds). Set ops less often, but real for "users *or* contacts" / "users
 let cities = _sql(db |> select_from(type<User>)._select(_.City)._distinct())
 // => array<string>, no dupes
 
-// UNION — schemas must match
+// UNION - schemas must match
 let all_emails = _sql(
     (db |> select_from(type<User>)._select(_.Email))
     ._union(db |> select_from(type<Contact>)._select(_.Email)))
 
-// UNION ALL — keeps duplicates, no dedupe pass
+// UNION ALL - keeps duplicates, no dedupe pass
 let combined = _sql(
     (db |> select_from(type<User>)._select(_.Email))
     ._union_all(db |> select_from(type<Contact>)._select(_.Email)))
@@ -580,7 +580,7 @@ let combined = _sql(
 
 - **`_distinct()` placement.** Terminal vs. modifier? In SQL it's part of
   the projection clause (`SELECT DISTINCT`); in LINQ it's a chainable
-  terminal. Mirror LINQ — place it after `_select`.
+  terminal. Mirror LINQ - place it after `_select`.
 - **Schema-compatibility check.** `_union` requires both queries to project
   the same column types in the same order. The macro can verify this at
   compile time given the projected tuple types match. Make the error
@@ -597,9 +597,9 @@ let combined = _sql(
 
 The single biggest design gap. Every existing tutorial reads from one
 table. Real apps join. Flagged as "need a shape" in API_REWORK.md but
-deliberately deferred — this is where it gets settled.
+deliberately deferred - this is where it gets settled.
 
-### 23-joins — "one-to-many across tables"
+### 23-joins - "one-to-many across tables"
 
 **What it teaches.** Combine rows from two tables on a key. "Users with
 their orders." Inner join (rows must match), left join (right side may
@@ -607,7 +607,7 @@ be missing), full outer join (rare).
 
 **Why.** Probably the single most-used SQL feature beyond simple
 SELECT/WHERE. Without it, the only way to get "user + their orders" is
-N+1 queries — pathological.
+N+1 queries - pathological.
 
 **EF Core.** Two flavors:
 - *Explicit join* via `Join(...)`: `users.Join(orders, u => u.Id, o =>
@@ -618,7 +618,7 @@ N+1 queries — pathological.
   lazy loading. Much more ergonomic; requires the relationship to be
   declared (see 26).
 
-**Strawman (explicit join — works without relationship metadata):**
+**Strawman (explicit join - works without relationship metadata):**
 
 ```das
 let buyers = _sql(db |> select_from(type<User>)
@@ -628,7 +628,7 @@ let buyers = _sql(db |> select_from(type<User>)
 // => array<tuple<Name:string; Total:int>>
 // => SELECT u.name, o.total FROM users u INNER JOIN orders o ON u.id=o.user_id
 
-// LEFT JOIN — order may be absent → projection sees Option<Order>
+// LEFT JOIN - order may be absent -> projection sees Option<Order>
 let users_w_optional = _sql(db |> select_from(type<User>)
     ._left_join(db |> select_from(type<Order>),
                 on   = (u, o) => u.Id == o.UserId,
@@ -636,7 +636,7 @@ let users_w_optional = _sql(db |> select_from(type<User>)
                                        Total = o._or(default<Order>()).Total)))
 ```
 
-**Strawman (relationship-aware — depends on tut 26):**
+**Strawman (relationship-aware - depends on tut 26):**
 
 ```das
 // if User has @sql_has_many(type<Order>, by="UserId") Orders : array<Order>
@@ -646,8 +646,8 @@ let buyers = _sql(db |> select_from(type<User>)
 
 **Open questions:**
 
-- **Lambda parameter naming.** In `on=(u, o) => …` and `into=(u, o) =>
-  …`, must the parameter names match across the two lambdas, or is each
+- **Lambda parameter naming.** In `on=(u, o) => ...` and `into=(u, o) =>
+  ...`, must the parameter names match across the two lambdas, or is each
   lambda independent? Independent is simpler; matching is more
   EF-flavored.
 - **LEFT JOIN's nullable right side.** SQL's right-side row is
@@ -659,19 +659,19 @@ let buyers = _sql(db |> select_from(type<User>)
 - **Three-table joins.** Chained `._join(...)._join(...)`? Each chain
   step changes the "current row" type, which cascades into named-tuple
   spaghetti fast. LINQ's escape hatch is `from u in users, o in orders,
-  p in products where … select …` (query-comprehension syntax) — no
+  p in products where ... select ...` (query-comprehension syntax) - no
   daslang analog yet. Ship 2-table joins first, treat 3+ as raw SQL
   until a comprehension story exists?
 - **Inner / left / right / full outer.** Names: `_join` (inner) /
   `_left_join` / `_full_outer_join`? `_right_join` is rare in modern
   SQL; might omit and document the reflexive workaround. SQLite
-  supports `RIGHT JOIN` and `FULL OUTER JOIN` only as of 3.39 — drop
+  supports `RIGHT JOIN` and `FULL OUTER JOIN` only as of 3.39 - drop
   silently on older builds?
-- **Cross join** (cartesian product) — distinct enough to merit a name?
+- **Cross join** (cartesian product) - distinct enough to merit a name?
   `_cross_join` reads as a footgun on accident; better to require it
   spelled out so it's obviously deliberate.
 
-### 24-subqueries — "EXISTS, IN, correlated"
+### 24-subqueries - "EXISTS, IN, correlated"
 
 **What it teaches.** A query inside another query. "Users who have placed
 *any* order" (EXISTS). "Orders for users matching predicate P" (IN).
@@ -684,20 +684,20 @@ client-side eval over a full table.
 **Strawman:**
 
 ```das
-// EXISTS — translated from ._any() inside a _where
+// EXISTS - translated from ._any() inside a _where
 let with_orders = _sql(db |> select_from(type<User>)
     ._where(u => _sql(db |> select_from(type<Order>)
                         ._where(o => o.UserId == u.Id)
                         ._any())))
-// => SELECT … FROM users u WHERE EXISTS (SELECT 1 FROM orders o WHERE o.user_id=u.id)
+// => SELECT ... FROM users u WHERE EXISTS (SELECT 1 FROM orders o WHERE o.user_id=u.id)
 
-// IN — _.UserId in (subquery)
+// IN - _.UserId in (subquery)
 let active_user_orders = _sql(db |> select_from(type<Order>)
     ._where(_.UserId._in(db |> select_from(type<User>)
                             ._where(_.Active)._select(_.Id))))
-// => SELECT … FROM orders WHERE user_id IN (SELECT id FROM users WHERE active=1)
+// => SELECT ... FROM orders WHERE user_id IN (SELECT id FROM users WHERE active=1)
 
-// correlated subquery — outer column referenced in inner query
+// correlated subquery - outer column referenced in inner query
 let above_avg = _sql(db |> select_from(type<Order>)
     ._where(o => o.Total > _sql(db |> select_from(type<Order>)
                                    ._where(o2 => o2.UserId == o.UserId)
@@ -715,7 +715,7 @@ let above_avg = _sql(db |> select_from(type<Order>)
 - **`_in` / `_contains` syntax.** `_.UserId._in(other)` reads naturally;
   `other._contains(_.UserId)` is LINQ's spelling. Pick one. The first
   composes better with daslang's `_` placeholder.
-- **Correlated subquery — capture detection.** The macro's existing
+- **Correlated subquery - capture detection.** The macro's existing
   captured-var machinery (used for bind parameters in `_where`) needs to
   distinguish "outer-row column reference" (translates to `outer.col`)
   from "outer-scope local variable" (translates to a bind parameter).
@@ -726,7 +726,7 @@ let above_avg = _sql(db |> select_from(type<Order>)
   (`x NOT IN (1, NULL)` is always NULL, never TRUE). Worth a tutorial
   warning; not an API issue.
 
-### 25-null_handling — "Option<T>, IS NULL, COALESCE, three-valued logic"
+### 25-null_handling - "Option<T>, IS NULL, COALESCE, three-valued logic"
 
 **What it teaches.** SQL's three-valued logic (`NULL = NULL` is NULL,
 not TRUE). Mapping SQL NULL onto daslang `Option<T>` for read paths.
@@ -744,7 +744,7 @@ place.
 [sql_table(name="users")]
 struct User {
     @sql_primary_key Id : int
-    Name        : string                    // NOT NULL — daslang non-nullable
+    Name        : string                    // NOT NULL - daslang non-nullable
     DeletedAt   : Option<int64>             // nullable timestamp
     Score       : Option<float>             // nullable
     Avatar      : Option<array<uint8>>      // nullable BLOB
@@ -754,31 +754,31 @@ struct User {
 **Strawman (queries):**
 
 ```das
-// IS NULL — _is_none() predicate
+// IS NULL - _is_none() predicate
 let active = _sql(db |> select_from(type<User>)
     ._where(_.DeletedAt._is_none())
     ._select(_.Name))
 // => SELECT name FROM users WHERE deleted_at IS NULL
 
-// COALESCE — ._or(default)
+// COALESCE - ._or(default)
 let with_fallback = _sql(db |> select_from(type<User>)
     ._select((Name=_.Name, S=_.Score._or(0.0))))
 // => SELECT name, IFNULL(score, 0.0) FROM users
 
-// equality with optional — does the right thing
+// equality with optional - does the right thing
 let target = some(0.5)
 let matches = _sql(db |> select_from(type<User>)._where(_.Score == target))
-// => SELECT … WHERE score IS ?  (when target is some)  or  WHERE score IS NULL  (when none)
+// => SELECT ... WHERE score IS ?  (when target is some)  or  WHERE score IS NULL  (when none)
 ```
 
 **Open questions:**
 
 - **`_is_none()` / `_is_some()` predicate forms.** Translate to `IS NULL`
   / `IS NOT NULL`. Equality with `==` already works on `Option<T>` per
-  PR #2471 review — does the macro emit `IS` (NULL-safe) or `=` (NULL
-  poisons)? Almost certainly `IS` — `=` is a near-universal bug source.
+  PR #2471 review - does the macro emit `IS` (NULL-safe) or `=` (NULL
+  poisons)? Almost certainly `IS` - `=` is a near-universal bug source.
 - **`_.Score._or(0.0)` vs. daslang's `??` operator.** If `??` works in
-  `_select` lambdas, we should translate it natively (`a ?? b` →
+  `_select` lambdas, we should translate it natively (`a ?? b` ->
   `IFNULL(a, b)`). Otherwise `_or` is the SQL-aware spelling.
 - **Aggregates over nullable columns.** SQL silently skips NULLs in
   `SUM`/`AVG` and counts-but-skips with `COUNT(col)`. Worth a tutorial
@@ -787,7 +787,7 @@ let matches = _sql(db |> select_from(type<User>)._where(_.Score == target))
   DESC. Other DBs differ. Per-query `NULLS FIRST`/`NULLS LAST` belongs in
   tut 20.
 
-### 26-foreign_keys — "relationships, declarative"
+### 26-foreign_keys - "relationships, declarative"
 
 **What it teaches.** Two distinct concerns: (a) declaring that
 `Order.UserId` references `User.Id` (DDL-side, integrity, cascade); (b)
@@ -795,12 +795,12 @@ navigating from a User to its Orders without writing the join (query-side,
 "navigation properties").
 
 **Why.** Flagged "deferred" at end of tut 02. (a) is small surface; (b) is
-a worldview-level decision — EF's navigation properties are arguably its
+a worldview-level decision - EF's navigation properties are arguably its
 single biggest feature, and the corresponding complexity (lazy loading,
 change tracking, "include" semantics) is enormous. Tutorial should pin
 down whether we ship (a)-only, or commit to the full (b) story.
 
-**Strawman (a) — DDL-only, conservative:**
+**Strawman (a) - DDL-only, conservative:**
 
 ```das
 [sql_table(name="orders")]
@@ -816,7 +816,7 @@ struct Order {
 `FOREIGN KEY (UserId) REFERENCES users(Id) ON DELETE CASCADE`. No new
 query surface. Joins still go through tut 23's explicit `_join`.
 
-**Strawman (b) — navigation properties, ambitious:**
+**Strawman (b) - navigation properties, ambitious:**
 
 ```das
 [sql_table(name="users")]
@@ -825,15 +825,15 @@ struct User {
     Name : string
 
     @sql_has_many(type<Order>, by="UserId")
-    Orders : array<Order>           // not a column — derived
+    Orders : array<Order>           // not a column - derived
 }
 
-// usage — single user with orders eagerly loaded
+// usage - single user with orders eagerly loaded
 let u = _sql(db |> select_from(type<User>)
     ._where(_.Id == 1)
     ._include(_.Orders)
     ._first())
-for (o in u.Orders) print("…")
+for (o in u.Orders) print("...")
 ```
 
 **Open questions:**
@@ -843,7 +843,7 @@ for (o in u.Orders) print("…")
   (`_include`, loaded vs. not-loaded distinction, semantic implications
   for `[sql_table]`-the-struct, change tracking adjacent). Daslang's
   philosophy ("explicit, not implicit; if it gets slow you can fix it")
-  arguably favors (a) — make joins explicit. Defer (b) to a future round.
+  arguably favors (a) - make joins explicit. Defer (b) to a future round.
 - **`@sql_has_many` field is *not* a column.** Type system needs to
   ignore it for DDL emission, INSERT bind, and SELECT-without-include.
   Probably the macro emits a parallel "real columns" descriptor and the
@@ -851,7 +851,7 @@ for (o in u.Orders) print("…")
 - **`@sql_belongs_to` (the inverse).** EF generates both ends of a
   relationship; daslang would too if (b) is in.
 - **Composite foreign keys.** `@sql_foreign_key(ref=type<X>,
-  fields=tuple(A,B))` — falls out naturally if at all; not common.
+  fields=tuple(A,B))` - falls out naturally if at all; not common.
 - **PRAGMA dependence.** Foreign keys are *off by default* in SQLite.
   `create_table` emits the constraint either way, but enforcement
   requires `PRAGMA foreign_keys=ON`. Tutorial must call this out
@@ -865,9 +865,9 @@ The existing schema story (struct + `[sql_table]` + `@sql_primary_key`)
 is the bare minimum. Real schemas have indexes, defaults, computed
 columns, unique constraints, custom types.
 
-### 27-indexes — "CREATE INDEX, when and why"
+### 27-indexes - "CREATE INDEX, when and why"
 
-**What it teaches.** Indexes — what they are, when to add them, the
+**What it teaches.** Indexes - what they are, when to add them, the
 performance impact. Single-column and composite indexes. Unique indexes
 (equivalent to a unique constraint).
 
@@ -899,12 +899,12 @@ db |> create_table(type<User>)
 
 **Open questions:**
 
-- **Per-field shorthand.** `@sql_indexed` annotation on a field — convenient
+- **Per-field shorthand.** `@sql_indexed` annotation on a field - convenient
   but redundant when struct-level `[sql_index]` exists. `@sql_unique` on a
   field is equally redundant with `[sql_index(unique=true)]`. Pick one
   syntax; teach the other as deprecated-on-arrival.
 - **Index naming.** Auto-generate from table+columns? Allow override via
-  `[sql_index(name="ix_my_thing", fields=…)]`?
+  `[sql_index(name="ix_my_thing", fields=...)]`?
 - **Partial indexes** (`WHERE deleted=0`). SQLite supports them; rare in
   EF. Defer until someone asks.
 - **Index hints on queries** (`INDEXED BY`). Anti-pattern in modern SQL;
@@ -914,14 +914,14 @@ db |> create_table(type<User>)
   this tutorial, "indexes are emitted as part of CREATE TABLE; existing
   tables aren't touched."
 
-### 28-defaults_computed — "more @sql_* annotations"
+### 28-defaults_computed - "more @sql_* annotations"
 
 **What it teaches.** Server-side defaults (`DEFAULT CURRENT_TIMESTAMP`),
 computed/generated columns (SQLite 3.31+: `GENERATED ALWAYS AS (price *
 qty)`), check constraints, table-level constraints.
 
 **Why.** API_REWORK.md mentions `@sql_default(expr)` once but never
-exercises it. Real schemas lean on these heavily — every `created_at`
+exercises it. Real schemas lean on these heavily - every `created_at`
 column, every `total = price * qty` derived column.
 
 **Strawman:**
@@ -946,9 +946,9 @@ struct Order {
 
 - **Typed default helpers vs. raw SQL strings.** `@sql_default("(strftime
   ('%s','now'))")` is provider-specific and typo-prone. A typed alternative
-  — `@sql_default_now`, `@sql_default_uuid`, `@sql_default(value)` for
-  literals — locks portability and catches typos. Probably ship both.
-- **Computed columns on insert.** If the user passes `Total=…` to
+  - `@sql_default_now`, `@sql_default_uuid`, `@sql_default(value)` for
+  literals - locks portability and catches typos. Probably ship both.
+- **Computed columns on insert.** If the user passes `Total=...` to
   `insert(Order(...))`, what happens? Silently ignore? Reject at compile
   time (the `[sql_table]` macro can flag computed fields as
   "construction-only-zero")? SQLite errors at runtime.
@@ -961,10 +961,10 @@ struct Order {
   field) are awkward when the constraint spans columns; table-level
   `[sql_check("...")]` covers everything. Ship table-level only?
 
-### 29-custom_types — "DateTime, enums, GUIDs, JSON; type adapters"
+### 29-custom_types - "DateTime, enums, GUIDs, JSON; type adapters"
 
 **What it teaches.** Mapping daslang types that don't have native SQL
-counterparts. SQLite has no DATE/TIME/UUID — they're stored as TEXT or
+counterparts. SQLite has no DATE/TIME/UUID - they're stored as TEXT or
 INTEGER by convention. Enums need int-or-string round-trip. JSON columns
 get string-with-validation.
 
@@ -976,7 +976,7 @@ reinventing it.
 **Strawman:**
 
 ```das
-// declare an adapter — bind/extract callbacks tied to a type
+// declare an adapter - bind/extract callbacks tied to a type
 register_sql_type(type<DateTime>,
     sql_type = SqlType.Integer,
     bind     = $(stmt, idx, dt : DateTime) =>
@@ -1000,11 +1000,11 @@ struct Event {
   code. Resolution probably needs a `[sql_type_for(type<DateTime>)]`
   annotation on the adapter function/struct so the macro picks it up
   during compilation.
-- **Enums.** Likely auto-handled (int-backed enum → INTEGER column with
+- **Enums.** Likely auto-handled (int-backed enum -> INTEGER column with
   cast on bind/extract). Worth a `@sql_enum_as_string` annotation for
   human-readable storage that survives renames? (Storing as int means
   reordering enum values silently corrupts data.)
-- **JSON columns.** Tied to tut 37. `@sql_json Foo : tuple<…>` round-trips
+- **JSON columns.** Tied to tut 37. `@sql_json Foo : tuple<...>` round-trips
   via daslang's JSON module. Lives in `sqlite/sqlite_boost` or in the
   abstract `daslib/sql`?
 - **Per-field overrides vs. type-level adapters.** If `DateTime` has a
@@ -1022,7 +1022,7 @@ These tutorials cover what an admin/operator needs: schema evolution,
 read-only views, custom SQL functions, runtime tuning. Less about
 day-to-day app code, more about long-term maintenance.
 
-### 30-migrations — "versioned schema evolution"
+### 30-migrations - "versioned schema evolution"
 
 **What it teaches.** Real apps' schemas evolve. v1 has no Email column;
 v2 adds it; an existing v1 DB on disk needs to be upgraded automatically
@@ -1055,7 +1055,7 @@ def migration_003(db : SqlRunner) {
 // at app startup:
 with_sqlite("app.db") <| $(db) {
     db |> migrate_to_latest()    // runs migrations in order, records in __schema_version
-    // … app code runs against the up-to-date schema …
+    // ... app code runs against the up-to-date schema ...
 }
 ```
 
@@ -1068,21 +1068,21 @@ with_sqlite("app.db") <| $(db) {
   evolution work to the user. Daslang's "explicit, not implicit"
   philosophy probably favors hand-written; flag generation as a future
   module.
-- **Up-only vs. up+down.** Most projects use up-only — down migrations
-  are written, never run, eventually rot. Default up-only; if a `down=…`
+- **Up-only vs. up+down.** Most projects use up-only - down migrations
+  are written, never run, eventually rot. Default up-only; if a `down=...`
   block is provided, it's available for manual rollback.
 - **Where does `__schema_version` live?** Reserved table name? User-
   configurable via a setting? Single integer or migration-name-set?
 - **Out of scope for the dasSQLITE rework itself.** Probably ships as
   `daslib/sqlite_migrate` (separate module) once the core API stabilizes.
   Design constraint: the `[sql_table]` machinery must not preclude a
-  future struct-diff implementation — keep field metadata
+  future struct-diff implementation - keep field metadata
   introspectable.
 
-### 31-views — "saved queries as read-only tables"
+### 31-views - "saved queries as read-only tables"
 
-**What it teaches.** `CREATE VIEW active_users AS SELECT … FROM users
-WHERE deleted=0` — a saved query that's queryable like a table. Read-only
+**What it teaches.** `CREATE VIEW active_users AS SELECT ... FROM users
+WHERE deleted=0` - a saved query that's queryable like a table. Read-only
 in SQLite (other DBs allow updatable views).
 
 **Why.** Common in reporting, permission models, multi-tenancy. Cleanly
@@ -1104,7 +1104,7 @@ struct ActiveUser {
 db |> create_view(type<ActiveUser>)
 
 // read-side: identical to a table
-for (u in db |> select_from(type<ActiveUser>)) { … }
+for (u in db |> select_from(type<ActiveUser>)) { ... }
 ```
 
 **Strawman (LINQ-defined view):**
@@ -1138,9 +1138,9 @@ def define_active_users(db : SqlRunner) {
   trigger. Out of scope; teach "writes go through the underlying tables."
 - **View dependencies.** A view depends on the tables it queries; if the
   underlying table is dropped/altered, the view breaks. Ordering
-  constraint for `create_table` / `create_view` calls — flag.
+  constraint for `create_table` / `create_view` calls - flag.
 
-### 32-sql_functions — "register a daslang fn as a SQL fn"
+### 32-sql_functions - "register a daslang fn as a SQL fn"
 
 **What it teaches.** SQLite's `sqlite3_create_function` lets you register
 a callback that SQL can call inside `WHERE` / `SELECT` / `ORDER BY`.
@@ -1157,45 +1157,45 @@ function used in `WHERE` can be indexed via expression indexes).
 ```das
 [sql_function(name="levenshtein")]
 def lev_dist(a : string; b : string) : int {
-    // … pure daslang impl …
+    // ... pure daslang impl ...
 }
 
-// register on a runner — SQLite's binding is per-connection
+// register on a runner - SQLite's binding is per-connection
 db |> register_function(@@<(a:string;b:string):int>lev_dist)
 
 // translatable predicate inside _sql
 let near = _sql(db |> select_from(type<User>)
     ._where(lev_dist(_.Name, "alic") <= 2))
-// => SELECT … WHERE levenshtein(name, ?) <= 2
+// => SELECT ... WHERE levenshtein(name, ?) <= 2
 ```
 
 **Open questions:**
 
 - **Function lifetime.** SQLite registers per-connection. A `SqlRunner`
   outlives connection swaps inside (e.g. reconnect on busy). Need
-  re-registration on reconnect — runner tracks the registered set?
+  re-registration on reconnect - runner tracks the registered set?
 - **Macro awareness.** The `_sql` macro must know which daslang functions
   are registered SQL functions in order to translate calls in
   `_where`/`_select` to native SQL. Compile-time registry the macro
   reads, populated by `[sql_function]` annotations? Per-runner (runtime)
-  registration won't work for compile-time translation — the annotation
+  registration won't work for compile-time translation - the annotation
   is the source of truth.
 - **Aggregate functions** (xStep + xFinal) and **window functions** are
   much more complex; defer to a follow-up tutorial.
 - **Function determinism / `SQLITE_DETERMINISTIC` flag.** Required for
   expression indexes. Annotation on the daslang function?
 
-### 33-pragma — "WAL mode, busy_timeout, foreign_keys, concurrency tuning"
+### 33-pragma - "WAL mode, busy_timeout, foreign_keys, concurrency tuning"
 
 **What it teaches.** SQLite's runtime knobs. The four pragmas that
 matter for almost every real app:
-- `PRAGMA journal_mode=WAL` — readers don't block writers; one writer
+- `PRAGMA journal_mode=WAL` - readers don't block writers; one writer
   doesn't block readers. Massive concurrency win.
-- `PRAGMA busy_timeout=5000` — wait N ms instead of immediately erroring
+- `PRAGMA busy_timeout=5000` - wait N ms instead of immediately erroring
   on lock contention.
-- `PRAGMA foreign_keys=ON` — *off by default* (SQLite's worst trap).
+- `PRAGMA foreign_keys=ON` - *off by default* (SQLite's worst trap).
   Required for declared FKs to actually enforce.
-- `PRAGMA synchronous=NORMAL` — durability/perf tradeoff (FULL is the
+- `PRAGMA synchronous=NORMAL` - durability/perf tradeoff (FULL is the
   default, paranoid; NORMAL is appropriate for almost everyone in WAL
   mode).
 
@@ -1211,17 +1211,17 @@ with_sqlite("app.db") <| $(db) {
     db |> set_pragma("busy_timeout", "5000")
     db |> set_pragma("foreign_keys", "ON")
     db |> set_pragma("synchronous", "NORMAL")
-    // … work …
+    // ... work ...
 }
 
-// or — a one-shot opinionated bundle
+// or - a one-shot opinionated bundle
 db |> apply_recommended_pragmas()    // sets the four above; logs at LOG_INFO
 
-// or — at open time via named-tuple parameter
+// or - at open time via named-tuple parameter
 with_sqlite("app.db",
             pragmas = (journal_mode="WAL",
                             busy_timeout=5000,
-                            foreign_keys=true)) <| $(db) { … }
+                            foreign_keys=true)) <| $(db) { ... }
 ```
 
 **Open questions:**
@@ -1229,7 +1229,7 @@ with_sqlite("app.db",
 - **Typed enum vs. string-based.** `set_journal_mode(JournalMode.WAL)`
   catches typos at compile time but only covers well-known pragmas.
   String-based covers the long tail (every PRAGMA SQLite ships).
-  Probably ship both — typed for the well-known, fallback to string.
+  Probably ship both - typed for the well-known, fallback to string.
 - **`apply_recommended_pragmas()` opinions.** The four-pragma bundle
   above is sane but opinionated. Bake it in or document it as "what most
   apps want, here are the lines, copy-paste."
@@ -1245,14 +1245,14 @@ with_sqlite("app.db",
 These are the things you don't think about until you ship: backups,
 streaming large reads, multiple databases, concurrency.
 
-### 34-backup_vacuum — "backup, VACUUM, integrity check"
+### 34-backup_vacuum - "backup, VACUUM, integrity check"
 
 **What it teaches.** Three operational primitives:
 - `sqlite3_backup_*` API for online backup of a *live* DB (not just
-  copying the file — that's unsafe while writes are happening).
-- `VACUUM` — rebuild the DB file, reclaiming free pages. Periodic
+  copying the file - that's unsafe while writes are happening).
+- `VACUUM` - rebuild the DB file, reclaiming free pages. Periodic
   hygiene.
-- `PRAGMA integrity_check` — "is this DB corrupted?"
+- `PRAGMA integrity_check` - "is this DB corrupted?"
 
 **Why.** Production hygiene. Saves files, snapshots before risky
 migrations, "is this DB OK?" check after a crash.
@@ -1260,10 +1260,10 @@ migrations, "is this DB OK?" check after a crash.
 **Strawman:**
 
 ```das
-// online backup — safe on a live DB, no downtime
+// online backup - safe on a live DB, no downtime
 db |> backup_to("backup-2026-04-23.db")
 
-// VACUUM — must NOT be inside a transaction
+// VACUUM - must NOT be inside a transaction
 with_sqlite("app.db") <| $(db) {
     db |> exec("VACUUM")           // synchronous; can take a while on big DBs
 }
@@ -1282,7 +1282,7 @@ if (length(report) != 0) {
   copies-then-closes. Probably ship both; path-based is the common case.
 - **VACUUM's transaction restriction.** VACUUM cannot run inside an open
   transaction. Compile-time check (the macro knows whether `with_transaction`
-  is in scope) — too clever, too brittle? Probably runtime panic with a
+  is in scope) - too clever, too brittle? Probably runtime panic with a
   clear message.
 - **`PRAGMA optimize`.** SQLite 3.18+; runs ANALYZE-equivalent
   selectively. Lighter-weight than VACUUM and worth running periodically.
@@ -1291,10 +1291,10 @@ if (length(report) != 0) {
   progress (`sqlite3_backup_step` returning intermediate progress). Worth
   exposing for big DBs / progress UI? Probably defer.
 
-### 35-streaming — "iterate large result sets without materializing"
+### 35-streaming - "iterate large result sets without materializing"
 
 **What it teaches.** `for (row in db |> select_from(type<T>))` already
-streams (per tut 04 — iterator-based, one row at a time). This tutorial
+streams (per tut 04 - iterator-based, one row at a time). This tutorial
 *reinforces* the rule: never call `to_array(...)` on a 10M-row query.
 Shows the correct shape and the OOM-risk anti-shape.
 
@@ -1305,13 +1305,13 @@ streaming idiom as primary.
 **Strawman:**
 
 ```das
-// already works — iterator-based, one row at a time, no array materialized
+// already works - iterator-based, one row at a time, no array materialized
 for (row in _sql(db |> select_from(type<Event>)._where(_.At >= since))) {
     process(row)
     break if (row.Critical)        // stops the SQL stream cleanly
 }
 
-// vs. forced materialization — bad for big results
+// vs. forced materialization - bad for big results
 let all <- to_array(_sql(db |> select_from(type<Event>)))   // OOM risk on big tables
 ```
 
@@ -1322,7 +1322,7 @@ let all <- to_array(_sql(db |> select_from(type<Event>)))   // OOM risk on big t
   cleanup which calls `sqlite3_finalize`. No leak. Verify at impl time;
   document.
 - **Re-iteration of the same iterator.** SQL iterators consume once.
-  Re-running needs a fresh `_sql(...)` call. Document — users coming
+  Re-running needs a fresh `_sql(...)` call. Document - users coming
   from in-memory iterators get surprised.
 - **Two simultaneous iterators on the same DB.** SQLite supports
   multiple open statements, but each holds locks. Tutorial should warn
@@ -1331,9 +1331,9 @@ let all <- to_array(_sql(db |> select_from(type<Event>)))   // OOM risk on big t
 - **No new API surface.** Mostly a docs/tutorial concern. Tutorial worth
   writing because it inoculates against perf-pitfall reports.
 
-### 36-attach — "ATTACH DATABASE, cross-DB queries"
+### 36-attach - "ATTACH DATABASE, cross-DB queries"
 
-**What it teaches.** `ATTACH DATABASE 'archive.db' AS archive` — query
+**What it teaches.** `ATTACH DATABASE 'archive.db' AS archive` - query
 `archive.users` alongside `main.users` in one connection. Cross-DB
 joins, copying data between DBs without an export/import dance.
 
@@ -1347,20 +1347,20 @@ flows. Power feature; SQLite-specific.
 with_sqlite("main.db") <| $(db) {
     db |> attach("archive.db", as_name="archive")
 
-    // raw form — table name qualified
+    // raw form - table name qualified
     let merged = db |> query(
         "SELECT * FROM main.users UNION SELECT * FROM archive.users",
         type<User>)
 
-    // typed form (if [sql_table] gets a schema annotation — see open Q)
-    // for (u in db |> select_from(type<ArchivedUser>)) { … }
+    // typed form (if [sql_table] gets a schema annotation - see open Q)
+    // for (u in db |> select_from(type<ArchivedUser>)) { ... }
 
     db |> detach("archive")
 }
 
-// or — block-scoped
+// or - block-scoped
 db |> with_attached("archive.db", as_name="archive") <| {
-    // … queries here see both schemas; auto-detach on exit …
+    // ... queries here see both schemas; auto-detach on exit ...
 }
 ```
 
@@ -1373,11 +1373,11 @@ db |> with_attached("archive.db", as_name="archive") <| {
 - **Cross-DB transactions.** SQLite handles them when in WAL mode; some
   edge cases around journaling. Worth a note; not API design.
 - **Provider scope.** SQLite-only. Not even worth a place in
-  `daslib/sql` abstract — the analog (cross-server queries via foreign
+  `daslib/sql` abstract - the analog (cross-server queries via foreign
   data wrappers in PG, linked servers in MSSQL) is wildly different per
   backend.
 
-### 37-json — "JSON columns (SQLite JSON1 extension)"
+### 37-json - "JSON columns (SQLite JSON1 extension)"
 
 **What it teaches.** Storing structured data as JSON text + querying
 inside it via `json_extract(col, '$.field')`. Common modern pattern:
@@ -1406,7 +1406,7 @@ db |> insert(User(Id=1, Name="alice",
 
 // query inside the JSON:
 let dark = _sql(db |> select_from(type<User>)._where(_.Prefs.theme == "dark"))
-// => SELECT … WHERE json_extract(prefs, '$.theme') = ?
+// => SELECT ... WHERE json_extract(prefs, '$.theme') = ?
 
 // projection from inside JSON:
 let themes = _sql(db |> select_from(type<User>)._select(_.Prefs.theme))
@@ -1416,9 +1416,9 @@ let themes = _sql(db |> select_from(type<User>)._select(_.Prefs.theme))
 **Open questions:**
 
 - **Serialization plug-in.** `@sql_json` requires a JSON serializer.
-  Daslang has `daslib/json` — provider plugs that in. Lives in the
+  Daslang has `daslib/json` - provider plugs that in. Lives in the
   abstract layer or in `sqlite/sqlite_boost` (since the `json_extract`
-  function name is provider-specific — PG uses `->` operator)?
+  function name is provider-specific - PG uses `->` operator)?
 - **The `_.Prefs.theme` translation.** Sophisticated: macro must
   recognize "field access on a JSON-typed column" and emit
   `json_extract(prefs, '$.theme')` instead of treating it as a normal
@@ -1426,8 +1426,8 @@ let themes = _sql(db |> select_from(type<User>)._select(_.Prefs.theme))
   `_json_extract(_.Prefs, "$.theme")` puts the burden on the user but
   keeps the macro simpler.
 - **Indexed JSON paths.** SQLite supports indexes on `json_extract(...)`
-  expressions — power feature, defer.
-- **Type fidelity.** Round-tripping `tuple<theme:string;…>` through JSON
+  expressions - power feature, defer.
+- **Type fidelity.** Round-tripping `tuple<theme:string;...>` through JSON
   loses some info (no distinction between "field absent" and "field
   null"). Worth a documentation pass.
 
@@ -1435,16 +1435,16 @@ let themes = _sql(db |> select_from(type<User>)._select(_.Prefs.theme))
 
 ## Specialized features
 
-These are useful but narrow — each serves a specific niche. Worth
+These are useful but narrow - each serves a specific niche. Worth
 designing the *escape hatch* for each so users can reach them without
 fighting the API; not worth building a full LINQ-style facade for any of
 them.
 
-### 38-bulk_ops — "huge-batch insert, INSERT … SELECT, bulk update"
+### 38-bulk_ops - "huge-batch insert, INSERT ... SELECT, bulk update"
 
 **What it teaches.** Beyond `insert(array<T>)` (covered in tut 02 with
 auto-transaction), the next tier: thousands-to-millions-of-rows
-scenarios. `INSERT INTO … SELECT …` for moving data between tables
+scenarios. `INSERT INTO ... SELECT ...` for moving data between tables
 without leaving the DB. Prepared-statement reuse for streaming inserts.
 
 **Why.** Imports, ETL, replication, archival jobs. Tutorial 02's 8-row
@@ -1454,21 +1454,21 @@ constraints (memory, transaction size, statement-cache wins).
 **Strawman:**
 
 ```das
-// already exists — auto-transaction wraps the whole array
-db |> insert(big_array)              // BEGIN; INSERT…; INSERT…; … COMMIT
+// already exists - auto-transaction wraps the whole array
+db |> insert(big_array)              // BEGIN; INSERT...; INSERT...; ... COMMIT
 
-// new — server-side INSERT … SELECT, no rows cross the wire
+// new - server-side INSERT ... SELECT, no rows cross the wire
 let n = _sql(db |> select_from(type<User>)
     ._where(_.LastSeen < cutoff)
     ._sql_insert_into(type<UserArchive>))
 // => INSERT INTO user_archive(...) SELECT ... FROM users WHERE last_seen<?
 
-// new — bulk update with predicate (companion to tut 15)
+// new - bulk update with predicate (companion to tut 15)
 let stale = _sql(db |> select_from(type<User>)
     ._where(_.LastSeen < cutoff)
     ._sql_update((Active=false)))
 
-// new — streaming insert from an iterator (no full materialization)
+// new - streaming insert from an iterator (no full materialization)
 db |> insert_stream(type<Event>) <| $(yield) {
     for (line in read_log_lines(path)) {
         yield(parse_event(line))     // batched + prepared-statement-reused under the hood
@@ -1482,7 +1482,7 @@ db |> insert_stream(type<Event>) <| $(yield) {
   bulk forms.** Top-level `insert_select(...)` / `bulk_update(...)` /
   `bulk_delete(...)` would just be sugar over the chain terminals; not
   worth the duplication. Naming follows the `_sql_` prefix rule for
-  SQL-only chain terminals (cross-cutting § E). All three are terminal —
+  SQL-only chain terminals (cross-cutting sec. E). All three are terminal - 
   return `int` (rows-affected) by default, `array<T>` when called with
   `returning=type<T>` (per tut 15's RETURNING decision).
 - **Transaction sizing for huge inserts.** A million-row insert in one
@@ -1493,7 +1493,7 @@ db |> insert_stream(type<Event>) <| $(yield) {
   "design challenges") really pays off. Worth a benchmark in the
   tutorial: 5000 single-row inserts with vs. without statement reuse.
 
-### 39-fts5 — "full-text search"
+### 39-fts5 - "full-text search"
 
 **What it teaches.** SQLite's FTS5 virtual tables: declare a
 search-indexed table, insert text, query with `MATCH 'word*'`. Returns
@@ -1524,16 +1524,16 @@ let hits = _sql(db |> select_from(type<DocSearch>)
 
 - **Tokenizer / configuration.** FTS5 has many knobs (tokenizers
   unicode61/porter/ascii, prefix indexes, etc.). Annotation surface
-  explodes; keep narrow at first — default tokenizer, no per-table
+  explodes; keep narrow at first - default tokenizer, no per-table
   knobs, escape-hatch via raw `CREATE VIRTUAL TABLE` for power users.
 - **Joining FTS hits back to content rows.** `DocSearch` is logically a
   view over `docs`; the macro could emit a join to fetch the original
-  row. Or punt — user does the join explicitly with `_join`.
+  row. Or punt - user does the join explicitly with `_join`.
 - **Module placement.** Probably worth shipping but as a `daslib/sql_fts`
-  *extension* module rather than core — niche enough that everyone
+  *extension* module rather than core - niche enough that everyone
   carrying it is a tax.
 
-### 40-concurrency — "threading, busy retry, per-context runners"
+### 40-concurrency - "threading, busy retry, per-context runners"
 
 **What it teaches.** Connection-per-thread vs. shared connection. WAL
 mode for read concurrency (already in tut 33). The SQLITE_BUSY retry
@@ -1541,24 +1541,24 @@ pattern. Daslang's threading model interaction: each context owns its
 own runner; runners cannot cross context boundaries.
 
 **Why.** First time SQLite stops looking like a single-threaded library.
-Per CLAUDE.md, contexts can't share heap-resident data — what does that
+Per CLAUDE.md, contexts can't share heap-resident data - what does that
 mean for `SqlRunner`? Worth establishing the rule explicitly so people
 don't try to share a runner across `new_thread` boundaries.
 
 **Strawman:**
 
 ```das
-// per-thread runners — each thread opens its own
+// per-thread runners - each thread opens its own
 new_thread() <| @ {
     with_sqlite("app.db") <| $(db) {
         db |> set_pragma("busy_timeout", "5000")
         // queries here race against main-thread queries;
         // WAL mode lets readers + 1 writer coexist
-        for (e in _sql(db |> select_from(type<Event>))) { … }
+        for (e in _sql(db |> select_from(type<Event>))) { ... }
     }
 }
 
-// retry on SQLITE_BUSY — pattern, not API (yet)
+// retry on SQLITE_BUSY - pattern, not API (yet)
 def with_retry<T>(max : int; fn : block<():Result<T,string>>) : T {
     for (i in range(max)) {
         let r = invoke(fn)
@@ -1572,7 +1572,7 @@ def with_retry<T>(max : int; fn : block<():Result<T,string>>) : T {
 **Open questions:**
 
 - **`SqlRunner` cross-context safety.** Almost certainly *cannot* cross
-  boundaries — the runner holds heap-resident state (statement cache,
+  boundaries - the runner holds heap-resident state (statement cache,
   bind buffers). Tutorial must establish this hard rule early; the
   type system probably can't enforce it but a runtime check on first use
   could.
@@ -1588,16 +1588,16 @@ def with_retry<T>(max : int; fn : block<():Result<T,string>>) : T {
   every project hand-rolls the same loop. `with_retry_on_busy(...)`
   helper worth shipping?
 
-### 41-triggers — "DB-level callbacks (raw SQL only)"
+### 41-triggers - "DB-level callbacks (raw SQL only)"
 
-**What it teaches.** `CREATE TRIGGER` — DB-level callbacks on
+**What it teaches.** `CREATE TRIGGER` - DB-level callbacks on
 INSERT/UPDATE/DELETE. Useful for audit log generation, denormalization
 (materialized derived columns updated on insert), enforcing constraints
 that span tables.
 
-**Why.** Mostly out-of-scope for daslang user code — triggers live in
+**Why.** Mostly out-of-scope for daslang user code - triggers live in
 the DB, fire transparently, have no daslang-side hook. Tutorial answers
-"can I do this?" — yes via raw `exec`; no, there's no LINQ-style
+"can I do this?" - yes via raw `exec`; no, there's no LINQ-style
 surface.
 
 **Strawman:**
@@ -1612,7 +1612,7 @@ db |> exec("""
     END
 """)
 
-// triggers fire transparently — db |> delete(...) honours them
+// triggers fire transparently - db |> delete(...) honours them
 db |> delete(User(Id=42))
 // row is deleted from users; user_audit gets a corresponding insert
 ```
@@ -1623,7 +1623,7 @@ db |> delete(User(Id=42))
   raw escape hatch and notes that triggers fire transparently from
   `[sql_table]`-generated mutations.
 - **Worth its own tutorial vs. a paragraph in the raw-SQL tutorial?**
-  Lean toward shipping it — triggers come up in legacy-schema porting,
+  Lean toward shipping it - triggers come up in legacy-schema porting,
   and "yes, your triggers will fire correctly through the daslang API"
   is the question users actually want answered.
 - **`OLD` / `NEW` pseudo-tables.** SQLite-specific; mention briefly so
@@ -1636,42 +1636,42 @@ db |> delete(User(Id=42))
 A few design questions surface across multiple tutorials above and are
 worth pulling out so we don't re-decide them per-feature:
 
-### A — The SQL function table (translatable functions)
+### A - The SQL function table (translatable functions)
 
 Tutorials 20 (sort by `lower(_.Name)`), 25 (`COALESCE` / `IFNULL`), 32
 (custom functions) all need the macro to know which daslang function
 calls translate to SQL. There are three populating mechanisms:
 
-1. **Built-in baseline** — `lower`, `upper`, `length`, `abs`, `trim`,
+1. **Built-in baseline** - `lower`, `upper`, `length`, `abs`, `trim`,
    `coalesce`, `substr`, etc. Hard-coded into the macro / abstract
    layer.
-2. **Provider extensions** — `json_extract`, `julianday`, `strftime`,
+2. **Provider extensions** - `json_extract`, `julianday`, `strftime`,
    `date`, `time` (SQLite); different per backend. Lives in
    `sqlite/sqlite_boost`.
-3. **User-registered** (tut 32) — `[sql_function]`-annotated daslang
+3. **User-registered** (tut 32) - `[sql_function]`-annotated daslang
    functions. Compile-time discoverable.
 
 The macro needs a single lookup that walks all three. Settle the registry
-shape early — it's load-bearing for too many tutorials to design
+shape early - it's load-bearing for too many tutorials to design
 ad hoc.
 
-### B — Cross-provider portability of annotations
+### B - Cross-provider portability of annotations
 
 Many `@sql_*` annotations have provider-specific values:
 `@sql_default("(strftime('%s','now'))")` is SQLite-flavored; PG would
-spell it `now()`. EF deals with this via "value generators" — typed
+spell it `now()`. EF deals with this via "value generators" - typed
 sentinels (`ValueGeneratedOnAdd`) the provider translates.
 
 For each new annotation that takes a SQL string (defaults, computed
 columns, check constraints), decide: typed enum (portable, restricted),
-raw string (flexible, lock-in), or both? Probably both — typed for the
+raw string (flexible, lock-in), or both? Probably both - typed for the
 common cases, raw as escape hatch with a `@sql_provider("sqlite")` opt-in
 guard.
 
-### C — The translation-failure boundary
+### C - The translation-failure boundary
 
 API_REWORK.md says "default: `macro_error` at compile time" for
-non-translatable predicates — but tutorials 23 (joins with arbitrary
+non-translatable predicates - but tutorials 23 (joins with arbitrary
 join predicates), 24 (subqueries with correlated lambdas), 25
 (`Option<T>` semantics), 32 (calls to unregistered functions) all push
 on this. As we accumulate "if you write this, the macro errors" rules,
@@ -1683,7 +1683,7 @@ Helpful for users to know exactly what's translatable vs. what falls
 back to `select_from(...)._where(...)` *without* `_sql` (compatibility
 mode).
 
-### D — `daslib/sql` vs. `sqlite/sqlite_boost` placement, refined
+### D - `daslib/sql` vs. `sqlite/sqlite_boost` placement, refined
 
 Each new tutorial above implicitly declares "this lives in the abstract
 layer" or "this lives in the provider." Quick sweep:
@@ -1710,13 +1710,13 @@ layer" or "this lives in the provider." Quick sweep:
 | 40 concurrency | abstract pattern; provider-specific knobs |
 | 41 triggers | abstract escape hatch (just raw `exec`) |
 
-Most of the new surface is abstract — SQLite-specific tutorials cluster
+Most of the new surface is abstract - SQLite-specific tutorials cluster
 in operations (33, 34, 36) and specialized features (37, 39). The
 `daslib/sql` abstract layer is the bigger module; `sqlite/sqlite_boost`
 stays focused on dialect, type table, runner impl, and a handful of
 SQLite power features.
 
-### E — Naming convention: function form + macro form pair
+### E - Naming convention: function form + macro form pair
 
 dasSQLITE mirrors daslib/linq's two-form pattern. Every operation that
 takes a predicate, projection, or merge clause has both a *function form*
@@ -1724,56 +1724,56 @@ takes a predicate, projection, or merge clause has both a *function form*
 row placeholder, lets the user skip block-type signatures).
 
 **Function form** is the bare name unless it collides with a daslang
-keyword, in which case a trailing underscore disambiguates — same trick
+keyword, in which case a trailing underscore disambiguates - same trick
 daslib/linq uses for `where_` (`where` is a daslang keyword).
 
 **Macro form** is the function-form name with a leading underscore. The
 macro wraps each block-arg expression in a synthetic `$(_) => expr`
 block (or `$(_; _excluded) => expr` when `_excluded` appears in the AST
-— see "Macro AST sentinels" below) and forwards positionally.
+ - see "Macro AST sentinels" below) and forwards positionally.
 
 | Operation | Function form | Macro form | RETURNING (function) | RETURNING (macro) |
 |---|---|---|---|---|
 | Update bulk           | `update`             | `_update`             | `update_returning`             | `_update_returning`             |
 | Delete bulk           | `delete_` (keyword)  | `_delete`             | `delete_returning`             | `_delete_returning`             |
 | Upsert (merge)        | `upsert`             | `_upsert`             | `upsert_returning`             | `_upsert_returning`             |
-| INSERT INTO … SELECT  | `insert_into`        | `_insert_into`        | `insert_into_returning`        | `_insert_into_returning`        |
+| INSERT INTO ... SELECT  | `insert_into`        | `_insert_into`        | `insert_into_returning`        | `_insert_into_returning`        |
 | INSERT OR REPLACE     | `insert_or_replace`  | n/a (no blocks)       | `insert_or_replace_returning`  | n/a                             |
 | INSERT OR IGNORE      | `insert_or_ignore`   | n/a (no blocks)       | n/a                            | n/a                             |
 
-`insert_or_ignore` and `insert_or_replace` don't get macro forms — they
+`insert_or_ignore` and `insert_or_replace` don't get macro forms - they
 take no blocks (no `_` placeholder to sugar over). Plain function calls.
 
 Each strict form has a `try_` non-panic sibling returning
 `Result<int, string>` (or `Result<array<T>, string>` for RETURNING
 variants); macro forms get a `_try_` prefix. So a block-taking operation
-expands to up to 8 names — `update`, `_update`, `try_update`,
+expands to up to 8 names - `update`, `_update`, `try_update`,
 `_try_update`, `update_returning`, `_update_returning`,
 `try_update_returning`, `_try_update_returning`. All mechanically
 derivable; no surprise.
 
 **Argument order is the API contract, not named-arg keywords.**
 Daslang supports named-arg syntax at function-definition sites (`def
-update(db; tt; where : block<…>; set : block<…>)`) and at call sites,
+update(db; tt; where : block<...>; set : block<...>)`) and at call sites,
 but callers may use either form. The macro pattern-matches by
-*position* only — so an API design that depends on call-site named args
-("if the caller writes `set=…`, do X; if they write positionally, do
+*position* only - so an API design that depends on call-site named args
+("if the caller writes `set=...`, do X; if they write positionally, do
 Y") would be unenforceable. Function definitions can still use named-
 arg syntax for self-documentation, but the macro reads its inputs
 purely positionally.
 
 **Macro AST sentinels:**
 
-- `_` — the default row placeholder (one-arg block parameter). Used in
+- `_` - the default row placeholder (one-arg block parameter). Used in
   `_where(_.Active)`, `_select(_.Name)`, `_update(type<T>, _.X<5,
-  (Y=2))`, etc. The macro always synthesizes `$(_) => …`.
-- `_excluded` — the proposed-but-not-yet-inserted row inside `_upsert`'s
+  (Y=2))`, etc. The macro always synthesizes `$(_) => ...`.
+- `_excluded` - the proposed-but-not-yet-inserted row inside `_upsert`'s
   `do_update` block. Mirrors SQL's `excluded` pseudo-table. When the
   macro detects `_excluded` in a block expression's AST, it synthesizes
-  a two-arg block `$(_; _excluded) => …` instead of a one-arg block.
+  a two-arg block `$(_; _excluded) => ...` instead of a one-arg block.
 
 **No `_sql(...)` wrapper for mutations.** UPDATE / DELETE / UPSERT /
-INSERT-INTO-SELECT have no in-memory analog — they can only run in the
+INSERT-INTO-SELECT have no in-memory analog - they can only run in the
 DB. The `_sql(...)` wrapper exists for SELECT chains where the same
 chain has a runtime fallback (compat mode, no SQL push-down). Mutation
 function/macro pairs always emit SQL directly; the wrapper would be
@@ -1782,7 +1782,7 @@ ceremonial noise.
 **No `_sql_` prefix.** An earlier draft proposed `_sql_update` /
 `_sql_delete` / `_sql_insert_into` to mark "SQL-only" operators. With
 the function/macro pair convention from daslib/linq, the leading-
-underscore-as-macro convention is already enough — adding `_sql_` would
+underscore-as-macro convention is already enough - adding `_sql_` would
 double-mark and break parallelism with `_where` / `_select`. The
 "SQL-only" property is documented per-operation, not encoded in the
 name.
@@ -1797,7 +1797,7 @@ sibling away from a clean macro form.
 ## Plan, take two
 
 Once the above tutorials get the same "decisions locked" treatment that
-01–14 received in `API_REWORK.md`, the synthesized plan should be able
+01-14 received in `API_REWORK.md`, the synthesized plan should be able
 to answer, for each piece of code in `[sql_table]`-generated machinery
 or the `_sql` macro:
 

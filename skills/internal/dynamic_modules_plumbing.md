@@ -27,14 +27,14 @@ edit re-derives (`CMAKE_CONFIGURE_DEPENDS`); until a rebuild, only the scan serv
 ## Gate
 
 `REVIEW.das` calls `gate_descriptor_census(<descriptor>, [<folders>], [<non-module tokens>])`
-(`dastest/review_gate.das`): disk ↔ descriptor equality both ways, one directory level, so name
+(`dastest/review_gate.das`): disk <-> descriptor equality both ways, one directory level, so name
 every folder. Optional third argument: quoted tokens that are not module names (class names,
 category strings).
 
 ## Debugging
 
 - configure prints `<module>: N <category>/<subfolder> resolver rows derived from .das_module`
-  — check N first; zero is a `FATAL_ERROR` (wrong `subfolder`, or `.das` renamed away from the
+  - check N first; zero is a `FATAL_ERROR` (wrong `subfolder`, or `.das` renamed away from the
   descriptor names); a missing/renamed descriptor dies earlier, at `FILE(READ)`
 - a failed `require foo/bar` means BOTH routes missed: descriptor absent or unscanned (module
   folder under neither dasroot nor `-project_root`), AND no compiled-in row (not

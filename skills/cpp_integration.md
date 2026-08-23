@@ -58,10 +58,10 @@ a namespace use the namespace-safe pair instead: `DECLARE_MODULE(ClassName)` /
 `DECLARE_ALL_DEFAULT_MODULES` at file scope, `PULL_MODULE(ClassName)` /
 `PULL_ALL_DEFAULT_MODULES` inside the namespace (`tutorials/integration/cpp/22_namespace_integration.cpp`).
 
-A C++ module also needs a `.das_module` descriptor to load into the DLL binary —
+A C++ module also needs a `.das_module` descriptor to load into the DLL binary - 
 `skills/dynamic_modules.md`.
 
-## Binding functions — `addExtern` + `DAS_BIND_FUN`
+## Binding functions - `addExtern` + `DAS_BIND_FUN`
 
 ```cpp
 addExtern<DAS_BIND_FUN(cpp_function)>(*this, lib, "das_name",
@@ -74,16 +74,16 @@ ref params), `modifyArgumentAndExternal`, `accessGlobal`, `invoke` (calls back i
 daslang), `worstDefault`.
 
 **`modifyArgument` on a temporary loses the call.** When a function mutates state reachable
-*through* an argument that is itself a temporary — `set(node.text, value)` where `.text`
-returns by value — the optimizer sees the temporary is dead after the call and eliminates
+*through* an argument that is itself a temporary - `set(node.text, value)` where `.text`
+returns by value - the optimizer sees the temporary is dead after the call and eliminates
 the call. Declare `modifyArgumentAndExternal`.
 
-## Binding types — `MAKE_TYPE_FACTORY` + `ManagedStructureAnnotation`
+## Binding types - `MAKE_TYPE_FACTORY` + `ManagedStructureAnnotation`
 
 1. `MAKE_TYPE_FACTORY(DasName, CppType)` at file scope
 2. `ManagedStructureAnnotation<T, canNew, canDelete>` with
    `addField<DAS_BIND_MANAGED_FIELD(member)>("name", "name")`
-3. `addAnnotation(make_smart<MyAnnotation>(lib))` — register a contained type before the
+3. `addAnnotation(make_smart<MyAnnotation>(lib))` - register a contained type before the
    type that contains it
 4. A function returning a bound type by value needs the `SimNode_ExtFuncCallAndCopyOrMove`
    template argument on `addExtern`
@@ -93,7 +93,7 @@ of a handled type needs `unsafe`, an immutable `let` returned from a factory doe
 Provide `make_xxx()` factories returning by value so scripts write `let x = make_xxx(...)`.
 POD structs (no default member initializers, no virtuals) bind best.
 
-## Binding methods — `DAS_CALL_MEMBER` + `DAS_CALL_METHOD`
+## Binding methods - `DAS_CALL_MEMBER` + `DAS_CALL_METHOD`
 
 daslang has no member functions; a method is a free function whose first argument is
 `self`, called with pipe syntax (`obj |> method()`).
@@ -110,7 +110,7 @@ addExtern<DAS_CALL_METHOD(method_increment)>(*this, lib, "increment",
 Non-const methods take `modifyArgument`, const methods `none`.
 `DAS_CALL_MEMBER_CPP` supplies the AOT-compatible name string.
 
-## Callbacks — `TBlock`, `TFunc`, `TLambda`
+## Callbacks - `TBlock`, `TFunc`, `TLambda`
 
 | Type | Template | Invocation | Lifetime |
 |---|---|---|---|
@@ -134,11 +134,11 @@ signature-checked, while untyped `Lambda` maps to `lambda<>` and will **not** ma
 typed `lambda<(x:int):int>`. Anything that invokes a script callback takes
 `SideEffects::invoke`.
 
-Calling into daslang from C++ goes through the same helpers —
+Calling into daslang from C++ goes through the same helpers - 
 `das_invoke_function<Ret>::invoke(ctx, at, fnPtr, args...)` marshals arguments for you and
 is preferred over raw `cast<>` plus `evalWithCatch`.
 
-## Binding `std::shared_ptr<T>` — `Handle<T>` + `HandleRegistry`
+## Binding `std::shared_ptr<T>` - `Handle<T>` + `HandleRegistry`
 
 Use this when the C++ type is already owned by `std::shared_ptr` and cannot be retrofitted
 with `ptr_ref_count`. Self-contained example: `tutorials/integration/cpp/23_handle_registry.cpp`.
@@ -147,14 +147,14 @@ with `ptr_ref_count`. Self-contained example: `tutorials/integration/cpp/23_hand
 #include "daScript/misc/handle_registry.h"   // Handle<T>, HandleRegistry<T>
 #include "daScript/ast/ast_handle.h"         // addHandleAnnotation, cast<Handle<T>>
 
-MAKE_TYPE_FACTORY(MyType, MyType)            // file scope — REQUIRED
+MAKE_TYPE_FACTORY(MyType, MyType)            // file scope - REQUIRED
 
 addHandleAnnotation<MyType>(this, lib, "MyType",
     "destroy_my_type",                       // optional daslang destructor
     "das::Handle<MyType>");                  // C++ name AOT emits into stubs
 ```
 
-`typeName<T>` must exist at file scope — the leak dump reads it, and without it
+`typeName<T>` must exist at file scope - the leak dump reads it, and without it
 `addHandleAnnotation` fails to compile (`use of undefined type 'das::typeName<T>'`). Use
 `MAKE_TYPE_FACTORY` for a single TU, or the
 `MAKE_EXTERNAL_TYPE_FACTORY` / `IMPLEMENT_EXTERNAL_TYPE_FACTORY` pair across header and cpp.
@@ -173,7 +173,7 @@ int my_type_do_thing(Handle<MyType> h, int arg) {
 }
 ```
 
-`lookup` returns an empty `shared_ptr` for a null, stale, or reused handle — the null check
+`lookup` returns an empty `shared_ptr` for a null, stale, or reused handle - the null check
 is a generation-checked use-after-free guard. `instance()` is one per-`T` singleton shared
 across the executable and every `.shared_module`, and is mutex-guarded.
 
@@ -183,7 +183,7 @@ passed by value, so `modifyArgument` is rejected at registration
 behind the handle anyway.
 
 Script side, a handle is a plain value: `var h = make_my_type(...)`, no `var inscope`,
-`==` / `!=` / `is_alive(h)` all work. There is **no scope-based release** — every acquired
+`==` / `!=` / `is_alive(h)` all work. There is **no scope-based release** - every acquired
 handle must be destroyed explicitly or it leaks and is printed at shutdown
 (`--no-dump-leaks` on the CLI suppresses that for intentional cases). AOT needs no extra
 work: `cast<Handle<T>>` maps to `uint64_t`.
@@ -198,7 +198,7 @@ work: `cast<Handle<T>>` maps to `uint64_t`.
 
 ## Operators and properties
 
-Operators bind by name — register a function whose daslang name is the symbol:
+Operators bind by name - register a function whose daslang name is the symbol:
 
 ```cpp
 addExtern<DAS_BIND_FUN(vec3_add), SimNode_ExtFuncCallAndCopyOrMove>(
@@ -206,13 +206,13 @@ addExtern<DAS_BIND_FUN(vec3_add), SimNode_ExtFuncCallAndCopyOrMove>(
 ```
 
 Bindable: `+ - * / % << >> < > <= >= & | ^ ~ ! && ||`, the compound-assign family, `++`,
-`--`, `[]`, and the special names `clone` and `finalize`. There is no whitelist — only the
+`--`, `[]`, and the special names `clone` and `finalize`. There is no whitelist - only the
 characters are validated, so any punctuation name the parser accepts binds.
 `addEquNeq<T>(*this, lib)` binds `==` and `!=` together.
 
 Properties are field-like access backed by C++. Inside a `ManagedStructureAnnotation`, for
 a member function: `addProperty<DAS_BIND_MANAGED_PROP(length)>("length", "length")` (use
-`addPropertyExtConst<...>` when const and non-const accessors differ — see
+`addPropertyExtConst<...>` when const and non-const accessors differ - see
 `tutorials/integration/cpp/09_operators_and_properties.cpp`). For a free function, name it
 with the `` .` `` prefix:
 
@@ -225,9 +225,9 @@ addExtern<DAS_BIND_FUN(get_content_length)>(*this, lib, ".`content_length",
 ```
 
 `resp.content_length` then calls it. This is the way to bind a property whose getter is a
-free function, or whose member needs a conversion (`size_t` → `int`).
+free function, or whose member needs a conversion (`size_t` -> `int`).
 
-## Binding enums — `DAS_BASE_BIND_ENUM`
+## Binding enums - `DAS_BASE_BIND_ENUM`
 
 ```cpp
 // MUST come BEFORE `using namespace das`
@@ -239,13 +239,13 @@ addEnumeration(new EnumerationDasName());    // in the module constructor
 ```
 
 The macro defines names inside `namespace das`, which collide with global enum names once
-`using namespace das` is in effect — hence the ordering rule. `das::LogLevel` already
+`using namespace das` is in effect - hence the ordering rule. `das::LogLevel` already
 exists, so never name an enum `LogLevel`. Unscoped C-style enums use
 `DAS_BASE_BIND_ENUM_98`; `DAS_BIND_ENUM_CAST(CppEnum)` adds an explicit `cast<>`
 specialization when the SFINAE default is not enough. Manual alternative:
 `new Enumeration("Name")` plus `pEnum->addIEx("Value", "CppEnum::Value", intValue, LineInfo())`.
 
-## Low-level interop — `addInterop`
+## Low-level interop - `addInterop`
 
 `addInterop` binds a function that receives raw simulation arguments plus the call node, so
 it can inspect what was actually passed. Its distinguishing power is the **"any type"
@@ -263,14 +263,14 @@ addInterop<my_interop, ReturnType, ArgType1, ArgType2>(
     *this, lib, "das_name", SideEffects::none, "my_interop");
 ```
 
-**`TypeInfo` holds a union** — `structType`, `enumType` and `annotation_info` share
+**`TypeInfo` holds a union** - `structType`, `enumType` and `annotation_info` share
 memory, and reading the wrong one is undefined behavior. Dispatch on `ti->type`:
-`tStructure` → `ti->structType`, `tEnumeration`/`tEnumeration8`/`tEnumeration16` →
-`ti->enumType`, `tHandle` → `ti->getAnnotation()` (resolves and caches the live
+`tStructure` -> `ti->structType`, `tEnumeration`/`tEnumeration8`/`tEnumeration16` ->
+`ti->enumType`, `tHandle` -> `ti->getAnnotation()` (resolves and caches the live
 `TypeAnnotation`; `das_to_string(Type::tHandle)` is empty, so handled type names come from
 `ti->getAnnotation()->name`).
 
-## `aotRequire()` — headers for AOT output
+## `aotRequire()` - headers for AOT output
 
 When a module binds functions declared in specific headers, AOT-generated C++ must include
 them, or it fails to compile with "undeclared identifier":
@@ -284,9 +284,9 @@ virtual ModuleAotType aotRequire(TextWriter & tw) const override {
 
 Generate stubs with `bin/daslang -aot input.das output.cpp`, adding `-aot-macros` when the
 script defines macros. `error[50101]: AOT link failed on <fn>` means the recorded hash no
-longer matches the source — regenerate and rebuild.
+longer matches the source - regenerate and rebuild.
 
-## Diagnostics — `TextPrinter`, never `fprintf(stderr, ...)`
+## Diagnostics - `TextPrinter`, never `fprintf(stderr, ...)`
 
 ```cpp
 #include "daScript/misc/string_writer.h"
@@ -299,9 +299,9 @@ default), so a program whose stdout carries a protocol redirects all diagnostics
 with `textPrinterToStderr()` (das: `diagnostics_to_stderr()`) or `textPrinterToFile(path)`
 (das: `diagnostics_to_file`). `fprintf` writes wherever the OS `stderr` points, and on
 consoles (Switch, PlayStation, Xbox) there is no `stderr` at all. The rule covers temporary
-debug prints too — do not leave `fprintf` scaffolding in the tree.
+debug prints too - do not leave `fprintf` scaffolding in the tree.
 
-## C-string builtins — guard `!str || !*str`
+## C-string builtins - guard `!str || !*str`
 
 At runtime the empty string is `nullptr`, and the interpreter always passes `null`. But a
 constant-folded AOT call may pass a real `""` instead, so a null-only guard changes
@@ -316,4 +316,4 @@ const char * find(const char * str, const char * needle) {
 
 Real bug: `strstr("","")` returned a match under AOT and no-match under the interpreter.
 Highest risk is the 2-argument overloads (no `Context*`) that participate in constant
-folding — `find`, `rfind`, `contains`.
+folding - `find`, `rfind`, `contains`.

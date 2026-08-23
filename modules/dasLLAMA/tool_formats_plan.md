@@ -1,7 +1,7 @@
-# Tool formats arc — ToolMode for every family but GLM
+# Tool formats arc - ToolMode for every family but GLM
 
 **Endgoal (one PR):** when it merges, every supported family except GLM-4 serves `tools`
-through the OpenAI endpoint — gpt-oss, gemma-4, mistral3, llama — with tests demonstrating
+through the OpenAI endpoint - gpt-oss, gemma-4, mistral3, llama - with tests demonstrating
 each per the REVIEW.md recognition-test rule. GLM keeps its THINKING.md remote-leg record
 (zen2). The Hermes/Qwen family is the already-working reference.
 
@@ -18,11 +18,11 @@ enum ToolMode { none; hermes; harmony; gemma4; mistral; llama_json }
 
 Per-mode responsibilities (all dispatched in `dasllama_chat.das`; arch files stay declarative):
 
-1. **Defs render** — where and how the tool definitions enter the prompt.
-2. **Call parse** — extract calls from the generated reply, composing AFTER the reasoning
-   split (reasoning first, calls from the content half — the shipped pipeline).
-3. **Call replay** — `render_assistant_calls` for stateless history.
-4. **Results render** — `add_tool_results` framing.
+1. **Defs render** - where and how the tool definitions enter the prompt.
+2. **Call parse** - extract calls from the generated reply, composing AFTER the reasoning
+   split (reasoning first, calls from the content half - the shipped pipeline).
+3. **Call replay** - `render_assistant_calls` for stateless history.
+4. **Results render** - `add_tool_results` framing.
 
 The server's `parse_tool_calls_auto` becomes mode-dispatched; the OpenAI normalization
 (`tool_calls`, `finish_reason`) is already format-agnostic past extraction.
@@ -31,19 +31,19 @@ The server's `parse_tool_calls_auto` becomes mode-dispatched; the OpenAI normali
 
 | family | defs | call | results | notes |
 |---|---|---|---|---|
-| **harmony** (gpt-oss) | DEVELOPER turn, TypeScript-style `functions` namespace block — NOT a JSON list | `commentary` channel with recipient header `to=functions.NAME` (+ optional `<|constrain|>json`), body = JSON args, ends at `<|call|>` (already our stop) | tool message back on the matching recipient framing | the channel splitter already parses these headers (recipient-qualified commentary routes to reasoning today — with tools declared it becomes `tool_calls`); highest infrastructure reuse |
-| **gemma4** | system-turn block (verify exact shape) | asymmetric `<|tool_call>` … `<tool_call|>` | family's response tags | interplay with thinking is specified in THINKING.md: thoughts inside an in-flight tool chain survive history-strip, and tool-response continuation PREFILLS the thought opener — the asymmetric matcher must accept the opener from either side (the case left unhandled in the thinking arc) |
-| **mistral** | `[AVAILABLE_TOOLS]`…`[/AVAILABLE_TOOLS]` (before the last user turn, not the system block) | `[TOOL_CALLS]` + JSON ARRAY, no closing marker (ends at EOS) | `[TOOL_RESULTS]`…`[/TOOL_RESULTS]` | real control tokens in the v0.3/tekken vocabs; closest fit to the marker model |
-| **llama_json** (llama-3.x) | JSON defs in the system prompt | the WHOLE reply is a bare JSON object (`{"name":…,"parameters":…}`) — no markers; `<|python_tag|>` only for builtins (out of scope) | `ipython` role turn | parse = strict whole-content JSON sniff (a call iff the full content parses as an object with name+parameters); weakest small-model reliability — see the grammar section |
+| **harmony** (gpt-oss) | DEVELOPER turn, TypeScript-style `functions` namespace block - NOT a JSON list | `commentary` channel with recipient header `to=functions.NAME` (+ optional `<|constrain|>json`), body = JSON args, ends at `<|call|>` (already our stop) | tool message back on the matching recipient framing | the channel splitter already parses these headers (recipient-qualified commentary routes to reasoning today - with tools declared it becomes `tool_calls`); highest infrastructure reuse |
+| **gemma4** | system-turn block (verify exact shape) | asymmetric `<|tool_call>` ... `<tool_call|>` | family's response tags | interplay with thinking is specified in THINKING.md: thoughts inside an in-flight tool chain survive history-strip, and tool-response continuation PREFILLS the thought opener - the asymmetric matcher must accept the opener from either side (the case left unhandled in the thinking arc) |
+| **mistral** | `[AVAILABLE_TOOLS]`...`[/AVAILABLE_TOOLS]` (before the last user turn, not the system block) | `[TOOL_CALLS]` + JSON ARRAY, no closing marker (ends at EOS) | `[TOOL_RESULTS]`...`[/TOOL_RESULTS]` | real control tokens in the v0.3/tekken vocabs; closest fit to the marker model |
+| **llama_json** (llama-3.x) | JSON defs in the system prompt | the WHOLE reply is a bare JSON object (`{"name":...,"parameters":...}`) - no markers; `<|python_tag|>` only for builtins (out of scope) | `ipython` role turn | parse = strict whole-content JSON sniff (a call iff the full content parses as an object with name+parameters); weakest small-model reliability - see the grammar section |
 
 ## Tests (the REVIEW rule, applied four times)
 
 - **Model-free**: per-mode parse pins (call extraction, replay round-trip, reasoning+tools
-  compose for harmony/gemma4) — `tests/test_chat.das` render pins + parse cases wherever a
+  compose for harmony/gemma4) - `tests/test_chat.das` render pins + parse cases wherever a
   wire shape is expressible without a model.
 - **Live legs** in `utils/dasllama-server/test_openai_server_think.das` (or a sibling
   `_tools` file if it outgrows): gpt-oss-20b (PARITY_FULL tier, local), gemma-4-E2B (local,
-  under tier), llama-3.2-3B-Q4 (local, under tier), mistral — **fetch
+  under tier), llama-3.2-3B-Q4 (local, under tier), mistral - **fetch
   Mistral-7B-Instruct-v0.3 Q4_K_M (~4.4 GB, under tier)**; the local v0.3 Q8 is over the
   6 GiB tier and Small-24B far over.
 - Each live leg: declare one obvious tool, greedy, assert `finish_reason="tool_calls"` +
@@ -53,14 +53,14 @@ The server's `parse_tool_calls_auto` becomes mode-dispatched; the OpenAI normali
 ## The grammar question (audited 2026-08-11)
 
 **llama.cpp**: full GBNF engine + `json_schema_to_grammar` + **lazy grammars** (trigger
-tokens/patterns arm the constraint mid-generation — the tool-call mechanism: free until
+tokens/patterns arm the constraint mid-generation - the tool-call mechanism: free until
 `<tool_call>`-class trigger fires, then schema-constrained JSON; forced from step 0 for
-`tool_choice:"required"`). Their schema→grammar half is the fragile part — 2026 issue tail:
+`tool_choice:"required"`). Their schema->grammar half is the fragile part - 2026 issue tail:
 combined-grammar build fails above ~58 tools / cumulative schema size, `maxLength >= 2000`
 emits unparseable GBNF, empty-object schemas break the whole request, PCRE shorthands
 unsupported.
 
-**dasLLAMA**: nothing — the sampler is a flat logits → cutoffs → argmax/CDF pipeline
+**dasLLAMA**: nothing - the sampler is a flat logits -> cutoffs -> argmax/CDF pipeline
 (`dasllama_sampling.das`), no per-step constraint hook.
 
 **Decision: formats first; grammar is NOT in this PR.** Three of four families emit their
@@ -68,23 +68,23 @@ trained formats reliably unconstrained (the shipped Qwen legs prove the pattern 
 greedy; llama.cpp itself shipped tool calling before lazy grammars existed). Grammar is an
 engine-layer feature with its own design surface (incremental token-level matching across
 UTF-8-partial pieces, candidate filtering vs full-vocab masking, penalty/cutoff interplay,
-decode hot-path cost) and llama.cpp's bug tail shows the schema→grammar half alone is an arc.
+decode hot-path cost) and llama.cpp's bug tail shows the schema->grammar half alone is an arc.
 Gating four working formats on it inverts the value order.
 
 **Follow-up arc (separate, after this PR): constrained decoding.**
 - Milestone 1: a JSON-only constrained sampler (state-machine over candidate tokens, no
-  schema compilation — the 80/20): upgrades the llama leg to deterministic-parseable,
+  schema compilation - the 80/20): upgrades the llama leg to deterministic-parseable,
   implements `response_format: json_object`, and gives `tool_choice:"required"` an honest
   core for llama_json mode.
 - Milestone 2 (only if demanded): schema-aware constraint + lazy triggers per ToolMode
-  (the trigger points are exactly the mode's call markers — keep them data so this slots in).
+  (the trigger points are exactly the mode's call markers - keep them data so this slots in).
   General GBNF is explicitly out of scope until a consumer needs it.
 - The concrete trigger for starting the arc: the llama-3.2-3B live leg flaking at greedy, or
   a real `tool_choice:"required"` / structured-output consumer.
 
 ## Follow-up discussion before the PR: dasllama-server chat preview
 
-The control page's chat panel speaks the same OpenAI surface this arc extends — before the PR
+The control page's chat panel speaks the same OpenAI surface this arc extends - before the PR
 opens, discuss what the preview should DO with the new fields: render `reasoning_content`
 (collapsed thinking block? streamed inline?), display declared tools and emitted
 `tool_calls`/results turns, and whether the preview grows a way to answer a call (a canned
@@ -95,27 +95,27 @@ the outcome lands either in this PR or as its own follow-up arc.
 
 1. ToolMode enum + dispatch skeleton; migrate Hermes onto it (zero-behavior-change commit,
    pinned by the existing token-for-token tests).
-2. harmony (most reuse, biggest value) → gemma4 (asymmetric pair + the thinking interplay)
-   → mistral (cleanest marker fit) → llama_json (sniff parse, lenient live assert).
+2. harmony (most reuse, biggest value) -> gemma4 (asymmetric pair + the thinking interplay)
+   -> mistral (cleanest marker fit) -> llama_json (sniff parse, lenient live assert).
 3. Server: mode-dispatched parse; `tool_choice` handling unchanged ("required" still
    warns-as-auto until the constrained-decoding arc).
 4. Docs: THINKING.md tool section update, both READMEs, das2rst grouping for any new facade
-   verb (the docs gate re-runs — the think_drain lesson).
+   verb (the docs gate re-runs - the think_drain lesson).
 
 ## Chat-layer wiring design (settled; implement next)
 
 **Defs placement per mode** (all in the first-turn machinery): hermes = system prose (as
 shipped); harmony = canonical system body (identity + `Reasoning: medium` + channel declaration
-+ commentary-routing line; no live date — noted deviation) then a DEVELOPER turn
++ commentary-routing line; no live date - noted deviation) then a DEVELOPER turn
 `# Instructions\n\n{system}\n\n# Tools\n\n{namespace}`; gemma4 = `<|tool>decl<tool|>` blocks
-spliced after the system content (markers + `<|"|>` are vocab specials — marker-split);
-mistral = the `[AVAILABLE_TOOLS][…][/AVAILABLE_TOOLS]` block rendered as its OWN segment
-BEFORE the first `[INST]` (canonical places it before the LAST user turn — identical for
+spliced after the system content (markers + `<|"|>` are vocab specials - marker-split);
+mistral = the `[AVAILABLE_TOOLS][...][/AVAILABLE_TOOLS]` block rendered as its OWN segment
+BEFORE the first `[INST]` (canonical places it before the LAST user turn - identical for
 single-turn requests; the review round moved it out of the [INST] frame, CR10); llama_json =
 defs block prefixed into the FIRST user turn.
 
 **Replay per mode** (render_assistant_calls_): harmony = ` to=functions.NAME` + `<|channel|>`
-`commentary json` + `<|message|>` + args, closed by `<|call|>` (NOT the derived `<|end|>` —
+`commentary json` + `<|message|>` + args, closed by `<|call|>` (NOT the derived `<|end|>` - 
 per-mode close suppression); gemma4 = `<|tool_call>` DSL blocks, turn stays OPEN (a
 `turn_open` session flag; results continue the same model turn); mistral = `[TOOL_CALLS]`
 special + JSON array text + `</s>`; llama_json = the bare JSON object + `<|eot_id|>`.
@@ -127,26 +127,26 @@ gemma4 = `<|tool_response>response:NAME{...}<tool_response|>` in the open model 
 generation continues in-turn (no assistant_open); mistral = `[TOOL_RESULTS]` framing;
 llama_json = an `ipython`-header turn with the string-results-JSON-quoted quirk.
 
-**Server**: finish-path dispatch — harmony+tools = `harmony_parse` (one walk supersedes
+**Server**: finish-path dispatch - harmony+tools = `harmony_parse` (one walk supersedes
 split-then-parse); gemma4 = think-split then `gemma4_parse`; mistral/llama_json = think-split
 (inert) then their parsers; hermes = as shipped.
 
-## Review round for PR #3691 — ALL items greenlit (no trims), fix before merge
+## Review round for PR #3691 - ALL items greenlit (no trims), fix before merge
 
 Sources: opus /code-review (10 confirmed), REVIEW.md audit (4V/2U/4S), Copilot (2).
 
 **A. Severe:**
-1. role:"tool" + no tools on a none-mode family → render_tool_results' llama else-arm panics
-   render_parts → server death. FIX: mode==none routes to the pre-PR user-frame path; the
+1. role:"tool" + no tools on a none-mode family -> render_tool_results' llama else-arm panics
+   render_parts -> server death. FIX: mode==none routes to the pre-PR user-frame path; the
    render_prompt gate becomes `mode != hermes && mode != none`.
 2. [INST]-sniffed templates without v0.3 tokens: ungated [TOOL_RESULTS] special panics; tools
    no longer 400. FIX: resolve `tool_vocab_ok` per mode at create (mirror think_vocab);
-   effective mode falls to none when the mode's control specials are absent — the server 400s
+   effective mode falls to none when the mode's control specials are absent - the server 400s
    honestly again (this also makes REVIEW's inert-declaration exemption TRUE).
-3. (a) [user, asst(calls), tool, user] replay: add_user overwrites the queued results —
+3. (a) [user, asst(calls), tool, user] replay: add_user overwrites the queued results - 
    dropped on ALL families (partly pre-existing for hermes). FIX: flush the queued results
    turn (render, no assistant_open) before add_user when both queue in render_chat_suffix's
-   walk — needs a chat-layer flush seam. (b) gemma4 close_turn=false leaks an open turn on
+   walk - needs a chat-layer flush seam. (b) gemma4 close_turn=false leaks an open turn on
    [user, asst(calls), user]. FIX: ChatSession.turn_open; the next render closes it
    (close_parts) when not continuing with tool results.
 4. tool_call_id discarded; positional pairing misorders parallel results. FIX: server maps
@@ -167,7 +167,7 @@ Sources: opus /code-review (10 confirmed), REVIEW.md audit (4V/2U/4S), Copilot (
    next "<|start|>"/"<|channel|>" header (drop the off-grammar tail); harmony_parse same.
 
 **B. Auditor:**
-- V1: render pins in tests/test_chat.das for the four modes — model-free tool_mode asserts
+- V1: render pins in tests/test_chat.das for the four modes - model-free tool_mode asserts
   per family + ONE token-for-token pin on gemma-4-E2B (defs turn -> call replay -> result
   turn). V2: pins for tool_call_of_json / json_value_or_quoted / json_quoted in
   test_tool_formats.das. V3+S1: move the pure wire-text builders into dasllama_tools
@@ -175,29 +175,29 @@ Sources: opus /code-review (10 confirmed), REVIEW.md audit (4V/2U/4S), Copilot (
   sharpen the REVIEW placement rule to "every byte that goes on the wire is produced by a
   function in dasllama_tools.das; dasllama_chat.das assembles ChatParts and places them in
   turns" + reconcile the section preamble with entries naming neighbours.
-- V4: THINKING.md test map — add test_tool_formats.das, the four tool live legs, and fix the
+- V4: THINKING.md test map - add test_tool_formats.das, the four tool live legs, and fix the
   trigger spelling. S2: the recognition rule's trigger becomes "think_mode or tool_mode" in
   REVIEW.md AND THINKING.md. S3: reword the exemption per fix A2. S4: bind "smallest
   local GGUF" to the fetch_models manifest.
 - U1: PR body gains the model-free -jit command line. U2: catalogue
   Llama-3.2-3B-Instruct-Q4_K_M, Mistral-7B-Instruct-v0.3-Q4_K_M, gemma-4-E2B-it-Q4_K_M in
-  performance/fetch_models.das (repo+revision pin, bytes+sha256 — match the file's format).
+  performance/fetch_models.das (repo+revision pin, bytes+sha256 - match the file's format).
 
 **C. Copilot + judgment:**
 - --border CSS var: verify it exists in control.html's :root; fix the chip style if not.
-- Stale comment above renderMsgContent (still describes the regex) — correct it.
+- Stale comment above renderMsgContent (still describes the regex) - correct it.
 - CR10: mistral [AVAILABLE_TOOLS] renders INSIDE [INST]; canonical is BEFORE it. FIX: render
   the defs block as its own segment before the user turn frame; note in this plan.
-- CR9: page-side fallback — when no reasoning_content arrived and content starts with
+- CR9: page-side fallback - when no reasoning_content arrived and content starts with
   <think>, apply the old regex into the think span (R1-distill-class models).
 
 Process after fixes: focused gates (codec pins, test_chat, think e2e full-tier 21/21 rerun,
 server regressions), lint 3-rail, format, commit, push --no-verify, re-request Copilot,
 back into the babysit loop (~5 min cadence while a round is pending).
 
-**Status: IMPLEMENTED (all of A, B, C — no trims).** Notes from the round: A2's demotion is
+**Status: IMPLEMENTED (all of A, B, C - no trims).** Notes from the round: A2's demotion is
 pinned model-free (a vocab-less synthetic Model with an [INST] template demotes to none);
 A3's flush seam + A3b's `turn_open` close are CONSUMPTION-cleared (render_prompt stays const
 so `render_turn` inspection is idempotent); the local Llama-3.2-3B-Q4_K_M had an
-unknown-provenance sha (same size as bartowski's, different bytes) — replaced with the
+unknown-provenance sha (same size as bartowski's, different bytes) - replaced with the
 canonical bartowski file, which is what U2 catalogues.

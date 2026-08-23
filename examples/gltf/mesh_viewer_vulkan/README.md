@@ -1,7 +1,7 @@
 # dasGLTF Mesh Viewer (Vulkan + Dear ImGui)
 
 The Vulkan sibling of `mesh_viewer_opengl`: an interactive glTF 2.0 viewer built on the in-tree
-**dasGLTF** module (`modules/dasGLTF`), the **dasVulkan** renderer (`vulkan/vulkan_gltf` — the same
+**dasGLTF** module (`modules/dasGLTF`), the **dasVulkan** renderer (`vulkan/vulkan_gltf` - the same
 Cook-Torrance PBR, sharing `gltf/gltf_pbr_common` math with the GL adapter), and **dasImgui** for
 the UI. It loads a `.glb`/`.gltf`, frames it automatically, orbits it under the metallic-roughness
 PBR shader, and drives the model transform, animation playback and lighting from two ImGui windows.
@@ -11,7 +11,7 @@ no depth attachment), which a fullscreen triangle composites under the UI each f
 
 ## Run
 
-dasVulkan and dasImgui both ship in-tree with daslang — no package install needed, a bare build
+dasVulkan and dasImgui both ship in-tree with daslang - no package install needed, a bare build
 suffices:
 
 ```sh
@@ -30,9 +30,9 @@ daslang -project_root examples/gltf/mesh_viewer_vulkan \
 
 ## Controls
 
-- **drag** — orbit  ·  **scroll** — zoom  ·  **P** — screenshot (`screenshot.png`)
-- **Model** window — open a file, pick an animation clip, play/scrub time, rotate/scale, auto-rotate
-- **Lighting** window — light direction, intensity, color, ambient, environment amount, reset to defaults
+- **drag** - orbit  *  **scroll** - zoom  *  **P** - screenshot (`screenshot.png`)
+- **Model** window - open a file, pick an animation clip, play/scrub time, rotate/scale, auto-rotate
+- **Lighting** window - light direction, intensity, color, ambient, environment amount, reset to defaults
 
-Metals reflect an equirect HDR environment (`tutorials/_assets/hdri/cannon_2k.hdr`, CC0 — the same
+Metals reflect an equirect HDR environment (`tutorials/_assets/hdri/cannon_2k.hdr`, CC0 - the same
 map OpenGL tutorial 12 uses); the **Environment** slider scales it, 0 falls back to flat ambient.

@@ -22,7 +22,7 @@ bootstrapped with `utils/mcp/setup.das` have it): `dasherd_whoami`,
 shell quoting entirely; focus sets and bundle manifests pass as inline JSON
 (`focus_json`, `bundle_json`).
 
-**CLI fallback** — run the repository-owned CLI from any participating
+**CLI fallback** - run the repository-owned CLI from any participating
 worktree by using its absolute path when necessary:
 
 ```powershell

@@ -9,12 +9,12 @@ Statically typed, everything zero-initialized.
 | Workhorse scalars | `bool`, `int`, `uint`, `int64`, `uint64`, `float`, `double`, `string` |
 | Vectors | `int2/3/4`, `uint2/3/4`, `float2/3/4` |
 | Ranges | `range`, `urange`, `range64`, `urange64` |
-| Storage scalars | `int8`, `uint8`, `int16`, `uint16` — no arithmetic of their own |
+| Storage scalars | `int8`, `uint8`, `int16`, `uint16` - no arithmetic of their own |
 | 16/8-bit lattice | `float16` (`half`), `half2/3/4/8`, `short2/3/4/8`, `ushort2/3/4/8`, `byte2/3/4/8/16`, `ubyte2/3/4/8/16` |
 | Nominal | `enum`, `bitfield`, `struct`, `class`, `typedef distinct` |
 | Structural | `tuple`, `variant`, fixed arrays `T[N]` |
 | Containers | `array<T>`, `table<K;V>`, `table<T>` (set form) |
-| Callable | `block`, `lambda`, `function` — see closures.md |
+| Callable | `block`, `lambda`, `function` - see closures.md |
 | Indirection | `T?` pointer, `T&` reference, `T?#` temporary, `smart_ptr<T>`, `iterator<T>` |
 | Mutable string | `das_string`, a bound C++ `std::string`; compares with `string` directly, never wrapped in `string(...)` (probe-verified 2026-08-16) |
 
@@ -26,9 +26,9 @@ The first five groups pass by value, everything else by reference; `string` is i
 | Literal | Type |
 |---|---|
 | `34` | `int` |
-| `075` | `int` — NOT octal, this is 75; leading zeros are insignificant |
-| `0xFF00A120` | `uint` — hex is unsigned by default; write `int(0x3F)` for `int` |
-| `'a'` | `int` — character literals are integers |
+| `075` | `int` - NOT octal, this is 75; leading zeros are insignificant |
+| `0xFF00A120` | `uint` - hex is unsigned by default; write `int(0x3F)` for `int` |
+| `'a'` | `int` - character literals are integers |
 | `34u` / `13l` / `0xFF00A120ul` / `32u8` | `uint` / `int64` / `uint64` / `uint8` |
 | `1.52`, `1.0f`, `1.e-2` | `float` |
 | `1.52d`, `1.e2lf` | `double` |
@@ -36,36 +36,36 @@ The first five groups pass by value, everything else by reference; `string` is i
 
 Strings use `"..."`, may span lines, escapes `\t \n \r \\ \" \' \b \f \v \xHH \uHHHH
 \UHHHHHHHH`, and interpolate `{expr}` with an optional format spec (`"{pi:5.2f}"`). A nested
-literal inside an interpolation stays plain — `"{s == "abc"}"`; escaping it (`"{s == \"abc\"}"`)
+literal inside an interpolation stays plain - `"{s == "abc"}"`; escaping it (`"{s == \"abc\"}"`)
 is a syntax error.
 
-**Character literals take a smaller escape set** — `\b \t \n \f \r \\ \'` only. `'\v'` is
+**Character literals take a smaller escape set** - `\b \t \n \f \r \\ \'` only. `'\v'` is
 `error[30151] syntax error, unexpected invalid token` though `"\v"` works; write the number,
 `11`. (probe-verified 2026-08-16)
 
 ## Conversions
 
 **No implicit value-to-value conversion**: `int + float` is a compile error. Cast by calling the
-target type — `float(i)`, `int(3.7)` truncates toward zero — any numeric to any numeric.
+target type - `float(i)`, `int(3.7)` truncates toward zero - any numeric to any numeric.
 
 Bare *integer literals* promote to a known target type when the value fits: local/global
 initializers, struct field declarations, struct-ctor field values, variant-arm values, `=`,
 `:=`, compound assignment, either side of a binary operator, `return`. Call arguments,
-parameter defaults, and `<-` do **not** promote — write `foo(1.0)`, never `foo(1)`.
+parameter defaults, and `<-` do **not** promote - write `foo(1.0)`, never `foo(1)`.
 
 Integer and bitfield targets are range-checked (`var d : uint8 = 256` is an error);
 `float`/`double` targets always accept, so a literal above 2^24 silently loses precision in a
 `float`. Enums cast out with `int(e)`; back in needs `unsafe(reinterpret<Color>(1))`.
 
-To text: `string(x)` or interpolation. There is no cast back — `int("123")` and `bool(x)` do
+To text: `string(x)` or interpolation. There is no cast back - `int("123")` and `bool(x)` do
 **not** exist; use `to_int` / `try_to_int` (strings.md) and `x != 0`.
 
 ## Vectors, swizzles, and the 16/8-bit lattice
 
-Swizzles read in any order (`v.zyx`); only sequential ones are writable — `w.xy =
+Swizzles read in any order (`v.zyx`); only sequential ones are writable - `w.xy =
 float2(9.0, 8.0)` on a `float4 w`.
 
-`xyzw` caps at 4 lanes. Vectors also take OpenCL `.s` swizzles — `s` plus one hex lane digit per
+`xyzw` caps at 4 lanes. Vectors also take OpenCL `.s` swizzles - `s` plus one hex lane digit per
 output lane, repeats allowed (`v.s3210`, `b16.sf`); 8- and 16-lane forms add `.lo` / `.hi`. The
 two namespaces never mix in one mask.
 
@@ -74,13 +74,13 @@ int8, `ubyte` unsigned.
 
 - **fp16 arithmetic is closed**: `half4 * half4 + half4` is a `half4`, bit-identical to native
   fp16. `half4(f4)` / `float4(h4)` convert; `half8(lo_float4, hi_float4)` packs.
-- **The integer families are storage, converts, and bits only** — `byte4 + byte4` and ordering
+- **The integer families are storage, converts, and bits only** - `byte4 + byte4` and ordering
   compares are compile errors. Widen (`int4(b4)` sign-extends, `uint4(us4)`) and narrow
   (`short4(i4)`, C truncation) with the target constructor, or saturate (`short4_sat`,
   `byte8_sat`). `<< >> & | ^` and compound assigns work, scalar `int` shift count masked to the
   lane width.
 - 16-lane 8-bit forms carry exact dot products (`idot4(a, b)` -> `int4`, `idot4(acc, a, b)`
-  accumulates, `idot(a, b)` reduces to one `int`) and `shuffle(lut, idx)` — bytes out of a
+  accumulates, `idot(a, b)` reduces to one `int`) and `shuffle(lut, idx)` - bytes out of a
   16-entry `byte16` by `ubyte16` index.
 
 ## Enumerations
@@ -159,7 +159,7 @@ variant Value {
 }
 
 var v = Value(i = 42)
-print("{v is i} {v as i}\n")        // true 42 — 'is' tests, 'as' extracts
+print("{v is i} {v as i}\n")        // true 42 - 'is' tests, 'as' extracts
 v = Value(s = "hello")              // assigning a whole variant switches the case
 let n = v ?as i ?? -1               // safe extract with fallback: -1
 print("{variant_index(v)}\n")       // 2
@@ -198,7 +198,7 @@ sub-array: `let b <- a[1..3]` is `array<int>`.
 |---|---|
 | `T?` | nullable pointer, `null` by default |
 | `T const?` | the **pointee** is const |
-| `T? const` | the **pointer** is const — this is what `let` / a non-`var` parameter adds |
+| `T? const` | the **pointer** is const - this is what `let` / a non-`var` parameter adds |
 | `T?#` | temporary pointer, cannot escape its scope |
 | `void?` | untyped; `reinterpret` before use |
 
@@ -214,29 +214,29 @@ Safe without `unsafe`: `new`, `*p` / `deref(p)`, `p.field`, `p?.field`, `p ?? de
 `safe_addr(x)` (from `daslib/safe_addr`; `x` must be a local or global), `intptr(p)` (address as
 `uint64`). Needs `unsafe`: `addr(x)`, `delete p`, `p[i]`, `++p` / `p += n`, `reinterpret<T>(x)`.
 
-**A `void?` carries no stride, so arithmetic on one is refused outright** — `error[30950]
+**A `void?` carries no stride, so arithmetic on one is refused outright** - `error[30950]
 operations on 'void' pointers are prohibited`, even inside `unsafe`. Do byte math on `intptr(p)`,
 or reinterpret to `uint8?` first. (probe-verified 2026-08-16)
 
-**Writing through a pointer needs both const positions open** — a non-const pointee *and* a
+**Writing through a pointer needs both const positions open** - a non-const pointee *and* a
 `var` handle: `def f(var p : float?)` stores, while a plain `p : float?` parameter is
 `float? const` and rejects the store. Const flows from the handle through deref, index, and
-field access. Never take a writable pointer as `T const?` and `reinterpret` the const away —
+field access. Never take a writable pointer as `T const?` and `reinterpret` the const away - 
 the const type already licensed optimizations that can delete the write. Declare `var T?`
 (memory.md).
 
 `addr<T?>(x)` is sugar for `reinterpret<T?>(addr(x))` under one `unsafe` gate; the target must
-be a pointer type. Casts are call-style — `reinterpret<int>(f)`, never `reinterpret<int> f` (a
+be a pointer type. Casts are call-style - `reinterpret<int>(f)`, never `reinterpret<int> f` (a
 syntax error). A non-const `T?` is accepted where the parameter is `T const?` (one-directional,
 top level only; also for a pointer field of a tuple passed directly as an argument).
 
 `smart_ptr<T>` is reference-counted, exists only for C++-registered handled types (never for
 daslang structs or classes), moves with `<-`, and is declared `var inscope`. Compiler AST node
-types are *not* smart pointers — they are garbage-collected raw pointers (macros.md).
+types are *not* smart pointers - they are garbage-collected raw pointers (macros.md).
 
 ## Temporary types
 
-A `#` marks a value borrowed from C++ that must not outlive its scope — `string#`, `int?#`,
+A `#` marks a value borrowed from C++ that must not outlive its scope - `string#`, `int?#`,
 `array<uint8>#`. Temporaries cannot be copied (`s = boo` errors), moved, returned, or passed
 where a regular value is expected; they *can* be cloned with `:=`, which is how a value escapes.
 A parameter marked `implicit` takes both flavors, on the promise it never caches the value
@@ -284,7 +284,7 @@ shorthand aliases to the corresponding anonymous forms.
 | `typeinfo <trait>(x)` | compile-time query; the trait name goes *outside* the parens: `typeinfo typename(x)`, `typeinfo sizeof(type<Foo>)`, `typeinfo dim(arr)` |
 
 `var f : Foo` is rejected ("uninitialized variable is unsafe") when `Foo` has field initializers
-— write `var f = Foo()`; a struct with none declares fine and is zeroed.
+ - write `var f = Foo()`; a struct with none declares fine and is zeroed.
 
 Trait catalog, `static_if`, and generic type contracts (`-const`, `-&`, `-[]`, `==const`,
 `explicit`, `implicit`, OR-types): generics.md.

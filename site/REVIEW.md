@@ -1,6 +1,6 @@
 # site (daslang.io) Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
 **Every hand-written shell command shown on a page runs verbatim and produces the result
@@ -9,7 +9,7 @@ the implementation does not exist yet, the page does not show the command.
 
 **The `cmd` field of any run in `files/dasllama/bench_records.json` is the exact argv
 `modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it spawns)
-ran.** A receipt is per run — one `cmd` + `date` run object — never per rendered row.
+ran.** A receipt is per run - one `cmd` + `date` run object - never per rendered row.
 
 **`files/dasllama.js` shows a run's receipt line on every row that run produced.** One run's
 `cmd` + `date` covers several rendered rows; a row rendered without its run's receipt line is
@@ -40,15 +40,15 @@ title.** The per-PR lane stages the site without WASM artifacts and runs the sui
 `--grep-invert '@wasm'` (`playground-e2e.yml`), so an untagged runtime-dependent test fails
 every PR.
 
-**A change to the deployed playground sources — `playground/` (this folder), `web/examples/ui/src/`, or
-`web/examples/ui/samples/` — ships with a stated run of the WASM-staged Playwright suite**
-(`tests/playground/`, this folder), naming the result — passes and any failures — in the PR body or
+**A change to the deployed playground sources - `playground/` (this folder), `web/examples/ui/src/`, or
+`web/examples/ui/samples/` - ships with a stated run of the WASM-staged Playwright suite**
+(`tests/playground/`, this folder), naming the result - passes and any failures - in the PR body or
 commit message. The run also names its runtime artifacts: built from this change when the
 change feeds `web/output/daslang_static.*`, the deployed ones otherwise. The no-WASM lane
 cannot see a broken runtime path, and every sample on the page runs through that path.
 
-**Every number on a page that reports a measurement — a rate, a duration, a size, a score
-some run produced — is rendered from live data, copied from a checked-in measurement record,
+**Every number on a page that reports a measurement - a rate, a duration, a size, a score
+some run produced - is rendered from live data, copied from a checked-in measurement record,
 or carries a source comment naming it a placeholder.** A placeholder that could be mistaken
 for a fact is a defect. A number stating a fixture or a run parameter (an image's dimensions,
 a token budget) reports no measurement and is outside this rule.
@@ -57,10 +57,10 @@ a token budget) reports no measurement and is outside this rule.
 and `dasllama.html`'s inline `<style>` copy keeps identical bodies.** Changing one copy and
 not the other is a defect.
 
-**A `dl-*` selector is defined where its markup lives — the markup a page renders, including
+**A `dl-*` selector is defined where its markup lives - the markup a page renders, including
 what `files/dasllama.js` injects: a selector `dasllama.html` renders is defined in
 `dasllama.html`, and in `files/dasllama-table.css` too when `site-dasllama/`'s pages (repo
-root — the dasllama.io site) render it as well; a selector only `site-dasllama/`'s pages
+root - the dasllama.io site) render it as well; a selector only `site-dasllama/`'s pages
 render is defined in `files/dasllama-table.css` alone.**
 
 **News entries state real, shipped events.** An entry in `_news/*.md` for something not yet

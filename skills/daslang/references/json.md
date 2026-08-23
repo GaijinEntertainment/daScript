@@ -1,20 +1,20 @@
 # JSON
 
 ```das
-require daslib/json_boost        // re-exports daslib/json publicly — never require both
+require daslib/json_boost        // re-exports daslib/json publicly - never require both
 ```
 
-`sprint_json` / `sscan_json` are builtins — no require.
+`sprint_json` / `sscan_json` are builtins - no require.
 
 ## Pick the simplest tool that fits
 
 | Situation | Use |
 |---|---|
-| A daslang value ↔ a JSON string | `sprint_json(v, pretty)` / `sscan_json(json, var v)` |
+| A daslang value <-> a JSON string | `sprint_json(v, pretty)` / `sscan_json(json, var v)` |
 | Unknown shape, or a tree to mutate | `JV(x)` / `from_JV(js, type<T>)` |
-| A one-off object, no struct on hand | `JV((key1 = val1, key2 = val2))` — named tuple |
-| The generic walker doesn't know your type | a `def JV(x : MyType)` / `def from_JV(…)` overload |
-| Runtime keys, conditional inserts | a hand-built `table<string; JsonValue?>` — last resort, loses every field annotation |
+| A one-off object, no struct on hand | `JV((key1 = val1, key2 = val2))` - named tuple |
+| The generic walker doesn't know your type | a `def JV(x : MyType)` / `def from_JV(...)` overload |
+| Runtime keys, conditional inserts | a hand-built `table<string; JsonValue?>` - last resort, loses every field annotation |
 
 ## sprint_json / sscan_json
 
@@ -26,12 +26,12 @@ let ok = sscan_json(json_str, dst)          // bool; false on parse error
 
 Round-trips structs, classes (deref the pointer: `sprint_json(*ptr, false)`), arrays, tables,
 tuples, variants (key = the active field name), enums, bitfields, vector types, pointers, and all
-primitives. **Unknown keys are silently ignored** — validate required fields yourself.
+primitives. **Unknown keys are silently ignored** - validate required fields yourself.
 
 | Annotation | Effect |
 |---|---|
 | `@optional` | Omit the field on output when it equals the default/empty value |
-| `@embed` | Emit a `string` field as raw JSON — caller must supply valid JSON |
+| `@embed` | Emit a `string` field as raw JSON - caller must supply valid JSON |
 | `@unescape` | Emit the string unescaped |
 | `@enum_as_int` | Serialize an enum as its integer value, not its name |
 | `@rename = "json_key"` | Map to another JSON key; fixes daslang-keyword collisions: field `_type` plus `@rename = "type"` |
@@ -46,15 +46,15 @@ omits the key. `read_json` + `from_JV(js, type<T>)` honors element defaults.
 ## JV / from_JV and JsonValue?
 
 ```das
-var js = JV(Player(name = "Hero", hp = 100))     // value → tree
+var js = JV(Player(name = "Hero", hp = 100))     // value -> tree
 
 var error : string
 var parsed = read_json(json_str, error)          // null on failure, error set
-let p2 = from_JV(parsed, type<Player>)           // tree → value
+let p2 = from_JV(parsed, type<Player>)           // tree -> value
 ```
 
 `JV` accepts primitives, vectors, arrays, tables, tuples, variants, enums, and structs/classes by
-reflection; `JV(a, b, c, …)` (up to 10 arguments) builds an array. `from_JV`'s second argument is a
+reflection; `JV(a, b, c, ...)` (up to 10 arguments) builds an array. `from_JV`'s second argument is a
 type witness; an optional third is the fallback when the value is null, missing, or wrong-typed.
 Custom types need overloads:
 
@@ -76,7 +76,7 @@ let score = js?["user"]?["scores"]?[0] ?? 0       // ?[] takes keys and array in
 ```
 
 Safe operators never crash, even on null. **`js?.value` reads the struct field
-`JsonValue.value`** (the underlying `JsValue` variant), *not* a JSON key named `"value"` — for that
+`JsonValue.value`** (the underlying `JsValue` variant), *not* a JSON key named `"value"` - for that
 key write `js?["value"]`.
 
 `is` / `as` test the underlying variant through the pointer; `as` on the wrong case crashes.
@@ -85,7 +85,7 @@ Cases: `_object` (`table<string; JsonValue?>`), `_array` (`array<JsonValue?>`), 
 (`string`), `_number` (`double`), `_longint` (`int64`), `_bool` (`bool`), `_null` (`void?`).
 
 An integer literal is `_longint` only while it fits `int64`; past that it parses as `_number`. So a
-wire format carrying `uint64` ids above `INT64_MAX` loses precision — send those as strings. Any
+wire format carrying `uint64` ids above `INT64_MAX` loses precision - send those as strings. Any
 number the `double` range cannot hold at all (`1e400`, `1e-400`, 400 digits) is a parse error, never
 a panic and never a silent zero.
 
@@ -94,12 +94,12 @@ a panic and never a silent zero.
 - `read_json(text, var error)` takes a `string` or an `array<uint8>`; `write_json(js)` serializes,
   a null pointer as `"null"`. `\uXXXX` escapes decode to UTF-8, a surrogate pair folding into one
   code point; an unpaired surrogate becomes U+FFFD.
-- `try_fixing_broken_json(text)` repairs model-generated output before `read_json` — concatenation
+- `try_fixing_broken_json(text)` repairs model-generated output before `read_json` - concatenation
   (`"a" + "b"`), trailing commas, double-quoted nesting.
 - Writer settings return the previous value (save and restore for a scoped change):
   `set_no_trailing_zeros`, `set_no_empty_arrays`, `set_allow_duplicate_keys`.
-- `%json~ … %%` parses a literal at compile time into a runtime `JsonValue?`.
-- `from_json(jv, type<Row>)` is a lazy typed row source over a JSON **array** — see queries.md.
+- `%json~ ... %%` parses a literal at compile time into a runtime `JsonValue?`.
+- `from_json(jv, type<Row>)` is a lazy typed row source over a JSON **array** - see queries.md.
 
 ## Building without a struct
 
@@ -114,8 +114,8 @@ var obj = JV(tab)
 The named-tuple form has **no `@optional` / `@rename` / `@embed`**: every key is emitted under its
 daslang name. For conditional keys, declare a small struct with `@optional`.
 
-The hand-built table takes a plain `var`, **never `var inscope`** — scope-exit finalize would free
-the pointees (`error[31009] … requires unsafe`). `JsonValue?` is a garbage-collected raw pointer;
+The hand-built table takes a plain `var`, **never `var inscope`** - scope-exit finalize would free
+the pointees (`error[31009] ... requires unsafe`). `JsonValue?` is a garbage-collected raw pointer;
 passing it by value copies the pointer.
 
 **Cross-context:** a `JsonValue?` allocated in one context's heap is invalid in another. Send the

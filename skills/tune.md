@@ -1,4 +1,4 @@
-# Kernel tuning — `[tune]` and the per-app tune sidecar
+# Kernel tuning - `[tune]` and the per-app tune sidecar
 
 `llvm/daslib/llvm_tune` turns **one reference function into a tuned kernel
 family**: a grid of code-generation permutations, a per-app record of which
@@ -8,16 +8,16 @@ JIT-time external code generator), so the family only *generates* under the
 LLVM JIT; on every other tier the reference body runs verbatim.
 
 The design goal is that a shipped application reaches *its own box's* floor
-with **defaults that are data** — a small JSON sidecar — rather than a fork
+with **defaults that are data** - a small JSON sidecar - rather than a fork
 of the kernels per machine. The winners are compile-time stamps: the front
 end reads the sidecar and stamps the winning permutation onto the function
 before codegen.
 
-The sidecar is **per-app**: `<app>.tune.json` beside the app — the root
+The sidecar is **per-app**: `<app>.tune.json` beside the app - the root
 script this process runs (the first `.das` on the command line), or the
 binary itself when there is none (standalone exe, embedded host).
 `DAS_TUNE_MANIFEST` overrides the location outright. A sidecar **older than
-the running binary is stale** and reads as absent everywhere — a rebuilt
+the running binary is stale** and reads as absent everywhere - a rebuilt
 binary invalidates every measured winner, so copied-around stale files can
 never resurrect dead measurements.
 
@@ -25,7 +25,7 @@ never resurrect dead measurements.
 
 This is the `[tune]` framework (the `[llvm_code]` generator grid). An
 application's own loop-hint profile (e.g. dasLLAMA's `[tuned]` macro)
-tunes a different thing, but shares the same sidecar file — perm winners
+tunes a different thing, but shares the same sidecar file - perm winners
 under `"kernels"`, library runtime knobs under `"runtime"`.
 ```
 
@@ -41,7 +41,7 @@ require llvm/daslib/llvm_tune
 [tune_perm(kstep = 1), tune_perm(kstep = 2), tune_perm(kstep = 4),
  tune(gen = "mylib::gemm_gen", fallback = "kstep2")]
 def gemm(a, b, c : float?; n : int) : void {
-    // reference implementation — runs on the interpreter, AOT, and any
+    // reference implementation - runs on the interpreter, AOT, and any
     // target the generator declines. Never edited per box.
 }
 ```
@@ -55,7 +55,7 @@ At compile time exactly one winner is stamped onto `gemm`:
 
 A harness discovers the winner by benching the whole grid, then records it in
 the sidecar. The next compile picks it up. Nothing about `gemm`'s callers
-changes — the annotated function *is* the real symbol.
+changes - the annotated function *is* the real symbol.
 
 ## The annotations
 
@@ -68,7 +68,7 @@ cache key). `suffix="..."` overrides the auto-derived variant name;
 `|`-separated OR alternatives, matched against the host CPU features plus the
 `DAS_JIT_*_FORCE_FEATURES` overrides). `tune_requires_ok(expr)` evaluates
 such an expression on its own, and `tune_pick_fallback(chain)` runs the same
-rule over a `;`-chain of `suffix` / `suffix:requires` entries — that is how a
+rule over a `;`-chain of `suffix` / `suffix:requires` entries - that is how a
 library whose permutations are *generated*, with no row to hang `requires=`
 on, still gets a per-ISA default.
 
@@ -77,14 +77,14 @@ on, still gets a per-ISA default.
 Closes a bracket of `[tune_perm]` rows (annotations apply in declaration
 order; `tune` consumes the rows banked before it). `gen=` is the
 `[llvm_code]` generator key. `fallback=` is a `;`-separated chain tried in
-declaration order — the first permutation whose `requires=` hint passes on
+declaration order - the first permutation whose `requires=` hint passes on
 this box is the manifest-less default; `reference` forces the original body.
 The tuned function needs an **explicit return type**.
 
 ### `[tune_companion(fn="sibling", gen="key")]`
 
 Listed between the `[tune_perm]` rows and `tune(...)`. Stamps a sibling
-function with the **same** permutation from the same manifest entry — the
+function with the **same** permutation from the same manifest entry - the
 two-function stamp, so a kernel and (say) its repack-layout query can never
 desync, JIT-time declines included. The sibling is a plain function declared
 earlier in the same module, with an explicit return type.
@@ -101,19 +101,19 @@ The `DAS_TUNE_MODE` environment variable selects the compile-time behavior:
 
 `tune` / `test`
     Stamp the full grid as `<name>__<suffix>` clones plus the
-    `<name>_variants()` registry (name → function-pointer rows). A harness
+    `<name>_variants()` registry (name -> function-pointer rows). A harness
     benches them and records the winner (`tune`), or bit-exact-gates every
     variant against the reference row (`test`).
 
 ```{note}
 
 A sidecar with **no entry** for a function falls through to its
-`fallback=` — a sidecar written before a kernel family landed must not
+`fallback=` - a sidecar written before a kernel family landed must not
 silently drop that family to the reference tier. An explicit `"reference"`
 entry forces the original body.
 ```
 
-## Tuner wiring — `[tune_scope]`
+## Tuner wiring - `[tune_scope]`
 
 A library that owns tuned kernels declares one scope:
 
@@ -139,30 +139,30 @@ lowercased constant name; `version_key=` overrides), so bumping the constant
 on kernel work invalidates every box's winners. The annotation names that
 module by string only, so the declaring module must `require` it as well
 (suppress the unused-require lint), and the scope's tuner must stamp the
-value with `tune_provenance_note` — an unstamped pin re-tunes on every
+value with `tune_provenance_note` - an unstamped pin re-tunes on every
 start. The pin rides the same
-completeness check everywhere it runs — the policy rail, `daspkg release
+completeness check everywhere it runs - the policy rail, `daspkg release
 --quick`'s inherit gate, resolver adoption. The winners themselves live in the ONE
-per-app file — every library's tuner **upserts its own keys** and preserves
+per-app file - every library's tuner **upserts its own keys** and preserves
 everyone else's (that upsert is the isolation contract; "is this scope tuned"
 is per-key completeness, not file existence). Reading winners needs no scope
-at all — every `[tune]` resolves against the app sidecar.
+at all - every `[tune]` resolves against the app sidecar.
 
 ```{warning}
 
 The default-`auto` policy fires only for app roots that **see**
-`llvm_tune` — a library owning scopes must re-export it
+`llvm_tune` - a library owning scopes must re-export it
 (`require llvm/daslib/llvm_tune public`), or its apps silently get no
 default policy. Re-export `llvm_tune` alone, not your module's whole
 public surface (a blanket `public` on a module that also re-exports
 `jobque_boost` floods requirers with name ambiguities).
 ```
 
-## Application policy — `[tune_policy]` and `--tune`
+## Application policy - `[tune_policy]` and `--tune`
 
 **Untuned does not start.** Any application whose program root has a `main`
 and whose libraries declare tune scopes gets the `auto` policy **by
-default** — no annotation needed: an incomplete or stale sidecar tunes at
+default** - no annotation needed: an incomplete or stale sidecar tunes at
 startup and re-execs, so one launch already serves tuned kernels. The
 `[tune_policy]` annotation on `main` overrides the flavor (the `auto` /
 `restart` flavors prepend a runtime guard to its body):
@@ -182,28 +182,28 @@ def main {
 * - `missing`
   - behavior when a scope's sidecar entries are absent or stale
 * - `fallback`
-  - stamp `fallback=` silently (also what `DAS_TUNE_POLICY=fallback` — the
-    CI kill switch — forces everywhere)
+  - stamp `fallback=` silently (also what `DAS_TUNE_POLICY=fallback` - the
+    CI kill switch - forces everywhere)
 * - `warn`
   - loud compile-time banner with the exact tuner command
 * - `error`
-  - fail the compile with the same message — the dev mode
+  - fail the compile with the same message - the dev mode
 * - `auto`
   - **the default, declared or not**: tune at startup (a guard runs each
     incomplete scope's tuner), then **re-exec** the process; the fresh compile
     stamps the winners. One launch, then it runs.
 * - `restart`
-  - like `auto` but no re-exec — tune at startup, then exit asking for a
+  - like `auto` but no re-exec - tune at startup, then exit asking for a
     manual restart.
 ```
 
-Programs whose root has no `main` never get the default — dastest-driven
+Programs whose root has no `main` never get the default - dastest-driven
 test files run `[test]` functions, so the test suite never tunes-on-start.
 
 `--tune` after `--` on the application's command line forces the tune path
 even when the sidecar is complete (a re-tune; the flag is stripped from the
 re-exec so the child converges). `DAS_TUNE_POLICY` overrides the declared
-value — `DAS_TUNE_POLICY=fallback` is the CI kill switch.
+value - `DAS_TUNE_POLICY=fallback` is the CI kill switch.
 
 Two further escapes exist for a run that must not mint. `--jit-opt-level=0`
 flips the *injected default* to `fallback`, because winners raced under O3
@@ -220,7 +220,7 @@ outranks both.
 Tuning cannot happen mid-compile: the tuner is a separate daslang process,
 and adopting its winners means new compile-time stamps regardless. That is
 why `auto` tunes at runtime and re-execs into a fresh compile rather than
-stamping in place — which also keeps the winners cross-module-safe (a
+stamping in place - which also keeps the winners cross-module-safe (a
 required library's kernels are stamped at their own `[tune]` time, not
 mutated after the fact). Re-exec is why an `auto` application's `main` must
 return `void` or `int`.
@@ -230,17 +230,17 @@ return `void` or `int`.
 
 A frozen artifact must not demand or run tuning:
 
-* **Cross-box artifacts** (`policies.tune_frozen` — set by the `-aot` C++
-  generator and by dastest's AST serializer) are fully tune-free — every tune
+* **Cross-box artifacts** (`policies.tune_frozen` - set by the `-aot` C++
+  generator and by dastest's AST serializer) are fully tune-free - every tune
   annotation is inert, only the reference-row registries are emitted. Per-box
   stamps would otherwise desync the artifact against the box that consumes it.
 * **AOT-consuming runs** (`policies.aot`) are tune-free only when the JIT is
   off: a stamp changes the function's semantic hash, so a stamped function
   would fail the AOT link. Under `-jit` the JIT supersedes AOT bodies and
   tuned stamps stay live.
-* **Standalone exe** (`llvm-jit -exe`) still *stamps* — an exe built beside a
+* **Standalone exe** (`llvm-jit -exe`) still *stamps* - an exe built beside a
   sidecar ships those winners (a local-use artifact by definition), and one
-  built without ships the generic `fallback=` stamps — but the policy rail
+  built without ships the generic `fallback=` stamps - but the policy rail
   is dead (no `[tune_policy]`, no `--tune`). The exe DOES get the status
   `[init]`, so the artifact self-reports its baked stamps
   (`tune_status()` / `log_tune_status` work inside a standalone exe). A
@@ -251,20 +251,20 @@ A frozen artifact must not demand or run tuning:
   generic/redistributable.
 
 One more compile is inert for a different reason: under the host's
-`-documentation` policy — a documentation or reflection root — every tune
+`-documentation` policy - a documentation or reflection root - every tune
 annotation and the policy rail are off. Ask with `is_building_documentation()`.
 
 `daspkg release` applies "untuned does not start" to artifacts at **build
 time**: the `-exe` build's release-deps JSON reports every scope with
 per-key completeness (`tune_scopes_status`), and every scope that declares a
-tuner **re-mints on every release** — a frozen exe never tunes, so an
+tuner **re-mints on every release** - a frozen exe never tunes, so an
 unmeasured winner would ship forever. `--quick` is the only mode that
 inherits an existing sidecar, and only a complete, fresh one; an incomplete
 or stale sidecar mints even under `--quick`. A tuner that *refuses* (the
 noise probe's hard ceiling, a supervisor interrupt) fails the release
 outright rather than shipping fallbacks quietly. daspkg then rebuilds so the exe bakes the
 measured winners, and ships the sidecar beside the exe as
-`<bundle>.tune.json` (touched newer than the exe — the `"runtime"` knob
+`<bundle>.tune.json` (touched newer than the exe - the `"runtime"` knob
 section travels with the artifact, and the file documents the baked
 winners). The sidecar it measures against is the source-side one beside the
 app script; the bundle gets a byte-identical copy.
@@ -275,7 +275,7 @@ The sidecar is `<app>.tune.json` beside the app: `utils/myapp/main.das`
 reads and writes `utils/myapp/main.tune.json`; a standalone exe (or an
 embedded host with no `.das` on its command line) uses the binary's own stem.
 The app identity is the first `.das` argument before `--` on the process
-command line — macro time and runtime read the same argv, so compile-time
+command line - macro time and runtime read the same argv, so compile-time
 stamps and the harness write API always agree on the file. No declaration is
 needed; `DAS_TUNE_MANIFEST` overrides the location, and
 `set_tune_manifest_runtime_path` points just the get/set APIs elsewhere for
@@ -285,7 +285,7 @@ A sidecar whose mtime **predates the running binary's** is stale: it reads as
 absent (stamps fall back, the policy rail re-tunes), and the first
 `tune_manifest_set` resets it to a fresh document. Measurements never
 outlive the binary that made them. A sidecar carrying another box's
-identity is stale too — measurements are a property of the box — unless
+identity is stale too - measurements are a property of the box - unless
 `provenance.applied_box` names this box, which is how a scope resolver (below)
 adopts a compatible sibling box's mint deliberately. That identity is the
 five-field `platform|arch|model_id|os_build|cpu` string `tune_box_identity()`
@@ -296,36 +296,36 @@ A scope declaring `version_of=` adds a third axis: a sidecar minted at another
 library version reads incomplete for that scope alone.
 
 Every "untuned" refusal **names its reason** via `tune_sidecar_verdict`
-(`TuneSidecarReason`) — `absent` (no sidecar at the path), `stale_binary`
+(`TuneSidecarReason`) - `absent` (no sidecar at the path), `stale_binary`
 (both dates), `foreign_box` (both identities), `unreadable` (not a tune
 sidecar), `version` (both values), `missing` (the kernel names), so a bare
 "untuned" never leaves the operator to diff provenance by hand. And when `DAS_TUNE_MANIFEST`
 points at a file that reads untuned, the compile prints one loud warning per
-scope instead of silently stamping fallbacks — an explicit manifest disables
+scope instead of silently stamping fallbacks - an explicit manifest disables
 the policy rail, so nothing else would say so, and a measurement run believing
 its winners are live while stamping fallbacks is the exact hazard the sidecar
 model exists to prevent.
 
 Two seams let a supervisor or a network service participate:
 
-- `tune_set_scope_resolver(fn)` — registered from an `[init]` (which must run
+- `tune_set_scope_resolver(fn)` - registered from an `[init]` (which must run
   before the guard at the top of `main`), consulted by
   the auto/restart policy guards before spawning a scope's tuner. A resolver
   that can satisfy the scope another way (dasLLAMA's exchange client downloads
   a matching per-box sidecar from dasllama.io) returns true; completeness is
   re-checked, never trusted, and `--tune` never consults it.
-- `tune_interrupt_requested()` — true while the file named by
+- `tune_interrupt_requested()` - true while the file named by
   `DAS_TUNE_CONTROL` exists. Tuners poll it between kernel families and abort
   without minting; the measurement in flight always completes. (A tuner that
   spans multiple processes end-gates each process's own write, so an interrupt
   in a later process leaves earlier processes' mints on disk.)
 
-## Runtime status — `tune_status()`
+## Runtime status - `tune_status()`
 
-`tune_status()` returns one row per `[tune]` function — its winning suffix,
+`tune_status()` returns one row per `[tune]` function - its winning suffix,
 the source (`manifest` / `fallback` / `reference`), the scope, and the
 sidecar path. It is populated when the application declares `[tune_policy]`.
-`log_tune_status("myapp")` is the ready-made "am I tuned?" surface — it logs
+`log_tune_status("myapp")` is the ready-made "am I tuned?" surface - it logs
 the table at `LOG_INFO` (`<n>/<total> kernels tuned for this box`, one line
 per function, plus a `--tune` hint when any kernel is on a non-manifest tier),
 and is a no-op when the table is empty. Call it at startup:
@@ -348,7 +348,7 @@ restart afterwards. During the wait it shows a progress display:
 
 Outer counter (kernels done), the kernel being tuned, the screening pass and
 its round counter, how many grid rows are still in contention, and observed
-elapsed. **Nothing there is predicted** — the segments are far too uneven for
+elapsed. **Nothing there is predicted** - the segments are far too uneven for
 an ETA to mean anything, so none is offered.
 
 Three verbosity levels, selected by `--tune-quiet` / `--tune-verbose` on the
@@ -365,7 +365,7 @@ application (or `DAS_TUNE_VERBOSITY` directly):
 
 ### Progress events
 
-The display is driven by events the tuner emits as prefixed lines on stdout —
+The display is driven by events the tuner emits as prefixed lines on stdout - 
 a pipe is the only channel that spans the process chain:
 
 ```text
@@ -395,14 +395,14 @@ consumes them with `tune_progress_feed` and renders `tune_progress_line`.
 A tuner decides with a stopwatch, and the stopwatch is the same one
 llama-bench uses (`ref_time_ticks`: QPC / `CLOCK_MONOTONIC`); what differs is
 what sits between two reads. The rule: **one timed window is tens of
-milliseconds** — a window the size of an OS timer tick reads scheduler jitter
-as a verdict — and **a winner is decided by margin, not by ranking**: a row
+milliseconds** - a window the size of an OS timer tick reads scheduler jitter
+as a verdict - and **a winner is decided by margin, not by ranking**: a row
 takes the seat only when its median beats the shipped fallback by the win
-margin — 3% in the dasLLAMA harness, or the highest probe cv seen so far in
-the run, whichever is larger, so a noisier box demands a wider win — and keeps
+margin - 3% in the dasLLAMA harness, or the highest probe cv seen so far in
+the run, whichever is larger, so a noisier box demands a wider win - and keeps
 it only when it still does in a validation re-race against that fallback
 alone. Everything inside the margin is the same measurement, and the fallback
-holds — deterministic beats lottery. A winner that loses its margin in the
+holds - deterministic beats lottery. A winner that loses its margin in the
 re-race, or whose margin sits under the closing probe's floor, is **demoted**
 to the fallback, per kernel; the mint still lands. Neither the race nor the
 re-race ever refuses a sidecar; the only refusal is the probe's hard ceiling,
@@ -413,7 +413,7 @@ each row's reps so its window lands near the target; a short screen races the
 whole grid; the finalists are the best candidate and its twins (every row
 within the margin band of it, the whole tie set, capped) plus the fallback; the
 seat is decided on the finalists' medians; among tied finalists the
-**incumbent** — the previous sidecar's winner — keeps the seat, else the
+**incumbent** - the previous sidecar's winner - keeps the seat, else the
 fallback, else the first in grid order, so a re-mint moves a kernel only when
 the box actually changed. A family with no candidate after the screen is done
 in seconds: its fallback holds.
@@ -421,8 +421,8 @@ in seconds: its fallback holds.
 The noise probe is a **witness, not a gate**: a harness times one fixed kernel
 in the same tens-of-ms windows at the start, mid-run, and at the end, and
 stamps what it saw (`noise: ok` / `noisy`, `noise_probes`, the measured
-`noise_floor_cv_pct`). Only a **busy** box — cv past a hard ceiling (10% in
-the dasLLAMA harness; the note threshold is 2%) — refuses, with
+`noise_floor_cv_pct`). Only a **busy** box - cv past a hard ceiling (10% in
+the dasLLAMA harness; the note threshold is 2%) - refuses, with
 `DAS_TUNE_NOISE_OVERRIDE=1` turning that refusal into a pass stamped
 `noise: overridden`. A probe over the note threshold gets one settle-and-retry
 before its cv is stamped (a transient the run itself caused fades in seconds;
@@ -430,33 +430,33 @@ outside noise does not).
 
 The framework carries the policy and the math; the harness carries the probe:
 
-- `tune_noise_threshold_pct(paranoid)` — the note threshold: 2%;
+- `tune_noise_threshold_pct(paranoid)` - the note threshold: 2%;
   `DAS_TUNE_NOISE_CV=<pct>` overrides for calibration (and a value above the
   hard ceiling raises the ceiling with it). The `paranoid` argument is
   ignored.
-- `tune_noise_override()` — `DAS_TUNE_NOISE_OVERRIDE=1` turns the hard-ceiling
+- `tune_noise_override()` - `DAS_TUNE_NOISE_OVERRIDE=1` turns the hard-ceiling
   refusal into a pass, stamped `noise: overridden`; the escape always leaves a
   mark.
-- `tune_median(samples)` / `tune_cv_pct(samples)` — rank by the median over
+- `tune_median(samples)` / `tune_cv_pct(samples)` - rank by the median over
   every measured round a row ran (print best-of alongside); a best-of far
   under its own median is a per-kernel noise flag.
-- `tune_provenance_note(key, value)` — attach the noise verdict, the
+- `tune_provenance_note(key, value)` - attach the noise verdict, the
   validation outcome (`validation: ok`, `validation_demoted`,
   `validation_max_drift_pct`) and any other measurement condition to the
   `"provenance"` section of every subsequent sidecar save in the process.
 
 Two placement rules from the dasLLAMA harness (the worked consumer): every
 sidecar `race` row carries the winner's `margin_pct` over the fallback and,
-after a demotion, the `demoted` row's name — "how much did it win by" and "what
+after a demotion, the `demoted` row's name - "how much did it win by" and "what
 lost its seat" must be answerable from the file; and the closing probe runs
 **before** any GPU race in the same process, so the bracket covers exactly the
 window that produced the winners. (GPU races block the thread, and a thread
-that blocked wakes cold — the same E-core transient a sleep causes.)
+that blocked wakes cold - the same E-core transient a sleep causes.)
 
 Level drift between the race and the re-race (`validation_max_drift_pct`) is
 stamped and noted, never judged: a row's absolute level moves with the
 interleave it ran in and the box's clock state, while same-window margins
-hold, so cross-window medians prove nothing. There is one protocol — no
+hold, so cross-window medians prove nothing. There is one protocol - no
 paranoid budget, no fast race: `--tune-paranoid` is accepted and runs the
 same protocol; the debugging concession is accepting an existing sidecar.
 
@@ -467,7 +467,7 @@ same protocol; the debugging concession is accepting an existing sidecar.
 2. Add the `[tune_perm]` grid, then `tune(gen=, fallback=)`; any
    `[tune_companion]` rows go between the two.
 3. A library that already declares a `[tune_scope]` absorbs the new family
-   automatically — same sidecar, same tuner. Otherwise declare one scope on a
+   automatically - same sidecar, same tuner. Otherwise declare one scope on a
    dummy struct in that module.
 4. Teach the harness to bench `<name>_variants()` and record the winner with
    `tune_manifest_set("<name>", winner)`. A demanded kernel with no sidecar
@@ -493,7 +493,7 @@ UPSERTS: other functions' entries and other sections survive. A following
 
 ## Sidecar format
 
-A sectioned JSON object — perm winners under `"kernels"`, library runtime
+A sectioned JSON object - perm winners under `"kernels"`, library runtime
 knobs under `"runtime"` (owned by the library that reads them), the race
 tables behind each multi-variant winner under `"race"`, and `"provenance"`
 (who wrote it) refreshed on every write:
@@ -507,24 +507,24 @@ tables behind each multi-variant winner under `"race"`, and `"provenance"`
 }
 ```
 
-It is a per-app, per-box artifact — gitignored (`*.tune.json`), and any
+It is a per-app, per-box artifact - gitignored (`*.tune.json`), and any
 change re-keys the JIT DLL cache automatically (the winning permutation's args
 fold into the DLL basename).
 
 Every mint is also archived to `<home>/.tune-history/<box>/` (or
-`DAS_TUNE_HISTORY`): successful mints copy the whole sidecar — provenance and
-race tables ride inside, so each archive is self-contained — and failed mints
+`DAS_TUNE_HISTORY`): successful mints copy the whole sidecar - provenance and
+race tables ride inside, so each archive is self-contained - and failed mints
 leave a marked `.FAILED.json` stub. Nothing in the history is ever deleted;
 it is the box's longitudinal health record, and `tune_history_archive` is the
 framework call a mint wrapper makes. A re-mint also snapshots the previous
-sidecar to `<sidecar>.bak` and prints the diff — winner changes with their
+sidecar to `<sidecar>.bak` and prints the diff - winner changes with their
 margins from the new race tables, plus the median time shift over shared
 rows. Uniform shift = box state; scattered past-floor flips = a noisy mint;
 same-direction twin flips = an estimator change.
 
 ```{seealso}
 
-`modules/dasLLAMA/tune_for_this_box.md` — a worked application of this
+`modules/dasLLAMA/tune_for_this_box.md` - a worked application of this
 framework (the dasLLAMA gen GEMM family), including the measurement
 discipline that separates a real win from a benchmark artifact, and the
 `dasllama-server` / `ask` / `wav2txt` trio sharing one box's winners.

@@ -2,35 +2,35 @@
 
 ## Overview
 
-`JobStatus`, `Channel`, `LockBox`, and `Feature` are threading primitives in `job_que.h` / `aot_builtin_jobque.h`. They use manual refcounting (`addRef`/`releaseRef`) and are a common source of leaks. A permanent tracking system (intrusive linked lists + per-ID tracing) is always on — no debug macros or rebuild needed.
+`JobStatus`, `Channel`, `LockBox`, and `Feature` are threading primitives in `job_que.h` / `aot_builtin_jobque.h`. They use manual refcounting (`addRef`/`releaseRef`) and are a common source of leaks. A permanent tracking system (intrusive linked lists + per-ID tracing) is always on - no debug macros or rebuild needed.
 
 ## Architecture
 
 ### Object hierarchy
 
-- **JobStatus** — base refcounted sync primitive (`mRef`, `mRemaining`, condition variable)
-- **Channel : JobStatus** — FIFO queue of `Feature` values (`mTrackMagic = TRACK_CHANNEL`)
-- **LockBox : JobStatus** — single-slot fill/grab/join container (`mTrackMagic = TRACK_LOCKBOX`)
-- **Feature** — value type carrying `void* data + TypeInfo + Context`. Lives in Channels and LockBoxes
-- **AtomicTT** — bare `std::atomic<TT>`, does NOT inherit from JobStatus, no refcounting
+- **JobStatus** - base refcounted sync primitive (`mRef`, `mRemaining`, condition variable)
+- **Channel : JobStatus** - FIFO queue of `Feature` values (`mTrackMagic = TRACK_CHANNEL`)
+- **LockBox : JobStatus** - single-slot fill/grab/join container (`mTrackMagic = TRACK_LOCKBOX`)
+- **Feature** - value type carrying `void* data + TypeInfo + Context`. Lives in Channels and LockBoxes
+- **AtomicTT** - bare `std::atomic<TT>`, does NOT inherit from JobStatus, no refcounting
 
 ### Tracking fields
 
 Every `JobStatus` has:
-- `mTrackId` — unique ID from shared counter `g_jobque_track_total` (shared with Feature)
-- `mTrackNext/mTrackPrev` — intrusive doubly-linked list
-- `mTrackMagic` — subtype tag: `TRACK_JOB_STATUS`, `TRACK_CHANNEL`, or `TRACK_LOCKBOX`
-- `mCreatedAt` — string description of the daScript source location where created
+- `mTrackId` - unique ID from shared counter `g_jobque_track_total` (shared with Feature)
+- `mTrackNext/mTrackPrev` - intrusive doubly-linked list
+- `mTrackMagic` - subtype tag: `TRACK_JOB_STATUS`, `TRACK_CHANNEL`, or `TRACK_LOCKBOX`
+- `mCreatedAt` - string description of the daScript source location where created
 
 Every `Feature` has:
-- `fTrackId` — unique ID from same shared counter
-- `fTrackNext/fTrackPrev` — separate intrusive doubly-linked list
-- `fCreatedAt` — creation source location
-- `fOwner` / `fOwnerTrackId` — which Channel/LockBox holds this Feature
+- `fTrackId` - unique ID from same shared counter
+- `fTrackNext/fTrackPrev` - separate intrusive doubly-linked list
+- `fCreatedAt` - creation source location
+- `fOwner` / `fOwnerTrackId` - which Channel/LockBox holds this Feature
 
 ### Key files (repo-only)
 
-The `include/` headers ship in the SDK; the `src/` files below do not — they are
+The `include/` headers ship in the SDK; the `src/` files below do not - they are
 daslang's own implementation, listed here for anyone working in the repo.
 
 | File | What |
@@ -50,7 +50,7 @@ daslang's own implementation, listed here for anyone working in the repo.
 bin/daslang path/to/script.das
 ```
 
-**With daslang-live** — capture output to file:
+**With daslang-live** - capture output to file:
 ```bash
 cd path/to/script/dir
 bin/daslang-live main.das > /tmp/output.txt 2>&1 &
@@ -67,11 +67,11 @@ total 1 leaked JobStatus objects
 total 1 leaked Feature objects
 ```
 
-- **#4** — track ID (shared between JobStatus and Feature)
-- **(rc=2)** — current refcount at dump time (should be 0 for cleanup)
-- **LockBox** — subtype (Channel, LockBox, or JobStatus)
-- **created at** — daScript source location
-- **owner=#4** — Feature is inside JobStatus #4
+- **#4** - track ID (shared between JobStatus and Feature)
+- **(rc=2)** - current refcount at dump time (should be 0 for cleanup)
+- **LockBox** - subtype (Channel, LockBox, or JobStatus)
+- **created at** - daScript source location
+- **owner=#4** - Feature is inside JobStatus #4
 
 **A dump that follows an `EXCEPTION:` line is a consequence, not the leak.**
 A panic is fatal to the process, so every reference live at that moment is
@@ -79,15 +79,15 @@ reported as leaked whatever the panic was. Chase the exception, not the
 refcounts.
 
 **`synch primitive deleted while being used (ref=N)` on a `with_channel` line
-is that scope closing on a worker that has not released yet** — N is the count
+is that scope closing on a worker that has not released yet** - N is the count
 it still holds, and the worker then touches a destroyed mutex, so the panic is
-followed by a secondary crash — a libc mutex fatal on Linux, an access violation
+followed by a secondary crash - a libc mutex fatal on Linux, an access violation
 in the exit-time leak dump on Windows. Taking the worker's payload is not that release:
 a worker pushes and releases after, which wakes the consumer between the two,
 so a consumer that stops at the payload (`pop_with_timeout_clone`, `try_pop`)
 must `join()` the channel before its scope ends. A consumer that stops on the
-count instead — `for_each_clone`, whose final `pop` blocks until the count
-reaches zero — is already fenced, as is a worker that releases the channel
+count instead - `for_each_clone`, whose final `pop` blocks until the count
+reaches zero - is already fenced, as is a worker that releases the channel
 before signalling a separate wait group.
 
 ## Step 2: Trace a Specific Object
@@ -109,7 +109,7 @@ Shutting down...
 JobStatus #4 (LockBox) releaseRef (rc=3) at audio_boost.das:215:22
 ```
 
-**Read the trace:** Each line shows the rc *before* the operation. Here rc goes 0→1→2→3, then only one releaseRef 3→2. Two refs were never released — that's the leak.
+**Read the trace:** Each line shows the rc *before* the operation. Here rc goes 0->1->2->3, then only one releaseRef 3->2. Two refs were never released - that's the leak.
 
 ## Step 3: Identify the Leak Pattern
 
@@ -118,7 +118,7 @@ JobStatus #4 (LockBox) releaseRef (rc=3) at audio_boost.das:215:22
 **Missing cleanup on early return:**
 ```
 strudel_shutdown() {
-    if (g_cmd_channel == null) { return }  // ← early return skips status box cleanup
+    if (g_cmd_channel == null) { return }  // <- early return skips status box cleanup
     ...
     // status box cleanup never reached in main-thread mode
 }
@@ -146,18 +146,18 @@ When a Channel/LockBox/JobStatus is captured in a lambda, `capture_macro` in `jo
 
 For a typical LockBox with `set_status_update`:
 ```
-lock_box_create()           rc: 0 → 1  (create)
-add_ref()                   rc: 1 → 2  (explicit, in user code)
-set_status_update() add_ref rc: 2 → 3  (hidden, inside audio_boost)
+lock_box_create()           rc: 0 -> 1  (create)
+add_ref()                   rc: 1 -> 2  (explicit, in user code)
+set_status_update() add_ref rc: 2 -> 3  (hidden, inside audio_boost)
 --- audio thread processes unset ---
-releaseRef                  rc: 3 → 2  (audio thread releases set_status_update ref)
-release()                   rc: 2 → 1  (matches explicit add_ref)
-lock_box_remove()           rc: 1 → 0  (delete)
+releaseRef                  rc: 3 -> 2  (audio thread releases set_status_update ref)
+release()                   rc: 2 -> 1  (matches explicit add_ref)
+lock_box_remove()           rc: 1 -> 0  (delete)
 ```
 
 ### LockBox lifecycle (fill/grab/join)
 
-LockBox synchronization: `fill()` sets `mRemaining=1`, `grab()` sets `mRemaining=0` and notifies, `join()` waits for `mRemaining==0`. No extra `add_ref`/`release` needed for the fill/grab/join cycle itself — the refs are for ownership tracking (who holds a pointer to the box).
+LockBox synchronization: `fill()` sets `mRemaining=1`, `grab()` sets `mRemaining=0` and notifies, `join()` waits for `mRemaining==0`. No extra `add_ref`/`release` needed for the fill/grab/join cycle itself - the refs are for ownership tracking (who holds a pointer to the box).
 
 ## Step 4: Add `--max-frames` for Automated Testing
 
@@ -201,11 +201,11 @@ Note: `--track-job-status` goes before the script path (daslang arg), `--max-fra
 
 Audio apps must shut down in the correct order:
 
-1. `unset_status_update(sid)` — tell audio thread to release the status box ref
+1. `unset_status_update(sid)` - tell audio thread to release the status box ref
 2. Wait for audio thread to process it (the box's `join()` will return once the audio thread's grab/release cycle completes)
-3. `strudel_shutdown()` or equivalent — stop the strudel/midi thread
-4. `audio_system_finalize(...)` — stop the audio thread
-5. `lock_box_remove()` / `channel_remove()` — delete the objects (rc must be 1)
+3. `strudel_shutdown()` or equivalent - stop the strudel/midi thread
+4. `audio_system_finalize(...)` - stop the audio thread
+5. `lock_box_remove()` / `channel_remove()` - delete the objects (rc must be 1)
 
 If `audio_system_finalize` runs before `unset_status_update` is processed, the async command is lost and the ref leaks.
 
@@ -220,7 +220,7 @@ ref before it returns or the runtime panics:
 Stream has not been released. missing stream|>release or stream|>notify_and_release
 ```
 
-…and the Stream is then deleted while the outer scope still holds a
+...and the Stream is then deleted while the outer scope still holds a
 handle, producing the secondary crash:
 
 ```
@@ -229,24 +229,24 @@ synch primitive deleted while being used (ref=1)
 
 Two idioms balance the capture:
 
-- **`s |> release`** — when completion is signalled separately (e.g.
+- **`s |> release`** - when completion is signalled separately (e.g.
   alongside a `with_wait_group` / JobStatus that the job also signals).
   Use this when the consumer doesn't care about the Stream's own count.
-- **`s |> notify_and_release`** — when the Stream itself is the
+- **`s |> notify_and_release`** - when the Stream itself is the
   completion signal (`with_stream(count)` form, consumer checks
   `s.isReady`). Use this when the consumer is gated on the stream's
   ready state.
 
 **Why this is easy to miss:** the symmetry with Channel / JobStatus /
 LockBox / Feature (all four jobque primitives auto-refcount on lambda
-capture as of #2438) means the rule is uniform — but the panic only
+capture as of #2438) means the rule is uniform - but the panic only
 fires at runtime from an inner lambda frame, so the crash message is
 not obviously tied to the forgotten release at the **top** of the job
 body. There is no RAII / `defer` wrapper that does it implicitly.
 
 When writing tutorials/examples that show "push from worker, drain on
 main": pair Stream with a separate wait group and use `s |> release`
-in the worker — don't rely on the stream's own count as the signal
+in the worker - don't rely on the stream's own count as the signal
 unless the consumer really wants `isReady`.
 
 ## Quick Checklist

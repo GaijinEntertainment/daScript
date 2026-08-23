@@ -43,7 +43,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_DENSE_SHEXP` | flag | off | The dense rail's gemma-4 shared-expert w1/w3/w2 triple; opt-IN, measured a wash-to-loss. |
 | `DASLLAMA_GPU_SHEXP` | flag | follows DASLLAMA_GPU | Shared-expert rail on the GPU. |
 | `DASLLAMA_GPU_QKV` | flag | off | Fused QKV rail on the GPU; stays off under DASLLAMA_GPU (measured a wash). |
-| `DASLLAMA_GPU_CLS` | flag | on | Keep the classifier plane on the GPU — the best ms-per-GB region; 0 is the CPU A/B lever. |
+| `DASLLAMA_GPU_CLS` | flag | on | Keep the classifier plane on the GPU - the best ms-per-GB region; 0 is the CPU A/B lever. |
 | `DASLLAMA_GPU_COMBINE` | flag | on | Device-side routed MoE combine; 0 falls back to the host combine. |
 | `DASLLAMA_GPU_HEAT` | number | 0 | Expert heat threshold: hold the N hottest experts resident regardless of layer placement. |
 | `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
@@ -56,8 +56,8 @@ The image preprocessing rail: dynamic-resolution token bounds and the debug dump
 |---|---|---|---|
 | `DASLLAMA_VISION_MIN_TOKENS` | number | 40 (the gemma-4 model default) | Minimum soft tokens per image; dynamic-resolution geometry upscales to reach it. |
 | `DASLLAMA_VISION_MAX_TOKENS` | number | 280 (the gemma-4 model default) | Maximum soft tokens per image; dynamic-resolution geometry downscales to fit. |
-| `DASLLAMA_VISION_DUMP` | text | unset | Path prefix: dump every letterboxed image fed to a vision embedder as <prefix><tag>.ppm — the human smoke test; empty = off. |
-| `DASLLAMA_SPAN_FUSE` | flag | on | Serve the image turn as ONE fused prefill (per-query span mask); 0 pins the three-eval splice (head / media rows / tail) — the parity A/B rail. |
+| `DASLLAMA_VISION_DUMP` | text | unset | Path prefix: dump every letterboxed image fed to a vision embedder as <prefix><tag>.ppm - the human smoke test; empty = off. |
+| `DASLLAMA_SPAN_FUSE` | flag | on | Serve the image turn as ONE fused prefill (per-query span mask); 0 pins the three-eval splice (head / media rows / tail) - the parity A/B rail. |
 
 ## Metal backend
 
@@ -68,9 +68,9 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_LOGITS` | flag | on | Produce logits on the GPU; 0 pulls the classifier back to the CPU. Blob-only models force it on. |
 | `DASLLAMA_METAL_ATTN` | flag | on | ggml-geometry QK/AV prefill attention (~10x the trio GEMMs); 0 pins the trio. |
 | `DASLLAMA_METAL_SPAN` | flag | on | Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent. |
-| `DASLLAMA_METAL_TOWER` | flag | on | Serve tower/embedder encodes on the Metal tower driver — the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower. |
+| `DASLLAMA_METAL_TOWER` | flag | on | Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower. |
 | `DASLLAMA_METAL_WDEC` | flag | on | Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 pins the CPU decoder. |
-| `DASLLAMA_METAL_WDEC_STEP` | flag | on | Serve the whisper DECODE STEP on the GPU too (needs wdec). Small decoders (n_text_state under the 1024 floor; set_metal_wdec_step_min_d) keep the CPU rail — the per-dispatch latency floor beats them. |
+| `DASLLAMA_METAL_WDEC_STEP` | flag | on | Serve the whisper DECODE STEP on the GPU too (needs wdec). Small decoders (n_text_state under the 1024 floor; set_metal_wdec_step_min_d) keep the CPU rail - the per-dispatch latency floor beats them. |
 | `DASLLAMA_METAL_ATTN_D` | flag | on | Fused single-pass decode attention (assumes head_size 128); 0 is the A/B rail to the chunked pair. |
 | `DASLLAMA_METAL_ATTN_SINGLE` | number | 64 | Row count below which attention uses the single-chunk kernel; clamped to 128. |
 | `DASLLAMA_METAL_MULMM` | flag | on | The mul_mm prefill GEMM; 0 falls back to the legacy per-op path. |
@@ -87,7 +87,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_HAZARD_PARANOID` | flag | off | Barrier at every dispatch instead of at tracker-detected hazards (correctness bisect). |
 | `DASLLAMA_METAL_HAZARD_STRICT` | flag | off | Treat every detected hazard as strict, widening barriers (correctness bisect). |
 | `DASLLAMA_METAL_PIPE_DEBUG` | flag | off | Per-step pipeline trace: GPU envelope and true inter-step handoff idle, first steps plus outliers. |
-| `DASLLAMA_METAL_DECODE_SKIP` | text | unset | Comma-separated dispatch names to skip in decode — a bring-up bisect that breaks correctness. |
+| `DASLLAMA_METAL_DECODE_SKIP` | text | unset | Comma-separated dispatch names to skip in decode - a bring-up bisect that breaks correctness. |
 | `DASLLAMA_METAL_PREFILL_SKIP` | text | unset | Prefill twin of DASLLAMA_METAL_DECODE_SKIP. |
 | `DASLLAMA_MTP_DEBUG` | text | unset | MTP bring-up bisect: cold logs the failing gate, reject forces the reject path. |
 | `DASLLAMA_METAL_BATCH_GEMM_MIN` | number | 5 | Batch size at which batched decode switches from GEMV to GEMM; floor 2. |
@@ -149,7 +149,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | Variable | Type | Default | Effect |
 |---|---|---|---|
 | `DASLLAMA_MODELS_DIR` | path | unset | Directory holding the .gguf models the probes, benches and tests load. dasllama-server's model catalog downloads here too when set. |
-| `DASLLAMA_CONFIRM_MODEL` | path | auto-resolved from the models dir | Model used by the tuner's confirm gate (FULL path, not a bare filename). Unset: the gate auto-resolves from the models dir — the preferred confirm carrier, else the largest present q8 gguf; the fallback pins only when the box has no q8 model at all. |
+| `DASLLAMA_CONFIRM_MODEL` | path | auto-resolved from the models dir | Model used by the tuner's confirm gate (FULL path, not a bare filename). Unset: the gate auto-resolves from the models dir - the preferred confirm carrier, else the largest present q8 gguf; the fallback pins only when the box has no q8 model at all. |
 | `DASLLAMA_BATCH_CHUNKS` | text | unset | Override the batched-dispatch chunk count in the 1-core GEMM probe. |
 | `DASLLAMA_BATCH_GRID_2D` | number | unset | Use the 2D batch grid in the parity probe. |
 | `DASLLAMA_FOCUS_BACKEND` | text | unset | Restrict the 1-core GEMM probe to one backend. |
@@ -250,7 +250,7 @@ Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends 
 | `HOME` | path | unset | Ambient platform variable; read only to derive the default Hugging Face cache when HF_HOME is unset. |
 | `USERPROFILE` | path | unset | Ambient platform variable (Windows twin of HOME); read only to derive dasllama-server's default models dir. |
 | `DAS_JOBQUE_THREADS` | number | conservative default | Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/internal/environment_variables.md. |
-| `DAS_JOBQUE_AFFINITY` | number | 2 on darwin (engine [init]), else 0 | Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask — on darwin mode 2 is QoS classification (no pin API) and dasLLAMA defaults it on. Matters on big SMT boxes. |
+| `DAS_JOBQUE_AFFINITY` | number | 2 on darwin (engine [init]), else 0 | Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask - on darwin mode 2 is QoS classification (no pin API) and dasLLAMA defaults it on. Matters on big SMT boxes. |
 | `DAS_JOBQUE_TEAM_RANK_GATE` | number | profile-driven | Team-dispatch rank gate. When set, it suppresses the box profile's own team_rank_gate knob. |
 | `DAS_TUNE_MANIFEST` | path | <app>.tune.json | Kernel-tuning sidecar to read/write. Point it somewhere writable when the app dir is read-only. |
 | `DAS_TUNE_MODE` | text | unset | Kernel-tuning mode. The [tune] framework owns these; see skills/tune.md. |

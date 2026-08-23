@@ -1,9 +1,9 @@
 # Four-engine SQL benchmarks
 
-The `benchmarks/sql` query families measured across four engines — in-tree
+The `benchmarks/sql` query families measured across four engines - in-tree
 SQLite, [dasDuckDB](https://github.com/borisbat/dasDuckDB),
 [dasPostgreSQL](https://github.com/borisbat/dasPostgreSQL), and a plain
-`array<Car>` baseline — in both interpreted and JIT mode. Results:
+`array<Car>` baseline - in both interpreted and JIT mode. Results:
 [results.md](results.md).
 
 Every family body lives once in `_sql_families.das` as a generic function over
@@ -24,7 +24,7 @@ daslang ../../../utils/daspkg/main.das -- install --root .
 
 The PostgreSQL lane also needs a live server: point `DAS_PG_CONNINFO` at it
 (default `host=localhost port=5499 user=postgres dbname=postgres`). **No server
-is fine** — the lane self-skips and the results table shows `—` for its column.
+is fine** - the lane self-skips and the results table shows ` - ` for its column.
 Fixtures build in a throwaway schema and are dropped on exit.
 
 ## Run
@@ -38,7 +38,7 @@ daslang -project_root . ../../../dastest/dastest.das -- --bench --test sqlite.da
 daslang -jit -project_root . ../../../dastest/dastest.das -- --bench --test duckdb.das
 ```
 
-Or everything at once, regenerating [results.md](results.md) — see its
+Or everything at once, regenerating [results.md](results.md) - see its
 "How to re-run" section.
 
 `--bench-names <family>_<engine>` filters to a single benchmark; running a lane

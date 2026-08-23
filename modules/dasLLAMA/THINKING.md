@@ -12,41 +12,41 @@ family-blind.
 
 **Prompt side:**
 
-1. **`think_default`** — the family's own thinking default. Qwen/GLM/gpt-oss/gemma-4 think
+1. **`think_default`** - the family's own thinking default. Qwen/GLM/gpt-oss/gemma-4 think
    unless told otherwise (gemma-4 is thinking-trained: the instruct prefill does not stop the
    model from answering in thinking prose, it just strips the wrapper and burns the reply
-   budget — instruct is the opt-out). `create_chat_renderer_` seeds the
+   budget - instruct is the opt-out). `create_chat_renderer_` seeds the
    session's `enable_thinking` from it; the server's `enable_thinking` request field (either
-   spelling: top-level or `chat_template_kwargs`) is tri-state — ABSENT leaves the family
+   spelling: top-level or `chat_template_kwargs`) is tri-state - ABSENT leaves the family
    default in force, a present bool overrides.
-2. **`think_suppress`** (thinking → off, Qwen-shaped): prefills an empty, closed thought block
+2. **`think_suppress`** (thinking -> off, Qwen-shaped): prefills an empty, closed thought block
    on the generation prompt (Qwen3's `enable_thinking=false`). Renders only when thinking is
    off AND the vocab has the specials.
-3. **`think_gate` + `assistant_open_think`** (off → thinking, gemma-4-shaped): the gate
-   (`<|think|>`) opens the system turn — rendered even when no system prompt is set — and the
+3. **`think_gate` + `assistant_open_think`** (off -> thinking, gemma-4-shaped): the gate
+   (`<|think|>`) opens the system turn - rendered even when no system prompt is set - and the
    generation prompt switches to the bare `assistant_open_think` header so the model emits its
    own thought channel. gemma-4's default `assistant_open` keeps the closed empty
    `<|channel>thought\n<channel|>` prefill, so thinking-off renders the exact pre-arc tokens.
-4. **`stop_nothink`** — extra stop tokens in force whenever the next turn is NOT a thinking
+4. **`stop_nothink`** - extra stop tokens in force whenever the next turn is NOT a thinking
    turn, merged by `effective_stop_ids`. gemma-4 lists its channel markers: an instruct-mode
    E-series model rambles past its answer through a stray `<channel|>` (observed live:
-   `…4.<channel|>4`), and in a non-thinking turn a channel marker is always framing noise — the
+   `...4.<channel|>4`), and in a non-thinking turn a channel marker is always framing noise - the
    turn is over. Anything that generates from a ChatSession reads `effective_stop_ids(chat)`,
    never `chat.stop_ids`.
 5. **Arming is vocab-gated and gate-aware** (`think_turn_active`): the reply matcher, the
-   alternate opener, and the stop merge all key on one predicate — toggle on, the reply markers
+   alternate opener, and the stop merge all key on one predicate - toggle on, the reply markers
    resolve in the vocab (an inert declaration like Qwen2.5's shared ChatML template never arms),
    and a gate family's gate rendered on a consumed turn or renders this turn. A mid-conversation
    `set_thinking(true)` on gemma-4 therefore stays instruct-shaped (the gate cannot enter an
    already-rendered context) with the framing stops still armed.
 
-**Reply side — the per-family matcher** (`think_mode` + `think_open`/`think_close`):
+**Reply side - the per-family matcher** (`think_mode` + `think_open`/`think_close`):
 
-- **symmetric** (Qwen, GLM): `<think>` … `</think>`.
-- **channel_switch** (gpt-oss Harmony): `<|channel|>analysis<|message|>` … reasoning … `<|end|>`
-  (repeatable; `commentary` counts as reasoning) → `<|channel|>final<|message|>` … content. The
+- **symmetric** (Qwen, GLM): `<think>` ... `</think>`.
+- **channel_switch** (gpt-oss Harmony): `<|channel|>analysis<|message|>` ... reasoning ... `<|end|>`
+  (repeatable; `commentary` counts as reasoning) -> `<|channel|>final<|message|>` ... content. The
   Harmony markers are the mode's own grammar, not per-arch data.
-- **asymmetric** (gemma-4): `<|channel>thought` (trailing `\n` optional) … `<channel|>` …
+- **asymmetric** (gemma-4): `<|channel>thought` (trailing `\n` optional) ... `<channel|>` ...
   content. Asymmetric brackets are the family design.
 - **truncated tail**: reasoning that never closed (budget cut) classifies as reasoning.
 
@@ -56,7 +56,7 @@ SSE chunk boundaries). `respond_` stores history reasoning-stripped through it; 
 remains as the legacy symmetric-only helper.
 
 **Server surface** (`utils/dasllama-server/openai_server.das`): the reasoning span rides
-`reasoning_content` — on the chat-completion message, and as streaming deltas (the
+`reasoning_content` - on the chat-completion message, and as streaming deltas (the
 DeepSeek/llama.cpp framing). Tool-capable replies split reasoning FIRST, then
 `parse_tool_calls_auto` runs on the content half, so a thinking model that calls tools yields
 `reasoning_content` AND `tool_calls` in one response.
@@ -67,12 +67,12 @@ DeepSeek/llama.cpp framing). Tool-capable replies split reasoning FIRST, then
 |---|---|---|---|---|
 | Qwen 2.5 (qwen2, qwen2moe) | n/a (no think vocab) | symmetric (inert) | hermes | Qwen2.5-0.5B |
 | Qwen 3 / 3.5 / 3.6 (qwen3, qwen3moe, qwen35, qwen35moe, qwen3next) | on | symmetric | hermes | Qwen3-0.6B / Qwen3.5-0.8B |
-| GLM-4 MoE (glm4moe) | on | symmetric | none declared | **none local — zen2 leg pending, below** |
+| GLM-4 MoE (glm4moe) | on | symmetric | none declared | **none local - zen2 leg pending, below** |
 | gpt-oss | on | channel_switch | harmony (developer-turn namespace, commentary-channel calls) | gpt-oss-20b (11 GB, large-tier) |
 | gemma-4 E-series | on (instruct = opt-out via the closed-channel prefill) | asymmetric | gemma4 (declaration/call/response DSL) | gemma-4-E2B |
 | llama-3.x (llama) | none | none | llama_json (whole-reply object, ipython results) | Llama-3.2-3B |
 | mistral v0.3 (mistral-instruct template) | none | none | mistral ([AVAILABLE_TOOLS]/[TOOL_CALLS]) | Mistral-7B-v0.3 Q4 |
-| phi3, gemma2/3, mistral3 (v7-tekken) | none | none | none declared | — |
+| phi3, gemma2/3, mistral3 (v7-tekken) | none | none | none declared | - |
 
 Every ToolMode's wire codec lives in `dasllama_tools.das` (serializers + parsers, model-free
 pinned in `tests/test_tool_formats.das`); the chat layer dispatches defs/replay/results on the
@@ -81,31 +81,31 @@ undeclared (an honest 400) pending the zen2 leg.
 
 ## Test map
 
-- `modules/dasLLAMA/tests/test_think_split.das` — model-free: every family's exact wire shape
+- `modules/dasLLAMA/tests/test_think_split.das` - model-free: every family's exact wire shape
   through the matcher, whole-string and per-chunk down to 1 byte.
-- `modules/dasLLAMA/tests/test_tool_formats.das` — model-free: every ToolMode's wire codec
+- `modules/dasLLAMA/tests/test_tool_formats.das` - model-free: every ToolMode's wire codec
   (defs serializers, call parsers, replay/result builders) against verbatim fixtures, plus the
   hardening pins (bounded gemma-4 DSL scans, harmony recipient clipping, post-final framing).
-- `modules/dasLLAMA/tests/test_chat.das` — render side: gemma-4 default/thinking-ON prefills
+- `modules/dasLLAMA/tests/test_chat.das` - render side: gemma-4 default/thinking-ON prefills
   token-for-token (`test_chat_gemma4_thinking`), Qwen think-suppress, Hermes tool blocks
   (Qwen2.5 token-for-token, Qwen3.5 marker ids), the per-family ToolMode declarations + the
   missing-specials demotion (`test_chat_tool_modes`), and the gemma-4 tool wire token-for-token
-  — defs/replay/result turns, displaced-results + open-turn healing (`test_chat_gemma4_tool_wire`).
-- `utils/dasllama-server/test_openai_server_think.das` — live legs, model-gated: Qwen3-0.6B
+  - defs/replay/result turns, displaced-results + open-turn healing (`test_chat_gemma4_tool_wire`).
+- `utils/dasllama-server/test_openai_server_think.das` - live legs, model-gated: Qwen3-0.6B
   (reasoning_content non-streaming + streaming order + tools-with-thinking compose),
-  gemma-4-E2B (on-default / instruct-opt-out pair + tools + the call→result→answer round-trip),
+  gemma-4-E2B (on-default / instruct-opt-out pair + tools + the call->result->answer round-trip),
   Llama-3.2-3B (llama_json), Mistral-7B-v0.3 (mistral), gpt-oss-20b (Harmony split + harmony
   tools; `DASLLAMA_PARITY_FULL=1`).
 
 REVIEW.md binds new families to this map: declaring `think_mode` or `tool_mode` ships
 the wire-shape case and the live leg in the same change.
 
-## GLM-4 — the pending zen2 leg
+## GLM-4 - the pending zen2 leg
 
 No small glm4moe model exists (the family starts at GLM-4.5-Air, ~106 B), so GLM has no local
 live leg here. The symmetric matcher it shares with Qwen is fully covered model-free. What
 remains is the live proof on the zen2 box (which stocks a GLM-4.5 gguf): run
-`test_openai_server_think.das`'s qwen3 arm pattern against the GLM model — default thinking
+`test_openai_server_think.das`'s qwen3 arm pattern against the GLM model - default thinking
 produces `reasoning_content`, `enable_thinking=false` suppresses via its declared
 `think_suppress`, content clean of `<think>`. When that runs, record the result here; if GLM
 tool calling is wanted, its format declaration comes first and brings the test obligations

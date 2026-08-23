@@ -4,8 +4,8 @@ All test files added from the `examples/test/` (daScriptTest) migration on the `
 Each file needs manual review to verify correctness, gen2 syntax, and proper dastest integration.
 
 **Legend:**
-- `[ ]` — needs review
-- `[x]` — reviewed and approved
+- `[ ]` - needs review
+- `[x]` - reviewed and approved
 
 ---
 

@@ -1,11 +1,11 @@
-# ast-fuzz — random AST generator + verifier
+# ast-fuzz - random AST generator + verifier
 
 Two tools for hardening the daslang compiler (and your own macros) against
 malformed-but-plausible ASTs:
 
-- **generator** — builds random AST straight from the node definitions and asks
+- **generator** - builds random AST straight from the node definitions and asks
   *does the compiler crash?*
-- **verifier** (`daslib/ast_verify`) — turns a crash-class malformation into a
+- **verifier** (`daslib/ast_verify`) - turns a crash-class malformation into a
   clean diagnostic instead of a segfault several passes later
 
 ## Generator
@@ -17,14 +17,14 @@ daslang utils/internal/ast-fuzz/main.das -- --bin bin/daslang --seeds 50
 Each seed writes a victim that is nothing but `def main { }` plus the options
 that turn the generator on. An `[infer_macro]` (`_ast_synth.das`) then adds whole
 functions with random signatures, the structures / enumerations / globals their
-types point at, and a generated body for each — so nothing about the program is
+types point at, and a generated body for each - so nothing about the program is
 hardcoded. It compiles in a **subprocess**, the only way to attribute a crash to
 the seed that caused it, since a crash kills the process. A normal compiler error
 is fine; an abnormal exit (signal / abort) is a compiler bug.
 
 It **generates** rather than mutating parsed trees on purpose. The parser reaches
 only a subset of legal shapes, and a mutation set mostly produces programs the
-type checker is designed to reject — measured: 800 mutation runs, 645 valid
+type checker is designed to reject - measured: 800 mutation runs, 645 valid
 samples, zero crashes. Generation found crashes on the first probe.
 
 ### What it covers
@@ -34,7 +34,7 @@ samples, zero crashes. Generation found crashes on the first probe.
 constructible `Expression` subclass (the abstract bases are skipped), with every
 child slot filled recursively.
 
-`TypeDecl` coverage includes every payload-bearing family — `tStructure`,
+`TypeDecl` coverage includes every payload-bearing family - `tStructure`,
 `tEnumeration`/`8`/`16`/`64`, `tHandle`, `tDistinct`, `tFixedArray` (with
 `fixedDim`), `tBitfield`/`8`/`16`/`64` (with `argNames`), the 16/8-bit lattice
 vectors, and `fakeContext` / `anyArgument` / `option`.
@@ -51,7 +51,7 @@ Four axes are opt-in, because each leaves parser-shaped AST behind:
 Handled-type annotations come from a fixed list of real types (`HANDLED_TYPES` in
 `_ast_synth.das`) rather than being enumerated: `module_find_type_annotation`
 `static_cast`s whatever `findAnnotation` returns, so asking it for `export` would
-hand back a *function* annotation reinterpreted as a type annotation — a pointer
+hand back a *function* annotation reinterpreted as a type annotation - a pointer
 no source can produce, whose crashes would not count.
 
 Extending the type space this way found two crash classes and both are now
@@ -61,7 +61,7 @@ checked: a `tHandle` with a null `annotation`, and a `tDistinct` without a
 Not generated: annotation declarations on functions/structures, shared nodes (a
 DAG) or cycles, and multi-module programs.
 
-`_ast_synth_all.das` is a **build product, not a source** — gitignored (see the
+`_ast_synth_all.das` is a **build product, not a source** - gitignored (see the
 root `.gitignore`), and written on first driver run. Its static half lives in
 `gen_prelude.das.in`; only the per-kind dispatch is generated. Regenerate with:
 
@@ -84,7 +84,7 @@ The seed reproduces the whole run, so reduce from there:
 - `--synth-skip Kind1,Kind2` drops node kinds from the pool; bisect to identify
   which kind the crash requires.
 - `--synth-only <fn>` replaces one body while still counting every match, so the
-  per-function seeds — and therefore every other body — are unchanged.
+  per-function seeds - and therefore every other body - are unchanged.
 - `--synth-dump` prints each synthesized body as source.
 
 ### CRASH vs TIMEOUT vs resource
@@ -112,7 +112,7 @@ Three ways in:
 
 - **CLI:** `daslang --ast-verify foo.das` force-includes the module (the way
   `-jit` pulls in its daslib support). `--ast-verify-batch` is the CI gate form:
-  no pre-infer checks, post-infer over the module being compiled only — the
+  no pre-infer checks, post-infer over the module being compiled only - the
   finished tree is checked, at a fraction of the cost; a tree a macro breaks
   mid-inference then crashes the compiler instead of being reported, so the
   CI/preflight gates count a crash as red. Either mode: a report fails the compile.
@@ -131,10 +131,10 @@ no `else`, `with (module x)` having no subject) is deliberately not flagged.
 ### Node uniqueness
 
 An `Expression` or a `TypeDecl` reachable from two parents is a missing
-`clone_expression` / `clone_type` — a compiler or macro bug that surfaces later
+`clone_expression` / `clone_type` - a compiler or macro bug that surfaces later
 as a double edit or a double free, not as a segfault. Each such node is reported
 once per walk, and an aliased type is unshared by cloning it at the slot the
-visitor can replace (the outermost one — nested `firstType` / `argTypes` are
+visitor can replace (the outermost one - nested `firstType` / `argTypes` are
 reported only). `options _ast_verify_unique = false` turns the check off for a
 module that legitimately shares nodes.
 
@@ -142,7 +142,7 @@ Expression types (`expr.type`) are not walked by the visitor either, so the pass
 records them as whole trees from `preVisitExpression`, along with the type slots
 the expression visits skip (`ascType`, `recordType`, `bitfieldType`,
 `assumeType`, a non-closure block's `returnType`) and the `typeMacroExpr` /
-`fixedDimExpr` payloads. A slot the walk itself enters is left alone —
+`fixedDimExpr` payloads. A slot the walk itself enters is left alone - 
 `ExprMakeLocal::visit` walks `makeType`, so recording it here would read as an
 alias of the node the walk is about to reach.
 
@@ -152,15 +152,15 @@ Quote bodies count too: `ExprQuote::visit` descends only when a visitor answers
 ### gc-root reachability (off by default)
 
 `verify_module_gc_root` reports every gc-tracked node a module owns that a full
-walk of its AST never reaches — an orphan, or a node in a slot no visitor walks.
+walk of its AST never reaches - an orphan, or a node in a slot no visitor walks.
 It runs from a `[post_compile_macro]`, the first hook after the compiler collects
 the module root; before that collect the root still holds the garbage inference
 left behind, so every node there reads as unreachable.
 
 Enable it with `options _ast_verify_gc_root = true`. It stays off because
-`gc_collect` deliberately keeps nodes no `Visitor` walks — `daslib/quote.das`
+`gc_collect` deliberately keeps nodes no `Visitor` walks - `daslib/quote.das`
 carries a field blacklist naming three (`Function.inferStack`,
-`ExprReturn._block`, `ExprVar.pBlock`) — so gc-reachable and visitor-reachable
+`ExprReturn._block`, `ExprVar.pBlock`) - so gc-reachable and visitor-reachable
 are not yet the same set, and real files still report a handful of nodes.
 
 ### Why every check repairs
@@ -194,7 +194,7 @@ Two compiler-side hooks, both no-ops unless the module is loaded:
 - **once per inference pass** (`ast_infer_type.cpp`). Macros that run *inside*
   inference (for-loop / call / variant / reader) substitute a subtree that is
   consumed in the same pass, and at the substitution site it is not yet installed
-  in the module — so checking there sees the old tree. Checking per pass, with
+  in the module - so checking there sees the old tree. Checking per pass, with
   the tree in place, is what catches them.
 - **once inference is done** (`ast_parse.cpp`), as a `[post_infer_macro]`, where a
   function's inferred result type is final. That is the only point at which a
@@ -203,14 +203,14 @@ Two compiler-side hooks, both no-ops unless the module is loaded:
   the last pass and firing there reports valid code.
 
   It deliberately does NOT check "every expression carries a type". Walking the
-  AST cannot tell what codegen will actually emit — a generic instance can hold
+  AST cannot tell what codegen will actually emit - a generic instance can hold
   an untyped constant that `SimulateVisitor` never touches (`daslib/archive`'s
-  per-field `apply` blocks are one) — so that check only ever produced false
+  per-field `apply` blocks are one) - so that check only ever produced false
   positives.
 
 A macro that re-breaks the same node every pass never converges: the verifier
 repairs, the macro breaks it again, and the compile ends in `error[30507]: type
-inference exceeded maximum allowed number of passes`. That is the macro's bug —
+inference exceeded maximum allowed number of passes`. That is the macro's bug - 
 break the node once.
 
 ## Self-test

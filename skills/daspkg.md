@@ -28,14 +28,14 @@ The `--root` flag sets the project root directory (default: current directory). 
 | `cleanup` | `cleanup [--force] [--global]` | Remove `modules/` and `daspkg.lock` to reset a project |
 | `doctor` | `doctor` | Check environment (git, cmake, gh) |
 | `release` | `release [--out <dir>]` | Bundle project as a redistributable standalone (exe + shared modules + assets) |
-| `release wasm` | `release wasm --root <dir> [--out <dir>] [--wasm-lib-dir <dir>]` | Cross-compile the project to a standalone wasm64 web app (`<name>.{html,js,wasm}`) — see WebAssembly section |
+| `release wasm` | `release wasm --root <dir> [--out <dir>] [--wasm-lib-dir <dir>]` | Cross-compile the project to a standalone wasm64 web app (`<name>.{html,js,wasm}`) - see WebAssembly section |
 | `introduce` | `introduce` | Register package in the public index (creates PR on daspkg-index) |
 | `withdraw` | `withdraw` | Remove package from the public index |
 
 ## Install Sources
 
-- **GitHub:** `install github.com/user/repo` — NO `https://` prefix (daspkg prepends it)
-- **With version:** `install github.com/user/repo@1.0` (also accepts `@v1.0` — the `v` prefix is stripped automatically)
+- **GitHub:** `install github.com/user/repo` - NO `https://` prefix (daspkg prepends it)
+- **With version:** `install github.com/user/repo@1.0` (also accepts `@v1.0` - the `v` prefix is stripped automatically)
 - **Local path:** `install ./path/to/package`
 - **Index name:** `install my-package` (looks up in package index)
 
@@ -60,15 +60,15 @@ The `--root` flag sets the project root directory (default: current directory). 
 - Lock file: `daspkg.lock` in the `--root` directory
 - Package name (in `.das_package`) can differ from repo name
 - Code locates data files sitting beside its own `.das` source with `get_this_module_dir()`
-  (`require daslib/module_path`) — **never** `dir_name(get_module_file_name("X"))`, which bakes
+  (`require daslib/module_path`) - **never** `dir_name(get_module_file_name("X"))`, which bakes
   the build-machine path. Resolution tiers and the call-site rule: *Runtime asset paths* below
-- `install` and `update`/`upgrade` can take 10+ minutes for packages with native builds — use long timeouts
+- `install` and `update`/`upgrade` can take 10+ minutes for packages with native builds - use long timeouts
 
 ## Global Modules
 
-Large packages (e.g. dasImguiNodeEditor) can be installed **globally** — once under `{das_root}/modules/` — and shared across all projects using that daScript SDK. This avoids redundant clones and builds.
+Large packages (e.g. dasImguiNodeEditor) can be installed **globally** - once under `{das_root}/modules/` - and shared across all projects using that daScript SDK. This avoids redundant clones and builds.
 
-Note: **in-tree modules satisfy `require_package` automatically** — a package depending on dasImgui or dasVulkan resolves against `modules/dasImgui` / `modules/dasVulkan` ("part of this daslang tree — nothing to install").
+Note: **in-tree modules satisfy `require_package` automatically** - a package depending on dasImgui or dasVulkan resolves against `modules/dasImgui` / `modules/dasVulkan` ("part of this daslang tree - nothing to install").
 
 ### Usage
 
@@ -97,7 +97,7 @@ daspkg check --global
 ### Install behavior
 
 - **Global install** (`--global`): clones and builds in `{das_root}/modules/`, records in `{das_root}/modules/.daspkg_global.lock`
-- **Local install auto-uses global:** `daspkg install foo` checks the global lock file first. If a compatible global version exists, it records a reference (`"global": true` in project lock file) instead of cloning — zero network, zero build time
+- **Local install auto-uses global:** `daspkg install foo` checks the global lock file first. If a compatible global version exists, it records a reference (`"global": true` in project lock file) instead of cloning - zero network, zero build time
 - **Version mismatch:** if the global version doesn't satisfy the project's requested version, daspkg errors with a suggestion. Use `--force` to install locally, or `--global` to update the global copy
 - **Dependencies:** global packages' dependencies also install globally. Built-in SDK modules (already in `das_root/modules/`) are automatically skipped
 
@@ -106,13 +106,13 @@ daspkg check --global
 A package can exist both locally and globally. The C++ runtime (`require_dynamic_modules`) handles this via **shadow detection**:
 
 - If the same module directory exists in both `{das_root}/modules/` and `{project_root}/modules/`, the **local version wins**
-- A warning is printed: `"Warning: local 'dasImguiNodeEditor' shadows global — using local"`
-- This is safe — removing the local copy seamlessly falls back to the global one
+- A warning is printed: `"Warning: local 'dasImguiNodeEditor' shadows global - using local"`
+- This is safe - removing the local copy seamlessly falls back to the global one
 
 ### Remove behavior
 
-- `daspkg remove --global foo` — deletes `{das_root}/modules/foo/` and removes from global lock file
-- `daspkg remove foo` (where project entry has `"global": true`) — only removes the project lock file reference; the global directory is not deleted
+- `daspkg remove --global foo` - deletes `{das_root}/modules/foo/` and removes from global lock file
+- `daspkg remove foo` (where project entry has `"global": true`) - only removes the project lock file reference; the global directory is not deleted
 
 ### CMake integration
 
@@ -120,7 +120,7 @@ Global packages that use `cmake_build()` or `custom_build()` get a `.daspkg_stan
 
 ## `.das_package` Manifest
 
-Every package has a `.das_package` file — a daslang script declaring metadata:
+Every package has a `.das_package` file - a daslang script declaring metadata:
 
 ```das
 options gen2
@@ -172,17 +172,17 @@ def initialize(project_path : string) {
 }
 ```
 
-## Release — bundle project as a standalone
+## Release - bundle project as a standalone
 
 `daspkg release` produces a redistributable folder under `<--out>/<bundle_name>/` containing:
 
-- The standalone exe (`<bundle_name>.exe` — produced by `daslang -exe`).
+- The standalone exe (`<bundle_name>.exe` - produced by `daslang -exe`).
 - Every `.shared_module` dylib the program transitively requires, at the path the exe expects (`modules/<X>/<X>.shared_module`).
 - Every asset matching the project's `release_include` globs.
 
-The recipient can run the bundled exe **without daslang installed**. PR #1 (exe-relative shared modules, merged 2026-05-05) is the prerequisite — the runtime resolves dylibs against the exe's own directory first.
+The recipient can run the bundled exe **without daslang installed**. PR #1 (exe-relative shared modules, merged 2026-05-05) is the prerequisite - the runtime resolves dylibs against the exe's own directory first.
 
-**Build-time tuning (the `[tune]` framework):** the `-exe` build's deps JSON reports every `[tune_scope]` with per-key completeness against the app tune sidecar; `cmd_release` always mints: it runs the tuners (`DAS_TUNE_MODE=tune`, `DAS_TUNE_MANIFEST=<sidecar>`), REBUILDS so the exe bakes the measured winners, and ships the sidecar beside the exe as `<bundle>.tune.json` (touched newer than the exe — a sidecar older than the binary reads as stale). `--quick` is the only inheriting mode, and only from a complete, fresh sidecar; a tuner refusal (noise gate / validation) fails the release rather than shipping fallbacks. The exe self-reports its baked stamps via `tune_status()`. See `skills/tune.md`.
+**Build-time tuning (the `[tune]` framework):** the `-exe` build's deps JSON reports every `[tune_scope]` with per-key completeness against the app tune sidecar; `cmd_release` always mints: it runs the tuners (`DAS_TUNE_MODE=tune`, `DAS_TUNE_MANIFEST=<sidecar>`), REBUILDS so the exe bakes the measured winners, and ships the sidecar beside the exe as `<bundle>.tune.json` (touched newer than the exe - a sidecar older than the binary reads as stale). `--quick` is the only inheriting mode, and only from a complete, fresh sidecar; a tuner refusal (noise gate / validation) fails the release rather than shipping fallbacks. The exe self-reports its baked stamps via `tune_status()`. See `skills/tune.md`.
 
 ### `release()` hook in `.das_package`
 
@@ -203,13 +203,13 @@ def release() {
 }
 ```
 
-For a **dep package** (e.g. `dasCards`), only the asset-glob calls matter — its `release_main` is ignored when releasing a parent project that depends on it.
+For a **dep package** (e.g. `dasCards`), only the asset-glob calls matter - its `release_main` is ignored when releasing a parent project that depends on it.
 
-### Auto-detection — shared modules + transitive dep traversal
+### Auto-detection - shared modules + transitive dep traversal
 
 `daslang -exe --list-shared-modules <path>` writes a JSON file describing the program's deps. `cmd_release` then:
 
-1. **Ships dylibs**: every `.shared_module` registered for a daslang module that the compiled program references. Detection is by program-module membership (not used-function set) — a `require`d module whose .das functions aren't called still gets shipped, because its native data may be loaded at runtime.
+1. **Ships dylibs**: every `.shared_module` registered for a daslang module that the compiled program references. Detection is by program-module membership (not used-function set) - a `require`d module whose .das functions aren't called still gets shipped, because its native data may be loaded at runtime.
 2. **Walks transitive deps**: for every program module whose .das source file lives under a `<root>/modules/<DepName>/` package (i.e. has a `.das_package` ancestor distinct from the project's own root), runs that dep's `release()` and copies its `release_include` files to `<bundle>/modules/<DepName>/<rel>`.
 
 If a module is loaded only at runtime (e.g. data files read while the .das is never `require`d), use `release_shared_module(name)` to force-include it. Argument can be the daslang-side module name (`"sqlite"`) OR the package directory name (`"dasSQLITE"`).
@@ -218,20 +218,20 @@ If a module is loaded only at runtime (e.g. data files read while the .das is ne
 
 ```
 <out>/
-└── <bundle_name>/
-    ├── <bundle_name>.exe                       # the standalone binary
-    ├── modules/                                # auto-detected dylibs + transitive dep assets
-    │   ├── dasGlfw/dasModuleGlfw.shared_module
-    │   ├── dasStbImage/dasModuleStbImage.shared_module
-    │   ├── dasCards/cards/svg-cards.svg        # from dasCards's release_include
-    │   └── ...
-    ├── <asset paths from project's release_include>  # preserved relative to project root
-    └── ...
++-- <bundle_name>/
+    +-- <bundle_name>.exe                       # the standalone binary
+    +-- modules/                                # auto-detected dylibs + transitive dep assets
+    |   +-- dasGlfw/dasModuleGlfw.shared_module
+    |   +-- dasStbImage/dasModuleStbImage.shared_module
+    |   +-- dasCards/cards/svg-cards.svg        # from dasCards's release_include
+    |   +-- ...
+    +-- <asset paths from project's release_include>  # preserved relative to project root
+    +-- ...
 ```
 
 The bundle is the host platform only. Cross-compilation is deferred until daslang itself supports it; v1 has no platform-tag suffix or auto-archive (`--zip` etc.). Recipients can tar/zip the directory themselves.
 
-### Shipping a file from outside the package — `release_include_from()`
+### Shipping a file from outside the package - `release_include_from()`
 
 `release_include` globs **downward from the package root**, so it cannot reach shared tooling that
 lives elsewhere in the tree. `release_include_from(source[, dest])` resolves `source` against
@@ -240,34 +240,34 @@ name, and may name a subdirectory). This is how `utils/dasllama-server` (and the
 dictation bot in the das-telegram package) ships the one supervisor in `utils/watchdog/`.
 
 A missing source **fails the release** with exit 1 rather than shipping a bundle quietly short a
-file — a `release_include` whose target has moved away silently ships nothing, which is the failure
+file - a `release_include` whose target has moved away silently ships nothing, which is the failure
 this exists to prevent.
 
-### Debug symbols — `release_include_symbols()`
+### Debug symbols - `release_include_symbols()`
 
-Opt-in. Ships the `.pdb` for every binary the release ships — the app exe, `libDaScriptDyn*.dll`, and each `.shared_module` — into `<bundle>/symbols/`, flat:
+Opt-in. Ships the `.pdb` for every binary the release ships - the app exe, `libDaScriptDyn*.dll`, and each `.shared_module` - into `<bundle>/symbols/`, flat:
 
 ```
 <out>/<bundle_name>/
-└── symbols/
-    ├── libDaScriptDyn.pdb            # 166 MB
-    ├── libDaScriptDyn_runtime.pdb    # 153 MB
-    └── dasModuleHV.pdb  ...
++-- symbols/
+    +-- libDaScriptDyn.pdb            # 166 MB
+    +-- libDaScriptDyn_runtime.pdb    # 153 MB
+    +-- dasModuleHV.pdb  ...
 ```
 
-Point a debugger straight at it — `cdb -y <bundle>\symbols` (or add the dir to `_NT_SYMBOL_PATH`) — and a minidump taken from the deployed tree resolves without the build machine.
+Point a debugger straight at it - `cdb -y <bundle>\symbols` (or add the dir to `_NT_SYMBOL_PATH`) - and a minidump taken from the deployed tree resolves without the build machine.
 
 **Why it is opt-in:** daslang's two runtime PDBs alone are ~320 MB, which dwarfs a typical ~25 MB bundle. Enable it for a deployment you intend to debug crashes in, not by default.
 
-**Why it is needed at all:** a released tree contains no PDBs, so anything looking for `<program>.pdb` beside the *deployed* binary finds nothing — which is why crash bundlers that probe that path record an empty artifact list. The collector instead resolves each PDB beside the **source** binary in the build tree, which is where the linker wrote it.
+**Why it is needed at all:** a released tree contains no PDBs, so anything looking for `<program>.pdb` beside the *deployed* binary finds nothing - which is why crash bundlers that probe that path record an empty artifact list. The collector instead resolves each PDB beside the **source** binary in the build tree, which is where the linker wrote it.
 
 Windows only. ELF carries DWARF inside the binary, and macOS `.dSYM` bundles need separate handling; on those platforms the flag logs a skip. The symbol files are recorded in `.daspkg_release.manifest`, so a re-release cleans them like any other shipped file.
 
-Known gap: an app whose exe is produced by the JIT `write_exe` path gets no PDB — that link does not pass `/DEBUG` and emits only a `.map`. Runtime and module frames are still covered.
+Known gap: an app whose exe is produced by the JIT `write_exe` path gets no PDB - that link does not pass `/DEBUG` and emits only a `.map`. Runtime and module frames are still covered.
 
-### Runtime asset paths — `get_this_module_dir()`
+### Runtime asset paths - `get_this_module_dir()`
 
-Dep code that loads data files via `dir_name(get_module_file_name("X"))` gets the **build-machine path**, not the bundle path — `get_module_file_name` returns the `.das` file path baked at compile time. Use `get_this_module_dir()` from `daslib/module_path` instead:
+Dep code that loads data files via `dir_name(get_module_file_name("X"))` gets the **build-machine path**, not the bundle path - `get_module_file_name` returns the `.das` file path baked at compile time. Use `get_this_module_dir()` from `daslib/module_path` instead:
 
 ```das
 require daslib/module_path
@@ -281,29 +281,29 @@ def load_assets() {
 
 The macro captures the call-site source file path at expansion, then walks the same 3-tier resolution PR #2579 introduced for `.shared_module`:
 
-1. `<exe_dir>/<rel>` — daspkg release standalone bundle
-2. `<das_root>/<rel>` — SDK / cmake install
-3. `dir_name(<call-site-baked>)` — dev (interpreted from source)
+1. `<exe_dir>/<rel>` - daspkg release standalone bundle
+2. `<das_root>/<rel>` - SDK / cmake install
+3. `dir_name(<call-site-baked>)` - dev (interpreted from source)
 
 `<rel>` is the suffix starting at the last `/modules/` segment.
 
 **Project-local code (no `/modules/` in path)** skips tiers 1+2 and goes straight to tier 3, which returns the baked dir if it still exists (dev) or `<exe_dir>` if it doesn't (relocated bundle). So `path_join(get_this_module_dir(), "asset.png")` from a project-local `main.das` works in both dev and shipped bundles, as long as the asset is shipped sitting next to the exe.
 
-**Call from inside a function — not a top-level `let` initializer.** daslang's `-exe` JIT path has a known limitation: top-level `let`s that call Context-allocating builtins (like `get_this_module_dir()`, `get_das_root()`, `dir_name(get_module_file_name(...))`) emit JIT-process-baked function pointers that are wrong under ASLR in the standalone exe. The same call works fine inside any function body. Tracked separately; once the daslang fix lands, the top-level form will Just Work.
+**Call from inside a function - not a top-level `let` initializer.** daslang's `-exe` JIT path has a known limitation: top-level `let`s that call Context-allocating builtins (like `get_this_module_dir()`, `get_das_root()`, `dir_name(get_module_file_name(...))`) emit JIT-process-baked function pointers that are wrong under ASLR in the standalone exe. The same call works fine inside any function body. Tracked separately; once the daslang fix lands, the top-level form will Just Work.
 
 ### What does **not** ship
 
-- Source `.das` files compiled into the exe (daslib stdlib, project's own helpers, dep `.das` companions). The runtime exe doesn't need them — they're already baked in.
+- Source `.das` files compiled into the exe (daslib stdlib, project's own helpers, dep `.das` companions). The runtime exe doesn't need them - they're already baked in.
 - Source files alongside `.shared_module` dylibs (CMakeLists, README, etc.).
 - The `.das_package` and `daspkg.lock` files.
 - Debug symbols, unless the package declares `release_include_symbols()`.
 - Anything not matched by a `release_include` glob.
 
-## WebAssembly (wasm64) — `build --wasm` / `release wasm`
+## WebAssembly (wasm64) - `build --wasm` / `release wasm`
 
 `daspkg release wasm` cross-compiles a project to a **standalone wasm64 web app** (`<name>.{html,js,wasm}`) that runs compiled (not interpreted) in the browser. It is the web analogue of native `release`: one `.das_package` per example, driven by the same `release()` hook.
 
-**wasm64 ONLY.** Every compiled web artifact is memory64 (8-byte pointers). The wasm32 *cross-compile* target is unsupported — on a 64-bit host it bakes 8-byte-pointer layouts the wasm32 runtime reads as 4 (garbage); pure scripts only ever "worked" at wasm32 by dodging that bug class. wasm64 makes host-ptr-size == target-ptr-size, so the bug class vanishes with zero codegen changes. The browser needs memory64 (Chrome/Edge/Firefox 133+); on Safari/iOS the site falls back to the wasm32 *interpreter* (`daslang_static.wasm`, an ordinary C++→wasm build — not the cross-compiler, so unaffected).
+**wasm64 ONLY.** Every compiled web artifact is memory64 (8-byte pointers). The wasm32 *cross-compile* target is unsupported - on a 64-bit host it bakes 8-byte-pointer layouts the wasm32 runtime reads as 4 (garbage); pure scripts only ever "worked" at wasm32 by dodging that bug class. wasm64 makes host-ptr-size == target-ptr-size, so the bug class vanishes with zero codegen changes. The browser needs memory64 (Chrome/Edge/Firefox 133+); on Safari/iOS the site falls back to the wasm32 *interpreter* (`daslang_static.wasm`, an ordinary C++->wasm build - not the cross-compiler, so unaffected).
 
 ### Two-step workflow
 
@@ -322,9 +322,9 @@ daspkg release wasm --root examples/games/arcanoid --out _release
 
 ### Prerequisites
 
-- **emsdk active** — `emcc` + `cmake` on PATH (CI activates `emsdk_env` first).
-- **wasm64 archives** — from `daspkg build --wasm` (in `web/output64/lib`, or pass `--wasm-lib-dir`).
-- **Host shared modules** (graphics examples only) — the host daslang must have `modules/dasGlfw/dasModuleGlfw.shared_module` + `modules/dasOpenGL/dasModuleOpenGL.shared_module` present, or GL silently falls back to the broken dasbind path (black canvas + runtime "Failed to find @dasbind::glCreateShader"). Guard before release: the cross-compile log must show `NEED_MODULE(Module_dasOpenGL) for opengl` (native), not a `@dasbind` binding. Pure compute scripts need no shared modules.
+- **emsdk active** - `emcc` + `cmake` on PATH (CI activates `emsdk_env` first).
+- **wasm64 archives** - from `daspkg build --wasm` (in `web/output64/lib`, or pass `--wasm-lib-dir`).
+- **Host shared modules** (graphics examples only) - the host daslang must have `modules/dasGlfw/dasModuleGlfw.shared_module` + `modules/dasOpenGL/dasModuleOpenGL.shared_module` present, or GL silently falls back to the broken dasbind path (black canvas + runtime "Failed to find @dasbind::glCreateShader"). Guard before release: the cross-compile log must show `NEED_MODULE(Module_dasOpenGL) for opengl` (native), not a `@dasbind` binding. Pure compute scripts need no shared modules.
 
 ### `release()` hooks for web
 
@@ -348,11 +348,11 @@ def release() {
 
 ### Game source contract (cross-compiles UNCHANGED)
 
-A game keeps its plain desktop `main` — on wasm the browser lifecycle auto-drives `init`/`update`/`shutdown` per `requestAnimationFrame` and **bypasses `main`**. No `eval_main_loop` / per-platform edits. (Graphics examples may need `options stack = 8_388_608` — decs nested queries overflow the 16 KB default context stack in the cross-compiled exe.)
+A game keeps its plain desktop `main` - on wasm the browser lifecycle auto-drives `init`/`update`/`shutdown` per `requestAnimationFrame` and **bypasses `main`**. No `eval_main_loop` / per-platform edits. (Graphics examples may need `options stack = 8_388_608` - decs nested queries overflow the 16 KB default context stack in the cross-compiled exe.)
 
 ## Resetting a Project (cleanup)
 
-Use `cleanup` to wipe a consumer project's daspkg state so the next `install` starts from scratch — useful when auditing packages or recovering from a bad partial install.
+Use `cleanup` to wipe a consumer project's daspkg state so the next `install` starts from scratch - useful when auditing packages or recovering from a bad partial install.
 
 ```bash
 # dry-run: show what would be removed
@@ -368,7 +368,7 @@ What `cleanup` removes:
 - `.gitignore` entries daspkg had added (one line per non-global package in the lockfile)
 
 Safety rails:
-- Refuses to run in a directory that has neither `.das_package` nor `daspkg.lock` — prevents nuking arbitrary `modules/` dirs
+- Refuses to run in a directory that has neither `.das_package` nor `daspkg.lock` - prevents nuking arbitrary `modules/` dirs
 - `--force` is required to actually delete; without it, `cleanup` prints a plan and exits
 - `--global --force` removes every globally-installed daspkg package from `{das_root}/modules/` and the global lockfile (in-tree SDK modules are left alone since they're never listed in the global lockfile)
 

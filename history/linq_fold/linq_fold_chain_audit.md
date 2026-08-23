@@ -1,84 +1,84 @@
-# `_fold` chain coverage audit — silent fall-off catalog
+# `_fold` chain coverage audit - silent fall-off catalog
 
 Generated 2026-05-23 from `0a2da407f`. Probe files live under
 `/tmp/audit_probes/` (re-runnable; see "How to re-run" at the bottom).
 
-## Status — what this audit has closed
+## Status - what this audit has closed
 
-**Theme 1 (terminal `_select` extension) — landed 2026-05-24** (`59c4f3f98`):
+**Theme 1 (terminal `_select` extension) - landed 2026-05-24** (`59c4f3f98`):
 
-- **1a, 1e + motivating** (`plan_order_family` / `plan_decs_order_family`): terminal `_select` accepted after `take(N)`. Bounded-heap holds the raw element; projection runs ≤K times at return.
-- **plan_reverse / plan_decs_reverse**: terminal `_select` accepted after `reverse [+ take(N)]`. Closes the natural "filter, reverse for newest-first, take K, project" idiom. NOT closed: the `reverse + _select + take` ordering (2c / 2e exact shape) — user must reorder to `reverse + take + _select`.
+- **1a, 1e + motivating** (`plan_order_family` / `plan_decs_order_family`): terminal `_select` accepted after `take(N)`. Bounded-heap holds the raw element; projection runs <=K times at return.
+- **plan_reverse / plan_decs_reverse**: terminal `_select` accepted after `reverse [+ take(N)]`. Closes the natural "filter, reverse for newest-first, take K, project" idiom. NOT closed: the `reverse + _select + take` ordering (2c / 2e exact shape) - user must reorder to `reverse + take + _select`.
 - **8b** (`plan_decs_join`): single trailing `_select` between `_join` and the implicit `to_array`. Substitutes via a let-bound join-result + projection.
-- **7a** (`plan_zip`): 3-arg `zip(a, b, sel)` pre-lowered to 2-arg `zip(a, b) |> _select(sel-as-tuple)` — the natural dot-product idiom now splices.
+- **7a** (`plan_zip`): 3-arg `zip(a, b, sel)` pre-lowered to 2-arg `zip(a, b) |> _select(sel-as-tuple)` - the natural dot-product idiom now splices.
 
-Coverage extension: 1395 → 1415 linq tests (10 new tests in `tests/linq/test_linq_fold_terminal_select.das`).
+Coverage extension: 1395 -> 1415 linq tests (10 new tests in `tests/linq/test_linq_fold_terminal_select.das`).
 
-**Theme 2 (trailing `_where` / HAVING) — landed 2026-05-24**:
+**Theme 2 (trailing `_where` / HAVING) - landed 2026-05-24**:
 
 - **8a, C6** (`plan_decs_join`): single trailing `_where` between `_join` and the terminator. Predicate references join-result fields; emission binds the result once per pair and gates `count++` / `push_clone`. Composes with the terminal `_select` from Theme 1.
-- **4a** (`plan_group_by`) + **4e** (`plan_decs_group_by` via shared `plan_group_by_core`): trailing `_where` AFTER `_select(reducer)`, i.e. SQL HAVING on the post-aggregate tuple. Binds the constructed output once per bucket and gates buf-emit / count-emit. Distinct from the existing `having_` slot (which is pre-select and can lift hidden reducer slots) — both can fire on the same chain.
-- **5c** (`plan_loop_or_count` across all 4 lanes — counter / accumulator / early-exit / array): `take(N)._where(p).terminator` accepted. Take cap ticks unconditionally per element; trailing `_where` gates only the per-element contribution, preserving the "first N elements, then keep matching" semantic that auto-rewriting can't reproduce.
+- **4a** (`plan_group_by`) + **4e** (`plan_decs_group_by` via shared `plan_group_by_core`): trailing `_where` AFTER `_select(reducer)`, i.e. SQL HAVING on the post-aggregate tuple. Binds the constructed output once per bucket and gates buf-emit / count-emit. Distinct from the existing `having_` slot (which is pre-select and can lift hidden reducer slots) - both can fire on the same chain.
+- **5c** (`plan_loop_or_count` across all 4 lanes - counter / accumulator / early-exit / array): `take(N)._where(p).terminator` accepted. Take cap ticks unconditionally per element; trailing `_where` gates only the per-element contribution, preserving the "first N elements, then keep matching" semantic that auto-rewriting can't reproduce.
 
-Coverage extension: 1415 → 1437 linq tests (12 new tests in `tests/linq/test_linq_fold_theme2_trailing_where.das`).
+Coverage extension: 1415 -> 1437 linq tests (12 new tests in `tests/linq/test_linq_fold_theme2_trailing_where.das`).
 
-**Theme 4 (2-arg terminator predicates) — landed 2026-05-24** (bundled with Theme 5 in the same PR):
+**Theme 4 (2-arg terminator predicates) - landed 2026-05-24** (bundled with Theme 5 in the same PR):
 
-- **3c** (`plan_distinct` + `plan_decs_distinct`): trailing `_distinct().count(P)` / `_distinct_by(K).count(P)` / `.long_count(P)`. Dedup remains unconditional so `distinct_by` keeps FIRST occurrence per key; a separate counter increments only when `P` matches that first occurrence — matches tier-2 `distinct.count(P)` semantics (distinct-then-filter, not filter-then-distinct). When a `_select` precedes `_distinct`, the predicate peels against the post-projection element so `_select(F)._distinct().count(P)` binds `P`'s parameter to the projected value.
+- **3c** (`plan_distinct` + `plan_decs_distinct`): trailing `_distinct().count(P)` / `_distinct_by(K).count(P)` / `.long_count(P)`. Dedup remains unconditional so `distinct_by` keeps FIRST occurrence per key; a separate counter increments only when `P` matches that first occurrence - matches tier-2 `distinct.count(P)` semantics (distinct-then-filter, not filter-then-distinct). When a `_select` precedes `_distinct`, the predicate peels against the post-projection element so `_select(F)._distinct().count(P)` binds `P`'s parameter to the projected value.
 - **`plan_zip`**: trailing `zip(a, b)[._select(F)].count(P)` / `.long_count(P)`. Predicate is captured into a dedicated counter-predicate gate emitted around `acc++` *inside* the upstream where/select wrap (NOT merged into `whereCond`), so eager `where(W).select(F).count(P)` ordering is preserved when `F` has side effects. With `_select`, the predicate peels against the projected value via a `vproj` bind. Length-shortcut is suppressed once `P` is present.
 - **`plan_decs_unroll` bare-chain `count()` / `count(P)`** (separate root-cause fix to `extract_decs_bridge`): `from_decs_template(...).count()` / `.count(P)` over a no-chain source was bailing because `forExpr.iteratorVariables` is unpopulated when no chain op forces an inference pass over the bridge's inner for-loop. The bridge now recovers iter names from `mkTup.values` (peeling the `ExprRef2Value` wrap), so both the Slice 1 `arch.size` shortcut and the `emit_decs_accumulator` 2-arg `count(P)` path are reachable on bare chains.
 
-**Theme 5 (`_order_by(K).reverse()` normalization) — landed 2026-05-24** (same PR):
+**Theme 5 (`_order_by(K).reverse()` normalization) - landed 2026-05-24** (same PR):
 
-- **1b, 2b**: pre-planner `normalize_order_reverse` pass runs from every `plan_*order_family` / `plan_*reverse` planner immediately after `flatten_linq`. Adjacent `(order_by|order_by_descending|order|order_descending, reverse)` pairs swap to the flipped variant and the `reverse` element is erased. The `ExprCall` arg list is identical between ascending/descending order variants, so no AST clone is needed — only the `LinqCall` metadata pointer is repointed to the flipped registry entry. Iterative: `_order_by(K).reverse().reverse()` collapses to `_order_by(K)` in two passes; `_order_by_descending(K).reverse()` flips to `_order_by(K)`.
+- **1b, 2b**: pre-planner `normalize_order_reverse` pass runs from every `plan_*order_family` / `plan_*reverse` planner immediately after `flatten_linq`. Adjacent `(order_by|order_by_descending|order|order_descending, reverse)` pairs swap to the flipped variant and the `reverse` element is erased. The `ExprCall` arg list is identical between ascending/descending order variants, so no AST clone is needed - only the `LinqCall` metadata pointer is repointed to the flipped registry entry. Iterative: `_order_by(K).reverse().reverse()` collapses to `_order_by(K)` in two passes; `_order_by_descending(K).reverse()` flips to `_order_by(K)`.
 
-Coverage extension across both themes: 1437 → 1463 linq tests (14 new in `tests/linq/test_linq_fold_theme45_quick_wins.das`); the existing `test_unroll5c_select_distinct_count_pred_parity` + `_long_count_pred_parity` parity tests in `test_linq_from_decs.das` now exercise the splice path instead of bailing.
+Coverage extension across both themes: 1437 -> 1463 linq tests (14 new in `tests/linq/test_linq_fold_theme45_quick_wins.das`); the existing `test_unroll5c_select_distinct_count_pred_parity` + `_long_count_pred_parity` parity tests in `test_linq_from_decs.das` now exercise the splice path instead of bailing.
 
-**Theme 3 Phase 1 (cross-arm composition for C3) — landed 2026-05-24**:
+**Theme 3 Phase 1 (cross-arm composition for C3) - landed 2026-05-24**:
 
-- **C3** (`plan_decs_group_by` with new `isDecsJoin` adapter mode): the "killer demo" composition `from_decs_template(A) |> _join(from_decs_template(B), ...) |> _group_by(K) |> _select(reducer) |> [count|to_array]` now splices end-to-end. `plan_decs_group_by` recognizes a trailing `join` upstream of `group_by_lazy` and switches to a new `GroupBySourceAdapter` mode (`isDecsJoin = true`) that emits hashB-collect + srcA-probe + per-pair result-lam bind as the per-element source loop; that bind feeds `plan_group_by_core`'s existing `tab?[uk] ?? dummy` bucket update directly. **Single pass, zero intermediate allocations** (vs the tier-2 baseline's 3: dealers-array → join-array → group-map → output-array). `plan_group_by_core` itself is untouched — the abstraction held. v1 constraints: count/to_array terminator with primitive equi-keys; no segments between `join` and `group_by_lazy`; HAVING (trailing `_where` post-aggregate) deferred to v2. Coverage extension: +7 tests / 14 sub-runs in `tests/linq/test_linq_fold_theme3_decs_join_groupby.das` (1463 → 1483).
+- **C3** (`plan_decs_group_by` with new `isDecsJoin` adapter mode): the "killer demo" composition `from_decs_template(A) |> _join(from_decs_template(B), ...) |> _group_by(K) |> _select(reducer) |> [count|to_array]` now splices end-to-end. `plan_decs_group_by` recognizes a trailing `join` upstream of `group_by_lazy` and switches to a new `GroupBySourceAdapter` mode (`isDecsJoin = true`) that emits hashB-collect + srcA-probe + per-pair result-lam bind as the per-element source loop; that bind feeds `plan_group_by_core`'s existing `tab?[uk] ?? dummy` bucket update directly. **Single pass, zero intermediate allocations** (vs the tier-2 baseline's 3: dealers-array -> join-array -> group-map -> output-array). `plan_group_by_core` itself is untouched - the abstraction held. v1 constraints: count/to_array terminator with primitive equi-keys; no segments between `join` and `group_by_lazy`; HAVING (trailing `_where` post-aggregate) deferred to v2. Coverage extension: +7 tests / 14 sub-runs in `tests/linq/test_linq_fold_theme3_decs_join_groupby.das` (1463 -> 1483).
 
-**Theme 3 Phase 2 (cross-arm composition for C2) — landed 2026-05-24**:
+**Theme 3 Phase 2 (cross-arm composition for C2) - landed 2026-05-24**:
 
-- **C2** (`plan_group_by_core` trailing `_order_by` extension): the canonical SQL `GROUP BY ... ORDER BY` shape `<source> |> _group_by(K) |> _select(reduce) |> _order_by(K2) |> to_array()` now splices end-to-end. Both `plan_group_by` and `plan_decs_group_by` pop an optional trailing `_order_by` / `_order_by_descending` after the count check; `plan_group_by_core`'s to_array lane emits an inline-cmp `sort(buf, ...)` right after the bucket-fill — mutating the same buffer in place. **One pass + in-place sort** (vs the tier-2 cascade's three allocations: `group_by_lazy_to_array` → `select` → fresh-array sort). Three lanes share the same sort tail (array source, decs source via `isDecs`, decs-decs join via `isDecsJoin` — Theme 3 Phase 1 composes cleanly). v1 constraints: inline-able key only (pure single-expression lambda, no sideeffects); bare `_order` / `_order_descending` (no key) deferred; non-inline keys cascade. Composes with HAVING (`_select(reduce) |> _where(P) |> _order_by(K2)`). Coverage extension: +7 tests / 14 sub-runs in `tests/linq/test_linq_fold_theme3_c2_group_by_order_by.das` (1483 → 1497).
+- **C2** (`plan_group_by_core` trailing `_order_by` extension): the canonical SQL `GROUP BY ... ORDER BY` shape `<source> |> _group_by(K) |> _select(reduce) |> _order_by(K2) |> to_array()` now splices end-to-end. Both `plan_group_by` and `plan_decs_group_by` pop an optional trailing `_order_by` / `_order_by_descending` after the count check; `plan_group_by_core`'s to_array lane emits an inline-cmp `sort(buf, ...)` right after the bucket-fill - mutating the same buffer in place. **One pass + in-place sort** (vs the tier-2 cascade's three allocations: `group_by_lazy_to_array` -> `select` -> fresh-array sort). Three lanes share the same sort tail (array source, decs source via `isDecs`, decs-decs join via `isDecsJoin` - Theme 3 Phase 1 composes cleanly). v1 constraints: inline-able key only (pure single-expression lambda, no sideeffects); bare `_order` / `_order_descending` (no key) deferred; non-inline keys cascade. Composes with HAVING (`_select(reduce) |> _where(P) |> _order_by(K2)`). Coverage extension: +7 tests / 14 sub-runs in `tests/linq/test_linq_fold_theme3_c2_group_by_order_by.das` (1483 -> 1497).
 
-**Theme 3 Phase 3 (cross-arm composition for C1 + C5) — landed 2026-05-24**:
+**Theme 3 Phase 3 (cross-arm composition for C1 + C5) - landed 2026-05-24**:
 
-- **C1 + C5** (`plan_order_family` + `plan_decs_order_family` distinct/distinct_by gate): both `_distinct_by(K1) |> _order_by(K2) |> take(N) |> to_array()` (C1) and `_order_by(K1) |> distinct() |> take(N) |> to_array()` (C5) now splice end-to-end across array and decs sources. Both planners' walk loop gained a `distinct` / `distinct_by` recognizer that captures the distinct key without bailing; the bounded-heap path declares a `var dset : table<typedecl(...)>` above the source loop and wraps per-element push by `if (!key_exists(dset, dkey)) { dset |> insert(dkey); HEAP_UPDATE }`. **Single source pass, no full distinct materialization** (vs the tier-2 cascade's `distinct_by_to_array` → `order_by_inplace` → `take_inplace` chain that materializes the entire distinct set before sorting). Position of `distinct` in the chain (before vs after `_order_by`) has no bearing on emission — the set just gates the same heap update; the bounded-heap path treats source-walk order as opaque. v1 constraints: inline-able order key (mirrors `plan_order_family`'s existing bounded-heap gate); first/first_or_default + distinct deferred (streaming-min path not extended); composes with WHERE (filter before distinct gate) and terminal `_select` (project ≤N heap survivors at return). Coverage extension: +9 tests / 18 sub-runs in `tests/linq/test_linq_fold_theme3_c1_c5_distinct_order_take.das` (1497 → 1515).
+- **C1 + C5** (`plan_order_family` + `plan_decs_order_family` distinct/distinct_by gate): both `_distinct_by(K1) |> _order_by(K2) |> take(N) |> to_array()` (C1) and `_order_by(K1) |> distinct() |> take(N) |> to_array()` (C5) now splice end-to-end across array and decs sources. Both planners' walk loop gained a `distinct` / `distinct_by` recognizer that captures the distinct key without bailing; the bounded-heap path declares a `var dset : table<typedecl(...)>` above the source loop and wraps per-element push by `if (!key_exists(dset, dkey)) { dset |> insert(dkey); HEAP_UPDATE }`. **Single source pass, no full distinct materialization** (vs the tier-2 cascade's `distinct_by_to_array` -> `order_by_inplace` -> `take_inplace` chain that materializes the entire distinct set before sorting). Position of `distinct` in the chain (before vs after `_order_by`) has no bearing on emission - the set just gates the same heap update; the bounded-heap path treats source-walk order as opaque. v1 constraints: inline-able order key (mirrors `plan_order_family`'s existing bounded-heap gate); first/first_or_default + distinct deferred (streaming-min path not extended); composes with WHERE (filter before distinct gate) and terminal `_select` (project <=N heap survivors at return). Coverage extension: +9 tests / 18 sub-runs in `tests/linq/test_linq_fold_theme3_c1_c5_distinct_order_take.das` (1497 -> 1515).
 
-**Theme 7 (chained `_select` collapse) — landed 2026-05-24**:
+**Theme 7 (chained `_select` collapse) - landed 2026-05-24**:
 
-- **7c + plan_distinct + plan_reverse + plan_decs_distinct + plan_decs_reverse + plan_decs_join** (new `collapse_chained_selects` pre-pass): consecutive `_select(f) |> _select(g)` calls in a linq chain are now collapsed into a single `_select(g(f(_)))` by mutating the `calls` array immediately after `flatten_linq` (mirrors Theme 5's `normalize_order_reverse` calling convention). Composition takes the INNER lambda's structure (preserves param type), renames its bound param to a fresh `qn("cs", at)` name to avoid collision with outer's `_` (the default boost-side `_select(F)` desugar uses `_` for both inner and outer; without renaming, `apply_template` would recursively re-substitute and compound `._N` accessors), then overwrites its body with outer's body where outer's param is substituted by the renamed-inner body. Chain backlink (`calls[i+1]._0.arguments[0]`) is rewired so the inner select is dropped from the AST too — subsequent planner passes see the same shortened chain. Gated on `!has_sideeffects(innerBody)` because collapsing shifts evaluation count when outer references its param zero or many times (cascade always evaluates inner once per element); pure inner is safe regardless of outer's param-use count. Wired into 8 planners (`plan_order_family`, `plan_reverse`, `plan_distinct`, `plan_decs_order_family`, `plan_decs_reverse`, `plan_decs_distinct`, `plan_decs_join`, `plan_zip`) — `plan_loop_or_count`, `plan_group_by_core`, and `plan_decs_unroll` already handle chained selects natively via their `intermediateBinds` / chain-info machinery and don't need the pre-pass. Direct unlocks: chain 7c (zip + N selects + terminator), chained-select-before-distinct, chained-select-before-reverse, chained-select-before-decs-join (composes with Theme 1's trailing _select extension). Two planners that DON'T benefit (the pre-pass is a defensive no-op): `plan_order_family` / `plan_decs_order_family` — they don't accept ANY `_select` in their grammar (`[where_*] order_* [take|first|first_or_default]?` + Theme 1's terminal `_select` is a separate substitution). Coverage extension: +9 tests / 18 sub-runs in `tests/linq/test_linq_fold_theme7_chained_select.das` (1515 → 1539). Impure-inner anti-test verifies the cascade fallback still produces correct output.
+- **7c + plan_distinct + plan_reverse + plan_decs_distinct + plan_decs_reverse + plan_decs_join** (new `collapse_chained_selects` pre-pass): consecutive `_select(f) |> _select(g)` calls in a linq chain are now collapsed into a single `_select(g(f(_)))` by mutating the `calls` array immediately after `flatten_linq` (mirrors Theme 5's `normalize_order_reverse` calling convention). Composition takes the INNER lambda's structure (preserves param type), renames its bound param to a fresh `qn("cs", at)` name to avoid collision with outer's `_` (the default boost-side `_select(F)` desugar uses `_` for both inner and outer; without renaming, `apply_template` would recursively re-substitute and compound `._N` accessors), then overwrites its body with outer's body where outer's param is substituted by the renamed-inner body. Chain backlink (`calls[i+1]._0.arguments[0]`) is rewired so the inner select is dropped from the AST too - subsequent planner passes see the same shortened chain. Gated on `!has_sideeffects(innerBody)` because collapsing shifts evaluation count when outer references its param zero or many times (cascade always evaluates inner once per element); pure inner is safe regardless of outer's param-use count. Wired into 8 planners (`plan_order_family`, `plan_reverse`, `plan_distinct`, `plan_decs_order_family`, `plan_decs_reverse`, `plan_decs_distinct`, `plan_decs_join`, `plan_zip`) - `plan_loop_or_count`, `plan_group_by_core`, and `plan_decs_unroll` already handle chained selects natively via their `intermediateBinds` / chain-info machinery and don't need the pre-pass. Direct unlocks: chain 7c (zip + N selects + terminator), chained-select-before-distinct, chained-select-before-reverse, chained-select-before-decs-join (composes with Theme 1's trailing _select extension). Two planners that DON'T benefit (the pre-pass is a defensive no-op): `plan_order_family` / `plan_decs_order_family` - they don't accept ANY `_select` in their grammar (`[where_*] order_* [take|first|first_or_default]?` + Theme 1's terminal `_select` is a separate substitution). Coverage extension: +9 tests / 18 sub-runs in `tests/linq/test_linq_fold_theme7_chained_select.das` (1515 -> 1539). Impure-inner anti-test verifies the cascade fallback still produces correct output.
 
-**Theme 6 (decs-bridge fall-off diagnostic) — landed 2026-05-25**:
+**Theme 6 (decs-bridge fall-off diagnostic) - landed 2026-05-25**:
 
-- **`LinqFold.visit`** (new diagnostic in [daslib/linq_fold.das](../../daslib/linq_fold.das)): after every tier-1 planner (all six `plan_decs_*` arms plus the array-side `plan_*` arms) returns null and right before `fold_linq_default` fires, `flatten_linq(call.arguments[0])` is destructured into `(top, calls)`; if `calls` is non-empty AND `extract_decs_bridge(top)` is non-null (the chain has a `from_decs_template` source AND actual chain ops that will cascade), emit a `*warning*` to the compiler log naming the call site and pointing at the patterns RST. Empty-calls case (bare `_fold(from_decs_template(...))`) is suppressed — there's no cascade, just the bridge's own materialization. When fired, the bridge is about to materialize a temp `res` array into the tier-2 array cascade — an extra allocation on top of whatever cascade follows. The warning makes that perf cliff visible at compile time instead of being silently absorbed. Suppress per file with `options _no_linq_perf_warn = true` (intended for tests that intentionally exercise cascade behavior as regression guards — e.g. `tests/linq/test_linq_from_decs.das` target_unroll5e_groupby_count_pred_fold, `tests/linq/test_linq_fold_theme3_decs_join_groupby.das` C3-anti-*). Uses `to_compiler_log` (matches `daslib/defer.das` deprecation pattern) so the warning surfaces in default `daslang` output without requiring lint mode. Coverage: +2 tests in `tests/linq/test_linq_fold_theme6_decs_bridge_warn.das` (fires path) and `test_linq_fold_theme6_decs_bridge_warn_silenced.das` (suppression path); 1539 → 1541.
+- **`LinqFold.visit`** (new diagnostic in [daslib/linq_fold.das](../../daslib/linq_fold.das)): after every tier-1 planner (all six `plan_decs_*` arms plus the array-side `plan_*` arms) returns null and right before `fold_linq_default` fires, `flatten_linq(call.arguments[0])` is destructured into `(top, calls)`; if `calls` is non-empty AND `extract_decs_bridge(top)` is non-null (the chain has a `from_decs_template` source AND actual chain ops that will cascade), emit a `*warning*` to the compiler log naming the call site and pointing at the patterns RST. Empty-calls case (bare `_fold(from_decs_template(...))`) is suppressed - there's no cascade, just the bridge's own materialization. When fired, the bridge is about to materialize a temp `res` array into the tier-2 array cascade - an extra allocation on top of whatever cascade follows. The warning makes that perf cliff visible at compile time instead of being silently absorbed. Suppress per file with `options _no_linq_perf_warn = true` (intended for tests that intentionally exercise cascade behavior as regression guards - e.g. `tests/linq/test_linq_from_decs.das` target_unroll5e_groupby_count_pred_fold, `tests/linq/test_linq_fold_theme3_decs_join_groupby.das` C3-anti-*). Uses `to_compiler_log` (matches `daslib/defer.das` deprecation pattern) so the warning surfaces in default `daslang` output without requiring lint mode. Coverage: +2 tests in `tests/linq/test_linq_fold_theme6_decs_bridge_warn.das` (fires path) and `test_linq_fold_theme6_decs_bridge_warn_silenced.das` (suppression path); 1539 -> 1541.
 
-**Theme 8 (specialized fusion arms — 2a, 3b, C4) — landed 2026-05-25**:
+**Theme 8 (specialized fusion arms - 2a, 3b, C4) - landed 2026-05-25**:
 
-- **2a** (`plan_reverse`): trailing `reverse + distinct[_by]` on array source — implicit to_array, no other chain ops. New emission walks source backward via index and gates push by a set-insert on the dedup key. Saves the cascade's `reverse_to_array` allocation AND the second `distinct_by_inplace` pass. v1 scope tight: array source (`isGoodArrayType || isArray`) required since non-array sources can't be backward-indexed, and pre-reverse where_/select/take all bail (keep cascade for those). LAST-per-key semantics preserved: backward walk picks the first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 `reverse.distinct_by`.
-- **3b** (`plan_order_family`): upstream `distinct[_by]` + `_order_by[_descending]` WITHOUT `take` on the to_array path. The bail `(distinctName != "" && takeExpr == null)` relaxes to allow when `firstName == ""` (first/first_or_default still cascades — streaming-min path has no dset hook). The where_+order fused-loop path generalizes: when `distinctName != ""`, declare `var order_dset : table<typedecl(...)>` and wrap pushExpr with the same set-gated `if (!key_exists(...))` block as the bounded-heap branch (Theme 3 Phase 3). Composes cleanly with WHERE (filter→distinct→sort) and Theme 1's terminal `_select` (project at return). Saves the cascade's `distinct_by_to_array` intermediate iterator setup.
-- **C4** (`plan_zip`): trailing `reverse` between zip's chain and the terminator — accepts on ARRAY/COUNTER/ACCUMULATOR lanes plus `any`/`all`/`contains` early-exit (reverse is identity for all of those). Bails on `first` / `first_or_default` (NOT identity under reverse). Constraint: reverse must be the last chain op (`i == intermediateEnd - 1`) — anything after would see the reversed stream and change semantics vs cascade. Array lane emits `_::reverse_inplace($i(bufName))` before the return; other lanes treat reverse as a no-op so the existing emission paths fire unchanged.
+- **2a** (`plan_reverse`): trailing `reverse + distinct[_by]` on array source - implicit to_array, no other chain ops. New emission walks source backward via index and gates push by a set-insert on the dedup key. Saves the cascade's `reverse_to_array` allocation AND the second `distinct_by_inplace` pass. v1 scope tight: array source (`isGoodArrayType || isArray`) required since non-array sources can't be backward-indexed, and pre-reverse where_/select/take all bail (keep cascade for those). LAST-per-key semantics preserved: backward walk picks the first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 `reverse.distinct_by`.
+- **3b** (`plan_order_family`): upstream `distinct[_by]` + `_order_by[_descending]` WITHOUT `take` on the to_array path. The bail `(distinctName != "" && takeExpr == null)` relaxes to allow when `firstName == ""` (first/first_or_default still cascades - streaming-min path has no dset hook). The where_+order fused-loop path generalizes: when `distinctName != ""`, declare `var order_dset : table<typedecl(...)>` and wrap pushExpr with the same set-gated `if (!key_exists(...))` block as the bounded-heap branch (Theme 3 Phase 3). Composes cleanly with WHERE (filter->distinct->sort) and Theme 1's terminal `_select` (project at return). Saves the cascade's `distinct_by_to_array` intermediate iterator setup.
+- **C4** (`plan_zip`): trailing `reverse` between zip's chain and the terminator - accepts on ARRAY/COUNTER/ACCUMULATOR lanes plus `any`/`all`/`contains` early-exit (reverse is identity for all of those). Bails on `first` / `first_or_default` (NOT identity under reverse). Constraint: reverse must be the last chain op (`i == intermediateEnd - 1`) - anything after would see the reversed stream and change semantics vs cascade. Array lane emits `_::reverse_inplace($i(bufName))` before the return; other lanes treat reverse as a no-op so the existing emission paths fire unchanged.
 
-Coverage extension: +16 tests in `tests/linq/test_linq_fold_theme8_fusion_arms.das` (1541 → 1557). All anti-tests verify out-of-scope shapes (2a-take, 3b-first, C4-first, C4-not-last) cascade correctly.
+Coverage extension: +16 tests in `tests/linq/test_linq_fold_theme8_fusion_arms.das` (1541 -> 1557). All anti-tests verify out-of-scope shapes (2a-take, 3b-first, C4-first, C4-not-last) cascade correctly.
 
 **Audit fully closed.** All 8 themes shipped between 2026-05-24 and 2026-05-25.
 
 
 The audit catalogs **silent fall-off** in `daslib/linq_fold.das`: chains where a
 natural user phrasing makes the splice arm return null and the planner falls
-back to the slow default cascade (`fold_linq_default`) — without any warning.
+back to the slow default cascade (`fold_linq_default`) - without any warning.
 Every row below shows the post-macro `ast_dump` of one probe, classified as
 SPLICE-FIRES (single-pass specialized loop) or FALLS-OFF (cascade of
 `__::linq\`helper\`` calls plus intermediate `array<...>` allocations).
 
 Each "FALLS-OFF" row names the bail line in `linq_fold.das` and proposes
 either a cheap user-side rewrite or an arm extension. The audit does NOT
-change any code — every finding is a follow-up TODO.
+change any code - every finding is a follow-up TODO.
 
 ---
 
-## Motivating example — closest 10 sounds
+## Motivating example - closest 10 sounds
 
 The audit was prompted by this user scenario: "I have an array of sounds with
 `(id, position)` and a head position. Give me the ids of the 10 closest." The
@@ -94,12 +94,12 @@ let closest_ids <- _fold(each(sounds)
 
 That chain SILENTLY FALLS OFF the splice. The arm that should fire is
 `plan_order_family` (linq_fold.das:1234), which emits a bounded-heap walk
-holding at most N elements — but its accept list is `[where_*] order_*
+holding at most N elements - but its accept list is `[where_*] order_*
 [take|first]?`, and the `._select(_.id)` between `take` and `to_array` is not
 in that list. The chain falls through line 1284's `else { return null }` and
 into the default 3-pass cascade.
 
-**With `_select` (the natural form)** — `/tmp/audit_probes/motivating_with_select.das`:
+**With `_select` (the natural form)** - `/tmp/audit_probes/motivating_with_select.das`:
 
 ```das
 return <- invoke($(var source : iterator<Sound&>) : array<int> {
@@ -114,7 +114,7 @@ return <- invoke($(var source : iterator<Sound&>) : array<int> {
 Default cascade: full sort over N elements + allocation, then truncate, then
 another allocation for the projection.
 
-**Without `_select` (the splice-eligible form)** — `/tmp/audit_probes/motivating_without_select.das`:
+**Without `_select` (the splice-eligible form)** - `/tmp/audit_probes/motivating_without_select.das`:
 
 ```das
 return <- invoke($(source : array<Sound>) : array<Sound> {
@@ -132,19 +132,19 @@ return <- invoke($(source : array<Sound>) : array<Sound> {
 }, sounds)
 ```
 
-Single-pass bounded heap holding ≤10 elements. No N-sized allocation.
+Single-pass bounded heap holding <=10 elements. No N-sized allocation.
 
 The rest of this document is the systematic version of that comparison
 across every `plan_*` arm in the splice machinery.
 
 ---
 
-## Chain 1 — `plan_order_family` / `plan_decs_order_family`
+## Chain 1 - `plan_order_family` / `plan_decs_order_family`
 
 **Accepts**: `[where_*] order_* [take(N)|first|first_or_default]?` (linq_fold.das:1234 array, :4547 decs)
 **Common bails**: select-anywhere (line 1284 / 4594 fall-through), where-after-order (line 1252 / 4566), reverse-in-chain (line 1284 / 4594 fall-through), explicit comparator on bare `order` / `order_descending` (line 1264 / 4575)
 
-### 1a — Closest 10 sounds, return ids (array)
+### 1a - Closest 10 sounds, return ids (array)
 
 **Probe** (`/tmp/audit_probes/chain1_1a.das`):
 ```das
@@ -166,11 +166,11 @@ return <- invoke($(var source : iterator<Sound&>) : array<int> {
 }, __::builtin`each(sounds))
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification**: FALLS-OFF - default cascade.
 
-**Conclusion**: `_select(_.id)` between `take(10)` and `to_array()` is not in plan_order_family's allowed call list (linq_fold.das:1284 fall-through). The cascade fully sorts N elements into `pass_0`, then truncates, then allocates a fresh `array<int>` for the projection. Rewrite: split into two steps — `let top <- _fold(...take(10).to_array()); let ids <- [for (s in top); s.id]`. Extending the arm to accept a terminal `_select` after `take(N)` / `first` / `first_or_default` is the highest-impact fix since the bounded heap already holds ≤N elements; a final projection at emission time is essentially free.
+**Conclusion**: `_select(_.id)` between `take(10)` and `to_array()` is not in plan_order_family's allowed call list (linq_fold.das:1284 fall-through). The cascade fully sorts N elements into `pass_0`, then truncates, then allocates a fresh `array<int>` for the projection. Rewrite: split into two steps - `let top <- _fold(...take(10).to_array()); let ids <- [for (s in top); s.id]`. Extending the arm to accept a terminal `_select` after `take(N)` / `first` / `first_or_default` is the highest-impact fix since the bounded heap already holds <=N elements; a final projection at emission time is essentially free.
 
-### 1b — Top 5 scores descending via order + reverse (array)
+### 1b - Top 5 scores descending via order + reverse (array)
 
 **Probe** (`/tmp/audit_probes/chain1_1b.das`):
 ```das
@@ -191,11 +191,11 @@ return <- invoke($(var source : iterator<Score&>) : array<Score> {
 }, __::builtin`each(scores))
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification**: FALLS-OFF - default cascade.
 
 **Conclusion**: `reverse()` between `_order_by` and `take` is not in the accepted vocabulary (line 1284 fall-through). The natural way for a user to ask for "top 5 descending" via the ascending key is `order_by(...).reverse().take(5)`; the splice path requires the user to know `_order_by_descending(...).take(5)` instead. The arm could recognize `_order_by(k).reverse()` and rewrite it to the `_order_by_descending(k)` form before the comparator-emission step.
 
-### 1c — Where-after-order (array)
+### 1c - Where-after-order (array)
 
 **Probe** (`/tmp/audit_probes/chain1_1c.das`):
 ```das
@@ -217,11 +217,11 @@ return <- invoke($(var source : iterator<Employee&>) : array<Employee> {
 }, __::builtin`each(employees))
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification**: FALLS-OFF - default cascade.
 
-**Conclusion**: `_where` after `_order_by` is explicitly rejected by `if (hasOrder) return null` at line 1252. Sorting first and then filtering is genuinely wasteful (sorts ~N elements just to drop most of them); the rewrite is mechanical — move the `_where` before the `_order_by`. Worth a lint suggestion rather than a splice extension: keeping the post-sort `_where` semantically correct in the splice would require either re-running the filter inside the bounded heap or re-allocating after the sort, both of which lose the cascade's correctness while not actually buying anything over the trivial user rewrite.
+**Conclusion**: `_where` after `_order_by` is explicitly rejected by `if (hasOrder) return null` at line 1252. Sorting first and then filtering is genuinely wasteful (sorts ~N elements just to drop most of them); the rewrite is mechanical - move the `_where` before the `_order_by`. Worth a lint suggestion rather than a splice extension: keeping the post-sort `_where` semantically correct in the splice would require either re-running the filter inside the bounded heap or re-allocating after the sort, both of which lose the cascade's correctness while not actually buying anything over the trivial user rewrite.
 
-### 1d — Closest 10 sounds, baseline (array)
+### 1d - Closest 10 sounds, baseline (array)
 
 **Probe** (`/tmp/audit_probes/chain1_1d.das`):
 ```das
@@ -249,11 +249,11 @@ return <- invoke($(source : array<Sound>) : array<Sound> {
 }, sounds)
 ```
 
-**Classification**: SPLICE-FIRES — bounded-heap arm (line 1300 `useBoundedHeap`).
+**Classification**: SPLICE-FIRES - bounded-heap arm (line 1300 `useBoundedHeap`).
 
-**Conclusion**: Baseline confirms the bounded-heap splice path — O(N log K) heap maintenance over the walk, no full-N sort, no full-N allocation.
+**Conclusion**: Baseline confirms the bounded-heap splice path - O(N log K) heap maintenance over the walk, no full-N sort, no full-N allocation.
 
-### 1e — Closest 10 sounds, return ids (decs)
+### 1e - Closest 10 sounds, return ids (decs)
 
 **Probe** (`/tmp/audit_probes/chain1_1e.das`): same shape as 1a over `from_decs_template(type<DecsSound>)`.
 
@@ -275,11 +275,11 @@ return <- invoke($(var source : iterator<tuple<id:int; position:float3>>) : arra
 }))
 ```
 
-**Classification**: FALLS-OFF — default cascade, with the **double penalty** that the decs source bridge eagerly materializes ALL rows into `res` before the array cascade even starts.
+**Classification**: FALLS-OFF - default cascade, with the **double penalty** that the decs source bridge eagerly materializes ALL rows into `res` before the array cascade even starts.
 
-**Conclusion**: Same trailing `_select` mismatch as 1a (line 4594 fall-through in `plan_decs_order_family`). Worse than 1a because when `plan_decs_order_family` returns null, the `from_decs_template` bridge has no other splice to bind it to — it degenerates to full materialization of every archetype row into a temp `res`, wrapped in `to_sequence` for the array cascade. Two allocations of the full row set + one projection. Extension fix: same as 1a — accept a terminal `_select` after `take(N)` / `first` / `first_or_default` in `plan_decs_order_family`.
+**Conclusion**: Same trailing `_select` mismatch as 1a (line 4594 fall-through in `plan_decs_order_family`). Worse than 1a because when `plan_decs_order_family` returns null, the `from_decs_template` bridge has no other splice to bind it to - it degenerates to full materialization of every archetype row into a temp `res`, wrapped in `to_sequence` for the array cascade. Two allocations of the full row set + one projection. Extension fix: same as 1a - accept a terminal `_select` after `take(N)` / `first` / `first_or_default` in `plan_decs_order_family`.
 
-### 1f — Closest 10 sounds, baseline (decs)
+### 1f - Closest 10 sounds, baseline (decs)
 
 **Probe** (`/tmp/audit_probes/chain1_1f.das`): same shape as 1d over decs.
 
@@ -302,27 +302,27 @@ return <- invoke($() : array<tuple<id:int; position:float3>> {
 })
 ```
 
-**Classification**: SPLICE-FIRES — bounded-heap arm fused into a single `for_each_archetype` (line 4609 `useBoundedHeap`).
+**Classification**: SPLICE-FIRES - bounded-heap arm fused into a single `for_each_archetype` (line 4609 `useBoundedHeap`).
 
-**Conclusion**: Decs baseline confirms the bounded-heap path through the archetype walk: ≤10 push_clones to `decs_buf`, no eager materialization.
+**Conclusion**: Decs baseline confirms the bounded-heap path through the archetype walk: <=10 push_clones to `decs_buf`, no eager materialization.
 
-### Chain 1 — follow-up TODOs
+### Chain 1 - follow-up TODOs
 
 - **Highest impact**: extend `plan_order_family` (line 1234) and `plan_decs_order_family` (line 4547) to accept a terminal `_select` after `take(N)` / `first` / `first_or_default`. The bounded-heap arm already holds at most N elements; emitting the projection during the final `order_inplace` walk is essentially free. The "closest N, return projected field" idiom is extremely natural.
 - Recognize `_order_by(k).reverse()` and rewrite to `_order_by_descending(k)` (and dual) before the comparator-emission step. Currently `reverse()` mid-chain is a hard bail (line 1284 / 4594).
 - Lint suggestion (style rule, not a splice extension): `_order_by(...)._where(...)` should reorder to `_where(...)._order_by(...)`. Sorting before filtering is wasteful in any execution mode.
-- Decs FALLS-OFF cases are doubly penalized — the bridge's eager-materialize default lands behind every `plan_decs_order_family` bail. Worth a dedicated diagnostic when this path is hit.
+- Decs FALLS-OFF cases are doubly penalized - the bridge's eager-materialize default lands behind every `plan_decs_order_family` bail. Worth a dedicated diagnostic when this path is hit.
 
 ---
 
-## Chain 2 — `plan_reverse` / `plan_decs_reverse`
+## Chain 2 - `plan_reverse` / `plan_decs_reverse`
 
 **Accepts**: `[where_*][select?] reverse [take(N)]? [count|first|first_or_default]?` (linq_fold.das:1764 array, :4802 decs)
-**Common bails**: `where_` / `select` AFTER reverse or AFTER select (line 1797-1800 / 4833-4838 — `seenSelect || hasReverse` guards), order-anywhere (line 1813 / 4851 fall-through), double-reverse (line 1804 / 4843), `take(N)` paired with a separate terminator (line 1816 / 4854 bail).
+**Common bails**: `where_` / `select` AFTER reverse or AFTER select (line 1797-1800 / 4833-4838 - `seenSelect || hasReverse` guards), order-anywhere (line 1813 / 4851 fall-through), double-reverse (line 1804 / 4843), `take(N)` paired with a separate terminator (line 1816 / 4854 bail).
 
-Note: `_where → _select → reverse → take → to_array` (select BEFORE reverse, no further select/where after) is ACCEPTED — the guards prevent `where AFTER select` and `select AFTER select`, not `select BEFORE reverse`.
+Note: `_where -> _select -> reverse -> take -> to_array` (select BEFORE reverse, no further select/where after) is ACCEPTED - the guards prevent `where AFTER select` and `select AFTER select`, not `select BEFORE reverse`.
 
-### 2a — Reverse + distinct_by (array)
+### 2a - Reverse + distinct_by (array)
 
 **Probe** (`/tmp/audit_probes/chain2_2a.das`):
 ```das
@@ -342,11 +342,11 @@ return <- invoke($(var source : iterator<Event&>) : array<Event> {
 }, __::builtin`each(events))
 ```
 
-**Classification (post-Theme 8)**: SPLICE-FIRES — `plan_reverse` accepts trailing `distinct[_by]` on array source (implicit to_array, no other chain ops). Emission: backward index walk + `var rev_dset : table<...>` set-gate around the push. Single source pass; no `reverse_to_array` allocation, no second dedup walk.
+**Classification (post-Theme 8)**: SPLICE-FIRES - `plan_reverse` accepts trailing `distinct[_by]` on array source (implicit to_array, no other chain ops). Emission: backward index walk + `var rev_dset : table<...>` set-gate around the push. Single source pass; no `reverse_to_array` allocation, no second dedup walk.
 
-**Conclusion**: Theme 8 landed 2026-05-25. LAST-per-key semantics preserved: backward walk picks the first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 `reverse.distinct_by`. v1 scope tight (array source only, no other chain ops) — non-array sources can't be backward-indexed and would yield no win over cascade; pre-reverse where_/select/take are bail-to-cascade for the same reason.
+**Conclusion**: Theme 8 landed 2026-05-25. LAST-per-key semantics preserved: backward walk picks the first-seen-in-reversed-order = last-in-source occurrence, matching tier-2 `reverse.distinct_by`. v1 scope tight (array source only, no other chain ops) - non-array sources can't be backward-indexed and would yield no win over cascade; pre-reverse where_/select/take are bail-to-cascade for the same reason.
 
-### 2b — Order then reverse (array)
+### 2b - Order then reverse (array)
 
 **Probe** (`/tmp/audit_probes/chain2_2b.das`):
 ```das
@@ -366,11 +366,11 @@ return <- invoke($(var source : iterator<Event&>) : array<Event> {
 }, __::builtin`each(events))
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification**: FALLS-OFF - default cascade.
 
 **Conclusion**: Symmetric to 1b. `plan_reverse` bails at `_order_by` (line 1813 fall-through); `plan_order_family` bails at `reverse()` (line 1284 fall-through). Neither splice fires. User rewrite: `_order_by_descending(_.ts).to_array()`. Same TODO as chain 1: recognize `_order_by(k).reverse()` and normalize to `_order_by_descending(k)` before either planner gets it.
 
-### 2c — Select-after-reverse (array)
+### 2c - Select-after-reverse (array)
 
 **Probe** (`/tmp/audit_probes/chain2_2c.das`):
 ```das
@@ -393,11 +393,11 @@ return <- invoke($(var source : iterator<User&>) : array<string> {
 }, __::builtin`each(users))
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification**: FALLS-OFF - default cascade.
 
-**Conclusion**: `_select` AFTER `reverse` trips the `hasReverse` half of the guard at line 1800 (`if (hasReverse || seenSelect) return null` inside the select arm). User rewrite to fire the splice is non-obvious — move the select before reverse: `_where(_.active)._select(_.name).reverse().take(5).to_array()` (which DOES splice, since select BEFORE reverse is accepted). Extension fix: in `plan_reverse`, when a terminal `_select(...)` follows `reverse` (or `reverse + take(N)`), treat it as a projection applied on the buffer return — same shape as the chain 1 terminal-projection extension.
+**Conclusion**: `_select` AFTER `reverse` trips the `hasReverse` half of the guard at line 1800 (`if (hasReverse || seenSelect) return null` inside the select arm). User rewrite to fire the splice is non-obvious - move the select before reverse: `_where(_.active)._select(_.name).reverse().take(5).to_array()` (which DOES splice, since select BEFORE reverse is accepted). Extension fix: in `plan_reverse`, when a terminal `_select(...)` follows `reverse` (or `reverse + take(N)`), treat it as a projection applied on the buffer return - same shape as the chain 1 terminal-projection extension.
 
-### 2d — Where + reverse + take (array baseline)
+### 2d - Where + reverse + take (array baseline)
 
 **Probe** (`/tmp/audit_probes/chain2_2d.das`):
 ```das
@@ -421,21 +421,21 @@ return <- invoke($(source : array<Event>) : array<Event> {
 }, events)
 ```
 
-**Classification**: SPLICE-FIRES — R5 buffer + reverse_inplace + resize arm.
+**Classification**: SPLICE-FIRES - R5 buffer + reverse_inplace + resize arm.
 
-**Conclusion**: Baseline confirms the standard plan_reverse buffer arm — one filtered push pass, one in-place reverse, one resize to take(N).
+**Conclusion**: Baseline confirms the standard plan_reverse buffer arm - one filtered push pass, one in-place reverse, one resize to take(N).
 
-### 2e — Select-after-reverse (decs)
+### 2e - Select-after-reverse (decs)
 
 **Probe** (`/tmp/audit_probes/chain2_2e.das`): same shape as 2c over decs.
 
 **Generated** (trimmed): identical structure to 2c, plus eager decs bridge materializing `res` first.
 
-**Classification**: FALLS-OFF — default cascade, doubled by eager decs materialization.
+**Classification**: FALLS-OFF - default cascade, doubled by eager decs materialization.
 
 **Conclusion**: Same root cause as 2c (line 4838 in plan_decs_reverse). Three full-N allocations: `res`, `pass_0` (where filtered), `pass_2` (selected). Same extension fix as 2c.
 
-### 2f — Where + reverse + take (decs baseline)
+### 2f - Where + reverse + take (decs baseline)
 
 **Probe** (`/tmp/audit_probes/chain2_2f.das`): same shape as 2d over decs.
 
@@ -454,11 +454,11 @@ return <- invoke($() : array<tuple<...>> {
 })
 ```
 
-**Classification**: SPLICE-FIRES — plan_decs_reverse buffer + reverse_inplace + resize.
+**Classification**: SPLICE-FIRES - plan_decs_reverse buffer + reverse_inplace + resize.
 
 **Conclusion**: Decs-side mirror of 2d.
 
-### Chain 2 — follow-up TODOs
+### Chain 2 - follow-up TODOs
 
 - **Highest impact**: accept a terminal `_select(...)` after `reverse` (and after `reverse + take(N)`) in BOTH `plan_reverse` (line 1764) and `plan_decs_reverse` (line 4802). The current bail catches the natural "filter-then-reverse-for-newest-first-then-project" idiom.
 - Recognize `reverse + distinct_by` as a fused walk retaining the LAST element per key, single archetype walk for decs and single source walk + buffer for arrays.
@@ -467,14 +467,14 @@ return <- invoke($() : array<tuple<...>> {
 
 ---
 
-## Chain 3 — `plan_distinct` / `plan_decs_distinct`
+## Chain 3 - `plan_distinct` / `plan_decs_distinct`
 
 **Accepts**: `[where_*][select?] (distinct|distinct_by) [take(N)]? [count|long_count|sum|to_array]?` (linq_fold.das:1945 array, :5049 decs)
-**Common bails**: `where_` AFTER `select` or `distinct` (line 1979 / 5085), second `select` (line 1982 / 5090, seenSelect), order-anywhere (line 1998 / 5108 fall-through), reverse-anywhere (same), 2-arg `count` / `long_count` / `sum` with predicate (line 1953-1957 / 5057-5063 — terminator-peel only fires for 1-arg form), distinct-after-distinct (line 1986 / 5095), `take(N)` paired with non-implicit terminator (line 2002 / 5112).
+**Common bails**: `where_` AFTER `select` or `distinct` (line 1979 / 5085), second `select` (line 1982 / 5090, seenSelect), order-anywhere (line 1998 / 5108 fall-through), reverse-anywhere (same), 2-arg `count` / `long_count` / `sum` with predicate (line 1953-1957 / 5057-5063 - terminator-peel only fires for 1-arg form), distinct-after-distinct (line 1986 / 5095), `take(N)` paired with non-implicit terminator (line 2002 / 5112).
 
-Note: `_select(_.field)._where(...) → distinct → count` flips the order to `_where AFTER _select` which DOES hit the seenSelect bail (line 1979). `_where → _select → distinct → count` is ACCEPTED.
+Note: `_select(_.field)._where(...) -> distinct -> count` flips the order to `_where AFTER _select` which DOES hit the seenSelect bail (line 1979). `_where -> _select -> distinct -> count` is ACCEPTED.
 
-### 3a — Select then where then distinct then count (array)
+### 3a - Select then where then distinct then count (array)
 
 **Probe** (`/tmp/audit_probes/chain3_3a.das`):
 ```das
@@ -498,11 +498,11 @@ return invoke($(var source : iterator<EventA&>) : int {
 }, __::builtin`each(events))
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification**: FALLS-OFF - default cascade.
 
-**Conclusion**: `_where` AFTER `_select` trips the seenSelect bail at line 1979. 4-pass cascade for what could be a single-walk streaming dedup (no buffer at all because terminator is `count`). `_where → _select → distinct → count` is splice-eligible; the user just has to swap the where and select.
+**Conclusion**: `_where` AFTER `_select` trips the seenSelect bail at line 1979. 4-pass cascade for what could be a single-walk streaming dedup (no buffer at all because terminator is `count`). `_where -> _select -> distinct -> count` is splice-eligible; the user just has to swap the where and select.
 
-### 3b — Distinct then order (array)
+### 3b - Distinct then order (array)
 
 **Probe** (`/tmp/audit_probes/chain3_3b.das`):
 ```das
@@ -522,11 +522,11 @@ return <- invoke($(var source : iterator<Row&>) : array<Row> {
 }, __::builtin`each(rows))
 ```
 
-**Classification (post-Theme 8)**: SPLICE-FIRES — `plan_order_family` accepts upstream `distinct[_by]` on the no-take to_array path (the existing `(distinctName != "" && takeExpr == null)` bail relaxes when `firstName == ""`). Emission: where_+order fused-loop path generalized — declares `var order_dset : table<typedecl(...)>` above the source loop, gates the per-element `push_clone` by set-insert on the dedup key, then sorts the buf in place. Single source pass.
+**Classification (post-Theme 8)**: SPLICE-FIRES - `plan_order_family` accepts upstream `distinct[_by]` on the no-take to_array path (the existing `(distinctName != "" && takeExpr == null)` bail relaxes when `firstName == ""`). Emission: where_+order fused-loop path generalized - declares `var order_dset : table<typedecl(...)>` above the source loop, gates the per-element `push_clone` by set-insert on the dedup key, then sorts the buf in place. Single source pass.
 
-**Conclusion**: Theme 8 landed 2026-05-25. Saves the cascade's `distinct_by_to_array` intermediate iterator setup. Composes with WHERE (filter before distinct gate) and Theme 1 terminal `_select` (project at return). first/first_or_default + distinct still cascades (streaming-min path has no dset hook — deferred).
+**Conclusion**: Theme 8 landed 2026-05-25. Saves the cascade's `distinct_by_to_array` intermediate iterator setup. Composes with WHERE (filter before distinct gate) and Theme 1 terminal `_select` (project at return). first/first_or_default + distinct still cascades (streaming-min path has no dset hook - deferred).
 
-### 3c — Distinct then predicated count (array)
+### 3c - Distinct then predicated count (array)
 
 **Probe** (`/tmp/audit_probes/chain3_3c.das`):
 ```das
@@ -547,11 +547,11 @@ return invoke($(var source : iterator<EventR&>) : int {
 }, __::builtin`each(events))
 ```
 
-**Classification**: FALLS-OFF — default cascade (tier-2 helpers).
+**Classification**: FALLS-OFF - default cascade (tier-2 helpers).
 
-**Conclusion**: `_count(predicate)` is the 2-arg form, and the terminator-peel at line 1953 requires `length(calls.back()._0.arguments) == 1` — bails BY DESIGN since the 1-arg splice template would silently drop the predicate (emit `length(seen)` instead of counting predicate-true survivors). Extension fix: extend plan_distinct's terminator branch to recognize 2-arg `_count(p)` and `_long_count(p)` and emit `if (p(it)) cnt++` at the fresh-key site.
+**Conclusion**: `_count(predicate)` is the 2-arg form, and the terminator-peel at line 1953 requires `length(calls.back()._0.arguments) == 1` - bails BY DESIGN since the 1-arg splice template would silently drop the predicate (emit `length(seen)` instead of counting predicate-true survivors). Extension fix: extend plan_distinct's terminator branch to recognize 2-arg `_count(p)` and `_long_count(p)` and emit `if (p(it)) cnt++` at the fresh-key site.
 
-### 3d — Where + distinct_by + count (array baseline)
+### 3d - Where + distinct_by + count (array baseline)
 
 **Probe** (`/tmp/audit_probes/chain3_3d.das`):
 ```das
@@ -574,19 +574,19 @@ return invoke($(source : array<EventD>) : int {
 }, events)
 ```
 
-**Classification**: SPLICE-FIRES — buffer-free count arm (terminator is `length(seen)`).
+**Classification**: SPLICE-FIRES - buffer-free count arm (terminator is `length(seen)`).
 
-**Conclusion**: Streaming-dedup arm — single source walk, hashed dedup, return length. No element buffer (line 2014-2016, `needBuffer = false` when terminator is count).
+**Conclusion**: Streaming-dedup arm - single source walk, hashed dedup, return length. No element buffer (line 2014-2016, `needBuffer = false` when terminator is count).
 
-### 3e — Select then where then distinct then count (decs)
+### 3e - Select then where then distinct then count (decs)
 
 **Probe** (`/tmp/audit_probes/chain3_3e.das`): same shape as 3a over decs.
 
-**Classification**: FALLS-OFF — default cascade, doubled by eager decs materialization.
+**Classification**: FALLS-OFF - default cascade, doubled by eager decs materialization.
 
 **Conclusion**: plan_decs_distinct bails at line 5085. Three full-N allocations (`res` + `pass_0` + `pass_1`) to compute a scalar count. Same user rewrite (swap where and select) and same extension fix as 3a.
 
-### 3f — Where + distinct_by + count (decs baseline)
+### 3f - Where + distinct_by + count (decs baseline)
 
 **Probe** (`/tmp/audit_probes/chain3_3f.das`):
 
@@ -606,25 +606,25 @@ return invoke($() : int {
 })
 ```
 
-**Classification**: SPLICE-FIRES — plan_decs_distinct streaming-dedup arm with hoisted `decs_seen` table.
+**Classification**: SPLICE-FIRES - plan_decs_distinct streaming-dedup arm with hoisted `decs_seen` table.
 
 **Conclusion**: Hoisted seen-table spans archetypes, single walk with where + key insert, return length.
 
-### Chain 3 — follow-up TODOs
+### Chain 3 - follow-up TODOs
 
 - **Highest impact**: extend the 1-arg terminator peel in plan_distinct (line 1953) and plan_decs_distinct (line 5057) to accept 2-arg `_count(p)` / `_long_count(p)`. Emit predicate as a gate at the fresh-key site.
-- Document (possibly as a STYLE lint) that `_select → _where → distinct → terminator` should be rewritten to `_where → _select → distinct → terminator` — the pre-select form is splice-eligible.
+- Document (possibly as a STYLE lint) that `_select -> _where -> distinct -> terminator` should be rewritten to `_where -> _select -> distinct -> terminator` - the pre-select form is splice-eligible.
 - Niche: recognize `_distinct_by(keyFn) + _order_by(otherKey) + to_array` and emit a fused hash-track + bounded sort walk.
 - Decs FALLS-OFF inherits the eager-materialize double penalty from the bridge.
 
 ---
 
-## Chain 4 — `plan_group_by` / `plan_decs_group_by`
+## Chain 4 - `plan_group_by` / `plan_decs_group_by`
 
 **Accepts**: `[where_*][select*] group_by_lazy(key) [having_]? select(reducer) [count]?` (linq_fold.das:3030 array, :4500 decs, shared core :2729)
 **Common bails**: missing terminal select (line 3046 / 4516), missing group_by_lazy (line 3056 / 4526), unrecognized reducer specs (line 2808), bare reducer + hidden HAVING slots (line 2821).
 
-### 4a — Inventory: sum price per category, keep categories totaling >1000
+### 4a - Inventory: sum price per category, keep categories totaling >1000
 
 **Probe** (`/tmp/audit_probes/chain4_4a.das`):
 ```das
@@ -646,11 +646,11 @@ finalize(pass_1);
 return <- pass_2;
 ```
 
-**Classification**: FALLS-OFF (default cascade — three eager array allocations).
+**Classification**: FALLS-OFF (default cascade - three eager array allocations).
 
-**Conclusion**: A `_where` AFTER `_select(reducer)` lives outside the group_by recognizer (linq_fold.das:3046 demands `select` to be the immediate tail, optionally with one `having_` between it and `group_by_lazy`). The user's "post-aggregate HAVING" is exactly what the optional `having_` slot is for — rewrite to `._group_by(_.category)._having(_._1 |> select(@(i:Item)=>i.price) |> sum > 1000)._select(...)` and the splice fires. Arm extension: peel a single trailing `_where` and translate it to a `having_` slot when its predicate references only post-projection field names.
+**Conclusion**: A `_where` AFTER `_select(reducer)` lives outside the group_by recognizer (linq_fold.das:3046 demands `select` to be the immediate tail, optionally with one `having_` between it and `group_by_lazy`). The user's "post-aggregate HAVING" is exactly what the optional `having_` slot is for - rewrite to `._group_by(_.category)._having(_._1 |> select(@(i:Item)=>i.price) |> sum > 1000)._select(...)` and the splice fires. Arm extension: peel a single trailing `_where` and translate it to a `having_` slot when its predicate references only post-projection field names.
 
-### 4b — Brands sorted by count
+### 4b - Brands sorted by count
 
 **Probe** (`/tmp/audit_probes/chain4_4b.das`):
 ```das
@@ -671,9 +671,9 @@ return <- pass_1;
 
 **Classification**: FALLS-OFF (default cascade).
 
-**Conclusion**: Any post-`select(reducer)` op forces the recognizer to bail (line 3046). `plan_group_by_core` finishes first; `_order_by` then operates on the bucket-array shape via tier-2. No clean rewrite — this is a genuine two-stage pipeline. Arm extension: after `plan_group_by_core` emits its table, peel a trailing `_order_by` / `_reverse` / `take` cascade on the bucket output as a buffer-required post-pass.
+**Conclusion**: Any post-`select(reducer)` op forces the recognizer to bail (line 3046). `plan_group_by_core` finishes first; `_order_by` then operates on the bucket-array shape via tier-2. No clean rewrite - this is a genuine two-stage pipeline. Arm extension: after `plan_group_by_core` emits its table, peel a trailing `_order_by` / `_reverse` / `take` cascade on the bucket output as a buffer-required post-pass.
 
-### 4c — Distinct names per brand
+### 4c - Distinct names per brand
 
 **Probe** (`/tmp/audit_probes/chain4_4c.das`):
 ```das
@@ -694,9 +694,9 @@ return <- pass_1;
 
 **Classification**: FALLS-OFF (default cascade).
 
-**Conclusion**: `recognize_reducer_specs` (line 2807) only knows count / length / long_count / sum / min / max / first / average + their `select(...) |> reducer` variants. `distinct` is not a recognized reducer spec — `specs` comes back empty and we bail at line 2808. Extension: accept `distinct[_by]` / `reverse` / `to_array` as reducer ends, accumulating to `array<T>` slot type (table-of-arrays accumulator pattern already exists).
+**Conclusion**: `recognize_reducer_specs` (line 2807) only knows count / length / long_count / sum / min / max / first / average + their `select(...) |> reducer` variants. `distinct` is not a recognized reducer spec - `specs` comes back empty and we bail at line 2808. Extension: accept `distinct[_by]` / `reverse` / `to_array` as reducer ends, accumulating to `array<T>` slot type (table-of-arrays accumulator pattern already exists).
 
-### 4d — Baseline: count per brand
+### 4d - Baseline: count per brand
 
 **Probe** (`/tmp/audit_probes/chain4_4d.das`):
 ```das
@@ -725,19 +725,19 @@ for (kv in values(tab)) { buf |> push_clone(kv) }
 return <- buf
 ```
 
-**Classification**: SPLICE-FIRES (`plan_group_by_core` table-state arm — line 2853).
+**Classification**: SPLICE-FIRES (`plan_group_by_core` table-state arm - line 2853).
 
-**Conclusion**: Reference arm — table-of-accumulators + addr-compare first-key-wins state machine.
+**Conclusion**: Reference arm - table-of-accumulators + addr-compare first-key-wins state machine.
 
-### 4e — DECS variant of 4a (post-aggregate HAVING)
+### 4e - DECS variant of 4a (post-aggregate HAVING)
 
-Same shape as 4a over `from_decs_template`. Decs bridge unrolls (good) but bucket then materializes through the standard array cascade — worst of both worlds (for_each_archetype expansion + three array allocations + per-bucket reducer invoke).
+Same shape as 4a over `from_decs_template`. Decs bridge unrolls (good) but bucket then materializes through the standard array cascade - worst of both worlds (for_each_archetype expansion + three array allocations + per-bucket reducer invoke).
 
 **Classification**: FALLS-OFF (line 4516 mirrors line 3046).
 
 **Conclusion**: `plan_group_by_core` is shared, so one extension covers both planners.
 
-### 4f — DECS baseline (count per brand)
+### 4f - DECS baseline (count per brand)
 
 **Generated** (trimmed):
 ```das
@@ -757,11 +757,11 @@ for_each_archetype(<hash>, <erq>, $(arch) {
 ... reserve(decs_buf); for (kv in values(decs_tab)); push_clone ...
 ```
 
-**Classification**: SPLICE-FIRES (`plan_decs_group_by` → shared core with decs adapter).
+**Classification**: SPLICE-FIRES (`plan_decs_group_by` -> shared core with decs adapter).
 
 **Conclusion**: Decs adapter routes the table-accumulator through `for_each_archetype`. User MUST write `.to_array()` explicitly here.
 
-### Chain 4 — follow-up TODOs
+### Chain 4 - follow-up TODOs
 
 - **HAVING-shaped trailing `_where`**: post-aggregate filter after `_select(reducer)` is the natural shape for "GROUP BY ... HAVING SUM(x) > N". Peel one trailing `_where` and translate to synthetic `having_`.
 - **`_order_by` / `_reverse` / `take` on group buckets**: very common SQL shape. Add a post-pass to `plan_group_by_core` that inlines these into the buf-emit loop.
@@ -769,12 +769,12 @@ for_each_archetype(<hash>, <erq>, $(arch) {
 
 ---
 
-## Chain 5 — `plan_loop_or_count`
+## Chain 5 - `plan_loop_or_count`
 
 **Accepts**: `[where_*][select*][skip?][skip_while?][take_while?][take?] [terminator]?` over 17 terminator names (count / long_count / sum / min / max / average / first / first_or_default / any / all / contains / element_at / element_at_or_default / last / last_or_default / single / single_or_default / aggregate). Source must be array-typed via `each(...)` (linq_fold.das:1563).
-**Common bails**: where-after-range (line 1603), select-after-range (line 1630), impure select before where (line 1607), duplicate range ops (lines 1647/1654/1662/1669), buffer-required op (line 1674 — order_by/distinct/group_by/reverse all bail here to their planners), unknown op (line 1678), identity ARRAY chain (line 1748).
+**Common bails**: where-after-range (line 1603), select-after-range (line 1630), impure select before where (line 1607), duplicate range ops (lines 1647/1654/1662/1669), buffer-required op (line 1674 - order_by/distinct/group_by/reverse all bail here to their planners), unknown op (line 1678), identity ARRAY chain (line 1748).
 
-### 5a — Two `where_`s around a pure `_select`
+### 5a - Two `where_`s around a pure `_select`
 
 **Probe** (`/tmp/audit_probes/chain5_5a.das`):
 ```das
@@ -793,9 +793,9 @@ return invoke($(source) {
 
 **Classification**: SPLICE-FIRES (counter lane with merged predicate).
 
-**Conclusion**: where-after-select is HANDLED by the planner (linq_fold.das:1605-1620) — when the projection is pure, the second `where_` substitutes the projection into the predicate and merges with the first via `&&`. Zero allocation. Pure-select fast path does exactly what users expect.
+**Conclusion**: where-after-select is HANDLED by the planner (linq_fold.das:1605-1620) - when the projection is pure, the second `where_` substitutes the projection into the predicate and merges with the first via `&&`. Zero allocation. Pure-select fast path does exactly what users expect.
 
-### 5b — Select after a range op
+### 5b - Select after a range op
 
 **Probe** (`/tmp/audit_probes/chain5_5b.das`):
 ```das
@@ -813,9 +813,9 @@ return <- pass_2;
 
 **Classification**: FALLS-OFF (default cascade).
 
-**Conclusion**: linq_fold.das:1630 — the second `_select` arrives with `seenSkip == true` and the planner bails. A `_select` after any range op is structurally incompatible with the single-pass shape because the projection identity shifts mid-chain. User rewrite: collapse to a single projection. Arm extension would require multi-segment shape with per-segment binds — almost a new planner.
+**Conclusion**: linq_fold.das:1630 - the second `_select` arrives with `seenSkip == true` and the planner bails. A `_select` after any range op is structurally incompatible with the single-pass shape because the projection identity shifts mid-chain. User rewrite: collapse to a single projection. Arm extension would require multi-segment shape with per-segment binds - almost a new planner.
 
-### 5c — Where after take
+### 5c - Where after take
 
 **Probe** (`/tmp/audit_probes/chain5_5c.das`):
 ```das
@@ -834,9 +834,9 @@ return <- pass_2;
 
 **Classification**: FALLS-OFF (default cascade).
 
-**Conclusion**: linq_fold.das:1603 — `where_` arrives with `seenTake == true`. Semantically distinct from `where.take`: `take(100)._where(...)` = "first 100 elements, then keep active ones" (count ≤ 100); `_where(...).take(100)` = "first 100 active ones" (count exactly 100 if there are ≥100 active). No automatic rewrite is safe. Extension: counter lane with take-cap that ticks BEFORE the where filter.
+**Conclusion**: linq_fold.das:1603 - `where_` arrives with `seenTake == true`. Semantically distinct from `where.take`: `take(100)._where(...)` = "first 100 elements, then keep active ones" (count <= 100); `_where(...).take(100)` = "first 100 active ones" (count exactly 100 if there are >=100 active). No automatic rewrite is safe. Extension: counter lane with take-cap that ticks BEFORE the where filter.
 
-### 5d — Aggregate terminator
+### 5d - Aggregate terminator
 
 **Probe** (`/tmp/audit_probes/chain5_5d.das`):
 ```das
@@ -857,7 +857,7 @@ return invoke($(source) {
 
 **Conclusion**: `aggregate` is a recognized walk-lane terminator. Seed and reducer block are inlined; per-element body is just `agg = agg + body`. No invoke into `aggregate_impl`.
 
-### 5e — Baseline: where + select + take + sum
+### 5e - Baseline: where + select + take + sum
 
 **Probe** (`/tmp/audit_probes/chain5_5e.das`):
 ```das
@@ -879,9 +879,9 @@ return invoke($(source) {
 
 **Classification**: SPLICE-FIRES (accumulator lane + take cap).
 
-**Conclusion**: Canonical happy path — where → select fuses, take adds a counter, sum is an accumulator. Reference arm.
+**Conclusion**: Canonical happy path - where -> select fuses, take adds a counter, sum is an accumulator. Reference arm.
 
-### Chain 5 — follow-up TODOs
+### Chain 5 - follow-up TODOs
 
 - **`where` after `take` / `take_while`**: not algebraically equivalent so can't auto-reorder, but the counter-lane shape could handle it manually.
 - **`select` after `skip` / `take` / `take_while` / `skip_while`**: requires per-segment bind handling. Probably better to document canonical order in `skills/linq.md` and lint-warn.
@@ -889,12 +889,12 @@ return invoke($(source) {
 
 ---
 
-## Chain 6 — `plan_decs_unroll`
+## Chain 6 - `plan_decs_unroll`
 
 **Accepts**: same shape as `plan_loop_or_count` (count/long_count/sum/min/max/average/first/first_or_default/any/all/contains/element_at/element_at_or_default/last/last_or_default/single/single_or_default/aggregate/min_by/max_by + implicit-to_array) over `from_decs_template(...)` bridges. Delegates to plan_decs_order_family / plan_decs_reverse / plan_decs_distinct / plan_decs_group_by / plan_decs_join for buffer-required shapes.
 **Common bails**: source not a decs bridge (line 4455), no recognized terminator + no implicit to_array (line 4493), range extraction failed (line 4476), chain info failed (line 4478), sum/min/max/average over tuple element (line 4483), select before predicate-driven range (line 3568).
 
-### 6a — Select before predicate-driven range
+### 6a - Select before predicate-driven range
 
 **Probe** (`/tmp/audit_probes/chain6_6a.das`):
 ```das
@@ -913,9 +913,9 @@ return <- pass_2;
 
 **Classification**: FALLS-OFF (default cascade for linq chain; bridge IS unrolled but doesn't connect to the rest).
 
-**Conclusion**: linq_fold.das:3568 — when suffix contains `skip_while` / `take_while`, prefix must be select-free (predicates use source tuple, not projected scalar). User rewrite: drop the `_select`, move comparison into `_skip_while`: `._skip_while(_.score < 0).count()`. Make the rule explicit in `skills/linq.md`. Arm extension would require predicate rewriting through projection.
+**Conclusion**: linq_fold.das:3568 - when suffix contains `skip_while` / `take_while`, prefix must be select-free (predicates use source tuple, not projected scalar). User rewrite: drop the `_select`, move comparison into `_skip_while`: `._skip_while(_.score < 0).count()`. Make the rule explicit in `skills/linq.md`. Arm extension would require predicate rewriting through projection.
 
-### 6b — Aggregate over decs
+### 6b - Aggregate over decs
 
 **Probe** (`/tmp/audit_probes/chain6_6b.das`):
 ```das
@@ -936,9 +936,9 @@ return invoke($() {
 
 **Classification**: SPLICE-FIRES (`emit_decs_walk_lane`, Slice 5f).
 
-**Conclusion**: Aggregate is in the `isWalk` set. Bridge fuses into accumulator loop — pruner trimmed to ONLY `e_score` reads (no `e_id`/`e_active`). Best-in-class shape.
+**Conclusion**: Aggregate is in the `isWalk` set. Bridge fuses into accumulator loop - pruner trimmed to ONLY `e_score` reads (no `e_id`/`e_active`). Best-in-class shape.
 
-### 6c — min_by with where
+### 6c - min_by with where
 
 **Probe** (`/tmp/audit_probes/chain6_6c.das`):
 ```das
@@ -971,7 +971,7 @@ return invoke($() {
 
 **Conclusion**: Canonical streaming-min shape on decs. All three columns read since `min_by` returns the full element.
 
-### 6d — element_at with where
+### 6d - element_at with where
 
 **Probe** (`/tmp/audit_probes/chain6_6d.das`):
 ```das
@@ -1003,7 +1003,7 @@ return invoke($() {
 
 **Conclusion**: `for_each_archetype_find` outer (returns bool to break early across archetypes) + counter inside, then panics if not found. Reference arm.
 
-### 6e — reverse + take + to_array (delegates to plan_decs_reverse)
+### 6e - reverse + take + to_array (delegates to plan_decs_reverse)
 
 **Probe** (`/tmp/audit_probes/chain6_6e.das`):
 ```das
@@ -1039,24 +1039,24 @@ return invoke($() {
 })
 ```
 
-**Classification**: SPLICE-FIRES (`plan_decs_reverse` — PR #2834 reverse skip-into-tail pattern).
+**Classification**: SPLICE-FIRES (`plan_decs_reverse` - PR #2834 reverse skip-into-tail pattern).
 
-**Conclusion**: `plan_decs_unroll` does NOT handle `reverse` itself — dispatch happens earlier through `plan_decs_reverse`. 2-pass shape (sum sizes → skip into tail → reverse_inplace) is exactly the PR #2834 win. Dispatch works as designed.
+**Conclusion**: `plan_decs_unroll` does NOT handle `reverse` itself - dispatch happens earlier through `plan_decs_reverse`. 2-pass shape (sum sizes -> skip into tail -> reverse_inplace) is exactly the PR #2834 win. Dispatch works as designed.
 
-### Chain 6 — follow-up TODOs
+### Chain 6 - follow-up TODOs
 
 - **`select` before `skip_while` / `take_while`**: same root cause as Chain 5 5b (predicate semantics differ pre- vs post-projection). Document canonical order.
-- **sum/min/max/average over tuple element without `_select`**: line 4483 bail is correct but silent — emit a planner diagnostic when `isAccum && selectCount == 0`.
+- **sum/min/max/average over tuple element without `_select`**: line 4483 bail is correct but silent - emit a planner diagnostic when `isAccum && selectCount == 0`.
 - **Implicit to_array gate**: line 4493 requires `expr._type.isGoodArrayType`. Failure mode for "no terminator at all" is opaque.
 
 ---
 
-## Chain 7 — `plan_zip`
+## Chain 7 - `plan_zip`
 
 **Accepts**: `zip(srcB) [where_*][select?][skip?][skip_while?][take_while?][take?] [terminator]?` STRICTLY 2-arg zip (linq_fold.das:5395)
 **Common bails**: 3-arg result-selector zip (line 5402), unrecognized intermediate op (line 5528), chained selects (line 5486)
 
-### 7a — `zip(srcB, result_selector)` 3-arg form + `sum()`
+### 7a - `zip(srcB, result_selector)` 3-arg form + `sum()`
 
 **Probe** (`/tmp/audit_probes/chain7_7a.das`):
 ```das
@@ -1073,11 +1073,11 @@ return invoke($(var source : iterator<int&>) : int {
 }, each(a))
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification**: FALLS-OFF - default cascade.
 
-**Conclusion**: The natural "sum of (a[i] op b[i])" — the dot-product idiom — bails at line 5402 because the result-selector lives inside `zip(...)`. To recover splice, rewrite as `zip(b) |> _select(_._0 * _._1) |> sum()` (probe 7d). Either lower the 3-arg form to 2-arg `zip + _select` inside the macro before reaching `plan_zip`, or extend `plan_zip` to peel a 3-arg zip's result_selector into the chain `projection` slot.
+**Conclusion**: The natural "sum of (a[i] op b[i])" - the dot-product idiom - bails at line 5402 because the result-selector lives inside `zip(...)`. To recover splice, rewrite as `zip(b) |> _select(_._0 * _._1) |> sum()` (probe 7d). Either lower the 3-arg form to 2-arg `zip + _select` inside the macro before reaching `plan_zip`, or extend `plan_zip` to peel a 3-arg zip's result_selector into the chain `projection` slot.
 
-### 7b — `zip` + `_order_by` terminator
+### 7b - `zip` + `_order_by` terminator
 
 **Probe** (`/tmp/audit_probes/chain7_7b.das`):
 ```das
@@ -1093,11 +1093,11 @@ return <- invoke($(var source : iterator<int&>) : array<tuple<int;int>> {
 }, each(a))
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification**: FALLS-OFF - default cascade.
 
 **Conclusion**: `_order_by` after `zip` is unrecognized intermediate op (line 5528). A targeted "zip-then-order-by-then-take" arm would be the right next splice.
 
-### 7c — `zip` + chained `_select`s
+### 7c - `zip` + chained `_select`s
 
 **Probe** (`/tmp/audit_probes/chain7_7c.das`):
 ```das
@@ -1126,11 +1126,11 @@ return <- invoke($(srcA : array<int> const; srcB : array<int> const) : array<int
 }, a, b)
 ```
 
-**Classification (post-Theme 7)**: SPLICE-FIRES — `collapse_chained_selects` pre-pass folds the two adjacent `_select`s into a single composed projection `(it._0 * 2)`; `plan_zip`'s accumulator lane then emits the parallel for-loop directly into the output buffer with no `__::linq\`select_to_array\`` / `__::linq\`select\`` intermediate calls.
+**Classification (post-Theme 7)**: SPLICE-FIRES - `collapse_chained_selects` pre-pass folds the two adjacent `_select`s into a single composed projection `(it._0 * 2)`; `plan_zip`'s accumulator lane then emits the parallel for-loop directly into the output buffer with no `__::linq\`select_to_array\`` / `__::linq\`select\`` intermediate calls.
 
-**Conclusion**: chained-select collapse landed 2026-05-24 (Theme 7). Mirrors how chained `_where` already compose via `&&`. Gated on `!has_sideeffects(innerBody)` — chains with `%` / `/` / user-call inner cascade to tier-2 (output remains correct). The same pre-pass runs in 7 other planners that bail on chained `_select` (plan_distinct, plan_reverse, plan_decs_*, plan_decs_join); plan_loop_or_count / plan_group_by_core / plan_decs_unroll already handle chained selects natively.
+**Conclusion**: chained-select collapse landed 2026-05-24 (Theme 7). Mirrors how chained `_where` already compose via `&&`. Gated on `!has_sideeffects(innerBody)` - chains with `%` / `/` / user-call inner cascade to tier-2 (output remains correct). The same pre-pass runs in 7 other planners that bail on chained `_select` (plan_distinct, plan_reverse, plan_decs_*, plan_decs_join); plan_loop_or_count / plan_group_by_core / plan_decs_unroll already handle chained selects natively.
 
-### 7d — Baseline: `zip` + `_select` + `sum`
+### 7d - Baseline: `zip` + `_select` + `sum`
 
 **Probe** (`/tmp/audit_probes/chain7_7d.das`):
 ```das
@@ -1148,24 +1148,24 @@ return invoke($(srcA : array<int>; srcB : array<int>) : int {
 }, a, b)
 ```
 
-**Classification**: SPLICE-FIRES — inline parallel `for` + accumulator, zero intermediate buffers.
+**Classification**: SPLICE-FIRES - inline parallel `for` + accumulator, zero intermediate buffers.
 
 **Conclusion**: User-facing gap: 7d's wording (`zip(b) |> _select(_._0 * _._1) |> sum()`) is strictly less readable than 7a's `zip(b, $(x,y) => x*y) |> sum()` form, yet the latter falls off. Splice ergonomics suffer when the "fast path" requires the awkward spelling.
 
-### Chain 7 — follow-up TODOs
+### Chain 7 - follow-up TODOs
 
 - Pre-lower 3-arg `zip(a, b, sel)` to 2-arg `zip(a, b) |> _select(...)` inside `LinqFold.visit` (or hoist the selector into `projection` directly inside `plan_zip`). Closes 7a.
 - Extend `plan_zip` to accept `_order_by` / `reverse` between zip and a terminator that needs full materialization anyway. Closes 7b and unblocks "top-K of zip" patterns.
-- Collapse N consecutive `_select` projections (line 5486 + plan_loop_or_count's analog) — symmetric with how N consecutive `where_` already compose via `&&`. Closes 7c.
+- Collapse N consecutive `_select` projections (line 5486 + plan_loop_or_count's analog) - symmetric with how N consecutive `where_` already compose via `&&`. Closes 7c.
 
 ---
 
-## Chain 8 — `plan_decs_join`
+## Chain 8 - `plan_decs_join`
 
 **Accepts**: `_join(srcA, srcB, on, into) [count]?` strictly binary, primitive keys, no intermediate chain ops (linq_fold.das:5267)
 **Common bails**: post-join chain op of ANY kind (line 5284), non-primitive key type (lines 5296-5303), keya/keyb untyped (line 5293).
 
-### 8a — `_join` + post-join `_where` + `count`
+### 8a - `_join` + post-join `_where` + `count`
 
 **Probe** (`/tmp/audit_probes/chain8_8a.das`):
 ```das
@@ -1188,11 +1188,11 @@ var pass_2 = __::linq`count(pass_1);
 finalize(pass_1);
 ```
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification**: FALLS-OFF - default cascade.
 
 **Conclusion**: Bails at line 5284 because `_where` sits between `_join` and `count`. Worst-case: full materialization of BOTH dealer and car archetypes into per-iterator buffers before `join_impl` runs, plus a second `where_to_array` pass and a third `count`. Fix: wrap the count-bump in `if (predicate) { ... }` inside the probe loop.
 
-### 8b — `_join` + post-join `_select` + `to_array`
+### 8b - `_join` + post-join `_select` + `to_array`
 
 **Probe** (`/tmp/audit_probes/chain8_8b.das`):
 ```das
@@ -1201,11 +1201,11 @@ return <- _fold(from_decs_template(type<DecsCar>) |> _join(from_decs_template(ty
                                                   |> to_array())
 ```
 
-**Classification**: FALLS-OFF — default cascade (3 buffer allocations).
+**Classification**: FALLS-OFF - default cascade (3 buffer allocations).
 
-**Conclusion**: Same bail (line 5284). The natural projection-shaping idiom — produce the full join row then project — is universally faster as inline projection. Fix is symmetric with 8a: accept single trailing `_select` and substitute body into the result lambda position.
+**Conclusion**: Same bail (line 5284). The natural projection-shaping idiom - produce the full join row then project - is universally faster as inline projection. Fix is symmetric with 8a: accept single trailing `_select` and substitute body into the result lambda position.
 
-### 8c — Composite (tuple) join key
+### 8c - Composite (tuple) join key
 
 **Probe** (`/tmp/audit_probes/chain8_8c.das`):
 ```das
@@ -1214,11 +1214,11 @@ return _fold(_join(srcA, srcB, $(l, r) => (l.dealer_id, l.id) == (r.region, r.id
 
 **Generated** (trimmed): `join_to_array` instantiated with `tuple<int;int>` keys; `unique_key(tuple<int;int>) : string` invoked by `join_impl`.
 
-**Classification**: FALLS-OFF — default cascade.
+**Classification**: FALLS-OFF - default cascade.
 
 **Conclusion**: Bails at primitive-key gate (lines 5296-5303): `keyType.baseType == Type.tTuple` not in whitelist. The `_join` macro itself accepts tuple-equi form, so the gate is the ONLY reason this falls off. Two fixes: (a) plumb `unique_key(keyBody)` into probe/insert sites of the splice (matches `join_impl`); or (b) accept tuples-of-primitives directly as `table<tuple<...>; array<...>>` key, since daslang tables hash tuples natively. (b) is cleaner.
 
-### 8d — Baseline: `_join` + `count`
+### 8d - Baseline: `_join` + `count`
 
 **Generated**:
 ```das
@@ -1241,11 +1241,11 @@ return invoke($() : int {
 })
 ```
 
-**Classification**: SPLICE-FIRES — single hash, two `for_each_archetype` passes, count bumped by bucket-length.
+**Classification**: SPLICE-FIRES - single hash, two `for_each_archetype` passes, count bumped by bucket-length.
 
 **Conclusion**: Confirms hashed-join splice fires for bench-supported shape. Narrow surface is the issue: any meaningful post-processing reverts to full materialization.
 
-### Chain 8 — follow-up TODOs
+### Chain 8 - follow-up TODOs
 
 - Add a single-trailing-`_where` arm (mirror plan_zip's `whereCond` slot). Closes 8a + C6.
 - Add a single-trailing-`_select` arm: substitute select's lambda body into result-push position. Closes 8b.
@@ -1258,9 +1258,9 @@ return invoke($() : int {
 
 When a user chain combines two splice families, dispatch order (linq_fold.das:5700-5727) claims one and the other op bails the whole arm. Six obvious user-natural compositions, all FALLS-OFF:
 
-### C1 — Distinct + order + take
+### C1 - Distinct + order + take
 
-**Why interesting**: "Top-K most recent distinct users" — both `_distinct_by` and `_order_by` have splice arms, neither tolerates the other op.
+**Why interesting**: "Top-K most recent distinct users" - both `_distinct_by` and `_order_by` have splice arms, neither tolerates the other op.
 
 **Probe** (`/tmp/audit_probes/comp_C1.das`):
 ```das
@@ -1275,13 +1275,13 @@ __::linq`take_inplace(pass_0, 10);
 return <- pass_0;
 ```
 
-**Classification (post-Theme 3 Phase 3)**: SPLICE-FIRES — `plan_order_family` (and decs mirror `plan_decs_order_family`) gained a `distinct` / `distinct_by` recognizer in the walk loop; the bounded-heap path declares `var order_dset : table<typedecl(_::unique_key(invoke(distinctKey, default<elemType>)))>` above the source loop and wraps the per-element push by `let dkey = _::unique_key(KEY[it]); if (!order_dset |> key_exists(dkey)) { order_dset |> insert(dkey); HEAP_UPDATE }`. Emission shape: single zero-arg `invoke` containing `let order_take_n = N` + `var order_buf : array<T>` + `var order_dset : table<DKEY>` + `for (it in source) { let dkey = ...; if (!key_exists(dset, dkey)) { dset |> insert(dkey); /* push_heap if buf<N, else pop+replace+push */ } }` + `_::order_inplace(order_buf, cmp)` + `return <- order_buf`. No `__::linq\`distinct_by_to_array\``, `__::linq\`order_by_inplace\``, or `__::linq\`take_inplace\`` calls.
+**Classification (post-Theme 3 Phase 3)**: SPLICE-FIRES - `plan_order_family` (and decs mirror `plan_decs_order_family`) gained a `distinct` / `distinct_by` recognizer in the walk loop; the bounded-heap path declares `var order_dset : table<typedecl(_::unique_key(invoke(distinctKey, default<elemType>)))>` above the source loop and wraps the per-element push by `let dkey = _::unique_key(KEY[it]); if (!order_dset |> key_exists(dkey)) { order_dset |> insert(dkey); HEAP_UPDATE }`. Emission shape: single zero-arg `invoke` containing `let order_take_n = N` + `var order_buf : array<T>` + `var order_dset : table<DKEY>` + `for (it in source) { let dkey = ...; if (!key_exists(dset, dkey)) { dset |> insert(dkey); /* push_heap if buf<N, else pop+replace+push */ } }` + `_::order_inplace(order_buf, cmp)` + `return <- order_buf`. No `__::linq\`distinct_by_to_array\``, `__::linq\`order_by_inplace\``, or `__::linq\`take_inplace\`` calls.
 
-**Conclusion**: Bounded-heap-of-size-N gated by set-insert (Theme 3 Phase 3 landed 2026-05-24). Single source pass, no full distinct materialization. Same `plan_order_family` walk handles both array and (via `plan_decs_order_family` mirror) decs sources. v1 constraints: inline-able order key (existing bounded-heap gate); first/first_or_default + distinct deferred; composes with WHERE (filter before distinct gate) and terminal `_select` (project ≤N heap survivors at return). Mirror of C5 (same arm pair, distinct AFTER order_by) shares the same emission.
+**Conclusion**: Bounded-heap-of-size-N gated by set-insert (Theme 3 Phase 3 landed 2026-05-24). Single source pass, no full distinct materialization. Same `plan_order_family` walk handles both array and (via `plan_decs_order_family` mirror) decs sources. v1 constraints: inline-able order key (existing bounded-heap gate); first/first_or_default + distinct deferred; composes with WHERE (filter before distinct gate) and terminal `_select` (project <=N heap survivors at return). Mirror of C5 (same arm pair, distinct AFTER order_by) shares the same emission.
 
-### C2 — Group-by + select + order-by + to_array
+### C2 - Group-by + select + order-by + to_array
 
-**Why interesting**: "Brands sorted by frequency" — canonical SQL `GROUP BY ... ORDER BY COUNT(*)`.
+**Why interesting**: "Brands sorted by frequency" - canonical SQL `GROUP BY ... ORDER BY COUNT(*)`.
 
 **Probe** (`/tmp/audit_probes/comp_C2.das`):
 ```das
@@ -1301,13 +1301,13 @@ __::linq`order_by_inplace(pass_1, $(_) { return _.C; });
 return <- pass_1;
 ```
 
-**Classification (post-Theme 3 Phase 2)**: SPLICE-FIRES — both `plan_group_by` and `plan_decs_group_by` now pop an optional trailing `_order_by` / `_order_by_descending` after the count check; `plan_group_by_core`'s to_array lane emits an inline-cmp `sort(buf, $(v1, v2) => _::less(v1.K, v2.K))` right after the bucket-fill (using the same `try_make_inline_cmp` helper as `plan_order_family`). Emission shape: single zero-arg `invoke` containing `var inscope tab : table<...>` + `var dummy : ...` + bucket-fill `for (it in source)` loop + `var buf : array<...>` + `buf |> reserve(length(tab))` + `for (kv in values(tab)) buf |> push_clone(...)` + `sort(buf, INLINE_CMP)` + `return <- buf` + `finally finalize(tab)`. No `__::linq\`group_by_lazy_to_array\``, `__::linq\`select\``, or `__::linq\`order_by_inplace\`` calls; sort is inlined.
+**Classification (post-Theme 3 Phase 2)**: SPLICE-FIRES - both `plan_group_by` and `plan_decs_group_by` now pop an optional trailing `_order_by` / `_order_by_descending` after the count check; `plan_group_by_core`'s to_array lane emits an inline-cmp `sort(buf, $(v1, v2) => _::less(v1.K, v2.K))` right after the bucket-fill (using the same `try_make_inline_cmp` helper as `plan_order_family`). Emission shape: single zero-arg `invoke` containing `var inscope tab : table<...>` + `var dummy : ...` + bucket-fill `for (it in source)` loop + `var buf : array<...>` + `buf |> reserve(length(tab))` + `for (kv in values(tab)) buf |> push_clone(...)` + `sort(buf, INLINE_CMP)` + `return <- buf` + `finally finalize(tab)`. No `__::linq\`group_by_lazy_to_array\``, `__::linq\`select\``, or `__::linq\`order_by_inplace\`` calls; sort is inlined.
 
-**Conclusion**: One pass + in-place sort over a single output buffer (Theme 3 Phase 2 landed 2026-05-24). The same `plan_group_by_core` to_array tail serves all three source shapes (array via `plan_group_by`, decs via `plan_decs_group_by`'s `isDecs` mode, decs-decs join via `isDecsJoin` mode — Theme 3 Phase 1 composes cleanly with this extension). v1 constraints: inline-able key only (pure single-expression lambda, no sideeffects); bare `_order` / `_order_descending` (no key) deferred since group_by output is typically a named tuple where `<` is ill-defined; non-inline keys cascade. Composes with HAVING.
+**Conclusion**: One pass + in-place sort over a single output buffer (Theme 3 Phase 2 landed 2026-05-24). The same `plan_group_by_core` to_array tail serves all three source shapes (array via `plan_group_by`, decs via `plan_decs_group_by`'s `isDecs` mode, decs-decs join via `isDecsJoin` mode - Theme 3 Phase 1 composes cleanly with this extension). v1 constraints: inline-able key only (pure single-expression lambda, no sideeffects); bare `_order` / `_order_descending` (no key) deferred since group_by output is typically a named tuple where `<` is ill-defined; non-inline keys cascade. Composes with HAVING.
 
-### C3 — Decs join + select + group_by + select
+### C3 - Decs join + select + group_by + select
 
-**Why interesting**: "Join cars onto dealers, group by region, count" — universal BI shape on decs.
+**Why interesting**: "Join cars onto dealers, group by region, count" - universal BI shape on decs.
 
 **Probe** (`/tmp/audit_probes/comp_C3.das`):
 ```das
@@ -1317,13 +1317,13 @@ return <- _fold(_join(decsCars, decsDealers, on=..., into=(Region=r.region, CarN
                 |> to_array())
 ```
 
-**Classification (post-Theme 3 Phase 1)**: SPLICE-FIRES — `plan_decs_group_by` recognizes the trailing `join` upstream of `group_by_lazy` and switches to an `isDecsJoin` `GroupBySourceAdapter` mode (Theme 3 Phase 1 landed 2026-05-24). Emission is a single zero-arg `invoke` containing: `var inscope djoin_tab : table<...>` + `var djoin_dummy : ...` + `var djoin_jhash : table<KEY; array<TUPB>>` + `for_each_archetype(B) { ... djoin_jhash[keyb(jtb)] |> push_clone(jtb) }` (hash collect) + `for_each_archetype(A) { ... get(djoin_jhash, keya(jta), $(jarr) { for (jtb in jarr) { let djoin_jres = result_lam(jta, jtb); ... addr-compare tab update }})}` (probe + per-pair bucket update). No `__::linq\`join_impl\``, no `__::linq\`group_by_lazy_to_array\``, no intermediate `array<...>` allocations.
+**Classification (post-Theme 3 Phase 1)**: SPLICE-FIRES - `plan_decs_group_by` recognizes the trailing `join` upstream of `group_by_lazy` and switches to an `isDecsJoin` `GroupBySourceAdapter` mode (Theme 3 Phase 1 landed 2026-05-24). Emission is a single zero-arg `invoke` containing: `var inscope djoin_tab : table<...>` + `var djoin_dummy : ...` + `var djoin_jhash : table<KEY; array<TUPB>>` + `for_each_archetype(B) { ... djoin_jhash[keyb(jtb)] |> push_clone(jtb) }` (hash collect) + `for_each_archetype(A) { ... get(djoin_jhash, keya(jta), $(jarr) { for (jtb in jarr) { let djoin_jres = result_lam(jta, jtb); ... addr-compare tab update }})}` (probe + per-pair bucket update). No `__::linq\`join_impl\``, no `__::linq\`group_by_lazy_to_array\``, no intermediate `array<...>` allocations.
 
 **Conclusion**: The "killer demo" composition. The structural fix turned out smaller than the audit predicted: `plan_group_by_core` is **untouched** because its output emission is source-shape-agnostic (loops over `kv pairs in values(tab)` regardless of how the tab was populated). The cross-arm cooperation lives entirely in a new `adapter_emit_source_loop` branch + `GroupBySourceAdapter` field extension + `plan_decs_group_by` recognizer extension. v1 constraints: count/to_array terminator with primitive equi-keys; no segments between `join` and `group_by_lazy`; HAVING on the join+group_by chain defers to v2. The same adapter pattern is the candidate vehicle for C1 / C2 / C5 (Theme 3 Phase 2-3).
 
-### C4 — Zip + reverse + to_array
+### C4 - Zip + reverse + to_array
 
-**Why interesting**: "Pair two parallel sequences, walk backward" — natural for time-reversed analyses.
+**Why interesting**: "Pair two parallel sequences, walk backward" - natural for time-reversed analyses.
 
 **Probe** (`/tmp/audit_probes/comp_C4.das`):
 ```das
@@ -1337,11 +1337,11 @@ __::linq`reverse_inplace(pass_0);
 return <- pass_0;
 ```
 
-**Classification (post-Theme 8)**: SPLICE-FIRES — `plan_zip` accepts `reverse` as the last chain op between zip's chain and the terminator. Array lane emits `_::reverse_inplace($i(bufName))` before return. Counter / accumulator (sum/min/max/avg) / any/all/contains lanes treat reverse as a no-op (mathematical identity); first / first_or_default bails (NOT identity under reverse).
+**Classification (post-Theme 8)**: SPLICE-FIRES - `plan_zip` accepts `reverse` as the last chain op between zip's chain and the terminator. Array lane emits `_::reverse_inplace($i(bufName))` before return. Counter / accumulator (sum/min/max/avg) / any/all/contains lanes treat reverse as a no-op (mathematical identity); first / first_or_default bails (NOT identity under reverse).
 
-**Conclusion**: Theme 8 landed 2026-05-25. Reverse must be the last chain op — anything after would see the reversed stream and change semantics vs cascade. Saves zip's `zip_to_array` iterator wrap on the array lane (modest INTERP win; identity-lane saves the buf alloc + reverse_inplace entirely).
+**Conclusion**: Theme 8 landed 2026-05-25. Reverse must be the last chain op - anything after would see the reversed stream and change semantics vs cascade. Saves zip's `zip_to_array` iterator wrap on the array lane (modest INTERP win; identity-lane saves the buf alloc + reverse_inplace entirely).
 
-### C5 — Order-by + distinct + take + to_array
+### C5 - Order-by + distinct + take + to_array
 
 **Why interesting**: Variant on C1 with order-first.
 
@@ -1350,23 +1350,23 @@ return <- pass_0;
 return <- _fold(each(items) |> _order_by(_.score) |> distinct() |> take(10) |> to_array())
 ```
 
-**Classification (post-Theme 3 Phase 3)**: SPLICE-FIRES — same `plan_order_family` (and decs mirror `plan_decs_order_family`) walk-loop extension as C1. The recognizer accepts `distinct[_by]` either BEFORE `_order_by` (C1 position) or AFTER it (C5 position) — both feed the same set-gated bounded-heap emission. For bare `distinct()` the gate keys on the whole element (`let dkey = _::unique_key(it)`); for `distinct_by(K)` it peels `K[it]`. Theme 3 Phase 3 landed 2026-05-24.
+**Classification (post-Theme 3 Phase 3)**: SPLICE-FIRES - same `plan_order_family` (and decs mirror `plan_decs_order_family`) walk-loop extension as C1. The recognizer accepts `distinct[_by]` either BEFORE `_order_by` (C1 position) or AFTER it (C5 position) - both feed the same set-gated bounded-heap emission. For bare `distinct()` the gate keys on the whole element (`let dkey = _::unique_key(it)`); for `distinct_by(K)` it peels `K[it]`. Theme 3 Phase 3 landed 2026-05-24.
 
-**Conclusion**: Operator-order swap is a no-op for the emission — what matters is "set + heap together in one source pass", not the chain position. Confirms the original audit observation ("the pattern is symmetric — not a property of which arm runs first") and validates the unified recognizer design.
+**Conclusion**: Operator-order swap is a no-op for the emission - what matters is "set + heap together in one source pass", not the chain position. Confirms the original audit observation ("the pattern is symmetric - not a property of which arm runs first") and validates the unified recognizer design.
 
-### C6 — Decs_join + post-join filter
+### C6 - Decs_join + post-join filter
 
-**Why interesting**: Composition view of 8a — confirms the failure mode is the same whether reached via "splice arm couldn't extend" or "two arms collide".
+**Why interesting**: Composition view of 8a - confirms the failure mode is the same whether reached via "splice arm couldn't extend" or "two arms collide".
 
 **Probe** (`/tmp/audit_probes/comp_C6.das`): same as 8a.
 
-**Classification**: FALLS-OFF — same root cause as 8a (linq_fold.das:5284).
+**Classification**: FALLS-OFF - same root cause as 8a (linq_fold.das:5284).
 
 **Conclusion**: Listed here to make the symmetry explicit. Closing 8a TODO closes this row too.
 
-### Composition — cross-cutting observation
+### Composition - cross-cutting observation
 
-Five of six composition probes (C1, C2, C3, C5, C6) are blocked by the same architectural pattern: each splice arm currently requires `flatten_linq` to yield a contiguous run of recognized ops, with the planner pipeline trying one arm at a time and falling to tier-2 the moment ANY arm refuses. There is no cross-arm composition mechanism. The highest-leverage next investment isn't another arm — it's a "compose-aware" planner step that walks the call chain once, attributes each op to a candidate arm (or "boundary op" like `_where`/`_select` that any arm can host), and stitches the emissions. C4 is the lone outlier where one arm could absorb the second op trivially; the other five point at the same missing infrastructure.
+Five of six composition probes (C1, C2, C3, C5, C6) are blocked by the same architectural pattern: each splice arm currently requires `flatten_linq` to yield a contiguous run of recognized ops, with the planner pipeline trying one arm at a time and falling to tier-2 the moment ANY arm refuses. There is no cross-arm composition mechanism. The highest-leverage next investment isn't another arm - it's a "compose-aware" planner step that walks the call chain once, attributes each op to a candidate arm (or "boundary op" like `_where`/`_select` that any arm can host), and stitches the emissions. C4 is the lone outlier where one arm could absorb the second op trivially; the other five point at the same missing infrastructure.
 
 ---
 
@@ -1374,24 +1374,24 @@ Five of six composition probes (C1, C2, C3, C5, C6) are blocked by the same arch
 
 Synthesizing the per-chain TODOs into prioritized themes:
 
-### Theme 1 — Terminal `_select` extension (HIGH impact, MEDIUM effort)
+### Theme 1 - Terminal `_select` extension (HIGH impact, MEDIUM effort)
 
-Recurs in: **chains 1, 2, 7, 8**. Almost every arm that produces a buffer or holds a bounded-K state could accept a terminal `_select` that projects during the emission/return — currently bails almost universally. The bounded-heap, R5 buffer, and join probe-loop arms all hold `≤K` or per-element values they then need to discard or project; absorbing the projection is a small qmacro splice each.
+Recurs in: **chains 1, 2, 7, 8**. Almost every arm that produces a buffer or holds a bounded-K state could accept a terminal `_select` that projects during the emission/return - currently bails almost universally. The bounded-heap, R5 buffer, and join probe-loop arms all hold `<=K` or per-element values they then need to discard or project; absorbing the projection is a small qmacro splice each.
 
 Specific arms to extend:
-- `plan_order_family` line 1234 + `plan_decs_order_family` line 4547 — accept terminal `_select` after `take(N)` / `first` / `first_or_default`. Closes 1a, 1e.
-- `plan_reverse` line 1764 + `plan_decs_reverse` line 4802 — accept terminal `_select` after `reverse [take(N)]`. Closes 2c, 2e.
-- `plan_decs_join` line 5267 — accept single trailing `_select` substituting into result lambda. Closes 8b.
-- `plan_zip` line 5395 — pre-lower 3-arg `zip(a, b, sel)` to 2-arg `zip(a, b) |> _select(sel)`. Closes 7a.
+- `plan_order_family` line 1234 + `plan_decs_order_family` line 4547 - accept terminal `_select` after `take(N)` / `first` / `first_or_default`. Closes 1a, 1e.
+- `plan_reverse` line 1764 + `plan_decs_reverse` line 4802 - accept terminal `_select` after `reverse [take(N)]`. Closes 2c, 2e.
+- `plan_decs_join` line 5267 - accept single trailing `_select` substituting into result lambda. Closes 8b.
+- `plan_zip` line 5395 - pre-lower 3-arg `zip(a, b, sel)` to 2-arg `zip(a, b) |> _select(sel)`. Closes 7a.
 
-### Theme 2 — Trailing `_where` / HAVING (HIGH impact, MEDIUM effort)
+### Theme 2 - Trailing `_where` / HAVING (HIGH impact, MEDIUM effort)
 
 Recurs in: **chains 4, 5, 8**. The "trailing post-aggregate filter" idiom is universal in SQL-like usage and falls off whenever it appears in a splice arm:
-- `plan_group_by_core` — peel trailing `_where` to synthetic `having_` slot (closes 4a, 4e).
-- `plan_decs_join` — accept single trailing `_where` mirroring plan_zip's `whereCond` (closes 8a, C6).
-- `plan_loop_or_count` — counter-lane with take-cap that ticks BEFORE the where filter (closes 5c).
+- `plan_group_by_core` - peel trailing `_where` to synthetic `having_` slot (closes 4a, 4e).
+- `plan_decs_join` - accept single trailing `_where` mirroring plan_zip's `whereCond` (closes 8a, C6).
+- `plan_loop_or_count` - counter-lane with take-cap that ticks BEFORE the where filter (closes 5c).
 
-### Theme 3 — Cross-arm composition (HIGHEST impact, LARGE effort)
+### Theme 3 - Cross-arm composition (HIGHEST impact, LARGE effort)
 
 Recurs in: **5 of 6 composition probes** (C1, C2, C3, C5, C6). The planner pipeline tries arms in order and fails to tier-2 if any arm refuses; there is no mechanism for two arms to share a chain. The structural fix is a "compose-aware" planner step that:
 1. Walks the call chain once
@@ -1400,46 +1400,46 @@ Recurs in: **5 of 6 composition probes** (C1, C2, C3, C5, C6). The planner pipel
 
 This is the largest architectural change suggested by the audit but unlocks the most common BI-style queries. Closes C1, C2, C3, C5.
 
-### Theme 4 — 2-arg terminator predicates (LOW effort, MEDIUM impact)
+### Theme 4 - 2-arg terminator predicates (LOW effort, MEDIUM impact)
 
 Recurs in: **chain 3, chain 5, chain 7**. Several splice arms only accept 1-arg `count()` / `long_count()` / `sum()` etc., and silently bail when the user adds a predicate. The extension is trivial: emit `if (p(it)) cnt++` at the existing increment site.
 
-- `plan_distinct` line 1953, `plan_decs_distinct` line 5057 — accept 2-arg `count(p)` / `long_count(p)`. Closes 3c.
-- `plan_zip` lines 5412-5436 — same shape. (Not probed explicitly but observed in agent 1 inventory.)
-- `plan_decs_unroll` line 4458 — same shape.
+- `plan_distinct` line 1953, `plan_decs_distinct` line 5057 - accept 2-arg `count(p)` / `long_count(p)`. Closes 3c.
+- `plan_zip` lines 5412-5436 - same shape. (Not probed explicitly but observed in agent 1 inventory.)
+- `plan_decs_unroll` line 4458 - same shape.
 
-### Theme 5 — `_order_by(k).reverse()` → `_order_by_descending(k)` normalization
+### Theme 5 - `_order_by(k).reverse()` -> `_order_by_descending(k)` normalization
 
 Recurs in: **chains 1, 2**. Pure rewrite at the macro level, before any planner sees the chain. Closes 1b, 2b. Trivial to implement; sized like a half-day.
 
-### Theme 6 — Decs-bridge double penalty — LANDED 2026-05-25
+### Theme 6 - Decs-bridge double penalty - LANDED 2026-05-25
 
 Whenever a `plan_decs_*` arm bails, the `from_decs_template` bridge degenerates to full `for_each_archetype` materialization into a temp `res` array, which is then wrapped in `to_sequence` for the array-side cascade. This costs an EXTRA allocation on top of whatever cascade follows.
 
-Diagnostic landed at the `_fold` dispatch point in `LinqFold.visit`, right before `fold_linq_default` (i.e. after every tier-1 planner — decs AND array-side — has returned null). `flatten_linq(call.arguments[0])` destructures into `(top, calls)`; the diagnostic fires only when `calls` is non-empty (a chain to cascade) AND `extract_decs_bridge(top)` is non-null (a `from_decs_template` source). When fired, a `*warning*` is emitted to the compiler log naming the call site and pointing at `linq_fold_patterns.rst`. Surfaces the perf cliff at compile time without requiring lint mode (uses `to_compiler_log` like `daslib/defer.das`'s deprecation warning). Suppress per file with `options _no_linq_perf_warn = true` — intended for tests that intentionally cascade as regression guards.
+Diagnostic landed at the `_fold` dispatch point in `LinqFold.visit`, right before `fold_linq_default` (i.e. after every tier-1 planner - decs AND array-side - has returned null). `flatten_linq(call.arguments[0])` destructures into `(top, calls)`; the diagnostic fires only when `calls` is non-empty (a chain to cascade) AND `extract_decs_bridge(top)` is non-null (a `from_decs_template` source). When fired, a `*warning*` is emitted to the compiler log naming the call site and pointing at `linq_fold_patterns.rst`. Surfaces the perf cliff at compile time without requiring lint mode (uses `to_compiler_log` like `daslib/defer.das`'s deprecation warning). Suppress per file with `options _no_linq_perf_warn = true` - intended for tests that intentionally cascade as regression guards.
 
-### Theme 7 — Chained `_select` collapse — LANDED 2026-05-24
+### Theme 7 - Chained `_select` collapse - LANDED 2026-05-24
 
-Recurred in: **chain 7 (7c)** (the audit primary target) plus the equivalent chained-select-before-arm-op shape on `plan_distinct`, `plan_reverse`, `plan_decs_*`, and `plan_decs_join`. `collapse_chained_selects` mutates the `calls` array in place after `flatten_linq`, replacing N consecutive `_select` calls with a single composed `_select(... g(f(_)))` — symmetric with how N consecutive `_where` already compose via `&&`. Composition takes the inner lambda's structure (preserves param TYPE), renames its bound param to a fresh `qn("cs", at)` name to avoid `apply_template` recursive substitution when both lambdas share the boost-side `_` desugar, then overwrites its body with outer's body where outer's param is substituted by the renamed-inner body. Chain backlink rewired so subsequent planner passes see the shortened AST.
+Recurred in: **chain 7 (7c)** (the audit primary target) plus the equivalent chained-select-before-arm-op shape on `plan_distinct`, `plan_reverse`, `plan_decs_*`, and `plan_decs_join`. `collapse_chained_selects` mutates the `calls` array in place after `flatten_linq`, replacing N consecutive `_select` calls with a single composed `_select(... g(f(_)))` - symmetric with how N consecutive `_where` already compose via `&&`. Composition takes the inner lambda's structure (preserves param TYPE), renames its bound param to a fresh `qn("cs", at)` name to avoid `apply_template` recursive substitution when both lambdas share the boost-side `_` desugar, then overwrites its body with outer's body where outer's param is substituted by the renamed-inner body. Chain backlink rewired so subsequent planner passes see the shortened AST.
 
-Wired into 8 planners (the 7 listed above + `plan_zip`). Gated on `!has_sideeffects(innerBody)` — pure inner is safe regardless of outer's param-use count; impure inner cascades to preserve evaluation-count semantics. Chain 5 (5b) — `_select(...) + skip(N) + _select(...)` — is NOT addressed since the two selects aren't adjacent; that's a separate "select↔skip swap" optimization out of Theme 7 scope (op-reordering with predicate-preservation proof).
+Wired into 8 planners (the 7 listed above + `plan_zip`). Gated on `!has_sideeffects(innerBody)` - pure inner is safe regardless of outer's param-use count; impure inner cascades to preserve evaluation-count semantics. Chain 5 (5b) - `_select(...) + skip(N) + _select(...)` - is NOT addressed since the two selects aren't adjacent; that's a separate "select<->skip swap" optimization out of Theme 7 scope (op-reordering with predicate-preservation proof).
 
 The two `plan_*order_family` planners gain nothing from the pre-pass because they don't accept ANY leading `_select` in their grammar; the call is a defensive no-op there (if their grammar ever extends, the collapse is already wired). `plan_loop_or_count`, `plan_group_by_core`, and `plan_decs_unroll` already handle chained selects natively and don't need the pre-pass.
 
-### Theme 8 — Specialized fusion arms — LANDED 2026-05-25
+### Theme 8 - Specialized fusion arms - LANDED 2026-05-25
 
 Three small self-contained splice arms, bundled as one PR since each is independent:
 
-- **2a** (`plan_reverse`): `each(arr).reverse()._distinct_by(K).to_array()` — array source only. Single backward index walk over source, `table<K>` set-gates the push. Saves the cascade's `reverse_to_array` allocation AND the `distinct_by_inplace` second pass. v1 implicit-to_array only; pre-reverse where_/select/take all bail (cascade owns those).
+- **2a** (`plan_reverse`): `each(arr).reverse()._distinct_by(K).to_array()` - array source only. Single backward index walk over source, `table<K>` set-gates the push. Saves the cascade's `reverse_to_array` allocation AND the `distinct_by_inplace` second pass. v1 implicit-to_array only; pre-reverse where_/select/take all bail (cascade owns those).
 - **3b** (`plan_order_family`): `each(arr)._distinct[_by]_._order_by[_descending].to_array()` WITHOUT `take`. Generalizes the existing where_+order fused-loop path with a `var order_dset` declaration and set-gated `pushExpr` wrapper (mirroring Theme 3 Phase 3's bounded-heap distinct gate). Composes with WHERE and terminal `_select`. Saves `distinct_by_to_array` iterator setup. first/first_or_default + distinct still cascades (streaming-min path has no dset hook).
 - **C4** (`plan_zip`): trailing `reverse` as the last chain op between zip's chain and the terminator. Array lane emits `_::reverse_inplace(bufName)` before return; counter / accumulator (sum/min/max/avg) / any/all/contains lanes treat reverse as a no-op (mathematical identity); first / first_or_default bails (NOT identity).
 
-Coverage: +16 tests in `tests/linq/test_linq_fold_theme8_fusion_arms.das` (1541 → 1557) including parity tests vs handwritten cascades and anti-tests for each out-of-scope shape. **Audit fully closed** — all 8 themes shipped.
+Coverage: +16 tests in `tests/linq/test_linq_fold_theme8_fusion_arms.das` (1541 -> 1557) including parity tests vs handwritten cascades and anti-tests for each out-of-scope shape. **Audit fully closed** - all 8 themes shipped.
 
 ### Out-of-scope observations
 
 - **`linq_fold_patterns.rst` cross-check**: this audit did NOT systematically verify that every "splice arm exists" claim in the RST page is reachable via the canonical chain shape. A future doc-only PR should walk the RST table row-by-row and probe each shape (most are covered above; rows not represented are likely doc-only fictions).
-- **JIT verification**: all probes here are INTERP-only. The JIT lane may behave differently — e.g. the bounded-heap arm's `spliced_push_heap` may or may not optimize well under llvm_jit.
+- **JIT verification**: all probes here are INTERP-only. The JIT lane may behave differently - e.g. the bounded-heap arm's `spliced_push_heap` may or may not optimize well under llvm_jit.
 - **Bench impact quantification**: the cross-cutting findings are ordered by "how natural is the user phrasing" + "how expensive is the cascade", not by measured ns/op. A follow-up bench round (writing N FALLS-OFF chains as new benches, measuring fall-off cost) would sharpen the prioritization.
 
 ---
@@ -1459,9 +1459,9 @@ for f in /tmp/audit_probes/*.das; do
 done
 ```
 
-To re-create the probe set after deleting `/tmp/audit_probes/`, follow each probe's "Probe" code block — each is self-contained (`options gen2` + `require` lines + struct + one `[export] def probe_NX` + stub `def main(){}`). The audit doesn't depend on any fixture outside the probe files themselves.
+To re-create the probe set after deleting `/tmp/audit_probes/`, follow each probe's "Probe" code block - each is self-contained (`options gen2` + `require` lines + struct + one `[export] def probe_NX` + stub `def main(){}`). The audit doesn't depend on any fixture outside the probe files themselves.
 
 Classification rules:
-- `for_each_archetype` + inline state (heap, accumulator, counter, table) → **SPLICE-FIRES**
-- `__::linq\`*_to_array\`` / `__::linq\`*_inplace\`` / cascade of `pass_0 → pass_1 → ...` → **FALLS-OFF**
-- Direct `min_by_impl` / `top_n_by_impl` invocation without inlining → **BAILS-TO tier-2**
+- `for_each_archetype` + inline state (heap, accumulator, counter, table) -> **SPLICE-FIRES**
+- `__::linq\`*_to_array\`` / `__::linq\`*_inplace\`` / cascade of `pass_0 -> pass_1 -> ...` -> **FALLS-OFF**
+- Direct `min_by_impl` / `top_n_by_impl` invocation without inlining -> **BAILS-TO tier-2**

@@ -1,12 +1,12 @@
-# Queries — Comprehensions and LINQ
+# Queries - Comprehensions and LINQ
 
 Preference order for filter / map / sort / group / aggregate / materialize:
 
-1. **Comprehension** — one `[for (x in src); expr; where cond]` (or its table form) covers it all.
-2. **LINQ** — multi-step chains, lazy iterators, set operations, joins, aggregations.
-3. **Plain `for`** — side effect in the body, or `break` / `continue`.
+1. **Comprehension** - one `[for (x in src); expr; where cond]` (or its table form) covers it all.
+2. **LINQ** - multi-step chains, lazy iterators, set operations, joins, aggregations.
+3. **Plain `for`** - side effect in the body, or `break` / `continue`.
 
-`daslib/functional` (`map`, `filter`, `each`, `to_array`) is legacy — not integrated with the chain
+`daslib/functional` (`map`, `filter`, `each`, `to_array`) is legacy - not integrated with the chain
 macros, does not fuse. Only for code already built on it.
 
 ## Comprehensions
@@ -25,7 +25,7 @@ result.
 ## LINQ
 
 ```das
-require daslib/linq_boost        // re-exports daslib/linq and the fold family — never require both
+require daslib/linq_boost        // re-exports daslib/linq and the fold family - never require both
 ```
 
 | Group | Operators |
@@ -43,12 +43,12 @@ require daslib/linq_boost        // re-exports daslib/linq and the fold family �
 The fold machinery selects the `*_inplace` family on its own for a mutable local source; don't call
 those by hand.
 
-**Two-source operators come in four shapes** (iterator/array × iterator/array). **Never append
+**Two-source operators come in four shapes** (iterator/array x iterator/array). **Never append
 `_to_array` to an array+array call:** the base overload already returns `array<T>`, so
 `union_to_array(a, b)` on two arrays is `error[30341]`. `zip` is N-ary up to 8 sources; for three or
 more, mix operands with `each(arr)`.
 
-### `_fold` — the default terminator
+### `_fold` - the default terminator
 
 `_fold` rewrites a chain to stay in **array form** end to end, cheaper than the lazy form on
 essentially every input. **It goes last, as a trailing call:**
@@ -58,7 +58,7 @@ let names <- arr._where(_.flag)._select(_.name)._fold()
 ```
 
 The wrapping form `_fold(chain)` needs a chain already ending in a terminator (`to_array` / `count`
-/ `to_table` / …) — over a bare trailing `_select` it fails to infer the selector; trailing position
+/ `to_table` / ...) - over a bare trailing `_select` it fails to infer the selector; trailing position
 has no such restriction. Skip `_fold` only for a lazy `iterator<T>` composed into a larger pipeline.
 
 `linq_boost`'s `_<op>(iter, expr)` shorthand expands to `<op>(iter, $(_) => expr)` for the common
@@ -72,20 +72,20 @@ let dims = (each(range(N))._select("{_:d}").to_array()._fold()) |> join(", ")
 ```
 
 - **The shorthands need an iterator or an array receiver.** `range(N)` is a `range` value, not an
-  iterator: `error[50503] expecting iterator or array` — write `each(range(N))._select(…)`. Same for
+  iterator: `error[50503] expecting iterator or array` - write `each(range(N))._select(...)`. Same for
   a C++-bound vector field.
 - **`each(...)` is `[unsafe_outside_of_for]`**, arrays included. A `_fold` chain peels it before
   inference; a plain LINQ call needs `unsafe(each(arr))`.
-- **`_fold`'s output type follows the source, not the spelling** — an iterator source folds to
+- **`_fold`'s output type follows the source, not the spelling** - an iterator source folds to
   `iterator<T>`; add `.to_array()` before `._fold()`.
 - **A multi-line chain needs surrounding parentheses.**
-- **`_` is local to the closest enclosing `_<op>(...)`.** Name inner closures (`@@(x) => …`); don't
+- **`_` is local to the closest enclosing `_<op>(...)`.** Name inner closures (`@@(x) => ...`); don't
   nest the placeholder. It does substitute inside string interpolation and inside a
-  `build_string() $(w) { … }` body.
+  `build_string() $(w) { ... }` body.
 - **String `join(arr, sep)` lives in `strings` / `strings_boost`**; LINQ's `join` is the SQL-style
-  two-source equi-join. The typer picks by argument types — "missing argument blk" on a join call
+  two-source equi-join. The typer picks by argument types - "missing argument blk" on a join call
   usually means the string module is not required.
-- **Join selectors need typed parameters** — bare `@@(c) => c.id` gives `error[30341]` plus
+- **Join selectors need typed parameters** - bare `@@(c) => c.id` gives `error[30341]` plus
   `error[30928] can't get field 'id' of auto const&`; struct construction inside one takes **named**
   arguments (`Pair(c = c, o = o)`, never `Pair(c, o)`).
 
@@ -101,7 +101,7 @@ var byId <- _fold(each(orders) |> _select(_.id => _.total) |> to_table())
 ```
 
 `to_table()` gives `table<K;V>` from a kv (or any `k => v` tuple) chain, the `table<K>` set form
-from a scalar chain; duplicate keys keep the last occurrence. Slot order is unspecified — never
+from a scalar chain; duplicate keys keep the last occurrence. Slot order is unspecified - never
 write an order-sensitive expectation over a table chain.
 
 ## What fuses, and what falls back
@@ -109,26 +109,26 @@ write an order-sensitive expectation over a table chain.
 `_fold` splices each recognized shape into one specialized loop; an unrecognized shape still gives
 the right answer, materializing.
 
-**Fuses** — filters and projections into the loop body; every aggregate, element and test
+**Fuses** - filters and projections into the loop body; every aggregate, element and test
 terminator; `take` / `skip` / `take_while` / `skip_while`; `to_array` and the selector-free
 `to_table()`; `order_by |> first` as a streaming minimum, no buffer; `order_by |> take(N)` as a
 bounded heap of N; `distinct` / `distinct_by` as one hash-set lane, also as a gate on that heap;
 `group_by` with a reducing `select`, plus a HAVING filter and a trailing `order_by`; equi-joins on a
-**primitive** key (`group_join` on array and table leads only); `zip` over 2–8 sources. Sources fuse
-symmetrically — arrays, tables (`each_kv` / `keys` / `values`), decs templates, `from_json`,
-`from_xml_node` — each pruned to the fields and lanes the chain reads.
+**primitive** key (`group_join` on array and table leads only); `zip` over 2-8 sources. Sources fuse
+symmetrically - arrays, tables (`each_kv` / `keys` / `values`), decs templates, `from_json`,
+`from_xml_node` - each pruned to the fields and lanes the chain reads.
 
-**Falls back** — `left_join` / `right_join` / `full_outer_join` / `cross_join`; any join whose key
+**Falls back** - `left_join` / `right_join` / `full_outer_join` / `cross_join`; any join whose key
 is not primitive (tuple keys); mixed-source `union` / `except` / `intersect` / `concat` once the
 first source has been transformed; the 3-argument `to_table(key, elementSelector)`; a chained
 `_select(f) |> _select(g)` whose inner selector has side effects; aggregations over `group_by_lazy`
 with a non-reducing `select`.
 
-**Some shapes fuse only in one order** — reorder rather than accept the fallback:
+**Some shapes fuse only in one order** - reorder rather than accept the fallback:
 `reverse().take(N)._select(F)` fuses where `reverse()._select(F).take(N)` does not; `distinct`
 combines with `order_by` only when a `take` bounds it, and `take(N).distinct()` bails;
 `_order_by(K2)._distinct_by(K1)` bails while the distinct-first order fuses; a `_select` placed
-*before* `_skip_while` / `_take_while` blocks the match — push it past them, those predicates
+*before* `_skip_while` / `_take_while` blocks the match - push it past them, those predicates
 running on the source element, not on the projection.
 
 A chain over a decs-template source that no arm claims warns at compile time, naming the call site.
@@ -138,12 +138,12 @@ Suppress it per file with `options _no_linq_perf_warn = true`.
 
 One style per transformation. A comprehension is complete: don't drop `_select` / `_where` / `_fold`
 onto its result, don't feed it into a sequence-consuming primitive (LINQ `join` / `concat` / `zip` /
-`aggregate`, or string `join(arr, sep)`) — the moment one appears, the upstream should be LINQ too —
+`aggregate`, or string `join(arr, sep)`) - the moment one appears, the upstream should be LINQ too - 
 and don't drop a comprehension mid-chain.
 
 ```das
 // Bad:
-let pairs <- join([for (x in customers); x], orders, …)
+let pairs <- join([for (x in customers); x], orders, ...)
 
 // Good:
 let pairs <- customers |> join(orders,

@@ -1,4 +1,4 @@
-# Audio `.dlim` — one load path, borrowed planes
+# Audio `.dlim` - one load path, borrowed planes
 
 The LLM side of the load rail was unified: one `build_image` / `parse_image`, cold builds stream
 from the gguf mapping, the served struct is always image-backed. The audio side was left half
@@ -24,7 +24,7 @@ it out. The LLM rail stopped doing this; audio never started.
 **Latent bug, independent of the above.** `AudioTower`, `Qwen3aTower`, `CanaryEncoder`, and
 `Gemma4aEncoder` call `fmap_close` directly in their finalizers. `WhisperModel` and
 `ParakeetModel` call `image_backing_release`, which is the one that also handles a memory chunk.
-When `cache_via_image_` takes the chunk rail — `DASLLAMA_IMAGE_SAVE=0`, or a failed write — the
+When `cache_via_image_` takes the chunk rail - `DASLLAMA_IMAGE_SAVE=0`, or a failed write - the
 first four `munmap` a malloc'd pointer.
 
 ### Plane inventory
@@ -64,7 +64,7 @@ struct PlaneF  { p : float const? = null; n : int64 = 0l }
 struct PlaneI8 { p : int8  const? = null; n : int64 = 0l }
 ```
 
-with `operator []` (both `int` and `int64` — no implicit promotion), `length`, `empty`. Probed:
+with `operator []` (both `int` and `int64` - no implicit promotion), `length`, `empty`. Probed:
 the accessor reads correctly, `pl.p` still hands a raw `float const?` to a pointer kernel with no
 laundering, and a generic `apply` walk discriminates a plane by shape via
 `typeinfo safe_has_field <p> (field)`.
@@ -75,18 +75,18 @@ already have `serialize_pod_array`.
 
 **The accessor is free under `-jit`, measured.** A cache-resident 4-accumulator sum over 67.1 M
 elements, 7 interleaved reps: raw pointer 15.635 ms, plane accessor in the same module 15.619 ms,
-plane accessor in a *different* module 15.627 ms, cv ≤ 1.24 %. That is ~1.3 elements per cycle in
-all three arms, so the accessor inlines across the module boundary as well as within one — the
+plane accessor in a *different* module 15.627 ms, cv <= 1.24 %. That is ~1.3 elements per cycle in
+all three arms, so the accessor inlines across the module boundary as well as within one - the
 das auto-inline pass being same-module-only does not govern this, because under `-jit` the program
 lowers to one LLVM module. Interpreted and AOT are untested and dasLLAMA runs neither.
 
 **The bounds check is free too, so it ships.** Same rig: checked plane 15.611 ms against the raw
-pointer's 15.608 ms, and against 20.856 ms for the `array<float>` indexing it replaces — the plane
+pointer's 15.608 ms, and against 20.856 ms for the `array<float>` indexing it replaces - the plane
 is safer than a raw pointer and a quarter faster than the status quo, because array indexing pays
 an indirection through the header that an inlined pointer does not. Removing the check is a
 profiling-time question on real kernels, not a design one; it is banked in `PERF_LEDGER.md`.
 
-## Staging is a separate type — this is the actual fix
+## Staging is a separate type - this is the actual fix
 
 The root cause is one struct serving an owner and a borrower. Split them:
 
@@ -100,7 +100,7 @@ struct WhisperStaging {
 }
 ```
 
-`load_X_` fills a staging struct. `build_image` walks it — every plane is an `array<T>` there, so
+`load_X_` fills a staging struct. `build_image` walks it - every plane is an `array<T>` there, so
 the **write side of `dasllama_image.das` needs no change at all**. `parse_image` binds the served
 struct's `Plane` fields. Cold and warm converge on the same borrowed struct, and `Model` keeps
 using the existing array-borrow path until it follows.
@@ -114,41 +114,41 @@ needs a different marker. Decide before Phase 1 starts.
 
 ## Status
 
-**Phase 1 LANDED, Phase 2 LANDED, Phase 3 LANDED FOR WHISPER** (5.29 → 2.12 GB cold-mint peak,
+**Phase 1 LANDED, Phase 2 LANDED, Phase 3 LANDED FOR WHISPER** (5.29 -> 2.12 GB cold-mint peak,
 streamed==eager gated plane-for-plane, fp32 and q8 both). Gemma4a/canary mints (+1.15/+1.33 GB)
-stay staged for now — both sit under serve-side peaks their mints do not dominate, and the
+stay staged for now - both sit under serve-side peaks their mints do not dominate, and the
 long-clip encoder scratch in PERF_LEDGER.md is the bigger memory item. Parakeet (+0.15 GB) is
 not worth streaming.
 
 **Phase 1 LANDED, Phase 2 LANDED** (2026-08-01, branch bbatkin/dasllama-reorg). All six carriers
 serve borrowed planes; no eager form survives; the ownership hack remains only under `Model` and
-the synthetic test probe. The gemma4a teardown panic closed with it — it was the generated
+the synthetic test probe. The gemma4a teardown panic closed with it - it was the generated
 `AsrModel` field-walk delete, fixed by an explicit finalizer. Phase 3 is open, and it is the
 binding half of CODEREVIEW.md's "a mint never holds the whole model": today every audio mint
 stages the full model in owned arrays before the writer runs.
 
 ## Phases
 
-**Phase 1 — representation.** Add `PlaneF`/`PlaneI8` and accessors. Move the small arrays to meta.
+**Phase 1 - representation.** Add `PlaneF`/`PlaneI8` and accessors. Move the small arrays to meta.
 Convert the six carriers field by field, family at a time, `AudioTower` first (`WhisperModel` and
 `Qwen3aTower` nest it). Introduce staging structs; `load_X_` fills staging. Finalizers lose the
 `lock_count` branch and release only the backing. `_builtin_make_temp_array` /
 `_builtin_forget_temp_array` leave the audio side entirely.
 
-**Phase 2 — always map.** Delete the eager-serve arm: `DASLLAMA_IMAGE=0` routes to the in-memory
+**Phase 2 - always map.** Delete the eager-serve arm: `DASLLAMA_IMAGE=0` routes to the in-memory
 chunk rail instead of returning owned arrays, matching `DASLLAMA_IMAGE_SAVE` on the LLM side. Fix
-the four `fmap_close` finalizers to `image_backing_release` — a prerequisite, since Phase 2 makes
+the four `fmap_close` finalizers to `image_backing_release` - a prerequisite, since Phase 2 makes
 the chunk rail reachable in the default configuration. This is a user-visible knob change and
 belongs in `ENVIRONMENT.md`.
 
-**Phase 3 — stream the cold build.** Baselines measured (2026-08-02, m1, max-RSS warm vs cold):
-whisper-turbo 1.48→5.29 GB is THE case — mint 3.6× serve; gemma4a +1.15 GB, canary +1.33 GB on
+**Phase 3 - stream the cold build.** Baselines measured (2026-08-02, m1, max-RSS warm vs cold):
+whisper-turbo 1.48->5.29 GB is THE case - mint 3.6x serve; gemma4a +1.15 GB, canary +1.33 GB on
 top of serve peaks their mints do not dominate; parakeet +0.15 GB, not worth streaming. Order:
-whisper, then gemma4a/canary if their serve-side scratch (the larger finding — see
+whisper, then gemma4a/canary if their serve-side scratch (the larger finding - see
 PERF_LEDGER.md) has not restructured them first. Compute the layout and total size ahead of the first byte
 (the loaders already compute every offset before filling), then transcode plane bytes from the
 source mapping straight into the writer instead of materializing the blob. Peak drops from
-whole-model to one band. This is where the memory win is; Phases 1–2 are correctness.
+whole-model to one band. This is where the memory win is; Phases 1-2 are correctness.
 
 Phase 1 is the large one and splits per family. Phase 3 can land per family too, and does not have
 to land for all six.
@@ -161,27 +161,27 @@ Existing coverage to lean on: `tests/test_model_image.das` (image round-trip),
 New, and they land *with* the phase they cover:
 
 **Phase 1**
-- *Plane accessor unit test* — bind a `PlaneF`/`PlaneI8` over a known byte pattern; check
+- *Plane accessor unit test* - bind a `PlaneF`/`PlaneI8` over a known byte pattern; check
   `length`, `empty`, `operator []` at both index types, and that `pl.p` reaches a pointer kernel.
   Feed the function, check the bytes.
-- *Staging/served name agreement* — per family, assert every staging plane field name has a
+- *Staging/served name agreement* - per family, assert every staging plane field name has a
   matching served `Plane` field and vice versa. A rename that hits one side silently drops a plane
   to empty today; this is the test that makes that loud.
-- *Round-trip per family* — stage from source, build to a chunk, parse back, compare every plane
+- *Round-trip per family* - stage from source, build to a chunk, parse back, compare every plane
   byte-for-byte and every meta scalar against the staged values. Six cells, small models only.
-- *Finalizer owns one thing* — load a carrier from an image, drop it, and assert the backing is
+- *Finalizer owns one thing* - load a carrier from an image, drop it, and assert the backing is
   released once and no plane is freed. `test_model_image.das` loses its `lock_count` reach-in.
 
 **Phase 2**
-- *Chunk rail per family* — force `DASLLAMA_IMAGE_SAVE=0` and load each family; this is the test
+- *Chunk rail per family* - force `DASLLAMA_IMAGE_SAVE=0` and load each family; this is the test
   the four `fmap_close` finalizers fail today.
-- *`DASLLAMA_IMAGE=0` still serves* — the knob changes meaning, so it needs a cell proving a model
+- *`DASLLAMA_IMAGE=0` still serves* - the knob changes meaning, so it needs a cell proving a model
   still loads and transcribes under it.
 
 **Phase 3**
-- *Streamed == eager* — build a family's image both ways and compare the files byte-for-byte,
+- *Streamed == eager* - build a family's image both ways and compare the files byte-for-byte,
   the same shape the LLM streaming rail is gated by.
-- *Peak footprint* — measure peak RSS for a cold audio mint before and after, per family. Report
+- *Peak footprint* - measure peak RSS for a cold audio mint before and after, per family. Report
   the pair (footprint, wall-clock); a load-time trade ships both numbers, not an assumption.
 
 **Every phase**
@@ -192,6 +192,6 @@ New, and they land *with* the phase they cover:
 
 ## Gated on this
 
-`test_gemma4a_audio_oracle` — `can't delete locked array` during teardown after real token
+`test_gemma4a_audio_oracle` - `can't delete locked array` during teardown after real token
 generation. It is a bug in exactly the mechanism this arc deletes, so it is not patched
 separately; it is re-checked after Phase 1.

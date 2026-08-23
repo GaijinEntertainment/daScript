@@ -31,7 +31,7 @@ class public OnlyNttpAnnotation : AstFunctionAnnotation {
         let ok = empty(scan.offenders)
         if (!ok) {
             errors := build_string() $(writer) {
-                writer |> write("only_nttp: '{func.name}' calls extern(s) bound with addExtern:")
+                writer |> write("only_nttp: '{func.name}' calls extern(s) not bound with addExternInline:")
                 for (off in scan.offenders) {
                     writer |> write("\n    {off}")
                 }

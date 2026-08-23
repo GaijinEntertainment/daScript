@@ -1,4 +1,4 @@
-# dasVulkan — roadmap / postponed work
+# dasVulkan - roadmap / postponed work
 
 The raw binding, the boost layer (handles, vk_view structs, sType ctors, command
 wrappers, windowing), array-of-struct marshalling, the resizable swapchain, the
@@ -6,10 +6,10 @@ independent-count model, the Linux lavapipe test suite, and the documentation
 site all shipped. What's deliberately left, with enough context to pick each up
 cold:
 
-## Tutorial arc 09–13 (current)
+## Tutorial arc 09-13 (current)
 
-Tutorials 01–08 shipped (triangle, mandelbrot, sdf, cube, instancing, skybox,
-particles, shadow mapping). Tutorials 09–13 cover the non-esoteric remainder of
+Tutorials 01-08 shipped (triangle, mandelbrot, sdf, cube, instancing, skybox,
+particles, shadow mapping). Tutorials 09-13 cover the non-esoteric remainder of
 Vulkan with five tutorials, each unblocking a discrete capability gap. Deferred:
 tessellation, geometry shaders (obviated by mesh), push descriptors / timeline
 semaphores / sync2 (correctness rails, not visual), sparse, multiview,
@@ -25,7 +25,7 @@ conservative raster (esoteric), hardware ray tracing (booked separately).
 
 ### Implementation gap map (from the 2026-06-17 audit)
 
-**dasVulkan side** (this repo) is mostly there — gaps are quick wrappers:
+**dasVulkan side** (this repo) is mostly there - gaps are quick wrappers:
 
 - 09: `cmd_begin_rendering` wrapper missing (raw `vkCmdBeginRendering` bound in
   `src/dasVULKAN.gen_funcs_15.cpp`; `cmd_end_rendering` already wrapped at
@@ -50,7 +50,7 @@ conservative raster (esoteric), hardware ray tracing (booked separately).
 lifts:
 
 - 09: nothing emitter-side.
-- 10: MRT — emitter enforces single `@location` per global at
+- 10: MRT - emitter enforces single `@location` per global at
   `spirv_emit.das:372-374`; needs array-of-locations support. `subpassInput`
   type missing entirely; needs `OpTypeImage Dim=SubpassData`, `subpassLoad`
   intrinsic, `InputAttachmentIndex` decoration surface (grammar has the
@@ -68,7 +68,7 @@ lifts:
   `[vulkan_mesh_shader]` / `[vulkan_task_shader]` annotation classes,
   `gl_MeshVerticesEXT[]` / `gl_PrimitiveTriangleIndicesEXT[]` builtins,
   `SetMeshOutputsEXT` / `EmitMeshTasksEXT` intrinsics. The mesh-shader emitter
-  surface is the single biggest piece of the arc — likely 2–3 sub-PRs.
+  surface is the single biggest piece of the arc - likely 2-3 sub-PRs.
 
 ### PR-by-PR plan
 
@@ -76,22 +76,22 @@ Each line is one PR. dasVulkan PRs land in this repo; dasSpirv PRs land in
 daslang main tree (`modules/dasSpirv/`). Tutorial PRs land here, gated on their
 impl prereqs. Mark `[merged]` and the PR number inline as each lands.
 
-1. dasVulkan — `cmd_begin_rendering` wrapper.
-2. dasVulkan — **Tutorial 09** (MSAA + dynamic rendering on existing cube scene).
-3. daslang — dasSpirv MRT: multiple `@location` outputs from fragment.
-4. daslang — dasSpirv subpass inputs: `subpassInput` + `OpTypeImage
+1. dasVulkan - `cmd_begin_rendering` wrapper.
+2. dasVulkan - **Tutorial 09** (MSAA + dynamic rendering on existing cube scene).
+3. daslang - dasSpirv MRT: multiple `@location` outputs from fragment.
+4. daslang - dasSpirv subpass inputs: `subpassInput` + `OpTypeImage
    Dim=SubpassData` + `subpassLoad` + `InputAttachmentIndex` decoration.
-5. dasVulkan — **Tutorial 10** (deferred shading — G-buffer + lighting subpass).
-6. dasVulkan — **Tutorial 11** (HDR + bloom; no impl prereq).
-7. daslang — dasSpirv `nonuniformEXT()` + `gl_DrawID` builtin.
-8. dasVulkan — bindless helper (descriptor-set-layout builder with
+5. dasVulkan - **Tutorial 10** (deferred shading - G-buffer + lighting subpass).
+6. dasVulkan - **Tutorial 11** (HDR + bloom; no impl prereq).
+7. daslang - dasSpirv `nonuniformEXT()` + `gl_DrawID` builtin.
+8. dasVulkan - bindless helper (descriptor-set-layout builder with
    `VkDescriptorSetLayoutBindingFlagsCreateInfo` pNext typed in).
-9. dasVulkan — **Tutorial 12** (GPU-driven culling + indirect + bindless).
-10. daslang — dasSpirv mesh-shader surface (annotations + execution model
-    dispatch + builtins + intrinsics). Likely splits into 2–3 sub-PRs.
-11. dasVulkan — mesh extension feature-enable helper +
+9. dasVulkan - **Tutorial 12** (GPU-driven culling + indirect + bindless).
+10. daslang - dasSpirv mesh-shader surface (annotations + execution model
+    dispatch + builtins + intrinsics). Likely splits into 2-3 sub-PRs.
+11. dasVulkan - mesh extension feature-enable helper +
     `cmd_draw_mesh_tasks_indirect_ext` wrapper.
-12. dasVulkan — **Tutorial 13** (cluster culling task → meshlet mesh → fragment).
+12. dasVulkan - **Tutorial 13** (cluster culling task -> meshlet mesh -> fragment).
 
 About 80% of the implementation work concentrates in PRs 3, 4, and 10. The
 others are quick. Tutorials write themselves once their impl PRs land.
@@ -113,7 +113,7 @@ don't show up strongly in the rendered output. Known soft spots:
   procedural bump fields are very subtle on a flat floor / box. A richer
   texture (bricks with deeper mortar, knurled metal on the cube) would
   push the per-fragment perturbation visibly into the lighting.
-- **Tutorial 10 point lights**: visible with the current 4×-boosted
+- **Tutorial 10 point lights**: visible with the current 4x-boosted
   intensity but only on flat ground. A scene with vertical surfaces /
   multiple receivers would show off the per-pixel-cost-constant-in-light
   -count payoff more obviously.
@@ -137,20 +137,20 @@ Per-binding multi-UBO auto-bind stays unimplemented.
 
 ## p-prefix strip on boost field names
 
-The boost view structs keep Vulkan's C field names verbatim — `pAttachments`,
-`pApplicationInfo`, `renderPass`, `queueFamilyIndex` — even though in daslang
+The boost view structs keep Vulkan's C field names verbatim - `pAttachments`,
+`pApplicationInfo`, `renderPass`, `queueFamilyIndex` - even though in daslang
 `pAttachments` is just `array<ImageView>`, not a pointer. The `p` / `pp`
 Hungarian prefix is meaningless on the boost side.
 
-A p-strip pass would rename the boost field to drop the prefix (`pAttachments` →
+A p-strip pass would rename the boost field to drop the prefix (`pAttachments` ->
 `attachments`). It's purely cosmetic: the generated marshalling maps boost-field
-→ raw `Vk*`-field by position, so the boost-side name is free to change without
+-> raw `Vk*`-field by position, so the boost-side name is free to change without
 touching the C side.
 
 Deferred because: (1) it's ergonomics, not function; (2) it's a churning
 public-API rename touching every example/test that sets a field by name; (3) it's
-entangled with two related decisions best made in the same pass — whether to drop
-the auto-derived `…Count` fields from the public surface entirely, and whether to
+entangled with two related decisions best made in the same pass - whether to drop
+the auto-derived `...Count` fields from the public surface entirely, and whether to
 go full snake_case. Do it once, decisively, with the convention nailed down.
 
 ## Typed pNext chains
@@ -176,19 +176,19 @@ typed API needs the `structextends` data wired through the emitter, a
 scratch/lifetime mechanism for chained structs, and an API-shape decision
 (fluent builder vs. array-of-variant).
 
-## macOS — **DONE** (MoltenVK)
+## macOS - **DONE** (MoltenVK)
 
 macOS works with no opt-in: `brew install molten-vk vulkan-loader vulkan-tools`
 and the offscreen suite + windowed examples run on Apple GPUs via MoltenVK. Three
 pieces made it work, all platform-agnostic:
 
-- **Loader discovery** — `das_volkInitialize` (`src/dasVULKAN.main.cpp`, `__APPLE__`)
+- **Loader discovery** - `das_volkInitialize` (`src/dasVULKAN.main.cpp`, `__APPLE__`)
   falls back to dlopen'ing the loader from `$VULKAN_SDK` / the Homebrew prefix when
   volk's built-in search misses it, then wires volk via `volkInitializeCustom`.
-- **Portability** — `create_instance` (`daslib/vulkan_boost.das`) auto-enables
+- **Portability** - `create_instance` (`daslib/vulkan_boost.das`) auto-enables
   `VK_KHR_portability_enumeration` + the create flag when the loader advertises it
   (else MoltenVK returns `ERROR_INCOMPATIBLE_DRIVER`). No-op on Win/Linux.
-- **Metal surface** — `vk_surface_from_native` creates a `VkSurfaceKHR` from a
+- **Metal surface** - `vk_surface_from_native` creates a `VkSurfaceKHR` from a
   `CAMetalLayer` (`vkCreateMetalSurfaceEXT`); the Cocoa/QuartzCore code is isolated
   to `src/dasVULKAN.metal.mm`. Windowed apps call
   `glfwInitVulkanLoader(vk_get_instance_proc_addr())` before `glfwInit` so GLFW
@@ -196,7 +196,7 @@ pieces made it work, all platform-agnostic:
 
 Known limitation: the `CAMetalLayer.contentsScale` is set once at attach time
 (retina-correct for the window's current display). A window dragged to a
-different-DPI display mid-session keeps its original scale — a proper fix needs a
+different-DPI display mid-session keeps its original scale - a proper fix needs a
 display-change hook reconciling `contentsScale` alongside the existing
 swapchain-extent recreation. Deferred (single-display is the common case).
 
@@ -230,7 +230,7 @@ the handoff is seamless, then destroys the old one after.
 
 ## The skipped command / struct tail
 
-The struct emitter skips ~182 composites and the command emitter ~124 commands —
+The struct emitter skips ~182 composites and the command emitter ~124 commands - 
 the irregular long tail: structs/commands whose params are flags-output, raw
 `PFN_*` function pointers, foreign/opaque types, or other shapes the uniform
 vk_view / classifier rules don't cover. Each is logged at generation time. Most
@@ -241,7 +241,7 @@ are exotic extensions; revisit case-by-case if a consumer needs one.
 `cmake/DasVulkanCompileShader.cmake` (+ its `include` at `CMakeLists.txt:21`) is
 the last GLSL-era artifact: a consumer-facing glslangValidator/spirv-opt macro,
 unused by the repo itself since the dasSpirv migration ("ZERO GLSL, ZERO
-committed .spv" — dasSpirv MASTERPLAN). Decision (2026-07-16): shaders are
+committed .spv" - dasSpirv MASTERPLAN). Decision (2026-07-16): shaders are
 always das-authored, the helper goes; deletion deferred ~2 weeks in case a
 consumer objects. Delete the file + the include line; nothing else references
 it.

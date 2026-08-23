@@ -1,7 +1,7 @@
 # Copy-Pasting strudel.cc Patterns into daslang
 
-Read this skill when the user has a pattern from strudel.cc — a line or
-block of JavaScript like ``s("bd sd").fast(2).jux(rev)`` — and wants
+Read this skill when the user has a pattern from strudel.cc - a line or
+block of JavaScript like ``s("bd sd").fast(2).jux(rev)`` - and wants
 to run it under daslang's strudel library. This is about **translating
 user patterns**, not porting library features. For the library-side
 "implement this primitive in daslang" workflow, the public API already
@@ -10,11 +10,11 @@ covers almost everything strudel.cc users rely on; use
 
 ## Where strudel.cc patterns come from
 
-- The REPL at https://strudel.cc — everything on the front page is a
+- The REPL at https://strudel.cc - everything on the front page is a
   pattern
 - Example gallery: https://strudel.cc/workshop/
 - Upstream source, for behavioural ground-truth:
-  https://github.com/tidalcycles/strudel — use `WebFetch` on specific
+  https://github.com/tidalcycles/strudel - use `WebFetch` on specific
   files rather than cloning
 
 ## The five mechanical rewrites
@@ -22,7 +22,7 @@ covers almost everything strudel.cc users rely on; use
 Doing these five in order turns almost every strudel.cc pattern into a
 valid daslang expression. Apply them top-down on the pasted snippet.
 
-### 1. Method chain → pipe chain
+### 1. Method chain -> pipe chain
 
 ```
 // strudel.cc
@@ -36,12 +36,12 @@ Every ``.name(args)`` becomes ``|> name(args)``. Chains of four or
 five stages are normal.
 
 Note that daslang **does** support ``.method()`` as sugar for
-``method(receiver, ...)`` — but only on **struct** types. ``Pattern``
+``method(receiver, ...)`` - but only on **struct** types. ``Pattern``
 is a ``lambda<...>`` typedef, not a struct, so ``s("bd").fast(2.0)``
 fails to compile. Pipe (``|>``) is the correct form for strudel
 chains, and it is faster to compile than method syntax anyway.
 
-To break a long chain across lines, wrap it in ``(...)`` — daslang
+To break a long chain across lines, wrap it in ``(...)`` - daslang
 permits newlines **anywhere inside** parens, square brackets, and
 table-literal braces:
 
@@ -62,44 +62,44 @@ Without the surrounding parens the chain must be on one line
 
 Every scalar pattern modifier accepts ``int``, ``float``, **or**
 ``double`` (the param type is the union ``int | float | double``), so
-bare strudel.cc numbers translate directly — no suffix juggling:
+bare strudel.cc numbers translate directly - no suffix juggling:
 
 ```
-.fast(2)        →  |> fast(2)       // bare int is fine
-.gain(0.5)      →  |> gain(0.5)
-.note(60)       →  |> note(60)
-.speed(2)       →  |> speed(2)      // (used to need 2.0)
-.delay(0.25)    →  |> delay(0.25)
-.orbit(1)       →  |> orbit(1)
+.fast(2)        ->  |> fast(2)       // bare int is fine
+.gain(0.5)      ->  |> gain(0.5)
+.note(60)       ->  |> note(60)
+.speed(2)       ->  |> speed(2)      // (used to need 2.0)
+.delay(0.25)    ->  |> delay(0.25)
+.orbit(1)       ->  |> orbit(1)
 ```
 
 ``2``, ``2.0``, and ``2.0lf`` are all accepted at the same call site.
-(This is a recent change — older code wrote ``fast(2.0lf)`` /
+(This is a recent change - older code wrote ``fast(2.0lf)`` /
 ``speed(2.0)`` because time funcs took ``double`` and effect funcs
 took ``float``. Both forms still compile; bare ints are now simplest.)
 
-### 3. Bare identifiers as transforms → lambda literals
+### 3. Bare identifiers as transforms -> lambda literals
 
 strudel.cc passes **function names** to combinators; daslang wants a
 typed lambda:
 
 ```
-.jux(rev)              →  |> jux(@(x) => rev(x))
-.off(1/8, fast(2))     →  |> off(0.125, @(x) => fast(x, 2))
-.sometimes(fast(2))    →  |> sometimes(@(x) => fast(x, 2))
+.jux(rev)              ->  |> jux(@(x) => rev(x))
+.off(1/8, fast(2))     ->  |> off(0.125, @(x) => fast(x, 2))
+.sometimes(fast(2))    ->  |> sometimes(@(x) => fast(x, 2))
 ```
 
 **Use ``@(x) =>`` (a capture lambda), NOT ``@@(x) =>``.** Combinators
 (``jux``, ``off``, ``sometimes``, ``superimpose``, ``chunk``,
-``when_cycle``, …) take ``PatternTransform = lambda<(Pattern):Pattern>``.
+``when_cycle``, ...) take ``PatternTransform = lambda<(Pattern):Pattern>``.
 A no-capture ``@@(x) =>`` is a *function pointer*, which does not match
 the ``lambda`` type and fails type inference. ``@(x) =>`` is correct.
 
-**``every`` is the exception — it takes two PATTERNS, not a transform.**
+**``every`` is the exception - it takes two PATTERNS, not a transform.**
 daslang's signature is ``every(n, pat_on, pat_off)``: it plays ``pat_on``
-on cycles 0, n, 2n, … and ``pat_off`` otherwise. There is no
+on cycles 0, n, 2n, ... and ``pat_off`` otherwise. There is no
 ``every(n, transform)`` overload, so build both branches explicitly
-(construct the pattern twice rather than aliasing one — ``every`` moves
+(construct the pattern twice rather than aliasing one - ``every`` moves
 both into its closure):
 
 ```
@@ -130,7 +130,7 @@ chain, build it inside the lambda body:
 stack(s("bd"), s("hh*4"))
 
 // daslang
-stack([s("bd"), s("hh*4")])     // array of patterns — note the brackets
+stack([s("bd"), s("hh*4")])     // array of patterns - note the brackets
 ```
 
 Same for ``cat``, ``fastcat``, ``randcat``, ``choose``, ``wchoose``.
@@ -166,7 +166,7 @@ def main() {
 }
 ```
 
-Every tutorial under ``tutorials/daStrudel/`` uses this shape — copy
+Every tutorial under ``tutorials/daStrudel/`` uses this shape - copy
 the harness from the closest one. For offline WAV rendering instead of
 live audio, see ``examples/daStrudel/features/feature_common.das``
 (``play_feature_cps`` with ``--wav PATH``).
@@ -174,14 +174,14 @@ live audio, see ``examples/daStrudel/features/feature_common.das``
 ## Samples, synths, and soundfonts
 
 daslang ships with **built-in drum synthesis**. The following sample
-names are synthesised out of the box — no sample pack needed:
+names are synthesised out of the box - no sample pack needed:
 
 ``bd``, ``sd``, ``hh`` / ``hh_pedal``, ``oh`` / ``hh_open``, ``cp``,
 ``tom_low``, ``tom_high``, ``ride`` / ``ride_bell``, ``crash``,
 ``sidestick``, ``cowbell`` / ``cb``, ``tambourine`` / ``tamb``.
 
 So ``s("bd sd hh cp")`` pasted from strudel.cc produces audio
-immediately — an 808-style kick, a snare with wires, a noise-burst
+immediately - an 808-style kick, a snare with wires, a noise-burst
 hi-hat, a clap. The synth is "decent", not sample-accurate; if the
 user wants the exact strudel.cc timbre, load the upstream sample
 pack (option 1 below).
@@ -212,7 +212,7 @@ effort:
 
    See :ref:`tutorial_dastrudel_synthesis` for the full list:
    ``sine``, ``sawtooth``, ``square``, ``triangle``, ``supersaw``,
-   ``pink``, ``white``. **Note the exact names** — strudel.cc aliases
+   ``pink``, ``white``. **Note the exact names** - strudel.cc aliases
    ``sawtooth`` as ``saw``; daslang does not. ``s("saw")`` falls
    through to silence.
 
@@ -230,7 +230,7 @@ effort:
 In daslang, ``orbit`` selects a per-orbit effect bus with **independent
 reverb / delay / chorus** instances. ``room`` sends to the orbit's
 reverb, ``delay`` to its delay, ``chorus`` to its chorus. Voices on
-different orbits don't share FX state — splitting orbits is how you
+different orbits don't share FX state - splitting orbits is how you
 get separate reverb tails or chorus rates for the kick vs the lead.
 ``orbit(0)`` is the default. See ``examples/daStrudel/features/orbit_*.das``
 for canonical patterns.
@@ -249,8 +249,8 @@ Setters flip an ``hrtf_active`` flag on the event; the scheduler
 routes the dry signal and the orbit-FX sends through **two**
 per-voice ``ma_hrtf`` instances (``hrtf_l`` + ``hrtf_r``) for
 binaural-stereo HRTF: each input channel becomes a virtual source
-at azimuth -/+ 30°, summed at the output. Pan and HRTF are
-orthogonal — pan controls source width, HRTF controls position.
+at azimuth -/+ 30 deg, summed at the output. Pan and HRTF are
+orthogonal - pan controls source width, HRTF controls position.
 Best on headphones; cheaper to skip and use ``pan`` alone when
 externalisation isn't needed. See
 :ref:`tutorial_dastrudel_hrtf_position` and
@@ -260,7 +260,7 @@ externalisation isn't needed. See
 
 ### Mini-notation ``bd(3,8)`` Euclidean form
 
-Parses directly — paste it verbatim::
+Parses directly - paste it verbatim::
 
     s("bd(3,8)")        // = euclid(s("bd"), 3, 8)
     s("bd(3,8,2)")      // = euclidRot(s("bd"), 3, 8, 2)
@@ -272,9 +272,9 @@ are also public.
 
 All available::
 
-    .chop(4)              →  |> chop(4)                    // n slices per event, in place
-    .striate(4)           →  |> striate(4)                 // n slices spread across the cycle
-    .slice(4, "0 1 2 3")  →  |> slice(4, note("0 1 2 3"))  // slices in index-pattern order
+    .chop(4)              ->  |> chop(4)                    // n slices per event, in place
+    .striate(4)           ->  |> striate(4)                 // n slices spread across the cycle
+    .slice(4, "0 1 2 3")  ->  |> slice(4, note("0 1 2 3"))  // slices in index-pattern order
 
 ### Method aliases that don't exist
 
@@ -282,7 +282,7 @@ All available::
 Expand to the parametric form:
 
 ```
-.jux_rev()   →  |> jux(@(x) => rev(x))
+.jux_rev()   ->  |> jux(@(x) => rev(x))
 ```
 
 ### Backtick-heavy mini-notation
@@ -308,7 +308,7 @@ strudel.cc accepts a pattern as the argument to a setter::
 
     s("bd*4").gain("1 0.5")
 
-daslang has pattern-valued overloads for every setter — the same
+daslang has pattern-valued overloads for every setter - the same
 syntax works::
 
     s("bd*4") |> gain(s("1 0.5"))
@@ -318,13 +318,13 @@ If ``gain("1 0.5")`` doesn't compile, wrap the pattern literal in
 
 ## Verification loop
 
-1. **Compile-check** — `bin/daslang -compile-only <file>.das`
+1. **Compile-check** - `bin/daslang -compile-only <file>.das`
    exits 0. Syntax and type errors surface here.
-2. **Listen** — run the ported pattern for 8-16 seconds. Compare to a
+2. **Listen** - run the ported pattern for 8-16 seconds. Compare to a
    mental image of the strudel.cc playback (or load the strudel.cc
    REPL side-by-side).
 3. **If it sounds wrong:** check the three most common culprits in
-   order — (a) missing samples falling back to silence, (b)
+   order - (a) missing samples falling back to silence, (b)
    tempo-aware ADSR making the envelope feel different, (c) a
    transform passed as ``@@(x) =>`` (function pointer) instead of
    ``@(x) =>`` (lambda), which fails to compile against
@@ -343,7 +343,7 @@ If ``gain("1 0.5")`` doesn't compile, wrap the pattern literal in
    * - ``.jux(rev)``
      - ``\|> jux(@(x) => rev(x))``
    * - ``p.every(4, rev)``
-     - ``every(4, p_rev, p)`` — two patterns, not a transform
+     - ``every(4, p_rev, p)`` - two patterns, not a transform
    * - ``stack(a, b, c)``
      - ``stack([a, b, c])``
    * - ``"bd(3,8)"``
@@ -357,7 +357,7 @@ If ``gain("1 0.5")`` doesn't compile, wrap the pattern literal in
    * - ``.note(60)``
      - ``\|> note(60)``
    * - ``s("saw")``
-     - ``s("sawtooth")`` — no ``saw`` alias
+     - ``s("sawtooth")`` - no ``saw`` alias
    * - auto-play
      - ``play(pat, seconds)`` harness + ``[export] def main``
 

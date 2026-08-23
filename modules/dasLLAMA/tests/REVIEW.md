@@ -1,25 +1,25 @@
 # dasLLAMA tests Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md`. Planned work: `../THINKING.md`.
 
-**Every PR runs `run.das -- --suite model-free`, plus every test here the change reaches — never
+**Every PR runs `run.das -- --suite model-free`, plus every test here the change reaches - never
 the whole directory.** A change reaches a test when it alters anything the test's result
-depends on — the test file, a shared helper, engine code it exercises, an in-tree fixture or
+depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture or
 corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
 **A test file with at least one cell that RUNS (not skips) with no model file present is
 listed in `run.das`'s `model-free` suite in the same change it is added.**
 
 **A test file in no `run.das` model suite (every suite but `model-free`), whose every cell is
-model-gated, is listed in the `model-free` suite too and skips honestly without its models** —
+model-gated, is listed in the `model-free` suite too and skips honestly without its models** - 
 the per-PR gate then runs it wherever the models are stocked.
 
 **A test file in a `run.das` model suite (every suite but `model-free`) runs only through
 `run.das`; dastest invoked directly on such a file is a defect. A `model-free` file runs
 through the runner or under plain dastest.**
 
-**Every test RUN runs under `-jit`** — never the interpreter, never AOT. A compile-only CI lane
+**Every test RUN runs under `-jit`** - never the interpreter, never AOT. A compile-only CI lane
 passes dastest's `--compile-only`; a model-gated suite run interpreted, with skips standing in
 for the guard, is a defect.
 
@@ -32,16 +32,16 @@ instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
 same change.**
 
 **A new `model-free`-listed or suite-less test file whose name does not say what it covers
-gets a `CLAUDE.md` entry in the same change** — `run.das`'s `model-free` list is the
+gets a `CLAUDE.md` entry in the same change** - `run.das`'s `model-free` list is the
 complete census, the `CLAUDE.md` map is deliberately partial.
 
-**A new, renamed, or dropped arm name — the literal passed to `arm_on(t, name)`
-(`_model_tier.das`), what `--arm` matches — updates the arm census in `CLAUDE.md`'s "Arm
-filter mechanics" section in the same change** — an arm the census does not name is
+**A new, renamed, or dropped arm name - the literal passed to `arm_on(t, name)`
+(`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm
+filter mechanics" section in the same change** - an arm the census does not name is
 unreachable to whoever is choosing what to run.
 
-**Weakening `test_program_roots.das` — dropping a root from its sweep, loosening its
-`options stack = 524288` assert, or relaxing its prefill-intent assert — is a defect.**
+**Weakening `test_program_roots.das` - dropping a root from its sweep, loosening its
+`options stack = 524288` assert, or relaxing its prefill-intent assert - is a defect.**
 
 **Weakening `test_env_registry.das` is a defect.** It enforces the knob contract that
 `../ENVIRONMENT.md` describes.
@@ -49,30 +49,30 @@ unreachable to whoever is choosing what to run.
 **Weakening `test_model_specs.das` is a defect.** It is the gate on the model-set table
 (`../performance/model_specs.das`).
 
-**Weakening `test_exchange_schema.das` or `test_bench_records_schema.das` — loosening an
-assert, dropping one, or narrowing the corpus either one sweeps — is a defect** — they gate
+**Weakening `test_exchange_schema.das` or `test_bench_records_schema.das` - loosening an
+assert, dropping one, or narrowing the corpus either one sweeps - is a defect** - they gate
 the real `write_bench_records` output.
 
-**Weakening `test_scheduler.das`'s media-stream bypass check — a media stream attaches no
-cached hit at admit (`prefix_attach`) and donates no pages at reap (`donate_stream`) — is a
+**Weakening `test_scheduler.das`'s media-stream bypass check - a media stream attaches no
+cached hit at admit (`prefix_attach`) and donates no pages at reap (`donate_stream`) - is a
 defect.** Cache keys are token ids, and the KV past the splice does not follow from them.
 
 **A test passes or skips explicitly on every platform.** A test that silently vanishes on one
-platform is a defect, and so is a zero-assertion pass — a cell whose whole body is
+platform is a defect, and so is a zero-assertion pass - a cell whose whole body is
 platform-gated prints a skip or feint on the platforms where that body compiles out.
 
 **A skip gate keys on a device capability, a run-mode knob's value, or a stocked fixture beside
-the models (a model file, an mmproj, an oracle dump — a model gate) — never on the existence of
+the models (a model file, an mmproj, an oracle dump - a model gate) - never on the existence of
 an artifact this repo's build or a previous test run produced (a mint, a generated binary, a
 dump a test wrote).** An artifact gate goes permanently false when its producer moves.
 
-**A test loading a model over 6 GiB runs only under `DASLLAMA_PARITY_FULL=1`** — a final pre-PR
+**A test loading a model over 6 GiB runs only under `DASLLAMA_PARITY_FULL=1`** - a final pre-PR
 gate, not the iteration loop. Here the spelling is `model_available` (`_model_tier.das`); a
 serving leg, which cannot require this folder's fixtures, open-codes the same gate. Check what a
 test loads first.
 
-**Every suite but `test_model_image.das` and `test_model_image_vulkan.das` — the image-rail
-coverage pair (mint, map, GC, flavors) — loads each carrier through its own loader, never the
+**Every suite but `test_model_image.das` and `test_model_image_vulkan.das` - the image-rail
+coverage pair (mint, map, GC, flavors) - loads each carrier through its own loader, never the
 `.dlim` image rail (`load_model`, `load_model_cached`, `load_model_image`):** decoders through
 `load_model_` (`../dasllama/dasllama_load.das`); towers, embedders, and union carriers through
 their family or carrier loaders.
@@ -81,11 +81,11 @@ their family or carrier loaders.
 test feeding the new value and checking the result.** "The model still runs" is not that
 test.
 
-**A predicate whose value is fixed by the build platform — it cannot differ between two runs on
-one machine — is tested through the argv it gates or the mode it selects**, never through the
+**A predicate whose value is fixed by the build platform - it cannot differ between two runs on
+one machine - is tested through the argv it gates or the mode it selects**, never through the
 predicate's value.
 
-**An added, moved, or edited registration's test observes reachability** — the registered
+**An added, moved, or edited registration's test observes reachability** - the registered
 thing is reached through the registry, not called directly.
 
 **A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
@@ -104,61 +104,61 @@ difference.
 **A kernel-unit arm whose property a CPU oracle can witness compares its kernel against that
 oracle.**
 
-**A kernel-unit arm testing cross-dispatch bit-identity — a property no CPU oracle can
-witness — compares GPU against GPU with its output buffers prefilled with a sentinel.**
+**A kernel-unit arm testing cross-dispatch bit-identity - a property no CPU oracle can
+witness - compares GPU against GPU with its output buffers prefilled with a sentinel.**
 
 **A kernel-unit arm whose output plane is its input plane, and whose CPU oracle does not
 differ from the input by construction, pairs its compare with an assert that the output
-differs from the input at a known index** — an in-place kernel that never ran leaves the
+differs from the input at a known index** - an in-place kernel that never ran leaves the
 input, which can wrongly satisfy a tolerant compare.
 
-**Every ASR family has a token-for-token oracle cell** — one comparing a transcript against a
+**Every ASR family has a token-for-token oracle cell** - one comparing a transcript against a
 reference leg, external dump or CPU control alike.
 
-**A stocked artifact a test in this folder loads — a model file, mmproj, image fixture, or
-oracle dump — has a row in `../performance/model_specs.das` (or `asr_catalog` in
+**A stocked artifact a test in this folder loads - a model file, mmproj, image fixture, or
+oracle dump - has a row in `../performance/model_specs.das` (or `asr_catalog` in
 `../performance/profile_common.das`), rides a row's `companions` list, has a convert script
 checked in beside the table in `../performance/`, or (an oracle dump) has a mint script that
 regenerates it, beside the dumps under `models_dir()`, named in the test that loads the
 dump.**
 
-**A test that reads a vision encode oracle dump names the minting arm in its header — the
+**A test that reads a vision encode oracle dump names the minting arm in its header - the
 backend, the flash-attention setting, and the mmproj precision the dump came from.**
 
 **A cell pins every driver hook and serving-lane knob its claim depends on, and restores it
-after** — the Metal driver hooks `set_metal_tower`, `set_metal_wdec`, `set_metal_wdec_step`
+after** - the Metal driver hooks `set_metal_tower`, `set_metal_wdec`, `set_metal_wdec_step`
 (OFF for a CPU-served or f32-decoder claim) and the family serving-lane pins
-`set_<family>_q8` (false for an exact-plane claim, true for a q8 claim) — never a runtime
+`set_<family>_q8` (false for an exact-plane claim, true for a q8 claim) - never a runtime
 decline standing in for a pin. The mechanism (why the hooks flip legs silently) is
 `CLAUDE.md`'s "Metal fixtures" section.
 
 **A cell asserting the UNPINNED default lane compares against
-`float_batch_override_active()`, never against a hardcoded lane** — the accelerate
+`float_batch_override_active()`, never against a hardcoded lane** - the accelerate
 float-batch tier moves the default per box; the assert is on the lane the tier selects, not
 on the predicate's own value.
 
-**A cell that encodes, preprocesses, or asserts on media bytes an encoder consumes — pixels
-or audio samples, not a `.dlim` model image — with no model loaded builds its fixture
+**A cell that encodes, preprocesses, or asserts on media bytes an encoder consumes - pixels
+or audio samples, not a `.dlim` model image - with no model loaded builds its fixture
 procedurally and pins its expectations in-repo.**
 
-**Any media a test feeds an embedder — an image or an audio clip — is a fixture the test
-builds, or is previewable via `DASLLAMA_VISION_DUMP` (images)** — a red never requires adding
+**Any media a test feeds an embedder - an image or an audio clip - is a fixture the test
+builds, or is previewable via `DASLLAMA_VISION_DUMP` (images)** - a red never requires adding
 instrumentation before a human can see what the model consumed.
 
-**A tier-1 media fixture — one an embedder-parity cell regenerates in-test and compares
-against an oracle dump — has an exact-value generator.** A generator running libm
+**A tier-1 media fixture - one an embedder-parity cell regenerates in-test and compares
+against an oracle dump - has an exact-value generator.** A generator running libm
 transcendentals is not float-portable and its cell is a defect; orientation coverage uses
 shaped exact fixtures.
 
 **An embedding-parity cell names its fixture and logs the measured maxdiff on green as well
 as red.**
 
-**A new or loosened tolerance bar ships a control the bar reds — a poison, a knockout, or a
-cross-lane witness — in the same change.** A bar nothing has ever exceeded is not known to
+**A new or loosened tolerance bar ships a control the bar reds - a poison, a knockout, or a
+cross-lane witness - in the same change.** A bar nothing has ever exceeded is not known to
 discriminate.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
-change** — the wire-shape pins, the render pins, and a live server leg gated on the family's
+change** - the wire-shape pins, the render pins, and a live server leg gated on the family's
 smallest GGUF that runs on the small tier (the file homes are `CLAUDE.md`'s "Model-free /
 no-arm tests" and "Out-of-folder test files" notes). A family whose vocab lacks the markers
 has no format to test.

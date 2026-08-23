@@ -14,123 +14,123 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 
 | File | Description |
 |---|---|
-| `_common.das` | Shared helper module — random number generation, shuffling, intersection helpers (not a benchmark) |
-| `_slot_map.das` | SlotMap template macro module — wraps hash maps as ID-based slot allocators (not a benchmark) |
+| `_common.das` | Shared helper module - random number generation, shuffling, intersection helpers (not a benchmark) |
+| `_slot_map.das` | SlotMap template macro module - wraps hash maps as ID-based slot allocators (not a benchmark) |
 | `test02.das` | Sequential insert + read of 600K elements across builtin table, cuckoo, and flat hash maps |
-| `test03.das` | Insert 1M unique random numbers, clear, re-insert — builtin table, cuckoo, and flat hash maps |
-| `test04.das` | Insert 1M unique random numbers then erase all — tests erase performance |
-| `test05.das` | Overwrite same key (key=3) 300K times — single-key hot-path update performance |
-| `test06.das` | Insert 1M random keys with 10% collisions, incrementing struct value — collision handling |
-| `test07.das` | Insert 1M random keys with 50% collisions, incrementing struct value — heavy collision |
-| `test08.das` | Insert 1M random numbers then look up all via key_exists — lookup-only performance |
-| `test09.das` | Insert 1M random numbers then look up and sum via get() callback — read performance |
-| `test10.das` | Pure insert of 1M unique random numbers — insert-only (no read, no clear) |
-| `test11.das` | SlotMap adapter insert of 1M random numbers — monotonic uint64 IDs, entity allocation pattern |
-| `test12.das` | Pathological key distribution — 8K sequential + random keys (100K total) with deliberately bad hash |
-| `test13.das` | `hash(string)` microbenchmark — short vs long keys; inlined FNV intrinsic (JIT) vs bound C++ builtin (interp) |
-| `test14.das` | Large string-keyed builtin table (open-addressed, inlined find/at) vs int reference — sizes the large-string lookup against the int reference; `_fresh`/`_same` isolate strcmp |
+| `test03.das` | Insert 1M unique random numbers, clear, re-insert - builtin table, cuckoo, and flat hash maps |
+| `test04.das` | Insert 1M unique random numbers then erase all - tests erase performance |
+| `test05.das` | Overwrite same key (key=3) 300K times - single-key hot-path update performance |
+| `test06.das` | Insert 1M random keys with 10% collisions, incrementing struct value - collision handling |
+| `test07.das` | Insert 1M random keys with 50% collisions, incrementing struct value - heavy collision |
+| `test08.das` | Insert 1M random numbers then look up all via key_exists - lookup-only performance |
+| `test09.das` | Insert 1M random numbers then look up and sum via get() callback - read performance |
+| `test10.das` | Pure insert of 1M unique random numbers - insert-only (no read, no clear) |
+| `test11.das` | SlotMap adapter insert of 1M random numbers - monotonic uint64 IDs, entity allocation pattern |
+| `test12.das` | Pathological key distribution - 8K sequential + random keys (100K total) with deliberately bad hash |
+| `test13.das` | `hash(string)` microbenchmark - short vs long keys; inlined FNV intrinsic (JIT) vs bound C++ builtin (interp) |
+| `test14.das` | Large string-keyed builtin table (open-addressed, inlined find/at) vs int reference - sizes the large-string lookup against the int reference; `_fresh`/`_same` isolate strcmp |
 
 ## core/gc/
 
 | File | Description |
 |---|---|
-| `test01.das` | Runtime heap `heap_collect` cost — mark-bound (20K live nodes), sweep-bound (400K-slot capacity, tiny live), and deep (500K-node chain, exercises the bounded-recursion mark path) |
+| `test01.das` | Runtime heap `heap_collect` cost - mark-bound (20K live nodes), sweep-bound (400K-slot capacity, tiny live), and deep (500K-node chain, exercises the bounded-recursion mark path) |
 
 ## core/jobque/
 
 | File | Description |
 |---|---|
-| `dispatch.das` | Fork/join dispatch tax — empty `parallel_for` round trip (ns/op = one job's share) across the dispatch knobs: baseline, `set_jobque_worker_spin` (spin-before-park), `set_jobque_batch_dispatch` (one-lock publish at join), and both. Pin `DAS_JOBQUE_THREADS` when recording |
-| `dispatch_timeline.das` | Standalone (`daslang -jit <file>`) timeline attribution for the same matrix — reports dispatch-loop duration, last-worker-start (ramp), and round trip medians per mode, empty and 30µs-busy jobs, all in one process (interleaved A/B) |
+| `dispatch.das` | Fork/join dispatch tax - empty `parallel_for` round trip (ns/op = one job's share) across the dispatch knobs: baseline, `set_jobque_worker_spin` (spin-before-park), `set_jobque_batch_dispatch` (one-lock publish at join), and both. Pin `DAS_JOBQUE_THREADS` when recording |
+| `dispatch_timeline.das` | Standalone (`daslang -jit <file>`) timeline attribution for the same matrix - reports dispatch-loop duration, last-worker-start (ramp), and round trip medians per mode, empty and 30us-busy jobs, all in one process (interleaved A/B) |
 
 ## core/math/
 
 | File | Description |
 |---|---|
-| `horizontal_reduce.das` | `hmin`/`hmax`/`hadd` over a hot float4 array — measures the JIT `llvm.vector.reduce.*` lowering vs the extern-call fallback (and interp); non-constant inputs + a global sink defeat const-fold / DCE |
+| `horizontal_reduce.das` | `hmin`/`hmax`/`hadd` over a hot float4 array - measures the JIT `llvm.vector.reduce.*` lowering vs the extern-call fallback (and interp); non-constant inputs + a global sink defeat const-fold / DCE |
 
 ## audio/
 
 | File | Description |
 |---|---|
-| `test01.das` | Convolution-reverb per-block cost — `conv_reverb_process` quality tiers: `high` (dual decorrelated IRs) vs `medium` (mono IR + Schroeder allpass decorrelation, ~half the convolution work) vs `low` (Freeverb-style algorithmic reverb, 8 damped comb + 4 allpass per channel, no FFT — ~6× cheaper than high). The convolution tiers' per-partition complex multiply-accumulate is SIMD-vectorized via `dag_vecMath` (cross-platform SSE/NEON), ~2× over scalar |
-| `test02.das` | Reverb tail-skip gating (in `conv_reverb_process`) — per-bus cost of an active bus (full convolution) vs an idle bus (silent input → gate skips: scan + zero + return); the idle cost is what the gate saves per idle orbit |
+| `test01.das` | Convolution-reverb per-block cost - `conv_reverb_process` quality tiers: `high` (dual decorrelated IRs) vs `medium` (mono IR + Schroeder allpass decorrelation, ~half the convolution work) vs `low` (Freeverb-style algorithmic reverb, 8 damped comb + 4 allpass per channel, no FFT - ~6x cheaper than high). The convolution tiers' per-partition complex multiply-accumulate is SIMD-vectorized via `dag_vecMath` (cross-platform SSE/NEON), ~2x over scalar |
+| `test02.das` | Reverb tail-skip gating (in `conv_reverb_process`) - per-bus cost of an active bus (full convolution) vs an idle bus (silent input -> gate skips: scan + zero + return); the idle cost is what the gate saves per idle orbit |
 
 ## core/bool_array/
 
 | File | Description |
 |---|---|
-| `test01.das` | Push 1M alternating true/false — BoolArray vs array&lt;bool&gt; append performance |
-| `test02.das` | Index access — count trues via a[i] in 1M elements — BoolArray vs array&lt;bool&gt; |
-| `test03.das` | Iteration access — count trues via `for (e in a)` in 1M elements — BoolArray vs array&lt;bool&gt; |
-| `test04.das` | Compound XOR (^^=) bit flip on 1M elements — BoolArray compound vs simple vs array&lt;bool&gt; |
-| `test05.das` | Insert at index 0 — push 10K values at front — BoolArray vs array&lt;bool&gt; |
-| `test06.das` | Erase at index 0 — erase 10K values from front — BoolArray vs array&lt;bool&gt; |
+| `test01.das` | Push 1M alternating true/false - BoolArray vs array&lt;bool&gt; append performance |
+| `test02.das` | Index access - count trues via a[i] in 1M elements - BoolArray vs array&lt;bool&gt; |
+| `test03.das` | Iteration access - count trues via `for (e in a)` in 1M elements - BoolArray vs array&lt;bool&gt; |
+| `test04.das` | Compound XOR (^^=) bit flip on 1M elements - BoolArray compound vs simple vs array&lt;bool&gt; |
+| `test05.das` | Insert at index 0 - push 10K values at front - BoolArray vs array&lt;bool&gt; |
+| `test06.das` | Erase at index 0 - erase 10K values from front - BoolArray vs array&lt;bool&gt; |
 
 ## core/table_key_value/
 
 | File | Description |
 |---|---|
-| `test01.das` | `get_key(tab, v)` vs `keys(tab)+values(tab)` — single iterator with pointer arithmetic vs two parallel iterators (1K, 10K, 100K entries) |
+| `test01.das` | `get_key(tab, v)` vs `keys(tab)+values(tab)` - single iterator with pointer arithmetic vs two parallel iterators (1K, 10K, 100K entries) |
 
 ## core/small_table/
 
-Small-table regime micro-benchmarks (N from 1 to 64) — the load profile the large-table `core/hash/` suite does not cover. Used to locate the linear-vs-hashed crossover (`maxLinearCapacity`) and to measure the string-key and constant-key paths.
+Small-table regime micro-benchmarks (N from 1 to 64) - the load profile the large-table `core/hash/` suite does not cover. Used to locate the linear-vs-hashed crossover (`maxLinearCapacity`) and to measure the string-key and constant-key paths.
 
 | File | Description |
 |---|---|
-| `test01.das` | Integer-keyed small tables — build (insert+alloc), positive lookup (hit), negative lookup (miss), swept across N |
-| `test02.das` | String-keyed small tables — build/hit/miss sweep; hit queries with distinct-pointer keys (strcmp fires, realistic), keys pre-built outside the measured block |
-| `test03.das` | Constant string-literal keys (`const_*`) vs runtime-array keys (`var_*`) — baseline for item 4 (precomputed-hash specialization of constant keys) |
-| `test04.das` | Many small tables (decs/per-entity shape) — thousands of independent N-element tables, build (watch B/op for item 1 memory) and cold-sweep query (cache locality) |
-| `test05.das` | Crossover prototype — inlined hash-only linear scan (`lin_*`) vs real open-addressed `?[]` (`hash_*`) over N, short and long keys; predicts `maxLinearCapacity` before packed mode exists |
-| `test06.das` | Lookup-only (never insert) packed string-table find at N=8 — const/var keys, hit and miss; A/B/C harness for the JIT inlined packed find (`JIT_STRING_FIND` none/scalar/vector) |
-| `test07.das` | Packed (N=8) integer-key find (hit/miss, no-hash SIMD key compare) and `tab[k]++` update fast-path (string + int) — the paths added when the inline find was extended to integer keys and to insert |
+| `test01.das` | Integer-keyed small tables - build (insert+alloc), positive lookup (hit), negative lookup (miss), swept across N |
+| `test02.das` | String-keyed small tables - build/hit/miss sweep; hit queries with distinct-pointer keys (strcmp fires, realistic), keys pre-built outside the measured block |
+| `test03.das` | Constant string-literal keys (`const_*`) vs runtime-array keys (`var_*`) - baseline for item 4 (precomputed-hash specialization of constant keys) |
+| `test04.das` | Many small tables (decs/per-entity shape) - thousands of independent N-element tables, build (watch B/op for item 1 memory) and cold-sweep query (cache locality) |
+| `test05.das` | Crossover prototype - inlined hash-only linear scan (`lin_*`) vs real open-addressed `?[]` (`hash_*`) over N, short and long keys; predicts `maxLinearCapacity` before packed mode exists |
+| `test06.das` | Lookup-only (never insert) packed string-table find at N=8 - const/var keys, hit and miss; A/B/C harness for the JIT inlined packed find (`JIT_STRING_FIND` none/scalar/vector) |
+| `test07.das` | Packed (N=8) integer-key find (hit/miss, no-hash SIMD key compare) and `tab[k]++` update fast-path (string + int) - the paths added when the inline find was extended to integer keys and to insert |
 
 ## core/array/
 
 | File | Description |
 |---|---|
 | `test01.das` | emplace, emplace_grow, move, and reserve on arrays of locked vs unlocked struct elements |
-| `test02.das` | push vs push_clone — int and struct with string field (10K elements, pre-reserved) |
+| `test02.das` | push vs push_clone - int and struct with string field (10K elements, pre-reserved) |
 
 ## core/array_literal/
 
 | File | Description |
 |---|---|
-| `build.das` | array/table literal build cost — `[..]` / `array<T>(..)` / `{..}` built directly on the heap (no stack `T[N]` + memcpy), for ints, structs, and tables |
+| `build.das` | array/table literal build cost - `[..]` / `array<T>(..)` / `{..}` built directly on the heap (no stack `T[N]` + memcpy), for ints, structs, and tables |
 
 ## core/array_lock/
 
 | File | Description |
 |---|---|
-| `test01.das` | emplace, emplace_grow, move, and reserve on arrays of locked vs `[skip_field_lock_check]` struct elements — measures array lock overhead |
+| `test01.das` | emplace, emplace_grow, move, and reserve on arrays of locked vs `[skip_field_lock_check]` struct elements - measures array lock overhead |
 
 ## core/builtin_ops/
 
 | File | Description |
 |---|---|
-| `test01.das` | `empty()` / `length()` call throughput on `array<int>` and `table<int;int>` — walks a prebuilt vector of half-filled/half-empty containers (no const-fold). `empty/*` lanes vs `length/*` reference lanes isolate the cost of the native `empty` extern; INTERP is the apples-to-apples target (JIT lanes are asymmetric — `length(table)` is not JIT-inlined) |
+| `test01.das` | `empty()` / `length()` call throughput on `array<int>` and `table<int;int>` - walks a prebuilt vector of half-filled/half-empty containers (no const-fold). `empty/*` lanes vs `length/*` reference lanes isolate the cost of the native `empty` extern; INTERP is the apples-to-apples target (JIT lanes are asymmetric - `length(table)` is not JIT-inlined) |
 
 ## fusion/
 
 | File | Description |
 |---|---|
-| `bench_v_ldu.das` | Fusion-engine `Op2At` array-indexed read at sizeof(T) ∈ {4,8,12,16} — int, int64, float3, float4. Used to compare DAS_FUSION=0 vs current `DAS_LDU_WORKHORSE` ladder vs `v_zero+memcpy(sizeof(CTYPE))` |
+| `bench_v_ldu.das` | Fusion-engine `Op2At` array-indexed read at sizeof(T)  in  {4,8,12,16} - int, int64, float3, float4. Used to compare DAS_FUSION=0 vs current `DAS_LDU_WORKHORSE` ladder vs `v_zero+memcpy(sizeof(CTYPE))` |
 
 ## sql/
 
 Multi-lane comparison over the same `Car` schema: `_sql` macro over `:memory:` SQLite vs in-memory `array<Car>` linq splice vs decs (`[decs_template]`) linq splice vs XML (`from_xml_node`) vs JSON (`from_json`). See `benchmarks/sql/results.md` for the current ns/op numbers across both INTERP and JIT.
 
-**Layout: one file per source.** Each source lane lives in its own file (`array.das`, `decs.das`, `xml.das`, `json.das`, `sql.das`); the shared fixture for that source (the `array<Car>`, the parsed DOM, the decs world, the `JsonValue?` tree, the `:memory:` DB) is built **once** in `[init]` and freed in `[finalize]`, so every query in the file reuses the same data. The sweep runs one process per file, isolating each source — this removes the cross-source instruction-cache contamination that made the JIT column jittery when all five lanes shared one process. Benchmark functions are named `<family>_<lane>` (e.g. `count_aggregate_m5f`) so `_update_results.das` pivots them into the `(family x source)` matrix unchanged.
+**Layout: one file per source.** Each source lane lives in its own file (`array.das`, `decs.das`, `xml.das`, `json.das`, `sql.das`); the shared fixture for that source (the `array<Car>`, the parsed DOM, the decs world, the `JsonValue?` tree, the `:memory:` DB) is built **once** in `[init]` and freed in `[finalize]`, so every query in the file reuses the same data. The sweep runs one process per file, isolating each source - this removes the cross-source instruction-cache contamination that made the JIT column jittery when all five lanes shared one process. Benchmark functions are named `<family>_<lane>` (e.g. `count_aggregate_m5f`) so `_update_results.das` pivots them into the `(family x source)` matrix unchanged.
 
 | Lane | Source | Form |
 |---|---|---|
-| `m1` (SQL) | `:memory:` SQLite | `_sql` macro — compile-time SQL emission, work pushed to the engine |
-| `m3f` (Array) | pre-populated `array<Car>` | `_fold` over `each(arr).chain()` — fuses the chain into a single pass |
-| `m4` (Decs) | decs entities via `[decs_template]` | `_fold` over `from_decs_template(type<DecsCar>).chain()` — fuses into a per-archetype walk |
-| `m5f` (XML) | in-memory XML doc (`fixture_xml_string`) | `_fold` over `from_xml_node(root, type<Car>)` — `XmlAdapter` fuses + field-prunes the chain into one DOM walk |
-| `m6f` (JSON) | pre-built `JsonValue?` array (`fixture_json`) | `_fold` over `from_json(jv, type<Car>)` — `JsonAdapter` fuses + field-prunes into one array walk (mirror of m5f; aliases heap strings instead of cloning) |
+| `m1` (SQL) | `:memory:` SQLite | `_sql` macro - compile-time SQL emission, work pushed to the engine |
+| `m3f` (Array) | pre-populated `array<Car>` | `_fold` over `each(arr).chain()` - fuses the chain into a single pass |
+| `m4` (Decs) | decs entities via `[decs_template]` | `_fold` over `from_decs_template(type<DecsCar>).chain()` - fuses into a per-archetype walk |
+| `m5f` (XML) | in-memory XML doc (`fixture_xml_string`) | `_fold` over `from_xml_node(root, type<Car>)` - `XmlAdapter` fuses + field-prunes the chain into one DOM walk |
+| `m6f` (JSON) | pre-built `JsonValue?` array (`fixture_json`) | `_fold` over `from_json(jv, type<Car>)` - `JsonAdapter` fuses + field-prunes into one array walk (mirror of m5f; aliases heap strings instead of cloning) |
 
 The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the splice ladder closed the gap between m3f and m4 across the corpus, and m3 was no longer a useful comparison point.
 
@@ -138,20 +138,20 @@ The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the spl
 
 | Query family | Description |
 |---|---|
-| `aggregate_match` | `_where + aggregate(seed, op)` — user-supplied binary reducer over a filtered slice |
-| `all_match` | `all(P)` with always-true predicate — full scan, returns true |
-| `any_match` | `any(P)` — first-hit early exit |
-| `average_aggregate` | `average(_.price)` — single-row scalar reduce |
-| `bare_order_where` | `_where + _order_by(_.price)` — fused prefilter + sort, no take |
-| `chained_where` | `_where + _where + count` — two filter stages then count |
-| `contains_match` | `contains(needle)` — early-exit equality scan |
-| `count_aggregate` | `count()` — engine pushes `COUNT(*)`; array/decs fuse where+count |
+| `aggregate_match` | `_where + aggregate(seed, op)` - user-supplied binary reducer over a filtered slice |
+| `all_match` | `all(P)` with always-true predicate - full scan, returns true |
+| `any_match` | `any(P)` - first-hit early exit |
+| `average_aggregate` | `average(_.price)` - single-row scalar reduce |
+| `bare_order_where` | `_where + _order_by(_.price)` - fused prefilter + sort, no take |
+| `chained_where` | `_where + _where + count` - two filter stages then count |
+| `contains_match` | `contains(needle)` - early-exit equality scan |
+| `count_aggregate` | `count()` - engine pushes `COUNT(*)`; array/decs fuse where+count |
 | `distinct_by_count` | `_distinct_by(_.brand) \|> count()` (Array/Decs only; SQL TODO) |
-| `distinct_count` | `_select(_.brand).distinct() \|> count()` — projection then dedup |
-| `distinct_take` | `_select(_.brand).distinct().take(N)` — early-exit dedup |
-| `element_at_match` | `_where + element_at(N)` — skip then take 1 |
-| `first_match` | `_where + first()` — first-hit |
-| `first_or_default_match` | `_where + first_or_default(d)` — first-hit with default |
+| `distinct_count` | `_select(_.brand).distinct() \|> count()` - projection then dedup |
+| `distinct_take` | `_select(_.brand).distinct().take(N)` - early-exit dedup |
+| `element_at_match` | `_where + element_at(N)` - skip then take 1 |
+| `first_match` | `_where + first()` - first-hit |
+| `first_or_default_match` | `_where + first_or_default(d)` - first-hit with default |
 | `groupby_average` | `_group_by(_.brand) + _select(AvgPrice = avg)` |
 | `groupby_count` | `_group_by(_.brand) + _select(N = count)` |
 | `groupby_first` | `_group_by(_.brand) + _select(FirstCar = first per group)` (Array/Decs only; SQL TODO) |
@@ -159,47 +159,47 @@ The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the spl
 | `groupby_having_hidden_sum` | `_group_by + _having(sum > 50000) + _select` |
 | `groupby_max` | `_group_by(_.brand) + _select(MaxPrice = max)` |
 | `groupby_min` | `_group_by(_.brand) + _select(MinPrice = min)` |
-| `groupby_multi_reducer` | `_group_by + 4-slot named tuple` — count + sum + max + … fused |
-| `groupby_select_sum` | `_select(_.price) + _group_by(_ % 100) + _select((K, S=sum))` (Array/Decs only; SQL TODO — expression keys) |
+| `groupby_multi_reducer` | `_group_by + 4-slot named tuple` - count + sum + max + ... fused |
+| `groupby_select_sum` | `_select(_.price) + _group_by(_ % 100) + _select((K, S=sum))` (Array/Decs only; SQL TODO - expression keys) |
 | `groupby_sum` | `_group_by(_.brand) + _select(TotalPrice = sum)` |
 | `groupby_where_count` | `_where + _group_by + _select(N = length)` |
 | `groupby_where_sum` | `_where + _group_by + _select(TotalPrice = sum)` |
-| `join_count` | `_join(cars, dealers, on = c.dealer_id == d.id) + count()` (Decs lane absent — TODO: decs join machinery) |
-| `last_match` | `_where + last()` — carry-last terminator |
-| `long_count_aggregate` | `long_count()` — int64 counter |
-| `max_aggregate` | `max(_.price)` — streaming max |
-| `min_aggregate` | `min(_.price)` — streaming min |
-| `order_by_multi_key` | `_where + _order_by_keys((_.brand, _.price), mask)` — multi-key composite stable_sort, no take (single-key stays unstable; SQL pushes `ORDER BY c1, c2`) |
-| `order_take_desc` | `_order_by_descending(_.price) + take(N)` — top-N largest |
-| `reverse_take` | `reverse + take(N)` — tail N rows |
-| `select_count` | `_select + count` — projection then counter (DCE'd in some lanes) |
-| `select_where` | `_where + _select` — filter then project |
-| `select_where_count` | `_select(2*price) + _where(> T) + count` — where-after-select |
-| `select_where_order_take` | `_where + _select + _order_by + take(N)` — full chain |
-| `select_where_sum` | `_select(2*price) + _where(> T) + sum` — where-after-select fused with accumulator |
-| `single_match` | `single` — assert-one-element with full scan |
-| `skip_take` | `skip(M) + take(K) + to_array` — windowing |
-| `skip_while_match` | `skip_while(P) + count` — predicate-driven skip |
-| `sort_first` | `_order_by + first` — streaming-min (no buffer) |
-| `sort_take` | `_order_by + take(N)` — bounded-heap (size N) |
-| `sum_aggregate` | `sum(_.price)` — engine pushes `SUM(price)`; array/decs accumulator |
-| `sum_where` | `_where + _select + sum` — three-stage |
-| `take_count` | `take(N) + to_array` — bounded materialization |
-| `take_count_filtered` | `_where + take(N) + count` (Array/Decs only; SQL semantically distinct — LIMIT-on-aggregate) |
+| `join_count` | `_join(cars, dealers, on = c.dealer_id == d.id) + count()` (Decs lane absent - TODO: decs join machinery) |
+| `last_match` | `_where + last()` - carry-last terminator |
+| `long_count_aggregate` | `long_count()` - int64 counter |
+| `max_aggregate` | `max(_.price)` - streaming max |
+| `min_aggregate` | `min(_.price)` - streaming min |
+| `order_by_multi_key` | `_where + _order_by_keys((_.brand, _.price), mask)` - multi-key composite stable_sort, no take (single-key stays unstable; SQL pushes `ORDER BY c1, c2`) |
+| `order_take_desc` | `_order_by_descending(_.price) + take(N)` - top-N largest |
+| `reverse_take` | `reverse + take(N)` - tail N rows |
+| `select_count` | `_select + count` - projection then counter (DCE'd in some lanes) |
+| `select_where` | `_where + _select` - filter then project |
+| `select_where_count` | `_select(2*price) + _where(> T) + count` - where-after-select |
+| `select_where_order_take` | `_where + _select + _order_by + take(N)` - full chain |
+| `select_where_sum` | `_select(2*price) + _where(> T) + sum` - where-after-select fused with accumulator |
+| `single_match` | `single` - assert-one-element with full scan |
+| `skip_take` | `skip(M) + take(K) + to_array` - windowing |
+| `skip_while_match` | `skip_while(P) + count` - predicate-driven skip |
+| `sort_first` | `_order_by + first` - streaming-min (no buffer) |
+| `sort_take` | `_order_by + take(N)` - bounded-heap (size N) |
+| `sum_aggregate` | `sum(_.price)` - engine pushes `SUM(price)`; array/decs accumulator |
+| `sum_where` | `_where + _select + sum` - three-stage |
+| `take_count` | `take(N) + to_array` - bounded materialization |
+| `take_count_filtered` | `_where + take(N) + count` (Array/Decs only; SQL semantically distinct - LIMIT-on-aggregate) |
 | `take_sum_aggregate` | `take(N) + sum` (Array/Decs only; SQL semantically distinct) |
-| `take_while_match` | `take_while(P) + count` — predicate-driven take |
-| `to_array_filter` | `_where + _select + to_array` — three-stage materialize |
+| `take_while_match` | `take_while(P) + count` - predicate-driven take |
+| `to_array_filter` | `_where + _select + to_array` - three-stage materialize |
 | `zip_dot_product` | `zip(a, b) + _select(_._0 * _._1) + sum` (Array/Decs only; zip is not relational, no SQL form) |
 
 ## micro/
 
-Standalone micro-benchmarks — self-contained (no `_common`), kept out of `sql/` so they don't interfere with the `results.md` table-building sweep. Used to validate a design choice with hand-coded "fake code" (the AST the macro would emit) before building the macro.
+Standalone micro-benchmarks - self-contained (no `_common`), kept out of `sql/` so they don't interfere with the `results.md` table-building sweep. Used to validate a design choice with hand-coded "fake code" (the AST the macro would emit) before building the macro.
 
 | File | Description |
 |------|-------------|
-| `join_select_shapes.das` | `join \|> select` output shapes over XML: C tier-2 (materialize tuples) vs A fused-materialize vs B streaming generator — A wins in every config; streaming is slower (generator overhead), string clone is a flat orthogonal cost |
-| `json_source_shapes.das` | `from c : Car in jv where … select c.name` over a JSON array: A hand field-pruned vs B hand full-row `from_JV` vs C the shipped JsonAdapter via `_fold` — field-pruning wins 3.7× (A vs B: INTERP 177 vs 650 ns/op; JIT 49 vs 183). C (the macro) fuses to A's shape and slightly beats it (157/37). Validated the field-pruning design; now also a regression check that the adapter matches hand-optimal |
-| `single_last_shapes.das` | `where(pred) \|> single/last` over XML: C full-materialize-per-element vs A materialize-under-guard (read predicate field cheaply, build the full row only for matching elements) — A wins (single 6.1× INTERP / 100k→1 clone; last 1.66× / clones only matching rows) |
-| `apply_vs_apply_imm.das` | `apply` (inline ref-local `let/var field &`) vs `apply_imm` (assume-aliased) over a struct field walk — both inline (no per-field invoke), but assume carries no per-field local so it is ~25% faster INTERP (54 vs 41 ns/op), identical JIT (2.0). vs the old per-field-invoke `apply` (113 ns/op) both are ~2× faster. Justifies keeping `apply_imm` as the struct-only hot path |
-| `serialize_apply.das` | `JV(struct)` serialization — regression guard for dropping the function-escaping `return` from `to_JV(struct)` so its `apply` block inlines instead of falling to the per-field invoke fallback. Inline 1161/579 ns/op (INTERP/JIT) vs invoke-fallback 2083/1424 = **1.79× / 2.46× faster, −2 allocs/op**. `to_XML(struct)` got the same rewrite (build-gated, not benched here) |
+| `join_select_shapes.das` | `join \|> select` output shapes over XML: C tier-2 (materialize tuples) vs A fused-materialize vs B streaming generator - A wins in every config; streaming is slower (generator overhead), string clone is a flat orthogonal cost |
+| `json_source_shapes.das` | `from c : Car in jv where ... select c.name` over a JSON array: A hand field-pruned vs B hand full-row `from_JV` vs C the shipped JsonAdapter via `_fold` - field-pruning wins 3.7x (A vs B: INTERP 177 vs 650 ns/op; JIT 49 vs 183). C (the macro) fuses to A's shape and slightly beats it (157/37). Validated the field-pruning design; now also a regression check that the adapter matches hand-optimal |
+| `single_last_shapes.das` | `where(pred) \|> single/last` over XML: C full-materialize-per-element vs A materialize-under-guard (read predicate field cheaply, build the full row only for matching elements) - A wins (single 6.1x INTERP / 100k->1 clone; last 1.66x / clones only matching rows) |
+| `apply_vs_apply_imm.das` | `apply` (inline ref-local `let/var field &`) vs `apply_imm` (assume-aliased) over a struct field walk - both inline (no per-field invoke), but assume carries no per-field local so it is ~25% faster INTERP (54 vs 41 ns/op), identical JIT (2.0). vs the old per-field-invoke `apply` (113 ns/op) both are ~2x faster. Justifies keeping `apply_imm` as the struct-only hot path |
+| `serialize_apply.das` | `JV(struct)` serialization - regression guard for dropping the function-escaping `return` from `to_JV(struct)` so its `apply` block inlines instead of falling to the per-field invoke fallback. Inline 1161/579 ns/op (INTERP/JIT) vs invoke-fallback 2083/1424 = **1.79x / 2.46x faster, -2 allocs/op**. `to_XML(struct)` got the same rewrite (build-gated, not benched here) |
 | `bound_check_elision.das` | Array-index-heavy loops (dynamic `range(length)` r/w and sum, fixed-array const range) with the hot loops in plain functions. Neutral by default (checked path); re-run with `options bound_check_elision` to measure the interpreter bound-check elision pass. Interp-only (the pass targets the tree interpreter) |

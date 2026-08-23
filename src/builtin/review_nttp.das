@@ -44,7 +44,7 @@ def check_nttp_policy {
         for_each_function(mod, "") $(func) {
             return if (!is_plain_value_bind(func) || is_shared_generic_helper("{(func as BuiltInFunction).cppName}"))
             if (inInlineOnly && !func.moreFlags2.nttp) {
-                macro_error(compiling_program(), func.at, "REVIEW policy: {mod.name}::{func.name} is bound with addExtern; builtin/math/strings binds use addExternInline")
+                macro_error(compiling_program(), func.at, "REVIEW policy: {mod.name}::{func.name} is not bound with addExternInline; builtin/math/strings binds are NTTP")
             } elif (!inInlineOnly && func.moreFlags2.nttp) {
                 macro_error(compiling_program(), func.at, "REVIEW policy: {mod.name}::{func.name} is bound with addExternInline; only builtin/math/strings binds are NTTP")
             }

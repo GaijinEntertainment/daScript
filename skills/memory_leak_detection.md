@@ -1,7 +1,7 @@
 # Memory Leak Detection
 
 daslang ships six distinct leak-detection mechanisms, each narrow. This skill
-is the master index — read it first, pick the right tool, then dive into the
+is the master index - read it first, pick the right tool, then dive into the
 per-mechanism details (or the dedicated skill for #5, `jobque_debugging.md`).
 
 A docs-style rendering of this same material is published at
@@ -17,12 +17,12 @@ it adds nothing you will not find here, so stay in this file.
 | Long-running run keeps growing, or want per-context heap dump at exit | **#2 `-track-allocations -heap-report`** (single dash) |
 | Know a specific smart_ptr id is misbehaving, want debug-break on every addRef/delRef | **#4 `--track-smart-ptr <hexId>`** |
 | Script uses channels/jobs/lockboxes, `DumpJobQueLeaks` printed survivors | **#5 `--track-job-status`** (`skills/jobque_debugging.md`) |
-| Long-running dasHV server suspected to leak WebSocket-client handles | **#6 `HandleRegistry` auto-dump** — `Handle<TypeName>` lines at process exit list unreleased handles |
+| Long-running dasHV server suspected to leak WebSocket-client handles | **#6 `HandleRegistry` auto-dump** - `Handle<TypeName>` lines at process exit list unreleased handles |
 
 **CLI dash convention:** `-track-allocations` and `-heap-report` use **one**
 leading dash; `--track-smart-ptr`, `--track-job-status`, and
 `--das-profiler-leaks` use **two**. This is a historical inconsistency in
-`utils/daslang/main.cpp` — preserve it as-is in the commands you suggest. <!-- repo-only -->
+`utils/daslang/main.cpp` - preserve it as-is in the commands you suggest. <!-- repo-only -->
 
 Order of investigation if you see multiple leak reports at exit: fix #3
 (gc_node) first (any survivor indicates an ownership bug that can cascade),
@@ -30,7 +30,7 @@ then #5 (job-que primitives), then #2/#1 (heap), then #4/#6.
 
 ---
 
-## #1 — `--das-profiler-leaks` (daslang heap with captured call stacks)
+## #1 - `--das-profiler-leaks` (daslang heap with captured call stacks)
 
 **Scope:** every live allocation on a daslang `Context` heap, grouped per
 context, with the full daslang call stack that produced it.
@@ -60,14 +60,14 @@ per context.
 stack to find the scope that owns the memory and failed to free it.
 
 **Don't:** enable this for a shipping build. Every allocation clones the
-shadow call stack — it's a debug tool.
+shadow call stack - it's a debug tool.
 
 See `skills/profiler.md` for the full guide (also covers
 the performance profiler mode).
 
 ---
 
-## #2 — `-track-allocations -heap-report` (C++ heap dump)
+## #2 - `-track-allocations -heap-report` (C++ heap dump)
 
 **Scope:** one report per main context at exit, listing all live blocks in
 the Context's heap + string heap. Captures each allocation's size, pointer,
@@ -78,7 +78,7 @@ id, optional comment, and daslang `file:line`.
 bin/daslang -track-allocations -heap-report path/to/script.das
 ```
 
-**Output (default linear heap — one line per chunk):**
+**Output (default linear heap - one line per chunk):**
 ```
 --- heap report ---
 2b0202057	944 of 65536
@@ -103,7 +103,7 @@ bytes per location:
 
 **Read it:** the persistent allocator shows each live block separately.
 "big stuff" rows: size, pointer, sequential id, optional comment (`array`,
-`new [[ ]]`, `table`, etc. — stamped by the runtime helper), optional
+`new [[ ]]`, `table`, etc. - stamped by the runtime helper), optional
 `file:line` from the LineInfo at the allocation site. "decks" (when
 present) shows slab occupancy per size class. "bytes per location"
 aggregates totals by source site.
@@ -122,7 +122,7 @@ quick survey of "what's alive right now".
 
 ---
 
-## #3 — gc_node leak detection (automatic, AST nodes)
+## #3 - gc_node leak detection (automatic, AST nodes)
 
 **Scope:** every `gc_node`-derived AST type (TypeDecl, Expression, Function,
 Structure, Enumeration, Variable, MakeFieldDecl, MakeStruct, etc.) that
@@ -144,7 +144,7 @@ gc_root 0x7ff...: count=3
 
 **Narrow it down:** set `DAS_GC_BREAK_ON_ID=<id>` as an environment variable
 (pick an id from the report), then run under a debugger. `gc_break_on_id` is
-checked in the gc_node constructor and triggers `os_debug_break()` — you get
+checked in the gc_node constructor and triggers `os_debug_break()` - you get
 the full C++ + daslang stack trace for the creation site.
 
 ```bash
@@ -161,7 +161,7 @@ hashes or crashes on subsequent runs.
 
 ---
 
-## #4 — `--track-smart-ptr <hexId>` (single smart_ptr trace)
+## #4 - `--track-smart-ptr <hexId>` (single smart_ptr trace)
 
 **Scope:** one specific `ptr_ref_count` subclass instance (Context, Program,
 FileAccess, gc-migrated types via their policy, any other smart_ptr).
@@ -171,7 +171,7 @@ FileAccess, gc-migrated types via their policy, any other smart_ptr).
 bin/daslang --track-smart-ptr 0x5a path/to/script.das
 ```
 
-The id is the `ref_count_id` of the target object — usually read from a
+The id is the `ref_count_id` of the target object - usually read from a
 prior `DumpTrackPtr()` dump line like
 `0x7ffee1301000 (rc=2, id=5a) Context main_ctx`.
 
@@ -190,10 +190,10 @@ debugger if you need it.
 
 ---
 
-## #5 — JobStatus / Channel / LockBox / Feature (threading primitives)
+## #5 - JobStatus / Channel / LockBox / Feature (threading primitives)
 
 **Scope:** `JobStatus` and its subclasses (`Channel`, `LockBox`) plus
-`Feature` value-type — manually-refcounted synchronization primitives.
+`Feature` value-type - manually-refcounted synchronization primitives.
 
 **Invoke:**
 ```bash
@@ -207,7 +207,7 @@ refs, lockbox fill/grab/join lifecycle).
 
 ---
 
-## #6 — `HandleRegistry<T>` (dasHV WebSocket handles) — automatic
+## #6 - `HandleRegistry<T>` (dasHV WebSocket handles) - automatic
 
 **Scope:** value-sized handles backed by `std::shared_ptr<T>` on the C++
 side. Used by dasHV for `hv::WebSocketClient`, `hv::WebSocketServer`,
@@ -222,7 +222,7 @@ threads via `Module_JobQue::~Module_JobQue`) and the
 is deliberate: before the window, live job threads legitimately hold
 handles; after it, the `dumpHandleLeaks<T>` function pointers registered
 from shared-module DLLs are dangling. Every handle type registered via
-`addHandleAnnotation<T>` auto-registers a per-type dump callback — no
+`addHandleAnnotation<T>` auto-registers a per-type dump callback - no
 per-module boilerplate.
 
 **Output:**
@@ -236,13 +236,13 @@ total 1 leaked handles of type WebSocketServer
 Columns: slot index, generation counter (rolls on release/reacquire), and
 `shared_ptr::use_count()` at dump time. `rc=1` = registry is the sole
 owner (textbook leak). `rc>1` = another strong ref is keeping the object
-alive — look for forgotten captures.
+alive - look for forgotten captures.
 
-**Type names** come from `typeName<T>::name()` — for handle types this is
+**Type names** come from `typeName<T>::name()` - for handle types this is
 wired via `MAKE_EXTERNAL_TYPE_FACTORY(Name, hv::Name)` in
 `modules/dasHV/src/dasHV.h` (repo-only). Any new handle type introduced via
 `addHandleAnnotation<T>` that does NOT have a `typeName<T>` specialization
-fails to compile (by design — compile-time enforcement of a readable name).
+fails to compile (by design - compile-time enforcement of a readable name).
 
 **Manual query** (still useful for in-process programmatic inspection):
 ```cpp
@@ -262,7 +262,7 @@ reached script exit without calling the matching destroy function (e.g.
 `operator delete` (e.g. via `inscope` / explicit `delete`).
 
 **Disabled modules:** `handleRegistry_dumpAll()` is cheap even when dasHV
-is disabled via `DAS_HV_DISABLED=ON` — the module's TUs aren't compiled, so
+is disabled via `DAS_HV_DISABLED=ON` - the module's TUs aren't compiled, so
 no callbacks are registered, and the dump iterates an empty hooks vector.
 
 **Advisory, not fatal:** the dump prints but does not change exit code
@@ -272,7 +272,7 @@ no callbacks are registered, and the dump iterates an empty hooks vector.
 **Silencing all three exit-time dumps:** pass `--no-dump-leaks` to
 `daslang.exe` / `daslang-live.exe` and the JobStatus, HandleRegistry, and
 smart_ptr TextPrinter dumps all become quiet (the exit(1) on smart_ptr
-leak is preserved — it's a failure signal, not diagnostic noise).
+leak is preserved - it's a failure signal, not diagnostic noise).
 Default is on. Use this in environments where pre-existing noisy leaks
 would drown out the signal you're looking for, or when another tool is
 consuming daslang output.
@@ -284,22 +284,22 @@ consuming daslang output.
 Common non-leaks that look like leaks:
 
 - **Missing `inscope`** on a `smart_ptr<T>` / `var inscope` on array/table-like
-  types — the value lives for the context's lifetime by design. Fix: add
+  types - the value lives for the context's lifetime by design. Fix: add
   `inscope`, or explicit `delete`.
-- **`var arr : array<int>` with no `delete arr` and no `inscope`** — arrays
+- **`var arr : array<int>` with no `delete arr` and no `inscope`** - arrays
   have NO scope-based RAII (see CLAUDE.md memory); the heap-side data
   survives until context destroy. `inscope` triggers a finalizer; `delete`
   is explicit.
-- **Channel / Stream not released** — holding the Stream past the last
+- **Channel / Stream not released** - holding the Stream past the last
   `s |> release()` / `s |> notify_and_release()` call leaks the primitive.
   See `skills/jobque_debugging.md`.
-- **Capture-macro hidden addRef** — lambdas over JobStatus/Channel bump the
+- **Capture-macro hidden addRef** - lambdas over JobStatus/Channel bump the
   refcount via `capture_macro` in `jobque_boost.das`; the matching release
   fires at lambda destruction. If the lambda outlives expectations, the ref
   outlives it too.
-- **String interning** — `intern`'d strings live in the `constStringHeap`
+- **String interning** - `intern`'d strings live in the `constStringHeap`
   for the program lifetime. Not a leak.
-- **Persistent heap option** — `options persistent_heap = true` keeps
+- **Persistent heap option** - `options persistent_heap = true` keeps
   allocated memory across context runs intentionally.
 
 ---
@@ -320,10 +320,10 @@ Common non-leaks that look like leaks:
 
 ## Cross-references
 
-- `skills/profiler.md` — the full guide for #1 (ships in the SDK).
+- `skills/profiler.md` - the full guide for #1 (ships in the SDK).
 - This file is the master index; the docs-site rendering of it adds nothing extra.
-- `skills/jobque_debugging.md` — full workflow for #5.
-- `include/daScript/misc/handle_registry.h` — dasHV handle infrastructure (#6).
-- `include/daScript/misc/gc_node.h` — gc_node header (`DAS_GC_BREAK_ON_ID`).
-- `include/daScript/misc/smart_ptr.h` — `ptr_ref_count`, `ref_count_track` (#4).
-- `include/daScript/misc/platform.h:490-497` — `DAS_TRACK_ALLOCATIONS` compile-time gate (#2).
+- `skills/jobque_debugging.md` - full workflow for #5.
+- `include/daScript/misc/handle_registry.h` - dasHV handle infrastructure (#6).
+- `include/daScript/misc/gc_node.h` - gc_node header (`DAS_GC_BREAK_ON_ID`).
+- `include/daScript/misc/smart_ptr.h` - `ptr_ref_count`, `ref_count_track` (#4).
+- `include/daScript/misc/platform.h:490-497` - `DAS_TRACK_ALLOCATIONS` compile-time gate (#2).

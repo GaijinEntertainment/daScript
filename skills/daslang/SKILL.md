@@ -1,7 +1,7 @@
 ---
 name: daslang
 description: >-
-  daslang (formerly daScript) language reference — gen2 syntax, type system, memory model,
+  daslang (formerly daScript) language reference - gen2 syntax, type system, memory model,
   generics, macros, standard library. Invoke whenever a task involves writing, reviewing,
   refactoring, debugging, or understanding .das files or a daslang project.
 ---
@@ -13,7 +13,7 @@ Entertainment. `.das` files run interpreted, AOT-compiled to C++, or LLVM-JIT-co
 layout mirrors C++.
 
 **gen2 is the DEFAULT parser:** a `.das` file is gen2 (C-like, braces) unless it opts out with
-`options gen2 = false` — never infer gen1 (indentation-based) from a missing `options gen2`
+`options gen2 = false` - never infer gen1 (indentation-based) from a missing `options gen2`
 marker. Never write gen1; by convention new files still open with `options gen2`. Everything
 below is gen2.
 
@@ -21,29 +21,29 @@ below is gen2.
 
 Detailed semantics live in `./references/`:
 
-- `types.md` — type catalog, vector lattice, literal suffixes, enums/variants/tuples/
+- `types.md` - type catalog, vector lattice, literal suffixes, enums/variants/tuples/
   bitfields, fixed arrays, the two const positions, temporary (`#`) and distinct types
-- `functions.md` — parameters, named arguments, overload resolution, operator overloading,
+- `functions.md` - parameters, named arguments, overload resolution, operator overloading,
   computed properties, pipes, precedence
-- `structs-and-classes.md` — initialization modes, virtuals, sealed/static, runtime type checks
-- `closures.md` — blocks/lambdas/function pointers, capture modes, generators, iterators
-- `memory.md` — the const model, move/copy/clone, finalizers, `inscope`, delete semantics,
+- `structs-and-classes.md` - initialization modes, virtuals, sealed/static, runtime type checks
+- `closures.md` - blocks/lambdas/function pointers, capture modes, generators, iterators
+- `memory.md` - the const model, move/copy/clone, finalizers, `inscope`, delete semantics,
   contexts and threading, unsafe catalog
-- `generics.md` — `auto(TT)`, type contracts, typeinfo traits, `static_if`, pattern matching
-- `macros.md` — compilation pipeline, macro classes, `qmacro`, `qmatch`, annotations
-- `modules-and-stdlib.md` — module declarations, `require`, `with (module ...)`, options,
+- `generics.md` - `auto(TT)`, type contracts, typeinfo traits, `static_if`, pattern matching
+- `macros.md` - compilation pipeline, macro classes, `qmacro`, `qmatch`, annotations
+- `modules-and-stdlib.md` - module declarations, `require`, `with (module ...)`, options,
   containers, daslib catalog
-- `strings.md` — the string surface, byte views, the parse family, `build_string`,
+- `strings.md` - the string surface, byte views, the parse family, `build_string`,
   conversions, regular expressions
-- `files-and-paths.md` — fio helpers, directory walking, subprocess capture, glob patterns
-- `json.md` — `sprint_json`/`sscan_json`, `JV`, `JsonValue?`, safe navigation
-- `queries.md` — comprehensions, the linq surface, what fuses into one pass
-- `cli-and-config.md` — argv parsing, environment twins, config knobs
+- `files-and-paths.md` - fio helpers, directory walking, subprocess capture, glob patterns
+- `json.md` - `sprint_json`/`sscan_json`, `JV`, `JsonValue?`, safe navigation
+- `queries.md` - comprehensions, the linq surface, what fuses into one pass
+- `cli-and-config.md` - argv parsing, environment twins, config knobs
 
 ## Functions
 
 ```das
-def add(a, b : int) : int {         // `a, b : int` — one type for both names
+def add(a, b : int) : int {         // `a, b : int` - one type for both names
     return a + b
 }
 
@@ -56,7 +56,7 @@ def twice(a) => a + a               // arrow body; untyped param makes it generi
   same line as the `=>`.
 - Named arguments follow positionals: `foo(pos, name = value)`.
 - Defaults: `def greet(name : string = "world")`.
-- Visibility is a prefix keyword — `def private helper()`; there is no `[private]` annotation.
+- Visibility is a prefix keyword - `def private helper()`; there is no `[private]` annotation.
 
 ## Variables and the const model
 
@@ -66,7 +66,7 @@ var b = 13                          // mutable: type is `int`
 var c : float = 0.5
 ```
 
-`let x = e` means `x : auto const = e` — const lives entirely in the type, and dereference,
+`let x = e` means `x : auto const = e` - const lives entirely in the type, and dereference,
 indexing and field access flow it onto the result, so a `let` handle gives const access to
 *everything reachable through it*. Never strip const with `reinterpret` to write: the
 optimizer trusts the const type and may silently delete the write.
@@ -87,7 +87,7 @@ for (x in arr) { ... }              // arrays, tables, iterators
 while (running) { ... }
 ```
 
-- Conditions must be `bool` — no truthiness: `if (ptr != null)`. `if` / `for` / `while` /
+- Conditions must be `bool` - no truthiness: `if (ptr != null)`. `if` / `for` / `while` /
   `static_if` all require the parentheses.
 - Postfix conditionals: `return x if (cond)`, likewise `break` / `continue`.
 - A bare `{ ... }` at statement level is a lexical scope, and takes `{ ... } finally { ... }`.
@@ -95,8 +95,8 @@ while (running) { ... }
 
 ## Strings
 
-- Strings are immutable; interpolate `{expr}` as in `"hello, {name}"` — not `${}` (compiles,
-  prints a literal `$`), not `%s` — with format specifiers `"{value:08x}"`, escaping literal
+- Strings are immutable; interpolate `{expr}` as in `"hello, {name}"` - not `${}` (compiles,
+  prints a literal `$`), not `%s` - with format specifiers `"{value:08x}"`, escaping literal
   braces `"literal \{braces\}"`. Number to string: `"{x}"`
   or `string(42)`.
 - `length(s)` / `empty(s)` need no `require`; the rest of the string API needs
@@ -136,9 +136,9 @@ var sq <- [for (x in range(10)); x * x]     // array comprehension
 var m <- { for (x in range(5)); x => x * x } // table comprehension
 ```
 
-- `table[key]` on a mutable table INSERTS a default entry when missing — read with
+- `table[key]` on a mutable table INSERTS a default entry when missing - read with
   `t?[key] ?? default`, test with `key_exists(t, k)`.
-- Never do two `[]` lookups on the same table in one expression — rehashing can invalidate
+- Never do two `[]` lookups on the same table in one expression - rehashing can invalidate
   the first reference.
 - `push` copies, `emplace` moves (zeroes the source), `push_clone` deep-clones. Bulk forms
   `push_from` / `push_clone_from` take a whole array at once.
@@ -147,9 +147,9 @@ var m <- { for (x in range(5)); x => x * x } // table comprehension
 
 | Operator | Effect |
 |---|---|
-| `=`  | copy — value types (`int`, `float`, `bool`, `string`, pointers, POD structs) |
-| `<-` | move — transfers ownership, source is zeroed |
-| `:=` | clone — deep copy, source unchanged |
+| `=`  | copy - value types (`int`, `float`, `bool`, `string`, pointers, POD structs) |
+| `<-` | move - transfers ownership, source is zeroed |
+| `:=` | clone - deep copy, source unchanged |
 
 ```das
 def make() : array<int> {
@@ -158,7 +158,7 @@ def make() : array<int> {
 }
 ```
 
-Structs are copyable only if all fields are. `delete` on a lambda requires `unsafe` — copies
+Structs are copyable only if all fields are. `delete` on a lambda requires `unsafe` - copies
 alias one shared capture frame.
 
 ## Pointers
@@ -209,30 +209,30 @@ variant field or switching the active field requires `unsafe`.
 ## Memory model
 
 Locals and structs live on the stack; `new`, arrays and tables use the current context's
-heap. Cleanup is deterministic and explicit — `delete`, `var inscope`, or moving ownership
+heap. Cleanup is deterministic and explicit - `delete`, `var inscope`, or moving ownership
 out with `<-`; a plain local `var arr : array<int>` is NOT finalized at scope exit. Each
-context (thread) owns its heap and cannot retain pointers into another's — clone what
+context (thread) owns its heap and cannot retain pointers into another's - clone what
 crosses. `delete` on a container of pointers finalizes AND FREES every pointee; `clear()`
 first when the pointers are non-owning.
 
 ## Error handling
 
-- `panic("msg")` is FATAL — daslang has no exception model. `try { } recover { }` captures
+- `panic("msg")` is FATAL - daslang has no exception model. `try { } recover { }` captures
   the message before exiting; it does NOT recover and continue. Never design APIs around
   panic-as-control-flow.
 - `assert(cond, "msg")` may be stripped in release; `verify(cond, "msg")` always runs. The
-  message must be a string CONSTANT — for a runtime-value diagnostic write
+  message must be a string CONSTANT - for a runtime-value diagnostic write
   `if (!cond) panic("bad n = {n}")`. An asserted expression with side effects (invoking a
   lambda counts) is rejected; use `verify`.
 - Recoverable errors are values: return `bool`, `T?`, or a variant with an error case.
-- `{ } finally { }` is SKIPPED on panic, by design — no must-run-on-failure cleanup there.
+- `{ } finally { }` is SKIPPED on panic, by design - no must-run-on-failure cleanup there.
 
 ## Callable types
 
 | Kind | Prefix | Allocation | Captures | Storable | Copyable |
 |---|---|---|---|---|---|
 | block    | `$`  | stack | surrounding scope by reference | no  | no |
-| lambda   | `@`  | heap  | explicit modes: copy/move/clone/ref | yes | yes — pointer copy (alias) |
+| lambda   | `@`  | heap  | explicit modes: copy/move/clone/ref | yes | yes - pointer copy (alias) |
 | function | `@@` | none  | none | yes | yes |
 
 `@@name` is a pointer to a named function.
@@ -241,21 +241,21 @@ first when the pointers are non-owning.
 
 - **No implicit conversions between values.** `float_var + int_var` is a compile error;
   cast one side. Bare integer LITERALS are the one exception, adapting to a known numeric
-  target — `f + 1`, `d > 1`, `var f : float = 1`, `return 200` into `uint8` — but NOT at
+  target - `f + 1`, `d > 1`, `var f : float = 1`, `return 200` into `uint8` - but NOT at
   call arguments (`take_f(1)` fails when `take_f` wants float) or parameter defaults, and
-  float literals never adapt to double. No `bool(int)` — write `x != 0`. No `string(bool)`
-  — interpolate `"{flag}"`.
-- **Hex literals are `uint`** — `int(0x3F)` when an int is needed.
+  float literals never adapt to double. No `bool(int)` - write `x != 0`. No `string(bool)`
+  - interpolate `"{flag}"`.
+- **Hex literals are `uint`** - `int(0x3F)` when an int is needed.
 - **Reserved words that look like identifiers:** `where`, `shared`, `label`, `expect`,
   `pass`, `explicit`, `capture`, `deref`, `template` are keywords; `range`, `urange`,
   `range64`, `urange64`, `block`, `function`, `lambda`, `iterator`, and the small-vector type
   names (`half2`, `short4`, `byte16`, ...) are type tokens. Using any as a
-  variable/parameter/field/function or annotation-argument name is a syntax error —
+  variable/parameter/field/function or annotation-argument name is a syntax error - 
   including `@range = 5` on a field.
 - **A statement-level expression must fit one line** unless wrapped in `(...)`: a
   continuation line starting with `+` or `-` parses as a separate unary statement and is
   silently optimized away.
-- **`options stack = N` counts only in the MAIN module** — a required library cannot raise
+- **`options stack = N` counts only in the MAIN module** - a required library cannot raise
   the program's stack.
 - **`require` paths use `/`**, resolve module mounts or same-directory names, and cannot
   contain hyphens; a file elsewhere in the tree needs a relative path with the explicit

@@ -3,7 +3,7 @@
 The wasm build worker of the daslang.io playground pipeline
 (`plans/dasweb_wasm_pipeline.md`, phase 3a). Runs on the compute box (`zen4`), **pulls** the
 build queue from `dasweb-playground` over HTTPS with a bearer token, runs each job through a
-sandboxed build command, and uploads the artifact file set (or the compiler error — that text
+sandboxed build command, and uploads the artifact file set (or the compiler error - that text
 is what the playground shows the user). Nothing on the web box ever connects here: builder
 death degrades to a backed-up queue, never a site outage. Review rules: `REVIEW.md`
 (binding).
@@ -26,7 +26,7 @@ beside the tool, keys = flag names; precedence defaults < toml < explicit CLI fl
 `authoritative = true`. A wrong-typed key is a startup error. The effective config is logged at
 startup with per-key provenance; the token is reported set/unset only.
 
-Deployed values on zen4: `server_url = "https://daslang.io"`, the real `token` (toml-only —
+Deployed values on zen4: `server_url = "https://daslang.io"`, the real `token` (toml-only - 
 a CLI flag would put the secret in the process list; it must equal the playground's
 `build_token`), `worktree` = the dedicated wasm worktree, `build_cmd = "bash run_build.sh"`.
 The service refuses to start without a token and a build command.
@@ -34,32 +34,32 @@ The service refuses to start without a token and a build command.
 ## How a job runs
 
 1. **Identity**: the toolchain id is the wasm worktree's HEAD sha (`--toolchain` overrides).
-   At startup the service announces it via `POST /api/build/toolchain` — **that announce is
+   At startup the service announces it via `POST /api/build/toolchain` - **that announce is
    the toolchain's go-live, so the ABI canary (`--jit-check-abi`) must have run clean on the
    worktree first**; `announce = false` leaves the go-live to the operator.
 2. **Claim**: `POST /api/build/next` with the toolchain; 204 means idle (sleep
    `poll_interval_seconds`), a job means build now and poll again immediately after.
-3. **Materialize**: the job's source document lands in a per-job scratch dir — raw `.das` text
+3. **Materialize**: the job's source document lands in a per-job scratch dir - raw `.das` text
    as `main.das`, or the `{files, active}` bundle with every file name validated (one boring
    `.das` path component each; anything else refuses the job).
 4. **Build**: `<build_cmd> <src_dir> <out_dir> <mode> <entry>` via argv (no shell),
-   killed after `build_timeout_seconds`. `run_build.sh` is the recipe — see **The sandbox**
-   below — and per mode it runs the exact CI command the queue replaced: `module` = host
+   killed after `build_timeout_seconds`. `run_build.sh` is the recipe - see **The sandbox**
+   below - and per mode it runs the exact CI command the queue replaced: `module` = host
    daslang `-exe --jit-target=wasm64-unknown-emscripten` against the `web/output64` runtime
-   archive (→ `sample.wasm`); `page` = daspkg's release-wasm rail (the one the five
+   archive (-> `sample.wasm`); `page` = daspkg's release-wasm rail (the one the five
    `/examples` cards use) under a `.das_package` this service generates into the scratch src
-   dir naming the app `sample` (job sources can never carry their own — bundle names must be
+   dir naming the app `sample` (job sources can never carry their own - bundle names must be
    plain `.das`), flattened inside the sandbox to `sample.{html,js,wasm}`. The server decides
    the mode at request time by scanning the source's requires; this service only obeys the
    claimed job's mode.
 5. **Collect**: exactly the files the mode declares, by name (`expected_artifact_names`).
    The build runs the user's compile-time code and can write anything into the output
-   directory, so anything else there is logged and dropped — a build cannot widen its own
+   directory, so anything else there is logged and dropped - a build cannot widen its own
    output set. The server re-checks the same rule rather than trusting this service.
 6. **Upload**: success = multipart `POST /api/build/result` with a `[{name, sha256}]` manifest
-   plus one file part per artifact (libhv reads the files itself — bytes never pass through a
+   plus one file part per artifact (libhv reads the files itself - bytes never pass through a
    das string); failure = the build output as the error. Every claim this service sees resolves
-   with one of the two — the queue's stale-requeue sweep is for builder *death*, not builder
+   with one of the two - the queue's stale-requeue sweep is for builder *death*, not builder
    code paths.
 
 ## The sandbox
@@ -83,14 +83,14 @@ Also applied: `--network=none`, a read-only root with a tmpfs `/tmp`, `--memory`
 `--userns=keep-id` so the build runs as the unprivileged account this service runs as. The
 emcc cache is mounted read-only with `EM_FROZEN_CACHE=1`, so one job cannot poison what later
 jobs link against; the toolchain-bump protocol warms it with one build **of each mode** outside
-the sandbox — the page link is `-pthread` and needs the `-mt` system libraries a module build
+the sandbox - the page link is `-pthread` and needs the `-mt` system libraries a module build
 never touches.
 Podman passes no host environment through, so a token in this service's environment is not
 visible to a build. There is deliberately **no** unsandboxed fallback: no podman or no image
 means no build.
 
 Three deployment requirements that are part of the boundary, not decoration. This service must
-run under a **dedicated, sudo-less account** — on a box where the login user has passwordless
+run under a **dedicated, sudo-less account** - on a box where the login user has passwordless
 sudo, a sandbox escape as that user is a root compromise. Its bearer token must reach it
 without becoming a readable file inside any mount (systemd `LoadCredential`, or the
 environment, which podman does not forward). And `scratch_dir` should point at a
@@ -114,7 +114,7 @@ the native module registered), and their `DT_NEEDED` X11/GL libs must resolve in
 container or the dlopen fails and every graphics sample reports `missing prerequisite`.
 
 The box environment (`DASWEB_WASM_WORKTREE`, pinned emsdk, the worktree's own
-`web/build_wasm_host.sh` host build, the sandbox image) is documented in `~/SETUP.md` on zen4 —
+`web/build_wasm_host.sh` host build, the sandbox image) is documented in `~/SETUP.md` on zen4 - 
 the wasm worktree is dedicated because wasm and native builds poison each other's `bin/` and
 `lib/` (`plans/dasweb_wasm_pipeline.md` has the postmortem). Build the sandbox image once per
 `Containerfile` change (bump the tag here, in `Containerfile`, and in `run_build.sh` together):
@@ -127,13 +127,13 @@ podman build -t dasweb-builder:2 -f utils/internal/dasweb-buildd/Containerfile .
 
 The toolchain id is the wasm worktree's HEAD sha, so moving the worktree re-keys every cached
 artifact and each sample pays a real build on its next click. Roll once, after a batch of work
-has landed — never per-merge.
+has landed - never per-merge.
 
 Moving the worktree is not by itself a roll. `run_build.sh` consumes two built things, and a
 daslang change lands in one or the other: `bin/daslang`, the cross-compile host that emits the
 emcc link line (where link flags live), and `web/output64/lib/*_runtime*.a`, the runtime archive
 linked into every artifact (where runtime behaviour lives). Pulling without rebuilding both
-announces a new id whose artifacts still carry the old code — the cache is invalidated and
+announces a new id whose artifacts still carry the old code - the cache is invalidated and
 nothing is fixed. The host additionally bakes its own C++ ABI into every module it codegens, so
 it is built by `web/build_wasm_host.sh` rather than an ordinary cmake invocation; a host whose
 stdlib or exception config differs from the target corrupts the wasm heap at runtime with no

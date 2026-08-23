@@ -1,6 +1,6 @@
 # Writing and running benchmarks
 
-Benchmarks run on the same `dastest` framework as tests — read `skills/writing_tests.md`
+Benchmarks run on the same `dastest` framework as tests - read `skills/writing_tests.md`
 for the framework itself; this file is what benchmarks add.
 
 ## Running
@@ -10,11 +10,11 @@ bin/daslang dastest/dastest.das -- --bench --test path/to/benchmark.das
 bin/daslang -jit dastest/dastest.das -- --bench --test path/to/directory/
 ```
 
-- `--bench` — without it, `[benchmark]` functions are skipped
+- `--bench` - without it, `[benchmark]` functions are skipped
 - `-jit` goes **before** `dastest.das`: it puts dastest itself in JIT mode, which is what
   gets the benchmark code JIT-compiled. Use it for any performance number you intend to
   believe
-- `--bench-names name1,name2` — run only those benchmark functions
+- `--bench-names name1,name2` - run only those benchmark functions
 
 Dropping `--bench` turns the same command into a fast compile check: it reports 0 tests but
 surfaces every compile error.
@@ -39,7 +39,7 @@ require dastest/testing_boost
 [benchmark]
 def my_benchmark(b : B?) {
     b |> run("sub_name", CHUNK_SIZE) {
-        // measured — this block runs in a loop
+        // measured - this block runs in a loop
     }
 }
 ```
@@ -59,7 +59,7 @@ stable measurement, unrolls blocks faster than 100 ns, and reports CPU time plus
 string allocations per operation. Pass `chunk_size` when the block loops internally, so
 ns/op stays per logical operation; names take interpolation (`"insert/{HASH_SIZE}"`).
 
-`B` and `T` share the `Asserter` base, so the test assertions work — prefer
+`B` and `T` share the `Asserter` base, so the test assertions work - prefer
 `b |> equal(x, y)` over a hand-rolled `if (x != y) { b->failNow() }`. `b->failNow()` aborts
 the benchmark, `b->fail()` marks it failed and continues; a correctness helper takes
 `b : B?` so it can do either.
@@ -75,7 +75,7 @@ require dastest/testing_boost
 let HASH_SIZE = 600000
 
 def run_read_bench(b : B?; hmap : auto(HashMapType)) {
-    let m = fill_map(hmap, HASH_SIZE)          // setup is outside run — not measured
+    let m = fill_map(hmap, HASH_SIZE)          // setup is outside run - not measured
     b |> run("read/{HASH_SIZE}", HASH_SIZE) {
         for (i in range(HASH_SIZE)) {
             b |> equal(m?[i] ?? 0, -i)
@@ -97,10 +97,10 @@ def builtin_table(b : B?) {
 - `auto(HashMapType)`-style generic helpers let one body benchmark several implementations
 - `options unsafe_table_lookup = false` when benchmarking table `[]` without `unsafe`
 - Custom containers (`TCuckooHashTable`, `TFlatHashTable`, `SlotMap`) declare `erase`,
-  `key_exists`, `emplace` as `def static` — call them with dot syntax
+  `key_exists`, `emplace` as `def static` - call them with dot syntax
   (`hashMap.erase(key)`); pipe syntax resolves a free function and fails
-- Files starting with `_` are skipped by dastest — use that for shared helper modules
+- Files starting with `_` are skipped by dastest - use that for shared helper modules
 - Format benchmark files like any other `.das`
 
-This repo's own benchmark tree — layout, the index file, output capture:
+This repo's own benchmark tree - layout, the index file, output capture:
 `skills/internal/benchmarks_in_repo.md` (repo-only).
