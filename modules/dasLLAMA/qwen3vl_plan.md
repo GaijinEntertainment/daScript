@@ -653,3 +653,36 @@ Metal tower deletes it too.
 25. Wired at the prefill seam (fire when > ~1 s since the last Metal submission), the
     re-measured Metal img:pp lands 8B −7..−13% vs ref (from −29%) and 4B −3..−9% (from
     −16%); CPU cells and tg unchanged.
+
+#### Slice M warm-up verdict (2026-08-23): the penalty cannot be pre-paid — the tower is the fix
+
+Probe ladder on the 8B (each arm = encode, then the warm-up variant, then the timed span
+eval; clean eval 609 ms, after-encode 680 ms):
+
+| warm-up variant | own cost | eval after | verdict |
+|---|---|---|---|
+| empty command buffer (async) | ~0 | 678.6 | nothing |
+| empty cb + wait (round trip 0.107 ms!) | ~0 | 678.5 | the driver was never asleep |
+| MTLResidencySet pin (146 buffers incl. the blob, active) | 0 | 679.4 | residency is not the mechanism |
+| 1-thread real kernel (async) | ~0 | 678.0 | execution alone is not the trigger |
+| page-touch kernel (1 load / 16 KB page, whole blob) | 17-23 ms | 675.2 | page faults are not the mechanism |
+| 1-token decode (streams ALL weight bytes) | ~100 ms (28 warm) | **608.4** | full repay — rides the ramp itself |
+| 32-row prefill | ~148 ms | 608.9 | same |
+| page-touch pulse train through the encode (real thread) | — | 684.0 | light load does not hold the domain |
+
+**The operational law:** after a multi-second CPU-saturating phase, the first ~70 ms (8B; ~
+scales with the model's bandwidth demand) of sustained-bandwidth GPU work runs degraded —
+a memory/GPU governor ramp, not residency, not paging, not driver wake. It is one-time per
+burn, is absorbed by whatever heavy work runs first, and cannot be pre-paid by anything
+cheaper than the ramp itself; a synchronous warm-up always nets a loss (own cost rides on
+top). Scored: **P23 CORRECT** (empty repays nothing), **P24 HALF** (the full-stream warm-up
+repays 100% but costs ~100 ms, 2.5x the predicted bound — because it IS the ramp),
+**P25 VOID** (no warm-up lever exists to wire; the residency machinery was implemented,
+measured at zero effect, and reverted — the probe ledger above is what it bought).
+
+**Consequence:** the das Metal image-turn pp gap on CPU-encoding models is the price of the
+CPU tower, not of the prefill lane (das text prefill = parity; the eval machinery = +10 ms).
+The remedy is slice J's deferred **Metal tower for the qwen ViTs** — GPU encodes keep the
+domain loaded, delete the 2-12 s CPU encodes AND the ramp, and also delete the still-open
+1.7x metal-armed-CPU-encode anomaly. Until a family's tower serves on GPU (qwen25v, the
+conformer audio encoders), its image/audio-turn pp keeps the ramp — ledgered.

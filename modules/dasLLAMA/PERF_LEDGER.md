@@ -12,6 +12,29 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **OPEN — the qwen Metal image-turn pp reds are the CPU encode's aftermath (measured
+  2026-08-23, M1 Max, the slice-M dig; plan: `qwen3vl_plan.md` slice M).** Record-grade
+  `img:pp` das/lcpp on the honest walk: 3B −12%, 4B −16%, 8B −29%, 30B MoE −41% (unprobed)
+  — while das TEXT prefill at the same padded M is at parity (4B +2.7%, 8B −6.2%) and the
+  whole image-eval machinery (wide ds rows, mrope tables, span mask) prices +10 ms. The
+  mechanism: after the multi-second CPU tower encode, the first ~70 ms (8B; scales with
+  bandwidth demand) of sustained GPU work runs degraded — a memory/GPU governor ramp.
+  Refuted by probe: driver wake (empty cb round-trips in 0.107 ms), MTLResidencySet pinning
+  (146 buffers, zero effect — implemented and reverted), per-page faults (page-touch kernel
+  repays nothing), light pulse-trains through the burn. Only full-weight-stream work absorbs
+  it (a 1-token decode: 100 ms after-burn vs 28 warm), i.e. the ramp rides whatever heavy
+  work comes first — no warm-up can net-win. **The fix is the deferred Metal tower for the
+  qwen ViTs** (also deletes the 2-12 s CPU encodes and the open 1.7x metal-armed-CPU-encode
+  anomaly below). Until a family's tower serves on GPU (qwen25v exact-only, the conformer
+  audio encoders), its media-turn pp keeps the ramp.
+
+- **OPEN — arming Metal makes the CPU q8 tower encode ~1.7x slower (measured 2026-08-23,
+  M1 Max, 8B qwen3v tower: 3.26-3.45 s with MetalMode.required vs 1.90 s on the CPU leg,
+  same t=8).** Reproduces in a quiet -jit probe, so it is not the bench harness. Mechanism
+  unnamed — worker placement / QoS when the Metal queue is live is the suspect class.
+  Costs every Metal-leg image cell ~1.4-1.6 s of encode today; the Metal tower deletes the
+  arm entirely, but the mechanism matters wherever a CPU encoder coexists with Metal serving.
+
 - **RULED AND LANDED — the spliced image prefill trailed llama.cpp on Metal; the fused span
   eval closed it (measured 2026-08-21, M1 Max, the fused-image-span arc).** The record-grade
   gap was das/lcpp **0.52–0.62×** `img:pp` across all three vision models (E2B 687 vs 1101,
