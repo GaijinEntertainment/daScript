@@ -102,3 +102,50 @@ jobs:
         path: utils/internal/dasweb-verify/browser/artifacts
         if-no-files-found: ignore
         retention-days: 14
+
+  wasm_specs:
+    # The @wasm cells of the Playwright e2e suite (site/tests/playground). The
+    # per-PR lane stages the site with no runtime and inverts them out, so this
+    # is the only CI that ever executes them - without it they rot silently
+    # (the revive specs shipped broken for eleven days). Only the @wasm tag
+    # runs here: the untagged cells stub production services (share minting,
+    # the wasm build queue) and belong to the staged per-PR lane.
+    if: github.event_name != 'schedule' || github.repository == 'GaijinEntertainment/daScript'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        # deliberately no `cache:` — see the header
+
+    - name: "Install suite dependencies"
+      working-directory: site/tests/playground
+      run: npm ci
+
+    - name: "Install Chromium"
+      working-directory: site/tests/playground
+      run: npx playwright install chromium --with-deps
+
+    - name: "Run @wasm specs against the live playground"
+      working-directory: site/tests/playground
+      env:
+        BASE_URL: ${{ github.event.inputs.base_url || 'https://daslang.io' }}
+      # Serial on purpose: each cell downloads the ~40MB runtime, and parallel
+      # workers sharing one pipe turn tight per-spec budgets into flakes.
+      run: |
+        set -euo pipefail
+        echo "driving ${BASE_URL}"
+        npx playwright test --grep '@wasm' --workers=1
+
+    - name: "Upload Playwright report on failure"
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: wasm-spec-report
+        path: site/tests/playground/playwright-report/
+        if-no-files-found: ignore
+        retention-days: 14

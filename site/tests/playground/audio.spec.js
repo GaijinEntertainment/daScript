@@ -72,7 +72,7 @@ async function loadPlaygroundWithTap(page) {
         () => window.code && typeof window.code.setValue === 'function', null, { timeout: 20_000 });
     await page.waitForFunction(
         () => !!(window.PlaygroundRunner && window.PlaygroundRunner.isReady()),
-        null, { timeout: 30_000 });
+        null, { timeout: 60_000 });
     await page.waitForFunction(
         () => Array.from(document.getElementById('examples').options)
             .some(o => o.text === 'Audio: strudel synth arpeggio'),
@@ -80,31 +80,34 @@ async function loadPlaygroundWithTap(page) {
 }
 
 test('strudel audio sample plays then stops @wasm', async ({ page }) => {
+    test.slow();   // a full runtime compile before the run; parallel-suite load stretches it
     await loadPlaygroundWithTap(page);
     await page.selectOption('#examples', { label: 'Audio: strudel synth arpeggio' });
     await page.waitForFunction(() => window.code.getValue().includes('strudel_tick'), null, { timeout: 15_000 });
 
     await page.click('#run'); // trusted gesture -> installAudioUnlock resumes the context
 
-    // Plays: live Web Audio output becomes non-zero within a few seconds.
-    await expect.poll(() => frameEval(page, () => window.__peak), { timeout: 8_000 }).toBeGreaterThan(0.01);
+    // Plays: live Web Audio output becomes non-zero. Event-driven: the wide
+    // budget only spends when the script compile is squeezed by sibling specs.
+    await expect.poll(() => frameEval(page, () => window.__peak), { timeout: 30_000 }).toBeGreaterThan(0.01);
 
     // Stops on its own (~7s, END_SECONDS): the AudioContext leaves 'running'.
     await expect
         .poll(() => frameEval(page,
             () => window.__states().every(s => s !== 'running') && window.__states().length > 0),
-            { timeout: 12_000 })
+            { timeout: 20_000 })
         .toBe(true);
 });
 
 test('strudel audio sample reports its lifecycle @wasm', async ({ page }) => {
+    test.slow();   // a full runtime compile before the run; parallel-suite load stretches it
     await loadPlaygroundWithTap(page);
     await page.selectOption('#examples', { label: 'Audio: strudel synth arpeggio' });
     await page.waitForFunction(() => window.code.getValue().includes('strudel_tick'), null, { timeout: 15_000 });
     await page.click('#run');
     // init() and the eventual shutdown() both print to the output panel.
     await expect(page.locator('.output_line_text', { hasText: 'playing synth arpeggio' }))
-        .toBeVisible({ timeout: 10_000 });
+        .toBeVisible({ timeout: 30_000 });
     await expect(page.locator('.output_line_text', { hasText: 'strudel: stopped' }))
-        .toBeVisible({ timeout: 15_000 });
+        .toBeVisible({ timeout: 30_000 });
 });
