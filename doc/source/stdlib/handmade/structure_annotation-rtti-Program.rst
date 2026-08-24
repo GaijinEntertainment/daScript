@@ -4,6 +4,7 @@ module name
 total number of functions in the program
 total number of variables in the program
 compilation errors and exceptions
+stack size the global init script needs
 size of the global string heap
 whether a visitor walks builtin functions too
 initial semantic hash with dependencies

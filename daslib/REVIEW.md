@@ -94,7 +94,8 @@ growing either overload set without the cap is a silently missed finding, the re
 suggestion that does not compile.
 
 **A diff that adds or changes an emit entry point - a function that runs the emit visitor
-and then returns or writes the generated C++ - keeps the error check ahead of that return
+(`CppAot` or its subclass `StandaloneContextGen`, the visitors that write C++) and then
+returns or writes the generated C++ - keeps the error check ahead of that return
 or write.** The error check is the program's `macroException`/`failToCompile` state, or
 `log_aot_emit_errors` where the emit runs standalone; a codegen exception mid-visit
 leaves partial C++.
@@ -113,10 +114,10 @@ spell it are `aotStructName` and the `VarInfo` emitter's inline
 `aotSuffixNameEx(info.name, "_S", ...)`. One site changed alone writes `offsetof`s that
 name a struct declared under a different name.
 
-**A diff that adds or changes a function that runs the emit visitor calls
-`buildStructEnumCollisions` before that visitor runs.** The duty sits on that function,
-not on each helper it calls to spell a name: the table decides when a name gets its
-collision suffix, and a run that skips it spells structs differently from the one that
+**A diff that adds or changes a function that runs the emit visitor keeps
+`buildStructEnumCollisions` running before that visitor runs.** It may run in a helper
+(`dumpDependencies` seeds it today): the table decides when a name gets its collision
+suffix, and a run that skips the seeding spells structs differently from the one that
 seeded it.
 
 **`match_error` stores a BORROWED `LineInfo` pointer - pass a pattern node's location,

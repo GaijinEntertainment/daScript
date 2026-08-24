@@ -20,10 +20,13 @@ def private standalone_cop(var cop : CodeOfPolicies) {
     cop.tune_frozen = true
 }
 
-def private generate_standalone_files(t : T?; fixture, out_dir : string; cross_platform : bool = false) : tuple<header : string; source : string> {
+def private generate_standalone_files(t : T?; fixture, out_dir : string; cross_platform : bool = false; stack_policy : uint = 0u) : tuple<header : string; source : string> {
     let input = path_join(get_das_root(), "tests/aot/{fixture}.das")
     using() $(var cop : CodeOfPolicies) {
         standalone_cop(cop)
+        if (stack_policy != 0u) {
+            cop.stack = stack_policy
+        }
         ast_gc_guard() {
             standalone_aot(input, out_dir, cross_platform, false, cop)
         }
@@ -50,6 +53,20 @@ def private generate_standalone_files(t : T?; fixture, out_dir : string; cross_p
 
 def private generate_standalone_source(t : T?; fixture, out_dir : string) : string {
     return generate_standalone_files(t, fixture, out_dir).source
+}
+
+def private expect_emit_failure(t : T?; fixture, out_dir : string) {
+    let input = path_join(get_das_root(), "tests/aot/{fixture}.das")
+    var ok = true
+    using() $(var cop : CodeOfPolicies) {
+        standalone_cop(cop)
+        ast_gc_guard() {
+            ok = standalone_aot(input, out_dir, false, false, cop)
+        }
+    }
+    t |> success(!ok, "standalone_aot reports failure")
+    let generated = path_join(out_dir, "{fixture}.das.cpp")
+    t |> success(!stat(generated).is_valid, "no output is written on failure")
 }
 
 def private brace_balance(text : string) : int {
@@ -83,11 +100,22 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
     }
 
     t |> run("the context stack and heap hints honor the script's options") @(t : T?) {
-        let source = generate_standalone_source(t, "_standalone_stack_fixture", out_dir)
+        let source = generate_standalone_source(t, "_standalone_options_fixture", out_dir)
         t |> success(find(source, ": Context(262144/*stack*/)") >= 0, "the ctor sizes the stack from options stack")
         t |> success(find(source, "policies.heap_size_hint = 123456;") >= 0, "heap_size_hint comes from the script's options")
         t |> success(find(source, "policies.string_heap_size_hint = 234567;") >= 0, "string_heap_size_hint comes from the script's options")
+        t |> success(find(source, "unused_interpreted_helper") < 0, "an unused [no_aot] function neither blocks emission nor emits")
         t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
+    }
+
+    t |> run("a stack option below the interpreter's floor is raised to it") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_small_stack_fixture", out_dir)
+        t |> success(find(source, ": Context(16384/*stack*/)") >= 0, "options stack = 4096 still gets the 16K floor")
+    }
+
+    t |> run("with no stack option the policies' stack size decides") @(t : T?) {
+        let files = generate_standalone_files(t, "_standalone_novars_fixture", out_dir, stack_policy = 32768u)
+        t |> success(find(files.source, ": Context(32768/*stack*/)") >= 0, "the ctor sizes the stack from CodeOfPolicies")
     }
 
     t |> run("forward declarations spell types the way the definitions do") @(t : T?) {
@@ -149,32 +177,12 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> equal(brace_balance(files.source), 0, "unbalanced braces in the generated C++")
     }
 
-    t |> run("a [no_aot] function is a collected error, not a runtime crash") @(t : T?) {
-        let input = path_join(get_das_root(), "tests/aot/_standalone_no_aot_fixture.das")
-        var ok = true
-        using() $(var cop : CodeOfPolicies) {
-            standalone_cop(cop)
-            ast_gc_guard() {
-                ok = standalone_aot(input, out_dir, false, false, cop)
-            }
-        }
-        t |> success(!ok, "standalone_aot reports failure")
-        let generated = path_join(out_dir, "_standalone_no_aot_fixture.das.cpp")
-        t |> success(!stat(generated).is_valid, "no output is written on failure")
+    t |> run("a used [no_aot] function is a collected error, not a runtime crash") @(t : T?) {
+        expect_emit_failure(t, "_standalone_no_aot_fixture", out_dir)
     }
 
     t |> run("a required module's [init] is a collected error, not a crash") @(t : T?) {
-        let input = path_join(get_das_root(), "tests/aot/_standalone_foreign_init_fixture.das")
-        var ok = true
-        using() $(var cop : CodeOfPolicies) {
-            standalone_cop(cop)
-            ast_gc_guard() {
-                ok = standalone_aot(input, out_dir, false, false, cop)
-            }
-        }
-        t |> success(!ok, "standalone_aot reports failure")
-        let generated = path_join(out_dir, "_standalone_foreign_init_fixture.das.cpp")
-        t |> success(!stat(generated).is_valid, "no output is written on failure")
+        expect_emit_failure(t, "_standalone_foreign_init_fixture", out_dir)
     }
 
     t |> run("before_emit receives the compiled program") @(t : T?) {

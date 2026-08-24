@@ -122,15 +122,18 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
         });
     }
 
+    let min_init_stack = 16384
     let stack_opt = program._options |> find_arg("stack") ?as tInt ?? int(program.policies.stack)
-    let stack_size = max(stack_opt, 16384) + int(program.globalInitStackSize)
+    let stack_size = max(stack_opt, min_init_stack) + int(program.globalInitStackSize)
     write(tw, "{cfg.class_name}::{cfg.class_name}() : Context({stack_size}/*stack*/) \{\n");
     write(tw, "    auto & context = *this;\n");
     write(tw, "    CodeOfPolicies policies;");
     write(tw, "    policies.debugger = {program.policies.debugger} /*policies.debugger*/;\n");
     write(tw, "    policies.persistent_heap = {program._options |> find_arg("persistent_heap") ?as tBool ?? program.policies.persistent_heap};\n");
-    write(tw, "    policies.heap_size_hint = {program._options |> find_arg("heap_size_hint") ?as tInt ?? int(program.policies.heap_size_hint)};\n");
-    write(tw, "    policies.string_heap_size_hint = {program._options |> find_arg("string_heap_size_hint") ?as tInt ?? int(program.policies.string_heap_size_hint)};\n");
+    let heap_hint = uint(program._options |> find_arg("heap_size_hint") ?as tInt ?? int(program.policies.heap_size_hint))
+    let string_heap_hint = uint(program._options |> find_arg("string_heap_size_hint") ?as tInt ?? int(program.policies.string_heap_size_hint))
+    write(tw, "    policies.heap_size_hint = {heap_hint:d};\n");
+    write(tw, "    policies.string_heap_size_hint = {string_heap_hint:d};\n");
     write(tw, "    policies.track_allocations = {program._options |> find_arg("track_allocations") ?as tBool ?? program.policies.track_allocations};\n");
     write(tw, "    context.setup({program.totalVariables}/*totalVariables*/, {program.globalStringHeapSize:d} /*globalStringHeapSize*/, policies, \{\});\n");
 
@@ -360,6 +363,15 @@ def genStandaloneSrc(var program : ProgramPtr;
     return initFunctions
 }
 
+def private isMarkedNoAot(pfun : Function?) : bool {
+    for (ann in pfun.annotations) {
+        if (ann.annotation.name == "no_aot") {
+            return true
+        }
+    }
+    return false
+}
+
 def private checkAllUsedFunctionsCanAot(program : ProgramPtr) {
     program.get_ptr() |> for_each_module_no_order($(pm) {
         pm |> for_each_module_function($(pfun) {
@@ -367,16 +379,20 @@ def private checkAllUsedFunctionsCanAot(program : ProgramPtr) {
                 return
             }
             if (pfun.flags.noAot) {
-                macro_error(program, pfun.at, "standalone AOT cannot emit function {pfun.name}: it needs the interpreter ([no_aot], or a type AOT cannot express), and a standalone context has none")
+                if (isMarkedNoAot(pfun)) {
+                    macro_error(program, pfun.at, "standalone AOT cannot emit function {pfun.name}: it is [no_aot], and a standalone context has no interpreter")
+                } else {
+                    macro_error(program, pfun.at, "standalone AOT cannot emit function {pfun.name}: it uses a type AOT cannot express, and a standalone context has no interpreter")
+                }
             }
         });
     });
 }
 
 def private prepareProgramForEmission(var program : ProgramPtr; context : Context) : BlockVariableCollector? {
-    var marker = new NoAotMarker();
-    make_visitor(*marker) $(adapter_marker) {
-        visit(program, adapter_marker)
+    var noAotMarker = new NoAotMarker();
+    make_visitor(*noAotMarker) $(adapter_no_aot) {
+        visit(program, adapter_no_aot)
     }
     checkAllUsedFunctionsCanAot(program)
 
@@ -394,7 +410,7 @@ def private prepareProgramForEmission(var program : ProgramPtr; context : Contex
     unsafe {
         delete flags
         delete pmarker
-        delete marker
+        delete noAotMarker
     }
 
     var coll = new BlockVariableCollector();
