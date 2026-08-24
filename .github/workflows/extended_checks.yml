@@ -487,6 +487,7 @@ jobs:
       if: matrix.target == 'linux'
       run: |
         set -eux
+        python3 ci/test_fix_md_ascii.py
         python3 ci/fix_md_ascii.py --check
 
     - name: "Test watchdog tray wording (python)"
