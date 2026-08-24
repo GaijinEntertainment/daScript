@@ -30,11 +30,18 @@ what it costs today and what the fix would change.
   Results (released exe, r=3, quiet M1 Max, fresh upstream pairs): 8B img:pp 522 -> 552
   tok/s (-7.5% -> -2.2%), 4B img:pp 942 -> 986 (-2.7%), 8B text p321 534.5 -> 566.7 (+7.8%
   ahead); p341/p512 unchanged (remainders outside the window); 30B Omni img:pp 783 (rides -
-  its FFN is MoE, out of tail scope). **OPEN followups: (1) the span-attention tax (~6 ms/turn
-  in-process, the whole remaining probe-visible image cost); (2) the post-encode context
-  residue (~10 ms on 8B - the bench-context image wall exceeds the in-process wall by it);
-  (3) the kq mul_mm sites and the MoE prefill GEMMs take no tail yet (the kq mv twins
-  exist); (4) r in [9,15] via a third mv pass (~12 ms more on the shapes that hit it).**
+  its FFN is MoE, out of tail scope). The span-attention tax split on the finer knockouts
+  (attn_qk/attn_sm/attn_av x span-size scaling): ~3 ms was a CONSTANT AV overhead - with the
+  span armed the AV kernels walked every query tile to np32, dropping the causal limit
+  wholesale; the bound is now tile-conditional (max(uend, causal reach) only where the tile
+  holds span rows - a pure shrink over softmax-zeroed columns, the f16 fused-vs-splice
+  witness reads 0 with it). The 1-row-span tax fell 3.3 -> 0.58 ms (small-media turns win);
+  at the 300-row turn the remaining ~6 ms is INTRINSIC non-causal pairs - the image cell
+  does not move. **OPEN followups: (1) the post-encode context residue (~10 ms on 8B:
+  ~6.7 ms GPU cache aftermath of the per-turn tower encode + ~3.8 ms host commit slack;
+  lever = encode-ahead overlap, shared with the decode per-step-overhead entry); (2) the kq
+  mul_mm sites and the MoE prefill GEMMs take no tail yet (the kq mv twins exist); (3) r in
+  [9,15] via a third mv pass (~12 ms more on the shapes that hit it).**
 
 - **LANDED - the Metal q8 decode GEMV family ran one-row-per-simdgroup with a full-n walk,
   spilling the x vector past L1 from n=4096; the reduction-split form takes every q8 model
