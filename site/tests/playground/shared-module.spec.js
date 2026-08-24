@@ -14,6 +14,11 @@
 
 const { test, expect } = require('@playwright/test');
 
+// Pin the editor to a known tiny program before the counted runs: the default
+// sample (data.json[0]) is whatever the playground features that month — a GL
+// demo prints no output lines at all.
+const PROBE_SRC = 'options gen2\n[export]\ndef main {\n    print("PROBE-OK\\n")\n}\n';
+
 // Gate on the runner's own readiness, not the Run button: the button is
 // re-gated on state *changes*, so mid-run it can briefly hold a stale enabled
 // state while isReady() is false.
@@ -37,6 +42,7 @@ test('a session of runs compiles the runtime once, not once per run @wasm', asyn
     await page.locator('.CodeMirror').waitFor({ state: 'visible' });
     await page.waitForFunction(() => window.pgSamplesReady === true, null, { timeout: 30_000 });
     await waitForRunReady(page);
+    await page.evaluate((src) => { window.code.getDoc().setValue(src); }, PROBE_SRC);
 
     // The page is up and a frame is standing by — from here on, no run may
     // cost another fetch (= another compile) of the runtime.
@@ -50,11 +56,11 @@ test('a session of runs compiles the runtime once, not once per run @wasm', asyn
     await runAndWaitForOutput(page);
     await waitForRunReady(page);
 
-    // Both runs actually executed: the default sample prints "Hello World"
-    // once per run. (A weaker any-output check would accept a status line.)
+    // Both runs actually executed: the probe prints once per run. (A weaker
+    // any-output check would accept a status line.)
     const lines = await page.evaluate(() =>
         [...document.querySelectorAll('#output .output_line_text')].map((e) => e.textContent).join('\n'));
-    expect((lines.match(/Hello World/g) || []).length).toBe(2);
+    expect((lines.match(/PROBE-OK/g) || []).length).toBe(2);
     expect(lines).not.toContain('runtime aborted');
 
     expect(lateWasmFetches).toBe(0);
