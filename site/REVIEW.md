@@ -32,8 +32,10 @@ in the results.md tables, is a defect.
 changing `examples/benchmarks/sql/results.md` in the same change, or that leaves any cell in the
 record differing from the same family-and-lane cell in those results.md tables, is a defect.
 
-**Every code sample shown on a page compiles and runs with the current toolchain.** daslang
-samples are gen2 and compile with the current binary; no pseudo-code presented as code.
+**Every code sample shown on a page is a full program - it compiles and runs with the
+current toolchain, and the page links it to "try it on playground".** daslang samples are
+gen2; a partial snippet shown as a code card, a sample without its playground link, or
+pseudo-code presented as code is a defect.
 
 **A test under `tests/playground/` (this folder) that needs the daslang runtime carries `@wasm` in its
 title.** The per-PR lane stages the site without WASM artifacts and runs the suite with
