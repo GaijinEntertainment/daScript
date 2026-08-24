@@ -85,7 +85,18 @@ def read_repaired(path: Path):
         return raw.decode("utf-8"), False
     except UnicodeDecodeError:
         pass
-    text = raw.decode("cp1252", errors="replace")
+    # Preserve valid UTF-8 runs and decode only invalid bytes as CP-1252. Treating
+    # the whole file as CP-1252 corrupts mixed files: an isolated legacy byte can
+    # otherwise turn every valid UTF-8 punctuation sequence into mojibake.
+    mixed = raw.decode("utf-8", errors="surrogateescape")
+    repaired = []
+    for ch in mixed:
+        code = ord(ch)
+        if 0xDC80 <= code <= 0xDCFF:
+            repaired.append(bytes((code - 0xDC00,)).decode("cp1252", errors="replace"))
+        else:
+            repaired.append(ch)
+    text = "".join(repaired)
     for _ in range(3):  # collapse double-encoded runs until stable
         try:
             text2 = text.encode("cp1252").decode("utf-8")
