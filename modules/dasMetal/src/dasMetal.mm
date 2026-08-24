@@ -483,6 +483,9 @@ namespace das {
 #if defined(DASMETAL_HAS_RESIDENCY_SETS)
         if ( @available(macOS 15.0, iOS 18.0, *) ) {
             auto & hb = g_rsetHeartbeat;
+            // arm the countdown BEFORE the thread can exist - a fresh thread reading 0 would
+            // take the idle sleep and delay the first keep-alive pass by idle_ms
+            hb.loops_left.store(int64_t(keep_alive_s) * 1000 / ResidencyHeartbeat::interval_ms, std::memory_order_relaxed);
             {
                 std::lock_guard<std::mutex> guard(hb.mx);
                 if ( std::find(hb.sets.begin(), hb.sets.end(), (void *) rset) == hb.sets.end() ) {
@@ -493,7 +496,6 @@ namespace das {
                     hb.thr = std::thread(residency_heartbeat_loop);
                 }
             }
-            hb.loops_left.store(int64_t(keep_alive_s) * 1000 / ResidencyHeartbeat::interval_ms, std::memory_order_relaxed);
         }
 #else
         (void) keep_alive_s;
