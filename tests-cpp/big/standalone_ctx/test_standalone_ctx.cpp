@@ -28,5 +28,11 @@ int main( int, char * [] ) {
     expect("pair_sum(embedder-built Pair)", ctx.pair_sum(embedderPair), 42);
     expect("flip(on)", int32_t(ctx.flip(standalone_init_fixture::Mode::on)),
         int32_t(standalone_init_fixture::Mode::off));
+    constexpr uint32_t kFixtureStackSize = 262144;
+    expect("stack.size() exceeds options stack by the init headroom",
+        ctx.stack.size() > kFixtureStackSize ? 1 : 0, 1);
+    expect("apply_lambda(10)", ctx.apply_lambda(10), 16);
+    expect("call_through_pointer(21)", ctx.call_through_pointer(21), 42);
+    expect("sum_generator(5)", ctx.sum_generator(5), 10);
     return failures ? 1 : 0;
 }

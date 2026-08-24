@@ -556,8 +556,10 @@ def expectsLocalTemp(expr : ExprMakeLocal?) : bool {
     return false
 }
 
-class NoAotMarker : AstVisitor {
+class public NoAotMarker : AstVisitor {
     //! AST visitor that marks functions containing non-AOT-compatible types as noAot.
+    //! Run it before anything reads `flags.noAot`. It also mutates the AST: `invoke` of a
+    //! block literal gets `aotSkipMakeBlock`, and a surviving `quote()` logs an error.
     @do_not_delete func : Function? <- null;
 
     def override preVisitTypeDecl(typeDecl : TypeDeclPtr) {

@@ -244,9 +244,15 @@ an entry lands here only when no name, shape, or test can carry it.
   (signature written by `aot_cpp.das`'s `preVisitGlobalLet` - a daslib-to-daslib pairing,
   nothing checks agreement), then each `[init]` function directly. Deliberate divergences:
   `__init_shared` is hardcoded `true` (a fresh standalone context always owns its
-  shared globals), there is no `globalInitStackSize` stack push (init locals are C++
-  locals in AOT), and there is no `!stopFlags` guard between `[init]` calls (a panic
-  propagates out of the ctor instead of soft-stopping the sequence).
+  shared globals), there is no separate init stack (init locals are C++ locals in AOT;
+  instead the ctor's base `Context(N)` folds the init headroom in: N =
+  `max(options stack, 16384) + globalInitStackSize`, mirroring the interpreter's
+  init-stack formula in `src/ast/ast_simulate.cpp` - a pair; `globalInitStackSize`
+  reaches the emitter through the rtti `Program` binding in
+  `src/builtin/module_builtin_rtti.cpp` - so an `invoke` during init still
+  has das stack to push a prologue onto), and there is no `!stopFlags` guard between
+  `[init]` calls (a panic propagates out of the ctor instead of soft-stopping the
+  sequence).
 - **Global init order is a pact with the allocator**: `StandaloneContextGen`'s
   `preVisitGlobalLet` emits required modules' globals via ordered `for_each_module`
   before the adapter walks the entry module's own - correct only because
@@ -256,8 +262,15 @@ an entry lands here only when no name, shape, or test can carry it.
   simulated context's list through rtti `for_each_init_function`, so the C++ late-init
   sort stays the single source of truth.
 - **Cross-module limits fail loud at emit time**: only main-module, AOT-emitted `[init]`
-  functions can be called from the ctor (required-module and `[no_aot]` ones panic with
-  the reason), because the standalone TU only emits the entry module's function bodies.
+  functions can be called from the ctor (required-module and `[no_aot]` ones are collected
+  emit errors with the reason), because the standalone TU only emits the entry module's
+  function bodies.
+- **Every used function must have an AOT body** - a standalone context has no
+  interpreter, so a used `noAot` function (the `[no_aot]` annotation, or `NoAotMarker`
+  finding a type AOT cannot express) is a collected emit error, never a
+  `fnByMangledName` call that would crash at runtime. `prepareProgramForEmission` runs
+  `NoAotMarker` first (the regular AOT paths run it too; standalone must match) and
+  then `checkAllUsedFunctionsCanAot` walks used, non-builtin functions.
 - **Type definitions live in the header, once** - struct/enum definitions (the
   dependency dump plus the entry module's own `declarations` capture) are emitted into
   the `.das.h`, which the `.das.cpp` includes; the source never redefines them. They sit
