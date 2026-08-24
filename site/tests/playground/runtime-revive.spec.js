@@ -16,6 +16,14 @@
 
 const { test, expect } = require('@playwright/test');
 
+// Pin the editor to a known tiny program before a run whose output is
+// asserted: the default sample (data.json[0]) is whatever the playground
+// features that month — a GL demo prints no output lines at all.
+const PROBE_SRC = 'options gen2\n[export]\ndef main {\n    print("PROBE-OK\\n")\n}\n';
+async function setProbeProgram(page) {
+    await page.evaluate((src) => { window.code.getDoc().setValue(src); }, PROBE_SRC);
+}
+
 test('a dead page revives on the next Run click @wasm', async ({ page }) => {
     test.slow();   // several full frame lifecycles; parallel-suite load stretches each
     await page.addInitScript(() => {
@@ -63,8 +71,7 @@ test('a dead page revives on the next Run click @wasm', async ({ page }) => {
         .toBeVisible({ timeout: 15_000 });
 
     // The revived spare comes up for real, the next Run actually executes the
-    // program (the default sample prints "Hello World"), and no further abort
-    // joined the output.
+    // program, and no further abort joined the output.
     await page.waitForFunction(() => {
         const b = document.getElementById('run');
         return b && !b.disabled && window.PlaygroundRunner && window.PlaygroundRunner.isReady();
@@ -72,8 +79,9 @@ test('a dead page revives on the next Run click @wasm', async ({ page }) => {
     const abortsBefore = await page.evaluate(() =>
         [...document.querySelectorAll('#output .output_line_text')]
             .filter((e) => e.textContent.includes('runtime aborted')).length);
+    await setProbeProgram(page);
     await page.click('#run');
-    await expect(page.locator('.output_line_text', { hasText: 'Hello World' }))
+    await expect(page.locator('.output_line_text', { hasText: 'PROBE-OK' }))
         .toBeVisible({ timeout: 60_000 });
     const abortsAfter = await page.evaluate(() =>
         [...document.querySelectorAll('#output .output_line_text')]
@@ -97,8 +105,9 @@ test('streaming-compile failure falls back to ArrayBuffer and the page works @wa
     await page.waitForFunction(
         () => window.PlaygroundRunner && window.PlaygroundRunner.isReady(),
         null, { timeout: 60_000 });
+    await setProbeProgram(page);
     await page.click('#run');
-    await expect(page.locator('.output_line_text', { hasText: 'Hello World' }))
+    await expect(page.locator('.output_line_text', { hasText: 'PROBE-OK' }))
         .toBeVisible({ timeout: 60_000 });
     const lines = await page.evaluate(() =>
         [...document.querySelectorAll('#output .output_line_text')].map((e) => e.textContent).join('\n'));
@@ -139,11 +148,10 @@ test('a failed runtime compile reports itself and the retry recovers @wasm', asy
         const b = document.getElementById('run');
         return b && !b.disabled && window.PlaygroundRunner && window.PlaygroundRunner.isReady();
     }, null, { timeout: 60_000 });
-    const before = await page.evaluate(() => document.querySelectorAll('#output .output_line').length);
+    await setProbeProgram(page);
     await page.click('#run');
-    await page.waitForFunction(
-        (n) => document.querySelectorAll('#output .output_line').length > n,
-        before, { timeout: 60_000 });
+    await expect(page.locator('.output_line_text', { hasText: 'PROBE-OK' }))
+        .toBeVisible({ timeout: 60_000 });
     const lines = await page.evaluate(() =>
         [...document.querySelectorAll('#output .output_line_text')].map((e) => e.textContent).join('\n'));
     expect(lines).not.toContain('runtime aborted: run-frame');
