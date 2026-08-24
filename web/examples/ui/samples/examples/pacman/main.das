@@ -19,9 +19,9 @@ require strudel/strudel_player
 require daslib/strings_boost
 require live_stub   // playground shim: replaces the live/* + live_host stack (window, clock, no-op [live_command])
 
-// Music uses the THREADED strudel player (strudel_init/strudel_play). The runtime
-// gate in init() turns it on only where the audio backend is threaded — wasm64 and
-// native; a single-threaded backend keeps music off and SFX (play_sound_from_pcm) on.
+// Music uses the THREADED strudel player (strudel_init/strudel_play). The playground
+// interpreter shares the renderer's runtime and cannot host that worker safely; only
+// standalone builds may enable it, and only with a threaded audio backend. SFX stay on.
 var music_enabled = false
 
 // ===== Constants =====
@@ -1089,7 +1089,7 @@ def init() {
         audio_initialized = true
         init_audio_samples()
     }
-    music_enabled = !audio_is_single_threaded()
+    music_enabled = is_standalone_exe() && !audio_is_single_threaded()
     if (music_enabled && !music_initialized) {
         strudel_init(@@strudel_music_main)
         strudel_set_volume(0.4, 0.0)
