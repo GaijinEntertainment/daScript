@@ -27,7 +27,7 @@ require metal/das_metal_boost
 // thread = one 16-element contiguous run = one scale load + four byte4 device loads — the
 // staging knockout showed per-element scale reloads were 55% of kernel time), barriers, and
 // runs 8x8 simdgroup tiles via the MIXED mac (f32 accumulators, f16 operands). Dequant-to-half
-// carries ggml's tolerance envelope: int8 quants are exact in half, the folded scale product
+// sets the tolerance envelope: int8 quants are exact in half, the folded scale product
 // rounds — pinned runs compare against CPU within relative tolerance, not bit-exact.
 //
 // The host driver is self-contained: weight regions upload lazily ON FIRST USE, keyed by the

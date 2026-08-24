@@ -19,7 +19,7 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // covers only a single partial chunk, so this probe prefills 150 synthetic tokens — two full
 // 64-token chunks plus a partial tail — exercising chunk boundaries, partial-chunk math, and the
 // batched-conv history handoff. The two forms are NOT bit-identical (chunk FP reassociation;
-// llama.cpp accepts the same divergence between its autoregressive and chunking builders), so the
+// upstream accepts the same divergence between its autoregressive and chunking paths), so the
 // gate is id-level: same argmax after prefill, then token-for-token agreement over an 8-token
 // greedy continuation — which also proves the conv/S state the chunked prefill leaves behind
 // feeds the recurrent decode correctly.

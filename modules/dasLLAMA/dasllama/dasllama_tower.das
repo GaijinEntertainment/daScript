@@ -17,7 +17,7 @@ require dasllama/dasllama_gguf   // read_clamp reads sidecar scalar tensors
 // file that re-implements a shape found here is a defect; nothing here names a family type.
 
 // erfc rational approximation (Numerical Recipes 6.2), |fractional error| < 1.2e-7 —
-// float-level agreement with ggml's erff. Double internally.
+// float-level agreement with the reference erff. Double internally.
 def private erf_nr(x : double) : double {
     let z = abs(x)
     let t = 1.0lf / (1.0lf + 0.5lf * z)
@@ -27,7 +27,7 @@ def private erf_nr(x : double) : double {
     return x >= 0.0lf ? 1.0lf - erfc : erfc - 1.0lf
 }
 
-//! gelu_erf(x) = 0.5·x·(1 + erf(x/√2)) — the EXACT erf form (ggml's ggml_vec_gelu_erf_f32),
+//! gelu_erf(x) = 0.5·x·(1 + erf(x/√2)) — the EXACT erf form,
 //! not the tanh approximation ``gelu`` uses. Whisper's conv frontend and encoder FFN both
 //! use this flavor. In place over the first ``size`` elements.
 def gelu_erf(var x : float?; size : int64) {
@@ -45,9 +45,9 @@ def gelu_erf(var x : array<float> | #; size : int64) {
     gelu_erf(unsafe(addr(x[0])), size)
 }
 
-//! whisper.cpp's ggml_gelu flavor (GGML_GELU_FP16): tanh approximation evaluated through an
+//! The fp16-LUT gelu flavor: tanh approximation evaluated through an
 //! fp16 lookup table — input and output both round-trip through binary16, with ±10 clamps
-//! applied BEFORE the conversion. Bit-exact vs ggml's CPU path. In place over ``size``.
+//! applied BEFORE the conversion. Bit-exact vs the reference CPU path. In place over ``size``.
 def gelu_tanh_lut(var x : float?; size : int64) {
     unsafe {
         for (i in range64(size)) {
@@ -123,8 +123,8 @@ def gelu_erf_batch(var x : array<float> | #; d, npos : int64) {
     }
 }
 
-//! Per-row swiglu with ggml's swapped halves: out[r][i] = silu(x[r][half+i]) · x[r][i]
-//! (ultravox_model.py's SwiGLU — silu on the SECOND half, passthrough on the first).
+//! Per-row swiglu with swapped halves: out[r][i] = silu(x[r][half+i]) · x[r][i]
+//! (silu on the SECOND half, passthrough on the first - the swapped convention).
 def swiglu_swapped_rows(var o : array<float>; x : array<float>; half, rows : int64) {
     for (r in range64(rows)) {
         for (i in range64(half)) {
@@ -140,7 +140,7 @@ def swiglu_swapped_rows(var o : array<float>; x : array<float>; half, rows : int
 }
 
 //! LayerNorm row: o = (x − mean)/√(var + eps)·w + b, mean/var double-accumulated over the
-//! row (ggml_norm's exact shape; the decoder only has RMS so this is new). Population var.
+//! row (the decoder only has RMS so this is new). Population var.
 def layernorm(var o : float?; x, w, b : float const?; size : int64; eps : float) {
     unsafe {
         var mean = 0.0lf
@@ -441,9 +441,9 @@ def tower_read_conv_pair_folded(m : GGUFMeta; b : array<uint8> | #; base : strin
     delete w1
 }
 
-//! Per-op activation-quant calibration range (mtmd ClippableLinear): clamp(x, imin, imax) before
+//! Per-op activation-quant calibration range: clamp(x, imin, imax) before
 //! the matmul, clamp the result to (omin, omax) after. ``active`` false = no sidecar scalars on
-//! disk, which mtmd treats as ±FLT_MAX — an identity clamp, so callers may skip the pass.
+//! disk, which means ±FLT_MAX — an identity clamp, so callers may skip the pass.
 [safe_when_uninitialized]
 struct Clamp {
     imin : float = -3.4028235e38
@@ -493,7 +493,7 @@ def clamp_rows(var dst : array<float>; src : array<float>; n : int64; lo, hi : f
 }
 
 //! Threaded per-row RMSNorm against a weight row in a prepared image: out[r] = rmsnorm(src[r])·w
-//! (``rmsnorm``'s (x·scale)·w order — ggml's RMS_NORM then MUL). ``out`` may be ``src``. A
+//! (``rmsnorm``'s (x·scale)·w order — normalize, then multiply). ``out`` may be ``src``. A
 //! per-head norm is this with ``d`` = head width and ``npos`` = tokens × heads.
 def rms_rows(var out : array<float>; src : array<float>; w : PlaneF; woff, d, npos : int64; eps : float) {
     if (npos <= 0l || d <= 0l) return
@@ -511,7 +511,7 @@ def rms_rows(var out : array<float>; src : array<float>; w : PlaneF; woff, d, np
     }
 }
 
-//! Weightless ggml_rms_norm per row, in place: x ⊙ 1/√(mean(x²) + eps), the mean accumulated in
+//! Weightless RMS norm per row, in place: x ⊙ 1/√(mean(x²) + eps), the mean accumulated in
 //! double (gemma4uv's pre-projection norm; gemma4v's V-norm with ``d`` = head width).
 def rms_rows_weightless(var x : array<float>; d, npos : int64; eps : float) {
     if (npos <= 0l || d <= 0l) return
@@ -535,8 +535,8 @@ def rms_rows_weightless(var x : array<float>; d, npos : int64; eps : float) {
     }
 }
 
-// The f16 table for geglu_quick_lut_rows: ggml-cpu's ggml_table_gelu_quick_f16 (GGML_GELU_QUICK_FP16
-// is on by default) — idx = f32_to_f16(x), value = f16(x·σ(1.702x)) widened. Built once, main thread.
+// The f16 table for geglu_quick_lut_rows, matching the reference CPU LUT:
+// idx = f32_to_f16(x), value = f16(x·σ(1.702x)) widened. Built once, main thread.
 var private g_gelu_quick_lut : array<float>
 
 [cold_path]
@@ -554,8 +554,8 @@ def private gelu_quick_lut_ensure() {
     }
 }
 
-//! GEGLU-quick over token-major rows: h = gelu_quick(gate) ⊙ up, gelu_quick evaluated as ggml-cpu
-//! does — input and output both round-trip through binary16 (its f16 table), matching the CPU
+//! GEGLU-quick over token-major rows: h = gelu_quick(gate) ⊙ up, gelu_quick evaluated through
+//! the f16 table — input and output both round-trip through binary16, matching the CPU
 //! oracle bit-for-bit rather than the exact x·σ(1.702x). Elementwise ⇒ lane-count invariant.
 def geglu_quick_lut_rows(var h : array<float>; gate, up : array<float>; ff, npos : int64) {
     if (npos <= 0l || ff <= 0l) return
@@ -575,7 +575,7 @@ def geglu_quick_lut_rows(var h : array<float>; gate, up : array<float>; ff, npos
     }
 }
 
-//! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in ggml's [C][KH][KW]
+//! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in [C][KH][KW]
 //! order (row index c·p² + ky·p + kx), one row per non-overlapping p×p patch walking the canvas
 //! row-major (pos_x = i % n_cols, pos_y = i / n_cols). Returns npos; ``x0`` grows to npos × 3p².
 def im2col_rgb_patches(planes : array<float>; w, h, p : int64; @scratch var x0 : array<float>) : int64 {
@@ -609,8 +609,8 @@ def im2col_rgb_patches(planes : array<float>; w, h, p : int64; @scratch var x0 :
 }
 
 //! Two-axis NEOX RoPE over token-major rows [npos × n_head·hs], in place: each head's first hs/2
-//! dims rotate by the row's x-position table entry, the second hs/2 by its y entry (ggml: two ROPE
-//! views then CONCAT). Tables are ``build_rope_tabs_rows`` outputs at head_size = hs/2.
+//! dims rotate by the row's x-position table entry, the second hs/2 by its y entry (two half-width
+//! rotations concatenated). Tables are ``build_rope_tabs_rows`` outputs at head_size = hs/2.
 def rope_neox_2d_rows(var v : array<float>; npos, n_head, hs : int64;
                       cos_x, sin_x, cos_y, sin_y : array<float>) {
     if (npos <= 0l) return
@@ -655,9 +655,9 @@ def rope_neox_tab_rows(var v : array<float>; npos, n_head, hs : int64; cos_t, si
     }
 }
 
-//! ggml's antialiased bilinear (BILINEAR | ANTIALIAS, the mtmd pos-embed resize): resample a
+//! Antialiased bilinear resize (the pos-embed resize): resample a
 //! channel-inner grid [sh×sw rows × d] to [dh×dw rows × d] — triangle filter, support
-//! max(1, 1/scale), weights normalized per pixel, f32 accumulation in ggml's (sy, sx) order.
+//! max(1, 1/scale), weights normalized per pixel, f32 accumulation in (sy, sx) order.
 def interpolate_grid_bilinear_aa(@scratch var out : array<float>; src : PlaneF; src_off : int64;
                                  sw, sh, dw, dh, d : int64) {
     if (long_length(out) < dw * dh * d) {
@@ -715,8 +715,8 @@ def interpolate_grid_bilinear_aa(@scratch var out : array<float>; src : PlaneF; 
 }
 
 //! Average pool k×k, stride k, over a patch grid held token-major (row = gy·gw + gx, d channels):
-//! out row (oy·(gw/k) + ox) = mean of the k×k window (ky outer, kx inner — ggml's POOL_2D
-//! accumulation order, then one divide). Ragged edges are dropped. Returns the output row count.
+//! out row (oy·(gw/k) + ox) = mean of the k×k window (ky outer, kx inner accumulation
+//! order, then one divide). Ragged edges are dropped. Returns the output row count.
 def avg_pool2d_rows(@scratch var out : array<float>; x : array<float>; gw, gh, d, k : int64) : int64 {
     let ow = gw / k
     let oh = gh / k

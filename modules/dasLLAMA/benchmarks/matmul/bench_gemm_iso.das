@@ -16,9 +16,9 @@ require dasllama/dasllama_env
 
 // Isolated batched-GEMM throughput, ours (production matmul_q8q8_batch) on REAL model matmul
 // shapes at the prefill batch width (ntok = 512), THREADED, reported as GMAC/s aggregate AND per
-// core. This is the das half of the pure-GEMM ladder (harness/pure_gemm_ladder.sh) — the lcpp
+// core. This is the das half of the pure-GEMM ladder (harness/pure_gemm_ladder.sh) — the reference
 // half is `test-backend-ops perf -o MUL_MAT` with the same shapes (harness/backend_ops_shapes.patch);
-// lcpp reports GFLOPS = 2·GMAC/s. Sweep DAS_JOBQUE_THREADS=2,4,8,… to read the parallel_for
+// it reports GFLOPS = 2·GMAC/s. Sweep DAS_JOBQUE_THREADS=2,4,8,… to read the parallel_for
 // scaling curve (values <= 1 are a fatal error — N means N total lanes incl. the computing main,
 // so there is no honest 1-lane jobque run); per-lane GMAC/s at 2 lanes is the near-kernel ceiling;
 // how far the aggregate climbs as lanes grow tells us whether parallel_for or the kernel is the wall.

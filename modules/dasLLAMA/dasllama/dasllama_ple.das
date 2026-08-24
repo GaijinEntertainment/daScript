@@ -19,8 +19,8 @@ require math
 // subsystem live outside the hub (the engine is required back, so the umbrella breaks the cycle).
 
 // ===== gemma-4 E-series per-layer embeddings (PLE) =====
-// A per-(token, layer) side input mixed into each layer's output (mirrors llama.cpp gemma4's
-// build_inp_per_layer + per_layer_embd). ple_inp is POSITION-major: (p, l, i) at p*(layers*ple)+l*ple+i.
+// A per-(token, layer) side input mixed into each layer's output. ple_inp is POSITION-major:
+// (p, l, i) at p*(layers*ple)+l*ple+i.
 
 // Pre-step finish (shared by decode/prefill): given the gathered+sqrt(ple)-scaled token rows already
 // in s.ple_inp[0..npos*all), add the projected embedding branch. proj = rmsnorm((1/√dim)·(model_proj·
@@ -118,7 +118,7 @@ def private ple_pre_prefill_impl(t : Model; var s : Session; tokens : array<int6
 }
 
 // Prefill-from-embeddings (multimodal) pre-step: no token ids, so the gather uses the padding token
-// (id 0) broadcast across positions — matching llama.cpp gemma4's build_inp_per_layer media branch.
+// (id 0) broadcast across positions.
 def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
     let all = t.config.n_layers * t.config.n_embd_per_layer
     for (p in range64(npos)) {
@@ -165,7 +165,7 @@ def private ple_block_prefill(t : Model; var s : Session; l : int64; npos : int6
 // weightless, then scaled by 1/√n_embd and a learned per-channel scale before the ffn_gate_inp matmul.
 def private gemma4_router_tmp(t : Model; var s : Session; l : int64) {
     let dim = t.config.dim
-    // sum of squares in DOUBLE (matches ggml_rms_norm): float drift here flips the discrete top-8 expert pick
+    // sum of squares in DOUBLE: float drift here flips the discrete top-8 expert pick
     var ss = 0.0lf
     for (i in range64(dim)) {
         ss += double(s.moe_ao[i] * s.moe_ao[i])
@@ -200,7 +200,7 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
     gemma4_router_tmp(t, s, l)
     mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb2, dim, ne)
     moe_select(c, unsafe(addr(s.moe_logits[0])), s.moe_idx, s.moe_w, 0l)
-    for (j in range64(k)) {   // ggml scales each expert's down output by ffn_down_exps_s — fold it into w_j
+    for (j in range64(k)) {   // each expert's down output is scaled by ffn_down_exps_s — fold it into w_j
         s.moe_w[j] *= t.fblob[t.moe_down_scale_off + l * ne + s.moe_idx[j]]
     }
     prof_add("moe_route", ts_route)
@@ -289,8 +289,8 @@ def ffn_gemma4_prefill(t : Model; var s : Session; l : int64; npos : int64) {
 }
 
 // gemma4 MoE router input, batched: twin of gemma4_router_tmp over npos positions. Sum-of-squares
-// accumulates in DOUBLE to match ggml_float — top-8 select is near-tie-brittle, float SoS would flip
-// experts. Bit-identical per row to the decode single-token path.
+// accumulates in DOUBLE — top-8 select is near-tie-brittle, float SoS would flip experts.
+// Bit-identical per row to the decode single-token path.
 def private gemma4_router_batch(t : Model; var rin : array<float>; src : array<float>; l, dim, npos : int64) {
     let eps = t.config.norm_eps
     let inv_d = 1.0 / sqrt(float(dim))

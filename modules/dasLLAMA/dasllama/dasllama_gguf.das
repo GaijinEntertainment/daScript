@@ -18,7 +18,7 @@ require dasllama/dasllama_par       // maybe_parallel_for (+ its emitted dispatc
 // Generic GGUF (v2/v3) reader: parses the header, typed key-value metadata, and the
 // tensor-info table out of an mmap'd byte buffer, then exposes typed getters. Knows nothing
 // about transformers — the semantic mapping (tensor names -> weight blob) lives in
-// dasllama_transformer. Mirrors llama.cpp's gguf_context / llama_model_loader split.
+// dasllama_transformer.
 //
 // File layout (little-endian): "GGUF" magic, u32 version, i64 n_tensors, i64 n_kv,
 // then n_kv {key:str, type:i32, [arr_type:i32, count:i64], value...} pairs,
@@ -53,8 +53,8 @@ let GGML_TYPE_Q6_K = 14
 let GGML_TYPE_BF16 = 30
 let GGML_TYPE_MXFP4 = 39
 
-// MXFP4 e2m1 magnitudes DOUBLED (nibble -> ±{0,.5,1,1.5,2,3,4,6}×2, OCP MX spec via ggml
-// kvalues_mxfp4); the E8M0 block scale below is halved to compensate.
+// MXFP4 e2m1 magnitudes DOUBLED (nibble -> ±{0,.5,1,1.5,2,3,4,6}×2, OCP MX spec); the E8M0
+// block scale below is halved to compensate.
 let private MXFP4_KVALUES = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,
                                         0.0, -1.0, -2.0, -3.0, -4.0, -6.0, -8.0, -12.0)
 
@@ -234,7 +234,7 @@ def private with_tensor_view(m : GGUFMeta; srcbytes : array<uint8> | #; ti : int
     }
 }
 
-//! Expand a model path into its shard list. A llama.cpp split name ("<prefix>-00001-of-00003.gguf")
+//! Expand a model path into its shard list. A GGUF split name ("<prefix>-00001-of-00003.gguf")
 //! yields every sibling shard (any shard index normalizes); anything else yields [path]. A missing
 //! sibling panics (partial split must not run), or yields [] with `missing_ok` (presence gates).
 def gguf_shard_paths(path : string; missing_ok : bool = false) : array<string> {
@@ -310,7 +310,7 @@ def private parse_gguf_shard(base : void?; size : int64) : GGUFMeta {
 }
 
 //! Parse a mapped shard set into one unified meta: shard 0 carries the model KVs (config, vocab,
-//! chat template — llama.cpp split convention), tensor directories merge across all shards with
+//! chat template — the GGUF split convention), tensor directories merge across all shards with
 //! each tensor stamped with its shard. Tensor reads then resolve through the shard_* arrays.
 def parse_gguf_meta_shards(bases : array<void?>; sizes : array<int64>) : GGUFMeta {
     var m <- parse_gguf_shard(bases[0], sizes[0])
@@ -541,10 +541,7 @@ def gguf_find_tensor(m : GGUFMeta; name : string) : int {
     return -1
 }
 
-//! high (ggml order). Matches llama.cpp dequantize_row_q4_K op-for-op — bit-exact.
-
-
-// loops (uint8 source and destination regions never overlap).
+// byte-wise copy in uint64-stride loops (uint8 source and destination regions never overlap)
 def private bcopy(var d : uint8?; s : uint8 const?; n : int64) {
     unsafe {
         var d8 = reinterpret<uint64?>(d)
@@ -896,7 +893,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
         }
     } elif (gtype == GGML_TYPE_MXFP4) {
         // block of 32: 1 E8M0 scale byte + 16 nibble bytes (low nibbles = elems 0..15, high = 16..31);
-        // x = e2m1[nibble] * scale — both sides carry the ×2/÷2 ggml convention (see MXFP4_KVALUES)
+        // x = e2m1[nibble] * scale — both sides carry the ×2/÷2 on-disk convention (see MXFP4_KVALUES)
         let nb = expect_n / 32l
         var bo = base + (src_off / 32l) * 17l
         for (blk in range64(nb)) {
@@ -1046,7 +1043,7 @@ def gguf_transcode_q5_0_to_q8(m : GGUFMeta; srcbytes : array<uint8> | #; name : 
     }
 }
 
-//! Transcode a Q4_0 tensor straight from disk into our Q4 layout — no fp32 round-trip. GGML's exact
+//! Transcode a Q4_0 tensor straight from disk into our Q4 layout — no fp32 round-trip. The on-disk
 //! split-half nibble packing copies verbatim to qdst[qoff_bytes..] (= weight-offset/2); per-block
 //! fp16 scale widens to fp32 in sdst[soff..]. Requires the tensor to be Q4_0 on disk.
 def gguf_transcode_q4_0(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var qdst : array<uint8>; var sdst : array<float>; qoff_bytes, soff, expect_n : int64; src_off : int64 = 0l) {

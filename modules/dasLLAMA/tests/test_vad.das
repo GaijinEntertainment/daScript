@@ -16,7 +16,7 @@ require dasllama/dasllama_env
 // modules/dasLLAMA/models/silero_vad.bin) and drives a deterministic integer-LCG signal — the
 // expected per-frame probs are frozen from onnxruntime on the official silero_vad_16k_op15.onnx
 // (harness/silero_vad_oracle.py). The segment case additionally needs jfk.wav (DASLLAMA_MODELS_DIR)
-// and matches silero get_speech_timestamps sample-for-sample. Spec: modules/dasLLAMA/silero_vad_plan.md.
+// and matches silero get_speech_timestamps sample-for-sample. Spec: history/dasLLAMA/silero_vad_plan.md.
 
 def private vad_bin_path() : string {
     return "{get_das_root()}/modules/dasLLAMA/models/silero_vad.bin"

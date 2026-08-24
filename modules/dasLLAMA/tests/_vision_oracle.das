@@ -1,6 +1,6 @@
 // Shared tier-1 vision oracle pieces for the gemma4uv / gemma4v encoder tests:
 //   - the per-token line parser for llama-mtmd-debug's MTMD_DEBUG_EMBEDDINGS block
-//   - the exact-value fixture generators (float-for-float from mtmd-debug.cpp)
+//   - the exact-value fixture generators (float-for-float against the llama-mtmd-debug dump)
 //   - the per-token compare, logging the maxdiff against an absolute + scale-relative bar
 
 options gen2
@@ -69,7 +69,7 @@ def load_oracle_encode(path : string; var o : OracleEncode) : bool {
     return o.npos > 0 && length(o.means) == o.npos
 }
 
-// the -p encode fixture generators, float-for-float from mtmd-debug.cpp (interleaved RGB rows)
+// the -p encode fixture generators, float-for-float against the llama-mtmd-debug dump (interleaved RGB rows)
 def make_planes(kind : string; w, h : int) : array<float> {
     var planes : array<float>
     planes |> resize(w * h * 3)

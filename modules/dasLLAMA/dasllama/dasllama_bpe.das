@@ -32,8 +32,8 @@ struct BpeTokenizer {
     // SPM-style BPE (Gemma-4): raw-UTF-8 merges (no GPT-2 byte alphabet), '▁' space escape,
     // newline-run pre-split. No field default — zero-init `var tk : BpeTokenizer` must stay legal.
     spm_space : bool
-    // whether encode(add_special) prepends BOS — the GGUF add_bos_token key, else a per-pre default
-    // mirroring llama.cpp (gpt-4o adds none). Same no-field-default rule as spm_space.
+    // whether encode(add_special) prepends BOS — the GGUF add_bos_token key, else a per-pre
+    // default (gpt-4o adds none). Same no-field-default rule as spm_space.
     add_bos : bool
 }
 
@@ -58,21 +58,21 @@ def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
         for (i in range(length(merges))) {
             tk.merge_rank |> insert(merges[i], int64(i))
         }
-        // gemma4 GGUFs carry no tokenizer.ggml.pre — the model name IS the pre (llama.cpp does the same)
+        // gemma4 GGUFs carry no tokenizer.ggml.pre — the model name IS the pre
         let tok_model = gguf_has(m, "tokenizer.ggml.model") ? gguf_str(m, bytes, "tokenizer.ggml.model") : ""
         tk.pre = gguf_has(m, "tokenizer.ggml.pre") ? gguf_str(m, bytes, "tokenizer.ggml.pre") : tok_model
         tk.spm_space = tok_model == "gemma4"
         // Qwen2.5-Omni GGUFs omit bos_token_id entirely (qwen2 never adds BOS)
         tk.bos_id = gguf_has(m, "tokenizer.ggml.bos_token_id") ? gguf_int(m, bytes, "tokenizer.ggml.bos_token_id") : -1l
         tk.eos_id = gguf_int(m, bytes, "tokenizer.ggml.eos_token_id")
-        // the metadata key wins; absent, mirror llama.cpp's per-pre defaults (gpt-4o adds no BOS,
+        // the metadata key wins; absent, the per-pre default applies (gpt-4o adds no BOS,
         // the llama-bpe family keeps it)
         tk.add_bos = (gguf_has(m, "tokenizer.ggml.add_bos_token")
             ? gguf_int(m, bytes, "tokenizer.ggml.add_bos_token") != 0l
             : tk.pre != "gpt-4o")
         if (tk.pre == "gpt-4o") {
-            // llama.cpp force-renders these gpt-oss control tokens (attr -> USER_DEFINED) so channel
-            // markers stay visible in decoded text — mirror it (type 4 escapes the type-3 mute rule)
+            // these gpt-oss control tokens force-render (attr -> USER_DEFINED) so channel
+            // markers stay visible in decoded text (type 4 escapes the type-3 mute rule)
             for (name in ["<|channel|>", "<|message|>", "<|start|>", "<|constrain|>"]) {
                 let id = tk.lookup?[name] ?? -1l
                 if (id >= 0l) {
@@ -294,7 +294,7 @@ def init_byte_token_names() {
 }
 
 // An unresolved symbol falls back to per-byte <0xXX> tokens — raw-UTF-8 BPE has no GPT-2
-// byte alphabet to land on (llama.cpp llm_tokenizer_bpe_session, non-byte_encode branch).
+// byte alphabet to land on.
 def private emit_byte_fallback(tk : BpeTokenizer; s : string; var ids : array<int64>) {
     peek_data(s) $(d : array<uint8> const#) {
         for (k in range(length(d))) {
@@ -306,7 +306,7 @@ def private emit_byte_fallback(tk : BpeTokenizer; s : string; var ids : array<in
 
 // Gemma-4 encode: escape spaces to '▁', split newline-runs vs rest (llama4 "[^\n]+|[\n]+"),
 // then ranked merges over raw UTF-8 pieces. An all-newline run that's itself a vocab token
-// short-circuits the merge loop (llama.cpp gemma-4 newline fix).
+// short-circuits the merge loop.
 def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64> {
     var ids : array<int64>
     // '▁' space escape at cpt level — ' ' and U+2581 are one cpt each (exact map); a whole-text string replace() is superlinear
@@ -460,7 +460,7 @@ def bpe_decode(tk : BpeTokenizer; id : int64) : string {
     }
     if (tk.spm_space) {
         // SPM-style pieces: byte tokens (type 6) -> the raw byte; user-defined markers (type 4)
-        // verbatim; normal pieces unescape '▁' -> space (mirrors llama.cpp token_to_piece)
+        // verbatim; normal pieces unescape '▁' -> space
         if (tk.token_type[id] == 6l) {
             let bv = byte_token_val(tk.vocab[id])
             return bv >= 0 ? string([uint8(bv)]) : ""

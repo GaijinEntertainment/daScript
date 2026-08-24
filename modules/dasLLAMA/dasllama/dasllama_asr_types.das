@@ -26,9 +26,9 @@ struct AsrCaps {
     prompt : bool                // context/prompt conditioning (qwen3a: AsrSession.context)
 }
 
-//! One transcription segment: [t0, t1] centiseconds, text, raw token ids (whisper.cpp's
-//! result_all shape, timestamps+eot included), and mean per-token log-probability — a
-//! confidence signal, more negative = less certain.
+//! One transcription segment: [t0, t1] centiseconds, text, raw token ids (timestamps and eot
+//! included), and mean per-token log-probability — a confidence signal, more negative = less
+//! certain.
 struct TranscribeSegment {
     t0 : int64
     t1 : int64

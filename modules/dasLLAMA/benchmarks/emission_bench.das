@@ -1,5 +1,5 @@
 options gen2
-options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.cpp is benched
+options _jit_fast_math = true   // ggml-parity FP laxity — matches how the upstream reference is benched
 options persistent_heap = true
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true

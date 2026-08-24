@@ -13,7 +13,7 @@ require math   // nolint:STYLE030,LINT019 — used only inside the Apple static_
 // (int8 quants and int8 x pow2 products are exactly representable in half, block sums stay under
 // 2^24 in the f32 accumulators) so the compare is bit-exact; arbitrary scales carry the half
 // rounding of the folded scale product and compare under relative tolerance — the documented
-// envelope of the f16-tile path (the same one ggml's Metal mul_mm accepts). Also exercised: the
+// envelope of the f16-tile path (the same one the upstream Metal GEMM accepts). Also exercised: the
 // 32-row padding rail (ntok deliberately NOT a multiple of 32) and the small-ntok CPU delegation.
 // Off-Apple (or with no Metal device) every check feints cleanly.
 

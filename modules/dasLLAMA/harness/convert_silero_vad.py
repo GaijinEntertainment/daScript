@@ -7,7 +7,7 @@
 #
 #   python convert_silero_vad.py [op15.onnx] [out.bin]
 #
-# Container layout: modules/dasLLAMA/silero_vad_plan.md.
+# Container layout: history/dasLLAMA/silero_vad_plan.md.
 import sys, os, struct
 import numpy as np
 import onnx

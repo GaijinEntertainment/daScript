@@ -14,6 +14,9 @@ in two of them will drift:
 | `ARCHITECTURE.md` | me | what *belongs* in each file and why the system is shaped this way |
 | `REVIEW.md` | `/code-review`, and us while writing | criteria checkable against a diff |
 
+Shipped-arc plan docs live in `history/dasLLAMA/` (the archive log is `history/README.md`);
+a `*_plan.md` in this folder is an ACTIVE arc's working plan.
+
 **References flow one way: REVIEW cites ARCHITECTURE, never the reverse.** Sections here are
 numbered so they can be cited (`ARCHITECTURE sec.2.2`). Nothing here may cite a REVIEW rule -
 those are unnumbered review criteria by design, and a citation to one is a dangling pointer the
@@ -31,8 +34,8 @@ thing live instead. Files with no contested edge get one short line.
 Every file under `dasllama/` appears here. Two carry generated CONTENT rather than being
 generated themselves: `dasllama_env.das` holds the `[EnvConfig]` knob declarations (`ENVIRONMENT.md` is
 generated FROM it by `harness/gen_env_doc.das`), and `dasllama_unicode.das` is hand-written
-around transcoded data tables (RANGES/WS from llama.cpp's unicode-data.cpp - retranscode,
-never hand-edit the tables).
+around transcoded Unicode data tables (the RANGES/WS tables - regenerate by re-transcoding
+`$LCPP/src/unicode-data.cpp`, never hand-edit the tables).
 
 ### 1.1 Engine core
 
@@ -76,7 +79,7 @@ never hand-edit the tables).
   replay/result text builders, reply parsers; Harmony namespace/channels, gemma-4 DSL, mistral
   control tokens, llama JSON). Every byte of tool wire text is produced here - pure string+JSON
   functions, model-free testable; the chat layer assembles the output into ChatParts and the
-  server parses through the parsers. Verbatim-format provenance: `tool_formats_plan.md`.
+  server parses through the parsers. Wire-format provenance: `history/dasLLAMA/tool_formats_plan.md`.
 - **`dasllama_chat.das`** - conversation turns and chat-template application. Per-arch template
   *content* is registered by the arch file (sec.1.6), not written here.
 - **`dasllama_par.das`** - `maybe_parallel_for` and nothing else. Threading policy (job counts,
@@ -138,7 +141,7 @@ often gotten wrong, so each says explicitly where the neighbouring half goes.
 - **`dasllama_pretok.das`** - the pre-tokenizer: one hand-compiled split function per family
   (llama3/qwen2/qwen35, gpt-2, gpt-4o, tekken), selected by the BPE `pre` name. Regex-port growth
   lands here, never in the merge engine - the two change for different reasons (new model family
-  vs. algorithm work). Every arm with an on-disk llama.cpp corpus vocab is gated by its case in
+  vs. algorithm work). Every arm with an on-disk upstream corpus vocab is gated by its case in
   `test_tokenizer.das` (llama3, qwen2, qwen35, gpt-2); tekken has no corpus case, and gpt-4o is
   pinned by frozen ids in `test_parity.das` only.
 
@@ -414,7 +417,7 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   = (W_0+W_1)*img) and the pre-LN forward - fused-qkv biased GEMMs, vision-mrope (h/w ladder
   tables from `build_rope_tabs_vision`, full-head NEOX apply), scaled bidirectional
   attention, GELU-tanh - after a spatial-merge REORDER of the patch stream with the 48x48
-  learned position table resized to the grid by ggml's antialiased bilinear; then post-LN and
+  learned position table resized to the grid by an antialiased bilinear resample; then post-LN and
   the 2x2 merger MLP (the x4 reshape is free - merge partners are already adjacent). Dense
   carriers add DEEPSTACK taps (collected from the TENSOR list, never the metadata flags):
   after each tap block a LayerNorm->fc1->GELU->fc2 merger over the x4-merged rows emits one more
@@ -474,7 +477,7 @@ exact `llama-mtmd-debug` / `llama-mtmd-cli` invocation that minted each
 dump, so regeneration is a command, not archaeology. An encode oracle dump is minted on the
 CPU, `-fa off`, from the f32-widened mmproj twin - the only true-f32 reference arm (the
 reference's Metal "f32" GEMM stages half operands, its flash-attention path casts K/V to f16,
-and the shipped bf16 mmproj rounds activations to bf16; llama.cpp's own four arms spread
+and the shipped bf16 mmproj rounds activations to bf16; its own four arms spread
 <= 6.5e-3 on the gemma4v tokens).
 
 ### 1.8 Instrumentation and support
@@ -634,10 +637,10 @@ dedup, it keeps its warning until the dedup lands.
 ### 2.5 There is ONE benchmark rig, and the records are the baseline
 
 `benchmarks/lcpp_bench.das` is the only thing that measures performance. It is a *mirror* of
-llama.cpp's `llama-bench` - the same test shapes, rep counts and timing boundaries, applied to
+the upstream `llama-bench` - the same test shapes, rep counts and timing boundaries, applied to
 our engine - so `pp` is one batched prefill of `-p` tokens from an empty cache per rep and `tg`
 is `-n` single-token forwards with no logit read, each row one untimed warmup plus `-r` timed
-reps. The real `llama-bench` runs only when `--ref <path>` is passed; that is how the llama.cpp
+reps. The real `llama-bench` runs only when `--ref <path>` is passed; that is how the upstream
 columns were produced, and they are pinned, not re-measured.
 
 `performance/gen_bench_records.das` sweeps a board by spawning that rig once per cell, and
@@ -647,7 +650,7 @@ a number is self-describing rather than a bare figure in a table.
 
 **Regression checking inverts the same rig:** `gen_bench_records.das --oracle --legs metal`
 takes the store's das rows as the work list, re-measures each once, and gates one-sided against
-its stored mean (fail past 5%, warn past 3%, gains flagged as suspicious). llama.cpp never runs,
+its stored mean (fail past 5%, warn past 3%, gains flagged as suspicious). Upstream never runs,
 the store is never written, and a text cell's timed child runs `--frozen` - a prepare pass bakes
 and warms its image first (the batch starts wiped), so the timed cell never converts; ASR and
 image-chat cells bake what they need mid-cell, like their publishing legs. A second
@@ -793,14 +796,14 @@ contracts cannot.
 
 Figures in this section: M1 Max, 2026-08-23 - probes are quiet `-jit` runs with the rig's
 tune manifest; cells are the released `lcpp_bench` exe (`--image --image-think -r 3 -t 8
---ngl 99`); full tables in `qwen3vl_plan.md` slices M/J.
+--ngl 99`); full tables in `history/dasLLAMA/qwen3vl_plan.md` slices M/J.
 
 After a CPU-only phase, the first Metal submission runs degraded - one time per window,
 entirely in the kernel-side driver window (kernelStart->kernelEnd; queue hand-off and GPU
 execution stay flat - split probe-verified 2026-08-23, `harness/residency_ramp_probe.das` +
 `das_metal_boost`'s `metal_submit_trace`). The long-window mechanism is the OS collecting a
-committed+requested `MTLResidencySet` during inactivity; the fix (SHIPPED, copied from
-ggml-metal) is the residency HEARTBEAT - a dasMetal background thread re-requesting
+committed+requested `MTLResidencySet` during inactivity; the fix (SHIPPED) is the
+residency HEARTBEAT - a dasMetal background thread re-requesting
 residency every 5 ms for `DASLLAMA_METAL_HEARTBEAT_S` (default 180 s, 0 = A/B rail) after
 the last served step, kicked from `residency_flush`. Measured on the qwen3v tower encode:
 3000 ms burn drv 17.7 -> 3.0 ms. The `MTLResidencySet` pin itself
@@ -839,7 +842,7 @@ Durable "why it is built this way" facts harvested from the design docs archived
   intrinsic fallback bodies exist for off-ARCH correctness *inside* the JIT, not as runnable
   tiers.)
 - **Correctness before speed, token-for-token.** The engine is validated against external oracles
-  (llama2.c + llama.cpp `simple_ids`) plus per-arch parity fixtures. A new kernel passes the suite
+  (llama2.c + upstream `simple_ids`) plus per-arch parity fixtures. A new kernel passes the suite
   *and* the oracles with the new backend active before any perf claim.
 - **Peak memory before cold-start latency - a DELIBERATE trade, and the standing tiebreak.** When a
   load-time choice pits footprint against wall-clock, dasLLAMA takes the smaller footprint. The

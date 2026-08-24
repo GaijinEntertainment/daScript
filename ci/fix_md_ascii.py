@@ -26,7 +26,7 @@ EXEMPT_FILES = {
     "history/examples/dictation/CADMUS_PLAN.md",         # archived non-English content
     "examples/text/README.md",                           # text-rendering demo strings
     "modules/dasLLAMA/README.md",                        # model prompt samples
-    "modules/dasLLAMA/qwen2_audio_plan.md",              # model prompt samples
+    "history/dasLLAMA/qwen2_audio_plan.md",              # model prompt samples
     "history/dasLLAMA/audio_models_plan.md",             # model prompt samples
     "plans/dasllama-tutorials.md",                       # non-English tutorial samples
 }

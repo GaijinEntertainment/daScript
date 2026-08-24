@@ -282,7 +282,7 @@ def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float con
     if (g_accel_f16 && accel_bf16_f16_lane(yp, wp, xp, n, d, ntok)) {
         return true
     }
-    // widen bf16 to grow-only f32 scratch once per call (ggml-blas-style), then strip-sgemm
+    // widen bf16 to grow-only f32 scratch once per call, then strip-sgemm
     let total = d * n
     if (long_length(g_wf32_scratch) < total) {
         g_wf32_scratch |> scratch_regrow(total)

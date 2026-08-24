@@ -1279,7 +1279,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 mm_b_kq_groupn(s.moe_gout, t, f2, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
             } elif (fused_kq) {
                 mm_b_q51_groupn(s.moe_gout, t, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, nfe, dim)
-            } elif (c.moe_exps_bias) {   // ... and the down biases, inside the routed weight (ggml_add_id order)
+            } elif (c.moe_exps_bias) {   // ... and the down biases, added before the routed weight scales them
                 matmul_mx4q8_batch_groupn(s.moe_gout, t.mxq, t.mxs, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, t.fblob, s.moe_boffs2, nfe, dim)
             } else {
                 matmul_mx4q8_batch_groupn(s.moe_gout, t.mxq, t.mxs, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, nfe, dim)
@@ -1388,7 +1388,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         } else {
             mm_b_q8_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
         }
-        if (c.moe_exps_bias) {  // ... and its down bias, inside the routed weight (ggml_add_id order)
+        if (c.moe_exps_bias) {  // ... and its down bias, added before the routed weight scales it
             for (r in range64(cnt)) {
                 add_bias(s.moe_gout, r * dim, t.fblob, t.web2_off + eg * dim, dim)
             }
@@ -1555,7 +1555,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
         ple_pre_prefill_pad(t, s, npos)
         prof_add("ple", ts_ple)
     }
-    // the non-causal image span (mtmd_decode_use_non_causal, gemma vision): span queries attend
+    // the non-causal image span (gemma vision): span queries attend
     // [the sliding-window floor, attn_uniform_end), the rest stay causal — set for exactly this body
     if (non_causal) {
         s.attn_uniform_lo = start_pos
@@ -1676,7 +1676,7 @@ def private eval_embd_slice_(t : Model; var s : Session; embd : array<float>; lo
 }
 
 //! `eval_embd_span_`'s qwen mrope twin: the span rows are an nx×ny image grid roping on the
-//! mtmd decoder walk (t = pos0, per-row h/w, position advance max(nx, ny)); surrounding text
+//! image-grid walk (t = pos0, per-row h/w, position advance max(nx, ny)); surrounding text
 //! ropes sequentially at delta'd positions. Same uniform-span mask; only the angles differ.
 def eval_embd_span_mrope_(t : Model; var s : Session; embd : array<float>; npos, span_lo, span_hi, nx, ny : int64) {
     if (npos <= 0l) {

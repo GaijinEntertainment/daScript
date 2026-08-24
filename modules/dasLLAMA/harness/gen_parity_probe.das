@@ -8,7 +8,7 @@ options _dasllama_internal = true
 // computed ONCE from a grp4 copy via dot_q8q8_laneq4 — the per-block fold order is layout-
 // independent, so the same oracle serves every stamped mr. The gate is a TOLERANCE
 // (CLOSE_REL/CLOSE_ABS), not equality: under full fast-math the backend may legally regroup
-// a fold per loop shape (~1e-6 relative — the same laxity llama.cpp runs with); real
+// a fold per loop shape (~1e-6 relative — the same laxity the reference runs with); real
 // generator bugs are orders louder. The working buffers go through the backend repack, which
 // reads the q8q8_layout_gen companion — so this probe exercises the production two-function
 // coherence: manifest stamp -> layout report -> grp<mr> repack -> generated tile. Shapes

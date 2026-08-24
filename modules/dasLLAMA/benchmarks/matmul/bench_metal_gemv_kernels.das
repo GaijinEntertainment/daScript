@@ -15,7 +15,7 @@ require strings
 // The Metal Q8 GEMV kernel lab — the emission (decode) arc's weight-stream detector. Decode is
 // GEMV-bandwidth-bound: one token reads every weight once (3B q8 ~3.4GB/token), so the metric
 // that matters is the WEIGHT GB/s each variant sustains, not GMAC/s. The single-stream done gate
-// (llama.cpp Metal tg128 = 87 t/s on the 3B) implies ~340 GB/s effective on M1 Max.
+// (upstream Metal tg128 = 87 t/s on the 3B) implies ~340 GB/s effective on M1 Max.
 //
 // Batched decode (B independent streams, one weight pass) turns the GEMV into a skinny GEMM:
 // variants here stream the weight row ONCE and dot it against B activation vectors — the
@@ -37,6 +37,10 @@ require strings
 // report SLC bandwidth, not DRAM (q3b can exceed the 400GB/s DRAM peak). Real decode streams
 // all ~3.6GB once per token — cls3b (394MB) is the DRAM-honest proxy shape.
 //
+// NOTE (2026-08-24): production MetalQ8Gemv moved to the reduction-split form (2 rows/tg, the
+// n-walk split across 4 sgs), so v0_gemv now carries THAT kernel; every "v0" verdict below
+// predates the swap and describes the retired 1-row/sg form (q8_b1i keeps its algorithm on planar).
+//
 // Round-2 verdicts (M1 Max, 2026-07-14): v0/B1 ~352 wGB/s on cls3b (the bar is ~340) — the
 // single-stream GEMV is at target already; gemv_b1's plain loop matches it (the 4-in-flight
 // unroll is neutral at decode shapes). Stream-major gemv_bN saturates ALU ~340-540 GMAC/s (a
@@ -48,21 +52,21 @@ require strings
 //
 // Round-3 verdicts (M1 Max, 2026-07-14 late): the X-STAGED forms (bNx — tgmem panel chunk,
 // cooperative 128-thread load) are the fixed-B winners: b2x +40-88% over b2 (326-362 wGB/s;
-// kv3b neutral), b4x ~2x over b4 (188-217 — ABOVE lcpp's ~186 effective at ne11=4); the
+// kv3b neutral), b4x ~2x over b4 (188-217 — ABOVE upstream's ~186 effective at batch 4); the
 // per-lane device x loads were the limiter, NOT fma. b8x/b16x double their baselines but stay
 // UNDER the per-site GEMM policy (96-107 vs 109-124 wGB/s at B=8) — the B>=5 GEMM boundary
 // holds. The chunked-prefetch forms (bNc/bNc8 — per-lane-CONSECUTIVE byte4 chunks, one scale
 // load per chunk) are 30-45% WORSE everywhere: inter-lane coalescing beats per-lane locality
-// on AGX (lcpp's mul_mv_ext chunks are strided per-thread too — its prefetch win is the load
+// on AGX (the upstream chunked form is strided per-thread too — its prefetch win is the load
 // BATCHING, which [unroll_count=4] already banks). Kept as negative controls.
 //
 // K-quant round verdicts (M1 Max, 2026-07-15): k4_b1c (16B compact scale blocks, whole block in
-// ONE uint4 load) beats the lcpp mul_mv_q4_K wall at every shape — parity on the SLC-resident
+// ONE uint4 load) beats the upstream q4_K wall at every shape — parity on the SLC-resident
 // small shapes (q3b/kv3b), -16..-25% on qkv/w13/w2/cls (cls3b 0.677 vs 0.872 ms, 327 wGB/s,
 // 1.87x the q8 GEMV row; the 144/288-byte ceiling is 2.0x). k4_b1 (reading the production 20B
 // scale blocks) is the negative control: the 20B stride's varying mod-16 phase keeps LLVM from
 // merging the scale-triple into a vector load (3 scalar loads/row, +4 issues/iter) — 7-8%
-// behind lcpp everywhere. Production uploads therefore strip the pads GPU-side: quant plane
+// behind upstream everywhere. Production uploads therefore strip the pads GPU-side: quant plane
 // byte-identical (zero-copy-able), scale plane repacked 20B->16B at upload (2.7% of tensor bytes).
 //
 // K-quant ext round 3 (M1 Max, 2026-07-18, the gemma4-12B shapes): ALL three fused-B levers
@@ -75,9 +79,9 @@ require strings
 // (<= 33MB vs 48MB SLC), so a single pass's halved DRAM weight traffic is INVISIBLE in this lab;
 // only an in-graph A/B can resolve the B=8 form. Arms kept as negative controls.
 //
-// k5/k6 round (M1 Max, 2026-07-15): k6_b1d beats the lcpp q6_K wall at EVERY shape (-11..-19%,
-// 321-370 wGB/s; the uint4+select sub-scale read of k6_b1c cost 2 resident sgs — lcpp-shape
-// scattered byte loads of the 16B block win). k5 is ALU-bound on the per-element 5th-bit
+// k5/k6 round (M1 Max, 2026-07-15): k6_b1d beats the upstream q6_K wall at EVERY shape (-11..-19%,
+// 321-370 wGB/s; the uint4+select sub-scale read of k6_b1c cost 2 resident sgs — scattered
+// byte loads of the 16B block win). k5 is ALU-bound on the per-element 5th-bit
 // extract (~6 ops/elem vs k4's ~2.5 uint16-mask trick): k5_b2r (int-composed q5, 2 rows/sg)
 // takes 5/6 shapes at -5..-27% vs the wall (243 wGB/s cls3b — well under k4/k6's ~330-370;
 // further forms = ledger: uint16-mask nibble hybrid ~+5%, upload-time qh bit-plane transpose
@@ -407,7 +411,7 @@ class MetalGemvLabQ8B1P {
     }
 }
 
-// Chunked-prefetch twins (lcpp mul_mv_ext's chpt=4 discipline, plus per-lane-CONSECUTIVE chunks):
+// Chunked-prefetch twins (4 chunks per thread, laid out per-lane-CONSECUTIVE):
 // each lane owns 4 adjacent byte4s (16 elements) per k step, so the whole chunk sits inside ONE
 // scale block — 1 scale load per 16 elements instead of 4 — and the quant loads share a base
 // register (base+immediate addressing, merge-friendly). W dequants into registers up front, the
@@ -1000,7 +1004,7 @@ class MetalGemvLabQ8X {
 }
 
 // The 64-wide twin — the SAME v2 discipline on MulMm's 32(M) x 64(N) tile (its k-loop measured
-// 156 instr vs lcpp's 165, per-element 29% under the 32-wide v2). Half the threadgroups of v2
+// 156 instr vs upstream's 165, per-element 29% under the 32-wide v2). Half the threadgroups of v2
 // (d/64), so the per-shape winner is an occupancy-vs-ISA trade: wide-d sites (w13, cls) keep a
 // healthy grid and should capture the per-element edge; 48/16-tg sites should stay 32-wide.
 class MetalGemm64V2Lab {
@@ -1303,16 +1307,16 @@ class MetalSkReduceLab {
 // ===== K-quant (Q4_K) arms — the format-matrix W4 lab gate =====
 // Weight contract: f32-X, in-kernel superblock dequant. Two weight layouts per format:
 // the ggml interleaved block_q4_K stream (144B/sb: d f16, dmin f16, scales[12], qs[128]) for the
-// lcpp wall arm, and the production plane pair (k4q 128B qs + k4s 20B [d][dmin][scales[12]][pad4],
-// gguf_transcode_q4k's exact output) for ours. Geometry both: the lcpp mul_mv shape — 64-thread
-// tg, 2 simdgroups x 2 rows (N_SG_Q4_K=2, N_R0_Q4_K=2), lane owns 32 elems of every 4th
+// upstream wall arm, and the production plane pair (k4q 128B qs + k4s 20B [d][dmin][scales[12]][pad4],
+// gguf_transcode_q4k's exact output) for ours. Geometry both: a 64-thread tg, 2 simdgroups
+// x 2 rows, lane owns 32 elems of every 4th
 // superblock (ix = lane/8 block-stream, iq/ir sub-position), y loaded once per superblock and
 // reused across both rows. K-quant traffic/row: 148B (planes) / 144B (ggml) per 256 elems vs
 // q8's 288B — the ~1.95x decode payoff W4 is after.
 
-// the lcpp kernel_mul_mv_q4_K_f32 wall: their lane map, scale-halfword decode (kmask trick) and
-// nibble-mask acc folds (x16/x256 groups folded by pow2 constants), on the ggml interleaved
-// stream. Verbatim math; only the kargs plumbing is baked (dense strides from ndim/ddim).
+// the upstream q4_K wall on the ggml interleaved stream: 8-lane superblock map, scale-halfword
+// decode (kmask trick) and nibble-mask acc folds (x16/x256 groups folded by pow2 constants);
+// only the kargs plumbing is baked (dense strides from ndim/ddim).
 class MetalKqLabLcppK4 {
     @ssbo @binding = 0 gsh : array<float16> // interleaved block_q4_K stream, half view (d at 72*blk)
     @ssbo @binding = 1 gqu : array<uint>    // the same stream, uint view (scales at 36*blk+1, qs at 36*blk+4)
@@ -1397,9 +1401,9 @@ class MetalKqLabLcppK4 {
     }
 }
 
-// ours v1 — NEGATIVE CONTROL: the same lcpp shape reading the production 20B scale blocks
+// ours v1 — NEGATIVE CONTROL: the same wall-arm geometry reading the production 20B scale blocks
 // (k4s dual f16/uint views). The 20B stride's varying mod-16 phase blocks LLVM's vector-load
-// merge, so the scale triple compiles to 3 scalar loads per row — 7-8% behind the lcpp arm.
+// merge, so the scale triple compiles to 3 scalar loads per row — 7-8% behind the wall arm.
 class MetalKqLabK4B1 {
     @ssbo @binding = 0 ksh : array<float16> // k4s plane, half view (d at 10*blk, dmin at 10*blk+1)
     @ssbo @binding = 1 ksu : array<uint>    // the same plane, uint view (scales at 5*blk+1)
@@ -1487,9 +1491,9 @@ class MetalKqLabK4B1 {
 
 // ours v2: 16B scale blocks — the 20B transcode block minus its 4 pad bytes, built at upload.
 // The 20B stride's varying mod-16 phase blocks LLVM's vector-load merge (the v1 scale triple
-// compiles to 3 scalar loads; lcpp's 144B-stride triple gets one xyz), and 16B blocks land the
-// whole [d|dmin][s0][s1][s2] block in ONE uint4 load at phase 0 — fewer issues than lcpp's
-// xyz+halfpair AND 148->144B per 256 elems, byte-parity with ggml. Quant plane unchanged.
+// compiles to 3 scalar loads; the 144B-stride triple gets one xyz), and 16B blocks land the
+// whole [d|dmin][s0][s1][s2] block in ONE uint4 load at phase 0 — fewer issues than the
+// xyz+halfpair form AND 148->144B per 256 elems, byte-parity with ggml. Quant plane unchanged.
 class MetalKqLabK4B1C {
     @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
     @ssbo @binding = 1 ks4 : array<uint4>   // the same plane, uint4 view (whole block at blk)
@@ -1575,7 +1579,7 @@ class MetalKqLabK4B1C {
     }
 }
 
-// the lcpp kernel_mul_mv_q5_K_f32 wall (N_R0_Q5_K = 1 — one output row per simdgroup, rtg 2):
+// the upstream q5_K wall (one output row per simdgroup, rtg 2):
 // same kmask scale decode as q4_K; nibble bytes read directly, the 5th bit lands as a +16
 // select off the qh byte (bit s of qh[l] = sub-block s at position l).
 class MetalKqLabLcppK5 {
@@ -1662,7 +1666,7 @@ class MetalKqLabLcppK5 {
 }
 
 // ours v1 — the SMALL-d pick (kv-shape wins, big shapes lose to b2r): k5 plane pair (k5q 160B
-// [qs][qh] + 16B compact scale blocks), lcpp's q5 lane map and select-form math, nr0=1.
+// [qs][qh] + 16B compact scale blocks), 8-lane superblock map with the 5th bit added by select, nr0=1.
 class MetalKqLabK5B1C {
     @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
     @ssbo @binding = 1 ks4 : array<uint4>   // the same plane, uint4 view (whole block at blk)
@@ -1747,7 +1751,7 @@ class MetalKqLabK5B1C {
 }
 
 // ours, take 2 (superseded by b2r — kept as the nr0 isolation control): q5 composed in INT
-// (nibble | qh bit << 4, the k6 discipline) — ONE fma per element instead of lcpp's
+// (nibble | qh bit << 4, the k6 discipline) — ONE fma per element instead of the wall arm's
 // mask-fma + select-add pair, halving the float-accumulate chains.
 class MetalKqLabK5B1D {
     @ssbo @binding = 0 ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
@@ -1902,9 +1906,9 @@ class MetalKqLabK5B2R {
     }
 }
 
-// the lcpp kernel_mul_mv_q6_K_f32 wall (N_R0_Q6_K = 2): 6-bit q = nibble | 2 qh bits, minus 32,
+// the upstream q6_K wall (2 output rows per simdgroup): 6-bit q = nibble | 2 qh bits, minus 32,
 // per-16-element SIGNED int8 sub-scales, no min side. Lane owns 4x4-elem slices of every 2nd
-// superblock; the 4 scattered sub-scale byte loads are their shape.
+// superblock; the sub-scale block arrives as 4 scattered byte loads.
 class MetalKqLabLcppK6 {
     @ssbo @binding = 0 gsh : array<float16> // interleaved block_q6_K stream, half view (d at 105*blk+104)
     @ssbo @binding = 1 gqb : array<uint8>   // the same stream, byte view (ql at 210*blk, qh at +128, scales at +192)
@@ -2038,8 +2042,8 @@ class MetalKqLabK6B1C {
     }
 }
 
-// k6 take 2 — THE k6 winner (beats the lcpp wall at every shape, -11..-19%, 321-370 wGB/s):
-// the sub-scale block read as 4 scattered byte loads (lcpp's own shape — fewer live registers
+// k6 take 2 — THE k6 winner (beats the upstream wall at every shape, -11..-19%, 321-370 wGB/s):
+// the sub-scale block read as 4 scattered byte loads (fewer live registers
 // than b1c's uint4+select form, 28 vs 26 resident sgs; the 16B block still spans one line).
 class MetalKqLabK6B1D {
     @ssbo @binding = 0 kdh : array<float16> // d plane (d of blk at blk)
@@ -2119,7 +2123,7 @@ class MetalKqLabK6B1D {
 // x-sums — every ROW recomputes identical values; a d-independent prepass kills ~25% of the
 // per-token ALU), (b) inline per-quarter dequant (8 live w regs, not 32) for occupancy,
 // (c) fp16 x panels (2x fma rate) — accuracy call. Production interim: B=2..8 as B separate
-// B1 dispatches per site (= the lcpp wall exactly; honest, GPU-only, no CPU fallback).
+// B1 dispatches per site (= the upstream wall exactly; honest, GPU-only, no CPU fallback).
 // Address-alignment lesson (cost v1-v3 their 3-7x): a runtime-uniform term (b*ndim) in a
 // scalar-view index defeats LLVM's vector-load merge — it cannot prove 16B alignment. Bind a
 // float4 VIEW and index in float4 units; alignment holds by construction (the production q8
@@ -2429,13 +2433,13 @@ class MetalKqLabK6MvB2 {
     }
 }
 
-// ===== K-quant ext arms (round 2) — the lcpp mul_mv_ext SHAPE on our planes =====
+// ===== K-quant ext arms (round 2) — the one-row-per-thread chunked SHAPE on our planes =====
 // Round 1 failed on occupancy (w[32] + per-stream acc/sy sets in the b1c lane geometry). The
-// lcpp ext form keeps registers tiny and STILL amortizes the weight pass: one thread owns one
+// ext form keeps registers tiny and STILL amortizes the weight pass: one thread owns one
 // output row (8 K-lanes x 4 rows per simdgroup, 8 rows/tg, rtg=8), streams 16-elem chunks
 // (thread tx owns chunks tx and tx+8 of every superblock), materializes the chunk dequant into
 // 16 regs with d*sc AND dmin*m folded in (no per-column min-side sums at all — the round-1 sy
-// lever dissolves), then R column dot-folds off INDEXED float4 bases (their walked pointers
+// lever dissolves), then R column dot-folds off INDEXED float4 bases (walked pointers
 // traded for independent addresses per the AGX lesson). Scale decode = the ggml scalar pair
 // formula per chunk: chunk tx is always a LOW pair (j<4), chunk tx+8 always HIGH — both baked.
 
@@ -4186,18 +4190,20 @@ struct private LabVariant {
     sk : int = 0                            // slice count for gemm_sk
     tgmem : uint64 = 0ul                    // dynamic [[threadgroup(0)]] bytes (@workgroup kernels)
     kq : int = 0                            // K-quant plane arm: 4 = k4 (b0/b1 k4s dual view, b2 k4q)
-    kq_ggml : bool = false                  // K-quant lcpp wall arm (b0/b1 = ggml interleaved stream)
+    kq_ggml : bool = false                  // K-quant upstream wall arm (b0/b1 = ggml interleaved stream)
     kq16 : bool = false                     // kq arm reads the 16B compact scale blocks instead
     kq_mvb : bool = false                   // production small-batch KqMv contract (KqMvArgs uniform at 5)
     q8_blob : bool = false                  // b0/b1 = the 34B interleaved q8_0 blob, dual-viewed (MetalQ8Gemv)
-    tgsz : int = 128                        // threads per threadgroup (kq arms ride lcpp's 64)
+    tgsz : int = 128                        // threads per threadgroup (kq arms ride 64)
     rtg : int = 4                           // output rows per threadgroup (grid.x = ceil(d/rtg))
 }
 
 // exact-arithmetic Q8 fill: quants in [-8, 7], pow2 scales (same contract as the gemm lab)
 def private fill_exact_q8(var q : array<int8>; var s : array<float>; rows, k : int64; seed : int64) {
     let nb = k / 32l
+    q |> reserve(rows * k)   // cls-size fills (600MB+) trip max_unreserved_size otherwise
     q |> resize(rows * k)
+    s |> reserve(rows * nb)
     s |> resize(rows * nb)
     let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
     for (i in range64(rows * k)) {
@@ -4213,6 +4219,7 @@ def private fill_exact_q8(var q : array<int8>; var s : array<float>; rows, k : i
 // fill's pow2 scales are f16-exact, so the f32 and f16 scale views carry the same value.
 def private pack_q8_blob(wq : array<int8>; ws : array<float>; rows, k : int64; var blob : array<uint8>) {
     let nb = k / 32l
+    blob |> reserve(rows * nb * 34l)   // cls-size blobs (600MB+) trip max_unreserved_size otherwise
     blob |> resize(rows * nb * 34l)
     for (r in range64(rows)) {
         for (bl in range64(nb)) {
@@ -4252,7 +4259,7 @@ def private cpu_ref_sample(wq : array<int8>; ws : array<float>; xq : array<int8>
 // exact-arithmetic Q4_K fill: sub-scales/mins in [0,7], pow2 d/dmin, nibbles 0..15 — every
 // product is an exact int x pow2 (the fill_exact_q8 contract). Emits BOTH weight layouts from
 // one logical stream: the production plane pair (kq 128B qs + ks 20B scale blocks) and the ggml
-// interleaved block_q4_K stream (gg 144B) for the lcpp wall arm.
+// interleaved block_q4_K stream (gg 144B) for the upstream wall arm.
 def private fill_exact_k4(var kq : array<uint8>; var ks : array<uint8>; var gg : array<uint8>; rows, k : int64; seed : int64) {
     let nsb = k / 256l
     let total = rows * nsb
@@ -4301,7 +4308,7 @@ def private fill_exact_k4(var kq : array<uint8>; var ks : array<uint8>; var gg :
     }
 }
 
-// 6-bit sub-scale/min j of a 12-byte packed Q4_K scale block (ggml get_scale_min_k4, array form)
+// 6-bit sub-scale/min j of a 12-byte packed Q4_K scale block (array form)
 def private k4_ref_sc_mn(ks : array<uint8>; base, j : int64) : int2 {
     if (j < 4l) {
         return int2(int(ks[base + j]) & 63, int(ks[base + j + 4l]) & 63)
@@ -4714,13 +4721,16 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
     // the llama-3B decode GEMV geometries (n = reduction dim, d = output rows) + the qwen3-4B
     // set (dim 2560 / qd 4096 / hidden 9728 — qd != dim splits the q and wo shapes) + the
     // gemma4-12B set (dim 3840 / hidden 15360; qkv = the sliding class 4096+2048+2048, wogl =
-    // the global class's qd-8192 reduction — the fattest n the batch loop dispatches)
+    // the global class's qd-8192 reduction — the fattest n the batch loop dispatches) + the
+    // qwen3vl-8B set (dim 4096 / hidden 12288 / vocab 151936 — the decode-tg chase shapes)
     var shapes <- [("q3b", 3072l, 3072l), ("kv3b", 3072l, 1024l), ("qkv3b", 3072l, 5120l), ("w13_3b", 3072l, 8192l),
                    ("w2_3b", 8192l, 3072l), ("cls3b", 3072l, 128256l),
                    ("qkv4b", 2560l, 6144l), ("wo4b", 4096l, 2560l), ("w13_4b", 2560l, 9728l),
                    ("w2_4b", 9728l, 2560l), ("cls4b", 2560l, 151936l),
                    ("qkv12b", 3840l, 8192l), ("wogl12b", 8192l, 3840l), ("w13_12b", 3840l, 15360l),
-                   ("w2_12b", 15360l, 3840l)]
+                   ("w2_12b", 15360l, 3840l),
+                   ("qkv8b", 4096l, 6144l), ("wo8b", 4096l, 4096l), ("w13_8b", 4096l, 12288l),
+                   ("w2_8b", 12288l, 4096l), ("cls8b", 4096l, 151936l)]
     for (sh in shapes) {
         if (!want(g_env_bench.lab_shapes, sh._0)) {
             continue
@@ -5061,7 +5071,7 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var variants <- [
             LabVariant(name = "v0_gemv", src = MetalQ8Gemv_metal_q8_gemv_msl, entry = MetalQ8Gemv_metal_q8_gemv_msl_entry,
-                       b_list <- [1], q8_blob = true),
+                       b_list <- [1], q8_blob = true, rtg = 2, tgmem = MetalQ8Gemv_metal_q8_gemv_msl_tgmem),
             LabVariant(name = "gemv_b2", src = lab_gemv_b2_msl, entry = lab_gemv_b2_msl_entry,
                        b_list <- [2]),
             LabVariant(name = "gemv_b4", src = lab_gemv_b4_msl, entry = lab_gemv_b4_msl_entry,

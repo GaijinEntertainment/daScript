@@ -12,8 +12,8 @@ require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default bloc
 // with the routed-experts FFN: softmax router -> RENORMALIZED top-k, and NO shared expert. vs
 // qwen2moe: qwen2moe leaves the top-k weights un-renormalized and adds a sigmoid-gated shared
 // expert; qwen3moe renormalizes and drops the shared expert. The expert geometry (48/128/8/768 on
-// the 30B-A3B) comes from GGUF metadata at load. llama.cpp hardcodes norm_w=true in build_qwen3moe,
-// so norm_topk_prob defaults true here (the loader still honors an explicit expert_weights_norm key).
+// the 30B-A3B) comes from GGUF metadata at load. With no norm_w key in the GGUF, norm_topk_prob
+// defaults true here (the loader still honors an explicit expert_weights_norm key).
 def private configure_qwen3moe(var c : Config) {
     c.rope_neox = true
     c.qk_norm = true

@@ -19,7 +19,7 @@ require math
 // matched ref run ADJACENT:
 //   metal : das metal            vs stock -ngl 99          ("gpu")
 //   neon  : das cpu              vs clean-cpu -ngl 0       ("cpu", kernel vs kernel)
-//   amx   : das cpu --accel      vs stock -ngl 0 -nopo 1   ("cpu + accel" — -nopo keeps lcpp's
+//   amx   : das cpu --accel      vs stock -ngl 0 -nopo 1   ("cpu + accel" — -nopo keeps the ref's
 //           Metal op-offload from serving 'CPU' rows on the GPU; nopo == nometal-build)
 //   asr   : das cpu (lcpp_bench --asr) vs each catalog reference tool, per clip
 //   image : das cpu/accel/metal (lcpp_bench --image)  vs patched llama-mtmd-cli ("image-chat":
@@ -48,7 +48,7 @@ struct Args {
     settle : int = 12
 
     @clarg_name = "das-settle"
-    @clarg_doc = "Seconds to idle before each das cell (default: 180) — das tuned kernels run near the package power ceiling, and a heat-soaked box under-reads them with a CLEAN cv (gpt-oss tuned pp512 read −13.6% mid-board, 180s of idle restored it; llama.cpp refs were insensitive all along). The cv retry cannot catch a stable-low cell; only cool-slot entry can"
+    @clarg_doc = "Seconds to idle before each das cell (default: 180) — das tuned kernels run near the package power ceiling, and a heat-soaked box under-reads them with a CLEAN cv (gpt-oss tuned pp512 read −13.6% mid-board, 180s of idle restored it; the reference cells were insensitive all along). The cv retry cannot catch a stable-low cell; only cool-slot entry can"
     das_settle : int = 180
 
     @clarg_name = "ref-clean"
@@ -1409,7 +1409,7 @@ def main : int {
         // thermal-fair pass order: each ratio's das cell and its ref run ADJACENT (the
         // measurement protocol's interleave rule at the pass level), and the metal pair goes
         // FIRST — the old [das cpu, das metal, refs...] order ran das metal straight off the
-        // das-cpu heat soak while the lcpp metal ref ran minutes later on a different chip
+        // das-cpu heat soak while the metal ref ran minutes later on a different chip
         // state (27B: das 110.7 soaked vs 138.1 quiet — a phantom 0.91 board red). Refs still
         // run independently of das-cell failures.
         if (doLlm && legMetal) {

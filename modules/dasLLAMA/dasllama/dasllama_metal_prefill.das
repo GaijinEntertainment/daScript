@@ -961,7 +961,7 @@ class MetalMoeMulMmK6 : MetalMoeMulMmBase {
 
 // Gathered MXFP4 mul_mm — the family base with the mx4 A stage: each thread's 16-elem half IS
 // one nibble half of the 32-block (il0 = 0 low, 1 high); stage_init stages the doubled-e2m1
-// value table, stage_acc seeds per-expert bias (hasb; ggml_add_id order, bias precedes reduce).
+// value table, stage_acc seeds per-expert bias (hasb; bias precedes reduce).
 [metal_dispatch(name = "pf_enc_moe_mm_mx4_c", pso = "g_pf_pso_moe_mm_mx4", tgmem = "metal_moe_mulmm_mx4_msl_tgmem", tg = 128, grid = "npos/32, rows/64, ne", params = "rows : int64, npos : int64, ne : int64")]
 class MetalMoeMulMmMx4 : MetalMoeMulMmBase {
     @ssbo @binding = 0 @role = "weight" @off = "qoff" mxq4 : array<uint4>  // nibble plane, uint4 view (one block = one load)
@@ -1351,7 +1351,7 @@ class MetalAttnAV {
     }
 }
 
-// The ggml-geometry attention pair (v21 lessons applied to the trio's QK/AV GEMMs — the old
+// The tiled attention pair (v21 lessons applied to the trio's QK/AV GEMMs — the old
 // 32x32 scalar-f32-staged kernels ran ~60x below mul_mm rate, owning 24ms of the 3B window).
 // QK: S[h] = scale * Q_h . K_h^T, 32x64 C tiles; DASLLAMA_METAL_ATTN=0 pins the trio (hs % 64 != 0 too).
 
@@ -1734,7 +1734,7 @@ def public set_metal_prefill_logits_cpu(v : bool) {
 }
 
 //! Pin the legacy quantized-activation GEMM path (q8 X + planar weights) instead of the default
-//! llama.cpp mul_mm path (f32 X + block_q8_0 blobs). The legacy path is bit-identical to the CPU
+//! mul_mm path (f32 X + q8_0 block blobs). The legacy path is bit-identical to the CPU
 //! forward — the tests' exact-parity rail. `DASLLAMA_METAL_MULMM=0` pins it process-wide.
 def public set_metal_prefill_mulmm_legacy(v : bool) {
     g_mm_legacy = v
@@ -2666,7 +2666,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
             memcpy(reinterpret<void?>(dst + (npos - 1l) * dim * 4l), addr < void? >(s.x_b[0]), dim * 4l)
         }
     }
-    // ggml-geometry QK/AV (default): ~10x the old trio GEMMs' rate; needs hs % 64 (the AV grid;
+    // the tiled QK/AV pair (default): ~10x the old trio GEMMs' rate; needs hs % 64 (the AV grid;
     // BOTH classes); queries pad to mp % 32 and keys to nk64 % 64 — both true by construction.
     // DASLLAMA_METAL_ATTN=0 pins the trio.
     let mmattn = (head_size % 64l) == 0l && (hs_sw % 64l) == 0l && g_pf_env_attn
@@ -2773,7 +2773,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 let kvsh = kv_shared_layer(t, l)
                 // attention: [pending W2 residual +] norm -> [requant ->] Q/K/V -> rope ->
                 // scores+softmax -> P.V -> out-proj (fused path folds each residual add into the
-                // FOLLOWING add+rms+quant; the lcpp path feeds normed f32 rows straight to mul_mm)
+                // FOLLOWING add+rms+quant; the default path feeds normed f32 rows straight to mul_mm)
                 if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     pf_enc_rms(enc, bx, 0ul, bw_att, bxb, u_dim, u_eps, npos)
                 }

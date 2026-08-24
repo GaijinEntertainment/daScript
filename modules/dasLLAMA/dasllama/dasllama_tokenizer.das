@@ -80,7 +80,7 @@ def decode(tk : Tokenizer; ids : array<int64>) : string {
         return bpe_decode_ids(tk.bpe, ids)
     }
     return build_string() $(var wr) {
-        var prev = tk.spm.bos_id   // BOS as the initial prev, so a leading space right after BOS is stripped (llama2.c)
+        var prev = tk.spm.bos_id   // BOS as the initial prev, so a leading space right after BOS is stripped
         for (id in ids) {
             write(wr, decode(tk.spm, prev, id))
             prev = id

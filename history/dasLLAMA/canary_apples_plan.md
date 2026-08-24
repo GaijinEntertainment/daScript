@@ -18,7 +18,7 @@ all corpus clips at every phase boundary.
   `QuantMode.fp32` at dasllama_asr.das:206; all-f32 CNRY encoder). The fp32 kernels are
   bit-exact reference kernels by contract (`matmul_batch_core`) - never to be raced.
 - NVIDIA ships the checkpoint 100% BF16 (safetensors header); nobody quantizes canary
-  anywhere (llama.cpp: zero support; onnx-asr: no export). A q8 canary is the first.
+  anywhere (upstream: zero support; onnx-asr: no export). A q8 canary is the first.
 - Board precision audit (scouting bench, M1 8T, interleaved best-of-3, cv<=2.5%): upstream
   `whisper-quantize`/`parakeet-quantize` q8_0 models transcribe correctly AND are the
   references' best config (faster in 6/7 cells); das still leads 8-bit-vs-8-bit
@@ -217,7 +217,7 @@ to the M1 bytes** (the repack-canonical claim now proven cross-OS/arch), decoder
 per-arch as declared (transcript parity gate still owed - needs a das inference pass).
 Corpus 5/5 after the gb1 fix + M1 wav copies (zen4 ffmpeg decodes ogg to different bytes -
 the manifest gate caught it, exactly its job). ASR rig COMPLETE (NeMo-on-Linux-x86 venv came
-up clean); lcpp reference pair built @ ebd048f. **Paranoid mint WORKED first try**: 561.6 s
+up clean); the upstream reference pair built @ ebd048f. **Paranoid mint WORKED first try**: 561.6 s
 tune, noise=ok, box identity correct, validation passed, sidecar + ~/.tune-history archive +
 provenance all present; release total 720.3 s. First AVX-512 race: 30 kernels, **11 crowns
 differ from the per-ISA fallbacks** (dot->vec16_u2, dot_f16->vec16_u4, dot_q8q8->u2,
@@ -242,7 +242,7 @@ Ledgered from this phase:
   DAS_TUNE_MANIFEST/one-tune-per-box decision for the converter vs the release sidecar).
 
 Phase 7 addendum - sanity floor (same evening): E4B q8 cell at 8 lanes, cv 0.2%: das
-pp512 249.9 vs clean-cpu llama.cpp 97.2 = **2.57x** (ref confirmed -march=native => AVX-512;
+pp512 249.9 vs clean-cpu upstream 97.2 = **2.57x** (ref confirmed -march=native => AVX-512;
 clean-cpu == stock on Linux), tg128 11.88 vs 11.14 = 1.07x (both engines at the DDR5 wall).
 Add the stock leg + a second model before quoting publicly. Canary decoder parity gate
 **PASSED byte-identical** (jfk/jfk3/gb1, encoder via --mmproj) - all 18 artifacts now fully
@@ -258,7 +258,7 @@ Apple boards (M4 0.21/0.28/0.78), long-clip position stronger than M4. das 6.4-9
 Phase 7 audio-chat finding (Boris's eyeball): zen4 E2B/Omni leads are only 1.14-1.38x vs
 Apple's 3.5-6x - das audio-chat is ISO-SPEED M1<->zen4 (E2B gb1 45.4 vs 47.7 s) while its LLM
 side is FASTER on zen4, so the cells are tower-dominated and the das tower gets nothing from
-AVX-512; meanwhile ggml's x86 tower is ~3x its own ARM tower (ref E2B gb1 57.8 vs 198.2 s),
+AVX-512; meanwhile the reference's x86 tower is ~3x its own ARM tower (ref E2B gb1 57.8 vs 198.2 s),
 removing the subsidy the Apple leads enjoyed. LEDGER: per-op profile one audio-chat cell on
 zen4, name the tower kernels without x86 arms - same work-class as the gemma-26B x86 gap.
 

@@ -8,7 +8,7 @@ linear projector produce soft tokens that splice into the EXISTING qwen2 decoder
 is shared infrastructure — the same tower unlocks Ultravox (llama decoder, have it) and most
 of a Whisper-proper port later.
 
-Oracle = llama.cpp mtmd. ggml-org ships NO pre-quantized GGUF for Qwen2-Audio (their note:
+Oracle = the upstream mtmd tools. ggml-org ships NO pre-quantized GGUF for Qwen2-Audio (their note:
 "very poor result", ref PR #13760) — we convert `Qwen/Qwen2-Audio-7B-Instruct` ourselves with
 the in-tree `convert_hf_to_gguf.py` (guaranteed tensor-name compat with the checkout's mtmd).
 Model quality is the model's problem; parity with mtmd is ours. Perf: `-jit` only, AOT =
@@ -17,12 +17,12 @@ compile-gate, same as the rest of dasLLAMA.
 Audio input: dasAudio already decodes MP3/WAV/FLAC/Vorbis (`decode_audio`, miniaudio) and
 resamples at decode time (`make_decoder(filename, rate, channels)` → 16 kHz mono directly).
 
-## The pipeline (exact ops, from mtmd `models/whisper-enc.cpp` + `clip.cpp build_vit` + `mtmd-audio.cpp`)
+## The pipeline (exact ops, oracle-verified)
 
 0. **Load**: file → 16 kHz mono f32 PCM (dasAudio).
 1. **Mel**: STFT n_fft=400, hop=160, Hann; power spectrum → 201 bins; 128-mel filterbank;
    `log10(max(x,1e-10))`; clamp to global `max−8`; `(x+4)/4`. 30 s chunks → `[3000×128]`.
-   Exact padding/edge rules + filterbank source = mtmd-audio.cpp (verify at implementation).
+   Exact padding/edge rules + filterbank: verify against the `-p preproc` oracle dump at implementation.
    - **dasMinfft is pow2-only; Whisper's DFT is 400-point** → the ledger's "via dasMinfft"
      doesn't hold. Instead the DFT is two GEMMs with precomputed twiddles
      (`Re = frames·cos[400×201]`, `Im = frames·sin`), power = Re²+Im², mel = one more GEMM
@@ -35,7 +35,7 @@ resamples at decode time (`make_decoder(filename, rate, channels)` → 16 kHz mo
    (q has bias, k has NO bias, v bias, out bias; non-causal, no cache, scale 1/√64) →
    residual; LayerNorm(w,b) → fc1+b → gelu_erf → fc2+b → residual.
 5. **avg_pool1d(k=2,s=2)** over time → `[750×1280]`, THEN post-LN (order matters — pool sits
-   between the last block and ln_post, inside mtmd's build_vit).
+   between the last block and ln_post - order matters, and the oracle's node ladder pins it).
 6. **Projector**: single linear `mm_fc_w [1280→3584] + mm_fc_b` → 750 soft tokens / 30 s.
 7. **Splice**: ChatML prompt with the audio segment rendered as
    `<|audio_bos|>` + 750 embeddings + `<|audio_eos|>`; prefill consumes a mixed
@@ -62,9 +62,9 @@ resamples at decode time (`make_decoder(filename, rate, channels)` → 16 kHz mo
 
 - `llama-mtmd-cli -m decoder.gguf --mmproj mmproj.gguf --audio f.wav -p ...` = end-to-end
   token stream (temp 0) → GEN_IDS-style token-for-token parity, the arc's acceptance gate.
-- `MTMD_DEBUG_EMBEDDINGS=1` (clip.cpp:4484) dumps the projected soft tokens → stage-level
+- `MTMD_DEBUG_EMBEDDINGS=1` dumps the projected soft tokens → stage-level
   gate for mel+conv+encoder+projector before the decoder is even wired.
-- Fixtures: `llama.cpp/tools/mtmd/test-2.mp3` (in-tree, what mtmd's own tests use) + jfk.wav
+- Fixtures: `$LCPP/tools/mtmd/test-2.mp3` (in-tree, what mtmd's own tests use) + jfk.wav
   (the canonical whisper 11 s clip) + one LibriSpeech test-clean utterance + one non-speech
   sound (Qwen2-Audio does general audio understanding, not just ASR).
 
@@ -87,9 +87,9 @@ resamples at decode time (`make_decoder(filename, rate, channels)` → 16 kHz mo
   ("The spoken content in the audio is '而我最亲爱的美国同胞们' in Mandarin.") and
   tools/mtmd/test-2.mp3 ("I hear a slow-tempo, ambient electronic track in Bb minor …") —
   through miniaudio decode, mel, encoder, projector, splice, and the 7B q8 decoder.
-- mel filterbank is GENERATED in mtmd (librosa slaney formula, area-normed, fmax=sr/2) —
-  ported directly; mel gate vs `llama-mtmd-debug -p preproc --audio 440`: chunk 0 maxdiff
-  3.1e-05 (their radix-2 FFT vs our DFT-GEMM float order), silence chunk 3.6e-07.
+- mel filterbank is GENERATED at load, not shipped in the file (librosa slaney formula,
+  area-normed, fmax=sr/2); mel gate vs `llama-mtmd-debug -p preproc --audio 440`: chunk 0 maxdiff
+  3.1e-05 (the reference's radix-2 FFT vs our DFT-GEMM float order), silence chunk 3.6e-07.
 - padding pinned: zero-extend input to 31 s FIRST, then reflect-200 head + 30 s zeros + 200
   tail; Hann periodic-400; mel_floor 2⁻²⁴ (`log10(1e-10)` tail branch is unreachable in the
   whisper path); global max−8 clamp with the clamp value float-rounded before (x+4)/4.
@@ -97,23 +97,23 @@ resamples at decode time (`make_decoder(filename, rate, channels)` → 16 kHz mo
   and the decoder sees 1500 audio positions; confirmed in mtmd-cli logs.
 - encoder gate: all-ones mel via `llama-mtmd-debug -p encode --audio one -n 3000` (`-n` is
   MEL FRAMES there, raw samples are preproc-mode only). Upstream BUG found: the debug
-  audio path crashes (SIGBUS) — `clip_image_encode` drops `is_audio` when wrapping the
-  batch, sending the mel down the 3-channel vision copy. Local patch in the checkout
-  (clip.cpp, infer from single-channel buffer size); consider upstreaming.
+  audio path crashes (SIGBUS) — the encode wrapper drops the is-audio flag when wrapping the
+  batch, sending the mel down the 3-channel vision copy. Local patch in the reference checkout's clip source
+  (infer from single-channel buffer size); consider upstreaming.
 - mtmd/clip library logs are LOG_INF via their own logger — invisible without `--verbose`
   (both dumps "silently missing" cost a debug cycle each).
 - numpy stage oracle (scratchpad np_encoder.py, ~60 lines off the f32 mmproj) reproduces
-  mtmd stats to ~1e-3 (their encoder runs flash-attn) — its stage dumps + the module's
+  mtmd stats to ~1e-3 (the reference encoder runs flash-attn) — its stage dumps + the module's
   `set_audio_encode_ref_dir` witness rail bisected the one real bug in minutes: layer
   stride counted 7 d-vectors instead of 8, so each layer's fc2_b was clobbered by the next
   layer's ln1_w (attention perfect, FFN tail wrong).
-- prompt shape (from mtmd-cli debug logs): NO system message — llama.cpp's C++ chatml
+- prompt shape (from mtmd-cli debug logs): NO system message — the reference's C++ chatml
   render does not inject the Jinja default. Exact stream:
   `<|im_start|>user\n<|audio_bos|>` + 750×n_chunks embeddings + `<|audio_eos|>{text}<|im_end|>\n<|im_start|>assistant\n`,
   ONE bos/eos pair around ALL chunks. ids: im_start 151644, im_end 151645, audio_bos
   151647, audio_eos 151648, `<|AUDIO|>` 151646 (unused by mtmd's splice).
 - **tokenizer gap**: `encode(parse_special=true)` is still documented-unhonored, and BPE
-  add_special prepends BOS where llama.cpp's qwen2 adds none. The demo assembles specials
+  add_special prepends BOS where the reference's qwen2 adds none. The demo assembles specials
   by id + per-segment text encodes (the chat layer's pattern). Follow-up: honor
   parse_special in the tokenizer so multimodal drivers can tokenize rendered templates
   directly.

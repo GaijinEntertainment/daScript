@@ -8,7 +8,7 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
-// GLM-4.5 / GLM-4.5-Air (llama.cpp arch "glm4moe") — leading dense layer(s) then routed MoE with
+// GLM-4.5 / GLM-4.5-Air (GGUF arch "glm4moe") — leading dense layer(s) then routed MoE with
 // sigmoid gating + the DeepSeek-style exp_probs_b selection bias and an UNGATED shared expert
 // (all loader-detected). Attention: QKV bias, NEOX partial rotary (rope.dimension_count 64 of
 // head 128), pre-FFN norm named post_attention_norm. The trailing MTP/NextN draft block
@@ -16,7 +16,7 @@ require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default bloc
 // prelude, role-marker turns, thinking on by default (the model opens with <think> itself).
 def private configure_glm4moe(var c : Config) {
     c.moe = true
-    c.moe_gate = MoeGate.sigmoid   // llama.cpp defaults glm4moe to SIGMOID when the key is absent (Air ships key = 2)
+    c.moe_gate = MoeGate.sigmoid   // glm4moe defaults to SIGMOID when the gate key is absent (Air ships key = 2)
     c.attn_qkv_bias = true
     c.rope_neox = true
     c.partial_rope = true

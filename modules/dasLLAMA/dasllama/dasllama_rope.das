@@ -32,7 +32,7 @@ def private rope_freq_j(j, head_size : int64; theta : float; ffp : float const?)
 
 //! Positions [start_pos, start_pos+npos) as two cos/sin tables: cos_tab[pi*half + j] =
 //! cos((start_pos+pi) * fscale * freq[j]) * mscale, sin likewise. freq[j] is hoisted out of the
-//! position loop; mscale folds in here (ggml applies it to NORM and NEOX alike).
+//! position loop; mscale folds in here (it applies to NORM and NEOX alike).
 def build_rope_tabs(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                     theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
                     start_pos, npos, head_size : int64) {
@@ -81,9 +81,9 @@ def build_rope_tabs_rows(@scratch var cos_tab : array<float>; @scratch var sin_t
     }
 }
 
-//! build_rope_tabs_rows' interleaved-M-RoPE twin (qwen3vl image spans), the ggml
-//! ggml_mrope_cache_init sector walk verbatim: half-dim j reads the axis of positions4[pi] =
-//! (t, h=grid row, w=column, e) its sector selects; all-equal rows collapse bit-exactly.
+//! build_rope_tabs_rows' interleaved-M-RoPE twin (qwen3vl image spans), an interleaved sector
+//! walk: half-dim j reads the axis of positions4[pi] = (t, h=grid row, w=column, e) its sector
+//! selects; all-equal rows collapse bit-exactly.
 def build_rope_tabs_imrope(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
                            theta, fscale, mscale : float; rope_freqs : array<float>; use_ff : bool;
                            positions4 : array<int4>; sections : int4; nrows, head_size : int64) {
@@ -117,7 +117,7 @@ def build_rope_tabs_imrope(@scratch var cos_tab : array<float>; @scratch var sin
     }
 }
 
-//! ``build_rope_tabs_imrope``'s NON-interleaved twin (ggml MROPE, the qwen2vl decoder): the
+//! ``build_rope_tabs_imrope``'s NON-interleaved twin (MROPE, the qwen2vl decoder): the
 //! half-dim sections read as CONTIGUOUS ranges — j < x reads t, then y reads h, then z reads
 //! w, then e — with the frequency ladder running continuously across them (never restarting).
 def build_rope_tabs_mrope(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;
@@ -154,7 +154,7 @@ def build_rope_tabs_mrope(@scratch var cos_tab : array<float>; @scratch var sin_
     }
 }
 
-//! The mrope position map of one image-span prefill quantum (mtmd's decoder walk verbatim):
+//! The mrope position map of one image-span prefill quantum (the image-grid walk):
 //! head rows sequential from ``base``; span row i = (pos0, pos0+i/nx, pos0+i%nx, 0); tail rows
 //! sequential from pos0 + max(nx, ny) — an image advances the position by its grid's long side.
 def mrope_span_positions(@scratch var out : array<int4>; base, npos, span_lo, span_hi, nx, ny : int64) {
@@ -177,7 +177,7 @@ def mrope_span_positions(@scratch var out : array<int4>; base, npos, span_lo, sp
     }
 }
 
-//! The qwen3vl ViT's VISION-mode rope table (ggml rope VISION): row pi's hs/2 slots = the h
+//! The qwen3vl ViT's VISION-mode rope table: row pi's hs/2 slots = the h
 //! ladder (grid row) then the w ladder RESTARTED, freq divisor hs/2 — slot j reads
 //! θ^(−2·(j%(hs/4))/(hs/2)). Apply full-head NEOX (rope_scaled_neox_tab); positions2 = (h, w).
 def build_rope_tabs_vision(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>;

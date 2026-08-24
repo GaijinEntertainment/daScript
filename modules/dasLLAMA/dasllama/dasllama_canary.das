@@ -46,7 +46,7 @@ let private CN_ATN_BLOCK = 64l
 let private CN_MAX_NEW = 256l
 let private CN_PREEMPH = 0.97
 let private CN_HOP = 160l
-let private CN_MEL_FLOOR = 5.960464477539063e-08lf   // 2^-24 (NeMo log_zero_guard)
+let private CN_MEL_FLOOR = 5.960464477539063e-08lf   // 2^-24 (the log zero guard)
 
 //! Per-layer weight offsets inside ``blob`` (biases carried on every projection — the
 //! parakeet delta). ``bn_w``/``bn_b`` become fold scale/shift at load (BN + depthwise bias).
@@ -664,7 +664,7 @@ def stage_canary_encoder(path : string; q8 : bool = false) : CanaryStaging {
 
 //! Canary's log-mel: preemphasis 0.97, zero center-pad n_fft/2, STFT window, power spectra, mel dot,
 //! log(sum + 2⁻²⁴), then per-feature mean/std norm over valid frames (Bessel n−1, std + 1e-5);
-//! frames past ``valid`` are zeroed (NeMo's seq-len mask). FRAME-major ``[n_len × n_mel]``.
+//! frames past ``valid`` are zeroed (the seq-len mask). FRAME-major ``[n_len × n_mel]``.
 [hot_path]
 def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : CanaryState) {
     let n_in = long_length(samples)
@@ -752,7 +752,7 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
             st.mel[i * n_mel + j] = float((double(st.mel[i * n_mel + j]) - mean) / denom)
         }
     }
-    for (i in range64(valid, n_len)) {   // NeMo masks frames past seq_len to zero
+    for (i in range64(valid, n_len)) {   // frames past seq_len mask to zero
         for (j in range64(n_mel)) {
             st.mel[i * n_mel + j] = 0.0
         }
@@ -767,7 +767,7 @@ def private cn_relu_rows(var y : array<float>; n : int64) {
     }
 }
 
-// NeMo's MaskedConvSequential zeroes time-rows past the valid length before each conv; here
+// Time-rows past the valid length are zeroed before each conv; here
 // that lands as: zero rows [from_row, n_rows) of a [n_rows × row_stride] image.
 def private cn_mask_rows(var a : array<float>; from_row, n_rows, row_stride : int64) {
     for (i in range64(from_row * row_stride, n_rows * row_stride)) {
@@ -859,7 +859,7 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     // conv subsampling: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]
     let t1 = (st.n_len - 1l) / 2l + 1l
     let w1 = (n_mel - 1l) / 2l + 1l
-    // valid time lengths propagate through the stride-2 convs (NeMo's length mask)
+    // valid time lengths propagate through the stride-2 convs (the length mask)
     let l0 = cn_conv_out_len(st.n_valid)
     let l2 = cn_conv_out_len(l0)
     cn_conv0(m, st, st.n_len, n_mel)                              // -> y0 [t1 × w1 × nch]
@@ -1117,7 +1117,7 @@ def create_canary_asr_session(dec : Model; lang : string; kv : KVDtype = KVDtype
 
 // Canary-Qwen transcription: FastConformer-32 encode + projector, the SALM/Qwen prompt with the
 // audio soft tokens spliced at the placeholder, greedy decode over the Qwen3-1.7B decoder until
-// the text EOS (151645, which is included in the emitted ids — the NeMo generate convention).
+// the text EOS (151645, which is included in the emitted ids by convention).
 def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession;
                       samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
                       var detected_lang : string&) : int {

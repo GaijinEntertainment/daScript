@@ -142,7 +142,7 @@ def test_llama_json_parse(t : T?) {
         t |> equal(length(r.calls), 1)
         t |> equal(r.calls[0].name, "f")
         delete r
-        // prose containing a brace that is not a call object stays content (llama.cpp throws here; we stay lenient)
+        // prose containing a brace that is not a call object stays content (upstream throws here; we stay lenient)
         var r2 <- llama_json_parse("use \{braces} freely")
         t |> equal(r2.content, "use \{braces} freely")
         t |> equal(length(r2.calls), 0)

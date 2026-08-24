@@ -12,9 +12,9 @@ require strings
 
 // Kernel 3 of the B=2 walkthrough: rope + KV-store. OURS is ONE fused dispatch per layer
 // (MetalRopeStoreBF16: q ropes in place in the fused QKV row, k ropes with the f16 clamp
-// straight into the mirror, v copies alongside; cos/sin PRECOMPUTED per row). LLAMA.CPP runs
-// FOUR dispatches (kernel_rope_neox on Q, on K — theta via pow() per pair — then
-// kernel_cpy_f32_f16 for K and V into the cache). Same logical work, wildly different
+// straight into the mirror, v copies alongside; cos/sin PRECOMPUTED per row). The upstream
+// reference runs FOUR dispatches (a neox rope on Q, one on K — theta via pow() per pair —
+// then an f32->f16 copy for K and for V into the cache). Same logical work, wildly different
 // dispatch/transcendental budgets; per-layer cost is launch-overhead territory, which is
 // exactly the point: the step runs 28 of these.
 //

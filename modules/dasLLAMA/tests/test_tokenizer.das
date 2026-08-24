@@ -8,7 +8,7 @@ require strings
 require daslib/strings_boost
 require dasllama/dasllama_env
 
-// Tokenizer regression gates against llama.cpp's own test-tokenizer-0 corpora (the .inp/.out files
+// Tokenizer regression gates against the upstream test-tokenizer-0 corpora (the .inp/.out files
 // shipped next to each ggml-vocab-*.gguf), through the production facade (load_tokenizer_auto ->
 // encode/decode) so BOTH backends are covered: byte-level BPE (llama-bpe, qwen2, qwen35, gpt-2),
 // SPM-style BPE (gemma-4), and SentencePiece (phi-3, llama-spm). The vocab fixtures are

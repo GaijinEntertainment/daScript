@@ -7,7 +7,7 @@ require dasllama/dasllama_gguf
 require math
 
 // Byte-level GGUF quant-format gates on a synthetic in-memory file: the dequant arm must match an
-// independently hand-rolled ggml reference, and the exact-transcode rails must be bit-exact against
+// independently hand-rolled reference, and the exact-transcode rails must be bit-exact against
 // the dequant. Token-level gates on real files live in test_parity.das.
 
 // Q5_0 fixture: 3 blocks x 32 elems, 22 bytes each (fp16 d, 4B high bits, 16B split-half nibbles).
@@ -20,7 +20,7 @@ def private q5_qs_byte(blk, j : int) : uint {
     return uint((j * 7 + blk * 13) & 255)
 }
 
-// Independent reference: lane k of block blk (ggml dequantize_row_q5_0 semantics — the high bit of
+// Independent reference: lane k of block blk (Q5_0 dequant semantics — the high bit of
 // lane k is bit k of qh; the nibble is split-half packed).
 def private q5_ref(blk, k : int) : float {
     let nib = k < 16 ? int(q5_qs_byte(blk, k)) & 15 : int(q5_qs_byte(blk, k - 16)) >> 4
@@ -79,7 +79,7 @@ def private synth_q5_0_bytes : array<uint8> {
 
 [test]
 def test_gguf_q5_0(t : T?) {
-    // The dequant arm (gguf_read_tensor_f32) must match the hand-rolled ggml reference exactly.
+    // The dequant arm (gguf_read_tensor_f32) must match the hand-rolled reference exactly.
     t |> run("q5_0 dequant matches ggml reference") @(t : T?) {
         let gg <- synth_gguf(6, 96l, synth_q5_0_bytes())   // GGML_TYPE_Q5_0
         var m <- parse_gguf_meta(gg)

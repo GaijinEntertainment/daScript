@@ -112,8 +112,8 @@
    round (2026-08-09): production arms bind MoeGemvArgs kargs, the pre-kargs lab twins keep
    their historical layouts behind per-arm bind splits, the dead tail-duplicate
    run_gmm4/gmm6_lab calls are gone, and main runs end-to-end to the leak assert - all 19
-   correctness checks at rel 0, run_gmx4_lab reachable again (prod 300.6 wGB/s vs lcppe
-   302.1, prod = lcppe + an untaken bias branch). Don't trust rounds=1 numbers from this
+   correctness checks at rel 0, run_gmx4_lab reachable again (prod 300.6 wGB/s vs gmx4_lcppe
+   302.1, prod = the gmx4_lcppe arm + an untaken bias branch). Don't trust rounds=1 numbers from this
    lab - warm-up dominates.
 
 9. **Prefill compiles its own PSO for kernels decode already has - HALF RESOLVED by the lens
@@ -348,12 +348,12 @@
       and chat `modalities:["text","audio"]`. No served artifact can speak; the two Omni
       families have Talkers upstream but the GGUF ecosystem carries only thinker + audio
       encoder, and a talker conditions on thinker HIDDEN STATES (not a bolt-on). The
-      reference-backed route if wanted: a dedicated small TTS family (llama.cpp's tts
+      reference-backed route if wanted: a dedicated small TTS family (the upstream tts
       example - OuteTTS + WavTokenizer ggufs). Realtime API (WebSocket voice, barge-in) is
       the end-state the smaller audio choices point at; name it before choosing them.
     - DECLINE/PARK: `/v1/images/generations` (+edits/variations) - no roster model
       generates images even upstream; diffusion is a disjoint class (DiT/UNet + conv2d VAE,
-      no reference in llama.cpp; the GGML reference is stable-diffusion.cpp, which shares
+      no upstream reference; the GGML reference is stable-diffusion.cpp, which shares
       our quants/GGUF/GEMMs but not the graph). `file`/`video_url` parts likewise parked.
     - HYGIENE: our `/v1/images` is the dlim-inventory/bake endpoint - a name squat on the
       standard image-API prefix; rename ours or accept the squat deliberately.
@@ -497,7 +497,7 @@
     serving tier loses its batching win exactly on the edge models built for it. The prefill
     driver already carries batched PLE kernels (gather + finish, `dasllama_metal_prefill.das`),
     so the shape exists; the batch-decode arm needs the per-stream token-id gather plumbed
-    through the batch kargs. llama.cpp has no batched-PLE serving path either, so this is
+    through the batch kargs. Upstream has no batched-PLE serving path either, so this is
     differentiation, not parity catch-up. Done = `BATCH_NEEDS_OK` carries `ple`, a batch-decode
     E-series cell in the support matrix, and a scheduler-level A/B showing the batched step
     beats N per-row steps on an E-series carrier.
@@ -564,3 +564,10 @@
     elapsed interval nor the literal `// clock: control` is a finding; the four marked sites
     (`dasllama_prefix.das` x2, `dasllama_image.das`, plus the harness ramp probe) are the
     fixture.
+
+47. **`REVIEW.das` run with a cwd outside the repo root reports OK with zero findings even
+    when its checks should fire** (observed 2026-08-24 from a detached git worktree: the
+    root-guard `fexist` passes there, the folder walk silently returns nothing). A gate that
+    looks green off-root is a hazard for worktree-based auditors. Done = the walk either
+    resolves against the repo root explicitly or the run REFUSES (exit 2) when the walk
+    yields zero files - an empty scan is never a pass.

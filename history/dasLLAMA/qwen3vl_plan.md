@@ -21,16 +21,16 @@ half makes Omni-30B the flagship any-to-text carrier: text + image + audio in ON
 
 Two genuinely new mechanisms, both rope-shaped:
 
-1. **Decoder IMROPE** (`GGML_ROPE_TYPE_IMROPE`, sections `[24,20,20,0]` from
+1. **Decoder IMROPE** (the IMROPE rope type, sections `[24,20,20,0]` from
    `qwen3vlmoe.rope.dimension_sections`, interleaved t,t,y,x in NEOX ordering): image rows
    rope with per-row int positions (t=pos_0, x=pos_0+i%nx, y=pos_0+i/nx, z unused); text rows
    use equal positions in every section, which collapses IMROPE to the standard NEOX rope -
    this is why today's text/audio serving is already correct, and why the text-only
    bit-match regression is writable BEFORE any new code.
-2. **Vision-mrope in the ViT** (`GGML_ROPE_TYPE_VISION`, sections d_head/4 = 18x4,
+2. **Vision-mrope in the ViT** (the VISION rope type, sections d_head/4 = 18x4,
    n_dims = d_head/2 = 36, theta=10000) - the tower's 2D rope.
 
-**The mask is NOT new.** llama.cpp's causal mask is position-based and every image row
+**The mask is NOT new.** The upstream causal mask is position-based and every image row
 shares t=pos_0, so the image span is bidirectional-within-span, causal outside - exactly the
 uniform-span mask the fused-image-span arc shipped (PR 3815: `Session.attn_uniform_lo/end`,
 `AttnArgs.ulo/uend`, CPU per-row select + Metal span eval). Qwen never sets
@@ -39,12 +39,12 @@ reused as-is; only the rope angles inside it change.
 
 **Omni has NO deepstack.** Its mmproj carries `clip.vision.is_deepstack_layers` flags
 (8/16/24) but ZERO `v.deepstack.*` tensors - converter boilerplate, the same
-metadata-vs-tensor-list trap the gemma arc documented; `has_deepstack()` is tensor-driven in
-clip.cpp, so the oracle graph never takes that branch for this file. Deepstack is real on the
-DENSE Qwen3-VL carriers and lands as its own slice: three extra merger MLPs in the tower
+metadata-vs-tensor-list trap the gemma arc documented; the reference's deepstack test is
+tensor-driven, so the oracle graph never takes that branch for this file. Deepstack is real
+on the DENSE Qwen3-VL carriers and lands as its own slice: three extra merger MLPs in the tower
 (concat along the feature dim -> (1+3)xproj-dim wide soft tokens) plus the decoder add - after
 layer il < 3, slice il+1 of the row's wide embedding is added to the hidden state
-(`src/models/qwen3vl.cpp:147`); image rows only, text rows carry zero slices, decode
+image rows only, text rows carry zero slices, decode
 untouched.
 
 Scope: the three towers above, stills only, ONE image per user turn, CPU towers + CPU
@@ -52,7 +52,7 @@ image-span prefill first (Metal IMROPE is a scheduled slice, not a decline-forev
 order: Omni core (no new tower mask, decoder already serving) -> dense deepstack (same graph
 + mergers + the decoder add + `qwen3vl` dense arch registration) -> qwen2.5o (new tower shape:
 window attention, RMS, gated FFN; decoder MROPE non-interleaved on the `qwen2vl` arch - this
-also completes `omni-3b`, whose audio half already serves). Oracle = llama.cpp mtmd
+also completes `omni-3b`, whose audio half already serves). Oracle = the upstream mtmd tools
 (`llama-mtmd-cli` / the patched `llama-mtmd-debug` with the vision-oracle rig from the gemma
 arc - fnv1a64 pixel dumps, per-token embedding lines, all reusable unchanged).
 
@@ -67,20 +67,19 @@ arc - fnv1a64 pixel dumps, per-token embedding lines, all reusable unchanged).
 - **Meta**: width 1152, heads 16 (d_head 72), ffn 4304, patch 16, merge 2, image_size 768,
   image_mean = image_std = [0.5,0.5,0.5] (normalize = x*2-1, NOT gemma's identity),
   vision eps 1e-6, projector `qwen3vl_merger`, projection_dim 2048.
-- **ViT graph** (`tools/mtmd/models/qwen3vl.cpp`): temporal-merge conv (still image: conv_0(img)
+- **ViT graph** (oracle-verified, slice A): temporal-merge conv (still image: conv_0(img)
   + conv_1(img) - for stills this is ONE conv with pre-summed weights W_0+W_1, a load-time fold)
   -> spatial-merge REORDER of the token stream before the blocks (2x2 merge partners made
   adjacent) -> +patch_bias -> +position embeds (48x48 table bilinearly resized to the actual
   grid, then the same merge reorder) -> 27 pre-LN blocks with vision-mrope on q/k, full
   attention (no windows) -> post_ln -> reshape x4 -> merger MLP -> 2048-wide soft tokens.
-- **Decoder positions** (`mtmd.cpp: mtmd_image_tokens_get_decoder_pos` /
-  `mtmd_image_tokens_get_n_pos`): image token i of an nxxny MERGED grid gets
+- **Decoder positions**: image token i of an nxxny MERGED grid gets
   (t=pos_0, x=pos_0+i%nx, y=pos_0+i/nx, z=0); the sequence position then advances by
   **max(nx,ny)**, not the token count - the Session needs a rope-position rail decoupled
   from the KV row index from this point on. Audio chunks are mrope_1d = all sections
   sequential (today's behavior, unchanged).
 - **Template markers**: `<|vision_start|>` (151652) / `<|vision_end|>` (151653) around the
-  soft-token span, `<|image_pad|>` = 151655 (mtmd.cpp:461); NO suppress-token list (unlike
+  soft-token span, `<|image_pad|>` = 151655; NO suppress-token list (unlike
   gemma); stream shape pinned from the tier-2 log.
 - **Preproc** (slice-A oracle-verified 2026-08-22): `calc_size_preserved_ratio` 4-arg -
   round each side to the nearest multiple of align = patchxmerge = 32 with round-half-AWAY
@@ -113,18 +112,18 @@ noise demands them).
 
 ## Slices (commit ladder, single PR; each lands its REVIEW.md entries with it)
 
-- **A. Oracle rig (DONE 2026-08-22)**: `~/Work/llama.cpp/models/qwen3vl-vision-oracle/` -
+- **A. Oracle rig (DONE 2026-08-22)**: `$MODELS/qwen3vl-vision-oracle/` -
   `mint.sh` + 17 dumps (10 preproc, 7 encode vs the f32-widened twin) + `cli.cats.log`;
   the gemma dasdebug patch worked unchanged. Facts pinned:
   - Geometry oracle-verified: 640->640, 100->96, 650x487->640x480, 528->544 (round-half-AWAY,
     the discriminating case), 4000x3000->2336x1760 (beta-floor clamp); letterbox PAD_CEIL
     black centered (white4000x3000 probes); dumps are POST-normalize (x2-1).
   - Encode shapes: 448->[2048,196], 640x320->[2048,200], 96->[2048,9]; per-token lines healthy.
-  - ViT rope (ggml ops.cpp `ggml_mrope_cache_init`, VISION mode): full 72-dim head rotated
+  - ViT rope (VISION mode): full 72-dim head rotated
     as 36 NEOX pairs (i, i+36); pairs 0-17 use the y angle, 18-35 the x angle, each
     section's frequency ladder RESTARTING (indep_sects), theta = 10000^(-2/36); ViT positions
     per patch = (y, x, y, x) in the merge-reordered walk.
-  - Decoder IMROPE tail quirk, port VERBATIM: sections [24,20,20,0] over 64 half-dims give
+  - Decoder IMROPE tail quirk, reproduced EXACTLY: sections [24,20,20,0] over 64 half-dims give
     the t,h,w interleave on dims 0-59, then 60->t, 61->e, 62->e, 63->t - e reads the 4th
     position (0 on image rows => those dims unrotated; = p on text, so the NEOX collapse
     holds).
@@ -142,12 +141,12 @@ noise demands them).
   this bit once).
 - **B. IMROPE table builder (DONE 2026-08-22)**: das rope is TABLE-based (angle generation
   single-sourced in `dasllama_rope`, application kernels read cos/sin rows), so IMROPE is one
-  new builder - `build_rope_tabs_imrope` (per-row int4 positions + sections, the ggml sector
-  walk verbatim, same float order as the siblings) - and the TEXT PATH IS UNTOUCHED: the
+  new builder - `build_rope_tabs_imrope` (per-row int4 positions + sections, the same sector
+  walk and float order as the siblings) - and the TEXT PATH IS UNTOUCHED: the
   planned tsv-level regression dissolved into a stronger, cheaper gate. `test_rope.das`
   gained three model-free tests: the (p,p,p,p) collapse BIT-matches `build_rope_tabs_rows`
-  (prediction 1: CORRECT, first attempt), an image row matches a per-element ggml-order
-  reference including the tail quirk (61/62 -> e, unrotated at e=0), and an h-only
+  (prediction 1: CORRECT, first attempt), an image row matches a per-element reference
+  walk including the tail quirk (61/62 -> e, unrotated at e=0), and an h-only
   perturbation moves exactly the h dims. Negative control run: a poisoned axis walk reds
   both gates.
 - **C. Preproc (DONE 2026-08-22)**: `vision_normalize` gained mean/std defaults (0/1 -
@@ -160,7 +159,7 @@ noise demands them).
 - **D. Tower (DONE 2026-08-22)**: `dasllama_qwen3v.das` - image-rail load (per-tensor
   bf16/f32 planes; W_0+W_1 conv fold at stage; deepstack refused by TENSOR scan), merge
   reorder, the antialiased pos-embed resize (`interpolate_grid_bilinear_aa` in tower -
-  verified BIT-identical to a NumPy port of ggml's loop on the real table), 27 blocks
+  verified BIT-identical to a NumPy reference of the same loop on the real table), 27 blocks
   (fused-qkv, vision-mrope via `build_rope_tabs_vision` + full-head NEOX apply, scaled
   bidir attention, GELU-tanh-LUT FFN), 2x2 merger. Tier-1 (`test_qwen3v.das`): all seven
   fixtures green at maxdiff 3.7e-4-2.7e-3 on a poison-calibrated 2e-4 + 1e-2*rms bar (a
@@ -177,7 +176,7 @@ noise demands them).
   `{arch}.rope.dimension_sections`, validated 2xsum == rotary span), Session
   `rope_pos_delta` (+ at EVERY rope-angle site - table and classic, decode and prefill -
   never at KV indexing) and the transient per-quantum `mrope_pos` int4 map
-  (`mrope_span_positions` in dasllama_rope, the mtmd walk verbatim, model-free-tested);
+  (`mrope_span_positions` in dasllama_rope, matching the reference position walk, model-free-tested);
   `eval_embd_span_mrope_` rides the uniform-span rail fused AND spliced (per-slice map
   views); an mrope quantum declines the GPU prefill override loudly and is exempt from the
   CPU-prefill tripwire; the delta flows into the CPU-built rope tables, which the Metal
@@ -252,14 +251,14 @@ noise demands them).
 - **H. Deepstack (DONE 2026-08-22)**: the `qwen3vl` dense arch was ALREADY registered (the
   Qwen3-ASR precedent) and E1's sections read is arch-generic, so the decoder needed only
   `Config.n_deepstack` (loader: `{arch}.n_deepstack_layers`) + the slice-add rail. Design =
-  llama.cpp-congruent WIDE ROWS: the tower emits (1+n_ds)*proj_dim rows (slice 0 = main
+  WIDE ROWS: the tower emits (1+n_ds)*proj_dim rows (slice 0 = main
   merger, slice k+1 = tap k in encounter order), rows travel OPAQUELY through chat / worker /
   PendingReq / scheduler (zero plumbing there), and the eval seam (`forward_prefill_embd
   ds_wide`, exact-length detection in the three eval_embd entries) splits slice 0 into x_b
   and stashes the tails on `Session.ds_embd` (@scratch, `ds_active` framed like
   attn_uniform); the CPU layer loop adds slice l after layer l < n_ds to EVERY row - text
-  rows carry zero tails (assembled by `embed_text_rows_strided`), which is exactly
-  llama.cpp's semantics, so no row masking exists anywhere. A ds quantum DECLINES every GPU
+  rows carry zero tails (assembled by `embed_text_rows_strided`) - the model's own
+  semantics, so no row masking exists anywhere. A ds quantum DECLINES every GPU
   prefill override by name (tripwire-exempt) - the Metal per-layer-add kernel is an arc
   followup, needed before slice J's 8B Metal rows. Tower: taps collected from the TENSOR
   list (<=3), per-tap LayerNorm->fc1->GELU-LUT->fc2 over the x4-merged rows; the projector key
@@ -405,7 +404,7 @@ noise demands them).
    organ (fixtures, not preproc). Honorable mention: the vocab spells the span markers
    `<|vision_bos|>`/`<|vision_eos|>`, which no prediction saw coming.
 
-### Measurement predictions (registered 2026-08-22 BEFORE the J numbers; das vs llama.cpp,
+### Measurement predictions (registered 2026-08-22 BEFORE the J numbers; das vs upstream,
 ### M1 Max t=8, coco fixture, `lcpp_bench --image` vs patched llama-mtmd-cli, r=3)
 
 Context the predictions price in: the Metal tower serves gemma3v/gemma4v ONLY - every qwen
@@ -520,7 +519,7 @@ form). Cells stamp `(qwen3v q8)`. Qwen2.5-Omni-3B unmeasured - no q8 lane (slice
 
 ### Slice M - the Metal image-turn pp gap (dig opened 2026-08-23; Boris: separate PR)
 
-**Target:** slice J's Metal `img:pp` reds - das/lcpp 3B -12%, 4B -16%, 8B -30%, 30B MoE
+**Target:** slice J's Metal `img:pp` reds - das/upstream 3B -12%, 4B -16%, 8B -30%, 30B MoE
 -41% - while das leads or ties every gemma Metal image cell post-3815.
 
 **FOUND FIRST (before any timing): the bench's image cell feeds deepstack decoders a NARROW
@@ -528,7 +527,7 @@ scrambled span.** `measure_image_turn` copies `n_rows * dim` floats into an `npo
 buffer, but a qwen3v ds tower emits `n_rows x dim*(1+n_ds)` wide rows (probe: the 4B mmproj
 scans n_deepstack=3, row_width=10240, nout=300, len/nout=10240). The copy flattens the first
 75 wide rows into 300 narrow slots: content scrambled, ds adds never active (`embd_is_ds_wide`
-keys on length), das doing LESS prefill work than the lcpp leg it lost to. Every 4B/8B
+keys on length), das doing LESS prefill work than the upstream leg it lost to. Every 4B/8B
 img:pp/img:tg cell in the J sweep priced that walk; the clean captions survived on content
 redundancy - the greedy-tie gate lesson's third strike. Blast radius: plan figures only (no
 cards ruled, nothing committed to records/). 30B and qwen25o have no ds slices -> their cells
@@ -537,7 +536,7 @@ bench drives `respond_` through it - the cell prices the literal shipped walk, a
 hand-splice divergence class dies.
 
 ### Slice M predictions (18 registered before the row-width probe ran; 19-22 before any
-### re-measurement or decomposition; das vs llama.cpp, M1 Max t=8, coco fixture)
+### re-measurement or decomposition; das vs upstream, M1 Max t=8, coco fixture)
 
 18. The scramble hypothesis: the 4B mmproj scans ds=3 and emits wide rows, so the bench
     span is scrambled and ds-less. **SCORED: CORRECT** (probe above; called before running).
@@ -548,10 +547,10 @@ hand-splice divergence class dies.
     control at matched npos (~320) on the same decoders reproduces >= 2/3 of the gap, and
     skip-family knockouts attribute >= 60% of the das wall to the gemm family.
 21. The gap shrinks with M: at npos 512+ das text prefill on the VL-4B/8B decoders is within
-    +/-5% of lcpp (the board's dense text history) - short-M efficiency, not raw throughput.
+    +/-5% of upstream (the board's dense text history) - short-M efficiency, not raw throughput.
 22. The 30B MoE -41% is its own mechanism - the MoE expert batched-prefill path: knockouts
     attribute >= 50% of its das wall to the moe/gemm family, and its per-token deficit vs
-    lcpp at image-turn M is >= 1.5x the dense models'.
+    upstream at image-turn M is >= 1.5x the dense models'.
 
 #### Slice M progress (2026-08-23)
 
@@ -585,13 +584,13 @@ CPU-leg's; unexplained, parked - encode is slice-J/L territory).
 **Turn shapes verified equal both engines** (Boris's "same formats" check): das image npos =
 4 head + 300 rows + 17 tail = **321**; the mtmd ref's repriced rows = 41 + (300-20) = 321.
 Both engines KV f16; llama-bench/mtmd fa auto(on for Metal); same Q8_0 gguf (das planar
-repack = the das lane by design). llama.cpp build 98c4764b6 (2026-08-13).
+repack = the das lane by design). Upstream build 98c4764b6 (2026-08-13).
 
 **Text-M control (rig -p + --ref, same padded GEMM shapes as the image turn):** das text
 prefill is at parity - 4B p341 das 1038.3 vs ref 1011.3 (+2.7%), p512 +1.3%; 8B p341 -6.2%,
 p512 +0.3%; 3B p412 -5.3% (cv 4.6%, over bar - flag). **P20/P21 land WRONG in the
 informative direction: the image gap does NOT reproduce in text** - das's own image turn runs
-~16% below das text at the same padded M (4B: wall 381.6 vs 328.4 ms), while lcpp's image
+~16% below das text at the same padded M (4B: wall 381.6 vs 328.4 ms), while the upstream image
 turn runs AT its text rate. The mechanism is das-side, image-turn-specific.
 
 **Span-fuse A/B:** fused 841.1 vs splice 687.7 (DASLLAMA_SPAN_FUSE=0) - the fuse works,
@@ -609,7 +608,7 @@ silent fuse-decline exists it is worth a witness).
 Two mechanisms:
 1. **The staging floor (every mrope model, +19..30 ms/turn):** survives skipping every GPU
    kernel family - the embd quantum's CPU-side assemble + upload + per-turn setup (wide
-   splice, ds repack, mrope tables/positions). lcpp pays no such delta.
+   splice, ds repack, mrope tables/positions). Upstream pays no such delta.
 2. **The ds-wide gemm tax (deepstack models only, ~7.5% of gemm):** same padded shapes, same
    weights, +23 ms of gemm - only on the wide-quantum models; the 3B control acquits mrope
    and the span mask. Suspect: the wide quantum's x staging / slice-0 split path.
@@ -626,8 +625,8 @@ over tokens). The bench-context penalty reproduces by running the CPU tower ENCO
 between submit and execution on the FIRST Metal submission after the burn.** A 400 ms idle
 cooldown recovers nothing; **a sacrificial second eval after the same encode runs clean
 (608.9 ms)** - a one-time residency/driver-state repayment, not thermal, not scheduler decay.
-Every real image turn pays it because every turn starts with the CPU encode; lcpp never pays
-it (their mmproj encodes on the GPU). Knockout floors scale with pool size: 3B +19, 4B +30,
+Every real image turn pays it because every turn starts with the CPU encode; upstream never
+pays it (its mmproj encodes on the GPU). Knockout floors scale with pool size: 3B +19, 4B +30,
 8B +133 ms.
 
 **The qwen Metal img:pp gap decomposes as:** post-encode first-submission penalty (dominant,
@@ -712,7 +711,7 @@ if the meta hash misses it, bump the family tag - the slice-L stale-dlim lesson.
     tighter maxdiff than the bf16 lane's; the likely red, if any, is the rope table
     addressing against the merge reorder, not the GEMM chain.
 28. Measured 4B Metal encode (coco, 300 tok): 250-500 ms (today 2194 ms; mtmd Metal ~250);
-    the Metal-leg img:pp recovers to within +/-8% of lcpp - the burn and its ramp gone.
+    the Metal-leg img:pp recovers to within +/-8% of upstream - the burn and its ramp gone.
 29. The 1.7x metal-armed-CPU-encode anomaly goes moot on qwen3v and stays reproducible on
     qwen25v - it rides the CPU-encode-under-Metal context, not the family.
 
@@ -803,6 +802,16 @@ P31 (pool pins remove the slack) WRONG for pp, RIGHT for enc.
 From the arc's start: enc 2194/3446/6411 -> 179/257/241 (12-27x); pp -16/-29/-41% ->
 -16/-16/-5%. das leads every qwen3v Metal encode; the pp residual is ONE named mechanism
 with a scoped fix.
+
+#### Post-heartbeat + decode-GEMV refresh (2026-08-24)
+
+The residency heartbeat (metal-residency-ramp arc, merged) removed the ~40 ms
+commit->execution slack from every image turn (timed prefill 652 -> 612 ms): **img:pp 4B
+936.2 / 8B 524.5 / 30B 779.5 tok/s = -7/-7/-4% vs ref** (encode flat: 176.1/258.2/240.5 ms).
+The remaining ds-model gap decomposed as text-parity + the wide-quantum staging tax; the
+follow-on decode-tg chase (PERF_LEDGER, the reduction-split GEMV entry) then took the text
+decode itself from -9.6% to -2.3% (8B) - the residual on both fronts is now the fixed
+per-step submission overhead plus the ds staging, both ledgered.
 
 **Validation-round catch (make_pr battery): the tower missed the weights-epoch flush.**
 `test_vision_chat` deepstack cell red - the cats turn captioned a nonexistent eye, CPU lane

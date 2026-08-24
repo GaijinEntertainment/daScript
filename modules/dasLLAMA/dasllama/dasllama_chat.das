@@ -119,7 +119,7 @@ def private mistral_instruct_template() : ChatTemplate {
 
 // The Mistral v7-tekken template (Voxtral, Mistral-Small-3.x): [INST]content[/INST] with NO
 // spacing, [SYSTEM_PROMPT]…[/SYSTEM_PROMPT] system role. Detected BY NAME ("mistral-v7-tekken"),
-// not Jinja. Audio spans open with [BEGIN_AUDIO] and have no closing marker (mtmd voxtral shape).
+// not Jinja. Audio spans open with [BEGIN_AUDIO] and have no closing marker (the voxtral shape).
 def private mistral_v7_tekken_template() : ChatTemplate {
     var ct = ChatTemplate()
     ct.add_bos = true   // <s>
@@ -141,7 +141,7 @@ def private detect_chat_kind(src : string) : string {
     return "gemma4" if (contains(src, "<|turn>"))                       // Gemma-4 channel-based turn format
     return "gemma2" if (contains(src, "<start_of_turn>"))               // Gemma (2 and 3 share the turn shape)
     return "phi3" if (contains(src, "<|end|>"))                         // Phi-3
-    // v7-tekken BY NAME (Voxtral stores the llama.cpp alias, not Jinja), or by SHAPE (Medium 3.5)
+    // v7-tekken BY NAME (Voxtral stores the upstream alias, not Jinja), or by SHAPE (Medium 3.5)
     return "mistral-v7-tekken" if (contains(src, "v7-tekken") || contains(src, "[SYSTEM_PROMPT]"))
     return "mistral-instruct" if (contains(src, "[INST]"))              // Mistral instruct
     return "glm4moe" if (contains(src, "[gMASK]<sop>"))                 // GLM-4.5 family (spells <|user|> too — before Zephyr)
@@ -173,7 +173,7 @@ def chat_template(m : Model) : ChatTemplate {
 // ===== Renderer: ChatTemplate part list -> token ids =====
 
 // Encode each maximal run of text/content between special tokens as ONE segment — matches how
-// llama.cpp tokenizes a templated prompt (BPE/SPM merges do not cross special-token boundaries).
+// upstream tokenizes a templated prompt (BPE/SPM merges do not cross special-token boundaries).
 def private render_parts(m : Model; parts : array<ChatPart>; content : string; var out : array<int64>) {
     var seg : array<string>   // the current text run, flushed (encoded as one segment) at each special
     for (p in parts) {
@@ -627,7 +627,7 @@ def create_chat_renderer_(model : Model; system : string = ""; max_new : int64 =
             && special_id(model, "<|vision_bos|>") >= 0l && special_id(model, "<|vision_eos|>") >= 0l) {
         // Qwen2.5-Omni spells the SAME marker ids <|vision_bos|>/<|vision_eos|> where the VL
         // vocabs spell <|vision_start|>/<|vision_end|> - resolve by the vocab HERE so every
-        // render path serves them (mtmd hardcodes the VL spelling and feeds plain text there)
+        // render path serves them (upstream hardcodes the VL spelling and feeds plain text there)
         c.tmpl.image_pre.parts <- [chat_special("<|vision_bos|>")]
         c.tmpl.image_post.parts <- [chat_special("<|vision_eos|>")]
     }
@@ -1452,7 +1452,7 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
         let npos = n_head + n_media + long_length(tail)
         var inscope embd : array<float>
         assemble_media_embd(m, c, head, tail, is_image, embd)
-        // image span = non-causal (mtmd_decode_use_non_causal); audio is causal - empty span
+        // image span = non-causal; audio is causal - empty span
         let span_lo = is_image ? n_head : 0l
         let span_hi = is_image ? n_head + n_media : 0l
         generate_embd_(m, c.session, embd, npos, params, c.max_new, span_lo, span_hi, is_image ? c.image_grid : int2(0)) $(id, piece) {

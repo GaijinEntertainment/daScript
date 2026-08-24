@@ -21,8 +21,8 @@ require dasllama/dasllama_tune  // [tuned]: reconstitute kernels from templates 
 // activation prep, and this codec).
 
 // ===== f16 codec: IEEE binary16 held in uint16, converted per element inside the hot loop =====
-// (ggml's lesson: convert the O(head_size) side in-loop, keep the bandwidth win — f16_to_f32
-// lowers to vcvtph2ps/fcvtl inside the vectorized loop under the JIT).
+// The design rule: convert the O(head_size) side in-loop and keep the bandwidth win —
+// f16_to_f32 lowers to vcvtph2ps/fcvtl inside the vectorized loop under the JIT.
 
 //! Dot of an f32 query row against an f16 (binary16-in-uint16) cache row.
 [hint(unsafe_range_check, noalias = a, noalias = b)]
@@ -49,8 +49,8 @@ def template axpy_f16_template(var d : float ?; s : uint16 const ?; scale : floa
 [hint(unsafe_range_check, noalias = d, noalias = s), tuned]
 def axpy_f16(var d : float?; s : uint16 const?; scale : float; n : int64) {}
 
-// ===== q8_0 codec: ggml block_q8_0 — 32 int8 quants sharing one f16 scale =====
-// INTERLEAVED {f16 d; int8 qs[32]} = 34 bytes/block (llama.cpp -ctk/-ctv layout, so oracle
+// ===== q8_0 codec: 32 int8 quants sharing one f16 scale =====
+// INTERLEAVED {f16 d; int8 qs[32]} = 34 bytes/block (the -ctk/-ctv cache layout, so oracle
 // cross-checks stay honest). Rows are whole blocks (kv_dim % 32 == 0); n always a multiple of 32.
 
 //! Dot of an f32 query row against a q8_0 cache row: the block scale factors out —
@@ -139,8 +139,8 @@ def template cvt_q8kv_to_f32_template(var d : float ?; s : uint8 const ?; n : in
 [hint(unsafe_range_check, noalias = d, noalias = s), tuned]
 def cvt_q8kv_to_f32(var d : float?; s : uint8 const?; n : int64) {}
 
-//! Quantize n f32s (whole 32-blocks) into q8_0 blocks at dst — the codec store, ggml's exact
-//! quantize_row_q8_0 semantics: per block d = amax/127 as f16, quants round with UN-rounded f32
+//! Quantize n f32s (whole 32-blocks) into q8_0 blocks at dst — the codec store, exact q8_0
+//! quantizer semantics: per block d = amax/127 as f16, quants round with UN-rounded f32
 //! 1/d — idempotent (re-quantizing a dequantized row is byte-identical, max element hits ±127).
 [hint(unsafe_range_check, noalias = dst, noalias = src)]
 def template quantize_q8kv_row_template(var dst : uint8 ?; src : float const ?; n : int64) : void {
@@ -298,7 +298,7 @@ def template cvt_tq4kv_to_f32_template(var d : float ?; s : uint8 const ?; n : i
 [hint(unsafe_range_check, noalias = d, noalias = s), tuned]
 def cvt_tq4kv_to_f32(var d : float?; s : uint8 const?; n : int64) {}
 
-//! Quantize n (rotated) f32s into tq4 blocks at dst — the codec store. ggml quantize_row_q4_0
+//! Quantize n (rotated) f32s into tq4 blocks at dst — the codec store, q4_0 quantizer
 //! semantics: d = signed-max / -8 stored as f16, quants truncate x*id + 8.5 (never negative:
 //! |x*id| <= 8 by construction), capped at 15.
 [hint(unsafe_range_check, noalias = dst, noalias = src)]

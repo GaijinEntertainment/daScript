@@ -141,8 +141,8 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
         metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(head_size / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
     }
     t |> success(aran, "attention dispatches (hs={head_size}, mm={mm}): {err}")
-    // the mm pair stages HALF (llama.cpp's f32_f32 mul_mm does the same) — the envelope is the
-    // half-precision score shift through softmax, ~1% of the convex-combination output
+    // the mm pair stages HALF — the envelope is the half-precision score shift through
+    // softmax, ~1% of the convex-combination output
     t |> equal(buf_mismatch_tol(bxb, axb_want, mm ? 2e-2 : 1e-4), 0)
     metal_release(baq)
     metal_release(bak)
@@ -463,7 +463,7 @@ def test_metal_prefill_kernels(t : T?) {
                 // (hs 128 — the QK kernel's two-k-slab path; 2 heads keep the oracle cheap)
                 attn_trio_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, false)
                 attn_trio_gate(t, dev, queue, 128, 2, 1, NPOS, false)
-                // the ggml-geometry pair (hs % 64 shapes: llama-1B/3B classes + GQA)
+                // the tiled QK/AV pair (hs % 64 shapes: llama-1B/3B classes + GQA)
                 attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true)
                 attn_trio_gate(t, dev, queue, 128, 6, 2, 40, true)
 
@@ -557,7 +557,7 @@ def test_metal_prefill_kernels(t : T?) {
                 // ===== the classifier GEMV (logits-on-GPU) =====
                 // exact-arithmetic data (quants in [-8, 7], pow2 scales, int x): every per-byte4
                 // dot, scale product, and simd_sum partial is exactly representable — BIT-exact
-                // vs the CPU reference. d = 21 exercises the row < ddim tail guard (grid pads to 24).
+                // vs the CPU reference. d = 21 exercises the row < ddim tail guard (grid pads to 22).
                 gemv_gate(t, dev, queue, 96, 21)            // 3 blocks per row, guarded tail
                 gemv_gate(t, dev, queue, 160, 64)           // 5 blocks per row, exact grid
                 gemv_gate(t, dev, queue, 1120, 8)           // 35 blocks: exercises the 4-chunk main loop, not only the tail
@@ -1441,8 +1441,11 @@ def private gemv_gate(t : T?; dev, queue; n, d : int) {
             }
         }
     }
+    // one sentinel float past the output: the odd-d tail guard's only witness - an unguarded
+    // pair row writes element d, which a d-wide compare never reads
+    want |> push(-1000.0)
     var bx = buf_upload(dev, xv)
-    var by = buf_fill(dev, d, -1000.0)
+    var by = buf_fill(dev, d + 1, -1000.0)
     var bn = buf_u32(dev, uint(n))
     var bd = buf_u32(dev, uint(d))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
@@ -1453,7 +1456,8 @@ def private gemv_gate(t : T?; dev, queue; n, d : int) {
         metal_set_buffer(enc, by, 0ul, 3)
         metal_set_buffer(enc, bn, 0ul, 4)
         metal_set_buffer(enc, bd, 0ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint((d + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
+        metal_set_threadgroup_memory_length(enc, MetalQ8Gemv_metal_q8_gemv_msl_tgmem, 0)
+        metal_dispatch_threadgroups(enc, uint3(uint((d + 1) / 2), 1u, 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "gemv dispatch n={n} d={d}: {err}")
     t |> equal(buf_mismatch_exact(by, want), 0)

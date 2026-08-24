@@ -32,7 +32,7 @@ def private same(a, b : array<int64>) : bool {
 }
 
 // Regression (Copilot #3340): SPM encode/decode must use the per-model bos_id/eos_id loaded from
-// GGUF, not the llama2.c literals 1/2 — Gemma has bos=2 / eos=1. Empty text isolates the BOS/EOS
+// GGUF, not the struct defaults 1/2 — Gemma has bos=2 / eos=1. Empty text isolates the BOS/EOS
 // framing (no vocab lookup), so this needs no model file.
 [test]
 def test_spm_encode_respects_model_bos_eos(t : T?) {
