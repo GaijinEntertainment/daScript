@@ -2234,9 +2234,15 @@ endif()
 # the one exception is REVIEW_COMMON.md at the install root (adopting repos vendor
 # from it). This must stay the LAST install rule in the root CMakeLists so the
 # manifest it checks is complete.
+install(CODE "set(_das_docdir \"${DAS_INSTALL_DOCDIR}\")")
 install(CODE [[
     set(_review_leaks "")
-    get_filename_component(_root_common "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/REVIEW_COMMON.md" ABSOLUTE)
+    if(IS_ABSOLUTE "${_das_docdir}")
+        set(_root_common "$ENV{DESTDIR}${_das_docdir}/REVIEW_COMMON.md")
+    else()
+        set(_root_common "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/${_das_docdir}/REVIEW_COMMON.md")
+    endif()
+    get_filename_component(_root_common "${_root_common}" ABSOLUTE)
     foreach(_f IN LISTS CMAKE_INSTALL_MANIFEST_FILES)
         get_filename_component(_name "${_f}" NAME)
         get_filename_component(_f_abs "${_f}" ABSOLUTE)
