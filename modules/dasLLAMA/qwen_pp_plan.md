@@ -17,7 +17,13 @@ and the reduction-split decode GEMV arc (merged). Scope = the two ruled levers:
 Released rig exe (`performance/_rig/dasllama-bench.app/.../dasllama-bench.exe`), quiet box,
 r=3 t=8, `--ngl 99`; models + ref binary paths per `METHODOLOGY.md`. Image cells:
 `--image` + `--image-mmproj` + `--image-think` on the coco fixture. Text-M control: `-p 341`
-(same ceil-32 pad = 352 as the image turn's npos 321).
+(same ceil-32 pad = 352 as the image turn's npos 321). Every in-process/stage figure below
+("the probe") is `harness/image_turn_probe.das` under `-jit` (best-of-3 walls per arm;
+knockout arms = `DASLLAMA_METAL_PREFILL_SKIP`; model = `DASLLAMA_PROBE_MODEL`, default the
+8B) — direction-grade by contract, never board rows. Figures quoted as before/after across
+commits are two probe runs at the two tips, not an in-process A/B; the in-process
+tail-on/off compare lives in the parity arm (token-exact — bit-exactness is impossible by
+design across the f16-tile and f32-dot GEMM forms).
 
 ## Predictions (BEFORE the phase-0 runs)
 
@@ -51,8 +57,9 @@ r=3 t=8, `--ngl 99`; models + ref binary paths per `METHODOLOGY.md`. Image cells
 | post-encode context residue | ~10 ms | ~7 ms |
 | das image wall vs ref image wall | 615.5 vs 568.6 (−7.6%) | 340.7 vs ~318 (−7%) |
 
-Ref image mints (fresh, warm): 8B mtmd prefill 568.6 ms / 321 rows (564.6 tok/s), encode
-500 ms (das encode 255.8 — 2x ahead); ref decode 32.2 tok/s (das 38.7 — +20%).
+Ref image mints (fresh, warm): the 8B ref image turn's prefill 568.6 ms / 321 rows
+(564.6 tok/s), encode 500 ms (das encode 255.8 — 2x ahead); ref decode 32.2 tok/s (das
+38.7 — +20%).
 
 ## The lever (proposed, not yet ruled)
 
@@ -72,9 +79,13 @@ MoE prefill (30B −4%), the span-attn +6 ms, the ~10 ms post-encode residue.
 - [x] RULING: the GEMV-tail dispatch lever (approved).
 - [x] Implemented: enc_gemm_mm peels npos % 32 in [1,8] onto the mv family (r == 1 rides the
       reduction-split GEMV — the mv forms idle half their lanes on a lone row, measured: the
-      mv-only tail bought 24 ms, the r==1 reroute 8.6 more). DASLLAMA_METAL_MM_TAIL knob +
-      setter + engage counters; DASLLAMA_VERSION 9; the mv_b2 store now gates on nrows (it
-      phantom-wrote row 1 at nrows == 1 — an off-the-end write on an exactly-full KV panel).
+      mv-only tail bought 24 ms, the r==1 reroute 8.6 more). Per-form reduction alignment
+      gates the peel — the b4 stripe reads whole 128-quant rounds, so kdim % 128 != 0 keeps
+      the padded tile (dims like 576/896/1152 misread otherwise — device-probed), and r >= 2
+      always takes the b4 form (b2's stripe needs % 256). DASLLAMA_METAL_MM_TAIL knob +
+      setter + engage counters; DASLLAMA_VERSION 9; the mv_b2 store now gates on nrows —
+      defensive: at nrows == 1 it phantom-wrote its second row, which the batch rail's two
+      sizing paths make either an unread pad row or an off-the-buffer write.
       Probe (8B, one process, npos=321): tokens 599.2 -> 566.8 ms, wide-span 605.3 -> 572.6.
 - [x] Gates: mm-tail parity arm (residues 257/321%32==1 and 261/%32==5, token-exact, tail-off
       A/B, engage counters; y-offset poison control REDS it), kernels suite 7/7.
@@ -99,3 +110,9 @@ MoE prefill (30B −4%), the span-attn +6 ms, the ~10 ms post-encode residue.
 - [ ] Followups: post-encode residue (~10 ms: ~6.7 GPU cache aftermath + ~3.8 host slack;
       lever = encode-ahead overlap, shared with the decode submission-overhead arc), kq
       mul_mm + MoE prefill tails (the mv_kq twins exist), r in [9,15] via a third mv pass.
+      Review-round harvest: (a) the batch-DECODE mv rail carries the same unguarded stripe
+      widths with no alignment clause (pre-existing — B in [2,8] on a dim % 128 != 0 model
+      misreads; own arc, failing test first); (b) u_dn_qd2 is built from qd, not qd_l — a
+      latent bn != d exception if a hetero q-gated arch ever lands (unreachable today);
+      (c) the b2/b4 y binding carries no @span, so every peeled site pays a conservative
+      whole-buffer barrier — correctness-neutral, confounds per-r timing comparisons.

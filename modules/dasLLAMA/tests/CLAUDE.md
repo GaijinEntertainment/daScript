@@ -41,12 +41,17 @@ never mask a red.
 
 Arm names - decode parity: `arm1-basic arm2-hybrid arm3-step arm4-paged arm5-rewind
 arm6-churn arm7-q8kv arm7b-tq4kv arm8-s16 arm9-reload arm10-kq arm11-depth arm12-dim
-arm13-conc arm14-poison` (mm-tail in the prefill list below = the GEMV-tail residue shapes:
-npos % 32 == 1 rides the reduction-split GEMV, == 5 the mv b4 + pair leg - token parity +
-tail-off A/B + engage counters) (arm14 = the shared-region collision gate: a foreign GPU prefill must
+arm13-conc arm14-poison` (arm14 = the shared-region collision gate: a foreign GPU prefill must
 not degrade a later forced-feed decode - Qwen2.5-0.5B, its own `[test]` block),
 batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`. Prefill parity: `base mm-tail s16
-kq cont span span-fused span-mrope span-ds dim qkv` (span = the non-causal media eval shape, head + embd span,
+kq cont span span-fused span-mrope span-ds dim qkv` (mm-tail = the GEMV-tail residue peel -
+four fixtures, npos % 32 == 1 (the lone row rides the reduction-split GEMV), == 2 (the b4
+form at 2 rows), == 5 (two b4 dispatches, 4 rows + 1) and npos == 5 (the pure-tail leg,
+no mul_mm at all) - token parity vs the all-CPU control, the tail-off A/B twin, and the
+peeled sites/rows counters as the anti-vacuous witness; plus the SmolLM2 alignment-guard
+leg - dim 576 fails the b4 stripe's % 128, so npos % 32 == 2 must refuse the tail while
+== 1 still rides the gemv, counters only (greedy token equality is not a valid instrument
+on a 135M); span = the non-causal media eval shape, head + embd span,
 per codec; span-fused = the image turn's ONE-eval shape - causal head + media rows + causal
 tail through the per-query mask, one GPU prefill, with a same-backend fused-vs-splice logits
 witness on poison-calibrated per-codec bars; span-mrope = the qwen grid-roped turn - one GPU

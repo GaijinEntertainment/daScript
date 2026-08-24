@@ -386,6 +386,9 @@ struct public HarnessEnv {
     @clarg_doc = "Override the batched-dispatch chunk count in the 1-core GEMM probe."
     batch_chunks : string = ""
 
+    @clarg_doc = "Model filename (inside the models dir) the image-turn attribution probe loads."
+    probe_model : string = "Qwen3VL-8B-Instruct-Q8_0.gguf"
+
     @clarg_doc = "Use the 2D batch grid in the parity probe."
     batch_grid_2d : Option<int>
 

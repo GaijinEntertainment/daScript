@@ -644,9 +644,10 @@ def private gemv_b_gate(t : T?; dev, queue; bwidth, ndim, ddim, ys : int) {
     delete want
 }
 
-// MetalQ8MvB2/B4 (streamed skinny form, 64-thread tg, n % 256): X rows at float4 stride xs4,
-// b4 stores gate on nrows (the b<nrows pad columns compute and discard, x reads clamp to the
-// last live row). b2 always writes both columns — B=1 rides an unread y row by design.
+// MetalQ8MvB2/B4 (streamed skinny form, 64-thread tg; b2 walks 256-quant stripes, b4 128):
+// X rows at float4 stride xs4; BOTH forms gate stores on nrows — pad columns compute and
+// discard (b4's x2/x3 clamp; the x1 phantom read stays in the padded x rows), so rows past
+// nrows keep the sentinel and the compare asserts it.
 def private q8_mv_b_gate(t : T?; dev, queue; bwidth, ndim, ddim, nrows, xs4, ys : int) {
     let tag = "q8_mv_b{bwidth} n={ndim} d={ddim} nr={nrows} xs4={xs4} ys={ys}"
     var err : string
@@ -659,19 +660,18 @@ def private q8_mv_b_gate(t : T?; dev, queue; bwidth, ndim, ddim, nrows, xs4, ys 
     var wdeq : array<float>
     q8_blob_fill(ddim, ndim / 32, blob, wdeq)
     var xf : array<float>
-    q8_x_fill(nrows * xs4 * 4, xf)
-    let nwr = bwidth == 2 ? 2 : nrows   // b2 stores both columns unconditionally
+    q8_x_fill(max(nrows, 2) * xs4 * 4, xf)   // the unclamped x1 phantom read needs a row-1 backing
+    let nwr = bwidth == 2 ? 2 : 4   // the form's column count: rows past nrows must stay sentinel
     var want : array<float>
     want |> resize(nwr * ys)
     for (i in range(nwr * ys)) {
         want[i] = -1000.0
     }
-    for (b in range(nwr)) {
-        let src = min(b, nrows - 1)     // the b4 pad-column x clamp
+    for (b in range(nrows)) {
         for (r in range(ddim)) {
             var acc = 0.0lf
             for (c in range(ndim)) {
-                acc += double(wdeq[r * ndim + c]) * double(xf[src * xs4 * 4 + c])
+                acc += double(wdeq[r * ndim + c]) * double(xf[b * xs4 * 4 + c])
             }
             want[b * ys + r] = float(acc)
         }
@@ -757,6 +757,10 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 q8_mv_b_gate(t, dev, queue, 2, 256, 8, 2, 68, 20)
                 q8_mv_b_gate(t, dev, queue, 4, 512, 11, 3, 128, 11)
                 q8_mv_b_gate(t, dev, queue, 4, 256, 8, 4, 64, 8)
+                // the store-gate controls: nrows=1 on b2 (row 1 must stay sentinel — the
+                // ungated kernel phantom-wrote it) and nrows=2 on b4 (the GEMV tail's r==2 shape)
+                q8_mv_b_gate(t, dev, queue, 2, 512, 11, 1, 128, 11)
+                q8_mv_b_gate(t, dev, queue, 4, 512, 11, 2, 128, 11)
                 metal_release(queue)
             }
             t |> equal(metal_log_leaks_if_any(), 0l)

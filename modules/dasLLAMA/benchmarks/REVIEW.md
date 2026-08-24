@@ -11,9 +11,11 @@ measures fallback kernels silently. Tokenizing and detokenizing (`encode` / `enc
 that dispatches only pipelines the lab compiled itself never enters that path - nothing to
 gate.
 
-**A kernel A/B lab - a rig whose output selects between two implementations of the same
-compute - times both variants interleaved in one process with one instrument.** A board bench
-cell that picks a kernel tier by flag is not an A/B lab.
+**Timing whose output selects between two implementations of the same compute times both
+variants interleaved in one process with one instrument - whatever rig produced it and
+however the variant is chosen** (a knob flipped across two processes, or two runs at two
+commits, is a direction-grade reading, never the selection evidence). A board bench
+cell re-measured for the record is not selection timing.
 
 **An A/B arm whose timing is reported as adoptable evidence is first shown bit-exact against
 the lab's baseline arm or its CPU reference over the sampled region** (the report's
@@ -24,12 +26,14 @@ reported as evidence without that compare is a defect.
 line.**
 
 **A knockout or sweep instrument - one whose arms ATTRIBUTE cost across stages rather than
-select between two implementations - says so in its header: a line naming it an attribution
-sweep and naming what its arms attribute.** Without it the instrument reads as a lab and is
+select between two implementations - carries the literal header label "ATTRIBUTION SWEEP"
+and names what its arms attribute.** Without it the instrument reads as a lab and is
 deleted with a decision it never made.
 
-**A kernel A/B lab's numbers stay out of `../performance/records/<box>.json` and
-`../PERF_LEDGER.md`** - they settle the adoption decision in the lab's own report and the PR
+**What may enter `../PERF_LEDGER.md`: re-measured board rows, out-of-process observations,
+and direction-grade instrument readings ONLY when the entry names the instrument and marks
+the grade; what may enter `../performance/records/<box>.json`: board rows alone.** Lab
+selection numbers settle the adoption decision in the lab's own report and the PR
 that lands the kernel; the board learns the winner only through a re-measured cell row.
 
 **An out-of-process observer - a script that measures a benchmark process from outside -
@@ -42,8 +46,9 @@ repository does not build - a third-party reference tool - into
 the reference cells of `../performance/gen_bench_records.das`, the cells that time such a
 tool on a board workload.
 
-**A number derived by subtracting one measured wall from another prints both raw walls, not
-only the difference.**
+**A number derived by subtracting one measured wall from another carries both raw walls
+beside it - in the report line an instrument prints, and in any subtraction written into
+`../PERF_LEDGER.md` whose raw walls appear nowhere else in the entry.**
 
 **A change to the timed body or the measured input of a cell whose numbers are reported as
 evidence - a cell that mints rows into `../performance/records/<box>.json`, or the `--tok`

@@ -21,12 +21,18 @@ what it costs today and what the fix would change.
   wide-staging tax" was dead too - the one-process probe (`harness/image_turn_probe.das`,
   three workloads x five skip arms) put the ds-wide quantum at +0.1 ms over narrow and the
   whole in-process image tax at ~+6 ms, all in the attention family. The real structure is
-  the M staircase: 8B text p320 = 551 ms (10 tile-rows), p321 = 599, p352 = 600 - one
+  the M staircase: 8B text p320 = 551 ms (10 tile-rows), p321 = 599, p352 = 600 (released
+  exe walls, the bench's own driver lines) - one
   tile-row = ~48 ms, and the image turn (321 = 10x32+1) bills it for ONE real row. The tail
   dispatches floor(npos/32) tiles + the remainder rows on the mv GEMVs; a lone row rides the
-  reduction-split decode GEMV - the mv forms idle half their lanes on it (measured: mv-only
-  tail -24 ms, the r==1 reroute -8.6 more). The mv_b2 store now gates on nrows (it
-  phantom-wrote row 1 at nrows == 1 - off the end of an exactly-full KV panel).
+  reduction-split decode GEMV - the mv forms idle half their lanes on it (probe before/after
+  across the two commits, direction-grade, tokens wall 599.2 -> 575.4 -> 566.8 ms: the
+  mv-only tail -24, the r==1 reroute -8.6).
+  Per-form reduction alignment gates the peel (the b4 stripe reads whole 128-quant rounds;
+  kdim % 128 != 0 keeps the padded tile - dims 576/896/1152 misread otherwise,
+  device-probed), and r >= 2 always takes the b4 form (b2's stripe needs % 256). The mv_b2
+  store now gates on nrows - defensive: at nrows == 1 it phantom-wrote its second row, an
+  unread pad row or an off-the-buffer write depending on which batch path sized y.
   Results (released exe, r=3, quiet M1 Max, fresh upstream pairs): 8B img:pp 522 -> 552
   tok/s (-7.5% -> -2.2%), 4B img:pp 942 -> 986 (-2.7%), 8B text p321 534.5 -> 566.7 (+7.8%
   ahead); p341/p512 unchanged (remainders outside the window); 30B Omni img:pp 783 (rides -
@@ -37,11 +43,20 @@ what it costs today and what the fix would change.
   holds span rows - a pure shrink over softmax-zeroed columns, the f16 fused-vs-splice
   witness reads 0 with it). The 1-row-span tax fell 3.3 -> 0.58 ms (small-media turns win);
   at the 300-row turn the remaining ~6 ms is INTRINSIC non-causal pairs - the image cell
-  does not move. **OPEN followups: (1) the post-encode context residue (~10 ms on 8B:
-  ~6.7 ms GPU cache aftermath of the per-turn tower encode + ~3.8 ms host commit slack;
+  does not move. The stage/split figures here are `harness/image_turn_probe.das` readings
+  (one process, best-of-3, the `DASLLAMA_METAL_PREFILL_SKIP` arms) - direction-grade; the
+  Results line above is the record-grade board. **OPEN followups: (1) the post-encode
+  context residue (~10 ms on 8B - the bench-context image eval vs the probe's in-process
+  wall: gpu 577 vs 570.3 ms = ~6.7 GPU cache aftermath of the per-turn tower encode, and
+  total-minus-gpu 5.6 vs 1.8 ms = ~3.8 host commit slack;
   lever = encode-ahead overlap, shared with the decode per-step-overhead entry); (2) the kq
   mul_mm sites and the MoE prefill GEMMs take no tail yet (the kq mv twins exist); (3) r in
-  [9,15] via a third mv pass (~12 ms more on the shapes that hit it).**
+  [9,15] via a third mv pass (~12 ms more on the shapes that hit it); (4) PRE-EXISTING: the
+  batch-DECODE mv rail dispatches the same unguarded-stripe kernels with no reduction
+  alignment clause - B in [2,8] on a model whose dim/qd/hidden is % 128 != 0 (576/896/1152
+  class) misreads; its fix wants a failing test first, own arc; (5) the b2/b4 y binding
+  carries no @span, so each peeled site pays a conservative whole-buffer barrier -
+  correctness-neutral, but it confounds per-r timing comparisons.**
 
 - **LANDED - the Metal q8 decode GEMV family ran one-row-per-simdgroup with a full-n walk,
   spilling the x vector past L1 from n=4096; the reduction-split form takes every q8 model

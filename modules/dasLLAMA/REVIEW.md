@@ -1,7 +1,9 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`.
+`ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`; the perf
+backlog is `PERF_LEDGER.md` - a performance followup files there, everything else in the
+two followup files.
 
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
@@ -77,8 +79,10 @@ a defect in an engine file (`dasllama/`) outside a cold one-shot load, bake, map
 tokenizer-build progress log - instrumentation goes through the sanctioned rails, listed with
 their reasons in `ARCHITECTURE.md` sec.2.10.
 
-**A clock whose value feeds logic is marked `// clock: control`, in any file under this
-folder** - unmarked it reads as free-hand timing to the ad-hoc-profiling sweep.
+**A clock value that changes what the program DOES - control flow, eviction, a generated
+name; not a reported wall or a best-of reduction over reported walls - is marked
+`// clock: control`, in an engine file (`dasllama/`)** - unmarked it reads as free-hand
+timing to the ad-hoc-profiling sweep, which runs over the same tree.
 
 **Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
 quantum is COVERED by an annotated region entry** - `[hot_path]`, any of the `[no_alloc]` /
@@ -105,9 +109,11 @@ EXECUTED, not skipped.**
 
 **An override announces itself where it changes the outcome.** An override is an environment
 knob or an exported runtime setter that moves a gate, policy, or threshold off its default;
-a CLI flag, and a knob whose only effect is timing (an A/B perf rail), are never overrides
-under this rule. Where one changes an observable outcome of the run - what it writes, reads,
-or mints - a printed line names it by its own spelling (the env variable name, or the
+a CLI flag, and a knob that changes only WHEN work happens - never what the run writes,
+reads, mints, or computes - are not overrides under this rule. A knob that moves computed
+numerics is an override even when its purpose is timing (two GEMM forms of the same math
+differ in float terms). Where one changes an observable outcome of the run,
+a printed line names it by its own spelling (the env variable name, or the
 setter's function name); set-but-inert stays silent, per-site repeats are fine. Adding one,
 or giving one a new effect, without the announce is a defect.
 
@@ -134,7 +140,8 @@ delta, a noise floor, tuner timing - is settled by the sidecar or manifest stamp
 
 **A figure measuring one engine stage inside a served turn - a stage wall, a stage share, a
 stage speedup, or a cross-engine comparison of one stage; never a board cell's `pp`/`tg`
-rate - names the harness and flags that produced it, wherever it is written down: a
+rate or the whole wall of a `-p`/`-n` bench cell (those take the cell rule above) - names
+the harness and flags that produced it, wherever it is written down: a
 checked-in doc, a ledger, a code comment, or a PR description.** The naming rides the
 figure's own sentence, a table heading that covers the table's rows, or a section-level
 provenance line that covers the paragraphs under it.
@@ -209,8 +216,11 @@ the same change.**
 
 **An upstream mechanism is described in our own terms, not attributed** - no
 "lifted/ported verbatim from" and no upstream symbol, header, or constant names in a `.md`
-file or a `.das` comment; state what the code does and why its shape wins. A path naming
-where checked-in data is regenerated FROM is provenance, not attribution; legal attribution
+file or a `.das` comment; state what the code does and why its shape wins. Provenance is
+not attribution: a path naming where checked-in data is regenerated FROM, and the
+measurement surface naming the reference binary a number was taken against (the yardstick
+docs and the env knobs that point at it), both stay; everywhere else prose writes "the
+reference exe" / "upstream". Legal attribution
 lives in `THIRD_PARTY_NOTICES.md` and the `LICENSE.*` files, so prose never carries it.
 
 **A def of `dasllama/dasllama.das` - and a new OVERLOAD of one - is TAUGHT: demonstrated in

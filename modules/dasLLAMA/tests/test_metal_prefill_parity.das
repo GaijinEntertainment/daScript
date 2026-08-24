@@ -479,13 +479,20 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 t |> success(reload_preps_run() > preps0, "the drop ran the registered reload preps (decode's discard_pre reached through the registry)")
             }
 
-            // mm-tail arm: the GEMV-tail residue shapes — npos % 32 == 1 (the reduction-split
-            // GEMV leg) and == 5 (the mv b4 + pair leg). Token parity vs the all-CPU control,
-            // the tail-off A/B twin, and the engage counter as the anti-vacuous witness.
+            // mm-tail arm: the GEMV-tail residue fixtures — npos % 32 == 1 (the reduction-split
+            // GEMV leg), == 2 (the b4 form at nrows 2) and == 5 (two b4 dispatches, 4 rows + 1).
+            // Token parity vs the all-CPU control, the tail-off A/B twin, and the engage
+            // counters as the anti-vacuous witness; the SmolLM2 leg below pins the alignment
+            // guard (dim 576 fails the b4 stripe's % 128 — r >= 2 must keep the padded tile).
             if (arm_on(t, "mm-tail")) {
                 pin_kernel_backend("portable")
                 set_wscale_f16(false)
-                for (nres in [257l, 261l]) {
+                set_metal_prefill_mm_tail(true)   // establish the knob the engage claim depends on (no read-back)
+                if (long_length(prompt) < 261l) {
+                    t |> skip("counting prompt tokenized under 261 - the residue fixtures cannot slice")
+                    return
+                }
+                for (nres in [5l, 257l, 258l, 261l]) {   // 5 = the pure-tail leg (nfull == 0, no mul_mm at all)
                     var sl : array<int64>
                     sl |> reserve(nres)
                     for (i in range64(nres)) {
@@ -517,6 +524,46 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     log_gen_texts(tr, "mm-tail-off/{nres}", cpu_r, gpu_p)
                     t |> success(same(cpu_r, gpu_p), "npos={nres}: the tail-off twin matches the control too (A/B)")
                     delete sl
+                }
+                // the alignment-guard leg: SmolLM2's dim 576 fails the b4 stripe's % 128, so
+                // r >= 2 must REFUSE the tail (the padded tile serves) while r == 1 (% 32-clean)
+                // still rides the gemv. Counters only — greedy token equality is not a valid
+                // instrument on a 135M (near-ties flip under cross-backend noise).
+                let spath = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+                if (model_available(t, spath)) {
+                    var trs <- load_model_(spath, QuantMode.q8)
+                    if (trs.config.seq_len > 2048l) {
+                        trs.config.seq_len = 2048l
+                    }
+                    var trsg <- blob_twin(t, spath, 2048l)
+                    let sprompt <- encode(trs, counting_prompt(), true, false)
+                    t |> success(select_prefill_override("metal"), "override registered (mm-tail smol)")
+                    for (nres in [65l, 66l]) {
+                        var ssl : array<int64>
+                        ssl |> reserve(nres)
+                        for (i in range64(nres)) {
+                            ssl |> push(sprompt[i])
+                        }
+                        let sserved0 = metal_prefill_stats().prefills
+                        let stail0 = metal_prefill_tail_stats()
+                        var sgot <- continuation(trsg, trs, ssl, 4)
+                        let sserved = metal_prefill_stats().prefills - sserved0
+                        let sdsites = metal_prefill_tail_stats().sites - stail0.sites
+                        if (sserved > 0l) {
+                            if (nres % 32l == 1l) {
+                                t |> success(sdsites > 0l, "smol npos={nres}: the gemv leg engaged on the % 32-clean dim ({sdsites} sites)")
+                            } else {
+                                t |> equal(sdsites, 0l, "smol npos={nres}: the alignment guard refused the tail (dim 576 % 128 != 0)")
+                            }
+                        } else {
+                            feint("metal prefill declined on smol; the alignment-guard leg skipped\n")
+                        }
+                        delete ssl
+                        delete sgot
+                    }
+                    select_prefill_override("")
+                    delete trs
+                    delete trsg
                 }
                 clear_kernel_backend_pin()
                 select_kernel_backend(prior_backend)

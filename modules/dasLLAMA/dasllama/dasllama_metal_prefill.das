@@ -2110,7 +2110,7 @@ def public metal_prefill_tail_stats() : tuple<sites : int64; rows : int64> {
 
 // the peeled rows [row0, row0+r) of one mul_mm site as fixed-B GEMVs: y rows at stride d (every
 // mul_mm site's bn uniform equals its grid width d — a wider fused-row site must NOT take the
-// tail); r == 1 rides the reduction-split decode GEMV (the mv forms idle half their lanes on it).
+// tail); r == 1 rides the reduction-split GEMV, r >= 2 the b4 form only (b2's stripe needs % 256).
 def private enc_gemm_mm_tail(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
                              bx, by, bk, bn : MetalBuffer?; yoff : uint64; kdim, d, row0, r : int64) {
     g_pf_tail_sites++
@@ -2123,7 +2123,7 @@ def private enc_gemm_mm_tail(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; 
     }
     var ka = Q8MvArgs(ndim = uint(kdim), ddim = uint(d), nrows = uint(min(r, 4l)),
         xs4 = uint(kdim / 4l), ys = uint(d))
-    enc_mv_b(enc, r > 2l, bwblob, wboff, bx, by, ka, xoff, yo)
+    enc_mv_b(enc, true, bwblob, wboff, bx, by, ka, xoff, yo)
     if (r > 4l) {
         ka.nrows = uint(r - 4l)
         enc_mv_b(enc, true, bwblob, wboff, bx, by, ka, xoff + uint64(4l * kdim * 4l), yo + uint64(4l * d * 4l))
@@ -2135,7 +2135,9 @@ def private enc_gemm_mm_tail(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; 
 // kdim/npos arm the GEMV tail: full tiles + the npos % 32 remainder rows on the mv family.
 def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; mp, d : int64; yoff : uint64 = 0ul; kdim : int64 = 0l; npos : int64 = 0l) {
     let r = npos % 32l
-    if (g_pf_env_mm_tail && npos > 0l && r >= 1l && r <= MM_TAIL_MAX && kdim % 32l == 0l && d % 8l == 0l) {
+    // per-form reduction alignment: the gemv walks per-block; the b4 stripe reads whole 128-quant rounds
+    let align_ok = r == 1l ? kdim % 32l == 0l : kdim % 128l == 0l
+    if (g_pf_env_mm_tail && npos > 0l && r >= 1l && r <= MM_TAIL_MAX && align_ok && d % 8l == 0l) {
         let nfull = npos - r
         if (nfull > 0l) {
             if (g_pf_mm_tensor) {
@@ -3555,6 +3557,9 @@ def dasllama_metal_prefill_register() {
     register_ple_gpu_gate(@@metal_ple_pre_gpu_gate)
     g_pf_env_mulmm = g_env_metal.mulmm
     g_pf_env_mm_tail = g_env_metal.mm_tail
+    if (!g_pf_env_mm_tail) {
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_MM_TAIL=0 - small npos % 32 remainders bill the padded tile (numerics move with the form)\n")
+    }
     g_pf_env_span = g_env_metal.span
     g_pf_env_logits = g_env_metal.logits
     g_pf_env_attn = g_env_metal.attn

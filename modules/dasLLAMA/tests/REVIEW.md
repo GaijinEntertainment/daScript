@@ -94,10 +94,11 @@ the arch registrations (`register_decode_override` and its sibling `register_*` 
 declaration is not one of them.
 
 **A hand-bound kernel gate dispatches the geometry and threadgroup memory its production
-encoder does** - a change to a kernel's `[metal_dispatch]` `tg`, `grid`, or `tgmem`, to a
-field's `@binding`, or to its kargs struct's layout, updates every gate that hand-binds that
-kernel in the same change (the mechanism - why a missed tgmem fails silently - is
-`CLAUDE.md`'s "Arm filter mechanics" section).
+encoder does** - a change to anything a kernel dispatches with, binds, or reads from its
+kargs updates every gate that hand-binds that kernel in the same change, and a new in-body
+branch keyed on a kargs field needs a gate cell that arms the field (the mechanism - why a
+missed tgmem fails silently - is `CLAUDE.md`'s "Arm filter mechanics" section, the
+kernel-gate paragraph).
 
 **A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
 naming the `ggml-vocab-*.gguf` fixture.**
@@ -138,8 +139,9 @@ dump.**
 backend, the flash-attention setting, and the mmproj precision the dump came from.**
 
 **A cell establishes every driver hook and serving-lane knob its claim depends on, and
-restores it before returning** - the hooks have no read-back, so a cell that pins one OFF
-sets it back ON (the driver hooks `set_metal_tower`, `set_metal_wdec`, `set_metal_wdec_step`);
+restores it before returning** - a hook here is any process-wide setter with no read-back,
+so a cell that pins one OFF sets it back ON, and a cell whose claim needs the DEFAULT
+establishes that default too (the environment can carry the knob either way);
 a family serving-lane pin `set_<family>_q8` is undone with `reset_<family>_q8` - never a
 runtime decline standing in for a pin. The mechanism (why the hooks flip legs silently) is
 `CLAUDE.md`'s "Metal fixtures" section.
