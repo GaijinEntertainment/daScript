@@ -21,7 +21,7 @@ require daslib/strings_boost
 require daslib/regex
 require daslib/regex_boost
 
-enum DocumentBlock {
+enum public DocumentBlock {
     Typedefs,
     GlobalConstants,
     Enumerations,
