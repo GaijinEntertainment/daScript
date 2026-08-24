@@ -10,6 +10,9 @@
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/crash_handler.h"
 #include "daScript/misc/job_que.h"
+#ifdef __APPLE__
+#include <pthread/qos.h>
+#endif
 #if defined(_WIN32) && defined(_DEBUG)
 #include <crtdbg.h>
 #endif
@@ -711,6 +714,11 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     _set_error_mode(_OUT_TO_STDERR);
 #endif
     install_das_crash_handler();
+#ifdef __APPLE__
+    // class the main thread: unclassed threads wake on an E-core after any block
+    // (~half scalar throughput) - e.g. a jitted benchmark right after codegen
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+#endif
     das::arm_alloc_tracking();
     bool isArgAot = false;
     if (argc > 1) {
