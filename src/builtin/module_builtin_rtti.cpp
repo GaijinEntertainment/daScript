@@ -1102,6 +1102,13 @@ namespace das {
         return context.getTotalVariables();
     }
 
+    void rtti_builtin_context_for_each_init_function ( Context & ctx, const TBlock<void,uint64_t> & block, Context * context, LineInfoArg * at ) {
+        for ( int i=0, is=ctx.getTotalInitFunctions(); i!=is; ++i ) {
+            vec4f args[1] = { cast<uint64_t>::from(ctx.getInitFunction(i)->mangledNameHash) };
+            context->invoke(block, args, nullptr, at);
+        }
+    }
+
     vec4f rtti_contextFunctionInfo ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         Context * ctx = cast<Context *>::to(args[0]);
         int32_t tf = ctx->getTotalFunctions();
@@ -1833,6 +1840,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_contextTotalVariables)>(*this, lib, "get_total_variables",
                 SideEffects::modifyExternal, "rtti_contextTotalVariables")
                     ->arg("context");
+            addExtern<DAS_BIND_FUN(rtti_builtin_context_for_each_init_function)>(*this, lib, "for_each_init_function",
+                SideEffects::modifyExternal, "rtti_builtin_context_for_each_init_function")
+                    ->args({"ctx","block","context","line"});
             addInterop<rtti_contextFunctionInfo,const FuncInfo &,vec4f,int32_t>(*this, lib, "get_function_info",
                 SideEffects::modifyExternal, "rtti_contextFunctionInfo")
                     ->args({"context","index"});

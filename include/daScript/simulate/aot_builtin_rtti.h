@@ -123,6 +123,7 @@ namespace das {
     DAS_API void rtti_builtin_simulate ( const smart_ptr<Program> & program,
         const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo );
 
+    DAS_API void rtti_builtin_context_for_each_init_function ( Context & ctx, const TBlock<void,uint64_t> & block, Context * context, LineInfoArg * at );
     DAS_API void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, Module *> & block, Context * context, LineInfoArg * lineinfo);
     DAS_API void rtti_builtin_program_for_each_registered_module(const TBlock<void, Module *> & block, Context * context, LineInfoArg * lineinfo);
 

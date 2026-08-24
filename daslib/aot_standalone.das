@@ -74,7 +74,45 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
     }
 }
 
-def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var tw : StringBuilderWriter, program : ProgramPtr) {   // nolint:STYLE038 - flat emitter - one write per ctor section
+def collectInitFunctionAotNames(program : ProgramPtr; var context : Context) : array<string> {
+    //! In the simulated context's run order (late init last).
+    var initMnhOrder : array<uint64>
+    context |> for_each_init_function($(mnh : uint64) {
+        initMnhOrder |> push(mnh)
+    });
+    var initMnhSet : table<uint64>
+    for (mnh in initMnhOrder) {
+        initMnhSet |> insert(mnh)
+    }
+    var mnhToAotName : table<uint64; string>
+    let thisModule = program.getThisModule
+    program.get_ptr() |> for_each_module_no_order($(pm) {
+        pm |> for_each_module_function($(pfun) {
+            if (pfun.index < 0 || !pfun.flags.used || !(initMnhSet |> key_exists(pfun.getMangledNameHash))) {
+                return
+            }
+            if (pm != thisModule) {
+                macro_error(program, pfun.at, "standalone AOT cannot run [init] function: {pm.name}::{pfun.name} lives outside the main module")
+            } elif (pfun.flags.noAot) {
+                macro_error(program, pfun.at, "standalone AOT cannot run [init] function: {pfun.name} is [no_aot]")
+            } else {
+                mnhToAotName[pfun.getMangledNameHash] = aotFuncName(pfun)
+            }
+        });
+    });
+    var initNames : array<string>
+    for (mnh in initMnhOrder) {
+        let name = mnhToAotName?[mnh] ?? ""
+        if (!empty(name)) {
+            initNames |> push(name)
+        } elif (!program.flags.failToCompile) {
+            macro_error(program, LineInfo(), "standalone AOT cannot run [init] function: mangled name hash {mnh} is not in the emitted program")
+        }
+    }
+    return <- initNames
+}
+
+def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var tw : StringBuilderWriter, program : ProgramPtr; var context : Context) {   // nolint:STYLE038 - flat emitter - one write per ctor section
     var lookupVariableTable : array<Variable?>;
     if (program.totalVariables > 0) {
         program.get_ptr() |> for_each_module_no_order($(pm) {
@@ -106,6 +144,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     }
     write(tw, "     // end totalVariables\n\n");
     write(tw, "    context.allocateGlobalsAndShared();\n");
+    write(tw, "    if ( context.globals ) memset(context.globals, 0, context.getGlobalSize());\n");
     write(tw, "    context.totalVariables = {program.totalVariables}/*totalVariables*/;\n");
     write(tw, "    context.functions = (SimFunction *) context.code->allocate( {program.totalFunctions}/*totalFunctions*/*sizeof(SimFunction) );\n");
     write(tw, "    context.totalFunctions = {program.totalFunctions}/*totalFunctions*/;\n");
@@ -148,23 +187,17 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
         });
     });
 
-    if (program.initSemanticHashWithDep != uint64(0)) {
-        write(tw, "    \{\n");
-        write(tw, "        auto it = getGlobalAotLibrary().find(0x{program.initSemanticHashWithDep:x}/*initSemanticHashWithDep*/);\n");
-        write(tw, "        if ( it != getGlobalAotLibrary().end() ) \{\n");
-        write(tw, "            (it->second)(context);\n");
-        write(tw, "        \}\n");
-        write(tw, "    \}\n");
-    }
-
     if (!empty(initFunctions)) {
-        write(tw, " FillFunction(context, getGlobalAotLibrary(), id_to_funcs);\n");
-        write(tw, "    context.runInitScript();\n");
+        write(tw, "    FillFunction(context, getGlobalAotLibrary(), id_to_funcs);\n");
+    }
+    write(tw, "    __init_script(&context, true);\n");
+    for (initFn in collectInitFunctionAotNames(program, context)) {
+        write(tw, "    {initFn}(&context);\n");
     }
     write(tw, "\}\n");
 }
 
-def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var header : StringBuilderWriter, var source : StringBuilderWriter; cfg : StandaloneContextCfg) {
+def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var header : StringBuilderWriter, var source : StringBuilderWriter; cfg : StandaloneContextCfg; var context : Context) {
 
     write(header, "\n\n");
     write(header, "class {cfg.class_name} : public Context \{\n");
@@ -174,7 +207,7 @@ def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var
     write(header, "\};\n");
 
     writeStandaloneContextMethods(program, source, "{cfg.class_name}::", false, cfg);
-    writeStandaloneCtor(cfg, initFunctions, source, program);
+    writeStandaloneCtor(cfg, initFunctions, source, program, context);
 
     write(source, "#ifdef STANDALONE_CONTEXT_TESTS\n");
     write(source, "static Context * registerStandaloneTest ( ) \{\n");
@@ -200,29 +233,26 @@ class StandaloneContextGen : CppAot {
 
     used_functions : table<string>;
 
-    def override visitGlobalLet(prog : ProgramPtr) {
+    def override preVisitGlobalLet(prog : ProgramPtr) {
+        CppAot`preVisitGlobalLet(self, prog);
         var globals : array<Variable?>;
-        prog.get_ptr() |> for_each_module_no_order($(pm) {
+        prog.get_ptr() |> for_each_module($(pm) {
             pm |> for_each_global($(pvar) {
                 if (pvar.index < 0 || !pvar.flags.used
                         || pvar._module == prog.getThisModule) return ;
                 globals.push(pvar);
             });
         });
-
         for (variable in globals) {
             preVisitGlobalLetVariable(variable, false);
             if (variable.init != null) {
                 preVisitGlobalLetVariableInit(variable, variable.init);
                 visit_expression(variable.init, adapter);
-                variable.init := visitGlobalLetVariableInit(variable, variable.init);
             }
             let varn <- visitGlobalLetVariable(variable, false);
         }
-
-        tab --;
-        write(*ss, "\}\n");
     }
+
     def override preVisitProgramBody(var prog : ProgramPtr, that : Module?) {
         declarations = ss |> string_builder_str();
         ss |> string_builder_clear();
@@ -254,7 +284,7 @@ def writeRegistration(var header : StringBuilderWriter;
     write(header, "namespace {cfg.context_name} \{\n");
     write(source, "namespace {cfg.context_name} \{\n");
     dumpRegisterAot(unsafe(addr(source)), program, context, false, cfg.cross_platform);
-    writeStandaloneContext(program, initFunctions, header, source, cfg);
+    writeStandaloneContext(program, initFunctions, header, source, cfg, context);
     write(header, "\} // namespace {cfg.context_name}\n");
     write(source, "\} // namespace {cfg.context_name}\n");
 }
@@ -323,16 +353,15 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
         }
     }
-    fail_on_aot_emit_error(program)
-
     write(source, "namespace {program.thisNamespace} \{\n");
     write(source, "{ctx_generated}");
     write(source, "\} // namespace {program.thisNamespace}\n");
     return initFunctions
 }
 
-def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var pctx : smart_ptr<Context>; cfg : StandaloneContextCfg) {
+def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var pctx : smart_ptr<Context>; cfg : StandaloneContextCfg) : bool {
     //! Runs the standalone AOT visitor on the program to generate C++ source and header files.
+    //! Returns false (writing nothing) when emission collected errors.
     assume context = *pctx;
 
     var pmarker = new PrologueMarker();
@@ -387,6 +416,10 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
     }
     }
 
+    if (log_aot_emit_errors(program)) {
+        return false
+    }
+
     let cur_mod = mod.name.empty() ? cfg.context_name : string(mod.name);
     let outputFile = "{cfg.cpp_output_dir}/{cur_mod}.das";
         fopen("{outputFile}.h", "wb") $(fw) {
@@ -403,17 +436,27 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
             print("Couldn't create output file {outputFile}.cpp")
         }
     }
+    return true
+}
+
+[export]
+def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) {
+    //! Compiles a daslang file and generates standalone AOT C++ code in the given output directory.
+    return standalone_aot(input, output_dir, cross_platform, paranoid_validation, cop) $(var _program : ProgramPtr) {}
 }
 
 [export, unused_argument(paranoid_validation)]
-def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) {
+def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies; before_emit : block<(var program : ProgramPtr) : void>) {
     //! Compiles a daslang file and generates standalone AOT C++ code in the given output directory.
+    //! `before_emit` receives the compiled program, so a driver can read annotations
+    //! without compiling the program a second time.
     let file_name = input |> split_by_chars("/\\") |> back()
     let ctx_name = (file_name |> split("."))[0]
     let cfg = StandaloneContextCfg(context_name = ctx_name,
                                    class_name = "Standalone",
                                    cpp_output_dir = output_dir,
                                    cross_platform = cross_platform)
+    var ok = false
     using() $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")
         compile_and_simulate(input, access, unsafe(addr(mg)), cop) $(var program : ProgramPtr; var pctx : smart_ptr<Context>) {
@@ -423,9 +466,10 @@ def public standalone_aot(input : string; output_dir : string; cross_platform : 
             } elif (noAotModule) {
                 panic("Standalone context called on non aot module {input}")
             } else {
-                runStandaloneVisitor(program, modules_str, pctx, cfg)
+                before_emit |> invoke(program)
+                ok = runStandaloneVisitor(program, modules_str, pctx, cfg)
             }
         }
     }
-    return true
+    return ok
 }
