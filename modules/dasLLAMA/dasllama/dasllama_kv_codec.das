@@ -50,7 +50,7 @@ def template axpy_f16_template(var d : float ?; s : uint16 const ?; scale : floa
 def axpy_f16(var d : float?; s : uint16 const?; scale : float; n : int64) {}
 
 // ===== q8_0 codec: ggml block_q8_0 — 32 int8 quants sharing one f16 scale =====
-// INTERLEAVED {f16 d; int8 qs[32]} = 34 bytes/block (llama.cpp -ctk/-ctv layout, so oracle
+// INTERLEAVED {f16 d; int8 qs[32]} = 34 bytes/block (lcpp -ctk/-ctv layout, so oracle
 // cross-checks stay honest). Rows are whole blocks (kv_dim % 32 == 0); n always a multiple of 32.
 
 //! Dot of an f32 query row against a q8_0 cache row: the block scale factors out —

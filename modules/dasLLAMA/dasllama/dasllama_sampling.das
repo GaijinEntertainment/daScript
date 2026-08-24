@@ -18,7 +18,7 @@ require math
 // ===== Sampling =====
 
 //! Sampling parameters. Defaults are greedy (temp = 0, all cutoffs/penalties off) — bit-identical
-//! to argmax. Cutoff order matches llama.cpp: top-k on logits, then top-p and min-p on the
+//! to argmax. Cutoff order matches lcpp: top-k on logits, then top-p and min-p on the
 //! softmaxed probabilities.
 struct SamplingParams {
     temp : float = 0.0             // <= 0 => greedy argmax; otherwise softmax temperature
@@ -36,7 +36,7 @@ def set_seed_(var s : Session; seed : int) {
     s.rng = random_seed(seed)
 }
 
-// Repetition/presence/frequency penalties over the last `penalty_last_n` of `s.recent` (llama.cpp
+// Repetition/presence/frequency penalties over the last `penalty_last_n` of `s.recent` (lcpp
 // semantics): each unique token penalized once, multiplicative then presence+frequency*count.
 def private apply_penalties_(var s : Session; params : SamplingParams) {
     // <= 0 treated as off too (not just 1): 0 would inf/NaN the logits, and additive-penalty clients send it

@@ -7,7 +7,7 @@ module dasllama_pretok shared public
 require dasllama/dasllama_lint public
 require dasllama/dasllama_unicode
 
-// ===== BPE pre-tokenizer (port of llama.cpp unicode_regex_split_custom_llama3 / _qwen2 / _qwen35) =====
+// ===== BPE pre-tokenizer (port of lcpp unicode_regex_split_custom_llama3 / _qwen2 / _qwen35) =====
 // llama3 chunks digits \p{N}{1,3}, qwen2 emits one digit per token — `group_digits` selects between
 // them; qwen35 = qwen2 digits plus marks absorbed into letter runs ([\p{L}\p{M}]+).
 
@@ -133,7 +133,7 @@ def pretok_split(cpts : array<int>; group_digits : bool; marks : bool = false) :
     return <- offs
 }
 
-// gpt-2 pre-split (llama.cpp LLAMA_VOCAB_PRE_TYPE_GPT2). Differs from llama3: lowercase-only
+// gpt-2 pre-split (lcpp LLAMA_VOCAB_PRE_TYPE_GPT2). Differs from llama3: lowercase-only
 // contractions, the optional run prefix is exactly one space (not any non-letter), digit runs
 // are UNBOUNDED and space-attached, and no newline special-casing on punct/whitespace arms.
 def pretok_split_gpt2(cpts : array<int>) : array<int> {
@@ -210,9 +210,9 @@ def pretok_split_gpt2(cpts : array<int>) : array<int> {
     return <- offs
 }
 
-// llama.cpp GPT4O letter-case classes: "uppercase" = \p{L} minus ASCII a-z, "lowercase" = \p{L}
+// lcpp GPT4O letter-case classes: "uppercase" = \p{L} minus ASCII a-z, "lowercase" = \p{L}
 // minus ASCII A-Z (its regex spells (?=[\p{L}])[^a-z] / (?=[\p{L}])[^A-Z]), so non-cased scripts
-// (CJK, ...) land in BOTH classes. We match llama.cpp — the oracle — not tiktoken's true \p{Lu}/\p{Ll}.
+// (CJK, ...) land in BOTH classes. We match lcpp — the oracle — not tiktoken's true \p{Lu}/\p{Ll}.
 def private uUp(cpts : array<int>; pos : int) : bool {
     if (pos < 0 || pos >= length(cpts)) {
         return false
@@ -228,7 +228,7 @@ def private uLo(cpts : array<int>; pos : int) : bool {
     return cpt_is_letter(c) && !(c >= 'A' && c <= 'Z')
 }
 
-// gpt-4o / o200k pre-split (llama.cpp LLAMA_VOCAB_PRE_TYPE_GPT4O — gpt-oss). Differs from llama3:
+// gpt-4o / o200k pre-split (lcpp LLAMA_VOCAB_PRE_TYPE_GPT4O — gpt-oss). Differs from llama3:
 // contractions suffix letter runs (no standalone arm), letter runs are case-structured
 // (upper* lower+ | upper+ lower*), and punctuation runs may also trail '/'.
 def pretok_split_gpt4o(cpts : array<int>) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the o200k pre-tokenizer regex; splitting hides the regex shape
@@ -323,7 +323,7 @@ def pretok_split_gpt4o(cpts : array<int>) : array<int> {   // nolint:STYLE037,ST
     return <- offs
 }
 
-// tekken pre-split (Mistral/Voxtral). llama.cpp has no custom splitter — it runs generic std::wregex
+// tekken pre-split (Mistral/Voxtral). lcpp has no custom splitter — it runs generic std::wregex
 // TRUE ECMAScript alternation with greedy backtracking (up*lo+ tried first), so "你A" splits "你"|"A"
 // unlike gpt-4o's merged-run reduction. No contraction arm; single-digit \p{N}; '/' in punct tail.
 def pretok_split_tekken(cpts : array<int>) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the tekken pre-tokenizer regex; splitting hides the regex shape

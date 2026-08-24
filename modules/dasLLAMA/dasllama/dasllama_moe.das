@@ -793,7 +793,7 @@ def moe_select(c : Config; var lg : float?; var idx : array<int64>; var w : arra
 
 // pointer core — the threaded prefill router runs this in fork workers (scalars + raw pointers
 // only; Config/Session stay on the caller). `bias` (exp_probs_b, DeepSeek-V3/glm4moe) skews the
-// top-k PICK only — the stored weights stay the unbiased probs (llama.cpp build_moe_ffn order).
+// top-k PICK only — the stored weights stay the unbiased probs (lcpp build_moe_ffn order).
 def moe_select_core(gate : MoeGate; ne, k : int64; norm_topk : bool; wscale : float; // nolint:STYLE037,STYLE038 — gate variant x bias x renorm are flat arms over one logit row, coupled through the running top-k state
                     var lg : float?; var idx : int64?; var w : float?; off : int64;
                     bias : float const? = null) {
@@ -876,7 +876,7 @@ def moe_select_core(gate : MoeGate; ne, k : int64; norm_topk : bool; wscale : fl
     if (gate == MoeGate.softmax_weight) {  // gpt-oss: softmax over just the selected k logits
         softmax(w + off, k)
     }
-    if (norm_topk) {   // renormalize the selected weights to sum 1 (llama.cpp clamps at f16-min)
+    if (norm_topk) {   // renormalize the selected weights to sum 1 (lcpp clamps at f16-min)
         var ws = 0.0
         for (j in range64(k)) {
             ws += w[off + j]

@@ -10,7 +10,7 @@ require daslib/fio
 require stbimage
 require math
 
-// Tier-0 vision preprocessing gates — model-free, bit-exact against llama.cpp's mtmd
+// Tier-0 vision preprocessing gates — model-free, bit-exact against lcpp's mtmd
 // (`llama-mtmd-debug -p preproc`, CPU). The fnv1a64 pins and probe values come from the dumps
 // in <models>/gemma4-vision-oracle/ — mint.sh there regenerates them (vision_plan.md).
 

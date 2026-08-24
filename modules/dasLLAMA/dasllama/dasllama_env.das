@@ -213,7 +213,7 @@ struct public MetalEnv {
     @clarg_doc = "MTP speculative decode chain: 0 off, 1 forced, -1 adaptive."
     spec : Option<int>
 
-    @clarg_doc = "Rows per GEMV threadgroup, clamped 1..32."
+    @clarg_doc = "Rows per MoE router/expert GEMV threadgroup, clamped 1..32 (the dense GEMV geometry is fixed)."
     gemv_tg : int = 4
 
     @clarg_doc = "Single-pass B8 twin for K-quant small-batch mv at B=5..8; 0 is the A/B rail."
@@ -455,7 +455,7 @@ struct public BenchmarkEnv {
     @clarg_doc = "Skip the row-major arm of the isolated GEMM bench."
     bench_skip_rowmajor : bool = false
 
-    @clarg_doc = "Per-run detail from the llama.cpp comparison bench."
+    @clarg_doc = "Per-run detail from the lcpp comparison bench."
     bench_verbose : bool = false
 
     @clarg_doc = "Override the minimum rows per dispatch chunk in the GEMM bench."

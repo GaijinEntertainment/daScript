@@ -35,8 +35,8 @@ that today name `Gemma4uvEmbedder` by concrete type.
    for) - a later Metal leg of ours uses f32 K/V.
 4. **The oracle is CPU + the f32-widened mmproj twin + `-fa off`** - the only true-f32 arm the
    reference has: Metal's "f32" GEMM stages both operands as `half`, and FA moves the dump by
-   ~0.7 %; llama.cpp's own four arms (CPU/Metal x FA on/off) spread 2.2 % on tok0 v0. The
-   tier-1 gate is set against that reference on a scale-relative bar, and llama.cpp's own
+   ~0.7 %; lcpp's own four arms (CPU/Metal x FA on/off) spread 2.2 % on tok0 v0. The
+   tier-1 gate is set against that reference on a scale-relative bar, and lcpp's own
    cross-backend spread is the context for what "parity" can mean for this tower.
 
 ## The file on disk (census, re-verified by running `llama-mtmd-debug` on it)
@@ -150,7 +150,7 @@ here: `layer_inp_normed-0`, `Qcur_pos-0`, `Vcur_normed-0`, `kqv_out-0` ... `laye
 `pooled`, `projected`), `gray 336`, `cb 336`, `red/green/blue 336`, `cb 480`, `cb 672x336`
 (orientation), tier-2/3 with `MTMD_DEBUG_EMBEDDINGS=1 llama-mtmd-cli` on the cats jpg.
 
-**Minted (slice A, 2026-08-19, llama.cpp 98c4764b6):** `e2b.encode.{cb96,gray336,cb336,red336,
+**Minted (slice A, 2026-08-19, lcpp 98c4764b6):** `e2b.encode.{cb96,gray336,cb336,red336,
 green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder.txt` - the
 689-node (name, op, shape, sum) ladder extracted from the cb96 dump. Pins:
 - cb 96^2 -> 4 tokens; `projected` tok 0 `v0..v3 = 0.114981 0.533945 0.437806 0.140861`,

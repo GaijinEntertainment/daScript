@@ -187,6 +187,80 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
     }
 }
 
+// The banned-name scan: the upstream reference engine's project name appears in no .md file and
+// no .das LINE comment under this module (the module has no block comments, and a block scanner
+// would false-trigger on glob strings; a code string - a real path, a clone URL - is not a
+// comment). Spell the target lcpp; the needle concatenation lets this gate pass its own scan.
+let private BANNED = "llama" + ".cpp"
+
+def private collect_files_with(folder, suffix : string; var out : array<string>) {
+    dir(folder) $(fname) {
+        return if (fname == "." || fname == ".." || fname |> starts_with(".") || fname |> starts_with("_rig"))
+        let p = "{folder}/{fname}"
+        let st = stat(p)
+        if (st.is_valid && st.is_dir) {
+            collect_files_with(p, suffix, out)
+        } elif (ends_with(fname, suffix)) {
+            out |> push(p)
+        }
+    }
+}
+
+// byte offset of the first line comment opener — "//" outside a string literal and not
+// preceded by ':' (a bare URL) — or -1; tracks double-quote state with escapes so a "//"
+// inside a code string never opens a false comment
+def private comment_at(line : string) : int {
+    var at = -1
+    peek_data(line) $(d) {
+        var in_str = false
+        var i = 0
+        while (i < length(d)) {
+            let b = int(d[i])
+            if (in_str) {
+                if (b == '\\') {
+                    i++
+                } elif (b == '"') {
+                    in_str = false
+                }
+            } elif (b == '"') {
+                in_str = true
+            } elif (b == '/' && i + 1 < length(d) && int(d[i + 1]) == '/' && (i == 0 || int(d[i - 1]) != ':')) {
+                at = i
+                break
+            }
+            i++
+        }
+    }
+    return at
+}
+
+def private check_banned_name() {
+    var inscope mds : array<string>
+    collect_files_with("modules/dasLLAMA", ".md", mds)
+    for (p in mds) {
+        var ln = 0
+        for (line in split(fread(p), "\n")) {
+            ln++
+            if (find(line, BANNED) >= 0) {
+                gate_finding(p, ln, "names the reference engine - describe the mechanism, or spell the comparison target lcpp")
+            }
+        }
+    }
+    var inscope dass : array<string>
+    collect_files_with("modules/dasLLAMA", ".das", dass)
+    for (p in dass) {
+        var ln = 0
+        for (line in split(fread(p), "\n")) {
+            ln++
+            let at = comment_at(line)
+            continue if (at < 0)
+            if (find(slice(line, at), BANNED) >= 0) {
+                gate_finding(p, ln, "comment names the reference engine - describe the mechanism, or spell the comparison target lcpp")
+            }
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
@@ -203,5 +277,6 @@ def main() : int {
         "load_audio_embedder / encode_audio / audio_probe_proj_dim")
     check_family_seams(VISION_CARRIER, "VisionKind", VISION_SEAM_EXEMPT,
         "load_vision_embedder / encode_image / vision_proj_dim")
+    check_banned_name()
     return gate_verdict("dasllama")
 }

@@ -15,7 +15,7 @@ require ?das_metal dasllama/dasllama_metal_tower   // pin the CPU-oracle encodes
 
 // Audio tower tests. The mel/gelu/filterbank tests are self-contained; the encoder test
 // needs the locally-converted Qwen2-Audio mmproj (2.5 GB, gitignored) and skips without it.
-// The oracle constants come from llama.cpp's mtmd (llama-mtmd-debug, CPU backend) — the rig
+// The oracle constants come from lcpp's mtmd (llama-mtmd-debug, CPU backend) — the rig
 // and end-to-end token parity runs live in modules/dasLLAMA/qwen2_audio_plan.md.
 
 [test]

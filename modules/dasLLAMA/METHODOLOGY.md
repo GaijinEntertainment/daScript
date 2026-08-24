@@ -22,10 +22,10 @@ churn does not bleed into the next measurement.
 
 Three like-for-like comparisons, named by what both sides get:
 
-- **cpu** - portable CPU kernels on both sides. llama.cpp is a *clean-cpu* build (no
+- **cpu** - portable CPU kernels on both sides. lcpp is a *clean-cpu* build (no
   Accelerate/BLAS) at `-ngl 0`; das runs its portable tier. Kernel against kernel.
 - **cpu + accel** - both sides get the box's accelerated math path (Accelerate on Apple; MKL or
-  AOCL elsewhere). llama.cpp runs *stock* at `-ngl 0 -nopo 1`; `-nopo` stops its op-offload
+  AOCL elsewhere). lcpp runs *stock* at `-ngl 0 -nopo 1`; `-nopo` stops its op-offload
   from quietly serving "CPU" rows on the GPU - without it, a stock build ships big-batch ops to
   Metal and the row is not a CPU number.
 - **gpu** - each engine in its own GPU serving configuration. LLMs: both sides at `-ngl 99`.
@@ -83,7 +83,7 @@ das kernels are auto-tuned per box by the `[tune]` framework before measuring; t
 (winning kernel variants and their source) is recorded in every das row. The reference runs its
 shipped defaults. This is the comparison as intended: das's claim is that a JIT with per-box
 tuning beats hand-written universal kernels - tuning is the mechanism, not an unfair
-advantage; llama.cpp's own build-time dispatch (AVX tiers, i8mm paths) is likewise active on
+advantage; lcpp's own build-time dispatch (AVX tiers, i8mm paths) is likewise active on
 its side.
 
 No cross-box das binary is used, here or anywhere: `[tune]` bakes the winning kernel forms at
@@ -97,7 +97,7 @@ measure equivalent; the release rail is the one with the identity stamps).
 
 Every row carries, machine-captured at run time - never typed by hand:
 
-- **Engine identity**: das git commit and release; llama.cpp build commit; for ASR references,
+- **Engine identity**: das git commit and release; lcpp build commit; for ASR references,
   the tool's checkout commit (a dirty tree taints the identity loudly), the patch file's hash
   where a patched build is used, or the resolved Python package versions for the venv-based
   references.
@@ -163,11 +163,11 @@ configurations still in active development. Measured rows are annotated, not del
 
 - ASR rows split into the same cpu / cpu + accel / gpu categories as the LLMs (the ASR
   accel lever is `flavor: accel` on a cpu row, like the LLM rows), and the macOS reference CLIs get Apple's AMX
-  matrix unit through Accelerate in every CPU mode - noted where it applies. llama.cpp has
+  matrix unit through Accelerate in every CPU mode - noted where it applies. lcpp has
   no speech-to-text engine; those references are the dedicated ones (whisper.cpp,
   parakeet-cli, ONNX Runtime, NeMo), and the gpu category exists where the reference has a
   GPU mode (whisper.cpp on Metal).
-- The audio-in comparison stays a CPU slice: llama.cpp's audio encoders do not route through
+- The audio-in comparison stays a CPU slice: lcpp's audio encoders do not route through
   BLAS on CPU, and mtmd GPU builds are not measured here.
 - Community-submitted rows are out of scope for now; the record schema carries a source field
   for them, but no submission path is defined yet.

@@ -19,7 +19,7 @@ require math
 // subsystem live outside the hub (the engine is required back, so the umbrella breaks the cycle).
 
 // ===== gemma-4 E-series per-layer embeddings (PLE) =====
-// A per-(token, layer) side input mixed into each layer's output (mirrors llama.cpp gemma4's
+// A per-(token, layer) side input mixed into each layer's output (mirrors lcpp gemma4's
 // build_inp_per_layer + per_layer_embd). ple_inp is POSITION-major: (p, l, i) at p*(layers*ple)+l*ple+i.
 
 // Pre-step finish (shared by decode/prefill): given the gathered+sqrt(ple)-scaled token rows already
@@ -118,7 +118,7 @@ def private ple_pre_prefill_impl(t : Model; var s : Session; tokens : array<int6
 }
 
 // Prefill-from-embeddings (multimodal) pre-step: no token ids, so the gather uses the padding token
-// (id 0) broadcast across positions — matching llama.cpp gemma4's build_inp_per_layer media branch.
+// (id 0) broadcast across positions — matching lcpp gemma4's build_inp_per_layer media branch.
 def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
     let all = t.config.n_layers * t.config.n_embd_per_layer
     for (p in range64(npos)) {

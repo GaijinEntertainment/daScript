@@ -257,7 +257,7 @@ other models. This is the kernel scoreboard; `benchmarks/lcpp_bench.das` is the 
   are inner-leaf timers of the batched matmuls and double-count against the `mm_*` site
   buckets - compare within a tier, don't sum across tiers.
 - **Theirs (the recipe that found the M1 gap, now shipped):** `harness/ggml_op_profile.patch` -
-  apply to llama.cpp with `git apply --ignore-whitespace` and rebuild. It times thread-0 wall
+  apply to lcpp with `git apply --ignore-whitespace` and rebuild. It times thread-0 wall
   per graph node in `ggml_graph_compute_thread` (ggml-cpu.c) into buckets NAMED LIKE OURS
   (MUL_MATs split by tensor name: Qcur/Kcur/Vcur -> mm_qkv, kqv_out -> mm_wo, ffn_* -> mm_ffn,
   result_output -> mm_cls, kq/kqv + FLASH_ATTN_EXT/SOFT_MAX -> attn; SET_ROWS -> kv_store;
@@ -302,8 +302,8 @@ other models. This is the kernel scoreboard; `benchmarks/lcpp_bench.das` is the 
 4. `benchmarks/lcpp_bench.das --ref <llama-bench>` head-to-head (same shapes, one run); if a
    gap remains, per-op profile both sides (Tool 4) before touching any kernel.
 
-**When to stop:** GEMM at isolated parity with llama.cpp is the floor, not a lever; <=2-3%
-candidates are noise; on M1 the campaign ended at ~100-108% of llama.cpp prefill with the
+**When to stop:** GEMM at isolated parity with lcpp is the floor, not a lever; <=2-3%
+candidates are noise; on M1 the campaign ended at ~100-108% of lcpp prefill with the
 remaining serial inches (pack loops) judged diminishing returns. The goal of this doc is that
 the x64 box reaches its *own* floor with defaults that are data (the `<app>.tune.json` sidecar,
 TB, budget, threads) - not another fork of the kernels.

@@ -17,7 +17,7 @@ require math
 //   --libri   the 25-clip LibriSpeech dictation set (test-clean 1089-134686-0000..0024, OpenSLR
 //             SLR12) — fetched, converted to 16 kHz mono wav. Parakeet-v3 scope only.
 //   --refs    reference engines: whisper.cpp (whisper-cli + parakeet-cli) at the pinned commit,
-//             llama.cpp at the pinned commit + patches/mtmd-timing.patch, CPU-only mtmd build.
+//             lcpp at the pinned commit + patches/mtmd-timing.patch, CPU-only mtmd build.
 //   --venvs   the onnx / nemo python environments from requirements-{onnx,nemo}.txt.
 //   --check   verify every input and tool, print the env lines a sweep needs.
 //   bin/daslang modules/dasLLAMA/performance/setup_asr_rig.das -- --corpus --check

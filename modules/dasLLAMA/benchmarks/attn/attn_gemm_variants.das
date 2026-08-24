@@ -8,7 +8,7 @@ require math   // mad (fused multiply-add) in the tiled kernel
 
 // fp32 micro-GEMM for flash attention: C[M x N] += A[M x K] * B[K x N], all row-major, with B's
 // N as the contiguous (SIMD) dimension. This is the form that makes QKᵀ and P·V fast — a
-// broadcast-A FMA register tile with NO horizontal reduce (mirrors llama.cpp ggml simd-gemm.h).
+// broadcast-A FMA register tile with NO horizontal reduce (mirrors lcpp ggml simd-gemm.h).
 // Every variant lives here so bench_attn_gemm.das can compare them head-to-head; the winner is
 // promoted into the engine. Pointers (not arrays) so the kernels are fork/thread-callable.
 

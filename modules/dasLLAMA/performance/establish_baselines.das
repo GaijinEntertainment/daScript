@@ -4,7 +4,7 @@ options indenting = 4
 options _dasllama_internal = true
 
 // Batch reference-baseline establisher for the dasLLAMA profiling suite. Runs the REFERENCE tools once
-// per box (llama.cpp llama-bench for LLMs here; the ASR CLIs land in a later phase) and writes their
+// per box (lcpp llama-bench for LLMs here; the ASR CLIs land in a later phase) and writes their
 // tok/s to a machine-readable per-box baseline that gen_profile then merges with the freshly-measured
 // das side. This exists so establishing on a new box is one command, never a manual llama-bench sweep.
 //
@@ -14,7 +14,7 @@ options _dasllama_internal = true
 require profile_common
 require daslib/clargs
 require strings
-require llvm/daslib/llvm_tune   // [tune_policy]: this tool benches llama.cpp only — never auto-tune
+require llvm/daslib/llvm_tune   // [tune_policy]: this tool benches lcpp only — never auto-tune
 require dasllama/dasllama_env
 
 [CommandLineArgs]

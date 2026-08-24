@@ -289,8 +289,8 @@ def private qkv_rs_gate(t : T?; dev, queue; f16 : bool; neox, has_bias : bool; n
     let tag = "qkv_rs{f16 ? 16 : 32}{neox ? " neox" : ""}{has_bias ? " bias" : ""} n={ndim} qd={qd} kvd={kvd}"
     var err : string
     var pso = (f16
-        ? pipeline_from_source(dev, metal_q8_gemv_qkv_rs16_msl, metal_q8_gemv_qkv_rs16_msl_entry, metal_q8_gemv_qkv_rs16_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_q8_gemv_qkv_rs32_msl, metal_q8_gemv_qkv_rs32_msl_entry, metal_q8_gemv_qkv_rs32_msl_fastmath, err))
+        ? pipeline_from_source(dev, MetalQ8GemvQkvRsF16_metal_q8_gemv_qkv_rs_msl, MetalQ8GemvQkvRsF16_metal_q8_gemv_qkv_rs_msl_entry, MetalQ8GemvQkvRsF16_metal_q8_gemv_qkv_rs_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalQ8GemvQkvRsF32_metal_q8_gemv_qkv_rs_msl, MetalQ8GemvQkvRsF32_metal_q8_gemv_qkv_rs_msl_entry, MetalQ8GemvQkvRsF32_metal_q8_gemv_qkv_rs_msl_fastmath, err))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let ddim = qd + 2 * kvd
@@ -354,7 +354,7 @@ def private qkv_rs_gate(t : T?; dev, queue; f16 : bool; neox, has_bias : bool; n
             vwant[iv + 1] = float(a1)
         }
     }
-    var ka = Q8QkvRsArgs(ndim = uint(ndim), ddim = uint(ddim), qd = uint(qd), kvd = uint(kvd),
+    var ka = Q8QkvRsArgs(ndim = uint(ndim), qd = uint(qd), kvd = uint(kvd),
         hs = uint(hs), neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u)
     let koffb = uint64(qd * nb * 34)         // k segment's byte offset into the stacked blob
     let voffb = uint64((qd + kvd) * nb * 34)
@@ -382,7 +382,8 @@ def private qkv_rs_gate(t : T?; dev, queue; f16 : bool; neox, has_bias : bool; n
         metal_set_buffer(enc, bw, voffb, 11)   // wv views
         metal_set_buffer(enc, bw, voffb, 12)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 13)
-        metal_dispatch_threadgroups(enc, uint3(uint((ddim / 2 + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
+        metal_set_threadgroup_memory_length(enc, f16 ? MetalQ8GemvQkvRsF16_metal_q8_gemv_qkv_rs_msl_tgmem : MetalQ8GemvQkvRsF32_metal_q8_gemv_qkv_rs_msl_tgmem, 0)
+        metal_dispatch_threadgroups(enc, uint3(uint(ddim / 2), 1u, 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
@@ -425,7 +426,7 @@ def private silu_gelu_ref(g, u : double; gelu : bool) : float {
     return float(0.5lf * g * (2.0lf - 2.0lf / (1.0lf + exp(2.0lf * ga))) * u)
 }
 
-// MetalQ8GemvW13Sw: one simdgroup dots gate row (w1) AND up row (w3), stores act(g)·u.
+// MetalQ8GemvW13Sw: one threadgroup dots gate row (w1) AND up row (w3), stores act(g)·u.
 def private w13sw_gate(t : T?; dev, queue; gelu : bool; ndim, hidden : int) {
     let tag = "w13sw{gelu ? " gelu" : ""} n={ndim} h={hidden}"
     var err : string
@@ -477,7 +478,8 @@ def private w13sw_gate(t : T?; dev, queue; gelu : bool; ndim, hidden : int) {
         metal_set_buffer(enc, bw3, 0ul, 6)
         metal_set_buffer(enc, bw3, 0ul, 7)
         metal_set_buffer(enc, bact, 0ul, 8)
-        metal_dispatch_threadgroups(enc, uint3(uint((hidden + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
+        metal_set_threadgroup_memory_length(enc, metal_q8_gemv_w13sw16_msl_tgmem, 0)
+        metal_dispatch_threadgroups(enc, uint3(uint(hidden), 1u, 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
@@ -735,9 +737,14 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 qkv_rs_gate(t, dev, queue, true, true, false, 64, 16, 8, 8)
                 qkv_rs_gate(t, dev, queue, false, true, true, 64, 16, 8, 8)
                 qkv_rs_gate(t, dev, queue, false, false, false, 64, 16, 8, 8)
+                // production-depth reduction: nb=128 blocks puts work on all 4 simdgroups AND
+                // wraps the 32-block round - a gate-shape ndim leaves sgs 1-3 idle and the
+                // wrap unexecuted (both were mutation-deletable with the suite green)
+                qkv_rs_gate(t, dev, queue, true, true, true, 4096, 16, 8, 8)
                 // the fused W1|W3 + activation family (h=18: the row guard / min-clamp tails)
                 w13sw_gate(t, dev, queue, false, 320, 18)
                 w13sw_gate(t, dev, queue, true, 64, 8)
+                w13sw_gate(t, dev, queue, false, 2048, 6)   // nb=64: the multi-round wrap arm
                 w13sw_b_gate(t, dev, queue, 2, 320, 18)
                 w13sw_b_gate(t, dev, queue, 4, 320, 18)
                 // the fixed-B q8 GEMV twins: panel+tail ndim, min-clamp d, ys gaps, padded xs4,

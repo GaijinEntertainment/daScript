@@ -18,7 +18,7 @@ require dasllama/dasllama_par       // maybe_parallel_for (+ its emitted dispatc
 // Generic GGUF (v2/v3) reader: parses the header, typed key-value metadata, and the
 // tensor-info table out of an mmap'd byte buffer, then exposes typed getters. Knows nothing
 // about transformers — the semantic mapping (tensor names -> weight blob) lives in
-// dasllama_transformer. Mirrors llama.cpp's gguf_context / llama_model_loader split.
+// dasllama_transformer. Mirrors lcpp's gguf_context / llama_model_loader split.
 //
 // File layout (little-endian): "GGUF" magic, u32 version, i64 n_tensors, i64 n_kv,
 // then n_kv {key:str, type:i32, [arr_type:i32, count:i64], value...} pairs,
@@ -234,7 +234,7 @@ def private with_tensor_view(m : GGUFMeta; srcbytes : array<uint8> | #; ti : int
     }
 }
 
-//! Expand a model path into its shard list. A llama.cpp split name ("<prefix>-00001-of-00003.gguf")
+//! Expand a model path into its shard list. A lcpp split name ("<prefix>-00001-of-00003.gguf")
 //! yields every sibling shard (any shard index normalizes); anything else yields [path]. A missing
 //! sibling panics (partial split must not run), or yields [] with `missing_ok` (presence gates).
 def gguf_shard_paths(path : string; missing_ok : bool = false) : array<string> {
@@ -310,7 +310,7 @@ def private parse_gguf_shard(base : void?; size : int64) : GGUFMeta {
 }
 
 //! Parse a mapped shard set into one unified meta: shard 0 carries the model KVs (config, vocab,
-//! chat template — llama.cpp split convention), tensor directories merge across all shards with
+//! chat template — lcpp split convention), tensor directories merge across all shards with
 //! each tensor stamped with its shard. Tensor reads then resolve through the shard_* arrays.
 def parse_gguf_meta_shards(bases : array<void?>; sizes : array<int64>) : GGUFMeta {
     var m <- parse_gguf_shard(bases[0], sizes[0])
@@ -541,7 +541,7 @@ def gguf_find_tensor(m : GGUFMeta; name : string) : int {
     return -1
 }
 
-//! high (ggml order). Matches llama.cpp dequantize_row_q4_K op-for-op — bit-exact.
+//! high (ggml order). Matches lcpp dequantize_row_q4_K op-for-op — bit-exact.
 
 
 // loops (uint8 source and destination regions never overlap).

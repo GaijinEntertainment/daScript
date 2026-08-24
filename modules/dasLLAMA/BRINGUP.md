@@ -61,7 +61,7 @@ The tuner is the detector, so the human never has to be. For a box with existing
    Re-release with `--quick` (inherits the complete sidecar, ~85 s) and carry on; the full
    mint is not repeated for a code edit. Exception: kernel work - its `DASLLAMA_VERSION` bump
    makes every existing sidecar read version-stale, so that release re-mints.
-4. **New box only:** the same big model vs llama.cpp (section 3 references) - when the
+4. **New box only:** the same big model vs lcpp (section 3 references) - when the
    absolutes have no history, the RATIO is the known quantity.
 
 ## 0. Prerequisites
@@ -185,8 +185,8 @@ bin/daslang modules/dasLLAMA/performance/fetch_models.das --   # later: verify-o
 LLM references (two llama-bench builds):
 
 ```sh
-# --src = any llama.cpp checkout; the pinned worktrees + builds are created NEXT to it
-bin/daslang -jit modules/dasLLAMA/benchmarks/setup_lcpp_ref.das -- --src <llama.cpp> -j 16
+# --src = any lcpp checkout; the pinned worktrees + builds are created NEXT to it
+bin/daslang -jit modules/dasLLAMA/benchmarks/setup_lcpp_ref.das -- --src <lcpp> -j 16
 export LLAMA_BENCH_CLEAN=<...>/build-clean-cpu/bin/llama-bench
 export LLAMA_BENCH_STOCK=<...>/build-stock/bin/llama-bench
 ```
@@ -296,7 +296,7 @@ re-measures ONCE and gates one-sided against its stored mean - drop past `--orac
 (default 5%) fails, past `--oracle-warn` (default 3%) warns, gains report (flagged past the
 fail bar as "suspicious - verify"). Exit is nonzero on any FAIL.
 
-- GATE 1 - llama.cpp never re-measures: no ref runs, ref binaries not even required.
+- GATE 1 - lcpp never re-measures: no ref runs, ref binaries not even required.
 - GATE 2 - one das pass per row. The >3% cv warm-retry stays: it REPLACES a bad cold measure.
 - GATE 3 - a timed text cell is frozen: the batch starts with the lifecycle wipe, a prepare
   pass bakes its image, and the timed child runs `lcpp_bench --frozen` (it never converts);

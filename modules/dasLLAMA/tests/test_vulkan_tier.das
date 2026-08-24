@@ -1048,7 +1048,7 @@ let DROP_WOFF = 32000000l   // drop-arm scratch plane (q8 space)
 let DD = 160l           // dense output dim (%32)
 let DNR = 40l           // batch rows — one full 32-tile plus an unpadded remainder
 
-// llama.cpp's Q4_K_M MoE recipe bumps ffn_down_exps to Q5_0/Q8_0 while gate/up stay Q4_K, so
+// lcpp's Q4_K_M MoE recipe bumps ffn_down_exps to Q5_0/Q8_0 while gate/up stay Q4_K, so
 // k4/k4/q8 is the shape real files ship (glm4moe, gemma). gate/up must agree (one activation
 // image); down is free — the chain requants the intermediate in the DOWN stack's form.
 let MXOFF1 = 210000000l

@@ -19,7 +19,7 @@ options _dasllama_internal = true
 //         is layout-independent; the gemv compares the token-0 row) within
 //         CLOSE_REL/CLOSE_ABS on nb-even, nb-odd and a production-ish slice. Tolerance, not
 //         equality: variants run under full fast-math, so the backend may legally regroup a
-//         fold per loop shape (~1e-6 relative; llama.cpp holds no cross-kernel bit-parity
+//         fold per loop shape (~1e-6 relative; lcpp holds no cross-kernel bit-parity
 //         either) — real generator bugs (wrong stride/lane/scale) are orders louder and
 //         still die here. Declining perms (mr8_budget / mr2_lanes / dot_vpdpbusd) run the
 //         reference bodies.

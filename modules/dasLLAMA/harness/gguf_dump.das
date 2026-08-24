@@ -9,7 +9,7 @@ require strings
 require math
 
 // GGUF parser validator: parse a .gguf and print header / metadata / tensor info, so the
-// output can be diffed against llama.cpp's `llama-gguf <file> r`. The position-0 detector for
+// output can be diffed against lcpp's `llama-gguf <file> r`. The position-0 detector for
 // the loader — prove the parse is right before trusting any weights.
 //
 // Usage: bin/daslang modules/dasLLAMA/dasllama_gguf_dump.das -- <path-to.gguf>

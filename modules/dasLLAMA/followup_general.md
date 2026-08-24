@@ -348,12 +348,12 @@
       and chat `modalities:["text","audio"]`. No served artifact can speak; the two Omni
       families have Talkers upstream but the GGUF ecosystem carries only thinker + audio
       encoder, and a talker conditions on thinker HIDDEN STATES (not a bolt-on). The
-      reference-backed route if wanted: a dedicated small TTS family (llama.cpp's tts
+      reference-backed route if wanted: a dedicated small TTS family (lcpp's tts
       example - OuteTTS + WavTokenizer ggufs). Realtime API (WebSocket voice, barge-in) is
       the end-state the smaller audio choices point at; name it before choosing them.
     - DECLINE/PARK: `/v1/images/generations` (+edits/variations) - no roster model
       generates images even upstream; diffusion is a disjoint class (DiT/UNet + conv2d VAE,
-      no reference in llama.cpp; the GGML reference is stable-diffusion.cpp, which shares
+      no reference in lcpp; the GGML reference is stable-diffusion.cpp, which shares
       our quants/GGUF/GEMMs but not the graph). `file`/`video_url` parts likewise parked.
     - HYGIENE: our `/v1/images` is the dlim-inventory/bake endpoint - a name squat on the
       standard image-API prefix; rename ours or accept the squat deliberately.
@@ -497,7 +497,7 @@
     serving tier loses its batching win exactly on the edge models built for it. The prefill
     driver already carries batched PLE kernels (gather + finish, `dasllama_metal_prefill.das`),
     so the shape exists; the batch-decode arm needs the per-stream token-id gather plumbed
-    through the batch kargs. llama.cpp has no batched-PLE serving path either, so this is
+    through the batch kargs. lcpp has no batched-PLE serving path either, so this is
     differentiation, not parity catch-up. Done = `BATCH_NEEDS_OK` carries `ple`, a batch-decode
     E-series cell in the support matrix, and a scheduler-level A/B showing the batched step
     beats N per-row steps on an E-series carrier.

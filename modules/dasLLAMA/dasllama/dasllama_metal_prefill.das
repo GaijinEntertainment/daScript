@@ -1734,7 +1734,7 @@ def public set_metal_prefill_logits_cpu(v : bool) {
 }
 
 //! Pin the legacy quantized-activation GEMM path (q8 X + planar weights) instead of the default
-//! llama.cpp mul_mm path (f32 X + block_q8_0 blobs). The legacy path is bit-identical to the CPU
+//! lcpp mul_mm path (f32 X + block_q8_0 blobs). The legacy path is bit-identical to the CPU
 //! forward — the tests' exact-parity rail. `DASLLAMA_METAL_MULMM=0` pins it process-wide.
 def public set_metal_prefill_mulmm_legacy(v : bool) {
     g_mm_legacy = v

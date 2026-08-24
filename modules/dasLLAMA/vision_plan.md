@@ -19,7 +19,7 @@ disk carries it, alongside the gemma4a audio conformer the audio arc already run
 MobileNet - that's gemma3n's `gemma3nv`). v1 = gemma4uv on the 12B vehicle; the gemma4v ViT
 moves to the v2 ledger with its op list intact.
 
-Oracle = llama.cpp mtmd: `llama-mtmd-cli` end-to-end (temp 0), `llama-mtmd-debug -p preproc /
+Oracle = lcpp mtmd: `llama-mtmd-cli` end-to-end (temp 0), `llama-mtmd-debug -p preproc /
 -p encode --image <file|white|black|gray>` for stage gates, `MTMD_DEBUG_EMBEDDINGS=1` for
 projected soft tokens - the exact rig the qwen2-audio arc used and documented.
 
@@ -37,7 +37,7 @@ Naming: `dasllama_vision*` - `dasllama_image.das` is the dlim model-image file, 
 2. **Resize**: ONE das implementation adopting mtmd's conventions - corner-aligned ratio
    `(src-1)/(dst-1)`, float lerp per channel, truncating u8 cast, no antialiasing. Vanilla
    enough that "port" and "our standard code" coincide; tier-0 stays bit-exact for free.
-   Geometry policy ported exactly (it is the model contract, not llama.cpp parity).
+   Geometry policy ported exactly (it is the model contract, not lcpp parity).
 3. **CPU-only v1**: embedder f32 first, quantized planes only if slice-G measurement says
    they pay (IMAGE_VERSION -> 9 either way). Non-causal flag honored by the CPU attention arm;
    `attn_gpu_prefill_ready` gets a semantic guard (non-causal => not ready). Note today's
@@ -95,11 +95,11 @@ Naming: `dasllama_vision*` - `dasllama_image.das` is the dlim model-image file, 
    (cats, `--jinja`): `<|turn>system\n<|think|>\n<turn|>\n<|turn>user\n` + `<|image>` +
    130 embd + `<image|>` + `describe this image<turn|>\n<|turn>model\n` = 151 tokens.
    Template media slot is `<__media__>`, media-first before the user text. NOTE:
-   `tokenizer.ggml.suppress_tokens = [258883, 258882]` - llama.cpp never SAMPLES the end
+   `tokenizer.ggml.suppress_tokens = [258883, 258882]` - lcpp never SAMPLES the end
    markers; check dasLLAMA's sampler honors this before tier-2 (slice E).
 6. **Eval**: image rows via `eval_embd_` WITH the non-causal span flag - the causal UPPER
    bound lifts to the uniform bound `span_end`; the sliding-window LOWER bound stays, so a
-   SWA-layer span query attends `[sliding-window floor, span_end)`. That matches llama.cpp's
+   SWA-layer span query attends `[sliding-window floor, span_end)`. That matches lcpp's
    `is_masked_swa` (it masks distant past only; a future key is never masked), so do not
    "fix" the kernels to `[0, span_end)`. Text stays causal. Decoder positions sequential - no
    mrope, that's the qwen family. The DECODER does all visual reasoning - there is no ViT;
@@ -154,9 +154,9 @@ the per-PR checklist audit like everything else. Expected entries:
 
 ## Oracle strategy - rig MINTED at slice A
 
-Reference dumps live in `~/Work/llama.cpp/models/gemma4-vision-oracle/` - `mint.sh` there
+Reference dumps live in `$MODELS/gemma4-vision-oracle/` - `mint.sh` there
 regenerates everything (each .log keeps its exact invocation on line 1 and the WHOLE tool
-output). The rig needed a LOCAL llama.cpp patch (committed in that tree, dasprof-style):
+output). The rig needed a LOCAL lcpp patch (committed in that tree, dasprof-style):
 `--keep <ny>` = non-square fixture height in llama-mtmd-debug; a real pixel dump in
 `mtmd_debug_preprocess_image` (fnv1a64 over the f32le buffer + per-channel mean + 5 probes;
 full per-pixel via `MTMD_DEBUG_PIXELS=1`, regenerate-on-demand only); per-token
@@ -186,7 +186,7 @@ invariant - a transposed patch grid is only visible per-token).
 ## Slices (commit ladder, single PR - each lands its Review-contract entries with it)
 
 - **A. Oracle rig** (DONE 2026-08-14): mmproj fetched + pinned; sibling check resolved the
-  inverted family map (this plan corrected in place); local llama.cpp debug patch; 16
+  inverted family map (this plan corrected in place); local lcpp debug patch; 16
   reference dumps minted via `mint.sh`; meta facts + token ids + stream shape pinned above;
   oracle rules into REVIEW.md.
 - **B. Vision rail**: VisionImage + geometry + letterbox (bilinear + center-pad-black) +
@@ -447,7 +447,7 @@ oracle's arithmetic, not only about the port.
   + mask), per-sequence-per-range masks through batch stepping, and a cache policy for rows
   that have no token id. TRIGGER: genuinely concurrent image requests. dasllama-server is
   local-first (a few users, agent tools, local apps), so that trigger may never fire - do not
-  build this speculatively. Worth knowing if it ever does: llama.cpp toggles causality
+  build this speculatively. Worth knowing if it ever does: lcpp toggles causality
   CONTEXT-GLOBALLY around a media chunk (`llama_set_causal_attn(false)`), which cannot be
   right for a mixed batch - so upstream serializes media prefill too, and this rail would put
   dasLLAMA ahead of the reference rather than level with it.

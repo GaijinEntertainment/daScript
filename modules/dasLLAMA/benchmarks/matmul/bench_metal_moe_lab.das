@@ -810,7 +810,7 @@ class LabMoeGemvMx4A {
 }
 
 // ===== the tgmem-LUT variant (the lcpp shape) =====
-// llama.cpp's kernel_mul_mv_mxfp4_f32 copies its 16-value LUT into THREADGROUP memory at kernel
+// lcpp's kernel_mul_mv_mxfp4_f32 copies its 16-value LUT into THREADGROUP memory at kernel
 // start (one load + one barrier) and the hot loop reads tgmem — zero device loads per lookup.
 // Same change here, production kernel otherwise untouched: the 8 vtab device loads per block
 // iteration become tgmem reads. etab stays a device table (2 broadcast loads/block, secondary).
@@ -878,7 +878,7 @@ class LabMoeGemvMx4T {
 }
 
 // ===== the lcpp-shape variant (round 3: their whole thread mapping, verbatim) =====
-// llama.cpp's kernel_mul_mv_mxfp4_f32 monomorphized (NR0=2, NSG=2) at our MoE bindings:
+// lcpp's kernel_mul_mv_mxfp4_f32 monomorphized (NR0=2, NSG=2) at our MoE bindings:
 // 16 blocks in flight x 2 threads/block (ix=tiisg/2, it=tiisg%2), each thread owns 8 qs bytes;
 // 4 float4 x prefetch (yl[4]) reused across both rows; float4 accumulators folded to one
 // horizontal add per row; 32-slot tgmem LUT fill (their branch-free shape — reads touch 0..15).

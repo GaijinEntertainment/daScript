@@ -674,7 +674,7 @@ def test_canary_qwen_oracle(t : T?) {
 // Gemma-4 E2B audio: greedy no-think transcription is token-for-token with llama-mtmd-cli through
 // the confident prefix. The gemma4a Conformer encoder soft tokens match mtmd's audio embeddings at
 // rel ~0.0027 (float-reduction-order noise); the full transcription diverges only at the Gemma-4
-// q8 decoder's OWN ~0.6-logit near-tie (llama.cpp's raw logits at that step: three tokens within
+// q8 decoder's OWN ~0.6-logit near-tie (lcpp's raw logits at that step: three tokens within
 // 0.6), the qwen3moe/gemma-26B situation. So the fixture asserts the confident head, not the tail.
 // Oracle: llama-mtmd-cli -m E2B-Q8 --mmproj bf16 --audio clip --temp 0 --jinja (no-think turn).
 [test]

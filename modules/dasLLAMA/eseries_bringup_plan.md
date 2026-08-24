@@ -31,7 +31,7 @@ model - decode, prefill, chat, the vision and audio splices - across the serving
 ## Out of scope (ledgered)
 
 - Batched PLE on the GPU (the multi-stream Metal arm) - `followup_general.md` #40,
-  long-term differentiation (llama.cpp has no batched-PLE path either).
+  long-term differentiation (lcpp has no batched-PLE path either).
 - The whole-model resident recorder rejects shared-KV/sliding models by design - E-series
   rides the rails tier (same as E4B today).
 - E4B vision (mmproj not on this box); Vulkan.

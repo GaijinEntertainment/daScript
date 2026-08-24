@@ -18,7 +18,7 @@ all corpus clips at every phase boundary.
   `QuantMode.fp32` at dasllama_asr.das:206; all-f32 CNRY encoder). The fp32 kernels are
   bit-exact reference kernels by contract (`matmul_batch_core`) - never to be raced.
 - NVIDIA ships the checkpoint 100% BF16 (safetensors header); nobody quantizes canary
-  anywhere (llama.cpp: zero support; onnx-asr: no export). A q8 canary is the first.
+  anywhere (lcpp: zero support; onnx-asr: no export). A q8 canary is the first.
 - Board precision audit (scouting bench, M1 8T, interleaved best-of-3, cv<=2.5%): upstream
   `whisper-quantize`/`parakeet-quantize` q8_0 models transcribe correctly AND are the
   references' best config (faster in 6/7 cells); das still leads 8-bit-vs-8-bit
@@ -242,7 +242,7 @@ Ledgered from this phase:
   DAS_TUNE_MANIFEST/one-tune-per-box decision for the converter vs the release sidecar).
 
 Phase 7 addendum - sanity floor (same evening): E4B q8 cell at 8 lanes, cv 0.2%: das
-pp512 249.9 vs clean-cpu llama.cpp 97.2 = **2.57x** (ref confirmed -march=native => AVX-512;
+pp512 249.9 vs clean-cpu lcpp 97.2 = **2.57x** (ref confirmed -march=native => AVX-512;
 clean-cpu == stock on Linux), tg128 11.88 vs 11.14 = 1.07x (both engines at the DDR5 wall).
 Add the stock leg + a second model before quoting publicly. Canary decoder parity gate
 **PASSED byte-identical** (jfk/jfk3/gb1, encoder via --mmproj) - all 18 artifacts now fully

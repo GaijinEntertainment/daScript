@@ -333,7 +333,7 @@ def template dot_q8q8_laneq4x4_template(var yp : float ?; wg : int8 const ?; sg 
     }
 }
 
-//! 4-row × 4-token tile (llama.cpp ggml_gemm_q8_0_4x4 structure): shared weight v16i8 per chunk-lane
+//! 4-row × 4-token tile (lcpp ggml_gemm_q8_0_4x4 structure): shared weight v16i8 per chunk-lane
 //! feeds all 4 tokens (LLVM CSEs to one load, 4x fewer than 4× laneq4); 4 independent accumulators
 //! give SDOT the ILP a single chain can't. Not `private`, t0 % 4 == 0 and ntok-t0 >= 4 assumed.
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xqp, noalias = xsp), tuned(fallback = "u2")]

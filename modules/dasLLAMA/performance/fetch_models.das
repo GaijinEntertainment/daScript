@@ -52,7 +52,7 @@ def private entry_path(e : ProvEntry) : string {
 // ===== the on-box conversion drivers (--convert) =====
 // The recipes as executable steps, needing setup_asr_rig's rig: NEMO_PY (the venv python),
 // WHISPER_CPP (the pinned checkout, parakeet converter + models dir), MTMD_BIN (whose own
-// llama.cpp checkout serves the canary decoder's gguf writer — no extra env).
+// lcpp checkout serves the canary decoder's gguf writer — no extra env).
 
 def private convert_nemo_py() : string {
     let p = g_env_prof.nemo_py

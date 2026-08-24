@@ -78,13 +78,13 @@ enum AttnPrefillMode {
 
 //! Deltanet prefill algorithm (qwen35 hybrid). `recurrent` runs the per-token delta rule — the
 //! bit-exact reference the parity fixtures pin. `chunked` (default) is the 64-token blocked form
-//! (llama.cpp's default); NOT bit-identical (chunk-parallel FP reassociation), tolerance-validated.
+//! (lcpp's default); NOT bit-identical (chunk-parallel FP reassociation), tolerance-validated.
 enum DnPrefillMode {
     recurrent
     chunked
 }
 
-//! KV-cache storage codec, chosen per session at create time (llama.cpp -ctk/-ctv analog; K and V
+//! KV-cache storage codec, chosen per session at create time (lcpp -ctk/-ctv analog; K and V
 //! carry independent dtypes). f16 = half the KV bytes, near-lossless; f32 = bit-exact reference;
 //! q8_0 = block codec (34B/32 elements, needs kv_dim/head_size % 32); tq4 = rotated 4-bit (18B/32, needs head_size a power of two).
 enum KVDtype {
@@ -762,7 +762,7 @@ struct Model {
     wblob : array<float>
     qblob : array<int8>
     qscales : array<float>
-    // wscale_f16 rail: the Q8 weight-scale plane as raw binary16 halfwords — llama.cpp byte
+    // wscale_f16 rail: the Q8 weight-scale plane as raw binary16 halfwords — lcpp byte
     // parity (34 vs 36 B per 32 weights). Built by wscale_convert_f16 post-repack (qscales is
     // then freed); exactly one of qscales/qscales16 is populated for a q8 model.
     qscales16 : array<uint16>
@@ -909,7 +909,7 @@ struct Model {
     dn_dt_off : int64           // ssm_dt.bias: layers x dt_rank
     dn_a_off : int64            // ssm_a (= -exp(A_log), precomputed on disk): layers x dt_rank
     dn_norm_off : int64         // ssm_norm (gated out-norm weight, shared across heads): layers x d_state
-    // ssm_beta/ssm_alpha ride the DISK type like llama.cpp: quantized files matmul them q8
+    // ssm_beta/ssm_alpha ride the DISK type like lcpp: quantized files matmul them q8
     // (dnbeta/dnalpha_offs above); F32 files (35B-A3B) keep them fp32 in fblob and matmul fp32
     dn_ba_f32 : bool = false
     dn_betaf_off : int64        // fblob: layers x (dim x dt_rank), valid when dn_ba_f32
@@ -1831,7 +1831,7 @@ struct Session {
     @scratch dn_cws : array<float>          // per-v-head chunk workspace slabs (dt_rank x dn_cws_head_size)
     @scratch dn_tail : array<float>         // GPU deltanet chain: last taps qkv rows back (conv-history store)
     // MTP/NextN self-spec state (empty unless config.n_layer_nextn > 0). mtp_h is the trunk's
-    // post-output-norm hidden of the LAST evaluated position (llama.cpp's t_h_nextn handoff);
+    // post-output-norm hidden of the LAST evaluated position (lcpp's t_h_nextn handoff);
     // mtp_h_pos1 is that position PLUS ONE (0 = cold, keeps Session zero-init-safe).
     mtp_h : array<float>           // h_nextn (dim)
     mtp_h0 : array<float>          // the verify batch's ROW-0 normed hidden (= h_pos). forward_prefill's
@@ -3442,7 +3442,7 @@ def dn_key_dim(c : Config) : int64 => c.ssm_n_group * c.ssm_d_state
 //! deltanet fused-projection / conv channel count: [q (key_dim) ; k (key_dim) ; v (d_inner)].
 def dn_conv_dim(c : Config) : int64 => 2l * dn_key_dim(c) + c.ssm_d_inner
 
-// Chunk length for the blocked (chunked) deltanet prefill — llama.cpp's CS for gated deltanet.
+// Chunk length for the blocked (chunked) deltanet prefill — lcpp's CS for gated deltanet.
 let DN_CHUNK = 64l
 
 // Per-v-head workspace floats for the chunked deltanet prefill: eight CS x d_state panels
@@ -3481,7 +3481,7 @@ def dn_flush_all(var s : Session) {
 //! (gemma-4 E2B: 6144 for layers 0-14, 12288 for 15-34).
 def layer_hidden(t : Model; l : int64) : int64 => (empty(t.ffn_w) ? t.config.hidden_dim : t.ffn_w[l])
 
-//! Layer `l`'s KV source (mirrors llama.cpp gemma4 reuse()): own-KV layers map to themselves; a
+//! Layer `l`'s KV source (mirrors lcpp gemma4 reuse()): own-KV layers map to themselves; a
 //! shared layer (l >= n_layer_kv_from_start) reuses the last own-KV layer of its class — sliding
 //! reads kv_from_start-2, global reads kv_from_start-1 (those two straddle the boundary by pattern).
 def layer_kv_source(c : Config; l : int64) : int64 {
@@ -3731,7 +3731,7 @@ def private mm_cls(var y : array<float>; t : Model; x : array<float>; var xq : a
         // K-quant classifier (tied plane copy or untied kq output.weight)
         mm_kq(y, t, cls_fmt, t.wcls_off, x, xq, xs, xbs, n, d)
     } else {
-        // untied — or the tied classifier's Q8 transcode (the exact quants llama.cpp matmuls)
+        // untied — or the tied classifier's Q8 transcode (the exact quants lcpp matmuls)
         mm(y, t, t.wcls_off, x, xq, xs, n, d)
     }
 }
@@ -3871,7 +3871,7 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     let ts_final = prof_ticks()
     trace_tag(TRACE_TAG_CLS)
     rms_at(s.xb, t, t.rms_final_off, s.x, dim)
-    if (c.n_layer_nextn > 0l) {   // stash h_nextn (llama.cpp t_h_nextn) for the MTP draft head
+    if (c.n_layer_nextn > 0l) {   // stash h_nextn (lcpp t_h_nextn) for the MTP draft head
         copy_floats(s.xb, 0l, s.mtp_h, 0l, dim)
         s.mtp_h_pos1 = pos + 1l
     }
@@ -3893,7 +3893,7 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
 }
 
 //! One MTP/NextN draft step: from stashed trunk hidden `s.mtp_h` and `token`, produce draft logits
-//! in s.logits. `pos` is one BELOW llama.cpp's convention — rotary is position-delta-invariant, so
+//! in s.logits. `pos` is one BELOW lcpp's convention — rotary is position-delta-invariant, so
 //! shifting every MTP row down by one is mathematically identical. Overwrites s.mtp_h with h_nextn.
 var private g_mtp_spec = false
 
@@ -3924,7 +3924,7 @@ def forward_mtp(t : Model; var s : Session; token, pos : int64; want_logits : bo
     let dim = c.dim
     assert(c.n_layer_nextn > 0l)
     kv_ensure(s, pos + 1l)
-    // eh_proj input: [enorm(embed(token)) ; hnorm(h)] — embedding first (llama.cpp concat order)
+    // eh_proj input: [enorm(embed(token)) ; hnorm(h)] — embedding first (lcpp concat order)
     embed_row(t, token, unsafe(addr(s.x[0])))
     rms_at(s.xb, t, t.mtp_enorm_off, s.x, dim)
     copy_floats(s.xb, 0l, s.mtp_cat, 0l, dim)

@@ -3,7 +3,7 @@ options _dasllama_internal = true
 
 // Detector harness for the Llama-3 BPE tokenizer, run against the in-repo
 // ggml-vocab-llama-bpe fixture (the exact tokenizer + .inp/.out round-trip
-// corpus llama.cpp uses for test-tokenizer-0). No model download needed.
+// corpus lcpp uses for test-tokenizer-0). No model download needed.
 //
 // Step 1: load the BPE vocab/merges, parse the corpus, confirm input<->output
 // alignment, and (once bpe_encode lands) gate encode token-for-token.

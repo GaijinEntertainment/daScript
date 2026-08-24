@@ -897,7 +897,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
             }
 
             // arm 8: wscale_f16 model — the f16-scale GEMV twin reads the qscales16 halfword
-            // plane (llama.cpp q8_0 byte parity); a fresh load owns fresh weight regions
+            // plane (lcpp q8_0 byte parity); a fresh load owns fresh weight regions
             if (arm_on(t, "arm8-s16")) {
                 set_wscale_f16(true)
                 var tr16 <- load_model_(path, QuantMode.q8)

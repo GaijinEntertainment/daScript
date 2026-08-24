@@ -57,7 +57,7 @@ remains as the legacy symmetric-only helper.
 
 **Server surface** (`utils/dasllama-server/openai_server.das`): the reasoning span rides
 `reasoning_content` - on the chat-completion message, and as streaming deltas (the
-DeepSeek/llama.cpp framing). Tool-capable replies split reasoning FIRST, then
+DeepSeek/lcpp framing). Tool-capable replies split reasoning FIRST, then
 `parse_tool_calls_auto` runs on the content half, so a thinking model that calls tools yields
 `reasoning_content` AND `tool_calls` in one response.
 

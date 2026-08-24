@@ -1,7 +1,7 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md`. Planned work: `../THINKING.md`.
+doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`.
 
 **Every PR runs `run.das -- --suite model-free`, plus every test here the change reaches - never
 the whole directory.** A change reaches a test when it alters anything the test's result
@@ -31,9 +31,10 @@ instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
 **A change that re-scopes a test file with a `CLAUDE.md` entry keeps that entry true in the
 same change.**
 
-**A new `model-free`-listed or suite-less test file whose name does not say what it covers
-gets a `CLAUDE.md` entry in the same change** - `run.das`'s `model-free` list is the
-complete census, the `CLAUDE.md` map is deliberately partial.
+**A new test file listed in `run.das`'s `model-free` suite, or in no `run.das` suite at all,
+whose name does not say what it covers, gets a `CLAUDE.md` entry in the same change** -
+`run.das`'s `model-free` list is the complete census, the `CLAUDE.md` map is deliberately
+partial.
 
 **A new, renamed, or dropped arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm
@@ -87,7 +88,16 @@ one machine - is tested through the argv it gates or the mode it selects**, neve
 predicate's value.
 
 **An added, moved, or edited registration's test observes reachability** - the registered
-thing is reached through the registry, not called directly.
+thing is reached through its registry, not called directly. The registries this governs:
+the arch registrations (`register_decode_override` and its sibling `register_*` hooks), the
+`[EnvConfig]` env registry, and the format/backend dispatch tables. A `[metal_dispatch]`
+declaration is not one of them.
+
+**A hand-bound kernel gate dispatches the geometry and threadgroup memory its production
+encoder does** - a change to a kernel's `[metal_dispatch]` `tg`, `grid`, or `tgmem`, to a
+field's `@binding`, or to its kargs struct's layout, updates every gate that hand-binds that
+kernel in the same change (the mechanism - why a missed tgmem fails silently - is
+`CLAUDE.md`'s "Arm filter mechanics" section).
 
 **A new pre-tokenizer family or backend ships its `corpus_case` arm in `test_tokenizer.das`,
 naming the `ggml-vocab-*.gguf` fixture.**
@@ -100,7 +110,8 @@ BOTH sides: the decoded text where the model carries a vocab (`log_gen_texts` in
 red, or a suspicious green, must be readable in the log, not only as an id or float
 difference.
 
-**A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
+**A GPU kernel whose MSL entry symbol the census in `test_kernel_coverage.das` has not seen
+before ships with a small model in that file's coverage suite** that dispatches it.
 
 **A kernel-unit arm whose property a CPU oracle can witness compares its kernel against that
 oracle.**

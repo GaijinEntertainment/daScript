@@ -264,7 +264,7 @@ def model_exec_fmt(t : Model) : string {
     return "weights {weights} native; q8 activations; {scales}; {layout}"
 }
 
-//! The llama.cpp sibling's execution receipt, derived from the build flavor: every gguf tensor
+//! The lcpp sibling's execution receipt, derived from the build flavor: every gguf tensor
 //! runs in its disk format; the cpu backend additionally layout-repacks supported types at load
 //! (GGML_CPU_REPACK is ON in both pinned ref flavors).
 def lcpp_exec_fmt(backend : string) : string {
@@ -951,7 +951,7 @@ def file_identity(path : string; role : string) : InputFile {
 
 // ===== Baseline TSV I/O (reference tok/s the establisher writes, the generator reads) =====
 
-//! One reference-tool baseline row for a model: llama.cpp prefill / emission tok/s (CPU), the lcpp
+//! One reference-tool baseline row for a model: lcpp prefill / emission tok/s (CPU), the lcpp
 //! build commit, and the total parameter count llama-bench reported. -1 means "not measured".
 struct LlmBaseline {
     model : string
@@ -1269,7 +1269,7 @@ def models_provenance() : array<ProvEntry> {
 
 // ===== ASR: reference tools (paths, parsers, runners, versions) =====
 
-//! "audio-chat" when the model's reference is llama.cpp's multimodal CLI, else "asr" — the
+//! "audio-chat" when the model's reference is lcpp's multimodal CLI, else "asr" — the
 //! `BenchRun.workload` classifier, derived from the catalog rather than a hand-kept model list.
 def asr_workload(spec : AsrModelSpec) : string {
     for (rf in spec.refs) {
@@ -1322,7 +1322,7 @@ def nemo_py() : string {
     return normalize(empty(g_env_prof.nemo_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-nemo") : g_env_prof.nemo_py)
 }
 
-// The clean CPU-only build (llama.cpp-clean, ebd048fc5, Accelerate ON, Metal OFF, no dasprof)
+// The clean CPU-only build (lcpp-clean, ebd048fc5, Accelerate ON, Metal OFF, no dasprof)
 // patched with patches/mtmd-timing.patch. CPU-only is deliberate: the fast historical mtmd numbers
 // rode Metal (GPU) despite the "CPU-only" label — ggml's Conformer audio ops don't route through
 // BLAS/AMX, so a genuine CPU encode is ~16 s (and das's optimized scalar Conformer beats it).
@@ -1758,9 +1758,9 @@ struct InputFile {
 //! are siblings in the same store; pairing and ratios are derived at render time, never stored.
 //! `cmd` is the reproduction receipt: the exact invocation that produced the numbers.
 struct BenchRun {
-    engine : string          // "das" | "llama.cpp" | ASR references ("whisper.cpp", "onnx", "nemo", ...)
+    engine : string          // "das" | "lcpp" | ASR references ("whisper.cpp", "onnx", "nemo", ...)
     backend : string         // "cpu" | "metal" | "vulkan"
-    flavor : string          // das: "tuned" | "accel" (+AMX tier); llama.cpp build flavor: "stock" | "clean-cpu"
+    flavor : string          // das: "tuned" | "accel" (+AMX tier); lcpp build flavor: "stock" | "clean-cpu"
     box : string
     threads : int
     date : string            // YYYY-MM-DD
@@ -1769,7 +1769,7 @@ struct BenchRun {
     tests : table<string; BenchTest>
     @optional workload : string // "" = text LLM; "asr" | "audio-chat" | "image-chat" — selects the tests-key shape
     @optional source : string   // "official" | "community" — stamped by the store driver, not the tool
-    @optional sha : string      // engine commit (das: git HEAD; llama.cpp: build_commit)
+    @optional sha : string      // engine commit (das: git HEAD; lcpp: build_commit)
     @optional version : string  // das release version
     @optional dasllama_version : int // dasLLAMA's own release counter (das rows only) — the
                                 // sidecar-exchange roster key; see dasllama_version.das
@@ -1784,7 +1784,7 @@ struct BenchRun {
                                 // its cells ran — stamped by the board driver on das rows
     @optional exec_fmt : string // what this engine EXECUTES for this file (weight formats per site
                                 // class + activation/scale treatment) — the apples-to-apples receipt;
-                                // das derives it from the loaded Model, llama.cpp rows from flavor
+                                // das derives it from the loaded Model, lcpp rows from flavor
     @optional env : string      // the arming environment `cmd` was run under — see [[bench_env_line]].
                                 // Load-bearing: most GPU/tier levers arm via env, so a `cmd` alone
                                 // does NOT reproduce a row and two configs can look identical

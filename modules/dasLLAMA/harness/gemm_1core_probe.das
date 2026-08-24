@@ -7,7 +7,7 @@ options _dasllama_internal = true
 // matmul_q8q8_batch runs INLINE on the calling thread: target_chunk_work is pushed to infinity,
 // so maybe_parallel_for compiles to a plain invoke; the que merely exists, idle (the dispatch
 // sites' chunk-count args read get_dispatch_lanes() eagerly, que-less boxes throw). This is
-// the kernel-to-kernel denominator against llama.cpp's Q8_0 MUL_MAT via `test-backend-ops perf`
+// the kernel-to-kernel denominator against lcpp's Q8_0 MUL_MAT via `test-backend-ops perf`
 // (harness/pure_gemm_ladder.sh + backend_ops_shapes.patch = the shape-matched, thread-pinned
 // ladder). Interleaved best-of across backends per shape, tolerance-gated vs portable.
 // Run: daslang -jit gemm_1core_probe.das

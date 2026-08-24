@@ -27,7 +27,7 @@ Per-mode responsibilities (all dispatched in `dasllama_chat.das`; arch files sta
 The server's `parse_tool_calls_auto` becomes mode-dispatched; the OpenAI normalization
 (`tool_calls`, `finish_reason`) is already format-agnostic past extraction.
 
-## Per-family wire formats (verify each against the GGUF template + llama.cpp before coding)
+## Per-family wire formats (verify each against the GGUF template + lcpp before coding)
 
 | family | defs | call | results | notes |
 |---|---|---|---|---|
@@ -52,7 +52,7 @@ The server's `parse_tool_calls_auto` becomes mode-dispatched; the OpenAI normali
 
 ## The grammar question (audited 2026-08-11)
 
-**llama.cpp**: full GBNF engine + `json_schema_to_grammar` + **lazy grammars** (trigger
+**lcpp**: full GBNF engine + `json_schema_to_grammar` + **lazy grammars** (trigger
 tokens/patterns arm the constraint mid-generation - the tool-call mechanism: free until
 `<tool_call>`-class trigger fires, then schema-constrained JSON; forced from step 0 for
 `tool_choice:"required"`). Their schema->grammar half is the fragile part - 2026 issue tail:
@@ -65,10 +65,10 @@ unsupported.
 
 **Decision: formats first; grammar is NOT in this PR.** Three of four families emit their
 trained formats reliably unconstrained (the shipped Qwen legs prove the pattern at 0.6B
-greedy; llama.cpp itself shipped tool calling before lazy grammars existed). Grammar is an
+greedy; lcpp itself shipped tool calling before lazy grammars existed). Grammar is an
 engine-layer feature with its own design surface (incremental token-level matching across
 UTF-8-partial pieces, candidate filtering vs full-vocab masking, penalty/cutoff interplay,
-decode hot-path cost) and llama.cpp's bug tail shows the schema->grammar half alone is an arc.
+decode hot-path cost) and lcpp's bug tail shows the schema->grammar half alone is an arc.
 Gating four working formats on it inverts the value order.
 
 **Follow-up arc (separate, after this PR): constrained decoding.**

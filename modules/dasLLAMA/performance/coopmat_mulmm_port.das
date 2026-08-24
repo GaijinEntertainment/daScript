@@ -1,7 +1,7 @@
 options gen2
 options indenting = 4
 
-// scratch probe: OUR dasSpirv port of llama.cpp's matmul_q8_0_f32_f16acc_aligned_l config vs THEIR
+// scratch probe: OUR dasSpirv port of lcpp's matmul_q8_0_f32_f16acc_aligned_l config vs THEIR
 // compiled spv, same device buffers, one shape (the 24-TF headline: m=9728 k=2560 n=512).
 // Their exact geometry: BM=128 BN=128 BK=32, 4 warps in 2x2, each warp 64x64 = 4x4 f16acc fragments
 // (16 MMAs per TK step, A frag cached per row, B frag loaded per MMA), shared f16 pairs SST=BK/2+4.

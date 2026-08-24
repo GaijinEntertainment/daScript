@@ -67,7 +67,7 @@ def axpy(var d : float?; s : float const?; scale : float; n : int64) {}
 
 //! Dot of an f32 row against a bfloat16 (bf16-in-uint16) row. The widen is an exact high-half
 //! bit shift, so dots are bit-identical to pre-expanding the weight to fp32 at half the bandwidth
-//! (llama.cpp's AVX2 ggml_vec_dot_bf16 also truncates the ACTIVATION to bf16; ours stays f32).
+//! (lcpp's AVX2 ggml_vec_dot_bf16 also truncates the ACTIVATION to bf16; ours stays f32).
 [hint(unsafe_range_check, noalias = a, noalias = b)]
 def template dot_bf16_template(a : float const ?; b : uint16 const ?; n : int64) : float {
     var acc = 0.0
@@ -950,7 +950,7 @@ typedef MatmulMx4GroupNFn = function<(var yp : float?; wn : uint8 const?; we : u
 typedef MatmulMx4RowsFn = function<(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n : int64; rb : int64; re : int64) : void>
 // f16-weight-scale twins (the wscale_f16 rail): identical contracts to the Fn above them, except
 // the per-32-block WEIGHT scale plane is raw binary16 halfwords (Model.qscales16) instead of f32 —
-// llama.cpp byte parity, 34 vs 36 B per 32 weights. Activation scales (xsp) stay f32 everywhere.
+// lcpp byte parity, 34 vs 36 B per 32 weights. Activation scales (xsp) stay f32 everywhere.
 typedef MatmulQ8Q8FnS16 = function<(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n : int64; d : int64) : void>
 typedef MatmulQ8Q8BatchFnS16 = function<(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n : int64; d : int64; ntok : int64) : void>
 typedef MatmulQ8Q8Group3FnS16 = function<(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : uint16 const?; woff0 : int64; woff1 : int64; woff2 : int64; xqp : int8 const?; xsp : float const?; n : int64; d0 : int64; d1 : int64; d2 : int64) : void>
@@ -960,7 +960,7 @@ typedef MatmulQ8Q8RowsFnS16 = function<(var yp : float?; wp : int8 const?; sp : 
 // ([init]s run before the JIT installs generated code, so a predicate reading a JIT-stamped value
 // answers with its reference tier there). Lets a module register several runtime-dependent flavors.
 typedef BackendAvailableFn = function<() : bool>
-// Region-list batched MXFP4·Q8 GEMM — batch analog of MatmulMx4GroupNFn, llama.cpp's mul_mat_id
+// Region-list batched MXFP4·Q8 GEMM — batch analog of MatmulMx4GroupNFn, lcpp's mul_mat_id
 // shape: ONE dispatch runs every routed expert's [d x n] GEMM over its own row range of a shared
 // token-row image. `offs` packs TRIPLES [weight offset, row0, cnt]; bit-exact vs a per-region loop.
 typedef MatmulMx4Q8BatchGroupNFn = function<(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n : int64; d : int64) : void>
@@ -981,7 +981,7 @@ typedef RepackKqFn = function<(fmt : int; var kq : uint8?; var ks : uint8?; n : 
 // scale (n/32) and bsum (n/16) rows; Y token-major [ntok x d]. Bit-for-bit ntok x the fmt's
 // per-position GEMV over the same repacked planes.
 typedef MatmulKqBatchFn = function<(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; d : int64; ntok : int64) : void>
-// Batched region-list K-quant GEMM (kq batch groupn — fused MoE prefill, llama.cpp's mul_mat_id
+// Batched region-list K-quant GEMM (kq batch groupn — fused MoE prefill, lcpp's mul_mat_id
 // shape): `offs` packs TRIPLES [weight offset, row0, cnt]; region r consumes/produces activation
 // rows row0..row0+cnt (token-major). Plane bases pass whole; no bias form (biased arches are mx4).
 typedef MatmulKqBatchGroupNFn = function<(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; d : int64) : void>
@@ -2609,7 +2609,7 @@ def geglu(var g : array<float> | #; u : array<float> | #; size : int64) {
     geglu(unsafe(addr(g[0])), unsafe(addr(u[0])), size)
 }
 
-// gpt-oss clamped-SwiGLU constants (llama.cpp hardcodes both in build_moe_ffn's SWIGLU_OAI arm)
+// gpt-oss clamped-SwiGLU constants (lcpp hardcodes both in build_moe_ffn's SWIGLU_OAI arm)
 let SWIGLU_OAI_ALPHA = 1.702
 let SWIGLU_OAI_LIMIT = 7.0
 

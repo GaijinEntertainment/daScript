@@ -2155,7 +2155,7 @@ class MetalGemmLab6464Prefetch {
 }
 
 // v21: the ggml kernel_mul_mm GEOMETRY on our planar Q8 contract — measured head-to-head vs
-// the (since-removed) verbatim llama.cpp reference. 64 outputs x 32 tokens per threadgroup (their NR0xNR1 — transposed
+// the (since-removed) verbatim lcpp reference. 64 outputs x 32 tokens per threadgroup (their NR0xNR1 — transposed
 // vs our 64x64), TILE-MAJOR 8x8 shared blocks so every simdgroup_load is one contiguous
 // 64-half run at stride 8, weights transposed WITHIN their tiles at staging (the math loop
 // needs no transposed loads), and all device reads issued into registers BEFORE the
@@ -2949,7 +2949,7 @@ class MetalGemmLabBlob36 {
     }
 }
 
-// v23: v22's geometry on llama.cpp's OWN 34B blob (half scale + 32 int8, quants 2-byte-offset)
+// v23: v22's geometry on lcpp's OWN 34B blob (half scale + 32 int8, quants 2-byte-offset)
 // — their exact W contract and byte-wise load/dequant pattern, das-authored. Isolates the
 // residual data-contract share of the verbatim gap: half scale = 5.6% less W traffic, and the
 // +2 quant offset forces scalar byte loads (the reason ggml reads bytes, not vectors).
@@ -3517,7 +3517,7 @@ struct private LabVariant {
     f32x : bool = false                     // binding 2 gets the PRE-DEQUANTIZED f32 activation panel
     wscT : bool = false                     // binding 1 gets the [block][row]-TRANSPOSED W scales
     blob36 : bool = false                   // bindings 0+1 get the SAME 36B-block W blob (scale/quant views) + f32 X
-    blob34 : bool = false                   // bindings 0+1 get llama.cpp's OWN 34B blob (half-scale/byte views) + f32 X
+    blob34 : bool = false                   // bindings 0+1 get lcpp's OWN 34B blob (half-scale/byte views) + f32 X
     blob34p : bool = false                  // the PRODUCTION mul_mm binding set: blob x2, f32 X, y, kdim, ndim
     tgmem : uint64 = 0ul                    // dynamic [[threadgroup(0)]] bytes (0 = kernel uses static tg arrays)
 }
@@ -3586,7 +3586,7 @@ def private download_floats(buf; var dst : array<float>; count : int64) {
 // The emitted v22 is fully unrolled SSA: LLVM hoists ~42 loop-invariant threadgroup addresses
 // (16 A-store + 2 B-store + 24 sgmat-load pointers) out of the k-loop, holding them in registers
 // for the kernel's whole life — max_threads drops 1024 -> 832 (register-limited) and occupancy
-// eats ~13%. This probe keeps v22's staging verbatim but rewrites the math as llama.cpp shapes
+// eats ~13%. This probe keeps v22's staging verbatim but rewrites the math as lcpp shapes
 // it: matrix ARRAYS + rolled unroll(full) loops + two bumped tile pointers, so the AGX backend
 // unrolls with register-budget awareness. das-side equivalent needs emitter work — probe first.
 let LAB_V22ROLL_MSL = "#include <metal_stdlib>
@@ -3870,10 +3870,10 @@ kernel void lab_v24h1(device const half* wsh [[buffer(0)]],
 
 
 // v26 probe: v25's emitted text with the STATIC threadgroup arrays swapped for one dynamic
-// [[threadgroup(0)]] buffer (llama.cpp's shmem shape). ISA rail: the backend constant-folds
+// [[threadgroup(0)]] buffer (lcpp's shmem shape). ISA rail: the backend constant-folds
 // carried tile pointers into absolute addresses of STATIC tg arrays and must materialize the
 // large offsets (23 iadds in the math phase); the opaque dynamic base keeps small carried
-// offsets — loop 185 -> 156 instructions, iadd 40 -> 15 (the llama.cpp reference: 165 / 24).
+// offsets — loop 185 -> 156 instructions, iadd 40 -> 15 (the lcpp reference: 165 / 24).
 let LAB_V26_SHMEM_MSL = "#include <metal_stdlib>
 using namespace metal;
 kernel void lab_shmem(device const half* wsh [[buffer(0)]],

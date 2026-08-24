@@ -11,7 +11,7 @@ require dasllama/dasllama_env
 
 //! The vision preprocessing rail: dynamic-resolution geometry, the letterbox resize
 //! (aspect-preserving bilinear + center pad on black), and u8→f32 normalize. Conventions
-//! mirror llama.cpp's mtmd `img_tool` exactly — corner-aligned bilinear ratio, float lerp,
+//! mirror lcpp's mtmd `img_tool` exactly — corner-aligned bilinear ratio, float lerp,
 //! truncating u8 cast, PAD_CEIL letterbox — so the tier-0 oracle gates are bit-exact by
 //! construction (`vision_plan.md` §pipeline, dumps in models/gemma4-vision-oracle/).
 

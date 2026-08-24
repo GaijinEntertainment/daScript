@@ -15,7 +15,7 @@ require strings
 // The Metal Q8 GEMV kernel lab — the emission (decode) arc's weight-stream detector. Decode is
 // GEMV-bandwidth-bound: one token reads every weight once (3B q8 ~3.4GB/token), so the metric
 // that matters is the WEIGHT GB/s each variant sustains, not GMAC/s. The single-stream done gate
-// (llama.cpp Metal tg128 = 87 t/s on the 3B) implies ~340 GB/s effective on M1 Max.
+// (lcpp Metal tg128 = 87 t/s on the 3B) implies ~340 GB/s effective on M1 Max.
 //
 // Batched decode (B independent streams, one weight pass) turns the GEMV into a skinny GEMM:
 // variants here stream the weight row ONCE and dot it against B activation vectors — the
@@ -36,6 +36,10 @@ require strings
 // shapes whose weights fit the system-level cache (q3b 9.4MB, kv3b 3.1MB, w13/w2 25MB partly)
 // report SLC bandwidth, not DRAM (q3b can exceed the 400GB/s DRAM peak). Real decode streams
 // all ~3.6GB once per token — cls3b (394MB) is the DRAM-honest proxy shape.
+//
+// NOTE (2026-08-24): production MetalQ8Gemv moved to the reduction-split form (2 rows/tg, the
+// n-walk split across 4 sgs), so v0_gemv now carries THAT kernel; every "v0" verdict below
+// predates the swap and describes the retired 1-row/sg form (q8_b1i keeps its algorithm on planar).
 //
 // Round-2 verdicts (M1 Max, 2026-07-14): v0/B1 ~352 wGB/s on cls3b (the bar is ~340) — the
 // single-stream GEMV is at target already; gemv_b1's plain loop matches it (the 4-in-flight
@@ -4197,7 +4201,9 @@ struct private LabVariant {
 // exact-arithmetic Q8 fill: quants in [-8, 7], pow2 scales (same contract as the gemm lab)
 def private fill_exact_q8(var q : array<int8>; var s : array<float>; rows, k : int64; seed : int64) {
     let nb = k / 32l
+    q |> reserve(rows * k)   // cls-size fills (600MB+) trip max_unreserved_size otherwise
     q |> resize(rows * k)
+    s |> reserve(rows * nb)
     s |> resize(rows * nb)
     let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
     for (i in range64(rows * k)) {
@@ -4213,6 +4219,7 @@ def private fill_exact_q8(var q : array<int8>; var s : array<float>; rows, k : i
 // fill's pow2 scales are f16-exact, so the f32 and f16 scale views carry the same value.
 def private pack_q8_blob(wq : array<int8>; ws : array<float>; rows, k : int64; var blob : array<uint8>) {
     let nb = k / 32l
+    blob |> reserve(rows * nb * 34l)   // cls-size blobs (600MB+) trip max_unreserved_size otherwise
     blob |> resize(rows * nb * 34l)
     for (r in range64(rows)) {
         for (bl in range64(nb)) {
@@ -4714,13 +4721,16 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
     // the llama-3B decode GEMV geometries (n = reduction dim, d = output rows) + the qwen3-4B
     // set (dim 2560 / qd 4096 / hidden 9728 — qd != dim splits the q and wo shapes) + the
     // gemma4-12B set (dim 3840 / hidden 15360; qkv = the sliding class 4096+2048+2048, wogl =
-    // the global class's qd-8192 reduction — the fattest n the batch loop dispatches)
+    // the global class's qd-8192 reduction — the fattest n the batch loop dispatches) + the
+    // qwen3vl-8B set (dim 4096 / hidden 12288 / vocab 151936 — the decode-tg chase shapes)
     var shapes <- [("q3b", 3072l, 3072l), ("kv3b", 3072l, 1024l), ("qkv3b", 3072l, 5120l), ("w13_3b", 3072l, 8192l),
                    ("w2_3b", 8192l, 3072l), ("cls3b", 3072l, 128256l),
                    ("qkv4b", 2560l, 6144l), ("wo4b", 4096l, 2560l), ("w13_4b", 2560l, 9728l),
                    ("w2_4b", 9728l, 2560l), ("cls4b", 2560l, 151936l),
                    ("qkv12b", 3840l, 8192l), ("wogl12b", 8192l, 3840l), ("w13_12b", 3840l, 15360l),
-                   ("w2_12b", 15360l, 3840l)]
+                   ("w2_12b", 15360l, 3840l),
+                   ("qkv8b", 4096l, 6144l), ("wo8b", 4096l, 4096l), ("w13_8b", 4096l, 12288l),
+                   ("w2_8b", 12288l, 4096l), ("cls8b", 4096l, 151936l)]
     for (sh in shapes) {
         if (!want(g_env_bench.lab_shapes, sh._0)) {
             continue
@@ -5061,7 +5071,7 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var variants <- [
             LabVariant(name = "v0_gemv", src = MetalQ8Gemv_metal_q8_gemv_msl, entry = MetalQ8Gemv_metal_q8_gemv_msl_entry,
-                       b_list <- [1], q8_blob = true),
+                       b_list <- [1], q8_blob = true, rtg = 2, tgmem = MetalQ8Gemv_metal_q8_gemv_msl_tgmem),
             LabVariant(name = "gemv_b2", src = lab_gemv_b2_msl, entry = lab_gemv_b2_msl_entry,
                        b_list <- [2]),
             LabVariant(name = "gemv_b4", src = lab_gemv_b4_msl, entry = lab_gemv_b4_msl_entry,

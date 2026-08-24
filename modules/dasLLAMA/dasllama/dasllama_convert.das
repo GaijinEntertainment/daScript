@@ -88,7 +88,7 @@ def dequant_q4k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array
 
 //! Dequantize one Q5_K superblock (176B at `bo`) into dst[doff..doff+256). w = (d*sc)*q - (dmin*m),
 //! q = nibble | (high bit << 4); the high bit for chunk js lives in bit 2js (low)/2js+1 (high) of
-//! qh[l], qh base fixed per superblock. Matches llama.cpp dequantize_row_q5_K op-for-op.
+//! qh[l], qh base fixed per superblock. Matches lcpp dequantize_row_q5_K op-for-op.
 def dequant_q5k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array<float>; doff : int64) {
     let d = f16_to_f32(rd_u16(bytes, bo))
     let dmin = f16_to_f32(rd_u16(bytes, bo + 2l))
@@ -118,7 +118,7 @@ def dequant_q5k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array
 
 //! Dequantize one Q6_K superblock (210 bytes at `bo`: 128 low-nibble bytes ql, 64 high-2-bit
 //! bytes qh, 16 int8 sub-scales for 16 sub-blocks of 16, fp16 d) into dst[doff .. doff+256).
-//! w = (d*sc)*q with q = (ql | qh<<4) - 32. Matches llama.cpp dequantize_row_q6_K op-for-op.
+//! w = (d*sc)*q with q = (ql | qh<<4) - 32. Matches lcpp dequantize_row_q6_K op-for-op.
 def dequant_q6k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array<float>; doff : int64) {
     let d = f16_to_f32(rd_u16(bytes, bo + 208l))
     var qlo = bo          // ql cursor (64 bytes per 128-weight half)
@@ -349,8 +349,8 @@ def dequant_k5_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<u
     }
 }
 
-// llama.cpp's nearest_int — round-half-to-even via the fp32 add-magic trick, replicated bit-for-bit
-// so encoder output stays byte-comparable against llama.cpp's. Caller guarantees |fval| <= 4194303.
+// lcpp's nearest_int — round-half-to-even via the fp32 add-magic trick, replicated bit-for-bit
+// so encoder output stays byte-comparable against lcpp's. Caller guarantees |fval| <= 4194303.
 
 def private nearest_int(fval : float) : int {
     let v = fval + 12582912.0
@@ -358,7 +358,7 @@ def private nearest_int(fval : float) : int {
     return (i & int(0x007fffff)) - int(0x00400000)
 }
 
-// Weighted joint scale/min fit for one 32-weight sub-block (llama.cpp make_qkx2_quants, nmax=31,
+// Weighted joint scale/min fit for one 32-weight sub-block (lcpp make_qkx2_quants, nmax=31,
 // rmin=-0.5, rdelta=0.1, 16 steps): sweeps iscale around the naive max/min fit and keeps the
 // weighted-least-squares (scale, min) with the lowest weighted square error. Returns (scale, -min).
 def private k5_fit_sub(x : float const?; wt : float const?; var lout : int?) : float2 {
@@ -434,8 +434,8 @@ def private k5_fit_sub(x : float const?; wt : float const?; var lout : int?) : f
 }
 
 // Encode one 256-weight superblock into the k5 planes — the exact inverse of
-// dequant_k5_plane_superblock, following llama.cpp quantize_row_q5_K_ref op-for-op.
-def private quantize_k5_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64) {  // nolint:STYLE038 — verbatim llama.cpp make_qkx2_quants port; splitting the oracle-matched encoder invites drift
+// dequant_k5_plane_superblock, following lcpp quantize_row_q5_K_ref op-for-op.
+def private quantize_k5_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64) {  // nolint:STYLE038 — verbatim lcpp make_qkx2_quants port; splitting the oracle-matched encoder invites drift
     unsafe {
         var lq : int[256]
         var lsub : int[32]
@@ -629,7 +629,7 @@ def transcode_q51_block(bytes : array<uint8> | #; bo : int64; var kq : array<uin
 }
 
 //! Reference dequant of one q51-plane 32-block: w = d * q + m with q = nibble | qh_bit << 4
-//! (elem k reads qh bit k, elem k+16 bit k+16 — the llama.cpp Q5_1 bit map, kept verbatim).
+//! (elem k reads qh bit k, elem k+16 bit k+16 — the lcpp Q5_1 bit map, kept verbatim).
 def dequant_q51_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
     let d = f16_to_f32(rd_u16(ks, kso))
     let m = f16_to_f32(rd_u16(ks, kso + 2l))
@@ -833,7 +833,7 @@ def template quantize_q8_0_bs_into_ptr_template(src : float const ?; n : int64; 
 [hint(noalias = src, noalias = qdst, noalias = sdst, noalias = bdst), tuned(fallback = "plain")]
 def quantize_q8_0_bs_into_ptr(src : float const?; n : int64; var qdst : int8?; var sdst : float?; var bdst : int?; qoff, soff, boff : int64) {}
 
-//! Q8_K-form activation quantization (kq v2 — llama.cpp K-quant dot contract): ONE scale per
+//! Q8_K-form activation quantization (kq v2 — lcpp K-quant dot contract): ONE scale per
 //! 256-element superblock (sdst) + per-16 quant sums (bdst, 16/superblock) — lets K-quant kernels
 //! fold sub-scale/bsums-x-mins per superblock instead of per 32-block. Separate plane from Q8_0.
 def quantize_q8_k_into(src : array<float> | #; n : int64; var qdst : array<int8>; var sdst : array<float>; var bdst : array<int>; qoff, soff, boff : int64) {

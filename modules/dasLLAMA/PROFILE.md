@@ -19,7 +19,7 @@ small tier answers the same question - did this change cost performance - in a f
 ## Rig 1 - the small tier (the routine check)
 
 Measures prefill and emission tok/s for every catalog model under 6 GiB that exists on this box,
-merges each row into `performance/profile_llm_<box>.json`, and pulls the llama.cpp column from the
+merges each row into `performance/profile_llm_<box>.json`, and pulls the lcpp column from the
 committed `baseline_llm_<box>.tsv` (never re-measured here).
 
 ```sh
@@ -73,7 +73,7 @@ cares about.
 
 ## Rig 2 - the oracle (the published board)
 
-Re-measures this box's stored rows and gates each against its recorded mean. llama.cpp never
+Re-measures this box's stored rows and gates each against its recorded mean. lcpp never
 runs, the store is never written, and the timed cell never mints - a prepare pass bakes and
 warms each cell's image first, and `tune_sha` carries the pin-set proof.
 
@@ -122,7 +122,7 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
 - `--das-settle <seconds>` (default 180) idles before every das cell - a different mechanism
   than `--settle`. das tuned kernels run near the package power ceiling; on a heat-soaked box
   they under-read with a CLEAN cv (gpt-oss tuned pp512 read -13.6% mid-board; 180 s of idle
-  restored it; llama.cpp refs never moved). The cv retry cannot catch a stable-low cell - only
+  restored it; lcpp refs never moved). The cv retry cannot catch a stable-low cell - only
   cool-slot entry can. Refs get no cool slot on purpose: they are insensitive, and skipping it
   saves hours.
 
@@ -212,7 +212,7 @@ bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- --tok -m <model.g
   quadratic encode. `--tok-corpus` narrows corpora; `--prompts` swaps the prose seed file.
 - `tok enc` rows are MB/s of input text; `tok dec` is the full-sequence decode; `tok piece` is the
   streaming per-token path. Every corpus round-trip-gates (`decode(encode(x)) == x`) before timing.
-- `--ref <llama-tokenize>` adds a llama.cpp encode estimate on the same bytes and vocab (process
+- `--ref <llama-tokenize>` adds a lcpp encode estimate on the same bytes and vocab (process
   wall minus a 1-byte baseline - an estimate; both raw walls print beside it).
 - Single-threaded by nature, txt output only, no records rail: a decision instrument for tokenizer
   work, not a board row.

@@ -37,7 +37,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    sandwich norms), gpt-oss (sinks, swiglu_oai). The vulkan kernels for MoE/deltanet already
    exist in the cooperative tier - the work is resident-driver plumbing, not new shaders.
    Walkthrough datum (2026-08-06): qwen35-0.8B serves CORRECTLY on the per-op rails but the
-   per-layer submit+fence cadence caps it at 35% tg / 8% pp of llama.cpp's whole-graph run -
+   per-layer submit+fence cadence caps it at 35% tg / 8% pp of lcpp's whole-graph run -
    the hybrid-ladder extension is the fix, and the carrier conversion already made
    dn_step_cls a TokMeta class kernel, so recurrent layers can encode straight into the
    recorded token cmd; what remains is ladder plumbing (recurrent roles in rd_record_token,
@@ -86,14 +86,14 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    They diverged at birth (vulkan's grid folds any integer literal, metal's only "1"); one
    owner ends that, and (b) rides on the hoisted core.
 
-11. **cm2 prefill GEMM - close the llama.cpp prefill gap (ACTIVE ARC, ruled 2026-08-06).**
-   Origin evidence (zen2, RTX 5060 Ti, class-kernel branch vs llama.cpp b9860 Vulkan,
+11. **cm2 prefill GEMM - close the lcpp prefill gap (ACTIVE ARC, ruled 2026-08-06).**
+   Origin evidence (zen2, RTX 5060 Ti, class-kernel branch vs lcpp b9860 Vulkan,
    tinyllama-1.1B Q8, pp512/tg128 x5): decode tg 291.6 vs 294.7 = **99% - parity**; prefill
    pp 7242 (mm) vs 20900 = 34.6%, and the old fmt-6 cm2 arm sat at 5917 +/- 125 = 28% - the
    gap was KERNEL QUALITY, not coverage.
    DONE in-arc: the l-geometry re-cut on NATIVE fmt-0 two-plane q8 (decode METHOD reads the
    scale plane - the class-method `[spirv_decode]` form), the fast/edge clamp split, the
-   m tile + split-k + llama.cpp's occupancy selection (`cm2_tile_cols`/`cm2_split_k`,
+   m tile + split-k + lcpp's occupancy selection (`cm2_tile_cols`/`cm2_split_k`,
    `shaderSMCount` via VK_NV_shader_sm_builtins), the decode/prefill format decouple (mode 4
    serves decode on the unchanged q8 GEMV chain - the 14% tg drag is gone), and the fmt-6
    q8n side stack DELETED end-to-end (KqFmt.q8n, the gather, the xf16/actf16 side chain's
@@ -101,7 +101,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    bounds - branch-derived k0/k1/ybase in the hot tensor loop measured -27% pp even with
    no-op values.
    STILL OPEN in this item:
-   (a) K-quant generalization - extend decode-in-load to k4/k5/k6/q40 (llama.cpp's
+   (a) K-quant generalization - extend decode-in-load to k4/k5/k6/q40 (lcpp's
    fetch_scales/store_scales shared-mem staging is the model);
    (b) per-device tile tuning - fold the l/m/split picks into the tune rail (item 7);
    (c) mode selection defaults - `has_coopmat2` should pick cm2 by itself instead of the
@@ -118,14 +118,14 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    PR gate - the MAIN FACTOR for MoltenVK/M1 enablement, where maxStorageBufferRange is far
    tighter than 4 GiB).** Walkthrough evidence that motivated it: Llama-3.1-8B Q8's fmt-0
    arena wants 7.5 GB against the device's 4294967295B maxStorageBufferRange - honest
-   fail-closed decline, per-op fallback served tg 7.2 vs llama.cpp's 49.8. As built: each
+   fail-closed decline, per-op fallback served tg 7.2 vs lcpp's 49.8. As built: each
    ArenaFmt carries lazily-opened slabs capped at msr-derived blocks (both plane strides);
    `arena_place` returns `(slab << 32) | local` so the encoding rides every existing seam
    unchanged; `arena_planes(fmt, blk)` binds the tensor's slab; region/schedule metas carry
    the local half; merged k/v splits at a slab boundary; per-call arena seams cache sets per
    slab; a single tensor over one slab declines. Multi-slab correctness gated by
    `test_vulkan_arena_slabs` (forced tiny slab cap). Measured: Llama-3.1-8B Q8 resident
-   across two slabs at 93.3% tg / 54.3% pp of llama.cpp (was 14% / 3% on the fallback).
+   across two slabs at 93.3% tg / 54.3% pp of lcpp (was 14% / 3% on the fallback).
    FALLOUT FOUND AND FIXED: the resident ctx auto-negotiation OVERSUBSCRIBED - uncapped it
    armed at ctx 25590 (weights + KV = 14.5GB of the 16GB card), WDDM demotion took tg to
    3.65. The plan now accounts the driver's own scratch (`rdec_scratch_bytes` - prefill
@@ -138,12 +138,12 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    2026-08-06: "unsupported family, easy to support").** The resident gate declines
    `attn_qkv_bias` alone for the whole qwen2 line; everything downstream is the std shape the
    ladder serves. Walkthrough row (Qwen2.5-1.5B Q8): das 35.6 tg / 465 pp on the per-op
-   fallback vs llama.cpp 202.4 / 14986 - 18% / 3%. Fix shape: per-row `+ b[row]` epilogue in
+   fallback vs lcpp 202.4 / 14986 - 18% / 3%. Fix shape: per-row `+ b[row]` epilogue in
    the qkv class GEMV (bias rows ride the arena or one extra binding, offset in the push),
    same arm for q/k/v; then drop `attn_qkv_bias` from the :534 gate.
 
 14. **The gemma cluster arms - medium family unlock covering gemma2 AND gemma3 (walkthrough
-   2026-08-06: both UNSUPPORTED, per-op fallback; gemma2-2b 22.8 tg / 327 pp vs llama.cpp
+   2026-08-06: both UNSUPPORTED, per-op fallback; gemma2-2b 22.8 tg / 327 pp vs lcpp
    124.1 / 9566, gemma3-1b 58.5 / 636 vs 236.2 / 21540).** The shared base: sandwich norms
    (`pre_post_norm` - an extra norm role per layer) + sliding-window alternation (a
    window-start word in decode attention - TokMeta has room). That pair alone unlocks
@@ -197,7 +197,7 @@ carried "by osmosis" - good kernels (the cm2 arc), good cache strategy, overall 
 goodness - their per-family arms are mechanical one-flag/one-cluster work, done
 opportunistically, never a focus. The focus after plumbing is NEW model shapes: MoE, MTP,
 hybrids - where design room actually exists. On MoE specifically the 3060-era record had
-das WINNING (better MoE strategy: heat cache, expert residency, async shexp - no llama.cpp
+das WINNING (better MoE strategy: heat cache, expert residency, async shexp - no lcpp
 analog); the walkthrough shows their remaining edge is the cm2 prefill kernel alone, so
 tensor kernels + our MoE strategy = the expected win condition on coopmat2 hardware too.
 

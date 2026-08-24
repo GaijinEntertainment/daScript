@@ -31,7 +31,7 @@ thing live instead. Files with no contested edge get one short line.
 Every file under `dasllama/` appears here. Two carry generated CONTENT rather than being
 generated themselves: `dasllama_env.das` holds the `[EnvConfig]` knob declarations (`ENVIRONMENT.md` is
 generated FROM it by `harness/gen_env_doc.das`), and `dasllama_unicode.das` is hand-written
-around transcoded data tables (RANGES/WS from llama.cpp's unicode-data.cpp - retranscode,
+around transcoded data tables (RANGES/WS from lcpp's unicode-data.cpp - retranscode,
 never hand-edit the tables).
 
 ### 1.1 Engine core
@@ -138,7 +138,7 @@ often gotten wrong, so each says explicitly where the neighbouring half goes.
 - **`dasllama_pretok.das`** - the pre-tokenizer: one hand-compiled split function per family
   (llama3/qwen2/qwen35, gpt-2, gpt-4o, tekken), selected by the BPE `pre` name. Regex-port growth
   lands here, never in the merge engine - the two change for different reasons (new model family
-  vs. algorithm work). Every arm with an on-disk llama.cpp corpus vocab is gated by its case in
+  vs. algorithm work). Every arm with an on-disk lcpp corpus vocab is gated by its case in
   `test_tokenizer.das` (llama3, qwen2, qwen35, gpt-2); tekken has no corpus case, and gpt-4o is
   pinned by frozen ids in `test_parity.das` only.
 
@@ -463,6 +463,14 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
   rail), in `utils/dasllama-convert/main.das` (the per-family `.dlim` bake tool dispatches on family by
   design), and in files under `tests/` - the set `REVIEW.das`'s seam check enforces.
 
+The banned-name scan (`REVIEW.das check_banned_name`): the upstream reference engine's project
+name in a `.md` file or a `.das` LINE comment anywhere under this module. Licensed set: paths
+whose name starts with `.` or `_rig` (build outputs and hidden dirs the walk skips), and `.das`
+code strings - real filesystem paths, clone URLs - which sit outside the scan by construction
+(a code string is not a comment). The comparison target is spelled `lcpp`; a doc path that
+would otherwise spell the name rides `$MODELS` (the models directory) or `$LCPP` (the
+reference checkout).
+
 Vision oracle provenance (the convention `REVIEW.md`'s fixture rule points at): real image
 fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated
 (their `performance/fetch_models.das` entries are the checkable pins); the mtmd reference dumps
@@ -474,7 +482,7 @@ exact `llama-mtmd-debug` / `llama-mtmd-cli` invocation that minted each
 dump, so regeneration is a command, not archaeology. An encode oracle dump is minted on the
 CPU, `-fa off`, from the f32-widened mmproj twin - the only true-f32 reference arm (the
 reference's Metal "f32" GEMM stages half operands, its flash-attention path casts K/V to f16,
-and the shipped bf16 mmproj rounds activations to bf16; llama.cpp's own four arms spread
+and the shipped bf16 mmproj rounds activations to bf16; lcpp's own four arms spread
 <= 6.5e-3 on the gemma4v tokens).
 
 ### 1.8 Instrumentation and support
@@ -634,10 +642,10 @@ dedup, it keeps its warning until the dedup lands.
 ### 2.5 There is ONE benchmark rig, and the records are the baseline
 
 `benchmarks/lcpp_bench.das` is the only thing that measures performance. It is a *mirror* of
-llama.cpp's `llama-bench` - the same test shapes, rep counts and timing boundaries, applied to
+lcpp's `llama-bench` - the same test shapes, rep counts and timing boundaries, applied to
 our engine - so `pp` is one batched prefill of `-p` tokens from an empty cache per rep and `tg`
 is `-n` single-token forwards with no logit read, each row one untimed warmup plus `-r` timed
-reps. The real `llama-bench` runs only when `--ref <path>` is passed; that is how the llama.cpp
+reps. The real `llama-bench` runs only when `--ref <path>` is passed; that is how the lcpp
 columns were produced, and they are pinned, not re-measured.
 
 `performance/gen_bench_records.das` sweeps a board by spawning that rig once per cell, and
@@ -647,7 +655,7 @@ a number is self-describing rather than a bare figure in a table.
 
 **Regression checking inverts the same rig:** `gen_bench_records.das --oracle --legs metal`
 takes the store's das rows as the work list, re-measures each once, and gates one-sided against
-its stored mean (fail past 5%, warn past 3%, gains flagged as suspicious). llama.cpp never runs,
+its stored mean (fail past 5%, warn past 3%, gains flagged as suspicious). lcpp never runs,
 the store is never written, and a text cell's timed child runs `--frozen` - a prepare pass bakes
 and warms its image first (the batch starts wiped), so the timed cell never converts; ASR and
 image-chat cells bake what they need mid-cell, like their publishing legs. A second
@@ -839,7 +847,7 @@ Durable "why it is built this way" facts harvested from the design docs archived
   intrinsic fallback bodies exist for off-ARCH correctness *inside* the JIT, not as runnable
   tiers.)
 - **Correctness before speed, token-for-token.** The engine is validated against external oracles
-  (llama2.c + llama.cpp `simple_ids`) plus per-arch parity fixtures. A new kernel passes the suite
+  (llama2.c + lcpp `simple_ids`) plus per-arch parity fixtures. A new kernel passes the suite
   *and* the oracles with the new backend active before any perf claim.
 - **Peak memory before cold-start latency - a DELIBERATE trade, and the standing tiebreak.** When a
   load-time choice pits footprint against wall-clock, dasLLAMA takes the smaller footprint. The

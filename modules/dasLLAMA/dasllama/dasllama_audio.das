@@ -22,7 +22,7 @@ require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-im
 require dasllama/dasllama_image
 
 // Whisper-family audio frontend: 16 kHz mono PCM -> log-mel chunks, in two oracle-exact
-// flavors: log_mel_chunks mirrors llama.cpp mtmd (tools/mtmd/mtmd-audio.cpp, qwen2a tower),
+// flavors: log_mel_chunks mirrors lcpp mtmd (tools/mtmd/mtmd-audio.cpp, qwen2a tower),
 // log_mel_whisper mirrors whisper.cpp's log_mel_spectrogram (different padding/floor/fill
 // rules — see whisper_plan.md). The 400-point DFT is two GEMM columns of a precomputed
 // twiddle matrix (minfft is pow2-only, and 400 = 2^4*25 is not) — see qwen2_audio_plan.md.

@@ -1,7 +1,7 @@
 options gen2
 options indenting = 4
 
-// scratch probe: run llama.cpp's OWN matmul_q8_0_f32_f16acc_aligned_l pipeline (the cm1/KHR-coopmat
+// scratch probe: run lcpp's OWN matmul_q8_0_f32_f16acc_aligned_l pipeline (the cm1/KHR-coopmat
 // mul_mm that clocks 13-27 TFLOPS in-graph) in OUR harness, on the exact in-graph shapes, isolated.
 // SPV straight from their build dir; spec constants = l_warptile_mmq + ALIGNED; push constants =
 // vk_mat_mat_push_constants exactly as the GGML_VULKAN_DEBUG dispatch lines showed. The question this

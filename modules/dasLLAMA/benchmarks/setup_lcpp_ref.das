@@ -11,9 +11,9 @@ require daslib/strings_boost
 //   clean-cpu: -DGGML_ACCELERATE=OFF -DGGML_BLAS=OFF -DGGML_METAL=OFF — kernel-vs-kernel fair
 //              (on Apple Silicon, Accelerate routes GEMM through the AMX coprocessor; das's own
 //              kernels don't use it)
-//   stock:     release defaults — llama.cpp as people actually run it (Accelerate + Metal on
+//   stock:     release defaults — lcpp as people actually run it (Accelerate + Metal on
 //              macOS); one build serves CPU rows (-ngl 0) and Metal rows (-ngl 99)
-// Usage: bin/daslang modules/dasLLAMA/benchmarks/setup_lcpp_ref.das -- --src ~/Work/llama.cpp
+// Usage: bin/daslang modules/dasLLAMA/benchmarks/setup_lcpp_ref.das -- --src <your reference checkout>
 // Point lcpp_bench --ref (or LLAMA_BENCH) at the reported binaries.
 
 // bump deliberately; the sha a record carries is what pins its ref, this is just the default

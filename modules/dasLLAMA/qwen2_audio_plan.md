@@ -8,7 +8,7 @@ linear projector produce soft tokens that splice into the EXISTING qwen2 decoder
 is shared infrastructure — the same tower unlocks Ultravox (llama decoder, have it) and most
 of a Whisper-proper port later.
 
-Oracle = llama.cpp mtmd. ggml-org ships NO pre-quantized GGUF for Qwen2-Audio (their note:
+Oracle = lcpp mtmd. ggml-org ships NO pre-quantized GGUF for Qwen2-Audio (their note:
 "very poor result", ref PR #13760) — we convert `Qwen/Qwen2-Audio-7B-Instruct` ourselves with
 the in-tree `convert_hf_to_gguf.py` (guaranteed tensor-name compat with the checkout's mtmd).
 Model quality is the model's problem; parity with mtmd is ours. Perf: `-jit` only, AOT =
@@ -64,7 +64,7 @@ resamples at decode time (`make_decoder(filename, rate, channels)` → 16 kHz mo
   token stream (temp 0) → GEN_IDS-style token-for-token parity, the arc's acceptance gate.
 - `MTMD_DEBUG_EMBEDDINGS=1` (clip.cpp:4484) dumps the projected soft tokens → stage-level
   gate for mel+conv+encoder+projector before the decoder is even wired.
-- Fixtures: `llama.cpp/tools/mtmd/test-2.mp3` (in-tree, what mtmd's own tests use) + jfk.wav
+- Fixtures: `lcpp/tools/mtmd/test-2.mp3` (in-tree, what mtmd's own tests use) + jfk.wav
   (the canonical whisper 11 s clip) + one LibriSpeech test-clean utterance + one non-speech
   sound (Qwen2-Audio does general audio understanding, not just ASR).
 
@@ -107,13 +107,13 @@ resamples at decode time (`make_decoder(filename, rate, channels)` → 16 kHz mo
   `set_audio_encode_ref_dir` witness rail bisected the one real bug in minutes: layer
   stride counted 7 d-vectors instead of 8, so each layer's fc2_b was clobbered by the next
   layer's ln1_w (attention perfect, FFN tail wrong).
-- prompt shape (from mtmd-cli debug logs): NO system message — llama.cpp's C++ chatml
+- prompt shape (from mtmd-cli debug logs): NO system message — lcpp's C++ chatml
   render does not inject the Jinja default. Exact stream:
   `<|im_start|>user\n<|audio_bos|>` + 750×n_chunks embeddings + `<|audio_eos|>{text}<|im_end|>\n<|im_start|>assistant\n`,
   ONE bos/eos pair around ALL chunks. ids: im_start 151644, im_end 151645, audio_bos
   151647, audio_eos 151648, `<|AUDIO|>` 151646 (unused by mtmd's splice).
 - **tokenizer gap**: `encode(parse_special=true)` is still documented-unhonored, and BPE
-  add_special prepends BOS where llama.cpp's qwen2 adds none. The demo assembles specials
+  add_special prepends BOS where lcpp's qwen2 adds none. The demo assembles specials
   by id + per-segment text encodes (the chat layer's pattern). Follow-up: honor
   parse_special in the tokenizer so multimodal drivers can tokenize rendered templates
   directly.

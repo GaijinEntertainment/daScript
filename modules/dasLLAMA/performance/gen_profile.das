@@ -6,7 +6,7 @@ options _dasllama_internal = true
 
 // The das-side half of the profiling suite: for each tier-selected model it measures prefill (one
 // batched forward_prefill) and emission (a greedy decode loop) tok/s under the tuned per-box runtime,
-// pulls the matching llama.cpp reference from the committed baseline TSV (never re-run here — see
+// pulls the matching lcpp reference from the committed baseline TSV (never re-run here — see
 // establish_baselines.das), and MERGES the row into the persistent per-box profile JSON. Partial runs
 // (small now, large later) merge into the same file. JIT-only, Parsec off.
 //   bin/daslang -jit modules/dasLLAMA/performance/gen_profile.das -- -t small

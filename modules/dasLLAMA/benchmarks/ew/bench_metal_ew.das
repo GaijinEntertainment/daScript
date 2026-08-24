@@ -13,7 +13,7 @@ require strings
 
 // Kernel 4 of the B=2 walkthrough: the elementwise pack (das-kernel lab).
 // Slot A (2x per layer): OUR MetalAddRmsB — ONE dispatch fusing the residual add (in place)
-// with the next rmsnorm (llama.cpp runs these as two dispatches; the residual add is not
+// with the next rmsnorm (lcpp runs these as two dispatches; the residual add is not
 // in its norm+weight fusion window).
 // Slot B (1x per layer): our one-thread-per-element swiglu.
 // Shapes: dim 3072, hidden 8192, B=2 rows.

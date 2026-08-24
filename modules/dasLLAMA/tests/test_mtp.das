@@ -19,7 +19,7 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // extra trunk-shaped draft block at layer index n_layers plus nextn.{eh_proj,enorm,hnorm,...}).
 // Three layers of gate, mirroring how the feature was proven in:
 //   1. loader: nextn extras load, and with spec OFF the trunk continues the fixture EXACTLY like
-//      the plain (non-MTP) file — trunk equality was proven via llama.cpp simple_ids on both files;
+//      the plain (non-MTP) file — trunk equality was proven via lcpp simple_ids on both files;
 //   2. output-invariance: generate_mtp_greedy() == generate() token-for-token — greedy self-spec
 //      changes wall time, never tokens (accept path reads batch-kernel logits, so this holds only
 //      under the PINNED bit-exact kernels, same reasoning as test_parity's parity_gen_ok);
@@ -30,7 +30,7 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 
 // Qwen3.5-0.8B word-counting fixture: "Count from one to twenty: one, two, three," and its greedy
 // 40-token continuation (" four, five, ... twenty.\nCount from one to twenty"). Frozen from
-// llama.cpp simple_ids on the PLAIN Qwen3.5-0.8B-Q8_0 file; simple_ids on the -MTP- file produced
+// lcpp simple_ids on the PLAIN Qwen3.5-0.8B-Q8_0 file; simple_ids on the -MTP- file produced
 // the identical PROMPT+GEN ids, so this single fixture gates the loader AND trunk equality of the
 // MTP conversion. Confident list momentum — near-tie-free under the pinned kernels.
 let MTP_PROMPT <- [2427l, 494l, 799l, 310l, 16570l, 25l, 799l, 11l, 1330l, 11l, 2250l, 11l]

@@ -141,7 +141,7 @@ def private detect_chat_kind(src : string) : string {
     return "gemma4" if (contains(src, "<|turn>"))                       // Gemma-4 channel-based turn format
     return "gemma2" if (contains(src, "<start_of_turn>"))               // Gemma (2 and 3 share the turn shape)
     return "phi3" if (contains(src, "<|end|>"))                         // Phi-3
-    // v7-tekken BY NAME (Voxtral stores the llama.cpp alias, not Jinja), or by SHAPE (Medium 3.5)
+    // v7-tekken BY NAME (Voxtral stores the lcpp alias, not Jinja), or by SHAPE (Medium 3.5)
     return "mistral-v7-tekken" if (contains(src, "v7-tekken") || contains(src, "[SYSTEM_PROMPT]"))
     return "mistral-instruct" if (contains(src, "[INST]"))              // Mistral instruct
     return "glm4moe" if (contains(src, "[gMASK]<sop>"))                 // GLM-4.5 family (spells <|user|> too — before Zephyr)
@@ -173,7 +173,7 @@ def chat_template(m : Model) : ChatTemplate {
 // ===== Renderer: ChatTemplate part list -> token ids =====
 
 // Encode each maximal run of text/content between special tokens as ONE segment — matches how
-// llama.cpp tokenizes a templated prompt (BPE/SPM merges do not cross special-token boundaries).
+// lcpp tokenizes a templated prompt (BPE/SPM merges do not cross special-token boundaries).
 def private render_parts(m : Model; parts : array<ChatPart>; content : string; var out : array<int64>) {
     var seg : array<string>   // the current text run, flushed (encoded as one segment) at each special
     for (p in parts) {

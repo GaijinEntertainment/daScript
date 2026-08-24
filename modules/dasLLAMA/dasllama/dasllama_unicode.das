@@ -8,13 +8,13 @@ require dasllama/dasllama_lint public
 require strings
 
 // Unicode classification + UTF-8 codec for the Llama-3 / tiktoken BPE pre-tokenizer.
-// GENERATED DATA: RANGES + WS are transcoded from llama.cpp src/unicode-data.cpp
+// GENERATED DATA: RANGES + WS are transcoded from lcpp src/unicode-data.cpp
 // (unicode_ranges_flags + unicode_set_whitespace) so cpt_is_letter / cpt_is_number /
-// cpt_is_whitespace match llama.cpp's unicode_cpt_flags_from_cpt exactly.
+// cpt_is_whitespace match lcpp's unicode_cpt_flags_from_cpt exactly.
 //   RANGES: sorted (codepoint_start << 8 | category_flags); bits 0x02=number (\p{N}),
 //           0x04=letter (\p{L}), 0x10=combining mark (\p{M}). Lookup = largest start <= cpt
 //           (binary search).
-//   WS:     explicit whitespace codepoints (\s) — llama.cpp keeps these apart from the
+//   WS:     explicit whitespace codepoints (\s) — lcpp keeps these apart from the
 //           \p{Z} SEPARATOR category, so whitespace is a separate set, not a range bit.
 
 let private RANGES <- [
@@ -193,12 +193,12 @@ def cpt_is_number(cpt : int) : bool {
     return (range_flags(cpt) & 2) != 0
 }
 
-//! True if codepoint is a unicode combining mark (regex \p{M}, llama.cpp is_accent_mark).
+//! True if codepoint is a unicode combining mark (regex \p{M}, lcpp is_accent_mark).
 def cpt_is_mark(cpt : int) : bool {
     return (range_flags(cpt) & 16) != 0
 }
 
-//! True if codepoint is whitespace (regex \s), per llama.cpp's whitespace set.
+//! True if codepoint is whitespace (regex \s), per lcpp's whitespace set.
 def cpt_is_whitespace(cpt : int) : bool {
     for (w in WS) {
         return true if (w == cpt)

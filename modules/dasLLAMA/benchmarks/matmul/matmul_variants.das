@@ -336,7 +336,7 @@ def matmul_q8flat_par(var y : array<float>; wq : array<int8> | #; ws : array<flo
 // --- Q8·Q8 (activation-quantized). The activation x is ALSO quantized to Q8 per block, so the
 // inner block loop is int8·int8 -> the LLVM JIT emits ARM SDOT (vdotq_s32: 16 int8 MACs/instr,
 // exact int32 accumulate). The two per-block fp32 scales (weight ws[b], activation xs[b]) multiply
-// in once per 32-wide block. This is llama.cpp's Q8_0 kernel shape. x is pre-quantized by the
+// in once per 32-wide block. This is lcpp's Q8_0 kernel shape. x is pre-quantized by the
 // caller (xq int8 [n] + xs fp32 [n/32]); reused across all d output rows.
 
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
@@ -1242,7 +1242,7 @@ def matmul_par(var y : array<float>; w : array<float> | #; x : array<float>; n, 
 }
 
 // ===== decode-GEMV variant race — the top-end weight-streaming hunt =====
-// Decode GEMV (1 token) is pure weight streaming. llama.cpp's live M1 kernel
+// Decode GEMV (1 token) is pure weight streaming. lcpp's live M1 kernel
 // (ggml_gemv_q8_0_4x4_q8_0 — their 4x8 tier needs i8mm, absent on M1) is the SAME shape as
 // dot_q8q8_laneq4 yet sustains ~119 GB/s in-situ vs our ~101. These variants probe the three
 // structural deltas, one axis at a time: block-loop unroll / loads in flight (u2h, u2, u4),
@@ -1597,7 +1597,7 @@ def dot_q8q8_laneq4_2g(var yp : float?; wg : int8 const?; sg : float const?; xq 
     }
 }
 
-// Single-stream inline-scale layout (llama.cpp block_q8_0x4 shape, fp32 scales): per 4-row group,
+// Single-stream inline-scale layout (lcpp block_q8_0x4 shape, fp32 scales): per 4-row group,
 // nb super-blocks of 144 bytes = [16B float4 block scales][128B interleaved quants]. Built from the
 // laneq layout at load — repack_q8q8_inline below.
 def repack_q8q8_inline(wgq : array<int8>; wgs : array<float>; n, d : int64; var out : array<int8>) {

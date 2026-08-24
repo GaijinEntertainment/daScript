@@ -30,7 +30,7 @@ Two genuinely new mechanisms, both rope-shaped:
 2. **Vision-mrope in the ViT** (`GGML_ROPE_TYPE_VISION`, sections d_head/4 = 18x4,
    n_dims = d_head/2 = 36, theta=10000) - the tower's 2D rope.
 
-**The mask is NOT new.** llama.cpp's causal mask is position-based and every image row
+**The mask is NOT new.** lcpp's causal mask is position-based and every image row
 shares t=pos_0, so the image span is bidirectional-within-span, causal outside - exactly the
 uniform-span mask the fused-image-span arc shipped (PR 3815: `Session.attn_uniform_lo/end`,
 `AttnArgs.ulo/uend`, CPU per-row select + Metal span eval). Qwen never sets
@@ -52,7 +52,7 @@ image-span prefill first (Metal IMROPE is a scheduled slice, not a decline-forev
 order: Omni core (no new tower mask, decoder already serving) -> dense deepstack (same graph
 + mergers + the decoder add + `qwen3vl` dense arch registration) -> qwen2.5o (new tower shape:
 window attention, RMS, gated FFN; decoder MROPE non-interleaved on the `qwen2vl` arch - this
-also completes `omni-3b`, whose audio half already serves). Oracle = llama.cpp mtmd
+also completes `omni-3b`, whose audio half already serves). Oracle = lcpp mtmd
 (`llama-mtmd-cli` / the patched `llama-mtmd-debug` with the vision-oracle rig from the gemma
 arc - fnv1a64 pixel dumps, per-token embedding lines, all reusable unchanged).
 
@@ -113,7 +113,7 @@ noise demands them).
 
 ## Slices (commit ladder, single PR; each lands its REVIEW.md entries with it)
 
-- **A. Oracle rig (DONE 2026-08-22)**: `~/Work/llama.cpp/models/qwen3vl-vision-oracle/` -
+- **A. Oracle rig (DONE 2026-08-22)**: `$MODELS/qwen3vl-vision-oracle/` -
   `mint.sh` + 17 dumps (10 preproc, 7 encode vs the f32-widened twin) + `cli.cats.log`;
   the gemma dasdebug patch worked unchanged. Facts pinned:
   - Geometry oracle-verified: 640->640, 100->96, 650x487->640x480, 528->544 (round-half-AWAY,
@@ -252,14 +252,14 @@ noise demands them).
 - **H. Deepstack (DONE 2026-08-22)**: the `qwen3vl` dense arch was ALREADY registered (the
   Qwen3-ASR precedent) and E1's sections read is arch-generic, so the decoder needed only
   `Config.n_deepstack` (loader: `{arch}.n_deepstack_layers`) + the slice-add rail. Design =
-  llama.cpp-congruent WIDE ROWS: the tower emits (1+n_ds)*proj_dim rows (slice 0 = main
+  lcpp-congruent WIDE ROWS: the tower emits (1+n_ds)*proj_dim rows (slice 0 = main
   merger, slice k+1 = tap k in encounter order), rows travel OPAQUELY through chat / worker /
   PendingReq / scheduler (zero plumbing there), and the eval seam (`forward_prefill_embd
   ds_wide`, exact-length detection in the three eval_embd entries) splits slice 0 into x_b
   and stashes the tails on `Session.ds_embd` (@scratch, `ds_active` framed like
   attn_uniform); the CPU layer loop adds slice l after layer l < n_ds to EVERY row - text
   rows carry zero tails (assembled by `embed_text_rows_strided`), which is exactly
-  llama.cpp's semantics, so no row masking exists anywhere. A ds quantum DECLINES every GPU
+  lcpp's semantics, so no row masking exists anywhere. A ds quantum DECLINES every GPU
   prefill override by name (tripwire-exempt) - the Metal per-layer-add kernel is an arc
   followup, needed before slice J's 8B Metal rows. Tower: taps collected from the TENSOR
   list (<=3), per-tap LayerNorm->fc1->GELU-LUT->fc2 over the x4-merged rows; the projector key
@@ -405,7 +405,7 @@ noise demands them).
    organ (fixtures, not preproc). Honorable mention: the vocab spells the span markers
    `<|vision_bos|>`/`<|vision_eos|>`, which no prediction saw coming.
 
-### Measurement predictions (registered 2026-08-22 BEFORE the J numbers; das vs llama.cpp,
+### Measurement predictions (registered 2026-08-22 BEFORE the J numbers; das vs lcpp,
 ### M1 Max t=8, coco fixture, `lcpp_bench --image` vs patched llama-mtmd-cli, r=3)
 
 Context the predictions price in: the Metal tower serves gemma3v/gemma4v ONLY - every qwen
@@ -537,7 +537,7 @@ bench drives `respond_` through it - the cell prices the literal shipped walk, a
 hand-splice divergence class dies.
 
 ### Slice M predictions (18 registered before the row-width probe ran; 19-22 before any
-### re-measurement or decomposition; das vs llama.cpp, M1 Max t=8, coco fixture)
+### re-measurement or decomposition; das vs lcpp, M1 Max t=8, coco fixture)
 
 18. The scramble hypothesis: the 4B mmproj scans ds=3 and emits wide rows, so the bench
     span is scrambled and ds-less. **SCORED: CORRECT** (probe above; called before running).
@@ -585,7 +585,7 @@ CPU-leg's; unexplained, parked - encode is slice-J/L territory).
 **Turn shapes verified equal both engines** (Boris's "same formats" check): das image npos =
 4 head + 300 rows + 17 tail = **321**; the mtmd ref's repriced rows = 41 + (300-20) = 321.
 Both engines KV f16; llama-bench/mtmd fa auto(on for Metal); same Q8_0 gguf (das planar
-repack = the das lane by design). llama.cpp build 98c4764b6 (2026-08-13).
+repack = the das lane by design). lcpp build 98c4764b6 (2026-08-13).
 
 **Text-M control (rig -p + --ref, same padded GEMM shapes as the image turn):** das text
 prefill is at parity - 4B p341 das 1038.3 vs ref 1011.3 (+2.7%), p512 +1.3%; 8B p341 -6.2%,
@@ -803,6 +803,16 @@ P31 (pool pins remove the slack) WRONG for pp, RIGHT for enc.
 From the arc's start: enc 2194/3446/6411 -> 179/257/241 (12-27x); pp -16/-29/-41% ->
 -16/-16/-5%. das leads every qwen3v Metal encode; the pp residual is ONE named mechanism
 with a scoped fix.
+
+#### Post-heartbeat + decode-GEMV refresh (2026-08-24)
+
+The residency heartbeat (metal-residency-ramp arc, merged) removed the ~40 ms
+commit->execution slack from every image turn (timed prefill 652 -> 612 ms): **img:pp 4B
+936.2 / 8B 524.5 / 30B 779.5 tok/s = -7/-7/-4% vs ref** (encode flat: 176.1/258.2/240.5 ms).
+The remaining ds-model gap decomposed as text-parity + the wide-quantum staging tax; the
+follow-on decode-tg chase (PERF_LEDGER, the reduction-split GEMV entry) then took the text
+decode itself from -9.6% to -2.3% (8B) - the residual on both fronts is now the fixed
+per-step submission overhead plus the ds staging, both ledgered.
 
 **Validation-round catch (make_pr battery): the tower missed the weights-epoch flush.**
 `test_vision_chat` deepstack cell red - the cats turn captioned a nonexistent eye, CPU lane

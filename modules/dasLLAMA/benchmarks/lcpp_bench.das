@@ -1,6 +1,6 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
-options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.cpp is benched
+options _jit_fast_math = true   // ggml-parity FP laxity — matches how lcpp is benched
 options _cyclomatic_complexity = 0   // bench cell main = the measurement protocol ladder
 options _function_length = 0   // same
 options _ascii_strings = false   // the bench report is human-facing: the markdown/console rows print the mean +- sd with a real plus-minus sign
@@ -36,7 +36,7 @@ require daslib/md_boost
 require math
 require dasllama/dasllama_env
 
-// llama-bench mirror — EXACTLY llama.cpp's test shapes, rep counts, and timing boundaries, and
+// llama-bench mirror — EXACTLY lcpp's test shapes, rep counts, and timing boundaries, and
 // NOTHING else. Two independent rows, each = one untimed warmup + -r timed reps, mean ± stdev:
 //   pp: one batched forward_prefill of -p tokens from an empty cache per rep
 //   tg: -n single-token forwards at pos 0.. per rep, feeding synthetic ids with NO logit read
@@ -86,7 +86,7 @@ struct Args {
     @clarg_doc = "Output format: txt, md (llama-bench-style table), json (public bench records) (default: txt)"
     output : OutFmt = OutFmt.txt
 
-    @clarg_doc = "Path to a llama-bench binary — also bench llama.cpp on the same GGUF, same shapes (with --tok: a llama-tokenize binary instead)"
+    @clarg_doc = "Path to a llama-bench binary — also bench lcpp on the same GGUF, same shapes (with --tok: a llama-tokenize binary instead)"
     ref : string
 
     @clarg_name = "ref-flavor"
@@ -810,7 +810,7 @@ def private tok_dec_row(tk : Tokenizer; corpus, text : string; reps : int; fmt :
     delete ids
 }
 
-// llama.cpp reference (encode only): llama-tokenize wall-clock minus a 1-byte-input baseline,
+// lcpp reference (encode only): llama-tokenize wall-clock minus a 1-byte-input baseline,
 // interleaved, best of `reps` each. A process-subtraction ESTIMATE — both raw walls print beside
 // it, and no estimate is claimed when tokenize does not dominate the process wall.
 def private tok_ref_row(ref_bin, gguf, corpus, text : string; reps : int; fmt : OutFmt) {
@@ -1626,7 +1626,7 @@ def main() : int {
             delete refRows
             continue
         }
-    // -o json: the public bench records — one BenchModel per gguf, das run + optional llama.cpp sibling
+    // -o json: the public bench records — one BenchModel per gguf, das run + optional lcpp sibling
     let hw = gather_hardware()
     let date = format_time(get_clock(), "%Y-%m-%d")
     let box = box_name()
