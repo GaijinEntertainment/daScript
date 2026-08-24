@@ -227,6 +227,30 @@ an entry lands here only when no name, shape, or test can carry it.
   need `sizeof` even untouched, and by-value field types emit depth-first before their
   owner, or the type degrades to a forward declaration.
 
+## aot_standalone
+
+- **The generated constructor IS the init protocol** - a standalone context never calls
+  `Context::runInitScript`, so the ctor reproduces its observable semantics inline:
+  `memset(context.globals, 0, context.getGlobalSize())` mirrors runInitScript's globals
+  memset (`src/runtime/context.cpp`), then the same-TU `__init_script(&context, true)`
+  (signature written by `aot_cpp.das`'s `preVisitGlobalLet` - a daslib-to-daslib pairing,
+  nothing checks agreement), then each `[init]` function directly. Deliberate divergences:
+  `__init_shared` is hardcoded `true` (a fresh standalone context always owns its
+  shared globals), there is no `globalInitStackSize` stack push (init locals are C++
+  locals in AOT), and there is no `!stopFlags` guard between `[init]` calls (a panic
+  propagates out of the ctor instead of soft-stopping the sequence).
+- **Global init order is a pact with the allocator**: `StandaloneContextGen`'s
+  `preVisitGlobalLet` emits required modules' globals via ordered `for_each_module`
+  before the adapter walks the entry module's own - correct only because
+  `ast_allocate_stack.cpp` assigns `var->index` through the same dependency-first
+  module order with the entry module last, and `runInitScript` executes ascending
+  index. `[init]` function order is not re-derived at all: the emitter reads the
+  simulated context's list through rtti `for_each_init_function`, so the C++ late-init
+  sort stays the single source of truth.
+- **Cross-module limits fail loud at emit time**: only main-module, AOT-emitted `[init]`
+  functions can be called from the ctor (required-module and `[no_aot]` ones panic with
+  the reason), because the standalone TU only emits the entry module's function bodies.
+
 ## flatten
 
 - **Predicated lowering carries one live-mask per exit flavor** - `__flat_live` for

@@ -1217,7 +1217,19 @@ class CppGenBind : AnyGenBind {
         let spl = string(clang_getTypeSpelling(t))
         if (c.kind == CXTypeKind.Enum) return enum2enum?[spl] ?? spl
         if (t.kind == CXTypeKind.Long || t.kind == CXTypeKind.LongLong || t.kind == CXTypeKind.ULong || t.kind == CXTypeKind.ULongLong) return nspl // fancy type, may differ per platform
+        if (t.kind == CXTypeKind.Pointer) {
+            let pt = clang_getPointeeType(t)
+            if (pt.kind == CXTypeKind.Long || pt.kind == CXTypeKind.LongLong || pt.kind == CXTypeKind.ULong || pt.kind == CXTypeKind.ULongLong) return nspl
+        }
         return spl
+    }
+    def emitDesktopStub(var c : CXCursor; function_cpp_name : string) {
+        // signatures-only stub: links on a host lacking the real symbol, never runs.
+        let macro_proof_name = "({function_cpp_name})"
+        let stub_header = functionHeaderSpelling(c, false, false, false, macro_proof_name, "")
+        var stub_fun_type = clang_getCursorType(c)
+        let is_void = clang_getResultType(stub_fun_type).kind == CXTypeKind.Void
+        fprint(desktop_stub_file, "{stub_header} \{ return{is_void ? "" : " \{\}"}; \}\n")
     }
     def functionHeaderSpelling(var c : CXCursor; isMethod, needMethodQualifier, needArgumentNames : bool; function_name, self_type : string) {
         // TODO: calling convention?
@@ -1420,11 +1432,7 @@ class CppGenBind : AnyGenBind {
             bind_enchantation = " {function_cpp_type} , {function_cpp_name} "
             cpp_enchantation = function_cpp_name
             if (desktop_stub_file != null && emit_desktop_stub(function_name)) {
-                // signatures-only stub: links on a host lacking the real symbol, never runs.
-                // `return ({R})0;` covers void too (`return (void)0;` is legal).
-                let stub_header = functionHeaderSpelling(c, false, false, false, function_cpp_name, "")
-                let res_sp = typeSpelling(clang_getResultType(clang_getCursorType(c)))
-                fprint(desktop_stub_file, "{stub_header} \{ return ({res_sp})0; \}\n")
+                emitDesktopStub(c, function_cpp_name)
             }
         }
         fprint(func_file, from_comment(c))
@@ -1447,13 +1455,14 @@ class CppGenBind : AnyGenBind {
             for (ai in urange(narg)) {
                 let aii = int(isMethod ? ai + 1u : ai)
                 var carg = clang_Cursor_getArgument(c, ai)
-                var cp = getCursorArgType(clang_getCursorType(carg))     // non-canonical
+                var carg_type = clang_getCursorType(carg)
+                var cp = getCursorArgType(carg_type)     // non-canonical
                 // a binder may pin a (function,arg) to its raw C int instead of the enum
                 // retype, to preserve a shipped signature; cp="" -> int + ExprConstInt default
                 if (cp != "" && keep_c_arg_type(das_function_name, string(clang_getCursorSpelling(carg)), aii)) {
                     cp = ""
                 }
-                if (cp != "") {
+                if (cp != "" && cp != typeSpelling(carg_type)) {
                     fprint(func_file, "\n\t\t->arg_type({aii},makeType<{cp}>(lib))")
                 }
                 let cv = getCursorInit(carg, cp)

@@ -8,244 +8,244 @@
 #endif
 #include <GLES3/gl3.h>
 extern "C" {
-void glActiveTexture(unsigned int) { return (void)0; }
-void glAttachShader(unsigned int,unsigned int) { return (void)0; }
-void glBindAttribLocation(unsigned int,unsigned int,const char *) { return (void)0; }
-void glBindBuffer(unsigned int,unsigned int) { return (void)0; }
-void glBindFramebuffer(unsigned int,unsigned int) { return (void)0; }
-void glBindRenderbuffer(unsigned int,unsigned int) { return (void)0; }
-void glBindTexture(unsigned int,unsigned int) { return (void)0; }
-void glBlendColor(float,float,float,float) { return (void)0; }
-void glBlendEquation(unsigned int) { return (void)0; }
-void glBlendEquationSeparate(unsigned int,unsigned int) { return (void)0; }
-void glBlendFunc(unsigned int,unsigned int) { return (void)0; }
-void glBlendFuncSeparate(unsigned int,unsigned int,unsigned int,unsigned int) { return (void)0; }
-unsigned int glCheckFramebufferStatus(unsigned int) { return (unsigned int)0; }
-void glClear(unsigned int) { return (void)0; }
-void glClearColor(float,float,float,float) { return (void)0; }
-void glClearDepthf(float) { return (void)0; }
-void glClearStencil(int) { return (void)0; }
-void glColorMask(unsigned char,unsigned char,unsigned char,unsigned char) { return (void)0; }
-void glCompileShader(unsigned int) { return (void)0; }
-void glCompressedTexImage2D(unsigned int,int,unsigned int,int,int,int,int,const void *) { return (void)0; }
-void glCompressedTexSubImage2D(unsigned int,int,int,int,int,int,unsigned int,int,const void *) { return (void)0; }
-void glCopyTexImage2D(unsigned int,int,unsigned int,int,int,int,int,int) { return (void)0; }
-void glCopyTexSubImage2D(unsigned int,int,int,int,int,int,int,int) { return (void)0; }
-unsigned int glCreateProgram() { return (unsigned int)0; }
-unsigned int glCreateShader(unsigned int) { return (unsigned int)0; }
-void glCullFace(unsigned int) { return (void)0; }
-void glDeleteBuffers(int,const unsigned int *) { return (void)0; }
-void glDeleteFramebuffers(int,const unsigned int *) { return (void)0; }
-void glDeleteProgram(unsigned int) { return (void)0; }
-void glDeleteRenderbuffers(int,const unsigned int *) { return (void)0; }
-void glDeleteShader(unsigned int) { return (void)0; }
-void glDeleteTextures(int,const unsigned int *) { return (void)0; }
-void glDepthFunc(unsigned int) { return (void)0; }
-void glDepthMask(unsigned char) { return (void)0; }
-void glDepthRangef(float,float) { return (void)0; }
-void glDetachShader(unsigned int,unsigned int) { return (void)0; }
-void glDisable(unsigned int) { return (void)0; }
-void glDisableVertexAttribArray(unsigned int) { return (void)0; }
-void glDrawArrays(unsigned int,int,int) { return (void)0; }
-void glDrawElements(unsigned int,int,unsigned int,const void *) { return (void)0; }
-void glEnable(unsigned int) { return (void)0; }
-void glEnableVertexAttribArray(unsigned int) { return (void)0; }
-void glFinish() { return (void)0; }
-void glFlush() { return (void)0; }
-void glFramebufferRenderbuffer(unsigned int,unsigned int,unsigned int,unsigned int) { return (void)0; }
-void glFramebufferTexture2D(unsigned int,unsigned int,unsigned int,unsigned int,int) { return (void)0; }
-void glFrontFace(unsigned int) { return (void)0; }
-void glGenBuffers(int,unsigned int *) { return (void)0; }
-void glGenerateMipmap(unsigned int) { return (void)0; }
-void glGenFramebuffers(int,unsigned int *) { return (void)0; }
-void glGenRenderbuffers(int,unsigned int *) { return (void)0; }
-void glGenTextures(int,unsigned int *) { return (void)0; }
-void glGetActiveAttrib(unsigned int,unsigned int,int,int *,int *,unsigned int *,char *) { return (void)0; }
-void glGetActiveUniform(unsigned int,unsigned int,int,int *,int *,unsigned int *,char *) { return (void)0; }
-void glGetAttachedShaders(unsigned int,int,int *,unsigned int *) { return (void)0; }
-int glGetAttribLocation(unsigned int,const char *) { return (int)0; }
-void glGetBufferParameteriv(unsigned int,unsigned int,int *) { return (void)0; }
-unsigned int glGetError() { return (unsigned int)0; }
-void glGetFloatv(unsigned int,float *) { return (void)0; }
-void glGetFramebufferAttachmentParameteriv(unsigned int,unsigned int,unsigned int,int *) { return (void)0; }
-void glGetIntegerv(unsigned int,int *) { return (void)0; }
-void glGetProgramiv(unsigned int,unsigned int,int *) { return (void)0; }
-void glGetProgramInfoLog(unsigned int,int,int *,char *) { return (void)0; }
-void glGetRenderbufferParameteriv(unsigned int,unsigned int,int *) { return (void)0; }
-void glGetShaderiv(unsigned int,unsigned int,int *) { return (void)0; }
-void glGetShaderInfoLog(unsigned int,int,int *,char *) { return (void)0; }
-void glGetShaderPrecisionFormat(unsigned int,unsigned int,int *,int *) { return (void)0; }
-void glGetShaderSource(unsigned int,int,int *,char *) { return (void)0; }
-const unsigned char * glGetString(unsigned int) { return (const unsigned char *)0; }
-void glGetTexParameterfv(unsigned int,unsigned int,float *) { return (void)0; }
-void glGetTexParameteriv(unsigned int,unsigned int,int *) { return (void)0; }
-void glGetUniformfv(unsigned int,int,float *) { return (void)0; }
-void glGetUniformiv(unsigned int,int,int *) { return (void)0; }
-int glGetUniformLocation(unsigned int,const char *) { return (int)0; }
-void glGetVertexAttribfv(unsigned int,unsigned int,float *) { return (void)0; }
-void glGetVertexAttribiv(unsigned int,unsigned int,int *) { return (void)0; }
-void glGetVertexAttribPointerv(unsigned int,unsigned int,void **) { return (void)0; }
-void glHint(unsigned int,unsigned int) { return (void)0; }
-unsigned char glIsBuffer(unsigned int) { return (unsigned char)0; }
-unsigned char glIsEnabled(unsigned int) { return (unsigned char)0; }
-unsigned char glIsFramebuffer(unsigned int) { return (unsigned char)0; }
-unsigned char glIsProgram(unsigned int) { return (unsigned char)0; }
-unsigned char glIsRenderbuffer(unsigned int) { return (unsigned char)0; }
-unsigned char glIsShader(unsigned int) { return (unsigned char)0; }
-unsigned char glIsTexture(unsigned int) { return (unsigned char)0; }
-void glLineWidth(float) { return (void)0; }
-void glLinkProgram(unsigned int) { return (void)0; }
-void glPixelStorei(unsigned int,int) { return (void)0; }
-void glPolygonOffset(float,float) { return (void)0; }
-void glReadPixels(int,int,int,int,unsigned int,unsigned int,void *) { return (void)0; }
-void glReleaseShaderCompiler() { return (void)0; }
-void glRenderbufferStorage(unsigned int,unsigned int,int,int) { return (void)0; }
-void glSampleCoverage(float,unsigned char) { return (void)0; }
-void glScissor(int,int,int,int) { return (void)0; }
-void glShaderBinary(int,const unsigned int *,unsigned int,const void *,int) { return (void)0; }
-void glShaderSource(unsigned int,int,const char *const *,const int *) { return (void)0; }
-void glStencilFunc(unsigned int,int,unsigned int) { return (void)0; }
-void glStencilFuncSeparate(unsigned int,unsigned int,int,unsigned int) { return (void)0; }
-void glStencilMask(unsigned int) { return (void)0; }
-void glStencilMaskSeparate(unsigned int,unsigned int) { return (void)0; }
-void glStencilOp(unsigned int,unsigned int,unsigned int) { return (void)0; }
-void glStencilOpSeparate(unsigned int,unsigned int,unsigned int,unsigned int) { return (void)0; }
-void glTexImage2D(unsigned int,int,int,int,int,int,unsigned int,unsigned int,const void *) { return (void)0; }
-void glTexParameterf(unsigned int,unsigned int,float) { return (void)0; }
-void glTexParameterfv(unsigned int,unsigned int,const float *) { return (void)0; }
-void glTexParameteri(unsigned int,unsigned int,int) { return (void)0; }
-void glTexParameteriv(unsigned int,unsigned int,const int *) { return (void)0; }
-void glTexSubImage2D(unsigned int,int,int,int,int,int,unsigned int,unsigned int,const void *) { return (void)0; }
-void glUniform1f(int,float) { return (void)0; }
-void glUniform1fv(int,int,const float *) { return (void)0; }
-void glUniform1i(int,int) { return (void)0; }
-void glUniform1iv(int,int,const int *) { return (void)0; }
-void glUniform2f(int,float,float) { return (void)0; }
-void glUniform2fv(int,int,const float *) { return (void)0; }
-void glUniform2i(int,int,int) { return (void)0; }
-void glUniform2iv(int,int,const int *) { return (void)0; }
-void glUniform3f(int,float,float,float) { return (void)0; }
-void glUniform3fv(int,int,const float *) { return (void)0; }
-void glUniform3i(int,int,int,int) { return (void)0; }
-void glUniform3iv(int,int,const int *) { return (void)0; }
-void glUniform4f(int,float,float,float,float) { return (void)0; }
-void glUniform4fv(int,int,const float *) { return (void)0; }
-void glUniform4i(int,int,int,int,int) { return (void)0; }
-void glUniform4iv(int,int,const int *) { return (void)0; }
-void glUniformMatrix2fv(int,int,unsigned char,const float *) { return (void)0; }
-void glUniformMatrix3fv(int,int,unsigned char,const float *) { return (void)0; }
-void glUniformMatrix4fv(int,int,unsigned char,const float *) { return (void)0; }
-void glUseProgram(unsigned int) { return (void)0; }
-void glValidateProgram(unsigned int) { return (void)0; }
-void glVertexAttrib1f(unsigned int,float) { return (void)0; }
-void glVertexAttrib1fv(unsigned int,const float *) { return (void)0; }
-void glVertexAttrib2f(unsigned int,float,float) { return (void)0; }
-void glVertexAttrib2fv(unsigned int,const float *) { return (void)0; }
-void glVertexAttrib3f(unsigned int,float,float,float) { return (void)0; }
-void glVertexAttrib3fv(unsigned int,const float *) { return (void)0; }
-void glVertexAttrib4f(unsigned int,float,float,float,float) { return (void)0; }
-void glVertexAttrib4fv(unsigned int,const float *) { return (void)0; }
-void glVertexAttribPointer(unsigned int,int,unsigned int,unsigned char,int,const void *) { return (void)0; }
-void glViewport(int,int,int,int) { return (void)0; }
-void glReadBuffer(unsigned int) { return (void)0; }
-void glDrawRangeElements(unsigned int,unsigned int,unsigned int,int,unsigned int,const void *) { return (void)0; }
-void glTexImage3D(unsigned int,int,int,int,int,int,int,unsigned int,unsigned int,const void *) { return (void)0; }
-void glTexSubImage3D(unsigned int,int,int,int,int,int,int,int,unsigned int,unsigned int,const void *) { return (void)0; }
-void glCopyTexSubImage3D(unsigned int,int,int,int,int,int,int,int,int) { return (void)0; }
-void glCompressedTexImage3D(unsigned int,int,unsigned int,int,int,int,int,int,const void *) { return (void)0; }
-void glCompressedTexSubImage3D(unsigned int,int,int,int,int,int,int,int,unsigned int,int,const void *) { return (void)0; }
-void glGenQueries(int,unsigned int *) { return (void)0; }
-void glDeleteQueries(int,const unsigned int *) { return (void)0; }
-unsigned char glIsQuery(unsigned int) { return (unsigned char)0; }
-void glBeginQuery(unsigned int,unsigned int) { return (void)0; }
-void glEndQuery(unsigned int) { return (void)0; }
-void glGetQueryiv(unsigned int,unsigned int,int *) { return (void)0; }
-void glGetQueryObjectuiv(unsigned int,unsigned int,unsigned int *) { return (void)0; }
-unsigned char glUnmapBuffer(unsigned int) { return (unsigned char)0; }
-void glGetBufferPointerv(unsigned int,unsigned int,void **) { return (void)0; }
-void glDrawBuffers(int,const unsigned int *) { return (void)0; }
-void glUniformMatrix2x3fv(int,int,unsigned char,const float *) { return (void)0; }
-void glUniformMatrix3x2fv(int,int,unsigned char,const float *) { return (void)0; }
-void glUniformMatrix2x4fv(int,int,unsigned char,const float *) { return (void)0; }
-void glUniformMatrix4x2fv(int,int,unsigned char,const float *) { return (void)0; }
-void glUniformMatrix3x4fv(int,int,unsigned char,const float *) { return (void)0; }
-void glUniformMatrix4x3fv(int,int,unsigned char,const float *) { return (void)0; }
-void glBlitFramebuffer(int,int,int,int,int,int,int,int,unsigned int,unsigned int) { return (void)0; }
-void glRenderbufferStorageMultisample(unsigned int,int,unsigned int,int,int) { return (void)0; }
-void glFramebufferTextureLayer(unsigned int,unsigned int,unsigned int,int,int) { return (void)0; }
-void glBindVertexArray(unsigned int) { return (void)0; }
-void glDeleteVertexArrays(int,const unsigned int *) { return (void)0; }
-void glGenVertexArrays(int,unsigned int *) { return (void)0; }
-unsigned char glIsVertexArray(unsigned int) { return (unsigned char)0; }
-void glGetIntegeri_v(unsigned int,unsigned int,int *) { return (void)0; }
-void glBeginTransformFeedback(unsigned int) { return (void)0; }
-void glEndTransformFeedback() { return (void)0; }
-void glBindBufferBase(unsigned int,unsigned int,unsigned int) { return (void)0; }
-void glTransformFeedbackVaryings(unsigned int,int,const char *const *,unsigned int) { return (void)0; }
-void glGetTransformFeedbackVarying(unsigned int,unsigned int,int,int *,int *,unsigned int *,char *) { return (void)0; }
-void glVertexAttribIPointer(unsigned int,int,unsigned int,int,const void *) { return (void)0; }
-void glGetVertexAttribIiv(unsigned int,unsigned int,int *) { return (void)0; }
-void glGetVertexAttribIuiv(unsigned int,unsigned int,unsigned int *) { return (void)0; }
-void glVertexAttribI4i(unsigned int,int,int,int,int) { return (void)0; }
-void glVertexAttribI4ui(unsigned int,unsigned int,unsigned int,unsigned int,unsigned int) { return (void)0; }
-void glVertexAttribI4iv(unsigned int,const int *) { return (void)0; }
-void glVertexAttribI4uiv(unsigned int,const unsigned int *) { return (void)0; }
-void glGetUniformuiv(unsigned int,int,unsigned int *) { return (void)0; }
-int glGetFragDataLocation(unsigned int,const char *) { return (int)0; }
-void glUniform1ui(int,unsigned int) { return (void)0; }
-void glUniform2ui(int,unsigned int,unsigned int) { return (void)0; }
-void glUniform3ui(int,unsigned int,unsigned int,unsigned int) { return (void)0; }
-void glUniform4ui(int,unsigned int,unsigned int,unsigned int,unsigned int) { return (void)0; }
-void glUniform1uiv(int,int,const unsigned int *) { return (void)0; }
-void glUniform2uiv(int,int,const unsigned int *) { return (void)0; }
-void glUniform3uiv(int,int,const unsigned int *) { return (void)0; }
-void glUniform4uiv(int,int,const unsigned int *) { return (void)0; }
-void glClearBufferiv(unsigned int,int,const int *) { return (void)0; }
-void glClearBufferuiv(unsigned int,int,const unsigned int *) { return (void)0; }
-void glClearBufferfv(unsigned int,int,const float *) { return (void)0; }
-void glClearBufferfi(unsigned int,int,float,int) { return (void)0; }
-const unsigned char * glGetStringi(unsigned int,unsigned int) { return (const unsigned char *)0; }
-void glGetUniformIndices(unsigned int,int,const char *const *,unsigned int *) { return (void)0; }
-void glGetActiveUniformsiv(unsigned int,int,const unsigned int *,unsigned int,int *) { return (void)0; }
-unsigned int glGetUniformBlockIndex(unsigned int,const char *) { return (unsigned int)0; }
-void glGetActiveUniformBlockiv(unsigned int,unsigned int,unsigned int,int *) { return (void)0; }
-void glGetActiveUniformBlockName(unsigned int,unsigned int,int,int *,char *) { return (void)0; }
-void glUniformBlockBinding(unsigned int,unsigned int,unsigned int) { return (void)0; }
-void glDrawArraysInstanced(unsigned int,int,int,int) { return (void)0; }
-void glDrawElementsInstanced(unsigned int,int,unsigned int,const void *,int) { return (void)0; }
-__GLsync * glFenceSync(unsigned int,unsigned int) { return (__GLsync *)0; }
-unsigned char glIsSync(__GLsync *) { return (unsigned char)0; }
-void glDeleteSync(__GLsync *) { return (void)0; }
-unsigned int glClientWaitSync(__GLsync *,unsigned int,GLuint64) { return (unsigned int)0; }
-void glWaitSync(__GLsync *,unsigned int,GLuint64) { return (void)0; }
-void glGetInteger64v(unsigned int,GLint64 *) { return (void)0; }
-void glGetSynciv(__GLsync *,unsigned int,int,int *,int *) { return (void)0; }
-void glGetInteger64i_v(unsigned int,unsigned int,GLint64 *) { return (void)0; }
-void glGetBufferParameteri64v(unsigned int,unsigned int,GLint64 *) { return (void)0; }
-void glGenSamplers(int,unsigned int *) { return (void)0; }
-void glDeleteSamplers(int,const unsigned int *) { return (void)0; }
-unsigned char glIsSampler(unsigned int) { return (unsigned char)0; }
-void glBindSampler(unsigned int,unsigned int) { return (void)0; }
-void glSamplerParameteri(unsigned int,unsigned int,int) { return (void)0; }
-void glSamplerParameteriv(unsigned int,unsigned int,const int *) { return (void)0; }
-void glSamplerParameterf(unsigned int,unsigned int,float) { return (void)0; }
-void glSamplerParameterfv(unsigned int,unsigned int,const float *) { return (void)0; }
-void glGetSamplerParameteriv(unsigned int,unsigned int,int *) { return (void)0; }
-void glGetSamplerParameterfv(unsigned int,unsigned int,float *) { return (void)0; }
-void glVertexAttribDivisor(unsigned int,unsigned int) { return (void)0; }
-void glBindTransformFeedback(unsigned int,unsigned int) { return (void)0; }
-void glDeleteTransformFeedbacks(int,const unsigned int *) { return (void)0; }
-void glGenTransformFeedbacks(int,unsigned int *) { return (void)0; }
-unsigned char glIsTransformFeedback(unsigned int) { return (unsigned char)0; }
-void glPauseTransformFeedback() { return (void)0; }
-void glResumeTransformFeedback() { return (void)0; }
-void glGetProgramBinary(unsigned int,int,int *,unsigned int *,void *) { return (void)0; }
-void glProgramBinary(unsigned int,unsigned int,const void *,int) { return (void)0; }
-void glProgramParameteri(unsigned int,unsigned int,int) { return (void)0; }
-void glInvalidateFramebuffer(unsigned int,int,const unsigned int *) { return (void)0; }
-void glInvalidateSubFramebuffer(unsigned int,int,const unsigned int *,int,int,int,int) { return (void)0; }
-void glTexStorage2D(unsigned int,int,unsigned int,int,int) { return (void)0; }
-void glTexStorage3D(unsigned int,int,unsigned int,int,int,int) { return (void)0; }
-void glGetInternalformativ(unsigned int,unsigned int,unsigned int,int,int *) { return (void)0; }
+void (glActiveTexture)(unsigned int) { return; }
+void (glAttachShader)(unsigned int,unsigned int) { return; }
+void (glBindAttribLocation)(unsigned int,unsigned int,const char *) { return; }
+void (glBindBuffer)(unsigned int,unsigned int) { return; }
+void (glBindFramebuffer)(unsigned int,unsigned int) { return; }
+void (glBindRenderbuffer)(unsigned int,unsigned int) { return; }
+void (glBindTexture)(unsigned int,unsigned int) { return; }
+void (glBlendColor)(float,float,float,float) { return; }
+void (glBlendEquation)(unsigned int) { return; }
+void (glBlendEquationSeparate)(unsigned int,unsigned int) { return; }
+void (glBlendFunc)(unsigned int,unsigned int) { return; }
+void (glBlendFuncSeparate)(unsigned int,unsigned int,unsigned int,unsigned int) { return; }
+unsigned int (glCheckFramebufferStatus)(unsigned int) { return {}; }
+void (glClear)(unsigned int) { return; }
+void (glClearColor)(float,float,float,float) { return; }
+void (glClearDepthf)(float) { return; }
+void (glClearStencil)(int) { return; }
+void (glColorMask)(unsigned char,unsigned char,unsigned char,unsigned char) { return; }
+void (glCompileShader)(unsigned int) { return; }
+void (glCompressedTexImage2D)(unsigned int,int,unsigned int,int,int,int,int,const void *) { return; }
+void (glCompressedTexSubImage2D)(unsigned int,int,int,int,int,int,unsigned int,int,const void *) { return; }
+void (glCopyTexImage2D)(unsigned int,int,unsigned int,int,int,int,int,int) { return; }
+void (glCopyTexSubImage2D)(unsigned int,int,int,int,int,int,int,int) { return; }
+unsigned int (glCreateProgram)() { return {}; }
+unsigned int (glCreateShader)(unsigned int) { return {}; }
+void (glCullFace)(unsigned int) { return; }
+void (glDeleteBuffers)(int,const unsigned int *) { return; }
+void (glDeleteFramebuffers)(int,const unsigned int *) { return; }
+void (glDeleteProgram)(unsigned int) { return; }
+void (glDeleteRenderbuffers)(int,const unsigned int *) { return; }
+void (glDeleteShader)(unsigned int) { return; }
+void (glDeleteTextures)(int,const unsigned int *) { return; }
+void (glDepthFunc)(unsigned int) { return; }
+void (glDepthMask)(unsigned char) { return; }
+void (glDepthRangef)(float,float) { return; }
+void (glDetachShader)(unsigned int,unsigned int) { return; }
+void (glDisable)(unsigned int) { return; }
+void (glDisableVertexAttribArray)(unsigned int) { return; }
+void (glDrawArrays)(unsigned int,int,int) { return; }
+void (glDrawElements)(unsigned int,int,unsigned int,const void *) { return; }
+void (glEnable)(unsigned int) { return; }
+void (glEnableVertexAttribArray)(unsigned int) { return; }
+void (glFinish)() { return; }
+void (glFlush)() { return; }
+void (glFramebufferRenderbuffer)(unsigned int,unsigned int,unsigned int,unsigned int) { return; }
+void (glFramebufferTexture2D)(unsigned int,unsigned int,unsigned int,unsigned int,int) { return; }
+void (glFrontFace)(unsigned int) { return; }
+void (glGenBuffers)(int,unsigned int *) { return; }
+void (glGenerateMipmap)(unsigned int) { return; }
+void (glGenFramebuffers)(int,unsigned int *) { return; }
+void (glGenRenderbuffers)(int,unsigned int *) { return; }
+void (glGenTextures)(int,unsigned int *) { return; }
+void (glGetActiveAttrib)(unsigned int,unsigned int,int,int *,int *,unsigned int *,char *) { return; }
+void (glGetActiveUniform)(unsigned int,unsigned int,int,int *,int *,unsigned int *,char *) { return; }
+void (glGetAttachedShaders)(unsigned int,int,int *,unsigned int *) { return; }
+int (glGetAttribLocation)(unsigned int,const char *) { return {}; }
+void (glGetBufferParameteriv)(unsigned int,unsigned int,int *) { return; }
+unsigned int (glGetError)() { return {}; }
+void (glGetFloatv)(unsigned int,float *) { return; }
+void (glGetFramebufferAttachmentParameteriv)(unsigned int,unsigned int,unsigned int,int *) { return; }
+void (glGetIntegerv)(unsigned int,int *) { return; }
+void (glGetProgramiv)(unsigned int,unsigned int,int *) { return; }
+void (glGetProgramInfoLog)(unsigned int,int,int *,char *) { return; }
+void (glGetRenderbufferParameteriv)(unsigned int,unsigned int,int *) { return; }
+void (glGetShaderiv)(unsigned int,unsigned int,int *) { return; }
+void (glGetShaderInfoLog)(unsigned int,int,int *,char *) { return; }
+void (glGetShaderPrecisionFormat)(unsigned int,unsigned int,int *,int *) { return; }
+void (glGetShaderSource)(unsigned int,int,int *,char *) { return; }
+const unsigned char * (glGetString)(unsigned int) { return {}; }
+void (glGetTexParameterfv)(unsigned int,unsigned int,float *) { return; }
+void (glGetTexParameteriv)(unsigned int,unsigned int,int *) { return; }
+void (glGetUniformfv)(unsigned int,int,float *) { return; }
+void (glGetUniformiv)(unsigned int,int,int *) { return; }
+int (glGetUniformLocation)(unsigned int,const char *) { return {}; }
+void (glGetVertexAttribfv)(unsigned int,unsigned int,float *) { return; }
+void (glGetVertexAttribiv)(unsigned int,unsigned int,int *) { return; }
+void (glGetVertexAttribPointerv)(unsigned int,unsigned int,void **) { return; }
+void (glHint)(unsigned int,unsigned int) { return; }
+unsigned char (glIsBuffer)(unsigned int) { return {}; }
+unsigned char (glIsEnabled)(unsigned int) { return {}; }
+unsigned char (glIsFramebuffer)(unsigned int) { return {}; }
+unsigned char (glIsProgram)(unsigned int) { return {}; }
+unsigned char (glIsRenderbuffer)(unsigned int) { return {}; }
+unsigned char (glIsShader)(unsigned int) { return {}; }
+unsigned char (glIsTexture)(unsigned int) { return {}; }
+void (glLineWidth)(float) { return; }
+void (glLinkProgram)(unsigned int) { return; }
+void (glPixelStorei)(unsigned int,int) { return; }
+void (glPolygonOffset)(float,float) { return; }
+void (glReadPixels)(int,int,int,int,unsigned int,unsigned int,void *) { return; }
+void (glReleaseShaderCompiler)() { return; }
+void (glRenderbufferStorage)(unsigned int,unsigned int,int,int) { return; }
+void (glSampleCoverage)(float,unsigned char) { return; }
+void (glScissor)(int,int,int,int) { return; }
+void (glShaderBinary)(int,const unsigned int *,unsigned int,const void *,int) { return; }
+void (glShaderSource)(unsigned int,int,const char *const *,const int *) { return; }
+void (glStencilFunc)(unsigned int,int,unsigned int) { return; }
+void (glStencilFuncSeparate)(unsigned int,unsigned int,int,unsigned int) { return; }
+void (glStencilMask)(unsigned int) { return; }
+void (glStencilMaskSeparate)(unsigned int,unsigned int) { return; }
+void (glStencilOp)(unsigned int,unsigned int,unsigned int) { return; }
+void (glStencilOpSeparate)(unsigned int,unsigned int,unsigned int,unsigned int) { return; }
+void (glTexImage2D)(unsigned int,int,int,int,int,int,unsigned int,unsigned int,const void *) { return; }
+void (glTexParameterf)(unsigned int,unsigned int,float) { return; }
+void (glTexParameterfv)(unsigned int,unsigned int,const float *) { return; }
+void (glTexParameteri)(unsigned int,unsigned int,int) { return; }
+void (glTexParameteriv)(unsigned int,unsigned int,const int *) { return; }
+void (glTexSubImage2D)(unsigned int,int,int,int,int,int,unsigned int,unsigned int,const void *) { return; }
+void (glUniform1f)(int,float) { return; }
+void (glUniform1fv)(int,int,const float *) { return; }
+void (glUniform1i)(int,int) { return; }
+void (glUniform1iv)(int,int,const int *) { return; }
+void (glUniform2f)(int,float,float) { return; }
+void (glUniform2fv)(int,int,const float *) { return; }
+void (glUniform2i)(int,int,int) { return; }
+void (glUniform2iv)(int,int,const int *) { return; }
+void (glUniform3f)(int,float,float,float) { return; }
+void (glUniform3fv)(int,int,const float *) { return; }
+void (glUniform3i)(int,int,int,int) { return; }
+void (glUniform3iv)(int,int,const int *) { return; }
+void (glUniform4f)(int,float,float,float,float) { return; }
+void (glUniform4fv)(int,int,const float *) { return; }
+void (glUniform4i)(int,int,int,int,int) { return; }
+void (glUniform4iv)(int,int,const int *) { return; }
+void (glUniformMatrix2fv)(int,int,unsigned char,const float *) { return; }
+void (glUniformMatrix3fv)(int,int,unsigned char,const float *) { return; }
+void (glUniformMatrix4fv)(int,int,unsigned char,const float *) { return; }
+void (glUseProgram)(unsigned int) { return; }
+void (glValidateProgram)(unsigned int) { return; }
+void (glVertexAttrib1f)(unsigned int,float) { return; }
+void (glVertexAttrib1fv)(unsigned int,const float *) { return; }
+void (glVertexAttrib2f)(unsigned int,float,float) { return; }
+void (glVertexAttrib2fv)(unsigned int,const float *) { return; }
+void (glVertexAttrib3f)(unsigned int,float,float,float) { return; }
+void (glVertexAttrib3fv)(unsigned int,const float *) { return; }
+void (glVertexAttrib4f)(unsigned int,float,float,float,float) { return; }
+void (glVertexAttrib4fv)(unsigned int,const float *) { return; }
+void (glVertexAttribPointer)(unsigned int,int,unsigned int,unsigned char,int,const void *) { return; }
+void (glViewport)(int,int,int,int) { return; }
+void (glReadBuffer)(unsigned int) { return; }
+void (glDrawRangeElements)(unsigned int,unsigned int,unsigned int,int,unsigned int,const void *) { return; }
+void (glTexImage3D)(unsigned int,int,int,int,int,int,int,unsigned int,unsigned int,const void *) { return; }
+void (glTexSubImage3D)(unsigned int,int,int,int,int,int,int,int,unsigned int,unsigned int,const void *) { return; }
+void (glCopyTexSubImage3D)(unsigned int,int,int,int,int,int,int,int,int) { return; }
+void (glCompressedTexImage3D)(unsigned int,int,unsigned int,int,int,int,int,int,const void *) { return; }
+void (glCompressedTexSubImage3D)(unsigned int,int,int,int,int,int,int,int,unsigned int,int,const void *) { return; }
+void (glGenQueries)(int,unsigned int *) { return; }
+void (glDeleteQueries)(int,const unsigned int *) { return; }
+unsigned char (glIsQuery)(unsigned int) { return {}; }
+void (glBeginQuery)(unsigned int,unsigned int) { return; }
+void (glEndQuery)(unsigned int) { return; }
+void (glGetQueryiv)(unsigned int,unsigned int,int *) { return; }
+void (glGetQueryObjectuiv)(unsigned int,unsigned int,unsigned int *) { return; }
+unsigned char (glUnmapBuffer)(unsigned int) { return {}; }
+void (glGetBufferPointerv)(unsigned int,unsigned int,void **) { return; }
+void (glDrawBuffers)(int,const unsigned int *) { return; }
+void (glUniformMatrix2x3fv)(int,int,unsigned char,const float *) { return; }
+void (glUniformMatrix3x2fv)(int,int,unsigned char,const float *) { return; }
+void (glUniformMatrix2x4fv)(int,int,unsigned char,const float *) { return; }
+void (glUniformMatrix4x2fv)(int,int,unsigned char,const float *) { return; }
+void (glUniformMatrix3x4fv)(int,int,unsigned char,const float *) { return; }
+void (glUniformMatrix4x3fv)(int,int,unsigned char,const float *) { return; }
+void (glBlitFramebuffer)(int,int,int,int,int,int,int,int,unsigned int,unsigned int) { return; }
+void (glRenderbufferStorageMultisample)(unsigned int,int,unsigned int,int,int) { return; }
+void (glFramebufferTextureLayer)(unsigned int,unsigned int,unsigned int,int,int) { return; }
+void (glBindVertexArray)(unsigned int) { return; }
+void (glDeleteVertexArrays)(int,const unsigned int *) { return; }
+void (glGenVertexArrays)(int,unsigned int *) { return; }
+unsigned char (glIsVertexArray)(unsigned int) { return {}; }
+void (glGetIntegeri_v)(unsigned int,unsigned int,int *) { return; }
+void (glBeginTransformFeedback)(unsigned int) { return; }
+void (glEndTransformFeedback)() { return; }
+void (glBindBufferBase)(unsigned int,unsigned int,unsigned int) { return; }
+void (glTransformFeedbackVaryings)(unsigned int,int,const char *const *,unsigned int) { return; }
+void (glGetTransformFeedbackVarying)(unsigned int,unsigned int,int,int *,int *,unsigned int *,char *) { return; }
+void (glVertexAttribIPointer)(unsigned int,int,unsigned int,int,const void *) { return; }
+void (glGetVertexAttribIiv)(unsigned int,unsigned int,int *) { return; }
+void (glGetVertexAttribIuiv)(unsigned int,unsigned int,unsigned int *) { return; }
+void (glVertexAttribI4i)(unsigned int,int,int,int,int) { return; }
+void (glVertexAttribI4ui)(unsigned int,unsigned int,unsigned int,unsigned int,unsigned int) { return; }
+void (glVertexAttribI4iv)(unsigned int,const int *) { return; }
+void (glVertexAttribI4uiv)(unsigned int,const unsigned int *) { return; }
+void (glGetUniformuiv)(unsigned int,int,unsigned int *) { return; }
+int (glGetFragDataLocation)(unsigned int,const char *) { return {}; }
+void (glUniform1ui)(int,unsigned int) { return; }
+void (glUniform2ui)(int,unsigned int,unsigned int) { return; }
+void (glUniform3ui)(int,unsigned int,unsigned int,unsigned int) { return; }
+void (glUniform4ui)(int,unsigned int,unsigned int,unsigned int,unsigned int) { return; }
+void (glUniform1uiv)(int,int,const unsigned int *) { return; }
+void (glUniform2uiv)(int,int,const unsigned int *) { return; }
+void (glUniform3uiv)(int,int,const unsigned int *) { return; }
+void (glUniform4uiv)(int,int,const unsigned int *) { return; }
+void (glClearBufferiv)(unsigned int,int,const int *) { return; }
+void (glClearBufferuiv)(unsigned int,int,const unsigned int *) { return; }
+void (glClearBufferfv)(unsigned int,int,const float *) { return; }
+void (glClearBufferfi)(unsigned int,int,float,int) { return; }
+const unsigned char * (glGetStringi)(unsigned int,unsigned int) { return {}; }
+void (glGetUniformIndices)(unsigned int,int,const char *const *,unsigned int *) { return; }
+void (glGetActiveUniformsiv)(unsigned int,int,const unsigned int *,unsigned int,int *) { return; }
+unsigned int (glGetUniformBlockIndex)(unsigned int,const char *) { return {}; }
+void (glGetActiveUniformBlockiv)(unsigned int,unsigned int,unsigned int,int *) { return; }
+void (glGetActiveUniformBlockName)(unsigned int,unsigned int,int,int *,char *) { return; }
+void (glUniformBlockBinding)(unsigned int,unsigned int,unsigned int) { return; }
+void (glDrawArraysInstanced)(unsigned int,int,int,int) { return; }
+void (glDrawElementsInstanced)(unsigned int,int,unsigned int,const void *,int) { return; }
+__GLsync * (glFenceSync)(unsigned int,unsigned int) { return {}; }
+unsigned char (glIsSync)(__GLsync *) { return {}; }
+void (glDeleteSync)(__GLsync *) { return; }
+unsigned int (glClientWaitSync)(__GLsync *,unsigned int,GLuint64) { return {}; }
+void (glWaitSync)(__GLsync *,unsigned int,GLuint64) { return; }
+void (glGetInteger64v)(unsigned int,GLint64 *) { return; }
+void (glGetSynciv)(__GLsync *,unsigned int,int,int *,int *) { return; }
+void (glGetInteger64i_v)(unsigned int,unsigned int,GLint64 *) { return; }
+void (glGetBufferParameteri64v)(unsigned int,unsigned int,GLint64 *) { return; }
+void (glGenSamplers)(int,unsigned int *) { return; }
+void (glDeleteSamplers)(int,const unsigned int *) { return; }
+unsigned char (glIsSampler)(unsigned int) { return {}; }
+void (glBindSampler)(unsigned int,unsigned int) { return; }
+void (glSamplerParameteri)(unsigned int,unsigned int,int) { return; }
+void (glSamplerParameteriv)(unsigned int,unsigned int,const int *) { return; }
+void (glSamplerParameterf)(unsigned int,unsigned int,float) { return; }
+void (glSamplerParameterfv)(unsigned int,unsigned int,const float *) { return; }
+void (glGetSamplerParameteriv)(unsigned int,unsigned int,int *) { return; }
+void (glGetSamplerParameterfv)(unsigned int,unsigned int,float *) { return; }
+void (glVertexAttribDivisor)(unsigned int,unsigned int) { return; }
+void (glBindTransformFeedback)(unsigned int,unsigned int) { return; }
+void (glDeleteTransformFeedbacks)(int,const unsigned int *) { return; }
+void (glGenTransformFeedbacks)(int,unsigned int *) { return; }
+unsigned char (glIsTransformFeedback)(unsigned int) { return {}; }
+void (glPauseTransformFeedback)() { return; }
+void (glResumeTransformFeedback)() { return; }
+void (glGetProgramBinary)(unsigned int,int,int *,unsigned int *,void *) { return; }
+void (glProgramBinary)(unsigned int,unsigned int,const void *,int) { return; }
+void (glProgramParameteri)(unsigned int,unsigned int,int) { return; }
+void (glInvalidateFramebuffer)(unsigned int,int,const unsigned int *) { return; }
+void (glInvalidateSubFramebuffer)(unsigned int,int,const unsigned int *,int,int,int,int) { return; }
+void (glTexStorage2D)(unsigned int,int,unsigned int,int,int) { return; }
+void (glTexStorage3D)(unsigned int,int,unsigned int,int,int,int) { return; }
+void (glGetInternalformativ)(unsigned int,unsigned int,unsigned int,int,int *) { return; }
 }
 #endif

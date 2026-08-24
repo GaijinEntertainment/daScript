@@ -520,6 +520,12 @@ namespace das
         __forceinline int32_t getTotalVariables() const {
             return totalVariables;
         }
+        __forceinline int32_t getTotalInitFunctions() const {
+            return totalInitFunctions;
+        }
+        __forceinline SimFunction * getInitFunction ( int index ) const {
+            return (index>=0 && index<totalInitFunctions) ? initFunctions[index] : nullptr;
+        }
 
         __forceinline uint32_t globalOffsetByMangledName ( uint64_t mnh ) const {
             auto it = tabGMnLookup->find(mnh);

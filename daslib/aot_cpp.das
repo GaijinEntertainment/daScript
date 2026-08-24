@@ -4140,13 +4140,6 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
         delete visitor
     }
 
-    var funInit = false;
-    for (fn in fnn) {
-        if (fn.flags.init) {
-            funInit = true;
-        }
-    }
-
     if (!fnn.empty()) {
         write(*logs, "\n#ifdef _MSC_VER\n#pragma optimize(\"\", off)\n#endif\n");
         write(*logs, "struct AotFunction \{ uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); \};\n");
@@ -4246,9 +4239,10 @@ def public compile_and_simulate(input : string, var access; var mg : ModuleGroup
 }
 
 
-def public fail_on_aot_emit_error(program : ProgramPtr) {
+def public log_aot_emit_errors(program : ProgramPtr) : bool {
+    //! Logs collected emit errors; returns true when the program has any.
     if (!program.flags.macroException && !program.flags.failToCompile) {
-        return
+        return false
     }
     for (err in program.errors) {
         var msg = "{describe(err.at)}: error[{int(err.cerr)}]: {err.what}"
@@ -4260,7 +4254,13 @@ def public fail_on_aot_emit_error(program : ProgramPtr) {
         }
         to_log(LOG_ERROR, "{msg}\n")
     }
-    panic("AOT codegen failed: {length(program.errors)} codegen error(s) during emission (see log)")
+    return true
+}
+
+def public fail_on_aot_emit_error(program : ProgramPtr) {
+    if (log_aot_emit_errors(program)) {
+        panic("AOT codegen failed: {length(program.errors)} codegen error(s) during emission (see log)")
+    }
 }
 
 [export]

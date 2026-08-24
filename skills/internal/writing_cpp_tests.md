@@ -62,9 +62,11 @@ set_tests_properties(my_stress_test PROPERTIES LABELS "big")
 add_dependencies(test-big my_stress_test)
 ```
 
-Big tests that are C++ executables **don't include doctest** - they keep their own `int main()` returning 0/1 to ctest. They handle `Module::Initialize()` / `Module::Shutdown()` themselves.
+Big tests that are C++ executables **don't include doctest** - they keep their own `int main()` returning 0/1 to ctest.
 
-Big tests are **not in CI yet** (V1) - local-only via `ninja test-big`.
+**A big test's `int main()` owns its module lifetime** - nothing runs `doctest_main.cpp` for it. An exe that resolves modules through the registry calls `Module::Initialize()` / `Module::Shutdown()` itself. An exe whose only context comes from a generated standalone AOT constructor calls neither: that constructor is self-contained and consults no module registry (example: `big/standalone_ctx/`).
+
+A big test is not gated by CI - only the small suite runs there. Run `ninja test-big` locally before pushing one.
 
 ## Doctest assertion cheat sheet
 
@@ -82,7 +84,7 @@ Big tests are **not in CI yet** (V1) - local-only via `ninja test-big`.
 
 ## TEST_CASE / SUBCASE pattern
 
-One `TEST_CASE` per logical scenario. `SUBCASE`s for variations sharing setup. Each SUBCASE re-runs the TEST_CASE body from the top - so per-subcase fresh `Context`/state is automatic.
+One `TEST_CASE` per logical scenario. `SUBCASE`s for variations sharing setup. Each SUBCASE re-runs the TEST_CASE body from the top - so per-subcase fresh `Context`/state is automatic, at the cost of re-running setup per subcase (5 subcases = 5 `compileDaScript` calls).
 
 ```cpp
 TEST_CASE("compile + run my script") {
@@ -97,7 +99,7 @@ TEST_CASE("compile + run my script") {
 
 Don't try to share a `Context` across `TEST_CASE`s - modules can survive (they're process-global), but Context-level state will leak between tests and the leak guard will catch it.
 
-See `tests-cpp/small/test_run_with_catch_clear.cpp` for a 5-subcase example.
+See `tests-cpp/small/test_run_with_catch_clear.cpp` for a multi-subcase example.
 
 ## Environment & init (what's free, what's yours)
 
@@ -107,7 +109,7 @@ See `tests-cpp/small/test_run_with_catch_clear.cpp` for a 5-subcase example.
 
 ## Leak detection (automatic, will fail your test)
 
-The framework auto-checks three counters at the suite-end of every test process:
+The framework auto-checks these counters at the suite-end of every test process:
 
 1. **gc_node count** - AST nodes (TypeDecl, Expression, Function, etc.) tracked by gc_node. Thread-local: only the suite-runner thread's root is sampled, so gc_nodes leaked on a worker thread that isn't joined-and-collected before the test ends are invisible to this check.
 2. **JobQue / Channel / LockBox / Stream / Feature count** - anything in the `JobStatus` tracking list.
@@ -137,12 +139,9 @@ VSCode integration: install `matepek.vscode-catch2-test-adapter`, point at `buil
 
 ## Sanitizers
 
-Build with `-DDAS_USE_SANITIZER=address` (or `undefined`/`ubsan`, `thread`/`tsan`) in the `cmake` step. CI runs three Linux **Release** x86-64 sanitizer lanes - ASAN, TSAN and UBSAN - on every PR, each running the full suite (dastest + test_aot + ctest). Release keeps walltime in budget; Debug + ASAN was prohibitive. If your test fails under a sanitizer, fix the sanitizer error - don't disable.
+Build with `-DDAS_USE_SANITIZER=address` (or `undefined`/`ubsan`, `thread`/`tsan`) in the `cmake` step. CI runs Linux **Release** x86-64 sanitizer lanes - ASAN, TSAN and UBSAN - on every PR, each running the full suite (dastest + test_aot + ctest). Release keeps walltime in budget; Debug + ASAN was prohibitive. If your test fails under a sanitizer, fix the sanitizer error - don't disable.
 
 ## Common gotchas
 
 - `getDasRoot()` derives the root at runtime from the test executable's own path (it walks up past `bin/` / `bin/<config>/`), falling back to `"."` if the exe is not under a `bin` dir. It is not a configure-time constant - moving the binary moves the root. All `.das` fixture loads should use `getDasRoot() + "/tests-cpp/..."`, and tests must therefore run with the repo layout intact, which is why every `add_test` sets `WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}`.
-- Don't put `NEED_*` macros at file scope. They go in `doctest_main.cpp::main()`.
 - The doctest header is large (~7000 lines). Don't include it in non-test code.
-- For SUBCASE-heavy tests, remember the body re-runs from the top - each subcase gets a fresh setup. This is the desired behavior; just be aware of the cost (5 subcases = 5 `compileDaScript` calls).
-- Big-test `int main()`s must call `Module::Initialize()` / `Module::Shutdown()` themselves - they don't go through `doctest_main.cpp`.
