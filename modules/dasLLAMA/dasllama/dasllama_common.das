@@ -1516,11 +1516,25 @@ def public weights_epoch() : int64 {
     return g_weights_epoch
 }
 
+// the push half of the contract: caches don't poll for staleness (a poll is a call every
+// consumer must remember), the bump invokes them — dasllama_metal_common subscribes its drop
+var private g_weights_epoch_listeners : array<function<void>>
+
+//! Subscribe a drop-everything reaction to weight-address recycling — for GPU caches keyed by
+//! HOST ADDRESS. Invoked synchronously by every ``bump_weights_epoch`` ([init]-time is the
+//! registration home; bumps only happen at load/map boundaries, never mid-step).
+def public register_weights_epoch_listener(f : function<void>) {
+    g_weights_epoch_listeners |> push(f)
+}
+
 //! The image loader's half of the same contract: mapping a prepared image lands planes at
 //! fresh (possibly recycled) addresses exactly like a gguf load does, so it must move the
 //! epoch too — dasllama_image calls this on every successful load_image.
 def public bump_weights_epoch() {
     g_weights_epoch++
+    for (f in g_weights_epoch_listeners) {
+        invoke(f)
+    }
 }
 //! Resident memory footprint of a loaded model, in bytes, broken down by region. aux_fp32 is the
 //! embedding + norms (always kept); weight_fp32 is the dense big weights (only in fp32 mode — a

@@ -15,7 +15,7 @@ in two of them will drift:
 | `REVIEW.md` | `/code-review`, and us while writing | criteria checkable against a diff |
 
 **References flow one way: REVIEW cites ARCHITECTURE, never the reverse.** Sections here are
-numbered so they can be cited (`ARCHITECTURE sec.2.2`). Nothing here may cite a REVIEW rule - 
+numbered so they can be cited (`ARCHITECTURE sec.2.2`). Nothing here may cite a REVIEW rule -
 those are unnumbered review criteria by design, and a citation to one is a dangling pointer the
 moment the checklist is reordered.
 
@@ -209,8 +209,9 @@ that a question answered for one backend has an obvious address in the other. Th
 - **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,
   posadd, the gemma4v clamp / rope2d / GEGLU-quick, the head restride - gemma3v's and, offset-bound, the qwen3v/prefill slicers) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
   releases them like every other registry PSO; the borrowed prefill builders (`pf_enc_bf16_mm`,
-  `enc_add_bias_rows`, `enc_rope` - the qwen3v vision NEOX apply - and the attention trio via
-  `enc_qk_mm`/`enc_av_mm`) come up through
+  `enc_add_bias_rows`, `enc_rope` - the qwen3v vision NEOX apply - and the attention trio
+  `enc_qk_mm`/`enc_softmax`/`enc_av_mm`; this list is the closed borrowed set REVIEW_GPU.md's
+  tower rules key on) come up through
   `metal_prefill_pso_init`, prefill's public bring-up seat, and `plane_buffer` in common is
   public for the same wrap-a-plane reason. The tower's own objects (the ones buffer, its
   scratch pool) release through `metal_tower_shutdown`.
@@ -240,7 +241,7 @@ that a question answered for one backend has an obvious address in the other. Th
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class - "the builder needs the driver module" is never a placement reason. Prefill's
   prefill-only classes are convergence debt, not precedent.
-- **Retired: the single-pass whisper-decoder attention (`MetalWdecAttn`/`enc_wdec_attn`)** - 
+- **Retired: the single-pass whisper-decoder attention (`MetalWdecAttn`/`enc_wdec_attn`)** -
   deleted in the metal-asr review round (2026-08-17, the `bbatkin/metal-asr` PR; the kernel is
   in git history). The chunked part/comb pair replaced it during bring-up (1470->709 ms on the
   turbo decode) and its `float[1504]` tgmem bound was the only reason for the driver's old
@@ -296,10 +297,17 @@ entry here:**
   require of the `dasllama_math_vulkan` facade); the inversion that remains is the
   kernels<->common require DIRECTION, and it is why their seam shapes differ.
 - **UMA vs discrete VRAM**: Metal never grows Vulkan's VRAM machinery - arenas, upload
-  economics, mirrors and hydration are Vulkan's alone. Metal's ONE residency artifact is the
-  `MTLResidencySet` pin in `_common` (`DASLLAMA_METAL_RESIDENCY`, sec.2.12): it pins the served
-  working set so the per-commit tracked-set pass stays warm - a driver-cost shield, not a
+  economics, mirrors and hydration are Vulkan's alone. Metal's residency artifacts are the
+  `MTLResidencySet` pin in `_common` (`DASLLAMA_METAL_RESIDENCY`) plus its keep-alive
+  heartbeat (`DASLLAMA_METAL_HEARTBEAT_S`, a dasMetal background re-request that stops the OS
+  collecting the set over a CPU-only window, sec.2.12) - a driver-cost shield, not a
   placement mechanism; memory is still memory.
+- **The weights-epoch drop is Metal-only.** `bump_weights_epoch`'s listener seat
+  (`register_weights_epoch_listener`) has one subscriber: `_common`'s `metal_weights_drop`,
+  which runs the registered reload preps (`register_reload_prep`; the decode driver registers
+  `discard_pre`), quiesces, and releases the address-keyed region caches. Vulkan's reload
+  story is the unmap notify (`set_moe_gpu_unmap_notify`) - a different seam for a different
+  ownership model.
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes - Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants; the
   class-kernel arc retired the hand-built 6-slot set ladders outright) - and both speak the
@@ -616,7 +624,7 @@ reason: flat one-call-per-item runs (a registration or release list with one lin
 GPU kernel bodies whose phases are coupled by barriers, cooperative-matrix ops or register
 residency and so cannot cross a function boundary without changing the shader.
 
-Split only where a real seam exists - genuine duplication, a distinct phase, a self-contained arm - 
+Split only where a real seam exists - genuine duplication, a distinct phase, a self-contained arm -
 and only when the extracted helper stands on its own. Two corollaries this module keeps tripping
 over: **a kargs fold that grows an already-over-cap kernel body is not a reason to abandon the
 fold** (unpacking N fields adds N lines; take the growth and ledger the real seam), and **never
@@ -740,7 +748,7 @@ the documentation and to the registry test. The sanctioned forms beyond a plain 
 - **The config loads once at context init**, so `set_env_variable` mid-process is invisible to
   the running config: arm a child process's environment instead.
 - **A write of a foreign library's knob** (`set_env_variable` with a literal name) is allowed
-  only before that library first reads it, and the name must be a declared `[EnvConfig]` knob - 
+  only before that library first reads it, and the name must be a declared `[EnvConfig]` knob -
   the registry test scans writes too, so a re-spelled name fails it.
 
 `tests/test_env_registry.das` enforces the lot in both directions (declared <-> documented,
@@ -781,28 +789,32 @@ The tokenizer encode/decode path is sanctioned UNCOVERED by the region contracts
 gate is the `--tok` scaling rows, whose instrument (the size-ladder ratio) catches what the
 contracts cannot.
 
-### 2.12 The post-CPU-burn GPU ramp cannot be pre-paid - do not build a warm-up
+### 2.12 The post-CPU-burn GPU ramp - the residency heartbeat holds it; do not build a warm-up
 
 Figures in this section: M1 Max, 2026-08-23 - probes are quiet `-jit` runs with the rig's
 tune manifest; cells are the released `lcpp_bench` exe (`--image --image-think -r 3 -t 8
 --ngl 99`); full tables in `qwen3vl_plan.md` slices M/J.
 
-After a CPU-only phase, the first Metal submission runs degraded - host-side between commit
-and execution, one time per window (probe-verified 2026-08-23): ~40 ms after even a
-tens-of-ms window, saturating ~70-130 ms after multi-second burns, scaling with the model.
-The mechanism is Metal's per-commit dependency pass over the TRACKED working set running
-cold (the same pass that cost ~70 ms/prefill before the weights went untracked - see the
-region-upload comment in `dasllama_metal_common`); making the prefill pools untracked reds
-parity, so the tracking is load-bearing, and the scoped fix is a per-buffer tracking audit.
-Every pre-payment is REFUTED by measurement (`PERF_LEDGER.md`'s OPEN entry): empty command
-buffers and driver round-trips (0.107 ms - never asleep), single-dispatch kernels, per-page
-touch kernels, light pulse-trains through the burn - a warm-up always pays its own cost ON
-TOP of the slack it was meant to hide. Do not re-attempt one. The `MTLResidencySet` pin
-(`DASLLAMA_METAL_RESIDENCY`, on by default) is the ONE measured partial: it holds the
-short-window case (the tower's first submission after its CPU stem, -15 ms/encode) but not
-long windows. The structural fixes are removing the CPU phase (serve encoders on the GPU - 
-the Metal tower) and the tracking audit. Related, same ledger: merely arming Metal makes a
-CPU q8 tower encode ~1.7x slower - mechanism unnamed, deleted by a GPU-served tower.
+After a CPU-only phase, the first Metal submission runs degraded - one time per window,
+entirely in the kernel-side driver window (kernelStart->kernelEnd; queue hand-off and GPU
+execution stay flat - split probe-verified 2026-08-23, `harness/residency_ramp_probe.das` +
+`das_metal_boost`'s `metal_submit_trace`). The long-window mechanism is the OS collecting a
+committed+requested `MTLResidencySet` during inactivity; the fix (SHIPPED, copied from
+ggml-metal) is the residency HEARTBEAT - a dasMetal background thread re-requesting
+residency every 5 ms for `DASLLAMA_METAL_HEARTBEAT_S` (default 180 s, 0 = A/B rail) after
+the last served step, kicked from `residency_flush`. Measured on the qwen3v tower encode:
+3000 ms burn drv 17.7 -> 3.0 ms. The `MTLResidencySet` pin itself
+(`DASLLAMA_METAL_RESIDENCY`, on by default) holds the short-window case (-15 ms/encode on
+the tower's first submission after its CPU stem); the heartbeat holds the long ones.
+REFUTED by measurement (`PERF_LEDGER.md`, the heartbeat entry): every pre-payment - empty
+command buffers and driver round-trips (0.107 ms - never asleep), single-dispatch kernels,
+per-page touch kernels, light pulse-trains through the burn - a warm-up always pays its own
+cost ON TOP of the slack it was meant to hide; do not re-attempt one. Also refuted: a
+whole-map no-copy anchor buffer (page pre-wiring moves nothing) and the once-proposed
+per-buffer tracking audit (resource count is not the lever) - prefill pools simply stay
+tracked (untracked reds parity). The ~1-3 ms window-scaled residual is the driver/GPU
+idle-state wake class, no user-space lever found. Related, same ledger: merely arming Metal
+makes a CPU q8 tower encode ~1.7x slower - mechanism unnamed, deleted by a GPU-served tower.
 
 ---
 

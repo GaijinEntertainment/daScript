@@ -207,6 +207,21 @@ def public with_compute_encoder_timed(queue : MetalCommandQueue?; var error : st
     return with_compute_encoder_timed(queue, error, gpu_ms, encode_ms, blk)
 }
 
+//! The submission-split trace: when armed, every timed submission logs its command buffer's
+//! full timestamp split — drv (kernelStart→kernelEnd: the kernel-side driver window, where the
+//! tracked-set residency pass and page re-wiring live), queue (kernelEnd→GPUStart) and gpu
+//! (GPUStart→GPUEnd). The post-CPU-window residency ramp shows up ONLY in drv, so this is the
+//! instrument that tells set collection from execution cost. Off = one bool test per submission.
+var public metal_submit_trace = false
+
+[cold_path]   // the trace flag's opt-in leg
+def public submit_trace_log(cb : MetalCommandBuffer?; gpu_ms, encode_ms : double) {
+    let ks = metal_command_buffer_kernel_start_time(cb)
+    let ke = metal_command_buffer_kernel_end_time(cb)
+    let gs = metal_command_buffer_gpu_start_time(cb)
+    to_log(LOG_INFO, "metal submit: drv {(ke - ks) * 1000.0lf} ms, queue {(gs - ke) * 1000.0lf} ms, gpu {gpu_ms} ms, encode {encode_ms} ms\n")
+}
+
 //! The 4-out twin: also reports the host-side ENCODE time — the CPU cost of building the command
 //! buffer, measured from block entry through end_encoding (captured just before commit) — for the
 //! encode-CPU vs GPU-window split. The metal_commit hand-off itself falls in neither number.
@@ -221,6 +236,9 @@ def public with_compute_encoder_timed(queue : MetalCommandQueue?; var error : st
     metal_wait_until_completed(cb)
     error = metal_command_buffer_error(cb)
     gpu_ms = (metal_command_buffer_gpu_end_time(cb) - metal_command_buffer_gpu_start_time(cb)) * 1000.0lf
+    if (metal_submit_trace) {
+        submit_trace_log(cb, gpu_ms, encode_ms)
+    }
     metal_release(enc)
     metal_release(cb)
     return empty(error)

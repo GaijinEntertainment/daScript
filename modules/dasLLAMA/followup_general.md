@@ -550,3 +550,17 @@
     quant (SmoothQuant-style per-channel folds baked at stage - needs a calibration set and
     its own gate design). Done = either path serving the Omni-3B encode with a
     poison-discriminating tier-1 gate.
+
+45. **The `tests/msl/_fail_closed/` fixture list and `test_msl_fail_closed.das`'s
+    `check_rejects` calls are hand-synced (37 files, 37 calls, nothing checks).** A fixture
+    added without its needle assert (or an assert whose fixture was deleted) drifts silently.
+    Done = a `modules/dasMetal/REVIEW.das` gate cell (the module has none yet - this creates
+    it): every `_fail_closed/*.das` basename appears as a `check_rejects` argument and vice
+    versa - the list-A-equals-list-B shape.
+
+46. **The `// clock: control` marker (dasllama REVIEW.md's ad-hoc-profiling split) has no
+    mechanical check.** Done = a `REVIEW.das` cell or lint: every `ref_time_ticks()` /
+    `get_time_usec()` occurrence under `dasllama/` whose line carries neither a print of the
+    elapsed interval nor the literal `// clock: control` is a finding; the four marked sites
+    (`dasllama_prefix.das` x2, `dasllama_image.das`, plus the harness ramp probe) are the
+    fixture.

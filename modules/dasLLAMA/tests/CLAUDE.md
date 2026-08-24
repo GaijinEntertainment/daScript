@@ -346,8 +346,8 @@ images the rig cannot use and purges the flavors the rig depends on. Image-rail 
 
 ## Metal fixtures - driver knobs and the two-model pattern
 
-(REVIEW: "A cell pins every driver hook and serving-lane knob its claim depends on, and
-restores it before returning") The
+(REVIEW: "A cell establishes every driver hook and serving-lane knob its claim depends on,
+and restores it before returning") The
 hooks are on by default: they flip a q8 leg to the GPU silently, and an f32 leg records a
 quant_mode decline that panics under required mode - either way the cell stops measuring what
 its name says. The family serving-lane pins (`set_<family>_q8`) are the same trap in the

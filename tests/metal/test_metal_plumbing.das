@@ -95,3 +95,53 @@ def test_host_plumbing(t : T?) {
         }
     }
 }
+
+[test]
+def test_residency_heartbeat(t : T?) {
+    t |> run("residency heartbeat: arm, witness, unregister-on-release; submit trace branch") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            with_metal_device() $(dev : MetalDevice?) {
+                if (dev == null) {
+                    feint("no Metal device on this box; heartbeat checks skipped\n")
+                    return
+                }
+                var rset = metal_new_residency_set(dev)
+                if (rset == null) {
+                    feint("MTLResidencySet unavailable (macOS < 15); heartbeat checks skipped\n")
+                    return
+                }
+                metal_residency_set_commit(rset)
+                metal_residency_set_request(rset)
+                let sets0 = metal_residency_heartbeat_sets()
+                let ticks0 = metal_residency_heartbeat_ticks()
+                metal_residency_set_heartbeat(rset, 60)
+                t |> success(metal_residency_heartbeat_live(), "the heartbeat is armed after a kick")
+                t |> equal(metal_residency_heartbeat_sets(), sets0 + 1l, "the kick registered the set")
+                metal_residency_set_heartbeat(rset, 60)
+                t |> equal(metal_residency_heartbeat_sets(), sets0 + 1l, "a second kick does not register a duplicate")
+                let ts = ref_time_ticks()
+                while (get_time_usec(ts) < 30000) {}   // clock: control - bounds the tick window, never a reported figure
+                t |> success(metal_residency_heartbeat_ticks() > ticks0, "the loop requested residency ({metal_residency_heartbeat_ticks() - ticks0} passes in the window)")
+                metal_release(rset)
+                t |> equal(metal_residency_heartbeat_sets(), sets0, "release unregistered the set from the heartbeat collection")
+                // the loop keeps ticking on what remains — surviving 5 ms ticks past the
+                // release is the no-use-after-free witness
+                let ts2 = ref_time_ticks()
+                while (get_time_usec(ts2) < 30000) {}   // clock: control
+                t |> success(metal_residency_heartbeat_live(), "the loop survives ticks past the release (countdown intact)")
+                // the submit-split trace branch: one traced empty submit through the chokepoint
+                var queue = metal_new_command_queue(dev)
+                var terr : string
+                var tms = 0.0lf
+                metal_submit_trace = true
+                let tran = with_compute_encoder_timed(queue, terr, tms) $(enc : MetalComputeEncoder?) {}
+                metal_submit_trace = false
+                t |> success(tran, "a traced submit completes: {terr}")
+                metal_release(queue)
+            }
+            t |> equal(metal_live_object_count(), 0l)
+        } else {
+            feint("das_metal is not built on this platform; nothing to check\n")
+        }
+    }
+}

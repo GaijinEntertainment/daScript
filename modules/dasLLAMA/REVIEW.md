@@ -76,9 +76,12 @@ file.** A platform-neutral engine file carrying it is a defect.
 more of `dasllama/dasllama_common.das`.**
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
-a defect in engine code - instrumentation goes through the sanctioned rails, and a clock whose
-value feeds logic is marked `// clock: control`. The rails, and where free-hand timing is
-legal, are `ARCHITECTURE.md` sec.2.10.
+a defect in an engine file (`dasllama/`) outside a cold one-shot load, bake, map, or
+tokenizer-build progress log - instrumentation goes through the sanctioned rails, listed with
+their reasons in `ARCHITECTURE.md` sec.2.10.
+
+**A clock whose value feeds logic is marked `// clock: control`, in any file under this
+folder** - unmarked it reads as free-hand timing to the ad-hoc-profiling sweep.
 
 **Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
 quantum is COVERED by an annotated region entry** - `[hot_path]`, any of the `[no_alloc]` /
@@ -106,10 +109,11 @@ EXECUTED, not skipped.**
 
 **An override announces itself where it changes the outcome.** An override is an environment
 knob or an exported runtime setter that moves a gate, policy, or threshold off its default;
-a CLI flag is never an override under this rule. Where one changes an observable outcome of
-the run - what it writes, reads, or mints - a printed line names it by its own spelling (the
-env variable name, or the setter's function name); set-but-inert stays silent, per-site
-repeats are fine. Adding one, or giving one a new effect, without the announce is a defect.
+a CLI flag, and a knob whose only effect is timing (an A/B perf rail), are never overrides
+under this rule. Where one changes an observable outcome of the run - what it writes, reads,
+or mints - a printed line names it by its own spelling (the env variable name, or the
+setter's function name); set-but-inert stays silent, per-site repeats are fine. Adding one,
+or giving one a new effect, without the announce is a defect.
 
 **A self-measured served-turn time - tok/s, a turn wall - entering
 `performance/records/<box>.json` or `PERF_LEDGER.md` comes from the released `lcpp_bench`
@@ -221,10 +225,11 @@ a struct the renderer emits but the registry does not is caught by
 **`dasllama/dasllama_unicode.das`'s RANGES/WS tables are generated - retranscoded from llama.cpp's
 `unicode-data.cpp`; hand-editing them is a defect.**
 
-**A diff that adds a file, moves code between files, or changes what a file owns lands the
-`ARCHITECTURE.md` sec.1 edit that keeps the charters true, in the same change.** A per-file
-inventory restated in this checklist is a defect of the checklist (a rule naming what KIND of code lands in
-which file is the checklist's own).
+**A diff that adds a file under `dasllama/`, adds a file beside one `ARCHITECTURE.md` sec.1
+charters by name, moves code between files, or changes what a file owns lands the sec.1 edit
+that keeps the charters true, in the same change.** A per-file inventory restated in this
+checklist is a defect of the checklist (a rule naming what KIND of code lands in which file
+is the checklist's own).
 
 **A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
@@ -286,9 +291,11 @@ Benchmarks, harnesses, and tests decode their own fixtures.
 **Engine, HTTP, or writer logic never lands in `dasllama/dasllama_scheduler.das`** - engine logic in
 engine files, HTTP in the server, writer logic in the writer's own file.
 
-**An `[init]`-only side-effect require lives in `dasllama/dasllama_transformer.das`** - arch
-registrations, GPU tiers, every module requiring the engine back; it sits in
-`dasllama/dasllama_common.das` only if engine code needs it.
+**An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
+`dasllama/dasllama_transformer.das`** - arch registrations, GPU tiers, every module requiring
+the engine back; it sits in `dasllama/dasllama_common.das` only if engine code needs it. A
+program root (test, harness, benchmark, tool) requires the registration module it needs
+directly.
 
 **An architecture file (`dasllama/dasllama_arch_*.das`) is declarative registration only.** An
 architecture that changes a forward loop, or tests a family name on a shared path, is a defect.

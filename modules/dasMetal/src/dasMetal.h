@@ -78,6 +78,13 @@ namespace das {
     DAS_MOD_API void metal_residency_set_add_buffer ( MetalResidencySet * rset, MetalBuffer * buf, Context * ctx, LineInfoArg * at );
     DAS_MOD_API void metal_residency_set_commit ( MetalResidencySet * rset, Context * ctx, LineInfoArg * at );
     DAS_MOD_API void metal_residency_set_request ( MetalResidencySet * rset, Context * ctx, LineInfoArg * at );
+    // background keep-alive: re-requestResidency every few ms for keep_alive_s after the last
+    // call (a requested set still un-wires over a long CPU-only window; the heartbeat prevents
+    // the collect). Idempotent per set; call again to reset the countdown. Release unregisters.
+    DAS_MOD_API void metal_residency_set_heartbeat ( MetalResidencySet * rset, int32_t keep_alive_s, Context * ctx, LineInfoArg * at );
+    DAS_MOD_API bool metal_residency_heartbeat_live ();
+    DAS_MOD_API int64_t metal_residency_heartbeat_sets ();
+    DAS_MOD_API int64_t metal_residency_heartbeat_ticks ();
 
     // each registers as a das-side `metal_release` overload; C++ names differ
     // because DAS_BIND_FUN cannot take an overload set

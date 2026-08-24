@@ -84,7 +84,6 @@ def metal_tower_shutdown {
 
 [cold_path]   // per-encode bring-up: the registry/prefill inits are latched-flag cheap
 def private metal_tower_init : bool {
-    weight_caches_flush_on_reload()   // an embedder load/delete recycles staged-blob addresses — the address-keyed regions must not survive it
     // the registry owns the tower PSOs (metal_decode_init compiles them, via the prefill seat)
     if (g_tw_failed || !metal_common_init() || !metal_prefill_pso_init() || g_pso_ln == null) {
         return false
