@@ -442,7 +442,7 @@ namespace das {
         std::atomic<int64_t> ticks{0};
         std::thread thr;
         bool started = false;
-        static const int interval_ms = 5;
+        static constexpr int interval_ms = 5;   // constexpr: ODR-used via chrono at -O0, needs the implicit inline definition
         ~ResidencyHeartbeat() {
             stop.store(true, std::memory_order_relaxed);
             if ( thr.joinable() ) thr.join();
