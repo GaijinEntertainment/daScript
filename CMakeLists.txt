@@ -2047,6 +2047,7 @@ install(FILES
 # Install dasllama-server (OpenAI-compatible LLM server; JIT-only, runs from the
 # SDK's live toolchain — see its deploy-jit.ps1 for the standalone bundle path)
 file(GLOB DAS_LLAMA_SERVER_FILES ${PROJECT_SOURCE_DIR}/utils/dasllama-server/*.das)
+list(FILTER DAS_LLAMA_SERVER_FILES EXCLUDE REGEX "/REVIEW\\.das$")
 install(FILES ${DAS_LLAMA_SERVER_FILES}
     ${PROJECT_SOURCE_DIR}/utils/dasllama-server/README.md
     ${PROJECT_SOURCE_DIR}/utils/dasllama-server/control.html

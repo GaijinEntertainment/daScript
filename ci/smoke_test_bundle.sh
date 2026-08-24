@@ -226,6 +226,18 @@ else
     echo "FAIL (need skills/daslang/{SKILL.md,references/}, .claude/skills/daslang, .claude/agents/dragon.md, REVIEW_COMMON.md, and no skills/internal/)"
     FAIL=$((FAIL + 1))
 fi
+# REVIEW.md / REVIEW.das are 100% internal -- per-folder review machinery never
+# ships. REVIEW_COMMON.md is the one exception: adopting repos vendor from it.
+printf '  %-30s ' "no REVIEW.md/REVIEW.das"
+REVIEW_LEAKS=$(find "$BUNDLE" \( -name "REVIEW*.md" -o -name "REVIEW*.das" \) ! -name "REVIEW_COMMON.md" 2>/dev/null)
+if [[ -z "$REVIEW_LEAKS" ]]; then
+    echo "OK"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL (internal review files in bundle):"
+    echo "$REVIEW_LEAKS" | sed 's/^/    /'
+    FAIL=$((FAIL + 1))
+fi
 # No installed file may name a utils/internal/ path -- that class is a shipped
 # tutorial/scaffold invoking a tool the bundle does not carry (found live: the
 # AOT integration scaffolds). skills/ is excluded here: its own gate above owns
