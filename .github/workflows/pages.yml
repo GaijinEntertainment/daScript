@@ -393,6 +393,7 @@ jobs:
         cp site/examples.html _site/
         cp site/dasllama.html _site/
         cp site/performance.html _site/
+        cp site/benchmarks.html _site/
         cp site/robots.txt _site/
         cp site/sitemap.xml _site/
         cp site/google2cfdec88941bbdfc.html _site/   # Search Console ownership token — must stay deployed
