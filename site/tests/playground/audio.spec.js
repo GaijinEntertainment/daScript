@@ -80,7 +80,9 @@ async function loadPlaygroundWithTap(page) {
 }
 
 test('strudel audio sample plays then stops @wasm', async ({ page }) => {
-    test.slow();   // a full runtime compile before the run; parallel-suite load stretches it
+    // The summed per-step budgets exceed test.slow()'s 90s - match the
+    // overall budget to them, like the revive specs.
+    test.setTimeout(240_000);
     await loadPlaygroundWithTap(page);
     await page.selectOption('#examples', { label: 'Audio: strudel synth arpeggio' });
     await page.waitForFunction(() => window.code.getValue().includes('strudel_tick'), null, { timeout: 15_000 });
@@ -100,7 +102,9 @@ test('strudel audio sample plays then stops @wasm', async ({ page }) => {
 });
 
 test('strudel audio sample reports its lifecycle @wasm', async ({ page }) => {
-    test.slow();   // a full runtime compile before the run; parallel-suite load stretches it
+    // The summed per-step budgets exceed test.slow()'s 90s - match the
+    // overall budget to them, like the revive specs.
+    test.setTimeout(240_000);
     await loadPlaygroundWithTap(page);
     await page.selectOption('#examples', { label: 'Audio: strudel synth arpeggio' });
     await page.waitForFunction(() => window.code.getValue().includes('strudel_tick'), null, { timeout: 15_000 });
