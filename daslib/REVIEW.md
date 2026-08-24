@@ -94,15 +94,16 @@ growing either overload set without the cap is a silently missed finding, the re
 suggestion that does not compile.
 
 **A diff that adds or changes an emit entry point - a function that runs the emit visitor
-(`CppAot` or its subclass `StandaloneContextGen`, the visitors that write C++) and then
+(`CppAot` or any subclass of it - the visitors that write C++) and then
 returns or writes the generated C++ - keeps the error check ahead of that return
-or write.** The error check is the program's `macroException`/`failToCompile` state, or
-`log_aot_emit_errors` where the emit runs standalone; a codegen exception mid-visit
-leaves partial C++.
+or write.** The error check is the program's `macroException`/`failToCompile` state, read
+directly or through `log_aot_emit_errors`; a codegen exception mid-visit leaves partial
+C++.
 
-**A visitor override in the emit visitor never gates on `macroException`/`failToCompile`.**
-The entry point owns that check; an override that returns early on the error state emits
-truncated C++ that the entry point still writes out as complete.
+**A visitor override in `CppAot` or any subclass of it never gates on
+`macroException`/`failToCompile`.** The function that runs the visitor owns that check; an
+override that returns early on the error state emits truncated C++ that the caller still
+writes out as complete.
 
 **An unreachable emit state writes `#error` into the output, never `panic`** -
 `runMacroFunction` swallows a panic, so the emitter never reports through it.
@@ -114,11 +115,10 @@ spell it are `aotStructName` and the `VarInfo` emitter's inline
 `aotSuffixNameEx(info.name, "_S", ...)`. One site changed alone writes `offsetof`s that
 name a struct declared under a different name.
 
-**A diff that adds or changes a function that runs the emit visitor keeps
-`buildStructEnumCollisions` running before that visitor runs.** It may run in a helper
-(`dumpDependencies` seeds it today): the table decides when a name gets its collision
-suffix, and a run that skips the seeding spells structs differently from the one that
-seeded it.
+**A diff that adds or changes a function that runs `CppAot` or any subclass of it
+keeps `buildStructEnumCollisions` running before that visitor runs - directly or in a
+helper it calls.** The table decides when a name gets its collision suffix, and a run
+that skips the seeding spells structs differently from the run that seeded it.
 
 **`match_error` stores a BORROWED `LineInfo` pointer - pass a pattern node's location,
 never a synthesized access expression's.** Access nodes are cloned per field inside a bare
