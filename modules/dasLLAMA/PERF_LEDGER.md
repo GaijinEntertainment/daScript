@@ -12,6 +12,30 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED - the mul_mm prefill billed ceil-32 M tiles, so an npos just past a tile boundary
+  paid a whole extra tile-row of wall for rows nothing reads; the GEMV-tail dispatch peels
+  npos % 32 in [1,8] onto the fixed-B mv family (measured 2026-08-24, M1 Max, the qwen
+  img:pp chase; plan: `qwen_pp_plan.md`).** The dig that got here killed two prior theories:
+  the "8B small-M text GEMM gap" (-6% at p341) was the cold-first-process page tax - the warm
+  re-run prices das +2.1% AHEAD (never conclude from run 1, struck AGAIN); and the "4B
+  wide-staging tax" was dead too - the one-process probe (`harness/image_turn_probe.das`,
+  three workloads x five skip arms) put the ds-wide quantum at +0.1 ms over narrow and the
+  whole in-process image tax at ~+6 ms, all in the attention family. The real structure is
+  the M staircase: 8B text p320 = 551 ms (10 tile-rows), p321 = 599, p352 = 600 - one
+  tile-row = ~48 ms, and the image turn (321 = 10x32+1) bills it for ONE real row. The tail
+  dispatches floor(npos/32) tiles + the remainder rows on the mv GEMVs; a lone row rides the
+  reduction-split decode GEMV - the mv forms idle half their lanes on it (measured: mv-only
+  tail -24 ms, the r==1 reroute -8.6 more). The mv_b2 store now gates on nrows (it
+  phantom-wrote row 1 at nrows == 1 - off the end of an exactly-full KV panel).
+  Results (released exe, r=3, quiet M1 Max, fresh upstream pairs): 8B img:pp 522 -> 552
+  tok/s (-7.5% -> -2.2%), 4B img:pp 942 -> 986 (-2.7%), 8B text p321 534.5 -> 566.7 (+7.8%
+  ahead); p341/p512 unchanged (remainders outside the window); 30B Omni img:pp 783 (rides -
+  its FFN is MoE, out of tail scope). **OPEN followups: (1) the span-attention tax (~6 ms/turn
+  in-process, the whole remaining probe-visible image cost); (2) the post-encode context
+  residue (~10 ms on 8B - the bench-context image wall exceeds the in-process wall by it);
+  (3) the kq mul_mm sites and the MoE prefill GEMMs take no tail yet (the kq mv twins
+  exist); (4) r in [9,15] via a third mv pass (~12 ms more on the shapes that hit it).**
+
 - **LANDED - the Metal q8 decode GEMV family ran one-row-per-simdgroup with a full-n walk,
   spilling the x vector past L1 from n=4096; the reduction-split form takes every q8 model
   (measured 2026-08-24, M1 Max, the decode-tg chase).** The dig: qwen3vl text cells were

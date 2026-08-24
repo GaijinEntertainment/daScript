@@ -78,7 +78,10 @@ MoE prefill (30B −4%), the span-attn +6 ms, the ~10 ms post-encode residue.
       Probe (8B, one process, npos=321): tokens 599.2 -> 566.8 ms, wide-span 605.3 -> 572.6.
 - [x] Gates: mm-tail parity arm (residues 257/321%32==1 and 261/%32==5, token-exact, tail-off
       A/B, engage counters; y-offset poison control REDS it), kernels suite 7/7.
-- [ ] base + batch gates; rig re-release; the image board + text cells re-measured
-      record-grade; PERF_LEDGER entry.
+- [x] base + batch gates green; rig re-released; the board re-measured record-grade
+      (released exe, r=3, quiet box, fresh upstream pairs): 8B img:pp 522 -> 552 tok/s
+      (-7.5% -> -2.2% vs 564.6), 4B img:pp 942 -> 986 (-2.7% vs 1013.2), 8B text p321
+      534.5 -> 566.7 (+7.8% ahead of 525.9), p341/p512 unchanged, 30B Omni 783 (rides).
+      PERF_LEDGER entry in.
 - [ ] Followups: span-attn tax (~6 ms), post-encode residue (~10 ms), kq mul_mm + MoE prefill
       tails (the mv_kq twins exist), r in [9,15] via a third mv pass (marginal ~12 ms).
