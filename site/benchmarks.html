@@ -269,6 +269,11 @@
         "fibonacci recursive": "fib_recursive"
     };
 
+    function escapeHtml(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
     function fmt(t) {
         if (t == null) return "-";
         if (t >= 1) return t.toFixed(3) + "s";
@@ -286,6 +291,7 @@
             var vals = lanes.map(function (l) { return t[l.key] != null ? t[l.key] : null; });
             // a 0.0 lane is below the capture's timer resolution - never the row's baseline
             var best = Math.min.apply(null, vals.filter(function (v) { return v != null && v > 0; }));
+            if (!isFinite(best)) best = null;
             rows.push({ name: name, vals: vals, best: best });
         });
         function cellFor(row, col) {
@@ -316,7 +322,8 @@
 
         rows.forEach(function (r) {
             var slug = PLAYGROUND_SLUGS[r.name];
-            var label = slug ? "<a href='/playground/?example=" + slug + "'>" + r.name + "</a>" : r.name;
+            var name = escapeHtml(r.name);
+            var label = slug ? "<a href='/playground/?example=" + slug + "'>" + name + "</a>" : name;
             html += "<tr><td class='bm-td-name'>" + label + "</td>";
             r.vals.forEach(function (v, i) {
                 var das = lanes[i].das;
@@ -327,7 +334,7 @@
                 if (state.view === "table") {
                     html += "<td class='" + cls + "'>" + fmt(v) + "</td>";
                 } else {
-                    var w = Math.max(3, 100 * r.best / v);  // longer = faster
+                    var w = r.best ? Math.max(3, 100 * r.best / v) : 3;  // longer = faster
                     html += "<td class='" + cls + "'>" + fmt(v) +
                         "<span class='bm-cell-bar'><i style='width:" + w.toFixed(1) + "%'></i></span></td>";
                 }
@@ -372,9 +379,9 @@
 
     function renderProvenance() {
         var p = state.data[state.platform];
-        var prov = "<b>" + p.cpu + "</b> \u00b7 das lanes captured " + p.das_capture + " (daslang " + p.das_version + ")";
+        var prov = "<b>" + escapeHtml(p.cpu) + "</b> \u00b7 das lanes captured " + escapeHtml(p.das_capture) + " (daslang " + escapeHtml(p.das_version) + ")";
         if (p.ext_capture !== p.das_capture) {
-            prov += " \u00b7 other runtimes " + p.ext_capture + " (same box)";
+            prov += " \u00b7 other runtimes " + escapeHtml(p.ext_capture) + " (same box)";
         }
         prov += " \u00b7 <a class='forge-link-amber' href='https://github.com/borisbat/dasProfile'>dasProfile</a>";
         document.getElementById("bm-prov").innerHTML = prov;
@@ -392,10 +399,10 @@
         var tests = Object.keys(p.sections[state.board] || {}).length;
         var lines = [
             "<div><span class='prompt'>$</span> daslang dasProfile/main.das -- --json</div>",
-            "<div class='dim'>  " + p.cpu + "</div>",
-            "<div><span class='metric'>daslang </span><span class='amber'>" + p.das_version + "</span><span class='dim'> \u00b7 LLVM " + shortVersion(v.llvm) + " \u00b7 " + (v.cpp_compiler || "?") + "</span></div>",
-            "<div class='dim'>  LuaJIT " + shortVersion(v.luajit) + " \u00b7 Luau " + shortVersion(v.luau) + " \u00b7 QuickJS " + shortVersion(v.quickjs) + " \u00b7 Mono " + shortVersion(v.mono) + " \u00b7 .NET " + shortVersion(v.dotnet) + " \u00b7 Quirrel " + shortVersion(v.quirrel) + "</div>",
-            "<div class='ok'>  \u2713 " + tests + " benchmarks \u00b7 " + boards + " boards \u00b7 captured " + p.das_capture + "</div>"
+            "<div class='dim'>  " + escapeHtml(p.cpu) + "</div>",
+            "<div><span class='metric'>daslang </span><span class='amber'>" + escapeHtml(p.das_version) + "</span><span class='dim'> \u00b7 LLVM " + escapeHtml(shortVersion(v.llvm)) + " \u00b7 " + escapeHtml(v.cpp_compiler || "?") + "</span></div>",
+            "<div class='dim'>  LuaJIT " + escapeHtml(shortVersion(v.luajit)) + " \u00b7 Luau " + escapeHtml(shortVersion(v.luau)) + " \u00b7 QuickJS " + escapeHtml(shortVersion(v.quickjs)) + " \u00b7 Mono " + escapeHtml(shortVersion(v.mono)) + " \u00b7 .NET " + escapeHtml(shortVersion(v.dotnet)) + " \u00b7 Quirrel " + escapeHtml(shortVersion(v.quirrel)) + "</div>",
+            "<div class='ok'>  \u2713 " + tests + " benchmarks \u00b7 " + boards + " boards \u00b7 captured " + escapeHtml(p.das_capture) + "</div>"
         ];
         document.getElementById("bm-hero-receipt").innerHTML = lines.join("");
     }
