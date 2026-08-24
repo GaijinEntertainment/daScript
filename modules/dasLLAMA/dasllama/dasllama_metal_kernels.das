@@ -1932,7 +1932,7 @@ class MetalQ8MvB2 {
             s += simd_shuffle_down(s, 4u)
             s += simd_shuffle_down(s, 2u)
             s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row0 < ka.ddim) {
+            if (tx == 0u && row0 < ka.ddim && uint(b) < ka.nrows) {
                 y[uint(b) * ka.ys + row0] = s
             }
         }
@@ -3671,8 +3671,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
 
 // ===== encoders =====
 
-def enc_gemv(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64; bx, by, bn, bd : MetalBuffer?; d : int64; yoff : uint64 = 0ul) {
-    enc_gemv_c(enc, bw, boff, bw, bx, by, yoff, bn, bd, d, 1l)
+def enc_gemv(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64; bx, by, bn, bd : MetalBuffer?; d : int64; yoff : uint64 = 0ul; xoff : uint64 = 0ul) {
+    enc_gemv_c(enc, bw, boff, bw, bx, xoff, by, yoff, bn, bd, d, 1l)
 }
 
 // K-quant site GEMV — the per-format twin of enc_gemv over the kq plane pair
@@ -6386,8 +6386,8 @@ class template MetalQ8GemvT {
 class MetalQ8Gemv {
     @ssbo @binding = 0 @role = "weight" @off = "boff" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
     @ssbo @binding = 1 @role = "weight" @off = "boff" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 x : array<float4>    // [n] f32 vector, float4 view
-    @ssbo @binding = 3 @off = "yoff" @span = "d*np*4" y : array<float>     // [d] outputs (np = 1 on this form)
+    @ssbo @binding = 2 @role = "read" @off = "xoff" x : array<float4>    // [n] f32 vector, float4 view
+    @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "d*np*4" y : array<float>     // [d] outputs (np = 1 on this form)
     @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
     @uniform @binding = 5 ddim : uint       // d (output rows)
     @workgroup red : float[64]              // [2 rows][32 lanes] cross-sg partials

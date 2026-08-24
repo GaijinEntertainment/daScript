@@ -479,6 +479,50 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 t |> success(reload_preps_run() > preps0, "the drop ran the registered reload preps (decode's discard_pre reached through the registry)")
             }
 
+            // mm-tail arm: the GEMV-tail residue shapes — npos % 32 == 1 (the reduction-split
+            // GEMV leg) and == 5 (the mv b4 + pair leg). Token parity vs the all-CPU control,
+            // the tail-off A/B twin, and the engage counter as the anti-vacuous witness.
+            if (arm_on(t, "mm-tail")) {
+                pin_kernel_backend("portable")
+                set_wscale_f16(false)
+                for (nres in [257l, 261l]) {
+                    var sl : array<int64>
+                    sl |> reserve(nres)
+                    for (i in range64(nres)) {
+                        sl |> push(prompt[i])
+                    }
+                    let cpu_r <- continuation(tr, tr, sl, 24)
+                    t |> success(select_prefill_override("metal"), "override registered (mm-tail {nres})")
+                    let served0 = metal_prefill_stats().prefills
+                    let tail0 = metal_prefill_tail_stats()
+                    let gpu_r <- continuation(trg, tr, sl, 24)
+                    let served = metal_prefill_stats().prefills - served0
+                    let dsites = metal_prefill_tail_stats().sites - tail0.sites
+                    let drows = metal_prefill_tail_stats().rows - tail0.rows
+                    set_metal_prefill_mm_tail(false)
+                    let tail1 = metal_prefill_tail_stats()
+                    let gpu_p <- continuation(trg, tr, sl, 24)
+                    set_metal_prefill_mm_tail(true)
+                    select_prefill_override("")
+                    if (served == 0l) {
+                        delete sl
+                        feint("metal prefill declined (no Metal device?); mm-tail parity skipped\n")
+                        continue
+                    }
+                    t |> success(dsites > 0l, "npos={nres}: the GEMV tail engaged ({dsites} sites, {drows} rows)")
+                    t |> equal(drows, dsites * (nres % 32l), "npos={nres}: every peeled site carried the {nres % 32l}-row remainder")
+                    t |> equal(metal_prefill_tail_stats().sites - tail1.sites, 0l, "npos={nres}: tail off - the padded-tile path serves")
+                    log_gen_texts(tr, "mm-tail/{nres}", cpu_r, gpu_r)
+                    t |> success(same(cpu_r, gpu_r), "npos={nres}: 24-token continuation matches the all-CPU control (GEMV tail)")
+                    log_gen_texts(tr, "mm-tail-off/{nres}", cpu_r, gpu_p)
+                    t |> success(same(cpu_r, gpu_p), "npos={nres}: the tail-off twin matches the control too (A/B)")
+                    delete sl
+                }
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+            }
+
             // s16 arm (W2): the DEFAULT-load scale plane — blobs read raw f16 scales, the
             // classifier GEMV takes its halfword twin; a fresh load owns fresh weight regions.
             // The restores above un-pinned the backend — re-pin row-major (the donor contract)
