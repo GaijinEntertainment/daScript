@@ -38,13 +38,13 @@ a repeatable flag. The long name is the field name with underscores as hyphens; 
 
 | Annotation / form | Behaviour |
 |---|---|
-| `@clarg_required` | Missing flag ⇒ `parse_args` returns an error string. |
+| `@clarg_required` | Missing flag => `parse_args` returns an error string. |
 | `@clarg_doc` | The `--help` text. |
 | `@clarg_short = "n"` | Short alias (`-n`). |
 | `@clarg_name = "show-help"` | Overrides the derived long name. |
 | `@clarg_env = "NAME"` | Environment twin. |
 | `@clarg_positional` | Consumed in declaration order. `string`, `Option<string>`, `array<string>` only; an array positional must be last; a required positional cannot follow an optional one; not combinable with `@clarg_short` or `@clarg_count`. |
-| `@clarg_count` | Plain `int`; sums occurrences, so `-v -v -v` gives `3`. **Short-flag bundling is not implemented** — `-vvv` parses as nothing and leaves the field `0`. |
+| `@clarg_count` | Plain `int`; sums occurrences, so `-v -v -v` gives `3`. **Short-flag bundling is not implemented** - `-vvv` parses as nothing and leaves the field `0`. |
 | `@clarg_mutex_group = "name"` | Mutually exclusive group. |
 | `@clarg_skip` | Excludes the field from the CLI schema. |
 | `Option<T>` field type | Distinguishes "not supplied" from the zero value (`require daslib/option`). |
@@ -83,8 +83,8 @@ interpreter wires it to `-?` instead:
 help : bool
 ```
 
-Only an `-exe` binary owns argv, so `-h` / `--help` — and `parse_args_with_help`'s automatic help
-flag — are reachable only there.
+Only an `-exe` binary owns argv, so `-h` / `--help` - and `parse_args_with_help`'s automatic help
+flag - are reachable only there.
 
 ## Environment twins
 
@@ -95,15 +95,15 @@ become underscores; `@clarg_env = ""` opts a field out). Help shows it as `(env:
 
 A boolean reads `""`, `0`, `false`, `off`, `no` (any case) as false and anything else as true; a
 set-but-empty variable counts as unset; garbage in an int / float / enum variable is a parse
-**error**, exactly as on the command line — and so is a bare value-less `--flag` even when the
+**error**, exactly as on the command line - and so is a bare value-less `--flag` even when the
 variable is set. Either carrier satisfies `@clarg_required`. Positional, `@clarg_count`, and
 repeatable fields have no environment form; mutex groups are checked on the command line only, so an
 environment-supplied value never conflicts.
 
-## `[EnvConfig]` — ambient library knobs
+## `[EnvConfig]` - ambient library knobs
 
-`[EnvConfig(env_prefix = "MYLIB")]` — same `@clarg_doc` / `@clarg_env` vocabulary and name
-derivation, `bool` / `int` / `int64` / `float` / `string` fields, field initializers as defaults —
+`[EnvConfig(env_prefix = "MYLIB")]` - same `@clarg_doc` / `@clarg_env` vocabulary and name
+derivation, `bool` / `int` / `int64` / `float` / `string` fields, field initializers as defaults -
 generates `env_config(type<T>) : T` plus `get_env_config_info(type<T>)` for documentation
 generators.
 
@@ -115,7 +115,7 @@ Call it **once**, never per call. Same semantics as the twins, except that garba
 a warning and keeps the default instead of erroring. The command-line-only annotations (positional,
 count, required, short, mutex) are rejected here.
 
-An `Option<T>` field stays `none` when the variable is unset — read it with `??` or `is_some`.
+An `Option<T>` field stays `none` when the variable is unset - read it with `??` or `is_some`.
 `CommandArgumentInfo` also exposes, for documentation generators, `@clarg_default_doc = "probed"`
 (overrides the rendered default, for when the initializer literal would mislead) and `@clarg_path`
 (marks a string field as a filesystem path).

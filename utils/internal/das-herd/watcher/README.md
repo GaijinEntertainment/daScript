@@ -67,7 +67,7 @@ capture sidecar remains a follow-up.
 
 File inspection uses the same hosted-task primitive and a 15-second external
 timeout. The patch itself is captured byte-exactly through a pipe-to-file
-helper — the task terminal carries only diagnostics, so ConPTY column wrapping
+helper - the task terminal carries only diagnostics, so ConPTY column wrapping
 can never corrupt long diff lines. Working-tree diffs request three context
 lines, then read the complete working file separately for View; this keeps a
 12,000-line file out of the diff transport without changing Git semantics. The

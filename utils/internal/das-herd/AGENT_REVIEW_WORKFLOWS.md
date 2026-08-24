@@ -371,25 +371,25 @@ decisions that need a human, and merge when the user's declared policy permits.
 
 ### The observer model: tool-driven, not agent-driven (decided 2026-07-26)
 
-Watching is software's job; judgment is the agent's. Agents must never poll —
+Watching is software's job; judgment is the agent's. Agents must never poll -
 an agent context re-running `gh pr view` on a timer is the most expensive
 polling loop ever devised, and honest software does the same watch better for
-100500x less. The watcher grows a **GitHub observer**: dumb, cheap, tireless —
+100500x less. The watcher grows a **GitHub observer**: dumb, cheap, tireless -
 it polls PRs/CI/reviews, diffs observed state, and acts only on transitions.
 
-The lifecycle is inverted — the tool drives the agent ("PR slave driver"):
+The lifecycle is inverted - the tool drives the agent ("PR slave driver"):
 
 - **Arm**: when a PR is about to open or opens, the observer tells the
-  session's agent "we are about to do a PR, sit tight" — context delivered
+  session's agent "we are about to do a PR, sit tight" - context delivered
   once, no watching duties assigned.
 - **Summon**: on a meaningful transition the observer wakes the agent with a
-  delta briefing — "CI lane X went red after commit Y", "review question Z
-  arrived" — so tokens are spent on the judgment call, never on discovering
+  delta briefing - "CI lane X went red after commit Y", "review question Z
+  arrived" - so tokens are spent on the judgment call, never on discovering
   that nothing changed.
 
 Signal hierarchy, hard before soft: **a CI lane going red is a 100% real
 failure** and outranks every advisory signal. "Copilot says it's bad" is
-cute — an input to judgment; "test failed" is truth — an event that summons.
+cute - an input to judgment; "test failed" is truth - an event that summons.
 Attention ranking follows deviation, not activity: changes outside the
 declared Review Bundle focus, failures appearing after a force-push, repeated
 failed fix attempts on the same lane escalate to "needs looking into, for
@@ -458,12 +458,12 @@ for presentation, never the correctness oracle.
   tool-driven agent lifecycle (arm/summon); agents never poll. Hard signals
   (CI red) outrank soft ones (Copilot verdicts); attention ranks by deviation
   from the declared bundle, not by activity. Boris: review capacity is the
-  bottleneck — the PR-list rate resembles a medium-size startup — so the
+  bottleneck - the PR-list rate resembles a medium-size startup - so the
   next big UI after the terminal arc is the GitHub PR assistant, and key
   views are the regular workflow (human in terminals, human directing agents
   into terminals) plus reviewing copilot interaction with an honest
   "this one needs looking into, for reals" escalation instead of forced trust.
-- 2026-07-26: consequence of the observer model — automatic Copilot review on
+- 2026-07-26: consequence of the observer model - automatic Copilot review on
   GitHub becomes a redundant firehose; Boris intends to switch it off. Advisory
   review turns on-demand: summoned by the observer or the human when bundle
   deviation warrants it. When the repo setting actually flips, revisit
@@ -473,7 +473,7 @@ for presentation, never the correctness oracle.
   (reviews a claim, cheapest finding = deviation from the declaration), its
   output lands in the attention queue as a ranked soft signal (competes for
   trust, never demands it, never blocks), and escalation stays evidence-shaped
-  — an opinion with a reproduction (failing test) becomes a red lane and
+  - an opinion with a reproduction (failing test) becomes a red lane and
   summons; what can't be reproduced stays ranked advice. Reviewer sessions get
   fresh context and the bundle only, never the author's conversation
   (independence). Deterministic tools (lint, perf_lint, detect-dupe) join the

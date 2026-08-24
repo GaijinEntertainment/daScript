@@ -1,17 +1,17 @@
 # dasLLAMA Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`.
 
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
 
-**A timing rig — a script whose output is a measured wall or rate — and any kernel A/B lab,
+**A timing rig - a script whose output is a measured wall or rate - and any kernel A/B lab,
 wherever the diff puts them, answer to `benchmarks/REVIEW.md`.**
 
-**A change to what enters `performance/records/` or its manifests, an exchange change — the client or
+**A change to what enters `performance/records/` or its manifests, an exchange change - the client or
 schema for the sidecar exchange that boxes download tune winners from and submit winners
-to — or a provenance-manifest change, or a change to WHICH model file (a `.gguf`, a `.dlim`, an
+to - or a provenance-manifest change, or a change to WHICH model file (a `.gguf`, a `.dlim`, an
 mmproj, or an image or audio fixture) a recorded row or manifest pins, answers to
 `performance/REVIEW.md`.** A test or tool merely opening a stocked model file by name does
 not route.
@@ -22,18 +22,18 @@ not route.
 
 **A change to `dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_io.das`,
 `dasllama/dasllama_audio_embedder.das`, `dasllama/dasllama_asr.das`,
-`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR family file — one
-`dasllama/dasllama_<family>.das` holding a single speech model family — applies
+`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR family file - one
+`dasllama/dasllama_<family>.das` holding a single speech model family - applies
 `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
-`dasllama/dasllama_vision_embedder.das`, a vision family file — one
-`dasllama/dasllama_<family>.das` holding a single vision projector family — or an in-process
+`dasllama/dasllama_vision_embedder.das`, a vision family file - one
+`dasllama/dasllama_<family>.das` holding a single vision projector family - or an in-process
 path (one that runs inside the program under review, not a spawned child process) that
-splices a stream carrying decoded media — pixels or audio samples — into a prompt or
+splices a stream carrying decoded media - pixels or audio samples - into a prompt or
 schedules such a stream, applies `REVIEW_VISION.md`.**
 
-**A `dasllama/dasllama_tower.das` change — the shared encoder-tower home — applies
+**A `dasllama/dasllama_tower.das` change - the shared encoder-tower home - applies
 `REVIEW_AUDIO.md` and `REVIEW_VISION.md`;** a family file that only CALLS a shared rail does
 not thereby pick up the other modality's checklist.
 
@@ -42,13 +42,13 @@ not thereby pick up the other modality's checklist.
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same
 change.** Kernel work is whatever changes the generated kernel source, or the set of compiled
-pipeline variants (PSOs) built from it — a kernel body, a variant set, or a `[tune]` /
+pipeline variants (PSOs) built from it - a kernel body, a variant set, or a `[tune]` /
 `[tune_perm]` / `[tune_companion]` grid. A host-side bind or dispatch-argument change (an
 `@off` binding, a uniform value) is not, and neither is `[tune_scope]` metadata (`covers=`,
 `tuner=`, `version_of=`).
 
-**A `DASLLAMA_VERSION` bump with neither the kernel roster — the set of `[tune]`-scoped
-kernels a sidecar carries winners for — nor sidecar interchangeability changed is a
+**A `DASLLAMA_VERSION` bump with neither the kernel roster - the set of `[tune]`-scoped
+kernels a sidecar carries winners for - nor sidecar interchangeability changed is a
 defect**: equal versions mean an equal kernel roster and an interchangeable sidecar set
 (the exchange keys validity on version and box).
 
@@ -59,14 +59,14 @@ a kargs field, an `@off` bind offset, or a helper parameter.
 
 **Peak memory wins ties against load cost.** A change to an allocation reached from a load,
 bake, or convert path (judge a shared helper at each call site) that trades footprint for speed
-ships the measured pair — peak footprint and wall-clock — and an explicit stated decision.
+ships the measured pair - peak footprint and wall-clock - and an explicit stated decision.
 
 **A new GEMM/GEMV call site takes the fastest serving lane that exists for its weights; the
 f32 fallback is for correctness rails only.** A new call to an f32 matmul (`matmul_batch`,
 `mm_blob_b`, per-head `gemm_f32`, or an f32 GPU mm) outside a parity or oracle rail, where a
 faster-format twin already serves the same weights and shape, is a defect. Weights with no
 faster twin (unquantized planes) are out of scope; a site that must stay f32 for another
-reason is ledgered on the site's `ARCHITECTURE.md` §1 charter line, not commented into
+reason is ledgered on the site's `ARCHITECTURE.md` sec.1 charter line, not commented into
 compliance.
 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
@@ -76,27 +76,27 @@ file.** A platform-neutral engine file carrying it is a defect.
 more of `dasllama/dasllama_common.das`.**
 
 **No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
-a defect in engine code — instrumentation goes through the sanctioned rails, and a clock whose
+a defect in engine code - instrumentation goes through the sanctioned rails, and a clock whose
 value feeds logic is marked `// clock: control`. The rails, and where free-hand timing is
-legal, are `ARCHITECTURE.md` §2.10.
+legal, are `ARCHITECTURE.md` sec.2.10.
 
 **Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
-quantum is COVERED by an annotated region entry** — `[hot_path]`, any of the `[no_alloc]` /
+quantum is COVERED by an annotated region entry** - `[hot_path]`, any of the `[no_alloc]` /
 `[no_env]` / `[no_io]` contracts, or `[cold_path]` on its only reaching entry. Covered means
 an annotated entry reaches it: the contracts arm down the call graph, so an interior
 function carries nothing of its own. A region entry is the outermost such function (a kernel
 `*_encode` / `*_decode`, a step driver, the CPU decoder's `forward_*` entries); a loop
 reached only from a load, stage, bake, or convert path is not one, and the tokenizer
-encode/decode path's sanction is `ARCHITECTURE.md` §2.11's.
+encode/decode path's sanction is `ARCHITECTURE.md` sec.2.11's.
 
 **A new function that no annotated entry reaches but the runtime re-enters per token, per
-frame, or per prefill quantum — a step driver, or a backend entry called from dispatch or
-harness paths — carries its annotation itself; a rename is not new** (annotations follow
+frame, or per prefill quantum - a step driver, or a backend entry called from dispatch or
+harness paths - carries its annotation itself; a rename is not new** (annotations follow
 the name in the same change).
 
 **A change to `encode`/`bpe_encode` or anything they reach in `dasllama/dasllama_spm.das` /
 `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das` ships before/after `--tok` rows
-(`benchmarks/lcpp_bench.das`) for the affected backend** — the instrument is the scaling
+(`benchmarks/lcpp_bench.das`) for the affected backend** - the instrument is the scaling
 ratio across the size ladder, and superlinear is a defect.
 
 **A change to `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
@@ -107,47 +107,47 @@ EXECUTED, not skipped.**
 **An override announces itself where it changes the outcome.** An override is an environment
 knob or an exported runtime setter that moves a gate, policy, or threshold off its default;
 a CLI flag is never an override under this rule. Where one changes an observable outcome of
-the run — what it writes, reads, or mints — a printed line names it by its own spelling (the
+the run - what it writes, reads, or mints - a printed line names it by its own spelling (the
 env variable name, or the setter's function name); set-but-inert stays silent, per-site
 repeats are fine. Adding one, or giving one a new effect, without the announce is a defect.
 
-**A self-measured served-turn time — tok/s, a turn wall — entering
+**A self-measured served-turn time - tok/s, a turn wall - entering
 `performance/records/<box>.json` or `PERF_LEDGER.md` comes from the released `lcpp_bench`
-exe — `benchmarks/lcpp_bench.das` built by `daspkg release`, spawned by
+exe - `benchmarks/lcpp_bench.das` built by `daspkg release`, spawned by
 `performance/gen_bench_records.das` or run by hand where the cell's `PROFILE.md` section says
-so — never from the `-jit` script** (a `--for-debug-purposes` row is a debug instrument). A
+so - never from the `-jit` script** (a `--for-debug-purposes` row is a debug instrument). A
 tutorial's printed wall-clock is teaching output, feeding no board.
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
-`PROFILE.md` section. A servable capability is a modality, a family, or a serving path — a
+`PROFILE.md` section. A servable capability is a modality, a family, or a serving path - a
 lane a user's turn can be served through, a q8 or f32 serving lane and a GPU tower included;
 a new family or serving path landing inside an existing cell re-mints that cell's row on at
 least one box instead.
 
-**A timing figure describing a served turn as a whole — tok/s, latency, a whole-turn model
-or engine comparison — is a defect wherever it is written down with no cell behind it: a
+**A timing figure describing a served turn as a whole - tok/s, latency, a whole-turn model
+or engine comparison - is a defect wherever it is written down with no cell behind it: a
 checked-in doc, a ledger, a code comment, or a PR description.** The cell states its quant
 mode and stamps box and engine provenance, so a number can never silently describe a format
-nobody serves or a kernel set nobody ships. A rig-internal measurement margin — a crown
-delta, a noise floor, tuner timing — is settled by the sidecar or manifest stamp it rides in.
+nobody serves or a kernel set nobody ships. A rig-internal measurement margin - a crown
+delta, a noise floor, tuner timing - is settled by the sidecar or manifest stamp it rides in.
 
-**A figure measuring one engine stage inside a served turn — a stage wall, a stage share, a
+**A figure measuring one engine stage inside a served turn - a stage wall, a stage share, a
 stage speedup, or a cross-engine comparison of one stage; never a board cell's `pp`/`tg`
-rate — names the harness and flags that produced it, wherever it is written down: a
+rate - names the harness and flags that produced it, wherever it is written down: a
 checked-in doc, a ledger, a code comment, or a PR description.** The naming rides the
 figure's own sentence, a table heading that covers the table's rows, or a section-level
 provenance line that covers the paragraphs under it.
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
-`parse_image`'s mapping, and going live does no real work — repacking, quantizing, folding,
+`parse_image`'s mapping, and going live does no real work - repacking, quantizing, folding,
 permuting belong to the mint. A transform on the go-live path is a defect.
 
 **A missing `.dlim` is minted first, and the model is served from what was minted.**
 
 **There is one way to mint, and one way to load.** A weight carrier becomes live through
 `build_image` and `parse_image` in `dasllama/dasllama_image.das`. Reading weights into a live carrier,
-or releasing an image backing, anywhere else is a defect — and a second mint path, per family,
+or releasing an image backing, anywhere else is a defect - and a second mint path, per family,
 per format, or per backend, is a defect even where its output is identical.
 
 **A DECODER mint never holds the whole model.** It sizes the image before the first byte goes
@@ -155,7 +155,7 @@ out and writes each plane as it is produced. Keeping the source model resident t
 a defect, and a mint that is slower in exchange for a lower peak is correct.
 
 **A staged carrier mint (`cache_via_image_staged`) either refuses a source file at or past
-1 GiB, naming that file in the refusal, or streams it like a decoder** — the staged form holds
+1 GiB, naming that file in the refusal, or streams it like a decoder** - the staged form holds
 source and image at once, and that doubled peak is what the line caps.
 
 **A `.dlim` is box- and config-specific, not a portable format.** `image_identity` names the
@@ -163,54 +163,54 @@ box profile, the knobs, and the flavor a file was baked for, and a mismatch decl
 path that reinterprets a mismatched image, or widens an identity so that more files match, is a
 defect.
 
-**A bake reaps only its own lane** — an identity's (quant, tag) pair. A save drops AT MOST that
+**A bake reaps only its own lane** - an identity's (quant, tag) pair. A save drops AT MOST that
 lane's dead siblings plus BROKEN/version-stale images in any lane, nothing else.
 
 **Only a process that can recompute an image's identity may judge it dead.** Reaping an image
-whose identity the code cannot recompute — another flavor's, another family's — is a defect.
+whose identity the code cannot recompute - another flavor's, another family's - is a defect.
 
 **A plane split that follows the source FILE rather than a runtime knob takes ONE image tag**,
-with the meta flags describing the layout — a per-tensor type split is not a second flavor.
+with the meta flags describing the layout - a per-tensor type split is not a second flavor.
 
 **An image carries only what its flavor uses.** A plane the target platform or config never
-reads is not written — the mint decides, not the load. A flavor takes its file through
+reads is not written - the mint decides, not the load. A flavor takes its file through
 `image_path_for` and its tag through `register_image_family_tag`; carrying another flavor's
 planes is a defect.
 
 **A change to user-facing API updates every place it is shown.** User-facing means anything a
-consumer outside this repo can depend on — what it calls, types, requires, or parses
+consumer outside this repo can depend on - what it calls, types, requires, or parses
 (facade functions, CLI flags, environment knobs, file formats, defaults, what the installed
-SDK lets a program `require`) — plus the in-repo rig and tool surface: any output another tool
+SDK lets a program `require`) - plus the in-repo rig and tool surface: any output another tool
 parses, a console-only diagnostic not being one. A tutorial source, `.rst` page, docstring,
 help string, `README.md`, or checked-in document still showing the old call, flag, or default
 is a defect of the change, not of the docs.
 
-**Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) — the compile-time check that a
+**Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's
-path under `modules/dasLLAMA/` — is a defect:** a module added to its allowed set, the path
+path under `modules/dasLLAMA/` - is a defect:** a module added to its allowed set, the path
 match dropped or narrowed, or an error text that no longer names the facade to require
 instead. The allowed set is the table in the lint.
 
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
-owns, or a consumer `ARCHITECTURE.md` §1 names as ruled.** Any other file carrying it is a
-defect — a symbol the facade lacks is added to `dasllama/dasllama.das`, not escaped around.
+owns, or a consumer `ARCHITECTURE.md` sec.1 names as ruled.** Any other file carrying it is a
+defect - a symbol the facade lacks is added to `dasllama/dasllama.das`, not escaped around.
 A `require ... public` that re-exports an engine module OUT of an escaped file, beyond what
-that consumer's ruled charter (`ARCHITECTURE.md` §1) grants, is the same defect wearing a
+that consumer's ruled charter (`ARCHITECTURE.md` sec.1) grants, is the same defect wearing a
 different line.
 
 **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, adding a name to
-a check's licensed set — the names that check does not flag — or a finding text that no
+a check's licensed set - the names that check does not flag - or a finding text that no
 longer names what failed. What the gate enforces is read from the gate itself; each check's
 finding text states its own rule.
 
-**A new `REVIEW.das` check ships with its licensed set ledgered in `ARCHITECTURE.md` §1, in
+**A new `REVIEW.das` check ships with its licensed set ledgered in `ARCHITECTURE.md` sec.1, in
 the same change.**
 
-**A def of `dasllama/dasllama.das` — and a new OVERLOAD of one — is TAUGHT: demonstrated in
+**A def of `dasllama/dasllama.das` - and a new OVERLOAD of one - is TAUGHT: demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
 `doc/source/reference/tutorials/dasLLAMA_*.rst` page.** The gate matches def NAMES only, so
-an overload passes on a sibling's tutorial — the reviewer confirms a tutorial calls the NEW
+an overload passes on a sibling's tutorial - the reviewer confirms a tutorial calls the NEW
 signature, and a mention that only names it (a comment, a passing reference) does not count.
 
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
@@ -218,20 +218,20 @@ struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to
 a struct the renderer emits but the registry does not is caught by
 `tests/test_env_registry.das`.
 
-**`dasllama/dasllama_unicode.das`'s RANGES/WS tables are generated — retranscoded from llama.cpp's
+**`dasllama/dasllama_unicode.das`'s RANGES/WS tables are generated - retranscoded from llama.cpp's
 `unicode-data.cpp`; hand-editing them is a defect.**
 
 **A diff that adds a file, moves code between files, or changes what a file owns lands the
-`ARCHITECTURE.md` §1 edit that keeps the charters true, in the same change.** A per-file
+`ARCHITECTURE.md` sec.1 edit that keeps the charters true, in the same change.** A per-file
 inventory restated in this checklist is a defect of the checklist (a rule naming what KIND of code lands in
 which file is the checklist's own).
 
 **A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
-**A disk-order → compute-order transform lands per scope: kernel-layout in
+**A disk-order -> compute-order transform lands per scope: kernel-layout in
 `dasllama/dasllama_repack.das`, load-scope in `dasllama/dasllama_layout.das`.**
 
-**When placement rules disagree on one function, `ARCHITECTURE.md` §1's charter decides.**
+**When placement rules disagree on one function, `ARCHITECTURE.md` sec.1's charter decides.**
 
 **A CPU KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`,
 its format family kept whole.** GPU twins land in their backend kernel file.
@@ -239,31 +239,31 @@ its format family kept whole.** GPU twins land in their backend kernel file.
 **A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its backend file
 (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
-**A kernel body lands in its tier or backend kernel file** — never in `dasllama/dasllama_math.das` or a
+**A kernel body lands in its tier or backend kernel file** - never in `dasllama/dasllama_math.das` or a
 lens/dispatch macro file.
 
 **A family quirk lands in the family file; a piece two families need moves UP into the
-concern's shared file (its own file when none exists)** — never sideways into a sibling.
+concern's shared file (its own file when none exists)** - never sideways into a sibling.
 
-**A family gaining an arm for a media kind adds that kind's span markers — the template text
-that opens and closes the media rows — to that family's chat template, never a second
-renderer.** A family whose template or vocab lacks them has no arm for that media kind —
+**A family gaining an arm for a media kind adds that kind's span markers - the template text
+that opens and closes the media rows - to that family's chat template, never a second
+renderer.** A family whose template or vocab lacks them has no arm for that media kind - 
 `create_chat_` panics at create, not at render.
 
-**No signature in `dasllama/dasllama_tower.das` — the shared encoder-tower home — takes a
+**No signature in `dasllama/dasllama_tower.das` - the shared encoder-tower home - takes a
 type `dasllama/dasllama_audio.das` or a family file declares, and the file requires neither
 `dasllama/dasllama_audio.das` nor any family file.** A doc comment naming the family a
 helper was built for is fine; the code stays family-blind.
 
 **A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's
-file** — a single-caller helper sanctioned as tower-worthy is ledgered on `ARCHITECTURE.md`
-§1's tower charter line, not argued in review.
+file** - a single-caller helper sanctioned as tower-worthy is ledgered on `ARCHITECTURE.md`
+sec.1's tower charter line, not argued in review.
 
 **On the lane that serves the file's own planes, a weight plane's element type follows its
-SOURCE tensors, per weight region — the set of source tensors a carrier stores in one plane
+SOURCE tensors, per weight region - the set of source tensors a carrier stores in one plane
 (a block stack, a merger/projector).**
 
-**A weight region — the set of source tensors a carrier stores in one plane — whose source
+**A weight region - the set of source tensors a carrier stores in one plane - whose source
 tensors disagree on element type is refused in a message naming the offending tensor and
 both element types.**
 
@@ -272,10 +272,10 @@ serving restage) is a separate flavor under its own image identity, and the load
 it prints which lane it picked.**
 
 **A harness that prints output for another tool to compare fails loudly when it has nothing to
-print.** A run that ends without its comparison lines — wrong flags, failed load — exits
+print.** A run that ends without its comparison lines - wrong flags, failed load - exits
 non-zero.
 
-**Tool wire text — building or parsing — is produced only in `dasllama/dasllama_tools.das`.**
+**Tool wire text - building or parsing - is produced only in `dasllama/dasllama_tools.das`.**
 
 **No engine file (`dasllama/`) other than `dasllama/dasllama_audio_io.das` requires `audio` (the
 miniaudio decode module).**
@@ -283,10 +283,10 @@ miniaudio decode module).**
 **No engine file (`dasllama/`) other than `dasllama/dasllama_vision_io.das` requires `stbimage`.**
 Benchmarks, harnesses, and tests decode their own fixtures.
 
-**Engine, HTTP, or writer logic never lands in `dasllama/dasllama_scheduler.das`** — engine logic in
+**Engine, HTTP, or writer logic never lands in `dasllama/dasllama_scheduler.das`** - engine logic in
 engine files, HTTP in the server, writer logic in the writer's own file.
 
-**An `[init]`-only side-effect require lives in `dasllama/dasllama_transformer.das`** — arch
+**An `[init]`-only side-effect require lives in `dasllama/dasllama_transformer.das`** - arch
 registrations, GPU tiers, every module requiring the engine back; it sits in
 `dasllama/dasllama_common.das` only if engine code needs it.
 

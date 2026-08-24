@@ -1,15 +1,15 @@
 # daspkg Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
 **Run the unit suite on every change to a `.das` file in this folder:** `bin/daslang
-dastest/dastest.das -- --test utils/daspkg/test_daspkg.das` — fast, no network, interpreted.
+dastest/dastest.das -- --test utils/daspkg/test_daspkg.das` - fast, no network, interpreted.
 Such a change without a green unit run is a defect.
 
-**The integration suite — `bin/daslang dastest/dastest.das -- --test
-utils/daspkg/test_daspkg_git.das` — runs on any edit to `commands.das`, `index.das`, or
-`utils.das` whose hunks reach a function that runs a git command** — a behavior-preserving
+**The integration suite - `bin/daslang dastest/dastest.das -- --test
+utils/daspkg/test_daspkg_git.das` - runs on any edit to `commands.das`, `index.das`, or
+`utils.das` whose hunks reach a function that runs a git command** - a behavior-preserving
 refactor still counts. Needs network (the `borisbat/daspkg-test-*` fixture repos).
 
 **A change to `cmd_release`, `cmd_release_wasm`, or a `release_*` helper is verified on macOS,
@@ -20,13 +20,13 @@ directory), and no per-PR CI runs these suites.
 row in the same change.**
 
 **daspkg ships as a prebuilt exe: it stays in `DAS_UTILS` and `DAS_UTILS_SHIPPED_EXES`
-(`utils/CMakeLists.txt`)** — dropping either entry breaks the release bundle.
+(`utils/CMakeLists.txt`)** - dropping either entry breaks the release bundle.
 
 **A `cmd_release` bundle always mints the tune sidecar.** A `cmd_release` bundle that ships an
 exe without a sidecar beside it is a defect.
 
 **`--quick` is the only path that inherits a prior sidecar, and it refuses an incomplete one**
-— incomplete meaning missing any scope key the exe's deps JSON reports, the same completeness
+ - incomplete meaning missing any scope key the exe's deps JSON reports, the same completeness
 the release build itself checks.
 
 **`release_include_if_missing` files are user-owned after initialization.** A release path that
@@ -35,7 +35,7 @@ overwrites or deletes one, on any platform, is a defect.
 **`.daspkg_release.manifest` is written on every platform.**
 
 **Unit cells touch only local fixtures.** A `test_daspkg.das` cell that reaches the network is
-a defect — network coverage belongs in `test_daspkg_git.das`.
+a defect - network coverage belongs in `test_daspkg_git.das`.
 
 **A package, bundle, or app name that reaches a shell command is validated by
 `is_safe_pkg_name` first, and only `commands.das` may build such a command** (the validator is

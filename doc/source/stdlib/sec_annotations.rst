@@ -20,6 +20,7 @@ and other compile-time utilities.
    generated/build_const.rst
    generated/lpipe.rst
    generated/assert_once.rst
+   generated/only_nttp.rst
    generated/unroll.rst
    generated/bitfield_boost.rst
    generated/bitfield_trait.rst

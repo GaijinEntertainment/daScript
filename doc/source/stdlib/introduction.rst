@@ -119,6 +119,7 @@ Control flow macros
 * :doc:`lpipe <generated/lpipe>` — left-pipe operator macro (``<|``)
 * :doc:`is_local <generated/is_local>` — ``is_local_expr`` / ``is_scope_expr`` AST query helpers
 * :doc:`assert_once <generated/assert_once>` — ``assert_once`` — assertion that fires only on first failure
+* :doc:`only_nttp <generated/only_nttp>` — ``[only_nttp]`` — benchmark kernels reject slow-path extern binds
 * :doc:`unroll <generated/unroll>` — compile-time loop unrolling macro
 * :doc:`instance_function <generated/instance_function>` — ``[instance_function]`` annotation for struct method binding
 * :doc:`array_boost <generated/array_boost>` — ``temp_array``, ``array_view``, and ``empty`` helpers

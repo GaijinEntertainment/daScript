@@ -1,7 +1,7 @@
 # lineinfo-audit
 
 Validates AST `LineInfo` against actual source bytes across a corpus of `.das`
-files. Exists to keep ranges trustworthy for tooling that splices source text —
+files. Exists to keep ranges trustworthy for tooling that splices source text -
 lint auto-fix, extract-method/refactoring in the VSCode plugin, LSP features.
 
 ```
@@ -40,7 +40,7 @@ expression's range, `def operator X` anchors at `operator`.
 ## Reading the report
 
 Remaining violations are dominated by synthesized nodes that carry borrowed or
-degenerate ranges without `genFlags.generated` — compiler desugar (`delete`
+degenerate ranges without `genFlags.generated` - compiler desugar (`delete`
 statements, lambda/generator capture machinery) and daslib macro output
 (`match`, `apply`, `macro_verify`, decs `query`, `templates_boost` splices).
 Those are range-consumer hazards, not parser bugs: a fix/refactor tool must

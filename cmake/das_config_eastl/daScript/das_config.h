@@ -168,18 +168,7 @@ inline void *das_aligned_alloc16(uint64_t size) { return new char[size]; }
 inline void das_aligned_free16(void *ptr) { delete[] (char *)ptr; }
 inline size_t das_aligned_memsize(void *) { return 0; } // dagor asks defaultmem; no allocator here
 
-// if enabled, the generated interop will be marginally slower
-// the upside is that it well generate significantly less templated code, thus reducing compile time (and binary size)
-#ifndef DAS_SLOW_CALL_INTEROP
-#define DAS_SLOW_CALL_INTEROP 0
-#endif
-
 #ifndef DAS_FUSION
-#define DAS_FUSION 0
-#endif
-
-#if DAS_SLOW_CALL_INTEROP
-#undef DAS_FUSION
 #define DAS_FUSION 0
 #endif
 

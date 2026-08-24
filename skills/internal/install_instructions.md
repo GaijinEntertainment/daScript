@@ -2,7 +2,7 @@
 
 Read this before updating `install/CLAUDE.md` or changing what the SDK ships for AI
 assistants. The shipping decision itself is the folder (`skills/` root and
-`skills/daslang/` ship, `skills/internal/` never does) — that law and the move/split
+`skills/daslang/` ship, `skills/internal/` never does) - that law and the move/split
 rules live in `skill_taxonomy.md`; the content rules a shipped file must satisfy (and
 the `repo-only` marker mechanics) live in `writing_skills.md`. This file carries only
 what neither does: the SDK-side registry and the sync duties between the two CLAUDE.md
@@ -26,12 +26,12 @@ run from `ci/smoke_test_bundle.sh`.
 
 ## Registry duties
 
-- A skill moving between root and `internal/` changes what ships — move the file, then
+- A skill moving between root and `internal/` changes what ships - move the file, then
   fix BOTH CLAUDE.md tables: the top-level one always has a row; `install/CLAUDE.md`
   has a row exactly for shipped root skills. The gate fails the bundle when a shipped
   skill has no `install/CLAUDE.md` row.
 - The two CLAUDE.md heads share the language half by construction (the fails-silently
-  digest, the idiom table, the bundle pointer) — an edit to that half lands in BOTH
+  digest, the idiom table, the bundle pointer) - an edit to that half lands in BOTH
   files, same wording. Repo-dev content (build, CI, PR workflow) goes to the top-level
   head only.
 - Skill content edits touch `skills/<name>.md` only; shipping is automatic.

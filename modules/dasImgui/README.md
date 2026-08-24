@@ -2,21 +2,21 @@
 
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
-[Dear ImGui](https://github.com/ocornut/imgui) bindings for [daslang](https://daslang.io/) —
+[Dear ImGui](https://github.com/ocornut/imgui) bindings for [daslang](https://daslang.io/) -
 part of the daslang tree, built in by default.
 
 Provides the `imgui` binding, the v2 `widgets/` macro layer (`[widget]`/`[container]`/`with_*`), and the `imgui_harness` runtime for building GUI applications with daslang.
 
 ## Part of the daslang tree
 
-dasImgui lives at `modules/dasImgui` and builds with the normal daslang build —
+dasImgui lives at `modules/dasImgui` and builds with the normal daslang build -
 no package install. It is enabled by default (root CMake option
 `DAS_IMGUI_DISABLED`, default `OFF`) and needs the in-tree dasGlfw and
 dasClipboard modules (also on by default).
 
 Projects whose `.das_package` declares `require_package("dasImgui")` keep
 working unchanged: `daspkg install` recognizes the in-tree module and reports
-it as *part of this daslang tree — nothing to install*.
+it as *part of this daslang tree - nothing to install*.
 
 The previous standalone repo ([github.com/borisbat/dasImgui](https://github.com/borisbat/dasImgui))
 is archived with full history; development continues in the daslang tree.
@@ -29,7 +29,7 @@ is archived with full history; development continues in the daslang tree.
 
 ## Usage
 
-The canonical pattern uses `imgui/imgui_harness` — it hides the GLFW/GL backend
+The canonical pattern uses `imgui/imgui_harness` - it hides the GLFW/GL backend
 boilerplate behind five helpers, re-exports the backend-agnostic v2 stack, and
 supports `--headless` for tests and CI. See the [imgui tutorials](https://daslang.io/doc/reference/tutorials/imgui/index.html)
 starting at `boost_basics` for a complete walkthrough.
@@ -86,7 +86,7 @@ the usual `-project_root <project>` invocation.
 
 | Module | Require | Description |
 |--------|---------|-------------|
-| `imgui_harness` | `require imgui/imgui_harness` | Canonical wrapper for apps/examples/tests — hides GLFW/GL boilerplate, re-exports the backend-agnostic v2 stack, dispatches windowed vs `--headless` at runtime |
+| `imgui_harness` | `require imgui/imgui_harness` | Canonical wrapper for apps/examples/tests - hides GLFW/GL boilerplate, re-exports the backend-agnostic v2 stack, dispatches windowed vs `--headless` at runtime |
 | `imgui` | `require imgui` | Core Dear ImGui bindings (raw surface; most code goes through the v2 `widgets/` macro layer rather than calling these directly) |
 | `imgui_app` | (used by harness) | GLFW + OpenGL3 application runtime |
 | `imgui_app_headless` | (used by harness) | Display-less ImGui backend (CPU font atlas, no GLFW, no GL) for `--headless` runs |
@@ -95,11 +95,11 @@ the usual `-project_root <project>` invocation.
 ## Examples
 
 - `examples/features/embedded_terminal.das` - live PowerShell/ConPTY terminal view (also runs through the headless harness)
-- `examples/features/with_indent.das` — smallest single-file harness example (drives [test_with_indent.das](../../modules/dasImgui/tests/test_with_indent.das))
-- `examples/features/` — 90+ small focused demos, one widget/helper per file
-- `examples/imgui_demo/imgui_demo.das` — full Dear ImGui demo port (90+ scenes)
-- `examples/tutorial/` — annotated step-by-step tutorials matching the [docs site](https://daslang.io/doc/reference/tutorials/imgui/index.html)
-- `examples/save_demo/` — save/load round-trip demo
+- `examples/features/with_indent.das` - smallest single-file harness example (drives [test_with_indent.das](../../modules/dasImgui/tests/test_with_indent.das))
+- `examples/features/` - 90+ small focused demos, one widget/helper per file
+- `examples/imgui_demo/imgui_demo.das` - full Dear ImGui demo port (90+ scenes)
+- `examples/tutorial/` - annotated step-by-step tutorials matching the [docs site](https://daslang.io/doc/reference/tutorials/imgui/index.html)
+- `examples/save_demo/` - save/load round-trip demo
 
 ## Tests
 
@@ -124,9 +124,9 @@ daslang modules/dasImgui/utils/imgui2rst.das
 sphinx-build -b html doc/source doc/_build/html
 ```
 
-The first step runs the RST emitter (parallel to daslang's `das2rst`) — the
+The first step runs the RST emitter (parallel to daslang's `das2rst`) - the
 imgui modules carry macro-generated surfaces das2rst's reflection pass can't
-group — writing the GUI stdlib pages into `doc/source/stdlib/generated/`
+group - writing the GUI stdlib pages into `doc/source/stdlib/generated/`
 (gitignored). Re-run it whenever a public `//!` comment changes. Tutorial
 recordings are not in git; they stage from the rolling `docs-assets` GitHub
 release via `utils/internal/docs-assets/fetch.sh` / `fetch.ps1`. CI builds Sphinx with

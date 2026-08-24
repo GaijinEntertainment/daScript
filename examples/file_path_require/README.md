@@ -26,6 +26,6 @@ project file is loaded by the inner default `FsFileAccess`, which
 handles file-path requires directly.
 
 In project mode, regular `.das` source files have their requires routed
-through `module_get` — so `main.das` here does **not** use file-path
+through `module_get` - so `main.das` here does **not** use file-path
 requires when run with `-project`; you would need to implement
 file-path resolution inside your own `module_get` to support that.

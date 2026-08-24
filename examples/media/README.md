@@ -2,7 +2,7 @@
 
 CC0 (public domain) audio samples for daStrudel examples and MIDI player.
 
-## Drums — SamsSonor
+## Drums - SamsSonor
 
 Sam Greene's Sonor Force 3001 drumkit.
 Source: https://github.com/sfzinstruments/SamsSonor
@@ -33,13 +33,13 @@ Source FLAC samples are converted to mono OGG with linear peak normalization:
 ffmpeg -y -i Source.flac -ac 1 -c:a libvorbis -q:a 4 output.ogg
 ```
 
-Do NOT use `-af loudnorm` — it introduces echoes/artifacts on percussive sounds.
+Do NOT use `-af loudnorm` - it introduces echoes/artifacts on percussive sounds.
 For volume balancing between drum types, use linear scaling:
 ```
 ffmpeg -y -i Source.flac -ac 1 -af "volume=0.8" -c:a libvorbis -q:a 4 output.ogg
 ```
 
-## Piano — jRhodes3c
+## Piano - jRhodes3c
 
 1977 Rhodes Mark I Stage 73 electric piano by jlearman.
 Source: https://github.com/sfzinstruments/jlearman.jRhodes3c
@@ -78,4 +78,4 @@ Public domain MIDI files for testing the MIDI player:
 
 | File | Piece | Source |
 |---|---|---|
-| `midi/fur_elise.mid` | Beethoven — Fur Elise | midiworld.com |
+| `midi/fur_elise.mid` | Beethoven - Fur Elise | midiworld.com |

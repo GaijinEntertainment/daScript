@@ -2031,8 +2031,8 @@ namespace das
     }
 
 #define STR_DSTR_REG(OPNAME,EXPR) \
-    addExtern<DAS_BIND_FUN(OPNAME##_str_dstr)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_str_dstr)); \
-    addExtern<DAS_BIND_FUN(OPNAME##_dstr_str)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_dstr_str));
+    addExternInline<DAS_BIND_FUN(OPNAME##_str_dstr)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_str_dstr)); \
+    addExternInline<DAS_BIND_FUN(OPNAME##_dstr_str)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_dstr_str));
 
     void PointerOp ( const FunctionPtr & idpi ) {
         idpi->unsafeOperation = true;
@@ -2290,55 +2290,55 @@ namespace das
         // typeinfo macros
         addTypeInfoMacro(new ClassInfoMacro());
         // command line arguments
-        addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
+        addExternInline<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
             SideEffects::accessExternal,"builtin_das_root")
                 ->args({"context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(builtin_shared_module_extension)>(*this, lib, "shared_module_extension",
+        addExternInline<DAS_BIND_FUN(builtin_shared_module_extension)>(*this, lib, "shared_module_extension",
             SideEffects::none,"builtin_shared_module_extension")
                 ->args({"context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(builtin_get_das_version)>(*this, lib, "get_das_version",
+        addExternInline<DAS_BIND_FUN(builtin_get_das_version)>(*this, lib, "get_das_version",
             SideEffects::none,"builtin_get_das_version")
                 ->args({"context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(getCommandLineArguments)>(*this, lib, "builtin_get_command_line_arguments",
+        addExternInline<DAS_BIND_FUN(getCommandLineArguments)>(*this, lib, "builtin_get_command_line_arguments",
             SideEffects::accessExternal,"getCommandLineArguments")
                 ->arg("arguments");
-        addExtern<DAS_BIND_FUN(is_standalone_exe)>(*this, lib, "is_standalone_exe",
+        addExternInline<DAS_BIND_FUN(is_standalone_exe)>(*this, lib, "is_standalone_exe",
             SideEffects::accessExternal, "is_standalone_exe");
-        addExtern<DAS_BIND_FUN(is_safe_hash)>(*this, lib, "is_safe_hash",
+        addExternInline<DAS_BIND_FUN(is_safe_hash)>(*this, lib, "is_safe_hash",
             SideEffects::none, "is_safe_hash");
-        addExtern<DAS_BIND_FUN(withCommandLineArguments)>(*this, lib,  "with_argv",
+        addExternInline<DAS_BIND_FUN(withCommandLineArguments)>(*this, lib,  "with_argv",
             SideEffects::invoke, "withArgv")
                 ->args({"new_arguments", "block","context","line"});
         // compile-time functions
-        addExtern<DAS_BIND_FUN(is_compiling)>(*this, lib, "is_compiling",
+        addExternInline<DAS_BIND_FUN(is_compiling)>(*this, lib, "is_compiling",
             SideEffects::accessExternal, "is_compiling");
-        addExtern<DAS_BIND_FUN(is_compiling_macros)>(*this, lib, "is_compiling_macros",
+        addExternInline<DAS_BIND_FUN(is_compiling_macros)>(*this, lib, "is_compiling_macros",
             SideEffects::accessExternal, "is_compiling_macros");
-        addExtern<DAS_BIND_FUN(is_compiling_macros_in_module)>(*this, lib, "is_compiling_macros_in_module",
+        addExternInline<DAS_BIND_FUN(is_compiling_macros_in_module)>(*this, lib, "is_compiling_macros_in_module",
             SideEffects::accessExternal, "is_compiling_macros_in_module")
                 ->args({"name"});
-        addExtern<DAS_BIND_FUN(is_reporting_compilation_errors)>(*this, lib, "is_reporting_compilation_errors",
+        addExternInline<DAS_BIND_FUN(is_reporting_compilation_errors)>(*this, lib, "is_reporting_compilation_errors",
             SideEffects::accessExternal, "is_reporting_compilation_errors");
-        addExtern<DAS_BIND_FUN(get_context_share_counter)>(*this, lib, "get_context_share_counter",
+        addExternInline<DAS_BIND_FUN(get_context_share_counter)>(*this, lib, "get_context_share_counter",
             SideEffects::accessExternal, "get_context_share_counter")
                 ->arg("context");
         // iterator functions
-        addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
+        addExternInline<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_first")
                 ->args({"iterator","data","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_iterator_next)>(*this, lib,  "_builtin_iterator_next",
+        addExternInline<DAS_BIND_FUN(builtin_iterator_next)>(*this, lib,  "_builtin_iterator_next",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_next")
                 ->args({"iterator","data","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_iterator_close)>(*this, lib, "_builtin_iterator_close",
+        addExternInline<DAS_BIND_FUN(builtin_iterator_close)>(*this, lib, "_builtin_iterator_close",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_close")
                 ->args({"iterator","data","context"});
-        addExtern<DAS_BIND_FUN(builtin_iterator_delete)>(*this, lib, "_builtin_iterator_delete",
+        addExternInline<DAS_BIND_FUN(builtin_iterator_delete)>(*this, lib, "_builtin_iterator_delete",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_delete")
                 ->args({"iterator","context"});
-        addExtern<DAS_BIND_FUN(builtin_iterator_iterate)>(*this, lib, "_builtin_iterator_iterate",
+        addExternInline<DAS_BIND_FUN(builtin_iterator_iterate)>(*this, lib, "_builtin_iterator_iterate",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_iterate")
                 ->args({"iterator","data","context"});
-        addExtern<DAS_BIND_FUN(builtin_iterator_empty)>(*this, lib, "empty",
+        addExternInline<DAS_BIND_FUN(builtin_iterator_empty)>(*this, lib, "empty",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_empty")
                 ->arg("iterator");
         // count and ucount iterators
@@ -2353,47 +2353,47 @@ namespace das
         fnuCount->arguments[0]->init = new ExprConstUInt(0);  // start=0
         fnuCount->arguments[1]->init = new ExprConstUInt(1);  // step=0
         // make-iterator functions
-        addExtern<DAS_BIND_FUN(builtin_make_good_array_iterator)>(*this, lib,  "_builtin_make_good_array_iterator",
+        addExternInline<DAS_BIND_FUN(builtin_make_good_array_iterator)>(*this, lib,  "_builtin_make_good_array_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_good_array_iterator")
                 ->args({"iterator","array","stride","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_make_fixed_array_iterator)>(*this, lib,  "_builtin_make_fixed_array_iterator",
+        addExternInline<DAS_BIND_FUN(builtin_make_fixed_array_iterator)>(*this, lib,  "_builtin_make_fixed_array_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_fixed_array_iterator")
                 ->args({"iterator","data","size","stride","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_make_range_iterator)>(*this, lib,  "_builtin_make_range_iterator",
+        addExternInline<DAS_BIND_FUN(builtin_make_range_iterator)>(*this, lib,  "_builtin_make_range_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_range_iterator")
                 ->args({"iterator","range","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_make_urange_iterator)>(*this, lib,  "_builtin_make_urange_iterator",
+        addExternInline<DAS_BIND_FUN(builtin_make_urange_iterator)>(*this, lib,  "_builtin_make_urange_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_urange_iterator")
                 ->args({"iterator","range","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_make_range64_iterator)>(*this, lib,  "_builtin_make_range64_iterator",
+        addExternInline<DAS_BIND_FUN(builtin_make_range64_iterator)>(*this, lib,  "_builtin_make_range64_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_range64_iterator")
                 ->args({"iterator","range","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_make_urange64_iterator)>(*this, lib,  "_builtin_make_urange64_iterator",
+        addExternInline<DAS_BIND_FUN(builtin_make_urange64_iterator)>(*this, lib,  "_builtin_make_urange64_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_urange64_iterator")
                 ->args({"iterator","range","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_make_string_iterator)>(*this, lib,  "_builtin_make_string_iterator",
+        addExternInline<DAS_BIND_FUN(builtin_make_string_iterator)>(*this, lib,  "_builtin_make_string_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_string_iterator")
                 ->args({"iterator","string","context","at"})->setCaptureString();
-        addExtern<DAS_BIND_FUN(builtin_make_nil_iterator)>(*this, lib,  "_builtin_make_nil_iterator",
+        addExternInline<DAS_BIND_FUN(builtin_make_nil_iterator)>(*this, lib,  "_builtin_make_nil_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_nil_iterator")
                 ->args({"iterator","context", "at"});
-        addExtern<DAS_BIND_FUN(builtin_make_lambda_iterator)>(*this, lib,  "_builtin_make_lambda_iterator",
+        addExternInline<DAS_BIND_FUN(builtin_make_lambda_iterator)>(*this, lib,  "_builtin_make_lambda_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_lambda_iterator")
                 ->args({"iterator","lambda","stride","context","at"});
         addInterop<builtin_make_enum_iterator,void,vec4f>(*this, lib, "_builtin_make_enum_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_enum_iterator")
                 ->arg("iterator");
         // functions
-        addExtern<DAS_BIND_FUN(builtin_throw)>(*this, lib, "panic",
+        addExternInline<DAS_BIND_FUN(builtin_throw)>(*this, lib, "panic",
             SideEffects::modifyExternal, "builtin_throw")
                 ->args({"text","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_print)>(*this, lib, "print",
+        addExternInline<DAS_BIND_FUN(builtin_print)>(*this, lib, "print",
             SideEffects::modifyExternal, "builtin_print")
                 ->args({"text","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_feint)>(*this, lib, "feint",
+        addExternInline<DAS_BIND_FUN(builtin_feint)>(*this, lib, "feint",
             SideEffects::modifyExternal, "builtin_feint")
                 ->args({"text","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_error)>(*this, lib, "error",
+        addExternInline<DAS_BIND_FUN(builtin_error)>(*this, lib, "error",
             SideEffects::modifyExternal, "builtin_error")
                 ->args({"text","context","at"});
         addInterop<builtin_sprint,char *,vec4f,PrintFlags>(*this, lib, "sprint",
@@ -2405,17 +2405,17 @@ namespace das
         addInterop<builtin_json_sscan,bool,char *,vec4f>(*this, lib, "sscan_json",
             SideEffects::modifyArgumentAndExternal, "builtin_json_sscan")
                 ->args({"json","value"});
-        addExtern<DAS_BIND_FUN(builtin_terminate)>(*this, lib, "terminate",
+        addExternInline<DAS_BIND_FUN(builtin_terminate)>(*this, lib, "terminate",
             SideEffects::modifyExternal, "terminate")
                 ->args({"context","at"});
         addInterop<builtin_breakpoint,void>(*this, lib, "breakpoint", SideEffects::modifyExternal, "breakpoint");
         // stackwalk
-        auto fnsw = addExtern<DAS_BIND_FUN(builtin_stackwalk)>(*this, lib, "stackwalk",
+        auto fnsw = addExternInline<DAS_BIND_FUN(builtin_stackwalk)>(*this, lib, "stackwalk",
             SideEffects::modifyExternal, "builtin_stackwalk")
                 ->args({"args","vars","context","lineinfo"});
         fnsw->arguments[0]->init = new ExprConstBool(true);
         fnsw->arguments[1]->init = new ExprConstBool(true);
-        auto fngsw = addExtern<DAS_BIND_FUN(builtin_get_stackwalk)>(*this, lib, "get_stackwalk",
+        auto fngsw = addExternInline<DAS_BIND_FUN(builtin_get_stackwalk)>(*this, lib, "get_stackwalk",
             SideEffects::accessExternal, "builtin_get_stackwalk")
                 ->args({"args","vars","out_of_scope","top_only","context","lineinfo"})->setTempStringResult();
         fngsw->arguments[0]->init = new ExprConstBool(true);
@@ -2423,71 +2423,71 @@ namespace das
         fngsw->arguments[2]->init = new ExprConstBool(false);
         fngsw->arguments[3]->init = new ExprConstBool(false);
         // profiler
-        addExtern<DAS_BIND_FUN(resetProfiler)>(*this, lib, "reset_profiler",
+        addExternInline<DAS_BIND_FUN(resetProfiler)>(*this, lib, "reset_profiler",
             SideEffects::modifyExternal, "resetProfiler")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(dumpProfileInfo)>(*this, lib, "dump_profile_info",
+        addExternInline<DAS_BIND_FUN(dumpProfileInfo)>(*this, lib, "dump_profile_info",
             SideEffects::modifyExternal, "dumpProfileInfo")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(collectProfileInfo)>(*this, lib, "collect_profile_info",
+        addExternInline<DAS_BIND_FUN(collectProfileInfo)>(*this, lib, "collect_profile_info",
             SideEffects::modifyExternal, "collectProfileInfo")
                 ->args({"context","at"})->setTempStringResult();
         // variant
-        addExtern<DAS_BIND_FUN(variant_index)>(*this, lib, "variant_index", SideEffects::none, "variant_index");
-        addExtern<DAS_BIND_FUN(set_variant_index)>(*this, lib, "set_variant_index",
+        addExternInline<DAS_BIND_FUN(variant_index)>(*this, lib, "variant_index", SideEffects::none, "variant_index");
+        addExternInline<DAS_BIND_FUN(set_variant_index)>(*this, lib, "set_variant_index",
             SideEffects::modifyArgument, "set_variant_index")
                 ->args({"variant","index"})->unsafeOperation = true;
         // gc_node root introspection
-        addExtern<DAS_BIND_FUN(gc_thread_root_count)>(*this, lib, "gc_thread_root_count",
+        addExternInline<DAS_BIND_FUN(gc_thread_root_count)>(*this, lib, "gc_thread_root_count",
             SideEffects::accessExternal, "gc_thread_root_count");
-        addExtern<DAS_BIND_FUN(gc_active_root_count)>(*this, lib, "gc_active_root_count",
+        addExternInline<DAS_BIND_FUN(gc_active_root_count)>(*this, lib, "gc_active_root_count",
             SideEffects::accessExternal, "gc_active_root_count");
-        addExtern<DAS_BIND_FUN(gc_thread_root_report)>(*this, lib, "gc_thread_root_report",
+        addExternInline<DAS_BIND_FUN(gc_thread_root_report)>(*this, lib, "gc_thread_root_report",
             SideEffects::modifyExternal, "gc_thread_root_report");
-        auto gcrd = addExtern<DAS_BIND_FUN(gc_thread_root_report_detailed)>(*this, lib, "gc_thread_root_report_detailed",
+        auto gcrd = addExternInline<DAS_BIND_FUN(gc_thread_root_report_detailed)>(*this, lib, "gc_thread_root_report_detailed",
             SideEffects::modifyExternal, "gc_thread_root_report_detailed")
                 ->arg("max_nodes");
         gcrd->arguments[0]->init = new ExprConstUInt64(20);
-        addExtern<DAS_BIND_FUN(gc_total_id)>(*this, lib, "gc_total_id",
+        addExternInline<DAS_BIND_FUN(gc_total_id)>(*this, lib, "gc_total_id",
             SideEffects::accessExternal, "gc_total_id");
         // heap
-        addExtern<DAS_BIND_FUN(heap_allocation_stats)>(*this, lib, "heap_allocation_stats",
+        addExternInline<DAS_BIND_FUN(heap_allocation_stats)>(*this, lib, "heap_allocation_stats",
             SideEffects::modifyExternal, "heap_allocation_stats")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(heap_allocation_count)>(*this, lib, "heap_allocation_count",
+        addExternInline<DAS_BIND_FUN(heap_allocation_count)>(*this, lib, "heap_allocation_count",
             SideEffects::modifyExternal, "heap_allocation_count")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(string_heap_allocation_stats)>(*this, lib, "string_heap_allocation_stats",
+        addExternInline<DAS_BIND_FUN(string_heap_allocation_stats)>(*this, lib, "string_heap_allocation_stats",
             SideEffects::modifyExternal, "string_heap_allocation_stats")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(string_heap_allocation_count)>(*this, lib, "string_heap_allocation_count",
+        addExternInline<DAS_BIND_FUN(string_heap_allocation_count)>(*this, lib, "string_heap_allocation_count",
             SideEffects::modifyExternal, "string_heap_allocation_count")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated",
+        addExternInline<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated",
             SideEffects::modifyExternal, "heap_bytes_allocated")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(heap_total_allocated)>(*this, lib, "heap_total_allocated",
+        addExternInline<DAS_BIND_FUN(heap_total_allocated)>(*this, lib, "heap_total_allocated",
             SideEffects::modifyExternal, "heap_total_allocated")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(max_unreserved_size)>(*this, lib, "max_unreserved_size",
+        addExternInline<DAS_BIND_FUN(max_unreserved_size)>(*this, lib, "max_unreserved_size",
             SideEffects::modifyExternal, "max_unreserved_size")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(set_max_unreserved_size)>(*this, lib, "set_max_unreserved_size",
+        addExternInline<DAS_BIND_FUN(set_max_unreserved_size)>(*this, lib, "set_max_unreserved_size",
             SideEffects::modifyExternal, "set_max_unreserved_size")
                 ->args({"bytes","context"});
-        addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth",
+        addExternInline<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth",
             SideEffects::modifyExternal, "heap_depth")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(string_heap_bytes_allocated)>(*this, lib, "string_heap_bytes_allocated",
+        addExternInline<DAS_BIND_FUN(string_heap_bytes_allocated)>(*this, lib, "string_heap_bytes_allocated",
             SideEffects::modifyExternal, "string_heap_bytes_allocated")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(string_heap_total_allocated)>(*this, lib, "string_heap_total_allocated",
+        addExternInline<DAS_BIND_FUN(string_heap_total_allocated)>(*this, lib, "string_heap_total_allocated",
             SideEffects::modifyExternal, "string_heap_total_allocated")
                 ->arg("context");
-        addExtern<DAS_BIND_FUN(string_heap_depth)>(*this, lib, "string_heap_depth",
+        addExternInline<DAS_BIND_FUN(string_heap_depth)>(*this, lib, "string_heap_depth",
             SideEffects::modifyExternal, "string_heap_depth")
                 ->arg("context");
-        auto hcol = addExtern<DAS_BIND_FUN(heap_collect)>(*this, lib, "heap_collect",
+        auto hcol = addExternInline<DAS_BIND_FUN(heap_collect)>(*this, lib, "heap_collect",
                 SideEffects::modifyExternal, "heap_collect")
                     ->args({"string_heap","validate","context","at"});
         hcol->unsafeOperation = true;
@@ -2495,19 +2495,19 @@ namespace das
         hcol->needCallerStackFrame = true;
         hcol->arguments[0]->init = new ExprConstBool(true);
         hcol->arguments[1]->init = new ExprConstBool(false);
-        addExtern<DAS_BIND_FUN(builtin_frame_position)>(*this, lib, "frame_position",
+        addExternInline<DAS_BIND_FUN(builtin_frame_position)>(*this, lib, "frame_position",
             SideEffects::accessExternal, "builtin_frame_position")
                 ->args({"context","at"});
-        addExtern<DAS_BIND_FUN(string_heap_report)>(*this, lib, "string_heap_report",
+        addExternInline<DAS_BIND_FUN(string_heap_report)>(*this, lib, "string_heap_report",
             SideEffects::modifyExternal, "string_heap_report")
                 ->args({"context","line"});
-        addExtern<DAS_BIND_FUN(heap_report)>(*this, lib, "heap_report",
+        addExternInline<DAS_BIND_FUN(heap_report)>(*this, lib, "heap_report",
             SideEffects::modifyExternal, "heap_report")
                 ->args({"context","line"});
-        addExtern<DAS_BIND_FUN(memory_report)>(*this, lib, "memory_report",
+        addExternInline<DAS_BIND_FUN(memory_report)>(*this, lib, "memory_report",
             SideEffects::modifyExternal, "memory_report")
                 ->args({"errorsOnly","context","lineinfo"});
-        addExtern<DAS_BIND_FUN(is_intern_strings)>(*this, lib, "is_intern_strings",
+        addExternInline<DAS_BIND_FUN(is_intern_strings)>(*this, lib, "is_intern_strings",
             SideEffects::modifyExternal, "is_intern_strings")
                 ->arg("context");
         // binary serializer
@@ -2526,82 +2526,82 @@ namespace das
         addCall<ExprMemZero>        ("memzero");
         // hash
         addInterop<_builtin_hash,uint64_t,vec4f>(*this, lib, "hash", SideEffects::none, "_builtin_hash")->arg("data");
-        addExtern<DAS_BIND_FUN(hash64z)>(*this, lib, "hash", SideEffects::none, "hash64z")->arg("data");
-        addExtern<DAS_BIND_FUN(_builtin_hash_int8)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_int8")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_uint8)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_uint8")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_int16)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_int16")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_uint16)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_uint16")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_int32)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_int32")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_uint32)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_uint32")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_int64)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_int64")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_uint64)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_uint64")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_ptr)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_ptr")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_float)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_float")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_double)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_double")->arg("value");
-        addExtern<DAS_BIND_FUN(_builtin_hash_das_string)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_das_string")->arg("value");
-        addExtern<DAS_BIND_FUN(hash_combine64)>(*this, lib, "hash_combine64", SideEffects::none, "hash_combine64")
+        addExternInline<DAS_BIND_FUN(hash64z)>(*this, lib, "hash", SideEffects::none, "hash64z")->arg("data");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_int8)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_int8")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_uint8)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_uint8")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_int16)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_int16")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_uint16)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_uint16")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_int32)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_int32")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_uint32)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_uint32")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_int64)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_int64")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_uint64)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_uint64")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_ptr)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_ptr")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_float)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_float")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_double)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_double")->arg("value");
+        addExternInline<DAS_BIND_FUN(_builtin_hash_das_string)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_das_string")->arg("value");
+        addExternInline<DAS_BIND_FUN(hash_combine64)>(*this, lib, "hash_combine64", SideEffects::none, "hash_combine64")
             ->args({"hash","value"});
         // table functions
-        addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "_builtin_table_clear",
+        addExternInline<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "_builtin_table_clear",
             SideEffects::modifyArgument, "builtin_table_clear")
                 ->args({"table","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length",
+        addExternInline<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length",
             SideEffects::none, "builtin_table_size")
                 ->arg("table");
-        addExtern<DAS_BIND_FUN(builtin_table_empty)>(*this, lib, "empty",
+        addExternInline<DAS_BIND_FUN(builtin_table_empty)>(*this, lib, "empty",
             SideEffects::none, "builtin_table_empty")
                 ->arg("table");
-        addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity",
+        addExternInline<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity",
             SideEffects::none, "builtin_table_capacity")
                 ->arg("table");
-        addExtern<DAS_BIND_FUN(builtin_table_long_size)>(*this, lib, "long_length",
+        addExternInline<DAS_BIND_FUN(builtin_table_long_size)>(*this, lib, "long_length",
             SideEffects::none, "builtin_table_long_size")
                 ->arg("table");
-        addExtern<DAS_BIND_FUN(builtin_table_long_capacity)>(*this, lib, "long_capacity",
+        addExternInline<DAS_BIND_FUN(builtin_table_long_capacity)>(*this, lib, "long_capacity",
             SideEffects::none, "builtin_table_long_capacity")
                 ->arg("table");
-        addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock",
+        addExternInline<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_lock")
                 ->args({"table","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_table_lock_mutable)>(*this, lib, "__builtin_table_lock_mutable",
+        addExternInline<DAS_BIND_FUN(builtin_table_lock_mutable)>(*this, lib, "__builtin_table_lock_mutable",
             SideEffects::modifyArgumentAndExternal, "builtin_table_lock_mutable")
                 ->args({"table","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock",
+        addExternInline<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_unlock")
                 ->args({"table","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_table_unlock_mutable)>(*this, lib, "__builtin_table_unlock_mutable",
+        addExternInline<DAS_BIND_FUN(builtin_table_unlock_mutable)>(*this, lib, "__builtin_table_unlock_mutable",
             SideEffects::modifyArgumentAndExternal, "builtin_table_unlock_mutable")
                 ->args({"table","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_table_clear_lock)>(*this, lib, "__builtin_table_clear_lock",
+        addExternInline<DAS_BIND_FUN(builtin_table_clear_lock)>(*this, lib, "__builtin_table_clear_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_clear_lock")
                 ->args({"table","context"});
-        addExtern<DAS_BIND_FUN(builtin_table_tag)>(*this, lib, "tag_table",
+        addExternInline<DAS_BIND_FUN(builtin_table_tag)>(*this, lib, "tag_table",
             SideEffects::modifyExternal, "builtin_table_tag")
                 ->args({"table","name","context"});
         // scratch: same contract as the array flag; the bit lives in the shared Array flags word
-        addExtern<DAS_BIND_FUN(builtin_table_set_scratch)>(*this, lib, "set_scratch",
+        addExternInline<DAS_BIND_FUN(builtin_table_set_scratch)>(*this, lib, "set_scratch",
             SideEffects::modifyArgument, "builtin_table_set_scratch")
                 ->args({"table","value","context"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(builtin_table_is_scratch)>(*this, lib, "is_scratch",
+        addExternInline<DAS_BIND_FUN(builtin_table_is_scratch)>(*this, lib, "is_scratch",
             SideEffects::none, "builtin_table_is_scratch")
                 ->arg("table");
-        addExtern<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys",
+        addExternInline<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys",
             SideEffects::modifyArgumentAndExternal, "builtin_table_keys")
                 ->args({"iterator","table","stride","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values",
+        addExternInline<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values",
             SideEffects::modifyArgumentAndExternal, "builtin_table_values")
                 ->args({"iterator","table","stride","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_table_get_key)>(*this, lib, "__builtin_table_get_key",
+        addExternInline<DAS_BIND_FUN(builtin_table_get_key)>(*this, lib, "__builtin_table_get_key",
             SideEffects::modifyExternal, "builtin_table_get_key")
                 ->args({"result","table","value_ptr","value_stride","key_stride","context","at"});
         addInterop<builtin_table_reserve,void,vec4f,uint64_t>(*this, lib, "__builtin_table_reserve",
             SideEffects::modifyArgumentAndExternal, "builtin_table_reserve")
                 ->args({"table","size"});
         // array and table free
-        addExtern<DAS_BIND_FUN(builtin_array_free)>(*this, lib, "__builtin_array_free",
+        addExternInline<DAS_BIND_FUN(builtin_array_free)>(*this, lib, "__builtin_array_free",
             SideEffects::modifyArgumentAndExternal, "builtin_array_free")
                 ->args({"array","stride","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_table_free)>(*this, lib, "__builtin_table_free",
+        addExternInline<DAS_BIND_FUN(builtin_table_free)>(*this, lib, "__builtin_table_free",
             SideEffects::modifyArgumentAndExternal, "builtin_table_free")
                 ->args({"table","sizeOfKey","sizeOfValue","context","at"});
         // local collection
@@ -2622,173 +2622,173 @@ namespace das
         // blocks
         addCall<ExprInvoke>("invoke");
         // smart ptr stuff
-        addExtern<DAS_BIND_FUN(builtin_smart_ptr_move_new)>(*this, lib, "move_new",
+        addExternInline<DAS_BIND_FUN(builtin_smart_ptr_move_new)>(*this, lib, "move_new",
             SideEffects::modifyArgument, "builtin_smart_ptr_move_new")
                 ->args({"dest","src","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_smart_ptr_move_ptr)>(*this, lib, "move",
+        addExternInline<DAS_BIND_FUN(builtin_smart_ptr_move_ptr)>(*this, lib, "move",
             SideEffects::modifyArgument, "builtin_smart_ptr_move_ptr")
                 ->args({"dest","src","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_smart_ptr_move)>(*this, lib, "move",
+        addExternInline<DAS_BIND_FUN(builtin_smart_ptr_move)>(*this, lib, "move",
             SideEffects::modifyArgument, "builtin_smart_ptr_move")
                 ->args({"dest","src","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone_ptr)>(*this, lib, "smart_ptr_clone",
+        addExternInline<DAS_BIND_FUN(builtin_smart_ptr_clone_ptr)>(*this, lib, "smart_ptr_clone",
             SideEffects::modifyArgument, "builtin_smart_ptr_clone_ptr")
                 ->args({"dest","src","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone)>(*this, lib, "smart_ptr_clone",
+        addExternInline<DAS_BIND_FUN(builtin_smart_ptr_clone)>(*this, lib, "smart_ptr_clone",
             SideEffects::modifyArgument, "builtin_smart_ptr_clone")
                 ->args({"dest","src","context","at"});
-        addExtern<DAS_BIND_FUN(builtin_smart_ptr_use_count)>(*this, lib, "smart_ptr_use_count",
+        addExternInline<DAS_BIND_FUN(builtin_smart_ptr_use_count)>(*this, lib, "smart_ptr_use_count",
             SideEffects::none, "builtin_smart_ptr_use_count")
                 ->args({"ptr","context","at"});
-        addExtern<DAS_BIND_FUN(smart_ptr_is_valid)>(*this, lib, "smart_ptr_is_valid",
+        addExternInline<DAS_BIND_FUN(smart_ptr_is_valid)>(*this, lib, "smart_ptr_is_valid",
             SideEffects::none, "smart_ptr_is_valid")
                 ->arg("dest");
-        addExtern<DAS_BIND_FUN(equ_sptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_sptr");
-        addExtern<DAS_BIND_FUN(nequ_sptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_sptr");
-        addExtern<DAS_BIND_FUN(equ_ptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_ptr_sptr");
-        addExtern<DAS_BIND_FUN(nequ_ptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_ptr_sptr");
-        addExtern<DAS_BIND_FUN(equ_sptr_ptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_ptr");
-        addExtern<DAS_BIND_FUN(nequ_sptr_ptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_ptr");
+        addExternInline<DAS_BIND_FUN(equ_sptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_sptr");
+        addExternInline<DAS_BIND_FUN(nequ_sptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_sptr");
+        addExternInline<DAS_BIND_FUN(equ_ptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_ptr_sptr");
+        addExternInline<DAS_BIND_FUN(nequ_ptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_ptr_sptr");
+        addExternInline<DAS_BIND_FUN(equ_sptr_ptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_ptr");
+        addExternInline<DAS_BIND_FUN(nequ_sptr_ptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_ptr");
         // gc0
-        addExtern<DAS_BIND_FUN(gc0_save_ptr)>(*this, lib, "gc0_save_ptr",
+        addExternInline<DAS_BIND_FUN(gc0_save_ptr)>(*this, lib, "gc0_save_ptr",
             SideEffects::modifyExternal, "gc0_save_ptr")
                 ->args({"name","data","context","line"});
-        addExtern<DAS_BIND_FUN(gc0_save_smart_ptr)>(*this, lib, "gc0_save_smart_ptr",
+        addExternInline<DAS_BIND_FUN(gc0_save_smart_ptr)>(*this, lib, "gc0_save_smart_ptr",
             SideEffects::modifyExternal, "gc0_save_smart_ptr")
                 ->args({"name","data","context","line"});
-        addExtern<DAS_BIND_FUN(gc0_restore_ptr)>(*this, lib, "gc0_restore_ptr",
+        addExternInline<DAS_BIND_FUN(gc0_restore_ptr)>(*this, lib, "gc0_restore_ptr",
             SideEffects::accessExternal, "gc0_restore_ptr")
                 ->args({"name","context"});
-        addExtern<DAS_BIND_FUN(gc0_restore_smart_ptr)>(*this, lib, "gc0_restore_smart_ptr",
+        addExternInline<DAS_BIND_FUN(gc0_restore_smart_ptr)>(*this, lib, "gc0_restore_smart_ptr",
             SideEffects::accessExternal, "gc0_restore_smart_ptr")
                 ->args({"name","context"});
-        addExtern<DAS_BIND_FUN(gc0_reset)>(*this, lib, "gc0_reset",
+        addExternInline<DAS_BIND_FUN(gc0_reset)>(*this, lib, "gc0_reset",
             SideEffects::modifyExternal, "gc0_reset");
         // memops — explicit function-pointer types pick the non-const overloads (aot.h grew
         // const-source twins for the emitted das_cast<void const *> calls; the das-side extern
         // signatures must stay unchanged so no AOT hash churns)
-        addExtern<void (*)(void *, void *, int), das_memcpy>(*this, lib, "memcpy",
+        addExternInline<void (*)(void *, void *, int), das_memcpy>(*this, lib, "memcpy",
             SideEffects::modifyArgumentAndExternal, "das_memcpy")
                 ->args({"left","right","size"})->unsafeOperation = true;
-        addExtern<int (*)(void *, void *, int), das_memcmp>(*this, lib, "memcmp",
+        addExternInline<int (*)(void *, void *, int), das_memcmp>(*this, lib, "memcmp",
             SideEffects::none, "das_memcmp")
                 ->args({"left","right","size"})->unsafeOperation = true;
         // unsigned and 64-bit size overloads. Without these a size that is already
         // uint/int64/uint64 can only reach memcpy through int(...), which truncates
         // above 2GB -- silently copying the wrong number of bytes.
-        addExtern<void (*)(void *, void *, uint32_t), das_memcpy>(*this, lib, "memcpy",
+        addExternInline<void (*)(void *, void *, uint32_t), das_memcpy>(*this, lib, "memcpy",
             SideEffects::modifyArgumentAndExternal, "das_memcpy")
                 ->args({"left","right","size"})->unsafeOperation = true;
-        addExtern<void (*)(void *, void *, int64_t), das_memcpy>(*this, lib, "memcpy",
+        addExternInline<void (*)(void *, void *, int64_t), das_memcpy>(*this, lib, "memcpy",
             SideEffects::modifyArgumentAndExternal, "das_memcpy")
                 ->args({"left","right","size"})->unsafeOperation = true;
-        addExtern<void (*)(void *, void *, uint64_t), das_memcpy>(*this, lib, "memcpy",
+        addExternInline<void (*)(void *, void *, uint64_t), das_memcpy>(*this, lib, "memcpy",
             SideEffects::modifyArgumentAndExternal, "das_memcpy")
                 ->args({"left","right","size"})->unsafeOperation = true;
-        addExtern<int (*)(void *, void *, uint32_t), das_memcmp>(*this, lib, "memcmp",
+        addExternInline<int (*)(void *, void *, uint32_t), das_memcmp>(*this, lib, "memcmp",
             SideEffects::none, "das_memcmp")
                 ->args({"left","right","size"})->unsafeOperation = true;
-        addExtern<int (*)(void *, void *, int64_t), das_memcmp>(*this, lib, "memcmp",
+        addExternInline<int (*)(void *, void *, int64_t), das_memcmp>(*this, lib, "memcmp",
             SideEffects::none, "das_memcmp")
                 ->args({"left","right","size"})->unsafeOperation = true;
-        addExtern<int (*)(void *, void *, uint64_t), das_memcmp>(*this, lib, "memcmp",
+        addExternInline<int (*)(void *, void *, uint64_t), das_memcmp>(*this, lib, "memcmp",
             SideEffects::none, "das_memcmp")
                 ->args({"left","right","size"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(das_memset8)>(*this, lib, "memset8",
+        addExternInline<DAS_BIND_FUN(das_memset8)>(*this, lib, "memset8",
             SideEffects::modifyArgumentAndExternal, "das_memset8")
                 ->args({"left","value","count"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(das_memset16)>(*this, lib, "memset16",
+        addExternInline<DAS_BIND_FUN(das_memset16)>(*this, lib, "memset16",
             SideEffects::modifyArgumentAndExternal, "das_memset16")
                 ->args({"left","value","count"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(das_memset32)>(*this, lib, "memset32",
+        addExternInline<DAS_BIND_FUN(das_memset32)>(*this, lib, "memset32",
             SideEffects::modifyArgumentAndExternal, "das_memset32")
                 ->args({"left","value","count"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(das_memset64)>(*this, lib, "memset64",
+        addExternInline<DAS_BIND_FUN(das_memset64)>(*this, lib, "memset64",
             SideEffects::modifyArgumentAndExternal, "das_memset64")
                 ->args({"left","value","count"})->unsafeOperation = true;
-        addExternEx<void(*)(void *,uint4,int32_t),DAS_BIND_FUN(das_memset128u)>(*this, lib, "memset128",
+        addExternInlineEx<void(*)(void *,uint4,int32_t),DAS_BIND_FUN(das_memset128u)>(*this, lib, "memset128",
             SideEffects::modifyArgumentAndExternal, "das_memset128u")
                 ->args({"left","value","count"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(builtin_das_aligned_alloc16)> (*this, lib, "malloc",
+        addExternInline<DAS_BIND_FUN(builtin_das_aligned_alloc16)> (*this, lib, "malloc",
             SideEffects::modifyExternal, "builtin_das_aligned_alloc16")
                 ->args({"size"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(das_aligned_free16)> (*this, lib, "free",
+        addExternInline<DAS_BIND_FUN(das_aligned_free16)> (*this, lib, "free",
             SideEffects::modifyExternal, "das_aligned_free16")
                 ->args({"ptr"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(das_aligned_memsize)> (*this, lib, "malloc_usable_size",
+        addExternInline<DAS_BIND_FUN(das_aligned_memsize)> (*this, lib, "malloc_usable_size",
             SideEffects::none, "das_aligned_memsize")
                 ->args({"ptr"})->unsafeOperation = true;
         // pointer ari
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_inc)>(*this, lib, "i_das_ptr_inc", SideEffects::modifyArgument, "das_ptr_inc"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_dec)>(*this, lib, "i_das_ptr_dec", SideEffects::modifyArgument, "das_ptr_dec"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_inc)>(*this, lib, "i_das_ptr_inc", SideEffects::modifyArgument, "das_ptr_inc"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_dec)>(*this, lib, "i_das_ptr_dec", SideEffects::modifyArgument, "das_ptr_dec"));
         // int32
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_add_int32)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_int32"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_sub_int32)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_int32"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_add_int32)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_int32"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_sub_int32)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_int32"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_add_int32)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_int32"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_sub_int32)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_int32"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_set_add_int32)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_int32"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_set_sub_int32)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_int32"));
         // int64
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_add_int64)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_int64"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_sub_int64)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_int64"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_add_int64)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_int64"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_sub_int64)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_int64"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_add_int64)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_int64"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_sub_int64)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_int64"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_set_add_int64)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_int64"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_set_sub_int64)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_int64"));
         // uint32
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_add_uint32)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_uint32"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_sub_uint32)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_uint32"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_add_uint32)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_uint32"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_sub_uint32)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_uint32"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_add_uint32)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_uint32"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_sub_uint32)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_uint32"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_set_add_uint32)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_uint32"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_set_sub_uint32)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_uint32"));
         // uint64
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_add_uint64)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_uint64"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_sub_uint64)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_uint64"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_add_uint64)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_uint64"));
-        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_sub_uint64)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_uint64"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_add_uint64)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_uint64"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_sub_uint64)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_uint64"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_set_add_uint64)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_uint64"));
+        PointerOp(addExternInline<DAS_BIND_FUN(i_das_ptr_set_sub_uint64)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_uint64"));
         // diff
-        addExtern<DAS_BIND_FUN(i_das_ptr_diff)>(*this, lib, "i_das_ptr_diff", SideEffects::none, "i_das_ptr_diff");
+        addExternInline<DAS_BIND_FUN(i_das_ptr_diff)>(*this, lib, "i_das_ptr_diff", SideEffects::none, "i_das_ptr_diff");
         // rtti
-        addExtern<DAS_BIND_FUN(class_rtti_size)>(*this, lib, "class_rtti_size",
+        addExternInline<DAS_BIND_FUN(class_rtti_size)>(*this, lib, "class_rtti_size",
             SideEffects::none, "class_rtti_size")
                 ->arg("ptr");
         // profile
-        addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile",
+        addExternInline<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile",
             SideEffects::modifyExternal, "builtin_profile")
                 ->args({"count","category","block","context","line"});
         // das string binding
-        addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string",
+        addExternInline<DAS_BIND_FUN(to_das_string)>(*this, lib, "string",
             SideEffects::none, "to_das_string")
                 ->args({"source","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(pass_string)>(*this, lib, "string",
+        addExternInline<DAS_BIND_FUN(pass_string)>(*this, lib, "string",
             SideEffects::none, "pass_string", permanentArgFn())
                 ->args({"source"})->setCaptureString();
-        addExtern<DAS_BIND_FUN(clone_pass_string)>(*this, lib, "string",
+        addExternInline<DAS_BIND_FUN(clone_pass_string)>(*this, lib, "string",
             SideEffects::none, "clone_pass_string", temporaryArgFn())
                 ->args({"source","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "clone",
+        addExternInline<DAS_BIND_FUN(set_das_string)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_das_string")
                 ->args({"target","src"});
-        addExtern<DAS_BIND_FUN(set_string_das)>(*this, lib, "clone",
+        addExternInline<DAS_BIND_FUN(set_string_das)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_string_das")
                 ->args({"target","src","context","at"});
-        addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
+        addExternInline<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
             SideEffects::modifyExternal,"peek_das_string_T")
                 ->args({"src","block","context","line"})->setAotTemplate();
-        addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string",
+        addExternInline<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string",
             SideEffects::none, "builtin_string_clone")
                 ->args({"src","context","at"})->setTempStringResult();
         // das-string
-        addExtern<DAS_BIND_FUN(das_str_equ)>(*this, lib, "==", SideEffects::none, "das_str_equ");
-        addExtern<DAS_BIND_FUN(das_str_nequ)>(*this, lib, "!=", SideEffects::none, "das_str_nequ");
+        addExternInline<DAS_BIND_FUN(das_str_equ)>(*this, lib, "==", SideEffects::none, "das_str_equ");
+        addExternInline<DAS_BIND_FUN(das_str_nequ)>(*this, lib, "!=", SideEffects::none, "das_str_nequ");
         // string emptiness and length. length lived in the strings module, which made
         // `length(str)` need a require that `empty(str)` did not -- these belong together.
-        addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty",
+        addExternInline<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty",
             SideEffects::none, "builtin_empty")->arg("str");
-        addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty",
+        addExternInline<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty",
             SideEffects::none, "builtin_empty_das_string")->arg("str");
-        addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length",
+        addExternInline<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length",
             SideEffects::none, "builtin_string_length")->args({"str","context"});
-        addExtern<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
+        addExternInline<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
             SideEffects::none, "builtin_ext_string_length")->arg("str");
-        addExtern<DAS_BIND_FUN(builtin_string_long_length)>(*this, lib, "long_length",
+        addExternInline<DAS_BIND_FUN(builtin_string_long_length)>(*this, lib, "long_length",
             SideEffects::none, "builtin_string_long_length")->arg("str");
-        addExtern<DAS_BIND_FUN(builtin_ext_string_long_length)>(*this, lib, "long_length",
+        addExternInline<DAS_BIND_FUN(builtin_ext_string_long_length)>(*this, lib, "long_length",
             SideEffects::none, "builtin_ext_string_long_length")->arg("str");
         // das-string extra
         STR_DSTR_REG(  eq,==);
@@ -2798,61 +2798,61 @@ namespace das
         STR_DSTR_REG(  ls,<);
         STR_DSTR_REG(  gt,>);
         // temp array out of mem
-        auto bta = addExtern<DAS_BIND_FUN(builtin_temp_array)>(*this, lib, "_builtin_temp_array",
+        auto bta = addExternInline<DAS_BIND_FUN(builtin_temp_array)>(*this, lib, "_builtin_temp_array",
             SideEffects::invoke, "builtin_temp_array")
                 ->args({"data","size","block","context","line"});
         bta->unsafeOperation = true;
         bta->privateFunction = true;
-        auto bmta = addExtern<DAS_BIND_FUN(builtin_make_temp_array)>(*this, lib, "_builtin_make_temp_array",
+        auto bmta = addExternInline<DAS_BIND_FUN(builtin_make_temp_array)>(*this, lib, "_builtin_make_temp_array",
             SideEffects::modifyArgument, "builtin_make_temp_array")
                 ->args({"array","data","size"});
         bmta->unsafeOperation = true;
-        auto bmta64 = addExtern<DAS_BIND_FUN(builtin_make_temp_array_i64)>(*this, lib, "_builtin_make_temp_array_i64",
+        auto bmta64 = addExternInline<DAS_BIND_FUN(builtin_make_temp_array_i64)>(*this, lib, "_builtin_make_temp_array_i64",
             SideEffects::modifyArgument, "builtin_make_temp_array_i64")
                 ->args({"array","data","size"});
         bmta64->unsafeOperation = true;
-        auto bfta = addExtern<DAS_BIND_FUN(builtin_forget_temp_array)>(*this, lib, "_builtin_forget_temp_array",
+        auto bfta = addExternInline<DAS_BIND_FUN(builtin_forget_temp_array)>(*this, lib, "_builtin_forget_temp_array",
             SideEffects::modifyArgument, "builtin_forget_temp_array")
                 ->args({"array","context","line"});
         bfta->unsafeOperation = true;
         // migrate data
-        addExtern<DAS_BIND_FUN(das_is_dll_build)>(*this, lib, "das_is_dll_build",
+        addExternInline<DAS_BIND_FUN(das_is_dll_build)>(*this, lib, "das_is_dll_build",
             SideEffects::worstDefault, "das_is_dll_build");
-        addExtern<DAS_BIND_FUN(das_is_exceptions_enabled)>(*this, lib, "das_is_exceptions_enabled",
+        addExternInline<DAS_BIND_FUN(das_is_exceptions_enabled)>(*this, lib, "das_is_exceptions_enabled",
             SideEffects::worstDefault, "das_is_exceptions_enabled");
-        addExtern<DAS_BIND_FUN(is_in_aot)>(*this, lib, "is_in_aot",
+        addExternInline<DAS_BIND_FUN(is_in_aot)>(*this, lib, "is_in_aot",
             SideEffects::worstDefault, "is_in_aot");
-        addExtern<DAS_BIND_FUN(set_aot)>(*this, lib, "set_aot",
+        addExternInline<DAS_BIND_FUN(set_aot)>(*this, lib, "set_aot",
             SideEffects::worstDefault, "set_aot");
-        addExtern<DAS_BIND_FUN(reset_aot)>(*this, lib, "reset_aot",
+        addExternInline<DAS_BIND_FUN(reset_aot)>(*this, lib, "reset_aot",
             SideEffects::worstDefault, "reset_aot");
         // completion
-        addExtern<DAS_BIND_FUN(is_in_completion)>(*this, lib, "is_in_completion",
+        addExternInline<DAS_BIND_FUN(is_in_completion)>(*this, lib, "is_in_completion",
             SideEffects::worstDefault, "is_in_completion");
         // lint
-        addExtern<DAS_BIND_FUN(is_in_lint_check)>(*this, lib, "is_in_lint_check",
+        addExternInline<DAS_BIND_FUN(is_in_lint_check)>(*this, lib, "is_in_lint_check",
             SideEffects::worstDefault, "is_in_lint_check");
 
-        addExtern<DAS_BIND_FUN(is_building_documentation)>(*this, lib, "is_building_documentation",
+        addExternInline<DAS_BIND_FUN(is_building_documentation)>(*this, lib, "is_building_documentation",
             SideEffects::worstDefault, "is_building_documentation");
         // folding
-        addExtern<DAS_BIND_FUN(is_folding)>(*this, lib, "is_folding",
+        addExternInline<DAS_BIND_FUN(is_folding)>(*this, lib, "is_folding",
             SideEffects::worstDefault, "is_folding");
         // compiling file
-        addExtern<DAS_BIND_FUN(compiling_file_name)>(*this, lib, "compiling_file_name",
+        addExternInline<DAS_BIND_FUN(compiling_file_name)>(*this, lib, "compiling_file_name",
             SideEffects::accessExternal, "compiling_file_name");
-        addExtern<DAS_BIND_FUN(compiling_module_name)>(*this, lib, "compiling_module_name",
+        addExternInline<DAS_BIND_FUN(compiling_module_name)>(*this, lib, "compiling_module_name",
             SideEffects::accessExternal, "compiling_module_name");
-        addExtern<DAS_BIND_FUN(get_module_file_name)>(*this, lib, "get_module_file_name",
+        addExternInline<DAS_BIND_FUN(get_module_file_name)>(*this, lib, "get_module_file_name",
             SideEffects::accessExternal, "get_module_file_name")->args({"name", "context"})->setTempStringResult();
         // logger
-        addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
+        addExternInline<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
             SideEffects::modifyExternal, "toLog")->args({"level", "text", "context", "at"});
-        addExtern<DAS_BIND_FUN(diagnosticsToStderr)>(*this, lib, "diagnostics_to_stderr",
+        addExternInline<DAS_BIND_FUN(diagnosticsToStderr)>(*this, lib, "diagnostics_to_stderr",
             SideEffects::modifyExternal, "diagnosticsToStderr");
-        addExtern<DAS_BIND_FUN(diagnosticsToFile)>(*this, lib, "diagnostics_to_file",
+        addExternInline<DAS_BIND_FUN(diagnosticsToFile)>(*this, lib, "diagnostics_to_file",
             SideEffects::modifyExternal, "diagnosticsToFile")->args({"path"});
-        addExtern<DAS_BIND_FUN(toCompilerLog)>(*this, lib, "to_compiler_log",
+        addExternInline<DAS_BIND_FUN(toCompilerLog)>(*this, lib, "to_compiler_log",
             SideEffects::modifyExternal, "toCompilerLog")->args({"text","context","at"});
         // log levels
         addConstant<int>(*this, "LOG_CRITICAL", LogLevel::critical);
@@ -2864,32 +2864,32 @@ namespace das
         // separators
         addConstant(*this, "VEC_SEP",   DAS_PRINT_VEC_SEPARATROR);
         // clz, ctz, popcnt. mul
-        addExtern<DAS_BIND_FUN(uint32_clz)>(*this, lib, "clz", SideEffects::none, "uint32_clz")->arg("bits");
-        addExtern<DAS_BIND_FUN(uint64_clz)>(*this, lib, "clz", SideEffects::none, "uint64_clz")->arg("bits");
-        addExtern<DAS_BIND_FUN(uint32_ctz)>(*this, lib, "ctz", SideEffects::none, "uint32_ctz")->arg("bits");
-        addExtern<DAS_BIND_FUN(uint64_ctz)>(*this, lib, "ctz", SideEffects::none, "uint64_ctz")->arg("bits");
-        addExtern<DAS_BIND_FUN(uint32_popcount)>(*this, lib, "popcnt", SideEffects::none, "uint32_popcount")->arg("bits");
-        addExtern<DAS_BIND_FUN(uint64_popcount)>(*this, lib, "popcnt", SideEffects::none, "uint64_popcount")->arg("bits");
-        addExtern<DAS_BIND_FUN(mul_u64_u64)>(*this, lib, "mul128", SideEffects::none, "mul_u64_u64")->args({"a","b"});
+        addExternInline<DAS_BIND_FUN(uint32_clz)>(*this, lib, "clz", SideEffects::none, "uint32_clz")->arg("bits");
+        addExternInline<DAS_BIND_FUN(uint64_clz)>(*this, lib, "clz", SideEffects::none, "uint64_clz")->arg("bits");
+        addExternInline<DAS_BIND_FUN(uint32_ctz)>(*this, lib, "ctz", SideEffects::none, "uint32_ctz")->arg("bits");
+        addExternInline<DAS_BIND_FUN(uint64_ctz)>(*this, lib, "ctz", SideEffects::none, "uint64_ctz")->arg("bits");
+        addExternInline<DAS_BIND_FUN(uint32_popcount)>(*this, lib, "popcnt", SideEffects::none, "uint32_popcount")->arg("bits");
+        addExternInline<DAS_BIND_FUN(uint64_popcount)>(*this, lib, "popcnt", SideEffects::none, "uint64_popcount")->arg("bits");
+        addExternInline<DAS_BIND_FUN(mul_u64_u64)>(*this, lib, "mul128", SideEffects::none, "mul_u64_u64")->args({"a","b"});
         // string using
         addUsing<das::string>(*this, lib, "das::string");
         // try-recover
-        addExtern<DAS_BIND_FUN(builtin_try_recover)>(*this, lib, "builtin_try_recover",
+        addExternInline<DAS_BIND_FUN(builtin_try_recover)>(*this, lib, "builtin_try_recover",
             SideEffects::invoke, "builtin_try_recover")
                 ->args({"try_block","catch_block","context","at"});
         // main-loop
-        addExtern<DAS_BIND_FUN(builtin_main_loop)>(*this, lib, "eval_main_loop",
+        addExternInline<DAS_BIND_FUN(builtin_main_loop)>(*this, lib, "eval_main_loop",
             SideEffects::invoke, "builtin_main_loop")
                 ->args({"block","context","at"});
         // jit
-        addExtern<DAS_BIND_FUN(das_is_jit_function)>(*this, lib, "is_jit_function",
+        addExternInline<DAS_BIND_FUN(das_is_jit_function)>(*this, lib, "is_jit_function",
                 SideEffects::worstDefault, "das_is_jit_function")
                     ->args({"function"});
-        addExtern<DAS_BIND_FUN(das_jit_enabled)>(*this, lib, "jit_enabled",
+        addExternInline<DAS_BIND_FUN(das_jit_enabled)>(*this, lib, "jit_enabled",
             SideEffects::none, "das_jit_enabled")
                 ->args({"context","at"});
         // aot
-        addExtern<DAS_BIND_FUN(das_aot_enabled)>(*this, lib, "aot_enabled",
+        addExternInline<DAS_BIND_FUN(das_aot_enabled)>(*this, lib, "aot_enabled",
             SideEffects::none, "das_aot_enabled")
                 ->args({"context","at"});
         // bitfield
@@ -2900,20 +2900,20 @@ namespace das
         using BitSet8Fn  = void(*)(Bitfield8&,  Bitfield8,  bool);
         using BitSet16Fn = void(*)(Bitfield16&, Bitfield16, bool);
         using BitSet64Fn = void(*)(Bitfield64&, Bitfield64, bool);
-        addExtern<BitSetFn, static_cast<BitSetFn>(__bit_set)>(*this, lib, "__bit_set",
+        addExternInline<BitSetFn, static_cast<BitSetFn>(__bit_set)>(*this, lib, "__bit_set",
             SideEffects::modifyArgument, "__bit_set")
                 ->args({"value","mask","on"});
-        addExtern<BitSet8Fn, static_cast<BitSet8Fn>(__bit_set8)>(*this, lib, "__bit_set",
+        addExternInline<BitSet8Fn, static_cast<BitSet8Fn>(__bit_set8)>(*this, lib, "__bit_set",
             SideEffects::modifyArgument, "__bit_set8")
                 ->args({"value","mask","on"});
-        addExtern<BitSet16Fn, static_cast<BitSet16Fn>(__bit_set16)>(*this, lib, "__bit_set",
+        addExternInline<BitSet16Fn, static_cast<BitSet16Fn>(__bit_set16)>(*this, lib, "__bit_set",
             SideEffects::modifyArgument, "__bit_set16")
                 ->args({"value","mask","on"});
-        addExtern<BitSet64Fn, static_cast<BitSet64Fn>(__bit_set64)>(*this, lib, "__bit_set",
+        addExternInline<BitSet64Fn, static_cast<BitSet64Fn>(__bit_set64)>(*this, lib, "__bit_set",
             SideEffects::modifyArgument, "__bit_set64")
                 ->args({"value","mask","on"});
         // platform and architecture
-        addExtern<DAS_BIND_FUN(das_get_platform_name)>(*this, lib, "get_platform_name",
+        addExternInline<DAS_BIND_FUN(das_get_platform_name)>(*this, lib, "get_platform_name",
             SideEffects::none, "das_get_platform_name");
         // Same C++ query, but registered with a side effect so the optimizer never const-folds it.
         // get_platform_name() (SideEffects::none) folds at compile time to the HOST platform, which is
@@ -2921,7 +2921,7 @@ namespace das
         // get_running_platform_name() stays a real call, so in the cross-compiled binary it resolves to
         // the wasm runtime's das_get_platform_name -> "emscripten". Use it for runtime "where am I
         // actually executing" decisions; use get_platform_name() for compile-time / macro decisions.
-        addExtern<DAS_BIND_FUN(das_get_platform_name)>(*this, lib, "get_running_platform_name",
+        addExternInline<DAS_BIND_FUN(das_get_platform_name)>(*this, lib, "get_running_platform_name",
             SideEffects::accessExternal, "das_get_platform_name");
         // SideEffects::none so it FOLDS at compile time -> usable in static_if. The cross-compile
         // target is a compile-time property (the --jit-target triple is fixed for the whole compile),
@@ -2930,34 +2930,34 @@ namespace das
         // glDrawElementsBaseVertex branch before symbol resolution. Folds to "" on a non-cross run, so a
         // desktop compile keeps the BaseVertex branch. (get_running_platform_name stays accessExternal —
         // it must NOT fold; it reports where the code actually executes.)
-        addExtern<DAS_BIND_FUN(das_get_cross_platform_name)>(*this, lib, "get_cross_platform_name",
+        addExternInline<DAS_BIND_FUN(das_get_cross_platform_name)>(*this, lib, "get_cross_platform_name",
             SideEffects::none, "das_get_cross_platform_name");
-        addExtern<DAS_BIND_FUN(das_get_architecture_name)>(*this, lib, "get_architecture_name",
+        addExternInline<DAS_BIND_FUN(das_get_architecture_name)>(*this, lib, "get_architecture_name",
             SideEffects::none, "das_get_architecture_name");
         // accessExternal (NOT ::none) on purpose: CPU features are a property of the RUNNING box,
         // so this must never const-fold into AOT artifacts built on a different machine.
-        addExtern<DAS_BIND_FUN(das_cpu_supports)>(*this, lib, "cpu_supports",
+        addExternInline<DAS_BIND_FUN(das_cpu_supports)>(*this, lib, "cpu_supports",
             SideEffects::accessExternal, "das_cpu_supports")->args({"feature"});
         // fmt
-        addExtern<DAS_BIND_FUN(fmt_i8)>(*this, lib, "fmt",
+        addExternInline<DAS_BIND_FUN(fmt_i8)>(*this, lib, "fmt",
             SideEffects::none, "fmt_i8")->args({"format","value","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(fmt_u8)>(*this, lib, "fmt",
+        addExternInline<DAS_BIND_FUN(fmt_u8)>(*this, lib, "fmt",
             SideEffects::none, "fmt_u8")->args({"format","value","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(fmt_i16)>(*this, lib, "fmt",
+        addExternInline<DAS_BIND_FUN(fmt_i16)>(*this, lib, "fmt",
             SideEffects::none, "fmt_i16")->args({"format","value","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(fmt_u16)>(*this, lib, "fmt",
+        addExternInline<DAS_BIND_FUN(fmt_u16)>(*this, lib, "fmt",
             SideEffects::none, "fmt_u16")->args({"format","value","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(fmt_i32)>(*this, lib, "fmt",
+        addExternInline<DAS_BIND_FUN(fmt_i32)>(*this, lib, "fmt",
             SideEffects::none, "fmt_i32")->args({"format","value","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(fmt_u32)>(*this, lib, "fmt",
+        addExternInline<DAS_BIND_FUN(fmt_u32)>(*this, lib, "fmt",
             SideEffects::none, "fmt_u32")->args({"format","value","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(fmt_i64)>(*this, lib, "fmt",
+        addExternInline<DAS_BIND_FUN(fmt_i64)>(*this, lib, "fmt",
             SideEffects::none, "fmt_i64")->args({"format","value","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(fmt_u64)>(*this, lib, "fmt",
+        addExternInline<DAS_BIND_FUN(fmt_u64)>(*this, lib, "fmt",
             SideEffects::none, "fmt_u64")->args({"format","value","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(fmt_f)>(*this, lib, "fmt",
+        addExternInline<DAS_BIND_FUN(fmt_f)>(*this, lib, "fmt",
             SideEffects::none, "fmt_f")->args({"format","value","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(fmt_d)>(*this, lib, "fmt",
+        addExternInline<DAS_BIND_FUN(fmt_d)>(*this, lib, "fmt",
             SideEffects::none, "fmt_d")->args({"format","value","context","at"})->setTempStringResult();
     }
 }

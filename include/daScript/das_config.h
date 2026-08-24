@@ -114,22 +114,11 @@ using das_safe_set = std::set<K,C>;
 
 #define DAS_STD_HAS_BIND 1
 
-// if enabled, the generated interop will be marginally slower
-// the upside is that it well generate significantly less templated code, thus reducing compile time (and binary size)
-#ifndef DAS_SLOW_CALL_INTEROP
-  #define DAS_SLOW_CALL_INTEROP 0
-#endif
-
 #ifndef DAS_MAX_FUNCTION_ARGUMENTS
 #define DAS_MAX_FUNCTION_ARGUMENTS 32
 #endif
 
 #ifndef DAS_FUSION
-  #define DAS_FUSION  0
-#endif
-
-#if DAS_SLOW_CALL_INTEROP
-  #undef DAS_FUSION
   #define DAS_FUSION  0
 #endif
 

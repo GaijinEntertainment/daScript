@@ -52,6 +52,7 @@ require daslib/array_boost
 require daslib/archive
 require daslib/unroll
 require daslib/assert_once
+require daslib/only_nttp
 require daslib/ast_block_to_loop
 require daslib/ast_cursor
 require daslib/ast_match
@@ -906,6 +907,12 @@ def document_module_assert_once(_root : string) {
         group_by_regex("Assertion", mod, %regex~(assert_once)$%%)
     )
     document("Assert once", mod, "assert_once.rst", groups)
+}
+
+def document_module_only_nttp(_root : string) {
+    var mod = find_module("only_nttp")
+    var groups : array<DocGroup>
+    document("Only NTTP", mod, "only_nttp.rst", groups)
 }
 
 def document_module_ast_block_to_loop(_root : string) {
@@ -1917,6 +1924,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_archive(root)
     document_module_array_boost(root)
     document_module_assert_once(root)
+    document_module_only_nttp(root)
     document_module_ast_block_to_loop(root)
     document_module_ast_boost(root)
     document_module_ast_cursor(root)

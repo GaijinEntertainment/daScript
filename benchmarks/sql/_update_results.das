@@ -112,7 +112,7 @@ def load_cells(path : string; var cells : table<string; double>; var families : 
 
 def cell_str(cells : table<string; double>; fam, lane : string) : string {
     let key = "{fam}\t{lane}"
-    if (!key_exists(cells, key)) return "—"
+    if (!key_exists(cells, key)) return "-"
     return fmt1(cells?[key] ?? 0.0lf)
 }
 
@@ -202,7 +202,7 @@ def main : int {
 
     let body = build_string() $(w) {
         w |> write("{BEGIN_MARKER}\n")
-        w |> write("*Generated {cfg.date} by `benchmarks/sql/_update_results.das` — ns/op; `—` = absent lane. Edit the prose around the markers, not the tables.*\n\n")
+        w |> write("*Generated {cfg.date} by `benchmarks/sql/_update_results.das` - ns/op; ` - ` = absent lane. Edit the prose around the markers, not the tables.*\n\n")
         w |> write("## INTERP\n\n")
         w |> write(build_table(interpCells, families))
         w |> write("\n## JIT\n\n")

@@ -8,7 +8,7 @@ C++ tests live under `tests-cpp/`, use [doctest](https://github.com/doctest/doct
 
 ```
 tests-cpp/
-  CMakeLists.txt              entry point — top-level CMakeLists.txt has ONE line: add_subdirectory(tests-cpp)
+  CMakeLists.txt              entry point - top-level CMakeLists.txt has ONE line: add_subdirectory(tests-cpp)
   3rdparty/doctest/           vendored single-header doctest + cmake helpers (MIT/BSD-3)
   doctest_main.cpp            owns DOCTEST_CONFIG_IMPLEMENT, Module::Initialize/Shutdown, suite-end leak verification
   small/
@@ -20,7 +20,7 @@ tests-cpp/
       *.cpp                   custom int main(), custom deps, custom link variants
 ```
 
-**Companion `.das` fixtures live next to their `.cpp`** — never under `tests/` (that's dastest territory; mixing forces dastest-side maintenance for non-dastest files).
+**Companion `.das` fixtures live next to their `.cpp`** - never under `tests/` (that's dastest territory; mixing forces dastest-side maintenance for non-dastest files).
 
 ## Adding a small test (golden path)
 
@@ -38,13 +38,13 @@ TEST_CASE("my feature does X") {
 
 Optionally drop `tests-cpp/small/test_my_feature.das` next to it; load via `getDasRoot() + "/tests-cpp/small/test_my_feature.das"`.
 
-Rebuild — `cmake --build build`. The new test appears in `ctest -N` automatically (no CMake edit needed).
+Rebuild - `cmake --build build`. The new test appears in `ctest -N` automatically (no CMake edit needed).
 
-**Don't include doctest with `DOCTEST_CONFIG_IMPLEMENT`** — that's owned exclusively by `doctest_main.cpp`. Including the header without that macro is the right pattern for every other TU.
+**Don't include doctest with `DOCTEST_CONFIG_IMPLEMENT`** - that's owned exclusively by `doctest_main.cpp`. Including the header without that macro is the right pattern for every other TU.
 
 ## Adding a big test
 
-A "big" test is anything the single doctest exe can't host: a custom `int main()` (C++ or C), custom link deps, multiple link variants (static + dynamic), or no compiled source at all — `big/style_lint/` is just a `CMakeLists.txt` that registers ctest entries running a daslang script with a `PASS_REGULAR_EXPRESSION`. What makes it "big" is owning its own CMakeLists and carrying `LABELS "big"`. The canonical C++ example is `tests-cpp/big/concurrent_init/` — it has a thread-startup-barrier harness and is built as both `test_concurrent_init` (static) and `test_concurrent_init_dyn` (dynamic).
+A "big" test is anything the single doctest exe can't host: a custom `int main()` (C++ or C), custom link deps, multiple link variants (static + dynamic), or no compiled source at all - `big/style_lint/` is just a `CMakeLists.txt` that registers ctest entries running a daslang script with a `PASS_REGULAR_EXPRESSION`. What makes it "big" is owning its own CMakeLists and carrying `LABELS "big"`. The canonical C++ example is `tests-cpp/big/concurrent_init/` - it has a thread-startup-barrier harness and is built as both `test_concurrent_init` (static) and `test_concurrent_init_dyn` (dynamic).
 
 To add one:
 
@@ -62,9 +62,9 @@ set_tests_properties(my_stress_test PROPERTIES LABELS "big")
 add_dependencies(test-big my_stress_test)
 ```
 
-Big tests that are C++ executables **don't include doctest** — they keep their own `int main()` returning 0/1 to ctest. They handle `Module::Initialize()` / `Module::Shutdown()` themselves.
+Big tests that are C++ executables **don't include doctest** - they keep their own `int main()` returning 0/1 to ctest. They handle `Module::Initialize()` / `Module::Shutdown()` themselves.
 
-Big tests are **not in CI yet** (V1) — local-only via `ninja test-big`.
+Big tests are **not in CI yet** (V1) - local-only via `ninja test-big`.
 
 ## Doctest assertion cheat sheet
 
@@ -74,15 +74,15 @@ Big tests are **not in CI yet** (V1) — local-only via `ninja test-big`.
 | `REQUIRE(cond)` | Fatal; test stops on failure |
 | `CHECK_FALSE(cond)` / `REQUIRE_FALSE(cond)` | Negated form |
 | `CHECK_MESSAGE(cond, "msg")` | Adds a context message on failure |
-| `CHECK_EQ(a, b)` / `CHECK_NE(a, b)` / `CHECK_LT` / `CHECK_LE` / `CHECK_GT` / `CHECK_GE` | Comparison helpers — better failure messages than `CHECK(a == b)` because doctest stringifies both sides |
+| `CHECK_EQ(a, b)` / `CHECK_NE(a, b)` / `CHECK_LT` / `CHECK_LE` / `CHECK_GT` / `CHECK_GE` | Comparison helpers - better failure messages than `CHECK(a == b)` because doctest stringifies both sides |
 | `CHECK_THROWS(expr)` / `CHECK_NOTHROW(expr)` | Exception assertions |
 | `MESSAGE("...")` / `INFO("...")` | Log without checking |
 
-**Bit-fields must be wrapped in `bool(...)`** — doctest's expression decomposition binds operands by reference, and C++ forbids binding a reference to a bit-field. `CHECK(t->ref)` on a `TypeDecl` flag compiles on MSVC but fails on clang/gcc ("non-const reference cannot bind to bit-field") — Release CI on Windows won't catch it, every other lane goes red. Write `CHECK(bool(t->ref))` / `CHECK_FALSE(bool(t->constant))`.
+**Bit-fields must be wrapped in `bool(...)`** - doctest's expression decomposition binds operands by reference, and C++ forbids binding a reference to a bit-field. `CHECK(t->ref)` on a `TypeDecl` flag compiles on MSVC but fails on clang/gcc ("non-const reference cannot bind to bit-field") - Release CI on Windows won't catch it, every other lane goes red. Write `CHECK(bool(t->ref))` / `CHECK_FALSE(bool(t->constant))`.
 
 ## TEST_CASE / SUBCASE pattern
 
-One `TEST_CASE` per logical scenario. `SUBCASE`s for variations sharing setup. Each SUBCASE re-runs the TEST_CASE body from the top — so per-subcase fresh `Context`/state is automatic.
+One `TEST_CASE` per logical scenario. `SUBCASE`s for variations sharing setup. Each SUBCASE re-runs the TEST_CASE body from the top - so per-subcase fresh `Context`/state is automatic.
 
 ```cpp
 TEST_CASE("compile + run my script") {
@@ -95,23 +95,23 @@ TEST_CASE("compile + run my script") {
 }
 ```
 
-Don't try to share a `Context` across `TEST_CASE`s — modules can survive (they're process-global), but Context-level state will leak between tests and the leak guard will catch it.
+Don't try to share a `Context` across `TEST_CASE`s - modules can survive (they're process-global), but Context-level state will leak between tests and the leak guard will catch it.
 
 See `tests-cpp/small/test_run_with_catch_clear.cpp` for a 5-subcase example.
 
 ## Environment & init (what's free, what's yours)
 
 - `Module::Initialize()` runs **once** in `doctest_main.cpp` before any TEST_CASE. Don't call it again.
-- `NEED_*` macros also live in `doctest_main.cpp::main()`. Don't add them at file scope — they're statement-form (expand to expression statements + a brace block) and won't compile there. If you need a non-default module, add the `NEED_MODULE(...)` line to `doctest_main.cpp`.
+- `NEED_*` macros also live in `doctest_main.cpp::main()`. Don't add them at file scope - they're statement-form (expand to expression statements + a brace block) and won't compile there. If you need a non-default module, add the `NEED_MODULE(...)` line to `doctest_main.cpp`.
 - YOU own `compileDaScript`, `Context` creation, and `simulate` in your TEST_CASE body.
 
 ## Leak detection (automatic, will fail your test)
 
 The framework auto-checks three counters at the suite-end of every test process:
 
-1. **gc_node count** — AST nodes (TypeDecl, Expression, Function, etc.) tracked by gc_node. Thread-local: only the suite-runner thread's root is sampled, so gc_nodes leaked on a worker thread that isn't joined-and-collected before the test ends are invisible to this check.
-2. **JobQue / Channel / LockBox / Stream / Feature count** — anything in the `JobStatus` tracking list.
-3. **Module-registered handle count** — sum of every `HandleRegistry<T>::live_count()` across every module that registered via `addHandleAnnotation<T>` (HV resources, dasSQLITE statements, etc.). Picked up automatically — no per-module wiring.
+1. **gc_node count** - AST nodes (TypeDecl, Expression, Function, etc.) tracked by gc_node. Thread-local: only the suite-runner thread's root is sampled, so gc_nodes leaked on a worker thread that isn't joined-and-collected before the test ends are invisible to this check.
+2. **JobQue / Channel / LockBox / Stream / Feature count** - anything in the `JobStatus` tracking list.
+3. **Module-registered handle count** - sum of every `HandleRegistry<T>::live_count()` across every module that registered via `addHandleAnnotation<T>` (HV resources, dasSQLITE statements, etc.). Picked up automatically - no per-module wiring.
 
 When run via ctest, each TEST_CASE is invoked in its own process (`bin/tests-cpp-small --test-case="..."`), so the suite-end check fires per-TEST_CASE and ctest attributes the failure to the right test name. When run directly (`bin/tests-cpp-small`), all tests share one process and the suite-end check reports cumulative state.
 
@@ -126,8 +126,8 @@ If a leak shows up that you believe is a false positive: suspect lazy initializa
 
 | Command | What it does |
 |---|---|
-| `ninja test` (or bare `ctest` from build dir) | **Everything** — small *and* big. |
-| `ninja test-small` (or `ctest -L small`) | Small tests only — this is what CI runs. |
+| `ninja test` (or bare `ctest` from build dir) | **Everything** - small *and* big. |
+| `ninja test-small` (or `ctest -L small`) | Small tests only - this is what CI runs. |
 | `ninja test-big` (or `ctest -L big`) | Big tests only. |
 | `ctest -R "my feature"` | Single test by name regex. |
 | `ctest -V` | Verbose; shows full output and per-test leak attribution. |
@@ -137,12 +137,12 @@ VSCode integration: install `matepek.vscode-catch2-test-adapter`, point at `buil
 
 ## Sanitizers
 
-Build with `-DDAS_USE_SANITIZER=address` (or `undefined`/`ubsan`, `thread`/`tsan`) in the `cmake` step. CI runs three Linux **Release** x86-64 sanitizer lanes — ASAN, TSAN and UBSAN — on every PR, each running the full suite (dastest + test_aot + ctest). Release keeps walltime in budget; Debug + ASAN was prohibitive. If your test fails under a sanitizer, fix the sanitizer error — don't disable.
+Build with `-DDAS_USE_SANITIZER=address` (or `undefined`/`ubsan`, `thread`/`tsan`) in the `cmake` step. CI runs three Linux **Release** x86-64 sanitizer lanes - ASAN, TSAN and UBSAN - on every PR, each running the full suite (dastest + test_aot + ctest). Release keeps walltime in budget; Debug + ASAN was prohibitive. If your test fails under a sanitizer, fix the sanitizer error - don't disable.
 
 ## Common gotchas
 
-- `getDasRoot()` derives the root at runtime from the test executable's own path (it walks up past `bin/` / `bin/<config>/`), falling back to `"."` if the exe is not under a `bin` dir. It is not a configure-time constant — moving the binary moves the root. All `.das` fixture loads should use `getDasRoot() + "/tests-cpp/..."`, and tests must therefore run with the repo layout intact, which is why every `add_test` sets `WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}`.
+- `getDasRoot()` derives the root at runtime from the test executable's own path (it walks up past `bin/` / `bin/<config>/`), falling back to `"."` if the exe is not under a `bin` dir. It is not a configure-time constant - moving the binary moves the root. All `.das` fixture loads should use `getDasRoot() + "/tests-cpp/..."`, and tests must therefore run with the repo layout intact, which is why every `add_test` sets `WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}`.
 - Don't put `NEED_*` macros at file scope. They go in `doctest_main.cpp::main()`.
 - The doctest header is large (~7000 lines). Don't include it in non-test code.
-- For SUBCASE-heavy tests, remember the body re-runs from the top — each subcase gets a fresh setup. This is the desired behavior; just be aware of the cost (5 subcases = 5 `compileDaScript` calls).
-- Big-test `int main()`s must call `Module::Initialize()` / `Module::Shutdown()` themselves — they don't go through `doctest_main.cpp`.
+- For SUBCASE-heavy tests, remember the body re-runs from the top - each subcase gets a fresh setup. This is the desired behavior; just be aware of the cost (5 subcases = 5 `compileDaScript` calls).
+- Big-test `int main()`s must call `Module::Initialize()` / `Module::Shutdown()` themselves - they don't go through `doctest_main.cpp`.

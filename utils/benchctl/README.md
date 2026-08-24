@@ -109,7 +109,7 @@ Options:
 |------|-------------|
 | `--db <path>` | Database file path |
 | `--commit <hash>` | Filter to records with this exact commit hash |
-| `--tag <name>` | Filter to records carrying this tag (single-value; uses LIKE under the hood — empty `--tag` means no filter) |
+| `--tag <name>` | Filter to records carrying this tag (single-value; uses LIKE under the hood - empty `--tag` means no filter) |
 
 This is mostly needed to debug the selection filters before using a more useful `compare` command.
 
@@ -129,7 +129,7 @@ daslang utils/benchctl/main.das -- query --tag before
 daslang utils/benchctl/main.das -- query --commit abc12345 --tag before
 ```
 
-If you need a one-off filter that the structured flags don't cover (e.g. `WHERE string_allocs > 0`), open the DB directly with the `sqlite3` shell — `benchctl` no longer accepts arbitrary SQL via the CLI.
+If you need a one-off filter that the structured flags don't cover (e.g. `WHERE string_allocs > 0`), open the DB directly with the `sqlite3` shell - `benchctl` no longer accepts arbitrary SQL via the CLI.
 
 > Stored columns: `id`, `commit_hash`, `tags`, `insert_date`, `full_name`, `name`, `sub_name`, `mode`, `n`, `time_ns`, `allocs`, `heap_bytes`, `string_allocs`, `string_heap_bytes`. Tags are stored as `[tag1][tag2]` strings.
 
@@ -155,7 +155,7 @@ Options:
 | `--s <from=>to>` | Regex rename: rewrite old benchmark names to match new names |
 | `--no-color` | Disable colored output |
 
-Each side's filters compose with AND. Empty side filters mean "all rows for that side" — usually you want at least one filter per side.
+Each side's filters compose with AND. Empty side filters mean "all rows for that side" - usually you want at least one filter per side.
 
 **Example - compare two commits:**
 
@@ -196,14 +196,14 @@ For each paired benchmark:
 
 ```
 BenchmarkName/SubName
-    150.3 ns/op ±2%    148.1 ns/op ±1%    -1.47%    (p<0.001 n=10+10)
+    150.3 ns/op +/-2%    148.1 ns/op +/-1%    -1.47%    (p<0.001 n=10+10)
 ```
 
 Column layout: `old value` | `new value` | `delta` | `significance`
 
 - **Green** delta: lower values (improvement for time/memory metrics)
 - **Red** delta: higher values (regression)
-- `~`: result not statistically significant (p ≥ 0.05)
+- `~`: result not statistically significant (p >= 0.05)
 - **Yellow** variation: coefficient of variation exceeds 5% (noisy benchmark)
 
 A geometric mean summary across all benchmarks is printed at the end.
@@ -212,7 +212,7 @@ Some general advice:
 
 * You want the `p` to be as low as possible (p<0.001 is perfect)
 * You want the `n` to be around 10 or higher, **5 is the bare minimum**
-* You want the sample variation (±value) to be less than 5%
+* You want the sample variation (+/-value) to be less than 5%
 
 If all of the above are satisfied, you can generally consider the results legit and stable.
 
@@ -222,7 +222,7 @@ If all of the above are satisfied, you can generally consider the results legit 
 
 | Method | Description |
 |--------|-------------|
-| Outlier filtering | Tukey's fences (1.5 × IQR) applied before any statistics |
+| Outlier filtering | Tukey's fences (1.5 x IQR) applied before any statistics |
 | Mean | Arithmetic mean of per-operation values |
 | Variation | Coefficient of variation (stddev / mean); highlighted yellow if > 5% |
 | Significance | Welch's t-test; p < 0.05 is considered significant |

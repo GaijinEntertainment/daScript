@@ -17,14 +17,14 @@
 
 ## Key Features
 
-- High-performance — close to C++ speed via ahead-of-time (AOT) compilation and optional JIT (via LLVM)
+- High-performance - close to C++ speed via ahead-of-time (AOT) compilation and optional JIT (via LLVM)
 - Strong static typing with type inference
 - Generics, macros, and compile-time meta-programming
 - First-class iterators, generators, lambdas, and closures
 - Pattern matching, LINQ-style queries via standard library
-- Native C++ interop — easy embedding and binding
+- Native C++ interop - easy embedding and binding
 - Hot reloading support for rapid iteration
-- Cross-platform — Windows, macOS, Linux, WASM
+- Cross-platform - Windows, macOS, Linux, WASM
 
 ## What's in the Box
 
@@ -72,16 +72,16 @@ See `tutorials/integration/` for complete C and C++ embedding examples.
 
 A full tree-sitter grammar for daslang is included in `tree-sitter-daslang/`. Use it for:
 
-- **Syntax highlighting** — `tree-sitter-daslang/queries/highlights.scm` works in editors that support tree-sitter (Neovim, Helix, Zed)
-- **Parse-aware search** — via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search. Install `sg`, then run from the SDK root (where `sgconfig.yml` lives):
+- **Syntax highlighting** - `tree-sitter-daslang/queries/highlights.scm` works in editors that support tree-sitter (Neovim, Helix, Zed)
+- **Parse-aware search** - via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search. Install `sg`, then run from the SDK root (where `sgconfig.yml` lives):
   ```sh
   sg run -p "symbol_name" -l daslang
   ```
-- **Editor extensions** — `tree-sitter-daslang/zed-daslang/` includes a Zed extension
+- **Editor extensions** - `tree-sitter-daslang/zed-daslang/` includes a Zed extension
 
 ## MCP Server (AI Tool Integration)
 
-`utils/mcp/` contains an [MCP](https://modelcontextprotocol.io/) server exposing 40+ compiler-backed tools to AI coding assistants: compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, AOT generation, expression evaluation, parse-aware grep for both `.das` and C++, duplicate detection, live-reload control, and more. Uses stdio transport — no extra build dependencies.
+`utils/mcp/` contains an [MCP](https://modelcontextprotocol.io/) server exposing 40+ compiler-backed tools to AI coding assistants: compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, AOT generation, expression evaluation, parse-aware grep for both `.das` and C++, duplicate detection, live-reload control, and more. Uses stdio transport - no extra build dependencies.
 
 Configure in `.mcp.json`:
 ```json
@@ -99,8 +99,8 @@ See `utils/mcp/README.md` for the full tool list and permissions setup.
 
 ## LSP Server (Claude Code)
 
-`utils/lsp/` contains a language server for `.das`: **push diagnostics** — the
-compiler and lint report after every edit with no explicit tool call — plus
+`utils/lsp/` contains a language server for `.das`: **push diagnostics** - the
+compiler and lint report after every edit with no explicit tool call - plus
 definition / references / hover / document & workspace symbols / call
 hierarchy / go-to-implementation. Requires `python3` on `PATH`.
 
@@ -136,5 +136,5 @@ Binaries produced by `cmake --install` are ad-hoc code signed automatically, whi
 
 ## License
 
-BSD 3-Clause License — Copyright (c) 2019-2026, Gaijin Entertainment.
+BSD 3-Clause License - Copyright (c) 2019-2026, Gaijin Entertainment.
 See `LICENSE` for the full text.

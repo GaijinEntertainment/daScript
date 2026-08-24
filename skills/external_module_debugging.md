@@ -1,14 +1,14 @@
 # Debugging an external daslang module locally
 
-When you're iterating on a daslang module that lives OUTSIDE the main daslang repo — dasImguiNodeEditor, dasImguiImplot, dasCards, dasTelegram, your own daspkg package, etc. — you need a way to run/lint/test from a standalone `daslang.exe` (or via the MCP server) without a full `daspkg install`. (dasImgui itself is no longer external — it lives in-tree at `modules/dasImgui`; its dependents above still are.)
+When you're iterating on a daslang module that lives OUTSIDE the main daslang repo - dasImguiNodeEditor, dasImguiImplot, dasCards, dasTelegram, your own daspkg package, etc. - you need a way to run/lint/test from a standalone `daslang.exe` (or via the MCP server) without a full `daspkg install`. (dasImgui itself is no longer external - it lives in-tree at `modules/dasImgui`; its dependents above still are.)
 
 The **recommended approach** is `-load_module <path>` (repeatable). The older **junction trick** still works and is documented below as a fallback for workflows that need to exercise the `<project_root>/modules/<name>` scan path itself.
 
 ## The problem
 
-Each external module ships a `.das_module` descriptor (e.g. `C:/packages/dasImguiNodeEditor/.das_module`) whose `initialize(project_path)` callback registers native paths like `register_native_path("imgui", "imgui_node_editor_boost", "<P>/daslib/imgui_node_editor_boost.das")`. daslang only fires those callbacks when it discovers the module — either by scanning `<project_root>/modules/<name>/` or via an explicit `-load_module <path>`.
+Each external module ships a `.das_module` descriptor (e.g. `C:/packages/dasImguiNodeEditor/.das_module`) whose `initialize(project_path)` callback registers native paths like `register_native_path("imgui", "imgui_node_editor_boost", "<P>/daslib/imgui_node_editor_boost.das")`. daslang only fires those callbacks when it discovers the module - either by scanning `<project_root>/modules/<name>/` or via an explicit `-load_module <path>`.
 
-So running `daslang path/to/your-module/main.das` directly fails with a missing prerequisite on the module's registered requires (`imgui/imgui_node_editor_boost` here) — daslang has no module-discovery hook firing, and the `.das_module` `initialize()` never runs.
+So running `daslang path/to/your-module/main.das` directly fails with a missing prerequisite on the module's registered requires (`imgui/imgui_node_editor_boost` here) - daslang has no module-discovery hook firing, and the `.das_module` `initialize()` never runs.
 
 Running via `daspkg install` works but cuts off the live edit loop: every `.das` or C++ change needs a reinstall.
 
@@ -34,7 +34,7 @@ daslang -load_module C:/packages/dasImguiNodeEditor -load_module C:/packages/das
 daslang-live -load_module C:/packages/dasImguiNodeEditor your_script.das
 ```
 
-### MCP tools (preferred — keeps everything inside the editor)
+### MCP tools (preferred - keeps everything inside the editor)
 
 Every MCP tool that already accepts `project_root` also accepts `load_modules` (a JSON array of paths). Pass the module folder(s) directly:
 
@@ -51,33 +51,33 @@ Same shape for `lint`, `find_symbol`, `goto_definition`, `find_references`, `typ
 
 - Each `-load_module <P>` is treated as a single module folder. daslang looks for `<P>/.das_module` and runs its `initialize(<P>)` callback.
 - The path's **basename** becomes the shadow-skip key. If a module with the same basename also exists under `<project_root>/modules/<basename>/` or `<das_root>/modules/<basename>/`, the explicit `-load_module` entry wins (the others are skipped with a `local '<name>' shadows global` warning).
-- Edits to the module's source (`.das` or `.cpp`) are picked up live — daslang reads from the path directly on every invocation.
+- Edits to the module's source (`.das` or `.cpp`) are picked up live - daslang reads from the path directly on every invocation.
 
 ## When to use this
 
 - Iterating locally on an external module's daslang code before pushing to CI.
-- Iterating on the module's C++ binding — rebuild `dasModule<X>.shared_module`, the next MCP/daslang invocation picks it up (the MCP server itself does not load user-side bindings, so DLL stays unlocked between calls).
+- Iterating on the module's C++ binding - rebuild `dasModule<X>.shared_module`, the next MCP/daslang invocation picks it up (the MCP server itself does not load user-side bindings, so DLL stays unlocked between calls).
 - Running the module's harnesses / integration tests outside the `daspkg install` flow.
 - Cross-module lint/compile sanity checks before a PR.
 
 ## When NOT to use this
 
-- Production daspkg installs — those use `daspkg install <pkg>` which sets up the `<root>/modules/<pkg>/` layout natively, and the consuming code resolves modules without any extra flag.
-- Anything that depends on a built dasModule being copied to a specific install path — `-load_module` is a path, not a file copy, and the C++ binary still lives in the dev checkout.
+- Production daspkg installs - those use `daspkg install <pkg>` which sets up the `<root>/modules/<pkg>/` layout natively, and the consuming code resolves modules without any extra flag.
+- Anything that depends on a built dasModule being copied to a specific install path - `-load_module` is a path, not a file copy, and the C++ binary still lives in the dev checkout.
 
 ## Combining with `-project_root` / `.das_project`
 
 All three can be set on the same call. They're independent:
 
-- `-project` (a `.das_project` file) — custom `module_get` callbacks.
-- `-project_root` (a directory) — scan its `modules/*` for `.das_module` files.
-- `-load_module` (one path per flag, repeatable) — initialize this exact folder.
+- `-project` (a `.das_project` file) - custom `module_get` callbacks.
+- `-project_root` (a directory) - scan its `modules/*` for `.das_module` files.
+- `-load_module` (one path per flag, repeatable) - initialize this exact folder.
 
 Precedence on basename collision: `-load_module` shadows `<project_root>/modules/<name>`, which shadows `<das_root>/modules/<name>`.
 
 ## Fallback: the junction trick
 
-Before `-load_module`, the canonical workaround was to create a throwaway directory whose only contents are a `modules/<your-module>` junction (Windows) or symlink (POSIX) pointing at your dev checkout, then use it as `-project_root`. This still works — useful if you want to exercise the `<project_root>/modules/<name>` scan path itself (rather than the direct `init_dyn_modules` path).
+Before `-load_module`, the canonical workaround was to create a throwaway directory whose only contents are a `modules/<your-module>` junction (Windows) or symlink (POSIX) pointing at your dev checkout, then use it as `-project_root`. This still works - useful if you want to exercise the `<project_root>/modules/<name>` scan path itself (rather than the direct `init_dyn_modules` path).
 
 ### Windows
 
@@ -87,7 +87,7 @@ mklink /J C:\NE_DEMO\modules\dasImguiNodeEditor C:\packages\dasImguiNodeEditor
 daslang -project_root C:/NE_DEMO your_script.das
 ```
 
-`mklink /J` creates a directory junction — same effect as a symlink for daslang's purposes and doesn't need admin.
+`mklink /J` creates a directory junction - same effect as a symlink for daslang's purposes and doesn't need admin.
 
 ### POSIX
 
@@ -101,7 +101,7 @@ For most workflows `-load_module` is shorter and avoids the per-module mklink st
 
 ## Worked example: dasImguiNodeEditor
 
-[github.com/borisbat/dasImguiNodeEditor](https://github.com/borisbat/dasImguiNodeEditor) — external package; depends on the now in-tree dasImgui, which resolves from `<das_root>/modules/dasImgui` with no extra flag.
+[github.com/borisbat/dasImguiNodeEditor](https://github.com/borisbat/dasImguiNodeEditor) - external package; depends on the now in-tree dasImgui, which resolves from `<das_root>/modules/dasImgui` with no extra flag.
 
 Recommended:
 
@@ -129,7 +129,7 @@ daslang -project_root C:/NE_DEMO C:/packages/dasImguiNodeEditor/examples/tutoria
 
 ## Gotchas
 
-- **The module's `.das_module` initializer is invoked with `project_path = <the path you passed to -load_module>`.** Inside the initializer, `{project_path}/widgets/foo.das` resolves against that path directly. (With the junction trick, the path is `<dummy_root>/modules/<module_name>` — which junctions to the real dev-checkout path.)
+- **The module's `.das_module` initializer is invoked with `project_path = <the path you passed to -load_module>`.** Inside the initializer, `{project_path}/widgets/foo.das` resolves against that path directly. (With the junction trick, the path is `<dummy_root>/modules/<module_name>` - which junctions to the real dev-checkout path.)
 - **Shadow-skip uses path basenames.** `-load_module C:/packages/dasImguiNodeEditor` shadows entries named `dasImguiNodeEditor` in dasroot and project_root. If you renamed the module folder locally (e.g. `dasImguiNodeEditor-experimental`), the basename mismatch means it won't shadow the canonical `dasImguiNodeEditor`.
 - **`-load_module` is independent of `-dasroot`.** `-dasroot` points at the daslang stdlib (`daslib/`); `-load_module` points at user modules. They don't conflict.
 - **NEVER put a junction inside daslang's own `modules/` tree** (`<das_root>/modules/`, in the repo or SDK checkout). That's reserved for daslang's stdlib; user-side modules belong outside via `-load_module` or a dummy root.

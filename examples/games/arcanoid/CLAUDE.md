@@ -1,9 +1,9 @@
-# Arcanoid — daslang-live Example
+# Arcanoid - daslang-live Example
 
 ## Running
 
 ```bash
-# Live-reload mode (recommended — hot-reload on save, REST API on port 9090)
+# Live-reload mode (recommended - hot-reload on save, REST API on port 9090)
 bin/Release/daslang-live.exe examples/games/arcanoid/main.das
 
 # Standalone mode (no live reload, no REST API)
@@ -17,13 +17,13 @@ Both modes use the same `main.das`. Under `daslang.exe`, the script's `main()` f
 **Always use MCP tools** instead of curl for interacting with daslang-live:
 
 ```
-live_launch   — start the instance (or check if already running)
-live_status   — fps, uptime, paused, dt, has_error
-live_error    — last compilation error
-live_reload   — trigger reload (optional full=true)
-live_pause    — pause/unpause (paused=true/false)
-live_command  — dispatch a [live_command] (name + optional args JSON)
-live_shutdown — graceful shutdown
+live_launch   - start the instance (or check if already running)
+live_status   - fps, uptime, paused, dt, has_error
+live_error    - last compilation error
+live_reload   - trigger reload (optional full=true)
+live_pause    - pause/unpause (paused=true/false)
+live_command  - dispatch a [live_command] (name + optional args JSON)
+live_shutdown - graceful shutdown
 ```
 
 When a compilation error is active, `live_command` and `live_pause` return 503 with the error. Use `live_reload` to fix.
@@ -36,26 +36,26 @@ Use `live_command` with `name="help"` to list all available commands.
 
 | Command | Description | Args |
 |---|---|---|
-| `help` | List all commands | — |
+| `help` | List all commands | - |
 | `screenshot` | Save framebuffer to PNG | `file` (default: "screenshot.png") |
-| `cmd_watch_status` | Show watched files with stat info | — |
-| `cmd_watch_touch` | Touch watched file to trigger reload | — |
-| `cmd_watch_signal` | Signal files changed (bypass watcher) | — |
+| `cmd_watch_status` | Show watched files with stat info | - |
+| `cmd_watch_touch` | Touch watched file to trigger reload | - |
+| `cmd_watch_signal` | Signal files changed (bypass watcher) | - |
 
 #### Game Commands (from `[live_command]` in main.das)
 
 | Command | Description | Args |
 |---|---|---|
-| `cmd_game_status` | Score, lives, ball/brick counts, game state | — |
+| `cmd_game_status` | Score, lives, ball/brick counts, game state | - |
 | `cmd_spawn_ball` | Spawn a ball | `x` (float), `vx` (float) |
-| `cmd_spawn_bricks` | Spawn a new set of bricks | — |
+| `cmd_spawn_bricks` | Spawn a new set of bricks | - |
 | `cmd_spawn_bonus` | Spawn a bonus at paddle | `type` (string) |
 | `cmd_powerup` | Activate a powerup directly | `type` (string) |
-| `cmd_reset_game` | Reset game to initial state | — |
+| `cmd_reset_game` | Reset game to initial state | - |
 | `cmd_set_lives` | Set lives count | `lives` (int) |
-| `cmd_god_mode` | Toggle god mode (ball never falls) | — |
+| `cmd_god_mode` | Toggle god mode (ball never falls) | - |
 | `cmd_slow_motion` | Set game speed multiplier | `speed` (float, 0.1=slow, 1=normal, 2=fast) |
-| `cmd_decs_dump` | Dump DECS archetypes/entities | — |
+| `cmd_decs_dump` | Dump DECS archetypes/entities | - |
 
 **Powerup/bonus types:** `triple_ball`, `wide_paddle`, `narrow_paddle`, `sticky_paddle`, `fireball`, `extra_life`, `speed_up`, `speed_down`
 
@@ -76,12 +76,12 @@ live_command name=cmd_reset_game                                # Reset the game
 - **ECS**: Uses DECS (daslang ECS) for balls, bricks, bonuses, particles, trails
 - **Rendering**: OpenGL 3.3 with vertex/fragment shaders, planar shadows, HUD text
 - **Audio**: Procedurally generated sound effects via `audio_boost`
-- **State preservation**: Full persistence across live reloads — game keeps running seamlessly
+- **State preservation**: Full persistence across live reloads - game keeps running seamlessly
   - `decs_live` serializes/restores all DECS entities (bricks, balls, bonuses, trails)
   - `@live` variables (via `live/live_vars`) auto-persist: paddle_x, score, lives, game_state, powerup timers, sticky state, god_mode, game_speed
   - `audio_live` (via `audio/audio_live`) auto-persists audio sample buffers
   - `init()` guards `decs::restart()` + `spawn_bricks()` with `is_reload()` so entities aren't wiped on reload
-- **Bulk entity creation**: Uses `create_entities`T` for bricks, particles, and trails — ~10x faster than individual `create_entity`
+- **Bulk entity creation**: Uses `create_entities`T` for bricks, particles, and trails - ~10x faster than individual `create_entity`
 
 ## Keyboard Controls
 
@@ -91,7 +91,7 @@ live_command name=cmd_reset_game                                # Reset the game
 
 ## Game States
 
-`GameState.menu` → `GameState.playing` → `GameState.game_over_state` or `GameState.win_state`
+`GameState.menu` -> `GameState.playing` -> `GameState.game_over_state` or `GameState.win_state`
 
 Pause available during `playing` via Escape.
 

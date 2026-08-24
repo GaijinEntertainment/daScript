@@ -6,7 +6,7 @@ benchmark is `skills/writing_benchmarks.md`; this file is the repo's conventions
 ## Layout and index
 
 Benchmarks live under `benchmarks/<category>/`, with a subdirectory per subject
-(`core/hash/`, `core/table/`, `sort/`, `sql/`, …). Pick an existing category or add one.
+(`core/hash/`, `core/table/`, `sort/`, `sql/`, ...). Pick an existing category or add one.
 
 `benchmarks/README.md` indexes **every** `.das` file in the tree. Adding, removing, or
 renaming a file means editing the index in the same commit: a row with the filename and a
@@ -14,13 +14,13 @@ one-line description, under the table for its directory, plus a new section head
 directory is new. Helper modules (`_`-prefixed, skipped by dastest) are listed too, marked
 as not a benchmark.
 
-`modules/dasLLAMA/benchmarks/REVIEW.md` binds anything that produces record-grade timing —
+`modules/dasLLAMA/benchmarks/REVIEW.md` binds anything that produces record-grade timing -
 record rigs, A/B labs, and what may enter `PERF_LEDGER.md`. Root `benchmarks/` has no
 checklist; its one invariant is the README index rule above.
 
 ## Capturing output
 
-Run one file at a time and redirect to a file, then read the file — a whole directory in
+Run one file at a time and redirect to a file, then read the file - a whole directory in
 one invocation can run for hours, and terminal capture truncates and interleaves with
 scrollback.
 

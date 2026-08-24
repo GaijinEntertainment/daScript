@@ -142,40 +142,40 @@ namespace das {
 
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
         addAnnotation(new TimeAnnotation(lib));
-        addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
-        addExtern<DAS_BIND_FUN(iso8601_now)>(*this, lib, "iso8601_now",
+        addExternInline<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
+        addExternInline<DAS_BIND_FUN(iso8601_now)>(*this, lib, "iso8601_now",
             SideEffects::accessExternal, "iso8601_now")->setTempStringResult();
-        addExtern<DAS_BIND_FUN(builtin_mktime)>(*this, lib, "mktime", SideEffects::modifyExternal, "builtin_mktime")
+        addExternInline<DAS_BIND_FUN(builtin_mktime)>(*this, lib, "mktime", SideEffects::modifyExternal, "builtin_mktime")
             ->args({"year","month","mday","hour","min","sec"});
         // accessExternal (not none): reads process locale + timezone, so it must not be
         // CSE'd or constant-folded across environment changes — same as iso8601_now.
-        addExtern<DAS_BIND_FUN(format_time)>(*this, lib, "format_time", SideEffects::accessExternal, "format_time")
+        addExternInline<DAS_BIND_FUN(format_time)>(*this, lib, "format_time", SideEffects::accessExternal, "format_time")
             ->args({"time","format","context","at"})->setTempStringResult();
         // operations on time
-        addExtern<DAS_BIND_FUN(time_equal)>(*this, lib, "==",
+        addExternInline<DAS_BIND_FUN(time_equal)>(*this, lib, "==",
             SideEffects::none, "time_equal");
-        addExtern<DAS_BIND_FUN(time_nequal)>(*this, lib, "!=",
+        addExternInline<DAS_BIND_FUN(time_nequal)>(*this, lib, "!=",
             SideEffects::none, "time_nequal");
-        addExtern<DAS_BIND_FUN(time_gtequal)>(*this, lib, ">=",
+        addExternInline<DAS_BIND_FUN(time_gtequal)>(*this, lib, ">=",
             SideEffects::none, "time_gtequal");
-        addExtern<DAS_BIND_FUN(time_ltequal)>(*this, lib, "<=",
+        addExternInline<DAS_BIND_FUN(time_ltequal)>(*this, lib, "<=",
             SideEffects::none, "time_ltequal");
-        addExtern<DAS_BIND_FUN(time_gt)>(*this, lib, ">",
+        addExternInline<DAS_BIND_FUN(time_gt)>(*this, lib, ">",
             SideEffects::none, "time_gt");
-        addExtern<DAS_BIND_FUN(time_lt)>(*this, lib, "<",
+        addExternInline<DAS_BIND_FUN(time_lt)>(*this, lib, "<",
             SideEffects::none, "time_lt");
-        addExtern<DAS_BIND_FUN(time_sub)>(*this, lib, "-",
+        addExternInline<DAS_BIND_FUN(time_sub)>(*this, lib, "-",
             SideEffects::none, "time_sub");
         // TODO: move to upstream das
-        addExtern<DAS_BIND_FUN(ref_time_ticks)>(*this, lib, "ref_time_ticks",
+        addExternInline<DAS_BIND_FUN(ref_time_ticks)>(*this, lib, "ref_time_ticks",
             SideEffects::accessExternal, "ref_time_ticks");
-        addExtern<DAS_BIND_FUN(get_time_usec)>(*this, lib, "get_time_usec",
+        addExternInline<DAS_BIND_FUN(get_time_usec)>(*this, lib, "get_time_usec",
             SideEffects::accessExternal, "get_time_usec")->arg("ref");
-        addExtern<DAS_BIND_FUN(cast_int64)>(*this, lib, "int64",
+        addExternInline<DAS_BIND_FUN(cast_int64)>(*this, lib, "int64",
             SideEffects::none, "cast_int64")->arg("time");
-        addExtern<DAS_BIND_FUN(cast_clock)>(*this, lib, "clock",
+        addExternInline<DAS_BIND_FUN(cast_clock)>(*this, lib, "clock",
             SideEffects::none, "cast_clock")->arg("seconds");
-        addExtern<DAS_BIND_FUN(get_time_nsec)>(*this, lib, "get_time_nsec",
+        addExternInline<DAS_BIND_FUN(get_time_nsec)>(*this, lib, "get_time_nsec",
             SideEffects::accessExternal, "get_time_nsec")->arg("ref");
     }
 }

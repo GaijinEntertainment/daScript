@@ -1,6 +1,6 @@
 # Debugging AOT Hash Desync (`error[50101]: AOT link failed`)
 
-When `test_aot.exe -use-aot` (or any binary that links pre-built AOT stubs) reports `error[50101]: AOT link failed on <fn>`, it means the runtime computed a different semantic hash for `<fn>` than the AOT generator recorded. The AOT stub map has entries keyed by hash; lookup miss → link fails.
+When `test_aot.exe -use-aot` (or any binary that links pre-built AOT stubs) reports `error[50101]: AOT link failed on <fn>`, it means the runtime computed a different semantic hash for `<fn>` than the AOT generator recorded. The AOT stub map has entries keyed by hash; lookup miss -> link fails.
 
 Background on the hash machinery is in [`skills/internal/aot_testing.md`](aot_testing.md). This skill is the playbook for *finding why* the hashes disagree.
 
@@ -17,27 +17,27 @@ Background on the hash machinery is in [`skills/internal/aot_testing.md`](aot_te
    rm -rf tests/<area>/_aot_generated/ daslib/_aot_generated/
    cmake --build build --config Release --target test_aot -- /nodeReuse:false
    ```
-   **This is local-only, and `preflight --full` does not wipe for you** — its `tests-aot`
+   **This is local-only, and `preflight --full` does not wipe for you** - its `tests-aot`
    gate reuses whatever stubs are on disk, so a `daslib` edit made after your last build
    produces a 50101 that CI (fresh checkout, nothing cached) will never reproduce. Adding
    a method to a widely-required class is enough: the class's semantic hash is an input to
    every stub that requires it, so e.g. a new `LintVisitor` method desyncs `tests/lint`.
-   Tell this apart from a real desync by reading the hash list in the diagnostic — if it
+   Tell this apart from a real desync by reading the hash list in the diagnostic - if it
    names functions you just added, it is staleness, not codegen. Wipe every
    `_aot_generated` (they are all gitignored) before trusting the gate:
    ```
    find tests daslib modules examples utils tutorials -type d -name _aot_generated -print0 | xargs -0 rm -rf
    ```
 
-3. **The function's module was never AOT'd at all.** A missing stub and a mismatched stub produce the same 50101. New test dir not registered in `tests/aot/CMakeLists.txt`, or the module is in the daslib AOT *exclusion* regex there (modules whose builtins lack AOT header decls get excluded — if you gave such a module runtime-callable functions, add the missing decls to `include/daScript/simulate/aot_builtin_ast.h` and un-exclude it; precedent: `style_lint` and its five `for_each_*_macro` decls).
+3. **The function's module was never AOT'd at all.** A missing stub and a mismatched stub produce the same 50101. New test dir not registered in `tests/aot/CMakeLists.txt`, or the module is in the daslib AOT *exclusion* regex there (modules whose builtins lack AOT header decls get excluded - if you gave such a module runtime-callable functions, add the missing decls to `include/daScript/simulate/aot_builtin_ast.h` and un-exclude it; precedent: `style_lint` and its five `for_each_*_macro` decls).
 
-4. **A stub regenerated with a different path spelling.** The compile-invocation file path reaches *hashed constants* in quote-lowered functions, so the AOT-gen input must be spelled exactly as the runtime suite spells it — source-root-relative (`tests/...`). The `DAS_AOT_EXT` rule passes relative inputs with `WORKING_DIRECTORY` = source root for exactly this reason; regenerating a stub by hand with an absolute path desyncs every ``quote`lowered`N`` in it.
+4. **A stub regenerated with a different path spelling.** The compile-invocation file path reaches *hashed constants* in quote-lowered functions, so the AOT-gen input must be spelled exactly as the runtime suite spells it - source-root-relative (`tests/...`). The `DAS_AOT_EXT` rule passes relative inputs with `WORKING_DIRECTORY` = source root for exactly this reason; regenerating a stub by hand with an absolute path desyncs every ``quote`lowered`N`` in it.
 
-5. **The failing function has a `[tune]` family in its static call graph.** Generation and runtime must agree on the tune gate (`llvm_tune::tune_aot_gate` — `tune_frozen` at generation, `policies.aot && !jit` at runtime); a driver missing `tune_frozen` compiles in the STAMPED world (manifest/fallback stamps + full variants registries — the registries take function addresses, which flips `fastCall` on call sites) while the runtime compiles gated to the reference tier. There are TWO generation drivers that both need the policy: `utils/daslang/main.cpp` (`-aot`) **and** `utils/aot/main.das` (what the cmake AOT rules actually invoke) — the .das one was missed when #3423 introduced the policy (fixed in #3450). Diagnostic tell: a hand-run `bin/daslang -aot <file>` records hashes matching the runtime while the cmake-generated `.cpp` doesn't.
+5. **The failing function has a `[tune]` family in its static call graph.** Generation and runtime must agree on the tune gate (`llvm_tune::tune_aot_gate` - `tune_frozen` at generation, `policies.aot && !jit` at runtime); a driver missing `tune_frozen` compiles in the STAMPED world (manifest/fallback stamps + full variants registries - the registries take function addresses, which flips `fastCall` on call sites) while the runtime compiles gated to the reference tier. There are TWO generation drivers that both need the policy: `utils/daslang/main.cpp` (`-aot`) **and** `utils/aot/main.das` (what the cmake AOT rules actually invoke) - the .das one was missed when #3423 introduced the policy (fixed in #3450). Diagnostic tell: a hand-run `bin/daslang -aot <file>` records hashes matching the runtime while the cmake-generated `.cpp` doesn't.
 
 If none apply, you have a real desync. Continue.
 
-## Step 1 — Read the diagnostic
+## Step 1 - Read the diagnostic
 
 The error dumps the runtime's view:
 
@@ -52,10 +52,10 @@ otherwise the AOT-generated C++ is stale; regenerate it and rebuild
 
 What each piece means:
 
-- **`semantic hash is X`** — runtime's *combined* hash (own-hash + sorted dep hashes), `getFunctionAotHash` in [`src/simulate/simulate_fn_hash.cpp`](../src/simulate/simulate_fn_hash.cpp).
-- **`hash=0xY`** in the comment line — runtime's *own* hash for `<fn>` (`getFunctionHash`).
-- **`@dep::name=0xZ`** — runtime's own-hash for each dependency.
-- **The SimNode dump that follows** — the runtime function body, with per-node sub-hashes printed via `displayHash=true`.
+- **`semantic hash is X`** - runtime's *combined* hash (own-hash + sorted dep hashes), `getFunctionAotHash` in [`src/simulate/simulate_fn_hash.cpp`](../src/simulate/simulate_fn_hash.cpp).
+- **`hash=0xY`** in the comment line - runtime's *own* hash for `<fn>` (`getFunctionHash`).
+- **`@dep::name=0xZ`** - runtime's own-hash for each dependency.
+- **The SimNode dump that follows** - the runtime function body, with per-node sub-hashes printed via `displayHash=true`.
 
 The AOT-recorded values live in the generated `.cpp`:
 
@@ -65,15 +65,15 @@ grep "<fn>.*hash=" tests/<area>/_aot_generated/<file>.das.cpp
 
 You'll see the AOT-time `hash=0x...` and matching dep entries. The numeric registration line `{ 0x..., false, (void*)&<fn>_..., ... }` holds the AOT-time *combined* hash.
 
-## Step 2 — Localize the disagreement
+## Step 2 - Localize the disagreement
 
 Compare runtime vs AOT recorded.
 
-**Case A — own hash matches, combined doesn't.** Some dep's runtime hash differs from AOT. Diff the `@dep::*=0x...` lists in the AOT comment vs the runtime printout. The first dep with a different hex is the one to investigate next (recurse: it now becomes the `<fn>` to debug).
+**Case A - own hash matches, combined doesn't.** Some dep's runtime hash differs from AOT. Diff the `@dep::*=0x...` lists in the AOT comment vs the runtime printout. The first dep with a different hex is the one to investigate next (recurse: it now becomes the `<fn>` to debug).
 
-**Case B — own hash itself differs.** The function body hashes differently between AOT-gen and runtime. The body diverges in *some* node. Continue to step 3.
+**Case B - own hash itself differs.** The function body hashes differently between AOT-gen and runtime. The body diverges in *some* node. Continue to step 3.
 
-## Step 3 — Side-by-side SimNode dumps
+## Step 3 - Side-by-side SimNode dumps
 
 The trick: get the *same* function dumped from both code paths and `diff` them.
 
@@ -95,7 +95,7 @@ bin/Release/daslang.exe -dry-run tests/<area>/<failing_test>.das > /tmp/runtime.
 bin/Release/daslang.exe utils/aot/main.das -- -aot tests/<area>/<failing_test>.das /tmp/aot.cpp > /tmp/aot.txt 2>&1
 ```
 
-If the AOT-tool side surfaces only `[I] Aot to ...` without log_nodes output, that path runs `compile_and_simulate` from [`daslib/aot_cpp.das`](../daslib/aot_cpp.das), which discards logs. Use `daslang.exe -dry-run` on the same file as a **second runtime path** and diff the two — both runtime paths going through `simulate()` should produce identical hashes for the same source. If they DON'T, the issue is non-deterministic codegen (your bug) and the diff pinpoints it. If they DO match, the AOT-recorded value differs from both — search for special handling along the AOT-generation pipeline (e.g. `is_in_aot()`, `set_aot()`, `policies.aot_module`).
+If the AOT-tool side surfaces only `[I] Aot to ...` without log_nodes output, that path runs `compile_and_simulate` from [`daslib/aot_cpp.das`](../daslib/aot_cpp.das), which discards logs. Use `daslang.exe -dry-run` on the same file as a **second runtime path** and diff the two - both runtime paths going through `simulate()` should produce identical hashes for the same source. If they DON'T, the issue is non-deterministic codegen (your bug) and the diff pinpoints it. If they DO match, the AOT-recorded value differs from both - search for special handling along the AOT-generation pipeline (e.g. `is_in_aot()`, `set_aot()`, `policies.aot_module`).
 
 In the dump, find the failing function:
 ```
@@ -107,9 +107,9 @@ diff /tmp/runtime_fn.txt /tmp/other_fn.txt | head -60
 
 The first differing line is the divergence point. Each SimNode prints with hex hashes annotated; the change of hash on a particular node tells you which subtree differs.
 
-## Step 4 — Two common divergence shapes
+## Step 4 - Two common divergence shapes
 
-### Shape 1 — Constant value bytes differ (this PR's bug)
+### Shape 1 - Constant value bytes differ (this PR's bug)
 
 Diff shows a single `ConstValue` brace with **same low half, different high half**:
 
@@ -125,17 +125,17 @@ The first 8 bytes are the actual scalar (here `3.14lf`); the trailing 8 bytes lo
 ```cpp
 union { vec4f v; T t; } A;   // A.v UNINITIALIZED
 A.t = x;                     // writes sizeof(T) bytes
-return A.v;                  // returns 16 bytes — high bytes = stack garbage
+return A.v;                  // returns 16 bytes - high bytes = stack garbage
 ```
 
 Compare with the proper pattern (e.g. `cast<int64_t>::from`):
 ```cpp
-return v_cast_vec4f(v_ldui_half(&x));   // v_ldui_half = _mm_loadl_epi64 → zeros upper
+return v_cast_vec4f(v_ldui_half(&x));   // v_ldui_half = _mm_loadl_epi64 -> zeros upper
 ```
 
-Fix the broken specialization to either zero the union first (`A.v = v_zero(); A.t = x;`) or use the SSE intrinsic. SimSource hashes the full vec4f via `V_ARG(value)` in [`src/simulate/simulate_visit.cpp`](../src/simulate/simulate_visit.cpp) — there's no type info at hash time, so the fix has to be at the construction site, not the visit site.
+Fix the broken specialization to either zero the union first (`A.v = v_zero(); A.t = x;`) or use the SSE intrinsic. SimSource hashes the full vec4f via `V_ARG(value)` in [`src/simulate/simulate_visit.cpp`](../src/simulate/simulate_visit.cpp) - there's no type info at hash time, so the fix has to be at the construction site, not the visit site.
 
-### Shape 2 — `is_in_aot()` branching
+### Shape 2 - `is_in_aot()` branching
 
 Diff shows entire SimNode subtrees that exist in one path but not the other. The macro expansion produced different code in AOT mode vs runtime mode.
 
@@ -145,9 +145,9 @@ Diff shows entire SimNode subtrees that exist in one path but not the other. The
 grep -rln "is_in_aot\|set_aot\|aot_module" daslib/ <required modules>
 ```
 
-The AOT tool sets `g_isInAot = true` via `set_aot()` in [`daslib/aot_cpp.das:4249`](../daslib/aot_cpp.das). Code that branches on it is fundamentally non-portable across AOT-gen ↔ runtime — fix by removing the branch (produce the same AST in both contexts) or by ensuring the branch only affects details that don't reach the SimNode tree.
+The AOT tool sets `g_isInAot = true` via `set_aot()` in [`daslib/aot_cpp.das:4249`](../daslib/aot_cpp.das). Code that branches on it is fundamentally non-portable across AOT-gen <-> runtime - fix by removing the branch (produce the same AST in both contexts) or by ensuring the branch only affects details that don't reach the SimNode tree.
 
-## Step 5 — Verify the fix
+## Step 5 - Verify the fix
 
 After fixing:
 
@@ -174,6 +174,6 @@ If `log_nodes` isn't enough, [`src/simulate/simulate_fn_hash.cpp`](../src/simula
 #endif
 ```
 
-Flip `1` → `0` to turn on byte-by-byte hash trace (`debug_hash`) or per-function combined-hash trace (`debug_aot_hash`). **Caveat:** these print on every hash call during compilation. Cmake AOT custom-commands re-run daslang.exe per AOT file and capture stdout; if the build invokes daslang for many files, the build log explodes (~30k lines per file). Only enable when you can isolate one file with `daslang.exe -dry-run` outside of cmake.
+Flip `1` -> `0` to turn on byte-by-byte hash trace (`debug_hash`) or per-function combined-hash trace (`debug_aot_hash`). **Caveat:** these print on every hash call during compilation. Cmake AOT custom-commands re-run daslang.exe per AOT file and capture stdout; if the build invokes daslang for many files, the build log explodes (~30k lines per file). Only enable when you can isolate one file with `daslang.exe -dry-run` outside of cmake.
 
-For one-off byte inspection at SimSource construction, drop a `fprintf(stderr, ...)` into `setConstValue` or wherever you want to verify the bytes the simulator stores. Just remember to revert before rebuilding the static libs (`libDaScript`, `libDaScript_runtime`) — debug printf in a hot path is fine for diagnosis, never check it in.
+For one-off byte inspection at SimSource construction, drop a `fprintf(stderr, ...)` into `setConstValue` or wherever you want to verify the bytes the simulator stores. Just remember to revert before rebuilding the static libs (`libDaScript`, `libDaScript_runtime`) - debug printf in a hot path is fine for diagnosis, never check it in.

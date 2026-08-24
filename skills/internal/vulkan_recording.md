@@ -1,10 +1,10 @@
 # Recording dasVulkan tutorial videos
 
-The dasVulkan tutorial pages live in the main Sphinx tree at `doc/source/reference/tutorials/vulkan/`, with an MP4 per page. Recordings are produced by a **per-tutorial driver** — `modules/dasVulkan/tutorials/<NN>_<scene>/recording/record_<scene>.das` — that re-renders the scene parametrically (one frame per integer index, headless Vulkan readback), streams it to an APNG, then ffmpeg-muxes a daStrudel music bed, voiceover and captions onto it.
+The dasVulkan tutorial pages live in the main Sphinx tree at `doc/source/reference/tutorials/vulkan/`, with an MP4 per page. Recordings are produced by a **per-tutorial driver** - `modules/dasVulkan/tutorials/<NN>_<scene>/recording/record_<scene>.das` - that re-renders the scene parametrically (one frame per integer index, headless Vulkan readback), streams it to an APNG, then ffmpeg-muxes a daStrudel music bed, voiceover and captions onto it.
 
-Read this before writing or revising any `record_*.das` driver. Recording is NOT in CI — the drivers are manually-driven artifact producers, eyeballed and listened to before they ship. The deliverable is one `.mp4` per scene, uploaded to the rolling `docs-assets` GitHub release; MP4s are NOT committed, and docs builds stage them via `utils/internal/docs-assets/fetch.{sh,ps1}` before sphinx runs.
+Read this before writing or revising any `record_*.das` driver. Recording is NOT in CI - the drivers are manually-driven artifact producers, eyeballed and listened to before they ship. The deliverable is one `.mp4` per scene, uploaded to the rolling `docs-assets` GitHub release; MP4s are NOT committed, and docs builds stage them via `utils/internal/docs-assets/fetch.{sh,ps1}` before sphinx runs.
 
-**`docs-assets` is one flat namespace shared with the dasImgui recordings, so every dasVulkan MP4 uploads under a `vulkan_` prefix** — the driver writes `<scene>.mp4` beside its tutorial, and it ships as `vulkan_<scene>.mp4`:
+**`docs-assets` is one flat namespace shared with the dasImgui recordings, so every dasVulkan MP4 uploads under a `vulkan_` prefix** - the driver writes `<scene>.mp4` beside its tutorial, and it ships as `vulkan_<scene>.mp4`:
 
 ```bash
 gh release upload docs-assets vulkan_<scene>.mp4 --clobber
@@ -18,7 +18,7 @@ The RST pages cite the prefixed name; sphinx runs with `-W`, so an unprefixed up
 
 2. **Every frame is an independent function of its index.** `capture_apng` calls the render block once per integer `frame`; no state crosses frames. A driver that accumulates between frames produces a clip that cannot be re-rendered or resumed.
 
-3. **Render headlessly, read back.** Drivers render each frame to a host-visible buffer and read it back — no window, no swapchain capture. The windowed `window/show_<scene>.das` viewers exist for humans, not for recording.
+3. **Render headlessly, read back.** Drivers render each frame to a host-visible buffer and read it back - no window, no swapchain capture. The windowed `window/show_<scene>.das` viewers exist for humans, not for recording.
 
 4. **Panic on failure.** `capture_apng`, `prepare_voiceover` and the convert calls all return `bool`; a driver that ignores a `false` ships a silently botched recording.
 
@@ -47,7 +47,7 @@ Everything a driver writes is gitignored, the `.mp4` included. The `recording/` 
 
 ## The two utilities
 
-`tutorials/recording/tutorial_record.das` — silent, backend-agnostic (stbimage + ffmpeg only, no Vulkan dependency):
+`tutorials/recording/tutorial_record.das` - silent, backend-agnostic (stbimage + ffmpeg only, no Vulkan dependency):
 
 ```daslang
 def public capture_apng(apng_path : string; w, h, n_frames, frame_ms : int;
@@ -65,7 +65,7 @@ def public find_daslang_exe(das_root : string) : string
 |---|---|
 | `say(frame, caption)` / `say(frame, caption, voice)` | Register a caption + voice anchor at frame index `frame`; voice defaults to the caption |
 | `prepare_voiceover(apng_path [, base_url, voice_id, model])` | Synthesize each registered line via Kokoro TTS (`http://127.0.0.1:8880/v1`, voice `bf_emma`) into `<apng_dir>/voiceover/line_<i>.wav` and measure it. Existing wavs are reused, so re-runs after editing one line are cheap |
-| `convert_to_mp4_voiced(..., dur_s, fps, bed_db, fade_ms [, font_file])` | `convert_to_mp4` plus: each voiceover wav `adelay`ed to its frame's seconds under the music bed, and each caption rendered by ffmpeg `drawtext`. `font_file` defaults to the Windows `arial.ttf` in ffmpeg-escaped form — pass another path on Linux |
+| `convert_to_mp4_voiced(..., dur_s, fps, bed_db, fade_ms [, font_file])` | `convert_to_mp4` plus: each voiceover wav `adelay`ed to its frame's seconds under the music bed, and each caption rendered by ffmpeg `drawtext`. `font_file` defaults to the Windows `arial.ttf` in ffmpeg-escaped form - pass another path on Linux |
 
 ## Driver shape
 
@@ -119,9 +119,9 @@ bin/Release/daslang -project_root . \
     modules/dasVulkan/tutorials/01_triangle/recording/record_triangle.das
 ```
 
-Recording is one-at-a-time — a voiced run holds the TTS server, and concurrent runs collide on the shared `voiceover/` cache.
+Recording is one-at-a-time - a voiced run holds the TTS server, and concurrent runs collide on the shared `voiceover/` cache.
 
-## Caption vs voice — pronunciation conventions
+## Caption vs voice - pronunciation conventions
 
 `say(...)` takes a terse on-screen `caption` and a natural spoken `voice` because TTS does not read brand-name camelCase or hyphenated acronyms the way a human does. Captions stay canonical; voice text is respelled for Kokoro / `bf_emma`:
 
@@ -130,22 +130,22 @@ Recording is one-at-a-time — a voiced run holds the TTS server, and concurrent
 | `dasVulkan` | `das Vulkan` |
 | `dasSpirv` | `das Spear V` |
 | `SPIR-V` | `Spear V` (Khronos's intended pronunciation) |
-| `2` / `3` / … | `two` / `three` / … (digits are fine in captions, not aloud) |
+| `2` / `3` / ... | `two` / `three` / ... (digits are fine in captions, not aloud) |
 
-Strip `-`, `--` and other punctuation from voice text — the eye reads it, the TTS spells it out. **Use periods, not commas, to force pauses:** *"Zoom. Rotation. Color."* lands as three deliberate beats where the comma form runs together.
+Strip `-`, `--` and other punctuation from voice text - the eye reads it, the TTS spells it out. **Use periods, not commas, to force pauses:** *"Zoom. Rotation. Color."* lands as three deliberate beats where the comma form runs together.
 
 ## Quality tuning
 
-The voiced default is `-crf 28` with `-tune animation -preset slower`; the silent path uses libx264's default `-crf 23`. The tune biases x264 toward larger blocks and the slower preset gives motion search headroom — both matter for the smooth gradients and pans that shader-pure tutorial content produces, and together they let the higher CRF pass unnoticed while roughly halving the file. CRF is logarithmic (+6 ≈ half the bitrate).
+The voiced default is `-crf 28` with `-tune animation -preset slower`; the silent path uses libx264's default `-crf 23`. The tune biases x264 toward larger blocks and the slower preset gives motion search headroom - both matter for the smooth gradients and pans that shader-pure tutorial content produces, and together they let the higher CRF pass unnoticed while roughly halving the file. CRF is logarithmic (+6 ~ half the bitrate).
 
-**Adding a voiced recording:** start at `-crf 28`, eyeball at 100%, bump (`30`, `32`, …) until artifacts appear, then back off one step. Content with real photographic detail (textures from disk, camera blits) does not tolerate this — default back to `-crf 23` there.
+**Adding a voiced recording:** start at `-crf 28`, eyeball at 100%, bump (`30`, `32`, ...) until artifacts appear, then back off one step. Content with real photographic detail (textures from disk, camera blits) does not tolerate this - default back to `-crf 23` there.
 
 ## Prerequisites
 
 - **ffmpeg** on PATH, with `libx264` and (for captions) the `drawtext` filter.
-- **A full local daslang build** — the drivers need stbimage + audio, and voiced ones need dashv via dasOPENAI. The headless CI build has none of them.
+- **A full local daslang build** - the drivers need stbimage + audio, and voiced ones need dashv via dasOPENAI. The headless CI build has none of them.
 - **Kokoro TTS** at `http://127.0.0.1:8880/v1` (voiced drivers only), default voice `bf_emma`.
-- **No display and no Vulkan SDK** — headless readback through the vendored headers + volk is enough.
+- **No display and no Vulkan SDK** - headless readback through the vendored headers + volk is enough.
 
 ## Commit structure for a recording
 
@@ -154,10 +154,10 @@ For scene `foo`:
 1. Write `modules/dasVulkan/tutorials/<NN>_foo/recording/record_foo.das` modeled on the exemplars, plus whatever small `render_foo_frame(...)` helper it needs in the scene module.
 2. Run it; **eyeball and listen to** the resulting `.mp4`.
 3. Upload it under the prefixed name: `gh release upload docs-assets vulkan_foo.mp4 --clobber`.
-4. Commit `recording: foo` — the driver + the scene-module helper. The RST page cites it with `.. video:: vulkan_foo.mp4`; sphinx runs with `-W`, so upload before the cite lands.
+4. Commit `recording: foo` - the driver + the scene-module helper. The RST page cites it with `.. video:: vulkan_foo.mp4`; sphinx runs with `-W`, so upload before the cite lands.
 
 ## What this is NOT
 
-- **Not a daslang-live host.** No live commands, no HTTP, no env-var arming — unlike the dasImgui recordings, which drive a live host over port 9090.
+- **Not a daslang-live host.** No live commands, no HTTP, no env-var arming - unlike the dasImgui recordings, which drive a live host over port 9090.
 - **Not self-verifying.** Correctness is the tutorial's own pixel oracle in `test_<scene>.das`; the driver only produces the doc figure.
 - **Not CI.** The only automated check anywhere near it is the docs build failing on a cited MP4 that is missing from the `docs-assets` release.

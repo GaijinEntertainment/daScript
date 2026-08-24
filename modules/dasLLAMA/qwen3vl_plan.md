@@ -1,11 +1,11 @@
-# Qwen3-VL plan — the qwen vision legs (Omni-30B + dense Qwen3-VL + Qwen2.5-Omni)
+# Qwen3-VL plan - the qwen vision legs (Omni-30B + dense Qwen3-VL + Qwen2.5-Omni)
 
 ## Direction
 
 The last big image leg: qwen vision, ALL living tower variations (Boris 2026-08-21: "we need
 to support all variations of qwen image tower"). The anchor is the `qwen3vlmoe` decoder
 dasLLAMA already serves for text and audio (`Qwen3-Omni-30B-A3B-Instruct-Q8_0`, arch in
-`dasllama_arch_qwen3moe.das`, audio tower in `dasllama_qwen3a.das`) — finishing its image
+`dasllama_arch_qwen3moe.das`, audio tower in `dasllama_qwen3a.das`) - finishing its image
 half makes Omni-30B the flagship any-to-text carrier: text + image + audio in ONE chat turn
 (`add_user_audio_` and the audio template splice already exist). The dense Qwen3-VL models
 (deepstack) and Qwen2.5-Omni (window-attention ViT) complete the family.
@@ -14,236 +14,236 @@ half makes Omni-30B the flagship any-to-text carrier: text + image + audio in ON
 
 | Tower | Carriers | Shape | New mechanisms | Files |
 |---|---|---|---|---|
-| `qwen3vl_merger`, no deepstack | Qwen3-Omni-30B-A3B | 27 blk, 1152w, patch 16, LayerNorm, plain GELU FFN, fused qkv, learned pos (48×48, bilinear-resized) | vision-mrope; decoder IMROPE | on disk ✓ |
-| `qwen3vl_merger` + deepstack | Qwen3-VL dense 2B/4B/8B/32B, VL-MoE 30B/235B | same graph + `v.deepstack.{8,16,24}.{norm,fc1,fc2}` mergers | + deepstack: tower emits (1+3)×proj-dim wide rows; decoder adds slice il+1 after layer il<3 (image rows only) | 4B+8B Q8 + F16 mmprojs FETCHED this arc |
-| `qwen2.5o` (= qwen25vl) | Qwen2.5-Omni 3B/7B, Qwen2.5-VL | 32 blk, patch 14, RMSNorm, gated-silu FFN, separate q/k/v, NO learned pos, **window attention** (n_wa_pattern 8) | window attn in the tower; decoder MROPE (non-interleaved sections, `qwen2vl` arch) | mmproj on disk ✓ (`mmproj-omni-3b-f32`); 3B Q8 decoder + official f16 mmproj FETCHED this arc |
-| `qwen2vl` legacy | Qwen2-VL | superseded by 2.5 | — | SKIP — no carrier value |
+| `qwen3vl_merger`, no deepstack | Qwen3-Omni-30B-A3B | 27 blk, 1152w, patch 16, LayerNorm, plain GELU FFN, fused qkv, learned pos (48x48, bilinear-resized) | vision-mrope; decoder IMROPE | on disk yes |
+| `qwen3vl_merger` + deepstack | Qwen3-VL dense 2B/4B/8B/32B, VL-MoE 30B/235B | same graph + `v.deepstack.{8,16,24}.{norm,fc1,fc2}` mergers | + deepstack: tower emits (1+3)xproj-dim wide rows; decoder adds slice il+1 after layer il<3 (image rows only) | 4B+8B Q8 + F16 mmprojs FETCHED this arc |
+| `qwen2.5o` (= qwen25vl) | Qwen2.5-Omni 3B/7B, Qwen2.5-VL | 32 blk, patch 14, RMSNorm, gated-silu FFN, separate q/k/v, NO learned pos, **window attention** (n_wa_pattern 8) | window attn in the tower; decoder MROPE (non-interleaved sections, `qwen2vl` arch) | mmproj on disk yes (`mmproj-omni-3b-f32`); 3B Q8 decoder + official f16 mmproj FETCHED this arc |
+| `qwen2vl` legacy | Qwen2-VL | superseded by 2.5 | - | SKIP - no carrier value |
 
 Two genuinely new mechanisms, both rope-shaped:
 
 1. **Decoder IMROPE** (`GGML_ROPE_TYPE_IMROPE`, sections `[24,20,20,0]` from
    `qwen3vlmoe.rope.dimension_sections`, interleaved t,t,y,x in NEOX ordering): image rows
-   rope with per-row int positions (t=pos₀, x=pos₀+i%nx, y=pos₀+i/nx, z unused); text rows
-   use equal positions in every section, which collapses IMROPE to the standard NEOX rope —
+   rope with per-row int positions (t=pos_0, x=pos_0+i%nx, y=pos_0+i/nx, z unused); text rows
+   use equal positions in every section, which collapses IMROPE to the standard NEOX rope -
    this is why today's text/audio serving is already correct, and why the text-only
    bit-match regression is writable BEFORE any new code.
-2. **Vision-mrope in the ViT** (`GGML_ROPE_TYPE_VISION`, sections d_head/4 = 18×4,
-   n_dims = d_head/2 = 36, θ=10000) — the tower's 2D rope.
+2. **Vision-mrope in the ViT** (`GGML_ROPE_TYPE_VISION`, sections d_head/4 = 18x4,
+   n_dims = d_head/2 = 36, theta=10000) - the tower's 2D rope.
 
 **The mask is NOT new.** llama.cpp's causal mask is position-based and every image row
-shares t=pos₀, so the image span is bidirectional-within-span, causal outside — exactly the
+shares t=pos_0, so the image span is bidirectional-within-span, causal outside - exactly the
 uniform-span mask the fused-image-span arc shipped (PR 3815: `Session.attn_uniform_lo/end`,
 `AttnArgs.ulo/uend`, CPU per-row select + Metal span eval). Qwen never sets
 `mtmd_decode_use_non_causal`; the equal-t positions ARE its non-causality. The span rail is
 reused as-is; only the rope angles inside it change.
 
 **Omni has NO deepstack.** Its mmproj carries `clip.vision.is_deepstack_layers` flags
-(8/16/24) but ZERO `v.deepstack.*` tensors — converter boilerplate, the same
+(8/16/24) but ZERO `v.deepstack.*` tensors - converter boilerplate, the same
 metadata-vs-tensor-list trap the gemma arc documented; `has_deepstack()` is tensor-driven in
 clip.cpp, so the oracle graph never takes that branch for this file. Deepstack is real on the
 DENSE Qwen3-VL carriers and lands as its own slice: three extra merger MLPs in the tower
-(concat along the feature dim → (1+3)×proj-dim wide soft tokens) plus the decoder add — after
+(concat along the feature dim -> (1+3)xproj-dim wide soft tokens) plus the decoder add - after
 layer il < 3, slice il+1 of the row's wide embedding is added to the hidden state
 (`src/models/qwen3vl.cpp:147`); image rows only, text rows carry zero slices, decode
 untouched.
 
 Scope: the three towers above, stills only, ONE image per user turn, CPU towers + CPU
 image-span prefill first (Metal IMROPE is a scheduled slice, not a decline-forever). Ladder
-order: Omni core (no new tower mask, decoder already serving) → dense deepstack (same graph
-+ mergers + the decoder add + `qwen3vl` dense arch registration) → qwen2.5o (new tower shape:
-window attention, RMS, gated FFN; decoder MROPE non-interleaved on the `qwen2vl` arch — this
+order: Omni core (no new tower mask, decoder already serving) -> dense deepstack (same graph
++ mergers + the decoder add + `qwen3vl` dense arch registration) -> qwen2.5o (new tower shape:
+window attention, RMS, gated FFN; decoder MROPE non-interleaved on the `qwen2vl` arch - this
 also completes `omni-3b`, whose audio half already serves). Oracle = llama.cpp mtmd
 (`llama-mtmd-cli` / the patched `llama-mtmd-debug` with the vision-oracle rig from the gemma
-arc — fnv1a64 pixel dumps, per-token embedding lines, all reusable unchanged).
+arc - fnv1a64 pixel dumps, per-token embedding lines, all reusable unchanged).
 
-## Recon facts (2026-08-21, tensor dumps + source reads — slice A re-verifies via oracle)
+## Recon facts (2026-08-21, tensor dumps + source reads - slice A re-verifies via oracle)
 
 - **mmproj** (`mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf`, 860 tensors, both towers):
-  vision = 27 blocks × (ln1/ln2 + fused `attn_qkv` w+b + `attn_out` w+b + `ffn_up`/`ffn_down`
-  w+b — NO gate, GELU), `v.patch_embd.weight` + `.1` [16,16,3,1152] **F32** (temporal pair),
-  `v.patch_embd.bias`, `v.position_embd.weight` [1152, 2304] **F32** (48×48 grid),
-  `v.post_ln` (+ NO pre_ln), merger `mm.0` [4608→4608] + `mm.2` [4608→2048] BF16, GELU
+  vision = 27 blocks x (ln1/ln2 + fused `attn_qkv` w+b + `attn_out` w+b + `ffn_up`/`ffn_down`
+  w+b - NO gate, GELU), `v.patch_embd.weight` + `.1` [16,16,3,1152] **F32** (temporal pair),
+  `v.patch_embd.bias`, `v.position_embd.weight` [1152, 2304] **F32** (48x48 grid),
+  `v.post_ln` (+ NO pre_ln), merger `mm.0` [4608->4608] + `mm.2` [4608->2048] BF16, GELU
   between. Audio = the 32-block `qwen3a` conformer already served.
 - **Meta**: width 1152, heads 16 (d_head 72), ffn 4304, patch 16, merge 2, image_size 768,
-  image_mean = image_std = [0.5,0.5,0.5] (normalize = x·2−1, NOT gemma's identity),
+  image_mean = image_std = [0.5,0.5,0.5] (normalize = x*2-1, NOT gemma's identity),
   vision eps 1e-6, projector `qwen3vl_merger`, projection_dim 2048.
-- **ViT graph** (`tools/mtmd/models/qwen3vl.cpp`): temporal-merge conv (still image: conv₀(img)
-  + conv₁(img) — for stills this is ONE conv with pre-summed weights W₀+W₁, a load-time fold)
-  → spatial-merge REORDER of the token stream before the blocks (2×2 merge partners made
-  adjacent) → +patch_bias → +position embeds (48×48 table bilinearly resized to the actual
-  grid, then the same merge reorder) → 27 pre-LN blocks with vision-mrope on q/k, full
-  attention (no windows) → post_ln → reshape ×4 → merger MLP → 2048-wide soft tokens.
+- **ViT graph** (`tools/mtmd/models/qwen3vl.cpp`): temporal-merge conv (still image: conv_0(img)
+  + conv_1(img) - for stills this is ONE conv with pre-summed weights W_0+W_1, a load-time fold)
+  -> spatial-merge REORDER of the token stream before the blocks (2x2 merge partners made
+  adjacent) -> +patch_bias -> +position embeds (48x48 table bilinearly resized to the actual
+  grid, then the same merge reorder) -> 27 pre-LN blocks with vision-mrope on q/k, full
+  attention (no windows) -> post_ln -> reshape x4 -> merger MLP -> 2048-wide soft tokens.
 - **Decoder positions** (`mtmd.cpp: mtmd_image_tokens_get_decoder_pos` /
-  `mtmd_image_tokens_get_n_pos`): image token i of an nx×ny MERGED grid gets
-  (t=pos₀, x=pos₀+i%nx, y=pos₀+i/nx, z=0); the sequence position then advances by
-  **max(nx,ny)**, not the token count — the Session needs a rope-position rail decoupled
+  `mtmd_image_tokens_get_n_pos`): image token i of an nxxny MERGED grid gets
+  (t=pos_0, x=pos_0+i%nx, y=pos_0+i/nx, z=0); the sequence position then advances by
+  **max(nx,ny)**, not the token count - the Session needs a rope-position rail decoupled
   from the KV row index from this point on. Audio chunks are mrope_1d = all sections
   sequential (today's behavior, unchanged).
 - **Template markers**: `<|vision_start|>` (151652) / `<|vision_end|>` (151653) around the
   soft-token span, `<|image_pad|>` = 151655 (mtmd.cpp:461); NO suppress-token list (unlike
   gemma); stream shape pinned from the tier-2 log.
-- **Preproc** (slice-A oracle-verified 2026-08-22): `calc_size_preserved_ratio` 4-arg —
-  round each side to the nearest multiple of align = patch×merge = 32 with round-half-AWAY
-  (528→544, the discriminating case), β-scale into the [8, 4096]-token budget (×32² px;
-  4000×3000 → 2336×1760) — then the SAME PAD_CEIL letterbox as gemma (content scale =
+- **Preproc** (slice-A oracle-verified 2026-08-22): `calc_size_preserved_ratio` 4-arg -
+  round each side to the nearest multiple of align = patchxmerge = 32 with round-half-AWAY
+  (528->544, the discriminating case), beta-scale into the [8, 4096]-token budget (x32^2 px;
+  4000x3000 -> 2336x1760) - then the SAME PAD_CEIL letterbox as gemma (content scale =
   min ratio, centered, BLACK pad). The plan's first read of `dyn_size` as "stretch, no
-  letterbox" was WRONG: PAD_CEIL is the clip-model.h DEFAULT and qwen never overrides it —
-  verified by the white4000x3000 probes (corners −1, mean (1752−8)/1760 = 0.990909).
-  Normalize = (x−0.5)/0.5, and the oracle preproc dumps are POST-normalize f32, so tier-0
+  letterbox" was WRONG: PAD_CEIL is the clip-model.h DEFAULT and qwen never overrides it -
+  verified by the white4000x3000 probes (corners -1, mean (1752-8)/1760 = 0.990909).
+  Normalize = (x-0.5)/0.5, and the oracle preproc dumps are POST-normalize f32, so tier-0
   gates compare normalized buffers (gemma's identity normalize hid this distinction). das
   reuses the gemma geometry + letterbox code wholesale; only align, budget, and normalize
   constants differ.
 
 ## Downloads (fetched 2026-08-21, sha256-verified against the HF API, .sha pins minted)
 
-The Omni core needs nothing — decoder Q8 (31 GB) + mmproj bf16 on disk and pinned. Fetched
+The Omni core needs nothing - decoder Q8 (31 GB) + mmproj bf16 on disk and pinned. Fetched
 for the other two towers (~21 GB, `fetch_models.das` manifest entries owed in the arc):
 
 - `Qwen/Qwen3-VL-8B-Instruct-GGUF`: `Qwen3VL-8B-Instruct-Q8_0.gguf` (8.7 GB) +
-  `mmproj-Qwen3VL-8B-Instruct-F16.gguf` (1.2 GB) — the deepstack record carrier.
+  `mmproj-Qwen3VL-8B-Instruct-F16.gguf` (1.2 GB) - the deepstack record carrier.
 - `Qwen/Qwen3-VL-4B-Instruct-GGUF`: `Qwen3VL-4B-Instruct-Q8_0.gguf` (4.3 GB) +
-  `mmproj-Qwen3VL-4B-Instruct-F16.gguf` (0.8 GB) — the small dev vehicle.
+  `mmproj-Qwen3VL-4B-Instruct-F16.gguf` (0.8 GB) - the small dev vehicle.
 - `ggml-org/Qwen2.5-Omni-3B-GGUF`: `Qwen2.5-Omni-3B-Q8_0.gguf` (3.6 GB) +
-  `mmproj-Qwen2.5-Omni-3B-f16.gguf` (2.6 GB) — the qwen2.5o carrier; the official f16 mmproj
+  `mmproj-Qwen2.5-Omni-3B-f16.gguf` (2.6 GB) - the qwen2.5o carrier; the official f16 mmproj
   also gives the locally-converted `mmproj-omni-3b-f32` a re-fetchable provenance twin.
 
 Minted locally at slice A: f32-widened mmproj twins (`mint_f32_mmproj.py` pattern) for honest
-tier-1 gates on the bf16 Omni mmproj (the F16 mmprojs widen exactly — twins only if measured
+tier-1 gates on the bf16 Omni mmproj (the F16 mmprojs widen exactly - twins only if measured
 noise demands them).
 
 ## Slices (commit ladder, single PR; each lands its REVIEW.md entries with it)
 
-- **A. Oracle rig (DONE 2026-08-22)**: `~/Work/llama.cpp/models/qwen3vl-vision-oracle/` —
+- **A. Oracle rig (DONE 2026-08-22)**: `~/Work/llama.cpp/models/qwen3vl-vision-oracle/` -
   `mint.sh` + 17 dumps (10 preproc, 7 encode vs the f32-widened twin) + `cli.cats.log`;
   the gemma dasdebug patch worked unchanged. Facts pinned:
-  - Geometry oracle-verified: 640→640, 100→96, 650×487→640×480, 528→544 (round-half-AWAY,
-    the discriminating case), 4000×3000→2336×1760 (β-floor clamp); letterbox PAD_CEIL
-    black centered (white4000x3000 probes); dumps are POST-normalize (×2−1).
-  - Encode shapes: 448→[2048,196], 640×320→[2048,200], 96→[2048,9]; per-token lines healthy.
+  - Geometry oracle-verified: 640->640, 100->96, 650x487->640x480, 528->544 (round-half-AWAY,
+    the discriminating case), 4000x3000->2336x1760 (beta-floor clamp); letterbox PAD_CEIL
+    black centered (white4000x3000 probes); dumps are POST-normalize (x2-1).
+  - Encode shapes: 448->[2048,196], 640x320->[2048,200], 96->[2048,9]; per-token lines healthy.
   - ViT rope (ggml ops.cpp `ggml_mrope_cache_init`, VISION mode): full 72-dim head rotated
     as 36 NEOX pairs (i, i+36); pairs 0-17 use the y angle, 18-35 the x angle, each
-    section's frequency ladder RESTARTING (indep_sects), θ = 10000^(−2/36); ViT positions
+    section's frequency ladder RESTARTING (indep_sects), theta = 10000^(-2/36); ViT positions
     per patch = (y, x, y, x) in the merge-reordered walk.
   - Decoder IMROPE tail quirk, port VERBATIM: sections [24,20,20,0] over 64 half-dims give
-    the t,h,w interleave on dims 0-59, then 60→t, 61→e, 62→e, 63→t — e reads the 4th
-    position (0 on image rows ⇒ those dims unrotated; = p on text, so the NEOX collapse
+    the t,h,w interleave on dims 0-59, then 60->t, 61->e, 62->e, 63->t - e reads the 4th
+    position (0 on image rows => those dims unrotated; = p on text, so the NEOX collapse
     holds).
-  - Cats (640×480): 300 soft tokens, grid nx=20 ny=15, position advance 20. Stream:
+  - Cats (640x480): 300 soft tokens, grid nx=20 ny=15, position advance 20. Stream:
     `<|im_start|>user\n` + `<|vision_start|>`(151652) + 300 rows + `<|vision_end|>`(151653)
-    + text + `<|im_end|>\n<|im_start|>assistant\n` — media-first, NO system prompt, no
+    + text + `<|im_end|>\n<|im_start|>assistant\n` - media-first, NO system prompt, no
     suppress-token list. Greedy caption correctly describes the two cats; `DASLLAMA_IDS`
     minted.
   - Decoder hparams: 48 blocks, 128 experts top-8, GQA 4, head 128, rms eps 1e-6,
-    `n_deepstack_layers = 0` explicit, freq_base 1e6, standard attention (no GDN — the
+    `n_deepstack_layers = 0` explicit, freq_base 1e6, standard attention (no GDN - the
     "fused Gated Delta Net enabled" line in the log is a vacuous capability print).
   - Deepstack carrier verified (4B mmproj): mergers at layers 5/11/17, 24-block 1024-wide
     ViT, projection 2560, flags AGREE with tensors on dense files.
-  Note for regeneration: never edit mint.sh while it is running (bash re-reads by offset —
+  Note for regeneration: never edit mint.sh while it is running (bash re-reads by offset -
   this bit once).
 - **B. IMROPE table builder (DONE 2026-08-22)**: das rope is TABLE-based (angle generation
   single-sourced in `dasllama_rope`, application kernels read cos/sin rows), so IMROPE is one
-  new builder — `build_rope_tabs_imrope` (per-row int4 positions + sections, the ggml sector
-  walk verbatim, same float order as the siblings) — and the TEXT PATH IS UNTOUCHED: the
+  new builder - `build_rope_tabs_imrope` (per-row int4 positions + sections, the ggml sector
+  walk verbatim, same float order as the siblings) - and the TEXT PATH IS UNTOUCHED: the
   planned tsv-level regression dissolved into a stronger, cheaper gate. `test_rope.das`
   gained three model-free tests: the (p,p,p,p) collapse BIT-matches `build_rope_tabs_rows`
   (prediction 1: CORRECT, first attempt), an image row matches a per-element ggml-order
-  reference including the tail quirk (61/62 → e, unrotated at e=0), and an h-only
+  reference including the tail quirk (61/62 -> e, unrotated at e=0), and an h-only
   perturbation moves exactly the h dims. Negative control run: a poisoned axis walk reds
   both gates.
-- **C. Preproc (DONE 2026-08-22)**: `vision_normalize` gained mean/std defaults (0/1 —
-  gemma bit-identical by IEEE; qwen passes 0.5/0.5 in clip's own `(x/255 − mean)/std` order);
-  geometry and letterbox needed NO code — only constants (align 32, budget 8–4096).
-  `test_vision.das`: qwen geometry table (incl. 528→544 and the 2336×1760 clamp), the
-  extreme-ratio budget property, and ten post-normalize fnv1a64 gates — ALL bit-exact on the
+- **C. Preproc (DONE 2026-08-22)**: `vision_normalize` gained mean/std defaults (0/1 -
+  gemma bit-identical by IEEE; qwen passes 0.5/0.5 in clip's own `(x/255 - mean)/std` order);
+  geometry and letterbox needed NO code - only constants (align 32, budget 8-4096).
+  `test_vision.das`: qwen geometry table (incl. 528->544 and the 2336x1760 clamp), the
+  extreme-ratio budget property, and ten post-normalize fnv1a64 gates - ALL bit-exact on the
   first run (prediction 2's convention surprise was consumed at slice A). Negative control:
   a poisoned std reds all ten.
-- **D. Tower (DONE 2026-08-22)**: `dasllama_qwen3v.das` — image-rail load (per-tensor
-  bf16/f32 planes; W₀+W₁ conv fold at stage; deepstack refused by TENSOR scan), merge
-  reorder, the antialiased pos-embed resize (`interpolate_grid_bilinear_aa` in tower —
+- **D. Tower (DONE 2026-08-22)**: `dasllama_qwen3v.das` - image-rail load (per-tensor
+  bf16/f32 planes; W_0+W_1 conv fold at stage; deepstack refused by TENSOR scan), merge
+  reorder, the antialiased pos-embed resize (`interpolate_grid_bilinear_aa` in tower -
   verified BIT-identical to a NumPy port of ggml's loop on the real table), 27 blocks
   (fused-qkv, vision-mrope via `build_rope_tabs_vision` + full-head NEOX apply, scaled
-  bidir attention, GELU-tanh-LUT FFN), 2×2 merger. Tier-1 (`test_qwen3v.das`): all seven
-  fixtures green at maxdiff 3.7e-4–2.7e-3 on a poison-calibrated 2e-4 + 1e-2·rms bar (a
-  swapped rope ladder lands at 0.71–0.85 — 300×). Two oracle lessons: (1) the qwen mint
-  had omitted `-fa off` — clip's flash attention casts K/V to f16 and cost up to 1.5e-2
+  bidir attention, GELU-tanh-LUT FFN), 2x2 merger. Tier-1 (`test_qwen3v.das`): all seven
+  fixtures green at maxdiff 3.7e-4-2.7e-3 on a poison-calibrated 2e-4 + 1e-2*rms bar (a
+  swapped rope ladder lands at 0.71-0.85 - 300x). Two oracle lessons: (1) the qwen mint
+  had omitted `-fa off` - clip's flash attention casts K/V to f16 and cost up to 1.5e-2
   on the dumps (mint.sh now carries the flag + why); (2) the residual 1e-3-grade floor is
   the f16 GELU LUT quantizing summation-order drift between das GEMMs and the
-  reference's — visible here because solid-color fixtures sit at LOW token rms, the same
-  floor gemma3v's higher-rms fixtures absorb inside 4e-3·rms. Prediction 3 scored: the
-  ≤1e-4 claim was WRONG for a LUT-activation tower (right for gemma4uv's linear embedder,
+  reference's - visible here because solid-color fixtures sit at LOW token rms, the same
+  floor gemma3v's higher-rms fixtures absorb inside 4e-3*rms. Prediction 3 scored: the
+  <=1e-4 claim was WRONG for a LUT-activation tower (right for gemma4uv's linear embedder,
   the wrong prior here); prediction 2's "surprise in the resize" landed as the -fa
-  discovery — oracle-side, as predicted by the gemma pattern.
+  discovery - oracle-side, as predicted by the gemma pattern.
 - **E1. The decoder mrope rail (DONE 2026-08-22)**: `Config.rope_sections` (loader-read from
-  `{arch}.rope.dimension_sections`, validated 2×sum == rotary span), Session
-  `rope_pos_delta` (+ at EVERY rope-angle site — table and classic, decode and prefill —
+  `{arch}.rope.dimension_sections`, validated 2xsum == rotary span), Session
+  `rope_pos_delta` (+ at EVERY rope-angle site - table and classic, decode and prefill -
   never at KV indexing) and the transient per-quantum `mrope_pos` int4 map
   (`mrope_span_positions` in dasllama_rope, the mtmd walk verbatim, model-free-tested);
   `eval_embd_span_mrope_` rides the uniform-span rail fused AND spliced (per-slice map
   views); an mrope quantum declines the GPU prefill override loudly and is exempt from the
   CPU-prefill tripwire; the delta flows into the CPU-built rope tables, which the Metal
-  DECODE consumes — post-image GPU decode ropes correctly for free. Gates (stories15M +
-  stamped sections): fused == splice BIT-exact, delta = max(grid) − rows, map-reaches-math
-  (0.14 logits shift vs sequential; 11×2 vs 2×11 differ), existing span gates unregressed.
-  NOTE for slice F: batched-decode positions come from scheduler stream state — a post-image
+  DECODE consumes - post-image GPU decode ropes correctly for free. Gates (stories15M +
+  stamped sections): fused == splice BIT-exact, delta = max(grid) - rows, map-reaches-math
+  (0.14 logits shift vs sequential; 11x2 vs 2x11 differ), existing span gates unregressed.
+  NOTE for slice F: batched-decode positions come from scheduler stream state - a post-image
   stream needs its per-stream delta plumbed there.
 - **E2. Chat splice (DONE 2026-08-22)**: the vision pair on the SHARED ChatML template
-  (`<|vision_start|>`/`<|vision_end|>`, the gemma3-on-gemma_chat precedent — text-only
+  (`<|vision_start|>`/`<|vision_end|>`, the gemma3-on-gemma_chat precedent - text-only
   vocabs refuse at the image_vocab_ok gate); the qwen3v `VisionEmbedder` union arm +
   `vision_mrope_grid` (merged grid from the tower state; (0,0) on gemma families);
   ChatSession carries `image_grid`, `generate_embd_` gained the grid param routing the span
   through `eval_embd_span_mrope_` (facade twin added); the dual-arm
   `create_chat_(model, tower, embedder)` for one session serving all media. `ask --image`
   works UNCHANGED (union-routed). Tier-2/3 follow the house caption-floor convention
-  (freeform token parity is banned — tests/CLAUDE.md): the Omni leg in test_vision_chat.das
+  (freeform token parity is banned - tests/CLAUDE.md): the Omni leg in test_vision_chat.das
   pins the stream shape (markers 151652/151653, media-first), 300 rows, grid int2(20,15),
-  the caption, and `rope_pos_delta == 20 − 300` after the turn — GREEN 10/10 with every
+  the caption, and `rope_pos_delta == 20 - 300` after the turn - GREEN 10/10 with every
   gemma leg unregressed; the Omni's greedy caption correctly describes the cats fixture.
-  `test_omni_showcase`: ONE session — an image turn, then a text turn whose answer needs the
+  `test_omni_showcase`: ONE session - an image turn, then a text turn whose answer needs the
   image turn's history across the mrope delta. The three-modality form is BLOCKED on a
-  standing gap the test surfaced: audio-in-chat rides the whisper-class `AudioTower` only —
+  standing gap the test surfaced: audio-in-chat rides the whisper-class `AudioTower` only -
   the qwen3a conformer has no chat splice (`followup_general.md` #41; prediction 6 scores
-  WRONG on its premise — `add_user_audio_` existed but never served this family).
+  WRONG on its premise - `add_user_audio_` existed but never served this family).
 - **F. Server (DONE 2026-08-22)**: `PendingReq`/`Stream` gained `media_grid : int2` ((0,0) =
-  sequential; submit contract: positive grid ⇔ `nx·ny == n_media` ∧ non-causal, enforced by
+  sequential; submit contract: positive grid <=> `nx*ny == n_media` && non-causal, enforced by
   named panics); the media quantum routes a grid through the new facade
   `eval_embd_span_mrope` (span = the whole call), so the session delta then covers tail
-  chunks and decode. The E1 note's gap — batched-decode positions — closed by SPLITTING the
+  chunks and decode. The E1 note's gap - batched-decode positions - closed by SPLITTING the
   workspace positions: `ws.positions` stays the KV index (attention counts, cache rows,
-  mirror watermarks — every consumer audited), new `ws.rope_positions = n_past +
+  mirror watermarks - every consumer audited), new `ws.rope_positions = n_past +
   rope_pos_delta` feeds `build_rope_table_rows`, which the Metal batched override's table
   copy consumes for free. Same delta fold in the three self-built rope-row sites: Metal spec
   pre-encode (restores its "bit-identical to forward's row" contract), vulkan resident
-  single decode, vulkan resident batch decode (resident PREFILL needs nothing — it serves
+  single decode, vulkan resident batch decode (resident PREFILL needs nothing - it serves
   `start_pos == 0` only, where the delta is necessarily 0, and an mrope quantum declines
   every prefill override). Wire: the media worker stamps `MediaEvent.grid` from
-  `vision_mrope_grid` after encode; `handle_chat_tail` → `register_request` →
+  `vision_mrope_grid` after encode; `handle_chat_tail` -> `register_request` ->
   `PendingReq`; `/v1/stats` gained `mrope_streams` (scheduler counter) as the wire proof a
-  caption alone can't give. Gates: `test_scheduler_mrope` — the scheduler stream ==
+  caption alone can't give. Gates: `test_scheduler_mrope` - the scheduler stream ==
   `generate_embd`'s grid form solo AND batched 2-row against solo references, both
-  mutation-controlled (grid routing knocked out → the solo cell reds; delta dropped from the
-  batch gather → the batched cell reds); `test_scheduler_mrope_validation` — four named
+  mutation-controlled (grid routing knocked out -> the solo cell reds; delta dropped from the
+  batch gather -> the batched cell reds); `test_scheduler_mrope_validation` - four named
   panics; the server Omni leg (`test_openai_server_vision_mrope`, PARITY_FULL) GREEN end to
-  end — grid 20x15 through worker → scheduler → caption + `mrope_streams == 1` (the caption
+  end - grid 20x15 through worker -> scheduler -> caption + `mrope_streams == 1` (the caption
   POST rides the request BUILDER at `timeout = 600`: the 30B's CPU tower encode + CPU mrope
-  prefill dwarf the outbound default — slice G removes most of that wait). Two PRE-EXISTING
+  prefill dwarf the outbound default - slice G removes most of that wait). Two PRE-EXISTING
   reds in the PARITY_FULL-gated gemma leg (stash-controlled off this slice's diff) fixed in
   passing: the 12B's family default THINKS, so the caption sat wholly in `reasoning_content`
   with `content` honestly empty (the cell now pins `enable_thinking: false`), and the
   two-image 400 was renamed "one media clip per request" by the audio arc while the cell
   still grepped the old wording. Suite 4/4 green.
 - **G. Metal IMROPE (DONE 2026-08-22)**: the plan's "positions plane + sections into the
-  kernels" premise was WRONG — Metal's prefill rope (`enc_rope`) is a pure TABLE consumer
+  kernels" premise was WRONG - Metal's prefill rope (`enc_rope`) is a pure TABLE consumer
   (per-token cos/sin rows, memcpy'd from `s.rope_cos` each quantum), and E1's
   `prefill_rope_tables` already builds those rows from the mrope map. So G is a capability
   gate, not a kernel change (no MSL touched, no DASLLAMA_VERSION bump): new seat
-  `register_prefill_override_mrope_tables` (the split-span seat's twin) — Metal registers it
+  `register_prefill_override_mrope_tables` (the split-span seat's twin) - Metal registers it
   and serves the quantum; an unregistered override (vulkan: scalar-position angles) declines
   it to the CPU loop by name; the CPU-prefill tripwire's mrope exemption is REMOVED (a
   CPU-served mrope quantum on a Metal build is the silent-sink class again). Gates:
-  prefill-parity arm `span-mrope` (Llama-3.2-1B blob twin, stamped sections, 6×4 grid over
-  24 rows) — ONE GPU prefill (counter; the capability knockout reds it via the blob-only
+  prefill-parity arm `span-mrope` (Llama-3.2-1B blob twin, stamped sections, 6x4 grid over
+  24 rows) - ONE GPU prefill (counter; the capability knockout reds it via the blob-only
   panic), token-exact vs the all-CPU control, and a same-backend grid-vs-sequential
-  prefill-logits witness (measured 6.03 — greedy tokens TIE on the counting fixture, logits
+  prefill-logits witness (measured 6.03 - greedy tokens TIE on the counting fixture, logits
   are the honest discriminator); tripwire suite gains the mrope cell (mutation-controlled:
   restoring the exemption reds it); span/span-fused arms + test_vision_chat 12/12 + the
   vision server suite 4/4 unregressed. NOTE: the server-test harness maps the planar flavor
@@ -252,56 +252,56 @@ noise demands them).
 - **H. Deepstack (DONE 2026-08-22)**: the `qwen3vl` dense arch was ALREADY registered (the
   Qwen3-ASR precedent) and E1's sections read is arch-generic, so the decoder needed only
   `Config.n_deepstack` (loader: `{arch}.n_deepstack_layers`) + the slice-add rail. Design =
-  llama.cpp-congruent WIDE ROWS: the tower emits (1+n_ds)·proj_dim rows (slice 0 = main
+  llama.cpp-congruent WIDE ROWS: the tower emits (1+n_ds)*proj_dim rows (slice 0 = main
   merger, slice k+1 = tap k in encounter order), rows travel OPAQUELY through chat / worker /
   PendingReq / scheduler (zero plumbing there), and the eval seam (`forward_prefill_embd
   ds_wide`, exact-length detection in the three eval_embd entries) splits slice 0 into x_b
   and stashes the tails on `Session.ds_embd` (@scratch, `ds_active` framed like
-  attn_uniform); the CPU layer loop adds slice l after layer l < n_ds to EVERY row — text
+  attn_uniform); the CPU layer loop adds slice l after layer l < n_ds to EVERY row - text
   rows carry zero tails (assembled by `embed_text_rows_strided`), which is exactly
   llama.cpp's semantics, so no row masking exists anywhere. A ds quantum DECLINES every GPU
-  prefill override by name (tripwire-exempt) — the Metal per-layer-add kernel is an arc
+  prefill override by name (tripwire-exempt) - the Metal per-layer-add kernel is an arc
   followup, needed before slice J's 8B Metal rows. Tower: taps collected from the TENSOR
-  list (≤3), per-tap LayerNorm→fc1→GELU-LUT→fc2 over the ×4-merged rows; the projector key
-  falls back `clip.vision.projector_type` → `clip.projector_type` (the dense converter
+  list (<=3), per-tap LayerNorm->fc1->GELU-LUT->fc2 over the x4-merged rows; the projector key
+  falls back `clip.vision.projector_type` -> `clip.projector_type` (the dense converter
   scopes it top-level). Pairing: `vision_deepstack`/`vision_row_width` accessors + named
   refusals in create_chat_ and the server's arm_slot_vision. Oracle: `mint_4b.sh` (4 encode
   dumps on the f32-widened 4B mmproj + cli caption); the debug patch's per-token line grew
   q1/q2/q3 QUARTER-OFFSET probes because mean+v0..v3 are BLIND to a zeroed slice (measured:
-  a skipped tap passed untouched; with q-probes it reds at 6.9–9.7 vs the 2e-4+4e-2·rms bar
-  — the compounded 4-chain GELU-LUT floor measures 1.12e-2 on low-rms gray). Gates, all
+  a skipped tap passed untouched; with q-probes it reds at 6.9-9.7 vs the 2e-4+4e-2*rms bar
+  - the compounded 4-chain GELU-LUT floor measures 1.12e-2 on low-rms gray). Gates, all
   mutation-controlled: test_attn_span deepstack rail (zero-tail wide == narrow BIT-exact;
-  tails move logits 5.8; slice-0-vs-2 depth; no stale plane — the add knockout reds it),
+  tails move logits 5.8; slice-0-vs-2 depth; no stale plane - the add knockout reds it),
   test_qwen3v 4B tier-1 4/4, test_vision_chat_deepstack (small tier: wide rows through the
-  chat, caption names the cats, delta 20−300, and the zeroed-slices decoder control moves
+  chat, caption names the cats, delta 20-300, and the zeroed-slices decoder control moves
   prefill logits 10.4). The 8B record carrier smoked end-to-end via `ask --image` ("Two
-  cats.", 321-token prompt). The Config field add shifts every Model dlim's meta layout —
+  cats.", 321-token prompt). The Config field add shifts every Model dlim's meta layout -
   the v11 fingerprint auto-refuses and re-mints (observed on the 8B/4B first loads).
-- **I. qwen2.5o (DONE 2026-08-22)**: `dasllama_qwen25v.das` — the window-attention ViT (32
+- **I. qwen2.5o (DONE 2026-08-22)**: `dasllama_qwen25v.das` - the window-attention ViT (32
   RMS-normed blocks, separate biased q/k/v, gated-silu FFN whose hidden comes from the
-  TENSOR dims [3420] — the metadata's feed_forward_length lies [1280]; rope-only positions;
+  TENSOR dims [3420] - the metadata's feed_forward_length lies [1280]; rope-only positions;
   temporal-pair conv fold; per-channel CLIP normalize via new `vision_normalize3`). The
-  window machinery: rows sort by 112 px windows of 2×2-merged groups (the same (gy,gx,sy,sx)
+  window machinery: rows sort by 112 px windows of 2x2-merged groups (the same (gy,gx,sy,sx)
   merge walk as qwen3v composed under the window sort), non-full blocks run
   `attention_bidir_windows` (new tower helper: per-(window, head) units over CONTIGUOUS row
-  ranges — no mask tensor), every `n_wa_pattern`-th block attends in full, and the merger
+  ranges - no mask tensor), every `n_wa_pattern`-th block attends in full, and the merger
   un-sorts back to group-row-major. Decoder = the ALREADY-registered `qwen2vl` arch +
-  `Config.mrope_interleaved` (new flag; qwen3vl/qwen3vlmoe configures set it TRUE — the
+  `Config.mrope_interleaved` (new flag; qwen3vl/qwen3vlmoe configures set it TRUE - the
   qwen3vlmoe MISS would have silently flipped the Omni-30B to the wrong walk, caught in
   review) + `build_rope_tabs_mrope` (the NON-interleaved twin: contiguous section ranges,
   continuous frequency ladder). Vocab quirk: the Omni vocab spells the span markers
   `<|vision_bos|>`/`<|vision_eos|>` at the SAME ids the VL vocabs call
-  `<|vision_start|>`/`<|vision_end|>` — the chat layer resolves by VOCAB with a fallback
+  `<|vision_start|>`/`<|vision_end|>` - the chat layer resolves by VOCAB with a fallback
   (mtmd hardcodes the VL spelling and silently feeds it as plain text on the Omni). Oracle:
   `mint_25o.sh` (6 preproc + 5 encode dumps + cli caption; geometry = the shared code at
-  align 28, verified 518→532 round-half-away, 4000×3000→2044×1540). ORACLE LESSON: every
+  align 28, verified 518->532 round-half-away, 4000x3000->2044x1540). ORACLE LESSON: every
   stock debug fixture is window-SYMMETRIC (uniform/periodic), so an all-full-attention
-  poison PASSED tier-1 untouched — the patch grew the `quad` generator (four exact-value
-  quadrants), which reds the same poison at 10.7 (1300×). Gates: tier-1 5/5 first-run green
-  (3.9e-4–7.6e-3 on 2e-4 + 1e-2·rms), test_rope's non-interleaved cells (collapse bit-exact,
+  poison PASSED tier-1 untouched - the patch grew the `quad` generator (four exact-value
+  quadrants), which reds the same poison at 10.7 (1300x). Gates: tier-1 5/5 first-run green
+  (3.9e-4-7.6e-3 on 2e-4 + 1e-2*rms), test_rope's non-interleaved cells (collapse bit-exact,
   contiguous-axis reference, interleaved-vs-contiguous divergence), and
-  test_vision_chat_qwen25o (small tier) — the 3B captions the cats ("pink couch with two
-  cats… two remote controls"), grid 23×17, delta 23−391. omni-3b now serves text + image
+  test_vision_chat_qwen25o (small tier) - the 3B captions the cats ("pink couch with two
+  cats... two remote controls"), grid 23x17, delta 23-391. omni-3b now serves text + image
   (audio already served standalone; audio-IN-CHAT stays followup #41).
 - **J. Bench + records (PREP + MEASUREMENT DONE 2026-08-22; card decision PENDING)**:
   provenance rows + verified sha pins for all six fetched files landed (fetch_models 6/6 ok);
@@ -309,17 +309,17 @@ noise demands them).
   numbers, not cards): all four models das-vs-mtmd on the M1 Max, driven per-model via the
   released `lcpp_bench --image` (no catalog); the ref pp repriced on ROWS (mtmd's n_past
   advances by the mrope grid delta, so the patched n_prefill undercounts rows ~8x on mrope
-  models). Numbers in the arc summary; headline — das wins EVERY CPU cell (pp +11..16%
+  models). Numbers in the arc summary; headline - das wins EVERY CPU cell (pp +11..16%
   dense, 6x on the 30B MoE; tg ties dense, +45% MoE) and EVERY Metal tg (+12..159%), trails
-  every Metal pp (−12..−41%) and every encode except the 30B CPU pair (no Metal tower for
+  every Metal pp (-12..-41%) and every encode except the 30B CPU pair (no Metal tower for
   the qwen ViTs = the known slice-J gap; mtmd's clip CPU encode is also 4-5x faster than the
   das CPU tower, except the 30B where mtmd CPU encode collapses to 59 s vs das 6.3 s).
   THREE bench defects found by the sweep (fixed, 13c5916cc): the image cell never passed the
-  mrope grid (priced the sequential walk — captions hid it via greedy-tie saturation, the
+  mrope grid (priced the sequential walk - captions hid it via greedy-tie saturation, the
   arc's own gate lesson, until the 30B emptied); an empty timed reply still minted numbers
   (now refuses by name); and the qwen3 Instruct/VL checkpoints DERAIL on their own template's
-  think-suppress form (30B → immediate stop, 4B → re-emits 'assistant'; the form is in the
-  GGUF template but the Instruct checkpoints never trained on it) — `--image-think` prices
+  think-suppress form (30B -> immediate stop, 4B -> re-emits 'assistant'; the form is in the
+  GGUF template but the Instruct checkpoints never trained on it) - `--image-think` prices
   the template-default turn, which is also what the mtmd ref prices. OPEN protocol rule for
   Boris: should image cells default to template-default thinking (symmetric with mtmd) with
   think-off reserved for genuinely-thinking checkpoints (gemma-4-12B)? STILL PENDING: the
@@ -330,10 +330,10 @@ noise demands them).
   not-implemented list now names pixtral/minicpm-v as the remaining vision gap. daslang.io:
   the handmade RST family bullets gained the vision/omni lines (Qwen AND Gemma), the das2rst
   `VisionEmbedder` card names qwen3v + qwen25v, and the generated RST regenerates in the doc
-  pipeline (the generated dir is gitignored — the source edits are the deliverable). No new
-  env knobs (ENVIRONMENT untouched). Predictions 1–8 all scored in place. PERF_LEDGER
-  entries ride slice J's numbers. The §04 vision NUMBERS on that page turned out to be the
-  real staleness (the 3815 re-mint updated records/ but not the committed site merge) —
+  pipeline (the generated dir is gitignored - the source edits are the deliverable). No new
+  env knobs (ENVIRONMENT untouched). Predictions 1-8 all scored in place. PERF_LEDGER
+  entries ride slice J's numbers. The sec.04 vision NUMBERS on that page turned out to be the
+  real staleness (the 3815 re-mint updated records/ but not the committed site merge) -
   FIXED + GATED 2026-08-22: `gen_site_records --verify` and `test_site_records.das`
   (model-free suite) red any records commit that skips the site merge, and the live-page
   refresh rides `bbatkin/site-image-records-refresh` off master. Slice J's qwen image
@@ -341,17 +341,17 @@ noise demands them).
 
 ### Arc followups (owed by this arc, after K)
 
-- **Metal deepstack add — DONE 2026-08-22**: NO new kernel — the ds plane repacks CPU-side
+- **Metal deepstack add - DONE 2026-08-22**: NO new kernel - the ds plane repacks CPU-side
   into slice-major contiguous planes, uploads once, and each layer l < n_ds encodes one more
   `enc_add` at the slice offset after the layer-out residual; capability seat
   `register_prefill_override_ds_adds` (metal registers, others decline by name); the
-  CPU-prefill tripwire's ds exemption removed (+ its cell). Gate: prefill arm `span-ds` —
-  ONE GPU prefill + token parity + the add-CONTRIBUTION witness (lg(tails)−lg(zero) per
+  CPU-prefill tripwire's ds exemption removed (+ its cell). Gate: prefill arm `span-ds` -
+  ONE GPU prefill + token parity + the add-CONTRIBUTION witness (lg(tails)-lg(zero) per
   backend: the skipped-add mutation reds it at contribution 0 where greedy tokens TIE on
-  the counting fixture; clean dd = 10–13% of the 3.6 contribution, bar 0.5×).
+  the counting fixture; clean dd = 10-13% of the 3.6 contribution, bar 0.5x).
 
 - **qwen3a/gemma4a audio-in-chat** (= `followup_general.md` #41, pulled onto this arc): the
-  chat `AudioTower` serves whisper-class projectors only — the conformer families have no
+  chat `AudioTower` serves whisper-class projectors only - the conformer families have no
   chat splice, which blocks the one-session three-modality Omni showcase. Done = an
   audio-encoder seam the chat layer holds for either type (the `VisionEmbedder` union
   pattern), `add_user_audio_` routed by family, `test_omni_showcase` upgraded to
@@ -359,48 +359,48 @@ noise demands them).
 
 ## Predictions (registered before implementation, per the prediction game)
 
-1. Slice B bit-matches on the first honest attempt — the collapse-to-NEOX identity is exact,
+1. Slice B bit-matches on the first honest attempt - the collapse-to-NEOX identity is exact,
    so any diff is an implementation bug in the section walk, not arithmetic.
 2. Tier-0 preproc goes bit-exact only after one convention surprise in the RESIZE (algo or
-   rounding — the gemma arc's fmadd/roundi class), not in the geometry.
+   rounding - the gemma arc's fmadd/roundi class), not in the geometry.
 3. Oracle arithmetic (the lesson the gemma arc demanded): the stock bf16 encode dumps carry
    activation-rounding noise ~3e-2 maxdiff; against the f32-widened twin das tier-1 lands
-   ≤ 1e-4. Both numbers get measured, only the twin gates.
+   <= 1e-4. Both numbers get measured, only the twin gates.
 4. The biggest debug sink is the decoder POSITION RAIL (the offset bookkeeping through
    prefill/decode/server), not the tower and not the mask.
-   **SCORED (F/G): HALF.** The rail itself landed cleanly (E1's design paid off — F was
+   **SCORED (F/G): HALF.** The rail itself landed cleanly (E1's design paid off - F was
    plumbing, not debugging), but the CLASS was right: every follow-on gap was positional
    bookkeeping (the batched-decode delta, the three delta-less GPU rope-row sites, the
-   qwen3vlmoe interleave-flag miss) — none was tower or mask. What made it cheap instead of
+   qwen3vlmoe interleave-flag miss) - none was tower or mask. What made it cheap instead of
    a sink was the E1 law "delta at every rope-angle site, never KV" turning each gap into a
    grep, plus mutation-controlled gates.
-5. CPU encode of a ~300-token still on the M1 lands 0.5–2 s bf16 (27 blocks, 543 M params —
+5. CPU encode of a ~300-token still on the M1 lands 0.5-2 s bf16 (27 blocks, 543 M params -
    between gemma4uv's 54 ms linear and a whisper-large encode).
-   **SCORED: WRONG on the high side of usage.** The tier-1 448² encode (196 tok) runs ~3 s
+   **SCORED: WRONG on the high side of usage.** The tier-1 448^2 encode (196 tok) runs ~3 s
    and the server's off-thread 300-token cats encode measured 42 s on the SINGLE-threaded
-   media worker (the worker pins team mode off) — the prediction priced the jobque'd
+   media worker (the worker pins team mode off) - the prediction priced the jobque'd
    multi-core path, which the chat CLI gets (~9 s ttft incl. prefill) but the server worker
    does not. The mechanism (GEMM-bound, 543 M params) was right; the deployment context
    dominated. Slice J's Metal tower work is where this cost goes away.
 6. The showcase turn (image+audio+text, one prompt) works on the first session after slice E
    with no scheduler change.
-   **SCORED at E2: WRONG on its premise** — `add_user_audio_` existed but never served the
+   **SCORED at E2: WRONG on its premise** - `add_user_audio_` existed but never served the
    conformer families (chat AudioTower = whisper-class only); the two-modality showcase
    (image + text recall) landed instead, and audio-in-chat is followup #41.
-7. Deepstack (slice H) is the CHEAPEST leg — under a session end to end, because both halves
+7. Deepstack (slice H) is the CHEAPEST leg - under a session end to end, because both halves
    are adds to an already-green rail; its only red will be a slice-indexing bug caught by the
    zeroed-slices control, not a math bug.
    **SCORED: CORRECT on cost** (well under a session, first-run tier-1 modulo the projector-key
-   spelling), **HALF on the red**: no slice-indexing bug materialized in das — the defect the
+   spelling), **HALF on the red**: no slice-indexing bug materialized in das - the defect the
    controls caught was in the GATE ITSELF (mean+v0..v3 provably blind to a zeroed slice; the
    q-probe extension was the fix). The zeroed-slices DECODER control passed first try (10.4).
 8. qwen2.5o (slice I) costs more than deepstack but less than the Omni core; the window
    attention masks land right on the first attempt (they are index arithmetic), and the
    surprise, if any, is again in the reference's preproc arithmetic (patch-14 geometry).
-   **SCORED: CORRECT on cost and on the mask** — tier-1 went 5/5 green on the first run,
+   **SCORED: CORRECT on cost and on the mask** - tier-1 went 5/5 green on the first run,
    windows included. The surprise was NOT preproc (align-28 geometry passed via the shared
    code) but the ORACLE'S FIXTURES: every stock debug image is window-symmetric, so an
-   all-full-attention poison passed tier-1 untouched until the `quad` generator landed —
+   all-full-attention poison passed tier-1 untouched until the `quad` generator landed -
    the prediction named the right neighborhood (reference-side arithmetic) and the wrong
    organ (fixtures, not preproc). Honorable mention: the vocab spells the span markers
    `<|vision_bos|>`/`<|vision_eos|>`, which no prediction saw coming.
@@ -408,83 +408,83 @@ noise demands them).
 ### Measurement predictions (registered 2026-08-22 BEFORE the J numbers; das vs llama.cpp,
 ### M1 Max t=8, coco fixture, `lcpp_bench --image` vs patched llama-mtmd-cli, r=3)
 
-Context the predictions price in: the Metal tower serves gemma3v/gemma4v ONLY — every qwen
+Context the predictions price in: the Metal tower serves gemma3v/gemma4v ONLY - every qwen
 tower encodes on the CPU even on the das Metal leg (slice J's deferred Metal-tower work),
 while mtmd offloads the mmproj to Metal unless told not to.
 
-9.  **Qwen3VL-4B** (dense q8 decoder + ~430 M qwen3v tower): decoder cells land gemma-shaped —
-    Metal tg das LEADS 10–25%, Metal pp within ±10%, CPU pp das leads 15–40%. img:enc is the
-    known loser: das enc (CPU tower both legs) 3–8 s vs mtmd Metal enc ≤ 0.4 s (≥ 10×
-    against das); on the CPU pair (mtmd pinned --no-mmproj-offload) das enc is within 2×
+9.  **Qwen3VL-4B** (dense q8 decoder + ~430 M qwen3v tower): decoder cells land gemma-shaped -
+    Metal tg das LEADS 10-25%, Metal pp within +/-10%, CPU pp das leads 15-40%. img:enc is the
+    known loser: das enc (CPU tower both legs) 3-8 s vs mtmd Metal enc <= 0.4 s (>= 10x
+    against das); on the CPU pair (mtmd pinned --no-mmproj-offload) das enc is within 2x
     of mtmd's CPU enc, either side.
-    **SCORED: HALF** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). Metal tg +21% ✓, CPU pp +16% ✓, enc-vs-Metal 29× ✓; Metal pp −16%
-    (outside ±10%, wrong side) ✗; CPU enc 4.6× against das ✗ — mtmd's clip CPU encode is
-    genuinely ~5× faster than the das CPU tower, not within 2×.
-10. **Qwen3VL-8B** (same tower class, ~580 M): the 4B shape scaled — Metal tg das leads
-    10–25%, enc verdicts identical to P9.
-    **SCORED: MOSTLY** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). Metal tg +12% ✓ (bottom of band), enc verdicts identical ✓ (5.3× CPU,
-    15× Metal); unpredicted: Metal pp worsens to −30% (vs the 4B's −16%) — the deepstack
+    **SCORED: HALF** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). Metal tg +21% yes, CPU pp +16% yes, enc-vs-Metal 29x yes; Metal pp -16%
+    (outside +/-10%, wrong side) no; CPU enc 4.6x against das no - mtmd's clip CPU encode is
+    genuinely ~5x faster than the das CPU tower, not within 2x.
+10. **Qwen3VL-8B** (same tower class, ~580 M): the 4B shape scaled - Metal tg das leads
+    10-25%, enc verdicts identical to P9.
+    **SCORED: MOSTLY** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). Metal tg +12% yes (bottom of band), enc verdicts identical yes (5.3x CPU,
+    15x Metal); unpredicted: Metal pp worsens to -30% (vs the 4B's -16%) - the deepstack
     Metal cell (CPU repack + per-layer enc_adds) is the suspect, unprofiled.
 11. **Qwen3-Omni-30B-A3B q8** (MoE, 3B active; 32.5 GB fits the 64 GB box on BOTH legs):
-    Metal tg das leads 10–30% (the wave-C MoE arm), Metal pp ±15%; CPU pp das leads; enc =
-    the 543 M tower on CPU, 4–10 s das.
-    **SCORED: HALF, sandbagged the lead** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). CPU pp das leads ✓ but by 6× (not "leads"), CPU tg
-    +45%, Metal tg +159% (band said 10–30%) — mtmd's Metal MoE decode is far weaker than
-    predicted; Metal pp −41% ✗ (outside ±15%); enc 6.3 s ✓, and mtmd's own CPU encode
+    Metal tg das leads 10-30% (the wave-C MoE arm), Metal pp +/-15%; CPU pp das leads; enc =
+    the 543 M tower on CPU, 4-10 s das.
+    **SCORED: HALF, sandbagged the lead** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). CPU pp das leads yes but by 6x (not "leads"), CPU tg
+    +45%, Metal tg +159% (band said 10-30%) - mtmd's Metal MoE decode is far weaker than
+    predicted; Metal pp -41% no (outside +/-15%); enc 6.3 s yes, and mtmd's own CPU encode
     collapsing to 59 s was unpredicted.
-12. **Qwen2.5-Omni-3B q8** (the biggest tower in the set, ~1.3 B window ViT): das enc 8–20 s
-    both legs, mtmd Metal enc beats das by ≥ 20×; decoder (3B dense) Metal tg das leads
-    10–25%, pp ±10%.
-    **SCORED: HALF** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). enc 12.1 s ✓; mtmd Metal enc 17.5× (near the ≥20× claim); Metal tg +45%
-    (above band), Metal pp −12% (just outside). Direction right everywhere, magnitudes off.
+12. **Qwen2.5-Omni-3B q8** (the biggest tower in the set, ~1.3 B window ViT): das enc 8-20 s
+    both legs, mtmd Metal enc beats das by >= 20x; decoder (3B dense) Metal tg das leads
+    10-25%, pp +/-10%.
+    **SCORED: HALF** (released `lcpp_bench --image` vs patched llama-mtmd-cli, M1 Max t=8, coco fixture, best-of-3). enc 12.1 s yes; mtmd Metal enc 17.5x (near the >=20x claim); Metal tg +45%
+    (above band), Metal pp -12% (just outside). Direction right everywhere, magnitudes off.
 13. Cross-cut: at least one of the 8 pairs voids on cv > 3% and takes a settle + re-run;
     zero das crashes across all cells (every rail in the sweep is mutation-gated).
-    **SCORED: HALF.** The cv void happened (4B ref CPU tg, 5.9% — re-run reproduced the value
+    **SCORED: HALF.** The cv void happened (4B ref CPU tg, 5.9% - re-run reproduced the value
     to 0.2%; the cv is inherent to mtmd's 15-token decode window, not box noise). "Zero das
     crashes" held literally but missed the real failure mode: TWO silent-wrong classes (the
-    grid never passed; the suppress-form derail) — the sweep's value was finding them, and
+    grid never passed; the suppress-form derail) - the sweep's value was finding them, and
     the prediction's frame ("crashes") was looking at the wrong hazard.
 
-### Slice L — the CPU encode gap: qwen towers get the q8 block-GEMM lane (predictions
+### Slice L - the CPU encode gap: qwen towers get the q8 block-GEMM lane (predictions
 ### registered 2026-08-22 BEFORE implementation; the agreed first post-merge slice; every
 ### enc figure below = released `lcpp_bench --image`, CPU, --image-think, r=3, t=8, M1 Max)
 
 Design: port gemma3v's q8 serving lane (Q8_0 transcode at read, requant + q8q8 batch at
 encode, its own image tag, pin knobs, policy = q8 unless the accelerate float-batch tier is
 armed) to dasllama_qwen3v + dasllama_qwen25v. Block GEMMs only; conv/mergers/deepstack stay
-on file planes. qwen3v ff=4304 is not 32-aligned → the gemma3v ff_pad treatment (zero up
+on file planes. qwen3v ff=4304 is not 32-aligned -> the gemma3v ff_pad treatment (zero up
 rows / down cols), Q8 LANE ONLY so the exact bf16 lane stays byte-identical to today.
 tower_read_gemm_q8 hoists into dasllama_tower (g3v+g4v+two new = four copies otherwise).
 
-14. The q8 lane speeds the das CPU encode 3.5–5.5× per qwen tower (gemma4v's measured 4.8×
-    CPU-tower factor, same block-GEMM dominance): Omni-30B enc 6.3→1.2–1.8 s, VL-4B
-    5.1→1.0–1.5 s, VL-8B ~6→1.1–1.7 s, Omni-3B 12.1→2.2–3.5 s.
-15. Post-change das CPU enc vs mtmd's clip CPU enc: das lands within 1.5× either side on the
-    three dense towers (from 4.6–5.3× behind), and the 30B lead (mtmd 59 s collapse) widens
-    past 30×.
+14. The q8 lane speeds the das CPU encode 3.5-5.5x per qwen tower (gemma4v's measured 4.8x
+    CPU-tower factor, same block-GEMM dominance): Omni-30B enc 6.3->1.2-1.8 s, VL-4B
+    5.1->1.0-1.5 s, VL-8B ~6->1.1-1.7 s, Omni-3B 12.1->2.2-3.5 s.
+15. Post-change das CPU enc vs mtmd's clip CPU enc: das lands within 1.5x either side on the
+    three dense towers (from 4.6-5.3x behind), and the 30B lead (mtmd 59 s collapse) widens
+    past 30x.
 16. Greedy coco captions at the bench prompt change on at most 1 of the 4 models vs the
     exact lane (gemma experience: the q8 tower is caption-stable; near-ties may flip).
-17. Tier-1 q8 error vs the f32 oracle lands 0.15–0.35 × token rms on both qwen towers
-    (gemma3v measured 0.22–0.25 at 27 blocks; qwen3v is 27 blocks, qwen25v 32 windowed).
+17. Tier-1 q8 error vs the f32 oracle lands 0.15-0.35 x token rms on both qwen towers
+    (gemma3v measured 0.22-0.25 at 27 blocks; qwen3v is 27 blocks, qwen25v 32 windowed).
 
 #### Slice L findings (2026-08-22, the tier-1 + probe round BEFORE any perf measurement)
 
 The port went in as designed for BOTH towers; the tier-1 gates then split them:
 
 - **qwen3v (Omni-30B + VL dense): SHIPS.** q8 error 0.42 x rms worst (gray448; cb fixtures
-  0.1-0.3) — roughly double gemma3v's 0.22-0.25 floor, the qwen ViT's outlier channels.
+  0.1-0.3) - roughly double gemma3v's 0.22-0.25 floor, the qwen ViT's outlier channels.
   Bar 5.2e-1; the zero-layer-13 poison reds it by +0.73 (2.4x discrimination). Deepstack q8
   cells run cb-only at 6.5e-1 (the uniform gray fixture measures 7.9 x rms on the tap-slice
-  probes — taps sample mid-network residuals where the outlier noise arrives unwashed); the
+  probes - taps sample mid-network residuals where the outlier noise arrives unwashed); the
   zeroed-slices decoder control (10.4) is the gate that proves the slices still carry.
   Captions: VL-4B deepstack q8 caption full and correct.
-- **qwen25v (Omni-3B): DOES NOT SHIP — the lane is reverted, exact serving stays.** The q8q8
+- **qwen25v (Omni-3B): DOES NOT SHIP - the lane is reverted, exact serving stays.** The q8q8
   lane measured 2.0 x rms vs the oracle, and the zero-layer poison sat BELOW any bar wide
   enough to admit the clean encode (excess -0.38): the gate cannot distinguish q8 noise from
   a deleted layer. Localization: weights are fine (weight-only Q8 rounding = 0.0067 x rms);
   per-site chains on random x are fine (q8q8 3-7% worst-element, down float-x 2.4%); the
   disease is per-32-block ACTIVATION requant on the Qwen2-VL-lineage ViT's outlier rows
-  (±100 channels), at every site — the gated-FFN down input (silu(gate)·up) worst (its
+  (+/-100 channels), at every site - the gated-FFN down input (silu(gate)*up) worst (its
   float-activation form, `matmul_q8_batch` w8xf32, recovered only 2.0 -> 1.38 x rms; probed,
   then removed with the lane). An all-float-activation q8 lane wins nothing on CPU: these
   GEMMs are compute-bound and the 4-5x IS the int8xint8 SIMD. Options if the Omni-3B CPU
@@ -493,24 +493,24 @@ The port went in as designed for BOTH towers; the tier-1 gates then split them:
 
 Prediction scoring (14-17):
 14. **HALF.** The mechanism and the recipe landed, but only for qwen3v; qwen25v excluded
-    (unpredicted — the prediction assumed all qwen towers quantize alike; the Qwen2-VL
+    (unpredicted - the prediction assumed all qwen towers quantize alike; the Qwen2-VL
     activation-outlier lore was known and not priced in). Speedups not yet measured.
 15. Not yet measurable (perf round pending); qwen25v arm VOID (no q8 lane).
-16. On track — VL-4B q8 caption unchanged-quality; full sweep pending.
+16. On track - VL-4B q8 caption unchanged-quality; full sweep pending.
 17. **WRONG on both sides**: qwen3v landed ABOVE the band (0.42 vs 0.15-0.35) and qwen25v
-    landed at 2.0 — the band assumed gemma-like activation statistics; the per-family
+    landed at 2.0 - the band assumed gemma-like activation statistics; the per-family
     outlier ladder (gemma 0.25 -> qwen3v 0.42 -> qwen25v 2.0) was the real story.
 
 #### Slice L measurement (2026-08-22, released rig, CPU cells, --image-think, r=3, t=8, M1 Max)
 
 | model | das enc J (exact) | das enc now (q8) | speedup | vs mtmd clip CPU (J) |
 |---|---|---|---|---|
-| Qwen3VL-4B | 5.1 s | **1.084 s** | 4.7x | ~1.11 s — TIE (das -2%) |
-| Qwen3VL-8B | ~10 s | **1.895 s** | ~5.3x | ~1.89 s — TIE |
-| Qwen3-Omni-30B | 6.3 s | **1.496 s** | 4.2x | 59 s — das 39x ahead |
+| Qwen3VL-4B | 5.1 s | **1.084 s** | 4.7x | ~1.11 s - TIE (das -2%) |
+| Qwen3VL-8B | ~10 s | **1.895 s** | ~5.3x | ~1.89 s - TIE |
+| Qwen3-Omni-30B | 6.3 s | **1.496 s** | 4.2x | 59 s - das 39x ahead |
 
 Captions all correct at template-default thinking (cats + couch + remotes; the 30B its terse
-form). Cells stamp `(qwen3v q8)`. Qwen2.5-Omni-3B unmeasured — no q8 lane (slice-L findings).
+form). Cells stamp `(qwen3v q8)`. Qwen2.5-Omni-3B unmeasured - no q8 lane (slice-L findings).
 
 14. **CORRECT** (for the towers that shipped): 4.2-5.3x inside the 3.5-5.5x band.
 15. **CORRECT** (for the shipped towers): the dense pairs land at mtmd-clip parity (predicted
@@ -518,22 +518,22 @@ form). Cells stamp `(qwen3v q8)`. Qwen2.5-Omni-3B unmeasured — no q8 lane (sli
 16. **CORRECT so far**: captions unchanged-quality on all three measured models (+ the 4B
     chat-suite caption). 4 of 4 checked, 0 flips.
 
-### Slice M — the Metal image-turn pp gap (dig opened 2026-08-23; Boris: separate PR)
+### Slice M - the Metal image-turn pp gap (dig opened 2026-08-23; Boris: separate PR)
 
-**Target:** slice J's Metal `img:pp` reds — das/lcpp 3B −12%, 4B −16%, 8B −30%, 30B MoE
-−41% — while das leads or ties every gemma Metal image cell post-3815.
+**Target:** slice J's Metal `img:pp` reds - das/lcpp 3B -12%, 4B -16%, 8B -30%, 30B MoE
+-41% - while das leads or ties every gemma Metal image cell post-3815.
 
 **FOUND FIRST (before any timing): the bench's image cell feeds deepstack decoders a NARROW
 scrambled span.** `measure_image_turn` copies `n_rows * dim` floats into an `npos * dim`
-buffer, but a qwen3v ds tower emits `n_rows × dim*(1+n_ds)` wide rows (probe: the 4B mmproj
+buffer, but a qwen3v ds tower emits `n_rows x dim*(1+n_ds)` wide rows (probe: the 4B mmproj
 scans n_deepstack=3, row_width=10240, nout=300, len/nout=10240). The copy flattens the first
 75 wide rows into 300 narrow slots: content scrambled, ds adds never active (`embd_is_ds_wide`
 keys on length), das doing LESS prefill work than the lcpp leg it lost to. Every 4B/8B
 img:pp/img:tg cell in the J sweep priced that walk; the clean captions survived on content
-redundancy — the greedy-tie gate lesson's third strike. Blast radius: plan figures only (no
-cards ruled, nothing committed to records/). 30B and qwen25o have no ds slices → their cells
+redundancy - the greedy-tie gate lesson's third strike. Blast radius: plan figures only (no
+cards ruled, nothing committed to records/). 30B and qwen25o have no ds slices -> their cells
 stand. Fix: the chat gains `add_user_image_rows_` (pre-encoded rows in, width-checked), the
-bench drives `respond_` through it — the cell prices the literal shipped walk, and the
+bench drives `respond_` through it - the cell prices the literal shipped walk, and the
 hand-splice divergence class dies.
 
 ### Slice M predictions (18 registered before the row-width probe ran; 19-22 before any
@@ -541,15 +541,15 @@ hand-splice divergence class dies.
 
 18. The scramble hypothesis: the 4B mmproj scans ds=3 and emits wide rows, so the bench
     span is scrambled and ds-less. **SCORED: CORRECT** (probe above; called before running).
-19. On the fixed bench the das 4B/8B img:pp cells get SLOWER — the Metal gap widens by
-    3-10 points (ds adds + 4x embd staging) — and at least one of the two models' captions
+19. On the fixed bench the das 4B/8B img:pp cells get SLOWER - the Metal gap widens by
+    3-10 points (ds adds + 4x embd staging) - and at least one of the two models' captions
     changes text vs the scrambled run. CPU img:pp moves the same direction; enc unchanged.
 20. The dominant term of the (fixed) 4B/8B Metal pp gap is NOT image plumbing: a text-only
     control at matched npos (~320) on the same decoders reproduces >= 2/3 of the gap, and
     skip-family knockouts attribute >= 60% of the das wall to the gemm family.
 21. The gap shrinks with M: at npos 512+ das text prefill on the VL-4B/8B decoders is within
-    +/-5% of lcpp (the board's dense text history) — short-M efficiency, not raw throughput.
-22. The 30B MoE −41% is its own mechanism — the MoE expert batched-prefill path: knockouts
+    +/-5% of lcpp (the board's dense text history) - short-M efficiency, not raw throughput.
+22. The 30B MoE -41% is its own mechanism - the MoE expert batched-prefill path: knockouts
     attribute >= 50% of its das wall to the moe/gemm family, and its per-token deficit vs
     lcpp at image-turn M is >= 1.5x the dense models'.
 
@@ -557,90 +557,90 @@ hand-splice divergence class dies.
 
 **Fix landed (uncommitted yet): the bench prices the shipped walk.** The chat gained
 `add_user_image_rows_` (pre-encoded rows in, exact-width panic against `dim*(1+n_ds)`,
-one-media-kind + marker checks; `respond_` consumes them identically to the embedder walk —
+one-media-kind + marker checks; `respond_` consumes them identically to the embedder walk - 
 `test_vision_chat_rows_seam` pins token-for-token parity on the 4B ds pair). The bench's
-`measure_image_turn` now drives create_chat_ → add_user_image_rows_ → respond_ — the
+`measure_image_turn` now drives create_chat_ -> add_user_image_rows_ -> respond_ - the
 hand-splice, its private stop protocol, and the narrow copy are gone. The scheduler's media
-guard tightened to exact width (narrow image rows on a ds decoder now panic — the same silent
+guard tightened to exact width (narrow image rows on a ds decoder now panic - the same silent
 class through the server seam; two new panic cells in test_scheduler). Sibling find:
 test_audio_embedder's dlim scan took the FIRST sibling by directory order and grabbed the
-gemma4v vision image — now selects by baked `gemma4a-` family tag (pre-existing red the
+gemma4v vision image - now selects by baked `gemma4a-` family tag (pre-existing red the
 vision re-mints exposed).
 
 **Re-measure (released rig rebuilt --quick, same J protocol, r=3 t=8):** the honest walk
-timings are statistically UNCHANGED — 4B Metal img:pp 841.1 (J scrambled 847.6; a first
+timings are statistically UNCHANGED - 4B Metal img:pp 841.1 (J scrambled 847.6; a first
 688.0 run was an outlier, re-run confirmed), 8B Metal 402.1 (396.0), 3B control 1231.0
 (1229.9), 4B CPU 251.3 (250.9), 8B CPU 136.4 (139.3). tg unchanged everywhere. Captions on
 the fixed span now match the chat walk (pink couch/blanket, richer detail) where the
 scrambled span said red. **P18 CORRECT; P19 WRONG on cost** (predicted 3-10 point widening;
-ds staging + wide upload price ≈ 0 — 3 enc_adds and ~15 MB staging on a 400-850 ms wall);
+ds staging + wide upload price ~ 0 - 3 enc_adds and ~15 MB staging on a 400-850 ms wall);
 the caption-changes half was right. **Consequences: the J gap magnitudes stand on the honest
-walk, and deepstack staging is EXONERATED as the 8B suspect — the −30% exists with ds adds
+walk, and deepstack staging is EXONERATED as the 8B suspect - the -30% exists with ds adds
 active and cost-free.** Metal-leg encode note: both VL Metal cells now ride the q8 tower
-(enc 4B 2194 ms / 8B 3446 ms vs CPU-leg 1085/1902 — the Metal-leg CPU encode runs ~2x the
-CPU-leg's; unexplained, parked — encode is slice-J/L territory).
+(enc 4B 2194 ms / 8B 3446 ms vs CPU-leg 1085/1902 - the Metal-leg CPU encode runs ~2x the
+CPU-leg's; unexplained, parked - encode is slice-J/L territory).
 
 #### Slice M decomposition (2026-08-23, released rig, 4B/3B Metal; walls at ~equal mp pad)
 
 **Turn shapes verified equal both engines** (Boris's "same formats" check): das image npos =
-4 head + 300 rows + 17 tail = **321**; the mtmd ref's repriced rows = 41 + (300−20) = 321.
+4 head + 300 rows + 17 tail = **321**; the mtmd ref's repriced rows = 41 + (300-20) = 321.
 Both engines KV f16; llama-bench/mtmd fa auto(on for Metal); same Q8_0 gguf (das planar
 repack = the das lane by design). llama.cpp build 98c4764b6 (2026-08-13).
 
 **Text-M control (rig -p + --ref, same padded GEMM shapes as the image turn):** das text
-prefill is at parity — 4B p341 das 1038.3 vs ref 1011.3 (+2.7%), p512 +1.3%; 8B p341 −6.2%,
-p512 +0.3%; 3B p412 −5.3% (cv 4.6%, over bar — flag). **P20/P21 land WRONG in the
-informative direction: the image gap does NOT reproduce in text** — das's own image turn runs
+prefill is at parity - 4B p341 das 1038.3 vs ref 1011.3 (+2.7%), p512 +1.3%; 8B p341 -6.2%,
+p512 +0.3%; 3B p412 -5.3% (cv 4.6%, over bar - flag). **P20/P21 land WRONG in the
+informative direction: the image gap does NOT reproduce in text** - das's own image turn runs
 ~16% below das text at the same padded M (4B: wall 381.6 vs 328.4 ms), while lcpp's image
 turn runs AT its text rate. The mechanism is das-side, image-turn-specific.
 
-**Span-fuse A/B:** fused 841.1 vs splice 687.7 (DASLLAMA_SPAN_FUSE=0) — the fuse works,
-+22%. ⚠ the first fixed-cell run measured 688.0 ≈ the splice number exactly with NO
-SPAN_FUSE set and fused announce absent — unexplained single occurrence, parked (if a
+**Span-fuse A/B:** fused 841.1 vs splice 687.7 (DASLLAMA_SPAN_FUSE=0) - the fuse works,
++22%. [!] the first fixed-cell run measured 688.0 ~ the splice number exactly with NO
+SPAN_FUSE set and fused announce absent - unexplained single occurrence, parked (if a
 silent fuse-decline exists it is worth a witness).
 
-**Knockout ladders (DASLLAMA_METAL_PREFILL_SKIP, walls in ms, image−text at equal mp):**
+**Knockout ladders (DASLLAMA_METAL_PREFILL_SKIP, walls in ms, image-text at equal mp):**
 
-| model | total Δ | gemm Δ | attn Δ | ew Δ | nongemm Δ | floor Δ (all-gemm-skipped) |
+| model | total Delta | gemm Delta | attn Delta | ew Delta | nongemm Delta | floor Delta (all-gemm-skipped) |
 |---|---|---|---|---|---|---|
-| 4B (ds) | +53 | **+23** | +4.4 | −1.6 | +7.3 | **+30** (51.4 vs 21.4) |
-| 3B (no ds) | +18 | **≈0** (298.3 vs 299.6) | — | — | — | **+19** (36.4 vs 17.4) |
+| 4B (ds) | +53 | **+23** | +4.4 | -1.6 | +7.3 | **+30** (51.4 vs 21.4) |
+| 3B (no ds) | +18 | **~0** (298.3 vs 299.6) | - | - | - | **+19** (36.4 vs 17.4) |
 
 Two mechanisms:
 1. **The staging floor (every mrope model, +19..30 ms/turn):** survives skipping every GPU
-   kernel family — the embd quantum's CPU-side assemble + upload + per-turn setup (wide
+   kernel family - the embd quantum's CPU-side assemble + upload + per-turn setup (wide
    splice, ds repack, mrope tables/positions). lcpp pays no such delta.
 2. **The ds-wide gemm tax (deepstack models only, ~7.5% of gemm):** same padded shapes, same
-   weights, +23 ms of gemm — only on the wide-quantum models; the 3B control acquits mrope
+   weights, +23 ms of gemm - only on the wide-quantum models; the 3B control acquits mrope
    and the span mask. Suspect: the wide quantum's x staging / slice-0 split path.
-Attention's non-causal span block is real but small (+4.4 ms ≈ the extra 300² pairs).
-Consistency: 3B −5.3% text − 5.6% floor ≈ its −12% cell; 4B par text − 16% overhead ≈ −16%.
+Attention's non-causal span block is real but small (+4.4 ms ~ the extra 300^2 pairs).
+Consistency: 3B -5.3% text - 5.6% floor ~ its -12% cell; 4B par text - 16% overhead ~ -16%.
 8B ladder running; 30B MoE arm unprobed (P22 open).
 
 #### Slice M mechanism (2026-08-23, stage-stats probe, 8B, synthetic wide quantum)
 
 The image-turn overhead is NOT in the eval: tokens / narrow-embd / wide-mrope-span all run
-~600-609 ms in a quiet process (gpu_us ≈ wall; the whole wide+ds+mrope quantum costs +10 ms
+~600-609 ms in a quiet process (gpu_us ~ wall; the whole wide+ds+mrope quantum costs +10 ms
 over tokens). The bench-context penalty reproduces by running the CPU tower ENCODE first:
-**wide-span-after-encode = 680 ms, +70 ms with gpu_us up only 4 ms — host-side latency
+**wide-span-after-encode = 680 ms, +70 ms with gpu_us up only 4 ms - host-side latency
 between submit and execution on the FIRST Metal submission after the burn.** A 400 ms idle
 cooldown recovers nothing; **a sacrificial second eval after the same encode runs clean
-(608.9 ms)** — a one-time residency/driver-state repayment, not thermal, not scheduler decay.
+(608.9 ms)** - a one-time residency/driver-state repayment, not thermal, not scheduler decay.
 Every real image turn pays it because every turn starts with the CPU encode; lcpp never pays
 it (their mmproj encodes on the GPU). Knockout floors scale with pool size: 3B +19, 4B +30,
 8B +133 ms.
 
 **The qwen Metal img:pp gap decomposes as:** post-encode first-submission penalty (dominant,
 scales with model) + ds-wide gemm tax (+13-23 ms, 4B/8B) + non-causal span attention (+4 ms,
-intrinsic) + text-lane ≈ parity. 30B MoE (−41%) unprobed — its 6.4 s burn + biggest pools
+intrinsic) + text-lane ~ parity. 30B MoE (-41%) unprobed - its 6.4 s burn + biggest pools
 fit the same profile; a MoE-lane term may remain (P22 open).
 
-**Levers:** (1) the slice-J Metal tower for qwen ViTs deletes the burn AND its aftermath —
-one fix for both enc (2-12 s → sub-second) and most of the pp gap; (2) available today: a
+**Levers:** (1) the slice-J Metal tower for qwen ViTs deletes the burn AND its aftermath - 
+one fix for both enc (2-12 s -> sub-second) and most of the pp gap; (2) available today: a
 tiny warm-up submission between encode and prefill eats the one-time penalty on the das side
-(~70 ms back on 8B) — a real serving-path improvement, not bench cosmetics; (3) the ds-wide
+(~70 ms back on 8B) - a real serving-path improvement, not bench cosmetics; (3) the ds-wide
 gemm staging tax, small follow-up. ALSO FOUND, unexplained: arming Metal makes the CPU q8
-tower encode ~1.7x slower (probe 3.26 s vs CPU-leg 1.90 s on the 8B) — its own dig; the
+tower encode ~1.7x slower (probe 3.26 s vs CPU-leg 1.90 s on the 8B) - its own dig; the
 Metal tower deletes it too.
 
 ### Slice M warm-up lever (Boris 2026-08-23: "lets do warmup and see how it turns out");
@@ -651,10 +651,10 @@ Metal tower deletes it too.
 24. A 1-position throwaway prefill as the warm-up repays >= 80% (following eval <= 620 ms);
     its own GPU cost <= 40 ms, hideable behind the real quantum's CPU staging.
 25. Wired at the prefill seam (fire when > ~1 s since the last Metal submission), the
-    re-measured Metal img:pp lands 8B −7..−13% vs ref (from −29%) and 4B −3..−9% (from
-    −16%); CPU cells and tg unchanged.
+    re-measured Metal img:pp lands 8B -7..-13% vs ref (from -29%) and 4B -3..-9% (from
+    -16%); CPU cells and tg unchanged.
 
-#### Slice M warm-up verdict (2026-08-23): the penalty cannot be pre-paid — the tower is the fix
+#### Slice M warm-up verdict (2026-08-23): the penalty cannot be pre-paid - the tower is the fix
 
 Probe ladder on the 8B (each arm = encode, then the warm-up variant, then the timed span
 eval; clean eval 609 ms, after-encode 680 ms):
@@ -666,153 +666,153 @@ eval; clean eval 609 ms, after-encode 680 ms):
 | MTLResidencySet pin (146 buffers incl. the blob, active) | 0 | 679.4 | residency is not the mechanism |
 | 1-thread real kernel (async) | ~0 | 678.0 | execution alone is not the trigger |
 | page-touch kernel (1 load / 16 KB page, whole blob) | 17-23 ms | 675.2 | page faults are not the mechanism |
-| 1-token decode (streams ALL weight bytes) | ~100 ms (28 warm) | **608.4** | full repay — rides the ramp itself |
+| 1-token decode (streams ALL weight bytes) | ~100 ms (28 warm) | **608.4** | full repay - rides the ramp itself |
 | 32-row prefill | ~148 ms | 608.9 | same |
-| page-touch pulse train through the encode (real thread) | — | 684.0 | light load does not hold the domain |
+| page-touch pulse train through the encode (real thread) | - | 684.0 | light load does not hold the domain |
 
 **The operational law:** after a multi-second CPU-saturating phase, the first ~70 ms (8B; ~
-scales with the model's bandwidth demand) of sustained-bandwidth GPU work runs degraded —
+scales with the model's bandwidth demand) of sustained-bandwidth GPU work runs degraded - 
 a memory/GPU governor ramp, not residency, not paging, not driver wake. It is one-time per
 burn, is absorbed by whatever heavy work runs first, and cannot be pre-paid by anything
 cheaper than the ramp itself; a synchronous warm-up always nets a loss (own cost rides on
 top). Scored: **P23 CORRECT** (empty repays nothing), **P24 HALF** (the full-stream warm-up
-repays 100% but costs ~100 ms, 2.5x the predicted bound — because it IS the ramp),
+repays 100% but costs ~100 ms, 2.5x the predicted bound - because it IS the ramp),
 **P25 VOID** (no warm-up lever exists to wire; the residency machinery was implemented,
-measured at zero effect, and reverted — the probe ledger above is what it bought).
+measured at zero effect, and reverted - the probe ledger above is what it bought).
 
 **Consequence:** the das Metal image-turn pp gap on CPU-encoding models is the price of the
 CPU tower, not of the prefill lane (das text prefill = parity; the eval machinery = +10 ms).
-The remedy is slice J's deferred **Metal tower for the qwen ViTs** — GPU encodes keep the
+The remedy is slice J's deferred **Metal tower for the qwen ViTs** - GPU encodes keep the
 domain loaded, delete the 2-12 s CPU encodes AND the ramp, and also delete the still-open
 1.7x metal-armed-CPU-encode anomaly. Until a family's tower serves on GPU (qwen25v, the
-conformer audio encoders), its image/audio-turn pp keeps the ramp — ledgered.
+conformer audio encoders), its image/audio-turn pp keeps the ramp - ledgered.
 
 ### Slice J (opened 2026-08-23, Boris: "lets do J - and see where we are at"): the qwen3v
-### Metal tower — predictions 26-29 registered BEFORE implementation
+### Metal tower - predictions 26-29 registered BEFORE implementation
 
 Design (the gemma3v recipe, converged): the exact lane re-stages the block GEMMs as
 **f32-in-blob at ff_pad both dims** (gemma3v's "%64 fits Metal tiles, %32 quantizes" law;
-bf16 blk lane retired — mergers/taps keep their planes); `q3v_serve_q8` gains the
+bf16 blk lane retired - mergers/taps keep their planes); `q3v_serve_q8` gains the
 gpu-serves clause + `register_qwen3v_gpu` hook, so the lane ladder matches g3v: q8 CPU
 default / f32 exact when the Metal tower or accel serves. The Metal encode: stem + reorder +
 pos stay CPU; the block loop rides `metal_gemma3v_blocks`' dispatch chain + `enc_rope`
 (NEOX, per-token table rows = `s.cos_t/s.sin_t` uploaded once per grid) on q/k compact
 before head-restride; the fused qkv serves as THREE `enc_f32_mm` at weight row offsets
-(0, d*d, 2d*d); shapes pass the existing gates (d 1152%64=0, ff_pad 4352%64=0, hs 72 →
-hs_pad 128). Deepstack taps + the tail merger ride the same chain on GPU — the ×4 merge
+(0, d*d, 2d*d); shapes pass the existing gates (d 1152%64=0, ff_pad 4352%64=0, hs 72 ->
+hs_pad 128). Deepstack taps + the tail merger ride the same chain on GPU - the x4 merge
 reshape is a flat reinterpretation of the row buffer, so tap input = the residual buffer
-read as [npos/4 × 4d]; compact tap/tail outputs read back and scatter into the wide out on
+read as [npos/4 x 4d]; compact tap/tail outputs read back and scatter into the wide out on
 the CPU. Identity: verify the layout change shifts the dlim identity (offsets serialize);
-if the meta hash misses it, bump the family tag — the slice-L stale-dlim lesson.
+if the meta hash misses it, bump the family tag - the slice-L stale-dlim lesson.
 
-26. The qwen3v Metal blocks land with ZERO new Metal kernels — enc_rope covers the vision
+26. The qwen3v Metal blocks land with ZERO new Metal kernels - enc_rope covers the vision
     rope, weight-offset GEMMs cover the fused qkv, the existing LN/mm/gelu chain covers the
     taps and tail.
 27. Tier-1 exact cells pass on the FIRST honest run after the f32 re-stage at equal-or-
     tighter maxdiff than the bf16 lane's; the likely red, if any, is the rope table
     addressing against the merge reorder, not the GEMM chain.
 28. Measured 4B Metal encode (coco, 300 tok): 250-500 ms (today 2194 ms; mtmd Metal ~250);
-    the Metal-leg img:pp recovers to within +/-8% of lcpp — the burn and its ramp gone.
+    the Metal-leg img:pp recovers to within +/-8% of lcpp - the burn and its ramp gone.
 29. The 1.7x metal-armed-CPU-encode anomaly goes moot on qwen3v and stays reproducible on
-    qwen25v — it rides the CPU-encode-under-Metal context, not the family.
+    qwen25v - it rides the CPU-encode-under-Metal context, not the family.
 
 #### Slice J checkpoint (2026-08-23, released rig, Metal cells, r=3, coco)
 
-**LANDED (branch, 12/12 test_qwen3v):** the qwen3v Metal tower — the exact lane re-staged
+**LANDED (branch, 12/12 test_qwen3v):** the qwen3v Metal tower - the exact lane re-staged
 f32+ff_pad both dims (IMAGE_VERSION 12: the identity hashes knobs+version+tag, never offset
-values — a served-layout change without a bump maps stale images, third strike, rule now on
+values - a served-layout change without a bump maps stale images, third strike, rule now on
 the constant), `register_qwen3v_gpu` + the lane's driver clause, `metal_qwen3v_blocks`
 (gemma3v's chain + enc_rope NEOX on compact q/k + the fused qkv as three weight-offset GEMMs
-+ tap-layer segments stashing residuals for the CPU tap mergers — ZERO new Metal kernels,
++ tap-layer segments stashing residuals for the CPU tap mergers - ZERO new Metal kernels,
 P26 CORRECT). Tier-1: CPU f32 floor moved (ff_pad regroups the down GEMM's accumulation;
-red448 3.2e-3 → TIER1_REL 1.5e-2 with a LIVE exact zero-layer poison, excess 0.87); the
+red448 3.2e-3 -> TIER1_REL 1.5e-2 with a LIVE exact zero-layer poison, excess 0.87); the
 Metal arm gates on its own GPU bars (the gemma3v f16-tile precedent; gray stays off the
-GPU-ds set — the q8-ds precedent; engage evidence +6 encodes/+153 blocks/0 declines).
+GPU-ds set - the q8-ds precedent; engage evidence +6 encodes/+153 blocks/0 declines).
 P27 HALF: first-honest-run needed the bar recalibrations, and the miss was accumulation
 grouping + the ds-gray tap slices, not rope.
 
-**Measured (das Metal leg, before → after):** 4B enc 2194 → **512 ms** (4.3x; mtmd Metal
-~250), 8B enc 3446 → **752 ms** (4.6x; ref ~508). img:pp: 8B 402 → **445** (−29% → −21% vs
-ref ~566); 4B 841 → **849** (−16% unchanged). tg unchanged; captions correct both models
-(pink couch). **P28 HALF**: enc inside the predicted band, pp did NOT fully recover — the
+**Measured (das Metal leg, before -> after):** 4B enc 2194 -> **512 ms** (4.3x; mtmd Metal
+~250), 8B enc 3446 -> **752 ms** (4.6x; ref ~508). img:pp: 8B 402 -> **445** (-29% -> -21% vs
+ref ~566); 4B 841 -> **849** (-16% unchanged). tg unchanged; captions correct both models
+(pink couch). **P28 HALF**: enc inside the predicted band, pp did NOT fully recover - the
 encode still ENDS with a CPU burst (the taps + tail merger: ~8.6 GFLOP all-core right before
-the prefill), so the §2.12 ramp re-arms. **The named next lever: the taps + tail merger onto
-the GPU chain** (same dispatch vocabulary over the flat-reinterpreted merged rows) — cuts
+the prefill), so the sec.2.12 ramp re-arms. **The named next lever: the taps + tail merger onto
+the GPU chain** (same dispatch vocabulary over the flat-reinterpreted merged rows) - cuts
 the enc gap vs mtmd AND deletes the trailing burn that keeps pp from parity. P29 untested
 (qwen25v arm not re-run).
 
 #### Slice J round 2 (2026-08-23): taps + tail merger on the GPU chain
 
 The tap chains encode INLINE over the live residual (hazard tracking orders them against the
-next block's writes — the segments and stashes died), the tail merger follows the loop, and
+next block's writes - the segments and stashes died), the tail merger follows the loop, and
 ONE readback lands compact proj outputs for the CPU scatter. The merger/tap planes unified to
-f32-in-blob (the bf16 GEMM arm dies; the Omni tail widens 61 MB) → IMAGE_VERSION 13. The
-[nout × 4d] merged view doubles the row buffers' size demand (rows_ext = max(mp, 4·ceil32(nout))).
+f32-in-blob (the bf16 GEMM arm dies; the Omni tail widens 61 MB) -> IMAGE_VERSION 13. The
+[nout x 4d] merged view doubles the row buffers' size demand (rows_ext = max(mp, 4*ceil32(nout))).
 test_qwen3v 12/12 unchanged bars.
 
 **Measured (released rig, Metal leg, r=3; "before" = pre-J):**
 
-| model | enc before → NOW | ref enc | img:pp before → NOW | ref pp |
+| model | enc before -> NOW | ref enc | img:pp before -> NOW | ref pp |
 |---|---|---|---|---|
-| 4B (ds) | 2194 → **193 ms** (11.4x) | ~250 | 841 → 847 (−16%) | ~1009 |
-| 8B (ds) | 3446 → **277 ms** (12.4x) | ~508 | 402 → **468** (−17%) | ~566 |
-| 30B (no ds) | 6411 → **240 ms** (26.7x) | ~250 | 481 → **779** (−4%) | ~815 |
+| 4B (ds) | 2194 -> **193 ms** (11.4x) | ~250 | 841 -> 847 (-16%) | ~1009 |
+| 8B (ds) | 3446 -> **277 ms** (12.4x) | ~508 | 402 -> **468** (-17%) | ~566 |
+| 30B (no ds) | 6411 -> **240 ms** (26.7x) | ~250 | 481 -> **779** (-4%) | ~815 |
 
-**das now LEADS every qwen3v Metal encode**, and the 30B image pp is at parity — its −41%
-was almost entirely the §2.12 ramp (P22 scores WRONG: no MoE-lane mechanism remained once
-the burn died). The 4B/8B pp residual (−16/−17%) matches the slice-M non-ramp terms — the
-ds-WIDE decoder tax (+23/+13 ms wide-quantum staging in the PREFILL) + span attention — a
+**das now LEADS every qwen3v Metal encode**, and the 30B image pp is at parity - its -41%
+was almost entirely the sec.2.12 ramp (P22 scores WRONG: no MoE-lane mechanism remained once
+the burn died). The 4B/8B pp residual (-16/-17%) matches the slice-M non-ramp terms - the
+ds-WIDE decoder tax (+23/+13 ms wide-quantum staging in the PREFILL) + span attention - a
 decoder-side lever (dasllama_metal_prefill), not tower work; the no-ds 30B hitting parity is
-the discriminating witness. P28 rescored: enc BEAT the band; pp within ±8% on the no-ds
+the discriminating witness. P28 rescored: enc BEAT the band; pp within +/-8% on the no-ds
 model only. Captions correct on all three.
 
-#### Slice J round 3 (2026-08-23): the parity hunt — wide borrow, residency pin, and the named residual
+#### Slice J round 3 (2026-08-23): the parity hunt - wide borrow, residency pin, and the named residual
 
-**Landed:** (1) the WIDE BORROW — `forward_prefill_embd` arms a borrowed view of the caller's
+**Landed:** (1) the WIDE BORROW - `forward_prefill_embd` arms a borrowed view of the caller's
 wide quantum instead of splitting it (Session.wide_src/stride/soff; `ds_split_quantum` is the
 CPU fallback's lazy half and the warm/MTP edge's); the Metal prefill uploads the quantum WHOLE
-and slices it on-device via `enc_head_restride` (which gained src/dst offsets — dispatch-time
-binds, no MSL change); bds turns tracked when GPU-written. (2) the RESIDENCY PIN v2 —
+and slices it on-device via `enc_head_restride` (which gained src/dst offsets - dispatch-time
+binds, no MSL change); bds turns tracked when GPU-written. (2) the RESIDENCY PIN v2 - 
 MTLResidencySet over weight regions/planes + every recycled pool buffer
 (`pool_acquire_pinned` twins, seen-table idempotence, reset rides regions_release_all;
 DASLLAMA_METAL_RESIDENCY=0 is the A/B rail, witness cell in test_metal_prefill_parity):
-**measured A/B ×2: encode −15 ms reproducible (177/180 vs 194/194) — the tower's first
+**measured A/B x2: encode -15 ms reproducible (177/180 vs 194/194) - the tower's first
 submission after its CPU stem; pp unmoved.** Gates: parity + attn_span (hazard-strict) +
 qwen3v 12/12.
 
 **The pp residual, fully audited (the probe ladder):** the das GPU work at the exact bench
 turn shape = 333 ms (963 tok/s, text-parity); the bench context adds a ~40 ms one-time
-commit→execution slack on the first submission after ANY CPU-only window (ncb-invariant,
-affinity-invariant, mint-invariant, unpindable — pools pinned changed nothing; denormals,
+commit->execution slack on the first submission after ANY CPU-only window (ncb-invariant,
+affinity-invariant, mint-invariant, unpindable - pools pinned changed nothing; denormals,
 page faults, queue identity, decode aftermath, assemble bursts all REFUTED by probe). The
-tracked-pools→untracked experiment REDDED parity — the hazard tracking is load-bearing, so
+tracked-pools->untracked experiment REDDED parity - the hazard tracking is load-bearing, so
 the per-commit dependency pass (line-563 lore: ~70 ms/prefill before the weights went
 untracked) stays, and runs cold after CPU windows. **The remaining fix is a per-buffer
 tracking audit** (which pool buffers need Metal's tracking vs the capture rail's own
-barriers) — its own slice. P30 (wide borrow recovers the gap) WRONG — the split was ~2 ms;
+barriers) - its own slice. P30 (wide borrow recovers the gap) WRONG - the split was ~2 ms;
 P31 (pool pins remove the slack) WRONG for pp, RIGHT for enc.
 
 **The final board (released rig, Metal, r=3, honest walk):**
 
 | model | enc das | enc ref | das vs ref | img:pp das | ref | gap |
 |---|---|---|---|---|---|---|
-| 4B (ds) | **178.8 ms** | ~250 | **+40%** | 851.8 | ~1009 | −16% |
-| 8B (ds) | **257.1 ms** | ~508 | **+98%** | 473.7 | ~566 | −16% |
-| 30B | **240.5 ms** | ~250 | +4% | 776.8 | ~815 | −5% |
+| 4B (ds) | **178.8 ms** | ~250 | **+40%** | 851.8 | ~1009 | -16% |
+| 8B (ds) | **257.1 ms** | ~508 | **+98%** | 473.7 | ~566 | -16% |
+| 30B | **240.5 ms** | ~250 | +4% | 776.8 | ~815 | -5% |
 
-From the arc's start: enc 2194/3446/6411 → 179/257/241 (12-27x); pp −16/−29/−41% →
-−16/−16/−5%. das leads every qwen3v Metal encode; the pp residual is ONE named mechanism
+From the arc's start: enc 2194/3446/6411 -> 179/257/241 (12-27x); pp -16/-29/-41% ->
+-16/-16/-5%. das leads every qwen3v Metal encode; the pp residual is ONE named mechanism
 with a scoped fix.
 
 **Validation-round catch (make_pr battery): the tower missed the weights-epoch flush.**
-`test_vision_chat` deepstack cell red — the cats turn captioned a nonexistent eye, CPU lane
+`test_vision_chat` deepstack cell red - the cats turn captioned a nonexistent eye, CPU lane
 green. Root cause: `plane_buffer`/`upload_region` key resident regions by HOST ADDRESS with a
 `weights_epoch` guard that decode (`metal_decode.das:1986`) and prefill
-(`metal_prefill_forward` entry) honor — the tower never called it, so a deleted gemma
+(`metal_prefill_forward` entry) honor - the tower never called it, so a deleted gemma
 embedder's mapped blob address, recycled by the next qwen3v mmap, served GEMMA weights to the
-qwen3v encode (probe: gemma3v encode → qwen3v encode = every row wrong, maxdiff 1571; without
-the warm-up encode = float noise, 3 rows ≤0.134). Latent since the first tower family —
+qwen3v encode (probe: gemma3v encode -> qwen3v encode = every row wrong, maxdiff 1571; without
+the warm-up encode = float noise, 3 rows <=0.134). Latent since the first tower family - 
 exposed by qwen3v being the first cross-family GPU tower sequence in one process. Fix:
 `weight_caches_flush_on_reload()` at `metal_tower_init` entry (the prefill's exact seam).
-Regression witness: the deepstack cell itself (red without the line, green with — both
-proven). Re-gate: vision_chat 16/16, qwen3v 12/12, gemma4uv/4v/3v, mtower — all green.
+Regression witness: the deepstack cell itself (red without the line, green with - both
+proven). Re-gate: vision_chat 16/16, qwen3v 12/12, gemma4uv/4v/3v, mtower - all green.

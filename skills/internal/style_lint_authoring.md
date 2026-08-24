@@ -1,7 +1,7 @@
 # Adding a STYLE lint rule (repo-only)
 
 Read before changing `daslib/style_lint.das`. What a `STYLE*` finding means to whoever hits
-it — and the STYLE037/038 resolution policy — is `skills/style_lint.md`. The PERF twin,
+it - and the STYLE037/038 resolution policy - is `skills/style_lint.md`. The PERF twin,
 `skills/internal/perf_lint_authoring.md`, carries the shared enablement policy, the fixture
 header, and the runner command; only the STYLE-specific parts are repeated here.
 
@@ -10,8 +10,8 @@ header, and the runner command; only the STYLE-specific parts are repeated here.
 | Piece | Where |
 |---|---|
 | Module + `[lint_macro] class StyleLintMacro : AstPassMacro` | `daslib/style_lint.das` |
-| The walk — `class StyleLintVisitor : AstVisitor` | same file |
-| Warning sink — `macro_style_warning(...)`, error code 31209 | same file |
+| The walk - `class StyleLintVisitor : AstVisitor` | same file |
+| Warning sink - `macro_style_warning(...)`, error code 31209 | same file |
 | Duplicate-region engine behind STYLE040 | `daslib/dupe_detect.das` |
 | MCP `lint` tool: popen wrapper + the subtool that does the work | `utils/mcp/tools/lint_tool.das`, `utils/mcp/subtools/lint_tool.das` |
 | Fixtures, one per rule | `utils/lint/tests/` |
@@ -19,16 +19,16 @@ header, and the runner command; only the STYLE-specific parts are repeated here.
 The macro calls `style_lint(prog, true, build_lint_macro_disabled(prog), [comment_hygiene = <options
 _comment_hygiene>])`. Comment hygiene defaults on for sources under `daslib/`
 (`comment_hygiene_for`); `options _comment_hygiene` overrides in either direction. Public entry
-points mirror the PERF set — `style_lint`, `style_lint_collect`, `style_lint_collect_issues` —
+points mirror the PERF set - `style_lint`, `style_lint_collect`, `style_lint_collect_issues` -
 each with an optional `comment_hygiene` flag. STYLE005 is gated by the shared policy
 (`seed_default_disabled`), never by a function parameter.
 
 ## Adding a rule
 
 1. Take the next free `STYLEnnn`.
-2. Override the visitor method that sees the shape — `preVisitExprCall`, `preVisitExprOp2`,
+2. Override the visitor method that sees the shape - `preVisitExprCall`, `preVisitExprOp2`,
    `preVisitExprField`, `preVisitExprIfThenElse`, or a source-line read (below).
-3. Report with `style_warning("STYLEnnn: what it is; the fix", expr.at)`. Call it **bare** —
+3. Report with `style_warning("STYLEnnn: what it is; the fix", expr.at)`. Call it **bare** -
    `self->style_warning(...)` trips STYLE028, this module's own rule.
 4. Write `utils/lint/tests/styleNNN_<name>.das` with a bad example and a good one, using the
    fixture header from the PERF authoring skill (`expect 31209:N` here). A default-off rule needs
@@ -54,18 +54,18 @@ each with an optional `comment_hygiene` flag. STYLE005 is gated by the shared po
   `_type.baseType`, excluding `generated` / `inScope` / generic-host instantiations, then walk
   forward over contiguous statements matching a per-rule predicate. Argument matching always peels
   one `ExprRef2Value` (the typer inserts it whenever a ref-typed var is passed to a non-ref
-  parameter), and callee identity is `call.func.fromGeneric.name` — a `das_string`, so compare it
+  parameter), and callee identity is `call.func.fromGeneric.name` - a `das_string`, so compare it
   against a literal rather than binding it to a `let`.
 - **Whole-block scans** (STYLE012's chain form, STYLE033's existing-target form) run from
   `preVisitExprBlock` instead of from a declaration, so they need explicit overlap handling: a run
   already owned by the declaration-anchored path is skipped, or the two double-fire.
-- **Counter stacks** (STYLE026 nesting, STYLE037 complexity) — one slot per closure level, pushed
+- **Counter stacks** (STYLE026 nesting, STYLE037 complexity) - one slot per closure level, pushed
   on function entry and on `blockFlags.isClosure` entry, popped and checked on exit. A closure body
   gets a fresh slot: an outer `unsafe` does not propagate into a separate context, and a metric
   belongs to the host.
-- **Accumulated state** (STYLE024/025). Unsafe-ness is folded child-to-parent —
+- **Accumulated state** (STYLE024/025). Unsafe-ness is folded child-to-parent -
   `preVisitExpression` pushes an `UnsafeFrame`, `visitExpression` pops it and adds its count to the
-  parent — so a rule asks "how many nodes under this statement needed unsafe" instead of
+  parent - so a rule asks "how many nodes under this statement needed unsafe" instead of
   re-walking. Inherently-unsafe node kinds mark the stack; `genFlags.generated` subtrees are
   skipped.
 - **Post-visit passes** (STYLE014/015 comment blocks, STYLE029/030 requires, STYLE040 duplicates)
@@ -82,13 +82,13 @@ each with an optional `comment_hygiene` flag. STYLE005 is gated by the shared po
 - **Lambda, generator and local-function bodies lower to `flags.generated` carrier functions**
   whose bodies are verbatim user AST. Emit gates admit them via `is_user_authored_body`
   (`daslib/lint_config.das`), so every rule reaches them EXCEPT the metric rules: STYLE037/038
-  leave carriers unmetered, because a `` _lambda_… `` name means nothing to the reader.
-- **STYLE040's engine invariants** are in the module docstring of `daslib/dupe_detect.das` —
+  leave carriers unmetered, because a `` _lambda_... `` name means nothing to the reader.
+- **STYLE040's engine invariants** are in the module docstring of `daslib/dupe_detect.das` -
   read it before touching the hashing. Hashes only pick candidates; `subtree_equal` decides, so no
   collision can produce a finding, and `payload_key` is the single reader of per-node payload used
   by both hashing and verification so the two cannot drift.
 - **Match arms count toward STYLE037** because `MatchMacro` emits plain `ExprIfThenElse` without
-  the `generated` flag, and comprehension `for`/`where` nodes count for the same reason — only the
+  the `generated` flag, and comprehension `for`/`where` nodes count for the same reason - only the
   wrapper closure block is marked generated. Generated closures bill the host, so the score cannot
   depend on whether the optimizer inlined the wrapper.
 

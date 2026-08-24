@@ -1145,15 +1145,15 @@ namespace das
             // string builder writer
             addEnumeration(new EnumerationConversionResult());
             addAnnotation(new StringBuilderWriterAnnotation(lib));
-            addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
+            addExternInline<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
                 SideEffects::modifyArgumentAndExternal,"delete_string")->args({"str","context","lineinfo"})->unsafeOperation = true;
-            addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
+            addExternInline<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
                 SideEffects::modifyExternal,"builtin_build_string_T")->args({"block","context","lineinfo"})->setAotTemplate()->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_build_hash)>(*this, lib, "build_hash",
+            addExternInline<DAS_BIND_FUN(builtin_build_hash)>(*this, lib, "build_hash",
                 SideEffects::modifyExternal,"builtin_build_hash_T")->args({"block","context","lineinfo"})->setAotTemplate();
-            addExtern<DAS_BIND_FUN(builtin_string_peek)>(*this, lib, "peek_data",
+            addExternInline<DAS_BIND_FUN(builtin_string_peek)>(*this, lib, "peek_data",
                 SideEffects::modifyExternal,"builtin_string_peek")->args({"str","block","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(builtin_string_peek_and_modify)>(*this, lib, "modify_data",
+            addExternInline<DAS_BIND_FUN(builtin_string_peek_and_modify)>(*this, lib, "modify_data",
                 SideEffects::modifyExternal,"builtin_string_peek_and_modify")->args({"str","block","context","lineinfo"})->setTempStringResult();
             addInterop<builtin_write_string,StringBuilderWriter &,StringBuilderWriter,vec4f> (*this, lib, "write",
                 SideEffects::modifyExternal, "builtin_write_string")->args({"writer","anything"});
@@ -1201,7 +1201,7 @@ namespace das
                 SideEffects::modifyExternal, "format_and_write<float>")->args({"writer","format","value"})->setDeprecated("use fmt() instead");
             addExtern<DAS_BIND_FUN(format_and_write<double>),SimNode_ExtFuncCallRef>  (*this, lib, "format",
                 SideEffects::modifyExternal, "format_and_write<double>")->args({"writer","format","value"})->setDeprecated("use fmt() instead");
-            addExtern<DAS_BIND_FUN(builtin_string_from_array)>(*this, lib, "string",
+            addExternInline<DAS_BIND_FUN(builtin_string_from_array)>(*this, lib, "string",
                 SideEffects::none, "builtin_string_from_array")->args({"bytes","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_to_bytes),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "to_bytes",
                 SideEffects::none, "builtin_string_to_bytes")->args({"str","context","at"});
@@ -1209,265 +1209,265 @@ namespace das
             addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
                 SideEffects::modifyArgumentAndExternal, "builtin_strdup")->arg("anything")->unsafeOperation = true;
             // regular string
-            addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at",
+            addExternInline<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at",
                 SideEffects::none, "get_character_at")->args({"str","idx","context","at"});
-            addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat",
+            addExternInline<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat",
                 SideEffects::none, "get_character_uat")->args({"str","idx"})->unsafeOperation = true;
-            addExtern<DAS_BIND_FUN(get_first_character)>(*this, lib, "first_character",
+            addExternInline<DAS_BIND_FUN(get_first_character)>(*this, lib, "first_character",
                 SideEffects::none, "get_first_character")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(get_first_character_ds)>(*this, lib, "first_character",
+            addExternInline<DAS_BIND_FUN(get_first_character_ds)>(*this, lib, "first_character",
                 SideEffects::none, "get_first_character_ds")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(with_das_string)>(*this, lib, "with_das_string",
+            addExternInline<DAS_BIND_FUN(with_das_string)>(*this, lib, "with_das_string",
                 SideEffects::invoke, "with_das_string")->args({"block","context","at"});
-            addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat",
+            addExternInline<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat",
                 SideEffects::none, "string_repeat")->args({"str","count","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char",
+            addExternInline<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char",
                 SideEffects::none, "to_string_char")->args({"char","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with",
+            addExternInline<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with",
                 SideEffects::none, "builtin_string_endswith")->args({"str","cmp","context"});
-            addExtern<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
+            addExternInline<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
                 SideEffects::none, "builtin_string_ends_with")->args({"str","cmp","context"});
-            addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "starts_with",
+            addExternInline<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_string_startswith")->args({"str","cmp","context"});
-            addExtern<DAS_BIND_FUN(builtin_string_startswith2)>(*this, lib, "starts_with",
+            addExternInline<DAS_BIND_FUN(builtin_string_startswith2)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_string_startswith2")->args({"str","cmp","cmpLen","context"});
-            addExtern<DAS_BIND_FUN(builtin_string_startswith3)>(*this, lib, "starts_with",
+            addExternInline<DAS_BIND_FUN(builtin_string_startswith3)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_string_startswith3")->args({"str","offset","cmp","context"});
-            addExtern<DAS_BIND_FUN(builtin_string_startswith4)>(*this, lib, "starts_with",
+            addExternInline<DAS_BIND_FUN(builtin_string_startswith4)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_string_startswith4")->args({"str","offset","cmp","cmpLen","context"});
-            addExtern<DAS_BIND_FUN(builtin_string_starts_with)>(*this, lib, "starts_with",
+            addExternInline<DAS_BIND_FUN(builtin_string_starts_with)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_string_starts_with")->args({"str","cmp","context"});
             // byte-view twins: the view param is array<uint8> const implicit, so it binds both
             // a plain array<uint8> and the temporary view peek_data yields
-            addExtern<DAS_BIND_FUN(builtin_view_endswith)>(*this, lib, "ends_with",
+            addExternInline<DAS_BIND_FUN(builtin_view_endswith)>(*this, lib, "ends_with",
                 SideEffects::none, "builtin_view_endswith")->args({"bytes","cmp","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_view_startswith)>(*this, lib, "starts_with",
+            addExternInline<DAS_BIND_FUN(builtin_view_startswith)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_view_startswith")->args({"bytes","cmp","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_view_startswith2)>(*this, lib, "starts_with",
+            addExternInline<DAS_BIND_FUN(builtin_view_startswith2)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_view_startswith2")->args({"bytes","cmp","cmpLen","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_view_startswith3)>(*this, lib, "starts_with",
+            addExternInline<DAS_BIND_FUN(builtin_view_startswith3)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_view_startswith3")->args({"bytes","offset","cmp","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_view_startswith4)>(*this, lib, "starts_with",
+            addExternInline<DAS_BIND_FUN(builtin_view_startswith4)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_view_startswith4")->args({"bytes","offset","cmp","cmpLen","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip",
+            addExternInline<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip",
                 SideEffects::none, "builtin_string_strip")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right",
+            addExternInline<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right",
                 SideEffects::none, "builtin_string_strip_right")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left",
+            addExternInline<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left",
                 SideEffects::none, "builtin_string_strip_left")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_view_strip)>(*this, lib, "strip",
+            addExternInline<DAS_BIND_FUN(builtin_view_strip)>(*this, lib, "strip",
                 SideEffects::none, "builtin_view_strip")->args({"bytes","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_view_strip_right)>(*this, lib, "strip_right",
+            addExternInline<DAS_BIND_FUN(builtin_view_strip_right)>(*this, lib, "strip_right",
                 SideEffects::none, "builtin_view_strip_right")->args({"bytes","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_view_strip_left)>(*this, lib, "strip_left",
+            addExternInline<DAS_BIND_FUN(builtin_view_strip_left)>(*this, lib, "strip_left",
                 SideEffects::none, "builtin_view_strip_left")->args({"bytes","context","at"})->setTempStringResult();
             // strip_left as a cursor: the offset where content resumes, nothing allocated
-            addExtern<DAS_BIND_FUN(builtin_string_skip_white_space)>(*this, lib, "skip_white_space",
+            addExternInline<DAS_BIND_FUN(builtin_string_skip_white_space)>(*this, lib, "skip_white_space",
                 SideEffects::none, "builtin_string_skip_white_space")->args({"str","from","context"});
-            addExtern<DAS_BIND_FUN(builtin_view_skip_white_space)>(*this, lib, "skip_white_space",
+            addExternInline<DAS_BIND_FUN(builtin_view_skip_white_space)>(*this, lib, "skip_white_space",
                 SideEffects::none, "builtin_view_skip_white_space")->args({"bytes","from","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
+            addExternInline<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
                 SideEffects::none, "builtin_string_chop")->args({"str","start","length","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_view_chop)>(*this, lib, "chop",
+            addExternInline<DAS_BIND_FUN(builtin_view_chop)>(*this, lib, "chop",
                 SideEffects::none, "builtin_view_chop")->args({"bytes","start","length","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice",
+            addExternInline<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice",
                 SideEffects::none, "builtin_string_slice1")->args({"str","start","end","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice",
+            addExternInline<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice",
                 SideEffects::none, "builtin_string_slice2")->args({"str","start","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_view_slice1)>(*this, lib, "slice",
+            addExternInline<DAS_BIND_FUN(builtin_view_slice1)>(*this, lib, "slice",
                 SideEffects::none, "builtin_view_slice1")->args({"bytes","start","end","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_view_slice2)>(*this, lib, "slice",
+            addExternInline<DAS_BIND_FUN(builtin_view_slice2)>(*this, lib, "slice",
                 SideEffects::none, "builtin_view_slice2")->args({"bytes","start","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find",
+            addExternInline<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find",
                 SideEffects::none, "builtin_string_find1")->args({"str","substr","start","context"});
-            addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find",
+            addExternInline<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find",
                 SideEffects::none, "builtin_string_find2")->args({"str","substr"});
-            addExtern<DAS_BIND_FUN(builtin_find_first_char_of)>(*this, lib, "find",
+            addExternInline<DAS_BIND_FUN(builtin_find_first_char_of)>(*this, lib, "find",
                 SideEffects::none, "builtin_find_first_char_of")->args({"str","substr","context"});
-            addExtern<DAS_BIND_FUN(builtin_find_first_char_of2)>(*this, lib, "find",
+            addExternInline<DAS_BIND_FUN(builtin_find_first_char_of2)>(*this, lib, "find",
                 SideEffects::none, "builtin_find_first_char_of2")->args({"str","substr", "start", "context"});
-            addExtern<DAS_BIND_FUN(builtin_view_find)>(*this, lib, "find",
+            addExternInline<DAS_BIND_FUN(builtin_view_find)>(*this, lib, "find",
                 SideEffects::none, "builtin_view_find")->args({"bytes","substr","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_view_find_from)>(*this, lib, "find",
+            addExternInline<DAS_BIND_FUN(builtin_view_find_from)>(*this, lib, "find",
                 SideEffects::none, "builtin_view_find_from")->args({"bytes","substr","start","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_view_find_char_of)>(*this, lib, "find",
+            addExternInline<DAS_BIND_FUN(builtin_view_find_char_of)>(*this, lib, "find",
                 SideEffects::none, "builtin_view_find_char_of")->args({"bytes","substr","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_view_find_char_of2)>(*this, lib, "find",
+            addExternInline<DAS_BIND_FUN(builtin_view_find_char_of2)>(*this, lib, "find",
                 SideEffects::none, "builtin_view_find_char_of2")->args({"bytes","substr","start","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_string_rfind1)>(*this, lib, "rfind",
+            addExternInline<DAS_BIND_FUN(builtin_string_rfind1)>(*this, lib, "rfind",
                 SideEffects::none, "builtin_string_rfind1")->args({"str","substr","start","context"});
-            addExtern<DAS_BIND_FUN(builtin_string_rfind2)>(*this, lib, "rfind",
+            addExternInline<DAS_BIND_FUN(builtin_string_rfind2)>(*this, lib, "rfind",
                 SideEffects::none, "builtin_string_rfind2")->args({"str","substr"});
-            addExtern<DAS_BIND_FUN(builtin_view_rfind)>(*this, lib, "rfind",
+            addExternInline<DAS_BIND_FUN(builtin_view_rfind)>(*this, lib, "rfind",
                 SideEffects::none, "builtin_view_rfind")->args({"bytes","substr","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_view_rfind_from)>(*this, lib, "rfind",
+            addExternInline<DAS_BIND_FUN(builtin_view_rfind_from)>(*this, lib, "rfind",
                 SideEffects::none, "builtin_view_rfind_from")->args({"bytes","substr","start","context","at"});
-            addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse",
+            addExternInline<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse",
                 SideEffects::none, "builtin_string_reverse")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
+            addExternInline<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
                 SideEffects::modifyArgumentAndExternal, "builtin_append_char_to_string")->args({"str","ch"});
-            addExtern<DAS_BIND_FUN(builtin_resize_string)>(*this, lib, "resize",
+            addExternInline<DAS_BIND_FUN(builtin_resize_string)>(*this, lib, "resize",
                 SideEffects::modifyArgumentAndExternal, "builtin_resize_string")->args({"str","new_length"});
-            addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper",
+            addExternInline<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper",
                 SideEffects::none, "builtin_string_toupper")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower",
+            addExternInline<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower",
                 SideEffects::none, "builtin_string_tolower")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_split_by_char)>(*this, lib, "builtin_string_split_by_char",
+            addExternInline<DAS_BIND_FUN(builtin_string_split_by_char)>(*this, lib, "builtin_string_split_by_char",
                 SideEffects::modifyExternal, "builtin_string_split_by_char")->args({"str","delimiter","block","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
+            addExternInline<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
                 SideEffects::modifyExternal, "builtin_string_split")->args({"str","delimiter","block","context","lineinfo"});
             // conversion which throws exception on error. detects hex automatically
-            addExtern<DAS_BIND_FUN(string_to_int8)>(*this, lib, "int8",
+            addExternInline<DAS_BIND_FUN(string_to_int8)>(*this, lib, "int8",
                 SideEffects::none, "string_to_int8")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(string_to_uint8)>(*this, lib, "uint8",
+            addExternInline<DAS_BIND_FUN(string_to_uint8)>(*this, lib, "uint8",
                 SideEffects::none, "string_to_uint8")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(string_to_int16)>(*this, lib, "int16",
+            addExternInline<DAS_BIND_FUN(string_to_int16)>(*this, lib, "int16",
                 SideEffects::none, "string_to_int16")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(string_to_uint16)>(*this, lib, "uint16",
+            addExternInline<DAS_BIND_FUN(string_to_uint16)>(*this, lib, "uint16",
                 SideEffects::none, "string_to_uint16")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int",
+            addExternInline<DAS_BIND_FUN(string_to_int)>(*this, lib, "int",
                 SideEffects::none, "string_to_int")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint",
+            addExternInline<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint",
                 SideEffects::none, "string_to_uint")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(string_to_int64)>(*this, lib, "int64",
+            addExternInline<DAS_BIND_FUN(string_to_int64)>(*this, lib, "int64",
                 SideEffects::none, "string_to_int64")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(string_to_uint64)>(*this, lib, "uint64",
+            addExternInline<DAS_BIND_FUN(string_to_uint64)>(*this, lib, "uint64",
                 SideEffects::none, "string_to_uint64")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float",
+            addExternInline<DAS_BIND_FUN(string_to_float)>(*this, lib, "float",
                 SideEffects::none, "string_to_float")->args({"str","context","at"});
-            addExtern<DAS_BIND_FUN(string_to_double)>(*this, lib, "double",
+            addExternInline<DAS_BIND_FUN(string_to_double)>(*this, lib, "double",
                 SideEffects::none, "string_to_double")->args({"str","context","at"});
             // fast conversion, returns 0 if fails
-            addExtern<DAS_BIND_FUN(fast_to_int8)>(*this, lib, "to_int8",
+            addExternInline<DAS_BIND_FUN(fast_to_int8)>(*this, lib, "to_int8",
                 SideEffects::none, "fast_to_int8")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(fast_to_uint8)>(*this, lib, "to_uint8",
+            addExternInline<DAS_BIND_FUN(fast_to_uint8)>(*this, lib, "to_uint8",
                 SideEffects::none, "fast_to_uint8")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(fast_to_int16)>(*this, lib, "to_int16",
+            addExternInline<DAS_BIND_FUN(fast_to_int16)>(*this, lib, "to_int16",
                 SideEffects::none, "fast_to_int16")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(fast_to_uint16)>(*this, lib, "to_uint16",
+            addExternInline<DAS_BIND_FUN(fast_to_uint16)>(*this, lib, "to_uint16",
                 SideEffects::none, "fast_to_uint16")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int",
+            addExternInline<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int",
                 SideEffects::none, "fast_to_int")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(fast_to_uint)>(*this, lib, "to_uint",
+            addExternInline<DAS_BIND_FUN(fast_to_uint)>(*this, lib, "to_uint",
                 SideEffects::none, "fast_to_uint")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(fast_to_int64)>(*this, lib, "to_int64",
+            addExternInline<DAS_BIND_FUN(fast_to_int64)>(*this, lib, "to_int64",
                 SideEffects::none, "fast_to_int64")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(fast_to_uint64)>(*this, lib, "to_uint64",
+            addExternInline<DAS_BIND_FUN(fast_to_uint64)>(*this, lib, "to_uint64",
                 SideEffects::none, "fast_to_uint64")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(das_to_cpp_float)>(*this, lib, "to_cpp_float",
+            addExternInline<DAS_BIND_FUN(das_to_cpp_float)>(*this, lib, "to_cpp_float",
                 SideEffects::modifyExternal, "das_to_cpp_float")->args({"value","context", "at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float",
+            addExternInline<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float",
                 SideEffects::none, "fast_to_float")->arg("value");
-            addExtern<DAS_BIND_FUN(fast_to_double)>(*this, lib, "to_double",
+            addExternInline<DAS_BIND_FUN(fast_to_double)>(*this, lib, "to_double",
                 SideEffects::none, "fast_to_double")->arg("value");
             // conversion which returns error and offset of the first invalid character
-            addExtern<DAS_BIND_FUN(convert_from_string_int8)>(*this, lib, "int8",
+            addExternInline<DAS_BIND_FUN(convert_from_string_int8)>(*this, lib, "int8",
                 SideEffects::modifyArgument, "convert_from_string_int8")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_string_uint8)>(*this, lib, "uint8",
+            addExternInline<DAS_BIND_FUN(convert_from_string_uint8)>(*this, lib, "uint8",
                 SideEffects::modifyArgument, "convert_from_string_uint8")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_string_int16)>(*this, lib, "int16",
+            addExternInline<DAS_BIND_FUN(convert_from_string_int16)>(*this, lib, "int16",
                 SideEffects::modifyArgument, "convert_from_string_int16")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_string_uint16)>(*this, lib, "uint16",
+            addExternInline<DAS_BIND_FUN(convert_from_string_uint16)>(*this, lib, "uint16",
                 SideEffects::modifyArgument, "convert_from_string_uint16")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_string_int32)>(*this, lib, "int",
+            addExternInline<DAS_BIND_FUN(convert_from_string_int32)>(*this, lib, "int",
                 SideEffects::modifyArgument, "convert_from_string_int32")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_string_uint32)>(*this, lib, "uint",
+            addExternInline<DAS_BIND_FUN(convert_from_string_uint32)>(*this, lib, "uint",
                 SideEffects::modifyArgument, "convert_from_string_uint32")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_string_int64)>(*this, lib, "int64",
+            addExternInline<DAS_BIND_FUN(convert_from_string_int64)>(*this, lib, "int64",
                 SideEffects::modifyArgument, "convert_from_string_int64")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_string_uint64)>(*this, lib, "uint64",
+            addExternInline<DAS_BIND_FUN(convert_from_string_uint64)>(*this, lib, "uint64",
                 SideEffects::modifyArgument, "convert_from_string_uint64")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_string_float)>(*this, lib, "float",
+            addExternInline<DAS_BIND_FUN(convert_from_string_float)>(*this, lib, "float",
                 SideEffects::modifyArgument, "convert_from_string_float")->args({"str","result","offset"});
-            addExtern<DAS_BIND_FUN(convert_from_string_double)>(*this, lib, "double",
+            addExternInline<DAS_BIND_FUN(convert_from_string_double)>(*this, lib, "double",
                 SideEffects::modifyArgument, "convert_from_string_double")->args({"str","result","offset"});
             // byte-view twins of the conversion family - here `offset` is in and out, so the
             // same call can walk a view left to right
-            addExtern<DAS_BIND_FUN(convert_from_view_int8)>(*this, lib, "int8",
+            addExternInline<DAS_BIND_FUN(convert_from_view_int8)>(*this, lib, "int8",
                 SideEffects::modifyArgument, "convert_from_view_int8")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_view_uint8)>(*this, lib, "uint8",
+            addExternInline<DAS_BIND_FUN(convert_from_view_uint8)>(*this, lib, "uint8",
                 SideEffects::modifyArgument, "convert_from_view_uint8")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_view_int16)>(*this, lib, "int16",
+            addExternInline<DAS_BIND_FUN(convert_from_view_int16)>(*this, lib, "int16",
                 SideEffects::modifyArgument, "convert_from_view_int16")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_view_uint16)>(*this, lib, "uint16",
+            addExternInline<DAS_BIND_FUN(convert_from_view_uint16)>(*this, lib, "uint16",
                 SideEffects::modifyArgument, "convert_from_view_uint16")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_view_int32)>(*this, lib, "int",
+            addExternInline<DAS_BIND_FUN(convert_from_view_int32)>(*this, lib, "int",
                 SideEffects::modifyArgument, "convert_from_view_int32")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_view_uint32)>(*this, lib, "uint",
+            addExternInline<DAS_BIND_FUN(convert_from_view_uint32)>(*this, lib, "uint",
                 SideEffects::modifyArgument, "convert_from_view_uint32")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_view_int64)>(*this, lib, "int64",
+            addExternInline<DAS_BIND_FUN(convert_from_view_int64)>(*this, lib, "int64",
                 SideEffects::modifyArgument, "convert_from_view_int64")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_view_uint64)>(*this, lib, "uint64",
+            addExternInline<DAS_BIND_FUN(convert_from_view_uint64)>(*this, lib, "uint64",
                 SideEffects::modifyArgument, "convert_from_view_uint64")->args({"bytes","result","offset","hex","context","at"})->arg_init(3,new ExprConstBool(false));
-            addExtern<DAS_BIND_FUN(convert_from_view_float)>(*this, lib, "float",
+            addExternInline<DAS_BIND_FUN(convert_from_view_float)>(*this, lib, "float",
                 SideEffects::modifyArgument, "convert_from_view_float")->args({"bytes","result","offset","context","at"});
-            addExtern<DAS_BIND_FUN(convert_from_view_double)>(*this, lib, "double",
+            addExternInline<DAS_BIND_FUN(convert_from_view_double)>(*this, lib, "double",
                 SideEffects::modifyArgument, "convert_from_view_double")->args({"bytes","result","offset","context","at"});
             // escaping etc
-            addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
+            addExternInline<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
                 SideEffects::none, "builtin_string_escape")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",
+            addExternInline<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",
                 SideEffects::none, "builtin_string_unescape")->args({"str","context", "at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_safe_unescape)>(*this, lib, "safe_unescape",
+            addExternInline<DAS_BIND_FUN(builtin_string_safe_unescape)>(*this, lib, "safe_unescape",
                 SideEffects::none, "builtin_string_safe_unescape")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace",
+            addExternInline<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace",
                 SideEffects::none, "builtin_string_replace")->args({"str","toSearch","replace","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_rtrim)>(*this, lib, "rtrim",
+            addExternInline<DAS_BIND_FUN(builtin_string_rtrim)>(*this, lib, "rtrim",
                 SideEffects::none, "builtin_string_rtrim")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_rtrim_ts)>(*this, lib, "rtrim",
+            addExternInline<DAS_BIND_FUN(builtin_string_rtrim_ts)>(*this, lib, "rtrim",
                 SideEffects::none, "builtin_string_rtrim_ts")->args({"str","chars","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_ltrim)>(*this, lib, "ltrim",
+            addExternInline<DAS_BIND_FUN(builtin_string_ltrim)>(*this, lib, "ltrim",
                 SideEffects::none, "builtin_string_ltrim")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_trim)>(*this, lib, "trim",
+            addExternInline<DAS_BIND_FUN(builtin_string_trim)>(*this, lib, "trim",
                 SideEffects::none, "builtin_string_trim")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_view_rtrim)>(*this, lib, "rtrim",
+            addExternInline<DAS_BIND_FUN(builtin_view_rtrim)>(*this, lib, "rtrim",
                 SideEffects::none, "builtin_view_rtrim")->args({"bytes","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_view_rtrim_ts)>(*this, lib, "rtrim",
+            addExternInline<DAS_BIND_FUN(builtin_view_rtrim_ts)>(*this, lib, "rtrim",
                 SideEffects::none, "builtin_view_rtrim_ts")->args({"bytes","chars","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_view_ltrim)>(*this, lib, "ltrim",
+            addExternInline<DAS_BIND_FUN(builtin_view_ltrim)>(*this, lib, "ltrim",
                 SideEffects::none, "builtin_view_ltrim")->args({"bytes","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_view_trim)>(*this, lib, "trim",
+            addExternInline<DAS_BIND_FUN(builtin_view_trim)>(*this, lib, "trim",
                 SideEffects::none, "builtin_view_trim")->args({"bytes","context","at"})->setTempStringResult();
             // format (deprecated)
-            addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format",
+            addExternInline<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format",
                 SideEffects::none, "format<int32_t>")->args({"format","value","context","at"})->setDeprecated("use fmt() instead")->setTempStringResult();
-            addExtern<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format",
+            addExternInline<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format",
                 SideEffects::none, "format<uint32_t>")->args({"format","value","context","at"})->setDeprecated("use fmt() instead")->setTempStringResult();
-            addExtern<DAS_BIND_FUN(format<int64_t>)> (*this, lib, "format",
+            addExternInline<DAS_BIND_FUN(format<int64_t>)> (*this, lib, "format",
                 SideEffects::none, "format<int64_t>")->args({"format","value","context","at"})->setDeprecated("use fmt() instead")->setTempStringResult();
-            addExtern<DAS_BIND_FUN(format<uint64_t>)>(*this, lib, "format",
+            addExternInline<DAS_BIND_FUN(format<uint64_t>)>(*this, lib, "format",
                 SideEffects::none, "format<uint64_t>")->args({"format","value","context","at"})->setDeprecated("use fmt() instead")->setTempStringResult();
-            addExtern<DAS_BIND_FUN(format<float>)>   (*this, lib, "format",
+            addExternInline<DAS_BIND_FUN(format<float>)>   (*this, lib, "format",
                 SideEffects::none, "format<float>")->args({"format","value","context","at"})->setDeprecated("use fmt() instead")->setTempStringResult();
-            addExtern<DAS_BIND_FUN(format<double>)>  (*this, lib, "format",
+            addExternInline<DAS_BIND_FUN(format<double>)>  (*this, lib, "format",
                 SideEffects::none, "format<double>")->args({"format","value","context","at"})->setDeprecated("use fmt() instead")->setTempStringResult();
             // queries
-            addExtern<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha",
+            addExternInline<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha",
                 SideEffects::none, "is_alpha")->arg("Character");
-            addExtern<DAS_BIND_FUN(is_alnum)> (*this, lib, "is_alnum",
+            addExternInline<DAS_BIND_FUN(is_alnum)> (*this, lib, "is_alnum",
                 SideEffects::none, "is_alnum")->arg("Character");
-            addExtern<DAS_BIND_FUN(is_hex)>(*this, lib, "is_hex",
+            addExternInline<DAS_BIND_FUN(is_hex)>(*this, lib, "is_hex",
                 SideEffects::none, "is_hex")->args({"Character"});
-            addExtern<DAS_BIND_FUN(is_tab_or_space)>(*this, lib, "is_tab_or_space",
+            addExternInline<DAS_BIND_FUN(is_tab_or_space)>(*this, lib, "is_tab_or_space",
                 SideEffects::none, "is_tab_or_space")->args({"Character"});
-            addExtern<DAS_BIND_FUN(is_new_line)> (*this, lib, "is_new_line",
+            addExternInline<DAS_BIND_FUN(is_new_line)> (*this, lib, "is_new_line",
                 SideEffects::none, "is_new_line")->arg("Character");
-            addExtern<DAS_BIND_FUN(is_white_space)> (*this, lib, "is_white_space",
+            addExternInline<DAS_BIND_FUN(is_white_space)> (*this, lib, "is_white_space",
                 SideEffects::none, "is_white_space")->arg("Character");
-            addExtern<DAS_BIND_FUN(is_number)> (*this, lib, "is_number",
+            addExternInline<DAS_BIND_FUN(is_number)> (*this, lib, "is_number",
                 SideEffects::none, "is_number")->arg("Character");
             // bitset helpers
-            addExtern<DAS_BIND_FUN(is_char_in_set)>(*this, lib, "is_char_in_set",
+            addExternInline<DAS_BIND_FUN(is_char_in_set)>(*this, lib, "is_char_in_set",
                 SideEffects::none,"is_char_in_set")->args({"Character","Charset","Context","At"});
-            addExtern<DAS_BIND_FUN(char_set_total)>(*this, lib, "set_total",
+            addExternInline<DAS_BIND_FUN(char_set_total)>(*this, lib, "set_total",
                 SideEffects::none,"char_set_total")->arg("Charset");
-            addExtern<DAS_BIND_FUN(char_set_element)>(*this, lib, "set_element",
+            addExternInline<DAS_BIND_FUN(char_set_element)>(*this, lib, "set_element",
                 SideEffects::none,"char_set_element")->args({"Character","Charset"});
             // case-insensitive comparison
-            addExtern<DAS_BIND_FUN(builtin_string_stricmp)>(*this, lib, "compare_ignore_case",
+            addExternInline<DAS_BIND_FUN(builtin_string_stricmp)>(*this, lib, "compare_ignore_case",
                 SideEffects::none, "builtin_string_stricmp")->args({"a","b"});
             // string buffer
-            addExtern<DAS_BIND_FUN(builtin_reserve_string_buffer)>(*this, lib, "reserve_string_buffer",
+            addExternInline<DAS_BIND_FUN(builtin_reserve_string_buffer)>(*this, lib, "reserve_string_buffer",
                 SideEffects::none,"builtin_reserve_string_buffer")->args({"str","length","context"});
 
             // lets make sure its all aot ready

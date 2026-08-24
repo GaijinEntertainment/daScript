@@ -5,9 +5,9 @@ tags:
     - daScript
 ---
 
-Ask not what your compiler can do for you – ask what you can do for your compiler.
+Ask not what your compiler can do for you - ask what you can do for your compiler.
 
-*— Y.T., Compiler 101*
+*- Y.T., Compiler 101*
 
 <!-- more -->
 

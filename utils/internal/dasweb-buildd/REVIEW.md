@@ -1,13 +1,13 @@
 # dasweb-buildd Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first — its contract binds this checklist.** Architecture doc:
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasweb_wasm_pipeline.md`.
 
-**Every config, core, and client behavior has a dastest test in this directory** — `main.das`
+**Every config, core, and client behavior has a dastest test in this directory** - `main.das`
 and `buildd_service.das` stay glue and orchestration over tested modules; the whole loop is
 proven by the end-to-end checkpoint on the real boxes.
 
-**`[test]` files live in this directory and require siblings by bare name** — never under the
+**`[test]` files live in this directory and require siblings by bare name** - never under the
 global `tests/` tree, and never registered in any `CMakeLists.txt`.
 
 **HTTP tests run against the stub playground in `test_buildd_client.das` on this directory's
@@ -17,7 +17,7 @@ proven in its own directory.
 **A test that touches the filesystem uses `temp_directory`-rooted paths and deletes what it
 creates.** A test writing into the repo tree is a defect.
 
-**The health server binds loopback only** — `set_bind_host("127.0.0.1")` between `init` and
+**The health server binds loopback only** - `set_bind_host("127.0.0.1")` between `init` and
 `start`. A diff that removes, reorders past `start`, or conditionalizes the bind is a defect.
 
 **`POST /shutdown` verifies the transport peer is loopback.** No header can carry that proof.
@@ -25,7 +25,7 @@ creates.** A test writing into the repo tree is a defect.
 **The bearer token never appears in a log line, an error message, or the startup banner.** The
 banner logs set/unset and provenance only.
 
-**Every file name that reaches the filesystem — bundle sources and build outputs alike — passes
+**Every file name that reaches the filesystem - bundle sources and build outputs alike - passes
 this directory's name validation first.** A path assembled from an unvalidated request- or
 build-derived name is a defect.
 
@@ -56,15 +56,15 @@ structured lines.** A job path that can end without a log line is a defect.
 **Lifecycle-owned state is module-global; no collectable value lives in a `main`-loop local
 across `maybe_collect_gc()`.**
 
-**Every claimed job is resolved by an upload — success or failure — on every code path.** A
+**Every claimed job is resolved by an upload - success or failure - on every code path.** A
 path that drops a claim for the stale-requeue sweep to mop up is a defect.
 
 **Per-job scratch directories are removed when the job resolves.**
 
 **Route callbacks are retained with `push`, never `emplace`.**
 
-**A behavior change in a box-side file — `run_build.sh`, `roll_toolchain.sh`, `.das_package`,
-`watchdog.json`, `dasweb-buildd.toml` — lands with its note in the matching `README.md`
+**A behavior change in a box-side file - `run_build.sh`, `roll_toolchain.sh`, `.das_package`,
+`watchdog.json`, `dasweb-buildd.toml` - lands with its note in the matching `README.md`
 section** (The sandbox / The toolchain-bump protocol / Run).
 
 **A toolchain roll that moves the worktree rebuilds both the cross-compile host and the
@@ -84,26 +84,26 @@ lands with the other.
 beside the module, so a production token or URL in it would make an in-repo run claim
 production jobs.
 
-**Placement — one file, one line: a diff keeps each file inside its line, and a new file adds
+**Placement - one file, one line: a diff keeps each file inside its line, and a new file adds
 its line here, with its tests, in the same change.**
 
-- `main.das` — launcher: argv parsing into globals, logger init, the exported
+- `main.das` - launcher: argv parsing into globals, logger init, the exported
   `init`/`update`/`shutdown` lifecycle, the standalone GC loop, exit-code mapping. No route,
   no HTTP client call, no process spawning.
-- `buildd_config.das` — the config schema (`BuilddArgs`), the defaults/toml/CLI merge with
+- `buildd_config.das` - the config schema (`BuilddArgs`), the defaults/toml/CLI merge with
   per-key provenance, the startup banner payload. No HTTP, no process spawning, no
   filesystem beyond reading the config file.
-- `buildd_service.das` — lifecycle and orchestration: the loopback health/shutdown server,
-  module-global state, the poll → build → upload loop, per-job scratch dirs. No direct
-  process spawning and no direct outbound HTTP — those go through `buildd_core` and
+- `buildd_service.das` - lifecycle and orchestration: the loopback health/shutdown server,
+  module-global state, the poll -> build -> upload loop, per-job scratch dirs. No direct
+  process spawning and no direct outbound HTTP - those go through `buildd_core` and
   `buildd_client`.
-- `buildd_core.das` — build execution: source materialization, name validation, the build
+- `buildd_core.das` - build execution: source materialization, name validation, the build
   command invocation, artifact collection and hashing, toolchain derivation. Zero network.
-- `buildd_client.das` — the outbound HTTP calls (claim, result upload, announce). Zero
+- `buildd_client.das` - the outbound HTTP calls (claim, result upload, announce). Zero
   filesystem beyond handing paths to the multipart uploader.
-- `run_build.sh` — the box-side build recipe and its sandbox invocation; the only place a
+- `run_build.sh` - the box-side build recipe and its sandbox invocation; the only place a
   build command line or a sandbox mount lives.
-- `roll_toolchain.sh` — the box-side toolchain-bump recipe; the only place a roll step lives.
-- `Containerfile` — the sandbox image: only what a system must provide the toolchain;
+- `roll_toolchain.sh` - the box-side toolchain-bump recipe; the only place a roll step lives.
+- `Containerfile` - the sandbox image: only what a system must provide the toolchain;
   anything a read-only mount can supply belongs in `run_build.sh`.
-- `.das_package`, `watchdog.json`, `dasweb-buildd.toml` — packaging and deployment.
+- `.das_package`, `watchdog.json`, `dasweb-buildd.toml` - packaging and deployment.

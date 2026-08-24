@@ -34,7 +34,7 @@ def d(x, y) => "{x}/{y}"                       // two untyped names, independent
 
 Every `def` needs a body.
 
-The parameter list may wrap, but **the return type must stay on the closing-paren line** — a
+The parameter list may wrap, but **the return type must stay on the closing-paren line** - a
 continuation line starting `: int {` is
 `error[30151] syntax error, unexpected ':', expecting => or '{'`. (probe-verified 2026-08-16)
 
@@ -97,7 +97,7 @@ syntax error. Prefer the bare form; it works on method calls too: `obj.m(bias = 
 **There is no angle-bracket call form.** `take<int>(1, 2)` is
 `error[30151] syntax error, unexpected '>', expecting '('`. Pass the type as an ordinary
 argument, `take(type<int>, 1, 2)`, against a parameter declared `t : type<auto(TT)>` (tag it
-`[unused_argument(t)]` — a `type<>` parameter occupies no stack and cannot be read); take
+`[unused_argument(t)]` - a `type<>` parameter occupies no stack and cannot be read); take
 `default<T>` when the body needs a value. (probe-verified 2026-08-16)
 
 Defaults between the explicit arguments and a trailing block are padded automatically:
@@ -113,7 +113,7 @@ Overloads must differ in argument types; identical argument lists are a compile
 error. Matching picks the **most specialized** candidate: non-`auto` beats `auto` (alias
 base type ranks lowest, two aliases rank equal); among non-`auto`, no-cast beats cast; array
 beats non-array; concrete element type beats abstract. Compound types (pointer, array, table,
-tuple, variant, function/block/lambda) compare recursively by subtype and return type — all parts
+tuple, variant, function/block/lambda) compare recursively by subtype and return type - all parts
 must match or rank equally. Ties break on smallest *substitute distance* (+1 per argument needing
 a substitution cast); a remaining tie is a compile error.
 
@@ -124,7 +124,7 @@ def twice(a : auto[]) => length(a) * 2      // any fixed array
 def twice(a) => "generic"                   // anything else
 ```
 
-`explicit` on a parameter disables substitution — `def only_base(b : Base explicit)` accepts
+`explicit` on a parameter disables substitution - `def only_base(b : Base explicit)` accepts
 `Base` but rejects a struct that inherits from it.
 
 Contract annotations (`daslib/contracts`) restrict which types a generic matches, and combine
@@ -139,7 +139,7 @@ def kind(t) : string => "tuple-or-variant"
 ## Function pointers
 
 The type is `function<(args) : Ret>` (or `-> Ret`); bare `function` means an unspecified
-signature. Take a pointer with `@@`. They are ordinary values — locals, arrays, table slots,
+signature. Take a pointer with `@@`. They are ordinary values - locals, arrays, table slots,
 struct fields, parameters.
 
 ```das
@@ -150,19 +150,19 @@ let k = @@(a : int) => a - 1              // nameless, arrow form
 ```
 
 Call via `invoke(f, args)`, or with call notation on a **variable** holding the pointer (`f(3)`),
-never on an arbitrary expression — `arr[0](7)` is a syntax error, use `invoke(arr[0], 7)`.
+never on an arbitrary expression - `arr[0](7)` is a syntax error, use `invoke(arr[0], 7)`.
 
-Nameless functions capture nothing — referring to an enclosing local inside one is a compile
+Nameless functions capture nothing - referring to an enclosing local inside one is a compile
 error. `@@gen` on a generic (untyped-parameter) function reports "function not found".
 
 ## Pipes and method-style calls
 
 | Form | Means |
 |---|---|
-| `x \|> f(y)` | `f(x, y)` — value becomes the **first** argument |
-| `f(y) <\| x` | `f(y, x)` — value becomes the **last** argument |
+| `x \|> f(y)` | `f(x, y)` - value becomes the **first** argument |
+| `f(y) <\| x` | `f(y, x)` - value becomes the **last** argument |
 | `f() { ... }` | assumed pipe: a trailing block/lambda is the last argument |
-| `a.f(b)` | `f(a, b)` — only when `a` is a struct or class value |
+| `a.f(b)` | `f(a, b)` - only when `a` is a struct or class value |
 
 ```das
 let t = 12 |> addX(2) |> addX(3)     // addX(addX(12,2),3) == 17
@@ -170,7 +170,7 @@ var f = Foo()
 f.setXY(10, 11)                      // == f |> setXY(10,11) == setXY(f,10,11); f.area() is area(f)
 ```
 
-**Assumed pipe** — parameterless blocks need no `$`; blocks with parameters keep `$`, lambdas
+**Assumed pipe** - parameterless blocks need no `$`; blocks with parameters keep `$`, lambdas
 keep `@` / `@@`. Works after named calls, `obj.m()` and `obj->m()`. A non-block expression still
 needs explicit `<|`, e.g. `<| new Foo()`.
 
@@ -309,7 +309,7 @@ So `p ?? 2 * 10` is `(p ?? 2) * 10`; `2 * 3 |> inc()` is `2 * inc(3)`, not `inc(
 
 ## Also
 
-Recursion is supported, with no tail-call optimization — deep recursion consumes stack.
+Recursion is supported, with no tail-call optimization - deep recursion consumes stack.
 
 See *closures* (blocks, lambdas, generators, capture), *generics* (`auto`, `auto(TT)`, OR-types,
 `static_if`, `_::name` resolution, type contracts), *structs and classes* (methods, `->`,

@@ -27,7 +27,7 @@ Lets look at couple of examples from our short but intense history.
 
 Originally there was no plan to support classes, or structure methods for that matter; the idea was not to have significant OOP support at all.
 First thing people did is an OOP implementation on top of structures.
-If you can't beat them, join them—and then lead them - now we have classes, visibility, and other OOP bells and whistles.
+If you can't beat them, join them - and then lead them - now we have classes, visibility, and other OOP bells and whistles.
 
 Then there were properties. First via :=, and now we support += operators and such.
 More stuff followed - think match, initialization shortcuts, dot after enum, and many a thing.

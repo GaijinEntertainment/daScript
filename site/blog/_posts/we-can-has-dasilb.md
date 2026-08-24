@@ -36,9 +36,9 @@ This one got a lot more useful.
 
 ```
 Interface inheritance: [interface] class IChild : IParent
-— ancestor getters auto-generated for is/as/?as
-Default method implementations — non-abstract methods inherited by proxy
-Completeness checking — compile error on missing abstract methods
+ - ancestor getters auto-generated for is/as/?as
+Default method implementations - non-abstract methods inherited by proxy
+Completeness checking - compile error on missing abstract methods
 ```
 
 -------------------
@@ -68,7 +68,7 @@ json
 ----
 
 ```
-Proper \uXXXX Unicode escape → UTF-8 encoding
+Proper \uXXXX Unicode escape -> UTF-8 encoding
 ```
 
 -------------
@@ -89,9 +89,9 @@ decs
 This one gonna get a lot more love soon. Like batch object creation.
 
 ```
-is_alive(eid) — check entity is alive (generation matches)
-entity_count() — total alive entity count across archetypes
-get_component(eid, name, defval) — named component by value with fallback
+is_alive(eid) - check entity is alive (generation matches)
+entity_count() - total alive entity count across archetypes
+get_component(eid, name, defval) - named component by value with fallback
 ```
 
 ---------
@@ -99,7 +99,7 @@ algorithm
 ---------
 
 ```
-upper_bound, equal_range — binary search family (with/without comparator)
+upper_bound, equal_range - binary search family (with/without comparator)
 fill, is_sorted, rotate, min_element, max_element
 ```
 
@@ -108,7 +108,7 @@ functional
 ----------
 
 ```
-reduce_or_default, fold, scan — reduction/accumulation family
+reduce_or_default, fold, scan - reduction/accumulation family
 enumerate, for_each, find, find_index, partition
 tap, iterate, chain, pairwise, flat_map
 repeat now infinite by default; echo is non-destructive
@@ -120,7 +120,7 @@ linq
 
 ```
 order_descending / order_descending_inplace / order_descending_to_array
-count(iter, predicate) — count matching elements
+count(iter, predicate) - count matching elements
 skip_last / take_last (4 variants each)
 zip / zip_to_array with 3 sources
 ```
@@ -130,11 +130,11 @@ jobque_boost
 ------------
 
 ```
-try_pop, try_pop_clone — non-blocking channel pop
-pop_with_timeout, pop_with_timeout_clone — timed channel pop
-with_wait_group — auto-join wait group pattern
-done(status) — alias for notify_and_release
-parallel_for, parallel_for_each, parallel_map — automatic job partitioning macros
+try_pop, try_pop_clone - non-blocking channel pop
+pop_with_timeout, pop_with_timeout_clone - timed channel pop
+with_wait_group - auto-join wait group pattern
+done(status) - alias for notify_and_release
+parallel_for, parallel_for_each, parallel_map - automatic job partitioning macros
 ```
 
 -------------------------------

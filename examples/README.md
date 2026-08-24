@@ -12,7 +12,7 @@ daslang.exe examples/hello_world.das
 |------|-------------|
 | `hello_world.das` | Minimal hello-world program |
 
-## crash/ — Crash Handler Example
+## crash/ - Crash Handler Example
 
 Demonstrates native crash handling with daslang + C++ stack traces.
 Built as a C++ executable (`example_crash`) that links `libDaScriptDyn`.
@@ -23,13 +23,13 @@ Built as a C++ executable (`example_crash`) that links `libDaScriptDyn`.
 | `stack_overflow.das` | Stack overflow test case |
 | `main.cpp` | C++ host with crash handler integration |
 
-## dasbind/ — Foreign Function Interface
+## dasbind/ - Foreign Function Interface
 
 | File | Description |
 |------|-------------|
 | `dasbind_example.das` | Calling external C functions (Win32 API) via `[extern]` annotations |
 
-## daslive/ — Live-Reload Examples
+## daslive/ - Live-Reload Examples
 
 Examples for `daslang-live.exe`, the live-reloading application host.
 Scripts are edited and hot-reloaded without restarting. Run with:
@@ -51,7 +51,7 @@ daslang-live.exe examples/daslive/hello/main.das
 | `test_decs_reload/` | DECS (ECS) reload test |
 | `test_watch/` | Watch mechanism test |
 
-## games/ — Game Examples
+## games/ - Game Examples
 
 Full games built on top of daslang-live. Can also run standalone under `daslang.exe`
 (same script, both hosts drive the same `init`/`update`/`shutdown` lifecycle).
@@ -64,10 +64,10 @@ daslang-live.exe examples/games/arcanoid/main.das
 |-----------|-------------|
 | `arcanoid/` | Breakout game: DECS, OpenGL, procedural audio, strudel music, 30+ live commands |
 | `pacman/` | Pac-Man: maze, ghosts, power pills, strudel music |
-| `boulder-dash/` | Boulder Dash–style caves: scan-line physics, seeded generator, grab, quota + timer |
+| `boulder-dash/` | Boulder Dash-style caves: scan-line physics, seeded generator, grab, quota + timer |
 | `sequence/` | Sequence card board game: multi-module, bot AI, ELO tournament runner (requires `daspkg install`) |
 
-## debugapi/ — Debug Agent Examples
+## debugapi/ - Debug Agent Examples
 
 Debug agents let you inspect and control program execution at runtime:
 allocation tracking, breakpoints, instrumentation, and stack walking.
@@ -81,22 +81,22 @@ All examples require `options debugger = true`.
 | `instrumentation.das` | Line-level and function-level instrumentation hooks for profiling and tracing |
 | `stack_walker.das` | `DapiStackWalker` for call-stack inspection and diagnostic collection |
 
-## pathTracer/ — Path Tracer Demo
+## pathTracer/ - Path Tracer Demo
 
 A toy path tracer implemented in daslang, with OpenGL visualization variants.
-Requires the `stbimage` module and (for OpenGL variants) `dasGlfw` / `dasImgui` —
+Requires the `stbimage` module and (for OpenGL variants) `dasGlfw` / `dasImgui` -
 all ship in-tree, so a default build has them.
 
 | File | Description |
 |------|-------------|
 | `path_tracer.das` | Core path-tracing module (shared code) |
-| `toy_path_tracer.das` | Console path tracer — renders to a `.bmp` file |
+| `toy_path_tracer.das` | Console path tracer - renders to a `.bmp` file |
 | `toy_pathtracer_opengl_basic.das` | Real-time path tracer with basic OpenGL display |
 | `toy_path_tracer_opengl.das` | Real-time path tracer with progressive accumulation |
 | `toy_path_tracer_opengl_hdr.das` | Real-time path tracer with HDR tonemapping |
 | `toy_path_tracer_profile.das` | Path tracer performance benchmark |
 
-## opengl/ — OpenGL Examples
+## opengl/ - OpenGL Examples
 
 Introductory OpenGL examples using the `dasOpenGL` and `dasGlfw` modules.
 Requires `dasGlfw` and `dasOpenGL` to be enabled in the build (`DAS_GLFW_DISABLED=OFF`).
@@ -119,32 +119,32 @@ daslang.exe examples/opengl/01_hello_triangle.das
 Assets (`image.png`, `droidsansmono.ttf`, `orb.obj`) are bundled in the directory.
 The mesh and font were taken from BGFX examples.
 
-## uncategorized/ — Miscellaneous Examples
+## uncategorized/ - Miscellaneous Examples
 
 Standalone examples that don't fit neatly into other categories.
 
 | File | Description |
 |------|-------------|
-| `base64_generators.das` | Base64 encoder built as a chain of composable generators (deliberately slow — demonstrates generator composition, not production encoding) |
-| `shader_like_validation.das` | Shader-like mode demo — shows how `options shader_like` rejects heap-allocating constructs (arrays, lambdas, `new`) at simulation time |
-| `describe_function.das` | AST introspection — compiles a program at runtime and pretty-prints each function back to gen2 source via `describe_function` (daslib/ast) |
+| `base64_generators.das` | Base64 encoder built as a chain of composable generators (deliberately slow - demonstrates generator composition, not production encoding) |
+| `shader_like_validation.das` | Shader-like mode demo - shows how `options shader_like` rejects heap-allocating constructs (arrays, lambdas, `new`) at simulation time |
+| `describe_function.das` | AST introspection - compiles a program at runtime and pretty-prints each function back to gen2 source via `describe_function` (daslib/ast) |
 
-## hv/ — WebSocket Chat Example
+## hv/ - WebSocket Chat Example
 
 A WebSocket chat room powered by the `dashv` module.
 The server serves an HTML page and speaks WebSocket on the same port.
 
 | File | Description |
 |------|-------------|
-| `ws_chat_server.das` | Chat server — serves `chat.html` at `/`, WebSocket at `/chat` |
-| `ws_chat_client.das` | Terminal chat client — type messages in the console |
+| `ws_chat_server.das` | Chat server - serves `chat.html` at `/`, WebSocket at `/chat` |
+| `ws_chat_client.das` | Terminal chat client - type messages in the console |
 | `chat.html`          | Standalone browser chat client |
 
 Start the server, open `http://localhost:9090` in a browser,
-and/or run `ws_chat_client.das` in a terminal — all clients share the
+and/or run `ws_chat_client.das` in a terminal - all clients share the
 same chat room. See `examples/hv/README.md` for details.
 
-## audio/ — Audio Examples
+## audio/ - Audio Examples
 
 Audio examples using the `dasAudio` module. Requires `DAS_AUDIO_DISABLED=OFF` and
 `DAS_GLFW_DISABLED=OFF` (for OpenGL-based examples).
@@ -155,9 +155,9 @@ daslang.exe examples/audio/hrtf/main.das
 
 | Directory | Description |
 |-----------|-------------|
-| `hrtf/main.das` | Interactive 3D HRTF demo — fly camera (WASD+mouse), sound sources as spheres, XZ grid. Press N to add a single source, M to add 30 sources in a ring (for stress testing) |
+| `hrtf/main.das` | Interactive 3D HRTF demo - fly camera (WASD+mouse), sound sources as spheres, XZ grid. Press N to add a single source, M to add 30 sources in a ring (for stress testing) |
 
-## minfft/ — FFT Example
+## minfft/ - FFT Example
 
 FFT (Fast Fourier Transform) example using the built-in `dasMinfft` module. No setup required.
 
@@ -169,7 +169,7 @@ daslang.exe examples/minfft/main.das
 |------|-------------|
 | `main.das` | Compute FFT of a sine wave signal and print frequency bins |
 
-## daspkg/ — Package Manager Examples
+## daspkg/ - Package Manager Examples
 
 Example projects demonstrating the `daspkg` package manager. Each subdirectory
 is a self-contained project with a `.das_package` descriptor.
@@ -178,13 +178,13 @@ is a self-contained project with a `.das_package` descriptor.
 |-----------|-------------|
 | `daspkg-example/` | Minimal project that installs a package from the index |
 | `daspkg-build-example/` | Project with a C++ build step (`cmake_build`) |
-| `daspkg-version-1/` | Package versioning — pinning to version 1.x |
-| `daspkg-version-2/` | Package versioning — pinning to version 2.x |
+| `daspkg-version-1/` | Package versioning - pinning to version 1.x |
+| `daspkg-version-2/` | Package versioning - pinning to version 2.x |
 | `packages/daspkg-example-c/` | Template for a daspkg package with C sources |
 | `packages/daspkg-example-cpp/` | Template for a daspkg package with C++ shared module |
 | `packages/daspkg-example-mixed/` | Template for a mixed daslang + C++ package |
 
-## benchmarks/sql/ — Four-Engine SQL Benchmarks
+## benchmarks/sql/ - Four-Engine SQL Benchmarks
 
 The `benchmarks/sql` query families measured across SQLite, DuckDB, PostgreSQL,
 and a plain-array baseline, in interpreted and JIT mode. The DuckDB/PostgreSQL
@@ -193,8 +193,8 @@ providers install via this folder's `.das_package`; results land in a generated
 
 | File | Description |
 |------|-------------|
-| `sqlite.das` / `duckdb.das` / `postgres.das` | Engine lanes — thin `[benchmark]` wrappers over the shared families |
-| `array.das` | Baseline lane — same chains as fused linq folds over `array<Car>` |
+| `sqlite.das` / `duckdb.das` / `postgres.das` | Engine lanes - thin `[benchmark]` wrappers over the shared families |
+| `array.das` | Baseline lane - same chains as fused linq folds over `array<Car>` |
 | `_sql_families.das` | The query families, once, generic over the runner type |
 | `_update_results.das` | Regenerates the INTERP/JIT matrices in `results.md` from sweep JSON |
 
@@ -202,12 +202,12 @@ providers install via this folder's `.das_package`; results land in a generated
 
 A package's examples ship with the package, not here: the Telegram bots (echo +
 dictation) live in the `das-telegram` package repo, the Claude helper bot in
-`das-claude`, and the node-editor example in `dasImguiNodeEditor` — `daspkg install`
+`das-claude`, and the node-editor example in `dasImguiNodeEditor` - `daspkg install`
 brings each package with its examples.
 
-## graphics/ — ImGui Examples
+## graphics/ - ImGui Examples
 
-ImGui examples using the in-tree `dasImgui` module — it ships built-in, so no
+ImGui examples using the in-tree `dasImgui` module - it ships built-in, so no
 package install is needed:
 
 ```

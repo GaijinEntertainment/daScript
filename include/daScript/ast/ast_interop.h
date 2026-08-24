@@ -25,39 +25,53 @@ namespace das
         }
     };
 
-#if DAS_SLOW_CALL_INTEROP
     template  <typename FuncT, typename SimNodeT, typename FuncArgT>
-#else
-    template  <typename FuncT, FuncT fn, typename SimNodeT, typename FuncArgT>
-#endif
     class ExternalFn : public ExternalFnBase {
         static_assert ( is_base_of<SimNode_CallBase, SimNodeT>::value, "only call-based nodes allowed" );
     public:
-#if DAS_SLOW_CALL_INTEROP
         FuncT fn;
-        __forceinline ExternalFn(FuncT fnp, const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
-        : ExternalFnBase(name,cppName), fn(fnp) {
+        void * builtinAddress = nullptr;
+        // out-of-line on purpose: the construction body is per-signature COMDAT,
+        // so each bind site costs a call, not an inlined copy of constructExternal
+        ___noinline ExternalFn(FuncT fnp, void * builtinAddr, const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
+        : ExternalFnBase(name,cppName), fn(fnp), builtinAddress(builtinAddr) {
             constructExternal(makeFuncArgs<FuncArgT>::make(lib));
         }
-#else
-        __forceinline ExternalFn(const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
-        : ExternalFnBase(name,cppName) {
-            constructExternal(makeFuncArgs<FuncArgT>::make(lib));
+        ___noinline ExternalFn(FuncT fnp, void * builtinAddr, const char * name, const char * cppName = nullptr)
+        : ExternalFnBase(name,cppName), fn(fnp), builtinAddress(builtinAddr) {
         }
-        __forceinline ExternalFn(const char * name, const char * cppName = nullptr)
-        : ExternalFnBase(name,cppName) {
-        }
-#endif
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
             const char * fnName = context.code->allocateName(this->name);
-#if DAS_SLOW_CALL_INTEROP
             return context.code->makeNode<SimNodeT>(at, fnName, fn);
-#else
-            return context.code->makeNode<SimNodeT>(at, fnName);
-#endif
         }
         virtual void * getBuiltinAddress() const override {
-            return ImplWrapCall<SimNodeT::IS_CMRES, NeedVectorWrap<FuncT>::value, FuncT, fn>::get_builtin_address();
+            return builtinAddress;
+        }
+    };
+
+    // the JIT-callable address for a bind: the raw fn for plain-ABI binds, an
+    // ImplWrapCall wrapper (per-function code) only for cmres and vector-ABI binds
+    template <typename SimNodeType, typename FuncT, FuncT fn>
+    __forceinline void * makeJitAddress () {
+        return ImplWrapCall<SimNodeType::IS_CMRES, NeedVectorWrap<FuncT>::value, FuncT, fn>::get_builtin_address();
+    }
+
+    template  <typename FuncT, FuncT fn, typename SimNodeT, typename FuncArgT>
+    class ExternalFnInline : public ExternalFnBase {
+        static_assert ( is_base_of<SimNode_CallBase, SimNodeT>::value, "only call-based nodes allowed" );
+    public:
+        void * builtinAddress = nullptr;
+        ___noinline ExternalFnInline(void * builtinAddr, const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
+        : ExternalFnBase(name,cppName), builtinAddress(builtinAddr) {
+            this->nttp = true;
+            constructExternal(makeFuncArgs<FuncArgT>::make(lib));
+        }
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
+            const char * fnName = context.code->allocateName(this->name);
+            return context.code->makeNode<SimNodeT>(at, fnName);
+        }
+        virtual void * getBuiltinAddress() const override {
+            return builtinAddress;
         }
     };
 
@@ -228,20 +242,11 @@ namespace das
 
     DAS_API void addExternFunc(Module& mod, const FunctionPtr & fx, bool isCmres, SideEffects seFlags);
 
-#if DAS_SLOW_CALL_INTEROP
-    template <typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
-#else
-    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
-#endif
+    template <typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall>
     inline auto addExternProperty ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr,
                                     bool explicitConst=false, SideEffects sideEffects = SideEffects::none ) {
-#if DAS_SLOW_CALL_INTEROP
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, name, lib, cppName);
-#else
-        using SimNodeType = SimNodeT<FuncT, fn>;
-        auto fnX = new ExternalFn<FuncT, fn, SimNodeType, FuncT>(name, lib, cppName);
-#endif
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
         defaultTempFn tempFn;
         tempFn(fnX);
         fnX->arguments[0]->type->explicitConst = explicitConst;
@@ -255,20 +260,11 @@ namespace das
         return fnX;
     }
 
-#if DAS_SLOW_CALL_INTEROP
-    template <typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
-#else
-    template <typename ArgType, int ArgConst, typename RetType, typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
-#endif
+    template <typename ArgType, int ArgConst, typename RetType, typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall>
     inline auto addExternPropertyForType ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr,
                                     bool explicitConst=false, SideEffects sideEffects = SideEffects::none) {
-#if DAS_SLOW_CALL_INTEROP
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, fn, SimNodeType, FuncT>(name, cppName);
-#else
-        using SimNodeType = SimNodeT<FuncT, fn>;
-        auto fnX = new ExternalFn<FuncT, fn, SimNodeType, FuncT>(name, cppName);
-#endif
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, cppName);
         vector<TypeDeclPtr> types(2);
         types[0] = makeType<RetType>(lib);
         types[1] = makeType<ArgType>(lib);
@@ -287,21 +283,34 @@ namespace das
         return fnX;
     }
 
-#if DAS_SLOW_CALL_INTEROP
+    // same contract as addExtern, but the bind gets its own NTTP node so the
+    // callee can inline into it; opt-in for hot, inline-friendly functions
+    template <typename FuncT, FuncT fn, typename QQ = defaultTempFn>
+    inline auto addExternInline ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,
+                                  const char * cppName = nullptr, QQ && tempFn = QQ() ) {
+        using SimNodeType = SimNode_ExtFuncCallInline<FuncT, fn>;
+        auto fnX = new ExternalFnInline<FuncT, fn, SimNodeType, FuncT>(makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
+        tempFn(fnX);
+        addExternFunc(mod, fnX, SimNodeType::IS_CMRES, seFlags);
+        return fnX;
+    }
+
+    // addExternEx's NTTP sibling: explicit FuncArgT for signature-adjusted binds
+    template <typename FuncArgT, typename FuncT, FuncT fn, typename QQ = defaultTempFn>
+    inline auto addExternInlineEx ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,
+                                    const char * cppName = nullptr, QQ && tempFn = QQ() ) {
+        using SimNodeType = SimNode_ExtFuncCallInline<FuncT, fn>;
+        auto fnX = new ExternalFnInline<FuncT, fn, SimNodeType, FuncArgT>(makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
+        tempFn(fnX);
+        addExternFunc(mod, fnX, SimNodeType::IS_CMRES, seFlags);
+        return fnX;
+    }
+
     template <typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
-#else
-    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
-#endif
     inline auto addExtern ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,
                                   const char * cppName = nullptr, QQ && tempFn = QQ() ) {
-#if DAS_SLOW_CALL_INTEROP
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, name, lib, cppName);
-#else
-        using SimNodeType = SimNodeT<FuncT, fn>;
-        auto fnX = new ExternalFn<FuncT, fn, SimNodeType, FuncT>(name, lib, cppName);
-#endif
-
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
         tempFn(fnX);
 #if VERIFY_JIT_ARGUMENTS
         VerifyFn<FuncT, fn>::verify(fnX);
@@ -310,21 +319,11 @@ namespace das
         return fnX;
     }
 
-#if DAS_SLOW_CALL_INTEROP
     template <typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
-#else
-    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
-#endif
     inline auto makeExtern ( const ModuleLibrary & lib, const char * name,
                                 const char * cppName = nullptr, QQ && tempFn = QQ() ) {
-#if DAS_SLOW_CALL_INTEROP
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, name, lib, cppName);
-#else
-        using SimNodeType = SimNodeT<FuncT, fn>;
-        auto fnX = new ExternalFn<FuncT, fn, SimNodeType, FuncT>(name, lib, cppName);
-#endif
-
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
         tempFn(fnX);
 
         if (!SimNodeType::IS_CMRES) {
@@ -342,20 +341,11 @@ namespace das
         return fnX;
     }
 
-#if DAS_SLOW_CALL_INTEROP
-    template <typename FuncArgT, typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall>
-#else
-    template <typename FuncArgT, typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
-#endif
+    template <typename FuncArgT, typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
     inline auto addExternEx ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,
                                   const char * cppName = nullptr, QQ && tempFn = QQ() ) {
-#if DAS_SLOW_CALL_INTEROP
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncArgT>(fn, name, lib, cppName);
-#else
-        using SimNodeType = SimNodeT<FuncT, fn>;
-        auto fnX = new ExternalFn<FuncT, fn, SimNodeType, FuncArgT>(name, lib, cppName);
-#endif
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncArgT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
         tempFn(fnX);
 #if VERIFY_JIT_ARGUMENTS
         VerifyFn<FuncT, fn>::verify(fnX);
@@ -364,21 +354,12 @@ namespace das
         return fnX;
     }
 
-#if DAS_SLOW_CALL_INTEROP
     template <typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCallRef, typename QQ = defaultTempFn>
-#else
-    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCallRef, typename QQ = defaultTempFn>
-#endif
     inline auto addExternTempRef ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,
         const char * cppName = nullptr, QQ && tempFn = QQ() )
     {
-#if DAS_SLOW_CALL_INTEROP
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, name, lib, cppName);
-#else
-        using SimNodeType = SimNodeT<FuncT, fn>;
-        auto fnX = new ExternalFn<FuncT, fn, SimNodeType, FuncT>(name, lib, cppName);
-#endif
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
         tempFn(fnX);
         fnX->result->temporary = true;
 #if VERIFY_JIT_ARGUMENTS

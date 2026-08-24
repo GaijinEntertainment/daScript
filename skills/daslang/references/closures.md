@@ -1,10 +1,10 @@
-# Closures — blocks, lambdas, function pointers, generators, iterators
+# Closures - blocks, lambdas, function pointers, generators, iterators
 
 | | `block` (`$`) | `lambda` (`@`) | `function` (`@@`) |
 |---|---|---|---|
 | Storage | enclosing stack frame | heap capture frame | none (code pointer) |
-| Captures | whole enclosing scope, by reference, implicit | explicit per-variable: copy / move / clone / ref | none — cannot see enclosing locals |
-| Copyable (`=`) | no | **yes** — copies the pointer, aliasing the same frame | yes |
+| Captures | whole enclosing scope, by reference, implicit | explicit per-variable: copy / move / clone / ref | none - cannot see enclosing locals |
+| Copyable (`=`) | no | **yes** - copies the pointer, aliasing the same frame | yes |
 | Movable (`<-`) | no | yes | yes |
 | Cloneable (`:=`) | no | no | yes |
 | Local variable | yes, but only initialized from a block literal | yes | yes |
@@ -29,7 +29,7 @@ def radd(var ext : int&; b : block<(var arg : int&) : int>) : int { return invok
 ```
 
 `invoke(b, args...)` and `b(args...)` are equivalent. Call-like syntax works when the callee is a
-plain name or a struct field (`h.fn(21)`); anything else — an array element, a call result — needs
+plain name or a struct field (`h.fn(21)`); anything else - an array element, a call result - needs
 `invoke`, since `lams[0](100)` is a syntax error.
 
 ### Declaring one
@@ -56,7 +56,7 @@ the body sees the inner one. (probe-verified 2026-08-16)
 ### Capture and lifetime
 
 Reads and writes inside a block hit the enclosing frame's original variables. A block can never
-escape the frame it was made in — all compile errors:
+escape the frame it was made in - all compile errors:
 
 | Attempt | Error |
 |---|---|
@@ -80,14 +80,14 @@ print("{invoke(counter, 13)}\n")    // 13
 print("{counter(14)}\n")            // 15
 ```
 
-`<-` is the idiomatic initializer; `=` also compiles — same pointer copy.
+`<-` is the idiomatic initializer; `=` also compiles - same pointer copy.
 
 ### Copies alias the frame
 
 ```das
 var alias_of = counter    // copies the pointer, NOT the frame
-print("{alias_of(0)}\n")  // 2 — continues counter's captured cnt
-print("{cnt}\n")          // 0 — captured by copy, the outer variable was never touched
+print("{alias_of(0)}\n")  // 2 - continues counter's captured cnt
+print("{cnt}\n")          // 0 - captured by copy, the outer variable was never touched
 ```
 
 So they store directly in containers, struct fields, and globals:
@@ -100,12 +100,12 @@ struct Handler {
 
 var h = Handler(name = "double", fn <- @(x : int) => x * 2)
 var lams : array<lambda<(extra : int) : int>>
-lams |> push(counter)                 // push, not push_clone — lambdas are copyable
+lams |> push(counter)                 // push, not push_clone - lambdas are copyable
 ```
 
 `delete lam` frees a frame other copies may point at, so it needs `unsafe`
 (`error[31009] delete of lambda<...> requires unsafe`); the gate cascades to anything containing a
-lambda, so `delete` on an `array<lambda<...>>` is equally unsafe — and deleting an array holding two
+lambda, so `delete` on an `array<lambda<...>>` is equally unsafe - and deleting an array holding two
 copies of one lambda is a double free. No reference counting: a frame lives until the lambda is
 deleted or the host collects/resets the owning context's heap, so undeleted lambdas in a
 long-running loop leak.
@@ -142,14 +142,14 @@ unsafe {
 // a3 == [1,2]    (clone: the frame grew its own copy)
 ```
 
-A lambda cannot capture a block — blocks are neither copyable nor movable
+A lambda cannot capture a block - blocks are neither copyable nor movable
 (`error[30129] can't capture variable blk`).
 
 **Capture freezes the binding, not what it points at.** A copy-captured `var p : T?` is still a
 mutable pointer inside the frame: `p[i] = v` writes through to the original memory, and `p + off`
 is still a mutable `T?`. (probe-verified 2026-08-16)
 
-**An enclosing `unsafe` does not reach into a lambda body** — operations inside it need their own
+**An enclosing `unsafe` does not reach into a lambda body** - operations inside it need their own
 wrap; a *block* body, running in the same frame, is covered by the outer wrap.
 
 ### Finalizer
@@ -170,7 +170,7 @@ unsafe { delete counter; }   // prints "lambda finalizer ran, cnt = 1"
 
 ## Function pointers
 
-`@@` captures nothing — referencing an enclosing local from a `@@` body is
+`@@` captures nothing - referencing an enclosing local from a `@@` body is
 `error[30838] can't locate variable`. Declaration forms, the typed `@@<(...) : T> name` spelling,
 and `invoke` are under functions.
 
@@ -186,7 +186,7 @@ apply(10, @@(x : int) => x + 1)            // anonymous, arrow body, captures no
 ## Generators
 
 A generator is a lambda compiled into a state machine; its value is an `iterator<T>`, so returning
-one gives a lazy sequence. The body `yield`s elements and must end with `return false` — omitting it
+one gives a lazy sequence. The body `yield`s elements and must end with `return false` - omitting it
 is `error[30172] generator must return boolean`.
 
 ```das
@@ -219,7 +219,7 @@ unsafe {
 }
 ```
 
-A `finally` on a loop body inside a generator belongs to the **body block** — it runs once per
+A `finally` on a loop body inside a generator belongs to the **body block** - it runs once per
 iteration, interleaved, not once when the loop ends:
 
 ```das
@@ -259,7 +259,7 @@ you stopped driving early, and is always safe on a sequenced-out one.
 
 **The element type says whether the loop variable writes through.** `each(array<T>)` yields
 `iterator<T&>`, so `for (x in it) { x++ }` mutates the array; an iterator comprehension
-(`[iterator for (...); expr]`) and a plain `generator<T>` yield `iterator<T>` — a value per step,
+(`[iterator for (...); expr]`) and a plain `generator<T>` yield `iterator<T>` - a value per step,
 not a reference into any source. A generic parameter written `iterator<auto(TT) const>` takes both
 flavors through one instantiation, at the cost of a body that may not move from or mutate the
 elements. It must still be `var`: a non-`var` iterator parameter is const as a *handle* and cannot

@@ -59,7 +59,7 @@ binding. On a concrete cast target they are inert (`reinterpret<Foo? -const>(p)`
 | `auto -const` | matches, then removes `const` from the bound type |
 | `Foo#` | temporary `Foo#` only |
 | `auto -#` | matches, then removes the temporary qualifier |
-| `Foo implicit` | both `Foo` and `Foo#`, treated as written — **unsafe** |
+| `Foo implicit` | both `Foo` and `Foo#`, treated as written - **unsafe** |
 | `Foo \|#` | `Foo` then `Foo#`, in that order |
 | `auto&` | passed by reference |
 | `auto ==&` / `auto& ==&` | exact by-value / by-reference match |
@@ -76,7 +76,7 @@ the argument's.
 `-#` lets a generic own a copy of a possibly-temporary argument: `var owned : TT -# := a` clones a
 temporary into an owned value.
 
-`-#` with `==const` on **two or more** parameters sharing one alias breaks matching — a plain
+`-#` with `==const` on **two or more** parameters sharing one alias breaks matching - a plain
 `array<int>` is then rejected. For multi-source signatures use plain `array<TT>`.
 
 ## OR types
@@ -88,15 +88,15 @@ tries exact `Bar` first).
 
 ## typeinfo
 
-`typeinfo <trait>(expr)` or `typeinfo <trait>(type<T>)` — compile-time reflection, folded to a
+`typeinfo <trait>(expr)` or `typeinfo <trait>(type<T>)` - compile-time reflection, folded to a
 constant. Every trait takes exactly one argument; a few take extra names in angle brackets.
 
-**Names** — `typename`, `fulltypename`, `stripped_typename`, `undecorated_typename`, `modulename`,
+**Names** - `typename`, `fulltypename`, `stripped_typename`, `undecorated_typename`, `modulename`,
 `struct_name`, `struct_modulename`, `mangled_name`
 
-**Size and layout** — `sizeof`, `alignof`, `dim`, `dim_table_value`, `vector_dim`, `offsetof<field>`
+**Size and layout** - `sizeof`, `alignof`, `dim`, `dim_table_value`, `vector_dim`, `offsetof<field>`
 
-**Kind queries** — `is_pod`, `is_raw`, `is_struct`, `is_class`, `is_handle`, `is_distinct`,
+**Kind queries** - `is_pod`, `is_raw`, `is_struct`, `is_class`, `is_handle`, `is_distinct`,
 `is_tuple`, `is_variant`, `is_enum`, `is_bitfield`, `is_lambda`, `is_function`, `is_iterator`,
 `is_iterable`, `is_string`, `is_numeric`, `is_numeric_comparable`, `is_int`, `is_int64`, `is_float`,
 `is_double`, `is_vector`, `is_any_vector`, `is_array`, `is_table`, `is_dim`, `is_pointer`,
@@ -105,13 +105,13 @@ constant. Every trait takes exactly one argument; a few take extra names in angl
 
 `is_int`/`is_int64`/`is_float`/`is_double` are exact scalar checks, not "numeric".
 
-**Capabilities** — `can_copy`, `can_move`, `can_clone`, `can_clone_from_const`, `can_new`,
+**Capabilities** - `can_copy`, `can_move`, `can_clone`, `can_clone_from_const`, `can_new`,
 `can_delete`, `can_delete_ptr`, `can_be_placed_in_container`, `need_delete`, `need_inscope`,
 `has_nontrivial_ctor`, `has_nontrivial_dtor`, `has_nontrivial_copy`,
 `is_unsafe_when_uninitialized`, `is_safe_to_delete`, `is_pod_delete`, `needs_nontrivial_init`,
 `needs_container_init`, `needs_container_finalize`
 
-**Fields, annotations, variants** — `has_field<name>`, `safe_has_field<name>`,
+**Fields, annotations, variants** - `has_field<name>`, `safe_has_field<name>`,
 `struct_has_annotation<ann>`, `struct_safe_has_annotation<ann>`,
 `struct_has_annotation_argument<ann; arg>`, `struct_safe_has_annotation_argument<ann; arg>`,
 `struct_get_annotation_argument<ann; arg>`, `variant_index<name>`, `safe_variant_index<name>`
@@ -121,14 +121,14 @@ type: `static_if (typeinfo is_unsafe_when_uninitialized(type<TT>)) { unsafe { ..
 `@safe_when_uninitialized` field annotation and the `[safe_when_uninitialized]` struct annotation
 flip it (structs-and-classes.md).
 
-Annotation traits all carry the `struct_` prefix — plain `has_annotation` does not exist. The
+Annotation traits all carry the `struct_` prefix - plain `has_annotation` does not exist. The
 `safe_` forms return `false` / `-1` instead of raising a compile error; `has_field` requires the
 argument to already be a struct or handled type, `safe_has_field` does not. `<name>` takes the
 bare field name, not a string: `typeinfo safe_has_field<hp>(obj)`.
 
-**Existence** — `builtin_module_exists(name)` (how a binding is made optional),
+**Existence** - `builtin_module_exists(name)` (how a binding is made optional),
 `builtin_annotation_exists(type<T>)` (true for registered native types),
-`builtin_function_exists(@@<sig> name)` (native functions only — a daslang-defined function is a
+`builtin_function_exists(@@<sig> name)` (native functions only - a daslang-defined function is a
 compile error here).
 
 No `is_same_type(A, B)`; compare identity with
@@ -138,11 +138,11 @@ Any trait name not on this list is dispatched to the user-extensible typeinfo-ma
 
 ## static_if, static_assert, concept_assert
 
-`static_if (cond) { } static_elif (cond) { } else { }` — parentheses required; only the selected
+`static_if (cond) { } static_elif (cond) { } else { }` - parentheses required; only the selected
 branch is compiled, so the others may be invalid for the current types.
 
-- `static_assert(cond, "message")` — reports **at the assert**, inside the generic.
-- `concept_assert(cond, "message")` — reports **at the call site**; prefer it for preconditions a
+- `static_assert(cond, "message")` - reports **at the assert**, inside the generic.
+- `concept_assert(cond, "message")` - reports **at the call site**; prefer it for preconditions a
   caller can act on.
 
 ## Recursive (variadic) generics
@@ -180,7 +180,7 @@ one the untyped form above.
 | Prefix | Resolves in |
 |---|---|
 | *(none)* | the module where the generic is **defined**; the caller's overloads are invisible |
-| `_::` | as if written in the **instantiating** module — the caller's overloads *and* everything it requires |
+| `_::` | as if written in the **instantiating** module - the caller's overloads *and* everything it requires |
 | `__::` | the instantiating module's **own** symbols only, nothing imported |
 
 Inside a library generic, an unprefixed call to a function the caller defines fails with
@@ -201,7 +201,7 @@ def table_by_id(t : auto(T)) {
 
 ## Pattern matching
 
-`require daslib/match` adds `match`, `static_match`, `multi_match`, `static_multi_match` — macros
+`require daslib/match` adds `match`, `static_match`, `multi_match`, `static_multi_match` - macros
 matching a value against structural patterns, binding parts of it. Each arm is an `if (pattern)`;
 enum cases use the dotted `Color.Red` form.
 
@@ -216,13 +216,13 @@ enum cases use the dotted `Color.Red` form.
 | `(1, _, "3")`, `(13, ...)`, `(..., "13")` | tuple by position |
 | `fixed_array($v(a), $v(b))`, `fixed_array(0, ...)` | fixed-size array |
 | `[$v(a), $v(b)]`, `[..., 1, 2]` | dynamic array (element count is checked) |
-| `pattern && cond` | guard — extra condition using the bound variables |
+| `pattern && cond` | guard - extra condition using the bound variables |
 | `pattern \|\| pattern` | either; both sides must bind the same variables |
 | `match_expr(x + 1)` | element equals an expression over already-bound variables |
 | `match_type(type<int>, $v(e))` | matches on the type of the expression |
 
 **`static_match`** silently drops arms whose pattern cannot possibly match the argument type, so
-it compiles for any type — the matcher to use inside a generic:
+it compiles for any type - the matcher to use inside a generic:
 
 ```das
 def static_kind(what) : string {

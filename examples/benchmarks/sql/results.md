@@ -1,43 +1,43 @@
-# Four-engine SQL benchmarks — SQLite / DuckDB / PostgreSQL / Array
+# Four-engine SQL benchmarks - SQLite / DuckDB / PostgreSQL / Array
 
 The same `_fold` query families (mirroring `benchmarks/sql`) run over one `Car`
 schema (n = 100 000 cars, 100 dealers, 5 brands) against four engines; cells are
-ns/op, `—` = absent lane. The tables between the `BENCH:TABLES` markers are
+ns/op, ` - ` = absent lane. The tables between the `BENCH:TABLES` markers are
 machine-generated (see "How to re-run"); all other text is hand-edited.
 
 Engine lanes (each in its own file, fixtures built once in `[init]`; the sweep
 runs one process per file so lanes never contaminate each other):
 
-- **SQLite** — in-memory DB via the in-tree `sqlite/sqlite_boost` provider.
-- **DuckDB** — in-memory DB via [dasDuckDB](https://github.com/borisbat/dasDuckDB);
+- **SQLite** - in-memory DB via the in-tree `sqlite/sqlite_boost` provider.
+- **DuckDB** - in-memory DB via [dasDuckDB](https://github.com/borisbat/dasDuckDB);
   columnar/analytical engine, so aggregate-heavy families land very differently
   than row stores.
-- **PostgreSQL** — a live server via
+- **PostgreSQL** - a live server via
   [dasPostgreSQL](https://github.com/borisbat/dasPostgreSQL) (`DAS_PG_CONNINFO`,
   default `host=localhost port=5499 user=postgres dbname=postgres`). Numbers
-  include same-box TCP round-trip cost — that IS the honest client-side view of
+  include same-box TCP round-trip cost - that IS the honest client-side view of
   a networked engine; don't read them as engine-core speed.
-- **Array** — no database at all: the same chains as fused linq folds over an
+- **Array** - no database at all: the same chains as fused linq folds over an
   in-memory `array<Car>`. The baseline the engines are paying their overhead
   against.
 
 ## Missing cells
 
-A PostgreSQL `—` in *every* row just means no server was reachable (the lane
+A PostgreSQL ` - ` in *every* row just means no server was reachable (the lane
 self-skips). The six formerly-dashed DuckDB/PostgreSQL families
 (`distinct_by_*`, `distinct_count_pred`, `groupby_first`,
 `groupby_select_order`, `reverse_distinct_by`) were a dialect gap this suite
-exposed; it's closed — `_distinct_by` now lowers via the provider's
+exposed; it's closed - `_distinct_by` now lowers via the provider's
 `caps.distinct_on` (`DISTINCT ON` on DuckDB/PostgreSQL, SQLite keeps its
 bare-aggregate `GROUP BY`), and renamed projection entries declare
 `AS "<alias>"` so ordering over them resolves on strict engines.
 
 **Current tables: AMD Ryzen Threadripper 3990X (Windows, Release build), single sweep,
-local PostgreSQL server on the same box.** Absolute cells move with the capture box —
+local PostgreSQL server on the same box.** Absolute cells move with the capture box -
 the cross-engine ratios are the signal, not the second decimal.
 
 <!-- BENCH:TABLES BEGIN -->
-*Generated 2026-08-22 by `examples/benchmarks/sql/_update_results.das` — ns/op; `—` = absent lane (e.g. no PostgreSQL server was reachable). Edit the prose around the markers, not the tables.*
+*Generated 2026-08-22 by `examples/benchmarks/sql/_update_results.das` - ns/op; ` - ` = absent lane (e.g. no PostgreSQL server was reachable). Edit the prose around the markers, not the tables.*
 
 ## INTERP
 

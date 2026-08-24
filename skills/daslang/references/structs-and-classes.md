@@ -25,12 +25,12 @@ A function whose name matches the struct is its initializer; the compiler genera
 | `var b : Bar` | uninitialized declaration, zero-filled |
 | `Foo()` | run the initializer: every field gets its declared initializer, or zero |
 | `Foo(x = 13)` | name only what changes; the rest keep their declared initializers |
-| `unsafe(Foo(uninitialized x = 13))` | skip default-init of unnamed fields — hence `unsafe` |
+| `unsafe(Foo(uninitialized x = 13))` | skip default-init of unnamed fields - hence `unsafe` |
 | `new Foo(x = 1)` | same forms, on the current context heap; yields `Foo?` |
 | `Foo(a <- expr)` | move-init one field (zeroes the source) |
 | `Foo(a := expr)` | clone-init one field (source survives) |
 
-**Zero-init trap.** Any field initializer — `x, y : int = 0` counts — makes a bare `var f : Foo`
+**Zero-init trap.** Any field initializer - `x, y : int = 0` counts - makes a bare `var f : Foo`
 `error[31016]: Uninitialized variable f is unsafe`; write `var f = Foo()`.
 `[safe_when_uninitialized]` on the struct allows it, but zero-fills instead of applying the
 initializers.
@@ -39,7 +39,7 @@ A field whose *type* is unsafe-when-uninitialized and has no initializer is
 `error[31030]: Uninitialized field a is unsafe` at the struct declaration, silenced by
 `@safe_when_uninitialized value : T` on that field. (probe-verified 2026-08-16)
 
-**Clone initializer** — an initializer taking `Foo?`, so `new Foo(a)` deep-copies `a`:
+**Clone initializer** - an initializer taking `Foo?`, so `new Foo(a)` deep-copies `a`:
 `def Foo(p : Foo?) { var self := *p; return <- self }`.
 
 Arrays of structs: `var fs <- [Foo(x = 11, y = 22.0), Foo(x = 33)]`. The older
@@ -49,7 +49,7 @@ Arrays of structs: `var fs <- [Foo(x = 11, y = 22.0), Foo(x = 33)]`. The older
 
 Structs have no member functions; four idioms replace them:
 
-**1. Free function + pipe** — zero overhead, statically resolved.
+**1. Free function + pipe** - zero overhead, statically resolved.
 
 ```das
 def setXY(var self : Point; X, Y : int) {
@@ -64,7 +64,7 @@ let n = p.length2()         // dot works on struct values too: length2(p)
 `with (expr)` accepts any struct expression, temporaries included; writes go back through the
 reference. There is no `with (var x = expr)` binding form.
 
-**2. Function-pointer field** — an indirect call through a data member, overridable per derived
+**2. Function-pointer field** - an indirect call through a data member, overridable per derived
 type: "virtual" for a struct. **3. An inline `def`** is sugar for it, body wrapped in
 `with (self)`.
 
@@ -81,7 +81,7 @@ i.setXY(1, 2)               // dot, arrow and raw invoke all work on the inline 
 invoke(i.setXY, i, 5, 6)
 ```
 
-**4. `[class_method]` from `daslib/class_boost`** — a direct (non-virtual, no function-pointer
+**4. `[class_method]` from `daslib/class_boost`** - a direct (non-virtual, no function-pointer
 field) method: prepends a `self` argument and wraps the body in `with (self)`.
 
 ```das
@@ -99,7 +99,7 @@ struct Counter {
 `[explicit_const_class_method]` when one name needs both a const and a non-const overload.
 
 Call forms for idioms 3 and 4: `obj.m(...)`, `ptr->m(...)`, and `` Type`m(obj, ...) ``. **`|>` does
-not work** — the generated function is named `` Type`m ``.
+not work** - the generated function is named `` Type`m ``.
 
 ## Struct inheritance
 
@@ -125,7 +125,7 @@ def whichTag(var b : Base) : int => b->tag()    // whichTag(Kid()) is 2
 | function-pointer field | `override set = cast<auto>(@@Kid_setXY)` (cast needed: `self` type changed) |
 | plain data field's initializer | `override typeTag : uint64 = hash("Kid")` |
 
-`upcast` is C++/Java's *downcast* — guard it with a discriminator field when the dynamic type is
+`upcast` is C++/Java's *downcast* - guard it with a discriminator field when the dynamic type is
 not statically known.
 
 ```das
@@ -178,13 +178,13 @@ inheritance (`error[20701]`); `def sealed area : float` overrides and bans furth
 | Call form | Notes |
 |---|---|
 | `p.method(a)` / `p->method(a)` | identical on a pointer; dot also works on a value |
-| `` Type`method(*p, a) `` | explicit, non-virtual — calls that exact class's version |
-| `p \|> method(a)` | **does not work** — there is no free function named `method` |
+| `` Type`method(*p, a) `` | explicit, non-virtual - calls that exact class's version |
+| `p \|> method(a)` | **does not work** - there is no free function named `method` |
 
 **`const` methods** take `self` as const: they may not write fields, and may not call non-const
 methods (`error[30187]`).
 
-**Local class instances are unsafe** — `var f = Foo()` is `error[31017]: local class requires
+**Local class instances are unsafe** - `var f = Foo()` is `error[31017]: local class requires
 unsafe`; allocate with `new Foo()`, or wrap in `unsafe { }`. `delete` on a class pointer also
 requires `unsafe` (`error[31009]`).
 
@@ -199,13 +199,13 @@ parent has no match, `super` walks up to the nearest ancestor that does, matchin
 types.
 
 A derived constructor whose parent has a user constructor must call `super(...)` **exactly once on
-every control-flow path** — zero, two, or a call inside a loop are all `error[30308]`.
+every control-flow path** - zero, two, or a call inside a loop are all `error[30308]`.
 
 - A derived class with **no** constructor of its own gets a synthesized one that chains `super()`,
   so `new NoCtor()` runs the parent's constructor body.
 - A class **with** a user constructor still keeps the generated named-field initializer, so
   `new WithCtor(z = 9)` performs plain field-init and **does not run** the user constructor or the
-  parent's — leaving parent fields at zero. Use `new WithCtor(3)` when you want the constructor.
+  parent's - leaving parent fields at zero. Use `new WithCtor(3)` when you want the constructor.
 
 ### Finalizers
 
@@ -218,7 +218,7 @@ level; each level finalizes its own field slice exactly once.
   `delete cast<Ancestor>(self)` that skips the immediate parent does not count.
 - `delete` on a base-class pointer dispatches to the real dynamic type through the generated
   `__finalize` pointer: `delete b` where `b : Base? = new Leaf()` runs Leaf, then Mid, then Base.
-- Finalizers are not guaranteed to run implicitly — `delete` is explicit.
+- Finalizers are not guaranteed to run implicitly - `delete` is explicit.
 
 ### Operators as methods
 
@@ -240,8 +240,8 @@ pointer fails to compile with `error[30190]: is Dog only allowed for variants`.
 require daslib/dynamic_cast_rtti
 
 var a : Animal? = new Dog()
-a is Dog                    // true — walks the __rtti chain at runtime
-a is Animal                 // true — Dog is an Animal; a is Cat is false
+a is Dog                    // true - walks the __rtti chain at runtime
+a is Animal                 // true - Dog is an Animal; a is Cat is false
 var d = a as Dog            // forced: panics if the type is wrong
 var c = a ?as Cat           // safe: null if the type is wrong
 ```
@@ -252,7 +252,7 @@ ignores C++ inheritance.
 ## Interfaces
 
 `daslib/interfaces` gives polymorphism without a shared base class: an `[interface]` class holds
-methods only, no data fields; every `[implements(IName)]` class must define all of them — missing
+methods only, no data fields; every `[implements(IName)]` class must define all of them - missing
 ones are a compile error. Interface inheritance (`[interface] class IChild : IParent`) and
 non-abstract default methods are both supported.
 

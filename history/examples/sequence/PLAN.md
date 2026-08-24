@@ -1,8 +1,8 @@
-# Sequence Board Game — Live Coding Project Plan
+# Sequence Board Game - Live Coding Project Plan
 
 ## Context
 
-Build the Sequence card/board game as a live-coded daslang application in `examples/games/sequence/` (originally `examples/daslive/sequence/`). The primary goal is **exercising and stress-testing live coding** — the game is the vehicle, not the destination. If live-reload bugs surface, we stop and fix those first.
+Build the Sequence card/board game as a live-coded daslang application in `examples/games/sequence/` (originally `examples/daslive/sequence/`). The primary goal is **exercising and stress-testing live coding** - the game is the vehicle, not the destination. If live-reload bugs surface, we stop and fix those first.
 
 The existing `main.das` (68 lines) already has a working card viewer with dasCards integration. We'll grow it incrementally, keeping the app live-reloadable at every phase.
 
@@ -29,7 +29,7 @@ examples/games/sequence/
 - **Jack rules**: black jacks (spade, club) = remove opponent chip; red jacks (heart, diamond) = wild placement
 - **Player modes**: always 1 human + 1/2/3 bots (2, 3, or 4 player games). No networking.
 - **Separation**: `gameplay.das` is pure logic (no OpenGL, no GLFW); `main.das` owns all rendering + state + bot dispatch
-- **Bot interface**: each bot exports `def bot_XXX_move(game : GameState; player_idx : int) : Move` — function pointers in main.das, no classes
+- **Bot interface**: each bot exports `def bot_XXX_move(game : GameState; player_idx : int) : Move` - function pointers in main.das, no classes
 - **State persistence**: `GameState` via `@live` vars; GPU resources guarded by `is_reload()`
 - **Headless mode**: bot-vs-bot tournaments run without rendering (tight loop in `elo.das`)
 - **Sound**: procedural generation (sine/noise synthesis), tunable via `@live` vars
@@ -60,7 +60,7 @@ examples/games/sequence/
 ### Phase 2: Chips + Hover + Click
 - Draw chips as colored circles (triangle-fan mesh, created once)
 - Mouse hit-testing: highlight hovered cell via `draw_card` tint
-- Click places/cycles chip color (debug mode — no game rules yet)
+- Click places/cycles chip color (debug mode - no game rules yet)
 - `[live_command]` `cmd_place_chip(row, col, color)`, `cmd_clear_board`
 - `@live` vars: chip size, chip colors, hover tint
 - **Tests**: hit-testing logic (screen coords to grid cell), chip state round-trip
@@ -68,7 +68,7 @@ examples/games/sequence/
 
 ### Phase 3: Game State + Turn Structure
 - `gameplay.das`: `GameState` struct (board chips, hands, draw pile, discard, current player, phase enum)
-- `make_game(num_players)` — shuffle deck, deal hands (7 for 2p, 6 for 3p, 5 for 4p)
+- `make_game(num_players)` - shuffle deck, deal hands (7 for 2p, 6 for 3p, 5 for 4p)
 - `legal_moves()`, `apply_move()`, dead card detection
 - Jack logic included from the start (black=remove, red=wild)
 - `main.das`: display human's hand at bottom, card selection, play by clicking board, turn indicator
@@ -79,7 +79,7 @@ examples/games/sequence/
 - **Result**: playable game, human controls all sides (hot-seat debug)
 
 ### Phase 4: Win Detection + Sequence Highlighting
-- `gameplay.das`: `find_sequences()` — scan all 4 directions, FREE corners wild for everyone, sequences can share one cell
+- `gameplay.das`: `find_sequences()` - scan all 4 directions, FREE corners wild for everyone, sequences can share one cell
 - `check_win()` with player-count-aware condition (2 sequences for 2p, 1 for 3-4p)
 - `main.das`: highlight completed sequences (pulsing tint or colored line through 5 chips), game over screen with winner
 - `[live_command]` `cmd_check_sequences`
@@ -105,7 +105,7 @@ examples/games/sequence/
 - **Result**: fluid, polished feel
 
 ### Phase 7: Sound Effects
-- Procedural audio generation (sine sweeps, noise bursts — arcanoid pattern)
+- Procedural audio generation (sine sweeps, noise bursts - arcanoid pattern)
 - Events: card play (click/snap), chip place (thud), card draw (swish), jack remove (descending tone), sequence complete (ascending arpeggio), game win (fanfare), turn chime
 - `@live` volume, `[live_command]` `cmd_play_sound(name)`
 - **Tests**: PCM buffer generation produces non-zero samples, correct sample rates/lengths
@@ -128,7 +128,7 @@ examples/games/sequence/
 - `@live` ELO ratings for persistence across reloads
 - Console output: "After 1000 games: greedy=1520, random=1480"
 - **Tests**: ELO calculation math (expected score, K-factor update), headless game runs to completion, greedy beats random statistically (>60% win rate over 100+ games)
-- **Result**: data-driven bot development — modify bot, reload, tournament, check ELO delta
+- **Result**: data-driven bot development - modify bot, reload, tournament, check ELO delta
 
 ### Phase 10: Heuristic Bot + Weight Tuning
 - `bot_heuristic.das`: same evaluation categories as greedy, but with **configurable weight struct**
@@ -154,16 +154,16 @@ examples/games/sequence/
 1. Complete the phase implementation
 2. Run automated tests
 3. Take screenshots of the running app and review visually
-4. Manual play-testing — exercise the new functionality, screenshot results
+4. Manual play-testing - exercise the new functionality, screenshot results
 5. Stop and present results to the user
 6. Wait for user review and approval before starting the next phase
 
-If live-reload breaks at any point, that becomes the immediate priority — fix it before continuing the current phase.
+If live-reload breaks at any point, that becomes the immediate priority - fix it before continuing the current phase.
 
 ## Verification (per phase)
 
 1. **Live reload**: save file, confirm hot-reload works, `@live` vars tunable, state persists
-2. **Screenshots**: take a screenshot of the running app and review it visually — check board layout, chip rendering, hand display, animations, UI elements. This is the primary way to catch rendering bugs.
+2. **Screenshots**: take a screenshot of the running app and review it visually - check board layout, chip rendering, hand display, animations, UI elements. This is the primary way to catch rendering bugs.
 3. **Tests**: run `test_gameplay.das` (and other test files) via `run_test` MCP tool or dastest
 4. **MCP tools**: `compile_check` for syntax, `live_status` / `live_reload` for live testing
 5. **Game logic**: `[live_command]` endpoints to inspect/manipulate state
@@ -172,11 +172,11 @@ If live-reload breaks at any point, that becomes the immediate priority — fix 
 
 ## Critical Files
 
-- `examples/games/sequence/main.das` — main app (modify)
-- `examples/games/sequence/gameplay.das` — new, pure game logic module
-- `examples/games/sequence/bot_*.das` — new, one per AI
-- `examples/games/sequence/elo.das` — new, tournament system
-- `examples/games/sequence/test_*.das` — tests, grow each phase
-- `e:\dasCards\cards\opengl_cards.das` — card rendering API (read-only reference)
-- `skills/daslang_live.md` — live coding patterns (read before each phase)
-- `skills/das_formatting.md` — formatting rules (read before writing .das)
+- `examples/games/sequence/main.das` - main app (modify)
+- `examples/games/sequence/gameplay.das` - new, pure game logic module
+- `examples/games/sequence/bot_*.das` - new, one per AI
+- `examples/games/sequence/elo.das` - new, tournament system
+- `examples/games/sequence/test_*.das` - tests, grow each phase
+- `e:\dasCards\cards\opengl_cards.das` - card rendering API (read-only reference)
+- `skills/daslang_live.md` - live coding patterns (read before each phase)
+- `skills/das_formatting.md` - formatting rules (read before writing .das)

@@ -1,6 +1,6 @@
 # jobque-timeline
 
-Per-lane jobque trace viewer — the in-repo successor to the hand-spliced lane-timeline
+Per-lane jobque trace viewer - the in-repo successor to the hand-spliced lane-timeline
 browser artifact. Opens `jobque_trace_save` / `daslib/jobque_profile` JSON files (perfetto-
 compatible) in dockable ImGui windows: one row per lane, events colored by category with
 per-stage shading, unit markers (`token` / `layer` / `step`), computed stats (idle %,
@@ -9,7 +9,7 @@ rail that reruns your trace-producing app and auto-refreshes on save.
 
 ## Run
 
-The viewer needs dasImgui, which ships in-tree (`modules/dasImgui`) — nothing to install.
+The viewer needs dasImgui, which ships in-tree (`modules/dasImgui`) - nothing to install.
 
 ```
 bin/Release/daslang.exe -project_root utils/jobque-timeline utils/jobque-timeline/main.das -- a.trace.json b.trace.json
@@ -38,8 +38,8 @@ daslang-live -project_root utils/jobque-timeline utils/jobque-timeline/main.das
 `timeline_launch {app,args}`, `timeline_launch_status`, `timeline_refresh {file}`,
 `timeline_set_autorefresh {on}`.
 
-All times are µs, file-relative. `timeline_range_stats` and `timeline_describe` are the
-screenshot-free rail: selections and views come back as structured JSON (events, busy µs
+All times are us, file-relative. `timeline_range_stats` and `timeline_describe` are the
+screenshot-free rail: selections and views come back as structured JSON (events, busy us
 by category, idle %, parallelism, publish count).
 
 ## Files

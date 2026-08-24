@@ -9,29 +9,29 @@ The companion skill is `skills/internal/documentation_rst.md` for the RST side. 
 | Path | Purpose |
 |---|---|
 | `tutorials/<area>/*.das` | The canonical, project-wide tutorial home. New tutorials go here. |
-| `modules/<X>/tutorial/*.das` | **Inherited / upstream examples** (e.g. `modules/dasSQLITE/tutorial/` is the zetcode C-API port). Reference material — leave them alone. |
-| `history/<X>/tutorial-mockup/*.mockup` | Pre-implementation design artifacts (un-compilable), archived with their arc (e.g. `history/dasSQLITE/tutorial-mockup/`). Reference material — leave them alone. |
+| `modules/<X>/tutorial/*.das` | **Inherited / upstream examples** (e.g. `modules/dasSQLITE/tutorial/` is the zetcode C-API port). Reference material - leave them alone. |
+| `history/<X>/tutorial-mockup/*.mockup` | Pre-implementation design artifacts (un-compilable), archived with their arc (e.g. `history/dasSQLITE/tutorial-mockup/`). Reference material - leave them alone. |
 
-If you find yourself editing or replacing a file under `modules/<X>/tutorial/`, **stop**. Create the new tutorial under `tutorials/<area>/` instead and leave the inherited file as-is — those files are the cross-reference for the API rewrite, and overwriting them loses provenance.
+If you find yourself editing or replacing a file under `modules/<X>/tutorial/`, **stop**. Create the new tutorial under `tutorials/<area>/` instead and leave the inherited file as-is - those files are the cross-reference for the API rewrite, and overwriting them loses provenance.
 
 Existing areas (one per "topic", roughly one per non-language module):
 
 ```
-tutorials/language/        — language tutorials (NN_name.das)
-tutorials/macros/          — macro tutorials (NN_name.das + name_mod.das)
-tutorials/integration/c/   — C integration tutorials
-tutorials/integration/cpp/ — C++ integration tutorials
-tutorials/sql/             — dasSQLITE (NN-name.das, hyphenated)
-tutorials/dasAudio/        — dasAudio
-tutorials/dasHV/           — dasHV (HTTP/WebSocket)
-tutorials/dasMinfft/       — dasMinfft (FFT/DCT)
-tutorials/dasOPENAI/       — dasOPENAI (LLM API)
-tutorials/dasPEG/          — dasPEG (parser)
-tutorials/dasPUGIXML/      — dasPUGIXML (XML)
-tutorials/dasStbImage/     — dasStbImage
-tutorials/daStrudel/       — daStrudel (live-coding)
-tutorials/jsonrpc/         — JSON-RPC
-tutorials/opengl/          — OpenGL (installed as a directory)
+tutorials/language/        - language tutorials (NN_name.das)
+tutorials/macros/          - macro tutorials (NN_name.das + name_mod.das)
+tutorials/integration/c/   - C integration tutorials
+tutorials/integration/cpp/ - C++ integration tutorials
+tutorials/sql/             - dasSQLITE (NN-name.das, hyphenated)
+tutorials/dasAudio/        - dasAudio
+tutorials/dasHV/           - dasHV (HTTP/WebSocket)
+tutorials/dasMinfft/       - dasMinfft (FFT/DCT)
+tutorials/dasOPENAI/       - dasOPENAI (LLM API)
+tutorials/dasPEG/          - dasPEG (parser)
+tutorials/dasPUGIXML/      - dasPUGIXML (XML)
+tutorials/dasStbImage/     - dasStbImage
+tutorials/daStrudel/       - daStrudel (live-coding)
+tutorials/jsonrpc/         - JSON-RPC
+tutorials/opengl/          - OpenGL (installed as a directory)
 ```
 
 When adding tutorials for a **new** module, create a new `tutorials/<module>/` directory rather than dumping into an existing one.
@@ -83,9 +83,9 @@ Each tutorial is **one self-contained `[export] def main()` script** that runs e
 
 - Use section-banner comments to chunk the body:
   ```das
-  // ──────────────────────────────────────────────────────────────────────────
-  // Section 1 — One-line section title
-  // ──────────────────────────────────────────────────────────────────────────
+  // --------------------------------------------------------------------------
+  // Section 1 - One-line section title
+  // --------------------------------------------------------------------------
   //
   // 2-3 lines of prose explaining what this section demonstrates.
   ```
@@ -95,19 +95,19 @@ Each tutorial is **one self-contained `[export] def main()` script** that runs e
 
 ## Macro tutorials are split
 
-Anything under `tutorials/macros/` follows a special two-file pattern: numbered usage file (`NN_topic.das`) requires a non-numbered module file (`topic_mod.das`). Module files have no number prefix so `require` resolution works. See `skills/internal/documentation_rst.md` § "Macro tutorial RST conventions" for the doc side.
+Anything under `tutorials/macros/` follows a special two-file pattern: numbered usage file (`NN_topic.das`) requires a non-numbered module file (`topic_mod.das`). Module files have no number prefix so `require` resolution works. See `skills/internal/documentation_rst.md` sec. "Macro tutorial RST conventions" for the doc side.
 
 ## RST companion (REQUIRED)
 
-Every shipped tutorial has a paired RST page under `doc/source/reference/tutorials/`. The full conventions (label pattern, `.. seealso::` block, toctree placement) live in `skills/internal/documentation_rst.md` § "Tutorial RST conventions". The short version:
+Every shipped tutorial has a paired RST page under `doc/source/reference/tutorials/`. The full conventions (label pattern, `.. seealso::` block, toctree placement) live in `skills/internal/documentation_rst.md` sec. "Tutorial RST conventions". The short version:
 
-1. Create `doc/source/reference/tutorials/<area>_NN_<topic>.rst` (use a sibling tutorial's RST as the template — same pattern as `sql_03_last_row_id.rst` or `01_hello_world.rst`).
+1. Create `doc/source/reference/tutorials/<area>_NN_<topic>.rst` (use a sibling tutorial's RST as the template - same pattern as `sql_03_last_row_id.rst` or `01_hello_world.rst`).
 2. Add the new entry to the matching toctree section in `doc/source/reference/tutorials.rst`.
 3. Run the Sphinx workflow from `skills/internal/documentation_rst.md` to verify zero new warnings.
 
 ## CMake install hook
 
-Tutorials are installed to `${DAS_INSTALL_TUTORIALSDIR}/<area>/` via per-area `file(GLOB ...) + install(FILES ...)` blocks in `tutorials/CMakeLists.txt` (search for `_TUTORIAL_SOURCES`). When adding a tutorial to an **existing** registered area, the glob picks it up automatically — no CMake edit needed. All current areas are registered.
+Tutorials are installed to `${DAS_INSTALL_TUTORIALSDIR}/<area>/` via per-area `file(GLOB ...) + install(FILES ...)` blocks in `tutorials/CMakeLists.txt` (search for `_TUTORIAL_SOURCES`). When adding a tutorial to an **existing** registered area, the glob picks it up automatically - no CMake edit needed. All current areas are registered.
 
 When adding a tutorial for a **new** area, add the install rule to `tutorials/CMakeLists.txt`. Pattern:
 
@@ -124,10 +124,10 @@ If a tutorial pulls in non-`.das` data files (like `tutorials/dasPUGIXML/books.x
 
 ## Development workflow
 
-From `skills/internal/documentation_rst.md` § "Tutorial development workflow" — repeated here because it's load-bearing:
+From `skills/internal/documentation_rst.md` sec. "Tutorial development workflow" - repeated here because it's load-bearing:
 
-1. **Throwaway test file** during development to validate behavior — `dastest --test test_<topic>.das`. Always check `$LASTEXITCODE`.
-2. **Do NOT stage or commit the test file.** Tutorials are self-demonstrating — running the tutorial file itself is the test.
+1. **Throwaway test file** during development to validate behavior - `dastest --test test_<topic>.das`. Always check `$LASTEXITCODE`.
+2. **Do NOT stage or commit the test file.** Tutorials are self-demonstrating - running the tutorial file itself is the test.
 3. **Format** every `.das` tutorial with the MCP `format_file` tool before staging (`skills/das_formatting.md`).
-4. **Run the tutorial end-to-end** as the final check: `bin/Release/daslang.exe tutorials/<area>/NN_name.das` and inspect output. Crashes can produce no output — always check exit code.
+4. **Run the tutorial end-to-end** as the final check: `bin/Release/daslang.exe tutorials/<area>/NN_name.das` and inspect output. Crashes can produce no output - always check exit code.
 5. Stage only: tutorial `.das`, RST page, toctree update, CMake install rule (if first tutorial in a new area).

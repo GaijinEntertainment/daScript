@@ -1,9 +1,9 @@
-# dasHerd fix round — play-session triage (2026-07-25)
+# dasHerd fix round - play-session triage (2026-07-25)
 
 Source: Boris's first real play session (31 notes) + parity audit #1.
 Rule of the round: obvious fixes land without discussion; everything
 else gets a decision here first. Standing practice adopted the same day:
-screenshot vs live-inspection parity — anything visible but not
+screenshot vs live-inspection parity - anything visible but not
 inspectable, or editable but not commandable, is a bug (the app is as
 much for the agent as for the human).
 
@@ -15,37 +15,37 @@ much for the agent as for the human).
 3. New Session launcher must be a MODAL DIALOG, not dockable; while
    any dialog is up the rest of the UI is disabled and dimmed (darker
    background), standard modal behavior. (Reverses the dockable call.)
-4. Agent session launch: (a) terminal colors wrong; (b) env leak —
-   child Claude Code inherits CLAUDE_CODE_CHILD_SESSION → transcript
-   saving off → Relaunch/`--continue` broken.
+4. Agent session launch: (a) terminal colors wrong; (b) env leak -
+   child Claude Code inherits CLAUDE_CODE_CHILD_SESSION -> transcript
+   saving off -> Relaunch/`--continue` broken.
 5. Launch button doesn't close the launcher.
 6. Changelist per-row action icons: no tooltip on hover.
-7. Session appears twice (herd card + raw PTY row) — reads as duplicate.
+7. Session appears twice (herd card + raw PTY row) - reads as duplicate.
 8. Terminal has no scrollback access. (Parity audit: `scrollback_rows`
-   is 0 — no retained scrollback data either; data + UI fix.)
+   is 0 - no retained scrollback data either; data + UI fix.)
 9. Git surfaces don't aim at the attached session's worktree
    ("select a worktree" despite known origin).
-10. Mixed path separators in herd records (`D:/...\.codex/...`) —
+10. Mixed path separators in herd records (`D:/...\.codex/...`) -
     string identity matches (aim, conflicts, joins) silently fail.
     Investigated live: agent work was in the right worktree all along;
     surfaces were aimed elsewhere + PR tab counts commits only.
-11. Launcher: chose an EXISTING worktree, a new one was created —
+11. Launcher: chose an EXISTING worktree, a new one was created -
     "Create a dedicated worktree" default-on makes "Start from" mean
     "base for new", not "run here". Semantics must be explicit.
 12. Ctrl+wheel zoom is global; should zoom the view under the cursor.
 13. File Inspector missing search; audit every view for search.
 14. Inspector Diff/View mode must stick across file selections.
-15. "Previous/next change" are text buttons — icons; audit the rest.
-16. Project view → real file browser: distinct colors
+15. "Previous/next change" are text buttons - icons; audit the rest.
+16. Project view -> real file browser: distinct colors
     (folder/file/hidden), explicit sort modes with cycle, dirty
     propagation up folders, table with toggleable size/date columns,
     name filter with include-subfolders checkbox (default on).
 17. Launched agent unaware of dasHerd/dasherder skills.
 18. Repositories & Worktrees readability: colored path/branch
-    components, actively-used markers, worktree ↔ session navigation.
+    components, actively-used markers, worktree <-> session navigation.
 19. Sessions panel: Attention/Bundles belong under each session as
     subtree children; zero-count sections don't render.
-20. Typed-token color language (SHA, PID, path, branch) — one scheme,
+20. Typed-token color language (SHA, PID, path, branch) - one scheme,
     applied everywhere.
 21. PR view shows its base (merge-base commit) as a disabled row even
     with zero outgoing commits; hint at uncommitted Changelist work.
@@ -55,7 +55,7 @@ much for the agent as for the human).
     editable keyboard shortcuts first.
 24. Settings stays a dock tab; zoom is PER WINDOW and persisted;
     settings write-through on every change.
-25. Multiple terminals (or instant switching with preserved state) —
+25. Multiple terminals (or instant switching with preserved state) -
     scenario 1 is several agents at once.
 26. "Agent needs me": surface blocked-at-prompt / waiting-for-input on
     cards, not just explicit Attention.
@@ -63,84 +63,84 @@ much for the agent as for the human).
 28. Error history surface (latest-only chrome loses dismissed errors).
 29. Cards show output age, not just registry age.
 30. Parity audit #1: (a) selectable rows carry no label text in
-    snapshots — dasImgui fix; (b) terminal colors not inspectable
+    snapshots - dasImgui fix; (b) terminal colors not inspectable
     (need cell attributes); (c) scrollback_rows exposed = good, value 0
     = bug; (d) no attach-session / terminal-input semantic rails;
     zoom % not in state.
 31. The agent (Claude) talks to sessions through the terminal: type,
-    submit, read. Acceptance test after next restart — PowerShell
+    submit, read. Acceptance test after next restart - PowerShell
     first, then a live agent session.
 
 ## Priority (settled 2026-07-25: bugs over everything)
 
-Defects first — anything broken, silently wrong, or lying to the user
+Defects first - anything broken, silently wrong, or lying to the user
 or the agent lands before any feature, polish, or redesign work.
 
-P0 — broken core flows:
+P0 - broken core flows:
 - 4b env leak (kills `claude --continue` for every launched agent)
 - 10 path-separator identity mismatches (conflicts/aim/joins dead)
 - 11 launcher ignores "run in existing worktree" intent
 - 34 launcher race: Launch clicked before the repository list arrives
-  is a silent no-op (button silently disabled; no feedback) — same
+  is a silent no-op (button silently disabled; no feedback) - same
   family as 11: the launcher lies about what it will do
-- 8 scrollback — INVESTIGATED, decomposed (2026-07-25): the emulator
-  retains history fine (probe: 200 lines → scrollback_rows 136) and
-  the wheel already scrolls it (verified scroll_offset 0→15→0). Two
-  real items remain: (a) DISCOVERABILITY — no scrollbar, so scrolling
+- 8 scrollback - INVESTIGATED, decomposed (2026-07-25): the emulator
+  retains history fine (probe: 200 lines -> scrollback_rows 136) and
+  the wheel already scrolls it (verified scroll_offset 0->15->0). Two
+  real items remain: (a) DISCOVERABILITY - no scrollbar, so scrolling
   looks impossible (P2, add the scrollbar); (b) agent TUIs like Claude
   Code repaint in place, so terminal-level history is legitimately
-  empty there — transcript scrolling belongs to the TUI itself; a
+  empty there - transcript scrolling belongs to the TUI itself; a
   watcher-ring history view is the eventual answer if we want one.
   Rail nuance found on the way: herder_terminal_state.screen_text is
-  the live bottom screen regardless of scroll_offset (fine — the agent
+  the live bottom screen regardless of scroll_offset (fine - the agent
   wants the live screen), and the attached session can change between
-  input calls — herder_terminal_input should grow an optional
+  input calls - herder_terminal_input should grow an optional
   expected-session guard.
 - DONE 17 agent awareness (2026-07-25, four slices): per-profile
   intro_lines (opt-in first-prompt injection); marker-guarded
   CLAUDE.local.md drop + per-worktree git exclude at agent launch;
   dasherder row in the CLAUDE.md skill table; dasherd MCP shim
-  (utils/internal/das-herd/mcp_main.das — whoami/inbox/outbox/bundle/repository
+  (utils/internal/das-herd/mcp_main.das - whoami/inbox/outbox/bundle/repository
   tools over the watcher HTTP API, wired into .mcp.json by the
   supervisor's emit-config; CLI stays as human/fallback). Env scrub +
-  transcript persistence landed earlier with 4b. Codex rides MCP —
+  transcript persistence landed earlier with 4b. Codex rides MCP -
   no AGENTS.md shadow (tracked-file checkout collision).
 - 4a terminal colors (blocked on 30b tooling)
 
-P1 — tooling bugs by the parity rule (agent-blindness is a defect):
+P1 - tooling bugs by the parity rule (agent-blindness is a defect):
 - 30a selectable rows carry no label text in snapshots
 - 30b terminal cell attributes not inspectable
 - 33 minimized window starves UI-level agent driving
 - 35 no human/agent UI input arbitration: while the agent drives
   synthetically, human clicks still partially react (real and synth
   input MERGE unless set_user_control(false) explicitly detaches the
-  GLFW callbacks — nothing in dasHerd manages that today, and OS
+  GLFW callbacks - nothing in dasHerd manages that today, and OS
   window chrome is never suppressible from ImGui anyway). Fix shape:
-  an explicit UI input lease mirroring the terminal controller lease —
+  an explicit UI input lease mirroring the terminal controller lease -
   agent driving detaches real input + shows a visible "agent driving"
   banner with a human takeover gesture; semantic rails (Wave 0)
   sidestep the race entirely and stay the preferred path.
 
-P2 — small defects:
+P2 - small defects:
 - 5 launch doesn't close launcher; 6 changelist row tooltips dead;
   14 inspector mode resets; 7 double-listed session
 - RESOLVED 9 by the note-10 fix: attach_session always re-aimed at the
-  session origin (selection + review/history/refs) — it looked dead
+  session origin (selection + review/history/refs) - it looked dead
   because the origin carried the mixed-slash spelling and matched no
   observed worktree. Canonical spellings restored the behavior; the
   selection-is-sacred rule still holds for task auto-attaches (they
   pass follow_origin=false since the ghost fix).
 - 36 Launch has no in-flight debounce: duplicate clicks (incl.
   synthetic clicks queued while the window was minimized, then
-  replayed on restore) each create a session — observed three
+  replayed on restore) each create a session - observed three
   identical env-probe sessions from one intended launch. Debounce on
   a pending-create flag cleared by the herd revision bump.
 
 Features, foundation (command pattern/settings), and surface redesigns
-queue strictly behind these — the wave structure below survives as the
+queue strictly behind these - the wave structure below survives as the
 build order within what remains.
 
-## Wave 0 — rails first (enables everything else, incl. testing 31)
+## Wave 0 - rails first (enables everything else, incl. testing 31)
 
 - 30a: selectable/selectable_label snapshot payload gains its label
   text (dasImgui boost; benefits every app).
@@ -154,7 +154,7 @@ build order within what remains.
 
 Findings while landing Wave 0:
 - 32. Sessions-list loop crash (FIXED): bare `same_line()` inside the
-  per-session row loop — single-global widget renders once per frame —
+  per-session row loop - single-global widget renders once per frame -
   crashed update() the first time TWO interactive sessions were
   visible at once. Latent since the state-glyph slice; the multi-agent
   scenario would have hit it immediately.
@@ -165,30 +165,30 @@ Findings while landing Wave 0:
   frame-independent semantic commands (the direction 30d already
   takes).
 
-## Wave 1 — obvious fixes, no discussion
+## Wave 1 - obvious fixes, no discussion
 
 - 4b env sanitization: strip CLAUDE_CODE_* child markers; set
   CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 for agent profiles.
 - 10 path canonicalization: one spelling (forward slashes) at every
   boundary (launcher suggestions, registry, announce), via fio helpers.
 - 5 launch closes launcher; 1 new-session icon button in Sessions;
-  2 worktree right-click → New Session preselected.
+  2 worktree right-click -> New Session preselected.
 - 6 changelist row tooltip bug; 14 inspector mode stickiness;
-  15 prev/next → icon buttons.
+  15 prev/next -> icon buttons.
 - 21 PR base row + "N uncommitted changes in Changelist" status hint.
 
-## Wave 2 — foundation (discuss shape, then build)
+## Wave 2 - foundation (discuss shape, then build)
 
 - DONE 23/24 settings core (2026-07-25): dasHerd.ui.json, write-through
   on every change, tabbed Settings window (General: base zoom slider,
   session-list toggles), migrates the old layout-choice file; verified
   save+load live.
 - DONE 12 per-window zoom (2026-07-25): window_zoom_scope wraps each
-  work window — Ctrl+wheel adjusts only the hovered window, persists in
+  work window - Ctrl+wheel adjusts only the hovered window, persists in
   window_zoom, composes with the base zoom via with_font. Terminal
   keeps its explicit buttons on the base zoom pending a renderer pass.
 - DONE command pattern + editable shortcuts (2026-07-25): built on
-  imgui/imgui_commands (the existing dasImgui registry — ImGui-routed
+  imgui/imgui_commands (the existing dasImgui registry - ImGui-routed
   Shortcut() chords, macOS primary/secondary, invocation queue,
   bindings file with overlay-on-defaults load) instead of a bespoke
   table. rich_commands.das is a thin adapter: id -> action table,
@@ -207,7 +207,7 @@ Findings while landing Wave 0:
   round-tripped the bindings file; menu shortcut hints render from the
   registry. imgui_commands changes (dasImgui): capture_binding renamed
   public command_capture_tick for custom binding UIs, and the capture
-  loop now skips the side-modifier keys (LeftCtrl..RightSuper) — it
+  loop now skips the side-modifier keys (LeftCtrl..RightSuper) - it
   used to bind "Ctrl+LeftCtrl" the instant a real keyboard pressed the
   modifier half of a chord. Synth-test gotcha for the record:
   imgui_key_chord mods is an ARRAY (["Ctrl","Shift"]); a "Ctrl+Shift"
@@ -219,27 +219,27 @@ Every in-repo bug from the triage is fixed, live-verified, and
 committed.
 
 DONE 30b (2026-07-25): herder_terminal_state gained an `ansi` arg
-returning the emulator's checkpoint ANSI with full SGR — terminal
+returning the emulator's checkpoint ANSI with full SGR - terminal
 attributes are now inspectable end to end.
 
 DONE 4a (2026-07-25, root-caused via 30b): the colors were never a
 rendering bug. Probes proved the dasTerminal emulator decodes and the
 imgui_terminal renderer draws 16/256/truecolor + dim + resets
 correctly. The TUIs were monochrome because Claude Code sets
-NO_COLOR=1 in its tool shells — the watcher inherited it and passed it
+NO_COLOR=1 in its tool shells - the watcher inherited it and passed it
 to every PTY child, so chalk disabled color at the source. The env
 sanitizer now also scrubs NO_COLOR, CLAUDE_CODE_SESSION_ID, and
 CLAUDE_PID; verified with a live Claude launch rendering the brand
 truecolor logo.
 
 DONE in the dasImgui checkout, branch codex/embedded-terminal (all
-das-side — no DLL rebuild was ever needed):
+das-side - no DLL rebuild was ever needed):
 - 30a (144f0ed): ClickState/ToggleState carry the visible label
   (## suffix stripped) in snapshot payloads; icon_button reports its
   glyph. Verified: worktree rows now name themselves.
 - Scrollbar (f85b643): draggable right-edge scrollback track on the
   terminal widget, inset clear of the dock splitter's hover-stealing
-  grab zone. Verified: drag jumped scroll_offset 0→218 of 236.
+  grab zone. Verified: drag jumped scroll_offset 0->218 of 236.
 
 DONE note 31 in full + the conversation rails (dasHerd 5f9a38160):
 herder_session_say / herder_session_reply / herder_session_key
@@ -259,7 +259,7 @@ a restarted watcher's first broadcast always applies.
     a slot with the chain dispatcher whose captured prev still routes
     into ImGui, so the backend detach alone cannot sever real input.
     DONE (three layers):
-    - dasGlfw C++: real/synth entry split — GLFW slots now get
+    - dasGlfw C++: real/synth entry split - GLFW slots now get
       DasGlfw_Real* trampolines gated by glfw_set_real_input_muted;
       DasGlfw_Post* (synth) call the dispatchers directly and bypass
       the mute. Depth guard in dispatchers breaks historical
@@ -273,9 +273,9 @@ a restarted watcher's first broadcast always applies.
       elsewhere (the original, lease-level half of this note).
     - Inspectability: herder_input_state live command (user-control
       lock, synth cursor/keys, io cursor, real wheel/click counters)
-      — the lock was previously invisible to both screenshot and
+      - the lock was previously invisible to both screenshot and
       snapshot, a parity-audit violation.
-    The lease-arbitration UX ("input is leased to X — click to
+    The lease-arbitration UX ("input is leased to X - click to
     claim") still folds into the note-35 design.
 
 Still open, small, dasImgui-internal (agent-rail QoL, no dasHerd flow
@@ -283,24 +283,24 @@ blocked): combo imgui_force_set stops applying after a live reload
 (popup-click workaround exists); ClickState.click_count counts clicks
 on enabled=false widgets (the macro gates the return value after the
 widget already counted). Also learned: set_user_control(false)
-detaches the GLFW layer imgui_click itself injects through — use the
+detaches the GLFW layer imgui_click itself injects through - use the
 imgui_mouse_* bypass commands while input is detached.
 
 39. (Boris, end of round) Opening a portal (nested-repo) file from the
-    Project view in sticky Diff mode shows a SILENT EMPTY inspector —
+    Project view in sticky Diff mode shows a SILENT EMPTY inspector -
     reads as stuck. Forensics (live, while stuck): the app was fine
     (frames advancing); diff_row_count/old/new byte counts all 0 with
-    prepare_outcome "ready", status "" — the parent repo's git cannot
+    prepare_outcome "ready", status "" - the parent repo's git cannot
     diff a nested-repo file, and nothing says so. The VIEW side had
     prepared fine (13.7KB). Fix shape for the review round: portal
     files force View mode (or the diff pane states "file belongs to a
-    nested repository — no diff against the parent") — pairs with the
+    nested repository - no diff against the parent") - pairs with the
     registered-repo synthesis follow-up under note 37.
 
-## Wave 3 — surface reworks (each needs a short design pass)
+## Wave 3 - surface reworks (each needs a short design pass)
 
 - DONE 3+11+5 launcher (11/5 landed earlier; 3 on 2026-07-25): the
-  launcher is now a true MODAL dialog — popup_modal centers it, dims
+  launcher is now a true MODAL dialog - popup_modal centers it, dims
   the whole UI, and blocks input to everything behind (note 3's exact
   ask); Escape or the X dismisses; a successful Launch closes it via
   close_current_popup. LAUNCHER_WIN is gone; all openers (menus, the
@@ -314,7 +314,7 @@ imgui_mouse_* bypass commands while input is detached.
   now carries its own Attention (N) / Review bundles (N) children
   (mailbox/bundle session_id joined to the card's pty_session_id via
   shared row renderers with frame-global widget indices); the global
-  sections render only UNOWNED items and only when non-empty — the
+  sections render only UNOWNED items and only when non-empty - the
   perpetual "(0)" sections are gone. Cards show "output <age>" from
   client-witnessed output_bytes deltas beside the registry age (29).
   A client-side error ring (note 28, cap 20) keeps every error
@@ -323,16 +323,16 @@ imgui_mouse_* bypass commands while input is detached.
   vanished, panel clean; per-card children reuse the verified
   fallback renderers and light up with live agent data. REMAINING 26:
   "agent needs me" (blocked-at-prompt) needs watcher-side terminal
-  heuristics — pairs with the note-25 multiple-terminals work.
-- 8+4a terminal: watcher-side scrollback retention → client viewport,
+  heuristics - pairs with the note-25 multiple-terminals work.
+- 8+4a terminal: watcher-side scrollback retention -> client viewport,
   wheel scroll, then the color/palette fix (after 30b makes it
   provable). Search lands here too (13).
   - 13 FIRST SLICE DONE (2026-07-25): File Inspector View mode has
-    find — case-insensitive, incremental (rebuilds per keystroke),
+    find - case-insensitive, incremental (rebuilds per keystroke),
     prev/next with wraparound, "N of M" counter, amber "no matches";
     jumps reuse the focus-scroll rail (row * line_height). Verified
-    live: "th" in rich_state.das → "1 of 154" scrolled exactly to
-    "require math"; next → "2 of 154" deep-jump. Diff-mode search
+    live: "th" in rich_state.das -> "1 of 154" scrolled exactly to
+    "require math"; next -> "2 of 154" deep-jump. Diff-mode search
     deferred: the aligned panes need a text-line -> display-row map
     before jumps can land right. Terminal + history search still open
     with the scrollback work.
@@ -357,7 +357,7 @@ imgui_mouse_* bypass commands while input is detached.
   worktrees, both context items, dead-PTY navigation no longer
   surfaces "unknown session".
 - DONE 22 perspective indication (2026-07-25): every Git Activity tab
-  opens with a loud banner — perspective name in the warning accent,
+  opens with a loud banner - perspective name in the warning accent,
   context in the branch tint (PR shows "branch -> base", History
   "branch - outgoing first, then base", Tree the branch, Project the
   worktree path). The History table inserts a branch/base delimiter
@@ -371,7 +371,7 @@ imgui_mouse_* bypass commands while input is detached.
     added/deleted/title/muted/state) and rich_state re-exports it to
     every surface; all previously hard-coded literals in git_ui,
     files_ui, client chrome, terminal footer, and the shortcuts tab
-    now pull from it (identical values — zero visual delta), and the
+    now pull from it (identical values - zero visual delta), and the
     terminal session line renders state + pid as colored tokens as
     the exemplar for previously-plain tokens. Remaining under 18/22:
     branch/path/sha adoption on herd cards and the repositories panel,
@@ -384,14 +384,14 @@ imgui_mouse_* bypass commands while input is detached.
   lazily lists the FILESYSTEM (skipping .git), children recurse as
   portals, hidden tier applies, only the portal root carries the tag,
   and children sort with the active mode. Verified live: dasVulkan in
-  MAIN expands to .github/_build/cmake/daslib/doc/examples/generator —
+  MAIN expands to .github/_build/cmake/daslib/doc/examples/generator -
   contents no git listing can see. LIMITATION: a GITIGNORED nested
   repo (modules/dasImgui inside worktrees, .gitignore:108) produces
-  no status entry at all, so no portal root exists — discovery for
+  no status entry at all, so no portal root exists - discovery for
   those needs registered-repository synthesis (planned with the
   portal-into-own-Project-view follow-up). Opening a portal file in
   the inspector still goes through the parent repo's git plumbing and
-  may error — acceptable until nested repos register as repositories.
+  may error - acceptable until nested repos register as repositories.
 - DONE 9 auto-aim policy (2026-07-25): g_selection_explicit tracks
   whether the selection came from a deliberate pick (worktree row
   click, focus-target navigation, herder_git_select_worktree) vs a
@@ -405,14 +405,14 @@ imgui_mouse_* bypass commands while input is detached.
   under an open dialog can't redirect the action. Live-verified:
   right-click Close on scroll-probe -> modal with target-specific
   text -> Confirm -> closed_by_user in the registry. Agent rails
-  (herder_close_session) stay direct by design — confirmation is a
+  (herder_close_session) stay direct by design - confirmation is a
   human-mistake guard, not an agent gate.
 
-## Wave 4 — structural
+## Wave 4 - structural
 
 - 25 multiple terminals.
 - 17 agent awareness of dasherder (CONTEXT_PATH surfacing into the
-  agent's instruction set) — unlocks real Attention/Bundle testing.
+  agent's instruction set) - unlocks real Attention/Bundle testing.
 
 ## Icon-set expansion (dasImgui, consult Claude Design)
 
@@ -422,7 +422,7 @@ close/edit in use across dasHerd.
 Run the proposed additions past Claude Design (daslang.io Forge design
 system) before drawing them; regen the icon catalog after.
 
-PROPOSAL (ready for the consult, 2026-07-25 — every entry is a place
+PROPOSAL (ready for the consult, 2026-07-25 - every entry is a place
 the UI currently substitutes text or a wrong-shaped glyph):
 - file: Project rows borrow "edit" for files today; a document glyph
   pairs with the existing folder.
@@ -446,7 +446,7 @@ the UI currently substitutes text or a wrong-shaped glyph):
 
 ## Sequencing (settled 2026-07-25)
 
-No intermediate PR — no users yet. The whole fix round (Waves 0-4)
+No intermediate PR - no users yet. The whole fix round (Waves 0-4)
 lands on this branch, then one PR for historical record, then the big
 review happens on that PR.
 
@@ -462,7 +462,7 @@ deleting standalone-module artifacts).
 
 ## Block: external sessions (2026-07-25 evening)
 
-Goal (Boris): "external sessions" — a session whose terminal lives OUTSIDE
+Goal (Boris): "external sessions" - a session whose terminal lives OUTSIDE
 the herder (like the dev session building dasHerd itself), claimed from the
 outside, attached to worktree(s), coordination-only (mailbox/bundles/claims;
 no terminal view, no lease, no input), and able to OUTLIVE the herder across
@@ -472,13 +472,13 @@ sessions-first.
 
 Issue intake (live rig, numbering continues):
 - 40: sessions list: alive on top, dead in a different color, delete button
-  for session + associated worktrees — IMPLEMENTED, pending deploy
-- 41: worktree delete from the git panel — in-use = hard block; uncommitted
+  for session + associated worktrees - IMPLEMENTED, pending deploy
+- 41: worktree delete from the git panel - in-use = hard block; uncommitted
   changes = block + offer to launch a resolver session briefed with the
-  blocking state — IMPLEMENTED, pending deploy
-- 42: terminal in a NEW session does not scroll — FIXED (2026-07-26 goal
+  blocking state - IMPLEMENTED, pending deploy
+- 42: terminal in a NEW session does not scroll - FIXED (2026-07-26 goal
   round). Root cause proven from the session journal: Claude Code runs on
-  the ALTERNATE screen (?1049h — no terminal scrollback by design) and
+  the ALTERNATE screen (?1049h - no terminal scrollback by design) and
   enables mouse reporting (?1000/1002/1003/1006h); in a real terminal the
   wheel goes TO Claude, which scrolls its own transcript. Our widget only
   did local scrollback scrolling (empty on alt screen). Fix: dasTerminal
@@ -489,7 +489,7 @@ Issue intake (live rig, numbering continues):
   ("Jump to bottom (ctrl+End)" indicator on screen). Shell sessions were
   never broken (wheel 0->9 over 56 history rows on the same build).
 - 43: herd card click selects then unselects (cc-color-probe3 clicked while
-  "Towards 0.6.4 release" attached; selection bounces back) — FIXED
+  "Towards 0.6.4 release" attached; selection bounces back) - FIXED
   (2026-07-26). The dead-PTY attach guard from the fix round stopped the
   selection yank but left the click with ZERO feedback (the highlight was
   bound to pty==selected_id, which never changes for a dead PTY). Cards now
@@ -497,19 +497,19 @@ Issue intake (live rig, numbering continues):
   made outside the cards retarget it once per change. Proven both ways:
   dead-card pick sticks, live-card pick transfers and attaches.
 - 44: after creating a new session the terminal opens but has no keyboard
-  focus — a mouse click is needed before typing. FIXED (2026-07-26),
+  focus - a mouse click is needed before typing. FIXED (2026-07-26),
   two layers: (a) SetKeyboardFocusHere's tabbing request falls through
   the terminal's InvisibleButton onto the next tab stop (snapshot showed
-  the -5% zoom button holding focus) — focus now goes through the
+  the -5% zoom button holding focus) - focus now goes through the
   terminal's own model (g_terminal_view.focused); (b) the attach-time
   checkpoint restore rebuilt ImGuiTerminalState AFTER the handshake ran
-  — reset_terminal now carries focus over. Proven: real keystrokes
+  - reset_terminal now carries focus over. Proven: real keystrokes
   land in a fresh session with no click; snapshot focused=true
 - 45: the icons left of each session card (profile / state / conflict) have
-  no tooltips — unexplained glyphs. VERIFIED FIXED on deploy
+  no tooltips - unexplained glyphs. VERIFIED FIXED on deploy
   (2026-07-26): tooltips landed with the fix round; hover probe shows
   HERD_ICON_TOOLTIP hover=true value="Agent session (profile 'claude')"
-- 46: Sessions & Activity shows opaque rows — "REGULAR s2563..." entries and
+- 46: Sessions & Activity shows opaque rows - "REGULAR s2563..." entries and
   an error list ("unknown session", "4m ago") that is not clickable, not
   scrollable, not hideable, purpose unclear. Needs names over raw ids,
   click-through, dismiss/collapse, and dropping entries whose session no
@@ -518,12 +518,12 @@ Issue intake (live rig, numbering continues):
   click-navigate, errors are a collapsed/scrollable/clearable ring,
   zero-count sections gone; the "unknown session" error source (dead-PTY
   attach) fixed under 43. Boris re-test decides any residue
-- 47: visual artifacts in a NEW session's terminal — stray letters in a
+- 47: visual artifacts in a NEW session's terminal - stray letters in a
   one-character column outside the text flow (Boris saw red "S"s stacked
   vertically bottom-right; captured 'e'/'w'/'s'/'n' on the pane's left
   edge). Looks like a stale/displaced grid column surviving the
   attach-time resize, un-clipped; fades as output overwrites. FIXED
-  (2026-07-26): not the emulator — the "column" was Sessions-panel card
+  (2026-07-26): not the emulator - the "column" was Sessions-panel card
   text clipped at the WINDOW edge (one character into the padding, flush
   against the terminal border; bbox z=739 vs window edge 690 in the
   snapshot). Card detail/context/summary rows now elide to the content
@@ -531,7 +531,7 @@ Issue intake (live rig, numbering continues):
 - 51: BLOCK PIVOT (Boris, 2026-07-25): --continue resume is a crutch, not
   the answer. Next block, ahead of external sessions and everything else:
   redesign PTY hosting until a terminal session "does not depend on
-  anything, and yet can be communicated to" — detached ConPTY host that
+  anything, and yet can be communicated to" - detached ConPTY host that
   owns the console + child on its own, survives watcher/client/upgrade,
   reachable over a versioned IPC channel. Current UI/feature work is
   parked (committed on this branch) until that lands.
@@ -543,13 +543,13 @@ Issue intake (live rig, numbering continues):
   a fresh client authenticated, replayed from byte 0, sent input, got the
   child's echo with a forwarded env var. Remaining: dastest lifecycle
   test, watcher launch-via-host + adoption, daspkg release packaging.
-  LANDED (2026-07-26): all of it — lifecycle test, release packaging, and
+  LANDED (2026-07-26): all of it - lifecycle test, release packaging, and
   the watcher rework (launch-via-host for herd sessions, pumps proxied
   over the host WS, adoption on startup with sessions resurrecting as
   RUNNING, herd registry fold of dead hosts' exit stamps). Suite 71/71
   incl. test_watcher_adoption.das proving restart survival end-to-end.
   Decisions + the ConPTY drained-never-fires finding: PTY_HOST_DESIGN.md.
-- 50: HARD RULE + arc — a watcher restart must never kill hosted sessions
+- 50: HARD RULE + arc - a watcher restart must never kill hosted sessions
   ("its not ok to kill my terminal session"). Today PTYs are ConPTY
   children of the watcher and die with it; needs a per-session broker
   process that owns the ConPTY and outlives the watcher (tmux-server
@@ -559,7 +559,7 @@ Issue intake (live rig, numbering continues):
   sessions run in detached hosts; watcher restart adopts them back as
   running (see 51 / PTY_HOST_DESIGN.md). The operational rule stays until
   the rework is deployed to the live rig and proven there
-- 49: default layout — Git Changelist docks bottom-right as its own pane
+- 49: default layout - Git Changelist docks bottom-right as its own pane
   under the Git Activity + File Inspector tab stack (per Boris's live
   arrangement, captured in boris_changelist_dock.png); update
   setup_layout_preset so dock reset / fresh install lands there.
@@ -576,20 +576,20 @@ Issue intake (live rig, numbering continues):
   pick; set the explicit flag), so Project/Changelist immediately point
   at the session's tree. Evidence: the header above that empty-state
   ALREADY shows "PROJECT D:/Work/..." (the path), and visiting History or
-  Tree populates Project — so (1) the files request is not kicked on
+  Tree populates Project - so (1) the files request is not kicked on
   Project tab entry, and (2) the empty-state message lies (state is
   not-requested, not no-selection)
 
-Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
+Deferred - nice-to-have, never over real work (Boris, 2026-07-25):
 - token in child command line: fix is env-block support in dasTerminal
   spawn (pass DASHERD_* via CreateProcess lpEnvironment instead of a
   powershell -Command prefix). Harden later, way later.
 - lease heartbeat starvation under multi-second frame stalls (client
-  pumps ~1s, server timeout 5s) — observation, no repro.
+  pumps ~1s, server timeout 5s) - observation, no repro.
 - diff BEFORE/AFTER one-frame scroll desync when the AFTER pane drives
-  the wheel — cosmetic, inherent child draw order.
+  the wheel - cosmetic, inherent child draw order.
 - ImGui Install/RestoreCallbacks vs chain prev caches can strand a das
-  glfw_chain_add_* listener after mute/unmute — latent, zero in-tree
+  glfw_chain_add_* listener after mute/unmute - latent, zero in-tree
   callers; touching the interleave risks regressing note 38.
 - mcp_supervisor.py cannot answer ping while a tool call blocks
   (single-threaded stdin loop); mcp_main.das query values not
@@ -598,11 +598,11 @@ Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
 ## Block: dogfood round 2 (2026-07-27, rig-start intake)
 
 Found while bringing the rig up on freshly built binaries (master with the
-whole arc merged), BEFORE Boris's play session — filed, not fixed.
+whole arc merged), BEFORE Boris's play session - filed, not fixed.
 
 - 52: the terminal pane keeps rendering a DEAD session's restored content
   while its own header says "No session selected". Repro: restart the
-  watcher under an attached client — the client reconnects, the session is
+  watcher under an attached client - the client reconnects, the session is
   gone (attached=false, session_id=""), but g_terminal still holds the
   checkpoint-restored screen, so the pane shows a ghost until the client
   restarts. Structured proof: herder_terminal_state reported attached=false
@@ -617,27 +617,27 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   ~120-column checkpoint. That is exactly Boris's original note-47 sighting
   ("stray letters in a one-character column"); the panel-eliding fix covered
   only the Sessions-panel half. Fix shape: the checkpoint ANSI carries its
-  own geometry — resize to it before feeding, or reflow after.
-- 55: (Boris, live) File Inspector View mode on a .md file — Ctrl+wheel
+  own geometry - resize to it before feeding, or reflow after.
+- 55: (Boris, live) File Inspector View mode on a .md file - Ctrl+wheel
   "zooms the wrong thing: status bar, not rich text". Mechanism: the
   per-window zoom (window_zoom_scope("inspector"), rich_state.das:899)
-  only pushes an ImGui font, which sizes the window's CHROME — labels,
+  only pushes an ImGui font, which sizes the window's CHROME - labels,
   search box, status line. The content renderers size themselves from an
   explicit `zoom` argument that reads the GLOBAL base zoom instead:
   markdown at rich_inspector_ui.das:415 and its gutter width at :421,
-  source/diff views via source_view_style at :84 — all
+  source/diff views via source_view_style at :84 - all
   `float(g_zoom_percent) / 100.0f`. So Ctrl+wheel over the inspector
   resizes everything EXCEPT the content the window exists to show.
   Not markdown-specific: code in View mode and both Diff panes inherit
   the same miss. FIXED (2026-07-27): the three sites now read
   inspector_zoom() = window_zoom_percent("inspector"), because the base
-  zoom already reaches the content through FontScaleMain — passing it
+  zoom already reaches the content through FontScaleMain - passing it
   explicitly applied it TWICE. Measured before: markdown glyphs 1.71x the
   chrome glyphs at base 150%. Measured after: content tracks the window
   zoom (90% -> 19 text lines in an 790px band; 180% -> 8 lines, inked
   rows 202 -> 483) and matches chrome size at the same setting.
   SIBLING, still open: rich_git_ui.das:864 lane_spacing sizes the commit
-  graph from the base zoom inside window_zoom_scope("git-activity") —
+  graph from the base zoom inside window_zoom_scope("git-activity") -
   same miss, drawn geometry rather than text.
 - 55b: (Boris, same session) the first fix was still wrong in MODEL: it made
   Ctrl+wheel scale the whole inspector WINDOW, chrome included. "nop. only
@@ -655,9 +655,9 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   the other three unmoved.
 - 57: (Boris, live) Git Activity: the selection bar blocks the Tree view.
   The perspective banner + the Branches/Focus row sit above the graph and
-  eat the vertical space Tree needs — and Tree is the one perspective whose
+  eat the vertical space Tree needs - and Tree is the one perspective whose
   whole value is seeing the shape at once.
-- 58: (Boris, live) THE DELETE-SAFETY GAP — second roadblock in the
+- 58: (Boris, live) THE DELETE-SAFETY GAP - second roadblock in the
   delete-unused-worktrees-and-sessions scenario (the first was note 41).
   On the codex/fix-ci-30233791631 worktree: "there are no UI indications of
   sessions. how do i know if its safe to delete - i.e. if there are changes
@@ -673,7 +673,7 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   in the block below.
 - 61: (Boris, live) SWITCHING TO A BIG FILE TOOK 21 SECONDS. Clicking
   codex.cmd then utils/gen1-to-gen2/ds_parser.cpp: "it takes forever to
-  switch." Measured on the perf rail, which answered it outright —
+  switch." Measured on the perf rail, which answered it outright -
   `inspect_ready prep_ms=21662` and `21029` for ds_parser.cpp against
   `prep_ms=0` for codex.cmd. The inspector state named the cause:
   `view_syntax_span_count 148590` on a 716,680-byte file that git reports
@@ -687,7 +687,7 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   prep 21029 ms -> 327 ms, ready 24788 ms -> 617 ms, view text still fully
   present at 737,857 characters. Every hand-written source file in the tree is
   well under the cap and still highlights.
-- 58/60 FIXED 2026-07-27 (not yet proven live). 58: the facts exist now —
+- 58/60 FIXED 2026-07-27 (not yet proven live). 58: the facts exist now -
   `upstream_ref` off the status branch line, `unmerged_*` against
   origin/master with an origin/main retry and an honest "unknown", and a
   `repository_worktree_delete_tier` verdict on the row, in its tooltip, in
@@ -696,24 +696,24 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   master and 9 against origin/master (local master 108 behind). 60:
   `herd_archive` / `herd_restore` replace `herd_delete`; nothing erases a
   record any more, and the control says "Retire", never "Delete". The note's
-  second half — moving the per-session jsonl files beside the archived host
-  files — was dropped, and Boris confirmed it: the files were orphaned BECAUSE
+  second half - moving the per-session jsonl files beside the archived host
+  files - was dropped, and Boris confirmed it: the files were orphaned BECAUSE
   the record was erased, so a surviving record re-owns them; the move was only
   tidying and it would fight restore, since the watcher holds live paths to
   them. They stay put.
-- 60: herd_delete ERASES a session record — against the standing rule
+- 60: herd_delete ERASES a session record - against the standing rule
   Boris set the same day: "if u ever hear 'delete' from me - slap me.
   boris never delets. boris may forget to save, but stories stay."
   Today (herd_sessions.das:492) it does `g_herd |> erase(index)` and
-  saves, so the session vanishes from the registry while its artifacts —
+  saves, so the session vanishes from the registry while its artifacts -
   events.jsonl, mailbox.jsonl, bundles.jsonl, the ptyhost journal and
-  host log — stay on disk ORPHANED: still written, no longer reachable
+  host log - stay on disk ORPHANED: still written, no longer reachable
   through the app. That is the worst of both. Fix: retiring a session
-  ARCHIVES it — the record keeps existing in an archived state (hidden
+  ARCHIVES it - the record keeps existing in an archived state (hidden
   from the default list, still retrievable), artifacts move beside the
   other archived host files rather than being stranded. The UI wording
   follows the same rule: a control that archives must not say "Delete".
-- 59: IGNORED FILES ARE SILENTLY DESTROYED by worktree removal — found
+- 59: IGNORED FILES ARE SILENTLY DESTROYED by worktree removal - found
   while Boris challenged the note-58 "recoverable" tier ("worktree yes,
   branch no is how?"). Proven in an isolated probe repo (2026-07-27):
   a worktree holding only an ignored file reports NOTHING in
@@ -722,13 +722,13 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   deletes the directory and the ignored file with it.
   DOWNGRADED the same day (Boris): "herder files belong to a session, and
   we can't delete a session's worktree anyways. so no need to worry for
-  gitignore" — correct, and verified: the watcher's log root is
+  gitignore" - correct, and verified: the watcher's log root is
   get_das_root()/logs/dasHerd/**, i.e. the tree the WATCHER runs in, never
   the session worktrees, so no delete can reach the journals or session
   records; and a live session's worktree is hard-blocked regardless. What
   is actually left in a session worktree's ignored set is reproducible
   build output (bin/, build/, .jitted_scripts). So: keep the fact, drop
-  the alarm — surface an ignored-file count in the delete checklist if it
+  the alarm - surface an ignored-file count in the delete checklist if it
   is free, never gate on it.
   SAME PROBE corrected note 58's tiers: `git worktree remove` never
   touches the branch, so committed work is NEVER at risk from it (the
@@ -737,7 +737,7 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
   which dasHerd does not offer today; for worktree removal the unmerged
   count is an "is this workspace still carrying unfinished work" signal,
   not a data-loss gate.
-- 56: per-window zoom was mouse-only — Ctrl+wheel adjusted it, but no
+- 56: per-window zoom was mouse-only - Ctrl+wheel adjusted it, but no
   command could set or read it and no state dump exposed it, so neither a
   test nor an agent could verify note 55 either way (parity rule:
   editable-but-not-commandable is a bug). FIXED (2026-07-27): new
@@ -747,6 +747,6 @@ whole arc merged), BEFORE Boris's play session — filed, not fixed.
 - 54: closing a herd session ORPHANS its PTY into the raw session list when
   that PTY ended in a non-exited terminal state. herd_owns_pty skips closed
   records (rich_sessions_ui.das:566) so the PTY reads as "unowned", and the
-  raw list hides only the "exited" state, not "failed" — leaving a bare
+  raw list hides only the "exited" state, not "failed" - leaving a bare
   warning-glyph row with no context. Seen after closing two probe sessions
   whose hosts had been killed (state=failed, reason=host_lost).

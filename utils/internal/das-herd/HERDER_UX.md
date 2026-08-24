@@ -31,15 +31,15 @@ Discussion status: slice 1 implemented
 
 Three channels, never mixed:
 
-1. **App chrome (menu-bar right cluster)** — connection state, active
+1. **App chrome (menu-bar right cluster)** - connection state, active
    background work count, pending Attention count, and the latest error
    with a dismiss control. Fixed position, appears/disappears without
    moving any window content. Clicking the Attention bell opens the
    Sessions window; clicking the error's close glyph dismisses it.
-2. **Per-window status line** — each Git window keeps its reserved
+2. **Per-window status line** - each Git window keeps its reserved
    bottom line: severity glyph + text. Loading and errors replace the
    summary text only, never insert rows above the document.
-3. **Attention panel** — agent handoff only (focus sets, bundles), as
+3. **Attention panel** - agent handoff only (focus sets, bundles), as
    specified in `AGENT_REVIEW_WORKFLOWS.md`. Arrival never navigates.
 
 Errors no longer render inline inside the Terminal window; the copy /
@@ -90,7 +90,7 @@ Discussion status: slice 1 implemented
 
 The Sessions window lists interactive sessions only (agents, shells).
 Watcher plumbing kinds (`git-*`, `worktree-create`) are hidden behind a
-View toggle ("Show watcher task sessions", default off) — they remain
+View toggle ("Show watcher task sessions", default off) - they remain
 fully inspectable, and Git failures still attach their task terminal
 automatically. Session rows carry a state glyph. Automatic attaches
 never target plumbing kinds and never re-aim the Git surfaces
@@ -102,8 +102,8 @@ Discussion status: scenario model settled 2026-07-24; presets implemented
 
 The layout serves three scenarios, in frequency order:
 
-1. **Session.** The user lives in agent terminal sessions — several at
-   once — exactly like a coding-agent chat. File inspection is
+1. **Session.** The user lives in agent terminal sessions - several at
+   once - exactly like a coding-agent chat. File inspection is
    occasional and pointed: the agent links a file in the terminal, or
    the human points the agent at code, project structure, or a diff.
    The terminal is the spine; the inspector is a companion.
@@ -111,7 +111,7 @@ The layout serves three scenarios, in frequency order:
    side with the terminal, plus the PR changelist for what is going
    out. This is where Diff/View earns its depth.
 3. **Topology.** Multiple branches, merges, PRs brought into existing
-   worktrees — the Tree escalation surface per `GIT_TOPOLOGY_PLAN.md`.
+   worktrees - the Tree escalation surface per `GIT_TOPOLOGY_PLAN.md`.
    Rare; reached deliberately, never the default.
 
 Two dock presets in the View menu. Each preset is a **profile**: the
@@ -135,7 +135,7 @@ Session preset                      Review preset
 - **Project** is the full project-structure view (folders + every
   tracked and untracked-but-not-ignored file of the selected worktree),
   not just changed files. It lives as the fourth Git Activity
-  perspective (PR / History / Tree / Project) — project structure is a
+  perspective (PR / History / Tree / Project) - project structure is a
   Git perspective, not a separate window, and it shares the selection
   and inspector flow. Click opens the file in the inspector (clean
   files open straight in View); right-click sends a whole-file focus to
@@ -143,7 +143,7 @@ Session preset                      Review preset
 - Changelist and Activity share one column in Review; in Session they
   tab behind the inspector.
 - The terminal file-link handoff (agent links `path:line` in terminal
-  prose → click opens the inspector; PLAN.md T3) is the scenario-1
+  prose -> click opens the inspector; PLAN.md T3) is the scenario-1
   headline feature after this slice.
 
 ## Session launcher
@@ -160,7 +160,7 @@ inspection of the very worktree state the launch depends on.
 Discussion status: PROPOSED
 
 - Every right-click surface gets exactly one context menu; entries are
-  verbs with objects ("Copy error", "Look at that") — no bare nouns.
+  verbs with objects ("Copy error", "Look at that") - no bare nouns.
 - Hover tips on rows appear only for truncated content or glyph-only
   controls; no tooltip that repeats the visible text.
 - The Look-at-that flow stays as specified in
@@ -187,7 +187,7 @@ Discussion status: PROPOSED
   per-window status lines keep surface-local state; the Attention panel
   remains agent-handoff-only.
 - 2026-07-25: Worktree Files stopped being its own dock window and
-  became the Project perspective inside Git Activity — project
+  became the Project perspective inside Git Activity - project
   structure is a Git perspective sharing the selection and inspector
   flow, and its busy/error state reports through the Git Activity
   status line like every other perspective.

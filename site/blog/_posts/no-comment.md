@@ -12,7 +12,7 @@ Been a minute. But. Absolutely no comments.
 
 None whatsoever. Comments suck. They rot. U change code, it's no longer the same code. Comments get stale. Misleading, wishful, treacherous little things.
 
-Little? Did I say little? My buddy here disagrees. War. And Peace. And war again. Because details matter. A lot. They are scaffolding. Unless u look at other buddies — they don't care.
+Little? Did I say little? My buddy here disagrees. War. And Peace. And war again. Because details matter. A lot. They are scaffolding. Unless u look at other buddies - they don't care.
 
 I'm not talking about embedded documentation markdown. Nor do I diss lint suppression. No. It's the other ones. Pages upon pages. Sure, u can afford them. I can't afford for u to afford them. U'll pay. Every. Single. Time. He reads today's edition of `daslib/linq_boost`, and boy do u pay. Thousands of lines of how and why, in perfectly good English. Every session. Every cache miss. It has to go.
 

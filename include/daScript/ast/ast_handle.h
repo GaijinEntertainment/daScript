@@ -638,47 +638,47 @@ namespace das
             DAS_ASSERT(!canCopy || canCopy == das::is_copy_constructible<typename TT::value_type>::value);
             if constexpr(has_emplace_method_v<TT, typename TT::value_type> && has_emplace_back_method_v<TT, typename TT::value_type>) {
                 if ( canMove ) {
-                    addExtern<DAS_BIND_FUN((das_vector_emplace<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
+                    addExternInline<DAS_BIND_FUN((das_vector_emplace<TT>)),permanentArgFn>(*mod, lib, "emplace",
                         SideEffects::modifyArgument, "das_vector_emplace")->generated = true;
-                    addExtern<DAS_BIND_FUN((das_vector_emplace_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
+                    addExternInline<DAS_BIND_FUN((das_vector_emplace_back<TT>)),permanentArgFn>(*mod, lib, "emplace",
                         SideEffects::modifyArgument, "das_vector_emplace_back")->generated = true;
                 }
             }
             if constexpr(has_emplace_method_v<TT> && has_emplace_back_method_v<TT>) {
                 if constexpr ( das::is_default_constructible<typename TT::value_type>::value ) {
-                    addExtern<DAS_BIND_FUN((das_vector_push_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
+                    addExternInline<DAS_BIND_FUN((das_vector_push_empty<TT>)),permanentArgFn>(*mod, lib, "push_empty",
                         SideEffects::modifyArgument, "das_vector_push_empty")->generated = true;
-                    addExtern<DAS_BIND_FUN((das_vector_push_back_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
+                    addExternInline<DAS_BIND_FUN((das_vector_push_back_empty<TT>)),permanentArgFn>(*mod, lib, "push_empty",
                         SideEffects::modifyArgument, "das_vector_push_back_empty")->generated = true;
                 }
             }
             if constexpr (das::is_copy_constructible<typename TT::value_type>::value) {
                 if ( canCopy ) {
-                    addExtern<DAS_BIND_FUN((das_vector_push<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
+                    addExternInline<DAS_BIND_FUN((das_vector_push<TT>)),permanentArgFn>(*mod, lib, "push",
                         SideEffects::modifyArgument, "das_vector_push")->generated = true;
-                    addExtern<DAS_BIND_FUN((das_vector_push_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
+                    addExternInline<DAS_BIND_FUN((das_vector_push_back<TT>)),permanentArgFn>(*mod, lib, "push",
                         SideEffects::modifyArgument, "das_vector_push_back")->generated = true;
                 }
             }
-            addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
+            addExternInline<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
                 SideEffects::modifyArgument, "das_vector_pop")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_clear<TT>),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "clear",
+            addExternInline<DAS_BIND_FUN(das_vector_clear<TT>),permanentArgFn>(*mod, lib, "clear",
                 SideEffects::modifyArgument, "das_vector_clear")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_resize<TT>),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "resize",
+            addExternInline<DAS_BIND_FUN(das_vector_resize<TT>),permanentArgFn>(*mod, lib, "resize",
                 SideEffects::modifyArgument, "das_vector_resize")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_erase<TT>),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "erase",
+            addExternInline<DAS_BIND_FUN(das_vector_erase<TT>),permanentArgFn>(*mod, lib, "erase",
                 SideEffects::modifyArgument, "das_vector_erase")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_erase_range<TT>),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "erase",
+            addExternInline<DAS_BIND_FUN(das_vector_erase_range<TT>),permanentArgFn>(*mod, lib, "erase",
                 SideEffects::modifyArgument, "das_vector_erase_range")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
                 SideEffects::modifyArgument, "das_vector_each")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each_const<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
                 SideEffects::none, "das_vector_each_const")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_length<TT>)>(*mod, lib, "length",
+            addExternInline<DAS_BIND_FUN(das_vector_length<TT>)>(*mod, lib, "length",
                 SideEffects::none, "das_vector_length")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_empty<TT>)>(*mod, lib, "empty",
+            addExternInline<DAS_BIND_FUN(das_vector_empty<TT>)>(*mod, lib, "empty",
                 SideEffects::none, "das_vector_empty")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_capacity<TT>)>(*mod, lib, "capacity",
+            addExternInline<DAS_BIND_FUN(das_vector_capacity<TT>)>(*mod, lib, "capacity",
                 SideEffects::none, "das_vector_capacity")->generated = true;
             registerVectorJitFunctions<TT>::init(mod,lib);
         }
@@ -690,53 +690,53 @@ namespace das
             DAS_ASSERT(!canCopy || canCopy == das::is_copy_constructible<typename TT::value_type>::value);
             if constexpr(has_emplace_method_v<TT, typename TT::value_type> && has_emplace_back_method_v<TT, typename TT::value_type>) {
                 if ( canMove ) {
-                    addExtern<DAS_BIND_FUN((das_vector_emplace<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
+                    addExternInline<DAS_BIND_FUN((das_vector_emplace<TT>)),permanentArgFn>(*mod, lib, "emplace",
                         SideEffects::modifyArgument, "das_vector_emplace")
                             ->args({"vec","value","at"})->generated = true;
-                    addExtern<DAS_BIND_FUN((das_vector_emplace_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
+                    addExternInline<DAS_BIND_FUN((das_vector_emplace_back<TT>)),permanentArgFn>(*mod, lib, "emplace",
                         SideEffects::modifyArgument, "das_vector_emplace_back")
                             ->args({"vec","value"})->generated = true;
                 }
             }
             if constexpr(has_emplace_method_v<TT> && has_emplace_back_method_v<TT>) {
                 if constexpr ( das::is_default_constructible<typename TT::value_type>::value ) {
-                    addExtern<DAS_BIND_FUN((das_vector_push_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
+                    addExternInline<DAS_BIND_FUN((das_vector_push_empty<TT>)),permanentArgFn>(*mod, lib, "push_empty",
                         SideEffects::modifyArgument, "das_vector_push_empty")
                             ->args({"vec","at","context"})->generated = true;
-                    addExtern<DAS_BIND_FUN((das_vector_push_back_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
+                    addExternInline<DAS_BIND_FUN((das_vector_push_back_empty<TT>)),permanentArgFn>(*mod, lib, "push_empty",
                           SideEffects::modifyArgument, "das_vector_push_back_empty")
                               ->args({"vec"})->generated = true;
                 }
             }
             if constexpr (das::is_copy_constructible<typename TT::value_type>::value) {
                 if ( canCopy ) {
-                    addExtern<DAS_BIND_FUN((das_vector_push_value<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
+                    addExternInline<DAS_BIND_FUN((das_vector_push_value<TT>)),permanentArgFn>(*mod, lib, "push",
                         SideEffects::modifyArgument, "das_vector_push_value")
                             ->args({"vec","value","at","context"})->generated = true;
-                    addExtern<DAS_BIND_FUN((das_vector_push_back_value<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
+                    addExternInline<DAS_BIND_FUN((das_vector_push_back_value<TT>)),permanentArgFn>(*mod, lib, "push",
                         SideEffects::modifyArgument, "das_vector_push_back_value")
                             ->args({"vec","value"})->generated = true;
                 }
             }
             if constexpr (das::is_smart_ptr<typename TT::value_type>::value) {
-                addExtern<DAS_BIND_FUN((das_vector_push_value<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_clone",
+                addExternInline<DAS_BIND_FUN((das_vector_push_value<TT>)),permanentArgFn>(*mod, lib, "push_clone",
                     SideEffects::modifyArgument, "das_vector_push_value")->generated = true;
-                addExtern<DAS_BIND_FUN((das_vector_push_back_value<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_clone",
+                addExternInline<DAS_BIND_FUN((das_vector_push_back_value<TT>)),permanentArgFn>(*mod, lib, "push_clone",
                     SideEffects::modifyArgument, "das_vector_push_back_value")->generated = true;
             }
-            addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
+            addExternInline<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
                 SideEffects::modifyArgument, "das_vector_pop")
                     ->arg("vec")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_clear<TT>),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "clear",
+            addExternInline<DAS_BIND_FUN(das_vector_clear<TT>),permanentArgFn>(*mod, lib, "clear",
                 SideEffects::modifyArgument, "das_vector_clear")
                     ->arg("vec")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_resize<TT>),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "resize",
+            addExternInline<DAS_BIND_FUN(das_vector_resize<TT>),permanentArgFn>(*mod, lib, "resize",
                 SideEffects::modifyArgument, "das_vector_resize")
                     ->args({"vec","newSize"})->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_erase<TT>),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "erase",
+            addExternInline<DAS_BIND_FUN(das_vector_erase<TT>),permanentArgFn>(*mod, lib, "erase",
                 SideEffects::modifyArgument, "das_vector_erase")
                     ->args({"vec","index","context"})->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_erase_range<TT>),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "erase",
+            addExternInline<DAS_BIND_FUN(das_vector_erase_range<TT>),permanentArgFn>(*mod, lib, "erase",
                 SideEffects::modifyArgument, "das_vector_erase_range")
                     ->args({"vec","index","count","context"})->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
@@ -745,11 +745,11 @@ namespace das
             addExtern<DAS_BIND_FUN(das_vector_each_const<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
                 SideEffects::none, "das_vector_each_const")
                     ->args({"vec","context","at"})->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_length<TT>)>(*mod, lib, "length",
+            addExternInline<DAS_BIND_FUN(das_vector_length<TT>)>(*mod, lib, "length",
                 SideEffects::none, "das_vector_length")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_empty<TT>)>(*mod, lib, "empty",
+            addExternInline<DAS_BIND_FUN(das_vector_empty<TT>)>(*mod, lib, "empty",
                 SideEffects::none, "das_vector_empty")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_capacity<TT>)>(*mod, lib, "capacity",
+            addExternInline<DAS_BIND_FUN(das_vector_capacity<TT>)>(*mod, lib, "capacity",
                 SideEffects::none, "das_vector_capacity")->generated = true;
             registerVectorJitFunctions<TT>::init(mod,lib);
         }
@@ -920,14 +920,14 @@ namespace das
 
     template <typename TT>
     void addEquNeq(Module & mod, const ModuleLibrary & lib) {
-        addExtern<decltype(&das_equ<TT>),  das_equ<TT>> (mod, lib, "==", SideEffects::none, "das_equ");
-        addExtern<decltype(&das_nequ<TT>), das_nequ<TT>>(mod, lib, "!=", SideEffects::none, "das_nequ");
+        addExternInline<decltype(&das_equ<TT>),  das_equ<TT>> (mod, lib, "==", SideEffects::none, "das_equ");
+        addExternInline<decltype(&das_nequ<TT>), das_nequ<TT>>(mod, lib, "!=", SideEffects::none, "das_nequ");
     }
 
     template <typename TT>
     void addEquNeqVal(Module & mod, const ModuleLibrary & lib) {
-        addExtern<decltype(&das_equ_val<TT,TT>),  das_equ_val<TT,TT>> (mod, lib, "==", SideEffects::none, "das_equ_val");
-        addExtern<decltype(&das_nequ_val<TT,TT>), das_nequ_val<TT,TT>>(mod, lib, "!=", SideEffects::none, "das_nequ_val");
+        addExternInline<decltype(&das_equ_val<TT,TT>),  das_equ_val<TT,TT>> (mod, lib, "==", SideEffects::none, "das_equ_val");
+        addExternInline<decltype(&das_nequ_val<TT,TT>), das_nequ_val<TT,TT>>(mod, lib, "!=", SideEffects::none, "das_nequ_val");
     }
 
     template <typename T>
@@ -1009,9 +1009,9 @@ namespace das
         handleRegistry_registerDump(&dumpHandleLeaks<T>);
         handleRegistry_registerCount(&countHandleLeaks<T>);
         mod->addAnnotation(new ManagedHandleAnnotation<T>(lib, name, cppTypeName));
-        addExtern<decltype(&das_handle_equ<T>),  das_handle_equ<T>>
+        addExternInline<decltype(&das_handle_equ<T>),  das_handle_equ<T>>
             (*mod, lib, "==", SideEffects::none, "das_handle_equ");
-        addExtern<decltype(&das_handle_nequ<T>), das_handle_nequ<T>>
+        addExternInline<decltype(&das_handle_nequ<T>), das_handle_nequ<T>>
             (*mod, lib, "!=", SideEffects::none, "das_handle_nequ");
         addExtern<decltype(&das_handle_is_alive<T>), das_handle_is_alive<T>>
             (*mod, lib, "is_alive", SideEffects::accessExternal, "das_handle_is_alive");

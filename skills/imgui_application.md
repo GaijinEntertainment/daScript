@@ -47,7 +47,7 @@ options gc
 
 ## Delete first; collect rarely
 
-GC is unavoidable as a safety net, but it should run once in a blue moon—not
+GC is unavoidable as a safety net, but it should run once in a blue moon - not
 as routine frame cleanup.
 
 - `delete` uniquely-owned transient arrays, strings, tables, JSON graphs, and
@@ -56,7 +56,7 @@ as routine frame cleanup.
   input invalidates it.
 - Prefer move ownership (`<-`) so there is one obvious owner to delete.
 - Treat GC as the cleanup for unreachable leftovers, cycles, complex error
-  paths, and heap compaction—not as a substitute for ownership.
+  paths, and heap compaction - not as a substitute for ownership.
 
 Calling a `maybe_collect_gc` helper every loop is only a cheap eligibility
 check. The helper must use fragmentation/growth thresholds (and, for expensive

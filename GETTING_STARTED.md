@@ -20,7 +20,7 @@ cmake --build build --config Release -j
 
 The compiler lands at `bin/Release/daslang.exe` (Windows / MSVC), or
 `bin/daslang` / `build/daslang` (Make and Ninja layouts). Add it to your
-`PATH` or alias it — the rest of this guide writes `daslang`.
+`PATH` or alias it - the rest of this guide writes `daslang`.
 
 ## Compile a small program
 
@@ -35,7 +35,7 @@ def main() {
 }
 ```
 
-`[export]` makes `main` callable from outside the compiled context —
+`[export]` makes `main` callable from outside the compiled context -
 entry points need it. `options gen2` selects the current syntax
 generation; all documentation and new code use it.
 
@@ -46,14 +46,14 @@ of the language (also in-repo under `tutorials/`).
 
 The best supported editor is VSCode with the
 [daScript language support](https://marketplace.visualstudio.com/items?itemName=profelis.dascript-plugin)
-extension — language server, linting, debugging, and snippets. If
+extension - language server, linting, debugging, and snippets. If
 autocompletion seems unresponsive, raise `dascript.server.connectTimeout`
 to 10 (or 20 for a Debug-build compiler).
 
 ## AI assistants: MCP server
 
 The daslang MCP server (`utils/mcp/`) gives AI coding assistants
-compiler-backed tools — compile checks, navigation, parse-aware grep,
+compiler-backed tools - compile checks, navigation, parse-aware grep,
 test running, live-reload control. Configure in `.mcp.json` at the
 project root:
 
@@ -69,16 +69,16 @@ project root:
 }
 ```
 
-(point `command` at your binary — `bin/Release/daslang.exe` in a Windows
+(point `command` at your binary - `bin/Release/daslang.exe` in a Windows
 MSVC source build), or via CLI:
 `claude mcp add daslang -- bin/daslang utils/mcp/main.das`.
 Details: `utils/mcp/README.md`.
 
 ## AI assistants: LSP server
 
-The daslang LSP server (`utils/lsp/`) adds push diagnostics — after
+The daslang LSP server (`utils/lsp/`) adds push diagnostics - after
 every edit the compiler and lint report into the assistant's context
-automatically — plus definition/references/hover/symbols/call
+automatically - plus definition/references/hover/symbols/call
 hierarchy/implementation. It needs only the daslang binary and Python 3.
 
 Claude Code sessions started at the daslang repo root (or at an
@@ -96,11 +96,11 @@ directly. Details: `utils/lsp/README.md`.
 ## AI assistants: the language skill
 
 `skills/daslang/` is a standalone, self-contained daslang language
-reference in the Claude-skill format — `SKILL.md` plus per-topic
-references (types, functions, memory, macros, strings, JSON, …), every
+reference in the Claude-skill format - `SKILL.md` plus per-topic
+references (types, functions, memory, macros, strings, JSON, ...), every
 example verified against the compiler. An agent session started at the
 SDK root picks it up automatically (it is mirrored at
 `.claude/skills/daslang`); for any other project, copy or link that
 directory into the project's `.claude/skills/`. The rest of `skills/`
-covers task-specific ground — `CLAUDE.md`'s table says when to read
+covers task-specific ground - `CLAUDE.md`'s table says when to read
 which.
