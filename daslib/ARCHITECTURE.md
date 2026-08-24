@@ -226,6 +226,14 @@ an entry lands here only when no name, shape, or test can carry it.
 - **A struct needs a COMPLETE C++ type more often than field access suggests** - globals
   need `sizeof` even untouched, and by-value field types emit depth-first before their
   owner, or the type degrades to a forward declaration.
+- **`aotModuleName` has a C++ twin that moves in lockstep** -
+  `src/ast/ast_typedecl.cpp`'s `aotModuleName`/`describeCppTypeEx` spell the same type
+  names into the same TU through `DebugInfoHelper`'s cached cpp names
+  (`debug_helper_find_*_cppname`, the cross-platform `TypeSize<...>` sinks). The
+  main-module namespace override is therefore one knob with two ends:
+  `set_aot_main_module_name` writes the daslib global AND forwards to
+  `set_aot_main_module_name_cpp`; a spelling rule changed on one side only produces a TU
+  where the definition and its debug-info references disagree.
 
 ## aot_standalone
 
@@ -250,6 +258,19 @@ an entry lands here only when no name, shape, or test can carry it.
 - **Cross-module limits fail loud at emit time**: only main-module, AOT-emitted `[init]`
   functions can be called from the ctor (required-module and `[no_aot]` ones panic with
   the reason), because the standalone TU only emits the entry module's function bodies.
+- **Type definitions live in the header, once** - struct/enum definitions (the
+  dependency dump plus the entry module's own `declarations` capture) are emitted into
+  the `.das.h`, which the `.das.cpp` includes; the source never redefines them. They sit
+  in module-named namespaces directly under `das`, NOT under the per-program
+  `_anon_<hash>` namespace - that hash changes with the program, so it can never be a
+  public name. The entry module is promoted with an empty name, which would put its
+  types in an anonymous namespace (a distinct type per TU - an ODR/link break for any
+  struct in an exported signature); `aot_cpp`'s `set_aot_main_module_name` names it
+  after the context for the duration of standalone emission, so class signatures, the
+  source TU, and the embedder all resolve the same `das::<ctx>::T`. The header carries
+  `#pragma once` and the required modules' `aotRequire` includes so it stands alone in
+  an embedder TU; two DIFFERENT contexts' headers sharing a das dependency still cannot
+  be included in one TU (the shared types have no per-type guards).
 
 ## flatten
 
