@@ -28,5 +28,6 @@ int main( int, char * [] ) {
     expect("pair_sum(embedder-built Pair)", ctx.pair_sum(embedderPair), 42);
     expect("flip(on)", int32_t(ctx.flip(standalone_init_fixture::Mode::on)),
         int32_t(standalone_init_fixture::Mode::off));
+    expect("stack.size() honors options stack", ctx.stack.size() >= 262144 ? 1 : 0, 1);
     return failures ? 1 : 0;
 }

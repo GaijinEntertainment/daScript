@@ -78,7 +78,15 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
 
     t |> run("a context with no init functions still closes its constructor") @(t : T?) {
         let source = generate_standalone_source(t, "_standalone_novars_fixture", out_dir)
-        t |> success(find(source, "Standalone::Standalone() \{") >= 0, "constructor was emitted")
+        t |> success(find(source, "Standalone::Standalone() : Context(16384/*stack*/) \{") >= 0, "constructor was emitted with the default stack size")
+        t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
+    }
+
+    t |> run("the context stack and heap hints honor the script's options") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_stack_fixture", out_dir)
+        t |> success(find(source, ": Context(262144/*stack*/)") >= 0, "the ctor sizes the stack from options stack")
+        t |> success(find(source, "policies.heap_size_hint = 123456;") >= 0, "heap_size_hint comes from the script's options")
+        t |> success(find(source, "policies.string_heap_size_hint = 234567;") >= 0, "string_heap_size_hint comes from the script's options")
         t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
     }
 

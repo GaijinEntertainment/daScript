@@ -4,6 +4,7 @@ module aot_standalone private
 require daslib/fio
 require daslib/rtti
 require strings
+require math
 
 require daslib/match
 require daslib/strings_boost
@@ -121,13 +122,15 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
         });
     }
 
-    write(tw, "{cfg.class_name}::{cfg.class_name}() \{\n");
+    let stack_opt = program._options |> find_arg("stack") ?as tInt ?? int(program.policies.stack)
+    let stack_size = max(stack_opt, 16384) + int(program.globalInitStackSize)
+    write(tw, "{cfg.class_name}::{cfg.class_name}() : Context({stack_size}/*stack*/) \{\n");
     write(tw, "    auto & context = *this;\n");
     write(tw, "    CodeOfPolicies policies;");
     write(tw, "    policies.debugger = {program.policies.debugger} /*policies.debugger*/;\n");
     write(tw, "    policies.persistent_heap = {program._options |> find_arg("persistent_heap") ?as tBool ?? program.policies.persistent_heap};\n");
-    write(tw, "    policies.heap_size_hint = {program._options |> find_arg("heap_size_hint") ?as tUInt ?? program.policies.heap_size_hint :d};\n");
-    write(tw, "    policies.string_heap_size_hint = {program._options |> find_arg("string_heap_size_hint") ?as tUInt ?? program.policies.string_heap_size_hint :d};\n");
+    write(tw, "    policies.heap_size_hint = {program._options |> find_arg("heap_size_hint") ?as tInt ?? int(program.policies.heap_size_hint)};\n");
+    write(tw, "    policies.string_heap_size_hint = {program._options |> find_arg("string_heap_size_hint") ?as tInt ?? int(program.policies.string_heap_size_hint)};\n");
     write(tw, "    policies.track_allocations = {program._options |> find_arg("track_allocations") ?as tBool ?? program.policies.track_allocations};\n");
     write(tw, "    context.setup({program.totalVariables}/*totalVariables*/, {program.globalStringHeapSize:d} /*globalStringHeapSize*/, policies, \{\});\n");
 

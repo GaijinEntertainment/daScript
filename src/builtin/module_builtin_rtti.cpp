@@ -540,6 +540,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(totalFunctions)>("totalFunctions");
             addField<DAS_BIND_MANAGED_FIELD(totalVariables)>("totalVariables");
             addField<DAS_BIND_MANAGED_FIELD(globalStringHeapSize)>("globalStringHeapSize");
+            addField<DAS_BIND_MANAGED_FIELD(globalInitStackSize)>("globalInitStackSize");
             addField<DAS_BIND_MANAGED_FIELD(initSemanticHashWithDep)>("initSemanticHashWithDep");
             addField<DAS_BIND_MANAGED_FIELD(visitBuiltinFunctions)>("visitBuiltinFunctions");
             addFieldEx ( "flags", "flags", offsetof(Program, flags), makeProgramFlags() );

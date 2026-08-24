@@ -1,4 +1,5 @@
 options gen2
+options stack = 262144
 
 require standalone_init_dep
 
