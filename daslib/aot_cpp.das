@@ -32,14 +32,33 @@ def aotFieldName(name : string) : string {
     return result;
 }
 
+var private g_aot_main_module_name = ""
+
+def public set_aot_main_module_name(name : string) {
+    //! aotModuleName returns this for the unnamed (promoted) main module; "" (the default) leaves its types in an anonymous namespace.
+    //! Module-global for the process - set it around one emission and restore "".
+    //! Forwards to the C++ twin so DebugInfoHelper's cached cpp type names agree.
+    g_aot_main_module_name = name
+    set_aot_main_module_name_cpp(name)
+}
+
 def aotModuleName(pm : Module?) {
     if (pm.name.empty()) {
-        return "";
+        return g_aot_main_module_name;
     } elif (pm.name == "$") {
         return "_builtin_";
     } else {
         return string(pm.name);
     }
+}
+
+def aotModuleNameFromString(module_name : string) : string {
+    if (empty(module_name)) {
+        return g_aot_main_module_name;
+    } elif (module_name == "$") {
+        return "_builtin_";
+    }
+    return module_name;
 }
 
 
@@ -431,10 +450,11 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;   // nolint:STYLE038 - one arm per
             }
         } elif (baseType == Type.tStructure) {
             if (typeDecl.structType != null) {
-                if (typeDecl.structType._module.name.empty()) {
+                let ns = aotModuleName(typeDecl.structType._module)
+                if (ns.empty()) {
                     write(writer, "struct {aotStructName(typeDecl.structType)}")
                 } else {
-                    write(writer, "struct {aotModuleName(typeDecl.structType._module)}::{aotStructName(typeDecl.structType)}")
+                    write(writer, "struct {ns}::{aotStructName(typeDecl.structType)}")
                 }
             } else {
                 write(writer, "DAS_COMMENT(unspecified structure) ");
@@ -456,12 +476,13 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;   // nolint:STYLE038 - one arm per
             }
         } elif (typeDecl.isEnumT) {
             if (typeDecl.enumType != null) {
+                let ns = aotModuleName(typeDecl.enumType._module)
                 if (typeDecl.enumType.external) {
                     write(writer, "DAS_COMMENT(bound_enum) {typeDecl.enumType.cppName}");
-                } elif (typeDecl.enumType._module.name.empty()) {
+                } elif (ns.empty()) {
                     write(writer, "DAS_COMMENT(enum) {aotEnumName(typeDecl.enumType)}");
                 } else {
-                    write(writer, "DAS_COMMENT(enum) {aotModuleName(typeDecl.enumType._module)}::{aotEnumName(typeDecl.enumType)}")
+                    write(writer, "DAS_COMMENT(enum) {ns}::{aotEnumName(typeDecl.enumType)}")
                 }
             } else {
                 write(writer, "DAS_COMMENT(unspecified enumeration)")
@@ -908,11 +929,12 @@ class public AotDebugInfoHelper {
             writeDim(writer, fld, suffix);
             writeArgTypes(writer, fld, suffix);
             writeArgNames(writer, fld, suffix);
-            let prefix = !empty(info.module_name) ? "{info.module_name}::" : "";
+            let ns = aotModuleNameFromString(info.module_name)
+            let prefix = !empty(ns) ? "{ns}::" : "";
             writeVarAnnotationArgs(writer, fld, "{structInfoName(info)}_field_{fi}_ann");
             let fldAnnRef = fld.annotation_argument_count > 0u ? ", {structInfoName(info)}_field_{fi}_ann, {int(fld.annotation_argument_count)}u" : ""
             let structCppName = aotSuffixNameEx(info.name, "_S",
-                g_struct_enum_collide |> key_exists(structEnumNsKey(info.module_name, info.name)))
+                g_struct_enum_collide |> key_exists(structEnumNsKey(ns, info.name)))
             write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(prefix + structCppName, fld,suffix)}{fldAnnRef} \};\n");
         }
         let fields = (each(range(info.count))

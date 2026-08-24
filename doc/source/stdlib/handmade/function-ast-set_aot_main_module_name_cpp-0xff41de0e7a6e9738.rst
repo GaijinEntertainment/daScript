@@ -1,0 +1,1 @@
+Sets the C++ AOT emitter's namespace for the unnamed (promoted) main module's types; "" restores the anonymous-namespace default. The C++ half of daslib ``aot_cpp::set_aot_main_module_name`` - call that instead.

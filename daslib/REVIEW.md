@@ -31,10 +31,13 @@ sibling loop's exit path and unbalances its counter.
 **Per-function visitor state resets in `preVisitFunction`, ahead of any early return.**
 A latch that skips the template early-return poisons the next function.
 
-**A daslib predicate or emitted identifier whose correctness depends on a C++-side
-definition records the pairing in `ARCHITECTURE.md`, in its module's section, in the same
-diff that creates it - and the two sides change in lockstep.** Nothing fails when one side
-moves alone.
+**A diff that makes a daslib predicate or emitted identifier depend on a C++-side
+definition records the pair in `ARCHITECTURE.md`, in its module's section, naming both
+sides.** Nothing catches it when one side later moves alone.
+
+**When a diff changes one side of a recorded daslib/C++ pair so the two no longer match,
+it changes the other side and updates the pair's `ARCHITECTURE.md` entry in the same
+diff.**
 
 **Weakening the nolint-window tests is a defect** - `tests/lint/test_nolint_suppression.das`
 pins that a string literal, a URL, and a mid-comment `nolint:` do not suppress while a
@@ -90,17 +93,31 @@ subtree unbalances the count; the balance panic in each entry point is the tripw
 growing either overload set without the cap is a silently missed finding, the reverse a
 suggestion that does not compile.
 
-**AOT emit is fail-closed: `run_aot` and `run_aot_function` test
-`macroException`/`failToCompile` BEFORE materializing output; a visitor override never gates
-on them.** A codegen exception mid-visit leaves partial C++.
+**A diff that adds or changes an emit entry point - a function that runs the emit visitor
+and then returns or writes the generated C++ - keeps the error check ahead of that return
+or write.** The error check is the program's `macroException`/`failToCompile` state, or
+`log_aot_emit_errors` where the emit runs standalone; a codegen exception mid-visit
+leaves partial C++.
+
+**A visitor override in the emit visitor never gates on `macroException`/`failToCompile`.**
+The entry point owns that check; an override that returns early on the error state emits
+truncated C++ that the entry point still writes out as complete.
 
 **An unreachable emit state writes `#error` into the output, never `panic`** -
 `runMacroFunction` swallows a panic, so the emitter never reports through it.
 
-**`aotStructName` and the `VarInfo` emitter's inline `aotSuffixNameEx(info.name, "_S", ...)`
-build the same C++ identifier, and `buildStructEnumCollisions` is seeded before either
-emits.** An emit path that skips the seeding, or a suffix rule changed on one side, produces
-`offsetof`s naming a struct declared under a different identifier.
+**A diff that changes how a struct's C++ name is built changes every site that spells
+that name the same way.** The name is the module namespace (`aotModuleName`, or
+`aotModuleNameFromString` on the `VarInfo` path) plus the `_S` suffix; the sites that
+spell it are `aotStructName` and the `VarInfo` emitter's inline
+`aotSuffixNameEx(info.name, "_S", ...)`. One site changed alone writes `offsetof`s that
+name a struct declared under a different name.
+
+**A diff that adds or changes a function that runs the emit visitor calls
+`buildStructEnumCollisions` before that visitor runs.** The duty sits on that function,
+not on each helper it calls to spell a name: the table decides when a name gets its
+collision suffix, and a run that skips it spells structs differently from the one that
+seeded it.
 
 **`match_error` stores a BORROWED `LineInfo` pointer - pass a pattern node's location,
 never a synthesized access expression's.** Access nodes are cloned per field inside a bare
@@ -205,5 +222,7 @@ stays materialized, because a reference to a temporary dangles.
 **A swizzle rewrite reuses each source node once and clones every repeat** - the first
 appearance moves, a second output lane MUST clone, or one node gets two parents.
 
-**The RST label and topic key are computed twice - pre-infer and post-infer - and must
-agree byte-for-byte**, or the page prints a bare signature and the symbol re-stubs.
+**A diff that changes how the RST label or topic key is computed makes the same change in
+every place `rst.das` computes it - the stub pass (`generate_module_stubs`) and the
+documenting pass (`documents`) - keeping them byte-for-byte equal.** Diverged, the page
+prints a bare signature and the symbol re-stubs.

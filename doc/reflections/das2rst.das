@@ -473,7 +473,7 @@ def document_module_ast(_root : string) {
         group_by_regex("Infer", mod, %regex~(infer_generic_type|update_alias_map)$%%),
         group_by_regex("Module queries", mod, %regex~(module_find_annotation|module_find_type_annotation|module_find_structure|module_find_enumeration|module_has_comment_reader|not_inferred)$%%),
         group_by_regex("Debug info helpers", mod, %regex~(debug_helper_.*)%%),
-        group_by_regex("AOT support", mod, %regex~(aot_require|aot_type_ann_get_field_ptr|aot_need_type_info|aot_previsit_get_field_ptr|aot_previsit_get_field|aot_visit_get_field|write_aot_body|write_aot_suffix|write_aot_macro_suffix|write_aot_macro_prefix|macro_aot_infix|getInitSemanticHashWithDep|get_aot_hash_comment)$%%),
+        group_by_regex("AOT support", mod, %regex~(aot_require|aot_type_ann_get_field_ptr|aot_need_type_info|aot_previsit_get_field_ptr|aot_previsit_get_field|aot_visit_get_field|write_aot_body|write_aot_suffix|write_aot_macro_suffix|write_aot_macro_prefix|macro_aot_infix|getInitSemanticHashWithDep|get_aot_hash_comment|set_aot_main_module_name_cpp)$%%),
         group_by_regex("String builder writer", mod, %regex~(string_builder_str|string_builder_clear)$%%),
         group_by_regex("GC", mod, %regex~(ast_gc_guard|ast_gc_collect_scope|verify_typedecl_gc|verify_expression_gc|delete_expression|delete_type)$%%),
         hide_group(group_by_regex("Internal ast infrastructure", mod, %regex~(builtin_ast_.*)%%))

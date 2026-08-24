@@ -20,27 +20,36 @@ def private standalone_cop(var cop : CodeOfPolicies) {
     cop.tune_frozen = true
 }
 
-def private generate_standalone(t : T?; fixture, out_dir : string) : string {
+def private generate_standalone_files(t : T?; fixture, out_dir : string; cross_platform : bool = false) : tuple<header : string; source : string> {
     let input = path_join(get_das_root(), "tests/aot/{fixture}.das")
     using() $(var cop : CodeOfPolicies) {
         standalone_cop(cop)
         ast_gc_guard() {
-            standalone_aot(input, out_dir, false, false, cop)
+            standalone_aot(input, out_dir, cross_platform, false, cop)
         }
     }
+    var files : tuple<header : string; source : string>
     let generated = path_join(out_dir, "{fixture}.das.cpp")
-    var source = ""
     fopen(generated, "rb") $(fr) {
         if (fr != null) {
-            source = fread(fr)
+            files.source = fread(fr)
         }
     }
-    if (empty(source)) {
+    fopen(path_join(out_dir, "{fixture}.das.h"), "rb") $(fr) {
+        if (fr != null) {
+            files.header = fread(fr)
+        }
+    }
+    if (empty(files.source)) {
         t |> failure("standalone_aot produced no {generated}")
     }
     remove(generated)
     remove(path_join(out_dir, "{fixture}.das.h"))
-    return source
+    return files
+}
+
+def private generate_standalone_source(t : T?; fixture, out_dir : string) : string {
+    return generate_standalone_files(t, fixture, out_dir).source
 }
 
 def private brace_balance(text : string) : int {
@@ -59,7 +68,7 @@ def private brace_balance(text : string) : int {
 }
 
 [test]
-def test_standalone_emit(t : T?) {
+def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subcases
     var tmp_err : string
     let out_dir = create_temp_directory("standalone_emit", tmp_err)
     if (!empty(tmp_err)) {
@@ -68,20 +77,20 @@ def test_standalone_emit(t : T?) {
     }
 
     t |> run("a context with no init functions still closes its constructor") @(t : T?) {
-        let source = generate_standalone(t, "_standalone_novars_fixture", out_dir)
+        let source = generate_standalone_source(t, "_standalone_novars_fixture", out_dir)
         t |> success(find(source, "Standalone::Standalone() \{") >= 0, "constructor was emitted")
         t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
     }
 
     t |> run("forward declarations spell types the way the definitions do") @(t : T?) {
-        let source = generate_standalone(t, "_standalone_tuple_fixture", out_dir)
+        let source = generate_standalone_source(t, "_standalone_tuple_fixture", out_dir)
         t |> success(find(source, "TTuple<") >= 0, "the tuple definition was emitted")
         t |> success(find(source, "AutoTuple<") < 0, "cross-platform spelling leaked into a native emit")
         t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
     }
 
     t |> run("the constructor runs the init script and then the [init] functions") @(t : T?) {
-        let source = generate_standalone(t, "_standalone_init_fixture", out_dir)
+        let source = generate_standalone_source(t, "_standalone_init_fixture", out_dir)
         let ctor_pos = find(source, "Standalone::Standalone()")
         t |> success(ctor_pos >= 0, "constructor was emitted")
         let init_script_pos = find(source, "__init_script(&context, true);")
@@ -95,12 +104,41 @@ def test_standalone_emit(t : T?) {
     }
 
     t |> run("required modules' globals emit in dependency order before the entry module's") @(t : T?) {
-        let source = generate_standalone(t, "_standalone_cross_module_fixture", out_dir)
-        let a_pos = find(source, "/*g_dep_a*/")
-        let b_pos = find(source, "/*g_dep_b*/")
-        let main_pos = find(source, "/*g_main*/")
+        let files = generate_standalone_files(t, "_standalone_cross_module_fixture", out_dir)
+        let a_pos = find(files.source, "/*g_dep_a*/")
+        let b_pos = find(files.source, "/*g_dep_b*/")
+        let main_pos = find(files.source, "/*g_main*/")
         t |> success(a_pos >= 0 && b_pos >= 0 && main_pos >= 0, "all three globals were emitted")
         t |> success(a_pos < b_pos && b_pos < main_pos, "dependency-first order: dep_a, dep_b, entry module")
+        t |> success(find(files.header, "static_assert(sizeof(DepSpan)") >= 0, "a required module's struct definition is in the header")
+        t |> success(find(files.header, "struct _standalone_dep_a::DepSpan") >= 0, "the method spells the required module's struct by its public name")
+        t |> success(find(files.source, "static_assert(sizeof(DepSpan)") < 0, "the source does not redefine the required module's struct")
+    }
+
+    t |> run("struct and enum signatures put the type definitions in the header") @(t : T?) {
+        let files = generate_standalone_files(t, "_standalone_struct_sig_fixture", out_dir)
+        t |> success(find(files.header, "static_assert(sizeof(Pair)") >= 0, "the struct definition is in the header")
+        t |> success(find(files.header, "enum class Mode") >= 0, "the enum definition is in the header")
+        t |> success(find(files.header, "-> struct _standalone_struct_sig_fixture::Pair") >= 0, "the method spells the struct by its public name")
+        t |> success(find(files.header, "DAS_COMMENT(enum) _standalone_struct_sig_fixture::Mode") >= 0, "the method spells the enum by its public name")
+        t |> success(find(files.header, "pair_sum") >= 0, "the struct-taking method is declared")
+        t |> success(find(files.header, "namespace  \{") < 0, "no 'namespace  \{' (empty module name) in the header")
+        t |> success(find(files.header, "#pragma once") >= 0, "the header guards against double inclusion")
+        t |> success(find(files.header, "bin_serializer.h") >= 0, "required-module includes are in the header")
+        t |> success(find(files.source, "static_assert(sizeof(Pair)") < 0, "the source does not redefine the struct")
+        t |> success(find(files.source, "enum class Mode") < 0, "the source does not redefine the enum")
+        t |> equal(brace_balance(files.header), 0, "unbalanced braces in the generated header")
+        t |> equal(brace_balance(files.source), 0, "unbalanced braces in the generated C++")
+    }
+
+    t |> run("cross-platform debug info spells entry-module types by their public name") @(t : T?) {
+        let files = generate_standalone_files(t, "_standalone_struct_sig_fixture", out_dir, true)
+        t |> success(find(files.source, "offsetof(_standalone_struct_sig_fixture::Pair,") >= 0, "offsetof names the qualified struct")
+        t |> success(find(files.source, "TypeSize<_standalone_struct_sig_fixture::Pair>") >= 0, "TypeSize names the qualified struct")
+        t |> success(find(files.source, "DAS_COMMENT(enum) _standalone_struct_sig_fixture::Mode>") >= 0, "TypeSize names the qualified enum")
+        t |> success(find(files.source, "offsetof(Pair,") < 0, "no unqualified offsetof survives")
+        t |> success(find(files.source, "TypeSize<Pair>") < 0, "no unqualified struct TypeSize survives")
+        t |> equal(brace_balance(files.source), 0, "unbalanced braces in the generated C++")
     }
 
     t |> run("a required module's [init] is a collected error, not a crash") @(t : T?) {

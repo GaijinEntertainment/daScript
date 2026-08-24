@@ -1120,6 +1120,10 @@ namespace das {
         return context->allocateString(helper->t2cppTypeName.find(info)->second, at);
     }
 
+    void builtin_ast_set_aot_main_module_name(const char * name) {
+        setAotMainModuleName(name ? name : "");
+    }
+
     const char *debug_helper_find_struct_cppname(DebugInfoHelper * helper, StructInfo *info, Context * context, LineInfoArg * at) {
         DAS_ASSERT(helper->s2cppTypeName.find(info) != helper->s2cppTypeName.end());
         return context->allocateString(helper->s2cppTypeName.find(info)->second, at);
@@ -1782,6 +1786,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(debug_helper_find_struct_cppname)>(*this, lib,  "debug_helper_find_struct_cppname",
                                                            SideEffects::modifyExternal, "debug_helper_find_struct_cppname")
             ->args({"helper","struct_info", "context", "at"})->setTempStringResult();
+        addExtern<DAS_BIND_FUN(builtin_ast_set_aot_main_module_name)>(*this, lib,  "set_aot_main_module_name_cpp",
+                                                           SideEffects::modifyExternal, "builtin_ast_set_aot_main_module_name")
+            ->args({"name"});
         addExtern<DAS_BIND_FUN(macro_aot_infix)>(*this, lib,  "macro_aot_infix",
                                                            SideEffects::modifyArgument, "macro_aot_infix")
             ->args({"macro","ss", "expr"});

@@ -4018,9 +4018,15 @@ namespace das
         {   Type::tVariant,     "Variant"  }
     };
 
+    static string g_aotMainModuleName;
+
+    void setAotMainModuleName ( const string & name ) {
+        g_aotMainModuleName = name;
+    }
+
     string aotModuleName ( Module * pm  ) {
         if ( pm->name.empty() ) {
-            return "";
+            return g_aotMainModuleName;
         } else if ( pm->name=="$" ) {
             return "_builtin_";
         } else {
@@ -4194,10 +4200,11 @@ namespace das
             stream << ">";
         } else if ( baseType==Type::tStructure ) {
             if ( type->structType ) {
-                if ( type->structType->module->name.empty() ) {
+                auto structNs = aotModuleName(type->structType->module);
+                if ( structNs.empty() ) {
                     stream << aotStructName(type->structType);
                 } else {
-                    stream << aotModuleName(type->structType->module) << "::" << aotStructName(type->structType);
+                    stream << structNs << "::" << aotStructName(type->structType);
                 }
             } else {
                 stream << "DAS_COMMENT(unspecified structure) ";
@@ -4220,12 +4227,13 @@ namespace das
             }
         } else if ( type->isEnumT() ) {
             if ( type->enumType ) {
+                auto enumNs = type->enumType->external ? string() : aotModuleName(type->enumType->module);
                 if ( type->enumType->external ) {
                     stream << "DAS_COMMENT(bound_enum) " << type->enumType->cppName;
-                } else if ( type->enumType->module->name.empty() ) {
+                } else if ( enumNs.empty() ) {
                     stream << "DAS_COMMENT(enum) " << type->enumType->name;
                 } else {
-                    stream << "DAS_COMMENT(enum) " << aotModuleName(type->enumType->module) << "::" << type->enumType->name;
+                    stream << "DAS_COMMENT(enum) " << enumNs << "::" << type->enumType->name;
                 }
             } else {
                 stream << "DAS_COMMENT(unspecified enumeration)";

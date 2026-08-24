@@ -87,6 +87,7 @@ namespace das {
     DAS_CC_API void debug_helper_iter_enums(DebugInfoHelper * helper, const DebugBlockT<EnumInfo*> & block, Context * context, LineInfoArg * at);
     DAS_CC_API const char *debug_helper_find_type_cppname(DebugInfoHelper * helper, TypeInfo *info, Context * context, LineInfoArg * at);
     DAS_CC_API const char *debug_helper_find_struct_cppname(DebugInfoHelper * helper, StructInfo *info, Context * context, LineInfoArg * at);
+    DAS_CC_API void builtin_ast_set_aot_main_module_name(const char * name);
     DAS_CC_API bool macro_aot_infix(TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr);
     DAS_CC_API FileInfo *clone_file_info(const char *name, int tabSize, Context * context, LineInfoArg * at);
     DAS_CC_API void get_file_source_line(FileInfo * info, uint32_t line, const TBlock<void,TTemporary<const char *>> & blk, Context * context, LineInfoArg * at);

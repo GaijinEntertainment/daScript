@@ -44,9 +44,6 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
         var vars : array<string>
         vars |> reserve(length(fn.arguments))
         for (variable in fn.arguments) {
-            if (variable._type.baseType == Type.tStructure && declare_only) {
-                panic("Structures is not allowed in standalone contexts arguments.")
-            }
             let type_str = build_string() $(var wr) {
                 if (isLocalVec(variable._type)) {
                     describeLocalCppType(unsafe(addr(wr)), variable._type, cfg.cross_platform);
@@ -58,9 +55,6 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
         }
         let vars_str = join(vars, ", ");
         write(logs, "{vars_str}{!fn.arguments.empty() ? " " : ""}) -> ")
-        if (fn.result.baseType == Type.tStructure && declare_only) {
-            panic("Structures is not allowed in standalone contexts return types.");
-        }
         describeLocalCppType(unsafe(addr(logs)), fn.result, cfg.cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes);
         if (declare_only) {
             write(logs, ";\n");
@@ -323,11 +317,13 @@ def addFunctionInfo(fnn : array<Function?>; var helper : AotDebugInfoHelper?) {
 
 
 def genStandaloneSrc(var program : ProgramPtr;
+                     var header : StringBuilderWriter;
                      var source : StringBuilderWriter; cfg : StandaloneContextCfg;
                      var coll : BlockVariableCollector?) {
     var initFunctions : string;
+    var type_defs = "";
     let ctx_generated = build_string() $(tw) {
-        let deps = build_string() $(tmp_writer) {
+        type_defs = build_string() $(tmp_writer) {
             var cpp_aot = new CppAot(program := program, collector = coll, ss = unsafe(addr(tmp_writer)), cross_platform = cfg.cross_platform);
             make_visitor(*cpp_aot) $(aot_adapter) {
                 cpp_aot.adapter := aot_adapter
@@ -337,7 +333,6 @@ def genStandaloneSrc(var program : ProgramPtr;
                 delete cpp_aot
             }
         }
-        write(tw, deps);
         build_string() $(tmp_writer) {
             var gen = new StandaloneContextGen(program, unsafe(addr(tmp_writer)), coll, cfg.cross_platform);
             make_visitor(*gen) $(adapter) {
@@ -346,6 +341,8 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
 
             initFunctions = addFunctionInfo(collectProgramUsedFunctions(program, false, false), gen.helper);
+            type_defs += gen.declarations;
+            gen.declarations = "";
             write(tw, gen.str());
             unsafe {
                 delete gen.collector
@@ -353,17 +350,14 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
         }
     }
+    write(header, type_defs);
     write(source, "namespace {program.thisNamespace} \{\n");
     write(source, "{ctx_generated}");
     write(source, "\} // namespace {program.thisNamespace}\n");
     return initFunctions
 }
 
-def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var pctx : smart_ptr<Context>; cfg : StandaloneContextCfg) : bool {
-    //! Runs the standalone AOT visitor on the program to generate C++ source and header files.
-    //! Returns false (writing nothing) when emission collected errors.
-    assume context = *pctx;
-
+def private prepareProgramForEmission(var program : ProgramPtr; context : Context) : BlockVariableCollector? {
     var pmarker = new PrologueMarker();
     make_visitor(*pmarker) $(adapter_p) {
         visit(program, adapter_p)
@@ -384,16 +378,28 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
     make_visitor(*coll) $(adapter_coll) {
         visit(program, adapter_coll)
     }
+    return coll
+}
+
+def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var pctx : smart_ptr<Context>; cfg : StandaloneContextCfg) : bool {
+    //! Runs the standalone AOT visitor on the program to generate C++ source and header files.
+    //! Returns false (writing nothing) when emission collected errors.
+    assume context = *pctx;
+
+    var coll = prepareProgramForEmission(program, context)
 
     let mod = program.getThisModule;
     let mod_name = mod.moduleFlags.promoted ? "" : string(mod.name);
+    set_aot_main_module_name(cfg.context_name)
     var source_content = ""
     let header_content = build_string() $(header) {
     source_content = build_string() $(source) {
+        write(header, "#pragma once\n");
         if (!empty(mod_name)) {
             write(header, "// Module {mod_name}\n");
         }
         write(header, "{AOT_INCLUDES}");
+        write(header, "{join(modules, "")}");
 
         if (!empty(mod_name)) {
             write(source, "// Module {mod_name}\n");
@@ -406,7 +412,7 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
 
         write(source, "namespace das \{\n");
         write(header, "namespace das \{\n");
-            let initFunctions = genStandaloneSrc(program, source, cfg, coll);
+            let initFunctions = genStandaloneSrc(program, header, source, cfg, coll);
             writeRegistration(header, source, initFunctions, program, cfg, context);
         write(source, "\} // namespace das\n");
         write(header, "\} // namespace das\n");
@@ -415,6 +421,7 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
 
     }
     }
+    set_aot_main_module_name("")
 
     if (log_aot_emit_errors(program)) {
         return false
