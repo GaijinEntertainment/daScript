@@ -561,7 +561,15 @@ namespace das {
         if ( expr->rtti_isVar() ) { // global variable which happens to be constant
             auto var = static_cast<ExprVar *>(expr);
             auto variable = var->variable;
-            if ( variable && variable->init && variable->type->isConst() && variable->type->isFoldable() ) {
+            // A failed declaration can leave the declared type and initializer type
+            // mismatched while inference continues to collect diagnostics.  Do not
+            // substitute that initializer as the value of the declared type: an int
+            // initializer cloned into a string expression, for example, would make
+            // infer-time string folding interpret the integer bits as a pointer.
+            const bool matchingInitType = variable && variable->init && variable->init->type
+                && variable->type->isSameType(*variable->init->type,
+                    RefMatters::no, ConstMatters::no, TemporaryMatters::no);
+            if ( matchingInitType && variable->type->isConst() && variable->type->isFoldable() ) {
                 if ( /*!var->local &&*/ // this is an interesting question. should we allow local const to be folded?
                     !var->argument &&
                     !var->block ) {
