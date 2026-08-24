@@ -3,6 +3,7 @@
      both are referenced from robots.txt. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url><loc>https://daslang.io/</loc></url>
+    <url><loc>https://daslang.io/benchmarks.html</loc></url>
     <url><loc>https://daslang.io/performance.html</loc></url>
     <url><loc>https://daslang.io/dasllama.html</loc></url>
     <url><loc>https://daslang.io/daspkg.html</loc></url>
