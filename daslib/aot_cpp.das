@@ -556,7 +556,7 @@ def expectsLocalTemp(expr : ExprMakeLocal?) : bool {
     return false
 }
 
-class NoAotMarker : AstVisitor {
+class public NoAotMarker : AstVisitor {
     //! AST visitor that marks functions containing non-AOT-compatible types as noAot.
     @do_not_delete func : Function? <- null;
 

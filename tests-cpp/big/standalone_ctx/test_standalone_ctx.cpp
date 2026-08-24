@@ -29,5 +29,8 @@ int main( int, char * [] ) {
     expect("flip(on)", int32_t(ctx.flip(standalone_init_fixture::Mode::on)),
         int32_t(standalone_init_fixture::Mode::off));
     expect("stack.size() honors options stack", ctx.stack.size() >= 262144 ? 1 : 0, 1);
+    expect("apply_lambda(10)", ctx.apply_lambda(10), 16);
+    expect("call_through_pointer(21)", ctx.call_through_pointer(21), 42);
+    expect("sum_generator(5)", ctx.sum_generator(5), 10);
     return failures ? 1 : 0;
 }

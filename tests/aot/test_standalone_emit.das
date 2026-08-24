@@ -149,6 +149,20 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> equal(brace_balance(files.source), 0, "unbalanced braces in the generated C++")
     }
 
+    t |> run("a [no_aot] function is a collected error, not a runtime crash") @(t : T?) {
+        let input = path_join(get_das_root(), "tests/aot/_standalone_no_aot_fixture.das")
+        var ok = true
+        using() $(var cop : CodeOfPolicies) {
+            standalone_cop(cop)
+            ast_gc_guard() {
+                ok = standalone_aot(input, out_dir, false, false, cop)
+            }
+        }
+        t |> success(!ok, "standalone_aot reports failure")
+        let generated = path_join(out_dir, "_standalone_no_aot_fixture.das.cpp")
+        t |> success(!stat(generated).is_valid, "no output is written on failure")
+    }
+
     t |> run("a required module's [init] is a collected error, not a crash") @(t : T?) {
         let input = path_join(get_das_root(), "tests/aot/_standalone_foreign_init_fixture.das")
         var ok = true

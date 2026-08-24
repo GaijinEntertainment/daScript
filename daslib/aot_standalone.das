@@ -360,7 +360,26 @@ def genStandaloneSrc(var program : ProgramPtr;
     return initFunctions
 }
 
+def private checkAllUsedFunctionsCanAot(program : ProgramPtr) {
+    program.get_ptr() |> for_each_module_no_order($(pm) {
+        pm |> for_each_module_function($(pfun) {
+            if (pfun.index < 0 || !pfun.flags.used || pfun.flags.builtIn) {
+                return
+            }
+            if (pfun.flags.noAot) {
+                macro_error(program, pfun.at, "standalone AOT cannot emit function {pfun.name}: it needs the interpreter ([no_aot], or a type AOT cannot express), and a standalone context has none")
+            }
+        });
+    });
+}
+
 def private prepareProgramForEmission(var program : ProgramPtr; context : Context) : BlockVariableCollector? {
+    var marker = new NoAotMarker();
+    make_visitor(*marker) $(adapter_marker) {
+        visit(program, adapter_marker)
+    }
+    checkAllUsedFunctionsCanAot(program)
+
     var pmarker = new PrologueMarker();
     make_visitor(*pmarker) $(adapter_p) {
         visit(program, adapter_p)
@@ -375,6 +394,7 @@ def private prepareProgramForEmission(var program : ProgramPtr; context : Contex
     unsafe {
         delete flags
         delete pmarker
+        delete marker
     }
 
     var coll = new BlockVariableCollector();

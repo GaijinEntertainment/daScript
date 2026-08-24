@@ -74,3 +74,34 @@ def pair_sum(p : Pair) : int {
 def flip(m : Mode) : Mode {
     return m == Mode.on ? Mode.off : Mode.on
 }
+
+[export]
+def apply_lambda(x : int) : int {
+    let add3 = @(v : int) : int => v + 3
+    return invoke(add3, invoke(add3, x))
+}
+
+def local_double(x : int) : int {
+    return x + x
+}
+
+[export]
+def call_through_pointer(x : int) : int {
+    let fp = @@local_double
+    return invoke(fp, x)
+}
+
+[export]
+def sum_generator(n : int) : int {
+    var gen <- generator<int> {
+        for (i in range(n)) {
+            yield i
+        }
+        return false
+    }
+    var s = 0
+    for (v in gen) {
+        s += v
+    }
+    return s
+}

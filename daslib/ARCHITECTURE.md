@@ -261,6 +261,12 @@ an entry lands here only when no name, shape, or test can carry it.
 - **Cross-module limits fail loud at emit time**: only main-module, AOT-emitted `[init]`
   functions can be called from the ctor (required-module and `[no_aot]` ones panic with
   the reason), because the standalone TU only emits the entry module's function bodies.
+- **Every used function must have an AOT body** - a standalone context has no
+  interpreter, so a used `noAot` function (the `[no_aot]` annotation, or `NoAotMarker`
+  finding a type AOT cannot express) is a collected emit error, never a
+  `fnByMangledName` call that would crash at runtime. `prepareProgramForEmission` runs
+  `NoAotMarker` first (the regular AOT paths run it too; standalone must match) and
+  then `checkAllUsedFunctionsCanAot` walks used, non-builtin functions.
 - **Type definitions live in the header, once** - struct/enum definitions (the
   dependency dump plus the entry module's own `declarations` capture) are emitted into
   the `.das.h`, which the `.das.cpp` includes; the source never redefines them. They sit
