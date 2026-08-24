@@ -229,7 +229,7 @@ fi
 # REVIEW.md / REVIEW.das are 100% internal -- per-folder review machinery never
 # ships. REVIEW_COMMON.md is the one exception: adopting repos vendor from it.
 printf '  %-30s ' "no REVIEW.md/REVIEW.das"
-REVIEW_LEAKS=$(find "$BUNDLE" \( -name "REVIEW*.md" -o -name "REVIEW*.das" \) ! -name "REVIEW_COMMON.md" 2>/dev/null)
+REVIEW_LEAKS=$(find "$BUNDLE" \( -name "REVIEW*.md" -o -name "REVIEW*.das" \) ! -path "$BUNDLE/REVIEW_COMMON.md" 2>/dev/null)
 if [[ -z "$REVIEW_LEAKS" ]]; then
     echo "OK"
     PASS=$((PASS + 1))

@@ -2229,3 +2229,23 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         DESTINATION tree-sitter-daslang
     )
 endif()
+
+# REVIEW.md / REVIEW.das are repo-internal review machinery and never install;
+# the one exception is REVIEW_COMMON.md at the install root (adopting repos vendor
+# from it). This must stay the LAST install rule in the root CMakeLists so the
+# manifest it checks is complete.
+install(CODE [[
+    set(_review_leaks "")
+    get_filename_component(_root_common "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/REVIEW_COMMON.md" ABSOLUTE)
+    foreach(_f IN LISTS CMAKE_INSTALL_MANIFEST_FILES)
+        get_filename_component(_name "${_f}" NAME)
+        get_filename_component(_f_abs "${_f}" ABSOLUTE)
+        if(_name MATCHES "^REVIEW.*\.(md|das)$" AND NOT _f_abs STREQUAL _root_common)
+            list(APPEND _review_leaks "${_f}")
+        endif()
+    endforeach()
+    if(_review_leaks)
+        list(JOIN _review_leaks "\n  " _review_leaks_text)
+        message(FATAL_ERROR "install carries repo-internal review files:\n  ${_review_leaks_text}")
+    endif()
+]])
