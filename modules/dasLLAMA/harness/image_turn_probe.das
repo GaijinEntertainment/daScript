@@ -51,7 +51,8 @@ def measure_tokens(tr : Model; reps : int) : double {
     return best
 }
 
-def measure_span(tr : Model; wide : bool; reps : int) : double {
+def measure_span(tr : Model; wide : bool; reps : int; lo : int64 = SPAN_LO; hi : int64 = SPAN_HI;
+                 gx : int64 = GRID_X; gy : int64 = GRID_Y) : double {
     let dim = tr.config.dim
     let stride = wide ? (1l + tr.config.n_deepstack) * dim : dim
     var best = 1.0e30lf
@@ -63,7 +64,7 @@ def measure_span(tr : Model; wide : bool; reps : int) : double {
             embd[i] = 0.01 * sin(float(i % 1024l))
         }
         let t0 = ref_time_ticks()
-        eval_embd_span_mrope_(tr, s, embd, NPOS, SPAN_LO, SPAN_HI, GRID_X, GRID_Y)
+        eval_embd_span_mrope_(tr, s, embd, NPOS, lo, hi, gx, gy)
         let ms = double(get_time_usec(t0)) / 1000.0lf
         if (ms < best) {
             best = ms
@@ -101,6 +102,17 @@ def main {
                 let wsp = measure_span(tr, true, REPS)
                 let tag = empty(arm) ? "full" : arm
                 print("PROBE {tag}: tokens {t} ms | narrow-span {nsp} ms | wide-span {wsp} ms | narrow-tax {nsp - t} | wide-tax {wsp - t}\n")
+            }
+            // the span-tax split: which attention STAGE carries it (the per-stage knockouts),
+            // and how it scales with span size (span of 1 row = the constant/overhead part,
+            // 300 rows = overhead + the intrinsic non-causal pairs)
+            for (arm in ["", "attn_qk", "attn_sm", "attn_av"]) {
+                set_metal_prefill_skip(arm)
+                let t = measure_tokens(tr, REPS)
+                let s300 = measure_span(tr, false, REPS)
+                let s1 = measure_span(tr, false, REPS, SPAN_LO, SPAN_LO + 1l, 1l, 1l)
+                let tag = empty(arm) ? "split-full" : arm
+                print("SPLIT {tag}: tokens {t} ms | span300 {s300} ms | span1 {s1} ms | tax300 {s300 - t} | tax1 {s1 - t}\n")
             }
             set_metal_prefill_skip("")
         }

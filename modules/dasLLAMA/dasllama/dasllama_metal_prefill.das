@@ -1305,8 +1305,11 @@ class MetalAttnAV {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let kvhoff = (h / ka.kv_mul) * ka.head_size
-        // causal: P rows here are zero past qoff+qi0+31; uniform span: softmax zeroed [uend, np32)
-        let jlimit = ka.uend > 0u ? ka.np32 : min(ka.qoff + qi0 + 32u, ka.np32)
+        // P rows are zero past each row's live length, so the walk bound is the tile's max:
+        // causal reach, lifted to uend only when the tile holds span rows (causal-only tiles
+        // above the span keep their short walk)
+        let creach = ka.qoff + qi0 + 32u
+        let jlimit = min(ka.uend > 0u && ka.qoff + qi0 < ka.uend && creach > ka.ulo ? max(ka.uend, creach) : creach, ka.np32)
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
         var c00 : simdgroup_float8x8
@@ -1513,8 +1516,10 @@ class MetalAttnAVMmT {
         let h = gl_WorkGroupID.z
         let kvhoff = (h / ka.kv_mul) * ka.head_size
         let lid = gl_LocalInvocationID.x
-        // P rows here are zero past qoff+mBase+31; uniform span: softmax zeroed [uend, np32)
-        let klimit = ka.uend > 0u ? ka.np32 : min(ka.qoff + mBase + 32u, ka.np32)
+        // the tile-max walk bound: causal reach, lifted to uend only when the tile holds span
+        // rows (P is softmax-zeroed past each row's live length either way)
+        let creach = ka.qoff + mBase + 32u
+        let klimit = min(ka.uend > 0u && ka.qoff + mBase < ka.uend && creach > ka.ulo ? max(ka.uend, creach) : creach, ka.np32)
         var acc : float[2048]
         var cp = unsafe(addr(xb[mBase * ka.qd + h * ka.head_size + vBase]))
         tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
@@ -1571,8 +1576,10 @@ class MetalAttnAVMm : MetalMmTileBase {
         let bB = (sg / 2u) * 128u
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
-        // causal: P rows here are zero past qoff+mBase+31; uniform span: softmax zeroed [uend, np32)
-        let klimit = ka.uend > 0u ? ka.np32 : min(ka.qoff + mBase + 32u, ka.np32)
+        // the tile-max walk bound: causal reach, lifted to uend only when the tile holds span
+        // rows (P is softmax-zeroed past each row's live length either way)
+        let creach = ka.qoff + mBase + 32u
+        let klimit = min(ka.uend > 0u && ka.qoff + mBase < ka.uend && creach > ka.ulo ? max(ka.uend, creach) : creach, ka.np32)
         var kb = 0u
         while (kb * 32u < klimit) {
             let posg = kb * 32u + pr

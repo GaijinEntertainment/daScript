@@ -703,12 +703,18 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         "{kdt} fused turn served as ONE GPU prefill")
                     // same-backend mask witness: fused vs the three-eval splice on the GPU run
                     // row-identical math, so the prefill logits must agree at the bit-noise
-                    // floor — a mask defect on ANY row moves its KV and lands here
+                    // floor — a mask defect on ANY row moves its KV and lands here. The GEMV
+                    // tail is pinned OFF for both legs: a splice chunk whose npos % 32 lands in
+                    // the tail window would serve its remainder rows on the f32-dot GEMVs while
+                    // the fused eval stays f16-tile mul_mm — a GEMM-form spread the f16 bar
+                    // cannot absorb, and the tail has its own arm (mm-tail)
+                    set_metal_prefill_mm_tail(false)
                     var lg_fused <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
                     set_span_fuse(false)
                     set_metal_prefill_min_npos(1l)   // the splice's short head/tail ride the GPU too
                     let pfsp0 = metal_prefill_stats().prefills
                     var lg_splice <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
+                    set_metal_prefill_mm_tail(true)
                     // the reference must actually BE the splice: three GPU prefills, or the
                     // witness collapses onto its own subject (an always-fused mutant passes)
                     t |> success(metal_prefill_stats().prefills - pfsp0 == 3l,

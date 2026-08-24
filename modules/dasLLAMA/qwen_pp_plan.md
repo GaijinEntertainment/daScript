@@ -83,5 +83,19 @@ MoE prefill (30B −4%), the span-attn +6 ms, the ~10 ms post-encode residue.
       (-7.5% -> -2.2% vs 564.6), 4B img:pp 942 -> 986 (-2.7% vs 1013.2), 8B text p321
       534.5 -> 566.7 (+7.8% ahead of 525.9), p341/p512 unchanged, 30B Omni 783 (rides).
       PERF_LEDGER entry in.
-- [ ] Followups: span-attn tax (~6 ms), post-encode residue (~10 ms), kq mul_mm + MoE prefill
-      tails (the mv_kq twins exist), r in [9,15] via a third mv pass (marginal ~12 ms).
+- [x] Followup 1 (span-attn tax) split and fixed: the AV kernels dropped the causal walk
+      bound wholesale when the span was armed (`jlimit = np32`); now tile-conditional
+      (`max(uend, causal reach)` only where the tile holds span rows — a pure shrink over
+      softmax-zeroed columns, bit-neutral). Probe: tax1 3.3 -> 0.58 ms (the constant
+      overhead deleted — small-span turns win up to ~3 ms); tax300 unchanged within noise —
+      at the real 300-row span the extra walk was nearly free, the remaining ~6 ms is
+      INTRINSIC non-causal pairs + softmax length. The image cell does not move from this.
+      GATE LESSON: the span-fused f16 fused-vs-splice witness (bit-identity bar 1e-4) reds
+      under the GEMV tail — a splice chunk with npos % 32 in the tail window serves its
+      remainder rows on f32-dot GEMVs while the fused eval stays f16-tile; the witness now
+      pins the tail OFF for both legs (it isolates the MASK; the tail has its own arm). The
+      tail commit's gate scope missed this — bit-identity witnesses belong in the
+      change-affects set of ANY GEMM-numerics change.
+- [ ] Followups: post-encode residue (~10 ms: ~6.7 GPU cache aftermath + ~3.8 host slack;
+      lever = encode-ahead overlap, shared with the decode submission-overhead arc), kq
+      mul_mm + MoE prefill tails (the mv_kq twins exist), r in [9,15] via a third mv pass.
