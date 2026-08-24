@@ -443,6 +443,7 @@ namespace das {
         std::thread thr;
         bool started = false;
         static constexpr int interval_ms = 5;   // constexpr: ODR-used via chrono at -O0, needs the implicit inline definition
+        static constexpr int idle_ms = 100;     // the no-window poll - cheap wakeups once the keep-alive expires
         ~ResidencyHeartbeat() {
             stop.store(true, std::memory_order_relaxed);
             if ( thr.joinable() ) thr.join();
@@ -455,7 +456,8 @@ namespace das {
         if ( @available(macOS 15.0, iOS 18.0, *) ) {
             auto & hb = g_rsetHeartbeat;
             while ( !hb.stop.load(std::memory_order_relaxed) ) {
-                if ( hb.loops_left.load(std::memory_order_relaxed) > 0 ) {
+                bool armed = hb.loops_left.load(std::memory_order_relaxed) > 0;
+                if ( armed ) {
                     {
                         std::lock_guard<std::mutex> guard(hb.mx);
                         for ( void * h : hb.sets ) {
@@ -465,7 +467,11 @@ namespace das {
                     hb.loops_left.fetch_sub(1, std::memory_order_relaxed);
                     hb.ticks.fetch_add(1, std::memory_order_relaxed);
                 }
-                std::this_thread::sleep_for(std::chrono::milliseconds(ResidencyHeartbeat::interval_ms));
+                // idle (keep-alive expired) drops to a slow poll - a kick during the long sleep
+                // delays the first re-request by at most idle_ms, and the set was just requested
+                // by the serving step itself, so nothing can collect in that window
+                std::this_thread::sleep_for(std::chrono::milliseconds(
+                    armed ? ResidencyHeartbeat::interval_ms : ResidencyHeartbeat::idle_ms));
             }
         }
 #endif
@@ -473,6 +479,7 @@ namespace das {
 
     void metal_residency_set_heartbeat ( MetalResidencySet * rset, int32_t keep_alive_s, Context * ctx, LineInfoArg * at ) {
         if ( !rset ) ctx->throw_error_at(at, "metal_residency_set_heartbeat: null residency set");
+        if ( keep_alive_s <= 0 ) return;    // non-positive = no-op: nothing registers, no thread starts (the knob-0 contract)
 #if defined(DASMETAL_HAS_RESIDENCY_SETS)
         if ( @available(macOS 15.0, iOS 18.0, *) ) {
             auto & hb = g_rsetHeartbeat;
