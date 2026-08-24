@@ -108,6 +108,10 @@
       "files" : ["examples/tests.das"]
     },
     {
+      "name" : "Linq: group by + average",
+      "files" : ["examples/linq_cars.das"]
+    },
+    {
       "name" : "Dictionary (benchmark)",
       "files" : ["examples/dict.das"]
     },
