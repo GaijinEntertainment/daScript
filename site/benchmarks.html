@@ -310,13 +310,25 @@
     }
 
     function render() {
+        if (!state.data || !state.data[state.platform]) {
+            var loaded = state.data ? Object.keys(state.data) : [];
+            if (!loaded.length) {
+                document.getElementById("bm-table").innerHTML =
+                    "<tbody><tr><td class='bm-caption' style='padding:22px 14px'>benchmark data unavailable</td></tr></tbody>";
+                return;
+            }
+            state.platform = loaded[0];
+            document.getElementById("bm-platform").querySelectorAll("button").forEach(function (b) {
+                b.classList.toggle("is-on", b.getAttribute("data-p") === state.platform);
+            });
+        }
         var lanes = LANES[state.board];
         var rows = currentRows();
         var tbl = document.getElementById("bm-table");
 
-        var html = "<thead><tr><th" + sortAttr(0) + ">benchmark</th>";
+        var html = "<thead><tr><th" + thClassAttr(0, false) + ">benchmark</th>";
         lanes.forEach(function (l, i) {
-            html += "<th" + sortAttr(i + 1) + (l.das ? ' class="bm-das-col"' : "") + ">" + l.label + "</th>";
+            html += "<th" + thClassAttr(i + 1, l.das) + ">" + l.label + "</th>";
         });
         html += "</tr></thead><tbody>";
 
@@ -357,8 +369,11 @@
         renderHero();
     }
 
-    function sortAttr(i) {
-        return state.sortCol === i ? " class='is-sorted" + (state.sortDesc ? " is-desc" : "") + "'" : "";
+    function thClassAttr(i, das) {
+        var cls = [];
+        if (state.sortCol === i) cls.push("is-sorted" + (state.sortDesc ? " is-desc" : ""));
+        if (das) cls.push("bm-das-col");
+        return cls.length ? " class='" + cls.join(" ") + "'" : "";
     }
 
     function renderSummary(lanes, rows) {
