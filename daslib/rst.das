@@ -2096,7 +2096,7 @@ def public documents(name : string; mods : array<Module?>; fname : string; var g
     documents(name, mods, fname, groups, hook, none)
 }
 
-def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; hook : DocsHook; nosearch : array<string>) {
+def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; hook : DocsHook; nosearch : array<string>){ // nolint:STYLE037 - flat DocumentBlock dispatch ladder
     //! Same as `documents`, plus `nosearch`: symbol names whose value/field tables are
     //! excluded from the search index (the symbol and its description stay indexed).
     clear(seen_function_labels)
