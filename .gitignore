@@ -190,3 +190,4 @@ modules/dasLLAMA/benchmarks/modules/.daspkg.log
 
 # python bytecode, anywhere
 __pycache__/
+site/files/profile_results_*.json

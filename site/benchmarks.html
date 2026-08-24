@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Benchmarks — cross-language · daslang</title>
+    <meta name="description" content="The dasProfile suite: 16 benchmarks, das vs Lua, LuaJIT, Luau, Quirrel, QuickJS, Mono and .NET — interpreter, JIT and AOT lanes, per platform." />
+    <link rel="canonical" href="https://daslang.io/benchmarks.html" />
+    <link rel="icon" type="image/svg+xml" href="files/daslang-favicon.svg" />
+    <link rel="alternate icon" type="image/x-icon" href="files/daslang.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="files/forge.css" />
+    <link rel="stylesheet" href="files/nav-dropdown.css" />
+
+<style>
+  .bm-hero__badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.04em;
+    color: var(--amber); border: 1px solid var(--amber-dim); border-radius: 999px;
+    padding: 5px 12px; margin-bottom: 26px;
+  }
+  .bm-hero__badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+
+  .bm-run { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.9; color: var(--fg-dim); }
+  .bm-run .prompt { color: var(--green); }
+  .bm-run .dim { color: var(--fg-faint); }
+  .bm-run .ok { color: var(--green); }
+  .bm-run .amber { color: var(--amber); }
+  .bm-run .metric { color: var(--fg); }
+
+  .bm-viewbar { margin-top: 26px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .bm-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  .bm-seg button {
+    background: none; border: 0; color: var(--fg-faint); font-family: var(--font-mono);
+    font-size: 11px; padding: 6px 14px; cursor: pointer; letter-spacing: 0.04em;
+  }
+  .bm-seg button + button { border-left: 1px solid var(--rule); }
+  .bm-seg button.is-on { color: var(--amber); background: rgba(232, 161, 58, 0.07); }
+  .bm-hint { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
+
+  .bm-table-wrap { margin-top: 14px; border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+  table.bm-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; min-width: 760px; }
+  .bm-table thead th {
+    text-align: right; padding: 12px 10px; color: var(--fg-faint); font-weight: 400;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--rule);
+    background: var(--bg-2); white-space: nowrap; cursor: pointer; user-select: none; position: sticky; top: 0;
+  }
+  .bm-table thead th:first-child { text-align: left; }
+  .bm-table thead th:hover { color: var(--fg); }
+  .bm-table thead th.is-sorted { color: var(--amber); }
+  .bm-table thead th.is-sorted::after { content: ' ▲'; font-size: 8px; }
+  .bm-table thead th.is-sorted.is-desc::after { content: ' ▼'; }
+  .bm-table thead th.bm-das-col { color: var(--fg-dim); }
+  .bm-table tbody td { padding: 8px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  .bm-table tbody tr:last-child td { border-bottom: 0; }
+  .bm-table tbody tr:hover td { background: rgba(232,161,58,0.04); }
+  .bm-td-name { color: var(--fg); }
+  .bm-num { text-align: right; color: var(--fg-dim); }
+  .bm-num.bm-best { color: var(--amber); font-weight: 600; }
+  .bm-num.bm-das { background: rgba(232,161,58,0.035); }
+  .bm-dim { color: var(--fg-faint); }
+  .bm-caption { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); margin-top: 18px; }
+
+  .bm-cell-bar { display: block; height: 3px; margin-top: 4px; border-radius: 2px; background: var(--rule); position: relative; overflow: hidden; min-width: 64px; }
+  .bm-cell-bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--fg-faint); }
+  .bm-best .bm-cell-bar > i { background: var(--amber); opacity: 0.62; }
+
+  .bm-td-name a { color: var(--fg); text-decoration: none; border-bottom: 1px dotted var(--fg-faint); }
+  .bm-td-name a:hover { color: var(--amber); border-bottom-color: var(--amber); }
+
+  .bm-summary { display: flex; gap: 0; margin-top: 22px; border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; }
+  .bm-summary > div { flex: 1 0 auto; padding: 12px 16px; border-right: 1px solid var(--rule); min-width: 96px; }
+  .bm-summary > div:last-child { border-right: 0; }
+  .bm-summary .k { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-faint); white-space: nowrap; }
+  .bm-summary .v { font-family: var(--font-mono); font-size: 16px; margin-top: 4px; color: var(--fg-dim); }
+  .bm-summary .v.is-das { color: var(--amber); }
+  .bm-summary .u { font-size: 10.5px; color: var(--fg-faint); }
+
+  .bm-prov { margin-top: 14px; font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-faint); line-height: 1.8; }
+  .bm-prov b { color: var(--fg-dim); font-weight: 500; }
+
+  .forge-p--wide { max-width: 780px; }
+</style>
+</head>
+<body>
+<div class="forge-page">
+
+    <!-- ───── Nav ───── -->
+    <nav class="forge-nav">
+        <div class="forge-container forge-nav__inner">
+            <div class="forge-nav__left">
+                <a class="forge-mark" href="/">
+                    <span class="forge-mark__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M 19,2 C 6.848484,12.699956 12.591844,7.4593088 6.8243462,13.056243 16.852307,10.274014 6.8079126,19.737584 5,22 L 17.120536,11.596175 C 6.7139271,14.121239 17.627482,3.775356 19,2 Z m -7,1 c -5,0 -9,4 -9,9 0,2.5 0.9875,4.80625 2.6875,6.40625 L 7.09375,17 C 5.79375,15.8 5,14 5,12 5,8.1 8.1,5 12,5 12.4,5 12.69375,4.99375 13.09375,5.09375 L 14.8125,3.40625 C 13.9125,3.20625 13,3 12,3 Z M 18.3125,5.59375 16.90625,7 C 18.20625,8.2 19,10 19,12 c 0,3.9 -3.1,7 -7,7 -0.4,0 -0.69375,0.0063 -1.09375,-0.09375 L 9.1875,20.59375 C 10.0875,20.79375 11,21 12,21 c 5,0 9,-4 9,-9 0,-2.5 -0.9875,-4.80625 -2.6875,-6.40625 z"/></svg></span>
+                    <span>daslang</span>
+                    <span class="forge-mark__tld">.io</span>
+                </a>
+                <div class="forge-nav__links">
+                    <a href="doc/index.html">docs</a>
+                    <a href="/playground/">playground</a>
+                    <div class="forge-nav__group">
+                        <button class="forge-nav__trigger" type="button">performance <span class="forge-nav__chev">▾</span></button>
+                        <div class="forge-nav__menu">
+                            <a href="benchmarks.html" class="is-active"><span class="forge-nav__menu-label">cross-language <span class="forge-nav__menu-new">NEW</span></span><span class="forge-nav__menu-desc">The full suite — every runtime, every test, per platform.</span></a>
+                            <a href="/#benchmarks"><span class="forge-nav__menu-label">highlights</span><span class="forge-nav__menu-desc">The headline numbers, on the front page.</span></a>
+                            <a href="performance.html"><span class="forge-nav__menu-label">data queries</span><span class="forge-nav__menu-desc">One linq chain, six data sources — interp &amp; JIT.</span></a>
+                            <a href="dasllama.html"><span class="forge-nav__menu-label">dasLLAMA</span><span class="forge-nav__menu-desc">CPU LLM + speech-to-text, das vs llama.cpp.</span></a>
+                        </div>
+                    </div>
+                    <div class="forge-nav__group">
+                        <button class="forge-nav__trigger" type="button">ecosystem <span class="forge-nav__chev">▾</span></button>
+                        <div class="forge-nav__menu">
+                            <a href="daspkg.html"><span class="forge-nav__menu-label">daspkg</span><span class="forge-nav__menu-desc">The package manager that compiles in.</span></a>
+                            <a href="examples.html"><span class="forge-nav__menu-label">examples</span><span class="forge-nav__menu-desc">Games &amp; demos built in daslang.</span></a>
+                            <a href="downloads.html"><span class="forge-nav__menu-label">downloads</span><span class="forge-nav__menu-desc">Pre-built binaries &amp; source.</span></a>
+                        </div>
+                    </div>
+                    <div class="forge-nav__group">
+                        <button class="forge-nav__trigger" type="button">community <span class="forge-nav__chev">▾</span></button>
+                        <div class="forge-nav__menu">
+                            <a href="/blog/"><span class="forge-nav__menu-label">blog</span><span class="forge-nav__menu-desc">Release notes &amp; deep dives.</span></a>
+                            <a href="/#news"><span class="forge-nav__menu-label">news</span><span class="forge-nav__menu-desc">Latest releases &amp; ecosystem activity.</span></a>
+                            <a href="https://t.me/daScript"><span class="forge-nav__menu-label">telegram</span><span class="forge-nav__menu-desc">Chat with the daslang team.</span></a>
+                            <a href="https://github.com/GaijinEntertainment/daScript"><span class="forge-nav__menu-label">github</span><span class="forge-nav__menu-desc">Source, issues &amp; releases.</span></a>
+                            <a href="changelist.html"><span class="forge-nav__menu-label">change list</span><span class="forge-nav__menu-desc">Every release, version by version.</span></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="forge-nav__right">
+                <button class="forge-nav__burger" type="button" aria-label="menu"
+                    onclick="this.closest('.forge-nav').classList.toggle('is-open')">≡</button>
+                <a class="forge-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span class="forge-nav__gh-stars" data-github-star></span></a>
+                <span class="forge-nav__version">v0.6.4</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ───── Hero ───── -->
+    <section class="forge-hero">
+        <div class="forge-container forge-hero__grid">
+            <div>
+                <span class="bm-hero__badge"><span class="dot"></span>dasProfile · cross-language</span>
+                <h1>Sixteen benchmarks. Seven runtimes. <em>Every lane measured.</em></h1>
+                <p class="forge-hero__lede">
+                    The dasProfile suite runs the same programs across daslang and the scripting
+                    runtimes it competes with — Lua, LuaJIT, Luau, Quirrel, QuickJS, Mono and .NET —
+                    plus C++ as the floor. Two boards per platform: pure interpreters, and
+                    everything with a JIT or AOT compiler behind it. Absolute seconds, lower is
+                    better; the fastest lane in each row is highlighted.
+                </p>
+                <div class="forge-hero__ctas">
+                    <a class="forge-btn-primary" href="#suite">$ view the boards →</a>
+                    <a class="forge-btn-secondary" href="https://github.com/borisbat/dasProfile">dasProfile source</a>
+                </div>
+            </div>
+
+            <div class="forge-terminal">
+                <div class="forge-terminal__header">
+                    <div class="forge-terminal__dots"><span class="forge-terminal__dot forge-terminal__dot--red"></span><span class="forge-terminal__dot forge-terminal__dot--amber"></span><span class="forge-terminal__dot forge-terminal__dot--green"></span></div>
+                    <div class="forge-terminal__label">capture receipt</div>
+                </div>
+                <div class="forge-output" style="display:block">
+                    <div class="bm-run" id="bm-hero-receipt">
+                        <div><span class="prompt">$</span> daslang dasProfile/main.das -- --json</div>
+                        <div class="dim">  loading…</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="forge-section forge-section--alt" id="suite">
+        <div class="forge-container">
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span><span>the suite</span></div>
+            <h2 class="forge-h2">The full board.</h2>
+            <p class="forge-p forge-p--wide">Every runtime runs the same algorithm, ported line for line — hashing, allocation-heavy trees, string conversion, tight numeric loops. The interpreter board is what you get with no compiler at runtime; the AOT / JIT board is every lane's best shot. Pick a platform, a board, and a view.</p>
+
+            <div class="bm-viewbar">
+                <div class="bm-seg" id="bm-platform">
+                    <button class="is-on" data-p="windows">Threadripper 3990X</button><button data-p="darwin">Apple M1 Max</button>
+                </div>
+                <div class="bm-seg" id="bm-board">
+                    <button class="is-on" data-b="Interpreted">interpreted</button><button data-b="AOT or JIT">AOT / JIT</button>
+                </div>
+                <div class="bm-seg" id="bm-view">
+                    <button class="is-on" data-v="bars">bars</button><button data-v="table">table</button>
+                </div>
+                <span class="bm-hint" id="bm-hint">seconds · lower is better · click a column to sort</span>
+            </div>
+
+            <div class="bm-summary" id="bm-summary"></div>
+
+            <div class="bm-table-wrap"><table class="bm-table" id="bm-table"><tbody><tr><td class="bm-caption" style="padding:22px 14px">loading benchmark data…</td></tr></tbody></table></div>
+            <div class="bm-prov" id="bm-prov"></div>
+        </div>
+    </section>
+
+    <!-- ───── Footer ───── -->
+    <footer class="forge-footer">
+        <div class="forge-container forge-footer__grid">
+            <div>
+                <a class="forge-mark" href="/">
+                    <span class="forge-mark__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M 19,2 C 6.848484,12.699956 12.591844,7.4593088 6.8243462,13.056243 16.852307,10.274014 6.8079126,19.737584 5,22 L 17.120536,11.596175 C 6.7139271,14.121239 17.627482,3.775356 19,2 Z m -7,1 c -5,0 -9,4 -9,9 0,2.5 0.9875,4.80625 2.6875,6.40625 L 7.09375,17 C 5.79375,15.8 5,14 5,12 5,8.1 8.1,5 12,5 12.4,5 12.69375,4.99375 13.09375,5.09375 L 14.8125,3.40625 C 13.9125,3.20625 13,3 12,3 Z M 18.3125,5.59375 16.90625,7 C 18.20625,8.2 19,10 19,12 c 0,3.9 -3.1,7 -7,7 -0.4,0 -0.69375,0.0063 -1.09375,-0.09375 L 9.1875,20.59375 C 10.0875,20.79375 11,21 12,21 c 5,0 9,-4 9,-9 0,-2.5 -0.9875,-4.80625 -2.6875,-6.40625 z"/></svg></span>
+                    <span>daslang</span>
+                    <span class="forge-mark__tld">.io</span>
+                </a>
+                <div class="forge-footer__about">
+                    High-performance scripting for C++.<br />
+                    © 2018–2026 Gaijin Entertainment · BSD 3-Clause
+                </div>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">performance</div>
+                <a class="forge-footer__link" href="benchmarks.html">cross-language</a>
+                <a class="forge-footer__link" href="/#benchmarks">highlights</a>
+                <a class="forge-footer__link" href="performance.html">data queries</a>
+                <a class="forge-footer__link" href="dasllama.html">dasLLAMA</a>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">ecosystem</div>
+                <a class="forge-footer__link" href="daspkg.html">daspkg · package index</a>
+                <a class="forge-footer__link" href="/playground/">playground</a>
+                <a class="forge-footer__link" href="https://edenspark.io">edenspark · games on daslang</a>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">community</div>
+                <a class="forge-footer__link" href="https://t.me/daScript">telegram</a>
+                <a class="forge-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a>
+                <a class="forge-footer__link" href="changelist.html">change list</a>
+                <a class="forge-footer__link" href="downloads.html">downloads</a>
+            </div>
+        </div>
+    </footer>
+
+</div>
+<script>
+(function () {
+    "use strict";
+    var LANES = {
+        "Interpreted": [
+            { key: "DAS INTERPRETER", label: "DAS interp", das: true },
+            { key: "LUAU", label: "Luau", das: false },
+            { key: "LUA", label: "Lua", das: false },
+            { key: "LUAJIT -joff", label: "LuaJIT -joff", das: false },
+            { key: "QUIRREL", label: "Quirrel", das: false },
+            { key: "QUICKJS", label: "QuickJS", das: false },
+            { key: "MONO --interpreter", label: "Mono interp", das: false }
+        ],
+        "AOT or JIT": [
+            { key: "DAS AOT", label: "DAS AOT", das: true },
+            { key: "DAS JIT", label: "DAS JIT", das: true },
+            { key: "C++", label: "C++", das: false },
+            { key: "LUAU --codegen", label: "Luau codegen", das: false },
+            { key: "LUAJIT", label: "LuaJIT", das: false },
+            { key: "MONO", label: "Mono", das: false },
+            { key: ".NET", label: ".NET", das: false }
+        ]
+    };
+    var state = { platform: "windows", board: "Interpreted", view: "bars", sortCol: -1, sortDesc: false, data: null };
+
+    // "native loop" measures interop only - no playground sample
+    var PLAYGROUND_SLUGS = {
+        "sha256": "sha256", "dictionary": "dict", "n-bodies": "nbodies", "mandelbrot": "mandelbrot",
+        "spectral norm": "spectral_norm", "exp loop": "exp", "string2float": "f2i",
+        "particles kinematics": "particles", "queen": "queen", "fibonacci loop": "fib_loop",
+        "primes loop": "primes", "sort": "table_sort", "tree": "tree", "float2string": "f2s",
+        "fibonacci recursive": "fib_recursive"
+    };
+
+    function fmt(t) {
+        if (t == null) return "-";
+        if (t >= 1) return t.toFixed(3) + "s";
+        if (t >= 0.001) return (t * 1000).toFixed(2) + "ms";
+        return (t * 1e6).toFixed(0) + "\u00b5s";
+    }
+    function ratioText(r) { return r >= 100 ? "\u00d7" + r.toFixed(0) : r >= 10 ? "\u00d7" + r.toFixed(1) : "\u00d7" + r.toFixed(2); }
+
+    function currentRows() {
+        var tests = state.data[state.platform].sections[state.board];
+        var lanes = LANES[state.board];
+        var rows = [];
+        Object.keys(tests).forEach(function (name) {
+            var t = tests[name];
+            var vals = lanes.map(function (l) { return t[l.key] != null ? t[l.key] : null; });
+            // a 0.0 lane is below the capture's timer resolution - never the row's baseline
+            var best = Math.min.apply(null, vals.filter(function (v) { return v != null && v > 0; }));
+            rows.push({ name: name, vals: vals, best: best });
+        });
+        function cellFor(row, col) {
+            if (col === 0) return row.name;
+            var v = row.vals[col - 1];
+            return v == null ? Infinity : v;
+        }
+        if (state.sortCol >= 0) {
+            rows.sort(function (a, b) {
+                var x = cellFor(a, state.sortCol), y = cellFor(b, state.sortCol);
+                var c = x < y ? -1 : x > y ? 1 : 0;
+                return state.sortDesc ? -c : c;
+            });
+        }
+        return rows;
+    }
+
+    function render() {
+        var lanes = LANES[state.board];
+        var rows = currentRows();
+        var tbl = document.getElementById("bm-table");
+
+        var html = "<thead><tr><th" + sortAttr(0) + ">benchmark</th>";
+        lanes.forEach(function (l, i) {
+            html += "<th" + sortAttr(i + 1) + (l.das ? ' class="bm-das-col"' : "") + ">" + l.label + "</th>";
+        });
+        html += "</tr></thead><tbody>";
+
+        rows.forEach(function (r) {
+            var slug = PLAYGROUND_SLUGS[r.name];
+            var label = slug ? "<a href='/playground/?example=" + slug + "'>" + r.name + "</a>" : r.name;
+            html += "<tr><td class='bm-td-name'>" + label + "</td>";
+            r.vals.forEach(function (v, i) {
+                var das = lanes[i].das;
+                if (v == null) { html += "<td class='bm-num bm-dim" + (das ? " bm-das" : "") + "'>-</td>"; return; }
+                if (v === 0) { html += "<td class='bm-num bm-dim" + (das ? " bm-das" : "") + "' title='below timer resolution'>~0</td>"; return; }
+                var isBest = v === r.best;
+                var cls = "bm-num" + (isBest ? " bm-best" : "") + (das ? " bm-das" : "");
+                if (state.view === "table") {
+                    html += "<td class='" + cls + "'>" + fmt(v) + "</td>";
+                } else {
+                    var w = Math.max(3, 100 * r.best / v);  // longer = faster
+                    html += "<td class='" + cls + "'>" + fmt(v) +
+                        "<span class='bm-cell-bar'><i style='width:" + w.toFixed(1) + "%'></i></span></td>";
+                }
+            });
+            html += "</tr>";
+        });
+        html += "</tbody>";
+        tbl.innerHTML = html;
+
+        tbl.querySelectorAll("th").forEach(function (th, i) {
+            th.addEventListener("click", function () {
+                if (state.sortCol === i) { state.sortDesc = !state.sortDesc; }
+                else { state.sortCol = i; state.sortDesc = false; }
+                render();
+            });
+        });
+
+        renderSummary(lanes, rows);
+        renderProvenance();
+        renderHero();
+    }
+
+    function sortAttr(i) {
+        return state.sortCol === i ? " class='is-sorted" + (state.sortDesc ? " is-desc" : "") + "'" : "";
+    }
+
+    function renderSummary(lanes, rows) {
+        var html = "";
+        lanes.forEach(function (l, i) {
+            var logSum = 0, n = 0;
+            rows.forEach(function (r) {
+                var v = r.vals[i];
+                if (v != null && v > 0 && r.best > 0) { logSum += Math.log(v / r.best); n++; }
+            });
+            if (!n) return;
+            var geomean = Math.exp(logSum / n);
+            html += "<div><div class='k'>" + l.label + "</div><div class='v" + (l.das ? " is-das" : "") + "'>" +
+                ratioText(geomean) + " <span class='u'>geomean</span></div></div>";
+        });
+        document.getElementById("bm-summary").innerHTML = html;
+    }
+
+    function renderProvenance() {
+        var p = state.data[state.platform];
+        var prov = "<b>" + p.cpu + "</b> \u00b7 das lanes captured " + p.das_capture + " (daslang " + p.das_version + ")";
+        if (p.ext_capture !== p.das_capture) {
+            prov += " \u00b7 other runtimes " + p.ext_capture + " (same box)";
+        }
+        prov += " \u00b7 <a class='forge-link-amber' href='https://github.com/borisbat/dasProfile'>dasProfile</a>";
+        document.getElementById("bm-prov").innerHTML = prov;
+    }
+
+    function shortVersion(s) {
+        var m = (s || "").match(/\d[\w.\-+]*/);
+        return m ? m[0] : "?";
+    }
+
+    function renderHero() {
+        var p = state.data[state.platform];
+        var v = p.versions || {};
+        var boards = Object.keys(p.sections).length;
+        var tests = Object.keys(p.sections[state.board] || {}).length;
+        var lines = [
+            "<div><span class='prompt'>$</span> daslang dasProfile/main.das -- --json</div>",
+            "<div class='dim'>  " + p.cpu + "</div>",
+            "<div><span class='metric'>daslang </span><span class='amber'>" + p.das_version + "</span><span class='dim'> \u00b7 LLVM " + shortVersion(v.llvm) + " \u00b7 " + (v.cpp_compiler || "?") + "</span></div>",
+            "<div class='dim'>  LuaJIT " + shortVersion(v.luajit) + " \u00b7 Luau " + shortVersion(v.luau) + " \u00b7 QuickJS " + shortVersion(v.quickjs) + " \u00b7 Mono " + shortVersion(v.mono) + " \u00b7 .NET " + shortVersion(v.dotnet) + " \u00b7 Quirrel " + shortVersion(v.quirrel) + "</div>",
+            "<div class='ok'>  \u2713 " + tests + " benchmarks \u00b7 " + boards + " boards \u00b7 captured " + p.das_capture + "</div>"
+        ];
+        document.getElementById("bm-hero-receipt").innerHTML = lines.join("");
+    }
+
+    function wireSeg(id, key, attr) {
+        document.getElementById(id).querySelectorAll("button").forEach(function (b) {
+            b.addEventListener("click", function () {
+                document.getElementById(id).querySelectorAll("button").forEach(function (x) { x.classList.remove("is-on"); });
+                b.classList.add("is-on");
+                state[key] = b.getAttribute(attr);
+                state.sortCol = -1;
+                render();
+            });
+        });
+    }
+
+    function normalize(cap) {
+        var out = { cpu: cap.cpu, versions: cap.versions,
+                    das_capture: cap.das_capture || cap.timestamp,
+                    ext_capture: cap.ext_capture || cap.timestamp,
+                    das_version: (cap.versions || {}).daslang || "", sections: {} };
+        ["Interpreted", "AOT or JIT"].forEach(function (sec) {
+            var tests = {};
+            Object.keys(cap[sec] || {}).forEach(function (t) {
+                var lanes = {};
+                (cap[sec][t] || []).forEach(function (r) { lanes[r.language] = r.time; });
+                tests[t] = lanes;
+            });
+            out.sections[sec] = tests;
+        });
+        return out;
+    }
+    // Same vendored records as files/forge.js's front-page cycler: pages.yml
+    // fetches profile_results_<platform>.json from dasProfile at deploy time.
+    Promise.allSettled(["windows", "darwin"].map(function (plat) {
+        return fetch("files/profile_results_" + plat + ".json")
+            .then(function (resp) { if (!resp.ok) throw new Error(resp.status); return resp.json(); })
+            .then(function (json) { return { platform: plat, json: json }; });
+    })).then(function (results) {
+        state.data = {};
+        results.forEach(function (settled) {
+            if (settled.status === "fulfilled") state.data[settled.value.platform] = normalize(settled.value.json);
+        });
+        wireSeg("bm-platform", "platform", "data-p");
+        wireSeg("bm-board", "board", "data-b");
+        wireSeg("bm-view", "view", "data-v");
+        render();
+    });
+})();
+</script>
+<script src="files/github-star.js" defer></script>
+</body>
+</html>

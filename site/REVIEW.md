@@ -32,6 +32,12 @@ in the results.md tables, is a defect.
 changing `examples/benchmarks/sql/results.md` in the same change, or that leaves any cell in the
 record differing from the same family-and-lane cell in those results.md tables, is a defect.
 
+**`benchmarks.html` renders only the vendored dasProfile records - the same
+`files/profile_results_<platform>.json` files pages.yml fetches from borisbat/dasProfile at
+deploy time and `files/forge.js`'s front-page cycler reads.** A benchmark number hand-carried into the page
+or a second record file for the same data is a defect; provenance (the `das_capture` /
+`ext_capture` stamps) travels in the dasProfile files themselves.
+
 **Every code sample shown on a page is a full program - it compiles and runs with the
 current toolchain, and the page links it to "try it on playground".** daslang samples are
 gen2; a partial snippet shown as a code card, a sample without its playground link, or
