@@ -715,8 +715,6 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
 #endif
     install_das_crash_handler();
 #ifdef __APPLE__
-    // class the main thread: unclassed threads wake on an E-core after any block
-    // (~half scalar throughput) - e.g. a jitted benchmark right after codegen
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
 #endif
     das::arm_alloc_tracking();
