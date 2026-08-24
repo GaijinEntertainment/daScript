@@ -8,7 +8,7 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_common   // KVPool, Session, kv_pool_release_group
 require math   // min
 
-// The prefix cache (vLLM-style, page-granular): completed streams donate their full KV pages,
+// The prefix cache, page-granular: completed streams donate their full KV pages,
 // keyed by a CHAINED page hash over token ids, so a later request with the same prompt prefix
 // attaches those pages (pool refcnt++) and prefills only the tail. Whole-page matching keeps a
 // live stream's write cursor in its own private pages — no copy-on-write on the serving path.

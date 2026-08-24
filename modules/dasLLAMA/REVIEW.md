@@ -41,16 +41,13 @@ not thereby pick up the other modality's checklist.
 `modules/dasLLAMA/` applies this one.**
 
 **Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same
-change.** Kernel work is whatever changes the generated kernel source, or the set of compiled
-pipeline variants (PSOs) built from it - a kernel body, a variant set, or a `[tune]` /
-`[tune_perm]` / `[tune_companion]` grid. A host-side bind or dispatch-argument change (an
-`@off` binding, a uniform value) is not, and neither is `[tune_scope]` metadata (`covers=`,
-`tuner=`, `version_of=`).
-
-**A `DASLLAMA_VERSION` bump with neither the kernel roster - the set of `[tune]`-scoped
-kernels a sidecar carries winners for - nor sidecar interchangeability changed is a
-defect**: equal versions mean an equal kernel roster and an interchangeable sidecar set
-(the exchange keys validity on version and box).
+change, and a bump with no kernel work is the same defect.** Kernel work is whatever changes
+the generated kernel source, or the set of compiled pipeline variants (PSOs) built from it -
+a kernel body, a variant set, or a `[tune]` / `[tune_perm]` / `[tune_companion]` grid. A
+host-side bind or dispatch-argument change (an `@off` binding, a uniform value) is not, and
+neither is `[tune_scope]` metadata (`covers=`, `tuner=`, `version_of=`). Equal versions mean
+an equal kernel set and an interchangeable sidecar set - the exchange keys validity on
+version and box.
 
 **A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel,
 can this value change between dispatches? If yes it is data and belongs in a uniform, a kargs
@@ -89,20 +86,19 @@ quantum is COVERED by an annotated region entry** - `[hot_path]`, any of the `[n
 an annotated entry reaches it: the contracts arm down the call graph, so an interior
 function carries nothing of its own. A region entry is the outermost such function (a kernel
 `*_encode` / `*_decode`, a step driver, the CPU decoder's `forward_*` entries); a loop
-reached only from a load, stage, bake, or convert path is not one, and the tokenizer
-encode/decode path's sanction is `ARCHITECTURE.md` sec.2.11's.
+reached only from a load, stage, bake, or convert path is not one.
 
 **A new function that no annotated entry reaches but the runtime re-enters per token, per
 frame, or per prefill quantum - a step driver, or a backend entry called from dispatch or
 harness paths - carries its annotation itself; a rename is not new** (annotations follow
 the name in the same change).
 
-**A change to `encode`/`bpe_encode` or anything they reach in `dasllama/dasllama_spm.das` /
-`dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das` ships before/after `--tok` rows
-(`benchmarks/lcpp_bench.das`) for the affected backend** - the instrument is the scaling
-ratio across the size ladder, and superlinear is a defect.
+**A change to code or data of `encode`/`bpe_encode` or anything they reach in
+`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`
+ships before/after `--tok` rows (`benchmarks/lcpp_bench.das`) for the affected backend** - the
+instrument is the scaling ratio across the size ladder, and superlinear is a defect.
 
-**A change to `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
+**A change to code or data in `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
 template strings any of them look up, records a `tests/test_tokenizer.das` run with its cases
 EXECUTED, not skipped.**
@@ -211,6 +207,12 @@ finding text states its own rule.
 **A new `REVIEW.das` check ships with its licensed set ledgered in `ARCHITECTURE.md` sec.1, in
 the same change.**
 
+**An upstream mechanism is described in our own terms, not attributed** - no
+"lifted/ported verbatim from" and no upstream symbol, header, or constant names in a `.md`
+file or a `.das` comment; state what the code does and why its shape wins. A path naming
+where checked-in data is regenerated FROM is provenance, not attribution; legal attribution
+lives in `THIRD_PARTY_NOTICES.md` and the `LICENSE.*` files, so prose never carries it.
+
 **A def of `dasllama/dasllama.das` - and a new OVERLOAD of one - is TAUGHT: demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
 `doc/source/reference/tutorials/dasLLAMA_*.rst` page.** The gate matches def NAMES only, so
@@ -222,12 +224,13 @@ struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to
 a struct the renderer emits but the registry does not is caught by
 `tests/test_env_registry.das`.
 
-**`dasllama/dasllama_unicode.das`'s RANGES/WS tables are generated - retranscoded from llama.cpp's
-`unicode-data.cpp`; hand-editing them is a defect.**
+**`dasllama/dasllama_unicode.das`'s RANGES/WS tables are generated - retranscoded from
+`$LCPP/src/unicode-data.cpp` (the reference checkout); hand-editing them is a defect.**
 
-**A diff that adds a file under `dasllama/`, adds a file beside one `ARCHITECTURE.md` sec.1
-charters by name, moves code between files, or changes what a file owns lands the sec.1 edit
-that keeps the charters true, in the same change.** A per-file inventory restated in this
+**A diff that adds a file under `dasllama/`, adds a file beside one that has its own sec.1
+charter line, moves code between files, or changes what a file owns lands the sec.1 edit
+that keeps the charters true, in the same change** (a module-root doc file - a ledger, a
+plan, `LAWS.md` - has no charter line and lands free). A per-file inventory restated in this
 checklist is a defect of the checklist (a rule naming what KIND of code lands in which file
 is the checklist's own).
 

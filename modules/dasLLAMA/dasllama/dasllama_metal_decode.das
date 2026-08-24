@@ -650,7 +650,7 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
             if (fused_qkv && t.wv_offs[l] >= 0l) {
                 // one dispatch over all three segments — the kernel binds each tensor's blob slice separately (kind-major layout keeps q/k/v apart)
                 let bwq_ = blob_of(g_dev, t, t.wq_offs[l])
-                var fka = Q8QkvRsArgs(ndim = r.k_dim, ddim = r.k_qkvd, qd = r.k_qd, kvd = r.k_kvd,
+                var fka = Q8QkvRsArgs(ndim = r.k_dim, qd = r.k_qd, kvd = r.k_kvd,
                     hs = r.k_hs, neox = r.k_neox, has_bias = r.k_hasb)
                 enc_gemv_qkv_rs(enc, f16v, bwq_.buf, bwq_.boff,
                     uint64((t.wk_offs[l] / 32l) * 34l), uint64((t.wv_offs[l] / 32l) * 34l),
@@ -2052,7 +2052,7 @@ def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool 
 // B ~ 5 on every decode site (P1a lab — all sites are big shapes: the QKV concat, wo, w1/w3, w2).
 // DASLLAMA_METAL_BATCH_GEMM_MIN overrides for A/B.
 var private g_bgemm_min = -1l
-// the step splits into DASLLAMA_METAL_BATCH_NCB command buffers (llama.cpp's n_cb shape): the
+// the step splits into DASLLAMA_METAL_BATCH_NCB command buffers: the
 // ~3.2ms/step scheduling span pipelines behind cb k's execution instead of idling as one big cb;
 // queue order serializes the pieces, every encode is token-independent. 1 = the single-cb A/B rail.
 var private g_bncb = -1l
@@ -2069,7 +2069,7 @@ var private g_bconcurrent = true
 // Default ON; =0 pins the unfused triple (the A/B rail).
 var private g_bfuse = true
 
-// the mul_mv-shape GEMV (MetalQ8MvB2/B4 — the de-verbatim'd Part-3 winner, in-graph == the lcpp
+// the mul_mv-shape GEMV (MetalQ8MvB2/B4 — the Part-3 winner, in-graph == the upstream
 // reference) at every fixed-B site instead of the x-staged forms (which measured -10.5% in-graph:
 // the walkthrough lab win was SLC-inflated). DASLLAMA_METAL_BATCH_MV=0 = the x-staged A/B rail.
 var private g_bmv = true

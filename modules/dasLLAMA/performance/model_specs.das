@@ -77,7 +77,7 @@ struct ModelSpec {
 
 // ===== Parity fixture ids (frozen from the simple_ids oracle — harness/parity.sh) =====
 // Prompts are deliberately the *confident* ones: high-entropy prompts flip on genuine near-ties
-// (sub-ULP libm cos/sin/exp/tanh vs llama.cpp), which are not bugs. See dasllama_newmodels_arc.
+// (sub-ULP libm cos/sin/exp/tanh vs the oracle), which are not bugs. See dasllama_newmodels_arc.
 
 // the Qwen BPE counting fixture, "1, 2, 3, 4, 5, 6, 7," (no BOS) — every Qwen-vocab carrier
 // continues it identically (verified per-file against the live oracle before each reuse)

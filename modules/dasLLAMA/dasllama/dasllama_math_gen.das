@@ -1202,7 +1202,7 @@ def private mx4q8_batch_kernel_gen(var yp : float?; wn : uint8 const?; we : uint
     }
 }
 
-// mx4_batch_groupn slot: the fused MoE prefill form (llama.cpp mul_mat_id shape) — ONE dispatch
+// mx4_batch_groupn slot: the fused MoE prefill form — ONE dispatch
 // runs every touched expert's batched GEMM through the SAME batch cell walk; bias post-adds over
 // the span by the worker that owns it (bit-identical to add-at-store).
 def private mx4q8_batch_groupn_gen(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {

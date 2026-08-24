@@ -26,7 +26,7 @@ require math
 //! → 3×3 average pool ×√d → weightless RMS → projection. Oracle: llama-mtmd-debug -p encode on the
 //! f32-widened mmproj, CPU, -fa off (`vision_gemma4v_plan.md`).
 
-// mtmd hardcodes both in the projector's hparams — neither is in the gguf
+// neither is in the gguf - both are fixed for the family
 let GEMMA4V_ROPE_THETA = 100.0
 let private GEMMA4V_MERGE_DEFAULT = 3l
 let private GEMMA4V_STAGE_CAP = 1073741824ul   // the staged-mint line: a carrier source at or past 1 GiB streams instead
@@ -546,7 +546,7 @@ def private g4v_gemm_q8(var y : array<float>; t : Gemma4vTower; var s : Gemma4vS
     matmul_q8q8_batch(y, t.qblob, t.qscales, off, s.xqi, s.xsi, n, d, npos)
 }
 
-// mtmd's ClippableLinear: y = W · clamp(x); then clamp(y) — the identity GEMM when the file has
+// ClippableLinear: y = W · clamp(x); then clamp(y) — the identity GEMM when the file has
 // no sidecar scalars for this weight. `q8` routes a BLOCK region through the Q8_0 planes.
 def private g4v_gemm_clamped(var y : array<float>; t : Gemma4vTower; var s : Gemma4vState; bf16 : bool; off : int64;
                              x : array<float>; n, d, npos : int64; c : Clamp; q8 : bool = false) {

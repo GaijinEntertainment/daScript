@@ -30,7 +30,6 @@ require dasllama/dasllama_image
 // standard pre-LN transformer over an 800-frame window's positions (13 tokens per chunk)
 // and a GELU MLP projector into the decoder's embedding space. The transformer reuses
 // dasllama_audio's block loop (qwen3a adds a k bias, which the shared layout carries).
-// Ref: tools/mtmd/models/qwen3a.cpp + mtmd_audio_preprocessor_qwen3a.
 
 let QWEN3A_CHUNK = 100l         // mel frames per conv sub-chunk (n_window * 2)
 let QWEN3A_WINDOW = 800l        // mel frames per encoder forward (n_window_infer)
@@ -343,7 +342,7 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
 }
 
 //! Qwen3-ASR's log-mel (WhisperFeatureExtractor, center=True, truncation=False): 200-sample
-//! reflection pad both ends, NO 30s zero tail, clamp max stays in double (unlike mtmd whisper,
+//! reflection pad both ends, NO 30s zero tail, clamp max stays in double (unlike the mtmd flavor,
 //! no float round-trip); n_len = min((n_padded−400)/160+1, n_in/160+1), mel-major.
 def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
     let n_in = long_length(samples)
@@ -390,7 +389,7 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
              m.n_len, n_fft, n_bins * 2l)
 
     // power -> mel: float products in groups of 4 summed in float, groups accumulated in
-    // double (the mtmd worker's exact unrolled accumulation), floor 2^-24, log10
+    // double (reference-exact rounding), floor 2^-24, log10
     let mel_floor = 5.960464477539063e-08lf
     let log10_e = 0.43429448190325176lf
     var power : array<float>
@@ -432,8 +431,8 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
 }
 
 //! Slice one encoder window off the full mel: frames [off, off+win_eff), zero-padded up to a
-//! chunk multiple (the mtmd preprocessor's window shape — pad values are raw 0.0, NOT the
-//! clamp floor). Returns a mel-major MelChunk of n_len = ceil(win_eff/100)·100.
+//! chunk multiple - pad values are raw 0.0, NOT the clamp floor. Returns a mel-major MelChunk
+//! of n_len = ceil(win_eff/100)·100.
 def qwen3a_mel_window(m : WhisperMel; off : int64) : MelChunk {
     let win_eff = min(QWEN3A_WINDOW, m.n_len - off)
     let n_chunks = (win_eff + QWEN3A_CHUNK - 1l) / QWEN3A_CHUNK
@@ -754,8 +753,8 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
 }
 
 // Qwen3-Omni-30B transcription: the SHARED qwen3a AuT tower encodes the clip; soft tokens splice
-// into a plain Qwen chatml turn, greedy-decoded until <|im_end|> (emitted into the ids — mtmd
-// convention). Token-for-token vs llama-mtmd-cli --temp 0 --jinja on the same Q8 thinker + bf16 mmproj.
+// into a plain Qwen chatml turn, greedy-decoded until <|im_end|> (the stop token IS emitted into
+// the ids). Token-for-token vs llama-mtmd-cli --temp 0 --jinja on the same Q8 thinker + bf16 mmproj.
 def qwen3omni_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession;
                          samples : array<float> | #; blk : block<(seg : TranscribeSegment)>) : int {
     let tp = ref_time_ticks()

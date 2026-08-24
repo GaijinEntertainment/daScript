@@ -29,7 +29,7 @@ let CATS = "coco-val2017-000000039769.jpg"
 // the pinned marker ids (gemma-4 vocab; ggml-vocab-gemma-4.gguf)
 let IMAGE_OPEN = 255999l
 let IMAGE_CLOSE = 258882l
-// 640x480 letterboxes to 624x480 = 13x10 superpatches (mtmd oracle: image_tokens->nx = 130)
+// 640x480 letterboxes to 624x480 = 13x10 superpatches (mtmd oracle: nx = 130)
 let CATS_ROWS = 130l
 let MM_G3 = "mmproj-gemma-3-4b-it-F16.gguf"   // the gemma3 SigLIP pair
 let DEC_G3 = "gemma-3-4b-it-Q8_0.gguf"
@@ -99,7 +99,7 @@ def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn stor
             tt |> success(!empty(head) && !empty(tail), "both spans render")
             tt |> equal(head[long_length(head) - 1l], IMAGE_OPEN, "head ends with <|image>")
             tt |> equal(tail[0], IMAGE_CLOSE, "tail starts with <image|>")
-            // media-first: the user text sits in the TAIL, after the span (llama.cpp's order)
+            // media-first: the user text sits in the TAIL, after the span (the upstream order)
             let tail_text = decode_(m, tail)
             tt |> success(find(tail_text, "describe this image") >= 0,
                 "the user text follows the image span (tail: {replace(tail_text, "\n", "\\n")})")

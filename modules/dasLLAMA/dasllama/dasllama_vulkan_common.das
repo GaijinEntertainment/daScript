@@ -53,7 +53,7 @@ let MAX_STACKS = 384               // stack-table capacity (and the ffn-cmd key 
                                            // shexp/qkv rails add ~250 small stacks on top of
                                            // experts+cls; starving a LATER walk section costs
 let DESC_POOL_CHUNK = 256          // sets per descriptor-pool chunk — grows by one chunk on
-                                           // exhaustion (llama.cpp's shape); NVIDIA ignores pool caps,
+                                           // exhaustion; NVIDIA ignores pool caps,
                                            // MoltenVK/Intel enforce — a fixed 224-set pool silently cut 6 DN layers (-14% tg)
 let WG_X = 64u                     // kernel workgroup width (spec-const axis 0 can retune it)
 let BATCH_XQ_BYTES = 33_554_432l   // device-local gathered-activation scratch (chunk cap)
@@ -92,7 +92,7 @@ def mm_small_d : int64 {
     return g_mm_smalld
 }
 
-// per-dispatch tile router (the lcpp l/m ladder, ours resolved by measurement): in mm mode a
+// per-dispatch tile router (the l/m ladder, resolved by measurement): in mm mode a
 // small-cnt or small-d dispatch drops to the small tier — the L tile starves the grid and pads
 // its B panel there. Pure in (d, cnt, mode), so pipe pick and meta fill can never disagree.
 def q8_batch_tile_for(d, cnt : int64) : int64 {
@@ -126,7 +126,7 @@ def cm2_splitk_env : int64 {
 }
 
 
-// the cm2 tile pick, llama.cpp's guess mirrored onto our two tiles (no s tile — GEMV owns the
+// the cm2 tile pick over our two tiles (no s tile — GEMV owns the
 // narrow-n end): l unless the m grid fills the SMs better. Pure in (d, cnt, sm_count), so the
 // pipe pick and the meta fill can never disagree
 def cm2_tile_cols(d, cnt : int64) : int64 {
@@ -142,13 +142,13 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
     let tiles_l = wtiles * ((cnt + 255l) / 256l)
     let tiles_m = wtiles * ((cnt + 127l) / 128l)
     // prefer l when either grid overfills the SMs, or l fits with a 3-way split where m would
-    // not fit with a 2-way one (llama.cpp's prefer_large, verbatim)
+    // not fit with a 2-way one
     let prefer_large = (tiles_m > cores || tiles_l > cores
         || (tiles_l <= cores / 3l && tiles_m > cores / 2l))
     return cnt > 128l && prefer_large ? 256l : 128l
 }
 
-// llama.cpp's split-k guess: long K on an under-half-full grid splits the reduction across
+// the split-k heuristic: long K on an under-half-full grid splits the reduction across
 // f32 partial planes (SplitKReduce sums them). Returns (chunks, 256-aligned chunk); (1, 0) = off
 def cm2_split_k(d, cnt, n, tc : int64) : tuple<nsplit : int64; ksplit : int64> {
     let forced = cm2_splitk_env()

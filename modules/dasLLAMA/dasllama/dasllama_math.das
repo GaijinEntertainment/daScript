@@ -67,7 +67,7 @@ def axpy(var d : float?; s : float const?; scale : float; n : int64) {}
 
 //! Dot of an f32 row against a bfloat16 (bf16-in-uint16) row. The widen is an exact high-half
 //! bit shift, so dots are bit-identical to pre-expanding the weight to fp32 at half the bandwidth
-//! (llama.cpp's AVX2 ggml_vec_dot_bf16 also truncates the ACTIVATION to bf16; ours stays f32).
+//! (some reference AVX2 bf16 dots also truncate the ACTIVATION to bf16; ours stays f32).
 [hint(unsafe_range_check, noalias = a, noalias = b)]
 def template dot_bf16_template(a : float const ?; b : uint16 const ?; n : int64) : float {
     var acc = 0.0
@@ -122,7 +122,7 @@ def template mul_inplace_template(var d : float ?; s : float const ?; n : int64)
 [hint(unsafe_range_check, noalias = d, noalias = s), tuned]
 def mul_inplace(var d : float?; s : float const?; n : int64) {}
 
-//! d[j] *= scale (broadcast scalar), width-8 vectorized — ggml_vec_scale_f32. Flash attention
+//! d[j] *= scale (broadcast scalar), width-8 vectorized. Flash attention
 //! multiplies the whole Q×KV score tile by 1/sqrt(head_size) in one sweep, replacing the old scalar
 //! per-element multiply buried in the mask branch.
 [hint(unsafe_range_check, noalias = d)]
@@ -157,9 +157,9 @@ var g_jobque_spin_us = 30000l
 def public set_jobque_spin_us(v : int64) { g_jobque_spin_us = max(v, 0l) }
 def public get_jobque_spin_us() : int64 { return g_jobque_spin_us }
 
-// Join-poll level for fork/join joins (see setup_dasllama_jobque) — ggml's --poll denomination:
-// level*1024*128 relax-rounds on the joining thread before it parks (0 = park immediately).
-// 50 is ggml's shipped default; the poll burns only the calling thread and is bounded (~100ms).
+// Join-poll level for fork/join joins (see setup_dasllama_jobque): level*1024*128 relax-rounds
+// on the joining thread before it parks (0 = park immediately); the poll burns only the
+// calling thread and is bounded (~100ms).
 var g_jobque_join_poll = 50l
 def public set_jobque_join_poll(v : int64) { g_jobque_join_poll = max(v, 0l) }
 def public get_jobque_join_poll() : int64 { return g_jobque_join_poll }
@@ -270,7 +270,7 @@ def setup_dasllama_jobque_() {
 }
 
 // dasLLAMA matmuls are lockstep linear algebra: SMT siblings share the FMA/load ports, so the
-// default jobque gets physical cores - 1 workers (ggml's -t default; EPYC 9654 confirmed 192 SMT
+// default jobque gets physical cores - 1 workers (EPYC 9654 confirmed 192 SMT
 // lanes lose to 96). Cap min()s with the stock rule; DAS_JOBQUE_THREADS overrides.
 [init]
 def dasllama_jobque_threads_cap() {
@@ -330,7 +330,7 @@ def public get_dispatch_slot_bound() : int {
     return is_job_que_available() ? get_total_hw_jobs() + 1 : 1
 }
 
-// Min grain for matmul row splits (ggml-cpu.c mul_mat chunk_size = 16): without it a fixed
+// Min grain for matmul row splits (grain 16): without it a fixed
 // lanes×oversplit chunk count shatters a small matmul into sub-grain work items on many-core
 // boxes (EPYC 9654: kv 2048x512 GEMM 2.5x slower at 192 lanes than at 48). 0 disables.
 var g_matmul_min_chunk_rows = 16
@@ -454,7 +454,7 @@ def public matmul_grid(units : int; unit_rows : int64; oversplit : int; work : i
     return ntc > 1 ? int2(rc, ntc) : int2(c1, 1)
 }
 
-// Coarser grain for GEMV-shaped splits (ggml mul_mat: chunk_size 16 -> 64 when nr0==1||nr1==1):
+// Coarser grain for GEMV-shaped splits (grain 16 -> 64 when either side is a single row):
 // a decode matvec row is far less work than a GEMM row reused across ntok tokens (EPYC 9654:
 // grain 64 = +13-15% decode at default threads). 0 disables.
 var g_matmul_min_chunk_rows_gemv = 64
@@ -522,7 +522,7 @@ def public chain_stage_chunks(groups : int; rows : int; work : int64) : int {
 }
 
 //! y = W·x — matrix-vector product, the dominant LLM compute kernel. W is row-major [d x n],
-//! x is [n], y is [d]; each y[i] is one dot of W's row i with x (matches llama2.c: n=input, d=output).
+//! x is [n], y is [d]; each y[i] is one dot of W's row i with x (n = input width, d = output width).
 //! Large matmuls thread output rows (requires an enclosing with_job_que); small stay single-thread.
 def matmul(var y : array<float>; w : array<float> | #; x : array<float>; n, d : int64) {
     unsafe {
@@ -950,7 +950,7 @@ typedef MatmulMx4GroupNFn = function<(var yp : float?; wn : uint8 const?; we : u
 typedef MatmulMx4RowsFn = function<(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n : int64; rb : int64; re : int64) : void>
 // f16-weight-scale twins (the wscale_f16 rail): identical contracts to the Fn above them, except
 // the per-32-block WEIGHT scale plane is raw binary16 halfwords (Model.qscales16) instead of f32 —
-// llama.cpp byte parity, 34 vs 36 B per 32 weights. Activation scales (xsp) stay f32 everywhere.
+// on-disk byte parity, 34 vs 36 B per 32 weights. Activation scales (xsp) stay f32 everywhere.
 typedef MatmulQ8Q8FnS16 = function<(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n : int64; d : int64) : void>
 typedef MatmulQ8Q8BatchFnS16 = function<(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n : int64; d : int64; ntok : int64) : void>
 typedef MatmulQ8Q8Group3FnS16 = function<(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : uint16 const?; woff0 : int64; woff1 : int64; woff2 : int64; xqp : int8 const?; xsp : float const?; n : int64; d0 : int64; d1 : int64; d2 : int64) : void>
@@ -960,7 +960,7 @@ typedef MatmulQ8Q8RowsFnS16 = function<(var yp : float?; wp : int8 const?; sp : 
 // ([init]s run before the JIT installs generated code, so a predicate reading a JIT-stamped value
 // answers with its reference tier there). Lets a module register several runtime-dependent flavors.
 typedef BackendAvailableFn = function<() : bool>
-// Region-list batched MXFP4·Q8 GEMM — batch analog of MatmulMx4GroupNFn, llama.cpp's mul_mat_id
+// Region-list batched MXFP4·Q8 GEMM — batch analog of MatmulMx4GroupNFn, the fused MoE
 // shape: ONE dispatch runs every routed expert's [d x n] GEMM over its own row range of a shared
 // token-row image. `offs` packs TRIPLES [weight offset, row0, cnt]; bit-exact vs a per-region loop.
 typedef MatmulMx4Q8BatchGroupNFn = function<(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n : int64; d : int64) : void>
@@ -981,7 +981,7 @@ typedef RepackKqFn = function<(fmt : int; var kq : uint8?; var ks : uint8?; n : 
 // scale (n/32) and bsum (n/16) rows; Y token-major [ntok x d]. Bit-for-bit ntok x the fmt's
 // per-position GEMV over the same repacked planes.
 typedef MatmulKqBatchFn = function<(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; d : int64; ntok : int64) : void>
-// Batched region-list K-quant GEMM (kq batch groupn — fused MoE prefill, llama.cpp's mul_mat_id
+// Batched region-list K-quant GEMM (kq batch groupn — the fused MoE prefill
 // shape): `offs` packs TRIPLES [weight offset, row0, cnt]; region r consumes/produces activation
 // rows row0..row0+cnt (token-major). Plane bases pass whole; no bias form (biased arches are mx4).
 typedef MatmulKqBatchGroupNFn = function<(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; d : int64) : void>
@@ -1889,7 +1889,7 @@ def matmul_kq_active(fmt : int; var y : array<float> | #; kq : array<uint8> | #;
 
 //! Repack one K-quant weight tensor (region at element offset woff in the fmt's planes, shape
 //! [d rows x n cols]) into the active backend's kq layout, IN PLACE. No-op unless a kq-capable
-//! backend is active. n % 256 == 0 (the ggml K-quant row invariant).
+//! backend is active. n % 256 == 0 (the K-quant row invariant).
 def repack_kq_weight(fmt : int; var kq : array<uint8>; var ks : array<uint8>; woff, n, d : int64) {
     let sb = woff / 256l
     let qsb = kq_qsb(fmt)
@@ -2070,15 +2070,14 @@ def matmul_q8q8_groupn(var y : array<float>; wq : array<int8> | #; ws : array<ui
 // (16-byte-regular for TBL); nibbles index the DOUBLED e2m1 table, e8m0_half compensates the doubling.
 
 //! E8M0 scale byte -> fp32 * 0.5 = 2^(e-128), pairing with the DOUBLED e2m1 nibble values in
-//! mxfp4_fill_lut. e < 2 lands in fp32-denormal territory -> precomputed bit patterns (mirrors
-//! ggml_e8m0_to_fp32_half).
+//! mxfp4_fill_lut. e < 2 lands in fp32-denormal territory -> precomputed bit patterns.
 def e8m0_half(e : uint) : float {
     let bits = e < 2u ? (0x00200000u << e) : ((e - 1u) << 23u)
     return unsafe(reinterpret<float>(bits))
 }
 
 //! Fill a 16-byte LUT with the MXFP4 e2m1 magnitudes DOUBLED (nibble -> ±{0,.5,1,1.5,2,3,4,6}×2,
-//! OCP MX spec via ggml kvalues_mxfp4) as int8 — the table `tbl16_lo`/`tbl16_hi` and the scalar
+//! OCP MX spec) as int8 — the table `tbl16_lo`/`tbl16_hi` and the scalar
 //! kernels index; the halved E8M0 scale (e8m0_half) compensates.
 def mxfp4_fill_lut(var lut : int8[16]) {
     let kv = fixed_array(0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12)
@@ -2257,7 +2256,7 @@ def template dot_q4_template(wq : uint8 const ?; ws : float const ?; x : float c
     return acc
 }
 
-//! Q4_0 dequant-in-dot: `wq` is GGML split-half nibble packing (byte j = elem j low / j+16 high) +
+//! Q4_0 dequant-in-dot: `wq` is the on-disk split-half nibble packing (byte j = elem j low / j+16 high) +
 //! fp32 scale `ws` per 32-block. Widens nibbles at NEON lane width 4 (width 8 loses ~7% to cross-lane
 //! shuffles, hence fallback vec4_u4) — won the kernel bench (see matmul_variants). n % 32 == 0.
 [hint(unsafe_range_check, noalias = x, noalias = wq, noalias = ws), tuned(fallback = "vec4_u4")]
@@ -2383,7 +2382,7 @@ def template softmax_template(var x : float ?; size : int64) : void {
             sum += e
             i++
         }
-        let inv_sum = 1.0 / sum   // scale by the reciprocal (matches ggml_vec_scale_f32), not a per-element /=
+        let inv_sum = 1.0 / sum   // scale by the reciprocal, not a per-element /=
         for [tune = 1] (j in range64(size)) {
             x[j] *= inv_sum
         }
@@ -2442,7 +2441,7 @@ def softmax_sink(var x : array<float> | #; size : int64; sink : float) {
     softmax_sink(unsafe(addr(x[0])), size, sink)
 }
 
-//! Vectorized expf, 4 lanes (ggml_v_expf, ARM optimized-routines): ~2 ulp vs libm, ~7x scalar exp()
+//! Vectorized expf, 4 lanes (the ARM optimized-routines algorithm): ~2 ulp vs libm, ~7x scalar exp()
 //! (which scalarizes on Darwin-ARM, no vector libm). FAST PATH ONLY (no |n|>126 guard) — valid for
 //! x in ~[-87, 88]; callers must clamp (the flash softmax fold clamps to -80 before calling).
 def exp4(x : float4) : float4 {
@@ -2538,11 +2537,11 @@ def silu(var x : array<float> | #; size : int64) {
     silu(unsafe(addr(x[0])), size)
 }
 
-//! Softplus, matching ggml's op_softplus exactly: x > 20 → x, else log(1 + exp(x)).
+//! Softplus with the standard large-x shortcut: x > 20 → x, else log(1 + exp(x)).
 def softplus(x : float) : float => x > 20.0 ? x : log(1.0 + exp(x))
 
-//! Row-wise L2 normalization in place (ggml_l2_norm): scale = 1 / max(sqrt(Σx²), eps), the
-//! square-sum accumulated in double like ggml's ggml_float. Used on the deltanet q/k heads.
+//! Row-wise L2 normalization in place: scale = 1 / max(sqrt(Σx²), eps), the
+//! square-sum accumulated in double. Used on the deltanet q/k heads.
 [hint(noalias = v)]
 def l2_norm_rows(var v : float?; rows, row_size : int64; eps : float) {
     unsafe {
@@ -2563,7 +2562,7 @@ def l2_norm_rows(var v : float?; rows, row_size : int64; eps : float) {
 
 //! GELU, tanh approximation (HF's gelu_pytorch_tanh): the GeGLU gate nonlinearity (Gemma2).
 //! gelu(x) = 0.5x(1 + tanh(sqrt(2/pi)(x + 0.044715 x^3))), computed directly rather than via
-//! ggml's fp16 LUT approximation — near-ties against the LUT are expected, not bugs.
+//! a reference fp16 LUT approximation — near-ties against the LUT are expected, not bugs.
 def gelu(var x : float?; size : int64) {
     let k = 0.7978845608028654  // sqrt(2/pi)
     unsafe {
@@ -2609,11 +2608,11 @@ def geglu(var g : array<float> | #; u : array<float> | #; size : int64) {
     geglu(unsafe(addr(g[0])), unsafe(addr(u[0])), size)
 }
 
-// gpt-oss clamped-SwiGLU constants (llama.cpp hardcodes both in build_moe_ffn's SWIGLU_OAI arm)
+// gpt-oss clamped-SwiGLU constants (fixed by the arch, carried in no GGUF key)
 let SWIGLU_OAI_ALPHA = 1.702
 let SWIGLU_OAI_LIMIT = 7.0
 
-//! Fused clamped SwiGLU (gpt-oss, ggml_swiglu_oai): x = min(g, 7), y = clamp(u, -7, 7),
+//! Fused clamped SwiGLU (gpt-oss): x = min(g, 7), y = clamp(u, -7, 7),
 //! g = (x · sigmoid(1.702·x)) · (y + 1). The clamps and the +1 on the up branch are part of the
 //! trained activation, not an optimization. Same fusion contract as swiglu.
 def swiglu_oai(var g : float?; u : float const?; size : int64) {
@@ -2839,7 +2838,7 @@ def softcap4(var x : array<float> | #; size : int64; cap : float) {
 
 //! RoPE — rotary position embedding. Rotates each adjacent coordinate pair (2j, 2j+1) within a
 //! head by angle pos*freq, freq = 1/10000^(2j/head_size); encodes position as rotation so a later
-//! Q·K dot product depends only on relative token offset. In place; matches llama2.c's scheme.
+//! Q·K dot product depends only on relative token offset. In place.
 def rope(var vec : array<float> | #; pos, head_size, n : int64) {
     for (p in range64(n / 2l)) {
         let i = p * 2l
@@ -2870,7 +2869,7 @@ def rope_scaled(var v : float?; pos, head_size, n : int64; theta, fscale : float
                 freq /= ff[head_dim / 2l]
             }
             let angle = posf * freq
-            // mscale (YaRN/LongRoPE attn_factor) scales cos/sin — ggml applies it to NORM and NEOX
+            // mscale (YaRN/LongRoPE attn_factor) scales cos/sin — it applies to NORM and NEOX
             // alike (mistral3 YaRN = 1.416); the 1.0 default multiplies out bit-exactly elsewhere
             let fcr = cos(angle) * mscale
             let fci = sin(angle) * mscale

@@ -177,7 +177,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         fo += layers * c.ssm_dt_rank
         t.dn_norm_off = fo
         fo += layers * c.ssm_d_state
-        if (t.dn_ba_f32) {  // F32-on-disk ssm_beta/ssm_alpha stay fp32 (llama.cpp matmuls them f32)
+        if (t.dn_ba_f32) {  // F32-on-disk ssm_beta/ssm_alpha stay fp32 (their matmul runs in f32)
             t.dn_betaf_off = fo
             fo += layers * dim * c.ssm_dt_rank
             t.dn_alphaf_off = fo
@@ -1342,7 +1342,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // GGUF uses the architecture name as the metadata key prefix (llama.*, qwen2.*, gemma2.*, ...)
         let dim = gguf_int(m, bytes, "{arch}.embedding_length")
-        // MTP/NextN: block_count INCLUDES the appended draft block(s) (llama.cpp n_layer_all);
+        // MTP/NextN: block_count INCLUDES the appended draft block(s);
         // `layers` below is the TRUNK count — every per-layer validation/mask walks the trunk only.
         let nextn = gguf_has(m, "{arch}.nextn_predict_layers") ? gguf_int(m, bytes, "{arch}.nextn_predict_layers") : 0l
         if (nextn < 0l || nextn > 1l) {
@@ -1461,7 +1461,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // MTP/NextN consistency (arch-agnostic — qwen35 hybrids AND glm4moe carry draft blocks):
         // the metadata and the tensor directory must agree, and an MTP-only sidecar (trunk
-        // stripped, llama.cpp mtp_only) is not loadable standalone
+        // stripped) is not loadable standalone
         if (t.config.n_layer_nextn > 0l) {
             if (gguf_find_tensor(m, "blk.{layers}.nextn.eh_proj.weight") < 0) {
                 panic("dasLLAMA: nextn_predict_layers = {t.config.n_layer_nextn} but blk.{layers}.nextn.eh_proj.weight is missing")
@@ -1573,7 +1573,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // gemma-4 E-series: cross-layer KV sharing — the last N layers reuse an earlier layer's KV
         // cache (n_layer_kv_from_start = layers - shared), and their own attn_k/attn_v are dead weights
-        // (skipped by layout_offsets). Mirrors llama.cpp gemma4's has_kv()/reuse().
+        // (skipped by layout_offsets).
         if (gguf_has(m, "{arch}.attention.shared_kv_layers")) {
             let n_shared = gguf_int(m, bytes, "{arch}.attention.shared_kv_layers")
             if (n_shared > 0l) {
@@ -1609,7 +1609,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             t.config.n_ff_exp = (gguf_has(m, "{arch}.expert_feed_forward_length")
                 ? gguf_int(m, bytes, "{arch}.expert_feed_forward_length")
-                : hidden / t.config.n_expert_used)   // llama.cpp's fallback for files without the key
+                : hidden / t.config.n_expert_used)   // the fallback for files without the key
             if (t.config.n_ff_exp <= 0l) {   // pure-MoE files may omit feed_forward_length (hidden 0) — then the expert key is mandatory
                 panic("dasLLAMA: expert_feed_forward_length missing (and no dense feed_forward_length to derive it)")
             }
@@ -1642,8 +1642,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 t.config.expert_weights_scale = gguf_f32(m, bytes, "{arch}.expert_weights_scale")
             }
             if (gguf_has(m, "{arch}.expert_gating_func")) {
-                // llama.cpp enum: 1 = softmax over the logits, 2 = sigmoid, 3 = softmax over the
-                // selected top-k weights (gpt-oss hardcodes 3 in its graph — no GGUF key there,
+                // expert_gating_func enum: 1 = softmax over the logits, 2 = sigmoid, 3 = softmax over
+                // the selected top-k weights (gpt-oss hardcodes 3 in its graph — no GGUF key there,
                 // so its arch configure sets the default; bailingmoe2 files carry the key)
                 let gf = gguf_int(m, bytes, "{arch}.expert_gating_func")
                 if (gf == 2l) {
@@ -1659,7 +1659,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 panic("dasLLAMA: grouped expert routing (expert_group_count > 1) is not yet supported")
             }
             // DeepSeek-V3/glm4moe expert-selection bias: added to the (sigmoid) probs for the top-k
-            // PICK only; the mixing weights stay unbiased (llama.cpp build_moe_ffn)
+            // PICK only; the mixing weights stay unbiased
             t.config.moe_exp_probs = gguf_find_tensor(m, "blk.{lead}.exp_probs_b.bias") >= 0
             // router / per-expert biases (gpt-oss) — detected from the tensor table; the gate/up
             // pair always ships together, so probing ffn_up_exps.bias covers all three stacks
@@ -1735,7 +1735,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 panic("dasLLAMA: partial rotary combined with YaRN is not supported")
             }
             // yarn_log_multiplier replaces the 0.1 in the mscale correction (DeepSeek-2 lineage);
-            // mistral3 files carry it as 0, where llama.cpp's cancel-and-reapply dance nets out to
+            // mistral3 files carry it as 0, where the cancel-and-reapply dance nets out to
             // the plain 1 + 0.1·ln(factor) below — any other value needs that dance, fail closed
             let lmkey = "{arch}.rope.scaling.yarn_log_multiplier"
             if (gguf_has(m, lmkey) && gguf_f32(m, bytes, lmkey) != 0.0) {
@@ -1745,8 +1745,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             let yorig = (gguf_has(m, "{arch}.rope.scaling.original_context_length")
                 ? gguf_int(m, bytes, "{arch}.rope.scaling.original_context_length") : seq_len)
             let fscale = 1.0 / yfactor
-            // NTK-by-parts correction band (ggml_rope_yarn_corr_dims; beta_fast/slow from metadata,
-            // llama.cpp defaults 32/1): pairs below `lo` rotate at full frequency (extrapolate),
+            // NTK-by-parts correction band (beta_fast/slow from metadata,
+            // defaults 32/1): pairs below `lo` rotate at full frequency (extrapolate),
             // above `hi` fully interpolate (mistral3: beta_fast 4 widens the band vs gpt-oss's 32)
             let bfkey = "{arch}.rope.scaling.yarn_beta_fast"
             let bskey = "{arch}.rope.scaling.yarn_beta_slow"
@@ -1761,20 +1761,20 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             let hi = min(float(hs - 1l), ceil(float(hs) * log(float(yorig) / (beta_slow * 2.0 * PI)) / denom))
             t.rope_freqs |> resize(hs / 2l)
             for (j in range64(hs / 2l)) {
-                let ramp = 1.0 - clamp((float(j) - lo) / max(0.001, hi - lo), 0.0, 1.0)  // = rope_yarn_ramp(lo, hi, i0 = 2j): ggml halves i0, and lo/hi are already pair-unit
+                let ramp = 1.0 - clamp((float(j) - lo) / max(0.001, hi - lo), 0.0, 1.0)  // ramp in pair units - j is already the pair index (i0 = 2j halved), matching lo/hi
                 t.rope_freqs[j] = 1.0 / (fscale + ramp * (1.0 - fscale))
             }
             t.config.rope_mscale *= 1.0 + 0.1 * log(1.0 / fscale)
         }
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
-        // tied Q8 loads of a Q8_0 embedding matmul the classifier on the DISK quants (llama.cpp's
+        // tied Q8 loads of a Q8_0 embedding matmul the classifier on the DISK quants (the reference
         // arithmetic) and drop the fp32 table — see Model.cls_q8. Other disk types keep the exact
         // fp32 path (a requantized classifier would drift from the oracle for no parity gain).
         t.cls_q8 = (t.config.shared_weights && mode == QuantMode.q8
             && gguf_tensor_type(m, "token_embd.weight") == GGML_TYPE_Q8_0)
         // ssm_beta/ssm_alpha disk type routes their matmul (must precede layout_offsets): F32
-        // files keep them fp32 in fblob (llama.cpp matmuls f32); quantized files ride qblob.
+        // files keep them fp32 in fblob (their matmul runs in f32); quantized files ride qblob.
         // Also before detect_kq_formats — the dn tags demote on grouped (qwen3next) files.
         if (t.config.recr_mask != 0ul) {
             var frl = 0l
@@ -1802,8 +1802,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (gguf_has(m, "{arch}.final_logit_softcapping")) {
             t.config.final_logit_softcap = gguf_f32(m, bytes, "{arch}.final_logit_softcapping")
         }
-        // suppressed token ids (gemma4: the checkpoint's known-bad <image|>/<audio|>) — llama.cpp
-        // pins their logits to -inf in the graph, so parity requires the same
+        // suppressed token ids (gemma4: the checkpoint's known-bad <image|>/<audio|>) - their
+        // logits are pinned to -inf, which parity requires
         if (gguf_has(m, "tokenizer.ggml.suppress_tokens")) {
             t.suppress <- gguf_i32_array(m, bytes, "tokenizer.ggml.suppress_tokens")
         }
@@ -2037,7 +2037,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         to_log(LOG_INFO, "dasLLAMA: load stage meta+config+smalls: {get_time_usec(ts_stage) / 1000} ms\n")
         ts_stage = ref_time_ticks()
-        // big 2D weights -> active precision. ggml stores them row-major [out x in] = our convention.
+        // big 2D weights -> active precision. On-disk 2D weights are row-major [out x in] = our convention.
         var scratch : array<float>
         for (l in range64(layers_ld)) {
             let kv_l = layer_kv_dim(t.config, l)

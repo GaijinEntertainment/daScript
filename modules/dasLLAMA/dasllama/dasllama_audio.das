@@ -22,9 +22,9 @@ require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-im
 require dasllama/dasllama_image
 
 // Whisper-family audio frontend: 16 kHz mono PCM -> log-mel chunks, in two oracle-exact
-// flavors: log_mel_chunks mirrors llama.cpp mtmd (tools/mtmd/mtmd-audio.cpp, qwen2a tower),
-// log_mel_whisper mirrors whisper.cpp's log_mel_spectrogram (different padding/floor/fill
-// rules — see whisper_plan.md). The 400-point DFT is two GEMM columns of a precomputed
+// flavors: the mtmd flavor (log_mel_chunks) pre-extends short input to 31 s, floors at 2^-24;
+// the whisper flavor (log_mel_whisper) reflect-pads the raw input, drops the last frame and
+// floors at 1e-10 - see whisper_plan.md. The 400-point DFT is two GEMM columns of a precomputed
 // twiddle matrix (minfft is pow2-only, and 400 = 2^4*25 is not) — see qwen2_audio_plan.md.
 
 let AUDIO_SAMPLE_RATE = 16000l
@@ -32,23 +32,22 @@ let AUDIO_N_FFT = 400l
 let AUDIO_HOP = 160l
 let AUDIO_CHUNK_FRAMES = 3000l  // 30 s of hops per encoder chunk
 
-//! One 30 s log-mel chunk, mel-major ``[n_mel][n_len]`` (mtmd layout, conv-ready).
+//! One 30 s log-mel chunk, mel-major ``[n_mel][n_len]`` (conv-ready).
 struct MelChunk {
     n_mel : int64
     n_len : int64
     data : array<float>
 }
 
-//! Hann window of length ``n`` (periodic when ``periodic``), float-exact vs mtmd's
-//! ``fill_hann_window``: 0.5·(1 − cos(2πi/denom)) with denom = n (periodic) / n−1.
+//! Hann window of length ``n`` (periodic when ``periodic``), float-exact vs the reference:
+//! 0.5·(1 − cos(2πi/denom)) with denom = n (periodic) / n−1.
 def build_hann_window(n : int64; periodic : bool = true) : array<float> {
     let denom = double(periodic ? n : n - 1l)
     return <- [for (i in range64(n)); float(0.5lf * (1.0lf - double(cos(float(2.0lf * DBL_PI * double(i) / denom)))))]
 }
 
 //! Slaney-scale triangular mel filterbank ``[n_mel][n_fft/2+1]`` (librosa default, area-
-//! normalized) — a direct port of mtmd's ``fill_mel_filterbank_matrix`` with fmin=0,
-//! fmax=sample_rate/2. Double internally, float out.
+//! normalized) with fmin=0, fmax=sample_rate/2. Double internally, float out.
 def build_mel_filterbank(n_mel, n_fft, sample_rate : int64) : array<float> {
     let n_bins = n_fft / 2l + 1l
     // slaney hz<->mel: linear below 1 kHz, log above
@@ -90,8 +89,8 @@ def build_mel_filterbank(n_mel, n_fft, sample_rate : int64) : array<float> {
 }
 
 //! DFT twiddle matrix [n_fft][2·n_bins]: column 2k = cos(2πjk/n), column 2k+1 = −sin(2πjk/n).
-//! XW[frames×n_fft] · B -> interleaved re/im rows, same table values as mtmd's sin/cos cache
-//! (double theta, float trig). Shared by every mel flavor (whisper/mtmd here, qwen3a's module).
+//! XW[frames×n_fft] · B -> interleaved re/im rows; table values are reference-exact (double
+//! theta, float trig). Shared by every mel flavor (whisper/mtmd here, qwen3a's module).
 def build_dft_twiddles(n_fft : int64) : array<float> {
     let n_bins = n_fft / 2l + 1l
     var cos_tab : array<float>
@@ -199,11 +198,11 @@ def fft_pow2_run(n : int64; rev : int const?; tw : float const?; var reim : floa
 }
 
 //! Whisper log-mel spectrogram over the full padded input, split into full 3000-frame chunks —
-//! the mtmd whisper preprocessor end-to-end (pad to ≥31 s, reflect-200 head, Hann/hop-160 power
-//! spectra, slaney mel, log10, global max−8 clamp). Audio ≤30 s yields exactly one chunk.
+//! the mtmd flavor end-to-end (pad to ≥31 s, reflect-200 head, Hann/hop-160 power spectra,
+//! slaney mel, log10, global max−8 clamp). Audio ≤30 s yields exactly one chunk.
 def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> {
     let n_in = length(samples)
-    // mtmd zero-extends short input to chunk+1 seconds BEFORE the stage pads — the head
+    // this flavor zero-extends short input to chunk+1 seconds BEFORE the stage pads — the head
     // reflect below must read from the extended buffer, not the raw input
     let min_samples = int(AUDIO_SAMPLE_RATE * 31l)
     let n_base = max(n_in, min_samples)
@@ -244,8 +243,8 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
     gemm_f32(unsafe(addr(reim[0])), unsafe(addr(xw[0])), unsafe(addr(twiddles[0])),
              n_len, n_fft, n_bins * 2l)
 
-    // power spectra -> mel (float products, double sum — mtmd's exact accumulation), log10
-    let mel_floor = 5.960464477539063e-08lf                // 2^-24, mtmd filter_params default
+    // power spectra -> mel (float products, double sum in bin order), log10
+    let mel_floor = 5.960464477539063e-08lf                // 2^-24, the fixed filterbank floor
     let log10_e = 0.43429448190325176lf
     var mel : array<float>
     mel |> reserve(int(n_mel * n_len))
@@ -267,8 +266,9 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
         }
     }
 
-    // whisper-style dynamic clamp + scale, GLOBAL over the padded spectrogram; mtmd's exact
-    // rounding — the clamp value round-trips through float before the (x+4)/4 double math
+    // whisper-style dynamic clamp + scale, GLOBAL over the padded spectrogram; the clamp value
+    // round-trips through float before the (x+4)/4 double math - the round-trip is what keeps
+    // the mel plane bit-exact against the reference
     var mmax = -1e20lf
     for (v in mel) {
         mmax = max(mmax, double(v))
@@ -279,7 +279,7 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
         v = float((double(clamped) + 4.0lf) / 4.0lf)
     }
 
-    // full 3000-frame chunks only; the padded tail chunk is dropped (mtmd: "safe to ignore")
+    // full 3000-frame chunks only; the partial tail chunk is dropped
     var chunks : array<MelChunk>
     var off = 0l
     while (off + AUDIO_CHUNK_FRAMES <= n_len) {
@@ -296,7 +296,7 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
     return <- chunks
 }
 
-//! Full-length whisper.cpp-style log-mel spectrogram: total frame count (audio + the 30 s
+//! Full-length whisper-flavor log-mel spectrogram: total frame count (audio + the 30 s
 //! zero tail), the real-audio frame count (``n_len_org`` = the driver's seek_end), and
 //! mel-major ``[n_mel][n_len]`` data.
 struct WhisperMel {
@@ -357,9 +357,9 @@ def private mel_sized(@scratch var a : array<float>; n : int64) {
     a |> resize(n)
 }
 
-//! whisper.cpp's ``log_mel_spectrogram`` — diverges from the mtmd flavor above: reflect-200 pad
-//! from the RAW input (no 31 s pre-extend), drops the last frame, past-audio frames skip the FFT
-//! (floor 1e-10). Returning form; the ``var padded``/``var m`` overload reuses session scratch.
+//! The whisper mel flavor — diverges from the mtmd flavor above: reflect-200 pad from the RAW
+//! input (no 31 s pre-extend), drops the last frame, past-audio frames skip the FFT (floor
+//! 1e-10). Returning form; the ``var padded``/``var m`` overload reuses session scratch.
 def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters : array<float>; n_mel : int64) : WhisperMel {
     var padded : array<float>
     var m = WhisperMel(n_mel = n_mel)
@@ -386,7 +386,7 @@ def private log_mel_whisper_(samples : array<float> | #; plan : WhisperMelPlan; 
     let head = AUDIO_N_FFT / 2l                            // 200
     let n_padded = n_in + AUDIO_SAMPLE_RATE * 30l + 2l * head
     mel_sized(padded, n_padded)
-    let nref = clamp(n_in - 1l, 0l, head)                  // whisper.cpp reads samples[1..200] unguarded
+    let nref = clamp(n_in - 1l, 0l, head)                  // reflect reads samples[1..200]; clamp guards short input
     for (i in range64(head - nref)) {                      // scratch is reused, not fresh: zero every region
         padded[i] = 0.0
     }
@@ -468,7 +468,7 @@ def private log_mel_whisper_(samples : array<float> | #; plan : WhisperMelPlan; 
 }
 
 //! Slice one 3000-frame encoder window starting at mel frame ``seek``; frames past
-//! ``m.n_len`` zero-fill (whisper.cpp's conv-input copy). Returning form — the ``var c``
+//! ``m.n_len`` zero-fill (the conv input is always a full window). Returning form — the ``var c``
 //! overload reuses session scratch (zero per-window alloc).
 def whisper_mel_window(m : WhisperMel; seek : int64) : MelChunk {
     var c = MelChunk()
@@ -642,9 +642,9 @@ def private register_tower_image_tags {
 def audio_has_avgpool(t : AudioTower) : bool => (
     t.proj_kind == AudioProjKind.qwen2a || t.proj_kind == AudioProjKind.voxtral)
 
-//! Soft tokens one 30 s (3000-frame) mel chunk becomes after the projector — matches mtmd's
-//! clip_n_output_tokens: conv halves, avg-pool halves, stacking divides (floor: the ragged
-//! tail positions are DROPPED, mirroring ggml's build_stack view math — no zero-pad row).
+//! Soft tokens one 30 s (3000-frame) mel chunk becomes after the projector: conv halves,
+//! avg-pool halves, stacking divides (floor: the ragged tail positions are DROPPED - there
+//! is no zero-pad row).
 def audio_tokens_per_chunk(t : AudioTower) : int64 {
     var n = t.n_ctx
     if (audio_has_avgpool(t)) {
@@ -1442,7 +1442,7 @@ def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
 }
 
 // RMS-norm each d-wide row in place against a weight vector in the blob (ultravox projector
-// norms use eps 1e-6 hardcoded in mtmd's whisper-enc graph, independent of the tower eps)
+// norms use a fixed eps of 1e-6, independent of the tower eps)
 def private rms_rows_blob(var x : array<float>; blob : array<float>; w_off, dim, rows : int64) {
     rms_rows_blob_at(x, unsafe(addr<float const?>(blob[w_off])), dim, rows)
 }
@@ -1461,7 +1461,7 @@ def private rms_rows_blob_at(var x : array<float>; wp : float const?; dim, rows 
 }
 
 //! Runs the Whisper encoder + projector tail over one 30 s mel chunk; soft tokens land in ``s.out``.
-//! Stacking floors rows — ragged tail positions are dropped, not zero-padded (ggml build_stack view math).
+//! Stacking floors rows — ragged tail positions are dropped, not zero-padded.
 [hot_path]
 def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     audio_encode_blocks(t, s, mel)
@@ -1471,7 +1471,7 @@ def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     let rows = audio_tokens_per_chunk(t)
 
     if (t.proj_kind == AudioProjKind.qwen2a) {
-        // avg-pool pairs over time (BEFORE the post-LN — mtmd build_vit order), then ln_post
+        // avg-pool pairs over time (BEFORE the post-LN, not after), then ln_post
         let tp = tt / 2l
         for (p in range64(tp)) {
             for (c in range64(d)) {

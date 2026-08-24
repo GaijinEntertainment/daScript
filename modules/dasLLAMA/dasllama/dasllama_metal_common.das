@@ -157,7 +157,7 @@ var @scratch g_arena_free : array<tuple<off : uint64; size : uint64>>   // sorte
 // builders — co-located with their kernel class, some in prefill.das — see the pipeline they
 // dispatch; compile_pso() assignments + shutdown releases stay in kernels' metal_decode_init) =====
 var g_pso_gemv : MetalComputePipeline?
-var g_gemv_rows = 4l                       // rows (simdgroups) per GEMV threadgroup
+var g_gemv_rows = 4l                       // rows (simdgroups) per MoE router/expert GEMV threadgroup (the dense GEMV geometry is fixed)
 var g_pso_rms : MetalComputePipeline?
 var g_pso_add : MetalComputePipeline?
 var g_pso_addrms : MetalComputePipeline?
@@ -558,7 +558,7 @@ def mirror_release(var mr : KVMirror) {
 //! re-initializes on the next served step; all mirrors rebuild from the CPU caches on demand.
 
 
-// ===== the residency pin (ggml-metal's model; the mechanism + figures: ARCHITECTURE.md 2.12) =====
+// ===== the residency pin (the mechanism + figures: ARCHITECTURE.md 2.12) =====
 // The first submission after a CPU-only window repays the per-commit residency pass over the
 // resident bytes; a committed+requested MTLResidencySet keeps it a no-op.
 var private g_rset : MetalResidencySet?
@@ -1255,7 +1255,7 @@ def signs_buffer() : MetalBuffer? {
 
 
 // ===== the range tracker (the dispatch port; since P3 the batch rail's only hazard system) =====
-// lcpp ggml_mem_ranges-shaped, finer: exact (buffer, off, len) ranges over mutable FRAME buffers
+// exact (buffer, off, len) ranges over mutable FRAME buffers
 // only; armed only while the single-stream concurrent encoder builds (others no-op the staging)
 
 struct MemRange {

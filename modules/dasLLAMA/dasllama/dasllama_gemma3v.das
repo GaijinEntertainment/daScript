@@ -246,7 +246,7 @@ def private g3v_announce_lane() {
 }
 
 // the block GEMM tensors in GEMMA3V_GEMM_* order (q k v o up down). The shipped mmproj carries
-// ffn up/down SWAPPED (the historic converter defect clip.cpp detects by ne[0] and swaps back);
+// ffn up/down SWAPPED (a historic converter defect, detectable by ne[0]);
 // the stage read resolves the swap once and these lists hold the RESOLVED source names.
 def private g3v_gemm_names(swapped : bool) : array<string> {
     return <- [ "attn_q", "attn_k", "attn_v", "attn_out",
@@ -385,7 +385,7 @@ def private g3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gem
     }
 }
 
-// mm.input_projection is stored [d rows × proj_dim] (mtmd transposes it in-graph); the batch
+// mm.input_projection is stored [d rows × proj_dim], transposed at use; the batch
 // matmul wants [proj_dim rows × d], so the stage read untransposes once
 def private g3v_read_projection(m : GGUFMeta; bytes : array<uint8> | #; var st : Gemma3vStaging) {
     let d = st.t.n_embd

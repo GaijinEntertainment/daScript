@@ -174,8 +174,8 @@ The x86 audio gap has the same anatomy as the q51 hole, in the fp32 lane:
    fp32/bf16 has never shown enough quality edge to justify a lane, least of all on ASR
    where transcripts are the gate. The LLM rows already comply (same GGUF file both
    engines). The gaps and their fixes: llama-mtmd-cli audio towers - convert mmproj with
-   `--outtype q8_0` (composes with --mmproj; clip/mtmd has no quant guard; ggml mul_mat
-   takes q8_0) - verify with one conversion + transcript run, recipe joins the
+   `--outtype q8_0` (composes with --mmproj; clip/mtmd has no quant guard; the reference
+   matmul takes q8_0) - verify with one conversion + transcript run, recipe joins the
    fetch_models manifest; whisper.cpp refs - its own quantize tool, q8_0 standard (our
    whisper encoder is q8 - their leg should be too); NeMo/ONNX python legs - NOT forceable
    (torch fp32/16 graphs), the "oh well" bin: they run native precision and the board

@@ -5,7 +5,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_gguf
 require daslib/fio
 
-// gguf_shard_paths: llama.cpp split-name expansion ("<prefix>-NNNNN-of-NNNNN.gguf"), the
+// gguf_shard_paths: GGUF split-name expansion ("<prefix>-NNNNN-of-NNNNN.gguf"), the
 // non-split passthrough arms, and the missing_ok presence gate model_available rides
 // (incomplete split yields [] instead of the loader's panic). Name/filesystem only — no models.
 

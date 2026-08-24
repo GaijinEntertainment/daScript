@@ -336,7 +336,7 @@ def matmul_q8flat_par(var y : array<float>; wq : array<int8> | #; ws : array<flo
 // --- Q8·Q8 (activation-quantized). The activation x is ALSO quantized to Q8 per block, so the
 // inner block loop is int8·int8 -> the LLVM JIT emits ARM SDOT (vdotq_s32: 16 int8 MACs/instr,
 // exact int32 accumulate). The two per-block fp32 scales (weight ws[b], activation xs[b]) multiply
-// in once per 32-wide block. This is llama.cpp's Q8_0 kernel shape. x is pre-quantized by the
+// in once per 32-wide block. x is pre-quantized by the
 // caller (xq int8 [n] + xs fp32 [n/32]); reused across all d output rows.
 
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
@@ -1242,15 +1242,15 @@ def matmul_par(var y : array<float>; w : array<float> | #; x : array<float>; n, 
 }
 
 // ===== decode-GEMV variant race — the top-end weight-streaming hunt =====
-// Decode GEMV (1 token) is pure weight streaming. llama.cpp's live M1 kernel
-// (ggml_gemv_q8_0_4x4_q8_0 — their 4x8 tier needs i8mm, absent on M1) is the SAME shape as
-// dot_q8q8_laneq4 yet sustains ~119 GB/s in-situ vs our ~101. These variants probe the three
-// structural deltas, one axis at a time: block-loop unroll / loads in flight (u2h, u2, u4),
-// fma flush + split sdot chain (mad, ilp2), dual-group shared-activation streams (2g), and
-// their single-stream layout — scales inline ahead of the quants (inline*; theirs are fp16,
-// these stay fp32 = 8 more bytes per block-group). Raced by bench_gemv_decode.das.
+// Decode GEMV (1 token) is pure weight streaming. The upstream 4x4 M1 kernel (its 4x8 tier
+// needs i8mm, absent on M1) is the SAME shape as dot_q8q8_laneq4 yet sustains ~119 GB/s
+// in-situ vs our ~101. These variants probe the three structural deltas, one axis at a time:
+// block-loop unroll / loads in flight (u2h, u2, u4), fma flush + split sdot chain (mad, ilp2),
+// dual-group shared-activation streams (2g), and a single-stream layout - scales inline ahead
+// of the quants (inline*; the wall's are fp16, these stay fp32 = 8 more bytes per
+// block-group). Raced by bench_gemv_decode.das.
 
-//! base + [unroll_count=2] on the block loop — the "let LLVM unroll like their -O3 build" cell.
+//! base + [unroll_count=2] on the block loop — the "let LLVM unroll it" cell.
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs)]
 def dot_q8q8_laneq4_u2h(wg : int8 const?; sg : float const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
     let nb = n / 32l
@@ -1302,7 +1302,7 @@ def dot_q8q8_laneq4_mad(wg : int8 const?; sg : float const?; xq : int8 const?; x
     return f
 }
 
-//! unroll hint + fma flush combined — the closest spelling of their exact -O3 kernel.
+//! unroll hint + fma flush combined — the closest spelling of the -O3 wall kernel.
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xq, noalias = xs)]
 def dot_q8q8_laneq4_u2h_mad(wg : int8 const?; sg : float const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
     let nb = n / 32l
@@ -1597,7 +1597,7 @@ def dot_q8q8_laneq4_2g(var yp : float?; wg : int8 const?; sg : float const?; xq 
     }
 }
 
-// Single-stream inline-scale layout (llama.cpp block_q8_0x4 shape, fp32 scales): per 4-row group,
+// Single-stream inline-scale layout (interleaved 4-row blocks, fp32 scales): per 4-row group,
 // nb super-blocks of 144 bytes = [16B float4 block scales][128B interleaved quants]. Built from the
 // laneq layout at load — repack_q8q8_inline below.
 def repack_q8q8_inline(wgq : array<int8>; wgs : array<float>; n, d : int64; var out : array<int8>) {
@@ -1626,7 +1626,7 @@ def repack_q8q8_inline(wgq : array<int8>; wgs : array<float>; n, d : int64; var 
 }
 
 //! GEMV over the inline-scale single-stream layout: one pointer walk, scales load from the same
-//! cache lines as the quants (kills the second stream; still 8 more bytes/group than their fp16).
+//! cache lines as the quants (kills the second stream; still 8 more bytes/group than fp16 scales).
 [hint(unsafe_range_check, noalias = gp, noalias = xq, noalias = xs)]
 def dot_q8q8_inline4(gp : int8 const?; xq : int8 const?; xs : float const?; n : int64) : float4 {
     let nb = n / 32l

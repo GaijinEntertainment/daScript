@@ -440,7 +440,7 @@ def private fill_k4_stack(var kq : array<uint8>; var kc : array<uint8>; rows, k,
     }
 }
 
-// 6-bit sub-scale/min j of a 12-byte packed Q4_K scale block (ggml get_scale_min_k4)
+// 6-bit sub-scale/min j of a 12-byte packed Q4_K scale block
 def private k4_sc_mn(kc : array<uint8>; base, j : int64) : int2 {
     if (j < 4l) {
         return int2(int(kc[base + j]) & 63, int(kc[base + j + 4l]) & 63)
@@ -809,10 +809,10 @@ class LabMoeGemvMx4A {
     }
 }
 
-// ===== the tgmem-LUT variant (the lcpp shape) =====
-// llama.cpp's kernel_mul_mv_mxfp4_f32 copies its 16-value LUT into THREADGROUP memory at kernel
+// ===== the tgmem-LUT variant =====
+// The 16-value LUT is copied into THREADGROUP memory at kernel
 // start (one load + one barrier) and the hot loop reads tgmem — zero device loads per lookup.
-// Same change here, production kernel otherwise untouched: the 8 vtab device loads per block
+// Production kernel otherwise untouched: the 8 vtab device loads per block
 // iteration become tgmem reads. etab stays a device table (2 broadcast loads/block, secondary).
 class LabMoeGemvMx4T {
     @ssbo @binding = 0 mxu : array<uint>
@@ -877,11 +877,11 @@ class LabMoeGemvMx4T {
     }
 }
 
-// ===== the lcpp-shape variant (round 3: their whole thread mapping, verbatim) =====
-// llama.cpp's kernel_mul_mv_mxfp4_f32 monomorphized (NR0=2, NSG=2) at our MoE bindings:
-// 16 blocks in flight x 2 threads/block (ix=tiisg/2, it=tiisg%2), each thread owns 8 qs bytes;
+// ===== the wall-shape variant (round 3: the full 2-thread-per-block mapping) =====
+// The wall arm's mxfp4 GEMV geometry at our MoE bindings - 2 rows per simdgroup x 2
+// simdgroups = 4 rows/tg: 16 blocks in flight x 2 threads/block (ix = lane/2, it = lane%2), each thread owns 8 qs bytes;
 // 4 float4 x prefetch (yl[4]) reused across both rows; float4 accumulators folded to one
-// horizontal add per row; 32-slot tgmem LUT fill (their branch-free shape — reads touch 0..15).
+// horizontal add per row; 32-slot tgmem LUT fill (branch-free - reads touch 0..15).
 // vs the tgv arm: block stride 16 not 4 (6 loop trips at nb=90, not 23) and each weight byte
 // loads ONCE (tgv's 8-thread/block map loads every uint twice, one per nibble half).
 class LabMoeGemvMx4L {
@@ -899,13 +899,13 @@ class LabMoeGemvMx4L {
     @uniform @binding = 11 bys : uint
     @ssbo @binding = 14 etab : array<float>   // [256] exact e8m0_half scales (host-built)
     @ssbo @binding = 15 vtab : array<float>   // [16] signed doubled-e2m1 values (host-built)
-    @ssbo @binding = 16 mxb : array<uint8>    // nibble plane, byte view (lcpp's q2[0..7] loads)
+    @ssbo @binding = 16 mxb : array<uint8>    // nibble plane, byte view (8 byte loads per thread)
     @workgroup vt : float[32]
 
     [metal_kernel(name="lab_moe_mx4_l_msl")]
     def lab_moe_mx4_l {
         let lane = gl_SubgroupInvocationID
-        vt[lane] = vtab[lane % 16u]   // both sgs write the same 32 slots (benign, lcpp shape)
+        vt[lane] = vtab[lane % 16u]   // both sgs write the same 32 slots (benign, branch-free fill)
         barrier()
         let ix = lane / 2u   // 0..15
         let it = lane % 2u
@@ -954,7 +954,7 @@ class LabMoeGemvMx4L {
     }
 }
 
-// ===== lcpp shape + wide weight loads =====
+// ===== wall shape + wide weight loads =====
 // Same mapping, but the thread's 8 qs bytes arrive as ONE uint2 (8B) instead of 8 byte loads —
 // nibbles shift-extracted. The k4 sibling's 321 streams 16B uint4; this is the mx4 equivalent
 // (2 threads/block caps a thread's share of the 16B block at 8B).
@@ -1022,10 +1022,10 @@ class LabMoeGemvMx4W {
     }
 }
 
-// ===== lcpp shape + wide loads + COMPUTED e8m0 =====
+// ===== wall shape + wide loads + COMPUTED e8m0 =====
 // The lcppw disasm's remaining serial chain: mxe byte load -> wait -> etab device load at that
-// index, twice per iteration. lcpp computes the scale in ALU (as_type<float>(e << 23)) — same
-// here via uint_bits_to_float (msl_emit bitcast), bit-exact vs the etab formula for all 256
+// index, twice per iteration. Computing the scale in ALU (as_type<float>(e << 23)) kills it -
+// this arm computes it via uint_bits_to_float (msl_emit bitcast), bit-exact vs the etab formula for all 256
 // bytes (e<2 subnormal arm included). The mxe byte load stays; its dependent load is gone.
 class LabMoeGemvMx4E {
     @ssbo @binding = 0 mxu : array<uint>
@@ -1357,12 +1357,12 @@ def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
 
 // ===== gmm4: gathered mx4 MUL_MM section (gptoss pp512 shapes — the Wave-1 pp chase) =====
 // The pp knockout chase convicted the gathered expert mul_mms: 397ms of the 516ms pp512 GPU
-// window (77%) while lcpp's whole wall is ~496ms. Same discriminator as gmx4: price the
+// window (77%) while the whole upstream wall is ~496ms. Same discriminator as gmx4: price the
 // PRODUCTION MetalMoeMulMmMx4 at the exact shapes (E=32 nk=4 ntok=512, 2880x2880 planes, padded
-// 32-row buckets) on pipe vs serial, against (a) lcpp's kernel_mul_mm_id classic-simdgroup path
-// monomorphized VERBATIM for mxfp4 (their 17-byte interleaved blocks, byte loads, f32 B tile,
-// mixed float x half MMAs) and (b) the production kernel with the one structural delta lcpp
-// holds: an f32 B tile (no f32->f16 activation convert).
+// 32-row buckets) on pipe vs serial, against (a) a classic-simdgroup gathered mul_mm arm for
+// mxfp4 (17-byte interleaved blocks, byte loads, f32 B tile, mixed float x half MMAs) and
+// (b) the production kernel with the one structural delta the wall holds: an f32 B tile
+// (no f32->f16 activation convert).
 
 let GNTOK = 512l                  // pp512 token rows
 let GROWS = GNTOK * GK            // routed (token, slot) rows
@@ -1472,26 +1472,26 @@ class LabMoeMmMx4Bf32 {
     }
 }
 
-// lcpp kernel_mul_mm_id monomorphized (mxfp4, classic simdgroup branch — the M1 path):
-// 17-byte interleaved block_mxfp4 A plane read with their 16 byte-loads through the halved LUT,
-// half A tile in their swizzled-transposed layout, f32 B rows through the per-expert id list
-// (their map0 output), mixed float x half MMAs. Deviations, both noted at the measurement: the
-// LUT rides tgmem (their constant address space has no msl_emit spelling — same on-chip class),
-// and the epilogue stores C tiles STRAIGHT to the padded bucket panel (their tgmem-restage +
+// the upstream mxfp4 gathered-GEMM wall arm (classic simdgroup branch - the M1 path):
+// 17-byte interleaved block_mxfp4 A plane read as 16 byte-loads through the halved LUT,
+// half A tile in the swizzled-transposed layout, f32 B rows through the per-expert id list,
+// mixed float x half MMAs. Two departures, both noted at the measurement: the
+// LUT rides tgmem (the constant address space has no msl_emit spelling - same on-chip class),
+// and the epilogue stores C tiles STRAIGHT to the padded bucket panel (a tgmem-restage +
 // ids-scatter epilogue is the production reduce's job in our graph; the K-loop engine races
-// here). ndim % 64 == 0 at these shapes, so their nr0 partial-tile clamp drops out.
+// here). ndim % 64 == 0 at these shapes, so the nr0 partial-tile clamp drops out.
 class LabMoeMmMx4Lcpp {
     @ssbo @binding = 0 ab : array<uint8>    // interleaved block_mxfp4 plane: e byte + 16 nibble bytes
     @ssbo @binding = 1 xr : array<float4>   // token rows [ntok x kdim] f32
-    @ssbo @binding = 2 tpe : array<uint>    // [E] per-expert routed-row counts (their htpe)
-    @ssbo @binding = 3 ids : array<int>     // [E x ntok] per-expert id lists (their hids; id = tok * nk + slot)
+    @ssbo @binding = 2 tpe : array<uint>    // [E] per-expert routed-row counts
+    @ssbo @binding = 3 ids : array<int>     // [E x ntok] per-expert id lists (id = tok * nk + slot)
     @ssbo @binding = 4 y : array<float>     // padded bucket panel (prod layout — shared CPU check)
     @ssbo @binding = 5 basep : array<uint>  // padded panel bases
     @uniform @binding = 6 kdim : uint       // ne00
     @uniform @binding = 7 ndim : uint       // ne0 (weight rows)
     @uniform @binding = 8 ntok : uint       // ne21
     @uniform @binding = 9 nk : uint         // ne20
-    @ssbo @binding = 10 vtab : array<float> // [16] their halved LUT (kvalues_mxfp4_f)
+    @ssbo @binding = 10 vtab : array<float> // [16] halved e2m1 value LUT
     @workgroup sa : float16[2048]           // A tile: 64 rows x 32 k, 8x8-block swizzled
     @workgroup sb : float[1024]             // B tile: 32 rows x 32 k, 8x8-block swizzled
     @workgroup vt : float[16]
@@ -1526,7 +1526,7 @@ class LabMoeMmMx4Lcpp {
         var mb : simdgroup_float8x8[2]
         var mc : simdgroup_float8x8[8]
         var va : float16[16]
-        // their A/B swizzles, hoisted: A ib = 8*(2*il0 + i/8) + (lid/2)/8, addr 64*ib + 8*(i%8) + (lid/2)%8;
+        // the A/B swizzles, hoisted: A ib = 8*(2*il0 + i/8) + (lid/2)/8, addr 64*ib + 8*(i%8) + (lid/2)%8;
         // B ib = 4*(lid%4) + (lid/4)/8, addr 64*ib + 8*((lid/4)%8)
         let tA0 = (il0 * 2u * 8u + lr0 / 8u) * 64u + lr0 % 8u
         let ibB = ((lid % 4u) * 4u + (lid / 4u) / 8u) * 64u + ((lid / 4u) % 8u) * 8u
@@ -1580,12 +1580,12 @@ class LabMoeMmMx4Lcpp {
 // gmm4 buffer slots
 let GM_GQ = 0       // nibble plane (prod layout, uint4 view in-kernel)
 let GM_GE = 1       // scale bytes (prod layout)
-let GM_AB = 2       // interleaved block_mxfp4 plane (lcpp layout)
+let GM_AB = 2       // interleaved block_mxfp4 plane (wall-arm layout)
 let GM_X = 3        // token rows [GNTOK x GDIM] f32
 let GM_CNT = 4      // per-expert routed-row counts
 let GM_BASE = 5     // padded panel bases
 let GM_BKT = 6      // padded bucket -> (tok*nk + slot)
-let GM_IDS = 7      // lcpp hids: [E x GNTOK] id lists
+let GM_IDS = 7      // [E x GNTOK] per-expert id lists
 let GM_Y1 = 8       // gate dst panel
 let GM_Y2 = 9       // up dst panel
 let GM_UK = 10      // kdim = GDIM
@@ -1595,7 +1595,7 @@ let GM_UNK = 13
 let GM_UG1 = 14     // gather = 1
 let GM_UNTOK = 15
 let GM_VT = 16      // prod doubled-e2m1 LUT
-let GM_LVT = 17     // lcpp halved LUT
+let GM_LVT = 17     // halved e2m1 value LUT
 let GM_U0 = 18      // hasb = 0 (lab arms run the prod kernel without the bias fold)
 let GM_KA = 19      // MoeMmArgs kargs (the joined family contract)
 
@@ -1706,7 +1706,7 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     var lvt : array<float>
     lvt |> resize(16)
     for (i in range(16)) {
-        lvt[i] = vtab[i] * 0.5   // their halved LUT x their full e8m0 == our doubled LUT x e8m0_half
+        lvt[i] = vtab[i] * 0.5   // halved LUT x full e8m0 == our doubled LUT x e8m0_half
     }
     let t_fill = ref_time_ticks()
     var gq : array<uint8>

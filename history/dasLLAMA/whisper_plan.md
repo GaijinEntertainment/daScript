@@ -12,7 +12,7 @@ whisper-only (Qwen2-Audio stays on the chat rail). Perf: `-jit` only, AOT = comp
 
 **This arc ships as ONE PR together with the qwen2-audio commits already on the branch.**
 
-## The ggml bin container (whisper.cpp `whisper_model_load`, verified against checkout)
+## The ggml bin container (the whisper.cpp model loader, verified against checkout)
 
 1. magic u32 `0x67676d6c`.
 2. 11 x i32 hparams: n_vocab, n_audio_ctx, n_audio_state, n_audio_head, n_audio_layer,
@@ -44,7 +44,7 @@ Tensor names: `encoder.positional_embedding`, `encoder.conv{1,2}.{weight,bias}`,
 and per block the `cross_attn_ln` / `cross_attn.{query,key,value,out}` family (cross key no
 bias). Decoder = 24 tensors/layer, encoder = 15.
 
-## Mel - whisper.cpp `log_mel_spectrogram` (DIVERGES from the mtmd variant we shipped)
+## Mel - the whisper-family log-mel spectrogram (DIVERGES from the mtmd variant we shipped)
 
 - Padding: reflect-200 head taken from RAW samples[1..200] reversed (no 31 s zero-extend
   first!), then 30 s of zeros + 200 zeros tail (comment says reflective, code fills zeros).
@@ -54,8 +54,8 @@ bias). Decoder = 24 tensors/layer, encoder = 15.
 - Floor is `1e-10` (NOT mtmd's 2^-^2^4); accumulation = float products in groups of 4 summed in
   float, each group added to a double accumulator (mirror exactly); log10 in double.
 - Global max-8 clamp + (x+4)/4 in double over the WHOLE spectrogram (audio + zero tail).
-- Filterbank loaded from the model file. DFT stays our twiddle-GEMM (their radix-2/naive-25
-  FFT differs at ~1e-5 float order, same as the mtmd gate).
+- Filterbank loaded from the model file. DFT stays our twiddle-GEMM (the reference's
+  radix-2/naive-25 FFT differs at ~1e-5 float order, same as the mtmd gate).
 - Encoder window: 3000 frames sliced from the global mel at `seek`, zero-filled (0.0f) past
   n_len. Mel layout mel-major [n_mel][n_len], same as MelChunk.
 
@@ -65,8 +65,8 @@ Same conv k3s1 + k3s2 frontend, +pos rows, pre-LN blocks (q/v/out bias, k none, 
 non-causal). After blocks: ln_post directly (whisper) vs pool->ln_post->projector (qwen2a).
 Refactor `audio_encode` so both share the conv+pos+blocks core; tails diverge.
 
-**GELU flavor differs per oracle**: mtmd path (qwen2a) = gelu_erf; whisper.cpp = `ggml_gelu`
-tanh approximation THROUGH AN FP16 LUT (`GGML_GELU_FP16`): x<=-10 -> 0, x>=10 -> x, else
+**GELU flavor differs per oracle**: mtmd path (qwen2a) = gelu_erf; the whisper path = the
+tanh approximation THROUGH AN FP16 LUT: x<=-10 -> 0, x>=10 -> x, else
 `f16_to_f32(f16(0.5*xr*(1+tanhf(0.79788456*xr*(1+0.044715*xr^2)))))` with `xr = f16_to_f32(f16(x))`.
 Mirror exactly (needs f32->f16 RTE helper). Same flavor in the decoder MLP.
 
@@ -153,13 +153,13 @@ f16->f32-converted weights.
   greedy on jfk.wav** (26 text tokens + eot). tiny: 23/24 - the sole divergence is the first
   comma, a genuine knife-edge (oracle p(",")=0.3465 vs runner-up " ask"; our logit gap
   -0.050 the other way). whisper.cpp's own ARM CPU path computes every mul_mat as f16xf16
-  with fp16 vector accumulation (GGML_SIMD vfmaq_f16) and keeps K/V caches f16 (`itype`) -
+  with fp16 vector accumulation (fp16 FMA intrinsics) and keeps K/V caches f16 -
   its logits carry ~1e-2-scale noise vs exact f32 math, so sub-0.05-logit ties can land
   either way per implementation. Not chased: mirroring fp16 accumulation would make our
   compute strictly WORSE to match noise; the flagship gate is the arc's claim.
 - whisper-cli's `--debug-mode` mel dump is unreachable via whisper_full (the mel call
   hardcodes debug=false) - numpy is the mel oracle.
-- `no_context` defaults to TRUE (whisper.h 5939) - stock cli does NOT carry rolling context
+- `no_context` defaults to TRUE - stock cli does NOT carry rolling context
   between windows; multi-window in notimestamps mode = independent windows.
 - **Family sweep (jfk, +timestamps, greedy)**: tiny, base.en, small, medium, large-v3,
   large-v3-turbo all TOKEN-FOR-TOKEN (base.en also validates the non-multilingual path -
@@ -185,7 +185,7 @@ f16->f32-converted weights.
     per consumed ts, and the window advances by the SECOND of the pair.
   - the no-speech gate (nosp prob off raw prompt logits > 0.6 AND avg_logprobs over kept
     tokens < -1.0) suppresses a window's segments; plog's normalizer is captured between the
-    main filter suite and the force-timestamp rule (their logprob order).
+    main filter suite and the force-timestamp rule (the reference's logprob order).
   - v1 simplifications vs whisper_full (documented, all off the greedy-happy-path): the
     "don't go back in time" and repetition-loop failures end the window instead of triggering
     temperature fallback (fallback is disabled in the oracle runs anyway); entropy-based

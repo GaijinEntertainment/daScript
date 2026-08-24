@@ -212,8 +212,8 @@ def test_rope_gen_imrope_collapse(t : T?) {
 [test]
 def test_rope_gen_imrope_reference(t : T?) {
     let qsec = int4(24, 20, 20, 0)
-    // The ggml sector walk, re-derived per element in a different loop order: every dim of
-    // an image-shaped row must read the axis ggml_mrope_cache_init assigns it, including
+    // The sector walk, re-derived per element in a different loop order: every dim of
+    // an image-shaped row must read the axis its section assigns it, including
     // the [24,20,20,0] tail (60->t, 61->e, 62->e, 63->t).
     t |> run("image row matches a per-element ggml-order reference") @(t : T?) {
         var ff : array<float>
@@ -281,7 +281,7 @@ def test_rope_gen_imrope_shape(t : T?) {
     }
 }
 
-// the ggml NON-interleaved walk (is_imrope=false): sections read as contiguous ranges
+// the NON-interleaved walk: sections read as contiguous ranges
 def private mrope_axis_ref(j, sx, sy, sz : int) : int {
     if (j >= sx + sy + sz) {
         return 3
@@ -352,7 +352,7 @@ def test_rope_gen_mrope_noninterleaved(t : T?) {
 
 [test]
 def test_mrope_span_positions(t : T?) {
-    // the mtmd decoder walk: head sequential, span (pos0, pos0+i/nx, pos0+i%nx, 0), tail from
+    // the decoder walk: head sequential, span (pos0, pos0+i/nx, pos0+i%nx, 0), tail from
     // pos0 + max(nx, ny) — the grid's long side, not its row count
     t |> run("the quantum map follows the mtmd walk") @(t : T?) {
         var map : array<int4>
@@ -385,7 +385,7 @@ def test_mrope_span_positions(t : T?) {
 [test]
 def test_rope_gen_vision(t : T?) {
     // The qwen3vl ViT table: hs/2 slots per row — the h ladder then the w ladder restarted,
-    // freq divisor hs/2 (ggml VISION mode with sections hs/4 x4 and indep_sects).
+    // freq divisor hs/2 (VISION mode: sections hs/4 x4, each axis independent).
     t |> run("vision table matches the per-element ladder reference") @(t : T?) {
         var p2 <- [int2(3, 11), int2(0, 0)]
         var ct : array<float>

@@ -14,7 +14,7 @@ require dasllama/dasllama_gguf
 
 // Silero-VAD (v6, 16 kHz) — native reimplementation. Oracle = onnxruntime on the official
 // silero_vad_16k_op15.onnx (proven bit-exact); weights convert from that graph's initializers
-// via harness/convert_silero_vad.py. Full graph + framing spec: modules/dasLLAMA/silero_vad_plan.md.
+// via harness/convert_silero_vad.py. Full graph + framing spec: history/dasLLAMA/silero_vad_plan.md.
 // The shipped weights (models/silero_vad.bin) are Silero VAD, MIT-licensed (c) 2020-present
 // Silero Team — see models/silero_vad.LICENSE and https://github.com/snakers4/silero-vad.
 

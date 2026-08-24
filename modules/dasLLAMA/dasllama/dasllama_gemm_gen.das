@@ -928,7 +928,7 @@ def private or_bit_x10(te : TileEmit; var w, bytes, maskv : LLVMOpaqueValue?; na
 
 // One 256-weight SUPERBLOCK, K-quant grp<mr> form (te.kq = 4/5/6): weight vectors unpacked
 // ONCE per (sub-block, dword-group) and dotted against every token — weight-stationary,
-// bit-exact vs per-token GEMVs (tokCount=1). kq v2 folds integer sub-scales/bsums against Q8_K-form activations (the lcpp scheme).
+// bit-exact vs per-token GEMVs (tokCount=1). kq v2 folds integer sub-scales/bsums against Q8_K-form activations.
 def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) { // nolint:STYLE037,STYLE038 — one register-coupled superblock loop nest; the k-quant decode arms share live values
     let b = te.builder
     let rq = te.rq
@@ -1531,7 +1531,7 @@ def private setup_amx_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm
     return true
 }
 
-// The raw register plan (latch perms — lcpp's): C tiles tmm0-3 by (r·nt+ts), A tiles tmm4+ts,
+// The raw register plan (latch perms): C tiles tmm0-3 by (r·nt+ts), A tiles tmm4+ts,
 // B tiles tmm6+r; the cfg companion's palette sets exactly these shapes (C 16×64, A 16×32,
 // B 8×64). Internal-SSA perms ignore the plan — the backend allocates tmm itself.
 def private amx_tmm(te : TileEmit; v : int) : LLVMOpaqueValue? {
@@ -1737,7 +1737,7 @@ def private amx_fold_tile(var te : TileEmit; var region, bi, ws : LLVMOpaqueValu
     }
 }
 
-// The software-pipelined TMUL batch tile (double-buffered C, lcpp mmq.cpp): same contract as
+// The software-pipelined TMUL batch tile (double-buffered C): same contract as
 // emit_amx_tile, but the per-block scale fold is deferred one k-iteration — block bi's
 // TDPBSSD spills into C[cur] while block bi−1's fold reads C[pre], overlapping TMUL with the vector fold.
 def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool { // nolint:STYLE037,STYLE038 — the software-pipelined AMX schedule is one register-coupled loop

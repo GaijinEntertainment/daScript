@@ -1,11 +1,11 @@
 options gen2
 options indenting = 4
 
-// scratch probe: run llama.cpp's OWN matmul_q8_0_f32_f16acc_aligned_l pipeline (the cm1/KHR-coopmat
+// scratch probe: run the upstream matmul_q8_0_f32_f16acc_aligned_l pipeline (the cm1/KHR-coopmat
 // mul_mm that clocks 13-27 TFLOPS in-graph) in OUR harness, on the exact in-graph shapes, isolated.
-// SPV straight from their build dir; spec constants = l_warptile_mmq + ALIGNED; push constants =
-// vk_mat_mat_push_constants exactly as the GGML_VULKAN_DEBUG dispatch lines showed. The question this
-// answers: does 17 TFLOPS exist OUTSIDE their graph, or is their own test-backend-ops' 1.78 the truth?
+// SPV straight from the upstream build dir; spec constants = l_warptile_mmq + ALIGNED; push constants
+// match the wall pipeline's layout exactly, as its debug dispatch lines showed. The question this
+// answers: does 17 TFLOPS exist OUTSIDE that graph, or is the 1.78 its own test-backend-ops reports the truth?
 
 require vulkan public
 require vulkan/vulkan_boost public
@@ -26,7 +26,7 @@ struct Shape {
     m : int      // output features (weight rows)
     k : int      // contraction
     graph_tf : float   // what the perf logger showed in-graph (qwen3-4B/llama-3B runs)
-    tbo_tf : float     // what their test-backend-ops showed for the same shape
+    tbo_tf : float     // what the upstream test-backend-ops showed for the same shape
 }
 
 def private s8b(v : int) : uint8 => uint8(v & 0xFF)
@@ -196,7 +196,7 @@ def main {   // nolint:STYLE037,STYLE038 - linear Vulkan probe; every `var insco
     let dev = boost_value_to_vk(device)
     let queue = get_device_queue(device, gfx, 0u)
 
-    // descriptor layout: 3 storage buffers (A q8_0 blocks, B f32, D f32) — their binding order
+    // descriptor layout: 3 storage buffers (A q8_0 blocks, B f32, D f32) — the upstream binding order
     var dslci : DescriptorSetLayoutCreateInfo
     dslci.pBindings |> reserve(3)
     for (bi in range(3)) {
@@ -219,7 +219,7 @@ def main {   // nolint:STYLE037,STYLE038 - linear Vulkan probe; every `var insco
     plci.pPushConstantRanges |> push(pcr)
     var inscope pipe_layout <- create_pipeline_layout(device, plci)
 
-    // pipeline: their spv + their spec constants; require_full_subgroups like ggml_vk_create_pipeline
+    // pipeline: the upstream spv + its spec constants; require_full_subgroups, as its own loader does
     var inscope shader <- create_shader_module(device, words)
     var entries : VkSpecializationMapEntry[12]
     for (i in range(12)) {
@@ -261,7 +261,7 @@ def main {   // nolint:STYLE037,STYLE038 - linear Vulkan probe; every `var insco
     cpci.queueFamilyIndex = gfx
     var inscope pool <- create_command_pool(device, cpci)
 
-    // the shapes: in-graph rate vs their-test rate, from the perf-logger and test-backend-ops sessions
+    // the shapes: in-graph rate vs test-tool rate, from the perf-logger and test-backend-ops sessions
     var shapes <- [
         Shape(m = 1024, k = 2560, graph_tf = 13.2, tbo_tf = 1.66),
         Shape(m = 4096, k = 2560, graph_tf = 15.1, tbo_tf = 1.70),
@@ -332,7 +332,7 @@ def main {   // nolint:STYLE037,STYLE038 - linear Vulkan probe; every `var insco
         pc[3] = uint(k); pc[4] = uint(k); pc[5] = uint(m)
         pc[6] = uint(k * m); pc[7] = uint(k * n); pc[8] = uint(m * n)
         pc[9] = 0u; pc[10] = 1u
-        pc[11] = uint(k)   // k_split is the per-partition K SIZE — full K when unsplit (ggml_vk_matmul:8280)
+        pc[11] = uint(k)   // k_split is the per-partition K SIZE — full K when unsplit
         pc[12] = 1u; pc[13] = 1u; pc[14] = 1u; pc[15] = 1u
         pc[16] = uint(n)
         let gx = uint((m + 127) / 128)
@@ -370,7 +370,7 @@ def main {   // nolint:STYLE037,STYLE038 - linear Vulkan probe; every `var insco
         let ops = 2.0lf * double(m) * double(n) * double(k)
         let tflops = float(ops / (best_us * 1.0e6lf))
 
-        // validate a sample vs the f16-dequant reference (their math: A,B -> f16, f16acc MMA)
+        // validate a sample vs the f16-dequant reference (the pipeline's math: A,B -> f16, f16acc MMA)
         staging_roundtrip(device, phys, pool, queue, dd, d_bytes, false)
         var bad = 0
         var maxrel = 0.0

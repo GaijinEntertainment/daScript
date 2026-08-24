@@ -166,7 +166,7 @@ struct public MetalEnv {
     @clarg_doc = "Produce logits on the GPU; 0 pulls the classifier back to the CPU. Blob-only models force it on."
     logits : bool = true
 
-    @clarg_doc = "ggml-geometry QK/AV prefill attention (~10x the trio GEMMs); 0 pins the trio."
+    @clarg_doc = "Tiled QK/AV prefill attention (~10x the trio GEMMs); 0 pins the trio."
     attn : bool = true
 
     @clarg_doc = "Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent."
@@ -213,7 +213,7 @@ struct public MetalEnv {
     @clarg_doc = "MTP speculative decode chain: 0 off, 1 forced, -1 adaptive."
     spec : Option<int>
 
-    @clarg_doc = "Rows per GEMV threadgroup, clamped 1..32."
+    @clarg_doc = "Rows per MoE router/expert GEMV threadgroup, clamped 1..32 (the dense GEMV geometry is fixed)."
     gemv_tg : int = 4
 
     @clarg_doc = "Single-pass B8 twin for K-quant small-batch mv at B=5..8; 0 is the A/B rail."
@@ -225,7 +225,7 @@ struct public MetalEnv {
     @clarg_doc = "Pin the served working set (weight regions, planes, the recycled pool buffers) in an MTLResidencySet, macOS 15+: the per-commit residency pass stays a no-op, so the first submission after a CPU-only window stops repaying it (~15 ms/encode on the M1 Max released-rig image cell; ARCHITECTURE.md 2.12); 0 is the A/B rail."
     residency : bool = true
 
-    @clarg_doc = "Seconds the residency-set heartbeat keeps re-requesting residency after the last served step (a requested set still un-wires over a long CPU-only window; the ggml-metal keep-alive, ARCHITECTURE.md 2.12); 0 disables the heartbeat - the A/B rail."
+    @clarg_doc = "Seconds the residency-set heartbeat keeps re-requesting residency after the last served step (a requested set still un-wires over a long CPU-only window; ARCHITECTURE.md 2.12); 0 disables the heartbeat - the A/B rail."
     heartbeat_s : int = 180
 
     @clarg_doc = "Barrier at every dispatch instead of at tracker-detected hazards (correctness bisect)."
@@ -455,7 +455,7 @@ struct public BenchmarkEnv {
     @clarg_doc = "Skip the row-major arm of the isolated GEMM bench."
     bench_skip_rowmajor : bool = false
 
-    @clarg_doc = "Per-run detail from the llama.cpp comparison bench."
+    @clarg_doc = "Per-run detail from the comparison bench (lcpp_bench)."
     bench_verbose : bool = false
 
     @clarg_doc = "Override the minimum rows per dispatch chunk in the GEMM bench."

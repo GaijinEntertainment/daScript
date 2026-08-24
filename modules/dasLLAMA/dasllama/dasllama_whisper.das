@@ -34,7 +34,7 @@ require dasllama/dasllama_image
 
 //! A loaded whisper.cpp model: encoder tower (dasllama_audio's AudioTower, gelu_tanh flavor),
 //! decoder weight blob + offsets, byte-level vocab, mel filterbank from the file, and the
-//! special-token protocol ids (multilingual-shifted per whisper.cpp's vocab math).
+//! special-token protocol ids (shifted by the language count on multilingual vocabs).
 struct WhisperModel {
     n_vocab : int64
     n_text_ctx : int64
@@ -457,9 +457,9 @@ def private whisper_tag(enc_q8, dec_q8 : bool) : string {
     return enc_q8 ? "whisper-q8" : (dec_q8 ? "whisper-f32-q8" : "whisper-f32")
 }
 
-//! Loads a whisper.cpp ggml-*.bin model (f32/f16 only; verified byte-for-byte against
-//! whisper.cpp's whisper_model_load). Like ``load_model``, caches a box/knob-specific PREPARED
-//! IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
+//! Loads a whisper.cpp ggml-*.bin model (f32/f16 only; verified byte-for-byte against the
+//! reference loader). Like ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast
+//! reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
     return <- load_whisper_model(path, q8, q8)
 }
@@ -793,7 +793,7 @@ def private whisper_index(bytes : array<uint8> | #; n_bytes : int64; var st : Wh
         o += len
     }
 
-    // special-token id math (whisper_vocab defaults + multilingual shift)
+    // special-token id math (English-only base ids + multilingual shift)
     st.e.multilingual = st.e.n_vocab >= 51865l
     st.e.n_lang = st.e.n_vocab - 51765l - (st.e.multilingual ? 1l : 0l)
     st.e.tok_eot = 50256
@@ -956,8 +956,8 @@ def whisper_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
 
 // ===== decoder =====
 
-//! One sampled token: greedy argmax id + the most probable timestamp token (whisper.cpp's
-//! token_data.tid — segment boundaries read it even off text tokens).
+//! One sampled token: greedy argmax id + the most probable timestamp token (``tid`` — segment
+//! boundaries read it even off text tokens).
 struct SampledTok {
     id : int
     tid : int
@@ -1062,7 +1062,7 @@ def register_whisper_decode_gpu(fn : WhisperDecodeGpuFn) {
 
 //! Precompute the cross-attention memory for one encoded window (``enc_out`` =
 //! whisper_encode's ``s.xb``, ``n_ctx × d``): per layer K = W_k·enc (no bias, pre-scaled
-//! hs^-0.25), V = W_v·enc + b — whisper.cpp's build_graph_cross. Resets the sequence.
+//! hs^-0.25), V = W_v·enc + b. Resets the sequence.
 [hot_path]
 def whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) {
     if (g_wh_cross_kv_gpu_set && invoke(g_wh_cross_kv_gpu, w, ds, enc_out)) {
@@ -1166,7 +1166,7 @@ def private scale_inplace(var x : array<float>; n : int64; s : float) {
 }
 
 // Self-attention over the K/V caches, causal (row r sees positions 0..p0+r), parallel over heads.
-// No extra score scale — q/k rows were pre-scaled hs^-0.25 (whisper.cpp order). Caches gemm at
+// No extra score scale — the hs^-0.25 factor is folded into the q/k rows instead. Caches gemm at
 // full Tmax width; softmax is row-length-limited, tail probabilities zeroed — stale columns never contribute.
 def private dec_self_attn(w : WhisperModel; var ds : DecoderState; l, n, p0 : int64) {
     let d = w.n_text_state
@@ -1224,8 +1224,7 @@ def private dec_self_attn(w : WhisperModel; var ds : DecoderState; l, n, p0 : in
 }
 
 // Cross-attention against the per-window kx/vx memory: non-causal over all Ta positions,
-// scores scaled hs^-0.25 before softmax (the other hs^-0.25 half lives in the pre-scaled
-// keys — whisper.cpp's soft_max_ext(KQ, scale) split).
+// scores scaled hs^-0.25 before softmax (the other hs^-0.25 half lives in the pre-scaled keys).
 def private dec_cross_attn(w : WhisperModel; var ds : DecoderState; l, n : int64) {
     let d = w.n_text_state
     let hh = w.n_text_head
@@ -1375,10 +1374,10 @@ def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array
     asr_prof_add("wh.dec.logits", tl)
 }
 
-// ===== greedy driver (whisper_full's single-decoder temp-0 path, fallback disabled) =====
+// ===== greedy driver (single-decoder temp-0 path, fallback disabled) =====
 
 let private NEG_INF_LOGIT = -1e30
-let private MAX_INITIAL_TS = 1.0    // whisper.cpp default: first timestamp can't exceed 1 s
+let private MAX_INITIAL_TS = 1.0    // reference default: first timestamp can't exceed 1 s
 
 // driver trace (debug rail, set_audio_encode_ref_dir's sibling): per-window seek/no-speech
 // state and every sampled (id, tid, plog)
@@ -1388,7 +1387,7 @@ def set_whisper_trace(on : bool) {
     g_whisper_trace = on
 }
 
-// whisper.cpp's whisper_process_logits filter suite, in its exact order. ``n_sampled`` /
+// The logit-filter suite for one sampling step, in the fixed order parity requires. ``n_sampled`` /
 // ``last_id`` / ``penult_id`` describe the window's sampled-so-far state (pairs rule),
 // ``has_ts``/``seek_delta`` drive the non-decreasing rule.
 def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; no_timestamps : bool;
@@ -1413,7 +1412,7 @@ def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; n
     logits[w.tok_translate] = NEG_INF_LOGIT
     logits[w.tok_transcribe] = NEG_INF_LOGIT
     logits[w.tok_prev] = NEG_INF_LOGIT
-    for (i in range(100)) {              // g_lang.size() is fixed at 100 in whisper.cpp
+    for (i in range(100)) {              // the reference suppresses a fixed 100 language slots - n_lang may be 99
         logits[w.tok_sot + 1 + i] = NEG_INF_LOGIT
     }
     if (no_timestamps) {
@@ -1478,7 +1477,7 @@ def private exp_sum4(p : float const?; n : int64; m : float) : float {
     }
 }
 
-// the last process_logits rule, applied AFTER the logprob normalizer is captured: if the
+// the last filter rule, applied AFTER the logprob normalizer is captured: if the
 // probability mass over timestamps beats every text token, force a timestamp. logprob
 // comparison == raw-logit comparison (log_softmax is a monotone shift).
 def private whisper_force_ts_rule(w : WhisperModel; var logits : array<float>) {
@@ -1498,8 +1497,8 @@ def private whisper_force_ts_rule(w : WhisperModel; var logits : array<float>) {
     }
 }
 
-// log-sum-exp over the current logits — the logprob normalizer whisper.cpp captures between
-// the main filter suite and the force-timestamp rule (plog = logit − this)
+// log-sum-exp over the current logits — the logprob normalizer, captured between the main
+// filter suite and the force-timestamp rule (plog = logit − this)
 def private logits_lse(logits : array<float>) : float {
     let n = long_length(logits)
     unsafe {
@@ -1550,7 +1549,7 @@ def private token_prob(logits : array<float>; id : int) : float {
 }
 
 // Build and emit one segment off toks[i0..i1) at [t0, t1] — text = concat of the text-range
-// token bytes; a segment with no text (bare timestamps) is dropped, whisper.cpp's rule.
+// token bytes; a segment with no text (bare timestamps) is dropped, the reference rule.
 def private emit_segment(w : WhisperModel; toks : array<SampledTok>; i0, i1 : int; t0, t1 : int64;
                          blk : block<(seg : TranscribeSegment)>) {
     let text = build_string() $(writer) {
@@ -1574,8 +1573,8 @@ def private emit_segment(w : WhisperModel; toks : array<SampledTok>; i0, i1 : in
     blk |> invoke(seg)
 }
 
-// The window loop (whisper_full's single-decoder temp-0 path, no_context): 30 s windows advanced
-// by decoded timestamps, whisper.cpp's logit-filter + segment-splitting rules. Reads ``ds.mel``,
+// The window loop (single-decoder temp-0 path, no carried context): 30 s windows advanced by
+// decoded timestamps under the logit-filter + segment-splitting rules. Reads ``ds.mel``,
 // scratch rides ``ds`` (no per-window alloc). ``complete_only`` stops before a partial-audio window (drain path).
 def private transcribe_mel_windows(w : WhisperModel; var es : EncoderState; var ds : DecoderState;
                                    lang_id : int; no_timestamps, translate : bool;
@@ -1630,7 +1629,7 @@ def private transcribe_mel_windows(w : WhisperModel; var es : EncoderState; var 
             if (t.id > w.tok_beg) {      // timestamp token (strictly above <|0.00|>) moves the window
                 let seek_delta_new = 2l * int64(t.id - w.tok_beg)
                 if (has_ts && seek_delta > seek_delta_new && result_len < i) {
-                    break                // "do not go back in time" — whisper.cpp fails the decoder here
+                    break                // "do not go back in time" — the reference decoder fails here instead
                 }
                 seek_delta = seek_delta_new
                 result_len = i + 1
@@ -1652,7 +1651,7 @@ def private transcribe_mel_windows(w : WhisperModel; var es : EncoderState; var 
         asr_prof_add("wh.decode_total", tw)
 
         // the no-speech gate: a confident nosp read on the prompt logits + low avg logprob
-        // over the kept tokens drops the window's segments (whisper.cpp defaults 0.6 / −1.0)
+        // over the kept tokens drops the window's segments (reference defaults 0.6 / −1.0)
         var avg_logprobs = NEG_INF_LOGIT
         if (result_len > 0) {
             var sum = 0.0
@@ -1666,7 +1665,7 @@ def private transcribe_mel_windows(w : WhisperModel; var es : EncoderState; var 
             print("window seek {seek} seek_end {seek_end}: {length(ds.toks)} sampled, result_len {result_len}, seek_delta {seek_delta}, nosp {no_speech_prob}, avg_lp {avg_logprobs}, no_speech {is_no_speech}\n")
         }
 
-        // split [0, result_len) into segments at timestamp tokens (whisper.cpp's emission loop)
+        // split [0, result_len) into segments at timestamp tokens
         if (result_len > 0 && !is_no_speech) {
             var i0 = 0
             var t0 = seek + 2l * int64(ds.toks[0].tid - w.tok_beg)
@@ -1689,7 +1688,7 @@ def private transcribe_mel_windows(w : WhisperModel; var es : EncoderState; var 
         }
 
         // a window whose kept tokens end text-then-SINGLE-timestamp (no closing pair) covered
-        // everything it could hear — skip the entire remaining chunk (whisper.cpp PR #2629)
+        // everything it could hear — skip the entire remaining chunk
         let single_ts_ending = (result_len > 1
             && ds.toks[result_len - 2].id < w.tok_beg
             && ds.toks[result_len - 1].id > w.tok_beg)
@@ -1766,9 +1765,9 @@ def create_session(w : WhisperModel; lang : string = "en") : WhisperSession {
     return <- s
 }
 
-//! whisper.cpp's whisper_lang_auto_detect: encode the stream's first 30 s window (from the
-//! spectrogram the caller left in ``ds.mel``), decode a bare [sot] prompt, and pick the
-//! language token with the highest probability. Returns the g_lang language id.
+//! Language auto-detect: encode the stream's first 30 s window (from the spectrogram the
+//! caller left in ``ds.mel``), decode a bare [sot] prompt, and pick the language token with
+//! the highest probability. Returns the language-table id.
 def whisper_detect_language(w : WhisperModel; var es : EncoderState; var ds : DecoderState) : int {
     whisper_mel_window(ds.mel, 0l, ds.win)
     whisper_encode(w.enc, es, ds.win)
@@ -1787,8 +1786,8 @@ def whisper_detect_language(w : WhisperModel; var es : EncoderState; var ds : De
 }
 
 // Resolve the session's language id, running auto-detect on the first audio that reaches a
-// driver. Detection reuses the session scratch; the main loop re-encodes window 0 (matches
-// whisper.cpp, which also pays one extra encode for auto).
+// driver. Detection reuses the session scratch; the main loop re-encodes window 0 (the
+// reference pays the same extra encode for auto).
 def private resolve_lang_id(w : WhisperModel; var s : WhisperSession) : int {
     if (s.lang_id < 0) {
         s.lang_id = whisper_detect_language(w, s.es, s.ds)
@@ -1884,7 +1883,7 @@ def whisper_detokenize(w : WhisperModel; toks : array<int> | #) : string {
     }
 }
 
-//! The whisper language codes, in g_lang id order (index == language id).
+//! The whisper language codes, in language-token id order (index == language id).
 def whisper_lang_list() : array<string> {
     return <- [
         "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr",
@@ -1899,7 +1898,7 @@ def whisper_lang_list() : array<string> {
         "mg", "as", "tt", "haw", "ln", "ha", "ba", "jw", "su", "yue"]
 }
 
-//! lang string ("en", "zh", ...) -> whisper language id (g_lang order). -1 when unknown.
+//! lang string ("en", "zh", ...) -> whisper language id (the table order above). -1 when unknown.
 def whisper_lang_id(lang : string) : int {
     let langs <- whisper_lang_list()
     for (i in range(length(langs))) {

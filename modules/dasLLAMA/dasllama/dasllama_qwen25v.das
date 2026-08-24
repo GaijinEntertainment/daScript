@@ -29,10 +29,10 @@ require math
 //! ClippableLinear sidecars. Oracle: llama-mtmd-debug -p encode on the f32-widened mmproj
 //! (`qwen3vl_plan.md` slice I, dumps in models/qwen3vl-vision-oracle/).
 
-let QWEN25V_ROPE_THETA = 10000.0   // models/qwen2vl.cpp hardcodes it — not in the gguf
+let QWEN25V_ROPE_THETA = 10000.0   // fixed for the family - not in the gguf
 let QWEN25V_MIN_TOKENS = 8
 let QWEN25V_MAX_TOKENS = 4096
-let QWEN25V_WINDOW_PX_DEFAULT = 112l   // clip.cpp: attn_window_size default when the key is absent
+let QWEN25V_WINDOW_PX_DEFAULT = 112l   // the attn_window_size default when the key is absent
 
 // per-block GEMM order — the block GEMM plane stride follows it
 let QWEN25V_GEMM_Q = 0l

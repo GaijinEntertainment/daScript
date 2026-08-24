@@ -7,7 +7,7 @@ require strings
 
 [test]
 def test_unicode(t : T?) {
-    // Category classification must match llama.cpp's unicode_cpt_flags_from_cpt.
+    // Category classification must match the upstream codepoint-flag classification.
     t |> run("letters") @(t : T?) {
         t |> success(cpt_is_letter(65))      // 'A'
         t |> success(cpt_is_letter(122))     // 'z'

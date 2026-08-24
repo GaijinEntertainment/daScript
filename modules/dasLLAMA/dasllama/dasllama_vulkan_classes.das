@@ -1391,7 +1391,7 @@ class AtAttn : AtAttnTileT {
     }
 }
 
-// ===== cm2 flash attention (llama.cpp's flash_attn_cm2 shape: Br=Bc=64, online softmax on
+// ===== cm2 flash attention (Br=Bc=64, online softmax on
 // whole-workgroup tiles). One wg per (head, 64-query tile); Q loads as an f32 accumulator and
 // use-converts to f16 A; K^T loads through the transpose view from the f16 K shadow; the causal
 // mask computes on the fly in a per-element callback (no mask buffer); softmax state, the P
@@ -1409,8 +1409,8 @@ def facm2_exp(r, c : uint; v : float) : float => exp(v)
 [spirv_per_element, unused_argument(r, c)]
 def facm2_pick(r, c : uint; v, o : float) : float => max(v, o)
 
-// causal: key kbase+c may not exceed query w0+q0+r (-FLT_MAX/2 keeps Mold-M NaN-free, llama.cpp's
-// choice); padding rows keep their causal window so no row is all -inf (rowsum stays positive)
+// causal: key kbase+c may not exceed query w0+q0+r (-FLT_MAX/2 keeps Mold-M NaN-free);
+// padding rows keep their causal window so no row is all -inf (rowsum stays positive)
 [spirv_per_element]
 def facm2_mask(r, c : uint; v : float; qbase, kbase : uint) : float => kbase + c > qbase + r ? -1.7e38 : v
 
@@ -1509,7 +1509,7 @@ class FaCm2H64 {
     }
 }
 
-// hs=128 (llama-3.2-3B-class): same algorithm at Bc=32 (llama.cpp's hsk>=256 cut — K^T/V/softmax
+// hs=128 (llama-3.2-3B-class): same algorithm at Bc=32 (the head-size cut — K^T/V/softmax
 // state at 32 columns, KV loop steps 32). Fast standalone (24.7 TFLOP/s, right beside the h64) and
 // WINS end-to-end when the shadows fit (3B 4287 vs 3955 no-fa) — serving is gated only on the
 // resident plan learning the f16 shadow cost (see the pf_facm2 gate)
@@ -2641,7 +2641,7 @@ class CmI8Batch : MoeCmBase {
     }
 }
 
-// the mul_mm L-tile variant (DASLLAMA_COOPMAT=mm): llama.cpp's aligned-L geometry — BM=BN=128
+// the mul_mm L-tile variant (DASLLAMA_COOPMAT=mm): the aligned-L geometry — BM=BN=128
 // BK=32, 4 warps 2x2 with 16 f16acc fragments each. Edge tiles bounce stores via cml_o
 [vk_dispatch(name = "q8_batch_mm_cls", grid = "wgs", params = "wgs : int64")]
 class MmBatch : MoeCmBase {
@@ -2853,7 +2853,7 @@ class MmBatch : MoeCmBase {
 }
 
 // the aligned L twin: staging guards + edge branch removed — its own pipeline for
-// d + every cnt 128-multiples, like lcpp's _aligned pipelines
+// d + every cnt 128-multiples
 [vk_dispatch(name = "q8_batch_mm_a_cls", grid = "wgs", params = "wgs : int64")]
 class MmABatch : MoeCmBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant words
@@ -3239,7 +3239,7 @@ struct VkQ8Blk {
     qs : uint[8]   // one fmt-0 q8 block: 32 packed int8 quants; the scale lives in wsh
 }
 
-// llama.cpp's cm2 quant "l" geometry on the NATIVE fmt-0 two-plane layout: 256 threads, one
+// the cm2 quant "l" geometry on the NATIVE fmt-0 two-plane layout: 256 threads, one
 // 128-weight x 256-token tile per wg, BK=64 (2 blocks) per step, 8x-unrolled k loop. The decode
 // METHOD reads the separate scale plane by block index — the reason the class-method decode form
 // exists. Binding 4 unused (sparse)
@@ -3296,7 +3296,7 @@ class Q8Cm2LBatch : MoeCmBase {
         // FAST PATH — every access of this tile provably in bounds and K a whole number of
         // BK steps: unclamped (clamp-Undefined) layouts, and the B/out strides masked to a
         // multiple of 8 f16 (identity here — pa.n and pa.d are 32-multiples — but the mask makes
-        // the alignment PROVABLE to the driver's address analysis, llama.cpp's stride &= ~7)
+        // the alignment PROVABLE to the driver's address analysis via stride &= ~7)
         if (m0 + 128u <= pa.d && xt * 256u + 256u <= cnt && (pa.n & 63u) == 0u) {
             var fla : tensorLayout2D
             tensorLayoutCreate(fla)
@@ -3423,7 +3423,7 @@ class Q8Cm2LBatch : MoeCmBase {
     }
 }
 
-// the m-tile sibling (llama.cpp's cm2 quant "m": BN=128, same A / BK / thread count) — picked by
+// the m-tile sibling (cm2 quant "m": BN=128, same A / BK / thread count) — picked by
 // cm2_tile_cols when the l grid underfills the SMs; body mirrors Q8Cm2LBatch at 128-token width
 [vk_dispatch(name = "q8_batch_cm2m_cls", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2MBatch : MoeCmBase {

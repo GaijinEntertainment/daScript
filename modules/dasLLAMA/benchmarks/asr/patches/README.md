@@ -6,7 +6,8 @@ benchmarked binary's identity: the version capture in the profiling rig records 
 
 ## mtmd-timing.patch
 
-Base: llama.cpp @ `ebd048fc5` (ggml-org/llama.cpp). Applied to the CPU-only build whose
+Base: the reference engine @ `ebd048fc5` (the upstream ggml-org checkout, `$LCPP` - the clone URL is in
+`../../../performance/setup_asr_rig.das`). Applied to the CPU-only build whose
 `llama-mtmd-cli` serves as the audio-in reference (`MTMD_BIN`). Three changes:
 
 1. `MTMD_TIMING encode_prefill_ms E decode_ms D total_ms T n_prefill P n_decode N` line on

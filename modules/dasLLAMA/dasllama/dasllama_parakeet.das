@@ -26,9 +26,8 @@ require dasllama/dasllama_common   // apply_box_profile_runtime for the parakeet
 require dasllama/dasllama_image
 
 // Parakeet-TDT (NVIDIA FastConformer + LSTM predictor + Token-and-Duration Transducer),
-// read from whisper.cpp's converted ggml bin. Oracle = whisper.cpp's in-tree parakeet-cli
-// (CPU, -ng); the container/graph/decode rules are transcribed from src/parakeet.cpp —
-// see parakeet_plan.md for the full spec and line references.
+// read from the whisper.cpp-converted ggml bin. Oracle = whisper.cpp's in-tree parakeet-cli
+// (CPU, -ng); see parakeet_plan.md for the container/graph/decode spec.
 
 let PARAKEET_HOP = 160l
 let private LOCAL_ATTN_THRESHOLD = 8192l   // beyond this the oracle switches to local attention
@@ -1601,9 +1600,9 @@ def private pk_trace_step(m : ParakeetModel; st : ParakeetState; t : int64; n_to
     print("] -> {bdur}\n")
 }
 
-//! Greedy TDT decode over the encoder rows in ``st.x`` — whisper.cpp's parakeet_decode loop:
-//! joint softmax per frame, argmax token + duration, blank advances time, duration 0 caps at
-//! n_max_tokens/frame. Tokens land in ``st.toks``.
+//! Greedy TDT decode over the encoder rows in ``st.x``: joint softmax per frame, argmax token
+//! and duration, blank advances time, duration 0 caps at n_max_tokens/frame. Tokens land in
+//! ``st.toks``.
 [hot_path]
 def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : int64) {
     st.toks |> clear()
@@ -1679,7 +1678,7 @@ def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : in
             continue
         }
 
-        // token probability renormalized over the token slice (the oracle's create_token_data)
+        // token probability renormalized over the token slice
         let plog = st.logits[best] - logz
         var tok_sum = 0.0lf
         for (i in range(n_tok_logits)) {
@@ -1703,7 +1702,7 @@ def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : in
 }
 
 //! SPM detokenize: ▁ becomes a space, except while the transcript is still empty inside the
-//! FIRST piece (the oracle's sentencepiece_piece_to_text rule); `<...>` control pieces
+//! FIRST piece (the oracle's piece-to-text rule); `<...>` control pieces
 //! render as nothing.
 def parakeet_detokenize(m : ParakeetModel; toks : array<ParakeetToken> | #) : string {
     var segs : array<string>

@@ -91,7 +91,7 @@ def template dot_mx4q8_template(lut : int8 const ?; wn : uint8 const ?; we : uin
         let lutv = reinterpret<byte16 const?>(lut)[0]
         let wv = reinterpret<ubyte16 const?>(wn)
         let xv = reinterpret<byte16 const?>(xq)
-        for [tune = 1] (bi in range64(nb)) {   // fallback u2 = ggml's ib += 2 shape
+        for [tune = 1] (bi in range64(nb)) {   // fallback u2 = two blocks per iteration
             let nib = wv[bi]
             var acc = idot4(shuffle(lutv, nib), xv[bi * 2l])
             acc = idot4(acc, shuffle(lutv, nib >> 4), xv[bi * 2l + 1l])
@@ -101,7 +101,7 @@ def template dot_mx4q8_template(lut : int8 const ?; wn : uint8 const ?; we : uin
     return f
 }
 
-//! MXFP4·Q8 dot in plain das (ggml_vec_dot_mxfp4_q8_0's shape): one nibble load, two shuffle LUT
+//! MXFP4·Q8 dot in plain das: one nibble load, two shuffle LUT
 //! lookups (low via the &15 mask, high via the per-byte >> 4), each idot4'd against the Q8
 //! activation (one TBL + one SDOT each on arm64 JIT). Not `private`: called from lifted workers.
 [hint(unsafe_range_check, noalias = lut, noalias = wn, noalias = we, noalias = xq, noalias = xs), tuned(fallback = "u2")]
@@ -333,7 +333,7 @@ def template dot_q8q8_laneq4x4_template(var yp : float ?; wg : int8 const ?; sg 
     }
 }
 
-//! 4-row × 4-token tile (llama.cpp ggml_gemm_q8_0_4x4 structure): shared weight v16i8 per chunk-lane
+//! 4-row × 4-token tile: shared weight v16i8 per chunk-lane
 //! feeds all 4 tokens (LLVM CSEs to one load, 4x fewer than 4× laneq4); 4 independent accumulators
 //! give SDOT the ILP a single chain can't. Not `private`, t0 % 4 == 0 and ntok-t0 >= 4 assumed.
 [hint(unsafe_range_check, noalias = wg, noalias = sg, noalias = xqp, noalias = xsp), tuned(fallback = "u2")]

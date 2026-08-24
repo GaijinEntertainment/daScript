@@ -1,12 +1,12 @@
 options gen2
 options indenting = 4
 
-// scratch probe: OUR dasSpirv port of llama.cpp's matmul_q8_0_f32_f16acc_aligned_l config vs THEIR
-// compiled spv, same device buffers, one shape (the 24-TF headline: m=9728 k=2560 n=512).
-// Their exact geometry: BM=128 BN=128 BK=32, 4 warps in 2x2, each warp 64x64 = 4x4 f16acc fragments
+// scratch probe: OUR dasSpirv kernel at the matmul_q8_0_f32_f16acc_aligned_l config vs the
+// compiled reference spv, same device buffers, one shape (the 24-TF headline: m=9728 k=2560 n=512).
+// Geometry both: BM=128 BN=128 BK=32, 4 warps in 2x2, each warp 64x64 = 4x4 f16acc fragments
 // (16 MMAs per TK step, A frag cached per row, B frag loaded per MMA), shared f16 pairs SST=BK/2+4.
 // A is the gguf block_q8_0 byte stream (d f16 + 32 qs = 17 uint16s), dequantized during staging;
-// B is f32, converted to f16 during staging. Success = matching their TFLOPS on the same harness.
+// B is f32, converted to f16 during staging. Success = matching the reference TFLOPS on the same harness.
 
 require vulkan public
 require vulkan/vulkan_boost public
@@ -22,7 +22,7 @@ let DISPATCHES = 32
 
 let SST = 20             // shared row stride in uints (f16 pairs): BK/2/2 uints data (8) ... 16 f16 + 4 pad v2 = 20 v2 units == 20 uints? (v2=2 f16=1 uint)
 
-// their l_warptile_mmq spec for the reference pipeline
+// the l_warptile_mmq spec for the reference pipeline
 let SPEC = fixed_array<uint>(128u, 128u, 128u, 32u, 64u, 64u, 2u, 16u, 16u, 16u, 32u, 1u)
 
 // ===== OUR kernel =====
@@ -92,7 +92,7 @@ def ourmm_kernel {   // nolint:STYLE038 - compute-shader body; the staging/barri
             buf_b[o + 1] = packHalf2x16(v.zw)
         }
         barrier()
-        // 2 TK steps x (4 A rows x 4 B cols): A cached per row, B loaded per MMA — their order
+        // 2 TK steps x (4 A rows x 4 B cols): A cached per row, B loaded per MMA — the reference order
         for [unroll] (ks in range(2)) {
             var ca : coopmatA_f16_16x16
             var cb : coopmatB_f16_16x16
@@ -415,7 +415,7 @@ def main {   // nolint:STYLE038 - linear Vulkan probe; every `var inscope` handl
     cpci.queueFamilyIndex = gfx
     var inscope pool <- create_command_pool(device, cpci)
 
-    // shared descriptor layout: 4 storage buffers (theirs uses 0-2, ours also binds meta at 3)
+    // shared descriptor layout: 4 storage buffers (the reference uses 0-2, ours also binds meta at 3)
     var dslci : DescriptorSetLayoutCreateInfo
     dslci.pBindings |> reserve(4)
     for (bi in range(4)) {
@@ -429,7 +429,7 @@ def main {   // nolint:STYLE038 - linear Vulkan probe; every `var inscope` handl
     dpci.pPoolSizes |> push(DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_BUFFER, descriptorCount = 128u))
     var inscope desc_pool <- create_descriptor_pool(device, dpci)
 
-    // pipeline layouts: theirs (push constants), ours (none)
+    // pipeline layouts: the reference (push constants), ours (none)
     var plci_t : PipelineLayoutCreateInfo
     plci_t.pSetLayouts <- [weak_copy(set_layout)]
     var pcr : PushConstantRange
@@ -445,7 +445,7 @@ def main {   // nolint:STYLE038 - linear Vulkan probe; every `var inscope` handl
     var our_words <- clone_to_move(ourmm_spv)
     let pipe_ours = make_raw_pipeline(dev, our_words, boost_value_to_vk(layout_o), false)
 
-    // stats for ours (theirs already dumped by _lcpp_mulmm_isolated)
+    // stats for ours (the reference was already dumped by _lcpp_mulmm_isolated)
     var inscope pw <- vk_value_to_boost(pipe_ours)
     pw._needs_delete = true
     pw._device = unsafe(reinterpret<uint64>(dev))

@@ -20,7 +20,7 @@ require _vision_oracle   // the mtmd dump parser, fixture generators, per-token 
 // Fixtures: pre-resized [0,1] float canvases - no preprocessing, so a diff isolates the tower math.
 
 let private TIER1_ABS = 2e-4
-// x token rms. Poison-calibrated: 27 blocks whose GELU rides ggml's f16 LUT quantize the
+// x token rms. Poison-calibrated: 27 blocks whose GELU rides the f16 LUT quantize the
 // summation-order drift between das GEMMs and the reference's to a measured floor of
 // 0.6-3.2e-3 (the ff_pad width regroups the down GEMM's f32 accumulation - red448 tops the
 // set; the solid-color fixtures sit at low rms, where the floor shows; preproc, the

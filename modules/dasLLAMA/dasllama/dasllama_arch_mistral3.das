@@ -8,7 +8,7 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
-// Mistral Medium 3.5 (llama.cpp arch "mistral3") — the llama dense shape (NORM rope, SiLU FFN,
+// Mistral Medium 3.5 (GGUF arch "mistral3") — the llama dense shape (NORM rope, SiLU FFN,
 // no QK-norm) with YaRN rope (factor 64 over a 4096 original context, beta_fast 4) and the
 // v7-tekken chat format ([SYSTEM_PROMPT] system role, unspaced [INST], EOS-closed assistant
 // turns). The optional llama4-style attention temperature scaling (attention.temperature_scale)

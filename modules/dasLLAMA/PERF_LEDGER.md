@@ -12,6 +12,38 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED - the Metal q8 decode GEMV family ran one-row-per-simdgroup with a full-n walk,
+  spilling the x vector past L1 from n=4096; the reduction-split form takes every q8 model
+  (measured 2026-08-24, M1 Max, the decode-tg chase).** The dig: qwen3vl text cells were
+  never on the ladder - fresh pairs showed tg -9.6% (8B) / -11% (4B) vs upstream with pp at
+  parity; the per-step trace (`benchmarks/decode_step_trace.das`, -p 0) put 99% of the step
+  in GPU execution (gap 0.5 ms, sched 0.1 ms); the knockout ladder (the same trace under
+  `DASLLAMA_METAL_DECODE_SKIP` arms) attributed 86% of the step to the GEMV class at 309-334
+  GB/s achieved vs upstream's ~352 effective; the GEMV lab
+  (`benchmarks/matmul/bench_metal_gemv_kernels.das`) at new 8B shapes
+  showed the production form dominated at every shape, small-n included - the old "at the
+  wall" verdict had measured the form's own ceiling (the per-shape rates settle in the lab's
+  own report, per benchmarks/REVIEW.md). Mechanism: one row per simdgroup walks the FULL
+  reduction, so the shared x stream (n x 4B) spills L1 at n>=4096 and every weight load
+  pairs with a stalled x load; the fix splits the reduction across the tg's 4 simdgroups
+  (n/4 window per sg, L1-resident at every decode dim) and shares each x load across 2 rows,
+  reducing cross-sg via tgmem + two barriers. Swapped: `MetalQ8Gemv` (wo, dense w2, logits,
+  ASR-decoder sites), the fused `qkv_rs16/rs32` (one tg per rope pair) and `w13sw16` (one tg
+  per hidden row); `MetalDnBa` (d = dt_rank 16..64) keeps the old shape for occupancy.
+  Results (tg, das vs upstream; the released `lcpp_bench` exe, r=3, quiet M1 Max): 8B
+  36.4 -> 39.3 (-2.3%, was -9.6%), 4B 62.3 -> 65.4, E2B
+  96.2 -> 98.8 (+15% lead), E4B 52.8 -> 55.3 (tie -> +4.3% ahead), gemma-3-4b 66.2, Omni-30B
+  71.2; pp cells unchanged everywhere. NOTE the fused-kernel ports measured near-zero on the
+  8B (qwen3 never dispatches qkv_rs - qk_norm disqualifies fused_qkv - and w13sw's two weight
+  streams already amortized x); they pay on the families that do dispatch them. **OPEN
+  followups: (1) the fixed per-step submission overhead (~0.5 ms GPU-idle gap + ~0.3 ms
+  encode) is now the WHOLE remaining deficit - it is why qwen-4B/gemma-3-4b sit at -6..-7%
+  and the 8B at -2.3% (encode-ahead is the lever); (2) residual kernel headroom - the qkv
+  class runs below the form's isolated lab rate in situ (knockout ladder vs the lab's own
+  report).** E2B attribution for the ladder
+  lead: the non-GEMV half (fused chains) costs das ~2.7 ms/token vs upstream's ~5 - the win is
+  op-fusion overhead on the machinery-heavy E-series, not GEMM speed.
+
 - **MOSTLY LANDED (was OPEN, narrowed by slice J) - the first Metal submission after a
   CPU-only window repaid the kernel-side driver window; the residency-set HEARTBEAT removes
   ~85% of it (measured 2026-08-23, M1 Max; probe = `harness/residency_ramp_probe.das`, the
@@ -20,10 +52,9 @@ what it costs today and what the fix would change.
   The four-timestamp split localized the whole ramp to drv = kernelStart->kernelEnd (queue
   and GPU execution FLAT): warm 0.11 ms, 200-1000 ms burn ~1.2 ms, 3000 ms burn 17.7 ms.
   The long-window mechanism is the OS collecting a committed+requested `MTLResidencySet`
-  during inactivity - llama.cpp's comment names it verbatim, and their cure is a background
-  thread re-calling `requestResidency` every 5 ms (`ggml-metal-device.m`). Copied:
-  `metal_residency_set_heartbeat` in dasMetal (5 ms cadence, keep-alive countdown), kicked
-  from `residency_flush` per served step, knob `DASLLAMA_METAL_HEARTBEAT_S` (default 180 s,
+  during inactivity - the cure is a background thread re-calling `requestResidency` every
+  5 ms: `metal_residency_set_heartbeat` in dasMetal (5 ms cadence, keep-alive countdown),
+  kicked from `residency_flush` per served step, knob `DASLLAMA_METAL_HEARTBEAT_S` (default 180 s,
   0 = A/B rail). Probe ladder at the 3000 ms burn (drv ms, x2 each): baseline 17.7/17.8,
   heartbeat 2.95/3.01, whole-map anchor buffer 18.5/18.1, heartbeat+anchor 2.94/3.00 - the
   heartbeat takes the win alone. REFUTED by that ladder: the whole-map no-copy anchor (one
@@ -35,7 +66,11 @@ what it costs today and what the fix would change.
   tracked (untracked reds `test_metal_prefill_parity`). **OPEN residual:** ~1-3 ms drv on
   the first submission after a multi-hundred-ms window, scaling with window length,
   insensitive to residency cadence AND page pinning - the driver/GPU idle-state wake class;
-  no user-space lever found (pulse trains already refuted), live with it.
+  no user-space lever found (pulse trains already refuted), live with it. **Post-merge
+  bench confirmation (2026-08-24, fresh rig at the merged master):** the heartbeat also
+  removed the ~40 ms commit->execution slack slice J could only name inside the image turn
+  (timed prefill 652 -> 612 ms) - qwen img:pp gaps halved, 4B/8B -16% -> -7%, 30B -4%
+  unchanged, encode flat; the encode->prefill hand-off IS a CPU-only window.
 
 - **OPEN - arming Metal makes the CPU q8 tower encode ~1.7x slower (measured 2026-08-23,
   M1 Max, 8B qwen3v tower: 3.26-3.45 s with MetalMode.required vs 1.90 s on the CPU leg,
@@ -45,22 +80,22 @@ what it costs today and what the fix would change.
   Costs every Metal-leg image cell ~1.4-1.6 s of encode today; the Metal tower deletes the
   arm entirely, but the mechanism matters wherever a CPU encoder coexists with Metal serving.
 
-- **RULED AND LANDED - the spliced image prefill trailed llama.cpp on Metal; the fused span
+- **RULED AND LANDED - the spliced image prefill trailed upstream on Metal; the fused span
   eval closed it (measured 2026-08-21, M1 Max, the fused-image-span arc).** The record-grade
-  gap was das/lcpp **0.52-0.62x** `img:pp` across all three vision models (E2B 687 vs 1101,
+  gap was das/upstream **0.52-0.62x** `img:pp` across all three vision models (E2B 687 vs 1101,
   E4B 362 vs 658, 12B 140 vs 268 tok/s) while das led every CPU prefill, encode and decode
   cell. Two hypotheses refuted by per-slice probes (`eval_embd_slice_` timing +
   `metal_prefill_stage_stats`): NOT a CPU fallback (all quanta served on Metal, blob models
   exempt the `min_npos` floor, zero declines) and NOT submit/readback (gpu ~ wall, CPU-side
-  ~ 4 ms/turn). Also refuted: "llama.cpp runs one graph over the whole span" - it issues the
-  SAME three decodes (`mtmd_helper_eval_chunk_single`, causal-flag toggled around the image
+  ~ 4 ms/turn). Also refuted: "upstream runs one graph over the whole span" - it issues the
+  SAME three decodes (one per chunk, causal-flag toggled around the image
   chunk). The measured mechanism is the **pad-64 GEMM floor**: the mul_mm M tile pads every
   quantum to 64 rows (`mp = ((npos+63)/64)*64`), so the ~5-token head and ~21-token tail each
   billed a full 64-row GEMM pass through the stack - E2B slices 58.7 / 123.2 / 54.6 ms and
   head+tail 48 % of the wall for 17 % of the positions, measured by a temporary -jit per-slice
   probe (a `ref_time_ticks` wrap in `eval_embd_slice_` + `metal_prefill_stage_stats`, both
   reverted; `harness/prefill_msweep_probe.das` is the kept instrument), while the rows slice
-  alone already ran at lcpp's whole-span rate. **The fix:** `eval_embd_span_` issues ONE eval with a per-query
+  alone already ran at the upstream whole-span rate. **The fix:** `eval_embd_span_` issues ONE eval with a per-query
   mask - span rows [ulo, uend) uniform, head/tail causal - through the CPU flash/blocked/
   classic arms and `AttnArgs.ulo` on Metal (DASLLAMA_VERSION 7); the three-eval splice remains
   the vulkan-leg fallback and the `set_span_fuse(false)` parity rail. Record-grade after the
@@ -76,7 +111,7 @@ what it costs today and what the fix would change.
   the GEMM family at 96 % of the wall at both M. Every prefill kernel's M grid is `mp/32`
   (weight mul_mm, kq twins, attention trio), so the `mp = ceil64(npos)` pad billed a dead
   32-row GEMM block on every short prefill; the fix is `ceil32`. Record-grade image cells
-  after (released rig, refs adjacent): 12B **268.0** tok/s (lcpp 270.7 - parity within
+  after (released rig, refs adjacent): 12B **268.0** tok/s (upstream 270.7 - parity within
   noise), E4B **713.7** (663.1), E2B **1400.2** (1102.6) - das leads or ties every Metal
   image-prefill cell. The pad cut also reaches every Metal-served model's short prefill
   (`npos % 64` in [1, 32] - the interactive-prompt shape; pp512 cells sit at % 64 == 0, which
@@ -155,7 +190,7 @@ what it costs today and what the fix would change.
   emitted, per-box-tuned attention family - convert-in-tile f16 dots, optional int8 QK
   (requant Q once, vnni/sdot straight against q8 KV - q8 flips from slowest cache format to
   likely fastest), softmax fused into the flash walk. **Why it's a WIN, not catch-up (Boris
-  2026-08-05): llama.cpp runs the same dequant-to-f32-scratch seam - an emitted tile is
+  2026-08-05): upstream runs the same dequant-to-f32-scratch seam - an emitted tile is
   'potentially faster' than the ref, and the deep-clip audio cards on the site are the
   ready-made scoreboard.** NOT the quant-lane arc; a kernel arc of its own, eventually.
 
@@ -240,14 +275,14 @@ what it costs today and what the fix would change.
   Remaining quantified levers, by size: (1) **the dispatch model - MEASURED from both sides
   (2026-07-23 evening, same-window)**: das encodes **780 dispatches/step @8 / 811 @512** (new
   metal_dispatch_call_count instrument), every one implicitly barriered on the serial encoder.
-  llama.cpp's own knobs price the structure on this exact model (tg128, +/-0.4% reps): stock 58.50
+  upstream's own knobs price the structure on this exact model (tg128, +/-0.4% reps): stock 58.50
   t/s; GGML_METAL_CONCURRENCY_DISABLE **52.17 (+2.08ms/tok)**; FUSION_DISABLE 53.90 (+1.46);
-  GRAPH_OPTIMIZE_DISABLE 53.96 (+1.44) - lcpp-with-serial-encoder lands in OUR class, i.e. no
+  GRAPH_OPTIMIZE_DISABLE 53.96 (+1.44) - upstream-with-serial-encoder lands in OUR class, i.e. no
   kernel section loses; the whole gap is dispatch structure. Same-window das: chase full @8
-  **62.3 t/s (16.05ms) - AHEAD of lcpp stock 58.50** under real greedy decode; the llama-bench-
+  **62.3 t/s (16.05ms) - AHEAD of upstream stock 58.50** under real greedy decode; the llama-bench-
   protocol rail reads 55.75 +/-3.20 (synthetic-id feed perturbs the spec chain + the rail's tg is
   intrinsically noisy - the recorded 50.31 +/-2.2 board cell is protocol-dragged and/or tinted).
-  The port blueprint is llama.cpp's ggml_mem_ranges (ggml-metal-common.h): concurrent encoder +
+  The blueprint: a concurrent encoder +
   per-op src/dst range tracking - barrier + reset only when a new op's ranges conflict with the
   live set - plus ew-chain fusion and a graph-reorder pass that grows concurrent sets. Our shape:
   an enc_dispatch wrapper in dasllama_metal_common taking declared read/write (buffer, off, len)
@@ -271,7 +306,7 @@ what it costs today and what the fix would change.
   only change speed) + a shape-class schedule cache (FNV over the pso sequence, compiled once)
   with ASAP leveling over the conflict DAG + the g4 dense-shared/qwen35moe-shexp scratch split
   (own bh12s panel).** Measured 26B: @8 69.23 t/s gpu 14.40ms, @512 62.90 gpu 15.87 - cumulative
-  vs serial @8 +9.7%/-1.41ms (das now well ahead of lcpp stock 58.50 same-window); barriers
+  vs serial @8 +9.7%/-1.41ms (das now well ahead of upstream stock 58.50 same-window); barriers
   634->574 (the split's 2 levels/layer; leveling found nothing else - depth 574 IS the true
   chain). 12B (dense, no branch): unchanged, as expected. 26B/qwen35moe tolerance cells
   byte-identical maxd under STRICT; llama arm1/7/13 token-exact.
@@ -401,7 +436,7 @@ what it costs today and what the fix would change.
 - **QK-norm rope-store fusion - the f16 single-stream H-form SHIPPED (wave A chase round 2);
   the rest of the family is the residual (2026-07-17).** MetalRopeStoreHF16 folds bias +
   per-head RMS + rope + store into one threadgroup-per-head dispatch on QK-norm x f16-mirror
-  single-stream decode (+~1% on the 4B board; Q6_K B=1 tied lcpp exactly). Residual scope,
+  single-stream decode (+~1% on the 4B board; Q6_K B=1 tied upstream exactly). Residual scope,
   build when a board shows the gap: the f32/q8_0/tq4 codec twins and the BATCH H twins
   (those paths keep the MetalQkNorm prepass + flat rope-store - batch amortizes the extra
   dispatch over B rows, so the gap is smaller there), and a norm-capable fused qkv_rs
@@ -470,11 +505,11 @@ what it costs today and what the fix would change.
   per-region "stay-fp32 when the mat fits cache and the box lacks int8-dot silicon" load
   heuristic (or a box_profile knob like batch_grid_2d) - DON'T build until the M1 decoder-q8
   re-sweep says whether sdot boxes want q8 everywhere (likely yes -> knob would be x64-only).
-- **Gemma-4 E-series DENSE prefill trails lcpp Accelerate-BLAS on M1 (Wave G3 A/B, 2026-07-07).**
-  E4B pp512 das **178.7** vs lcpp **192.9 = 0.93x**; E2B pp512 das **376** vs lcpp **382 = 0.98x**
+- **Gemma-4 E-series DENSE prefill trails upstream Accelerate-BLAS on M1 (Wave G3 A/B, 2026-07-07).**
+  E4B pp512 das **178.7** vs upstream **192.9 = 0.93x**; E2B pp512 das **376** vs upstream **382 = 0.98x**
   (E2B ties, E4B ~7% back). Decode tied both (bandwidth-bound: E4B 18.7/19.2, E2B 36.0/36.9).
-  Root: dense prefill has no sparsity/grouping lever (unlike the MoE waves that LED lcpp), so it's
-  das NEON-SDOT vs lcpp Accelerate-BLAS (AMX-backed) on the projection/FFN GEMMs - the larger E4B
+  Root: dense prefill has no sparsity/grouping lever (unlike the MoE waves that LED upstream), so it's
+  das NEON-SDOT vs upstream Accelerate-BLAS (AMX-backed) on the projection/FFN GEMMs - the larger E4B
   dim (2560 x ff 10240) favors AMX more, hence 0.93x vs E2B's 0.98x. Cost today: ~7% E4B prefill
   on M1 only; boxes without AMX exposure (zen2/SPR VNNI) already close it. Possible lever: a
   gemm-gen tuned Q8 kernel for the E-series shapes (the tune framework already exists) - don't
@@ -494,7 +529,7 @@ what it costs today and what the fix would change.
   The parity gate is fp32 encoder correctness, so the gemma4a Conformer runs a plain fp32 scalar
   forward. A/B (M1 Max 8T, das vs llama-mtmd-cli; `benchmarks/asr/results.md`, now git history): das transcribe
   6028 ms / xRT 2.89 vs mtmd-cli 1547 ms / xRT 11.3 -> **das TRAILS 3.9x**, dominated by the encoder:
-  das encode 1888 ms vs mtmd 117 ms = **16x** (fp32 scalar Conformer vs ggml's bf16-weight SIMD
+  das encode 1888 ms vs mtmd 117 ms = **16x** (fp32 scalar Conformer vs upstream's bf16-weight SIMD
   GEMMs); long-context decode 21.7 vs 78 tok/s also lags. Unlike A1/parakeet/whisper (which lead or
   tie), this tower has had NO perf pass. Fix: route the gemma4a tower through the gemm-gen Q8 audio
   kernel (the same SIMD/threaded machinery parakeet/whisper towers already use) - likely the single
@@ -505,7 +540,7 @@ what it costs today and what the fix would change.
   8T, das vs llama-mtmd-cli): jfk das 3625 ms / xRT 3.03 vs mtmd 1173 / 9.4 = **das trails 3.09x**;
   jfk3 das 8263 / 3.99 vs mtmd 2079 / 15.9 = **3.97x**. Dominant gap = the fp32 scalar qwen3a tower
   (~4.8x encode), same lever as the gemma4a entry above - SIMD/Q8 the shared AuT/qwen3a encoder
-  covers BOTH A2 and A3. The q8 MoE thinker (grouped prefill ~207 t/s + q8 decode) also trails ggml.
+  covers BOTH A2 and A3. The q8 MoE thinker (grouped prefill ~207 t/s + q8 decode) also trails upstream.
   [!] These A/B numbers are SOFT: measured with a dormant Parsec host daemon (1.6% CPU) + Spotlight
   indexing the freshly-downloaded 34 GB - a clean announced Parsec-off re-sweep would firm them (parity
   is unaffected). Not chased mid-wave.
@@ -523,13 +558,13 @@ what it costs today and what the fix would change.
   parity + jfk best-of-3 + LS p50 before/after, both boxes.
 
 - **DONE SHIPPED + SILICON-ADJUDICATED (zen2, 2026-07-05): 2-D batch chunk space (row-units x
-  token-blocks).** Landed as `batch_grid_2d` (0 = 1-D / 1 = fine grid, ggml's 16-token cells /
+  token-blocks).** Landed as `batch_grid_2d` (0 = 1-D / 1 = fine grid, 16-token cells /
   2 = wave-aligned, rc*ntc = whole L-waves); the knob arms a per-dispatch auto-gate (engages only
   when the 1-D grain cap starves the admitted lanes), gen ts=4 walk factored into a shared
   body_cell so the off-path is the old walk verbatim; bit-exact all three ways (op-level test +
   512-tok GEN_IDS on both boxes). zen2 A/B (T=48, 3 interleaved reps): 135M pp512 knob2 +7.9%
   (every rep; +15% in the post-pin interleaved confirm), knob1 only +2.8% - **wave alignment
-  beats ggml's amortize-the-tail at one-claim-per-lane granularity, the same physics as the 1-D
+  beats amortize-the-tail chunking at one-claim-per-lane granularity, the same physics as the 1-D
   wave invariant**; 1B +3-4% (kv d=512 starves); Qwen3-0.6B null as geometry predicts (nothing
   starves at 48 lanes); T=24 control identical (gate can't engage). zen2 profile pinned
   `batch_grid_2d: 2`; M1 pin stays off (<=11 lanes can never starve - verified no-regress).
@@ -537,14 +572,14 @@ what it costs today and what the fix would change.
   fine-vs-aligned may flip where claim overhead differs). Original scoping kept below.
   Our batch dispatch chunks over out-row units only; tokens loop inside each chunk. Shapes
   with few row-units starve high lane counts (135M d=576 -> ~5-36 chunks for 48 lanes; the
-  Qwen3-0.6B attn_chain "deep-thin" 50% lead is the same geometry). llama.cpp's GENERIC path
-  chunks 2-D - (out-rows x tokens) grid, chunk 16, one atomic counter, all architectures
-  (ggml-cpu.c:1388-1442) - which is exactly why their mid/high-lane scaling holds on tiny
-  models where our gated pool tops out. Our batch walk already loops tokens inside units, so
+  Qwen3-0.6B attn_chain "deep-thin" 50% lead is the same geometry). The upstream GENERIC path
+  chunks 2-D - (out-rows x tokens) grid, chunk 16, one atomic counter, all architectures -
+  which is exactly why its mid/high-lane scaling holds on tiny models where our gated pool
+  tops out. Our batch walk already loops tokens inside units, so
   the chunk space generalizes mechanically (matmul_chunks gains a token axis; worker chunk =
   (unit range, token-block range)); y-slices stay disjoint by construction. Ordering: linearize
   ROWS-FASTEST (concurrent workers then share the token block's activation slice in LLC and
-  stream disjoint weight rows - lcpp's choice; their counter-starts-at-nth first-wave trick is
+  stream disjoint weight rows; starting the counter at the nth chunk on the first wave is
   the rank gate's natural analog on our side). **Delivery shape (Boris, 2026-07-05): a PIN per
   architecture, not a default rewrite** - the 1-D scheme already wins 2 of 3 ladder rungs
   head-to-head (avx2, vnni) and the M1/zen2 boxes; 2-D lands as a box_profile knob (default
@@ -552,8 +587,7 @@ what it costs today and what the fix would change.
   (SPR-class high-T tiny models, deep-thin attn shapes). Candidate refinement to discuss at
   implementation: an in-code auto-gate that only engages 2-D when the 1-D unit count starves
   the admitted lanes (units < k*lanes) - the knob then pins the gate rather than the mode.
-  Sized: the 135M-class T>=24 residual vs lcpp (their 0.90-1.0 cells) + the attn_chain lead.
-  (Spotted reading their amx/generic drivers during SPR session 3, 2026-07-05.)
+  Sized: the 135M-class T>=24 residual vs upstream (its 0.90-1.0 cells) + the attn_chain lead.
 - **DONE SHIPPED (audio arc, 2026-07-06): the Qwen2-Audio arc (speech->text, Boris 2026-07-05).**
   Landed token-for-token vs mtmd, then grew into the whole audio wave - whisper-proper ASR
   (6-model family sweep), Ultravox/Qwen2.5-Omni/Voxtral, Qwen3-ASR (new qwen3a chunked
@@ -567,7 +601,7 @@ what it costs today and what the fix would change.
   attention) -> avg-pool -> linear projector -> soft tokens spliced at the `<|audio|>`
   placeholder; the decoder is our EXISTING qwen2 arch untouched (no cross-attention anywhere).
   New pieces: im2col gather, encoder forward, embedding-span prefill (driver), mmproj GGUF
-  loader; oracle = llama.cpp mtmd (GGUF pairs ship). ~1 modest arc; the encoder is SHARED
+  loader; oracle = the upstream mtmd tool (GGUF pairs ship). ~1 modest arc; the encoder is SHARED
   infrastructure - the same implementation unlocks Ultravox (llama-3 decoder yes have it) and
   ~80% of a Whisper-proper port later.
 - **DONE SHIPPED (kq chain regrain, 2026-07-12 PM^2): kq layers re-admitted to both fused decode
@@ -588,7 +622,7 @@ what it costs today and what the fix would change.
   (`unpack_kq_panel_grp`, SWAR uint64 deposit), amortizing the 5/6-bit deposit over TB=128
   tokens instead of the tile's 4; the DRAM planes KEEP the packed 160/192 B/superblock form
   the decode path streams. M1 Max e2e (Qwen3-4B, warm/quiet, 3 alternated reps): Q5 pp512
-  110 -> 150-168 (lcpp 131 -> das 1.14-1.28x), Q6 111 -> 140-143 (lcpp 138.5 -> 1.01-1.03x),
+  110 -> 150-168 (upstream 131 -> das 1.14-1.28x), Q6 111 -> 140-143 (upstream 138.5 -> 1.01-1.03x),
   tg64 at v2 parity (Q5 ~33.7, Q6 ~30.5, Q4 control untouched). Iso tile: k5 65->89, k6
   58->76 GMAC/s at the probe's x16 amortization (~94/~79 effective at production x32).
   **THE LESSON (measured, do not re-learn):** pure byte-expanded DRAM planes (no scratch)
@@ -609,22 +643,22 @@ what it costs today and what the fix would change.
   E-core lane placement is EXONERATED - nothing to pin. **METHOD RULE: report the
   steady-state MEDIAN of >=3 back-to-back reps and discard the first-after-idle rep;
   best-of-N systematically picks the boost outlier.** Steady-state scoreboard (M1 Max,
-  Qwen3-4B vs lcpp steady): Q5 ~150 vs 131 = 1.15x, Q6 ~141 vs 138.5 = 1.02x, Q4_K_M
+  Qwen3-4B vs upstream steady): Q5 ~150 vs 131 = 1.15x, Q6 ~141 vs 138.5 = 1.02x, Q4_K_M
   ~155-158 vs 172 = 0.90x.
 - **DONE RACED (zen2, 2026-07-12 PM^2, 16 affinity-pinned cores both sides, ABBA before=52a22a39b
-  after=3d78ca8ef, Qwen3-4B): das WINS Q5 pp 1.84x / Q6 1.32x vs lcpp; the kq v2+v3 arc itself
-  is ~NEUTRAL on the maddubs lattice.** pp512 das-after/lcpp: Q4 161-180 vs 168.3 (~parity -
-  their one AVX2 K-quant repack), Q5 158-161 vs 87.0 (**1.84x**), Q6 128-130 vs 98.0
-  (**1.32x**); tg64 ~ lcpp parity all three (19.3/16.6/14.5 vs 19.25/16.87/14.69). ABBA
+  after=3d78ca8ef, Qwen3-4B): das WINS Q5 pp 1.84x / Q6 1.32x vs upstream; the kq v2+v3 arc itself
+  is ~NEUTRAL on the maddubs lattice.** pp512 das-after/upstream: Q4 161-180 vs 168.3 (~parity -
+  its one AVX2 K-quant repack), Q5 158-161 vs 87.0 (**1.84x**), Q6 128-130 vs 98.0
+  (**1.32x**); tg64 ~ upstream parity all three (19.3/16.6/14.5 vs 19.25/16.87/14.69). ABBA
   before->after: Q4/Q5 pp par-to-+3%, **Q6 pp -4.6%** (135.2->129.0 median), tg within noise
   (Q4 -4%, Q5 +2%, Q6 -3%). Reading: the M1 unpack win was an sdot-lattice property - on
-  Zen2's maddubs lattice the v1 unpack was never the bottleneck, and the Q5/Q6 lcpp wins
-  pre-date the arc (their vec_dot rail is that slow). The Q6 -4.6% is the arc's one x64 cost;
+  Zen2's maddubs lattice the v1 unpack was never the bottleneck, and the Q5/Q6 upstream wins
+  pre-date the arc (its dot-product rail is that slow). The Q6 -4.6% is the arc's one x64 cost;
   suspects (not yet attributed - needs a mid-arc leg): the v2 signed per-16 fold's separate
   lo/hi i16 chains (flush every 2 madds) vs v1's, or v3's second verbatim load per weight
   vector on a load-port-bound lattice. Candidate fix if chased: gate kqBytes per-ISA (byte
   panels NEON-only - needs a per-format panel-flag companion so the batch cell knows).
-  Sized: ~5% Q6 pp on zen2 only; zen2 stays 1.32x ahead of lcpp regardless. Also not yet run:
+  Sized: ~5% Q6 pp on zen2 only; zen2 stays 1.32x ahead of upstream regardless. Also not yet run:
   the zen2 kq tune sweep (families ran the maddubs-mr8 fallback rows; crowns could shift a
   few %). SPR when a box respins - per Boris (2026-07-12): future profiling moves to an
   AWS box, local boxes are a bottleneck.
@@ -635,15 +669,14 @@ what it costs today and what the fix would change.
   Adding a MoE-cell-shaped fixture to kq_tune_family and weighting the decision (or a
   per-model-class entry) recovers it. Sized: ~3% MoE pp on M1; re-check on zen2/SPR grids.
 - **AMX fold pipelining (double-buffered C spill) - only if amx silicon verdict ever flips.**
-  lcpp's tinygemm_kernel_amx interleaves block i-1's AVX-512 scale-fold between block i's
-  TMUL ops (double-buffered thread-local C scratch, mmq.cpp:2015-2105) - the fold hides under
+  The shape to build: interleave block i-1's AVX-512 scale-fold between block i's
+  TMUL ops (double-buffered thread-local C scratch) - the fold hides under
   tile latency; our emit_amx_tile serializes them, likely most of the T-independent ~1.6x
   end-to-end amx loss on SPR. Pure emission-order change (second spill alloca + reordered
   fold). NOT worth doing while the amx leg loses on frequency/bandwidth grounds anyway
   (SPR session-3 verdict: grid-resident, biased busd512 keeps the manifest); revisit on
-  Granite-Rapids-class silicon or a cache-resident serving regime. Their thread-local
-  once-per-thread ldtilecfg (vs our per-call config+release) rides the same follow-up.
-  (Spotted reading mmq.cpp during SPR session 3, 2026-07-05.)
+  Granite-Rapids-class silicon or a cache-resident serving regime. A thread-local
+  once-per-thread `ldtilecfg` (vs our per-call config+release) rides the same follow-up.
 - **x64 intrinsic backends lack the `mm_rows` row-range GEMV core (fused-chain fallback).** The
   fused decode chains (team_parallel_stages, 2026-07-03) gate on `kernel_backend_has_rows()`;
   portable + both arm64 backends carry the core, so the EPYC (profile-pinned portable) and M1
@@ -658,7 +691,7 @@ what it costs today and what the fix would change.
   B=2/4/8/16 vs llama-batched-bench Metal's 134/219/250/363 - steps are GPU-bound (CPU side
   < 1.5ms), so the whole gap is skinny-M GEMM efficiency: the fixed-B batched GEMV forms
   ALU-saturate (~340-540 GMAC/s - the B=4 valley's 35.9ms step), and gemm32's M-pad-32 staging
-  floor is ~51-54ms/step (~2900 GMAC/s padded) regardless of B, while lcpp's mul_mv sustains
+  floor is ~51-54ms/step (~2900 GMAC/s padded) regardless of B, while the upstream mul_mv sustains
   near-weight-stream rates to ne11~8. Chase candidates, LAB ROWS FIRST (bench_metal_gemv_kernels
   grows variants): (a) x-staged batched GEMV - stage the B-row X panel slice in threadgroup
   memory per k-chunk so per-lane device x loads (the ALU-bound form's limiter) become tgmem
@@ -670,9 +703,9 @@ what it costs today and what the fix would change.
   thread; llama-8B (dim 4096) declines batch at B >= 5 (the add+rms+quant row slab caps at
   3072 - an unfused rms+quant pair would re-admit it); GPU-side per-row greedy argmax for the
   batch (the single-stream spec chain already carries the kernel) if greedy batch serving ever
-  matters. Sized honestly: closing to lcpp's curve is worth up to ~2.1x at B=4, ~1.7x at B=8,
+  matters. Sized honestly: closing to the upstream curve is worth up to ~2.1x at B=4, ~1.7x at B=8,
   ~1.34x at B=16 on M1. UPDATE (2026-07-14 late): (a) LANDED as the x-staged fixed-B forms -
-  lab b2x 326-363 wGB/s (+40-88%), b4x 188-217 (~2x, above lcpp's ~186 at ne11=4); driver
+  lab b2x 326-363 wGB/s (+40-88%), b4x 188-217 (~2x, above upstream's ~186 at ne11=4); driver
   same-window A/B B=4 +19.2%, B=2 +1.8% (B=2's step is residual/dispatch-bound: knockout says
   GEMV+cls is 11.7ms of the 16.7ms gpu step at B=2, 21.4 of 27.6 at B=4 - the rest is the
   per-step kernel residual + ~141 serialized dispatch tails, the encode-ahead/fusion rounds'
@@ -696,7 +729,7 @@ what it costs today and what the fix would change.
   box the two could alias - noted x64 follow-up) - and drop the fp32 table: on gemma-4-12B,
   classifier traffic 4.03GB -> 1.13GB/token and resident 4.03GB -> 2.26GB. Rows are bit-identical
   (same Q8_0 data the fblob decode used; gated by test_parity_tied_cls_q8_rows); the classifier
-  quants are exactly what llama.cpp matmuls. 8 of 9 tied-model fixtures held token-for-token
+  quants are exactly what upstream matmuls. 8 of 9 tied-model fixtures held token-for-token
   unchanged; gemma2's "Once upon a time" flipped a near-tie under the PINNED classic+libm test
   kernels only (default kernels still matched the oracle 24/24) -> moved to the counting prompt
   like Qwen2.5/Phi, oracle-refrozen. fp32/q4 loads and non-Q8_0 embeddings keep the exact old
@@ -704,9 +737,9 @@ what it costs today and what the fix would change.
 - **DONE (perf pass, 2026-07-02): V-from-K layers fuse the K->V copy with the weightless V-norm.**
   Decode (mm_qkv) and prefill both rmsnorm k->v out-of-place when v_norm is on (bit-identical to
   copy + in-place norm; the block's v_norm step skips those layers). (Spotted wave 3.)
-- **DONE (perf pass, 2026-07-02): llama.cpp A/Bs run (quiet box, CPU `-ngl 0`, llama-bench
+- **DONE (perf pass, 2026-07-02): upstream A/Bs run (quiet box, CPU `-ngl 0`, llama-bench
   pp512/tg64 vs our matched driver, ggml-parity fast-math).** gemma-4-12B: prefill us 75-80 t/s
-  vs llama.cpp 74.4+/-0.5 (parity to +5%); decode us ~7.3 vs 8.74 (~84% - the remaining decode gap
+  vs upstream 74.4+/-0.5 (parity to +5%); decode us ~7.3 vs 8.74 (~84% - the remaining decode gap
   is the next lever). gpt-oss-20b: prefill us ~219 vs 117 (~1.9x FASTER - the grouped MoE GEMM);
   decode us ~19 vs ~39-42 (~0.47x - exactly the MXFP4->Q8 doubled expert-weight-traffic asymmetry
   quantified: the native-MXFP4/Q4_0 entry below is now the headline gpt-oss decode lever).
@@ -748,7 +781,7 @@ what it costs today and what the fix would change.
   7.98 vs anchor 8.67 (92%, unchanged - dense path untouched); resident 26 -> 13.2GB; every
   fixture token-for-token unchanged (no refreeze - the counting fixtures absorbed all
   kernel-order changes). Cost paid: gpt-oss pp512 ~186 -> ~121-149 t/s (the per-expert
-  expansion) vs llama.cpp's 119.9 - still >= parity; the native mx4 batch GEMM in the expansion
+  expansion) vs upstream's 119.9 - still >= parity; the native mx4 batch GEMM in the expansion
   entry below reclaims it. (Spotted wave 5; the Q4_0 halfway house was skipped - native landed
   directly.)
 - **q4 has no batched prefill kernel - prefill collapses to decode rate.** The q4 path serves
@@ -803,11 +836,11 @@ what it costs today and what the fix would change.
   shape measures 63-72 GB/s - the dispatch fuse was worth ~30% and is confirmed load-bearing.
   Follow-up landed: **expert bias vectors fold into the groupn workers' stores** (bp/boffs on the
   groupn contract; bit-identical to the post-pass add_bias, minus its serial ~36us/layer) -
-  decode 34.7 -> **35.2 t/s @ ctx 8 / 33.8 @ ctx 512** (llama.cpp same-window anchor 41.1 ->
+  decode 34.7 -> **35.2 t/s @ ctx 8 / 33.8 @ ctx 512** (upstream same-window anchor 41.1 ->
   0.86x). Also swept: decode-attn threshold 0-vs-262144 under the spinner at ctx 8/512 -
   a WASH at both depths (the low-ctx attention is memory-latency-bound; threading's dispatch
   cost ~ its serial cost), so the measured default stands; moe_reduce/rope threading rejected
-  (~8us/layer each, below dispatch cost). What remains vs llama.cpp is their continuous-polling
+  (~8us/layer each, below dispatch cost). What remains vs upstream is its continuous-polling
   threadpool (the bus never idles between ops) - picked up by the x64 arc's jobque work, not
   patchable here. (Profiling session, 2026-07-02.)
 - **MXFP4 grouped prefill pays a per-touched-expert Q8 expansion (~120MB of traffic each, half of
@@ -829,24 +862,24 @@ what it costs today and what the fix would change.
 - **DONE (GEMV hunt, 2026-07-03): the decode "kernel top-end gap" was chunk-count misalignment,
   not the kernel.** A 12-variant GEMV race (`bench_gemv_decode.das` + the matmul_variants decode
   cells: unroll/ILP/fma-flush/dual-group/inline-scale) proved every kernel micro-opt a wash -
-  llama.cpp's live M1 kernel (`ggml_gemv_q8_0_4x4_q8_0`; their 4x8 tier needs i8mm) is the same
+  the upstream live M1 kernel (its 4x8 tier needs i8mm) is the same
   shape as `dot_q8q8_laneq4`. The real delta: njobs = `get_total_hw_jobs()*k` sized chunks to the
    7 WORKERS, but 8 lanes serve them (workers + caller - team by design, fifo via main-steal), so
   the last wave ran half-empty (28 chunks / 8 lanes = 87.5% utilization). Fix:
   `get_dispatch_lanes()` (workers + caller; knob `set_dispatch_caller_lane`, decode_prof
   `--legacy-lanes`) at all 54 dispatch sites incl. x64 (same effect there, smaller: ~2-3% at 32+
-  workers). Measured: GEMV cls 109 -> 118-120 GB/s (their exact rate); decode e2e 74.3 -> 77.6 t/s
-  @ ctx 8 (+4.4%, ~0.95x lcpp) / 66.3 -> 67.8 @ ctx 512; mm_ffn 1.10x -> 1.04x, cls 1.19x -> 1.12x
-  of lcpp per-op. Suite 171/171 token-for-token (chunk splits don't move per-row math). Oversplit
+  workers). Measured: GEMV cls 109 -> 118-120 GB/s (the upstream rate exactly); decode e2e 74.3 -> 77.6 t/s
+  @ ctx 8 (+4.4%, ~0.95x upstream) / 66.3 -> 67.8 @ ctx 512; mm_ffn 1.10x -> 1.04x, cls 1.19x -> 1.12x
+  of upstream per-op. Suite 171/171 token-for-token (chunk splits don't move per-row math). Oversplit
   re-sweep under aligned lanes: decode e2e is a WASH across x1/x2/x4 (x8 past the knee) - the
   straggler-mitigation rationale dissolved once the split became 8-on-8, x4 default stands on the
   prefill iso numbers. (GEMV hunt session, 2026-07-03.)
-- **Q8 scales stream as a separate fp32 plane - llama.cpp's inline-fp16 layout moves ~6% less
-  weight traffic.** Their `block_q8_0x4` packs 4 fp16 scales WITH the 128 quant bytes (136 B per
-  4-row block-group, one stream); our laneq layout reads a second fp32-plane stream (144 B total
+- **Q8 scales stream as a separate fp32 plane - an inline-fp16 layout moves ~6% less
+  weight traffic.** Packing 4 fp16 scales WITH the 128 quant bytes is 136 B per
+  4-row block-group in one stream; our laneq layout reads a second fp32-plane stream (144 B total
   per group). At the now-aligned ~118-120 GB/s both sides saturate equally, so the remaining
-  cls/ffn per-op gap (1.04-1.12x of lcpp) is almost exactly this byte ratio (144/136 = 5.9%;
-  bench: our best cls call 2448us vs their 2307 = 6.1%). The bench's `inline`/`inline_u2m` cells
+  cls/ffn per-op gap (1.04-1.12x of upstream) is almost exactly this byte ratio (144/136 = 5.9%;
+  bench: our best cls call 2448us vs upstream's 2307 = 6.1%). The bench's `inline`/`inline_u2m` cells
   already prove the single-stream kernel shape works (fp32 inline = parity, occasionally +1%).
   The win requires fp16: (a) an f16->f32 convert intrinsic in dasLLVM aarch64_neon (vcvt_f32_f16
   via LLVM fpext, x64 twin F16C `vcvtph2ps` - gate on `cpu_supports`); (b) a repack variant
@@ -918,7 +951,7 @@ group; wording kept.
 
 - **BLAS / Accelerate on macOS - RULED OUT (measured).** dasLLAMA's 8-bit `sdot` kernel beats the
   BLAS (Accelerate) path, and it is structural, not incidental: BLAS is f32-only (no `hgemm`, no
-  int8 - ggml's whole BLAS backend is one `cblas_sgemm` that dequantizes any non-f32 operand into
+  int8 - the upstream BLAS backend routes through one `cblas_sgemm` that dequantizes any non-f32 operand into
   scratch first), while the weight matmul is memory-bound on the weight stream, so a 4x weight
   expansion to feed AMX/SME f32 throughput can never win. Decision: don't route dasLLAMA matmuls
   through BLAS. **Its "for Apple lower-precision matmul the framework is BNNS ... not pursued" tail
@@ -982,7 +1015,7 @@ group; wording kept.
 
 ### From `PUBLIC_BENCH_PLAN.md` (v2 backlog)
 
-- **OPEN - v2: hosted submission server**, which also hosts / auto-fetches the pinned llama.cpp ref
+- **OPEN - v2: hosted submission server**, which also hosts / auto-fetches the pinned upstream ref
   binaries. v1 accepts community records via reviewed PR plus the result panel's "copy record"
   paste funnel; the server replaces that funnel.
 - **OPEN - v2: select-two compare widget (maybe)** on the leaderboard, and publishing the

@@ -376,8 +376,8 @@ def q8q8_groupn_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?
 // Plane layouts per 256-weight superblock: k4 128B nibbles+32B f16(s,o); k5 adds 32B qh; k6
 // [128B ql][64B qh]+[16 sub-scales][f16 d]. Dot: s*(Σq·a) − o*(Σa); disk-order — backend-independent.
 
-//! 6-bit sub-scale/min j off a 12-byte packed Q4_K/Q5_K scale block at sp (ggml
-//! get_scale_min_k4, pointer form) — shared by the kq v2 dots, repack and dequants.
+//! 6-bit sub-scale/min j off a 12-byte packed Q4_K/Q5_K scale block at sp (the packed
+//! halfword decode, pointer form) — shared by the kq v2 dots, repack and dequants.
 def k4_sc_mn(sp : uint8 const?; j : int64) : int2 {
     unsafe {
         if (j < 4l) {
@@ -390,7 +390,7 @@ def k4_sc_mn(sp : uint8 const?; j : int64) : int2 {
 }
 
 // kq v2 (all three formats): Q8_K-form activations — xsp is the PER-SUPERBLOCK scale plane
-// (n/256 per token); integer sub-scale / bsums-x-mins sums fold to ONE float per superblock (lcpp scheme).
+// (n/256 per token); integer sub-scale / bsums-x-mins sums fold to ONE float per superblock.
 // Int sums are exact, so this is bit-exact vs the grp walk regardless of sub-block order.
 [hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
 def dot_k4q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
@@ -730,7 +730,7 @@ def matmul_kq_groupn(fmt : int; var y : array<float> | #; kq : array<uint8> | #;
     }
 }
 
-//! MXFP4·Q8 dot, scalar reference form (mirrors ggml_vec_dot_mxfp4_q8_0's tail loop): each nibble
+//! MXFP4·Q8 dot, scalar reference form: each nibble
 //! pairs low nibble w/ xq[j], high w/ xq[j+16] via doubled-e2m1 `lut`; flush order matches NEON dot_mx4q8 (agrees to reassociation).
 //! Not `private`: the mx4 unit-test reference, callable from lifted worker lambdas.
 [hint(unsafe_range_check, noalias = lut, noalias = wn, noalias = we, noalias = xq, noalias = xs)]

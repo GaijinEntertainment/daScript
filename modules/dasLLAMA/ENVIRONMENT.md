@@ -66,7 +66,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | Variable | Type | Default | Effect |
 |---|---|---|---|
 | `DASLLAMA_METAL_LOGITS` | flag | on | Produce logits on the GPU; 0 pulls the classifier back to the CPU. Blob-only models force it on. |
-| `DASLLAMA_METAL_ATTN` | flag | on | ggml-geometry QK/AV prefill attention (~10x the trio GEMMs); 0 pins the trio. |
+| `DASLLAMA_METAL_ATTN` | flag | on | Tiled QK/AV prefill attention (~10x the trio GEMMs); 0 pins the trio. |
 | `DASLLAMA_METAL_SPAN` | flag | on | Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent. |
 | `DASLLAMA_METAL_TOWER` | flag | on | Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower. |
 | `DASLLAMA_METAL_WDEC` | flag | on | Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 pins the CPU decoder. |
@@ -81,11 +81,11 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_DECODE_CONCURRENT` | flag | on | Concurrent encoder for the single-stream decode step, with barriers only at detected hazards. |
 | `DASLLAMA_METAL_FUSE` | flag | on | The R1 epilogue-fusion kernel (post_attn_rms + add_rms); 0 restores separate dispatches for A/B. |
 | `DASLLAMA_METAL_SPEC` | number | -1 (adaptive) | MTP speculative decode chain: 0 off, 1 forced, -1 adaptive. |
-| `DASLLAMA_METAL_GEMV_TG` | number | 4 | Rows per GEMV threadgroup, clamped 1..32. |
+| `DASLLAMA_METAL_GEMV_TG` | number | 4 | Rows per MoE router/expert GEMV threadgroup, clamped 1..32 (the dense GEMV geometry is fixed). |
 | `DASLLAMA_METAL_KQ_B8` | flag | on | Single-pass B8 twin for K-quant small-batch mv at B=5..8; 0 is the A/B rail. |
 | `DASLLAMA_METAL_KV_MIRROR_MB` | number | 4096 | Ceiling in MiB for the device-side KV mirror, clamped 64..4096. |
 | `DASLLAMA_METAL_RESIDENCY` | flag | on | Pin the served working set (weight regions, planes, the recycled pool buffers) in an MTLResidencySet, macOS 15+: the per-commit residency pass stays a no-op, so the first submission after a CPU-only window stops repaying it (~15 ms/encode on the M1 Max released-rig image cell; ARCHITECTURE.md 2.12); 0 is the A/B rail. |
-| `DASLLAMA_METAL_HEARTBEAT_S` | number | 180 | Seconds the residency-set heartbeat keeps re-requesting residency after the last served step (a requested set still un-wires over a long CPU-only window; the ggml-metal keep-alive, ARCHITECTURE.md 2.12); 0 disables the heartbeat - the A/B rail. |
+| `DASLLAMA_METAL_HEARTBEAT_S` | number | 180 | Seconds the residency-set heartbeat keeps re-requesting residency after the last served step (a requested set still un-wires over a long CPU-only window; ARCHITECTURE.md 2.12); 0 disables the heartbeat - the A/B rail. |
 | `DASLLAMA_METAL_HAZARD_PARANOID` | flag | off | Barrier at every dispatch instead of at tracker-detected hazards (correctness bisect). |
 | `DASLLAMA_METAL_HAZARD_STRICT` | flag | off | Treat every detected hazard as strict, widening barriers (correctness bisect). |
 | `DASLLAMA_METAL_PIPE_DEBUG` | flag | off | Per-step pipeline trace: GPU envelope and true inter-step handoff idle, first steps plus outliers. |
@@ -177,7 +177,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_BENCH_MODEL` | text | tinyllama | Model name for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_NTOK` | number | unset | Token count for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_SKIP_ROWMAJOR` | flag | off | Skip the row-major arm of the isolated GEMM bench. |
-| `DASLLAMA_BENCH_VERBOSE` | flag | off | Per-run detail from the llama.cpp comparison bench. |
+| `DASLLAMA_BENCH_VERBOSE` | flag | off | Per-run detail from the comparison bench (lcpp_bench). |
 | `DASLLAMA_MIN_CHUNK_ROWS` | number | unset | Override the minimum rows per dispatch chunk in the GEMM bench. |
 | `DASLLAMA_FUSED_DECODE` | flag | unset | Exercise the fused decode arm in the emission bench. |
 | `DASMETAL_LAB_ROUNDS` | number | 3 | Timing rounds per cell in the Metal kernel labs. |

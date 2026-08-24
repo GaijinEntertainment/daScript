@@ -84,7 +84,7 @@ def private attn_head_flash(qp : float const?; kcp, vcp : auto const?; var xbp :
                     kqp[i] = 0.0
                 }
                 gemm_f32(kqp, qpk, kpk, tile_rows, head_size, KV)
-                // ggml-style decomposition (ops.cpp:8771): scale — then soft-cap — the whole score tile
+                // tile-wide decomposition: scale — then soft-cap — the whole score tile
                 // in one vectorized sweep each, replacing the scalar per-element multiply in the mask branch.
                 scale_inplace(kqp, scale, tile_rows * KV)
                 if (attn_softcap > 0.0) {   // Gemma2: soft-cap scores before softmax

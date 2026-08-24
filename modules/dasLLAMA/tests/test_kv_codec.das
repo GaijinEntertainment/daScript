@@ -183,7 +183,7 @@ def test_kv_store_row_q8(t : T?) {
                     let v = q8_row_elem(row3, bi, k)
                     dq[bi * 32l + k] = v
                     // d/2 from the round, + up to 127·(f16 rounding of d) — quants round with the
-                    // UN-rounded f32 scale but dequant reads the stored f16 one (ggml semantics)
+                    // UN-rounded f32 scale but dequant reads the stored f16 one (the codec's stored-scale semantics)
                     ok_rt &&= abs(src[bi * 32l + k] - v) <= d * 0.57 + 1.0e-7
                 }
             }

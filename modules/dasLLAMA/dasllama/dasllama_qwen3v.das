@@ -32,8 +32,8 @@ require math
 //! gemma3v recipe); the f32 exact lane serves the Metal tower / float-batch tier and is the
 //! parity rail.
 
-let QWEN3V_ROPE_THETA = 10000.0   // models/qwen3vl.cpp hardcodes it — not in the gguf
-// the family's dynamic-resolution token budget (mtmd set_limit_image_tokens for qwen)
+let QWEN3V_ROPE_THETA = 10000.0   // fixed for the family - not in the gguf
+// the family's dynamic-resolution token budget
 let QWEN3V_MIN_TOKENS = 8
 let QWEN3V_MAX_TOKENS = 4096
 
@@ -614,8 +614,8 @@ def private q3v_check_planes(t : Qwen3vTower; src : string) {
     }
 }
 
-// the (h, w) walk order after the spatial merge: 2×2 partners adjacent, groups row-major
-// (clip.cpp's positions fill and the graph's merge permute follow the same walk)
+// the (h, w) walk order after the spatial merge: 2×2 partners adjacent, groups row-major -
+// the positions fill and the merge permute follow the same walk
 def private q3v_reorder_src(r, pw : int64) : int64 {
     let g = r / 4l
     let sub = r % 4l
@@ -898,8 +898,8 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
 }
 
 //! The whole image path in one call: geometry → letterbox → normalize(0.5, 0.5) →
-//! `qwen3v_encode` into `out` (returns nout). The token budget is the FAMILY's [8, 4096]
-//! (mtmd's qwen limits), not the gemma-scoped DASLLAMA_VISION_* knobs.
+//! `qwen3v_encode` into `out` (returns nout). The token budget is the FAMILY's [8, 4096],
+//! not the gemma-scoped DASLLAMA_VISION_* knobs.
 def encode_image_(t : Qwen3vTower; var s : Qwen3vState; img : VisionImage; tag : string;
                   var out : array<float>) : int64 {
     if (img.width <= 0 || img.height <= 0) {

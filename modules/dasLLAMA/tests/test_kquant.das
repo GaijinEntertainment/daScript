@@ -18,7 +18,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require math
 
 // K-quant (Q4_K / Q6_K) superblock dequant gates. The synthetic arms hand-pack one superblock
-// with the ggml bit layout written in the PACK direction (independent of the reader's unpack),
+// with the on-disk bit layout written in the PACK direction (independent of the reader's unpack),
 // so a layout misread fails loudly with no model files needed. The dequant arithmetic itself is
 // proven bit-exact against gguf-py's dequantize (harness/q4k_dequant_probe.das); the real-file
 // arm cross-checks against the Q8_0 twin of the same weights at known quantization-error levels.
@@ -29,7 +29,7 @@ def private q5_pat(k : int) : int => (k * 3 + 7) % 32
 def private q6_pat(k : int) : int => (k * 5 + 11) % 64
 
 // The shared synthetic scale/min sets: 6-bit values > 15 exercise the split high-bit arms of
-// get_scale_min_k4 (j >= 4); d/dmin are f16-exact so expected-value math uses the f32 value.
+// the 6-bit scale/min unpack (j >= 4); d/dmin are f16-exact so expected-value math uses the f32 value.
 let SYNTH_SC <- [63, 21, 37, 5, 48, 17, 60, 33]
 let SYNTH_MN <- [1, 62, 19, 44, 7, 58, 25, 36]
 let SYNTH_D = 0.5

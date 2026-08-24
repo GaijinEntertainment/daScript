@@ -56,11 +56,11 @@ def register_arch_qwen35() {
 
 // ===== qwen35 hybrid blocks: Gated DeltaNet (recurrent) + gated attention =====
 // Alternates Gated-DeltaNet linear-attention layers (no KV, O(1) f32 state) with full-attention
-// layers whose 2x-wide Q carries a sigmoid output gate. Oracle: llama.cpp qwen35.cpp + delta-net-base.cpp.
+// layers whose 2x-wide Q carries a sigmoid output gate.
 
 // Causal depthwise conv1d, one token step: per channel, dot the (taps = d_conv-1)-deep history
-// plus the current input against that channel's taps (oldest first, ggml_ssm_conv order), then
-// shift the history. Float accumulation matches ggml's sumf.
+// plus the current input against that channel's taps (oldest tap first), then shift the history.
+// Float accumulation in fixed tap order - the order keeps it bit-exact against the reference.
 def private dn_conv_step(var outp : float?; var st : float?; inp : float const?; w : float const?; channels, taps : int64) {
     unsafe {
         for (ch in range64(channels)) {
@@ -81,9 +81,9 @@ def private dn_conv_step(var outp : float?; var st : float?; inp : float const?;
     }
 }
 
-// One delta-rule step for one v-head (llama.cpp build_delta_net_autoregressive): S decays by
+// One delta-rule step for one v-head, autoregressive form: S decays by
 // exp(g); sk = kᵀS; d = (v - sk)·β; S += k⊗d; o = qᵀS (q pre-scaled by 1/sqrt(d_state)).
-// Row-by-row accumulation over the k index reproduces ggml's sum order.
+// Row-by-row accumulation over k - the fixed order keeps it bit-exact against the reference.
 def private dn_delta_head(var st : float?; q, k, v : float const?; var o : float?; var skd : float?; g, beta : float; ds : int64) {
     unsafe {
         let decay = exp(g)
@@ -187,7 +187,7 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
     rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
     prof_add("norm", ts_norm0)
     let ts_qkv = prof_ticks()
-    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32, like llama.cpp
+    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32
         mm_fblob(s.dn_beta, t, t.dn_betaf_off + l * dim * nvh, s.xb, dim, nvh)
         mm_fblob(s.dn_g, t, t.dn_alphaf_off + l * dim * nvh, s.xb, dim, nvh)
     } else {
@@ -233,7 +233,7 @@ def private deltanet_decode(t : Model; var s : Session; l : int64) {
     let ts_qkv = prof_ticks()
     mm_f(s.dn_qkv, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, cd)
     mm_f(s.dn_z, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, di)
-    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32, like llama.cpp
+    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32
         mm_fblob(s.dn_beta, t, t.dn_betaf_off + l * dim * nvh, s.xb, dim, nvh)
         mm_fblob(s.dn_g, t, t.dn_alphaf_off + l * dim * nvh, s.xb, dim, nvh)
     } else {
@@ -511,8 +511,8 @@ def private dn_conv_batch(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
-// One v-head's chunked delta rule over the whole prefill window (mirrors llama.cpp
-// build_delta_net_chunking; NOT bit-identical to the recurrent form — chunk FP reassociation).
+// One v-head's chunked delta rule over the whole prefill window (NOT bit-identical to the
+// recurrent form — chunk FP reassociation).
 // Solves (I + A) d = V_beta - (K_beta ⊙ e^{gcum}) S per chunk; state S advances once per chunk.
 def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; // nolint:STYLE037,STYLE038 — the chunked DeltaNet head is one barrier-coupled recurrence; splitting it would spill the chunk state
                             bp, gp : float const?; bg_stride : int64;
@@ -695,7 +695,7 @@ def private deltanet_prefill_chunked(t : Model; var s : Session; l : int64; npos
         unsafe {
             for (hh in range(rb, re)) {
                 let h = int64(hh)
-                let kh = h % nkh   // k-heads repeat cyclically onto v-heads (ggml_repeat: h % nkh)
+                let kh = h % nkh   // k-heads repeat cyclically onto v-heads (h % nkh)
                 dn_chunked_head(conv0, kh * ds, kd + kh * ds, 2l * kd + h * ds, cd,
                     bp0 + h, gp0 + h, nvh, zp0 + h * ds, op0 + h * ds, di,
                     st0 + h * ds * ds, ws0 + h * wssz, wnorm0,
@@ -781,7 +781,7 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
     let ts_qkv = prof_ticks()
     mm_b_f(s, s.dn_qkv_b, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], s.xb_b, dim, cd, npos)
     mm_b_f(s, s.dn_z_b, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], s.xb_b, dim, di, npos)
-    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32, like llama.cpp
+    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32
         mm_fblob_b(s.dn_beta_b, t, t.dn_betaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
         mm_fblob_b(s.dn_g_b, t, t.dn_alphaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
     } else {

@@ -601,7 +601,7 @@ class template MetalSqAttnQuantT {
     }
 }
 
-// q8_0 instance — 34B/32-elem ggml blocks. Measured 1.1-1.7x over the f16 form at d512-2048
+// q8_0 instance — 34B/32-elem q8_0 blocks. Measured 1.1-1.7x over the f16 form at d512-2048
 // (benchmarks/attn/bench_metal_sq_attn.das).
 [metal_dispatch(name = "enc_attn_q8_c", pso = "g_pso_attn_q8", tgmem = "MetalSqAttnQ8_metal_sq_attn_msl_tgmem", tg = "head_size", grid = "nheads", params = "nheads : int64, head_size : int64")]
 class MetalSqAttnQ8 : MetalSqAttnQuantT {
@@ -745,7 +745,7 @@ class template MetalSqAttnPartQuantT {
     }
 }
 
-// q8_0 instance — 34B/32-elem ggml blocks.
+// q8_0 instance — 34B/32-elem q8_0 blocks.
 [metal_dispatch(name = "enc_attnp_q8_c", pso = "g_pso_attnp_q8", tgmem = "MetalSqAttnPartQ8_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64")]
 class MetalSqAttnPartQ8 : MetalSqAttnPartQuantT {
     typedef QB = int8
@@ -822,18 +822,18 @@ class template MetalSqAttnCombT {
 class MetalSqAttnComb : MetalSqAttnCombT {
 }
 
-// The 2-rows-per-simdgroup fused QKV GEMV + rope + KV-row store: the rope pair's two elements
-// of q/k ARE two weight rows of the fused region — adjacent (2p, 2p+1) under NORM, (r, r+hs/2)
-// within the head under NEOX. Deletes the separate rope_store dispatch entirely.
-[metal_dispatch(name = "enc_qkvrs16_c", pso = "g_pso_qkvrs16", tg = 128, grid = "pairs/4", params = "pairs : int64")]
-class MetalQ8GemvQkvRsF16 {
+// The fused QKV GEMV + rope + KV-row store, one THREADGROUP per rope pair — rows adjacent
+// (2p, 2p+1) under NORM, (r, r+hs/2) in-head under NEOX — reduction split across the 4 sgs
+// (the MetalQ8Gemv discipline); KT/CLAMP16 = the mirror codec axis (the MetalRopeStoreKvT shape).
+[ |> template_struct_instance]
+class template MetalQ8GemvQkvRsT {
     @ssbo @binding = 0 @role = "weight" @off = "wqoff" wqbq : array<int8>   // wq blob, byte view @ the q tensor's byte offset
     @ssbo @binding = 1 @role = "weight" @off = "wqoff" wshq : array<float16>   // ... half-scale view (same offset). Segments bind
                                             // separately — kind-major layout keeps q/k/v apart
     @ssbo @binding = 2 x : array<float4>
     @ssbo @binding = 3 qo : array<float>    // q out, roped ([0, qd) of the QKV buffer)
-    @ssbo @binding = 4 @off = "koff" kd : array<float16>  // mirror K row (bound at the row offset)
-    @ssbo @binding = 5 @off = "voff" vd : array<float16>
+    @ssbo @binding = 4 @off = "koff" kd : array<KT>  // mirror K row (bound at the row offset)
+    @ssbo @binding = 5 @off = "voff" vd : array<KT>
     @ssbo @binding = 6 @role = "weight" tcos : array<float>  // [hs/2] this position's rope row
     @ssbo @binding = 7 @role = "weight" tsin : array<float>
     @ssbo @binding = 8 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
@@ -842,21 +842,19 @@ class MetalQ8GemvQkvRsF16 {
     @ssbo @binding = 11 @role = "weight" @off = "wvoff" wqbv : array<int8>  // wv blob views
     @ssbo @binding = 12 @role = "weight" @off = "wvoff" wshv : array<float16>
     @uniform @binding = 13 ka : Q8QkvRsArgs
+    @workgroup red : float[64]              // [2 pair rows][32 lanes] cross-sg partials
+    @template_constant CLAMP16 : bool = true
 
-    [metal_kernel(name="metal_q8_gemv_qkv_rs16_msl")]
-    def metal_q8_gemv_qkv_rs16 {   // nolint:STYLE038 — MSL kernel body; the QKV phases share tgmem + simdgroup state
+    [metal_kernel]
+    def metal_q8_gemv_qkv_rs {   // nolint:STYLE038 — MSL kernel body; the QKV phases share tgmem + simdgroup state
         let ndim = ka.ndim
-        let ddim = ka.ddim
         let qd = ka.qd
         let kvd = ka.kvd
         let hs = ka.hs
         let neox = ka.neox
         let has_bias = ka.has_bias
-        let pr = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (pr * 2u >= ddim) {
-            return
-        }
-        // the simdgroup's two rows ARE the rope pair: adjacent under NORM; (r, r+half) within
+        let pr = gl_WorkGroupID.x
+        // the threadgroup's two rows ARE the rope pair: adjacent under NORM; (r, r+half) within
         // the row's head under NEOX for the q/k ranges (v rows stay adjacent — no rope)
         let half = hs / 2u
         var row = pr * 2u
@@ -867,208 +865,142 @@ class MetalQ8GemvQkvRsF16 {
             row = seg + (lp / half) * hs + lp % half
             row2 = row + half
         }
+        let sg = gl_SubgroupID
         let lane = gl_SubgroupInvocationID
-        let nb4 = ndim / 4u
         let nb = ndim / 32u
+        let ix = lane / 4u                  // block-within-round: 8 blocks per sg per round
+        let il = lane % 4u                  // 8-quant chunk within the block
         var acc0 = 0.0
         var acc1 = 0.0
-        var k = lane
+        var ib = sg * 8u + ix
         // both pair rows sit in ONE segment (qd/kvd even, NEOX pairs stay in-head) — dot them
         // off that segment's blob views with segment-LOCAL rows
         if (row < qd) {
-            while (k < nb4) {
-                let x4 = x[k]
-                let co = (k % 8u) * 4u
-                let qb0 = (row * nb + k / 8u) * 34u + 2u + co
-                let qb1 = (row2 * nb + k / 8u) * 34u + 2u + co
-                let w0 = float4(float(wqbq[qb0]), float(wqbq[qb0 + 1u]), float(wqbq[qb0 + 2u]), float(wqbq[qb0 + 3u]))
-                let w1 = float4(float(wqbq[qb1]), float(wqbq[qb1 + 1u]), float(wqbq[qb1 + 2u]), float(wqbq[qb1 + 3u]))
-                acc0 += (w0.x * x4.x + w0.y * x4.y + w0.z * x4.z + w0.w * x4.w) * float(wshq[(row * nb + k / 8u) * 17u])
-                acc1 += (w1.x * x4.x + w1.y * x4.y + w1.z * x4.z + w1.w * x4.w) * float(wshq[(row2 * nb + k / 8u) * 17u])
-                k += gl_SubgroupSize
+            while (ib < nb) {
+                let xi = ib * 8u + il * 2u
+                let x0 = x[xi]
+                let x1 = x[xi + 1u]
+                let qb0 = (row * nb + ib) * 34u + 2u + il * 8u
+                let qb1 = (row2 * nb + ib) * 34u + 2u + il * 8u
+                acc0 += (float(wqbq[qb0]) * x0.x + float(wqbq[qb0 + 1u]) * x0.y +
+                    float(wqbq[qb0 + 2u]) * x0.z + float(wqbq[qb0 + 3u]) * x0.w +
+                    float(wqbq[qb0 + 4u]) * x1.x + float(wqbq[qb0 + 5u]) * x1.y +
+                    float(wqbq[qb0 + 6u]) * x1.z + float(wqbq[qb0 + 7u]) * x1.w) * float(wshq[(row * nb + ib) * 17u])
+                acc1 += (float(wqbq[qb1]) * x0.x + float(wqbq[qb1 + 1u]) * x0.y +
+                    float(wqbq[qb1 + 2u]) * x0.z + float(wqbq[qb1 + 3u]) * x0.w +
+                    float(wqbq[qb1 + 4u]) * x1.x + float(wqbq[qb1 + 5u]) * x1.y +
+                    float(wqbq[qb1 + 6u]) * x1.z + float(wqbq[qb1 + 7u]) * x1.w) * float(wshq[(row2 * nb + ib) * 17u])
+                ib += 32u
             }
         } elif (row < qd + kvd) {
             let lr = row - qd
             let lr2 = row2 - qd
-            while (k < nb4) {
-                let x4 = x[k]
-                let co = (k % 8u) * 4u
-                let qb0 = (lr * nb + k / 8u) * 34u + 2u + co
-                let qb1 = (lr2 * nb + k / 8u) * 34u + 2u + co
-                let w0 = float4(float(wqbk[qb0]), float(wqbk[qb0 + 1u]), float(wqbk[qb0 + 2u]), float(wqbk[qb0 + 3u]))
-                let w1 = float4(float(wqbk[qb1]), float(wqbk[qb1 + 1u]), float(wqbk[qb1 + 2u]), float(wqbk[qb1 + 3u]))
-                acc0 += (w0.x * x4.x + w0.y * x4.y + w0.z * x4.z + w0.w * x4.w) * float(wshk[(lr * nb + k / 8u) * 17u])
-                acc1 += (w1.x * x4.x + w1.y * x4.y + w1.z * x4.z + w1.w * x4.w) * float(wshk[(lr2 * nb + k / 8u) * 17u])
-                k += gl_SubgroupSize
+            while (ib < nb) {
+                let xi = ib * 8u + il * 2u
+                let x0 = x[xi]
+                let x1 = x[xi + 1u]
+                let qb0 = (lr * nb + ib) * 34u + 2u + il * 8u
+                let qb1 = (lr2 * nb + ib) * 34u + 2u + il * 8u
+                acc0 += (float(wqbk[qb0]) * x0.x + float(wqbk[qb0 + 1u]) * x0.y +
+                    float(wqbk[qb0 + 2u]) * x0.z + float(wqbk[qb0 + 3u]) * x0.w +
+                    float(wqbk[qb0 + 4u]) * x1.x + float(wqbk[qb0 + 5u]) * x1.y +
+                    float(wqbk[qb0 + 6u]) * x1.z + float(wqbk[qb0 + 7u]) * x1.w) * float(wshk[(lr * nb + ib) * 17u])
+                acc1 += (float(wqbk[qb1]) * x0.x + float(wqbk[qb1 + 1u]) * x0.y +
+                    float(wqbk[qb1 + 2u]) * x0.z + float(wqbk[qb1 + 3u]) * x0.w +
+                    float(wqbk[qb1 + 4u]) * x1.x + float(wqbk[qb1 + 5u]) * x1.y +
+                    float(wqbk[qb1 + 6u]) * x1.z + float(wqbk[qb1 + 7u]) * x1.w) * float(wshk[(lr2 * nb + ib) * 17u])
+                ib += 32u
             }
         } else {
             let lr = row - qd - kvd
             let lr2 = row2 - qd - kvd
-            while (k < nb4) {
-                let x4 = x[k]
-                let co = (k % 8u) * 4u
-                let qb0 = (lr * nb + k / 8u) * 34u + 2u + co
-                let qb1 = (lr2 * nb + k / 8u) * 34u + 2u + co
-                let w0 = float4(float(wqbv[qb0]), float(wqbv[qb0 + 1u]), float(wqbv[qb0 + 2u]), float(wqbv[qb0 + 3u]))
-                let w1 = float4(float(wqbv[qb1]), float(wqbv[qb1 + 1u]), float(wqbv[qb1 + 2u]), float(wqbv[qb1 + 3u]))
-                acc0 += (w0.x * x4.x + w0.y * x4.y + w0.z * x4.z + w0.w * x4.w) * float(wshv[(lr * nb + k / 8u) * 17u])
-                acc1 += (w1.x * x4.x + w1.y * x4.y + w1.z * x4.z + w1.w * x4.w) * float(wshv[(lr2 * nb + k / 8u) * 17u])
-                k += gl_SubgroupSize
+            while (ib < nb) {
+                let xi = ib * 8u + il * 2u
+                let x0 = x[xi]
+                let x1 = x[xi + 1u]
+                let qb0 = (lr * nb + ib) * 34u + 2u + il * 8u
+                let qb1 = (lr2 * nb + ib) * 34u + 2u + il * 8u
+                acc0 += (float(wqbv[qb0]) * x0.x + float(wqbv[qb0 + 1u]) * x0.y +
+                    float(wqbv[qb0 + 2u]) * x0.z + float(wqbv[qb0 + 3u]) * x0.w +
+                    float(wqbv[qb0 + 4u]) * x1.x + float(wqbv[qb0 + 5u]) * x1.y +
+                    float(wqbv[qb0 + 6u]) * x1.z + float(wqbv[qb0 + 7u]) * x1.w) * float(wshv[(lr * nb + ib) * 17u])
+                acc1 += (float(wqbv[qb1]) * x0.x + float(wqbv[qb1 + 1u]) * x0.y +
+                    float(wqbv[qb1 + 2u]) * x0.z + float(wqbv[qb1 + 3u]) * x0.w +
+                    float(wqbv[qb1 + 4u]) * x1.x + float(wqbv[qb1 + 5u]) * x1.y +
+                    float(wqbv[qb1 + 6u]) * x1.z + float(wqbv[qb1 + 7u]) * x1.w) * float(wshv[(lr2 * nb + ib) * 17u])
+                ib += 32u
             }
+        }
+        if (sg == 0u) {
+            red[lane] = 0.0
+            red[32u + lane] = 0.0
         }
         acc0 = simd_sum(acc0)
         acc1 = simd_sum(acc1)
-        if (lane != 0u) {
+        barrier()
+        if (lane == 0u) {
+            red[sg] = acc0
+            red[32u + sg] = acc1
+        }
+        barrier()
+        var tot0 = simd_sum(red[lane])
+        var tot1 = simd_sum(red[32u + lane])
+        if (sg != 0u || lane != 0u) {
             return
         }
         if (has_bias != 0u) {
-            acc0 += bias[row]
-            acc1 += bias[row2]
+            tot0 += bias[row]
+            tot1 += bias[row2]
         }
         if (row < qd) {
             let j = neox != 0u ? row % hs : (row % hs) / 2u
             let fcr = tcos[j]
             let fci = tsin[j]
-            qo[row] = acc0 * fcr - acc1 * fci
-            qo[row2] = acc0 * fci + acc1 * fcr
+            qo[row] = tot0 * fcr - tot1 * fci
+            qo[row2] = tot0 * fci + tot1 * fcr
         } elif (row < qd + kvd) {
             let ik = row - qd
             let ik2 = row2 - qd
             let j = neox != 0u ? ik % hs : (ik % hs) / 2u
             let fcr = tcos[j]
             let fci = tsin[j]
-            kd[ik] = float16(min(max(acc0 * fcr - acc1 * fci, -65504.0), 65504.0))   // nolint:STYLE019 — the MSL emitter lowers min/max only, no clamp
-            kd[ik2] = float16(min(max(acc0 * fci + acc1 * fcr, -65504.0), 65504.0))   // nolint:STYLE019
+            static_if (CLAMP16) {
+                kd[ik] = float16(min(max(tot0 * fcr - tot1 * fci, -65504.0), 65504.0))   // nolint:STYLE019 — the MSL emitter lowers min/max only, no clamp
+                kd[ik2] = float16(min(max(tot0 * fci + tot1 * fcr, -65504.0), 65504.0))   // nolint:STYLE019
+            } else {
+                kd[ik] = tot0 * fcr - tot1 * fci
+                kd[ik2] = tot0 * fci + tot1 * fcr
+            }
         } else {
             let iv = row - qd - kvd
-            vd[iv] = float16(min(max(acc0, -65504.0), 65504.0))   // nolint:STYLE019
-            vd[iv + 1u] = float16(min(max(acc1, -65504.0), 65504.0))   // nolint:STYLE019
+            static_if (CLAMP16) {
+                vd[iv] = float16(min(max(tot0, -65504.0), 65504.0))   // nolint:STYLE019
+                vd[iv + 1u] = float16(min(max(tot1, -65504.0), 65504.0))   // nolint:STYLE019
+            } else {
+                vd[iv] = tot0
+                vd[iv + 1u] = tot1
+            }
         }
     }
+}
+
+[metal_dispatch(name = "enc_qkvrs16_c", pso = "g_pso_qkvrs16", tgmem = "MetalQ8GemvQkvRsF16_metal_q8_gemv_qkv_rs_msl_tgmem", tg = 128, grid = "pairs", params = "pairs : int64")]
+class MetalQ8GemvQkvRsF16 : MetalQ8GemvQkvRsT {
+    typedef KT = float16
 }
 
 // f32-mirror twin — straight stores, no clamp.
-[metal_dispatch(name = "enc_qkvrs32_c", pso = "g_pso_qkvrs32", tg = 128, grid = "pairs/4", params = "pairs : int64")]
-class MetalQ8GemvQkvRsF32 {
-    @ssbo @binding = 0 @role = "weight" @off = "wqoff" wqbq : array<int8>   // per-segment blob views — the F16 twin's scheme
-    @ssbo @binding = 1 @role = "weight" @off = "wqoff" wshq : array<float16>
-    @ssbo @binding = 2 x : array<float4>
-    @ssbo @binding = 3 qo : array<float>
-    @ssbo @binding = 4 @off = "koff" kd : array<float>
-    @ssbo @binding = 5 @off = "voff" vd : array<float>
-    @ssbo @binding = 6 @role = "weight" tcos : array<float>
-    @ssbo @binding = 7 @role = "weight" tsin : array<float>
-    @ssbo @binding = 8 @role = "weight" bias : array<float>
-    @ssbo @binding = 9 @role = "weight" @off = "wkoff" wqbk : array<int8>
-    @ssbo @binding = 10 @role = "weight" @off = "wkoff" wshk : array<float16>
-    @ssbo @binding = 11 @role = "weight" @off = "wvoff" wqbv : array<int8>
-    @ssbo @binding = 12 @role = "weight" @off = "wvoff" wshv : array<float16>
-    @uniform @binding = 13 ka : Q8QkvRsArgs
-
-    [metal_kernel(name="metal_q8_gemv_qkv_rs32_msl")]
-    def metal_q8_gemv_qkv_rs32 {   // nolint:STYLE038 — MSL kernel body; the QKV phases share tgmem + simdgroup state
-        let ndim = ka.ndim
-        let ddim = ka.ddim
-        let qd = ka.qd
-        let kvd = ka.kvd
-        let hs = ka.hs
-        let neox = ka.neox
-        let has_bias = ka.has_bias
-        let pr = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (pr * 2u >= ddim) {
-            return
-        }
-        let half = hs / 2u
-        var row = pr * 2u
-        var row2 = row + 1u
-        if (neox != 0u && row < qd + kvd) {
-            let lp = row < qd ? pr : pr - qd / 2u
-            let seg = row < qd ? 0u : qd
-            row = seg + (lp / half) * hs + lp % half
-            row2 = row + half
-        }
-        let lane = gl_SubgroupInvocationID
-        let nb4 = ndim / 4u
-        let nb = ndim / 32u
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var k = lane
-        if (row < qd) {
-            while (k < nb4) {
-                let x4 = x[k]
-                let co = (k % 8u) * 4u
-                let qb0 = (row * nb + k / 8u) * 34u + 2u + co
-                let qb1 = (row2 * nb + k / 8u) * 34u + 2u + co
-                let w0 = float4(float(wqbq[qb0]), float(wqbq[qb0 + 1u]), float(wqbq[qb0 + 2u]), float(wqbq[qb0 + 3u]))
-                let w1 = float4(float(wqbq[qb1]), float(wqbq[qb1 + 1u]), float(wqbq[qb1 + 2u]), float(wqbq[qb1 + 3u]))
-                acc0 += (w0.x * x4.x + w0.y * x4.y + w0.z * x4.z + w0.w * x4.w) * float(wshq[(row * nb + k / 8u) * 17u])
-                acc1 += (w1.x * x4.x + w1.y * x4.y + w1.z * x4.z + w1.w * x4.w) * float(wshq[(row2 * nb + k / 8u) * 17u])
-                k += gl_SubgroupSize
-            }
-        } elif (row < qd + kvd) {
-            let lr = row - qd
-            let lr2 = row2 - qd
-            while (k < nb4) {
-                let x4 = x[k]
-                let co = (k % 8u) * 4u
-                let qb0 = (lr * nb + k / 8u) * 34u + 2u + co
-                let qb1 = (lr2 * nb + k / 8u) * 34u + 2u + co
-                let w0 = float4(float(wqbk[qb0]), float(wqbk[qb0 + 1u]), float(wqbk[qb0 + 2u]), float(wqbk[qb0 + 3u]))
-                let w1 = float4(float(wqbk[qb1]), float(wqbk[qb1 + 1u]), float(wqbk[qb1 + 2u]), float(wqbk[qb1 + 3u]))
-                acc0 += (w0.x * x4.x + w0.y * x4.y + w0.z * x4.z + w0.w * x4.w) * float(wshk[(lr * nb + k / 8u) * 17u])
-                acc1 += (w1.x * x4.x + w1.y * x4.y + w1.z * x4.z + w1.w * x4.w) * float(wshk[(lr2 * nb + k / 8u) * 17u])
-                k += gl_SubgroupSize
-            }
-        } else {
-            let lr = row - qd - kvd
-            let lr2 = row2 - qd - kvd
-            while (k < nb4) {
-                let x4 = x[k]
-                let co = (k % 8u) * 4u
-                let qb0 = (lr * nb + k / 8u) * 34u + 2u + co
-                let qb1 = (lr2 * nb + k / 8u) * 34u + 2u + co
-                let w0 = float4(float(wqbv[qb0]), float(wqbv[qb0 + 1u]), float(wqbv[qb0 + 2u]), float(wqbv[qb0 + 3u]))
-                let w1 = float4(float(wqbv[qb1]), float(wqbv[qb1 + 1u]), float(wqbv[qb1 + 2u]), float(wqbv[qb1 + 3u]))
-                acc0 += (w0.x * x4.x + w0.y * x4.y + w0.z * x4.z + w0.w * x4.w) * float(wshv[(lr * nb + k / 8u) * 17u])
-                acc1 += (w1.x * x4.x + w1.y * x4.y + w1.z * x4.z + w1.w * x4.w) * float(wshv[(lr2 * nb + k / 8u) * 17u])
-                k += gl_SubgroupSize
-            }
-        }
-        acc0 = simd_sum(acc0)
-        acc1 = simd_sum(acc1)
-        if (lane != 0u) {
-            return
-        }
-        if (has_bias != 0u) {
-            acc0 += bias[row]
-            acc1 += bias[row2]
-        }
-        if (row < qd) {
-            let j = neox != 0u ? row % hs : (row % hs) / 2u
-            let fcr = tcos[j]
-            let fci = tsin[j]
-            qo[row] = acc0 * fcr - acc1 * fci
-            qo[row2] = acc0 * fci + acc1 * fcr
-        } elif (row < qd + kvd) {
-            let ik = row - qd
-            let ik2 = row2 - qd
-            let j = neox != 0u ? ik % hs : (ik % hs) / 2u
-            let fcr = tcos[j]
-            let fci = tsin[j]
-            kd[ik] = acc0 * fcr - acc1 * fci
-            kd[ik2] = acc0 * fci + acc1 * fcr
-        } else {
-            let iv = row - qd - kvd
-            vd[iv] = acc0
-            vd[iv + 1u] = acc1
-        }
-    }
+[metal_dispatch(name = "enc_qkvrs32_c", pso = "g_pso_qkvrs32", tgmem = "MetalQ8GemvQkvRsF32_metal_q8_gemv_qkv_rs_msl_tgmem", tg = 128, grid = "pairs", params = "pairs : int64")]
+class MetalQ8GemvQkvRsF32 : MetalQ8GemvQkvRsT {
+    typedef KT = float
+    override CLAMP16 = false
 }
 
-// The W1|W3 twin of the same shape: one simdgroup dots BOTH ffn rows of an output element (gate
-// off the w1 blob views, up off the w3 views — kind-major layout keeps them apart) and writes
-// act(g)·u directly (act = silu or gelu per the uniform). Deletes the swiglu/geglu dispatch AND its serialization level.
-[metal_dispatch(name = "enc_w13sw_c", pso = "g_pso_w13sw", tg = 128, grid = "hidden/4", params = "hidden : int64")]
+
+// The W1|W3 twin: one THREADGROUP dots BOTH ffn rows of an output element (gate off the w1 blob
+// views, up off the w3 views), reduction split across its 4 simdgroups, and writes act(g)·u
+// directly (act = silu or gelu). Deletes the swiglu/geglu dispatch AND its serialization level.
+[metal_dispatch(name = "enc_w13sw_c", pso = "g_pso_w13sw", tgmem = "metal_q8_gemv_w13sw16_msl_tgmem", tg = 128, grid = "hidden", params = "hidden : int64")]
 class MetalQ8GemvW13Sw {
     @ssbo @binding = 0 @role = "weight" @off = "w1off" wqb1 : array<int8>   // w1 blob, byte view @ its tensor offset
     @ssbo @binding = 1 @role = "weight" @off = "w1off" wsh1 : array<float16>   // ... half-scale view
@@ -1079,38 +1011,55 @@ class MetalQ8GemvW13Sw {
     @ssbo @binding = 6 @role = "weight" @off = "w3off" wqb3 : array<int8>   // w3 blob views
     @ssbo @binding = 7 @role = "weight" @off = "w3off" wsh3 : array<float16>
     @uniform @binding = 8 @role = "weight" act : uint        // gate activation: 0 = silu (swiglu), 1 = gelu (geglu, gemma line)
+    @workgroup red : float[64]              // [gate|up][32 lanes] cross-sg partials
 
     [metal_kernel(name="metal_q8_gemv_w13sw16_msl")]
     def metal_q8_gemv_w13sw16 {
-        let r = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (r >= hidden) {
-            return
-        }
+        let r = gl_WorkGroupID.x
+        let sg = gl_SubgroupID
         let lane = gl_SubgroupInvocationID
-        let nb4 = ndim / 4u
         let nb = ndim / 32u
+        let ix = lane / 4u                  // block-within-round: 8 blocks per sg per round
+        let il = lane % 4u                  // 8-quant chunk within the block
         var acc0 = 0.0
         var acc1 = 0.0
-        var k = lane
-        while (k < nb4) {
-            let x4 = x[k]
-            let bi = r * nb + k / 8u
-            let qb = bi * 34u + 2u + (k % 8u) * 4u
-            let w0 = float4(float(wqb1[qb]), float(wqb1[qb + 1u]), float(wqb1[qb + 2u]), float(wqb1[qb + 3u]))
-            let w1 = float4(float(wqb3[qb]), float(wqb3[qb + 1u]), float(wqb3[qb + 2u]), float(wqb3[qb + 3u]))
-            acc0 += (w0.x * x4.x + w0.y * x4.y + w0.z * x4.z + w0.w * x4.w) * float(wsh1[bi * 17u])
-            acc1 += (w1.x * x4.x + w1.y * x4.y + w1.z * x4.z + w1.w * x4.w) * float(wsh3[bi * 17u])
-            k += gl_SubgroupSize
+        var ib = sg * 8u + ix
+        while (ib < nb) {
+            let xi = ib * 8u + il * 2u
+            let x0 = x[xi]
+            let x1 = x[xi + 1u]
+            let qb = (r * nb + ib) * 34u + 2u + il * 8u
+            acc0 += (float(wqb1[qb]) * x0.x + float(wqb1[qb + 1u]) * x0.y +
+                float(wqb1[qb + 2u]) * x0.z + float(wqb1[qb + 3u]) * x0.w +
+                float(wqb1[qb + 4u]) * x1.x + float(wqb1[qb + 5u]) * x1.y +
+                float(wqb1[qb + 6u]) * x1.z + float(wqb1[qb + 7u]) * x1.w) * float(wsh1[(r * nb + ib) * 17u])
+            acc1 += (float(wqb3[qb]) * x0.x + float(wqb3[qb + 1u]) * x0.y +
+                float(wqb3[qb + 2u]) * x0.z + float(wqb3[qb + 3u]) * x0.w +
+                float(wqb3[qb + 4u]) * x1.x + float(wqb3[qb + 5u]) * x1.y +
+                float(wqb3[qb + 6u]) * x1.z + float(wqb3[qb + 7u]) * x1.w) * float(wsh3[(r * nb + ib) * 17u])
+            ib += 32u
+        }
+        if (sg == 0u) {
+            red[lane] = 0.0
+            red[32u + lane] = 0.0
         }
         acc0 = simd_sum(acc0)
         acc1 = simd_sum(acc1)
+        barrier()
         if (lane == 0u) {
+            red[sg] = acc0
+            red[32u + sg] = acc1
+        }
+        barrier()
+        let tot0 = simd_sum(red[lane])
+        let tot1 = simd_sum(red[32u + lane])
+        if (sg == 0u && lane == 0u) {
             if (act == 0u) {
-                ho[r] = (acc0 / (1.0 + exp(-acc0))) * acc1
+                ho[r] = (tot0 / (1.0 + exp(-tot0))) * tot1
             } else {
                 // geglu: gelu(gate)·up — the CPU geglu4 / MetalGeglu tanh-via-exp identity (exp saturates, no NaN)
-                let ga = 0.7978845608028654 * (acc0 + 0.044715 * acc0 * acc0 * acc0)
-                ho[r] = 0.5 * acc0 * (2.0 - 2.0 / (1.0 + exp(2.0 * ga))) * acc1
+                let ga = 0.7978845608028654 * (tot0 + 0.044715 * tot0 * tot0 * tot0)
+                ho[r] = 0.5 * tot0 * (2.0 - 2.0 / (1.0 + exp(2.0 * ga))) * tot1
             }
         }
     }
@@ -2886,7 +2835,6 @@ struct DnArgs {
 // only in the destination views, never in the geometry.
 struct Q8QkvRsArgs {
     ndim : uint
-    ddim : uint
     qd : uint
     kvd : uint
     hs : uint
@@ -3081,7 +3029,7 @@ def private sqd_store(var part : array<float>; wacc : float[512]; pbase, wo, sl,
     }
 }
 
-// Fused single-pass batched attention: beats llama.cpp fa_vec at every depth 512-16K. One
+// Fused single-pass batched attention: beats the upstream vector form at every depth 512-16K. One
 // simdgroup per (row, head, 32-slice-group), scores kept in-register (no divergent store), V
 // accumulated lane-private (zero barriers). hs == 128 only; grid is HEAD-FASTEST for SLC locality.
 [ |> template_struct_instance]
@@ -3648,8 +3596,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_copy_row = compile_pso(metal_copy_row_msl, metal_copy_row_msl_entry, metal_copy_row_msl_fastmath, ok)
     g_pso_emb = compile_pso(metal_embed_q8_msl, metal_embed_q8_msl_entry, metal_embed_q8_msl_fastmath, ok)
     g_pso_emb_k6 = compile_pso(metal_embed_k6_msl, metal_embed_k6_msl_entry, metal_embed_k6_msl_fastmath, ok)
-    g_pso_qkvrs16 = compile_pso(metal_q8_gemv_qkv_rs16_msl, metal_q8_gemv_qkv_rs16_msl_entry, metal_q8_gemv_qkv_rs16_msl_fastmath, ok)
-    g_pso_qkvrs32 = compile_pso(metal_q8_gemv_qkv_rs32_msl, metal_q8_gemv_qkv_rs32_msl_entry, metal_q8_gemv_qkv_rs32_msl_fastmath, ok)
+    g_pso_qkvrs16 = compile_pso(MetalQ8GemvQkvRsF16_metal_q8_gemv_qkv_rs_msl, MetalQ8GemvQkvRsF16_metal_q8_gemv_qkv_rs_msl_entry, MetalQ8GemvQkvRsF16_metal_q8_gemv_qkv_rs_msl_fastmath, ok)
+    g_pso_qkvrs32 = compile_pso(MetalQ8GemvQkvRsF32_metal_q8_gemv_qkv_rs_msl, MetalQ8GemvQkvRsF32_metal_q8_gemv_qkv_rs_msl_entry, MetalQ8GemvQkvRsF32_metal_q8_gemv_qkv_rs_msl_fastmath, ok)
     g_pso_w13sw = compile_pso(metal_q8_gemv_w13sw16_msl, metal_q8_gemv_w13sw16_msl_entry, metal_q8_gemv_w13sw16_msl_fastmath, ok)
     g_pso_kq_k4 = compile_pso(metal_kq_gemv_k4_msl, metal_kq_gemv_k4_msl_entry, metal_kq_gemv_k4_msl_fastmath, ok)
     g_pso_kq_k5 = compile_pso(metal_kq_gemv_k5_msl, metal_kq_gemv_k5_msl_entry, metal_kq_gemv_k5_msl_fastmath, ok)
@@ -3824,7 +3772,7 @@ def enc_site_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
 }
 
 // One kq weight site in a batched step. B <= 8: nrows separate single-stream plane GEMVs (the
-// kq GEMV is ALU-bound, so this matches the lcpp kq batch wall). B >= 9: the kq mul_mm twin over
+// kq GEMV is ALU-bound, so this matches the upstream kq batch wall). B >= 9: the kq mul_mm twin over
 // the M-padded x panel. Disjoint y rows/columns: the caller's one barrier covers the whole group.
 def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
                   bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
@@ -3892,7 +3840,7 @@ def enc_rope_store_q8(enc : MetalComputeEncoder?; bqkv : MetalBuffer?; vsoff : u
         bbias, ka, nthreads)
 }
 
-// the fused QKV+rope+store dispatch (2 rows per simdgroup — grid covers ddim/2 pairs)
+// the fused QKV+rope+store dispatch (one 128-thread threadgroup per rope pair — grid covers ddim/2 pairs)
 def enc_gemv_qkv_rs(enc : MetalComputeEncoder?; f16 : bool; bw : MetalBuffer?; wqoff, wkoff, wvoff : uint64;
                     bx, bq : MetalBuffer?; kmb, vmb : MetalBuffer?; koff, voff : uint64;
                     bcos, bsin, bbias : MetalBuffer?; var ka : Q8QkvRsArgs; d : int64) {
@@ -3906,7 +3854,7 @@ def enc_gemv_qkv_rs(enc : MetalComputeEncoder?; f16 : bool; bw : MetalBuffer?; w
     }
 }
 
-// the fused W1|W3 + silu/gelu dispatch (2 rows per simdgroup — gate + up of one output element; bact picks the activation)
+// the fused W1|W3 + silu/gelu dispatch (one 128-thread threadgroup per output element — gate + up rows; bact picks the activation)
 def enc_gemv_w13sw(enc : MetalComputeEncoder?; bw : MetalBuffer?; w1off, w3off : uint64; bx, bh : MetalBuffer?; bn, bhid : MetalBuffer?; hidden : int64; bact : MetalBuffer?) {
     enc_w13sw_c(enc, bw, w1off, bw, bx, bh, bn, bhid, bw, w3off, bw, bact, hidden)
 }
@@ -4700,8 +4648,8 @@ def private msl_gelu_lut_form(a : float) : float {
     return float(float16(gv))
 }
 
-// whisper.cpp's fp16-LUT tanh GELU, form-matched: the +-10 clamps and BOTH f16 round-trips run
-// in kernel (RNE, same as the CPU table's domain), tanh via the exp identity (Metal tanh NaNs
+// The fp16-LUT tanh GELU, form-matched to the CPU table: the +-10 clamps and BOTH f16 round-trips
+// run in kernel (RNE, same as the CPU table's domain), tanh via the exp identity (Metal tanh NaNs
 // past ~44; the clamped argument reaches 43.7). Near-bit-exact vs the CPU LUT by construction.
 [metal_dispatch(name = "enc_gelu_lut", pso = "g_pso_gelu_lut", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGeluLut : MetalEw1T {
@@ -4734,7 +4682,7 @@ class MetalPosAdd2D {
     }
 }
 
-// mtmd's ClippableLinear clamp (gemma4v): dst = clamp(src, lo, hi), the bounds read off the tower's
+// The ClippableLinear clamp (gemma4v): dst = clamp(src, lo, hi), the bounds read off the tower's
 // f32 blob at the GEMM's clamp record (imin imax omin omax …; `side` 0 = input pair, 1 = output
 // pair). dst may be src (each thread owns one element); an inactive record holds ±FLT_MAX = identity.
 [metal_dispatch(name = "enc_clamp", pso = "g_pso_clamp", tg = 64, grid = "total/64", params = "total : int64")]
@@ -4821,8 +4769,8 @@ class MetalRope2D {
 }
 
 // The whisper cross-KV memory shuffles: one thread per OUTPUT element. Kx transposes the ck GEMM
-// rows [ta x d] into the decoder's head-major [hh][hs][ta], pre-scaled hs^-0.25 (whisper.cpp
-// order — attention then applies no K scale); Vx re-tiles to [hh][ta][hs], no scale.
+// rows [ta x d] into the decoder's head-major [hh][hs][ta], pre-scaled hs^-0.25 (the scale rides
+// the K store — attention then applies no K scale); Vx re-tiles to [hh][ta][hs], no scale.
 [metal_dispatch(name = "enc_cross_kx", pso = "g_pso_cross_kx", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalCrossKx {
     @ssbo @binding = 0 @role = "read" src : array<float>              // [ta x d] ck GEMM rows
@@ -4883,8 +4831,8 @@ class MetalCrossVx {
     }
 }
 
-// The f16 store twin: the decoder's RESIDENT K/V memory is float16 (format parity with
-// whisper.cpp's KV — half the attention read bytes); the f32 form above keeps the CPU-layout
+// The f16 store twin: the decoder's RESIDENT K/V memory is float16 (format parity with the
+// reference KV — half the attention read bytes); the f32 form above keeps the CPU-layout
 // readbacks. Same index math, converted store.
 [metal_dispatch(name = "enc_cross_vx_h", pso = "g_pso_cross_vx_h", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalCrossVxH {
@@ -5294,7 +5242,7 @@ class MetalF32MulMm : MetalMmTileBase {
 
 // The production GEMM: 64-output x 32-token C tiles (4 simdgroups, 8 accumulators), W as
 // interleaved 34B q8 blocks, raw f32 activations. Rolled [unroll_full] math over simdgroup-matrix
-// arrays. Requires out-dim % 64, M padded to 64. Beats llama.cpp's equivalent 2-3% on M1 Max.
+// arrays. Requires out-dim % 64, M padded to 64. Beats the upstream equivalent 2-3% on M1 Max.
 [metal_dispatch(name = "enc_gemm_mm_c", pso = "g_pso_mm", tgmem = "metal_q8_mulmm_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
 class MetalQ8MulMm : MetalMmTileBase {
     @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
@@ -5309,7 +5257,7 @@ class MetalQ8MulMm : MetalMmTileBase {
     def metal_q8_mulmm {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (rasterization order)
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
         var mc : simdgroup_float8x8[8]      // per-simdgroup C quadrant: 2 token-tiles x 4 output-tiles
         var ma : simdgroup_half8x8[4]
@@ -5331,7 +5279,7 @@ class MetalQ8MulMm : MetalMmTileBase {
         let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
         // device streams walk as REAL das pointers (unsafe(addr()) + bump at the loop tail):
         // pointer-vs-index register-allocates differently on AGX and is shape-dependent — this
-        // kernel measured pointer (llama.cpp's loop reads its scale straight off a carried pointer)
+        // kernel measured pointer, with the scale read straight off the carried pointer
         let blk0 = (nBase + lr0) * nkb
         var scur = unsafe(addr(wsh[blk0 * 17u]))                    // half scale rides the quants' cacheline
         var qp = unsafe(addr(wqb[blk0 * 34u + 2u + il0 * 16u]))
@@ -5431,9 +5379,9 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
                 let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
                 let dsc = dall * s6
                 let dmn = dsc * 32.0   // -32 folded to the fma form (k4's dmn shape)
-                // byte-position shift folded into exact power-of-two pre-scales (lcpp dequantize_q6_K
-                // shape): q<<8c is an exact f32 integer (6-bit quants), dsc/2^8c is an exponent shift,
-                // so each fma sees the same real product — bit-identical, one shift fewer per element
+                // byte-position shift folded into exact power-of-two pre-scales: q<<8c is an exact
+                // f32 integer (6-bit quants), dsc/2^8c is an exponent shift, so each fma sees the
+                // same real product — bit-identical, one shift fewer per element
                 let dsc1 = dsc * 0.00390625
                 let dsc2 = dsc * 0.0000152587890625
                 let dsc3 = dsc * 0.000000059604644775390625
@@ -6103,7 +6051,7 @@ class MetalMoeGemvMx4 {
         let bxs = ka.bxs
         let bys = ka.bys
         let hasb = ka.hasb
-        // the lcpp mul_mv_mxfp4 shape (moe-lab lcppe rung, 239->301 wGB/s at gpt-oss shapes):
+        // the wide-block MXFP4 GEMV shape (moe-lab lcppe rung, 239->301 wGB/s at gpt-oss shapes):
         // 16 blocks in flight x 2 threads/block, yl[4] float4 x prefetch shared across both rows,
         // uint2 weight loads, tgmem value LUT, e8m0 scale computed in ALU (no dependent etab load)
         let lane = gl_SubgroupInvocationID
@@ -6370,9 +6318,9 @@ class MetalMoeWScale {
     }
 }
 
-// One simdgroup per output row over the 34B q8 blob (f16 scale + 32 int8 inline — the SAME dual-view
-// W the mul_mm reads, bound at the tensor's byte offset): lane owns chunk lane%8 of every 4th block,
-// 4 in flight; the scale rides the quants' cacheline. Rows/tg via DASLLAMA_METAL_GEMV_TG; BATCHED adds a grid-y position axis (the DnBa shape).
+// One simdgroup per output row over the 34B q8 blob (f16 scale + 32 int8 inline, dual-viewed),
+// 4 blocks in flight — now the DnBa narrow-projection form only (d = dt_rank 16..64, where the
+// 2-rows/tg MetalQ8Gemv would starve the grid); BATCHED adds the grid-y position axis.
 [ |> template_struct_instance]
 class template MetalQ8GemvT {
     @ssbo @binding = 0 @role = "weight" @off = "boff" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
@@ -6431,8 +6379,64 @@ class template MetalQ8GemvT {
     }
 }
 
-[metal_dispatch(name = "enc_gemv_c", pso = "g_pso_gemv", tg = "g_gemv_rows*32", grid = "d/g_gemv_rows", params = "d : int64, np : int64")]
-class MetalQ8Gemv : MetalQ8GemvT {
+// Reduction-split GEMV (2 rows/tg, 4 simdgroups, 8 quants/thread/round): the n-walk splits
+// ACROSS the sgs (n/4 x-window per sg stays L1-resident at every decode dim) and one x load
+// feeds both rows — the 1-row/sg full-n walk it replaces spills x past L1 from n=4096.
+[metal_dispatch(name = "enc_gemv_c", pso = "g_pso_gemv", tgmem = "MetalQ8Gemv_metal_q8_gemv_msl_tgmem", tg = 128, grid = "d/2", params = "d : int64, np : int64")]
+class MetalQ8Gemv {
+    @ssbo @binding = 0 @role = "weight" @off = "boff" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
+    @ssbo @binding = 1 @role = "weight" @off = "boff" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
+    @ssbo @binding = 2 x : array<float4>    // [n] f32 vector, float4 view
+    @ssbo @binding = 3 @off = "yoff" @span = "d*np*4" y : array<float>     // [d] outputs (np = 1 on this form)
+    @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
+    @uniform @binding = 5 ddim : uint       // d (output rows)
+    @workgroup red : float[64]              // [2 rows][32 lanes] cross-sg partials
+
+    [metal_kernel]
+    def metal_q8_gemv {
+        let sg = gl_SubgroupID
+        let lane = gl_SubgroupInvocationID
+        let nb = ndim / 32u
+        let first_row = gl_WorkGroupID.x * 2u
+        let ix = lane / 4u                  // block-within-round: 8 blocks per sg per round
+        let il = lane % 4u                  // 8-quant chunk within the block
+        var sumf : float[2]
+        var ib = sg * 8u + ix
+        while (ib < nb) {
+            let xi = ib * 8u + il * 2u      // the x chunk once per round, shared by both rows
+            let x0 = x[xi]
+            let x1 = x[xi + 1u]
+            for [unroll_full] (r in range(2)) {
+                let bi = (first_row + uint(r)) * nb + ib
+                let d = float(wsh[bi * 17u])
+                let qb = bi * 34u + 2u + il * 8u
+                sumf[r] += (float(wqb[qb]) * x0.x + float(wqb[qb + 1u]) * x0.y +
+                    float(wqb[qb + 2u]) * x0.z + float(wqb[qb + 3u]) * x0.w +
+                    float(wqb[qb + 4u]) * x1.x + float(wqb[qb + 5u]) * x1.y +
+                    float(wqb[qb + 6u]) * x1.z + float(wqb[qb + 7u]) * x1.w) * d
+            }
+            ib += 32u                       // NSG*NQ blocks per round
+        }
+        for [unroll_full] (r in range(2)) {
+            if (sg == 0u) {
+                red[uint(r) * 32u + lane] = 0.0
+            }
+            sumf[r] = simd_sum(sumf[r])
+        }
+        barrier()
+        for [unroll_full] (r in range(2)) {
+            if (lane == 0u) {
+                red[uint(r) * 32u + sg] = sumf[r]
+            }
+        }
+        barrier()
+        for [unroll_full] (r in range(2)) {
+            let tot = simd_sum(red[uint(r) * 32u + lane])
+            if (lane == 0u && sg == 0u && first_row + uint(r) < ddim) {
+                y[first_row + uint(r)] = tot
+            }
+        }
+    }
 }
 
 // Batched narrow projection twin (DeltaNet β/α: d = dt_rank, 16..64 — under every GEMM N tile):
@@ -6442,7 +6446,7 @@ class MetalDnBa : MetalQ8GemvT {
     override BATCHED = true
 }
 
-// Q4_K: lane owns 32 elems of every 4th superblock; lcpp's kmask halfword scale decode +
+// Q4_K: lane owns 32 elems of every 4th superblock; the kmask halfword scale decode +
 // nibble-mask acc folds (x16/x256 groups folded by pow2 constants).
 [metal_dispatch(name = "enc_kq_k4_c", pso = "g_pso_kq_k4", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvK4 {
@@ -6596,7 +6600,7 @@ class MetalKqGemvK5 {
     }
 }
 
-// Q5_K, select-form nr0=1 twin (the gemv-lab b1c winner): one row per simdgroup, lcpp's q5 lane
+// Q5_K, select-form nr0=1 twin (the gemv-lab b1c winner): one row per simdgroup, the q5 lane
 // map, qh via mask-selects. Wins at n < 3072 at EVERY d (-9..-11% vs b2r) and the small-d kv
 // shape (b2r under-occupied); b2r keeps n >= 3072. enc_kq_gemv picks per site.
 [metal_dispatch(name = "enc_kq_k5c_c", pso = "g_pso_kq_k5c", tg = 64, grid = "rows/2", params = "rows : int64, n : int64")]
@@ -7347,7 +7351,7 @@ class MetalGeglu : MetalEw2T {
         0.5 * a * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.7978845608028654 * (a + 0.044715 * a * a * a))))) * b)
 }
 
-// GEGLU-quick (gemma4v): gelu_quick(g)*u with the CPU's ggml-cpu f16-table form — both binary16
+// GEGLU-quick (gemma4v): gelu_quick(g)*u with the CPU's f16-table form — both binary16
 // round-trips run in kernel (RNE), so the residual stream sees the same activation bits as the
 // CPU lane rather than the exact x*sigmoid(1.702x) (form-matched like the tower GELUs).
 [never_inline]   // the single-return-splice protection of msl_gelu_lut_form
@@ -7528,7 +7532,7 @@ class MetalDnL2Norm {
     }
 }
 
-// The fused sequential delta rule (llama.cpp's gated_delta_net shape): one simdgroup per
+// The fused sequential gated delta-net rule: one simdgroup per
 // (state column j, v-head) holds S[:,j] in registers and walks ALL npos tokens in-kernel —
 // zero per-token state traffic; β/σ/softplus fold into the loop (redundant per column, trivial).
 [metal_dispatch(name = "enc_dn_scan", pso = "g_pso_dn_scan", tg = 128, grid = "ds/4, nvh", params = "ds : int64, nvh : int64")]

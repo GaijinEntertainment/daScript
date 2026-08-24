@@ -1311,7 +1311,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         let f1 = fmt_at(t.we1_fmt, l)
         let f2 = fmt_at(t.we2_fmt, l)
         let f3 = fmt_at(t.we3_fmt, l)
-        // gate/up must share a form (one activation image); down is free. llama.cpp's Q4_K_M MoE
+        // gate/up must share a form (one activation image); down is free. The Q4_K_M MoE
         // recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
         // gemma). The walk stops on refusal so the resident set stays contiguous from the end.
         let gu_ok = ((f1 == KqFmt.q8) == (f3 == KqFmt.q8)

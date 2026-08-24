@@ -13,7 +13,7 @@ require math
 require strings
 
 // Decode-GEMV variant race at the real Llama-3.2-1B decode shapes. Decode is pure weight
-// streaming (1 token, zero reuse) — llama.cpp's same-shape ggml_gemv_q8_0_4x4_q8_0 sustains
+// streaming (1 token, zero reuse) — the upstream same-shape 4x4 GEMV sustains
 // ~119 GB/s in-situ vs our ~101, and this bench races the matmul_variants decode-GEMV cells
 // (unroll / loads-in-flight, fma flush, split sdot chain, dual-group streams, inline-scale
 // single-stream layout) to find which delta pays. Method: correctness-gated, then round-robin

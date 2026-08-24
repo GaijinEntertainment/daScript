@@ -125,7 +125,7 @@ class MetalGemmLabN64 {
     }
 }
 
-// v2: 64x32 C tile — the ggml mul_mm block shape. Same 21.3 MACs per staged element as v1 but
+// v2: 64x32 C tile. Same 21.3 MACs per staged element as v1 but
 // the doubled dimension is M, so the driver would pad activations to 64 rows if this lands.
 class MetalGemmLabM64 {
     @ssbo @binding = 0 wq : array<int8>
@@ -368,7 +368,7 @@ class MetalGemmLabK64 {
     }
 }
 
-// v5: 32x32 with TILE-MAJOR shared layout (the ggml mul_mm trick): each 8x8 tile is a
+// v5: 32x32 with TILE-MAJOR shared layout: each 8x8 tile is a
 // contiguous 64-half block (stride 8), so every simdgroup_load hits one 128-byte run —
 // no strided bank conflicts. Same 4KB threadgroup footprint as production.
 class MetalGemmLabTile32 {
@@ -609,7 +609,7 @@ class MetalGemmLabNoMath {
     }
 }
 
-// v7: 32x32 with RUN-STAGING (the ggml work split): 128 threads = 64 A runs + 64 B runs of 16
+// v7: 32x32 with RUN-STAGING (threads split across the two tiles): 128 threads = 64 A runs + 64 B runs of 16
 // CONTIGUOUS elements each — ONE scale load per run instead of one per element, contiguous
 // device byte loads the compiler can coalesce. The half split lands on simdgroup boundaries
 // (threads 0-63 = simdgroups 0-1) so there is no intra-simdgroup divergence. Math loop = v0.
@@ -1126,7 +1126,7 @@ class MetalGemmLabN64Vec4 {
     }
 }
 
-// v12: 64x32 C tile + vec4 run-staging — the ggml block shape rematch. A has exactly 128
+// v12: 64x32 C tile + vec4 run-staging — the v2 block shape rematch. A has exactly 128
 // 16-runs (one per thread); B's 64 runs ride on threads 64-127.
 class MetalGemmLabM64Vec4 {
     @ssbo @binding = 0 wq : array<byte4>
@@ -2154,16 +2154,16 @@ class MetalGemmLab6464Prefetch {
     }
 }
 
-// v21: the ggml kernel_mul_mm GEOMETRY on our planar Q8 contract — measured head-to-head vs
-// the (since-removed) verbatim llama.cpp reference. 64 outputs x 32 tokens per threadgroup (their NR0xNR1 — transposed
-// vs our 64x64), TILE-MAJOR 8x8 shared blocks so every simdgroup_load is one contiguous
-// 64-half run at stride 8, weights transposed WITHIN their tiles at staging (the math loop
-// needs no transposed loads), and all device reads issued into registers BEFORE the
-// pre-staging barrier (their latency-hiding order). Each simdgroup owns a 16-token x
-// 32-output quadrant: 8 accumulators, 6 tile loads per 8-k slab. Deviations from ggml, both
-// deliberate: our planar int8 + f32-scale buffers via byte4 loads (theirs: interleaved blobs
-// read a byte at a time), and no simdgroup_barrier(mem_none) scheduling hints (no emitter
-// spelling; production would inherit them via a fastmath-safe pragma if this lands).
+// v21: the wide-tile GEOMETRY on our planar Q8 contract — measured head-to-head vs the
+// (since-removed) upstream reference. 64 outputs x 32 tokens per threadgroup (transposed vs
+// our 64x64), TILE-MAJOR 8x8 shared blocks so every simdgroup_load is one contiguous 64-half
+// run at stride 8, weights transposed WITHIN their tiles at staging (the math loop needs no
+// transposed loads), and all device reads issued into registers BEFORE the pre-staging
+// barrier so their latency hides behind it. Each simdgroup owns a 16-token x 32-output
+// quadrant: 8 accumulators, 6 tile loads per 8-k slab. Two deliberate departures from the
+// wall arm: our planar int8 + f32-scale buffers via byte4 loads (the interleaved blob is read
+// a byte at a time), and no simdgroup_barrier(mem_none) scheduling hints (no emitter spelling;
+// production would inherit them via a fastmath-safe pragma if this lands).
 class MetalGemmLabGgmlGeo {
     @ssbo @binding = 0 wq : array<byte4>
     @ssbo @binding = 1 ws : array<float>
@@ -2179,7 +2179,7 @@ class MetalGemmLabGgmlGeo {
     def lab_ggmlgeo {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
         var c00 : simdgroup_float8x8
         var c01 : simdgroup_float8x8
@@ -2249,7 +2249,7 @@ class MetalGemmLabGgmlGeo {
             tg_store_half4(tb, ibB, vb0)    // k runs contiguous within the tile row — 2 vector stores
             tg_store_half4(tb, ibB + 4u, vb1)
             barrier()
-            // math fully unrolled (their FOR_UNROLL): 4 k-slabs x (6 tile loads + 8 macs),
+            // math fully unrolled: 4 k-slabs x (6 tile loads + 8 macs),
             // constant tile offsets off hoisted quadrant bases
             simdgroup_load(ma0, ta, aB, 8u)
             simdgroup_load(ma1, ta, aB + 64u, 8u)
@@ -2337,7 +2337,7 @@ class MetalGemmLabGgmlGeoF32X {
     def lab_ggmlgeof32x {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
         var c00 : simdgroup_float8x8
         var c01 : simdgroup_float8x8
@@ -2404,7 +2404,7 @@ class MetalGemmLabGgmlGeoF32X {
             tg_store_half4(tb, ibB, b0)     // no dequant on B — pure convert-and-store
             tg_store_half4(tb, ibB + 4u, b1)
             barrier()
-            // math fully unrolled (their FOR_UNROLL): 4 k-slabs x (6 tile loads + 8 macs),
+            // math fully unrolled: 4 k-slabs x (6 tile loads + 8 macs),
             // constant tile offsets off hoisted quadrant bases
             simdgroup_load(ma0, ta, aB, 8u)
             simdgroup_load(ma1, ta, aB + 64u, 8u)
@@ -2492,7 +2492,7 @@ class MetalGemmLabGgmlGeoNoScale {
     def lab_ggmlgeonosc {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
         var c00 : simdgroup_float8x8
         var c01 : simdgroup_float8x8
@@ -2562,7 +2562,7 @@ class MetalGemmLabGgmlGeoNoScale {
             tg_store_half4(tb, ibB, vb0)    // k runs contiguous within the tile row — 2 vector stores
             tg_store_half4(tb, ibB + 4u, vb1)
             barrier()
-            // math fully unrolled (their FOR_UNROLL): 4 k-slabs x (6 tile loads + 8 macs),
+            // math fully unrolled: 4 k-slabs x (6 tile loads + 8 macs),
             // constant tile offsets off hoisted quadrant bases
             simdgroup_load(ma0, ta, aB, 8u)
             simdgroup_load(ma1, ta, aB + 64u, 8u)
@@ -2650,7 +2650,7 @@ class MetalGemmLabGgmlGeoScT {
     def lab_ggmlgeosct {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
         var c00 : simdgroup_float8x8
         var c01 : simdgroup_float8x8
@@ -2720,7 +2720,7 @@ class MetalGemmLabGgmlGeoScT {
             tg_store_half4(tb, ibB, vb0)    // k runs contiguous within the tile row — 2 vector stores
             tg_store_half4(tb, ibB + 4u, vb1)
             barrier()
-            // math fully unrolled (their FOR_UNROLL): 4 k-slabs x (6 tile loads + 8 macs),
+            // math fully unrolled: 4 k-slabs x (6 tile loads + 8 macs),
             // constant tile offsets off hoisted quadrant bases
             simdgroup_load(ma0, ta, aB, 8u)
             simdgroup_load(ma1, ta, aB + 64u, 8u)
@@ -2808,7 +2808,7 @@ class MetalGemmLabBlob36 {
     def lab_blob36 {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
         var c00 : simdgroup_float8x8
         var c01 : simdgroup_float8x8
@@ -2876,7 +2876,7 @@ class MetalGemmLabBlob36 {
             tg_store_half4(tb, ibB, b0)     // no dequant on B — pure convert-and-store
             tg_store_half4(tb, ibB + 4u, b1)
             barrier()
-            // math fully unrolled (their FOR_UNROLL): 4 k-slabs x (6 tile loads + 8 macs),
+            // math fully unrolled: 4 k-slabs x (6 tile loads + 8 macs),
             // constant tile offsets off hoisted quadrant bases
             simdgroup_load(ma0, ta, aB, 8u)
             simdgroup_load(ma1, ta, aB + 64u, 8u)
@@ -2949,10 +2949,10 @@ class MetalGemmLabBlob36 {
     }
 }
 
-// v23: v22's geometry on llama.cpp's OWN 34B blob (half scale + 32 int8, quants 2-byte-offset)
-// — their exact W contract and byte-wise load/dequant pattern, das-authored. Isolates the
-// residual data-contract share of the verbatim gap: half scale = 5.6% less W traffic, and the
-// +2 quant offset forces scalar byte loads (the reason ggml reads bytes, not vectors).
+// v23: v22's geometry on the 34B blob layout (half scale + 32 int8, quants 2-byte-offset) —
+// that W contract and its byte-wise load/dequant pattern, das-authored. Isolates the residual
+// data-contract share of the gap vs the wall: half scale = 5.6% less W traffic, and the
+// +2 quant offset forces scalar byte loads (which is why that layout is read byte-wise).
 class MetalGemmLabBlob34 {
     @ssbo @binding = 0 wsh : array<float16> // 34B-block W blob, HALF-SCALE view: scale of block b at 17*b
     @ssbo @binding = 1 wqb : array<int8>    // the SAME blob buffer, BYTE view: quants of block b at 34*b + 2
@@ -2968,7 +2968,7 @@ class MetalGemmLabBlob34 {
     def lab_blob34 {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
         var c00 : simdgroup_float8x8
         var c01 : simdgroup_float8x8
@@ -3044,7 +3044,7 @@ class MetalGemmLabBlob34 {
             tg_store_half4(tb, ibB, b0)     // no dequant on B — pure convert-and-store
             tg_store_half4(tb, ibB + 4u, b1)
             barrier()
-            // math fully unrolled (their FOR_UNROLL): 4 k-slabs x (6 tile loads + 8 macs),
+            // math fully unrolled: 4 k-slabs x (6 tile loads + 8 macs),
             // constant tile offsets off hoisted quadrant bases
             simdgroup_load(ma0, ta, aB, 8u)
             simdgroup_load(ma1, ta, aB + 64u, 8u)
@@ -3133,7 +3133,7 @@ class MetalGemmLabGgmlGeoAOnly {
     def lab_ggmlgeoa {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
         var c00 : simdgroup_float8x8
         var c01 : simdgroup_float8x8
@@ -3192,7 +3192,7 @@ class MetalGemmLabGgmlGeoAOnly {
             ta[tA1 + 48u] = float16(va3.z)
             ta[tA1 + 56u] = float16(va3.w)
             barrier()
-            // math fully unrolled (their FOR_UNROLL): 4 k-slabs x (6 tile loads + 8 macs),
+            // math fully unrolled: 4 k-slabs x (6 tile loads + 8 macs),
             // constant tile offsets off hoisted quadrant bases
             simdgroup_load(ma0, ta, aB, 8u)
             simdgroup_load(ma1, ta, aB + 64u, 8u)
@@ -3280,7 +3280,7 @@ class MetalGemmLabGgmlGeoBOnly {
     def lab_ggmlgeob {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel (ggml rasterization)
+        let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
         var c00 : simdgroup_float8x8
         var c01 : simdgroup_float8x8
@@ -3318,7 +3318,7 @@ class MetalGemmLabGgmlGeoBOnly {
             tg_store_half4(tb, ibB, vb0)    // k runs contiguous within the tile row — 2 vector stores
             tg_store_half4(tb, ibB + 4u, vb1)
             barrier()
-            // math fully unrolled (their FOR_UNROLL): 4 k-slabs x (6 tile loads + 8 macs),
+            // math fully unrolled: 4 k-slabs x (6 tile loads + 8 macs),
             // constant tile offsets off hoisted quadrant bases
             simdgroup_load(ma0, ta, aB, 8u)
             simdgroup_load(ma1, ta, aB + 64u, 8u)
@@ -3392,7 +3392,7 @@ class MetalGemmLabGgmlGeoBOnly {
 }
 
 // knockout: v21 with the staging removed (math + barriers + stores only, tiles read
-// uninitialized) — the ggml-geometry math ceiling; attributes v21's staging share
+// uninitialized) — the v21-geometry math ceiling; attributes v21's staging share
 class MetalGemmLabGgmlGeoNoStage {
     @ssbo @binding = 0 wq : array<byte4>
     @ssbo @binding = 1 ws : array<float>
@@ -3513,11 +3513,11 @@ struct private LabVariant {
     check : bool = true                     // false = knockout: time it, never compare output
     threads : int = 128                     // threads per threadgroup
     f16w : bool = false                     // binding 0 gets the PRE-DEQUANTIZED f16 W panel
-    grid2d : bool = false                   // dispatch (M'/bm, d/bn, 1) — tokens on the fast axis (ggml rasterization)
+    grid2d : bool = false                   // dispatch (M'/bm, d/bn, 1) — tokens on the fast axis
     f32x : bool = false                     // binding 2 gets the PRE-DEQUANTIZED f32 activation panel
     wscT : bool = false                     // binding 1 gets the [block][row]-TRANSPOSED W scales
     blob36 : bool = false                   // bindings 0+1 get the SAME 36B-block W blob (scale/quant views) + f32 X
-    blob34 : bool = false                   // bindings 0+1 get llama.cpp's OWN 34B blob (half-scale/byte views) + f32 X
+    blob34 : bool = false                   // bindings 0+1 get the 34B blob layout (half-scale/byte views) + f32 X
     blob34p : bool = false                  // the PRODUCTION mul_mm binding set: blob x2, f32 X, y, kdim, ndim
     tgmem : uint64 = 0ul                    // dynamic [[threadgroup(0)]] bytes (0 = kernel uses static tg arrays)
 }
@@ -3586,8 +3586,8 @@ def private download_floats(buf; var dst : array<float>; count : int64) {
 // The emitted v22 is fully unrolled SSA: LLVM hoists ~42 loop-invariant threadgroup addresses
 // (16 A-store + 2 B-store + 24 sgmat-load pointers) out of the k-loop, holding them in registers
 // for the kernel's whole life — max_threads drops 1024 -> 832 (register-limited) and occupancy
-// eats ~13%. This probe keeps v22's staging verbatim but rewrites the math as llama.cpp shapes
-// it: matrix ARRAYS + rolled unroll(full) loops + two bumped tile pointers, so the AGX backend
+// eats ~13%. This probe keeps v22's staging verbatim but ROLLS the math:
+// matrix ARRAYS + rolled unroll(full) loops + two bumped tile pointers, so the AGX backend
 // unrolls with register-budget awareness. das-side equivalent needs emitter work — probe first.
 let LAB_V22ROLL_MSL = "#include <metal_stdlib>
 using namespace metal;
@@ -3870,10 +3870,10 @@ kernel void lab_v24h1(device const half* wsh [[buffer(0)]],
 
 
 // v26 probe: v25's emitted text with the STATIC threadgroup arrays swapped for one dynamic
-// [[threadgroup(0)]] buffer (llama.cpp's shmem shape). ISA rail: the backend constant-folds
+// [[threadgroup(0)]] buffer. ISA rail: the backend constant-folds
 // carried tile pointers into absolute addresses of STATIC tg arrays and must materialize the
 // large offsets (23 iadds in the math phase); the opaque dynamic base keeps small carried
-// offsets — loop 185 -> 156 instructions, iadd 40 -> 15 (the llama.cpp reference: 165 / 24).
+// offsets — loop 185 -> 156 instructions, iadd 40 -> 15 (the upstream reference: 165 / 24).
 let LAB_V26_SHMEM_MSL = "#include <metal_stdlib>
 using namespace metal;
 kernel void lab_shmem(device const half* wsh [[buffer(0)]],
@@ -4020,7 +4020,7 @@ def private upload_f32_x(dev; xq : array<int8>; xs : array<float>; rows, k : int
 
 // interleaved 36B-block W blob (f32 scale + 32 int8 quants, 4-aligned) — the Option-A
 // production layout: same bytes as planar quants+scales, but the scale rides the quants'
-// cacheline and byte4 quant loads stay aligned (ggml's 34B half-scale blocks force scalar reads)
+// cacheline and byte4 quant loads stay aligned (34B half-scale blocks force scalar reads)
 def private upload_blob36(dev; q : array<int8>; s : array<float>; rows, k : int64; enabled : bool) {
     if (!enabled) {
         return metal_new_buffer(dev, 64ul)

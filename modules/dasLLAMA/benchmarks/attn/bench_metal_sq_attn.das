@@ -331,19 +331,19 @@ class MetalSqAttnLabTq4 {
     }
 }
 
-// Fused single-pass form, take 2 (the lcpp fa_vec shape on our rails): one sg per (row, head,
+// Fused single-pass form, take 2 (the vector flash-attention shape on our rails): one sg per (row, head,
 // 32-position slice), 4 slices packed per 128-thread tg (no barriers — divergent per-sg exit is
 // safe), score/softmax/weights register-resident.
-// NEGATIVE, take 1 (2026-07-14, class deleted): the fully-fused lcpp-shape variant — one sg
+// NEGATIVE, take 1 (2026-07-14, class deleted): the fully-fused single-pass variant — one sg
 // per 32-position slice, register-resident softmax (keep-select + butterfly max +
 // simd_shuffle broadcast), zero barriers, part entries per-32-slice — reached ISA parity with
-// fa_vec (~15 issues/position vs their 14.7) but measured 15-20% SLOWER than the two-phase
+// the vector flash-attention wall (~15 issues/position vs its 14.7) but measured 15-20% SLOWER than the two-phase
 // form at every depth (d512 28.5 vs 23.5us; d2048 83.2 vs 74.5), 32-thread tgs and packed
 // alike: the per-slice prologue (~270 instr re-run per 32 positions vs per 64) eats the
 // softmax-pass savings; issue count is not the limiter at this size.
 // UNLIKE that take, K/V loads here use INDEPENDENT indexed offsets (kp[i * kv4]) instead of a
 // walked pointer — the walk built a 32-deep serial address chain every load depended on;
-// lcpp's unrolled body has base+immediate offsets (NS10 is an FC constant), loads independent.
+// the wall's unrolled body has base+immediate offsets (its slice count is an FC constant), loads independent.
 class MetalSqAttnPartLabF {
     @ssbo @binding = 0 kc : array<half4>
     @ssbo @binding = 1 vc : array<half4>
@@ -438,8 +438,8 @@ class MetalSqAttnPartLabF {
 // prologue amortizes over 64 positions with NO in-sg loop. Entries are 64-wide (comb's
 // min((cnt+31)/32, nchmax) clamp counts them right when nchmax = ceil(cnt/64)).
 // NEGATIVES recorded here (2026-07-14): (a) full-bake twin (kv_dim/hs/kv_mul hardcoded) —
-// neutral, the per-offset imadds are free; (b) slice-group WHILE-loop twin (lcpp nwg
-// discipline, running online merge across strided slices) — 15-30% SLOWER at depth than the
+// neutral, the per-offset imadds are free; (b) slice-group WHILE-loop twin (a running
+// online merge across strided slices) — 15-30% SLOWER at depth than the
 // loop-free partF even at 1 slice/sg: the loop-carried acc/m/tot state wrecks scheduling and
 // register pressure; amortization must be straight-line. Both removed; see git history.
 class MetalSqAttnPartLabF64 {
@@ -586,9 +586,9 @@ class MetalSqAttnPartLabF64 {
     }
 }
 
-// Deep-context twin: the lcpp nsg-loop shape done RIGHT — a capped budget of min(ceil(cnt/32),
+// Deep-context twin: the sg-loop shape done RIGHT — a capped budget of min(ceil(cnt/32),
 // 32) sgs per (row, head), each looping strided 32-slices, but the O accumulator lives in a
-// LANE-PRIVATE tgmem slot (their so4 discipline: loop-carried state through memory, registers
+// LANE-PRIVATE tgmem slot (loop-carried state through memory, registers
 // stay light) with scalar m/tot registers and a branch-free rescale-merge per slice. No
 // barriers — each lane touches only its own 4 floats. The register-resident loop form was the
 // recorded partG negative; tgmem residency is the variable it did not isolate.
@@ -704,7 +704,7 @@ class MetalSqAttnPartLabD {
 // Comb twin for the fused-arm part entries (132-float, float4-aligned). PARALLEL over entries
 // (the production comb walks them serially — at d2048 that is 64 dependent iterations): the 4
 // sgs each online-merge their entry subset with float4 loads (lane owns a 4-column group; m and
-// l arrive in ONE float4), then a single tgmem cross-sg merge. Mirrors lcpp reduce parallelism.
+// l arrive in ONE float4), then a single tgmem cross-sg merge - the reduce is parallel too.
 class MetalSqAttnCombLabP {
     @ssbo @binding = 0 part : array<float4>
     @ssbo @binding = 1 yo : array<float>

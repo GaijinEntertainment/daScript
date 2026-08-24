@@ -11,7 +11,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_bpe
 require strings
 
-// llama2.c SentencePiece-BPE tokenizer. tokenizer.bin layout:
+// SentencePiece-BPE tokenizer over the llama2.c tokenizer.bin format:
 //   int32 max_token_length, then per token { float32 score, int32 len, len bytes of text }.
 
 //! Vocabulary loaded from tokenizer.bin: id -> piece text, plus merge scores (for encode).
@@ -33,7 +33,7 @@ struct SpmTokenizer {
 }
 
 //! Build the DERIVED merge-pair table from vocab/lookup — called by both loaders and the image
-//! reader. A pair probe replaces the llama2.c concat-and-hash byte-identically: pack(left, right)
+//! reader. A pair probe replaces the concat-and-hash byte-identically: pack(left, right)
 //! maps to exactly the id the concat-string lookup would find (last duplicate wins in both).
 def build_spm_derived(var tk : SpmTokenizer) {
     tk.pair_merge |> clear()
@@ -141,7 +141,7 @@ struct private SpmBigram {
     mid : int64
 }
 
-// heap priority: highest score, then leftmost — exactly the llama2.c scan's selection order.
+// heap priority: highest score, then leftmost — exactly the sequential scan's selection order.
 // The bg_* heap in dasllama_bpe is a deliberate twin: different key struct and comparator,
 // and the two backends share no module to host a generic heap.
 def private sg_before(a, b : SpmBigram) : bool => a.score > b.score || (a.score == b.score && a.li < b.li)
@@ -188,7 +188,7 @@ def private sg_try_push(tk : SpmTokenizer; var h : array<SpmBigram>; toks : arra
         l_id = toks[li], r_id = toks[ri], mid = mid))
 }
 
-// Heap merge over the WHOLE token sequence: O(n log n) where the llama2.c rescan was O(n^2) in
+// Heap merge over the WHOLE token sequence: O(n log n) where the sequential rescan is O(n^2) in
 // text length. Stale entries (an endpoint merged since push) are skipped by the adjacency+id
 // guard; selection order matches the scan exactly, so ids are identical.
 def private spm_merge_heap(tk : SpmTokenizer; var toks : array<int64>) {
@@ -236,7 +236,7 @@ def private spm_merge_heap(tk : SpmTokenizer; var toks : array<int64>) {
     delete h
 }
 
-//! Decode one token to its display text (llama2.c decode): strip a single leading space
+//! Decode one token to its display text: strip a single leading space
 //! right after BOS, and turn raw-byte tokens "<0xXX>" into the actual byte (byte_token_val
 //! is shared with the BPE backend — same SentencePiece byte-fallback vocabulary).
 def decode(tk : SpmTokenizer; prev_token, token : int64) : string {
@@ -252,7 +252,7 @@ def decode(tk : SpmTokenizer; prev_token, token : int64) : string {
     return piece
 }
 
-//! Encode text into token IDs (SentencePiece-BPE, ported from llama2.c encode):
+//! Encode text into token IDs (SentencePiece-BPE):
 //! optional BOS, a dummy leading-space token, per-codepoint vocab lookup with byte
 //! fallback, then greedily merge the highest-scoring adjacent pair until none remain.
 def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {

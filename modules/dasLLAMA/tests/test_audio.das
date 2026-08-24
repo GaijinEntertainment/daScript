@@ -15,8 +15,8 @@ require ?das_metal dasllama/dasllama_metal_tower   // pin the CPU-oracle encodes
 
 // Audio tower tests. The mel/gelu/filterbank tests are self-contained; the encoder test
 // needs the locally-converted Qwen2-Audio mmproj (2.5 GB, gitignored) and skips without it.
-// The oracle constants come from llama.cpp's mtmd (llama-mtmd-debug, CPU backend) — the rig
-// and end-to-end token parity runs live in modules/dasLLAMA/qwen2_audio_plan.md.
+// The oracle constants come from llama-mtmd-debug (CPU backend) — the rig
+// and end-to-end token parity runs live in history/dasLLAMA/qwen2_audio_plan.md.
 
 [test]
 def test_gelu_erf(t : T?) {
@@ -126,7 +126,7 @@ def test_swiglu_swapped(t : T?) {
 // Tower-structure tests for the ultravox / voxtral / omni mmprojs (each skips without its
 // local model file). proj_dim comes from the mm tensors, NOT clip.audio.projection_dim —
 // the ultravox-1b GGUF metadata says 4096 while mm2 actually projects into the 2048-wide
-// decoder. Token counts mirror mtmd's clip_n_output_tokens floor math.
+// decoder. Token counts follow the projector chain's floor math.
 [test]
 def test_ultravox_tower(t : T?) {
     t |> run("ultravox mmproj: stack-8 projector shapes + 187 tokens/chunk") @(t : T?) {

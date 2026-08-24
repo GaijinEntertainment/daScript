@@ -89,7 +89,7 @@ def test_quant(t : T?) {
     }
 }
 
-// Q4_0 round-trip properties (GGML layout: d = smax/-8, offset-8, split-half packing). 4 bits, so
+// Q4_0 round-trip properties (on-disk layout: d = smax/-8, offset-8, split-half packing). 4 bits, so
 // the step is coarser than Q8: errors are bounded by half a step, and SNR lands ~20 dB lower.
 
 [test]

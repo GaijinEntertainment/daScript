@@ -878,7 +878,7 @@ def private gelu_form_delta(t : T?) {
         erfv[i] = xs[i]
     }
     gelu_tanh_lut(lut, int64(n))   // the SHIPPED whisper flavor (f16-LUT round trip)
-    gelu_erf(erfv, int64(n))       // the SHIPPED mtmd-family flavor
+    gelu_erf(erfv, int64(n))       // the SHIPPED tower flavor (exact erf)
     var max_lut = 0.0
     var max_erf = 0.0
     for (i in range(n)) {

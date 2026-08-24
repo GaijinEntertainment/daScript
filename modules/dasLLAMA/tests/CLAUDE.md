@@ -69,8 +69,8 @@ batch cell asserts the `graph` DECLINE on the planar model - shexp has no batch 
 blob twin's CPU batch fallback would trip the blob-only panic). The
 `kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels - 
 model-less per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has
-no arms; remember it exists - kernel uniform/binding changes MUST update its hand-bound
-dispatches. Shared fixtures (buf helpers, eyeball-dump compares, kq plane + q8 blob
+no arms; remember it exists (the hand-bound-gate sync obligation is `REVIEW.md`'s). Shared
+fixtures (buf helpers, eyeball-dump compares, kq plane + q8 blob
 builders) live in `_metal_kernel_common.das`; `test_metal_prefill_kernels.das` keeps its tag-less
 mismatch compares local - a same-arity twin would collide with the shared tagged one.
 `_mtl_toy.das` is the `[metal_dispatch]` multi-kernel (kernel=) fixture - its gate in
@@ -111,7 +111,7 @@ GPU-less boxes), and the flavor image round-trips the plan verbatim.
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
 under `DASLLAMA_PARITY_FULL=1`) is the KERNEL COVERAGE census
-(REVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite"): the small-model zoo swept across format/graph/batch/KV axes, then a
+(REVIEW: "A GPU kernel whose MSL entry symbol the census in test_kernel_coverage.das has not seen before ships with a small model in that file's coverage suite"): the small-model zoo swept across format/graph/batch/KV axes, then a
 report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
 kernels - never an auto-dead verdict. A zero means "nothing THIS zoo runs dispatched it",
 never "unreachable": the deletion gate is a reachability AUDIT of the kernel's dispatch
@@ -136,7 +136,7 @@ identity with `workload` in the key, annotations landing only on the rows they s
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
 `-w` workload scope; the stored-row->rig-leg map, `backend`/`flavor` => `metal` | plain cpu |
 `accel`, else refused; the tune-stamp gate; the oracle compare's ok/warn/fail bands; the
-llama.cpp image-reference parser `parse_mtmd_image` - encode summing, the MTMD_TIMING split,
+upstream image-reference parser `parse_mtmd_image` - encode summing, the MTMD_TIMING split,
 its refusal arms); plus the committed-records sweeps: image-chat receipts match their
 `backend`/`flavor` stamps and pin the fixture and mmproj, and every das row's `tune_sha`
 resolves to its committed generation archive.
@@ -212,7 +212,7 @@ bit-exact against pinned mtmd oracle hashes (dumps + mint scripts in the models 
 `gemma4-vision-oracle/` and `qwen3vl-vision-oracle/` - the qwen rail letterboxes at align 32),
 plus the stbimage decode/dump round-trips in a per-process temp dir.
 `test_gemma4uv.das` - the gemma4uv embedder tier-1 parity vs the `-p encode` oracle dumps
-(f32-mmproj-minted - the bf16 oracle carries ggml's bf16-dot activation noise); gates per-token
+(f32-mmproj-minted - the bf16 oracle carries bf16-dot activation noise); gates per-token
 mean/v0..v3 at 2e-4 with the measured maxdiff logged; skips honestly without the mmproj or dumps.
 On Apple builds the CPU gate pins the tower knob off, and a second test gates the GPU tier-1
 encode against the same dumps on a scale-relative bar (2e-4 + 4e-3*token-rms) - exceeding it

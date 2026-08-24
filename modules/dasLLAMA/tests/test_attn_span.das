@@ -17,7 +17,7 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_ + set_prefill_attn_mo
 require dasllama/dasllama_env
 
 // The non-causal image span (eval_embd_/forward_prefill_embd non_causal=true): every query of
-// the span attends [the sliding-window floor, span_end) — the mtmd_decode_use_non_causal semantics gemma
+// the span attends [the sliding-window floor, span_end) — the non-causal decode semantics gemma
 // vision decodes under. The reference here is the MASK DIRECTION itself: under causal
 // attention position 0's residual cannot depend on later rows; under the span it must.
 // Needs llama2.c's stories15M.bin (test_flash's fixture); skips cleanly when absent.

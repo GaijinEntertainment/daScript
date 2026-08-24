@@ -159,7 +159,7 @@ def eval_embd(model : Model; var session : Session; embd : array<float>; npos : 
 def eval_embd_span(model : Model; var session : Session; embd : array<float>; npos, span_lo, span_hi : int64) {
     //! ``eval_embd`` for a prompt carrying one NON-CAUSAL image span: rows ``[span_lo, span_hi)``
     //! prefill with every query attending the whole span, the text around them causally — the
-    //! gemma vision decode shape (mtmd's non-causal media chunk).
+    //! gemma vision decode shape (non-causal media chunk).
     eval_embd_span_(model, session, embd, npos, span_lo, span_hi)
 }
 

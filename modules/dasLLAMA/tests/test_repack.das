@@ -50,7 +50,7 @@ def private f16_val(var rng : Rng; lo, hi : float) : float {
 }
 
 // ===== the disk-order extractors, gated by a semantics-first WRITER =====
-// The writer places known values by the ggml packing rule (the inverse direction of the
+// The writer places known values by the on-disk packing rule (the inverse direction of the
 // extractor), so reader and expected value come from independent formulations.
 
 [test]

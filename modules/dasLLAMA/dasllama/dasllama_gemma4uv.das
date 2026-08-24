@@ -25,7 +25,7 @@ require math
 //! non-causal image span; this file only lifts pixels into embedding space
 //! (`vision_plan.md` §pipeline; oracle = llama-mtmd-debug -p encode).
 
-// pytorch LayerNorm default, HARDCODED in mtmd's graph builder — NOT the meta's 1e-6,
+// pytorch LayerNorm default, HARDCODED for this graph — NOT the meta's 1e-6,
 // which feeds only the pre-projection rms_norm (the two-eps parity trap)
 let GEMMA4UV_LN_EPS = 1e-5
 
@@ -153,7 +153,7 @@ def stage_gemma4uv_embedder(path : string) : Gemma4uvStaging {
         if (proj != "gemma4uv") {
             panic("dasLLAMA: mmproj projector '{proj}' is not gemma4uv (the E-series gemma4v ViT tower is a v2 leg)")
         }
-        var merge = 3l   // mtmd's pooling_kernel_size default for the gemma-4 family
+        var merge = 3l   // the pooling kernel size for the gemma-4 family
         if (gguf_has(m, "clip.vision.projector.scale_factor")) {
             merge = gguf_int(m, bytes, "clip.vision.projector.scale_factor")
         }

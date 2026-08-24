@@ -26,17 +26,17 @@ that today name `Gemma4uvEmbedder` by concrete type.
 2. **Planes follow the file per tensor**: the 112 block GEMMs and `mm.input_projection` are
    bf16 (`PlaneU16`, `mm_bf16_b` - exact widen, f32 activations), `patch_embd` / pos tables /
    norms / clamp scalars f32. This is the reference's own format on BOTH of its backends:
-   ggml-metal runs bf16 `mul_mm` natively on Apple6+/Metal3+ (activations rounded to bf16 in
-   the threadgroup, f32 accumulate) and aborts without bf16; ggml-cpu rounds activations to
-   bf16 too. No q8 lane until slice F measures.
+   its Metal backend runs bf16 `mul_mm` natively on Apple6+/Metal3+ (activations rounded to
+   bf16 in the threadgroup, f32 accumulate) and aborts without bf16; its CPU backend rounds
+   activations to bf16 too. No q8 lane until slice F measures.
 3. **Attention**: f32 K/V on the CPU, `enc_attention` grows a `kq_scale` argument (it hardcodes
    1/sqrtd; the ViT needs 1.0). The reference casts K/V to f16 under flash attention on both
-   backends (an unconditional `clip.cpp` cast; ggml-metal has f32 FA kernels it never asks
+   backends (an unconditional cast; its Metal backend has f32 FA kernels it never asks
    for) - a later Metal leg of ours uses f32 K/V.
 4. **The oracle is CPU + the f32-widened mmproj twin + `-fa off`** - the only true-f32 arm the
    reference has: Metal's "f32" GEMM stages both operands as `half`, and FA moves the dump by
-   ~0.7 %; llama.cpp's own four arms (CPU/Metal x FA on/off) spread 2.2 % on tok0 v0. The
-   tier-1 gate is set against that reference on a scale-relative bar, and llama.cpp's own
+   ~0.7 %; the reference's own four arms (CPU/Metal x FA on/off) spread 2.2 % on tok0 v0. The
+   tier-1 gate is set against that reference on a scale-relative bar, and its own
    cross-backend spread is the context for what "parity" can mean for this tower.
 
 ## The file on disk (census, re-verified by running `llama-mtmd-debug` on it)
@@ -55,7 +55,7 @@ bias, clamp scalars on `patch_embd` and `mm.input_projection`. The decoder (E2B,
 PLE, 35 layers) runs today under the single `gemma4` arch registration, renders the image
 markers already, and the media prefill path already carries a PLE arm.
 
-## The pipeline (exact ops, from `tools/mtmd/models/gemma4v.cpp` + `clip.cpp`; executed-graph
+## The pipeline (exact ops, oracle-verified; executed-graph
 ## node sums for 96x96 `cb` are in the oracle rig, `-fa off`)
 
 0. **Preprocess = v1's, verbatim**: align 48 (patch 16 x n_merge 3), min/max pixels
@@ -150,7 +150,7 @@ here: `layer_inp_normed-0`, `Qcur_pos-0`, `Vcur_normed-0`, `kqv_out-0` ... `laye
 `pooled`, `projected`), `gray 336`, `cb 336`, `red/green/blue 336`, `cb 480`, `cb 672x336`
 (orientation), tier-2/3 with `MTMD_DEBUG_EMBEDDINGS=1 llama-mtmd-cli` on the cats jpg.
 
-**Minted (slice A, 2026-08-19, llama.cpp 98c4764b6):** `e2b.encode.{cb96,gray336,cb336,red336,
+**Minted (slice A, 2026-08-19, upstream 98c4764b6):** `e2b.encode.{cb96,gray336,cb336,red336,
 green336,blue336,cb480,cb672x336}.log`, `e2b.cli.cats.log`, and `e2b.cb96.ladder.txt` - the
 689-node (name, op, shape, sum) ladder extracted from the cb96 dump. Pins:
 - cb 96^2 -> 4 tokens; `projected` tok 0 `v0..v3 = 0.114981 0.533945 0.437806 0.140861`,

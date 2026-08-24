@@ -655,7 +655,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                 let e = l * ne + s.moe_idx[j]
                 s.moe_offs[j * 2l] = t.we2_offs[l] + s.moe_idx[j] * ege
                 s.moe_offs[j * 2l + 1l] = j * nfe   // each down reads its own requantized row
-                s.moe_boffs[j] = t.web2_off + e * dim   // down bias inside the routed weight (ggml_add_id order)
+                s.moe_boffs[j] = t.web2_off + e * dim   // down bias added before the routed weight scales it
             }
             if (kq_sb(f2)) {
                 mm_at_kq_groupn(s.moe_dn, t, f2, s.moe_offs, k, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
@@ -699,7 +699,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             prof_add("act", ts_act)
             let ts_down = prof_ticks()
             mm(s.xb2, t, t.we2_offs[l] + base, s.hb, s.xq, s.xs, nfe, dim)
-            if (c.moe_exps_bias) {  // ... and its down bias, inside the routed weight (ggml_add_id order)
+            if (c.moe_exps_bias) {  // ... and its down bias, added before the routed weight scales it
                 add_bias(s.xb2, 0l, t.fblob, t.web2_off + e * dim, dim)
             }
             prof_add("mm_moe_dn", ts_down)
@@ -793,7 +793,7 @@ def moe_select(c : Config; var lg : float?; var idx : array<int64>; var w : arra
 
 // pointer core — the threaded prefill router runs this in fork workers (scalars + raw pointers
 // only; Config/Session stay on the caller). `bias` (exp_probs_b, DeepSeek-V3/glm4moe) skews the
-// top-k PICK only — the stored weights stay the unbiased probs (llama.cpp build_moe_ffn order).
+// top-k PICK only — the stored weights stay the unbiased probs.
 def moe_select_core(gate : MoeGate; ne, k : int64; norm_topk : bool; wscale : float; // nolint:STYLE037,STYLE038 — gate variant x bias x renorm are flat arms over one logit row, coupled through the running top-k state
                     var lg : float?; var idx : int64?; var w : float?; off : int64;
                     bias : float const? = null) {
@@ -876,7 +876,7 @@ def moe_select_core(gate : MoeGate; ne, k : int64; norm_topk : bool; wscale : fl
     if (gate == MoeGate.softmax_weight) {  // gpt-oss: softmax over just the selected k logits
         softmax(w + off, k)
     }
-    if (norm_topk) {   // renormalize the selected weights to sum 1 (llama.cpp clamps at f16-min)
+    if (norm_topk) {   // renormalize the selected weights to sum 1 (the sum clamps at f16-min)
         var ws = 0.0
         for (j in range64(k)) {
             ws += w[off + j]

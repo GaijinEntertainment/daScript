@@ -12,7 +12,7 @@ require strings
 // The per-ToolMode wire codecs: definition serializers (prompt side) and reply parsers (wire
 // side), all pure string+JSON functions — model-free testable. The chat layer renders through
 // the serializers; the server parses through the parsers. Formats verified verbatim against the
-// GGUF-embedded Jinja templates and llama.cpp's PEG handlers (see tool_formats_plan.md).
+// GGUF-embedded Jinja templates and the upstream PEG handlers (see tool_formats_plan.md).
 
 //! One parsed tool call: the function name, its arguments normalized to JSON object text, and
 //! the wire id where the format carries one (mistral; "" elsewhere).
@@ -300,7 +300,7 @@ def mistral_defs_text(tools_json : array<string>) : string {
 
 //! Parse a Mistral reply: free content up to `[TOOL_CALLS]`, then a JSON array of
 //! `\{"name","arguments"[,"id"]}` objects (id genuinely optional and order-tolerant — we do
-//! not copy llama.cpp's fixed-field-order trap). A bare object is tolerated too.
+//! not copy the upstream fixed-field-order trap). A bare object is tolerated too.
 def mistral_parse(reply : string) : ToolReply {
     var out = ToolReply()
     let m = find(reply, "[TOOL_CALLS]")

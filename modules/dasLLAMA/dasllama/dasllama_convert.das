@@ -34,13 +34,13 @@ def rd_f32(b : array<uint8> | #; o : int64) : float {
 }
 
 // E8M0 block scale -> fp32 * 0.5 = 2^(e-128) (the half matches the doubled MXFP4_KVALUES).
-// e < 2 lands in fp32 denormal territory -> precomputed bit patterns (ggml_e8m0_to_fp32_half).
+// e < 2 lands in fp32 denormal territory -> precomputed bit patterns.
 def e8m0_to_f32_half(e : uint) : float {
     let bits = e < 2u ? (0x00200000u << e) : ((e - 1u) << 23u)
     return unsafe(reinterpret<float>(bits))
 }
 
-// ===== K-quant superblock dequant (256-weight superblocks, ggml Q4_K / Q6_K) =====
+// ===== K-quant superblock dequant (256-weight superblocks, on-disk Q4_K / Q6_K) =====
 
 // int8 read (K-quant sub-scales are signed bytes)
 def private rd_i8(b : array<uint8> | #; o : int64) : int {
@@ -48,7 +48,7 @@ def private rd_i8(b : array<uint8> | #; o : int64) : int {
     return u < 128 ? u : u - 256
 }
 
-// 6-bit sub-scale/min unpack for Q4_K/Q5_K superblocks (ggml get_scale_min_k4). The 12 scale
+// 6-bit sub-scale/min unpack for Q4_K/Q5_K superblocks. The 12 scale
 // bytes hold 8 scales + 8 mins: j<4 live in the low 6 bits of bytes j / j+4; j>=4 split as
 // low-4 in byte j+4 (scale = low nibble, min = high) + top-2 of bytes j-4 / j.
 def private q4k_scale_min(b : array<uint8> | #; so, j : int64) : int2 {
@@ -88,7 +88,7 @@ def dequant_q4k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array
 
 //! Dequantize one Q5_K superblock (176B at `bo`) into dst[doff..doff+256). w = (d*sc)*q - (dmin*m),
 //! q = nibble | (high bit << 4); the high bit for chunk js lives in bit 2js (low)/2js+1 (high) of
-//! qh[l], qh base fixed per superblock. Matches llama.cpp dequantize_row_q5_K op-for-op.
+//! qh[l], qh base fixed per superblock. Bit-exact with the on-disk Q5_K dequant.
 def dequant_q5k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array<float>; doff : int64) {
     let d = f16_to_f32(rd_u16(bytes, bo))
     let dmin = f16_to_f32(rd_u16(bytes, bo + 2l))
@@ -118,7 +118,7 @@ def dequant_q5k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array
 
 //! Dequantize one Q6_K superblock (210 bytes at `bo`: 128 low-nibble bytes ql, 64 high-2-bit
 //! bytes qh, 16 int8 sub-scales for 16 sub-blocks of 16, fp16 d) into dst[doff .. doff+256).
-//! w = (d*sc)*q with q = (ql | qh<<4) - 32. Matches llama.cpp dequantize_row_q6_K op-for-op.
+//! w = (d*sc)*q with q = (ql | qh<<4) - 32. Bit-exact with the on-disk Q6_K dequant.
 def dequant_q6k_superblock(bytes : array<uint8> | #; bo : int64; var dst : array<float>; doff : int64) {
     let d = f16_to_f32(rd_u16(bytes, bo + 208l))
     var qlo = bo          // ql cursor (64 bytes per 128-weight half)
@@ -349,8 +349,8 @@ def dequant_k5_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<u
     }
 }
 
-// llama.cpp's nearest_int — round-half-to-even via the fp32 add-magic trick, replicated bit-for-bit
-// so encoder output stays byte-comparable against llama.cpp's. Caller guarantees |fval| <= 4194303.
+// Round-half-to-even via the fp32 add-magic trick - bit-exact with the reference rounding, so
+// encoder output stays byte-comparable against it. Caller guarantees |fval| <= 4194303.
 
 def private nearest_int(fval : float) : int {
     let v = fval + 12582912.0
@@ -358,7 +358,7 @@ def private nearest_int(fval : float) : int {
     return (i & int(0x007fffff)) - int(0x00400000)
 }
 
-// Weighted joint scale/min fit for one 32-weight sub-block (llama.cpp make_qkx2_quants, nmax=31,
+// Weighted joint scale/min fit for one 32-weight sub-block (nmax=31,
 // rmin=-0.5, rdelta=0.1, 16 steps): sweeps iscale around the naive max/min fit and keeps the
 // weighted-least-squares (scale, min) with the lowest weighted square error. Returns (scale, -min).
 def private k5_fit_sub(x : float const?; wt : float const?; var lout : int?) : float2 {
@@ -434,8 +434,8 @@ def private k5_fit_sub(x : float const?; wt : float const?; var lout : int?) : f
 }
 
 // Encode one 256-weight superblock into the k5 planes — the exact inverse of
-// dequant_k5_plane_superblock, following llama.cpp quantize_row_q5_K_ref op-for-op.
-def private quantize_k5_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64) {  // nolint:STYLE038 — verbatim llama.cpp make_qkx2_quants port; splitting the oracle-matched encoder invites drift
+// dequant_k5_plane_superblock, bit-exact with the Q5_K reference encoder.
+def private quantize_k5_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64) {  // nolint:STYLE038 — one oracle-matched superblock encoder; splitting it invites drift
     unsafe {
         var lq : int[256]
         var lsub : int[32]
@@ -629,7 +629,7 @@ def transcode_q51_block(bytes : array<uint8> | #; bo : int64; var kq : array<uin
 }
 
 //! Reference dequant of one q51-plane 32-block: w = d * q + m with q = nibble | qh_bit << 4
-//! (elem k reads qh bit k, elem k+16 bit k+16 — the llama.cpp Q5_1 bit map, kept verbatim).
+//! (elem k reads qh bit k, elem k+16 bit k+16 — the on-disk Q5_1 bit map, kept verbatim).
 def dequant_q51_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
     let d = f16_to_f32(rd_u16(ks, kso))
     let m = f16_to_f32(rd_u16(ks, kso + 2l))
@@ -682,7 +682,7 @@ def template cvt_f16_to_f32_template(var d : float ?; s : uint16 const ?; n : in
 [hint(unsafe_range_check, noalias = d, noalias = s), tuned]
 def cvt_f16_to_f32(var d : float?; s : uint16 const?; n : int64) {}
 
-// ===== fp32 -> Q8_0 / Q8_K / Q4_0 quantizers (ggml split-plane weight layout) + quality stats =====
+// ===== fp32 -> Q8_0 / Q8_K / Q4_0 quantizers (split-plane weight layout) + quality stats =====
 // These write the SPLIT planes (quants + f32 scales) the GEMM kernels read — the interleaved
 // f16-scale KV-cache twins live in dasllama_kv_codec (same math, different contractual bytes).
 
@@ -833,7 +833,7 @@ def template quantize_q8_0_bs_into_ptr_template(src : float const ?; n : int64; 
 [hint(noalias = src, noalias = qdst, noalias = sdst, noalias = bdst), tuned(fallback = "plain")]
 def quantize_q8_0_bs_into_ptr(src : float const?; n : int64; var qdst : int8?; var sdst : float?; var bdst : int?; qoff, soff, boff : int64) {}
 
-//! Q8_K-form activation quantization (kq v2 — llama.cpp K-quant dot contract): ONE scale per
+//! Q8_K-form activation quantization (kq v2 — the K-quant dot contract): ONE scale per
 //! 256-element superblock (sdst) + per-16 quant sums (bdst, 16/superblock) — lets K-quant kernels
 //! fold sub-scale/bsums-x-mins per superblock instead of per 32-block. Separate plane from Q8_0.
 def quantize_q8_k_into(src : array<float> | #; n : int64; var qdst : array<int8>; var sdst : array<float>; var bdst : array<int>; qoff, soff, boff : int64) {
@@ -892,7 +892,7 @@ def dequantize_q8_0(qt : Q8Tensor; var dst : array<float> | #) {
     }
 }
 
-//! A Q4_0-quantized tensor in GGML's exact block layout: 32 weights/block as 16 bytes split-half
+//! A Q4_0-quantized tensor in the exact on-disk block layout: 32 weights/block as 16 bytes split-half
 //! packed nibbles (byte j: low nibble = element j, high nibble = element j+16) + one scale.
 //! w[i] ~= (nibble - 8) * scales[block]; scale is fp32 (GGUF loader transcodes fp16 disk once).
 struct Q4Tensor {
@@ -901,7 +901,7 @@ struct Q4Tensor {
     n : int64
 }
 
-//! Quantize a flat fp32 tensor to Q4_0, GGML convention. Per block: pick the signed element of
+//! Quantize a flat fp32 tensor to Q4_0, on-disk convention. Per block: pick the signed element of
 //! largest magnitude `smax`, set d = smax / -8 (so that element maps to nibble 0), then
 //! nibble = clamp(round(w/d) + 8, 0, 15). The scale factors out so a later dot is d * sum(q[i]*x[i]).
 def quantize_q4_0(src : array<float> | #; n : int64) : Q4Tensor {
@@ -917,7 +917,7 @@ def quantize_q4_0(src : array<float> | #; n : int64) : Q4Tensor {
     for (b in range64(nblocks)) {
         let base = b * QK4
         var amax = 0.0
-        var smax = 0.0  // signed value achieving amax (GGML keeps the sign)
+        var smax = 0.0  // signed value achieving amax (the sign is kept)
         for (i in range64(QK4)) {
             let v = src[base + i]
             if (abs(v) > amax) {
@@ -938,7 +938,7 @@ def quantize_q4_0(src : array<float> | #; n : int64) : Q4Tensor {
     return <- qt
 }
 
-//! Quantize a flat fp32 tensor to Q4_0 (GGML split-half) directly into pre-allocated slices:
+//! Quantize a flat fp32 tensor to Q4_0 (split-half packing) directly into pre-allocated slices:
 //! packed nibble bytes land at qdst[qoff_bytes..] (qoff_bytes = weight-element-offset / 2), scales
 //! at sdst[soff..]. No allocation — the memory-honest loader's one-tensor-at-a-time path. n % 32 == 0.
 def quantize_q4_0_into(src : array<float> | #; n : int64; var qdst : array<uint8>; var sdst : array<float>; qoff_bytes, soff : int64) {
