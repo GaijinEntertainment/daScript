@@ -164,6 +164,7 @@ SET(DAS_UTILS_TO_TEST
     lint
     detect-dupe
     find-dupe/tests
+    gen1-to-gen2/tests
     internal/hygiene
     internal/ast-fuzz
     internal/requirefix

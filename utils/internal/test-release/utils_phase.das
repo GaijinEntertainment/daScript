@@ -39,6 +39,9 @@ def public utils_checks() : array<ToolCheck> {
         // the exe form must be able to compile a test at all: an -exe tool bakes its build machine's native paths
         ToolCheck(name = "dastest.exe/common-suite", argv <- ["@EXE:dastest@", "--test", "utils/common/tests"],
             want := DASTEST_OK, forbid := DASTEST_EMPTY, timeout = 300.0),
+        ToolCheck(name = "gen1-to-gen2/convert",
+            argv <- ["@EXE:daslang@", "utils/gen1-to-gen2/main.das", "--", "-p", "utils/mcp/tests/_fixture_gen1.das"],
+            want <- ["options gen2", "struct Point \{"]),
         // --- lint / format over the shipped daslib (the tree is at zero, and stays so) -----
         ToolCheck(name = "lint.exe/help", argv <- ["@EXE:lint@", "--help"], want <- ["Unified lint checker for daslang files."]),
         ToolCheck(name = "lint.exe/daslib", argv <- ["@EXE:lint@", "daslib"],

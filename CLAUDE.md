@@ -126,7 +126,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 
 Multiple skill files may apply to one task: creating a new daslib module needs `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/internal/documentation_rst.md`.
 
-**Formatter reminder:** format `.das` files with the MCP `format_file` tool (it calls `daslib/das_source_formatter`). NOT `utils/gen1-to-gen2/` - that is the v1->v2 syntax converter, not a formatter.
+**Formatter reminder:** format `.das` files with the MCP `format_file` tool (it calls `daslib/das_source_formatter`). NOT `utils/gen1-to-gen2/` - that is the v1->gen2 syntax converter, not a formatter.
 
 ### Updating Instructions with New Knowledge
 

@@ -13,7 +13,7 @@ das-fmt formats daslang source files in place using
 ``format_file`` tool and the shipped ``pre-commit`` hook.  The SDK
 bundle also carries a prebuilt ``bin/das-fmt.exe``.
 
-Not to be confused with ``gen1_to_gen2``, the gen1→gen2 syntax
+Not to be confused with ``gen1-to-gen2``, the gen1→gen2 syntax
 *converter*.
 
 Quick start

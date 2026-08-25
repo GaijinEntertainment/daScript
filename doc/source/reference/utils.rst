@@ -18,6 +18,7 @@ built-in leak-detection mechanism.
    utils/dascov.rst
    utils/lint.rst
    utils/das_fmt.rst
+   utils/gen1_to_gen2.rst
    utils/fix_lint_errors.rst
    utils/daspkg.rst
    utils/benchctl.rst

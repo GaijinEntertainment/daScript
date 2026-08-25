@@ -1874,6 +1874,12 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)
 # Install fix-lint-errors tool (mechanical lint auto-fixer)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/fix-lint-errors/main.das DESTINATION utils/fix-lint-errors)
 
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/
+    DESTINATION utils/gen1-to-gen2
+    FILES_MATCHING PATTERN "*.das"
+    PATTERN "tests" EXCLUDE
+)
+
 # Install MCP server (stdio transport, no dasHV dependency)
 #   main.das        — full server entry point
 #   cpp_main.das    — cpp/agnostic-subset entry point

@@ -32,6 +32,13 @@ struct Config {
     @clarg_doc = "List files that failed to compile"
     fails : bool
 
+    @clarg_name = "parse-only"
+    @clarg_doc = "Audit the pre-infer tree (parse_file) instead of the compiled one — what source-rewriting tools see"
+    parse_only : bool
+
+    @clarg_doc = "Parse as v1 syntax (version_2_syntax = false); implies --parse-only"
+    gen1 : bool
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -130,6 +137,7 @@ struct Violation {
 class AuditVisitor : AstVisitor {
     src_lines : array<string>
     file_norm : string
+    gen1_mode : bool = false
     fn_generated : bool = true
     fn_decl_valid : bool = false
     fn_decl_l0 : int
@@ -235,9 +243,8 @@ class AuditVisitor : AstVisitor {
     }
 
     def override preVisitExprVar(expr : ExprVar?) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
         let nm = string(expr.name)
-        if (nm |> starts_with("__")) return  // compiler-internal temps
+        if (expr.genFlags.generated || !same_file(expr.at) || nm |> starts_with("__")) return
         let actual = text_at(expr.at)
         if (actual |> starts_with("<col-oob") || actual |> starts_with("<line-oob")) return  // bounds check owns malformed ranges
         // segment match covers aka-mangled names (`access`at`176`24`)
@@ -251,10 +258,10 @@ class AuditVisitor : AstVisitor {
         let nm = string(expr.name)
         let actual = text_at(expr.at)
         // malformed ranges belong to the bounds check; `[`/`{` are
-        // array/table literal ctor desugar anchored at the bracket;
-        // `.` is dot-sugar method/property lowering anchored at the dot
         if (actual |> starts_with("<col-oob") || actual |> starts_with("<line-oob")
-                || actual == "[" || actual == "\{" || actual == ".") return
+                || actual == "[" || actual == "\{" || actual == "." || actual == ".."
+                || actual == "array" || actual == "table"
+                || actual == "[[" || actual == "[\{" || actual == "\{\{") return
         if (!name_segment_matches(nm, actual)) {
             report("anchor", "ExprCall", nm, actual, expr.at)
         }
@@ -271,7 +278,8 @@ class AuditVisitor : AstVisitor {
     }
 
     def override preVisitExprField(expr : ExprField?) {
-        if (expr.genFlags.generated || !same_file(expr.atField)) return
+        let tok = text_at(expr.atField)
+        if (expr.genFlags.generated || !same_file(expr.atField) || tok == "->" || tok == ".") return
         check_anchor("ExprField", expr.atField, string(expr.name))
     }
 
@@ -311,6 +319,7 @@ class AuditVisitor : AstVisitor {
             if (same_file(v.at) && !(v.name |> starts_with("__"))) {
                 let vnm = string(v.name)
                 let vtext = text_at(v.at)
+                if (vtext |> find(",") >= 0) continue
                 // segment match covers aka-mangled names
                 if (!name_segment_matches(vnm, vtext)) {
                     report("anchor", "LetVariable", vnm, vtext, v.at)
@@ -418,6 +427,7 @@ class AuditVisitor : AstVisitor {
         let lc = int(blk.at.last_column)
         if (l < 1 || ll < 1) return
         let opener = first_char(blk.at)
+        if (gen1_mode && opener != "\{") return
         let end_ln = line_of(ll)
         let closer = (lc >= 1 && lc <= length(end_ln)) ? slice(end_ln, lc - 1, lc) : "<oob>"
         if (opener != "\{" || closer != "\}") {
@@ -438,7 +448,7 @@ class AuditVisitor : AstVisitor {
     // leaves the folded const anchored on the folded expression's range —
     // only structurally-broken ranges are reportable here
     def check_const_range(node : string; expr : ExpressionPtr) {
-        if (expr.genFlags.generated || !same_file(expr.at)) return
+        if (expr.genFlags.generated || !same_file(expr.at) || expr is ExprConstString) return
         let actual = text_at(expr.at)
         if (actual == "<multiline>") {
             report("anchor", node, "single-token literal", "{int(expr.at.line)}:{int(expr.at.column)}..{int(expr.at.last_line)}:{int(expr.at.last_column)}", expr.at)
@@ -494,7 +504,41 @@ def visit_one(func : FunctionPtr; var v : AuditVisitor?;
 }
 
 
-def audit_file(file : string; verbose : bool;
+def private audit_program(program : ProgramPtr; file : string; src_lines : array<string>; gen1 : bool;
+                          var counts : table<string; int>;
+                          var samples : table<string; array<string>>;
+                          max_samples : int;
+                          var n_violations : int&) {
+    let file_norm = normalize_path(file)
+    var v = new AuditVisitor()
+    v.src_lines := src_lines
+    v.file_norm = file_norm
+    v.gen1_mode = gen1
+    var seen_fn : table<string; void?>
+    for_each_generic(get_this_module(program), "") $(func) {
+        visit_one(func, v, seen_fn, file_norm)
+    }
+    for_each_function(get_this_module(program), "") $(func) {
+        visit_one(func, v, seen_fn, file_norm)
+    }
+    for (viol in v.out) {
+        let key = "{viol.check}/{viol.node}"
+        if (key_exists(counts, key)) {
+            counts[key] = counts[key] + 1
+        } else {
+            counts |> insert(key, 1)
+        }
+        n_violations++
+        if (length(samples[key]) < max_samples) {
+            samples[key] |> push("{viol.file}:{viol.line}:{viol.column} expected {viol.expected} got {viol.actual}")
+        }
+    }
+    unsafe {
+        delete v
+    }
+}
+
+def audit_file(file : string; verbose, parse_only, gen1 : bool;
                var counts : table<string; int>;
                var samples : table<string; array<string>>;
                max_samples : int;
@@ -512,42 +556,29 @@ def audit_file(file : string; verbose : bool;
         using() $(var cop : CodeOfPolicies) {
             cop.ignore_shared_modules = true
             cop.export_all = true
-            cop.version_2_syntax = true
+            cop.version_2_syntax = !gen1
             cop.no_optimizations = true
-            compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
-                if (!ok) {
-                    ok_compile = false
-                    if (verbose) {
-                        to_log(LOG_ERROR, "FAIL {file}\n  {issues}\n")
+            if (parse_only || gen1) {
+                parse_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
+                    if (!ok) {
+                        ok_compile = false
+                        if (verbose) {
+                            to_log(LOG_ERROR, "FAIL {file}\n  {issues}\n")
+                        }
+                        return
                     }
-                    return
+                    audit_program(program, file, src_lines, gen1, counts, samples, max_samples, n_violations)
                 }
-                let thisMod = get_this_module(program)
-                let file_norm = normalize_path(file)
-                var v = new AuditVisitor()
-                v.src_lines := src_lines
-                v.file_norm = file_norm
-                var seen_fn : table<string; void?>
-                for_each_generic(thisMod, "") $(func) {
-                    visit_one(func, v, seen_fn, file_norm)
-                }
-                for_each_function(thisMod, "") $(func) {
-                    visit_one(func, v, seen_fn, file_norm)
-                }
-                for (viol in v.out) {
-                    let key = "{viol.check}/{viol.node}"
-                    if (key_exists(counts, key)) {
-                        counts[key] = counts[key] + 1
-                    } else {
-                        counts |> insert(key, 1)
+            } else {
+                compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
+                    if (!ok) {
+                        ok_compile = false
+                        if (verbose) {
+                            to_log(LOG_ERROR, "FAIL {file}\n  {issues}\n")
+                        }
+                        return
                     }
-                    n_violations++
-                    if (length(samples[key]) < max_samples) {
-                        samples[key] |> push("{viol.file}:{viol.line}:{viol.column} expected {viol.expected} got {viol.actual}")
-                    }
-                }
-                unsafe {
-                    delete v
+                    audit_program(program, file, src_lines, gen1, counts, samples, max_samples, n_violations)
                 }
             }
         }
@@ -591,7 +622,8 @@ def main() : int {
     var n_skip = 0
     var n_violations = 0
     var failed_files : array<string>
-    to_log(LOG_INFO, "auditing {length(files)} file(s)...\n")
+    let mode = cfg.gen1 ? "parse-only, v1 syntax" : (cfg.parse_only ? "parse-only" : "compiled")
+    to_log(LOG_INFO, "auditing {length(files)} file(s) [{mode}]...\n")
     for (i in range(length(files))) {
         let file = files[i]
         if (has_expect_directive(file)) {
@@ -601,7 +633,7 @@ def main() : int {
         if (cfg.verbose) {
             to_log(LOG_INFO, "[{i + 1}/{length(files)}] {file}\n")
         }
-        if (audit_file(file, cfg.verbose, counts, samples, cfg.samples, n_violations)) {
+        if (audit_file(file, cfg.verbose, cfg.parse_only, cfg.gen1, counts, samples, cfg.samples, n_violations)) {
             n_ok++
         } else {
             n_fail++

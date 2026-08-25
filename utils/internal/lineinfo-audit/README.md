@@ -6,6 +6,7 @@ lint auto-fix, extract-method/refactoring in the VSCode plugin, LSP features.
 
 ```
 daslang utils/internal/lineinfo-audit/main.das -- -p tests -p daslib [-s 5] [--max-files N] [-v] [--fails]
+                                         [--parse-only] [--gen1]
 ```
 
 Compiles each file (`no_optimizations`, full macro pipeline), walks every
@@ -19,6 +20,13 @@ non-generated user function, and checks each node against the source:
 | `envelope` | expression lies inside its function's `atDecl` span |
 | `block` | `ExprBlock` starts at `{` and ends at `}` |
 | `enclosure` | call `atEnclosure` ends at `)` |
+
+## Modes
+
+`--parse-only` audits the pre-infer tree (`parse_file`) instead of the compiled one. `--gen1`
+additionally parses as v1 syntax (`version_2_syntax = false`) and implies `--parse-only`; it is
+how a v1 to gen2 converter's anchors get validated. Two checks soften in `--gen1`: an indent
+block carries no braces to check, and a `[[` / `[{` / `{{` make-literal anchors on its bracket.
 
 ## Coordinate conventions (probed ground truth)
 
