@@ -33,7 +33,7 @@ CI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # Two exe naming conventions exist:
 #   * CPP_SUFFIX — for binaries built via cmake `add_executable` (daslang,
-#     daslang-live, gen1_to_gen2): platform-natural suffix (.exe on Windows,
+#     daslang-live): platform-natural suffix (.exe on Windows,
 #     none on Linux/macOS).
 #   * DASEXE_SUFFIX — for binaries built via `daslang -exe`: ALWAYS `.exe` on
 #     every platform (utils/CMakeLists.txt: "daslang -exe appends `.exe` to the
@@ -76,6 +76,7 @@ COMPILE_TESTS=(
     "daspkg|utils/daspkg/main.das"
     "detect-dupe|utils/detect-dupe/main.das"
     "fix-lint-errors|utils/fix-lint-errors/main.das"
+    "gen1-to-gen2|utils/gen1-to-gen2/main.das"
     "jobque-timeline|utils/jobque-timeline/main.das"
     "lint|utils/lint/main.das"
     "mcp|utils/mcp/main.das"
@@ -106,7 +107,6 @@ COMPILE_TESTS=(
 # and a bundle whose rpath points back at the build tree is present-but-dead on every
 # user's box.
 SHIPPED_EXE_TESTS=(
-    "gen1_to_gen2|cpp"
     "daslang-live|cpp"
     "benchctl|dasexe"
     "dascov|dasexe"

@@ -881,7 +881,6 @@ FLEX(src/parser/ds_lexer.lpp)
 FLEX(src/parser/ds2_lexer.lpp)
 BISON(src/parser/ds_parser.ypp)
 BISON(src/parser/ds2_parser.ypp)
-BISON(utils/gen1-to-gen2/ds_parser.ypp)
 
 SET(PARSER_GENERATED_SRC
 # 1st parser
@@ -1177,14 +1176,6 @@ src/simulate/fs_file_info.cpp
 )
 
 
-SET(GEN1_TO_GEN2_SRC
-        ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/fmt.cpp
-        ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/formatter.cpp
-        ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/helpers.cpp
-        ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/ds_parser.cpp
-        CACHE INTERNAL "GEN1_TO_GEN2_SRC"
-)
-
 # MSVC first so clang-cl (CXX_COMPILER_ID==Clang but MSVC driver) takes /EHsc, not -fexceptions
 if(MSVC)
   set_source_files_properties(src/builtin/module_builtin_ast_serialize.cpp PROPERTIES
@@ -1196,11 +1187,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   )
 endif()
 
-# flex/bison output (the gen1_to_gen2 converter's own copy) is not ours to clean
-IF(MSVC)
-  set_source_files_properties(${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/ds_parser.cpp PROPERTIES COMPILE_FLAGS "/W0")
-ELSE()
-  set_source_files_properties(${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/ds_parser.cpp PROPERTIES COMPILE_FLAGS "-w")
+IF(NOT MSVC)
   # fmt's vendored format-inl.h noreturn helper: GCC needs -Wno-error, clang -Wno-invalid-noreturn
   IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set_source_files_properties(src/misc/format.cpp PROPERTIES COMPILE_FLAGS "-Wno-error")
@@ -1307,7 +1294,6 @@ SET(LIBDASCRIPT_COMPILER_SRC
     ${SIMULATE_FUSION_SRC}
     ${PARSER_GENERATED_SRC}
     ${PARSER_SRC}
-    ${GEN1_TO_GEN2_SRC}
     src/ast/ast_parse.cpp
     src/ast/ast_optimize.cpp
     src/ast/ast_const_folding.cpp
@@ -1605,17 +1591,6 @@ if (NOT ${DAS_TOOLS_DISABLED})
         FILES_MATCHING PATTERN "*.das"
     )
 
-    add_executable(gen1_to_gen2 ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/main.cpp)
-    TARGET_LINK_LIBRARIES(gen1_to_gen2 libDaScriptDyn ${SRC_LIBRARIES})
-    ADD_DEPENDENCIES(gen1_to_gen2 libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
-    target_include_directories(gen1_to_gen2 PRIVATE ${NEED_MODULES_PATH})
-
-    SETUP_CPP11(gen1_to_gen2)
-    DAS_APPLY_STRICT_WARNINGS(gen1_to_gen2)
-    SETUP_LTO(gen1_to_gen2)
-    SETUP_BIN_RPATH(gen1_to_gen2)
-    install(TARGETS gen1_to_gen2 RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
-
     #IF(APPLE)
     #  add_executable(daslangOsx MACOSX_BUNDLE ${DAS_DASCRIPT_MAIN_SRC})
     #  TARGET_LINK_LIBRARIES(daslangOsx libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
@@ -1905,6 +1880,12 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)
 
 # Install fix-lint-errors tool (mechanical lint auto-fixer)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/fix-lint-errors/main.das DESTINATION utils/fix-lint-errors)
+
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/gen1-to-gen2/
+    DESTINATION utils/gen1-to-gen2
+    FILES_MATCHING PATTERN "*.das"
+    PATTERN "tests" EXCLUDE
+)
 
 # Install MCP server (stdio transport, no dasHV dependency)
 #   main.das        — full server entry point

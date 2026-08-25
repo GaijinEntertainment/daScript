@@ -1422,6 +1422,7 @@ namespace das {
     ExprBlock * ast_wrapInBlock ( Expression * expr ) {
         auto block = new ExprBlock();
         block->at = expr->at;
+        block->generated = true;
         block->list.push_back(expr);
         return block;
     }

@@ -9,7 +9,6 @@
     "bin": [
         "bin\\daslang.exe",
         "bin\\daslang-live.exe",
-        "bin\\gen1_to_gen2.exe",
         "bin\\lint.exe",
         "bin\\daspkg.exe",
         "bin\\dascov.exe",

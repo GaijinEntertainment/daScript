@@ -26,7 +26,7 @@ PACKAGE = "daslang"
 SUMMARY = "High-performance statically-typed scripting language for games and real-time applications"
 
 # console_scripts shim per shipped executable; the scoop bucket exposes the same set
-TOOLS = ["daslang", "daslang-live", "gen1_to_gen2", "lint", "daspkg", "dascov",
+TOOLS = ["daslang", "daslang-live", "lint", "daspkg", "dascov",
          "detect-dupe", "benchctl", "dastest", "das-fmt"]
 
 EXCLUDE_TOP = ("include", "examples", "doc", "logs")
