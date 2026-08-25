@@ -74,6 +74,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_ATTN_D` | flag | on | Fused single-pass decode attention (assumes head_size 128); 0 is the A/B rail to the chunked pair. |
 | `DASLLAMA_METAL_ATTN_SINGLE` | number | 64 | Row count below which attention uses the single-chunk kernel; clamped to 128. |
 | `DASLLAMA_METAL_MULMM` | flag | on | The mul_mm prefill GEMM; 0 falls back to the legacy per-op path. |
+| `DASLLAMA_METAL_MM_TAIL` | flag | on | GEMV-tail prefill dispatch: npos % 32 in [1,8] peels the last M tile's real rows onto the fixed-B GEMV family instead of billing a full 32-row tile; 0 pins the padded-tile path (the A/B rail). |
 | `DASLLAMA_METAL_NCB` | number | ~4 layers/chunk | Command-buffer split: each chunk commits as encoded so the scheduler overlaps chunk k with k-1. |
 | `DASLLAMA_METAL_UNRETAINED` | flag | off | Skip per-dispatch retain/release on the prefill command buffers. |
 | `DASLLAMA_METAL_PF_CAPTURE` | flag | on | Record each prefill chunk as a step graph and replay on a concurrent encoder; 0 is serial-encode rollback. |
@@ -153,6 +154,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_MODELS_DIR` | path | unset | Directory holding the .gguf models the probes, benches and tests load. dasllama-server's model catalog downloads here too when set. |
 | `DASLLAMA_CONFIRM_MODEL` | path | auto-resolved from the models dir | Model used by the tuner's confirm gate (FULL path, not a bare filename). Unset: the gate auto-resolves from the models dir - the preferred confirm carrier, else the largest present q8 gguf; the fallback pins only when the box has no q8 model at all. |
 | `DASLLAMA_BATCH_CHUNKS` | text | unset | Override the batched-dispatch chunk count in the 1-core GEMM probe. |
+| `DASLLAMA_PROBE_MODEL` | text | Qwen3VL-8B-Instruct-Q8_0.gguf | Model filename (inside the models dir) the image-turn attribution probe loads. |
 | `DASLLAMA_BATCH_GRID_2D` | number | unset | Use the 2D batch grid in the parity probe. |
 | `DASLLAMA_FOCUS_BACKEND` | text | unset | Restrict the 1-core GEMM probe to one backend. |
 | `DASLLAMA_FOCUS_SHAPE` | text | unset | Restrict the 1-core GEMM probe to one shape. |

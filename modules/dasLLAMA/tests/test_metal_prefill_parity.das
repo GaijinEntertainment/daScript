@@ -479,6 +479,100 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 t |> success(reload_preps_run() > preps0, "the drop ran the registered reload preps (decode's discard_pre reached through the registry)")
             }
 
+            // mm-tail arm: the GEMV-tail residue fixtures — npos % 32 == 1 (the reduction-split
+            // GEMV leg), == 2 (the b4 form at nrows 2) and == 5 (two b4 dispatches, 4 rows + 1).
+            // Token parity vs the all-CPU control, the tail-off A/B twin, and the engage
+            // counters as the anti-vacuous witness; the SmolLM2 leg below pins the alignment
+            // guard (dim 576 fails the b4 stripe's % 128 — r >= 2 must keep the padded tile).
+            if (arm_on(t, "mm-tail")) {
+                pin_kernel_backend("portable")
+                set_wscale_f16(false)
+                set_metal_prefill_mm_tail(true)   // establish the knob the engage claim depends on (no read-back)
+                for (nres in [5l, 257l, 258l, 261l]) {   // 5 = the pure-tail leg (nfull == 0, no mul_mm at all)
+                    if (nres > long_length(prompt)) {
+                        continue   // a fixture the counting prompt cannot slice; the others still run
+                    }
+                    var sl : array<int64>
+                    sl |> reserve(nres)
+                    for (i in range64(nres)) {
+                        sl |> push(prompt[i])
+                    }
+                    let cpu_r <- continuation(tr, tr, sl, 24)
+                    t |> success(select_prefill_override("metal"), "override registered (mm-tail {nres})")
+                    let served0 = metal_prefill_stats().prefills
+                    let tail0 = metal_prefill_tail_stats()
+                    let gpu_r <- continuation(trg, tr, sl, 24)
+                    let served = metal_prefill_stats().prefills - served0
+                    let dsites = metal_prefill_tail_stats().sites - tail0.sites
+                    let drows = metal_prefill_tail_stats().rows - tail0.rows
+                    set_metal_prefill_mm_tail(false)
+                    let tail1 = metal_prefill_tail_stats()
+                    let gpu_p <- continuation(trg, tr, sl, 24)
+                    set_metal_prefill_mm_tail(true)
+                    select_prefill_override("")
+                    if (served == 0l) {
+                        delete sl
+                        feint("metal prefill declined (no Metal device?); mm-tail parity skipped\n")
+                        continue
+                    }
+                    t |> success(dsites > 0l, "npos={nres}: the GEMV tail engaged ({dsites} sites, {drows} rows)")
+                    t |> equal(drows, dsites * (nres % 32l), "npos={nres}: every peeled site carried the {nres % 32l}-row remainder")
+                    t |> equal(metal_prefill_tail_stats().sites - tail1.sites, 0l, "npos={nres}: tail off - the padded-tile path serves")
+                    log_gen_texts(tr, "mm-tail/{nres}", cpu_r, gpu_r)
+                    t |> success(same(cpu_r, gpu_r), "npos={nres}: 24-token continuation matches the all-CPU control (GEMV tail)")
+                    log_gen_texts(tr, "mm-tail-off/{nres}", cpu_r, gpu_p)
+                    t |> success(same(cpu_r, gpu_p), "npos={nres}: the tail-off twin matches the control too (A/B)")
+                    delete sl
+                }
+                // the alignment-guard leg: SmolLM2's dim 576 fails the b4 stripe's % 128, so
+                // r >= 2 must REFUSE the tail (the padded tile serves) while r == 1 (% 32-clean)
+                // still rides the gemv. Counters only — greedy token equality is not a valid
+                // instrument on a 135M (near-ties flip under cross-backend noise).
+                let spath = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+                if (model_available(t, spath)) {
+                    var trs <- load_model_(spath, QuantMode.q8)
+                    if (trs.config.seq_len > 2048l) {
+                        trs.config.seq_len = 2048l
+                    }
+                    var trsg <- blob_twin(t, spath, 2048l)
+                    let sprompt <- encode(trs, counting_prompt(), true, false)
+                    t |> success(select_prefill_override("metal"), "override registered (mm-tail smol)")
+                    var ssites : int64[2]
+                    var sserved_all = true
+                    for (li in range(2)) {
+                        let nres = li == 0 ? 65l : 66l
+                        var ssl : array<int64>
+                        ssl |> reserve(nres)
+                        for (i in range64(nres)) {
+                            ssl |> push(sprompt[i])
+                        }
+                        let sserved0 = metal_prefill_stats().prefills
+                        let stail0 = metal_prefill_tail_stats()
+                        var sgot <- continuation(trsg, trs, ssl, 4)
+                        sserved_all &&= metal_prefill_stats().prefills - sserved0 > 0l
+                        ssites[li] = metal_prefill_tail_stats().sites - stail0.sites
+                        delete ssl
+                        delete sgot
+                    }
+                    if (sserved_all) {
+                        // per-site guard: at r == 1 every q8 site peels (% 32 holds for 576 and
+                        // 1536 alike); at r == 2 only the hidden-kdim w2 site (1536 % 128 == 0)
+                        // may peel - the six 576-kdim sites per layer must refuse
+                        t |> success(ssites[0] > 0l, "smol npos=65: the gemv leg engaged ({ssites[0]} sites)")
+                        t |> success(ssites[1] < ssites[0], "smol npos=66: the alignment guard refused the 576-kdim sites ({ssites[1]} of {ssites[0]})")
+                        t |> equal(ssites[1] * 7l, ssites[0], "smol npos=66: exactly the one hidden-kdim site per layer peeled")
+                    } else {
+                        feint("metal prefill declined on smol; the alignment-guard leg skipped\n")
+                    }
+                    select_prefill_override("")
+                    delete trs
+                    delete trsg
+                }
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+            }
+
             // s16 arm (W2): the DEFAULT-load scale plane — blobs read raw f16 scales, the
             // classifier GEMV takes its halfword twin; a fresh load owns fresh weight regions.
             // The restores above un-pinned the backend — re-pin row-major (the donor contract)
@@ -659,12 +753,18 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         "{kdt} fused turn served as ONE GPU prefill")
                     // same-backend mask witness: fused vs the three-eval splice on the GPU run
                     // row-identical math, so the prefill logits must agree at the bit-noise
-                    // floor — a mask defect on ANY row moves its KV and lands here
+                    // floor — a mask defect on ANY row moves its KV and lands here. The GEMV
+                    // tail is pinned OFF for both legs: a splice chunk whose npos % 32 lands in
+                    // the tail window would serve its remainder rows on the f32-dot GEMVs while
+                    // the fused eval stays f16-tile mul_mm — a GEMM-form spread the f16 bar
+                    // cannot absorb, and the tail has its own arm (mm-tail)
+                    set_metal_prefill_mm_tail(false)
                     var lg_fused <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
                     set_span_fuse(false)
                     set_metal_prefill_min_npos(1l)   // the splice's short head/tail ride the GPU too
                     let pfsp0 = metal_prefill_stats().prefills
                     var lg_splice <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
+                    set_metal_prefill_mm_tail(true)
                     // the reference must actually BE the splice: three GPU prefills, or the
                     // witness collapses onto its own subject (an always-fused mutant passes)
                     t |> success(metal_prefill_stats().prefills - pfsp0 == 3l,

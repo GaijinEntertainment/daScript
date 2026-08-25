@@ -190,6 +190,9 @@ struct public MetalEnv {
     @clarg_doc = "The mul_mm prefill GEMM; 0 falls back to the legacy per-op path."
     mulmm : bool = true
 
+    @clarg_doc = "GEMV-tail prefill dispatch: npos % 32 in [1,8] peels the last M tile's real rows onto the fixed-B GEMV family instead of billing a full 32-row tile; 0 pins the padded-tile path (the A/B rail)."
+    mm_tail : bool = true
+
     @clarg_default_doc = "~4 layers/chunk"
     @clarg_doc = "Command-buffer split: each chunk commits as encoded so the scheduler overlaps chunk k with k-1."
     ncb : int = 0
@@ -382,6 +385,9 @@ struct public HarnessEnv {
 
     @clarg_doc = "Override the batched-dispatch chunk count in the 1-core GEMM probe."
     batch_chunks : string = ""
+
+    @clarg_doc = "Model filename (inside the models dir) the image-turn attribution probe loads."
+    probe_model : string = "Qwen3VL-8B-Instruct-Q8_0.gguf"
 
     @clarg_doc = "Use the 2D batch grid in the parity probe."
     batch_grid_2d : Option<int>
