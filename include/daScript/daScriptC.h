@@ -49,9 +49,10 @@
     typedef float32x4_t vec4f;
     typedef int32x4_t   vec4i;
 #elif defined(_TARGET_SIMD_SCALAR)
-    //shared with vecmath/dag_vecMathDecl.h - keep identical
-    #ifndef DAS_SCALAR_VEC_TYPES_DEFINED
-    #define DAS_SCALAR_VEC_TYPES_DEFINED
+    // shared with vecmath/dag_vecMathDecl.h: same tag names, members and layout - whichever
+    // header is included first defines the pair for both (guard macro is vecmath-owned)
+    #ifndef VECMATH_SCALAR_TYPES_DEFINED
+    #define VECMATH_SCALAR_TYPES_DEFINED
     #ifdef __cplusplus
     struct alignas(16) vec4f_scalar_t { float f[4]; };
     struct alignas(16) vec4i_scalar_t { int32_t i[4]; };

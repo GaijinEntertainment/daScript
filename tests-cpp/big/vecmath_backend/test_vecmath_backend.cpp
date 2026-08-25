@@ -12,9 +12,13 @@
 #endif
 
 #include <vecmath/dag_vecMath.h>
+// compile pin: daScriptC.h shares vec4f_scalar_t/vec4i_scalar_t with dag_vecMathDecl.h
+// under VECMATH_SCALAR_TYPES_DEFINED - this TU pins the vecmath-first include order
+#include <daScript/daScriptC.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <cmath>
 
 #if defined(EXPECT_SCALAR) && !defined(_TARGET_SIMD_SCALAR)
 #error this target must select the scalar vecmath backend
@@ -58,6 +62,11 @@ static void check_near(const char *name, vec4f v, float x, float y, float z, flo
       return;
     }
 }
+static void check_double(const char *name, double got, double want)
+{
+  if (got != want) { printf("FAIL %s: got %.17g want %.17g\n", name, got, want); g_failed++; }
+}
+
 static void check_int(const char *name, long long got, long long want)
 {
   if (got != want) { printf("FAIL %s: got %lld want %lld\n", name, got, want); g_failed++; }
@@ -269,6 +278,221 @@ int main()
 
   check_lanes("is_nan", v_is_nan(v_make_vec4f(1.f, nanf_v, 3.f, nanf_v)),
               0u, 0xFFFFFFFFu, 0u, 0xFFFFFFFFu);
+
+  check_lanes("add_pairs", v_add_pairs(a, b), f2u(-0.75f), f2u(3.25f), f2u(2.5f), f2u(3.0f));
+  check_lanes("min_pairs", v_min_pairs(a, b), f2u(-2.25f), f2u(-0.5f), f2u(0.5f), f2u(-1.0f));
+  check_lanes("max_pairs", v_max_pairs(a, b), f2u(1.5f), f2u(3.75f), f2u(2.0f), f2u(4.0f));
+  check_lanesi("addi_pairs", v_addi_pairs(v_make_vec4i(1, 2, 30, 40), v_make_vec4i(500, 600, 7000, 8000)),
+               3u, 70u, 1100u, 15000u);
+  check_lanesi("mini_pairs", v_mini_pairs(ia, ib), 0xFFFFFFF9u, 0x88CA6C00u, 0xFFFFFFFBu, 3u);
+  check_lanesi("maxi_pairs", v_maxi_pairs(ia, ib), 3u, 0x1E240u, 11u, 7u);
+
+  check_lanes("hmin", v_hmin(a), f2u(-2.25f), f2u(-2.25f), f2u(-2.25f), f2u(-2.25f));
+  check_lanes("hmax", v_hmax(a), f2u(3.75f), f2u(3.75f), f2u(3.75f), f2u(3.75f));
+  check_lanes("hmin3", v_hmin3(a), f2u(-2.25f), f2u(-2.25f), f2u(-2.25f), f2u(-2.25f));
+  check_lanes("hmax3", v_hmax3(b), f2u(2.0f), f2u(2.0f), f2u(2.0f), f2u(2.0f));
+  check_lanesi("hmini", v_hmini(ia), 0x88CA6C00u, 0x88CA6C00u, 0x88CA6C00u, 0x88CA6C00u);
+  check_lanesi("hmaxi", v_hmaxi(ia), 0x1E240u, 0x1E240u, 0x1E240u, 0x1E240u);
+  check_lanesi("hmini3", v_hmini3(ia), 0xFFFFFFF9u, 0xFFFFFFF9u, 0xFFFFFFF9u, 0xFFFFFFF9u);
+  check_lanesi("hmaxi3", v_hmaxi3(ia), 0x1E240u, 0x1E240u, 0x1E240u, 0x1E240u);
+
+  check_lanes("round_away", v_round(v_make_vec4f(2.5f, -2.5f, 0.4f, -0.6f)),
+              f2u(3.0f), f2u(-3.0f), f2u(0.0f), f2u(-1.0f));
+  check_lanesi("cvt_roundi_away", v_cvt_roundi(v_make_vec4f(2.5f, -2.5f, 0.4f, -0.6f)),
+               3u, 0xFFFFFFFDu, 0u, 0xFFFFFFFFu);
+
+  {
+    vec4f c3 = v_cross3(v_make_vec4f(1, 2, 3, 0), v_make_vec4f(4, 5, 6, 0));
+    check_int("cross3_x", (long long)f2u(v_extract_x(c3)), (long long)f2u(-3.f));
+    check_int("cross3_y", (long long)f2u(v_extract_y(c3)), (long long)f2u(6.f));
+    check_int("cross3_z", (long long)f2u(v_extract_z(c3)), (long long)f2u(-3.f));
+  }
+
+  check_lanes("abs_diff", v_abs_diff(a, b), f2u(0.5f), f2u(2.75f), f2u(4.75f), f2u(4.5f));
+  check_lanes("cmp_abs_ge", v_cmp_abs_ge(a, b), 0u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0u);
+  check_lanes("cmp_abs_gt", v_cmp_abs_gt(a, b), 0u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0u);
+  check_lanes("cmp_abs_gt_ties", v_cmp_abs_gt(a, v_neg(a)), 0u, 0u, 0u, 0u);
+  check_lanesi("cmp_eqi8", v_cmp_eqi8(v_make_vec4i(0x01020304, 0x05060708, -1, 0),
+                                      v_make_vec4i(0x01FF03FF, 0x05060708, -1, 1)),
+               0xFF00FF00u, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFF00u);
+  check_lanesi("cvtu_trunc", v_cvtu_vec4i(v_make_vec4f(1.9f, 0.f, 2.5f, 100.7f)), 1u, 0u, 2u, 100u);
+
+  {
+    const vec4f zOnlyMask = v_cmp_gt(a, b);
+    check_int("truemask", v_truemask(zOnlyMask), 0b0100);
+    check_int("count_true", v_count_true(zOnlyMask), 1);
+    check_int("count_true4", v_count_true(v_set_all_bits()), 4);
+    check_int("is_any_neg_b", v_is_any_neg_b(zOnlyMask) ? 1 : 0, 1);
+    check_int("is_any_neg_b_false", v_is_any_neg_b(v_zero()) ? 1 : 0, 0);
+    check_int("merge_planes_all", v_is_merge_planes_nout(v_set_all_bits(), v_set_all_bits(), v_set_all_bits(),
+                                                         v_set_all_bits(), v_set_all_bits(), v_set_all_bits()), -1);
+    check_int("merge_planes_one_out", v_is_merge_planes_nout(v_set_all_bits(), v_zero(), v_set_all_bits(),
+                                                             v_set_all_bits(), v_set_all_bits(), v_set_all_bits()), 0);
+  }
+
+  check_lanesi("perm_i8", v_perm_i8(v_make_vec4i(0x03020100, 0x07060504, 0x0B0A0908, 0x0F0E0D0C),
+                                    v_make_vec4i(0x00010203, int(0x80808080), 0x0F0F0F0F, 0x04050607)),
+               0x00010203u, 0u, 0x0F0F0F0Fu, 0x04050607u);
+
+  check_lanes("perm_yxwz", v_perm_yxwz(a), f2u(-2.25f), f2u(1.5f), f2u(-0.5f), f2u(3.75f));
+  check_lanes("perm_yzwa", v_perm_yzwa(a, b), f2u(-2.25f), f2u(3.75f), f2u(-0.5f), f2u(2.0f));
+  check_lanes("perm_wabc", v_perm_wabc(a, b), f2u(-0.5f), f2u(2.0f), f2u(0.5f), f2u(-1.0f));
+  check_lanes("perm_xazc", v_perm_xazc(a, b), f2u(1.5f), f2u(2.0f), f2u(3.75f), f2u(-1.0f));
+  check_lanes("perm_ybwd", v_perm_ybwd(a, b), f2u(-2.25f), f2u(0.5f), f2u(-0.5f), f2u(4.0f));
+  check_lanes("perm_zwab", v_perm_zwab(a, b), f2u(3.75f), f2u(-0.5f), f2u(2.0f), f2u(0.5f));
+  check_lanesi("permi_yzxw", v_permi_yzxw(ia), 0xFFFFFFF9u, 0x1E240u, 3u, 0x88CA6C00u);
+  check_lanesi("permi_zwzw", v_permi_zwzw(ia), 0x1E240u, 0x88CA6C00u, 0x1E240u, 0x88CA6C00u);
+  check_lanesi("permi_xxyy", v_permi_xxyy(ia), 3u, 3u, 0xFFFFFFF9u, 0xFFFFFFF9u);
+  check_lanesi("permi_xxzz", v_permi_xxzz(ia), 3u, 3u, 0x1E240u, 0x1E240u);
+  check_lanesi("permi_xyxy", v_permi_xyxy(ia), 3u, 0xFFFFFFF9u, 3u, 0xFFFFFFF9u);
+  check_lanesi("permi_xzxz", v_permi_xzxz(ia), 3u, 0x1E240u, 3u, 0x1E240u);
+  check_lanesi("permi_ywyw", v_permi_ywyw(ia), 0xFFFFFFF9u, 0x88CA6C00u, 0xFFFFFFF9u, 0x88CA6C00u);
+  check_lanesi("permi_yyww", v_permi_yyww(ia), 0xFFFFFFF9u, 0xFFFFFFF9u, 0x88CA6C00u, 0x88CA6C00u);
+  check_lanesi("permi_yzxy", v_permi_yzxy(ia), 0xFFFFFFF9u, 0x1E240u, 3u, 0xFFFFFFF9u);
+  check_lanesi("permi_zzww", v_permi_zzww(ia), 0x1E240u, 0x1E240u, 0x88CA6C00u, 0x88CA6C00u);
+  check_lanesi("permi_wwyy", v_permi_wwyy(ia), 0x88CA6C00u, 0x88CA6C00u, 0xFFFFFFF9u, 0xFFFFFFF9u);
+
+  {
+    alignas(16) float aos[16];
+    for (int k = 0; k < 16; k++) aos[k] = (float)k;
+    vec4f x, y, z, w;
+    v_ldu_soa2(aos, x, y);
+    check_lanes("ldu_soa2_x", x, f2u(0.f), f2u(2.f), f2u(4.f), f2u(6.f));
+    check_lanes("ldu_soa2_y", y, f2u(1.f), f2u(3.f), f2u(5.f), f2u(7.f));
+    v_ld_soa2(aos, x, y);
+    check_lanes("ld_soa2_x", x, f2u(0.f), f2u(2.f), f2u(4.f), f2u(6.f));
+    check_lanes("ld_soa2_y", y, f2u(1.f), f2u(3.f), f2u(5.f), f2u(7.f));
+    v_ldu_soa3(aos, x, y, z);
+    check_lanes("ldu_soa3_x", x, f2u(0.f), f2u(3.f), f2u(6.f), f2u(9.f));
+    check_lanes("ldu_soa3_y", y, f2u(1.f), f2u(4.f), f2u(7.f), f2u(10.f));
+    check_lanes("ldu_soa3_z", z, f2u(2.f), f2u(5.f), f2u(8.f), f2u(11.f));
+    v_ld_soa3(aos, x, y, z);
+    check_lanes("ld_soa3_x", x, f2u(0.f), f2u(3.f), f2u(6.f), f2u(9.f));
+    check_lanes("ld_soa3_z", z, f2u(2.f), f2u(5.f), f2u(8.f), f2u(11.f));
+    v_ldu_soa4(aos, x, y, z, w);
+    check_lanes("ldu_soa4_w", w, f2u(3.f), f2u(7.f), f2u(11.f), f2u(15.f));
+    v_ld_soa4(aos, x, y, z, w);
+    check_lanes("ld_soa4_x", x, f2u(0.f), f2u(4.f), f2u(8.f), f2u(12.f));
+    check_lanes("ld_soa4_w", w, f2u(3.f), f2u(7.f), f2u(11.f), f2u(15.f));
+    alignas(16) float back[16] = {0};
+    v_ld_soa4(aos, x, y, z, w);
+    v_st_soa2(back, x, y);
+    check_int("st_soa2", (long long)f2u(back[5]), (long long)f2u(9.f));
+    v_stu_soa2(back, x, y);
+    check_int("stu_soa2", (long long)f2u(back[2]), (long long)f2u(4.f));
+    v_st_soa3(back, x, y, z);
+    check_int("st_soa3_y", (long long)f2u(back[4]), (long long)f2u(5.f));
+    check_int("st_soa3_hi", (long long)f2u(back[11]), (long long)f2u(14.f));
+    v_stu_soa3(back, x, y, z);
+    check_int("stu_soa3_rt", (long long)f2u(back[3]), (long long)f2u(4.f));
+    check_int("stu_soa3_rt2", (long long)f2u(back[11]), (long long)f2u(14.f));
+    v_st_soa4(back, x, y, z, w);
+    check_int("st_soa4", (long long)f2u(back[6]), (long long)f2u(6.f));
+    v_stu_soa4(back, x, y, z, w);
+    check_int("stu_soa4", (long long)f2u(back[9]), (long long)f2u(9.f));
+#if !defined(_TARGET_SIMD_NEON) // v_interleave3/4 are not part of the NEON backend (it stores SoA via vst3q/vst4q directly)
+    vec4f e0, e1, e2;
+    v_interleave3(x, y, z, e0, e1, e2);
+    check_lanes("interleave3_e0", e0, f2u(0.f), f2u(1.f), f2u(2.f), f2u(4.f));
+    check_lanes("interleave3_e2", e2, f2u(10.f), f2u(12.f), f2u(13.f), f2u(14.f));
+    vec4f i0, i1, i2, i3;
+    v_interleave4(x, y, z, w, i0, i1, i2, i3);
+    check_lanes("interleave4_e0", i0, f2u(0.f), f2u(1.f), f2u(2.f), f2u(3.f));
+    check_lanes("interleave4_e1", i1, f2u(4.f), f2u(5.f), f2u(6.f), f2u(7.f));
+    check_lanes("interleave4_e3", i3, f2u(12.f), f2u(13.f), f2u(14.f), f2u(15.f));
+#endif
+  }
+
+  {
+    const float m43[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    mat43f t43;
+    v_mat43_make_from_43cu_unsafe(t43, m43);
+    check_int("mat43_unsafe_r0x", (long long)f2u(v_extract_x(t43.row0)), (long long)f2u(1.f));
+    check_int("mat43_unsafe_r0z", (long long)f2u(v_extract_z(t43.row0)), (long long)f2u(7.f));
+    check_int("mat43_unsafe_r2y", (long long)f2u(v_extract_y(t43.row2)), (long long)f2u(6.f));
+  }
+
+  // vd_min/vd_max second-operand rule holds on every backend by contract - NaN row unguarded
+  {
+    vec4d da = vd_make_vec4d(1.5, -2.25, 3.75, -0.5);
+    vec4d db = vd_make_vec4d(2.0, 0.5, -1.0, 4.0);
+    check_double("vd_extract_y", vd_extract_y(da), -2.25);
+    check_double("vd_add", vd_extract_z(vd_add(da, db)), 2.75);
+    check_double("vd_sub", vd_extract_z(vd_sub(da, db)), 4.75);
+    check_double("vd_mul", vd_extract_w(vd_mul(da, db)), -2.0);
+    check_double("vd_div", vd_extract_x(vd_div(da, db)), 0.75);
+    check_double("vd_neg", vd_extract_x(vd_neg(da)), -1.5);
+    check_double("vd_zero_x", vd_extract_x(vd_zero()), 0.0);
+    check_double("vd_zero_w", vd_extract_w(vd_zero()), 0.0);
+    check_double("vd_min_nan", vd_extract_x(vd_min(vd_splats((double)nanf_v), vd_splats(1.0))), 1.0);
+    check_int("vd_max_tie", std::signbit(vd_extract_x(vd_max(vd_splats(0.0), vd_splats(-0.0)))) ? 1 : 0, 1);
+    check_double("vd_sqrt", vd_extract_y(vd_sqrt(vd_make_vec4d(4, 9, 16, 25))), 3.0);
+    check_double("vd_sqrt_x", vd_extract_x(vd_sqrt_x(vd_make_vec4d(4, 9, 16, 25))), 2.0);
+    vec4d dcl = vd_clamp(da, vd_zero(), vd_splats(1.0));
+    check_double("vd_clamp_x", vd_extract_x(dcl), 1.0);
+    check_double("vd_clamp_y", vd_extract_y(dcl), 0.0);
+    check_double("vd_clamp_z", vd_extract_z(dcl), 1.0);
+#if !defined(_TARGET_SIMD_NEON) // NEON vd_sqrt_x sqrts the whole low half; SSE/scalar preserve .y
+    check_int("vd_sqrt_x_keeps_y", vd_extract_y(vd_sqrt_x(vd_make_vec4d(4, 9, 16, 25))) == 9.0 ? 1 : 0, 1);
+#endif
+    check_double("vd_hadd4_x", vd_extract_x(vd_hadd4_x(da)), 2.5);
+    check_double("vd_hadd3_x", vd_extract_x(vd_hadd3_x(da)), 3.0);
+    check_double("vd_hadd4_bcast", vd_extract_z(vd_hadd4(da)), 2.5);
+    check_double("vd_hadd3_bcast", vd_extract_y(vd_hadd3(da)), 3.0);
+    check_double("vd_hadd4_assoc", vd_extract_x(vd_hadd4_x(vd_make_vec4d(1e16, 1.0, -1e16, 1.0))), 1.0);
+    check_double("vd_hadd3_assoc", vd_extract_x(vd_hadd3_x(vd_make_vec4d(1.0, 1e16, -1e16, 99.0))), 0.0);
+    check_double("vd_dot3", vd_extract_x(vd_dot3(da, db)), -1.875);
+    check_double("vd_dot3_x", vd_extract_x(vd_dot3_x(da, db)), -1.875);
+    check_double("vd_dot4_x", vd_extract_x(vd_dot4_x(da, db)), -3.875);
+    check_double("vd_dot4_bcast", vd_extract_y(vd_dot4(da, db)), -3.875);
+    vec4d dv = vd_make_vec4d(1.0, 2.0, 2.0, 4.0);
+    check_double("vd_length3_sq", vd_extract_y(vd_length3_sq(dv)), 9.0);
+    check_double("vd_length4_sq", vd_extract_z(vd_length4_sq(dv)), 25.0);
+    check_double("vd_length3", vd_extract_x(vd_length3(dv)), 3.0);
+    check_double("vd_length4", vd_extract_y(vd_length4(dv)), 5.0);
+    check_double("vd_length3_x", vd_extract_x(vd_length3_x(dv)), 3.0);
+    check_double("vd_length4_x", vd_extract_x(vd_length4_x(dv)), 5.0);
+    vec4d dc = vd_cross3(vd_make_vec4d(1, 2, 3, 0), vd_make_vec4d(4, 5, 6, 0));
+    check_double("vd_cross3_x", vd_extract_x(dc), -3.0);
+    check_double("vd_cross3_y", vd_extract_y(dc), 6.0);
+    check_double("vd_cross3_z", vd_extract_z(dc), -3.0);
+    check_double("vd_insert_x", vd_extract_x(vd_insert_x(da, 7.5)), 7.5);
+    check_double("vd_insert_y", vd_extract_y(vd_insert_y(da, 7.5)), 7.5);
+    check_double("vd_insert_z", vd_extract_z(vd_insert_z(da, 7.5)), 7.5);
+    check_double("vd_insert_w_w", vd_extract_w(vd_insert_w(da, 7.5)), 7.5);
+    check_double("vd_insert_w_z", vd_extract_z(vd_insert_w(da, 7.5)), 3.75);
+    alignas(32) double dbuf[4] = {10.5, -11.25, 12.75, -13.5};
+    check_double("vd_ld_z", vd_extract_z(vd_ld(dbuf)), 12.75);
+    vd_st(dbuf, da);
+    check_double("vd_st_lo", dbuf[0], 1.5);
+    check_double("vd_st_hi", dbuf[3], -0.5);
+    double ubuf[5];
+    vd_stu(ubuf + 1, db);
+    check_double("vd_stu_lo", ubuf[1], 2.0);
+    check_double("vd_stu_hi", ubuf[4], 4.0);
+    check_double("vd_ldu_y", vd_extract_y(vd_ldu(ubuf + 1)), 0.5);
+    vec4f df = vd_cvt_to_vec4f(da);
+    check_lanes("vd_to_vec4f", df, f2u(1.5f), f2u(-2.25f), f2u(3.75f), f2u(-0.5f));
+    vec4d d2 = vd_cvt_from_vec4f(a);
+    check_int("vd_from_vec4f", vd_extract_z(d2) == 3.75 ? 1 : 0, 1);
+    vec4d di = vd_cvt_from_vec4i(v_make_vec4i(3, -7, 123456, -2000000000));
+    check_int("vd_from_vec4i", vd_extract_w(di) == -2000000000.0 ? 1 : 0, 1);
+#if !defined(_TARGET_SIMD_NEON) // NEON converts saturate; SSE/scalar yield INT32_MIN out of range
+    check_lanesi("vd_to_vec4i_oor", vd_cvt_to_vec4i(vd_make_vec4d(3e9, -3e9, 1.0, -1.0)),
+                 0x80000000u, 0x80000000u, 1u, 0xFFFFFFFFu);
+#endif
+    check_lanesi("vd_to_vec4i", vd_cvt_to_vec4i(vd_make_vec4d(1.9, -2.9, 100.5, -0.5)),
+                 1u, 0xFFFFFFFEu, 100u, 0u);
+    const double p3d[3] = {9.0, 8.0, 7.0};
+    vec4d dp = vd_ldu_p3_safe(p3d);
+    check_double("vd_ldu_p3_x", vd_extract_x(dp), 9.0);
+    check_double("vd_ldu_p3_z", vd_extract_z(dp), 7.0);
+    check_double("vd_ldu_p3_w", vd_extract_w(dp), 0.0);
+    double outd[4] = {0, 0, 0, -1.0};
+    vd_stu_p3(outd, da);
+    check_double("vd_stu_p3_z", outd[2], 3.75);
+    check_double("vd_stu_p3_sentinel", outd[3], -1.0);
+  }
 
   if (g_failed) { printf("%d vecmath backend checks FAILED\n", g_failed); return 1; }
   printf("all vecmath backend checks passed\n");

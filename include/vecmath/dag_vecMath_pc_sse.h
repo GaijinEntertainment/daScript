@@ -5,7 +5,7 @@
 #pragma once
 
 #if !defined(_TARGET_PC_LINUX) && !defined(_TARGET_PC_MACOSX) && !defined(_TARGET_PC_WIN)\
- && !defined(_TARGET_PS4) && !defined(_TARGET_PS5)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC) && !defined(_TARGET_ANDROID)
+ && !defined(_TARGET_C1) && !defined(_TARGET_C2)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC) && !defined(_TARGET_ANDROID)
   #if __linux__ || __unix__
     #define _TARGET_PC_LINUX 1
   #elif __APPLE__
@@ -57,6 +57,132 @@ NO_ASAN_INLINE vec4i v_ldi(const int *m) { return  _mm_load_si128((const vec4i*)
 NO_ASAN_INLINE vec4i v_ldui(const int *m) { return _mm_loadu_si128((const vec4i*)m); }
 NO_ASAN_INLINE vec4f v_ldu_x(const float *m) { return _mm_load_ss(m); } // load x, zero others
 #endif
+
+VECTORCALL VECMATH_FINLINE void v_ld_soa2(const float *m, vec4f &x, vec4f &y)
+{
+  vec4f a = v_ld(m), b = v_ld(m + 4);
+  x = _mm_shuffle_ps(a, b, _MM_SHUFFLE(2, 0, 2, 0));
+  y = _mm_shuffle_ps(a, b, _MM_SHUFFLE(3, 1, 3, 1));
+}
+
+VECTORCALL VECMATH_FINLINE void v_ld_soa3(const float *m, vec4f &x, vec4f &y, vec4f &z)
+{
+  vec4f x0y0z0x1 = v_ld(m), y1z1x2y2 = v_ld(m + 4), z2x3y3z3 = v_ld(m + 8);
+  vec4f x2y2x3y3 = _mm_shuffle_ps(y1z1x2y2, z2x3y3z3, _MM_SHUFFLE(2, 1, 3, 2));
+  vec4f y0z0y1z1 = _mm_shuffle_ps(x0y0z0x1, y1z1x2y2, _MM_SHUFFLE(1, 0, 2, 1));
+  x = _mm_shuffle_ps(x0y0z0x1, x2y2x3y3, _MM_SHUFFLE(2, 0, 3, 0));
+  y = _mm_shuffle_ps(y0z0y1z1, x2y2x3y3, _MM_SHUFFLE(3, 1, 2, 0));
+  z = _mm_shuffle_ps(y0z0y1z1, z2x3y3z3, _MM_SHUFFLE(3, 0, 3, 1));
+}
+
+VECTORCALL VECMATH_FINLINE void v_ld_soa4(const float *m, vec4f &x, vec4f &y, vec4f &z, vec4f &w)
+{
+  vec4f a = v_ld(m), b = v_ld(m + 4), c = v_ld(m + 8), d = v_ld(m + 12);
+  vec4f t0 = _mm_unpacklo_ps(a, b), t1 = _mm_unpackhi_ps(a, b);
+  vec4f t2 = _mm_unpacklo_ps(c, d), t3 = _mm_unpackhi_ps(c, d);
+  x = _mm_movelh_ps(t0, t2);
+  y = _mm_movehl_ps(t2, t0);
+  z = _mm_movelh_ps(t1, t3);
+  w = _mm_movehl_ps(t3, t1);
+}
+
+VECTORCALL VECMATH_FINLINE void v_ldu_soa2(const float *m, vec4f &x, vec4f &y)
+{
+  vec4f a = v_ldu(m), b = v_ldu(m + 4);
+  x = _mm_shuffle_ps(a, b, _MM_SHUFFLE(2, 0, 2, 0));
+  y = _mm_shuffle_ps(a, b, _MM_SHUFFLE(3, 1, 3, 1));
+}
+
+VECTORCALL VECMATH_FINLINE void v_ldu_soa3(const float *m, vec4f &x, vec4f &y, vec4f &z)
+{
+  vec4f x0y0z0x1 = v_ldu(m), y1z1x2y2 = v_ldu(m + 4), z2x3y3z3 = v_ldu(m + 8);
+  vec4f x2y2x3y3 = _mm_shuffle_ps(y1z1x2y2, z2x3y3z3, _MM_SHUFFLE(2, 1, 3, 2));
+  vec4f y0z0y1z1 = _mm_shuffle_ps(x0y0z0x1, y1z1x2y2, _MM_SHUFFLE(1, 0, 2, 1));
+  x = _mm_shuffle_ps(x0y0z0x1, x2y2x3y3, _MM_SHUFFLE(2, 0, 3, 0));
+  y = _mm_shuffle_ps(y0z0y1z1, x2y2x3y3, _MM_SHUFFLE(3, 1, 2, 0));
+  z = _mm_shuffle_ps(y0z0y1z1, z2x3y3z3, _MM_SHUFFLE(3, 0, 3, 1));
+}
+
+VECTORCALL VECMATH_FINLINE void v_ldu_soa4(const float *m, vec4f &x, vec4f &y, vec4f &z, vec4f &w)
+{
+  vec4f a = v_ldu(m), b = v_ldu(m + 4), c = v_ldu(m + 8), d = v_ldu(m + 12);
+  vec4f t0 = _mm_unpacklo_ps(a, b), t1 = _mm_unpackhi_ps(a, b);
+  vec4f t2 = _mm_unpacklo_ps(c, d), t3 = _mm_unpackhi_ps(c, d);
+  x = _mm_movelh_ps(t0, t2);
+  y = _mm_movehl_ps(t2, t0);
+  z = _mm_movelh_ps(t1, t3);
+  w = _mm_movehl_ps(t3, t1);
+}
+
+// SoA lanes to 3 packed-float3 registers, the inverse of the v_ldu_soa3 deinterleave
+VECTORCALL VECMATH_FINLINE void v_interleave3(vec4f x, vec4f y, vec4f z, vec4f &e0, vec4f &e1, vec4f &e2)
+{
+  vec4f xy01 = _mm_unpacklo_ps(x, y);
+  vec4f zx01 = _mm_shuffle_ps(z, x, _MM_SHUFFLE(1, 1, 0, 0));
+  e0 = _mm_shuffle_ps(xy01, zx01, _MM_SHUFFLE(2, 0, 1, 0)); // x0 y0 z0 x1
+  vec4f yz1 = _mm_shuffle_ps(y, z, _MM_SHUFFLE(1, 1, 1, 1));
+  vec4f xy2 = _mm_shuffle_ps(x, y, _MM_SHUFFLE(2, 2, 2, 2));
+  e1 = _mm_shuffle_ps(yz1, xy2, _MM_SHUFFLE(2, 0, 2, 0)); // y1 z1 x2 y2
+  vec4f zx23 = _mm_shuffle_ps(z, x, _MM_SHUFFLE(3, 3, 2, 2));
+  vec4f yz23 = _mm_unpackhi_ps(y, z);
+  e2 = _mm_shuffle_ps(zx23, yz23, _MM_SHUFFLE(3, 2, 2, 0)); // z2 x3 y3 z3
+}
+
+// SoA lanes to 4 packed-float4 registers (a transpose), the inverse of the v_ldu_soa4 deinterleave
+VECTORCALL VECMATH_FINLINE void v_interleave4(vec4f x, vec4f y, vec4f z, vec4f w, vec4f &e0, vec4f &e1, vec4f &e2, vec4f &e3)
+{
+  vec4f t0 = _mm_unpacklo_ps(x, y), t1 = _mm_unpackhi_ps(x, y);
+  vec4f t2 = _mm_unpacklo_ps(z, w), t3 = _mm_unpackhi_ps(z, w);
+  e0 = _mm_movelh_ps(t0, t2);
+  e1 = _mm_movehl_ps(t2, t0);
+  e2 = _mm_movelh_ps(t1, t3);
+  e3 = _mm_movehl_ps(t3, t1);
+}
+
+VECTORCALL VECMATH_FINLINE void v_st_soa2(float *m, vec4f x, vec4f y)
+{
+  v_st(m, _mm_unpacklo_ps(x, y));
+  v_st(m + 4, _mm_unpackhi_ps(x, y));
+}
+VECTORCALL VECMATH_FINLINE void v_stu_soa2(float *m, vec4f x, vec4f y)
+{
+  v_stu(m, _mm_unpacklo_ps(x, y));
+  v_stu(m + 4, _mm_unpackhi_ps(x, y));
+}
+VECTORCALL VECMATH_FINLINE void v_st_soa3(float *m, vec4f x, vec4f y, vec4f z)
+{
+  vec4f e0, e1, e2;
+  v_interleave3(x, y, z, e0, e1, e2);
+  v_st(m, e0);
+  v_st(m + 4, e1);
+  v_st(m + 8, e2);
+}
+VECTORCALL VECMATH_FINLINE void v_stu_soa3(float *m, vec4f x, vec4f y, vec4f z)
+{
+  vec4f e0, e1, e2;
+  v_interleave3(x, y, z, e0, e1, e2);
+  v_stu(m, e0);
+  v_stu(m + 4, e1);
+  v_stu(m + 8, e2);
+}
+VECTORCALL VECMATH_FINLINE void v_st_soa4(float *m, vec4f x, vec4f y, vec4f z, vec4f w)
+{
+  vec4f e0, e1, e2, e3;
+  v_interleave4(x, y, z, w, e0, e1, e2, e3);
+  v_st(m, e0);
+  v_st(m + 4, e1);
+  v_st(m + 8, e2);
+  v_st(m + 12, e3);
+}
+VECTORCALL VECMATH_FINLINE void v_stu_soa4(float *m, vec4f x, vec4f y, vec4f z, vec4f w)
+{
+  vec4f e0, e1, e2, e3;
+  v_interleave4(x, y, z, w, e0, e1, e2, e3);
+  v_stu(m, e0);
+  v_stu(m + 4, e1);
+  v_stu(m + 8, e2);
+  v_stu(m + 12, e3);
+}
 
 // Always safe loading of float[3], but it uses [one more register (on SSE2) and] one more memory read (slower)
 #if _TARGET_SIMD_SSE >= 4
@@ -122,7 +248,6 @@ VECTORCALL VECMATH_FINLINE vec4i v_make_vec3i(int x, int y, int z)
 VECTORCALL VECMATH_FINLINE vec4f v_make_vec3f(vec4f x, vec4f y, vec4f z)
 { return _mm_shuffle_ps(_mm_shuffle_ps(x, y, _MM_SHUFFLE(0, 0, 0, 0)), z, _MM_SHUFFLE(0, 0, 2, 0)); }
 
-//VECTORCALL VECMATH_FINLINE vec4f v_perm_mask(){ _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(a), mask)); }
 #define V_SHUFFLE(v, mask) _mm_shuffle_ps(v, v, mask)
 #define V_SHUFFLE_REV(v, maskW, maskZ, maskY, maskX) V_SHUFFLE(v, _MM_SHUFFLE(maskW, maskZ, maskY, maskX))
 #define V_SHUFFLE_FWD(v, maskX, maskY, maskZ, maskW) V_SHUFFLE(v, _MM_SHUFFLE(maskW, maskZ, maskY, maskX))
@@ -170,6 +295,40 @@ VECTORCALL VECMATH_FINLINE vec4f v_merge_hw(vec4f a, vec4f b) { return _mm_unpac
 VECTORCALL VECMATH_FINLINE vec4f v_merge_lw(vec4f a, vec4f b) { return _mm_unpackhi_ps(a, b); }
 
 VECTORCALL VECMATH_FINLINE int v_signmask(vec4f a) { return _mm_movemask_ps(a); }
+VECTORCALL VECMATH_FINLINE int v_truemask(vec4f a) { return _mm_movemask_ps(a); }
+VECTORCALL VECMATH_FINLINE int v_count_true(vec4f a)
+{
+  // a true lane is all-ones == -1; sum the four lanes and negate
+  __m128i v = _mm_castps_si128(a);
+  v = _mm_add_epi32(v, _mm_shuffle_epi32(v, _MM_SHUFFLE(1, 0, 3, 2)));
+  v = _mm_add_epi32(v, _mm_shuffle_epi32(v, _MM_SHUFFLE(2, 3, 0, 1)));
+  return -_mm_cvtsi128_si32(v);
+}
+VECTORCALL VECMATH_FINLINE bool v_is_any_neg_b(vec4f a) { return _mm_movemask_ps(a) != 0; }
+VECTORCALL VECMATH_FINLINE int v_is_merge_planes_nout(vec4f m0, vec4f m1, vec4f m2, vec4f m3, vec4f m4, vec4f m5)
+{
+  // per-plane movemask merged on scalar ports, effectively free next to the vector work
+  // (a vector merge tree measured ~20% slower); unsigned(-x) has bit 31 set iff x != 0,
+  // so the & chain needs no setcc per plane
+  unsigned nout = unsigned(-_mm_movemask_ps(m0)) & unsigned(-_mm_movemask_ps(m1)) & unsigned(-_mm_movemask_ps(m2))
+                & unsigned(-_mm_movemask_ps(m3)) & unsigned(-_mm_movemask_ps(m4)) & unsigned(-_mm_movemask_ps(m5));
+  return int(nout) >> 31; // arithmetic shift broadcasts bit 31: 0 or -1
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_min_pairs(vec4f a, vec4f b)
+{
+  return _mm_min_ps(_mm_shuffle_ps(a, b, _MM_SHUFFLE(2, 0, 2, 0)), _mm_shuffle_ps(a, b, _MM_SHUFFLE(3, 1, 3, 1)));
+}
+VECTORCALL VECMATH_FINLINE vec4f v_max_pairs(vec4f a, vec4f b)
+{
+  return _mm_max_ps(_mm_shuffle_ps(a, b, _MM_SHUFFLE(2, 0, 2, 0)), _mm_shuffle_ps(a, b, _MM_SHUFFLE(3, 1, 3, 1)));
+}
+// haddps decodes to the same two shuffles plus the add on every core we target, and its lane
+// order is the pairwise one, so the explicit form only schedules better
+VECTORCALL VECMATH_FINLINE vec4f v_add_pairs(vec4f a, vec4f b)
+{
+  return _mm_add_ps(_mm_shuffle_ps(a, b, _MM_SHUFFLE(2, 0, 2, 0)), _mm_shuffle_ps(a, b, _MM_SHUFFLE(3, 1, 3, 1)));
+}
 
 VECTORCALL VECMATH_FINLINE bool v_test_all_bits_zeros(vec4f a)
 {
@@ -241,11 +400,11 @@ VECTORCALL VECMATH_FINLINE vec4i v_cvtu_vec4i(vec4f a)
 {
 #if defined(__AVX512F__)//only works on clang/gcc
   return _mm_cvtps_epu32(a);
-#elif _TARGET_64BIT //_mm_cvtss_si64 is x64 instruction
-  return v_make_vec4i(uint32_t(_mm_cvtss_si64(a)),
-                      uint32_t(_mm_cvtss_si64(v_splat_y(a))),
-                      uint32_t(_mm_cvtss_si64(v_splat_z(a))),
-                      uint32_t(_mm_cvtss_si64(v_splat_w(a))));
+#elif _TARGET_64BIT //_mm_cvttss_si64 is x64 instruction. cvtt, not cvt: this truncates like the cast it stands for
+  return v_make_vec4i(uint32_t(_mm_cvttss_si64(a)),
+                      uint32_t(_mm_cvttss_si64(v_splat_y(a))),
+                      uint32_t(_mm_cvttss_si64(v_splat_z(a))),
+                      uint32_t(_mm_cvttss_si64(v_splat_w(a))));
 #else
   return v_make_vec4i(uint32_t(v_extract_x(a)),
                       uint32_t(v_extract_y(a)),
@@ -375,12 +534,26 @@ VECTORCALL VECMATH_FINLINE vec4i v_seli(vec4i a, vec4i b, vec4i c)
 }
 #endif
 
+// roundps has no ties-away-from-zero mode, so decide on the truncated remainder: trunc and the
+// a - trunc(a) that follows are both exact, unlike biasing a by a signed half first (that add
+// can carry into the next integer, e.g. 0.49999997 -> 1). NEON has the mode natively
+VECTORCALL VECMATH_FINLINE vec4f v_round(vec4f a)
+{
+  vec4f t = v_trunc(a);
+  vec4f sign = v_and(a, v_cast_vec4f(V_CI_SIGN_MASK));
+  vec4f absFrac = v_xor(v_sub(a, t), sign); // truncation keeps the remainder on a's side of zero
+  vec4f away = v_cmp_ge(absFrac, V_C_HALF);
+  return v_add(t, v_or(v_and(away, V_C_ONE), sign));
+}
+
+VECTORCALL VECMATH_FINLINE vec4i v_cvt_roundi(vec4f a) { return v_cvt_trunci(v_round(a)); }
+
 
 VECTORCALL VECMATH_FINLINE vec4f v_add(vec4f a, vec4f b) { return _mm_add_ps(a, b); }
 VECTORCALL VECMATH_FINLINE vec4f v_sub(vec4f a, vec4f b) { return _mm_sub_ps(a, b); }
 VECTORCALL VECMATH_FINLINE vec4f v_mul(vec4f a, vec4f b) { return _mm_mul_ps(a, b); }
 VECTORCALL VECMATH_FINLINE vec4f v_div(vec4f a, vec4f b) { return _mm_div_ps(a, b); }
-#if defined(__FMA__) || (defined(__AVX2__) && defined(_MSC_VER) && !defined(__clang__))
+#if !defined(VECMATH_NO_FMA) && (defined(__FMA__) || (defined(__AVX2__) && defined(_MSC_VER) && !defined(__clang__)))
 VECTORCALL VECMATH_FINLINE vec4f v_madd(vec4f a, vec4f b, vec4f c) { return _mm_fmadd_ps(a, b, c); }
 VECTORCALL VECMATH_FINLINE vec4f v_madd_x(vec4f a, vec4f b, vec4f c) { return _mm_fmadd_ps(a, b, c); } // _ps is better
 VECTORCALL VECMATH_FINLINE vec4f v_msub(vec4f a, vec4f b, vec4f c) { return _mm_fmsub_ps(a, b, c); }
@@ -415,12 +588,28 @@ VECTORCALL VECMATH_FINLINE vec4i v_interleave_lo_i32(vec4i a, vec4i b) { return 
 VECTORCALL VECMATH_FINLINE vec4i v_interleave_hi_i32(vec4i a, vec4i b) { return _mm_unpackhi_epi32(a, b); }
 VECTORCALL VECMATH_FINLINE vec4i v_interleave_lo_i64(vec4i a, vec4i b) { return _mm_unpacklo_epi64(a, b); }
 VECTORCALL VECMATH_FINLINE vec4i v_interleave_hi_i64(vec4i a, vec4i b) { return _mm_unpackhi_epi64(a, b); }
+VECTORCALL VECMATH_FINLINE vec4i v_perm_i8(vec4i t, vec4i k)
+{
+#if _TARGET_SIMD_SSE >= 3
+  return _mm_shuffle_epi8(t, k);
+#else
+  alignas(16) uint8_t tb[16], kb[16], r[16];
+  _mm_store_si128((__m128i *)tb, t);
+  _mm_store_si128((__m128i *)kb, k);
+  for (int i = 0; i < 16; ++i)
+    r[i] = (kb[i] & 0x80) ? 0 : tb[kb[i] & 15];
+  return _mm_load_si128((const __m128i *)r);
+#endif
+}
+VECTORCALL VECMATH_FINLINE vec4i v_cmp_eqi8(vec4i a, vec4i b) { return _mm_cmpeq_epi8(a, b); }
 
 VECTORCALL VECMATH_FINLINE vec4f v_hadd4_x(vec4f a)
 {
-#if _TARGET_SIMD_SSE >= 3
-  vec4f s = _mm_hadd_ps(a, a);
-  return _mm_hadd_ps(s, s);
+#if _TARGET_SIMD_SSE >= 4
+  __m128 shuf = _mm_movehdup_ps(a);
+  __m128 sums = _mm_add_ps(a, shuf);
+  shuf = _mm_movehl_ps(shuf, sums);
+  return _mm_add_ss(sums, shuf);
 #else
   vec4f s = v_add(a, v_rot_2(a));
   return v_add_x(s, v_splat_y(s));
@@ -428,9 +617,10 @@ VECTORCALL VECMATH_FINLINE vec4f v_hadd4_x(vec4f a)
 }
 VECTORCALL VECMATH_FINLINE vec4f v_hadd3_x(vec3f a)
 {
-#if _TARGET_SIMD_SSE >= 3
-  vec4f s = _mm_hadd_ps(a, a);
-  return _mm_add_ss(s, _mm_movehl_ps(a, a));
+#if _TARGET_SIMD_SSE >= 4
+  __m128 shuf = _mm_movehdup_ps(a);
+  __m128 sums = _mm_add_ss(a, shuf);
+  return _mm_add_ss(sums, _mm_movehl_ps(a, a));
 #else
   vec4f s = _mm_add_ss(a, v_splat_y(a));
   return _mm_add_ss(s, _mm_movehl_ps(a, a));
@@ -506,16 +696,19 @@ VECTORCALL VECMATH_FINLINE vec4i v_packus16(vec4i a, vec4i b) { return _mm_packu
 VECTORCALL VECMATH_FINLINE vec4i v_packus16(vec4i a) { return _mm_packus_epi16(a,a); }
 
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise(vec4f a) { return _mm_rcp_ps(a); }
+// Newton step kept as y*(2 - a*y), the form NEON's vrecps computes: the algebraically equal
+// 2y - a*y*y evaluates y*y, which leaves float range long before 1/a does - it overflows below
+// |a| ~ 5e-20 (giving a sign flipped inf) and underflows above |a| ~ 1e19 (giving exactly 2x)
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_est(vec4f a)
 {
   __m128 y0 = _mm_rcp_ps(a);
-  return _mm_sub_ps(_mm_add_ps(y0, y0), _mm_mul_ps(a, _mm_mul_ps(y0, y0)));
+  return _mm_mul_ps(y0, _mm_sub_ps(V_C_TWO, _mm_mul_ps(a, y0)));
 }
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise_x(vec4f a) { return _mm_rcp_ss(a); }
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_est_x(vec4f a)
 {
   __m128 y0 = _mm_rcp_ss(a);
-  return _mm_sub_ss(_mm_add_ss(y0, y0), _mm_mul_ss(a, _mm_mul_ss(y0, y0)));
+  return _mm_mul_ss(y0, _mm_sub_ss(V_C_TWO, _mm_mul_ss(a, y0)));
 }
 
 VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_unprecise(vec4f a) { return _mm_rsqrt_ps(a); }
@@ -540,9 +733,6 @@ VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_est_x(vec4f a) // Reciprocal square roo
   r = v_mul_x(r, v_set_x(-0.5f));
   return v_mul_x(a, r);
 }
-
-VECTORCALL VECMATH_FINLINE vec4f v_rsqrt(vec4f a) { return v_div(v_sqrt(a), a); }
-VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_x(vec4f a) { return v_div_x(v_sqrt_x(a), a); }
 
 VECTORCALL VECMATH_FINLINE vec4i sse2_mini(vec4i a, vec4i b)
 {
@@ -609,6 +799,25 @@ VECTORCALL VECMATH_FINLINE vec4i v_maxu(vec4i a, vec4i b) {return sse2_maxu(a, b
 VECTORCALL VECMATH_FINLINE vec4i v_absi(vec4i a) {return sse2_absi(a);}
 #endif
 
+// SSE has no pairwise integer op: deinterleave the even and odd lanes of both operands (one
+// shufps each - there is no two-source integer shuffle, the float-domain cast is free) and
+// apply the elementwise op
+VECTORCALL VECMATH_FINLINE vec4i v_addi_pairs(vec4i a, vec4i b)
+{
+  vec4f af = v_cast_vec4f(a), bf = v_cast_vec4f(b);
+  return v_addi(v_cast_vec4i(v_perm_xzac(af, bf)), v_cast_vec4i(v_perm_ywbd(af, bf)));
+}
+VECTORCALL VECMATH_FINLINE vec4i v_mini_pairs(vec4i a, vec4i b)
+{
+  vec4f af = v_cast_vec4f(a), bf = v_cast_vec4f(b);
+  return v_mini(v_cast_vec4i(v_perm_xzac(af, bf)), v_cast_vec4i(v_perm_ywbd(af, bf)));
+}
+VECTORCALL VECMATH_FINLINE vec4i v_maxi_pairs(vec4i a, vec4i b)
+{
+  vec4f af = v_cast_vec4f(a), bf = v_cast_vec4f(b);
+  return v_maxi(v_cast_vec4i(v_perm_xzac(af, bf)), v_cast_vec4i(v_perm_ywbd(af, bf)));
+}
+
 VECTORCALL VECMATH_FINLINE vec4f v_neg(vec4f a) {return v_xor(a, v_cast_vec4f(v_splatsi(0x80000000)));}
 VECTORCALL VECMATH_FINLINE vec4i v_negi(vec4i a){ return v_subi(v_cast_vec4i(v_zero()), a); }
 VECTORCALL VECMATH_FINLINE vec4f v_abs(vec4f a)
@@ -624,9 +833,11 @@ VECTORCALL VECMATH_FINLINE vec4f v_abs(vec4f a)
   #endif
 }
 
-VECTORCALL VECMATH_FINLINE vec4f v_sqrt4_fast(vec4f a) { return _mm_sqrt_ps(a); }
-VECTORCALL VECMATH_FINLINE vec4f v_sqrt(vec4f a) { return _mm_sqrt_ps(a); }
-VECTORCALL VECMATH_FINLINE vec4f v_sqrt_fast_x(vec4f a) { return _mm_sqrt_ss(a); }
+VECTORCALL VECMATH_FINLINE vec4f v_abs_diff(vec4f a, vec4f b) { return v_abs(_mm_sub_ps(a, b)); }
+VECTORCALL VECMATH_FINLINE vec4f v_cmp_abs_ge(vec4f a, vec4f b) { return _mm_cmpge_ps(v_abs(a), v_abs(b)); }
+VECTORCALL VECMATH_FINLINE vec4f v_cmp_abs_gt(vec4f a, vec4f b) { return _mm_cmpgt_ps(v_abs(a), v_abs(b)); }
+
+VECTORCALL VECMATH_FINLINE vec4f v_sqrt(vec4f a)   { return _mm_sqrt_ps(a); }
 VECTORCALL VECMATH_FINLINE vec4f v_sqrt_x(vec4f a) { return _mm_sqrt_ss(a); }
 
 VECTORCALL VECMATH_FINLINE vec4f v_rot_1(vec4f a) { return V_SHUFFLE_REV(a, 0, 3, 2, 1); }
@@ -636,15 +847,70 @@ VECTORCALL VECMATH_FINLINE vec4i v_roti_1(vec4i a) { return _mm_shuffle_epi32(a,
 VECTORCALL VECMATH_FINLINE vec4i v_roti_2(vec4i a) { return _mm_shuffle_epi32(a, _MM_SHUFFLE(1, 0, 3, 2)); }
 VECTORCALL VECMATH_FINLINE vec4i v_roti_3(vec4i a) { return _mm_shuffle_epi32(a, _MM_SHUFFLE(2, 1, 0, 3)); }
 
+// horizontal min/max: 2 shuffles + 2 min/max is the log2 floor for a broadcast
+// reduction on SSE; NEON implements these with dedicated fminv/fmaxv instructions
+VECTORCALL VECMATH_FINLINE vec4f v_hmin(vec4f a)
+{
+  a = v_min(a, v_rot_1(a));
+  return v_min(a, v_rot_2(a));
+}
+VECTORCALL VECMATH_FINLINE vec4f v_hmax(vec4f a)
+{
+  a = v_max(a, v_rot_1(a));
+  return v_max(a, v_rot_2(a));
+}
+VECTORCALL VECMATH_FINLINE vec4f v_hmin3(vec3f a)
+{
+  return v_min(v_splat_x(a), v_min(v_splat_y(a), v_splat_z(a)));
+}
+VECTORCALL VECMATH_FINLINE vec4f v_hmax3(vec3f a)
+{
+  return v_max(v_splat_x(a), v_max(v_splat_y(a), v_splat_z(a)));
+}
+VECTORCALL VECMATH_FINLINE vec4i v_hmini(vec4i a)
+{
+  a = v_mini(a, v_roti_1(a));
+  return v_mini(a, v_roti_2(a));
+}
+VECTORCALL VECMATH_FINLINE vec4i v_hmaxi(vec4i a)
+{
+  a = v_maxi(a, v_roti_1(a));
+  return v_maxi(a, v_roti_2(a));
+}
+VECTORCALL VECMATH_FINLINE vec4i v_hmini3(vec4i a) { return v_mini(v_splat_xi(a), v_mini(v_splat_yi(a), v_splat_zi(a))); }
+VECTORCALL VECMATH_FINLINE vec4i v_hmaxi3(vec4i a) { return v_maxi(v_splat_xi(a), v_maxi(v_splat_yi(a), v_splat_zi(a))); }
+
 VECTORCALL VECMATH_FINLINE vec4f v_perm_yzxx(vec4f a) { return V_SHUFFLE_REV(a, 0,0,2,1); }
 VECTORCALL VECMATH_FINLINE vec4f v_perm_yzxy(vec4f a) { return V_SHUFFLE_REV(a, 1,0,2,1); }
 VECTORCALL VECMATH_FINLINE vec4f v_perm_yzxw(vec4f a) { return V_SHUFFLE_REV(a, 3,0,2,1); }
 VECTORCALL VECMATH_FINLINE vec4f v_perm_zxyw(vec4f a) { return V_SHUFFLE_REV(a, 3,1,0,2); }
+VECTORCALL VECMATH_FINLINE vec4f v_perm_yxwz(vec4f a) { return V_SHUFFLE_REV(a, 2,3,0,1); }
 VECTORCALL VECMATH_FINLINE vec4f v_perm_xxyy(vec4f a) { return V_SHUFFLE_REV(a, 1,1,0,0); }
 VECTORCALL VECMATH_FINLINE vec4f v_perm_zzww(vec4f a) { return V_SHUFFLE_REV(a, 3,3,2,2); }
 
 VECTORCALL VECMATH_FINLINE vec4f v_perm_xzac(vec4f xyzw, vec4f abcd) { return _mm_shuffle_ps(xyzw, abcd, _MM_SHUFFLE(2,0,2,0)); }
 VECTORCALL VECMATH_FINLINE vec4f v_perm_ywbd(vec4f xyzw, vec4f abcd) { return _mm_shuffle_ps(xyzw, abcd, _MM_SHUFFLE(3,1,3,1)); }
+#if _TARGET_SIMD_SSE >= 4
+VECTORCALL VECMATH_FINLINE vec4f v_perm_xazc(vec4f xyzw, vec4f abcd) { return _mm_blend_ps(xyzw, _mm_moveldup_ps(abcd), 0xA); }
+VECTORCALL VECMATH_FINLINE vec4f v_perm_ybwd(vec4f xyzw, vec4f abcd) { return _mm_blend_ps(_mm_movehdup_ps(xyzw), abcd, 0xA); }
+#else
+VECTORCALL VECMATH_FINLINE vec4f v_perm_xazc(vec4f xyzw, vec4f abcd)
+{ return _mm_movelh_ps(_mm_unpacklo_ps(xyzw, abcd), _mm_unpackhi_ps(xyzw, abcd)); }
+VECTORCALL VECMATH_FINLINE vec4f v_perm_ybwd(vec4f xyzw, vec4f abcd)
+{ return _mm_movehl_ps(_mm_unpackhi_ps(xyzw, abcd), _mm_unpacklo_ps(xyzw, abcd)); }
+#endif
+VECTORCALL VECMATH_FINLINE vec4f v_perm_zwab(vec4f xyzw, vec4f abcd) { return _mm_shuffle_ps(xyzw, abcd, _MM_SHUFFLE(1,0,3,2)); }
+#if _TARGET_SIMD_SSE >= 4
+VECTORCALL VECMATH_FINLINE vec4f v_perm_yzwa(vec4f xyzw, vec4f abcd)
+{ return _mm_castsi128_ps(_mm_alignr_epi8(_mm_castps_si128(abcd), _mm_castps_si128(xyzw), 4)); }
+VECTORCALL VECMATH_FINLINE vec4f v_perm_wabc(vec4f xyzw, vec4f abcd)
+{ return _mm_castsi128_ps(_mm_alignr_epi8(_mm_castps_si128(abcd), _mm_castps_si128(xyzw), 12)); }
+#else
+VECTORCALL VECMATH_FINLINE vec4f v_perm_yzwa(vec4f xyzw, vec4f abcd)
+{ return _mm_shuffle_ps(xyzw, _mm_shuffle_ps(xyzw, abcd, _MM_SHUFFLE(0,0,3,3)), _MM_SHUFFLE(2,0,2,1)); }
+VECTORCALL VECMATH_FINLINE vec4f v_perm_wabc(vec4f xyzw, vec4f abcd)
+{ return _mm_shuffle_ps(_mm_shuffle_ps(xyzw, abcd, _MM_SHUFFLE(0,0,3,3)), abcd, _MM_SHUFFLE(2,1,2,0)); }
+#endif
 VECTORCALL VECMATH_FINLINE vec4f v_perm_xyab(vec4f xyzw, vec4f abcd) { return _mm_shuffle_ps(xyzw, abcd, _MM_SHUFFLE(1,0,1,0)); }
 VECTORCALL VECMATH_FINLINE vec4f v_perm_zwcd(vec4f xyzw, vec4f abcd) { return _mm_shuffle_ps(xyzw, abcd, _MM_SHUFFLE(3,2,3,2)); }
 VECTORCALL VECMATH_FINLINE vec4f v_perm_bbyx(vec4f xyzw, vec4f abcd) { return _mm_shuffle_ps(abcd, xyzw, _MM_SHUFFLE(0,1,1,1)); }
@@ -655,7 +921,12 @@ VECTORCALL VECMATH_FINLINE vec4f v_perm_xxab(vec4f xyzw, vec4f abcd) { return _m
 VECTORCALL VECMATH_FINLINE vec4f v_perm_yzab(vec4f xyzw, vec4f abcd) { return _mm_shuffle_ps(xyzw, abcd, _MM_SHUFFLE(1,0,2,1)); }
 
 VECTORCALL VECMATH_FINLINE vec4f v_perm_xycd(vec4f xyzw, vec4f abcd) { return _mm_shuffle_ps(xyzw, abcd, _MM_SHUFFLE(3,2,1,0)); }
+#if _TARGET_SIMD_SSE >= 4
+// blend runs on 3 ports where movss is a port 5 shuffle
+VECTORCALL VECMATH_FINLINE vec4f v_perm_ayzw(vec4f xyzw, vec4f abcd) { return _mm_blend_ps(xyzw, abcd, 1); }
+#else
 VECTORCALL VECMATH_FINLINE vec4f v_perm_ayzw(vec4f xyzw, vec4f abcd) { return _mm_move_ss(xyzw, abcd); }
+#endif
 
 VECTORCALL VECMATH_FINLINE vec4f v_perm_xzbx(vec4f xyzw, vec4f abcd)
 {
@@ -727,6 +998,19 @@ VECTORCALL VECMATH_FINLINE vec4f v_perm_xyzd(vec4f xyzw, vec4f abcd)
 }
 #endif
 
+// integer single-source perms: pshufd is non-destructive, folds loads and stays in the int domain
+VECTORCALL VECMATH_FINLINE vec4i v_permi_xzxz(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(2, 0, 2, 0)); }
+VECTORCALL VECMATH_FINLINE vec4i v_permi_ywyw(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(3, 1, 3, 1)); }
+VECTORCALL VECMATH_FINLINE vec4i v_permi_xyxy(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(1, 0, 1, 0)); }
+VECTORCALL VECMATH_FINLINE vec4i v_permi_zwzw(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(3, 2, 3, 2)); }
+VECTORCALL VECMATH_FINLINE vec4i v_permi_xxyy(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(1, 1, 0, 0)); }
+VECTORCALL VECMATH_FINLINE vec4i v_permi_zzww(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(3, 3, 2, 2)); }
+VECTORCALL VECMATH_FINLINE vec4i v_permi_xxzz(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(2, 2, 0, 0)); }
+VECTORCALL VECMATH_FINLINE vec4i v_permi_yyww(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(3, 3, 1, 1)); }
+VECTORCALL VECMATH_FINLINE vec4i v_permi_wwyy(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(1, 1, 3, 3)); }
+VECTORCALL VECMATH_FINLINE vec4i v_permi_yzxw(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(3, 0, 2, 1)); }
+VECTORCALL VECMATH_FINLINE vec4i v_permi_yzxy(vec4i xyzw) { return _mm_shuffle_epi32(xyzw, _MM_SHUFFLE(1, 0, 2, 1)); }
+
 VECTORCALL VECMATH_FINLINE vec4f sse2_dot2(vec4f a, vec4f b)
 {
   vec4f m = _mm_mul_ps(a, b);
@@ -775,12 +1059,32 @@ VECTORCALL VECMATH_FINLINE vec4f sse2_dot4_x(vec4f a, vec4f b)
 VECTORCALL VECMATH_FINLINE vec4f sse2_plane_dist_x(plane3f a, vec3f b) { return v_add_x(sse2_dot3_x(a,b), v_splat_w(a)); }
 
 #if _TARGET_SIMD_SSE >= 4 || defined(_DAGOR_PROJECT_OPTIONAL_SSE4) || defined(__SSE4_1__)
-VECTORCALL VECMATH_FINLINE vec4f sse4_dot4(vec4f a, vec4f b) { return _mm_dp_ps(a,b, 0xFF); }
-VECTORCALL VECMATH_FINLINE vec4f sse4_dot4_x(vec4f a, vec4f b) { return _mm_dp_ps(a,b,0xF1); }
-VECTORCALL VECMATH_FINLINE vec4f sse4_dot3(vec4f a, vec4f b) { return _mm_dp_ps(a,b, 0x7F); }
-VECTORCALL VECMATH_FINLINE vec4f sse4_dot3_x(vec4f a, vec4f b) { return _mm_dp_ps(a,b,0x71); }
-VECTORCALL VECMATH_FINLINE vec4f sse4_dot2(vec4f a, vec4f b) { return _mm_dp_ps(a, b, 0x3F); }
-VECTORCALL VECMATH_FINLINE vec4f sse4_dot2_x(vec4f a, vec4f b) { return _mm_dp_ps(a, b, 0x31); }
+VECTORCALL VECMATH_FINLINE vec4f sse4_dot4_x(vec4f a, vec4f b)
+{
+  // dpps is slower, especially on AMD
+  __m128 mul = _mm_mul_ps(a, b);
+  __m128 shuf = _mm_movehdup_ps(mul);
+  __m128 sums = _mm_add_ps(mul, shuf);
+  shuf = _mm_movehl_ps(shuf, sums);
+  return _mm_add_ss(sums, shuf);
+}
+VECTORCALL VECMATH_FINLINE vec4f sse4_dot4(vec4f a, vec4f b) { return v_splat_x(sse4_dot4_x(a, b)); }
+VECTORCALL VECMATH_FINLINE vec4f sse4_dot3_x(vec4f a, vec4f b)
+{
+  // dpps is slower, especially on AMD
+  __m128 mul = _mm_mul_ps(a, b);
+  __m128 shuf = _mm_movehl_ps(mul, mul);
+  __m128 sums = _mm_add_ss(mul, shuf);
+  shuf = _mm_movehdup_ps(mul);
+  return _mm_add_ss(sums, shuf);
+}
+VECTORCALL VECMATH_FINLINE vec4f sse4_dot3(vec4f a, vec4f b) { return v_splat_x(sse4_dot3_x(a, b)); }
+VECTORCALL VECMATH_FINLINE vec4f sse4_dot2_x(vec4f a, vec4f b)
+{
+  __m128 mul = _mm_mul_ps(a, b);
+  return _mm_add_ss(mul, _mm_movehdup_ps(mul));
+}
+VECTORCALL VECMATH_FINLINE vec4f sse4_dot2(vec4f a, vec4f b) { return v_splat_x(sse4_dot2_x(a, b)); }
 VECTORCALL VECMATH_FINLINE vec4f sse4_plane_dist_x(plane3f a, vec3f b) { return v_add_x(sse4_dot3_x(a,b), v_splat_w(a)); }
 #else // fallback to SSE2
 VECTORCALL VECMATH_FINLINE vec4f sse4_dot4(vec4f a, vec4f b) { return sse2_dot4(a, b); }
@@ -792,18 +1096,6 @@ VECTORCALL VECMATH_FINLINE vec4f sse4_dot2_x(vec4f a, vec4f b) { return sse2_dot
 VECTORCALL VECMATH_FINLINE vec4f sse4_plane_dist_x(plane3f a, vec3f b) { return sse2_plane_dist_x(a,b); }
 #endif
 
-#if _TARGET_SIMD_SSE >= 3 || defined(_DAGOR_PROJECT_OPTIONAL_SSE4) || defined(__SSE3__)
-VECTORCALL VECMATH_FINLINE vec4f sse3_dot4(vec4f a, vec4f b)
-{
-  vec4f m = _mm_mul_ps(a, b);
-  m = _mm_hadd_ps(m,m);
-  return _mm_hadd_ps(m,m);
-}
-VECTORCALL VECMATH_FINLINE vec4f sse3_plane_dist_x(plane3f a, vec3f b) { return v_add_x(sse2_dot3_x(a,b), v_splat_w(a)); }
-#else
-VECTORCALL VECMATH_FINLINE vec4f sse3_dot4(vec4f a, vec4f b) { return sse2_dot4(a, b); }
-VECTORCALL VECMATH_FINLINE vec4f sse3_plane_dist_x(plane3f a, vec3f b) { return sse2_plane_dist_x(a,b); }
-#endif
 
 
 #if _TARGET_SIMD_SSE >= 4
@@ -814,14 +1106,6 @@ VECTORCALL VECMATH_FINLINE vec4f v_dot3_x(vec4f a, vec4f b) { return sse4_dot3_x
 VECTORCALL VECMATH_FINLINE vec4f v_dot2(vec4f a, vec4f b) { return sse4_dot2(a,b); }
 VECTORCALL VECMATH_FINLINE vec4f v_dot2_x(vec4f a, vec4f b) { return sse4_dot2_x(a,b); }
 VECTORCALL VECMATH_FINLINE vec4f v_plane_dist_x(plane3f a, vec3f b) { return sse4_plane_dist_x(a,b); }
-#elif _TARGET_SIMD_SSE >= 3
-VECTORCALL VECMATH_FINLINE vec4f v_dot4(vec4f a, vec4f b) { return sse3_dot4(a,b); }
-VECTORCALL VECMATH_FINLINE vec4f v_dot4_x(vec4f a, vec4f b) { return sse3_dot4(a,b); }
-VECTORCALL VECMATH_FINLINE vec4f v_dot3(vec4f a, vec4f b) { return sse2_dot3(a,b); }
-VECTORCALL VECMATH_FINLINE vec4f v_dot3_x(vec4f a, vec4f b) { return sse2_dot3_x(a,b); }
-VECTORCALL VECMATH_FINLINE vec4f v_dot2(vec4f a, vec4f b) { return sse2_dot2(a,b); }
-VECTORCALL VECMATH_FINLINE vec4f v_dot2_x(vec4f a, vec4f b) { return sse2_dot2_x(a,b); }
-VECTORCALL VECMATH_FINLINE vec4f v_plane_dist_x(plane3f a, vec3f b) { return sse3_plane_dist_x(a,b); }
 #else
 VECTORCALL VECMATH_FINLINE vec4f v_dot4(vec4f a, vec4f b) { return sse2_dot4(a,b); }
 VECTORCALL VECMATH_FINLINE vec4f v_dot4_x(vec4f a, vec4f b) { return sse2_dot4_x(a,b); }
@@ -832,16 +1116,26 @@ VECTORCALL VECMATH_FINLINE vec4f v_dot2_x(vec4f a, vec4f b) { return sse2_dot2_x
 VECTORCALL VECMATH_FINLINE vec4f v_plane_dist_x(plane3f a, vec3f b) { return sse2_plane_dist_x(a,b); }
 #endif
 
-VECTORCALL VECMATH_FINLINE vec4f v_length4_sq(vec4f a) { return v_dot4(a, a); }
-VECTORCALL VECMATH_FINLINE vec3f v_length3_sq(vec3f a) { return v_dot3(a, a); }
-VECTORCALL VECMATH_FINLINE vec4f v_length2_sq(vec4f a) { return v_dot2(a, a); }
-VECTORCALL VECMATH_FINLINE vec4f v_length4_sq_x(vec4f a) { return v_dot4_x(a, a); }
-VECTORCALL VECMATH_FINLINE vec3f v_length3_sq_x(vec3f a) { return v_dot3_x(a, a); }
-VECTORCALL VECMATH_FINLINE vec4f v_length2_sq_x(vec4f a) { return v_dot2_x(a, a); }
+// both products must stay rounded so a x a is exactly 0; unprotected, the compiler contracts
+// one mul into the sub and returns the other's rounding error instead
+VECTORCALL VECMATH_FINLINE vec3f v_cross3(vec3f a, vec3f b)
+{
+  // (a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x)
+#if defined(__FMA__) || (defined(__AVX2__) && defined(_MSC_VER) && !defined(__clang__))
+  // subtract through hsubps: FMA has no horizontal form, so no compiler can contract the
+  // muls into it and both products stay rounded by construction
+  vec4f u = v_mul(V_SHUFFLE_FWD(a, 1, 2, 2, 0), V_SHUFFLE_FWD(b, 2, 1, 0, 2)); // ay*bz az*by az*bx ax*bz
+  vec4f v = v_mul(V_SHUFFLE_FWD(a, 0, 1, 0, 1), V_SHUFFLE_FWD(b, 1, 0, 1, 0)); // ax*by ay*bx ax*by ay*bx
+  return _mm_hsub_ps(u, v);
+#else
+  // without FMA in the target the mul+sub pair cannot be contracted
+  vec3f yzxw = v_perm_yzxw(a);
+  vec3f bcad = v_perm_yzxw(b);
+  return v_perm_yzxy(v_sub(v_mul(a, bcad), v_mul(yzxw, b)));
+#endif
+}
 
-VECTORCALL VECMATH_FINLINE vec4f v_norm4(vec4f a) { return v_div(a, v_splat_x(v_sqrt_x(v_dot4_x(a,a)))); }
-VECTORCALL VECMATH_FINLINE vec4f v_norm3(vec4f a) { return v_div(a, v_splat_x(v_sqrt_x(v_dot3_x(a,a)))); }
-VECTORCALL VECMATH_FINLINE vec4f v_norm2(vec4f a) { return v_div(a, v_splat_x(v_sqrt_x(v_dot2_x(a,a)))); }
+// v_length*_sq and v_norm2/3/4 live in dag_vecMath_common.h (portable form).
 
 VECTORCALL VECMATH_FINLINE vec4f v_plane_dist(plane3f a, vec3f b)
 {
@@ -862,30 +1156,6 @@ VECTORCALL VECMATH_FINLINE void v_mat_33cu_from_mat33(float * __restrict m33, co
   m33[8] = v_extract_z(tm.col2);
 }
 
-VECTORCALL VECMATH_FINLINE void v_mat44_make_from_43ca(mat44f& tm, const float *const __restrict m43)
-{
-  v_mat44_make_from_43cu(tm, m43);
-}
-
-VECTORCALL VECMATH_FINLINE void v_mat44_make_from_43cu(mat44f& tm, const float *const __restrict m43)
-{
-  vec4f v0 = v_ldu(m43 + 0);
-  vec4f v1 = v_ldu(m43 + 4);
-  vec4f v2 = v_ldu(m43 + 8);
-#if _TARGET_SIMD_SSE >= 4
-  tm.col0 = _mm_blend_ps(v0, v_zero(), 1 << 3);
-  tm.col1 = _mm_insert_ps(_mm_shuffle_ps(v1, v1, _MM_SHUFFLE(2, 1, 0, 3)), v0, _MM_MK_INSERTPS_NDX(3, 0, 1 << 3));
-  tm.col2 = _mm_blend_ps(_mm_shuffle_ps(v1, v2, _MM_SHUFFLE(1, 0, 3, 2)), v_zero(), 1 << 3);
-  tm.col3 = v_rot_1(_mm_move_ss(v2, v_cast_vec4f(v_seti_x(0x3f800000))));
-#else // _TARGET_SIMD_SSE >= 4
-  vec4f v10 = _mm_shuffle_ps(v1, v0, _MM_SHUFFLE(3, 2, 1, 0));
-  tm.col0 = v_and(v0, V_CI_MASK1110);
-  tm.col1 = v_and(_mm_shuffle_ps(v10, v10, _MM_SHUFFLE(2, 1, 0, 3)), V_CI_MASK1110);
-  tm.col2 = v_and(_mm_shuffle_ps(v1, v2, _MM_SHUFFLE(1, 0, 3, 2)), V_CI_MASK1110);
-  tm.col3 = v_rot_1(_mm_move_ss(v2, v_cast_vec4f(v_seti_x(0x3f800000))));
-#endif // _TARGET_SIMD_SSE >= 4
-}
-
 VECTORCALL VECMATH_FINLINE void v_mat_43ca_from_mat44(float * __restrict m43, const mat44f& tm)
 {
   v_mat_43cu_from_mat44(m43, tm);
@@ -900,6 +1170,42 @@ VECTORCALL VECMATH_FINLINE void v_mat44_make_from_43cu_unsafe(mat44f &tmV, const
   tmV.col1 = v_perm_wxyz(v_perm_xycd(v1, v0));
   tmV.col2 = v_perm_zwxy(v_perm_xycd(v2, v1));
   tmV.col3 = v_rot_1(v2);
+}
+
+// hand-interleaved w cleanup: MSVC does not fuse _unsafe + v_mat44_make_affine back into this form
+VECTORCALL VECMATH_FINLINE void v_mat44_make_from_43cu(mat44f& tm, const float *const __restrict m43)
+{
+  vec4f v0 = v_ldu(m43 + 0);
+  vec4f v1 = v_ldu(m43 + 4);
+  vec4f v2 = v_ldu(m43 + 8);
+#if _TARGET_SIMD_SSE >= 4
+  tm.col0 = _mm_blend_ps(v0, v_zero(), 1 << 3);
+  tm.col1 = _mm_insert_ps(_mm_shuffle_ps(v1, v1, _MM_SHUFFLE(2, 1, 0, 3)), v0, _MM_MK_INSERTPS_NDX(3, 0, 1 << 3));
+  tm.col2 = _mm_blend_ps(_mm_shuffle_ps(v1, v2, _MM_SHUFFLE(1, 0, 3, 2)), v_zero(), 1 << 3);
+  tm.col3 = v_rot_1(_mm_blend_ps(v2, V_C_UNIT_1000, 1)); // pool constant instead of a GPR->vector crossing
+#else // _TARGET_SIMD_SSE >= 4
+  vec4f v10 = _mm_shuffle_ps(v1, v0, _MM_SHUFFLE(3, 2, 1, 0));
+  tm.col0 = v_and(v0, V_CI_MASK1110);
+  tm.col1 = v_and(_mm_shuffle_ps(v10, v10, _MM_SHUFFLE(2, 1, 0, 3)), V_CI_MASK1110);
+  tm.col2 = v_and(_mm_shuffle_ps(v1, v2, _MM_SHUFFLE(1, 0, 3, 2)), V_CI_MASK1110);
+  tm.col3 = v_rot_1(_mm_move_ss(v2, V_C_UNIT_1000)); // pool constant instead of a GPR->vector crossing
+#endif // _TARGET_SIMD_SSE >= 4
+}
+
+VECTORCALL VECMATH_FINLINE void v_mat44_make_from_43ca(mat44f& tm, const float *const __restrict m43)
+{
+  v_mat44_make_from_43cu(tm, m43);
+}
+
+VECTORCALL VECMATH_FINLINE void v_mat43_make_from_43cu_unsafe(mat43f &tmV, const float *const __restrict m43)
+{
+  // rows' .w lanes carry junk instead of the translation, which needs fewer shuffles
+  vec4f l0 = v_ldu(m43), l1 = v_ldu(m43 + 4), l2 = v_ldu(m43 + 8);
+  tmV.row0 = _mm_shuffle_ps(l0, l1, _MM_SHUFFLE(2, 2, 3, 0));
+  vec4f t = _mm_shuffle_ps(l0, l1, _MM_SHUFFLE(3, 0, 1, 1));
+  tmV.row1 = _mm_shuffle_ps(t, t, _MM_SHUFFLE(3, 3, 2, 0));
+  vec4f u = _mm_shuffle_ps(l0, l1, _MM_SHUFFLE(1, 1, 2, 2));
+  tmV.row2 = _mm_shuffle_ps(u, l2, _MM_SHUFFLE(0, 0, 2, 0));
 }
 
 VECTORCALL VECMATH_FINLINE void v_mat_43cu_from_mat44(float * __restrict m43, const mat44f& tm)
@@ -948,237 +1254,13 @@ VECTORCALL VECMATH_FINLINE void v_mat33_ident_swapxz(mat33f &dest)
   dest.col1 = V_C_UNIT_0100;
   dest.col2 = V_C_UNIT_1000;
 }
-VECTORCALL VECMATH_FINLINE void v_mat44_transpose(mat44f &dest, mat44f_cref src)
-{
-  __m128 tmp3, tmp2, tmp1, tmp0;
+// v_mat44_transpose*, v_mat43_transpose_to_mat44, v_mat44_transpose_to_mat43 and
+// v_mat44/33_mul_vec* live in dag_vecMath_common.h: the portable form maps to
+// optimal shuffles on both SSE and NEON, so a hw-specific version is not needed.
 
-  tmp0 = _mm_shuffle_ps(src.col0, src.col1, 0x44);
-  tmp2 = _mm_shuffle_ps(src.col0, src.col1, 0xEE);
-  tmp1 = _mm_shuffle_ps(src.col2, src.col3, 0x44);
-  tmp3 = _mm_shuffle_ps(src.col2, src.col3, 0xEE);
+// v_mat33_inverse lives in dag_vecMath_common.h (portable form).
 
-  dest.col0 = _mm_shuffle_ps(tmp0, tmp1, 0x88);
-  dest.col1 = _mm_shuffle_ps(tmp0, tmp1, 0xDD);
-  dest.col2 = _mm_shuffle_ps(tmp2, tmp3, 0x88);
-  dest.col3 = _mm_shuffle_ps(tmp2, tmp3, 0xDD);
-}
-
-VECTORCALL VECMATH_FINLINE void v_mat44_transpose(vec4f &r0, vec4f &r1, vec4f &r2, vec4f &r3)
-{
-   _MM_TRANSPOSE4_PS(r0, r1, r2, r3);
-}
-
-VECTORCALL VECMATH_FINLINE void v_mat43_transpose_to_mat44(mat44f &dest, mat43f_cref src)
-{
-  __m128 tmp3, tmp2, tmp1, tmp0;
-
-  tmp0 = _mm_shuffle_ps(src.row0, src.row1, 0x44);
-  tmp2 = _mm_shuffle_ps(src.row0, src.row1, 0xEE);
-  tmp1 = _mm_shuffle_ps(src.row2, v_zero(), 0x44);
-  tmp3 = _mm_shuffle_ps(src.row2, v_zero(), 0xEE);
-
-  dest.col0 = _mm_shuffle_ps(tmp0, tmp1, 0x88);
-  dest.col1 = _mm_shuffle_ps(tmp0, tmp1, 0xDD);
-  dest.col2 = _mm_shuffle_ps(tmp2, tmp3, 0x88);
-  dest.col3 = _mm_shuffle_ps(tmp2, tmp3, 0xDD);
-}
-VECTORCALL VECMATH_FINLINE void v_mat44_transpose_to_mat43(mat43f &dest, mat44f_cref src)
-{
-  __m128 tmp3, tmp2, tmp1, tmp0;
-
-  tmp0 = _mm_shuffle_ps(src.col0, src.col1, 0x44);
-  tmp2 = _mm_shuffle_ps(src.col0, src.col1, 0xEE);
-  tmp1 = _mm_shuffle_ps(src.col2, src.col3, 0x44);
-  tmp3 = _mm_shuffle_ps(src.col2, src.col3, 0xEE);
-
-  dest.row0 = _mm_shuffle_ps(tmp0, tmp1, 0x88);
-  dest.row1 = _mm_shuffle_ps(tmp0, tmp1, 0xDD);
-  dest.row2 = _mm_shuffle_ps(tmp2, tmp3, 0x88);
-}
-
-VECTORCALL VECMATH_FINLINE vec4f v_mat44_mul_vec4(mat44f_cref m, vec4f v)
-{
-  vec4f xxxx = v_splat_x(v);
-  vec4f yyyy = _mm_shuffle_ps(v, v, _MM_SHUFFLE(1,1,1,1));
-  vec4f zzzz = v_splat_z(v);
-  vec4f wwww = _mm_shuffle_ps(v, v, _MM_SHUFFLE(3,3,3,3));
-
-  return _mm_add_ps(
-    _mm_add_ps(_mm_mul_ps(xxxx, m.col0), _mm_mul_ps(yyyy, m.col1)),
-    _mm_add_ps(_mm_mul_ps(zzzz, m.col2), _mm_mul_ps(wwww, m.col3))
-  );
-}
-VECTORCALL VECMATH_FINLINE vec4f v_mat44_mul_vec3v(mat44f_cref m, vec3f v)
-{
-  vec4f xxxx = v_splat_x(v);
-  vec4f yyyy = _mm_shuffle_ps(v, v, _MM_SHUFFLE(1,1,1,1));
-  vec4f zzzz = v_splat_z(v);
-
-  return _mm_add_ps(_mm_add_ps(_mm_mul_ps(xxxx, m.col0), _mm_mul_ps(yyyy, m.col1)),
-                    _mm_mul_ps(zzzz, m.col2));
-}
-VECTORCALL VECMATH_FINLINE vec4f v_mat44_mul_vec3p(mat44f_cref m, vec3f v)
-{
-  vec4f xxxx = v_splat_x(v);
-  vec4f yyyy = _mm_shuffle_ps(v, v, _MM_SHUFFLE(1,1,1,1));
-  vec4f zzzz = v_splat_z(v);
-
-  return _mm_add_ps(
-    _mm_add_ps(_mm_mul_ps(xxxx, m.col0), _mm_mul_ps(yyyy, m.col1)),
-    _mm_add_ps(_mm_mul_ps(zzzz, m.col2), m.col3)
-  );
-}
-
-VECTORCALL VECMATH_FINLINE vec3f v_mat33_mul_vec3(mat33f_cref m, vec3f v)
-{
-  vec4f xxxx = v_splat_x(v);
-  vec4f yyyy = _mm_shuffle_ps(v, v, _MM_SHUFFLE(1,1,1,1));
-  vec4f zzzz = v_splat_z(v);
-
-  return _mm_add_ps(_mm_add_ps(_mm_mul_ps(xxxx, m.col0), _mm_mul_ps(yyyy, m.col1)),
-                    _mm_mul_ps(zzzz, m.col2));
-}
-
-VECTORCALL VECMATH_FINLINE void v_mat44_inverse(mat44f &dest, mat44f_cref m)
-{
-  __m128 minor0, minor1, minor2, minor3;
-  __m128 row0, row1, row2, row3;
-  __m128 det, tmp0, tmp1, tmp2, tmp3;
-
-  tmp0 = _mm_shuffle_ps(m.col0, m.col1, _MM_SHUFFLE(2,0,2,0));
-  tmp1 = _mm_shuffle_ps(m.col2, m.col3, _MM_SHUFFLE(2,0,2,0));
-  tmp2 = _mm_shuffle_ps(m.col0, m.col1, _MM_SHUFFLE(3,1,3,1));
-  tmp3 = _mm_shuffle_ps(m.col2, m.col3, _MM_SHUFFLE(3,1,3,1));
-  row0 = _mm_shuffle_ps(tmp0, tmp1, _MM_SHUFFLE(2,0,2,0));
-  row1 = _mm_shuffle_ps(tmp3, tmp2, _MM_SHUFFLE(2,0,2,0));
-  row2 = _mm_shuffle_ps(tmp0, tmp1, _MM_SHUFFLE(3,1,3,1));
-  row3 = _mm_shuffle_ps(tmp3, tmp2, _MM_SHUFFLE(3,1,3,1));
-
-  tmp1 = _mm_mul_ps(row2, row3);
-  tmp1 = V_SHUFFLE(tmp1, 0xB1);
-  minor0 = _mm_mul_ps(row1, tmp1);
-  minor1 = _mm_mul_ps(row0, tmp1);
-  tmp1 = V_SHUFFLE(tmp1, 0x4E);
-  minor0 = _mm_sub_ps(_mm_mul_ps(row1, tmp1), minor0);
-  minor1 = _mm_sub_ps(_mm_mul_ps(row0, tmp1), minor1);
-  minor1 = V_SHUFFLE(minor1, 0x4E);
-
-  tmp1 = _mm_mul_ps(row1, row2);
-  tmp1 = V_SHUFFLE(tmp1, 0xB1);
-  minor0 = _mm_add_ps(_mm_mul_ps(row3, tmp1), minor0);
-  minor3 = _mm_mul_ps(row0, tmp1);
-  tmp1 = V_SHUFFLE(tmp1, 0x4E);
-  minor0 = _mm_sub_ps(minor0, _mm_mul_ps(row3, tmp1));
-  minor3 = _mm_sub_ps(_mm_mul_ps(row0, tmp1), minor3);
-  minor3 = V_SHUFFLE(minor3, 0x4E);
-
-  tmp1 = _mm_mul_ps(V_SHUFFLE(row1, 0x4E), row3);
-  tmp1 = V_SHUFFLE(tmp1, 0xB1);
-  row2 = V_SHUFFLE(row2, 0x4E);
-  minor0 = _mm_add_ps(_mm_mul_ps(row2, tmp1), minor0);
-  minor2 = _mm_mul_ps(row0, tmp1);
-  tmp1 = V_SHUFFLE(tmp1, 0x4E);
-  minor0 = _mm_sub_ps(minor0, _mm_mul_ps(row2, tmp1));
-  minor2 = _mm_sub_ps(_mm_mul_ps(row0, tmp1), minor2);
-  minor2 = V_SHUFFLE(minor2, 0x4E);
-
-  tmp1 = _mm_mul_ps(row0, row1);
-
-  tmp1 = V_SHUFFLE(tmp1, 0xB1);
-  minor2 = _mm_add_ps(_mm_mul_ps(row3, tmp1), minor2);
-  minor3 = _mm_sub_ps(_mm_mul_ps(row2, tmp1), minor3);
-  tmp1 = V_SHUFFLE(tmp1, 0x4E);
-  minor2 = _mm_sub_ps(_mm_mul_ps(row3, tmp1), minor2);
-  minor3 = _mm_sub_ps(minor3, _mm_mul_ps(row2, tmp1));
-
-  tmp1 = _mm_mul_ps(row0, row3);
-  tmp1 = V_SHUFFLE(tmp1, 0xB1);
-  minor1 = _mm_sub_ps(minor1, _mm_mul_ps(row2, tmp1));
-  minor2 = _mm_add_ps(_mm_mul_ps(row1, tmp1), minor2);
-  tmp1 = V_SHUFFLE(tmp1, 0x4E);
-  minor1 = _mm_add_ps(_mm_mul_ps(row2, tmp1), minor1);
-  minor2 = _mm_sub_ps(minor2, _mm_mul_ps(row1, tmp1));
-
-  tmp1 = _mm_mul_ps(row0, row2);
-  tmp1 = V_SHUFFLE(tmp1, 0xB1);
-  minor1 = _mm_add_ps(_mm_mul_ps(row3, tmp1), minor1);
-  minor3 = _mm_sub_ps(minor3, _mm_mul_ps(row1, tmp1));
-  tmp1 = V_SHUFFLE(tmp1, 0x4E);
-  minor1 = _mm_sub_ps(minor1, _mm_mul_ps(row3, tmp1));
-  minor3 = _mm_add_ps(_mm_mul_ps(row1, tmp1), minor3);
-
-  det = _mm_mul_ps(row0, minor0);
-  det = _mm_add_ps(V_SHUFFLE(det, 0x4E), det);
-  det = _mm_add_ss(V_SHUFFLE(det, 0xB1), det);
-  tmp1 = v_rcp_safe(det);
-  det = _mm_sub_ss(_mm_add_ss(tmp1, tmp1), _mm_mul_ss(det, _mm_mul_ss(tmp1, tmp1)));
-  det = v_splat_x(det);
-  dest.col0 = _mm_mul_ps(det, minor0);
-  dest.col1 = _mm_mul_ps(det, minor1);
-  dest.col2 = _mm_mul_ps(det, minor2);
-  dest.col3 = _mm_mul_ps(det, minor3);
-}
-
-VECTORCALL VECMATH_FINLINE void v_mat33_inverse(mat33f &dest, mat33f_cref m)
-{
-  vec4f tmp0, tmp1, tmp2, tmp3, tmp4, dot, invdet, inv0, inv1, inv2;
-
-  tmp2 = v_cross3(m.col0, m.col1);
-  tmp0 = v_cross3(m.col1, m.col2);
-  tmp1 = v_cross3(m.col2, m.col0);
-  dot = v_dot3(tmp2, m.col2);
-  invdet = v_rcp_safe(dot);
-
-  tmp3 = _mm_shuffle_ps(tmp0, tmp1, _MM_SHUFFLE(0,2,0,2));
-  tmp4 = _mm_shuffle_ps(tmp0, tmp1, _MM_SHUFFLE(1,3,1,3));
-  inv0 = _mm_shuffle_ps(tmp3, tmp2, _MM_SHUFFLE(3,0,3,1));
-  inv1 = _mm_shuffle_ps(tmp4, tmp2, _MM_SHUFFLE(3,1,3,1));
-  inv2 = _mm_shuffle_ps(tmp3, tmp2, _MM_SHUFFLE(3,2,2,0));
-
-  dest.col0 = _mm_mul_ps(inv0, invdet);
-  dest.col1 = _mm_mul_ps(inv1, invdet);
-  dest.col2 = _mm_mul_ps(inv2, invdet);
-}
-
-VECTORCALL VECMATH_FINLINE vec4f v_mat44_det(mat44f_cref m)
-{
-  __m128 minor0;
-  __m128 row0, row1, row2, row3;
-  __m128 det, tmp0, tmp1, tmp2, tmp3;
-
-  tmp0 = _mm_shuffle_ps(m.col0, m.col1, _MM_SHUFFLE(2,0,2,0));
-  tmp1 = _mm_shuffle_ps(m.col2, m.col3, _MM_SHUFFLE(2,0,2,0));
-  tmp2 = _mm_shuffle_ps(m.col0, m.col1, _MM_SHUFFLE(3,1,3,1));
-  tmp3 = _mm_shuffle_ps(m.col2, m.col3, _MM_SHUFFLE(3,1,3,1));
-  row0 = _mm_shuffle_ps(tmp0, tmp1, _MM_SHUFFLE(2,0,2,0));
-  row1 = _mm_shuffle_ps(tmp3, tmp2, _MM_SHUFFLE(2,0,2,0));
-  row2 = _mm_shuffle_ps(tmp0, tmp1, _MM_SHUFFLE(3,1,3,1));
-  row3 = _mm_shuffle_ps(tmp3, tmp2, _MM_SHUFFLE(3,1,3,1));
-
-  tmp1 = _mm_mul_ps(row2, row3);
-  tmp1 = V_SHUFFLE(tmp1, 0xB1);
-  minor0 = _mm_mul_ps(row1, tmp1);
-  tmp1 = V_SHUFFLE(tmp1, 0x4E);
-  minor0 = _mm_sub_ps(_mm_mul_ps(row1, tmp1), minor0);
-
-  tmp1 = _mm_mul_ps(row1, row2);
-  tmp1 = V_SHUFFLE(tmp1, 0xB1);
-  minor0 = _mm_add_ps(_mm_mul_ps(row3, tmp1), minor0);
-  tmp1 = V_SHUFFLE(tmp1, 0x4E);
-  minor0 = _mm_sub_ps(minor0, _mm_mul_ps(row3, tmp1));
-
-  tmp1 = _mm_mul_ps(V_SHUFFLE(row1, 0x4E), row3);
-  tmp1 = V_SHUFFLE(tmp1, 0xB1);
-  row2 = V_SHUFFLE(row2, 0x4E);
-  minor0 = _mm_add_ps(_mm_mul_ps(row2, tmp1), minor0);
-  tmp1 = V_SHUFFLE(tmp1, 0x4E);
-  minor0 = _mm_sub_ps(minor0, _mm_mul_ps(row2, tmp1));
-
-  det = _mm_mul_ps(row0, minor0);
-  det = _mm_add_ps(V_SHUFFLE(det, 0x4E), det);
-  det = _mm_add_ss(V_SHUFFLE(det, 0xB1), det);
-  return det;
-}
+// v_mat44_det lives in dag_vecMath_common.h (portable form).
 
 #if defined(_MSC_VER) && (_MSC_VER < 1600 || (_MSC_VER < 1700 && _TARGET_64BIT)) && !defined(__clang__)
 //due to compiler bug (vc2008-32 and vc2010-64)
