@@ -1071,6 +1071,33 @@ namespace das {
 #endif
     }
 
+    bool JobStatus::WaitFor(int timeoutMs) {
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+        (void)timeoutMs;
+        return isReady();
+#else
+        if ( timeoutMs <= 0 ) return isReady();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+        int level = sJoinSpin.load(std::memory_order_relaxed);
+        if ( level > 0 ) {
+            for ( int b = 0; b != level && mRemaining.load(std::memory_order_relaxed) != 0; ++b ) {
+                for ( uint64_t i = 0; mRemaining.load(std::memory_order_relaxed) != 0 && i < 1024ull * 128ull; ++i ) {
+                    jobque_spin_relax();
+                }
+                if ( std::chrono::steady_clock::now() >= deadline ) break;
+            }
+            if ( mRemaining.load() == 0 ) {
+                lock_guard<mutex> guard(mCompleteMutex);
+                return true;
+            }
+        }
+        unique_lock<mutex> lock(mCompleteMutex);
+        return mCond.wait_until(lock, deadline, [this] {
+            return mRemaining==0;
+        });
+#endif
+    }
+
     bool JobStatus::isReady() {
         lock_guard<mutex> guard(mCompleteMutex);
         return mRemaining==0;

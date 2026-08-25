@@ -42,6 +42,7 @@ namespace das {
         bool NotifyAndRelease( LineInfo * at = nullptr );
         bool isReady();
         void Wait();
+        bool WaitFor(int timeoutMs);   // false = timed out; timeoutMs <= 0 polls
         void Clear(uint32_t count = 1);
         int addRef( LineInfo * at = nullptr );
         int releaseRef( LineInfo * at = nullptr );

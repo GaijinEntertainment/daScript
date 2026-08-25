@@ -319,6 +319,7 @@ namespace das {
     DAS_API JobStatus * jobStatusCreate( Context * context, LineInfoArg * );
     DAS_API void jobStatusRemove( JobStatus * & ch, Context * context, LineInfoArg * at );
     DAS_API void waitForJob ( JobStatus * status, Context * context, LineInfoArg * at );
+    DAS_API bool waitForJobWithTimeout ( JobStatus * status, int32_t timeoutMs, Context * context, LineInfoArg * at );
     DAS_API void notifyJob ( JobStatus * status, Context * context, LineInfoArg * at );
     DAS_API void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at );
     DAS_API vec4f channelPush ( Context & context, SimNode_CallBase * call, vec4f * args );

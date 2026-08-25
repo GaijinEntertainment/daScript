@@ -819,6 +819,9 @@ var private g_midi_files : table<string; MidiFile>  // owns parsed data
 var private g_midi_bank : SampleBank                // module-global sample bank
 var private g_midi_sf2 : SF2File?                   // module-global SF2 soundfont
 var private g_midi_running : bool = false
+
+let private MIDI_PCM_GRAB_TIMEOUT_MS = 2000
+let private MIDI_WORKER_EXIT_TIMEOUT_MS = 5000
 var private g_midi_audio_vis_ptr : void?  // audio vis channel as void* (avoids capture lifecycle)
 
 // ─── Audio Thread Main Loop ───
@@ -1000,8 +1003,11 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
         let MAX_UTIL = int(max_chunk_usec / chunk_budget_usec * 1000.lf)
         to_log(0, "midi {UTILIZATION/10}.{UTILIZATION%10}% avg, {MAX_UTIL/10}.{MAX_UTIL%10}% peak utilization\n")
     }
-    pcm_box |> join()
-    unsafe(lock_box_remove(pcm_box))
+    if (pcm_box |> join(MIDI_PCM_GRAB_TIMEOUT_MS)) {
+        unsafe(lock_box_remove(pcm_box))
+    } else {
+        to_log(LOG_ERROR, "midi: audio thread did not take the final PCM chunk within {MIDI_PCM_GRAB_TIMEOUT_MS}ms; leaking the pcm box\n")
+    }
     unset_status_update(sid)
     status_box |> seq_box_release
     unsafe {
@@ -1151,10 +1157,12 @@ def public midi_shutdown() {
     //! Stop the playback thread and release its stream/status; blocks until the audio thread confirms shutdown.
     if (!g_midi_running || g_midi_cmd_stream == null) return
     g_midi_cmd_stream |> push_archive(MidiCommand(shutdown = true))
-    g_midi_done_status |> join                        // blocks until worker notify_and_release
-    // refcount was 2 after init; worker's release made it 1; stream_remove decrements to 0 and deletes
-    unsafe(stream_remove(g_midi_cmd_stream))
-    unsafe(job_status_remove(g_midi_done_status))
+    if (g_midi_done_status |> join(MIDI_WORKER_EXIT_TIMEOUT_MS)) {
+        unsafe(stream_remove(g_midi_cmd_stream))
+        unsafe(job_status_remove(g_midi_done_status))
+    } else {
+        to_log(LOG_ERROR, "midi: worker thread did not exit within {MIDI_WORKER_EXIT_TIMEOUT_MS}ms; leaking its stream and done status\n")
+    }
     g_midi_running = false
     // release SF2 soundfont (finalizer recursively frees instruments/presets/zones)
     if (g_midi_sf2 != null) {
