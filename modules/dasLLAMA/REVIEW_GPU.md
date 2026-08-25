@@ -15,6 +15,13 @@ is asked by `prefill_decline` / `decode_decline`, never by a caps predicate.** A
 reports the session's setup progress - rather than the CALL, its row count or its span
 shape - is a defect however it is derived.
 
+**A bounds or tail guard inside a kernel's main loop whose answer the host already knows
+when it picks the pipeline is stamped, not branched: the guard sits under `static_if` on a
+`@template_constant`, so one template yields both the checked instance and the clean one,
+and the encoder picks by the shape it already holds.** A diff that edits an existing
+kernel's loop answers to this exactly as a new kernel class does; a per-iteration guard the
+host could have compiled out is a defect.
+
 **A shape claim is settled at the one site that is authoritative for that kind of constant,
 never by tracing the das that computes the value.** An in-body tile constant is confirmed
 literal in the generated `*_msl` global or the SPIR-V dump; a grid or threadgroup constant is
@@ -59,14 +66,17 @@ not count.
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
 
-**A backend-only capability goes in that backend's file for the matching role.** The roles a
-backend's files partition into: the kernel home (`_kernels` on Metal, `_classes` on Vulkan),
-`_common` (device state and plumbing), `_decode`, `_prefill`, `_shapes` (portable
-servability gates), `_tower` (the encoder-tower driver), `_asr_dec` (the ASR-decoder
-driver), and the kernel-access lens (`_lens` on Metal, `_dispatch` on Vulkan); a backend
-carries a role's file only once it has the capability. A capability with no matching role
-gets its own role file - and adds its role to this list in the same change; anything else
-is a grab-bag, and a grab-bag file is a defect.
+**A backend-only capability goes in that backend's file for the matching role.** The roles the
+`dasllama_metal_*` and `dasllama_vulkan_*` files partition into: the kernel home (`_kernels`
+on Metal, `_classes` on Vulkan), `_common` (device state and plumbing), `_decode`,
+`_prefill`, `_gemm` (the Metal batch-GEMM donor backend), `_shapes` (portable servability
+gates), `_tower` (the encoder-tower driver), `_asr_dec` (the ASR-decoder driver), `_seams`
+(the Vulkan single-op resident-driver seams), and the kernel-access lens (`_lens` on Metal,
+`_dispatch` on Vulkan); Vulkan's backend entry - the capability probe, the arm, the `.dlim`
+identity source, and the `[init]` that installs every hook - is
+`dasllama/dasllama_math_vulkan.das`. A backend carries a role's file only once it has the
+capability. A capability with no matching role gets its own role file - and adds its role to
+this list in the same change; anything else is a grab-bag, and a grab-bag file is a defect.
 
 **A GPU family shares ONE device and queue from `dasllama/dasllama_<gpu>_common.das`'s
 init.** A module creating its own is a defect.
@@ -110,7 +120,7 @@ class one of them dispatches, that class's builder, the servability gates
 (`dasllama/dasllama_gpu_resident.das`); never the bake paths, never a comment - ships
 GPU-vs-CPU parity on one q8 and one kq model with the armed mirror codec: `harness/parity.das`
 runs, or the in-suite instruments (`tests/test_metal_decode_parity.das` /
-`tests/test_metal_prefill_parity.das` through `run.das`).**
+`tests/test_metal_prefill_parity.das` through `tests/run.das`).**
 
 **A `harness/parity.das` run arms its backend: the Metal arm is `--ngl`; the Vulkan arm is
 `DASLLAMA_GPU=1`, never `--ngl`, and its log shows `resident driver armed`.** The Vulkan

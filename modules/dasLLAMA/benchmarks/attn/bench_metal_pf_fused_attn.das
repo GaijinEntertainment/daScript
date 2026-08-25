@@ -185,9 +185,9 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
         }
         var pso_qk = pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
         var pso_sm = pipeline_from_source(dev, metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, err)
-        var pso_av = pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err)
+        var pso_av = pipeline_from_source(dev, MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, err)
         var pso_qkt = pipeline_from_source(dev, metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, err)
-        var pso_avt = pipeline_from_source(dev, metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, err)
+        var pso_avt = pipeline_from_source(dev, MetalAttnAVMmT_metal_attn_av_mm_t_msl, MetalAttnAVMmT_metal_attn_av_mm_t_msl_entry, MetalAttnAVMmT_metal_attn_av_mm_t_msl_fastmath, err)
         if (pso_qk == null || pso_sm == null || pso_av == null || pso_qkt == null || pso_avt == null) {
             print("three-pass pso: {err}\n")
             return
@@ -230,7 +230,7 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
                 kn_buffer(enc, bsink, 0ul, 20)
                 kn_dispatch(enc, uint3(uint(np), uint(heads), 1u), uint3(128u, 1u, 1u))
                 kn_pipeline(enc, pso_av)
-                kn_tgmem(enc, metal_attn_av_mm_msl_tgmem, 0)
+                kn_tgmem(enc, MetalAttnAVMm_metal_attn_av_mm_msl_tgmem, 0)
                 kn_buffer(enc, batt, 0ul, 0)
                 kn_buffer(enc, bv, 0ul, 1)
                 kn_buffer(enc, bs, 0ul, 2)
@@ -285,7 +285,7 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
             var t_avt = -1.0lf
             race_pair_ms(queue, 5, t_avb, t_avt, $(enc) {
                 kn_pipeline(enc, pso_av)
-                kn_tgmem(enc, metal_attn_av_mm_msl_tgmem, 0)
+                kn_tgmem(enc, MetalAttnAVMm_metal_attn_av_mm_msl_tgmem, 0)
                 kn_buffer(enc, batt, 0ul, 0)
                 kn_buffer(enc, bv, 0ul, 1)
                 kn_buffer(enc, bs, 0ul, 2)
@@ -294,7 +294,7 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
                 kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
             }, $(enc) {
                 kn_pipeline(enc, pso_avt)
-                kn_tgmem(enc, metal_attn_av_mm_t_msl_tgmem, 0)
+                kn_tgmem(enc, MetalAttnAVMmT_metal_attn_av_mm_t_msl_tgmem, 0)
                 kn_buffer(enc, batt, 0ul, 0)
                 kn_buffer(enc, bv, 0ul, 1)
                 kn_buffer(enc, bs, 0ul, 2)

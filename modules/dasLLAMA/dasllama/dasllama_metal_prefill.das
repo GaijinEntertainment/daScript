@@ -1494,10 +1494,11 @@ class MetalAttnQKMm : MetalMmTileBase {
 // axis in 32-blocks. V stages contiguous float4 loads, position rows >= npos ZEROED (pf_p_weight
 // zeroes P columns >= npos EXACTLY; 0 * NaN from a pad V row would poison the tile).
 
-// Metal-4 staged-tile twin of MetalAttnAVMm: P x V over flat f16 tiles; V staged TRANSPOSED
-// (col-major source) with pad positions >= npos zeroed (0 * stale-NaN would poison the tile).
-[metal_dispatch(name = "enc_av_mm_t_c", pso = "g_pf_pso_avmm_t", tgmem = "metal_attn_av_mm_t_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
-class MetalAttnAVMmT {
+// Metal-4 staged-tile twin of MetalAttnAVMm: P x V over flat f16 tiles, V staged NATURAL rows.
+// PADFREE = clean pipeline (npos % 64 == 0: no pad position in any chunk, staging selects fold
+// out); the checked stamp zero-guards pad rows (0 * stale-NaN would poison the tile).
+[ |> template_struct_instance]
+class template MetalAttnAVMmTensorT {
     @ssbo @binding = 0 att : array<float16>
     @ssbo @binding = 1 v : array<float>
     @ssbo @binding = 2 xb : array<float>
@@ -1505,8 +1506,9 @@ class MetalAttnAVMmT {
     @ssbo @binding = 4 @role = "read" stat : array<float>  // [n_heads x qrows x 2] rowmax, 1/sum
     @workgroup twp : float16[2048]          // P chunk: 32 rows x 64 pos, exp applied at staging
     @workgroup twb : float16[4096]          // V chunk: 64 positions x 64 v-cols, NATURAL rows
+    @template_constant PADFREE : bool = false
 
-    [metal_kernel(name="metal_attn_av_mm_t_msl")]
+    [metal_kernel]
     def metal_attn_av_mm_t {
         let mBase = gl_WorkGroupID.x * 32u
         let vBase = gl_WorkGroupID.y * 64u
@@ -1535,7 +1537,7 @@ class MetalAttnAVMmT {
                 let rowb = (h * ka.qrows + mBase + r) * ka.np32
                 for [unroll_full] (t in range(16)) {
                     let jg = kb * 64u + ph + uint(t)
-                    let sr = jg < ka.np32 ? float(att[rowb + jg]) : 0.0
+                    let sr = PADFREE ? float(att[rowb + jg]) : (jg < ka.np32 ? float(att[rowb + jg]) : 0.0)
                     twp[r * 64u + ph + uint(t)] = float16(pf_p_weight(sr, jg, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv))
                 }
                 work += gl_WorkGroupSize.x
@@ -1547,7 +1549,7 @@ class MetalAttnAVMmT {
                 let pos = kb * 64u + p
                 let vbase = pos * ka.kv_dim + kvhoff + vBase + ch
                 for [unroll_full] (t in range(32)) {
-                    twb[p * 64u + ch + uint(t)] = pos < ka.npos ? float16(v[vbase + uint(t)]) : float16(0.0)
+                    twb[p * 64u + ch + uint(t)] = PADFREE ? float16(v[vbase + uint(t)]) : (pos < ka.npos ? float16(v[vbase + uint(t)]) : float16(0.0))
                 }
                 work += gl_WorkGroupSize.x
             }
@@ -1560,16 +1562,48 @@ class MetalAttnAVMmT {
     }
 }
 
-[metal_dispatch(name = "enc_av_mm_c", pso = "g_pf_pso_avmm", tgmem = "metal_attn_av_mm_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
-class MetalAttnAVMm : MetalMmTileBase {
+[metal_dispatch(name = "enc_av_mm_t_c", pso = "g_pf_pso_avmm_t", tgmem = "MetalAttnAVMmT_metal_attn_av_mm_t_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
+class MetalAttnAVMmT : MetalAttnAVMmTensorT {
+}
+
+[metal_dispatch(name = "enc_av_mm_tp_c", pso = "g_pf_pso_avmm_tp", tgmem = "MetalAttnAVMmTP_metal_attn_av_mm_t_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
+class MetalAttnAVMmTP : MetalAttnAVMmTensorT {
+    override PADFREE = true
+}
+
+// PADFREE = clean pipeline (npos % 32 == 0: no pad position in any block); carries
+// MetalMmTileBase's tiles + acc_quad inline — a template extending a base class from
+// another module trips the reified struct's finalizer typing.
+[ |> template_struct_instance]
+class template MetalAttnAVMmSgT {
     @ssbo @binding = 0 @role = "read" att : array<float16>  // [n_heads x qrows x np32] RAW scores, f16 slab
     @ssbo @binding = 1 @role = "read" v : array<float4>    // [nk64 x kv_dim/4] raw V (existing rows + the chunk)
     @ssbo @binding = 2 @role = "write" xb : array<float>    // [mp x qd] attention output
     @uniform @binding = 3 ka : AttnArgs
     @ssbo @binding = 4 @role = "read" stat : array<float>  // [n_heads x qrows x 2] rowmax, 1/sum
-    // inherited ta = V tiles (pos row, col col), tb = P tiles (token row, pos col)
+    @workgroup ta : float16[2048]           // V tiles (pos row, col col)
+    @workgroup tb : float16[1024]           // P tiles (token row, pos col)
+    @template_constant PADFREE : bool = false
 
-    [metal_kernel(name="metal_attn_av_mm_msl")]
+    def acc_quad(aB, bB : uint; var ma : simdgroup_half8x8[4]; var mb : simdgroup_half8x8[2]; var mc : simdgroup_float8x8[8]) {
+        var acur = unsafe(addr(ta[aB]))
+        var bcur = unsafe(addr(tb[bB]))
+        for [unroll_full] (_ik in range(4)) {
+            for [unroll_full] (i in range(4)) {
+                simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
+            }
+            for [unroll_full] (i in range(2)) {
+                simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
+            }
+            for [unroll_full] (i in range(8)) {
+                simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
+            }
+            acur = unsafe(acur + 512)
+            bcur = unsafe(bcur + 256)
+        }
+    }
+
+    [metal_kernel]
     def metal_attn_av_mm {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
@@ -1600,10 +1634,10 @@ class MetalAttnAVMm : MetalMmTileBase {
             let posg = kb * 32u + pr
             let srcA = posg * kvd4 + kvhoff4 + (vBase + vc16) / 4u
             let zero = float4(0.0)
-            let a0 = posg < ka.npos ? v[srcA] : zero
-            let a1 = posg < ka.npos ? v[srcA + 1u] : zero
-            let a2 = posg < ka.npos ? v[srcA + 2u] : zero
-            let a3 = posg < ka.npos ? v[srcA + 3u] : zero
+            let a0 = PADFREE ? v[srcA] : (posg < ka.npos ? v[srcA] : zero)
+            let a1 = PADFREE ? v[srcA + 1u] : (posg < ka.npos ? v[srcA + 1u] : zero)
+            let a2 = PADFREE ? v[srcA + 2u] : (posg < ka.npos ? v[srcA + 2u] : zero)
+            let a3 = PADFREE ? v[srcA + 3u] : (posg < ka.npos ? v[srcA + 3u] : zero)
             let srcB = (h * ka.qrows + mBase + lr1) * ka.np32 + kb * 32u + iy
             let qpos = ka.qoff + mBase + lr1
             let sbase = (h * ka.qrows + mBase + lr1) * 2u
@@ -1638,6 +1672,15 @@ class MetalAttnAVMm : MetalMmTileBase {
             simdgroup_store(mc[i], xb, (row0 + uint(i / 4) * 8u) * ka.qd + col0 + uint(i % 4) * 8u, ka.qd)
         }
     }
+}
+
+[metal_dispatch(name = "enc_av_mm_c", pso = "g_pf_pso_avmm", tgmem = "MetalAttnAVMm_metal_attn_av_mm_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
+class MetalAttnAVMm : MetalAttnAVMmSgT {
+}
+
+[metal_dispatch(name = "enc_av_mm_p_c", pso = "g_pf_pso_avmm_p", tgmem = "MetalAttnAVMmP_metal_attn_av_mm_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
+class MetalAttnAVMmP : MetalAttnAVMmSgT {
+    override PADFREE = true
 }
 
 // Interleave two [npos x d] panels into the [npos x 2d] MTP eh_proj input — the draft-warm
@@ -1712,6 +1755,8 @@ var private g_pf_qkmm_tensor : bool       // "attn_qkmm" crowned
 var private g_pf_pso_qkmm_t : MetalComputePipeline?
 var private g_pf_avmm_tensor : bool       // "attn_avmm" crowned
 var private g_pf_pso_avmm_t : MetalComputePipeline?
+var private g_pf_pso_avmm_tp : MetalComputePipeline?
+var private g_pf_pso_avmm_p : MetalComputePipeline?
 var private g_pf_pso_ple_gather : MetalComputePipeline?   // PLE pre-step: q8 token-row gather
 var private g_pf_pso_ple_finish : MetalComputePipeline?   // PLE pre-step: rms + combine, in place
 var private g_pf_pso_qkmm : MetalComputePipeline?
@@ -1926,9 +1971,17 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_avmm_t)
         g_pf_pso_avmm_t = null
     }
+    if (g_pf_pso_avmm_tp != null) {
+        metal_release(g_pf_pso_avmm_tp)
+        g_pf_pso_avmm_tp = null
+    }
     if (g_pf_pso_avmm != null) {
         metal_release(g_pf_pso_avmm)
         g_pf_pso_avmm = null
+    }
+    if (g_pf_pso_avmm_p != null) {
+        metal_release(g_pf_pso_avmm_p)
+        g_pf_pso_avmm_p = null
     }
     g_pf_failed = false
 }
@@ -1980,14 +2033,16 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         g_pf_pso_kq_mm6_t = compile_pso(metal_kq_mulmm_k6_t_msl, metal_kq_mulmm_k6_t_msl_entry, metal_kq_mulmm_k6_t_msl_fastmath, ok)
     }
     g_pf_pso_qkmm = compile_pso(metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, ok)
-    g_pf_pso_avmm = compile_pso(metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, ok)
+    g_pf_pso_avmm = compile_pso(MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, ok)
+    g_pf_pso_avmm_p = compile_pso(MetalAttnAVMmP_metal_attn_av_mm_msl, MetalAttnAVMmP_metal_attn_av_mm_msl_entry, MetalAttnAVMmP_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_qkmm_tensor = metal_tensor_crowned("attn_qkmm")
     if (g_pf_qkmm_tensor) {
         g_pf_pso_qkmm_t = compile_pso(metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, ok)
     }
     g_pf_avmm_tensor = metal_tensor_crowned("attn_avmm")
     if (g_pf_avmm_tensor) {
-        g_pf_pso_avmm_t = compile_pso(metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, ok)
+        g_pf_pso_avmm_t = compile_pso(MetalAttnAVMmT_metal_attn_av_mm_t_msl, MetalAttnAVMmT_metal_attn_av_mm_t_msl_entry, MetalAttnAVMmT_metal_attn_av_mm_t_msl_fastmath, ok)
+        g_pf_pso_avmm_tp = compile_pso(MetalAttnAVMmTP_metal_attn_av_mm_t_msl, MetalAttnAVMmTP_metal_attn_av_mm_t_msl_entry, MetalAttnAVMmTP_metal_attn_av_mm_t_msl_fastmath, ok)
     }
     g_pf_pso_moe_count = compile_pso(metal_moe_count_msl, metal_moe_count_msl_entry, metal_moe_count_msl_fastmath, ok)
     g_pf_pso_moe_bucket = compile_pso(metal_moe_bucket_msl, metal_moe_bucket_msl_entry, metal_moe_bucket_msl_fastmath, ok)
@@ -2343,8 +2398,18 @@ def enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : 
 }
 
 def enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; bstat : MetalBuffer?; mp, heads, head_size : int64) {   // public: the tower driver dispatches the crowned trio too
+    // the PADFREE (clean-PSO) pick needs the whole WALK inside live rows, not just npos
+    // divisibility: a padded query chunk (qoff + qrows > npos) walks pad-query tiles past npos,
+    // where a real row's 0 * stale-NaN V read poisons the tile — the checked stamp's guard
+    let walk_live = ka.qoff + ka.qrows == ka.npos
     if (g_pf_avmm_tensor && g_pf_pso_avmm_t != null) {
-        enc_av_mm_t_c(enc, batt, bv, bxb, ka, bstat, mp, heads, head_size)
+        if (walk_live && ka.npos % 64u == 0u && g_pf_pso_avmm_tp != null) {
+            enc_av_mm_tp_c(enc, batt, bv, bxb, ka, bstat, mp, heads, head_size)
+        } else {
+            enc_av_mm_t_c(enc, batt, bv, bxb, ka, bstat, mp, heads, head_size)
+        }
+    } elif (walk_live && ka.npos % 32u == 0u && g_pf_pso_avmm_p != null) {
+        enc_av_mm_p_c(enc, batt, bv, bxb, ka, bstat, mp, heads, head_size)
     } else {
         enc_av_mm_c(enc, batt, bv, bxb, ka, bstat, mp, heads, head_size)
     }
@@ -4071,8 +4136,8 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
     var err = ""
     var q_pso = pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
     var qt_pso = pipeline_from_source(dev, metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, err)
-    var a_pso = pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err)
-    var at_pso = pipeline_from_source(dev, metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, err)
+    var a_pso = pipeline_from_source(dev, MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, err)
+    var at_pso = pipeline_from_source(dev, MetalAttnAVMmT_metal_attn_av_mm_t_msl, MetalAttnAVMmT_metal_attn_av_mm_t_msl_entry, MetalAttnAVMmT_metal_attn_av_mm_t_msl_fastmath, err)
     if (q_pso == null || qt_pso == null || a_pso == null || at_pso == null) {
         out |> emplace(MetalTensorRaceResult(family = "attn_qkmm", winner = q_pso != null ? "simdgroup" : "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "pso: {err}"))
         out |> emplace(MetalTensorRaceResult(family = "attn_avmm", winner = a_pso != null ? "simdgroup" : "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "pso: {err}"))
@@ -4128,7 +4193,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
         var res2 = MetalTensorRaceResult(family = "attn_avmm", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
         race_pair_ms(queue, 5, res2.base_ms, res2.twin_ms, $(enc) {
             kn_pipeline(enc, a_pso)
-            kn_tgmem(enc, metal_attn_av_mm_msl_tgmem, 0)
+            kn_tgmem(enc, MetalAttnAVMm_metal_attn_av_mm_msl_tgmem, 0)
             kn_buffer(enc, bp, 0ul, 0)
             kn_buffer(enc, bstat, 0ul, 4)
             kn_buffer(enc, bkk, 0ul, 1)
@@ -4137,7 +4202,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
             kn_dispatch(enc, agrid, tg)
         }, $(enc) {
             kn_pipeline(enc, at_pso)
-            kn_tgmem(enc, metal_attn_av_mm_t_msl_tgmem, 0)
+            kn_tgmem(enc, MetalAttnAVMmT_metal_attn_av_mm_t_msl_tgmem, 0)
             kn_buffer(enc, bp, 0ul, 0)
             kn_buffer(enc, bstat, 0ul, 4)
             kn_buffer(enc, bkk, 0ul, 1)

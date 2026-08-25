@@ -36,7 +36,7 @@ def main {
         check(dev, "q8_gemm 32x32", metal_q8_gemm_msl, metal_q8_gemm_msl_entry, metal_q8_gemm_msl_fastmath)
         check(dev, "q8_gemm64 64x64", metal_q8_gemm64_msl, metal_q8_gemm64_msl_entry, metal_q8_gemm64_msl_fastmath)
         check(dev, "attn_qk_mm", metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath)
-        check(dev, "attn_av_mm", metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath)
+        check(dev, "attn_av_mm", MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath)
         check(dev, "attn_qk (classic)", metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath)
         check(dev, "attn_av (classic)", metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath)
         check(dev, "attn_rowstat", metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath)

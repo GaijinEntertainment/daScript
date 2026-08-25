@@ -1062,12 +1062,16 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
 // at staging — the gate feeds RAW scores + CPU-minted stats and oracles the same transform.
 // The tensor twin zero-guards V rows >= npos — the npos < np32 arm fills the pad rows with
 // garbage to prove the guard is live (their P weights are zero past each row's live length).
-def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, npos, qoff : int; uend : int = 0) {
-    let tag = "attn_av_mm{tensor ? "t" : ""} h={heads} hs={hs} m={mp} n={np32} npos={npos} u={uend}"
+def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, npos, qoff : int; uend : int = 0; padfree : bool = false) {
+    let tag = "attn_av_mm{tensor ? "t" : ""}{padfree ? " padfree" : ""} h={heads} hs={hs} m={mp} n={np32} npos={npos} u={uend}"
     var err : string
     var pso = (tensor
-        ? pipeline_from_source(dev, metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err))
+        ? (padfree
+            ? pipeline_from_source(dev, MetalAttnAVMmTP_metal_attn_av_mm_t_msl, MetalAttnAVMmTP_metal_attn_av_mm_t_msl_entry, MetalAttnAVMmTP_metal_attn_av_mm_t_msl_fastmath, err)
+            : pipeline_from_source(dev, MetalAttnAVMmT_metal_attn_av_mm_t_msl, MetalAttnAVMmT_metal_attn_av_mm_t_msl_entry, MetalAttnAVMmT_metal_attn_av_mm_t_msl_fastmath, err))
+        : (padfree
+            ? pipeline_from_source(dev, MetalAttnAVMmP_metal_attn_av_mm_msl, MetalAttnAVMmP_metal_attn_av_mm_msl_entry, MetalAttnAVMmP_metal_attn_av_mm_msl_fastmath, err)
+            : pipeline_from_source(dev, MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, err)))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
         return
@@ -1136,7 +1140,9 @@ def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     var bxb = buf_fill(dev, mp * qd, -1000.0)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tensor ? metal_attn_av_mm_t_msl_tgmem : metal_attn_av_mm_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, tensor
+            ? (padfree ? MetalAttnAVMmTP_metal_attn_av_mm_t_msl_tgmem : MetalAttnAVMmT_metal_attn_av_mm_t_msl_tgmem)
+            : (padfree ? MetalAttnAVMmP_metal_attn_av_mm_msl_tgmem : MetalAttnAVMm_metal_attn_av_mm_msl_tgmem), 0)
         metal_set_buffer(enc, batt, 0ul, 0)
         metal_set_buffer(enc, bv, 0ul, 1)
         metal_set_buffer(enc, bxb, 0ul, 2)
@@ -1225,6 +1231,12 @@ def test_metal_gemm_kernels(t : T?) {
                 attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 96, 64)
                 attn_av_mm_gate(t, dev, queue, false, 2, 128, 1, 32, 64, 64, 32)  // vBase=64 tile
                 attn_av_mm_gate(t, dev, queue, true, 2, 128, 1, 32, 64, 64, 32)
+                // the PADFREE (clean) stamps: npos == np32 divisible, no pad row in any chunk
+                attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 128, 64, padfree = true)
+                attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 128, 64, padfree = true)
+                attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 64, 64, 0, padfree = true)   // fresh square (the span-fused head shape)
+                attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 32, 96, 96, 64, uend = 96, padfree = true)   // span rows under uend
+                attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 128, 0, uend = 128, padfree = true)
                 // the uniform-span (uend) arms: every query row attends [0, uend) — base AND
                 // tensor twins (the _t twins' only span coverage; they feint without Metal-4)
                 attn_qk_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 0, 0, uend = 128)
