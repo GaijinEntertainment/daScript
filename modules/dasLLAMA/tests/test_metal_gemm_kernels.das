@@ -341,6 +341,130 @@ def private q8_devw_gate(t : T?; dev, queue; m, kdim, ndim : int) {
     delete wdeq
 }
 
+// the kq dev-W chains: the format's superblock dequant into a device f16 panel, then the
+// SAME all-device GEMM as q8's - per-format truth via kq_row_ref, plus the shared
+// poison-panel negative control (dequant skipped must miss the oracle)
+def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
+    let tag = "kq_devw_k{fmt} m={m} k={kdim} n={ndim}"
+    var err : string
+    let dsrc = fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl : metal_dequant_k6h_msl)
+    let dentry = fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl_entry : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl_entry : metal_dequant_k6h_msl_entry)
+    let dfm = fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl_fastmath : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl_fastmath : metal_dequant_k6h_msl_fastmath)
+    var dq_pso = pipeline_from_source(dev, dsrc, dentry, dfm, err)
+    var mm_pso = pipeline_from_source(dev, metal_half_mulmm_th_msl, metal_half_mulmm_th_msl_entry, metal_half_mulmm_th_msl_fastmath, err)
+    if (mm_pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        return
+    }
+    t |> success(dq_pso != null && mm_pso != null, "{tag}: pipeline: {err}")
+    return if (dq_pso == null || mm_pso == null)
+    let nb = kdim / 256
+    let nsb = ndim * nb
+    let nblk = ndim * (kdim / 32)
+    var kq : array<uint8>
+    var ks : array<uint8>
+    kq_fill_planes(fmt, nsb, kq, ks)
+    var xf : array<float>
+    xf |> resize(m * kdim)
+    for (i in range(m * kdim)) {
+        xf[i] = float(float16(0.07 * float(i % 39) - 1.3))   // f16 round-trip: the oracle dot stays exact
+    }
+    var xh : array<float16>
+    xh |> resize(m * kdim)
+    for (i in range(m * kdim)) {
+        xh[i] = float16(xf[i])
+    }
+    var want : array<float>
+    var env : array<float>
+    var wrow : array<float>
+    want |> resize(m * ndim)
+    env |> resize(m * ndim)
+    wrow |> resize(kdim)
+    for (j in range(ndim)) {
+        kq_row_ref(fmt, j * nb, nb, nsb, kq, ks, wrow)
+        for (r in range(m)) {
+            var acc = 0.0lf
+            var ev = 0.0lf
+            for (c in range(kdim)) {
+                let p = double(wrow[c]) * double(xf[r * kdim + c])
+                acc += p
+                ev += abs(p)
+            }
+            want[r * ndim + j] = float(acc)
+            env[r * ndim + j] = float(ev)
+        }
+    }
+    var bks = buf_upload(dev, ks)
+    var bkq = buf_upload(dev, kq)
+    var bx = buf_upload(dev, xh)
+    var bwh = buf_fill(dev, ndim * kdim, float16(-100.0))   // poison fill: an unwritten panel block reds the compare
+    var by = buf_fill(dev, m * ndim, -1000.0)
+    var bk = buf_u32(dev, uint(kdim))
+    var bn = buf_u32(dev, uint(ndim))
+    var dka = CvtArgs(total = uint(nblk))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, dq_pso)
+        metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   // k6: the f16 d tail
+        metal_set_buffer(enc, bks, 0ul, 1)
+        metal_set_buffer(enc, bkq, 0ul, 2)
+        metal_set_buffer(enc, bwh, 0ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(dka)), uint64(typeinfo sizeof(dka)), 4)
+        metal_dispatch_threadgroups(enc, uint3(uint((nblk + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+        metal_set_pipeline(enc, mm_pso)
+        metal_set_buffer(enc, bwh, 0ul, 0)
+        metal_set_buffer(enc, bx, 0ul, 1)
+        metal_set_buffer(enc, by, 0ul, 2)
+        metal_set_buffer(enc, bk, 0ul, 3)
+        metal_set_buffer(enc, bn, 0ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
+    }
+    // negative control: the GEMM alone over a poison-only panel must MISS the oracle
+    var bwh_p = buf_fill(dev, ndim * kdim, float16(-100.0))
+    var by_p = buf_fill(dev, m * ndim, -1000.0)
+    let ranp = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, mm_pso)
+        metal_set_buffer(enc, bwh_p, 0ul, 0)
+        metal_set_buffer(enc, bx, 0ul, 1)
+        metal_set_buffer(enc, by_p, 0ul, 2)
+        metal_set_buffer(enc, bk, 0ul, 3)
+        metal_set_buffer(enc, bn, 0ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ranp, "{tag}: control encode: {err}")
+    if (ranp) {
+        var badp = 0
+        unsafe {
+            let p = reinterpret<float const?>(metal_buffer_contents(by_p))
+            for (k in range(m * ndim)) {
+                badp += abs(p[k] - want[k]) <= max(2e-4 * env[k], 1e-3) ? 0 : 1
+            }
+        }
+        t |> success(badp > 0, "{tag}: poison-panel control reds the bar ({badp} over)")
+    }
+    metal_release(bwh_p)
+    metal_release(by_p)
+    metal_release(bks)
+    metal_release(bkq)
+    metal_release(bx)
+    metal_release(bwh)
+    metal_release(by)
+    metal_release(bk)
+    metal_release(bn)
+    metal_release(dq_pso)
+    metal_release(mm_pso)
+    delete kq
+    delete ks
+    delete xf
+    delete xh
+    delete want
+    delete env
+    delete wrow
+}
+
 // the native-bf16 A-stage pair: W is bf16 halfwords (top 16 bits of f32), row-major [ndim x kdim]
 // The dense f32-weight tower stamp. exact=true builds pow2/small-int fixtures every staged
 // value survives f32->f16 exactly (the compare then measures tiling/indexing alone, 2e-3);
@@ -1360,6 +1484,9 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64, halfx = true)
                 q8_devw_gate(t, dev, queue, 64, 256, 64)
                 q8_devw_gate(t, dev, queue, 32, 288, 128)   // non-256-multiple block count arms the dequant tail guard
+                for (fmt in [4, 5, 6]) {
+                    kq_devw_gate(t, dev, queue, fmt, 64, 512, 64)
+                }
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64, halfx = true)

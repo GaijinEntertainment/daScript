@@ -182,6 +182,107 @@ class MetalDequantQ8H {
     }
 }
 
+// K4/K5 superblock dequant -> panel twin of the q8 pass: one thread per 32-quant sub-block
+// (blk = gid/8 superblock, js = gid%8 — the kmask decode and nibble/qh compose are the
+// mul_mm twin's staging verbatim), output offset blk*256 + js*32 contiguous in both layouts.
+[ |> template_struct_instance]
+class template MetalDequantK45T {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view
+    @ssbo @binding = 3 @role = "write" wh : array<float16>
+    @uniform @binding = 4 ka : CvtArgs
+    @template_constant BLK : uint = 32u
+    @template_constant QH : bool = false
+
+    [metal_kernel]
+    def metal_dequant_k45 {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.total) {
+            return
+        }
+        let blk = gid / 8u
+        let js = gid % 8u
+        let sv = ks4[blk]
+        var sc = 0u
+        var mn = 0u
+        if (js < 4u) {
+            sc = (sv.y >> (8u * js)) & 63u
+            mn = (sv.z >> (8u * js)) & 63u
+        } else {
+            let j2 = js - 4u
+            let hi = sv.w >> (8u * j2)
+            sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
+            mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
+        }
+        let dsc = float(ksh[blk * 8u]) * float(sc)
+        let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
+        for (t in range(32)) {
+            let e = uint(t)
+            static_if (QH) {
+                let u = kqu[blk * BLK + (js / 2u) * 8u + e / 4u]
+                let hu = kqu[blk * BLK + 32u + e / 4u]
+                let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
+                wh[blk * 256u + js * 32u + e] = float16(dsc * float(q) - dmn)
+            } else {
+                let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
+                wh[blk * 256u + js * 32u + e] = float16(dsc * float(q) - dmn)
+            }
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_dequant_k4h", pso = "g_pf_pso_dq_k4", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalDequantK4H : MetalDequantK45T {}
+
+[metal_dispatch(name = "enc_dequant_k5h", pso = "g_pf_pso_dq_k5", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalDequantK5H : MetalDequantK45T {
+    override BLK = 40u
+    override QH = true
+}
+
+// the K6 twin: per-sub-block signed sub-scale, two 16-element halves (ile) per sub-block —
+// the ql|qh compose is MetalKqMulMmK6TensorT's staging verbatim
+[metal_dispatch(name = "enc_dequant_k6h", pso = "g_pf_pso_dq_k6", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalDequantK6H {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // d plane (f16 tail at doff)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>   // 16B sub-scale blocks
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // ql at 48*blk, qh at 48*blk+32
+    @ssbo @binding = 3 @role = "write" wh : array<float16>
+    @uniform @binding = 4 ka : CvtArgs
+
+    [metal_kernel(name="metal_dequant_k6h_msl")]
+    def metal_dequant_k6h {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.total) {
+            return
+        }
+        let blk = gid / 8u
+        let js = gid % 8u
+        let half6 = js / 4u
+        let gg = js % 4u
+        let nsh = (gg / 2u) * 4u
+        let hsh = gg * 2u
+        let dall = float(kdh[blk])
+        let sv = ksc[blk]
+        for (h in range(2)) {
+            let ile = uint(h)
+            let si = half6 * 8u + gg * 2u + ile
+            let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
+            let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
+            let dsc = dall * s6
+            for (t in range(16)) {
+                let k = uint(t) / 4u
+                let c = uint(t) % 4u
+                let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
+                let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
+                let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
+                wh[blk * 256u + js * 32u + ile * 16u + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
+            }
+        }
+    }
+}
+
 // The all-device half x half mul_mm form: A = the half-X activation panel, W = the dequant
 // panel above — no threadgroup staging, no barriers (the staged-operand tax is out).
 [metal_dispatch(name = "enc_gemm_hmm_th", pso = "g_pf_pso_hmm_th", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
@@ -1875,6 +1976,9 @@ var private g_pf_bxh2 : MetalBuffer?    // ... double-buffered so a site's GEMM 
 var private g_pf_bxh_flip : bool
 var private g_pf_bxh_bytes : uint64     // acquired panel capacity — pf_cvt_panel's fit check
 var private g_pf_pso_dq_q8 : MetalComputePipeline?   // q8 blob -> device f16 W panel (the dev-W pass)
+var private g_pf_pso_dq_k4 : MetalComputePipeline?   // the K-quant dequant passes onto the same panel
+var private g_pf_pso_dq_k5 : MetalComputePipeline?
+var private g_pf_pso_dq_k6 : MetalComputePipeline?
 var private g_pf_pso_hmm_th : MetalComputePipeline?  // all-device half x half mul_mm reading that panel
 var private g_pf_bwh : MetalBuffer?     // per-forward f16 W panels (dev-W form), double-buffered like bxh
 var private g_pf_bwh2 : MetalBuffer?
@@ -2123,6 +2227,18 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_dq_q8)
         g_pf_pso_dq_q8 = null
     }
+    if (g_pf_pso_dq_k4 != null) {
+        metal_release(g_pf_pso_dq_k4)
+        g_pf_pso_dq_k4 = null
+    }
+    if (g_pf_pso_dq_k5 != null) {
+        metal_release(g_pf_pso_dq_k5)
+        g_pf_pso_dq_k5 = null
+    }
+    if (g_pf_pso_dq_k6 != null) {
+        metal_release(g_pf_pso_dq_k6)
+        g_pf_pso_dq_k6 = null
+    }
     if (g_pf_pso_hmm_th != null) {
         metal_release(g_pf_pso_hmm_th)
         g_pf_pso_hmm_th = null
@@ -2219,7 +2335,6 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         g_pf_pso_mm_t = compile_pso(MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, ok)
         g_pf_pso_mm_th = compile_pso(MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, ok)
         g_pf_pso_dq_q8 = compile_pso(metal_dequant_q8h_msl, metal_dequant_q8h_msl_entry, metal_dequant_q8h_msl_fastmath, ok)
-        g_pf_pso_hmm_th = compile_pso(metal_half_mulmm_th_msl, metal_half_mulmm_th_msl_entry, metal_half_mulmm_th_msl_fastmath, ok)
     }
     g_pf_bf16_mm_tensor = metal_tensor_crowned("mulmm_bf16")
     g_pf_pso_bf16_mm = (g_pf_bf16_mm_tensor
@@ -2244,6 +2359,19 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     if (g_pf_kq_mm6_tensor) {
         g_pf_pso_kq_mm6_t = compile_pso(MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl, MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_entry, MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_fastmath, ok)
         g_pf_pso_kq_mm6_th = compile_pso(MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl, MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry, MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath, ok)
+    }
+    // dev-W: ONE all-device GEMM for every crowned family; dequant passes compile per family
+    if (g_pf_mm_tensor || g_pf_kq_mm4_tensor || g_pf_kq_mm5_tensor || g_pf_kq_mm6_tensor) {
+        g_pf_pso_hmm_th = compile_pso(metal_half_mulmm_th_msl, metal_half_mulmm_th_msl_entry, metal_half_mulmm_th_msl_fastmath, ok)
+    }
+    if (g_pf_kq_mm4_tensor) {
+        g_pf_pso_dq_k4 = compile_pso(MetalDequantK4H_metal_dequant_k45_msl, MetalDequantK4H_metal_dequant_k45_msl_entry, MetalDequantK4H_metal_dequant_k45_msl_fastmath, ok)
+    }
+    if (g_pf_kq_mm5_tensor) {
+        g_pf_pso_dq_k5 = compile_pso(MetalDequantK5H_metal_dequant_k45_msl, MetalDequantK5H_metal_dequant_k45_msl_entry, MetalDequantK5H_metal_dequant_k45_msl_fastmath, ok)
+    }
+    if (g_pf_kq_mm6_tensor) {
+        g_pf_pso_dq_k6 = compile_pso(metal_dequant_k6h_msl, metal_dequant_k6h_msl_entry, metal_dequant_k6h_msl_fastmath, ok)
     }
     g_pf_pso_qkmm = compile_pso(metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, ok)
     g_pf_pso_avmm = compile_pso(MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, ok)
@@ -2456,7 +2584,7 @@ def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kd
 // the dev-W pass: dequant this site's q8 blob into the next f16 W panel (flip pair, so a
 // site's GEMM overlaps the next site's dequant); null when the knob/panels/fit decline and
 // the caller keeps the tg twin. The 256-row gate mirrors pf_cvt_panel: the dequant tax is W-size-fixed.
-def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; rows, d, kdim : int64) : MetalBuffer? {
+def private pf_devw_fit(rows, d, kdim : int64) : MetalBuffer? {   // the shape-map predicate + panel flip, no encode
     if (!g_pf_env_dev_w || g_pf_bwh == null || kdim <= 0l || kdim % 32l != 0l) {
         return null
     }
@@ -2469,9 +2597,42 @@ def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wbo
     }
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh
     g_pf_bwh_flip = !g_pf_bwh_flip
+    return bwh
+}
+
+def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; rows, d, kdim : int64) : MetalBuffer? {
+    var bwh = pf_devw_fit(rows, d, kdim)
+    if (bwh == null) {
+        return null
+    }
     let nblk = d * kdim / 32l
     var dka = CvtArgs(total = uint(nblk))
     enc_dequant_q8h(enc, bwblob, wboff, bwblob, bwh, dka, (nblk + 255l) / 256l * 256l)
+    return bwh
+}
+
+// the kq-format dev-W pass: same panel/predicate, the format's superblock dequant kernel
+def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, d, kdim : int64) : MetalBuffer? {
+    let dq = fmt == KqFmt.k6 ? g_pf_pso_dq_k6 : (fmt == KqFmt.k4 ? g_pf_pso_dq_k4 : g_pf_pso_dq_k5)
+    if (dq == null) {
+        return null
+    }
+    var bwh = pf_devw_fit(rows, d, kdim)
+    if (bwh == null) {
+        return null
+    }
+    let bq = kq_quants_of(g_dev, t, fmt, woff)
+    let bs = kq_scales_of(g_dev, t, fmt, woff)
+    let nblk = d * kdim / 32l
+    var dka = CvtArgs(total = uint(nblk))
+    let gt = (nblk + 255l) / 256l * 256l
+    if (fmt == KqFmt.k6) {
+        enc_dequant_k6h(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bwh, dka, gt)
+    } elif (fmt == KqFmt.k4) {
+        enc_dequant_k4h(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bwh, dka, gt)
+    } else {
+        enc_dequant_k5h(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bwh, dka, gt)
+    }
     return bwh
 }
 
@@ -2539,7 +2700,16 @@ def pf_enc_bf16_mm(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64
 // binds (kq_quants_of / kq_scales_of — k6 binds its split scale plane twice, sub-scales at soff
 // + the f16 d tail at doff). Same grid/tgmem as enc_gemm_mm; bxh = the caller-minted f16 twin.
 def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows : int64;
-                              bx, by, bk, bn : MetalBuffer?; mp : int64; yoff : uint64 = 0ul; bxh : MetalBuffer? = null) {
+                              bx, by, bk, bn : MetalBuffer?; mp : int64; yoff : uint64 = 0ul; bxh : MetalBuffer? = null; kdim : int64 = 0l) {
+    // dev-W arm: shared all-device GEMM, per-format dequant pass, only behind the fmt's crown
+    let fmt_tensor = fmt == KqFmt.k6 ? g_pf_kq_mm6_tensor : (fmt == KqFmt.k4 ? g_pf_kq_mm4_tensor : g_pf_kq_mm5_tensor)
+    if (fmt_tensor && bxh != null && g_pf_pso_hmm_th != null && kdim > 0l) {
+        var bwh = pf_devw_panel_kq(enc, t, fmt, woff, mp, rows, kdim)
+        if (bwh != null) {
+            enc_gemm_hmm_th(enc, bwh, bxh, by, yoff, bk, bn, mp, rows)
+            return
+        }
+    }
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
     if (fmt == KqFmt.k6) {
@@ -2981,7 +3151,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     // the dev-W f16 panels: one W site's dequant output (largest layer-site N x K); oversized
     // sites (the vocab classifier) fail pf_devw_panel's fit check and keep the tg twin
     let bytes_wh = uint64(2l * max(dim, qd_mx) * max(hid_mx, max(nsh, max(2l * dim, di_dn))))
-    let want_wh = g_pf_env_dev_w && g_pf_pso_hmm_th != null && g_pf_pso_dq_q8 != null && npos >= 256l
+    let want_wh = (g_pf_env_dev_w && g_pf_pso_hmm_th != null
+        && (g_pf_pso_dq_q8 != null || g_pf_pso_dq_k4 != null || g_pf_pso_dq_k5 != null || g_pf_pso_dq_k6 != null))
     g_pf_bwh = want_wh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_wh) : null
     g_pf_bwh2 = want_wh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_wh) : null
     g_pf_bwh_flip = false
@@ -3229,7 +3400,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         let behp = blob_of(g_dev, t, t.mtp_ehproj_off)
                         enc_gemm_mm(enc, behp.buf, behp.boff, bwm_cat, bx, u_dim2, u_dim, mp, dim, 0ul, 2l * dim, npos, bxh_cat)
                     } else {
-                        pf_enc_kq_site_mm(enc, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, bwm_cat, bx, u_dim2, u_dim, mp, 0ul, bxh_cat)
+                        pf_enc_kq_site_mm(enc, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, bwm_cat, bx, u_dim2, u_dim, mp, 0ul, bxh_cat, 2l * dim)
                     }
                 }
             }
@@ -3323,7 +3494,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         if (c.q_gated) {
                             // 2x-wide packed [q|gate] projection, deinterleaved into the q panel + gate rows
                             if (fq != KqFmt.q8) {
-                                pf_enc_kq_site_mm(enc, t, fq, t.wq_offs[l], 2l * qd_l, bxb, bdnqg, u_dim, u_dn_qd2, mp, 0ul, bxh_x)
+                                pf_enc_kq_site_mm(enc, t, fq, t.wq_offs[l], 2l * qd_l, bxb, bdnqg, u_dim, u_dn_qd2, mp, 0ul, bxh_x, dim)
                             } else {
                                 let bwqb = blob_of(g_dev, t, t.wq_offs[l])
                                 enc_gemm_mm(enc, bwqb.buf, bwqb.boff, bxb, bdnqg, u_dim, u_dn_qd2, mp, 2l * qd_l, 0ul, dim, npos, bxh_x)
@@ -3331,21 +3502,21 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             enc_dn_deint(enc, bdnqg, bq, bdngate,
                                 DnDeintArgs(hs = uint(hs_l), qd = uint(qd_l), qs = uint(qd_l)), qd_l, npos)
                         } elif (fq != KqFmt.q8) {
-                            pf_enc_kq_site_mm(enc, t, fq, t.wq_offs[l], qd_l, bxb, bq, u_dim, u_qd_l, mp, 0ul, bxh_x)
+                            pf_enc_kq_site_mm(enc, t, fq, t.wq_offs[l], qd_l, bxb, bq, u_dim, u_qd_l, mp, 0ul, bxh_x, dim)
                         } else {
                             let bwqb = blob_of(g_dev, t, t.wq_offs[l])
                             enc_gemm_mm(enc, bwqb.buf, bwqb.boff, bxb, bq, u_dim, u_qd_l, mp, qd_l, 0ul, dim, npos, bxh_x)
                         }
                         if (!kvsh) {
                             if (fk != KqFmt.q8) {
-                                pf_enc_kq_site_mm(enc, t, fk, t.wk_offs[l], kvd_l, bxb, bks[l], u_dim, u_kvd_l, mp, koff, bxh_x)
+                                pf_enc_kq_site_mm(enc, t, fk, t.wk_offs[l], kvd_l, bxb, bks[l], u_dim, u_kvd_l, mp, koff, bxh_x, dim)
                             } else {
                                 let bwkb = blob_of(g_dev, t, t.wk_offs[l])
                                 enc_gemm_mm(enc, bwkb.buf, bwkb.boff, bxb, bks[l], u_dim, u_kvd_l, mp, kvd_l, koff, dim, npos, bxh_x)
                             }
                             if (has_wv) {
                                 if (fv != KqFmt.q8) {
-                                    pf_enc_kq_site_mm(enc, t, fv, t.wv_offs[l], kvd_l, bxb, bvs[l], u_dim, u_kvd_l, mp, koff, bxh_x)
+                                    pf_enc_kq_site_mm(enc, t, fv, t.wv_offs[l], kvd_l, bxb, bvs[l], u_dim, u_kvd_l, mp, koff, bxh_x, dim)
                                 } else {
                                     let bwvb = blob_of(g_dev, t, t.wv_offs[l])
                                     enc_gemm_mm(enc, bwvb.buf, bwvb.boff, bxb, bvs[l], u_dim, u_kvd_l, mp, kvd_l, koff, dim, npos, bxh_x)
@@ -3465,7 +3636,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     let fo = fmt_at(t.wo_fmt, l)
                     let bxh_av = pf_cvt_panel(enc, bxb, mp, qd_l)
                     if (fo != KqFmt.q8) {
-                        pf_enc_kq_site_mm(enc, t, fo, t.wo_offs[l], dim, bxb, bxb2, u_qd_l, u_dim, mp, 0ul, bxh_av)
+                        pf_enc_kq_site_mm(enc, t, fo, t.wo_offs[l], dim, bxb, bxb2, u_qd_l, u_dim, mp, 0ul, bxh_av, qd_l)
                     } else {
                         let bwob = blob_of(g_dev, t, t.wo_offs[l])
                         enc_gemm_mm(enc, bwob.buf, bwob.boff, bxb, bxb2, u_qd_l, u_dim, mp, dim, 0ul, qd_l, npos, bxh_av)
@@ -3610,13 +3781,13 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     let f3 = fmt_at(t.w3_fmt, l)
                     if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {
                         if (f1 != KqFmt.q8) {
-                            pf_enc_kq_site_mm(enc, t, f1, t.w1_offs[l], hid_l, bxb, bhb, u_dim, u_hid_l, mp, 0ul, bxh_ffn)
+                            pf_enc_kq_site_mm(enc, t, f1, t.w1_offs[l], hid_l, bxb, bhb, u_dim, u_hid_l, mp, 0ul, bxh_ffn, dim)
                         } else {
                             let bw1b = blob_of(g_dev, t, t.w1_offs[l])
                             enc_gemm_mm(enc, bw1b.buf, bw1b.boff, bxb, bhb, u_dim, u_hid_l, mp, hid_l, 0ul, dim, npos, bxh_ffn)
                         }
                         if (f3 != KqFmt.q8) {
-                            pf_enc_kq_site_mm(enc, t, f3, t.w3_offs[l], hid_l, bxb, bhb2, u_dim, u_hid_l, mp, 0ul, bxh_ffn)
+                            pf_enc_kq_site_mm(enc, t, f3, t.w3_offs[l], hid_l, bxb, bhb2, u_dim, u_hid_l, mp, 0ul, bxh_ffn, dim)
                         } else {
                             let bw3b = blob_of(g_dev, t, t.w3_offs[l])
                             enc_gemm_mm(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hid_l, mp, hid_l, 0ul, dim, npos, bxh_ffn)
@@ -3652,7 +3823,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                     let f2 = fmt_at(t.w2_fmt, l)
                     if (f2 != KqFmt.q8) {
-                        pf_enc_kq_site_mm(enc, t, f2, t.w2_offs[l], dim, bhb, bxb, u_hid_l, u_dim, mp, 0ul, bxh_h)
+                        pf_enc_kq_site_mm(enc, t, f2, t.w2_offs[l], dim, bhb, bxb, u_hid_l, u_dim, mp, 0ul, bxh_h, hid_l)
                     } else {
                         let bw2b = blob_of(g_dev, t, t.w2_offs[l])
                         enc_gemm_mm(enc, bw2b.buf, bw2b.boff, bhb, bxb, u_hid_l, u_dim, mp, dim, 0ul, hid_l, npos, bxh_h)
