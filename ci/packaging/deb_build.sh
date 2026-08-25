@@ -22,7 +22,7 @@ mkdir -p "$PKG/opt/daslang" "$PKG/usr/bin" "$PKG/DEBIAN"
 cp -a "$BUNDLE"/. "$PKG/opt/daslang/"
 
 # the user-facing binaries; everything else is reached relative to /opt/daslang
-for exe in daslang daslang-live gen1_to_gen2; do
+for exe in daslang daslang-live; do
     if [ -x "$PKG/opt/daslang/bin/$exe" ]; then
         ln -s "/opt/daslang/bin/$exe" "$PKG/usr/bin/$exe"
     fi

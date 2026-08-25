@@ -190,7 +190,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 
 ## SDK Directory Layout
 
-- `bin/` - compiler and tool binaries: `daslang`, `daslang-live`, `gen1_to_gen2`, plus prebuilt tool exes (`lint.exe`, `das-fmt.exe`, `daspkg.exe`, `dascov.exe`, `detect-dupe.exe`, `benchctl.exe`, `dastest.exe` - the `.exe` suffix on every platform) and shared-module / tree-sitter libraries on Windows. Each tool also keeps its source form - `bin/daslang utils/<tool>/main.das`, except das-fmt (`utils/das-fmt/dasfmt.das`) and dastest (`dastest/dastest.das`). **Name trap:** `bin/gen1_to_gen2` is the gen1->gen2 syntax *converter*, not a formatter; the formatter is `das-fmt` (MCP `format_file`, `bin/das-fmt.exe`, or `bin/daslang utils/das-fmt/dasfmt.das`)
+- `bin/` - compiler and tool binaries: `daslang`, `daslang-live`, plus prebuilt tool exes (`lint.exe`, `das-fmt.exe`, `daspkg.exe`, `dascov.exe`, `detect-dupe.exe`, `benchctl.exe`, `dastest.exe` - the `.exe` suffix on every platform) and shared-module / tree-sitter libraries on Windows. Each tool also keeps its source form - `bin/daslang utils/<tool>/main.das`, except das-fmt (`utils/das-fmt/dasfmt.das`) and dastest (`dastest/dastest.das`).
 - `lib/`, `include/daScript/` - libraries and C++ headers for embedding
 - `daslib/` - standard library modules (.das)
 - `modules/` - optional plugin modules (dasHV, dasGlfw, dasPUGIXML, dasSQLITE, dasAudio, dasLLVM, dasLLAMA, ...)

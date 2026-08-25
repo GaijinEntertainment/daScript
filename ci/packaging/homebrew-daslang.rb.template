@@ -33,7 +33,6 @@ class Daslang < Formula
     libexec.install Dir["#{root}/*"]
     bin.install_symlink libexec/"bin/daslang"
     bin.install_symlink libexec/"bin/daslang-live"
-    bin.install_symlink libexec/"bin/gen1_to_gen2"
   end
 
   test do

@@ -5,7 +5,6 @@
 #include "daScript/daScriptModule.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/fs_file_info.h"
-#include "../gen1-to-gen2/fmt.h"
 #include "daScript/ast/ast_aot_cpp.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/crash_handler.h"
@@ -648,7 +647,6 @@ void print_help() {
         << "    -project_root <path> root directory of the project (used for dyn modules)\n"
         << "    -load_module <path> directly load a single dynamic-module folder (the one containing .das_module); repeatable. Bypasses the project_root/modules/<name> scan and shadows same-basename entries from dasroot/project_root.\n"
         << "    --disable-module <name> never load/register the named dynamic module (case-insensitive folder match); repeatable. Keeps a native-only module (e.g. dashv) out of a wasm cross-compile so a guarded `require ?name` resolves as absent.\n"
-        << "    -run-fmt    <-i/-d> <-v2/-v1> {--semicolon} run formatter\n"
         << "    -log        output program code\n"
         << "    -pause      pause after errors and pause again before exiting program\n"
         << "    -dry-run    compile and simulate script without execution\n"
@@ -748,7 +746,6 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     string project_root;
     vector<string> load_modules;
     vector<string> disabled_modules;
-    optional<format::FormatOptions> formatter;
     for ( int i=1; i < argc; ++i ) {
         if ( argv[i][0]=='-' ) {
             string cmd(argv[i]+1);
@@ -883,38 +880,6 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 }
                 disabled_modules.push_back(argv[i + 1]);
                 i++;
-            } else if ( cmd=="run-fmt" ) {
-                formatter.emplace();
-                if ( i+2 > argc ) {
-                    printf("formatter requires 2 arguments\n");
-                    print_help();
-                    return -1;
-                }
-                const string mode = string(argv[i+1]);
-                if (mode == "-i" || mode == "--inplace") {
-                    formatter->insert(format::FormatOpt::Inplace);
-                } else if (string(argv[i+1]) == "-d" || string(argv[i+1]) == "--dry") {
-                } else {
-                    print_help();
-                    return -1;
-                }
-                i += 1;
-                const string to_v2 = string(argv[i+1]);
-                if (to_v2 == "-v2") {
-                    formatter->insert(format::FormatOpt::V2Syntax);
-                } else if (to_v2 == "-v1") {
-                } else {
-                    print_help();
-                    return -1;
-                }
-                i++;
-
-                if (i + 1 < argc)  {
-                    if (string(argv[i + 1]) == "--semicolon") {
-                        formatter->insert(format::FormatOpt::SemicolonEOL);
-                        ++i;
-                    }
-                }
             } else if ( cmd=="args" ) {
                 break;
             } else if ( cmd=="pause" ) {
@@ -1036,9 +1001,6 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     #endif
     Module::Initialize();
 
-    if (formatter) {
-        return format::run(formatter.value(), files);
-    }
     // compile and run
     int exitCode = 0;
     if (!aotResult.empty() && files.size() > 1) {

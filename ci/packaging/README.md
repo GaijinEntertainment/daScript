@@ -21,7 +21,7 @@ publishes itself.
    `winget-daslang.yaml.template` and PR it to microsoft/winget-pkgs.
 5. **apt**: the `.deb` on the release page installs with
    `sudo apt install ./daslang_<version>_amd64.deb` (binaries land in `/opt/daslang`,
-   `daslang`/`daslang-live`/`gen1_to_gen2` symlinked into `/usr/bin`). A hosted apt
+   `daslang`/`daslang-live` symlinked into `/usr/bin`). A hosted apt
    repo is a later tier.
 6. **pip** (automatic): `wheel_build.py` repacks each bundle into a platform wheel
    (`daslang-<ver>-py3-none-{win_amd64,manylinux_2_NN_x86_64,manylinux_2_NN_aarch64,macosx_NN_0_arm64}.whl`)
