@@ -116,6 +116,17 @@ namespace das {
         return ownFileInfo.get();
     }
 
+    TypeAnnotation * TypeInfo::getAnnotation() const {
+        if ( type != Type::tHandle ) {
+            return nullptr;
+        }
+        return Module::resolveAnnotation(this);
+    }
+
+    void TypeInfo::resolveAnnotation() const {
+        if ( daScriptEnvironment::getBound()->modules ) Module::resolveAnnotation(this);
+    }
+
     TypeAnnotation * Module::resolveAnnotation ( const TypeInfo * info ) {
         if ( info->type != Type::tHandle ) {
             return nullptr;

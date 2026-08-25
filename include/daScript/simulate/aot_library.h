@@ -35,21 +35,5 @@ namespace das {
     // makeAotJitNode builds a SimNode_Jit (defined in module_jit.cpp, where it is visible);
     SimNode * makeAotJitNode ( Context & ctx, void * publ );
 
-    // Test standalone context
-
-    typedef Context * ( * RegisterTestCreator ) ();
-
-    struct StandaloneContextNode {
-        StandaloneContextNode( RegisterTestCreator prfn ) {
-            regFn = prfn;
-            tail = head;
-            head = this;
-        }
-
-        StandaloneContextNode * tail = nullptr;
-        static StandaloneContextNode * head;
-        RegisterTestCreator regFn;
-    };
-
 }
 

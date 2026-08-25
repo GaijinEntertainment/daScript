@@ -108,9 +108,19 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
     }
 
-    t |> run("a stack option below the interpreter's floor is raised to it") @(t : T?) {
+    t |> run("an explicit stack option below the floor is honored exactly") @(t : T?) {
         let source = generate_standalone_source(t, "_standalone_small_stack_fixture", out_dir)
-        t |> success(find(source, ": Context(16384/*stack*/)") >= 0, "options stack = 4096 still gets the 16K floor")
+        t |> success(find(source, ": Context(4096/*stack*/)") >= 0, "options stack = 4096 emits 4096 - embedded targets budget the stack")
+    }
+
+    t |> run("an explicit stack of zero keeps the floor - Context(0) has no stack at all") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_zero_stack_fixture", out_dir)
+        t |> success(find(source, ": Context(16384/*stack*/)") >= 0, "options stack = 0 falls back to the floored default")
+    }
+
+    t |> run("a sub-floor policies stack without an explicit option is raised to the floor") @(t : T?) {
+        let files = generate_standalone_files(t, "_standalone_novars_fixture", out_dir, stack_policy = 8192u)
+        t |> success(find(files.source, ": Context(16384/*stack*/)") >= 0, "policies.stack = 8192 still gets the 16K floor")
     }
 
     t |> run("with no stack option the policies' stack size decides") @(t : T?) {
