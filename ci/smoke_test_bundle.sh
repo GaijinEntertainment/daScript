@@ -257,6 +257,43 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+# Every third-party notice the release-module set (plus the default-on modules)
+# installs must land at the bundle root -- an install rule silently not firing
+# (module off, typo'd RENAME, guard block not entered) is exactly the failure
+# mode that left shipped binaries without their notices.
+printf '  %-30s ' "third-party licenses present"
+MISSING_LICENSES=""
+for lic in URIPARSER DAG_NOISE VEC_MATH FMT FAST_FLOAT GLTF_SAMPLE_ASSETS \
+           HV OPENSSL LLVM Z3 MINIAUDIO OPENMPT CIPIC PUGIXML GLFW \
+           IMGUI FREETYPE MD4C JETBRAINS_MONO KHRONOS_GL \
+           VULKAN_HEADERS VOLK TREE_SITTER TREE_SITTER_ICU TREE_SITTER_C \
+           TREE_SITTER_CPP TREE_SITTER_MARKDOWN CLIP MINFFT SPIRV_HEADERS \
+           STB DROID_SANS_MONO; do
+    [[ -f "$BUNDLE/$lic.LICENSE" ]] || MISSING_LICENSES="$MISSING_LICENSES $lic"
+done
+[[ -f "$BUNDLE/LICENSE" ]] || MISSING_LICENSES="$MISSING_LICENSES <root>"
+if [[ -z "$MISSING_LICENSES" ]]; then
+    echo "OK"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL (missing:$MISSING_LICENSES)"
+    FAIL=$((FAIL + 1))
+fi
+
+# Soundfonts are fetched locally by devs and carry unclear redistribution terms;
+# the examples install excludes them by PATTERN, and this is that rule's
+# inverted control -- delete the PATTERN and this goes red on any box holding one.
+printf '  %-30s ' "no soundfonts in bundle"
+SF2_LEAKS=$(find "$BUNDLE" -iname '*.sf2' 2>/dev/null)
+if [[ -z "$SF2_LEAKS" ]]; then
+    echo "OK"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL (soundfonts in bundle):"
+    echo "$SF2_LEAKS" | sed 's/^/    /'
+    FAIL=$((FAIL + 1))
+fi
+
 printf '  %-30s ' "references resolve in bundle"
 # Skipped rather than failed when no python3 is present, so this script stays
 # runnable on a bare box.

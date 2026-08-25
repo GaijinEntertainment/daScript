@@ -1881,6 +1881,8 @@ install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS_INSTALL_DOCDIR} RENAME URIPARSER.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DAG_NOISE.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VEC_MATH.LICENSE)
+install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/fmt/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME FMT.LICENSE)
+install(FILES ${PROJECT_SOURCE_DIR}/include/fast_float/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME FAST_FLOAT.LICENSE)
 
 # utils/internal/ never installs — the folder is the audience decision
 # (machine-checked by utils/REVIEW.das).
@@ -2104,6 +2106,9 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/
     PATTERN "daspkg.lock" EXCLUDE
     PATTERN ".daspkg.log" EXCLUDE
     PATTERN "*.shared_module" EXCLUDE
+    # soundfonts are fetched locally and carry unclear redistribution terms —
+    # they must never ride into a release bundle
+    PATTERN "*.sf2" EXCLUDE
 )
 
 # The Fox rig/animation is CC-BY 4.0, so its attribution must also ship at the

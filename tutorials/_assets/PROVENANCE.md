@@ -13,6 +13,10 @@ recorded for provenance and so the set can be regenerated.
 - 2K equirectangular Radiance HDR. Soft overcast outdoor light - forgiving IBL / skybox reflections.
 - Used for environment reflections (skybox tut 6, teapot tut 14) and image-based lighting.
 
+## gltf/BoomBox.glb - Khronos glTF-Sample-Assets "BoomBox" (CC0)
+- Source: https://github.com/KhronosGroup/glTF-Sample-Assets (Models/BoomBox), CC0.
+- Same asset as `examples/gltf/media/BoomBox.glb`; this copy is the playground / tutorial-served one.
+
 ## cat/ - Poly Haven "Concrete Cat Statue" (CC0)
 - Source: https://polyhaven.com/a/concrete_cat_statue
 - `concrete_cat_statue.obj` (6863 verts / 11950 tris) converted from the 2K glTF by `gltf_to_obj.py`

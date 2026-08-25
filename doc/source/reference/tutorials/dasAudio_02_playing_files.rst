@@ -97,8 +97,9 @@ Running the Tutorial
 
    daslang.exe tutorials/dasAudio/02_playing_files.das
 
-The tutorial plays a WAV file from disk, decodes and plays an MP3 (first 3
-seconds), then loops a short generated tone for 2 seconds before stopping.
+The tutorial plays a WAV file from disk, decodes and plays a music file
+(first 3 seconds), then loops a short generated tone for 2 seconds before
+stopping.
 
 .. seealso::
 

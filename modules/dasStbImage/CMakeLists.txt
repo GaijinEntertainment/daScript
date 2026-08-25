@@ -84,5 +84,11 @@ IF ((NOT DAS_STBIMAGE_INCLUDED) AND (NOT ${DAS_STBIMAGE_DISABLED}))
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasStbImage
     )
 
+    # droidsansmono.LICENSE installs twice: with fonts/ for the runtime, and at the doc root
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasStbImage/STB.LICENSE
+        DESTINATION ${DAS_INSTALL_DOCDIR} RENAME STB.LICENSE)
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasStbImage/fonts/droidsansmono.LICENSE
+        DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DROID_SANS_MONO.LICENSE)
+
     ADD_EXAMPLE_RUN(modules/dasStbImage/examples/ttf_render_test.das)
 ENDIF()

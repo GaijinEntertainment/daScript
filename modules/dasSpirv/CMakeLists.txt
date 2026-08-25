@@ -26,4 +26,7 @@ IF(NOT DAS_SPIRV_INCLUDED)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasSpirv/.das_module
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasSpirv
     )
+    # vendored third-party: Khronos SPIRV-Headers grammar JSONs (MIT)
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasSpirv/SPIRV_HEADERS.LICENSE
+        DESTINATION ${DAS_INSTALL_DOCDIR} RENAME SPIRV_HEADERS.LICENSE)
 ENDIF()
