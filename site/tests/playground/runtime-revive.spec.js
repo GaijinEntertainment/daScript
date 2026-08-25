@@ -25,7 +25,10 @@ async function setProbeProgram(page) {
 }
 
 test('a dead page revives on the next Run click @wasm', async ({ page }) => {
-    test.slow();   // several full frame lifecycles; parallel-suite load stretches each
+    // Several full frame lifecycles, and the revive re-downloads the ~40MB
+    // runtime - 46s serial against the live site, so test.slow()'s 90s is too
+    // tight once a sibling worker shares the bandwidth.
+    test.setTimeout(240_000);
     await page.addInitScript(() => {
         if (window.top === window) { window.__abortSpares = true; return; }
         try {
@@ -40,7 +43,7 @@ test('a dead page revives on the next Run click @wasm', async ({ page }) => {
 
     // The runner reported the aborts on its way down.
     await expect(page.locator('.output_line_text', { hasText: 'runtime aborted' }).first())
-        .toBeVisible({ timeout: 30_000 });
+        .toBeVisible({ timeout: 120_000 });
 
     // Dead page: the budget is spent, no frame standing by, none on the way —
     // and the Run BUTTON is enabled, because the click is the revive trigger.
@@ -75,14 +78,14 @@ test('a dead page revives on the next Run click @wasm', async ({ page }) => {
     await page.waitForFunction(() => {
         const b = document.getElementById('run');
         return b && !b.disabled && window.PlaygroundRunner && window.PlaygroundRunner.isReady();
-    }, null, { timeout: 60_000 });
+    }, null, { timeout: 120_000 });
     const abortsBefore = await page.evaluate(() =>
         [...document.querySelectorAll('#output .output_line_text')]
             .filter((e) => e.textContent.includes('runtime aborted')).length);
     await setProbeProgram(page);
     await page.click('#run');
     await expect(page.locator('.output_line_text', { hasText: 'PROBE-OK' }))
-        .toBeVisible({ timeout: 60_000 });
+        .toBeVisible({ timeout: 120_000 });
     const abortsAfter = await page.evaluate(() =>
         [...document.querySelectorAll('#output .output_line_text')]
             .filter((e) => e.textContent.includes('runtime aborted')).length);
@@ -94,7 +97,10 @@ test('a dead page revives on the next Run click @wasm', async ({ page }) => {
 // the page — warn-and-work, never a dead page. Streaming is stubbed dead for
 // the whole session; the page must come up and run without a single abort.
 test('streaming-compile failure falls back to ArrayBuffer and the page works @wasm', async ({ page }) => {
-    test.slow();   // a full ArrayBuffer compile + a run; parallel-suite load stretches it
+    // A full ArrayBuffer download + compile before the page is up - the ~40MB
+    // fetch dominates against the live site once a sibling worker shares the
+    // bandwidth.
+    test.setTimeout(240_000);
     await page.addInitScript(() => {
         if (window.top !== window) return;   // the parent's compile is the one with the ladder
         WebAssembly.compileStreaming = () => Promise.reject(new TypeError('induced: streaming unavailable'));
@@ -104,11 +110,11 @@ test('streaming-compile failure falls back to ArrayBuffer and the page works @wa
     await page.waitForFunction(() => window.pgSamplesReady === true, null, { timeout: 30_000 });
     await page.waitForFunction(
         () => window.PlaygroundRunner && window.PlaygroundRunner.isReady(),
-        null, { timeout: 60_000 });
+        null, { timeout: 120_000 });
     await setProbeProgram(page);
     await page.click('#run');
     await expect(page.locator('.output_line_text', { hasText: 'PROBE-OK' }))
-        .toBeVisible({ timeout: 60_000 });
+        .toBeVisible({ timeout: 120_000 });
     const lines = await page.evaluate(() =>
         [...document.querySelectorAll('#output .output_line_text')].map((e) => e.textContent).join('\n'));
     expect(lines).not.toContain('runtime aborted');
@@ -122,7 +128,9 @@ test('streaming-compile failure falls back to ArrayBuffer and the page works @wa
 // one ladder, the first spare's request eats the second and aborts, so the
 // rebuilt spare's request is the retry that succeeds.
 test('a failed runtime compile reports itself and the retry recovers @wasm', async ({ page }) => {
-    test.slow();   // two compile attempts + a full run; parallel-suite load stretches each
+    // Two failing ladders then a real compile - up to three ~40MB downloads
+    // against the live site before the run even starts.
+    test.setTimeout(240_000);
     await page.addInitScript(() => {
         if (window.top !== window) return;   // stub the parent page only
         const origStreaming = WebAssembly.compileStreaming.bind(WebAssembly);
@@ -141,17 +149,17 @@ test('a failed runtime compile reports itself and the retry recovers @wasm', asy
 
     // The first spare heard {module: null, error} and reported the real cause.
     await expect(page.locator('.output_line_text', { hasText: 'wasm compile failed: induced compile failure' }))
-        .toBeVisible({ timeout: 30_000 });
+        .toBeVisible({ timeout: 120_000 });
 
     // The rebuilt spare's request re-compiles for real and the page recovers.
     await page.waitForFunction(() => {
         const b = document.getElementById('run');
         return b && !b.disabled && window.PlaygroundRunner && window.PlaygroundRunner.isReady();
-    }, null, { timeout: 60_000 });
+    }, null, { timeout: 120_000 });
     await setProbeProgram(page);
     await page.click('#run');
     await expect(page.locator('.output_line_text', { hasText: 'PROBE-OK' }))
-        .toBeVisible({ timeout: 60_000 });
+        .toBeVisible({ timeout: 120_000 });
     const lines = await page.evaluate(() =>
         [...document.querySelectorAll('#output .output_line_text')].map((e) => e.textContent).join('\n'));
     expect(lines).not.toContain('runtime aborted: run-frame');
