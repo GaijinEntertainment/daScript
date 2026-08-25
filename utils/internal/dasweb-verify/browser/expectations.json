@@ -48,6 +48,7 @@
     "Functions": { "kind": "console", "stdout": "^hello$" },
     "Macros (multi-file)": { "kind": "console", "stdout": "Section 3: mixed sources" },
     "Tests": { "kind": "console", "action": "test", "modes": ["interpreter"], "stdout": "SUCCESS!" },
+    "Linq: group by + average": { "kind": "console", "stdout": "Vaz: avg 1200" },
 
     "Dictionary (benchmark)": { "kind": "console", "stdout": "^\"dictionary\", " },
     "SHA-256 (benchmark)": { "kind": "console", "stdout": "^\"sha256\", " },
