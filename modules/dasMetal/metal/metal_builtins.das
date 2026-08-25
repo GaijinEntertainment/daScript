@@ -413,6 +413,30 @@ def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 
     }
 }
 
+//! the half-A overload: identical walk, activations stream as device f16 (the emitter picks
+//! the q8uh helper by this pointer's pointee — a float A operand is off the native half path)
+[unused_argument(sgs, wt, tid), sideeffects]
+def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 const?; a : float16 const?; lda : uint; var c : float?; ldc : uint; kk : uint; ldwb : uint; tid : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var ch = 0.0
+                for (b in range(int(kk) / 32)) {
+                    let blk = j * (int(kk) / 32) + b
+                    let ws = float(wsh[blk * 17])
+                    for (k in range(32)) {
+                        ch += float(a[r * int(lda) + b * 32 + k]) * float(float16(float(wqb[blk * 34 + k]) * ws))
+                    }
+                }
+                c[r * int(ldc) + j] = ch
+            }
+        }
+    }
+}
+
 // ===== staged-tile cooperative GEMM protocol (begin / step / store) =====
 // For kernels that DEQUANT-stage weight/activation tiles into @workgroup float16 (mx4 LUT,
 // k-quant sub-scales): stage a FLAT row-major [rows][kk] tile pair per K-chunk, then step.

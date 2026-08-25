@@ -2327,17 +2327,19 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
             w |> write("\}")
         }
     }
-    if (kind == "q8u") {
-        // interleaved-q8_0 W x raw f32 activations, upstream-geometry walk: W dequantized to a
+    if (kind == "q8u" || kind == "q8uh") {
+        // interleaved-q8_0 W x raw activations, upstream-geometry walk: W dequantized to a
         // threadgroup f16 tile per 32-K chunk (scale folded AT STAGING, amortized over the m
         // activation rows), activations streamed straight from device memory, and ONE
         // multiply_accumulate cooperative C held across the whole K loop — no per-element
-        // index/fold work anywhere in the hot path
+        // index/fold work anywhere in the hot path. q8uh streams HALF activations: a float A
+        // operand keeps matmul2d off the native half x half path (measured 8-11% per GEMM)
+        let at = kind == "q8uh" ? "half" : "float"
         return build_string() $(var w) {
-            w |> write("static void {name}(threadgroup half * wt, device const half * ws, device const char * wq, device const float * a, uint lda, device float * c, uint ldc, uint kk, uint ldwb, uint tid) \{\n")
+            w |> write("static void {name}(threadgroup half * wt, device const half * ws, device const char * wq, device const {at} * a, uint lda, device float * c, uint ldc, uint kk, uint ldwb, uint tid) \{\n")
             w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, true, matmul2d_descriptor::mode::multiply_accumulate);\n")
             w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
-            w |> write("    using AT = tensor<device float, dextents<int32_t, 2>, tensor_inline>;\n")
+            w |> write("    using AT = tensor<device {at}, dextents<int32_t, 2>, tensor_inline>;\n")
             w |> write("    using WT = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;\n")
             w |> write("    auto cT = op.get_destination_cooperative_tensor<AT, WT, float>();\n")
             w |> write("    for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
@@ -2353,7 +2355,7 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
             w |> write("            _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
             w |> write("        \}\n")
             w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
-            w |> write("        auto A = AT((device float *)(a + b * 32u), dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+            w |> write("        auto A = AT((device {at} *)(a + b * 32u), dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
             w |> write("        auto W = WT((threadgroup half *)wt, dextents<int32_t, 2>(32, {int(n)}));\n")
             w |> write("        op.run(A, W, cT);\n")
             w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
@@ -2742,8 +2744,15 @@ def private emit_tmm2d_tg_store_bias(var ctx : MslCtx; ec : ExprCall?; indent : 
 
 def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     let cname = call_base_name("{ec.name}")
-    let kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8u_f32" ? "q8u" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8")))
-    let want_args = kind == "bf" ? 10 : (kind == "q8b" ? 11 : (kind == "q8u" ? 13 : 14))
+    var kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8u_f32" ? "q8u" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8")))
+    if (kind == "q8u" && length(ec.arguments) == 13) {
+        // the overload resolves by the activation pointer's pointee: float16 = the half-A stream
+        let apt = ec.arguments[6]._type
+        if (apt != null && apt.firstType != null && apt.firstType.baseType == Type.tFloat16) {
+            kind = "q8uh"
+        }
+    }
+    let want_args = kind == "bf" ? 10 : (kind == "q8b" ? 11 : (kind == "q8u" || kind == "q8uh" ? 13 : 14))
     if (length(ec.arguments) != want_args) {
         err(ctx, ec.at, "{cname} takes exactly {want_args} arguments")
         return

@@ -126,7 +126,7 @@ def private metal4_tensor_available(dev) : bool {
     if (!g_m4_probed) {
         g_m4_probed = true
         var err : string
-        var p1 = pipeline_from_source(dev, metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, err)
+        var p1 = pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err)
         var p2 = pipeline_from_source(dev, metal_bf16_mulmm_t_msl, metal_bf16_mulmm_t_msl_entry, metal_bf16_mulmm_t_msl_fastmath, err)
         g_m4_ok = p1 != null || p2 != null
         metal_release(p1)
@@ -137,10 +137,12 @@ def private metal4_tensor_available(dev) : bool {
 
 // the Metal-4 tensor twin of the (already direct-covered) MetalQ8MulMm — same bindings; the
 // q8u form dequant-stages W into @workgroup, so the gate binds its tgmem like production
-def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int) {
-    let tag = "q8_mulmm_t m={m} k={kdim} n={ndim}"
+def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int; halfx : bool = false) {
+    let tag = "q8_mulmm_t{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, err)
+    var pso = (halfx
+        ? pipeline_from_source(dev, MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err))
     if (pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
         return
@@ -153,6 +155,13 @@ def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int) {
     q8_blob_fill(ndim, nb, blob, wdeq)
     var xf : array<float>
     q8_x_fill(m * kdim, xf)
+    var xh : array<float16>
+    if (halfx) {
+        xh |> resize(m * kdim)
+        for (i in range(m * kdim)) {
+            xh[i] = float16(xf[i])   // the fixture is f16-exact, so the oracle dot is unchanged
+        }
+    }
     var want : array<float>
     var env : array<float>
     want |> resize(m * ndim)
@@ -171,13 +180,13 @@ def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int) {
         }
     }
     var bw = buf_upload(dev, blob)
-    var bx = buf_upload(dev, xf)
+    var bx = halfx ? buf_upload(dev, xh) : buf_upload(dev, xf)
     var by = buf_fill(dev, m * ndim, -1000.0)
     var bk = buf_u32(dev, uint(kdim))
     var bn = buf_u32(dev, uint(ndim))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_q8_mulmm_t_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, halfx ? MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem : MetalQ8MulMmT_metal_q8_mulmm_t_msl_tgmem, 0)
         metal_set_buffer(enc, bw, 0ul, 0)
         metal_set_buffer(enc, bw, 0ul, 1)
         metal_set_buffer(enc, bx, 0ul, 2)
@@ -1183,6 +1192,7 @@ def test_metal_gemm_kernels(t : T?) {
                 }
                 kq_mulmm_gate(t, dev, queue, 4, false, 32, 256, 128)   // second shape: 2 col tiles
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64)
+                q8_mulmm_t_gate(t, dev, queue, 64, 256, 64, halfx = true)
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)
 

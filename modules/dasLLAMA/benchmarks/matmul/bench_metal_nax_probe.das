@@ -225,7 +225,7 @@ def main {   // nolint:STYLE038 — one-shot probe harness; buffers + PSOs stay 
             print("nax pso: {err}\n")
             return
         }
-        var q8u_pso = pipeline_from_source(dev, metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, err)
+        var q8u_pso = pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err)
         if (q8u_pso == null) {
             print("q8u pso: {err}\n")
             return
@@ -257,7 +257,7 @@ def main {   // nolint:STYLE038 — one-shot probe harness; buffers + PSOs stay 
             var t_nax = -1.0lf
             race_pair_ms(queue, 5, t_q8u, t_nax, $(enc) {
                 kn_pipeline(enc, q8u_pso)
-                kn_tgmem(enc, metal_q8_mulmm_t_msl_tgmem, 0)
+                kn_tgmem(enc, MetalQ8MulMmT_metal_q8_mulmm_t_msl_tgmem, 0)
                 kn_buffer(enc, bw, 0ul, 0)
                 kn_buffer(enc, bw, 0ul, 1)
                 kn_buffer(enc, bx, 0ul, 2)
@@ -279,7 +279,7 @@ def main {   // nolint:STYLE038 — one-shot probe harness; buffers + PSOs stay 
             var t_i8 = -1.0lf
             race_pair_ms(queue, 5, t_q8u2, t_i8, $(enc) {
                 kn_pipeline(enc, q8u_pso)
-                kn_tgmem(enc, metal_q8_mulmm_t_msl_tgmem, 0)
+                kn_tgmem(enc, MetalQ8MulMmT_metal_q8_mulmm_t_msl_tgmem, 0)
                 kn_buffer(enc, bw, 0ul, 0)
                 kn_buffer(enc, bw, 0ul, 1)
                 kn_buffer(enc, bx, 0ul, 2)
@@ -311,7 +311,7 @@ def main {   // nolint:STYLE038 — one-shot probe harness; buffers + PSOs stay 
             var t_ha = -1.0lf
             race_pair_ms(queue, 5, t_q8u3, t_ha, $(enc) {
                 kn_pipeline(enc, q8u_pso)
-                kn_tgmem(enc, metal_q8_mulmm_t_msl_tgmem, 0)
+                kn_tgmem(enc, MetalQ8MulMmT_metal_q8_mulmm_t_msl_tgmem, 0)
                 kn_buffer(enc, bw, 0ul, 0)
                 kn_buffer(enc, bw, 0ul, 1)
                 kn_buffer(enc, bx, 0ul, 2)

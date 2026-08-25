@@ -101,20 +101,20 @@ class MetalBf16MulMm : MetalMmTileBase {
     }
 }
 
-// Metal-4 tensor twin of MetalQ8MulMm (same binds, blob bound twice): tmm2d_q8u_f32 dequant-
-// stages W to a threadgroup f16 tile per K-chunk, streams activations from device, and holds
-// one multiply_accumulate C across the K loop — raced by the tuner (crown "mulmm_q8").
-[metal_dispatch(name = "enc_gemm_mm_t_c", pso = "g_pf_pso_mm_t", tgmem = "metal_q8_mulmm_t_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
-class MetalQ8MulMmT {
+// Metal-4 tensor twin of MetalQ8MulMm (same binds, blob bound twice): tmm2d_q8u_f32 stages W
+// to a tg f16 tile per K-chunk, streams activations, holds one multiply_accumulate C (crown
+// "mulmm_q8"). XT = the A stream codec: a float A operand is off the native half path.
+[ |> template_struct_instance]
+class template MetalQ8MulMmTensorT {
     @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16> // 34B-block W blob, half-scale view
     @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>    // the SAME blob buffer, byte view
-    @ssbo @binding = 2 xf : array<float>    // raw f32 activations
+    @ssbo @binding = 2 xf : array<XT>       // raw activations (float, or the converted f16 panel)
     @ssbo @binding = 3 @off = "yoff" @span = "mp*d*4" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
     @workgroup twb : float16[2048]          // W chunk: 64 wcols x 32 k, dequant-staged by the helper
 
-    [metal_kernel(name="metal_q8_mulmm_t_msl")]
+    [metal_kernel]
     def metal_q8_mulmm_t {
         let mBase = gl_WorkGroupID.x * 32u
         let nBase = gl_WorkGroupID.y * 64u
@@ -124,6 +124,38 @@ class MetalQ8MulMmT {
         var ap = unsafe(addr(xf[mBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
         tmm2d_q8u_f32(32u, 64u, 4u, twb, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u, gl_LocalInvocationIndex)
+    }
+}
+
+[metal_dispatch(name = "enc_gemm_mm_t_c", pso = "g_pf_pso_mm_t", tgmem = "MetalQ8MulMmT_metal_q8_mulmm_t_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
+class MetalQ8MulMmT : MetalQ8MulMmTensorT {
+    typedef XT = float
+}
+
+[metal_dispatch(name = "enc_gemm_mm_th_c", pso = "g_pf_pso_mm_th", tgmem = "MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
+class MetalQ8MulMmTH : MetalQ8MulMmTensorT {
+    typedef XT = float16
+}
+
+// The f32 -> f16 activation panel conversion feeding the half-X mul_mm stamp: one pass over
+// the panel (paid once) against the GEMM's d/64 re-reads of it at half the bytes.
+struct CvtArgs {
+    total : uint
+}
+
+[metal_dispatch(name = "enc_cvt_half", pso = "g_pf_pso_cvt_half", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalCvtHalf {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" xh : array<float16>
+    @uniform @binding = 2 ka : CvtArgs
+
+    [metal_kernel(name="metal_cvt_half_msl")]
+    def metal_cvt_half {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.total) {
+            return
+        }
+        xh[gid] = float16(x[gid])
     }
 }
 
@@ -1738,6 +1770,11 @@ var private g_pf_pso_rowstat : MetalComputePipeline?
 var private g_pf_pso_av : MetalComputePipeline?
 var private g_pf_pso_cat2 : MetalComputePipeline?
 var private g_pf_pso_mm_t : MetalComputePipeline?  // the mul_mm TENSOR twin; the base is the shared g_pso_mm
+var private g_pf_pso_mm_th : MetalComputePipeline?  // its half-X stamp (the converted f16 activation panel)
+var private g_pf_pso_cvt_half : MetalComputePipeline?
+var private g_pf_bxh : MetalBuffer?     // per-forward f16 activation scratch panels (null = f32 path);
+var private g_pf_bxh2 : MetalBuffer?    // ... double-buffered so a site's GEMM overlaps the next site's convert
+var private g_pf_bxh_flip : bool
 var private g_pf_pso_bf16_mm : MetalComputePipeline?   // native-BF16 A twin (E-series model_proj)
 var private g_pf_bf16_mm_tensor : bool   // crowned tensor twin selected (no tgmem bind)
 var private g_pf_mm_tensor : bool        // ditto for the production q8 mul_mm
@@ -1929,6 +1966,14 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_mm_t)
         g_pf_pso_mm_t = null
     }
+    if (g_pf_pso_mm_th != null) {
+        metal_release(g_pf_pso_mm_th)
+        g_pf_pso_mm_th = null
+    }
+    if (g_pf_pso_cvt_half != null) {
+        metal_release(g_pf_pso_cvt_half)
+        g_pf_pso_cvt_half = null
+    }
     if (g_pf_pso_bf16_mm != null) {
         metal_release(g_pf_pso_bf16_mm)
         g_pf_pso_bf16_mm = null
@@ -2012,7 +2057,9 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_cat2 = compile_pso(metal_pf_cat2_msl, metal_pf_cat2_msl_entry, metal_pf_cat2_msl_fastmath, ok)
     g_pf_mm_tensor = metal_tensor_crowned("mulmm_q8")
     if (g_pf_mm_tensor) {
-        g_pf_pso_mm_t = compile_pso(metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, ok)
+        g_pf_pso_mm_t = compile_pso(MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, ok)
+        g_pf_pso_mm_th = compile_pso(MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, ok)
+        g_pf_pso_cvt_half = compile_pso(metal_cvt_half_msl, metal_cvt_half_msl_entry, metal_cvt_half_msl_fastmath, ok)
     }
     g_pf_bf16_mm_tensor = metal_tensor_crowned("mulmm_bf16")
     g_pf_pso_bf16_mm = (g_pf_bf16_mm_tensor
@@ -2211,8 +2258,23 @@ def private enc_gemm_mm_tail(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; 
     }
 }
 
-// the production mul_mm dispatch: W blob bound twice (half-scale + byte views), raw f32 X, grid
-// (mp/32 token tiles, d/64 output tiles); yoff places K/V outputs past a continuation's panel rows.
+// the tensor-path pick: convert the A panel, dispatch the f16-stream stamp — double-buffered
+// so site i's GEMM overlaps site i+1's convert; under 256 rows the converts outweigh the
+// halved stream and the f32 form serves (tail forms keep f32 X either way).
+def private enc_gemm_mm_tensor(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; rows, d : int64; yoff : uint64; kdim : int64) {
+    if (g_pf_bxh != null && g_pf_pso_mm_th != null && kdim > 0l && rows >= 256l) {
+        var bxh = g_pf_bxh_flip ? g_pf_bxh2 : g_pf_bxh
+        g_pf_bxh_flip = !g_pf_bxh_flip
+        var cka = CvtArgs(total = uint(rows * kdim))
+        enc_cvt_half(enc, bx, bxh, cka, rows * kdim)
+        enc_gemm_mm_th_c(enc, bwblob, wboff, bwblob, bxh, by, yoff, bk, bn, rows, d)
+    } else {
+        enc_gemm_mm_t_c(enc, bwblob, wboff, bwblob, bx, by, yoff, bk, bn, rows, d)
+    }
+}
+
+// the production mul_mm dispatch: W blob bound twice (half-scale + byte views), grid (mp/32
+// token tiles, d/64 output tiles); yoff places K/V outputs past a continuation's panel rows.
 // kdim/npos arm the GEMV tail: full tiles + the npos % 32 remainder rows on the mv family.
 def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; mp, d : int64; yoff : uint64 = 0ul; kdim : int64 = 0l; npos : int64 = 0l) {
     let r = npos % 32l
@@ -2222,7 +2284,7 @@ def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff
         let nfull = npos - r
         if (nfull > 0l) {
             if (g_pf_mm_tensor) {
-                enc_gemm_mm_t_c(enc, bwblob, wboff, bwblob, bx, by, yoff, bk, bn, nfull, d)
+                enc_gemm_mm_tensor(enc, bwblob, wboff, bx, by, bk, bn, nfull, d, yoff, kdim)
             } else {
                 enc_gemm_mm_c(enc, bwblob, wboff, bwblob, bx, by, yoff, bk, bn, nfull, d)
             }
@@ -2231,7 +2293,7 @@ def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff
         return
     }
     if (g_pf_mm_tensor) {
-        enc_gemm_mm_t_c(enc, bwblob, wboff, bwblob, bx, by, yoff, bk, bn, mp, d)
+        enc_gemm_mm_tensor(enc, bwblob, wboff, bx, by, bk, bn, mp, d, yoff, kdim)
     } else {
         enc_gemm_mm_c(enc, bwblob, wboff, bwblob, bx, by, yoff, bk, bn, mp, d)
     }
@@ -2660,6 +2722,13 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
             }
         }
     }
+    // the half-X activation panel: one f16 scratch covering the largest A panel any mul_mm
+    // site converts (xb/hb/the 2*dim MTP cat/deltanet/PLE inputs)
+    let bytes_xh = max(max(max(bytes_xb, bytes_h), uint64(mp * 2l * dim * 4l)), max(bytes_dn_di, bytes_ple_g)) / 2ul
+    let want_xh = g_pf_pso_mm_th != null && mp >= 256l
+    g_pf_bxh = want_xh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_xh) : null
+    g_pf_bxh2 = want_xh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_xh) : null
+    g_pf_bxh_flip = false
     // upload the embedded rows + this prefill's rope table(s) (built for the chunk's GLOBAL
     // positions — build_rope_table takes start_pos; dual-rope: the sliding class's pair too)
     unsafe {
@@ -3502,6 +3571,14 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     if (u_rot != null) {
         pool_release(g_pf_upool, u_rot, 4ul)
     }
+    if (g_pf_bxh != null) {
+        pool_release(g_pf_pool, g_pf_bxh, bytes_xh)
+        g_pf_bxh = null
+    }
+    if (g_pf_bxh2 != null) {
+        pool_release(g_pf_pool, g_pf_bxh2, bytes_xh)
+        g_pf_bxh2 = null
+    }
     pool_release(g_pf_pool, batt, bytes_att)
     pool_release(g_pf_pool, bstats, bytes_stat)
     if (gpu_logits) {
@@ -3750,7 +3827,7 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
         res.note = "base pso: {err}"
         return res
     }
-    var twin_pso = pipeline_from_source(dev, metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, err)
+    var twin_pso = pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err)
     if (twin_pso == null) {
         res.winner = "simdgroup"
         res.note = "twin pso: {err}"
@@ -3779,7 +3856,7 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
         kn_dispatch(enc, grid, tg)
     }, $(enc) {
         kn_pipeline(enc, twin_pso)
-        kn_tgmem(enc, metal_q8_mulmm_t_msl_tgmem, 0)
+        kn_tgmem(enc, MetalQ8MulMmT_metal_q8_mulmm_t_msl_tgmem, 0)
         kn_buffer(enc, bw, 0ul, 0)
         kn_buffer(enc, bw, 0ul, 1)
         kn_buffer(enc, bxa, 0ul, 2)
