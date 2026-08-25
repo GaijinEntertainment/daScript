@@ -14,6 +14,7 @@ require daslib/fio
 require strings
 require math
 require dasllama/dasllama_env
+require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
 
 [CommandLineArgs]
 struct RunArgs {
@@ -83,6 +84,7 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_audio_embedder.das",
                     "modules/dasLLAMA/tests/test_batch_grid.das",
                     "modules/dasLLAMA/tests/test_bench_records_schema.das",
+                    "modules/dasLLAMA/tests/test_box_ident.das",
                     "modules/dasLLAMA/tests/test_box_profile.das",
                     "modules/dasLLAMA/tests/test_dasllama_lint_contracts.das",
                     "modules/dasLLAMA/tests/test_dasllama_lint_escape.das",
@@ -217,8 +219,7 @@ def private child_envs(cfg : RunArgs; win : bool) : string {
     // (observed 2026-07-30: fam-gemma4 freed 34 GB of bench flavors). A caller-set
     // DAS_TUNE_MANIFEST inherits; a box without a minted manifest keeps sidecar behavior.
     if (empty(g_env_core.tune_manifest)) {
-        let boxEnv = g_env_prof.box
-        let manifest = "modules/dasLLAMA/performance/{empty(boxEnv) ? "m1" : boxEnv}.tune.json"
+        let manifest = "modules/dasLLAMA/performance/{derive_box_name(g_env_prof.box)}.tune.json"
         var mst : FStat
         if (stat(manifest, mst)) {
             envs = (win ? "{envs}set \"DAS_TUNE_MANIFEST={manifest}\"&& "

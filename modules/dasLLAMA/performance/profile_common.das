@@ -23,6 +23,7 @@ require dasllama/dasllama_common public   // QuantMode
 require dasllama/dasllama_math            // active_kernel_backend — the exec_fmt layout receipt
 require llvm/daslib/llvm_tune             // tune_status — stamp provenance for the platform block
 require model_specs public                // the model-set table + its llm/official views
+require box_ident                         // derive_box_name — the hardware-keyed box tag
 
 // ===== Box + model roots =====
 
@@ -39,10 +40,11 @@ def models_dir() : string {
     return models_dir_resolved()   // ONE resolution, in dasllama_env — the tuner's confirm ladder shares it
 }
 
-// Short box tag baked into the JSON/TSV filenames (profile_llm_<box>.json). Override with DASLLAMA_BOX.
+// Short box tag baked into the JSON/TSV filenames (profile_llm_<box>.json). DASLLAMA_BOX
+// overrides; otherwise DERIVED FROM HARDWARE (box_ident) — a defaulted tag silently serves
+// another box's crowns and poisons its store.
 def box_name() : string {
-    let env = g_env_prof.box
-    return empty(env) ? "m1" : env
+    return derive_box_name(g_env_prof.box)
 }
 
 //! The per-box shared tune manifest (`DAS_TUNE_MANIFEST` target): ONE tune per box, so every
