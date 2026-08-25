@@ -69,6 +69,10 @@ dasSpirv and is reused as-is.
    defaults fast-math ON and we keep it. Float oracles compare with tolerance (ints
    bit-exact). `[metal_kernel(fastmath=false)]` per kernel when isolating a divergence
    needs strict IEEE.
+9. **Every `matmul2d_descriptor` sets `relaxed_precision = true`.** RP = false keeps the
+   op off the M5 tensor unit's fast path - measured 2-3x across the tmm2d families; the
+   cooperative-tensor register layout the fast path uses is what RP licenses. `REVIEW.das`
+   enforces the emitter's descriptor sites.
 
 ## Architecture
 

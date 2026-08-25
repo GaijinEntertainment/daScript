@@ -25,3 +25,8 @@ Architecture doc: `MASTERPLAN.md`.
 - **Weakening `test_msl_census.das`'s two-direction check - every declared kind emitted by
   some fixture, every emitted kind declared - is a defect.** Text has no disassembler; the
   census is the only coverage proxy.
+
+- **Weakening `REVIEW.das`'s descriptor cell - every `matmul2d_descriptor` that
+  `metal/msl_emit.das` writes sets `relaxed_precision = true` - is a defect**, including
+  narrowing the file it scans or its finding text no longer naming what failed. RP = false
+  keeps the op off the tensor-unit fast path.

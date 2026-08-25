@@ -611,6 +611,29 @@ family's args change, silently: the slots still exist, the types still compile, 
 reads a struct out of a 4-byte buffer. The dispatch census only catches a builder that binds kargs
 on some paths and not others; a duplicate that binds NO kargs is invisible to it.
 
+### 2.2b Tensor-GEMM shapes that measured out (M5, interleaved-race evidence)
+
+The forms below were built, raced against the crowned tg-staged q8u GEMM at real model
+shapes, and LOST; the probe that holds the numbers is
+`benchmarks/matmul/bench_metal_nax_probe.das`. Re-attempting one without new structure is
+re-buying a measured loss.
+
+- **Per-simdgroup register-fragment matmul2d (16x32x16, device -> `vec<T,8>` fragments):**
+  1.7-2.0x slower for weight GEMMs, vectorized loads and deep n-blocking included. The
+  fragment architecture pays for attention's streaming operand reuse (one resident Q against
+  a K/V walk), not for a GEMM's operand traffic - cooperative tg staging wins there.
+- **Mixed-integer matmul2d operands (float x int8, and the i8 x i8 per-block-fold form):**
+  3.5x slower - the mixed-int combinations exist in MPP's type lists but lower off the NAX
+  fast path. W8A8 claims from other stacks do not transfer through MPP.
+- **Fused single-kernel attention (scores in threadgroup, online softmax):** loses 10-80% to
+  the pipelined three-pass at real shapes - Metal's cross-kernel pipelining plus full-width
+  softmax beat tg-scope fusion.
+
+The positive laws these races established - half operands, stage-only-to-transform,
+consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules and the
+`modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
+and why they lose.
+
 ### 2.3 GPU-resident cache identity
 
 An address-keyed entry carries its SPAN, and a hit must cover the request - a shorter first upload

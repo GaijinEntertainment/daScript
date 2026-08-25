@@ -12,3 +12,15 @@
 - **2026-08-25** (`REVIEW_GPU.md`): Boris ruled no unguarded range-check invariants inside
   kernel main loops - all kernels, not just new kernels; guard them with `static_if` around
   a template argument, and see the gains.
+
+- **2026-08-25** (`REVIEW_GPU.md`): Boris ruled the arc's measured kernel findings become
+  standing rules so slower kernels are not attempted in the first place - the half-operand,
+  stage-only-to-transform, consecutive-staging, walk-bound-pick, double-buffered-scratch,
+  and size-gate rules land; the EXISTING kernel census gets an end-of-arc audit against
+  them; and "a kernel split into multiple instances instead of using static_if for a
+  template constant is a defect" (folded into the twins rule's defect list).
+
+- **2026-08-25** (`REVIEW_GPU.md`): Boris ruled fastmath is the kernel default - a
+  `fastmath = false` opt-out ships only with a failing test provided (the kernel
+  demonstrably "goes bonkers" under fastmath); the fastmath audit joins the end-of-arc
+  kernel sweep. (Census at ruling time: zero engine kernels opt out.)

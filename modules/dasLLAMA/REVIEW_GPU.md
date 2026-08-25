@@ -22,6 +22,34 @@ and the encoder picks by the shape it already holds.** A diff that edits an exis
 kernel's loop answers to this exactly as a new kernel class does; a per-iteration guard the
 host could have compiled out is a defect.
 
+**A `matmul2d` left or right operand never reaches the op as `float`: convert it in the
+pass that writes the operand's buffer or in the staging loop that reads it.** A float
+operand keeps the op off its native fast path; a tensor GEMM fed a float operand is a
+defect.
+
+**A `matmul2d` operand is threadgroup-staged only when the staged form differs from the
+stored form - a dequant, a transpose, a layout or element-type change; an operand consumed
+as stored streams from device.** A staged pass-through costs the op more than the reads it
+saves.
+
+**A staging loop assigns each work item a consecutive run of elements, not a stride.**
+Per-element strided staging with div/mod addressing pays multiples of the contiguous form.
+
+**An encoder that picks a kernel's guard-free instance - the one stamped without the loop's
+bounds or tail guard - shows that every address that instance touches stays inside rows
+holding real data; one extent dividing evenly is not that showing.** A padded chunk's walk
+can run past the live extent, and one poisoned read in a shared tile corrupts real rows.
+
+**Scratch that a pipeline of dispatches reuses is double-buffered or per-site.** One shared
+scratch serializes the whole chain through its write-after-read hazards.
+
+**An encoder path that adds dispatches to save bandwidth gates on work size, and the
+threshold is measured at both ends of the size ladder.** The small-work regression hides
+behind the big-work win.
+
+**A kernel declaring `fastmath = false` ships the test that fails with fastmath on.**
+Fastmath is the default and the opt-out exists for demonstrated breakage.
+
 **A shape claim is settled at the one site that is authoritative for that kind of constant,
 never by tracing the das that computes the value.** An in-body tile constant is confirmed
 literal in the generated `*_msl` global or the SPIR-V dump; a grid or threadgroup constant is
@@ -37,9 +65,10 @@ field; shifting the other twin's fields to different slots is a defect.
 are twins, whatever the axis (single/batch, format, single-pass/chunked); they stamp one
 `class template`: body divergence rides a stamp axis (`@template_constant`, or an overridden
 method spliced flat at emission), a stamp-varying binding rides `@template_gate`. A
-copy-pasted twin, or a dummy-bound field where a gate serves, is a defect. A fork OUT of a
-shared template is legitimate only when the bodies no longer differ on a single axis, and
-the surviving template's comment says which axis is gone.
+copy-pasted twin, a kernel split into hand instances where a `static_if` on a
+`@template_constant` serves, or a dummy-bound field where a gate serves, is a defect. A
+fork OUT of a shared template is legitimate only when the bodies no longer differ on a
+single axis, and the surviving template's comment says which axis is gone.
 
 **A `[metal_dispatch]` / `[vk_dispatch]` field carries `@role = "weight"` exactly when its
 memory is load-once - a model plane, or an `upload_region` upload never written after
@@ -76,7 +105,8 @@ gates), `_tower` (the encoder-tower driver), `_asr_dec` (the ASR-decoder driver)
 identity source, and the `[init]` that installs every hook - is
 `dasllama/dasllama_math_vulkan.das`. A backend carries a role's file only once it has the
 capability. A capability with no matching role gets its own role file - and adds its role to
-this list in the same change; anything else is a grab-bag, and a grab-bag file is a defect.
+this list and to `REVIEW.das`'s `GPU_ROLES_METAL` / `GPU_ROLES_VULKAN` set in the same
+change; anything else is a grab-bag, and a grab-bag file is a defect.
 
 **A GPU family shares ONE device and queue from `dasllama/dasllama_<gpu>_common.das`'s
 init.** A module creating its own is a defect.
@@ -157,9 +187,9 @@ silently drops that codec's GPU path.
 
 **An f16 store into any GPU-resident K/V clamps to the f16 finite range (+/-65504).**
 
-**Every resident override - a decode/prefill hook the whole-model residency rail registers in
-`dasllama/dasllama_common.das`'s override registries - gates sessions on the armed mirror codec and on the flat
-(non-paged) cache before touching the mirror.** Mirror bytes move only between same-codec
+**Every resident override - a decode/prefill hook the whole-model residency rail registers
+in `dasllama/dasllama_common.das`'s override registries - gates sessions on the armed mirror
+codec and on the flat (non-paged) cache before touching the mirror.** Mirror bytes move only between same-codec
 session rows and mirror rows; an override that byte-copies across codecs corrupts the host
 authority.
 
