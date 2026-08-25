@@ -1304,6 +1304,60 @@ def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollec
     }
 }
 
+enum private ExitKind { None, Break, Continue, Return }
+
+struct private TryExits {
+    hasBreak : bool
+    hasContinue : bool
+    hasReturn : bool
+}
+
+struct private TryFlowLevel {
+    isLoop : bool
+    exits : TryExits
+    flag : string
+    slot : string
+}
+
+struct private TryFlowState {
+    stack : array<TryFlowLevel>
+    ret_slot : string
+    ret_ptr : bool
+}
+
+class TryExitScanner : AstVisitor {
+    found : TryExits;
+    loopDepth : int = 0;
+
+    def override preVisitExprForBody(ffor : ExprFor?) {
+        loopDepth ++;
+    }
+    def override visitExprFor(var ffor : ExprFor?) : ExpressionPtr {
+        loopDepth --;
+        return ffor;
+    }
+    def override preVisitExprWhileBody(wh : ExprWhile?; body : ExpressionPtr) {
+        loopDepth ++;
+    }
+    def override visitExprWhile(var wh : ExprWhile?) : ExpressionPtr {
+        loopDepth --;
+        return wh;
+    }
+    def override preVisitExprBreak(that : ExprBreak?) {
+        found.hasBreak ||= loopDepth == 0;
+    }
+    def override preVisitExprContinue(that : ExprContinue?) {
+        found.hasContinue ||= loopDepth == 0;
+    }
+    def override preVisitExprReturn(expr : ExprReturn?) {
+        found.hasReturn ||= expr.returnFunc != null;
+    }
+};
+
+def private anyExit(exits : TryExits) {
+    return exits.hasBreak || exits.hasContinue || exits.hasReturn;
+}
+
 class public CppAot : AstVisitor {
     //! Main AST visitor that generates C++ ahead-of-time compiled code from daslang AST.
 
@@ -1333,6 +1387,7 @@ class public CppAot : AstVisitor {
     aotPrefix : table<string>;
     @do_not_delete local_temp_names : table<Expression?; int>;
     @do_not_delete scopes : array<ExprBlock?>;
+    flow : TryFlowState;
     prologue : bool = false;
     solidContext : bool = false;
     cross_platform : bool = false;
@@ -1500,6 +1555,9 @@ class public CppAot : AstVisitor {
         return !fun.moreFlags.isTemplate;
     }
     def override preVisitFunction(fn : FunctionPtr) {
+        flow.ret_ptr = fn.result.flags.ref;
+        flow.ret_slot = fn.result.isVoid ? "" : describeCppType(fn.result, DescribeConfig(skip_const = true,
+            skip_ref = true, cross_platform = cross_platform)) + (flow.ret_ptr ? " *" : "");
         if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn) == aot_filter_function)) {
             write(*ss, "\n/*<<AOT_FUNC_BEGIN>>*/");
         }
@@ -2190,8 +2248,15 @@ class public CppAot : AstVisitor {
         }
         return that;
     }
+    def returnLevel(expr : ExprReturn?) : int {
+        return expr.returnFunc == null ? -1 : flowLevel(ExitKind.Return);
+    }
     def override preVisitExprReturn(expr : ExprReturn?) {
-        write(*ss, "return ");
+        let at = returnLevel(expr);
+        write(*ss, at < 0 ? "return " : "\{ ");
+        if (at >= 0 && flow.stack[at].slot != "") {
+            write(*ss, "{flow.stack[at].slot} = {flow.ret_ptr ? "&(" : ""}");
+        }
         if (expr.returnFlags.moveSemantics) {
             write(*ss, "/* <- */ ");
         }
@@ -2218,17 +2283,24 @@ class public CppAot : AstVisitor {
             write(*ss, "/* no function/block for return */ ");
             return expr;
         }
+        let at = returnLevel(expr);
         assume retT = expr.returnFunc != null ? expr.returnFunc.result : expr._block.returnType;
         if (!retT.isVoid) {
             write(*ss, ")");
+            if (at >= 0 && flow.ret_ptr) {
+                write(*ss, ")");
+            }
+        }
+        if (at >= 0) {
+            write(*ss, "{retT.isVoid ? "" : "; "}{flow.stack[at].flag} = {int(ExitKind.Return)}; return; \}");
         }
         return expr;
     }
     def override preVisitExprBreak(that : ExprBreak?) {
-        write(*ss, "break");
+        writeExit(ExitKind.Break, "");
     }
     def override preVisitExprContinue(that : ExprContinue?) {
-        write(*ss, "continue");
+        writeExit(ExitKind.Continue, "");
     }
     def override preVisitExprVar(variable : ExprVar?) {
         if (variable._type.flags.aotAlias) {
@@ -2779,8 +2851,10 @@ class public CppAot : AstVisitor {
     }
     def override preVisitExprWhileBody(wh : ExprWhile?; body : ExpressionPtr) {
         write(*ss, " )\n{tabs()}");
+        flow.stack |> push(TryFlowLevel(isLoop = true));
     }
     def override visitExprWhile(var wh : ExprWhile?) : ExpressionPtr {
+        flow.stack |> pop();
         return wh;
     }
     def override preVisitExprIfThenElse(ifte : ExprIfThenElse?) {
@@ -2986,7 +3060,49 @@ class public CppAot : AstVisitor {
         write(*ss, ")");
         return expr;
     }
+    def flowLevel(code : ExitKind) : int {
+        for (i in range(length(flow.stack))) {
+            let at = length(flow.stack) - 1 - i;
+            assume lvl = flow.stack[at];
+            if (!lvl.isLoop) return lvl.flag != "" ? at : -1;
+            if (code != ExitKind.Return) return -1;
+        }
+        return -1;
+    }
+    def writeExit(code : ExitKind; slot : string) {
+        let at = flowLevel(code);
+        if (at >= 0) {
+            write(*ss, "\{ {flow.stack[at].flag} = {int(code)}; return; \}");
+        } elif (code == ExitKind.Break) {
+            write(*ss, "break");
+        } elif (code == ExitKind.Continue) {
+            write(*ss, "continue");
+        } else {
+            write(*ss, "return {slot == "" ? "" : (flow.ret_ptr ? "*" : "") + slot}");
+        }
+    }
+    def scanExits(tc : ExprTryCatch?) : TryExits {
+        var scanner = new TryExitScanner();
+        make_visitor(*scanner) $(adp) {
+            tc.try_block |> visit(adp);
+            tc.catch_block |> visit(adp);
+        }
+        return scanner.found;
+    }
     def override preVisitExprTryCatch(tc : ExprTryCatch?) {
+        var lvl = TryFlowLevel(exits = scanExits(tc));
+        if (anyExit(lvl.exits)) {
+            lvl.flag = "__try_flow_{int(tc.at.line)}_{int(tc.at.column)}";
+            write(*ss, "int32_t {lvl.flag} = {int(ExitKind.None)};\n{tabs()}");
+            let at = flowLevel(ExitKind.Return);
+            if (at >= 0) {
+                lvl.slot = flow.stack[at].slot;
+            } elif (lvl.exits.hasReturn && flow.ret_slot != "") {
+                lvl.slot = "__try_ret_{int(tc.at.line)}_{int(tc.at.column)}";
+                write(*ss, "{flow.ret_slot} {lvl.slot};\n{tabs()}");
+            }
+        }
+        flow.stack |> push(lvl);
         write(*ss, "das_try_recover(__context__, [&]()\n");
         write(*ss, "{tabs()}");
     }
@@ -2996,6 +3112,18 @@ class public CppAot : AstVisitor {
     }
     def override visitExprTryCatch(var tc : ExprTryCatch?) : ExpressionPtr {
         write(*ss, ")");
+        let lvl = flow.stack[length(flow.stack) - 1];
+        flow.stack |> pop();
+        if (!anyExit(lvl.exits)) return tc;
+        write(*ss, ";");
+        let taken = fixed_array(lvl.exits.hasBreak, lvl.exits.hasContinue, lvl.exits.hasReturn);
+        let codes = fixed_array(ExitKind.Break, ExitKind.Continue, ExitKind.Return);
+        for (t, code in taken, codes) {
+            if (!t) continue;
+            write(*ss, "\n{tabs()}if ( {lvl.flag} == {int(code)} ) \{ ");
+            writeExit(code, lvl.slot);
+            write(*ss, "; \}");
+        }
         return tc;
     }
     def isDistinctDeref(ptr2ref : ExprPtr2Ref?) {
@@ -3932,6 +4060,7 @@ class public CppAot : AstVisitor {
         write(*ss, "{tabs()}bool {nl} = true;\n");
     }
     def override preVisitExprForBody(ffor : ExprFor?) {
+        flow.stack |> push(TryFlowLevel(isLoop = true));
         let nl = needLoopName(ffor);
         write(*ss, "{tabs()}for ( ; {nl} ; {nl} = ");
         for (variable in ffor.iteratorVariables) {
@@ -3997,6 +4126,7 @@ class public CppAot : AstVisitor {
         return that;
     }
     def override visitExprFor(var ffor : ExprFor?) : ExpressionPtr {
+        flow.stack |> pop();
         write(*ss, "\n");
         for (x in range(ffor.iteratorVariables |> length)) {
             assume variable = ffor.iteratorVariables[ffor.iteratorVariables |> length - 1 - x];
