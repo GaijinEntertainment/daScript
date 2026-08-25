@@ -243,7 +243,6 @@ class template MetalKqMulMmK45TensorT {
     @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @workgroup twa : float16[1024]          // X chunk: 32 tokens x 32 k, flat row-major
     @workgroup twb : float16[2048]          // W chunk: 64 wrows x 32 k, flat row-major
     @template_constant BLK : uint = 32u
     @template_constant QH : bool = false
@@ -257,20 +256,17 @@ class template MetalKqMulMmK45TensorT {
         let lid = gl_LocalInvocationID.x
         var acc : float[2048]
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        tmm2d_tg_begin_deva(acc, 32u, 64u, 4u, 32u)
         var kb = 0u
         while (kb < nkb) {
-            var i = lid
-            while (i < 1024u) {
-                twa[i] = float16(xf[(mBase + i / 32u) * kdim + kb * 32u + i % 32u])
-                i += gl_WorkGroupSize.x
-            }
             let sb = kb / 8u
             let js = kb % 8u
-            i = lid
-            while (i < 2048u) {
-                let j = i / 32u
-                let e = i % 32u
+            // one work item = one (wrow, 16-element half): the sub-scale decode runs once per
+            // item and the quant reads sit on consecutive elements
+            var work = lid
+            while (work < 128u) {
+                let j = work >> 1u
+                let kh = (work & 1u) * 16u
                 let blk = (nBase + j) * nsb + sb
                 let sv = ks4[blk]
                 var sc = 0u
@@ -286,19 +282,22 @@ class template MetalKqMulMmK45TensorT {
                 }
                 let dsc = float(ksh[blk * 8u]) * float(sc)
                 let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-                static_if (QH) {
-                    let u = kqu[blk * BLK + (js / 2u) * 8u + e / 4u]
-                    let hu = kqu[blk * BLK + 32u + e / 4u]
-                    let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
-                    twb[i] = float16(dsc * float(q) - dmn)
-                } else {
-                    let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
-                    twb[i] = float16(dsc * float(q) - dmn)
+                for [unroll_full] (t in range(16)) {
+                    let e = kh + uint(t)
+                    static_if (QH) {
+                        let u = kqu[blk * BLK + (js / 2u) * 8u + e / 4u]
+                        let hu = kqu[blk * BLK + 32u + e / 4u]
+                        let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
+                        twb[j * 32u + e] = float16(dsc * float(q) - dmn)
+                    } else {
+                        let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
+                        twb[j * 32u + e] = float16(dsc * float(q) - dmn)
+                    }
                 }
-                i += gl_WorkGroupSize.x
+                work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, 32u, 64u, 32u)
             barrier()
             kb++
         }
@@ -327,7 +326,6 @@ class MetalKqMulMmK6T {
     @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @workgroup twa : float16[1024]
     @workgroup twb : float16[2048]
 
     [metal_kernel(name="metal_kq_mulmm_k6_t_msl")]
@@ -339,42 +337,41 @@ class MetalKqMulMmK6T {
         let lid = gl_LocalInvocationID.x
         var acc : float[2048]
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        tmm2d_tg_begin_deva(acc, 32u, 64u, 4u, 32u)
         var kb = 0u
         while (kb < nkb) {
-            var i = lid
-            while (i < 1024u) {
-                twa[i] = float16(xf[(mBase + i / 32u) * kdim + kb * 32u + i % 32u])
-                i += gl_WorkGroupSize.x
-            }
             let sb = kb / 8u
             let js = kb % 8u
             let half6 = js / 4u
             let gg = js % 4u
             let nsh = (gg / 2u) * 4u
             let hsh = gg * 2u
-            i = lid
-            while (i < 2048u) {
-                let j = i / 32u
-                let e = i % 32u
+            // one work item = one (wrow, 16-element half): dall/sub-scale decode once per item
+            // (ile is constant across a half), quant words shared by each 4-element run
+            var work = lid
+            while (work < 128u) {
+                let j = work >> 1u
+                let kh = (work & 1u) * 16u
+                let ile = kh / 16u
                 let blk = (nBase + j) * nsb + sb
                 let dall = float(kdh[blk])
-                let ile = e / 16u
-                let k = (e % 16u) / 4u
-                let c = e % 4u
                 let si = half6 * 8u + gg * 2u + ile
                 let sv = ksc[blk]
                 let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
                 let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
                 let dsc = dall * s6
-                let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
-                let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
-                let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                twb[i] = float16(dsc * float(q) - dsc * 32.0)
-                i += gl_WorkGroupSize.x
+                for [unroll_full] (t in range(16)) {
+                    let k = uint(t) / 4u
+                    let c = uint(t) % 4u
+                    let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
+                    let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
+                    let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
+                    twb[j * 32u + kh + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
+                }
+                work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, 32u, 64u, 32u)
             barrier()
             kb++
         }
@@ -425,7 +422,6 @@ class MetalMoeMulMmMx4T {
     @ssbo @binding = 7 basep : array<uint>
     @ssbo @binding = 12 @role = "weight" wb : array<float>   // [ne x ndim] per-expert bias rows
     @ssbo @binding = 13 @role = "weight" vtab : array<float> // [16] signed doubled-e2m1 values
-    @workgroup twa : float16[1024]          // X chunk: 32 tokens x 32 k, flat row-major
     @workgroup twb : float16[2048]          // W chunk: 64 wrows x 32 k, flat row-major
 
     [metal_kernel(name="metal_moe_mulmm_mx4_t_msl")]
@@ -442,50 +438,40 @@ class MetalMoeMulMmMx4T {
         let lid = gl_LocalInvocationID.x
         var acc : float[2048]
         var cp = unsafe(addr(y[(rbase + mBase) * ka.ndim + nBase]))
-        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        tmm2d_tg_begin_deva(acc, 32u, 64u, 4u, 32u)
         var kb = 0u
         while (kb < nkb) {
-            var i = lid
-            while (i < 1024u) {
-                twa[i] = float16(xf[(rbase + mBase + i / 32u) * ka.kdim + kb * 32u + i % 32u])
-                i += gl_WorkGroupSize.x
-            }
-            i = lid
-            while (i < 2048u) {
-                let j = i / 32u
-                let k = i % 32u
+            // one work item = one (wrow, 16-element nibble half): scale decode + the uint4
+            // quant word load once per item instead of per element
+            var work = lid
+            while (work < 128u) {
+                let j = work >> 1u
+                let kh = (work & 1u) * 16u
                 let blk = e * ka.eplane + (nBase + j) * nkb + kb
                 let sc = uint(mxe[blk])
                 let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))
-                let byi = k % 16u
                 let u4 = mxq4[blk]
-                let w32 = byi < 4u ? u4.x : (byi < 8u ? u4.y : (byi < 12u ? u4.z : u4.w))
-                let nby = (w32 >> ((byi % 4u) * 8u)) & 255u
-                twb[i] = float16(vtab[int(k < 16u ? (nby & 15u) : (nby >> 4u))] * d)
-                i += gl_WorkGroupSize.x
+                for [unroll_full] (t in range(16)) {
+                    let byi = uint(t)
+                    let w32 = byi < 4u ? u4.x : (byi < 8u ? u4.y : (byi < 12u ? u4.z : u4.w))
+                    let nby = (w32 >> ((byi % 4u) * 8u)) & 255u
+                    twb[j * 32u + kh + byi] = float16(vtab[int(kh == 0u ? (nby & 15u) : (nby >> 4u))] * d)
+                }
+                work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, 32u, 64u, 32u)
             barrier()
             kb++
         }
         if (ka.hasb != 0u) {
-            // rank-1 bias chunk: A col 0 = 1, W col 0 = wb[e][col]
-            var i = lid
-            while (i < 1024u) {
-                twa[i] = float16(i % 32u == 0u ? 1.0 : 0.0)
-                i += gl_WorkGroupSize.x
-            }
-            i = lid
-            while (i < 2048u) {
-                twb[i] = float16(i % 32u == 0u ? wb[e * ka.ndim + nBase + i / 32u] : 0.0)
-                i += gl_WorkGroupSize.x
-            }
-            barrier()
-            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
-            barrier()
+            // per-expert bias folded into the cooperative elements at store time (the staged
+            // rank-1 trick died with the A tile; f32 add either way, parity story unchanged)
+            var bp = unsafe(addr(wb[e * ka.ndim + nBase]))
+            tmm2d_tg_store_bias(acc, cp, bp, 32u, 64u, ka.ndim)
+        } else {
+            tmm2d_tg_store(acc, cp, 32u, 64u, ka.ndim)
         }
-        tmm2d_tg_store(acc, cp, 32u, 64u, ka.ndim)
     }
 }
 
@@ -629,7 +615,7 @@ class MetalMoeReduce {
 // Metal-4 tensor twin of MetalMoeMulMmQ8 — the CONTIGUOUS (gather=0, down-site) shape only:
 // bkt-indirect X rows cannot form a strided tensor view, so gate/up keep the simdgroup kernel
 // even when "moe_mulmm_q8" is crowned (the encode picks per dispatch).
-[metal_dispatch(name = "pf_enc_moe_mm_q8_t_c", pso = "g_pf_pso_moe_mm_q8_t", tg = 128, grid = "npos/32, rows/64, ne", params = "rows : int64, npos : int64, ne : int64")]
+[metal_dispatch(name = "pf_enc_moe_mm_q8_t_c", pso = "g_pf_pso_moe_mm_q8_t", tgmem = "metal_moe_mulmm_q8_t_msl_tgmem", tg = 128, grid = "npos/32, rows/64, ne", params = "rows : int64, npos : int64, ne : int64")]
 class MetalMoeMulMmQ8T {
     @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16> // expert STACK blob, half-scale view
     @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>    // the same blob buffer, byte view
@@ -638,6 +624,7 @@ class MetalMoeMulMmQ8T {
     @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 6 cnt : array<uint>
     @ssbo @binding = 7 basep : array<uint>
+    @workgroup twb : float16[2048]          // W chunk: 64 wcols x 32 k, dequant-staged by the helper
 
     [metal_kernel(name="metal_moe_mulmm_q8_t_msl")]
     def metal_moe_mulmm_q8_t {
@@ -654,7 +641,7 @@ class MetalMoeMulMmQ8T {
         var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
         var ap = unsafe(addr(xf[(rbase + mBase) * ka.kdim]))
         var cp = unsafe(addr(y[(rbase + mBase) * ka.ndim + nBase]))
-        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, ka.kdim, cp, ka.ndim, ka.kdim, ka.kdim / 32u)
+        tmm2d_q8u_f32(32u, 64u, 4u, twb, sp, wp, ap, ka.kdim, cp, ka.ndim, ka.kdim, ka.kdim / 32u, gl_LocalInvocationIndex)
     }
 }
 
@@ -1367,8 +1354,7 @@ class MetalAttnQKMmT {
     @ssbo @binding = 1 k : array<float>
     @ssbo @binding = 2 att : array<float>
     @uniform @binding = 3 ka : AttnArgs
-    @workgroup twa : float16[1024]          // Q chunk: 32 queries x 32 k, flat (pre-scaled)
-    @workgroup twb : float16[2048]          // K chunk: 64 keys x 32 k, flat
+    @workgroup twb : float16[2048]          // K chunk: 64 keys x 32 k, flat (scale folded here)
 
     [metal_kernel(name="metal_attn_qk_mm_t_msl")]
     def metal_attn_qk_mm_t {
@@ -1384,21 +1370,23 @@ class MetalAttnQKMmT {
         let lid = gl_LocalInvocationID.x
         var acc : float[2048]
         var cp = unsafe(addr(att[h * ka.qrows * ka.np32 + mBase * ka.np32 + nBase]))
-        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        tmm2d_tg_begin_deva(acc, 32u, 64u, 4u, 32u)
         var kb = 0u
         while (kb * 32u < ka.head_size) {
-            var i = lid
-            while (i < 1024u) {
-                twa[i] = float16(q[(mBase + i / 32u) * ka.qd + qhoff + kb * 32u + i % 32u] * ka.scale)
-                i += gl_WorkGroupSize.x
-            }
-            i = lid
-            while (i < 2048u) {
-                twb[i] = float16(k[(nBase + i / 32u) * ka.kv_dim + kvhoff + kb * 32u + i % 32u])
-                i += gl_WorkGroupSize.x
+            // Q streams from device raw; the softmax scale rides the staged K side instead
+            // ((q*s)·k == q·(k*s)), one work item = one (key row, 16-element half)
+            var work = lid
+            while (work < 128u) {
+                let j = work >> 1u
+                let kh = (work & 1u) * 16u
+                let kbase = (nBase + j) * ka.kv_dim + kvhoff + kb * 32u + kh
+                for [unroll_full] (t in range(16)) {
+                    twb[j * 32u + kh + uint(t)] = float16(k[kbase + uint(t)] * ka.scale)
+                }
+                work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            tmm2d_tg_step_deva(acc, unsafe(addr(q[mBase * ka.qd + qhoff + kb * 32u])), ka.qd, twb, 32u, 64u, 32u)
             barrier()
             kb++
         }
@@ -1507,7 +1495,6 @@ class MetalAttnAVMmT {
     @ssbo @binding = 1 v : array<float>
     @ssbo @binding = 2 xb : array<float>
     @uniform @binding = 3 ka : AttnArgs
-    @workgroup twa : float16[1024]          // P chunk: 32 tokens x 32 positions, flat
     @workgroup twb : float16[2048]          // V chunk: 64 v-cols x 32 positions, flat (transposed)
 
     [metal_kernel(name="metal_attn_av_mm_t_msl")]
@@ -1523,22 +1510,24 @@ class MetalAttnAVMmT {
         let klimit = min(ka.uend > 0u && ka.qoff + mBase < ka.uend && creach > ka.ulo ? max(ka.uend, creach) : creach, ka.np32)
         var acc : float[2048]
         var cp = unsafe(addr(xb[mBase * ka.qd + h * ka.head_size + vBase]))
-        tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
+        tmm2d_tg_begin_deva(acc, 32u, 64u, 4u, 32u)
         var kb = 0u
         while (kb * 32u < klimit) {
-            var i = lid
-            while (i < 1024u) {
-                twa[i] = float16(att[h * ka.qrows * ka.np32 + (mBase + i / 32u) * ka.np32 + kb * 32u + i % 32u])
-                i += gl_WorkGroupSize.x
-            }
-            i = lid
-            while (i < 2048u) {
-                let pos = kb * 32u + i % 32u
-                twb[i] = pos < ka.npos ? float16(v[pos * ka.kv_dim + kvhoff + vBase + i / 32u]) : float16(0.0)
-                i += gl_WorkGroupSize.x
+            // P streams from device (softmax-zeroed past each row's live length); V stays
+            // staged transposed with the pad-position zero guard, per-element (position-major
+            // V rows never coalesce into a v-col tile anyway)
+            var work = lid
+            while (work < 128u) {
+                let j = work >> 1u
+                let kh = (work & 1u) * 16u
+                for [unroll_full] (t in range(16)) {
+                    let pos = kb * 32u + kh + uint(t)
+                    twb[j * 32u + kh + uint(t)] = pos < ka.npos ? float16(v[pos * ka.kv_dim + kvhoff + vBase + j]) : float16(0.0)
+                }
+                work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
+            tmm2d_tg_step_deva(acc, unsafe(addr(att[h * ka.qrows * ka.np32 + mBase * ka.np32 + kb * 32u])), ka.np32, twb, 32u, 64u, 32u)
             barrier()
             kb++
         }
@@ -3772,6 +3761,7 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
         kn_dispatch(enc, grid, tg)
     }, $(enc) {
         kn_pipeline(enc, twin_pso)
+        kn_tgmem(enc, metal_moe_mulmm_q8_t_msl_tgmem, 0)
         kn_buffer(enc, bw, 0ul, 0)
         kn_buffer(enc, bw, 0ul, 1)
         kn_buffer(enc, bxa, 0ul, 2)

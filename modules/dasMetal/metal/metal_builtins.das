@@ -442,6 +442,53 @@ def public tmm2d_tg_step(var acc; ta; tb; m, n, kk : uint) {
     }
 }
 
+//! begin, deva flavor: the accumulator's LEFT operand is a device float stream (activations
+//! read straight from device memory), only the right tile is threadgroup-staged f16.
+[unused_argument(sgs, kk), sideeffects]
+def public tmm2d_tg_begin_deva(var acc; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (i in range(int(m * n))) {
+        acc[i] = 0.0
+    }
+}
+
+//! step, deva flavor: acc[r][j] += a[r*lda + k] * tb[j][k] over one K-chunk — `a` points at
+//! the chunk's first activation (device f32, row stride lda), tb flat [n][kk] f16 staged.
+[sideeffects]
+def public tmm2d_tg_step_deva(var acc; a : float const?; lda : uint; tb; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (k in range(int(kk))) {
+                    facc += a[r * int(lda) + k] * float(tb[j * int(kk) + k])
+                }
+                acc[r * int(n) + j] += facc
+            }
+        }
+    }
+}
+
+//! store with per-output-column bias: C[r][j] = acc[r][j] + bias[j] (overwrite, row stride ldc).
+[sideeffects]
+def public tmm2d_tg_store_bias(acc; var c : float?; bias : float const?; m, n, ldc : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                c[r * int(ldc) + j] = acc[r * int(n) + j] + bias[j]
+            }
+        }
+    }
+}
+
 //! store: C[r][j] = acc[r][j] (overwrite, row stride ldc).
 [sideeffects]
 def public tmm2d_tg_store(acc; var c : float?; m, n, ldc : uint) {
