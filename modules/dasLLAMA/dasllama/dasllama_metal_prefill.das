@@ -1495,7 +1495,7 @@ class MetalAttnAVMmT {
     @ssbo @binding = 1 v : array<float>
     @ssbo @binding = 2 xb : array<float>
     @uniform @binding = 3 ka : AttnArgs
-    @workgroup twb : float16[2048]          // V chunk: 64 v-cols x 32 positions, flat (transposed)
+    @workgroup twb : float16[4096]          // V chunk: 64 positions x 64 v-cols, NATURAL rows
 
     [metal_kernel(name="metal_attn_av_mm_t_msl")]
     def metal_attn_av_mm_t {
@@ -1510,24 +1510,26 @@ class MetalAttnAVMmT {
         let klimit = min(ka.uend > 0u && ka.qoff + mBase < ka.uend && creach > ka.ulo ? max(ka.uend, creach) : creach, ka.np32)
         var acc : float[2048]
         var cp = unsafe(addr(xb[mBase * ka.qd + h * ka.head_size + vBase]))
-        tmm2d_tg_begin_deva(acc, 32u, 64u, 4u, 32u)
+        tmm2d_tg_begin_devant(acc, 32u, 64u, 4u, 64u)
         var kb = 0u
-        while (kb * 32u < klimit) {
-            // P streams from device (softmax-zeroed past each row's live length); V stays
-            // staged transposed with the pad-position zero guard, per-element (position-major
-            // V rows never coalesce into a v-col tile anyway)
+        while (kb * 64u < klimit) {
+            // P streams from device (softmax-zeroed past each row's live length); V rows land
+            // NATURAL [pos][col] — coalesced 32-wide copies, no transpose gather; 64-position
+            // chunks halve the staging/barrier rounds of the long np32 walk
             var work = lid
             while (work < 128u) {
-                let j = work >> 1u
-                let kh = (work & 1u) * 16u
-                for [unroll_full] (t in range(16)) {
-                    let pos = kb * 32u + kh + uint(t)
-                    twb[j * 32u + kh + uint(t)] = pos < ka.npos ? float16(v[pos * ka.kv_dim + kvhoff + vBase + j]) : float16(0.0)
+                let p = work >> 1u
+                let ch = (work & 1u) * 32u
+                let pos = kb * 64u + p
+                let vbase = pos * ka.kv_dim + kvhoff + vBase + ch
+                for [unroll_full] (t in range(32)) {
+                    twb[p * 64u + ch + uint(t)] = pos < ka.npos ? float16(v[vbase + uint(t)]) : float16(0.0)
                 }
                 work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(att[h * ka.qrows * ka.np32 + mBase * ka.np32 + kb * 32u])), ka.np32, twb, 32u, 64u, 32u)
+            let kkc = min(64u, klimit - kb * 64u)
+            tmm2d_tg_step_devant(acc, unsafe(addr(att[h * ka.qrows * ka.np32 + mBase * ka.np32 + kb * 64u])), ka.np32, twb, 32u, 64u, kkc)
             barrier()
             kb++
         }
@@ -4026,8 +4028,9 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
     let hs = 128
     let qd = heads * hs
     let kvd = qd
-    let mp = 128
-    let np32 = 128
+    // real-model shape class: a 128x128 slab crowned the wrong kernel (twins win at 512)
+    let mp = 512
+    let np32 = 512
     var err = ""
     var q_pso = pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
     var qt_pso = pipeline_from_source(dev, metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, err)

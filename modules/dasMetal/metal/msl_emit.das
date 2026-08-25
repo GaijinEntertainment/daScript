@@ -524,7 +524,8 @@ let private MSL_LADDER_OWNED : table<string> <- {
     "sdot4", "usdot4", "i_das_ptr_add",
     "tmm2d_f32_bf16_f32", "tmm2d_q8_f32", "tmm2d_q8_f16s", "tmm2d_q8b_f32", "tmm2d_q8u_f32",
     "tmm2d_tg_begin", "tmm2d_tg_step", "tmm2d_tg_store", "tmm2d_tg_store_bias",
-    "tmm2d_tg_begin_deva", "tmm2d_tg_step_deva",
+    "tmm2d_tg_begin_deva", "tmm2d_tg_step_deva", "tmm2d_tile_tg", "tmm2d_tg_rowscale",
+    "tmm2d_tg_begin_nt", "tmm2d_tg_step_nt", "tmm2d_tg_begin_devant", "tmm2d_tg_step_devant",
     "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int"
 }
 
@@ -799,7 +800,7 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         if (scn == "tmm2d_tg_store_bias" && length(ecs.arguments) == 6) {
             mark_write_target(ctx, ecs.arguments[1])
         }
-        if ((scn == "tmm2d_tg_begin" || scn == "tmm2d_tg_begin_deva") && length(ecs.arguments) == 5) {
+        if ((scn == "tmm2d_tg_begin" || scn == "tmm2d_tg_begin_deva" || scn == "tmm2d_tg_begin_nt" || scn == "tmm2d_tg_begin_devant") && length(ecs.arguments) == 5) {
             var acc0 = ecs.arguments[0]
             if (acc0 is ExprRef2Value) {
                 acc0 = (acc0 as ExprRef2Value).subexpr
@@ -2415,6 +2416,166 @@ def private emit_tmm2d_tg_begin(var ctx : MslCtx; ec : ExprCall?; indent : strin
     lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] = 0.0f; \}")
 }
 
+// one whole tile matmul with the result landing in THREADGROUP scratch (the fused-attention
+// score tile: computed, softmaxed, and consumed without touching device memory). Fresh
+// overwrite-mode op per call; both operands staged f16 tiles, kk a call-site constant.
+def private emit_tmm2d_tile_tg(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 7) {
+        err(ctx, ec.at, "tmm2d_tile_tg takes exactly 7 arguments")
+        return
+    }
+    let ta = emit_value(ctx, ec.arguments[0])
+    let tb = emit_value(ctx, ec.arguments[1])
+    let so = emit_value(ctx, ec.arguments[2])
+    let m = tmm2d_const_uint(ctx, ec.arguments[3], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[4], "n (tile cols)")
+    let sgs = tmm2d_const_uint(ctx, ec.arguments[5], "sgs (simdgroups)")
+    let kk = tmm2d_const_uint(ctx, ec.arguments[6], "kk (K width)")
+    if (m == 0u || n == 0u || sgs == 0u || kk == 0u) {
+        return
+    }
+    note(ctx, "call.tmm2d_tile_tg")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    constexpr auto __tld = matmul2d_descriptor({int(m)}, {int(n)}, {int(kk)}, false, true, true);")
+    lines |> push("{indent}    matmul2d<__tld, execution_simdgroups<{int(sgs)}>> __tlop;")
+    lines |> push("{indent}    using __tlt = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
+    lines |> push("{indent}    auto __A = __tlt((threadgroup half *){ta}, dextents<int32_t, 2>({int(kk)}, {int(m)}));")
+    lines |> push("{indent}    auto __B = __tlt((threadgroup half *){tb}, dextents<int32_t, 2>({int(kk)}, {int(n)}));")
+    lines |> push("{indent}    auto __c = __tlop.get_destination_cooperative_tensor<decltype(__A), decltype(__B), float>();")
+    lines |> push("{indent}    __tlop.run(__A, __B, __c);")
+    lines |> push("{indent}    auto __S = tensor<threadgroup float, dextents<int32_t, 2>, tensor_inline>((threadgroup float *){so}, dextents<int32_t, 2>({int(n)}, {int(m)}));")
+    lines |> push("{indent}    __c.store(__S);")
+    lines |> push("{indent}\}")
+}
+
+// per-row scale of the held accumulator: acc[r][j] *= f[r] — the online-softmax rescale and
+// the final 1/sum in one primitive; each lane touches only elements it owns, no barrier
+def private emit_tmm2d_tg_rowscale(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 4) {
+        err(ctx, ec.at, "tmm2d_tg_rowscale takes exactly 4 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let fp = emit_value(ctx, ec.arguments[1])
+    let m = tmm2d_const_uint(ctx, ec.arguments[2], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[3], "n (tile cols)")
+    if (m == 0u || n == 0u) {
+        return
+    }
+    note(ctx, "call.tmm2d_tg_rowscale")
+    lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) \{")
+    lines |> push("{indent}    auto __ids = __tgf_{acc}.get_multidimensional_index(__i);")
+    lines |> push("{indent}    __tgf_{acc}[__i] *= ({fp})[__ids[1]];")
+    lines |> push("{indent}\} \}")
+}
+
+// the nt flavor: transpose_right=false — the B tile is staged in its NATURAL [kk][n] memory
+// order (V rows land with coalesced copies, no transpose gather); pairs begin_nt/step_nt
+def private emit_tmm2d_tg_begin_nt(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 5) {
+        err(ctx, ec.at, "tmm2d_tg_begin_nt takes exactly 5 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let m = tmm2d_const_uint(ctx, ec.arguments[1], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[2], "n (tile cols)")
+    let sgs = tmm2d_const_uint(ctx, ec.arguments[3], "sgs (simdgroups)")
+    let kk = tmm2d_const_uint(ctx, ec.arguments[4], "kk (chunk K width)")
+    if (m == 0u || n == 0u || sgs == 0u || kk == 0u) {
+        return
+    }
+    var a0 = ec.arguments[0]
+    if (a0 is ExprRef2Value) {
+        a0 = (a0 as ExprRef2Value).subexpr
+    }
+    if (a0 is ExprVar) {
+        ctx.tg_accs[string((a0 as ExprVar).name)] = "{int(m)}|{int(n)}|{int(sgs)}|{int(kk)}"
+    }
+    note(ctx, "call.tmm2d_tg_begin_nt")
+    lines |> push("{indent}constexpr auto __tgd_{acc} = matmul2d_descriptor({int(m)}, {int(n)}, {int(kk)}, false, false, true, matmul2d_descriptor::mode::multiply_accumulate);")
+    lines |> push("{indent}matmul2d<__tgd_{acc}, execution_simdgroups<{int(sgs)}>> __tgop_{acc};")
+    lines |> push("{indent}using __tgt_{acc} = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
+    lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgt_{acc}, __tgt_{acc}, float>();")
+    lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] = 0.0f; \}")
+}
+
+def private emit_tmm2d_tg_step_nt(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 6) {
+        err(ctx, ec.at, "tmm2d_tg_step_nt takes exactly 6 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let ta = emit_value(ctx, ec.arguments[1])
+    let tb = emit_value(ctx, ec.arguments[2])
+    let m = tmm2d_const_uint(ctx, ec.arguments[3], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[4], "n (tile cols)")
+    let kk = tmm2d_const_uint(ctx, ec.arguments[5], "kk (chunk K width)")
+    if (m == 0u || n == 0u || kk == 0u) {
+        return
+    }
+    note(ctx, "call.tmm2d_tg_step_nt")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    auto __A = __tgt_{acc}((threadgroup half *){ta}, dextents<int32_t, 2>({int(kk)}, {int(m)}));")
+    lines |> push("{indent}    auto __B = __tgt_{acc}((threadgroup half *){tb}, dextents<int32_t, 2>({int(n)}, {int(kk)}));")
+    lines |> push("{indent}    __tgop_{acc}.run(__A, __B, __tgf_{acc});")
+    lines |> push("{indent}\}")
+}
+
+
+// deva+nt: A streams from device f32 (row stride lda), B staged NATURAL [kk][n] tg f16 —
+// the AV-shape step (P streamed, V rows coalesced)
+def private emit_tmm2d_tg_begin_devant(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 5) {
+        err(ctx, ec.at, "tmm2d_tg_begin_devant takes exactly 5 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let m = tmm2d_const_uint(ctx, ec.arguments[1], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[2], "n (tile cols)")
+    let sgs = tmm2d_const_uint(ctx, ec.arguments[3], "sgs (simdgroups)")
+    let kk = tmm2d_const_uint(ctx, ec.arguments[4], "kk (chunk K width)")
+    if (m == 0u || n == 0u || sgs == 0u || kk == 0u) {
+        return
+    }
+    var a0 = ec.arguments[0]
+    if (a0 is ExprRef2Value) {
+        a0 = (a0 as ExprRef2Value).subexpr
+    }
+    if (a0 is ExprVar) {
+        ctx.tg_accs[string((a0 as ExprVar).name)] = "{int(m)}|{int(n)}|{int(sgs)}|{int(kk)}"
+    }
+    note(ctx, "call.tmm2d_tg_begin_devant")
+    lines |> push("{indent}constexpr auto __tgd_{acc} = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, false, true, matmul2d_descriptor::mode::multiply_accumulate);")
+    lines |> push("{indent}matmul2d<__tgd_{acc}, execution_simdgroups<{int(sgs)}>> __tgop_{acc};")
+    lines |> push("{indent}using __tgt_{acc} = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
+    lines |> push("{indent}using __tgta_{acc} = tensor<device float, dextents<int32_t, 2>, tensor_inline>;")
+    lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgta_{acc}, __tgt_{acc}, float>();")
+    lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] = 0.0f; \}")
+}
+
+def private emit_tmm2d_tg_step_devant(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 7) {
+        err(ctx, ec.at, "tmm2d_tg_step_devant takes exactly 7 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let ap = emit_value(ctx, ec.arguments[1])
+    let lda = emit_value(ctx, ec.arguments[2])
+    let tb = emit_value(ctx, ec.arguments[3])
+    let m = tmm2d_const_uint(ctx, ec.arguments[4], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[5], "n (tile cols)")
+    let kk = emit_value(ctx, ec.arguments[6])   // RUNTIME K — the begin_devant descriptor is dynamic_extent
+    if (m == 0u || n == 0u) {
+        return
+    }
+    note(ctx, "call.tmm2d_tg_step_devant")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    auto __A = __tgta_{acc}((device float *)({ap}), dextents<int32_t, 2>(int({kk}), {int(m)}), metal::array<int32_t, 2>\{1, int({lda})\});")
+    lines |> push("{indent}    auto __B = __tgt_{acc}((threadgroup half *){tb}, dextents<int32_t, 2>({int(n)}, int({kk})));")
+    lines |> push("{indent}    __tgop_{acc}.run(__A, __B, __tgf_{acc});")
+    lines |> push("{indent}\}")
+}
+
 // the deva flavor: destination typed <device-float A, threadgroup-half B> — activations
 // stream straight from device memory (the measured M5 fast path), only W is staged
 def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
@@ -2787,6 +2948,14 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_tmm2d_tg_begin(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_begin_deva") {
             emit_tmm2d_tg_begin_deva(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_begin_nt") {
+            emit_tmm2d_tg_begin_nt(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_begin_devant") {
+            emit_tmm2d_tg_begin_devant(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_step_devant") {
+            emit_tmm2d_tg_step_devant(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_step_nt") {
+            emit_tmm2d_tg_step_nt(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_step") {
             emit_tmm2d_tg_step(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_step_deva") {
@@ -2795,6 +2964,10 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_tmm2d_tg_store(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_store_bias") {
             emit_tmm2d_tg_store_bias(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tile_tg") {
+            emit_tmm2d_tile_tg(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_rowscale") {
+            emit_tmm2d_tg_rowscale(ctx, ec, indent, lines)
         } elif (is_user_fn(ec.func)) {
             note(ctx, "stmt.call_user")
             lines |> push("{indent}{emit_call_value(ctx, ec)};")

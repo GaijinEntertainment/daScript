@@ -442,6 +442,38 @@ def public tmm2d_tg_step(var acc; ta; tb; m, n, kk : uint) {
     }
 }
 
+//! One whole tile matmul into THREADGROUP float scratch (fused attention's score tile):
+//! so[r][j] = sum_k ta[r*kk+k] * tb[j*kk+k], overwrite — ta flat [m][kk] f16, tb [n][kk] f16.
+[unused_argument(sgs), sideeffects]
+def public tmm2d_tile_tg(ta; tb; var so; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (r in range(int(m))) {
+        for (j in range(int(n))) {
+            var facc = 0.0
+            for (k in range(int(kk))) {
+                facc += float(ta[r * int(kk) + k]) * float(tb[j * int(kk) + k])
+            }
+            so[r * int(n) + j] = facc
+        }
+    }
+}
+
+//! Per-row scale of the held accumulator: acc[r][j] *= f[r] — the online-softmax rescale and
+//! the final 1/sum share this primitive.
+[sideeffects]
+def public tmm2d_tg_rowscale(var acc; f; m, n : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (r in range(int(m))) {
+        for (j in range(int(n))) {
+            acc[r * int(n) + j] *= float(f[r])
+        }
+    }
+}
+
 //! begin, deva flavor: the accumulator's LEFT operand is a device float stream (activations
 //! read straight from device memory), only the right tile is threadgroup-staged f16.
 [unused_argument(sgs, kk), sideeffects]
@@ -467,6 +499,66 @@ def public tmm2d_tg_step_deva(var acc; a : float const?; lda : uint; tb; m, n, k
                 var facc = 0.0
                 for (k in range(int(kk))) {
                     facc += a[r * int(lda) + k] * float(tb[j * int(kk) + k])
+                }
+                acc[r * int(n) + j] += facc
+            }
+        }
+    }
+}
+
+//! begin, nt flavor: the step's B tile is staged NATURAL [kk][n] (transpose_right=false on
+//! the GPU op) — V-style operands land with coalesced row copies, no transpose gather.
+[unused_argument(sgs, kk), sideeffects]
+def public tmm2d_tg_begin_nt(var acc; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (i in range(int(m * n))) {
+        acc[i] = 0.0
+    }
+}
+
+//! step, nt flavor: acc[r][j] += ta[r][k] * tb[k][j] — ta flat [m][kk] f16, tb flat [kk][n] f16.
+[sideeffects]
+def public tmm2d_tg_step_nt(var acc; ta; tb; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (r in range(int(m))) {
+        for (j in range(int(n))) {
+            var facc = 0.0
+            for (k in range(int(kk))) {
+                facc += float(ta[r * int(kk) + k]) * float(tb[k * int(n) + j])
+            }
+            acc[r * int(n) + j] += facc
+        }
+    }
+}
+
+//! begin, deva+nt flavor: A streams from device f32, the step's B tile staged NATURAL [kk][n].
+[unused_argument(sgs, kk), sideeffects]
+def public tmm2d_tg_begin_devant(var acc; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (i in range(int(m * n))) {
+        acc[i] = 0.0
+    }
+}
+
+//! step, deva+nt flavor: acc[r][j] += a[r*lda + k] * tb[k][n] — a device f32 at the chunk's
+//! first element (row stride lda), tb flat [kk][n] f16.
+[sideeffects]
+def public tmm2d_tg_step_devant(var acc; a : float const?; lda : uint; tb; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (k in range(int(kk))) {
+                    facc += a[r * int(lda) + k] * float(tb[k * int(n) + j])
                 }
                 acc[r * int(n) + j] += facc
             }

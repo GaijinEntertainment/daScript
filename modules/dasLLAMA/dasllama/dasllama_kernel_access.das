@@ -308,7 +308,7 @@ class private AccessVisitor : AstVisitor {
             }
             return
         }
-        if (cname |> ends_with("tmm2d_tg_step_deva")) {
+        if (cname |> ends_with("tmm2d_tg_step_deva") || cname |> ends_with("tmm2d_tg_step_devant")) {
             // deva step: the device activation pointer (arg 1) is a tracked read; acc/tb stay
             // untracked locals/@workgroup like the plain step
             if (length(expr.arguments) == 7) {
@@ -331,6 +331,8 @@ class private AccessVisitor : AstVisitor {
                 || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode"
                 || cname |> ends_with("tmm2d_tg_begin") || cname |> ends_with("tmm2d_tg_step")
                 || cname |> ends_with("tmm2d_tg_begin_deva")
+                || cname |> ends_with("tmm2d_tg_begin_nt") || cname |> ends_with("tmm2d_tg_step_nt")
+                || cname |> ends_with("tmm2d_tile_tg") || cname |> ends_with("tmm2d_tg_rowscale")
                 || cname |> ends_with("i_das_ptr_add")) {
             // plain reads (the generic pass records them) — or, for the staged-GEMM protocol
             // begin/step, only untracked locals/@workgroup tiles. Pointer arithmetic is neither:

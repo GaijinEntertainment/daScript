@@ -101,6 +101,62 @@ class TmmKernels {
 
     @workgroup tqu : float16[512]    // q8u: 16 wcols x 32 k dequant-staged W chunk
 
+    @workgroup tgc : float16[512]    // nt protocol: 32 x 16 flat B chunk, NATURAL [kk][n]
+
+    [metal_kernel(name="tmm_nt_msl"), marker(no_coverage)]
+    def tmm_nt_k {
+        var acc : float[128]
+        var ap = unsafe(addr(xa[0]))
+        var wp = unsafe(addr(wb[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_tg_begin_nt(acc, 8u, 16u, 2u, 32u)
+        var kb = 0u
+        while (kb < 2u) {
+            var i = gl_LocalInvocationID.x
+            while (i < 256u) {
+                tga[i] = float16(unsafe(ap[(i / 32u) * 64u + kb * 32u + i % 32u]))
+                i += gl_WorkGroupSize.x
+            }
+            i = gl_LocalInvocationID.x
+            while (i < 512u) {
+                // NATURAL layout: tgc[k][j] = W[j][k] — the mm must read it un-transposed
+                let k = i / 16u
+                let j = i % 16u
+                tgc[i] = float16(uint_bits_to_float(uint(unsafe(wp[j * 64u + kb * 32u + k])) << 16u))
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step_nt(acc, tga, tgc, 8u, 16u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
+    }
+
+    [metal_kernel(name="tmm_devant_msl"), marker(no_coverage)]
+    def tmm_devant_k {
+        var acc : float[128]
+        var ap = unsafe(addr(xa[0]))
+        var wp = unsafe(addr(wb[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_tg_begin_devant(acc, 8u, 16u, 2u, 32u)
+        var kb = 0u
+        while (kb < 2u) {
+            var i = gl_LocalInvocationID.x
+            while (i < 512u) {
+                let k = i / 16u
+                let j = i % 16u
+                tgc[i] = float16(uint_bits_to_float(uint(unsafe(wp[j * 64u + kb * 32u + k])) << 16u))
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step_devant(acc, unsafe(addr(xa[kb * 32u])), 64u, tgc, 8u, 16u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
+    }
+
     [metal_kernel(name="tmm_q8u_msl"), marker(no_coverage)]
     def tmm_q8u_k {
         var sp = unsafe(addr(bsh[0]))
@@ -199,6 +255,12 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         var want_q8u : array<float>
         oracle->tmm_q8u_k()
         want_q8u := oracle.oc
+        var want_nt : array<float>
+        oracle->tmm_nt_k()
+        want_nt := oracle.oc
+        var want_dv : array<float>
+        oracle->tmm_devant_k()
+        want_dv := oracle.oc
         var want_tg : array<float>
         oracle->tmm_tg_k()
         want_tg := oracle.oc
@@ -242,9 +304,9 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                 var bbsh = buf_upload(dev, oracle.bsh)
                 var bbqb = buf_upload(dev, oracle.bqb)
                 gpu_bad = 0
-                for (which in range(6)) {
-                    let src = which == 0 ? tmm_bf16_msl : (which == 1 ? tmm_q8_msl : (which == 2 ? tmm_q8h_msl : (which == 3 ? tmm_q8b_msl : (which == 4 ? tmm_tg_msl : tmm_q8u_msl))))
-                    let entry = which == 0 ? tmm_bf16_msl_entry : (which == 1 ? tmm_q8_msl_entry : (which == 2 ? tmm_q8h_msl_entry : (which == 3 ? tmm_q8b_msl_entry : (which == 4 ? tmm_tg_msl_entry : tmm_q8u_msl_entry))))
+                for (which in range(8)) {
+                    let src = which == 0 ? tmm_bf16_msl : (which == 1 ? tmm_q8_msl : (which == 2 ? tmm_q8h_msl : (which == 3 ? tmm_q8b_msl : (which == 4 ? tmm_tg_msl : (which == 5 ? tmm_q8u_msl : (which == 6 ? tmm_nt_msl : tmm_devant_msl))))))
+                    let entry = which == 0 ? tmm_bf16_msl_entry : (which == 1 ? tmm_q8_msl_entry : (which == 2 ? tmm_q8h_msl_entry : (which == 3 ? tmm_q8b_msl_entry : (which == 4 ? tmm_tg_msl_entry : (which == 5 ? tmm_q8u_msl_entry : (which == 6 ? tmm_nt_msl_entry : tmm_devant_msl_entry))))))
                     var perr : string
                     var pso = pipeline_from_source(dev, src, entry, false, perr)
                     t |> success(pso != null, "pipeline {entry}: {perr}")
@@ -257,13 +319,13 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                     var bufs <- [bxa, bwb, boc, baq, basf, bwq, bwsf, bwsh, bbsh, bbqb]
                     var rerr : string
                     let tpg = tew * SGS
-                    let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr, which == 4 ? tmm_tg_msl_tgmem : (which == 5 ? tmm_q8u_msl_tgmem : 0ul))
+                    let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr, which == 4 ? tmm_tg_msl_tgmem : (which == 5 ? tmm_q8u_msl_tgmem : (which == 6 ? tmm_nt_msl_tgmem : (which == 7 ? tmm_devant_msl_tgmem : 0ul))))
                     t |> success(ran, "dispatch {entry}: {rerr}")
                     if (ran) {
-                        let bad = buf_mismatch_exact(boc, which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : want_q8u)))))
+                        let bad = buf_mismatch_exact(boc, which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : (which == 5 ? want_q8u : (which == 6 ? want_nt : want_dv)))))))
                         if (bad != 0) {
                             var got <- buf_download(boc, M * N, type<float>)
-                            let wref & = unsafe(which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : want_q8u)))))
+                            let wref & = unsafe(which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : (which == 5 ? want_q8u : (which == 6 ? want_nt : want_dv)))))))
                             var shown = 0
                             for (i in range(M * N)) {
                                 if (got[i] != wref[i] && shown < 4) {
