@@ -2170,8 +2170,10 @@ namespace das {
         auto bodyAt = func->body ? func->body->at : func->at;
         auto block = new ExprBlock();
         block->at = bodyAt;
+        block->generated = true;
         auto wth = new ExprWith();
         wth->at = bodyAt;
+        wth->generated = true;
         auto wvar = new ExprVar(func->at,"self");
         wvar->generated = true;
         wth->with = wvar;

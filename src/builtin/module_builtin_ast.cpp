@@ -1256,6 +1256,36 @@ namespace das {
     }
 
 #if !DAS_NO_FILEIO
+    void rtti_builtin_parse_file ( char * fileName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
+        TextWriter issues;
+        if ( !access ) access = make_smart<FsFileAccess>();
+        auto program = parseDaScriptWithPrerequisits(fileName, access, issues, *module_group, cop);
+        if ( program ) {
+            for ( auto & err : program->errors ) {
+                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+            }
+            string istr = issues.str();
+            vec4f args[3] = {
+                cast<bool>::from(!program->failed()),
+                cast<smart_ptr<Program>>::from(program),
+                cast<string *>::from(&istr)
+            };
+            daScriptEnvironment::getBound()->g_Program = program;
+            context->invoke(block, args, nullptr, at);
+            daScriptEnvironment::getBound()->g_Program.reset();
+        } else {
+            context->throw_error_at(at, "rtti_parse_file internal error, something went wrong");
+        }
+    }
+#else
+    void rtti_builtin_parse_file ( char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies &,
+            const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+    }
+#endif
+
+#if !DAS_NO_FILEIO
     void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         TextWriter issues;
@@ -1335,6 +1365,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
             SideEffects::modifyExternal, "rtti_builtin_compile_file")
                 ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_parse_file)>(*this, lib, "parse_file",
+            SideEffects::modifyExternal, "rtti_builtin_parse_file")
+                ->args({"file_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
         addExtern<DAS_BIND_FUN(thisProgram)>(*this, lib,  "this_program",
             SideEffects::accessExternal, "thisProgram")
                 ->arg("context");

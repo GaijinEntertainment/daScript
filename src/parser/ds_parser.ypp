@@ -1926,6 +1926,7 @@ block_or_simple_block
             auto retE = new ExprReturn(tokAt(scanner,@loc), $subexpr);
             auto blkE = new ExprBlock();
             blkE->at = tokAt(scanner,@loc);
+            blkE->generated = true;
             blkE->list.push_back(retE);
             $$ = blkE;
     }
@@ -1934,6 +1935,7 @@ block_or_simple_block
             retE->moveSemantics = true;
             auto blkE = new ExprBlock();
             blkE->at = tokAt(scanner,@loc);
+            blkE->generated = true;
             blkE->list.push_back(retE);
             $$ = blkE;
     }

@@ -915,14 +915,15 @@ namespace das {
         exit(1);
     }
 
-    ProgramPtr parseDaScript ( const string & fileName,
+    static ProgramPtr parseDaScriptEx ( const string & fileName,
                                const string & moduleName,
                               const FileAccessPtr & access,
                               TextWriter & logs,
                               ModuleGroup & libGroup,
                               bool exportAll,
                               bool isDep,
-                              CodeOfPolicies policies ) {
+                              CodeOfPolicies policies,
+                              bool inferAfterParse ) {
         verifyCodeOfPoliciesStamp(policies);
         CompilationCallbackGuard compilationCallbackGuard(moduleName, fileName);
         ProgramPtr program = make_smart<Program>();
@@ -1050,6 +1051,13 @@ namespace das {
             daScriptEnvironment::getBound()->g_compilingModuleName = nullptr;
             sort(program->errors.begin(),program->errors.end());
             program->deduplicateErrors();
+            program->isCompiling = false;
+            return program;
+        } else if ( !inferAfterParse ) {
+            daScriptEnvironment::getBound()->g_Program.reset();
+            daScriptEnvironment::getBound()->g_compilerLog = nullptr;
+            daScriptEnvironment::getBound()->g_compilingFileName = nullptr;
+            daScriptEnvironment::getBound()->g_compilingModuleName = nullptr;
             program->isCompiling = false;
             return program;
         } else {
@@ -1244,6 +1252,18 @@ namespace das {
             }
             return program;
         }
+    }
+
+    ProgramPtr parseDaScript ( const string & fileName, const string & moduleName,
+                              const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup,
+                              bool exportAll, bool isDep, CodeOfPolicies policies ) {
+        return parseDaScriptEx(fileName, moduleName, access, logs, libGroup, exportAll, isDep, policies, true);
+    }
+
+    ProgramPtr parseDaScriptNoInfer ( const string & fileName, const string & moduleName,
+                                     const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup,
+                                     bool exportAll, bool isDep, CodeOfPolicies policies ) {
+        return parseDaScriptEx(fileName, moduleName, access, logs, libGroup, exportAll, isDep, policies, false);
     }
 
     bool addExtraDependency(
@@ -1604,6 +1624,67 @@ namespace das {
         vector<NamelessMismatch> namelessMismatches;
         getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain, dependencies, namelessReq, namelessMismatches, libGroup, &tw, 1, false);
         logs << "module dependency graph:\n" << tw.str();
+    }
+
+    ProgramPtr parseDaScriptWithPrerequisits ( const string & fileName,
+                                              const FileAccessPtr & access,
+                                              TextWriter & logs,
+                                              ModuleGroup & libGroup,
+                                              CodeOfPolicies policies ) {
+        verifyCodeOfPoliciesStamp(policies);
+        ReuseCacheGuard rcg;
+        vector<ModuleInfo> req;
+        vector<MissingRecord> missing;
+        vector<RequireRecord> circular, notAllowed;
+        vector<FileInfo *> chain;
+        das_set<string> dependencies;
+        das_hash_map<string, NamelessModuleReq> namelessReq;
+        vector<NamelessMismatch> namelessMismatches;
+        string modName;
+        if ( !addExtraDependency("builtin", get_builtin_path(), missing, circular, notAllowed, req,
+                dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) ) {
+            auto res = make_smart<Program>();
+            res->error("internal error: failed to build builtin.das", logs.str(), "", LineInfo(),
+                CompilationError::internal_module);
+            return res;
+        }
+        for ( const auto & em : access->getExtraModules() ) {
+            addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies,
+                namelessReq, namelessMismatches, access, libGroup, policies, &logs);
+        }
+        if ( !getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain,
+                dependencies, namelessReq, namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
+            req.clear();
+            missing.clear();
+            circular.clear();
+            notAllowed.clear();
+            dependencies.clear();
+            namelessReq.clear();
+            namelessMismatches.clear();
+            return reportPrerequisitesErrors(fileName, missing, circular, notAllowed,
+                req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies);
+        }
+        if ( !verifyModuleNamesUnique(req, logs) ) {
+            auto res = make_smart<Program>();
+            res->error("Several modules with invalid names", logs.str(), "", LineInfo(),
+                CompilationError::already_declared_module);
+            return res;
+        }
+        for ( auto & mod : req ) {
+            if ( libGroup.findModule(mod.moduleName) ) continue;
+            auto depProgram = parseDaScript(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies);
+            if ( !depProgram ) continue;
+            policies.threadlock_context |= depProgram->options.getBoolOption("threadlock_context", false);
+            if ( depProgram->failed() ) return depProgram;
+            if ( depProgram->thisModule->name.empty() ) {
+                depProgram->library.renameModule(depProgram->thisModule.get(), mod.moduleName);
+                depProgram->thisModule->wasParsedNameless = true;
+            }
+            depProgram->thisModule->fileName = mod.fileName;
+            depProgram->thisModule->fromExtraDependency = mod.extraDepModule;
+            addNewModules(libGroup, depProgram);
+        }
+        return parseDaScriptNoInfer(fileName, modName, access, logs, libGroup, policies.export_all, false, policies);
     }
 
     ProgramPtr compileDaScript ( const string & fileName,

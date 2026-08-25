@@ -1705,6 +1705,13 @@ namespace das
     DAS_CC_API ProgramPtr parseDaScript ( const string & fileName, const string & moduleName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, bool isDep = false, CodeOfPolicies policies = CodeOfPolicies() );
 
+    DAS_CC_API ProgramPtr parseDaScriptNoInfer ( const string & fileName, const string & moduleName,
+        const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false,
+        bool isDep = false, CodeOfPolicies policies = CodeOfPolicies() );
+
+    DAS_CC_API ProgramPtr parseDaScriptWithPrerequisits ( const string & fileName, const FileAccessPtr & access,
+        TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
+
     // this one collectes dependencies and compiles with modules
     DAS_CC_API ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
