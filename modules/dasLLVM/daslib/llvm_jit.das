@@ -16,6 +16,7 @@ module llvm_jit shared private
 
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_intrin
+require llvm/daslib/llvm_jit_lower
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_jit_code
 require llvm/daslib/llvm_user_modules  // nolint:STYLE030,LINT019 - side-effect require: [llvm_code] generator modules must be in THIS module's closure so their [init] registration runs in the context that reads the registry; STYLE030 is policy-gated, so the keep only fires under a require-analysis run
@@ -1745,6 +1746,12 @@ class public LlvmJitVisitor : AstVisitor {
                     params |> push(cmresPtr, 0)
                     var ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, true, "")
                     setE(expr, cmresEval)
+                } elif (has_interop_lowering(expr)) {
+                    var ccall = lookup_interop_lowering(g_ctx, g_builder, types, expr,
+                        [for (x in expr.arguments); getE(x)]) {
+                        return build_interop_call(expr.func, typ, func, expr.arguments, params, false, "")
+                    }
+                    setE(expr, ccall)
                 } else {
                     var ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, false, "")
                     setE(expr, ccall)
@@ -1777,16 +1784,11 @@ class public LlvmJitVisitor : AstVisitor {
                         glob_fn_ptr = save_address_global(uid.get_dll_fn_name_ptr(expr.func), MNH_ADDR)
                     }
                 }
-                var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
-                params |> push(glob_fn_ptr)  // mnh
-                params |> push(args)
+                var cmresPtr : LLVMOpaqueValue?
                 if (cmresEval != null) {
-                    params |> push(LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""))
+                    cmresPtr = LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), "")
                 }
-                params |> push(get_context_param())
-                var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-                var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-                var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
+                var ccall = build_call_helper(glob_fn_ptr, args, cmresPtr)
                 if (cmresEval != null) {
                     setE(expr, cmresEval)
                 } elif (expr.func.result.isVoid) {
@@ -3797,6 +3799,16 @@ class public LlvmJitVisitor : AstVisitor {
         return is_workhorse_table_key(tabT.firstType.baseType)
     }
 
+    def inline_each_source(expr : ExpressionPtr) : ExpressionPtr {
+        if (!(expr is ExprCall)) return expr
+        var cf = expr as ExprCall
+        if (cf.func == null || length(cf.arguments) != 1
+                || !starts_with(cf.func.name, "builtin`each`")) return expr
+        assume srcT = cf.arguments[0]._type
+        if (srcT == null || !(srcT.isGoodArrayType || srcT.baseType == Type.tFixedArray)) return expr
+        return cf.arguments[0]
+    }
+
     def build_table_lock_call(tab_ptr : LLVMOpaqueValue?; at : LineInfo) {
         var params = fixed_array(
             LLVMBuildPointerCast(g_builder, tab_ptr, types.LLVMVoidPtrType(), ""),
@@ -3886,7 +3898,7 @@ class public LlvmJitVisitor : AstVisitor {
             forBodyToExpr[expr.body as ExprBlock] = expr
         }
         for (ssrc in expr.sources) {
-            if (is_count_or_ucount(ssrc) || is_table_keys_values(ssrc)) {
+            if (is_count_or_ucount(ssrc) || is_table_keys_values(ssrc) || inline_each_source(ssrc) != ssrc) {
                 skipCall |> insert(ssrc as ExprCall)
             }
         }
@@ -3923,7 +3935,14 @@ class public LlvmJitVisitor : AstVisitor {
         LOOP_START:
         */
         var lblk = loop_stack |> back()
-        for (svar, ssrc in expr.iteratorVariables, expr.sources) {
+        for (ssource in expr.sources) {
+            let ssrc = inline_each_source(ssource)
+            if (ssrc != ssource) {
+                visit(ssrc, adapter)
+            }
+        }
+        for (svar, ssource in expr.iteratorVariables, expr.sources) {
+            let ssrc = inline_each_source(ssource)
             if (ssrc._type.isRange) {// range()->first()
                 var srange = getE(ssrc)
                 var sfrom = LLVMBuildExtractElement(g_builder, srange, types.ConstI32(0ul), "range_from_{svar.name}")
@@ -3933,7 +3952,7 @@ class public LlvmJitVisitor : AstVisitor {
                 var not_okay = append_basic_block("for_{svar.name}_empty")
                 LLVMBuildCondBr(g_builder, cmp_from_to, okay, not_okay)
                 LLVMPositionBuilderAtEnd(g_builder, not_okay)
-                LLVMBuildStore(g_builder, LLVMConstInt(types.t_int1, 0ul, 0), lblk.need_loop) // need loop, no
+                LLVMBuildStore(g_builder, LLVMConstInt(types.t_int1, 0ul, 0), lblk.need_loop)
                 LLVMBuildBr(g_builder, okay)
                 LLVMPositionBuilderAtEnd(g_builder, okay)
                 range2[ssrc] = sto
@@ -3965,7 +3984,7 @@ class public LlvmJitVisitor : AstVisitor {
                 var not_okay = append_basic_block("for_{svar.name}_empty")
                 LLVMBuildCondBr(g_builder, cmp_from_to, okay, not_okay)
                 LLVMPositionBuilderAtEnd(g_builder, not_okay)
-                LLVMBuildStore(g_builder, LLVMConstInt(types.t_int1, 0ul, 0), lblk.need_loop) // need loop, no
+                LLVMBuildStore(g_builder, LLVMConstInt(types.t_int1, 0ul, 0), lblk.need_loop)
                 LLVMBuildBr(g_builder, okay)
                 LLVMPositionBuilderAtEnd(g_builder, okay)
                 build_array_lock(getE(ssrc), expr.at)
@@ -4052,27 +4071,29 @@ class public LlvmJitVisitor : AstVisitor {
                     range2[ssrc] = LLVMBuildAlloca(g_builder, LLVMPointerType(types.t_int8, 0u), "loop_iter")
                 }
                 var s_ptr = getE(ssrc)
-                // Check if it's das-optimized empty string (just nullptr).
-                var is_empty_str = LLVMBuildIsNull(g_builder, s_ptr, "null_check")
-                var not_empty_str = append_basic_block("not_empty_str")
-                LLVMBuildCondBr(g_builder, is_empty_str, lblk.loop_end, not_empty_str)
-
-                LLVMPositionBuilderAtEnd(g_builder, not_empty_str)
-
                 LLVMBuildStore(g_builder, s_ptr, range2[ssrc])
+                var is_empty_str = LLVMBuildIsNull(g_builder, s_ptr, "null_check")
+                var not_empty_str = append_basic_block("for_{svar.name}_not_empty")
+                var empty_str = append_basic_block("for_{svar.name}_empty")
+                var str_done = append_basic_block("for_{svar.name}_first_done")
+                LLVMBuildCondBr(g_builder, is_empty_str, empty_str, not_empty_str)
+                LLVMPositionBuilderAtEnd(g_builder, empty_str)
+                LLVMBuildStore(g_builder, LLVMConstInt(types.t_int1, 0ul, 0), lblk.need_loop)
+                LLVMBuildBr(g_builder, str_done)
+                LLVMPositionBuilderAtEnd(g_builder, not_empty_str)
                 var cur_chr = LLVMBuildLoad2(g_builder, types.t_int8, s_ptr, "cur_chr")
                 let zero_i8 = types.ConstI8(0 |> int8)
                 let is_null = LLVMBuildICmp(g_builder,
                     LLVMIntPredicate.LLVMIntNE, cur_chr, zero_i8, "is_null")
-                // Just in case check whether string is equal to '\0', e.g. this
-                // is native string.
-                LLVMBuildStore(g_builder, is_null, lblk.need_loop)
-
+                var need_now = LLVMBuildLoad2(g_builder, types.t_int1, lblk.need_loop, "need_loop_str")
+                LLVMBuildStore(g_builder, LLVMBuildAnd(g_builder, need_now, is_null, ""), lblk.need_loop)
                 assume svar_t = svar._type
                 assert(svar_t.baseType == Type.tInt)
                 // Cast to i32, since char is i32 in das.
-                var res = LLVMBuildSExt(g_builder, cur_chr, type_to_llvm_type(svar_t), "sext_cast")
+                var res = LLVMBuildZExt(g_builder, cur_chr, type_to_llvm_type(svar_t), "zext_cast")
                 LLVMBuildStore(g_builder, res, getV(svar))
+                LLVMBuildBr(g_builder, str_done)
+                LLVMPositionBuilderAtEnd(g_builder, str_done)
             } else {
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
             }
@@ -4097,7 +4118,8 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMBuildBr(g_builder, lblk.loop_continue)                           // LOOP CONTINUE
         }
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_continue)
-        for (svar, ssrc in expr.iteratorVariables, expr.sources) {
+        for (svar, ssource in expr.iteratorVariables, expr.sources) {
+            let ssrc = inline_each_source(ssource)
             if (ssrc._type.isRange) {// range()->next()
                 let isRange64 = ssrc._type.baseType == Type.tRange64 || ssrc._type.baseType == Type.tURange64
                 var svar_v = LLVMBuildLoad2(g_builder, isRange64 ? types.t_int64 : types.t_int32, getV(svar), "")
@@ -4166,7 +4188,7 @@ class public LlvmJitVisitor : AstVisitor {
 
                 LLVMBuildStore(g_builder, svar_i, range2[ssrc])
                 assert(svar._type.baseType == Type.tInt)
-                var res = LLVMBuildSExt(g_builder, val, type_to_llvm_type(svar._type), "sext_cast")
+                var res = LLVMBuildZExt(g_builder, val, type_to_llvm_type(svar._type), "zext_cast")
                 LLVMBuildStore(g_builder, res, getV(svar))
             } else {
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
@@ -4193,7 +4215,7 @@ class public LlvmJitVisitor : AstVisitor {
         for (i in range(len)) {
             let ri = len - i - 1
             let svar & = unsafe(expr.iteratorVariables[ri])
-            let ssrc & = unsafe(expr.sources[ri])
+            let ssrc = inline_each_source(expr.sources[ri])
             if (ssrc._type.isGoodArrayType) {
                 build_array_unlock(getE(ssrc), ssrc.at)
             } elif (ssrc._type.isIterator) {
@@ -4337,15 +4359,9 @@ class public LlvmJitVisitor : AstVisitor {
                     ctor = save_address_global(name, MNH_ADDR)
                 }
             }
-            var params <- [
-                ctor,  // mnh
-                LLVMConstPointerNull(LLVMPointerType(types.LLVMFloat4Type(), 0u)), // args
-                LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""),
-                get_context_param()
-            ]
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
+            var ccall = build_call_helper(ctor,
+                LLVMConstPointerNull(LLVMPointerType(types.LLVMFloat4Type(), 0u)),
+                LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""))
         }
     }
 
@@ -5265,6 +5281,39 @@ class public LlvmJitVisitor : AstVisitor {
         return true
     }
 
+    def build_call_helper(simfunc, args : LLVMOpaqueValue?; cmres : LLVMOpaqueValue? = null) : LLVMOpaqueValue? {
+        if (cmres == null) {
+            return LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_OR_FASTCALL],
+                LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL),
+                fixed_array(simfunc, args, get_context_param()), "")
+        }
+        return LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_CALL_WITH_CMRES],
+            LLVMGetNamedFunction(g_mod, FN_JIT_CALL_WITH_CMRES),
+            fixed_array(simfunc, args, cmres, get_context_param()), "")
+    }
+
+    def build_call_dispatch(simfunc, args : LLVMOpaqueValue?; cmres : LLVMOpaqueValue? = null) : LLVMOpaqueValue? {
+        var slot = LLVMBuildGEP2(g_builder, types.t_int8,
+            LLVMBuildPointerCast(g_builder, simfunc, LLVMPointerType(types.t_int8, 0u), ""),
+            types.ConstI32(uint64(SIMFUNCTION_OFFSET_OF_JIT_FUNCTION)), "simfn.jitp")
+        var jitfn = LLVMBuildLoad2(g_builder, types.LLVMVoidPtrType(), slot, "simfn.jitfn")
+        var direct = LLVMBuildIsNotNull(g_builder, jitfn, "simfn.jitted")
+        let cmresArg = cmres != null ? cmres : LLVMConstPointerNull(types.LLVMVoidPtrType())
+        var res = build_select(direct, types.LLVMFloat4Type()) {
+            var r = LLVMBuildCall2(g_builder, g_t_jit_function, jitfn,
+                fixed_array(get_context_param(), args, cmresArg), "")
+            var sfp = LLVMBuildGEP2(g_builder, types.t_int8,
+                LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(types.t_int8, 0u), ""),
+                types.ConstI32(uint64(CONTEXT_OFFSET_OF_STOP_FLAGS)), "ctx.stopflagsp")
+            LLVMBuildStore(g_builder, LLVMConstInt(types.t_int32, 0ul, 0), sfp)
+            return r
+        }
+        lpipe() {
+            return build_call_helper(simfunc, args, cmres)
+        }
+        return res
+    }
+
     def override visitExprInvoke(expr : ExprInvoke?) : ExpressionPtr {
         assume blockT = expr.arguments[0]._type
         var cmresEval : LLVMOpaqueValue?
@@ -5307,16 +5356,7 @@ class public LlvmJitVisitor : AstVisitor {
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION.SIM_FUNCTION), "SIMFUNCTION")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
             check_ptr_zero(SIMFUNCTION, expr.at, "invoke null method")
-            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
-            params |> push(SIMFUNCTION)
-            params |> push(args)
-            if (cmresEval != null) {
-                params |> push(cmresEvalPtr)
-            }
-            params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            var ccall = build_call_dispatch(SIMFUNCTION, args, cmresEvalPtr)
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
@@ -5331,16 +5371,7 @@ class public LlvmJitVisitor : AstVisitor {
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION.SIM_FUNCTION), "SIMFUNCTION")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
             check_ptr_zero(SIMFUNCTION, expr.at, "invoke null function")
-            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
-            params |> push(SIMFUNCTION)
-            params |> push(args)
-            if (cmresEval != null) {
-                params |> push(cmresEvalPtr)
-            }
-            params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            var ccall = build_call_dispatch(SIMFUNCTION, args, cmresEvalPtr)
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
@@ -5358,16 +5389,8 @@ class public LlvmJitVisitor : AstVisitor {
             LAMBDA = LLVMBuildLoad2(g_builder, g_t_lambda, LAMBDA, "LAMBDA")
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA.EVAL), "EVAL")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
-            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
-            params |> push(SIMFUNCTION)
-            params |> push(args)
-            if (cmresEval != null) {
-                params |> push(cmresEvalPtr)
-            }
-            params |> push(get_context_param())
-            var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
-            var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            check_ptr_zero(SIMFUNCTION, expr.at, "invoke null lambda")
+            var ccall = build_call_dispatch(SIMFUNCTION, args, cmresEvalPtr)
             if (cmresEval != null) {
                 setE(expr, cmresEval)
             } elif (blockT.firstType.isVoid) {
@@ -5612,10 +5635,8 @@ class public LlvmJitVisitor : AstVisitor {
         LAMBDA = LLVMBuildLoad2(g_builder, g_t_lambda, LAMBDA, "LAMBDA")
         var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA.FINALIZER), "FINALIZER")
         SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
-        var params <- [SIMFUNCTION, args, get_context_param()]
-        var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL)
-        var typ = g_fn_types[FN_JIT_CALL_OR_FASTCALL]
-        LLVMBuildCall2(g_builder, typ, func, params, "delete_lambda")
+        check_ptr_zero(SIMFUNCTION, at, "lambda finalizer is a null function")
+        build_call_dispatch(SIMFUNCTION, args)
         LLVMBuildBr(g_builder, end)
         LLVMPositionBuilderAtEnd(g_builder, end)
     }

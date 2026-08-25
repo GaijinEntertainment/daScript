@@ -14,6 +14,13 @@ Suppress one finding with `// nolint:STYLEnnn` on the line. Per-module `options`
 (STYLE037), `_function_length` (STYLE038), `_duplicate_regions` plus `_dupe_min_nodes` /
 `_dupe_min_statements` (STYLE040), and `_enable_default_off_rules` to force default-off rules on.
 
+**A file-level `options` line needs a reason the file cannot compile or run without it.** Never
+copy an options header from a neighbouring module - each knob there earns its place in *that*
+file, not in yours. `_comment_hygiene = false` is the clearest case: a new file has no comments
+to exempt, so adding it only pre-authorizes prose the comment rules would otherwise drain. When
+a knob does look necessary, try the code fix first - a const mismatch that seems to need
+`relaxed_pointer_const` is often one `var` parameter away.
+
 ## STYLE037 / STYLE038 - suppress an honest shape, never force a split
 
 Both metric rules spell their escapes the same way: `// nolint:STYLE03x` on the `def` line, or a

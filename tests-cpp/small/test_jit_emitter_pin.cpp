@@ -24,6 +24,7 @@ static const char * EMITTER_FILES[] = {
     "llvm_code.das",
     "llvm_dsl.das",
     "llvm_jit_intrin.das",
+    "llvm_jit_lower.das",
     "llvm_targets.das",
     "llvm_user_modules.das",
 };

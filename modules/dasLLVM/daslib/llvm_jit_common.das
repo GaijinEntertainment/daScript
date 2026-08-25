@@ -95,6 +95,7 @@ var public g_t_simFunction : LLVMOpaqueType?
 var public g_t_function : LLVMOpaqueType?
 var public g_t_lambda : LLVMOpaqueType?
 var public g_t_block : LLVMOpaqueType?
+var public g_t_jit_function : LLVMOpaqueType?
 var public g_t_stack_state : LLVMOpaqueType?
 var public g_t_iterator : LLVMOpaqueType?
 var public g_t_sequence : LLVMOpaqueType?
@@ -720,6 +721,7 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
     // cold: opt sinks the failure block off the hot path; pairs with noreturn.
     jit_add_extern(FN_JIT_EXCEPTION, jit_fn_type($(text, ctx, at : void?) : void {}),
         get_jit_exception(), fixed_array(noreturn, cold), (nocapture, [0, 1]))
+    g_t_jit_function = jit_fn_type($(ctx, args, cmres : void?) : float4 {})
     jit_add_extern(FN_JIT_CALL_OR_FASTCALL, jit_fn_type($(func, args, ctx : void?) : float4 {}),
         get_jit_call_or_fastcall(), fixed_array(nounwind, willreturn), (nocapture, [0, 1, 2]))
     jit_add_extern(FN_JIT_CALL_WITH_CMRES, jit_fn_type($(func, args, cmres, ctx : void?) : float4 {}),

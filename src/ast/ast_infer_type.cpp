@@ -5310,7 +5310,7 @@ namespace das {
         markNoDiscard(that);
     }
     ExpressionPtr InferTypes::visitForSource(ExprFor *expr, Expression *that, bool last) {
-        if (jitEnabled() && that->type && ((that->type->isHandle() && that->type->annotation->isIterable()) || (that->type->isString()))) {
+        if (jitEnabled() && that->type && that->type->isHandle() && that->type->annotation->isIterable()) {
             auto fnc = findMatchingFunctions("*", thisModule, "each", {that->type});
             // If there's any `each` for handle type use it, otherwise
             // stay in interpreter.
