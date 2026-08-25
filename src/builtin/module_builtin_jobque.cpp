@@ -1333,6 +1333,12 @@ namespace das {
         status->Wait();
     }
 
+    bool waitForJobWithTimeout ( JobStatus * status, int32_t timeoutMs, Context * context, LineInfoArg * at ) {
+        if ( !status ) context->throw_error_at(at, "waitForJobWithTimeout: status is null");
+        flushPendingForkJobs();     // batched dispatch publishes at the join point
+        return status->WaitFor(timeoutMs);
+    }
+
     void notifyJob ( JobStatus * status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "notifyJob: status is null");
         if ( !status->Notify() ) context->throw_error_at(at, "notifyJob: nothing to notify");
@@ -1585,6 +1591,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(waitForJob)>(*this, lib,  "join",
                 SideEffects::modifyExternal, "waitForJob")
                     ->args({"job","context","line"});
+            addExtern<DAS_BIND_FUN(waitForJobWithTimeout)>(*this, lib,  "join",
+                SideEffects::modifyExternal, "waitForJobWithTimeout")
+                    ->args({"job","timeout_ms","context","line"});
             addExtern<DAS_BIND_FUN(notifyJob)>(*this, lib,  "notify",
                 SideEffects::modifyExternal, "notifyJob")
                     ->args({"job","context","line"});
