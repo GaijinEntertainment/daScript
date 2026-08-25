@@ -15,12 +15,12 @@ is asked by `prefill_decline` / `decode_decline`, never by a caps predicate.** A
 reports the session's setup progress - rather than the CALL, its row count or its span
 shape - is a defect however it is derived.
 
-**A shape claim is settled at the site the device reads it, never at the das that computes
-the value.** An in-body tile constant is confirmed
+**A shape claim is settled at the one site that is authoritative for that kind of constant,
+never by tracing the das that computes the value.** An in-body tile constant is confirmed
 literal in the generated `*_msl` global or the SPIR-V dump; a grid or threadgroup constant is
 read off the class's `[metal_dispatch]` / `[vk_dispatch]` `grid=`/`tg=` spec, whose `"n/c"`
 form is a CEIL-divide - the spec alone decides, no builder read needed; a uniform's value is
-read at the single writer that fills its buffer.
+read at the single writer that fills its buffer, and nowhere upstream of it.
 
 **Kernel twins - kernel classes whose bodies differ on one stamp axis - bind the same kargs
 (kernel-argument struct) type at the same binding numbers**, even where one twin ignores a
@@ -90,12 +90,10 @@ decline site is a defect.
 
 **A diff that adds or removes a Metal-only or Vulkan-only hook, role, served path, or
 backend-only capability - anything that changes what one backend can serve and the other
-cannot - lands its `ARCHITECTURE.md` sec.1.5 edit in the
-same change - including when sec.1.5 already carries that class of asymmetry, and including
-sec.1.5's per-driver lists of registered hooks and borrowed kernels.**
-sec.1.5 is the closed list; an asymmetry it does not carry does not exist. A change that
-alters HOW an already-ledgered served path computes, without moving what either backend
-serves, does not fire this rule.
+cannot - lands its `ARCHITECTURE.md` sec.1.5 edit in the same change - including when
+sec.1.5 already carries that class of asymmetry, and including sec.1.5's per-driver lists
+of registered hooks and borrowed kernels.**
+sec.1.5 is the closed list; an asymmetry it does not carry does not exist.
 
 **A Vulkan pipeline is created only by a `[vk_dispatch]`-generated `ensure_*` and torn down by
 `vk_drop_model_state`.** A hand-written pipeline build anywhere else in the engine is a defect.
@@ -119,28 +117,27 @@ runs, or the in-suite instruments (`tests/test_metal_decode_parity.das` /
 driver declines codec-mismatched sessions silently.
 
 **A change to `dasllama/dasllama_metal_tower.das`, to the `AttnArgs` kargs struct, to any
-kernel class the tower dispatches (a builder it borrows changes the classes that builder
-dispatches), or to state the whole driver shares (a module-level `g_tw_*` variable,
-`metal_tower_init`, `dasllama_metal_tower_register` - reachable from every hook) runs the
-gate of every registered tower hook the changed code is reachable from.** The gates: the
+kernel class the tower dispatches or builder the tower borrows, or to state the whole
+driver shares (a module-level `g_tw_*` variable, `metal_tower_init`,
+`dasllama_metal_tower_register` - reachable from every hook) runs the gate of every
+registered tower hook the changed code is reachable from.** The gates: the
 family gates `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, `tests/test_gemma3v.das`, and
 `test_qwen3v_tier1_metal` in `tests/test_qwen3v.das`; the encoder-blocks leg's
 `tests/test_whisper.das`; the conv legs' `tests/test_audio.das` and
 `tests/test_audio_embedder.das`; plus a `tests/test_model_image.das` run with the `mtower`
 arm, `metal_tower_stats()`'s encode count rising across the run. A hook registered in
-`dasllama_metal_tower_register`, or a builder the tower borrows, that this rule does not
-name is the rule's defect to fix in the same change.
+`dasllama_metal_tower_register` that this rule's gates do not cover is the rule's defect to
+fix in the same change.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq
 model.** Parity runs never reach it.
 
-**A change to `dasllama/dasllama_metal_asr_dec.das`, to any kernel class the ASR decoder
-dispatches or builder it borrows, or any change to
-`dasllama/dasllama_metal_common.das`, ships a `tests/test_model_image.das` run with the
-`mtower` arm** - its CPU-vs-GPU transcript cells are the ASR-decoder driver's parity
-instrument, and the shared common paths and borrowed kernels reach that driver with no line
-of its own file touched.
+**A change to `dasllama/dasllama_metal_asr_dec.das`, to `dasllama/dasllama_metal_common.das`,
+or to any kernel class the ASR decoder dispatches or builder the ASR decoder borrows, ships
+a `tests/test_model_image.das` run with the `mtower` arm** - its CPU-vs-GPU transcript cells
+are the ASR-decoder driver's parity instrument, and the shared common paths and borrowed
+kernels reach that driver with no line of its own file touched.
 
 **A kernel that reads or writes the residency rail's `k_mirror`/`v_mirror` slabs leaves
 neither K/V codec - the mirror's element type, f16 or f32 - unserved**: both codecs covered

@@ -488,11 +488,10 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 pin_kernel_backend("portable")
                 set_wscale_f16(false)
                 set_metal_prefill_mm_tail(true)   // establish the knob the engage claim depends on (no read-back)
-                if (long_length(prompt) < 261l) {
-                    t |> skip("counting prompt tokenized under 261 - the residue fixtures cannot slice")
-                    return
-                }
                 for (nres in [5l, 257l, 258l, 261l]) {   // 5 = the pure-tail leg (nfull == 0, no mul_mm at all)
+                    if (nres > long_length(prompt)) {
+                        continue   // a fixture the counting prompt cannot slice; the others still run
+                    }
                     var sl : array<int64>
                     sl |> reserve(nres)
                     for (i in range64(nres)) {
@@ -538,7 +537,10 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     var trsg <- blob_twin(t, spath, 2048l)
                     let sprompt <- encode(trs, counting_prompt(), true, false)
                     t |> success(select_prefill_override("metal"), "override registered (mm-tail smol)")
-                    for (nres in [65l, 66l]) {
+                    var ssites : int64[2]
+                    var sserved_all = true
+                    for (li in range(2)) {
+                        let nres = li == 0 ? 65l : 66l
                         var ssl : array<int64>
                         ssl |> reserve(nres)
                         for (i in range64(nres)) {
@@ -547,19 +549,20 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         let sserved0 = metal_prefill_stats().prefills
                         let stail0 = metal_prefill_tail_stats()
                         var sgot <- continuation(trsg, trs, ssl, 4)
-                        let sserved = metal_prefill_stats().prefills - sserved0
-                        let sdsites = metal_prefill_tail_stats().sites - stail0.sites
-                        if (sserved > 0l) {
-                            if (nres % 32l == 1l) {
-                                t |> success(sdsites > 0l, "smol npos={nres}: the gemv leg engaged on the % 32-clean dim ({sdsites} sites)")
-                            } else {
-                                t |> equal(sdsites, 0l, "smol npos={nres}: the alignment guard refused the tail (dim 576 % 128 != 0)")
-                            }
-                        } else {
-                            feint("metal prefill declined on smol; the alignment-guard leg skipped\n")
-                        }
+                        sserved_all &&= metal_prefill_stats().prefills - sserved0 > 0l
+                        ssites[li] = metal_prefill_tail_stats().sites - stail0.sites
                         delete ssl
                         delete sgot
+                    }
+                    if (sserved_all) {
+                        // per-site guard: at r == 1 every q8 site peels (% 32 holds for 576 and
+                        // 1536 alike); at r == 2 only the hidden-kdim w2 site (1536 % 128 == 0)
+                        // may peel - the six 576-kdim sites per layer must refuse
+                        t |> success(ssites[0] > 0l, "smol npos=65: the gemv leg engaged ({ssites[0]} sites)")
+                        t |> success(ssites[1] < ssites[0], "smol npos=66: the alignment guard refused the 576-kdim sites ({ssites[1]} of {ssites[0]})")
+                        t |> equal(ssites[1] * 7l, ssites[0], "smol npos=66: exactly the one hidden-kdim site per layer peeled")
+                    } else {
+                        feint("metal prefill declined on smol; the alignment-guard leg skipped\n")
                     }
                     select_prefill_override("")
                     delete trs

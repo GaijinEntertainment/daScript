@@ -2,14 +2,14 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`; the perf
-backlog is `PERF_LEDGER.md` - a performance followup files there, everything else in the
-two followup files.
+backlog is `PERF_LEDGER.md` - a performance followup goes there, everything else in the
+two followup ledgers.
 
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
 
-**A timing rig - a script whose output is a measured wall or rate - and any kernel A/B lab,
-wherever the diff puts them, answer to `benchmarks/REVIEW.md`.**
+**A timing rig - a script whose output is a measured wall or rate - wherever the diff puts
+it, answers to `benchmarks/REVIEW.md`.**
 
 **A change to what enters `performance/records/` or its manifests, an exchange change - the client or
 schema for the sidecar exchange that boxes download tune winners from and submit winners
@@ -108,14 +108,14 @@ template strings any of them look up, records a `tests/test_tokenizer.das` run w
 EXECUTED, not skipped.**
 
 **An override announces itself where it changes the outcome.** An override is an environment
-knob or an exported runtime setter that moves a gate, policy, or threshold off its default;
-a CLI flag, and a knob that changes only WHEN work happens - never what the run writes,
-reads, mints, or computes - are not overrides under this rule. A knob that moves computed
-numerics is an override even when its purpose is timing (two GEMM forms of the same math
-differ in float terms). Where one changes an observable outcome of the run,
-a printed line names it by its own spelling (the env variable name, or the
-setter's function name); set-but-inert stays silent, per-site repeats are fine. Adding one,
-or giving one a new effect, without the announce is a defect.
+knob or an exported runtime setter that moves a gate, policy, or threshold off its default
+and thereby changes what the run writes, reads, mints, or computes - including a knob or
+setter whose purpose is timing when it moves computed numerics, since two GEMM forms of
+the same math differ in float terms. A knob or setter that changes only WHEN work happens
+is not an override, and a CLI flag is never one. A run that engages one prints a line
+naming it by its own spelling (the env variable name, or the setter's function name);
+set-but-inert stays silent, per-site repeats are fine. Adding one, or giving one a new
+effect, without the announce is a defect.
 
 **A self-measured served-turn time - tok/s, a turn wall - entering
 `performance/records/<box>.json` or `PERF_LEDGER.md` comes from the released `lcpp_bench`
@@ -123,6 +123,9 @@ exe - `benchmarks/lcpp_bench.das` built by `daspkg release`, spawned by
 `performance/gen_bench_records.das` or run by hand where the cell's `PROFILE.md` section says
 so - never from the `-jit` script** (a `--for-debug-purposes` row is a debug instrument). A
 tutorial's printed wall-clock is teaching output, feeding no board.
+
+**A subtraction of two measured walls written into `PERF_LEDGER.md` carries both raw walls
+in the entry.**
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
@@ -140,9 +143,9 @@ delta, a noise floor, tuner timing - is settled by the sidecar or manifest stamp
 
 **A figure measuring one engine stage inside a served turn - a stage wall, a stage share, a
 stage speedup, or a cross-engine comparison of one stage; never a board cell's `pp`/`tg`
-rate or the whole wall of a `-p`/`-n` bench cell (those take the cell rule above) - names
-the harness and flags that produced it, wherever it is written down: a
-checked-in doc, a ledger, a code comment, or a PR description.** The naming rides the
+rate and never the whole wall of a `benchmarks/lcpp_bench.das` `-p`/`-n` cell - names the
+harness and flags that produced it, wherever it is written down: a checked-in doc, a
+ledger, a code comment, or a PR description.** The naming rides the
 figure's own sentence, a table heading that covers the table's rows, or a section-level
 provenance line that covers the paragraphs under it.
 
@@ -217,11 +220,12 @@ the same change.**
 **An upstream mechanism is described in our own terms, not attributed** - no
 "lifted/ported verbatim from" and no upstream symbol, header, or constant names in a `.md`
 file or a `.das` comment; state what the code does and why its shape wins. Provenance is
-not attribution: a path naming where checked-in data is regenerated FROM, and the
-measurement surface naming the reference binary a number was taken against (the yardstick
-docs and the env knobs that point at it), both stay; everywhere else prose writes "the
-reference exe" / "upstream". Legal attribution
-lives in `THIRD_PARTY_NOTICES.md` and the `LICENSE.*` files, so prose never carries it.
+not attribution: a path naming where checked-in data is regenerated FROM, an env-knob row
+in `ENVIRONMENT.md` whose value locates the reference binary, and a command line or flag
+list in `METHODOLOGY.md`, `PROFILE.md`, or `BRINGUP.md`, all name the binary outright;
+every other `.md` line and `.das` comment writes "the reference exe" or "upstream". Legal
+attribution lives in `THIRD_PARTY_NOTICES.md` and the `LICENSE.*` files, so prose never
+carries it.
 
 **A def of `dasllama/dasllama.das` - and a new OVERLOAD of one - is TAUGHT: demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a

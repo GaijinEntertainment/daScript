@@ -11,30 +11,34 @@ measures fallback kernels silently. Tokenizing and detokenizing (`encode` / `enc
 that dispatches only pipelines the lab compiled itself never enters that path - nothing to
 gate.
 
-**Timing whose output selects between two implementations of the same compute times both
-variants interleaved in one process with one instrument - whatever rig produced it and
-however the variant is chosen** (a knob flipped across two processes, or two runs at two
-commits, is a direction-grade reading, never the selection evidence). A board bench
-cell re-measured for the record is not selection timing.
+**A choice between two implementations of the same compute is made only on timing that ran
+both variants interleaved in one process under one instrument, whatever rig produced it and
+whichever knob picks the variant inside that process.** A reading taken across two
+processes or across two commits is direction-grade - it says which way the wall moved, not
+which implementation to adopt - and using one to make the choice is a defect. A board bench
+cell re-measured for the record makes no choice and is not selection timing.
 
 **An A/B arm whose timing is reported as adoptable evidence is first shown bit-exact against
 the lab's baseline arm or its CPU reference over the sampled region** (the report's
 "bit-exact vs ..." line), the baseline arm itself answering to the CPU reference; an arm
 reported as evidence without that compare is a defect.
 
-**An A/B arm that skips the bit-exact compare against the CPU reference - a timing-only arm - says so in its report
-line.**
+**An A/B arm that skips the bit-exact compare against the CPU reference - a timing-only
+arm - says so in its report line.**
 
 **A knockout or sweep instrument - one whose arms ATTRIBUTE cost across stages rather than
-select between two implementations - carries the literal header label "ATTRIBUTION SWEEP"
-and names what its arms attribute.** Without it the instrument reads as a lab and is
-deleted with a decision it never made.
+select between two implementations - carries the literal text `ATTRIBUTION SWEEP` in its
+file header comment, on a line that also names what its arms attribute.** Without it the
+instrument reads as a lab and is deleted with a decision it never made.
 
-**What may enter `../PERF_LEDGER.md`: re-measured board rows, out-of-process observations,
-and direction-grade instrument readings ONLY when the entry names the instrument and marks
-the grade; what may enter `../performance/records/<box>.json`: board rows alone.** Lab
-selection numbers settle the adoption decision in the lab's own report and the PR
-that lands the kernel; the board learns the winner only through a re-measured cell row.
+**A lab's selection timings never enter `../PERF_LEDGER.md` or
+`../performance/records/<box>.json`** - they settle the adoption decision in the lab's own
+report and the PR that lands the kernel; the board learns the winner only through a
+re-measured cell row.
+
+**A direction-grade reading from an instrument under this folder enters `../PERF_LEDGER.md`
+only in an entry that names the instrument that produced it and calls the reading
+direction-grade, and never enters `../performance/records/<box>.json`.**
 
 **An out-of-process observer - a script that measures a benchmark process from outside -
 measures only what a process cannot measure about itself; its numbers may enter
@@ -46,9 +50,8 @@ repository does not build - a third-party reference tool - into
 the reference cells of `../performance/gen_bench_records.das`, the cells that time such a
 tool on a board workload.
 
-**A number derived by subtracting one measured wall from another carries both raw walls
-beside it - in the report line an instrument prints, and in any subtraction written into
-`../PERF_LEDGER.md` whose raw walls appear nowhere else in the entry.**
+**An instrument under this folder that prints a number formed by subtracting one measured
+wall from another prints both raw walls on that report line.**
 
 **A change to the timed body or the measured input of a cell whose numbers are reported as
 evidence - a cell that mints rows into `../performance/records/<box>.json`, or the `--tok`
