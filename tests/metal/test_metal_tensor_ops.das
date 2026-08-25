@@ -33,6 +33,7 @@ class TmmKernels {
     @ssbo @binding = 9 bqb : array<int8>     // q8b: the SAME blob layout, byte view
     @ssbo @binding = 10 och : array<float16> // C half twin (the store_half arm)
     @ssbo @binding = 11 xah : array<float16> // A half twin (the q8uh half-stream arm)
+    @ssbo @binding = 12 wh : array<float16>  // W: N x KK device-half panel (the hw/hwh arms)
 
     [metal_kernel(name="tmm_bf16_msl"), marker(no_coverage)]
     def tmm_bf16_k {
@@ -237,6 +238,22 @@ class TmmKernels {
         tmm2d_f32_bf16_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
     }
 
+    [metal_kernel(name="tmm_hw_msl"), marker(no_coverage)]
+    def tmm_hw_k {
+        var ap = unsafe(addr(xa[0]))
+        var wp = unsafe(addr(wh[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_f16w_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
+    }
+
+    [metal_kernel(name="tmm_hwh_msl"), marker(no_coverage)]
+    def tmm_hwh_k {
+        var ap = unsafe(addr(xah[0]))
+        var wp = unsafe(addr(wh[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_f16w_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
+    }
+
     [metal_kernel(name="tmm_q8u_msl"), marker(no_coverage)]
     def tmm_q8u_k {
         var sp = unsafe(addr(bsh[0]))
@@ -286,10 +303,12 @@ def private fill_oracle(var o : TmmKernels?) {
         o.xah[i] = float16(o.xa[i])
         o.aq[i] = int8(i % 17 - 8)
     }
+    o.wh |> resize(N * KK)
     for (i in range(N * KK)) {
         // bf16 halfword of an integer value: float bits >> 16 (values here are bf16-exact)
         o.wb[i] = uint16(float_bits_to_uint(float(i % 5 - 2)) >> 16u)
         o.wq[i] = int8((i * 3) % 15 - 7)
+        o.wh[i] = float16(float(i % 9 - 4))    // integer-valued half panel: f16-exact
     }
     for (i in range(M * NB)) {
         o.asf[i] = float(1 << (i % 3))         // powers of two: scale folds exact
@@ -322,6 +341,11 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         t |> success(find(tmm_q8uh_msl, "device const half * a") >= 0 || find(tmm_q8uh_msl, "device half") >= 0, "q8uh streams a device-half A")
         t |> success(find(tmm_bfh_msl, "__das_tmm2d_bfh_8_16_2") >= 0, "bfh (half-A) helper picked by the activation pointer type")
         t |> success(find(tmm_bfh_msl, "device const half * a") >= 0, "bfh streams a device-half A")
+        t |> success(find(tmm_hw_msl, "__das_tmm2d_hw_8_16_2") >= 0, "hw (device f16 W) helper generated")
+        t |> success(find(tmm_hw_msl, "device const half * wv") >= 0, "hw takes a device-half W panel")
+        t |> success(find(tmm_hw_msl, "threadgroup") < 0 || find(tmm_hw_msl, "threadgroup") > find(tmm_hw_msl, "kernel void"), "hw helper is all-device - no threadgroup staging, no barriers (class tgmem decls sit past the kernel sig)")
+        t |> success(find(tmm_hwh_msl, "__das_tmm2d_hwh_8_16_2") >= 0, "hwh (half-A) helper picked by the activation pointer type")
+        t |> success(find(tmm_hwh_msl, "device const half * a") >= 0, "hwh streams a device-half A")
         t |> success(find(tmm_deva_msl, "tensor<device float") >= 0, "deva float witness types a float A operand")
         t |> success(find(tmm_devah_msl, "tensor<device half") >= 0, "deva half witness types a half A operand")
         t |> success(find(tmm_devah_msl, "(device half *)") >= 0, "deva half step casts the stream to half")
@@ -376,6 +400,12 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         var want_bfh : array<float>
         oracle->tmm_bfh_k()
         want_bfh := oracle.oc
+        var want_hw : array<float>
+        oracle->tmm_hw_k()
+        want_hw := oracle.oc
+        var want_hwh : array<float>
+        oracle->tmm_hwh_k()
+        want_hwh := oracle.oc
         var want_tg : array<float>
         oracle->tmm_tg_k()
         want_tg := oracle.oc
@@ -419,10 +449,11 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                 var bbsh = buf_upload(dev, oracle.bsh)
                 var bbqb = buf_upload(dev, oracle.bqb)
                 var bxah = buf_upload(dev, oracle.xah)
+                var bwh = buf_upload(dev, oracle.wh)
                 gpu_bad = 0
-                for (which in range(13)) {
-                    let src = which == 0 ? tmm_bf16_msl : (which == 1 ? tmm_q8_msl : (which == 2 ? tmm_q8h_msl : (which == 3 ? tmm_q8b_msl : (which == 4 ? tmm_tg_msl : (which == 5 ? tmm_q8u_msl : (which == 6 ? tmm_nt_msl : (which == 7 ? tmm_devant_msl : (which == 8 ? tmm_nth_msl : (which == 9 ? tmm_q8uh_msl : (which == 10 ? tmm_deva_msl : (which == 11 ? tmm_devah_msl : tmm_bfh_msl)))))))))))
-                    let entry = which == 0 ? tmm_bf16_msl_entry : (which == 1 ? tmm_q8_msl_entry : (which == 2 ? tmm_q8h_msl_entry : (which == 3 ? tmm_q8b_msl_entry : (which == 4 ? tmm_tg_msl_entry : (which == 5 ? tmm_q8u_msl_entry : (which == 6 ? tmm_nt_msl_entry : (which == 7 ? tmm_devant_msl_entry : (which == 8 ? tmm_nth_msl_entry : (which == 9 ? tmm_q8uh_msl_entry : (which == 10 ? tmm_deva_msl_entry : (which == 11 ? tmm_devah_msl_entry : tmm_bfh_msl_entry)))))))))))
+                for (which in range(15)) {
+                    let src = which == 0 ? tmm_bf16_msl : (which == 1 ? tmm_q8_msl : (which == 2 ? tmm_q8h_msl : (which == 3 ? tmm_q8b_msl : (which == 4 ? tmm_tg_msl : (which == 5 ? tmm_q8u_msl : (which == 6 ? tmm_nt_msl : (which == 7 ? tmm_devant_msl : (which == 8 ? tmm_nth_msl : (which == 9 ? tmm_q8uh_msl : (which == 10 ? tmm_deva_msl : (which == 11 ? tmm_devah_msl : (which == 12 ? tmm_bfh_msl : (which == 13 ? tmm_hw_msl : tmm_hwh_msl)))))))))))))
+                    let entry = which == 0 ? tmm_bf16_msl_entry : (which == 1 ? tmm_q8_msl_entry : (which == 2 ? tmm_q8h_msl_entry : (which == 3 ? tmm_q8b_msl_entry : (which == 4 ? tmm_tg_msl_entry : (which == 5 ? tmm_q8u_msl_entry : (which == 6 ? tmm_nt_msl_entry : (which == 7 ? tmm_devant_msl_entry : (which == 8 ? tmm_nth_msl_entry : (which == 9 ? tmm_q8uh_msl_entry : (which == 10 ? tmm_deva_msl_entry : (which == 11 ? tmm_devah_msl_entry : (which == 12 ? tmm_bfh_msl_entry : (which == 13 ? tmm_hw_msl_entry : tmm_hwh_msl_entry)))))))))))))
                     var perr : string
                     var pso = pipeline_from_source(dev, src, entry, false, perr)
                     t |> success(pso != null, "pipeline {entry}: {perr}")
@@ -433,7 +464,7 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                     var boc = buf_fill(dev, M * N, 0.0)
                     var boch = buf_fill(dev, M * N, float16(0.0))
                     let tew = metal_pipeline_thread_execution_width(pso)
-                    var bufs <- [bxa, bwb, boc, baq, basf, bwq, bwsf, bwsh, bbsh, bbqb, boch, bxah]
+                    var bufs <- [bxa, bwb, boc, baq, basf, bwq, bwsf, bwsh, bbsh, bbqb, boch, bxah, bwh]
                     var rerr : string
                     let tpg = tew * SGS
                     let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr, which == 4 ? tmm_tg_msl_tgmem : (which == 5 ? tmm_q8u_msl_tgmem : (which == 6 ? tmm_nt_msl_tgmem : (which == 7 ? tmm_devant_msl_tgmem : (which == 8 ? tmm_nth_msl_tgmem : (which == 9 ? tmm_q8uh_msl_tgmem : (which == 10 ? tmm_deva_msl_tgmem : (which == 11 ? tmm_devah_msl_tgmem : 0ul))))))))
@@ -445,10 +476,10 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                         t |> equal(badh, 0)
                         gpu_bad += badh
                     } elif (ran) {
-                        let bad = buf_mismatch_exact(boc, which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : (which == 5 ? want_q8u : (which == 6 ? want_nt : (which == 7 ? want_dv : (which == 9 ? want_q8uh : (which == 10 ? want_deva : (which == 11 ? want_devah : want_bfh)))))))))))
+                        let bad = buf_mismatch_exact(boc, which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : (which == 5 ? want_q8u : (which == 6 ? want_nt : (which == 7 ? want_dv : (which == 9 ? want_q8uh : (which == 10 ? want_deva : (which == 11 ? want_devah : (which == 12 ? want_bfh : (which == 13 ? want_hw : want_hwh)))))))))))))
                         if (bad != 0) {
                             var got <- buf_download(boc, M * N, type<float>)
-                            let wref & = unsafe(which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : (which == 5 ? want_q8u : (which == 6 ? want_nt : (which == 7 ? want_dv : (which == 9 ? want_q8uh : (which == 10 ? want_deva : (which == 11 ? want_devah : want_bfh)))))))))))
+                            let wref & = unsafe(which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : (which == 5 ? want_q8u : (which == 6 ? want_nt : (which == 7 ? want_dv : (which == 9 ? want_q8uh : (which == 10 ? want_deva : (which == 11 ? want_devah : (which == 12 ? want_bfh : (which == 13 ? want_hw : want_hwh)))))))))))))
                             var shown = 0
                             for (i in range(M * N)) {
                                 if (got[i] != wref[i] && shown < 4) {
@@ -481,6 +512,7 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                 metal_release(bbsh)
                 metal_release(bbqb)
                 metal_release(bxah)
+                metal_release(bwh)
                 metal_release(queue)
             }
             if (gpu_bad >= 0) {

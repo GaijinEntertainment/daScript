@@ -229,6 +229,118 @@ def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int; halfx : boo
     delete wdeq
 }
 
+// the dev-W pair: the q8 blob dequantized to a device f16 panel (one thread per 34B block),
+// then the all-device half x half mul_mm reading it - the production >= 256-row prefill
+// form. Both dispatches chain in ONE encoder (hazard tracking orders the panel write/read).
+def private q8_devw_gate(t : T?; dev, queue; m, kdim, ndim : int) {
+    let tag = "q8_devw m={m} k={kdim} n={ndim}"
+    var err : string
+    var dq_pso = pipeline_from_source(dev, metal_dequant_q8h_msl, metal_dequant_q8h_msl_entry, metal_dequant_q8h_msl_fastmath, err)
+    var mm_pso = pipeline_from_source(dev, metal_half_mulmm_th_msl, metal_half_mulmm_th_msl_entry, metal_half_mulmm_th_msl_fastmath, err)
+    if (mm_pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        return
+    }
+    t |> success(dq_pso != null && mm_pso != null, "{tag}: pipeline: {err}")
+    return if (dq_pso == null || mm_pso == null)
+    let nb = kdim / 32
+    let nblk = ndim * nb
+    var blob : array<uint8>
+    var wdeq : array<float>
+    q8_blob_fill(ndim, nb, blob, wdeq)
+    var xf : array<float>
+    q8_x_fill(m * kdim, xf)
+    var xh : array<float16>
+    xh |> resize(m * kdim)
+    for (i in range(m * kdim)) {
+        xh[i] = float16(xf[i])   // the fixture is f16-exact, so the oracle dot is unchanged
+    }
+    var want : array<float>
+    var env : array<float>
+    want |> resize(m * ndim)
+    env |> resize(m * ndim)
+    for (j in range(ndim)) {
+        for (r in range(m)) {
+            var acc = 0.0lf
+            var ev = 0.0lf
+            for (c in range(kdim)) {
+                let p = double(wdeq[j * kdim + c]) * double(xf[r * kdim + c])
+                acc += p
+                ev += abs(p)
+            }
+            want[r * ndim + j] = float(acc)
+            env[r * ndim + j] = float(ev)
+        }
+    }
+    var bw = buf_upload(dev, blob)
+    var bx = buf_upload(dev, xh)
+    var bwh = buf_fill(dev, ndim * kdim, float16(-100.0))   // poison fill: an unwritten panel block reds the compare
+    var by = buf_fill(dev, m * ndim, -1000.0)
+    var bk = buf_u32(dev, uint(kdim))
+    var bn = buf_u32(dev, uint(ndim))
+    var dka = CvtArgs(total = uint(nblk))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, dq_pso)
+        metal_set_buffer(enc, bw, 0ul, 0)
+        metal_set_buffer(enc, bw, 0ul, 1)
+        metal_set_buffer(enc, bwh, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(dka)), uint64(typeinfo sizeof(dka)), 3)
+        metal_dispatch_threadgroups(enc, uint3(uint((nblk + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+        metal_set_pipeline(enc, mm_pso)
+        metal_set_buffer(enc, bwh, 0ul, 0)
+        metal_set_buffer(enc, bx, 0ul, 1)
+        metal_set_buffer(enc, by, 0ul, 2)
+        metal_set_buffer(enc, bk, 0ul, 3)
+        metal_set_buffer(enc, bn, 0ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
+    }
+    // negative control: the GEMM alone over a poison-only panel (dequant skipped) must MISS
+    // the oracle - proves the chained compare above actually rode the dequant output
+    var bwh_p = buf_fill(dev, ndim * kdim, float16(-100.0))
+    var by_p = buf_fill(dev, m * ndim, -1000.0)
+    let ranp = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, mm_pso)
+        metal_set_buffer(enc, bwh_p, 0ul, 0)
+        metal_set_buffer(enc, bx, 0ul, 1)
+        metal_set_buffer(enc, by_p, 0ul, 2)
+        metal_set_buffer(enc, bk, 0ul, 3)
+        metal_set_buffer(enc, bn, 0ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ranp, "{tag}: control encode: {err}")
+    if (ranp) {
+        // quiet count (no eyeball dump - this red is the expectation, not a failure)
+        var badp = 0
+        unsafe {
+            let p = reinterpret<float const?>(metal_buffer_contents(by_p))
+            for (k in range(m * ndim)) {
+                badp += abs(p[k] - want[k]) <= max(2e-3 * env[k], 1e-3) ? 0 : 1
+            }
+        }
+        t |> success(badp > 0, "{tag}: poison-panel control reds the bar ({badp} over)")
+    }
+    metal_release(bwh_p)
+    metal_release(by_p)
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(bwh)
+    metal_release(by)
+    metal_release(bk)
+    metal_release(bn)
+    metal_release(dq_pso)
+    metal_release(mm_pso)
+    delete blob
+    delete xf
+    delete xh
+    delete want
+    delete env
+    delete wdeq
+}
+
 // the native-bf16 A-stage pair: W is bf16 halfwords (top 16 bits of f32), row-major [ndim x kdim]
 // The dense f32-weight tower stamp. exact=true builds pow2/small-int fixtures every staged
 // value survives f32->f16 exactly (the compare then measures tiling/indexing alone, 2e-3);
@@ -1246,6 +1358,8 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 4, false, 32, 256, 128)   // second shape: 2 col tiles
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64)
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64, halfx = true)
+                q8_devw_gate(t, dev, queue, 64, 256, 64)
+                q8_devw_gate(t, dev, queue, 32, 288, 128)   // non-256-multiple block count arms the dequant tail guard
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64, halfx = true)

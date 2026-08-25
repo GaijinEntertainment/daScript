@@ -102,7 +102,7 @@ def private is_setop1(op : das_string) : bool => op == "++" || op == "--" || op 
 // Returns the C-argument index, or -1 for any other call. Suffix match, like the tg-protocol
 // arms: resolved call names may carry a module/instance prefix.
 def private tmm2d_c_arg(cname : string) : int {
-    if (cname |> ends_with("tmm2d_f32_bf16_f32") || cname |> ends_with("tmm2d_q8b_f32")) {
+    if (cname |> ends_with("tmm2d_f32_bf16_f32") || cname |> ends_with("tmm2d_f16w_f32") || cname |> ends_with("tmm2d_q8b_f32")) {
         return 7
     }
     if (cname |> ends_with("tmm2d_q8u_f32")) {

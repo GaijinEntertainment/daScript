@@ -159,6 +159,50 @@ class MetalCvtHalf {
     }
 }
 
+// The q8 blob -> device f16 W panel pass feeding the all-device mul_mm form: one thread per
+// 34B block, scale folds at dequant, output offset blk*32 stays contiguous in both layouts.
+// Paid per site per forward against the GEMM escaping the tg-staged-operand tax (probe arm D).
+[metal_dispatch(name = "enc_dequant_q8h", pso = "g_pf_pso_dq_q8", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalDequantQ8H {
+    @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16> // 34B-block W blob, half-scale view
+    @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>    // the SAME blob buffer, byte view
+    @ssbo @binding = 2 @role = "write" wh : array<float16>                  // the dequantized W panel, d x kdim
+    @uniform @binding = 3 ka : CvtArgs
+
+    [metal_kernel(name="metal_dequant_q8h_msl")]
+    def metal_dequant_q8h {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.total) {
+            return
+        }
+        let dscale = wsh[gid * 17u]
+        for (k in range(32)) {
+            wh[gid * 32u + uint(k)] = dscale * float16(float(wqb[gid * 34u + 2u + uint(k)]))
+        }
+    }
+}
+
+// The all-device half x half mul_mm form: A = the half-X activation panel, W = the dequant
+// panel above — no threadgroup staging, no barriers (the staged-operand tax is out).
+[metal_dispatch(name = "enc_gemm_hmm_th", pso = "g_pf_pso_hmm_th", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
+class MetalHalfMulMmTH {
+    @ssbo @binding = 0 @role = "read" wh : array<float16>   // pre-dequantized W panel, d x kdim
+    @ssbo @binding = 1 @role = "read" xf : array<float16>   // the f16 activation panel (half-X)
+    @ssbo @binding = 2 @off = "yoff" @span = "mp*d*4" y : array<float>
+    @uniform @binding = 3 kdim : uint
+    @uniform @binding = 4 ndim : uint
+
+    [metal_kernel(name="metal_half_mulmm_th_msl")]
+    def metal_half_mulmm_th {
+        let mBase = gl_WorkGroupID.x * 32u
+        let nBase = gl_WorkGroupID.y * 64u
+        var wp = unsafe(addr(wh[nBase * kdim]))
+        var ap = unsafe(addr(xf[mBase * kdim]))
+        var cp = unsafe(addr(y[mBase * ndim + nBase]))
+        tmm2d_f16w_f32(32u, 64u, 4u, ap, kdim, wp, kdim, cp, ndim, kdim)
+    }
+}
+
 // Metal-4 tensor twin of MetalBf16MulMm: the SAME 32x64 tile per threadgroup off the same
 // binds, lowered to mpp matmul2d over tensor_inline views (tuner crown "mulmm_bf16", dispatch
 // shape identical). XT = the A stream codec, same contract as MetalQ8MulMmTensorT.
@@ -1830,6 +1874,12 @@ var private g_pf_bxh : MetalBuffer?     // per-forward f16 activation scratch pa
 var private g_pf_bxh2 : MetalBuffer?    // ... double-buffered so a site's GEMM overlaps the next site's convert
 var private g_pf_bxh_flip : bool
 var private g_pf_bxh_bytes : uint64     // acquired panel capacity — pf_cvt_panel's fit check
+var private g_pf_pso_dq_q8 : MetalComputePipeline?   // q8 blob -> device f16 W panel (the dev-W pass)
+var private g_pf_pso_hmm_th : MetalComputePipeline?  // all-device half x half mul_mm reading that panel
+var private g_pf_bwh : MetalBuffer?     // per-forward f16 W panels (dev-W form), double-buffered like bxh
+var private g_pf_bwh2 : MetalBuffer?
+var private g_pf_bwh_flip : bool
+var private g_pf_bwh_bytes : uint64
 var private g_pf_pso_bf16_mm : MetalComputePipeline?   // native-BF16 A twin (E-series model_proj)
 var private g_pf_pso_bf16_mm_th : MetalComputePipeline? // its half-X stamp (tensor-crowned only)
 var private g_pf_bf16_mm_tensor : bool   // crowned tensor twin selected (no tgmem bind)
@@ -1927,6 +1977,13 @@ def public set_metal_prefill_mm_tail(v : bool) {
 //! npos-gated form swap is the same class of fused-vs-splice spread.
 def public set_metal_prefill_half_x(v : bool) {
     g_pf_env_half_x = v
+}
+
+//! A/B seat: the dev-W all-device GEMM form (q8 W dequantized to a device f16 panel per
+//! site, >= 256 rows) vs the tg-staged twin. Default on; identity witnesses pin it off with
+//! half-X — the same row-gated form-swap class.
+def public set_metal_prefill_dev_w(v : bool) {
+    g_pf_env_dev_w = v
 }
 
 //! The prefill knockout rail as an in-process setter (timing attribution — served output is
@@ -2062,6 +2119,14 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_cvt_half)
         g_pf_pso_cvt_half = null
     }
+    if (g_pf_pso_dq_q8 != null) {
+        metal_release(g_pf_pso_dq_q8)
+        g_pf_pso_dq_q8 = null
+    }
+    if (g_pf_pso_hmm_th != null) {
+        metal_release(g_pf_pso_hmm_th)
+        g_pf_pso_hmm_th = null
+    }
     if (g_pf_pso_bf16_mm != null) {
         metal_release(g_pf_pso_bf16_mm)
         g_pf_pso_bf16_mm = null
@@ -2153,6 +2218,8 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     if (g_pf_mm_tensor) {
         g_pf_pso_mm_t = compile_pso(MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, ok)
         g_pf_pso_mm_th = compile_pso(MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, ok)
+        g_pf_pso_dq_q8 = compile_pso(metal_dequant_q8h_msl, metal_dequant_q8h_msl_entry, metal_dequant_q8h_msl_fastmath, ok)
+        g_pf_pso_hmm_th = compile_pso(metal_half_mulmm_th_msl, metal_half_mulmm_th_msl_entry, metal_half_mulmm_th_msl_fastmath, ok)
     }
     g_pf_bf16_mm_tensor = metal_tensor_crowned("mulmm_bf16")
     g_pf_pso_bf16_mm = (g_pf_bf16_mm_tensor
@@ -2386,9 +2453,34 @@ def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kd
     return bxh
 }
 
+// the dev-W pass: dequant this site's q8 blob into the next f16 W panel (flip pair, so a
+// site's GEMM overlaps the next site's dequant); null when the knob/panels/fit decline and
+// the caller keeps the tg twin. The 256-row gate mirrors pf_cvt_panel: the dequant tax is W-size-fixed.
+def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; rows, d, kdim : int64) : MetalBuffer? {
+    if (!g_pf_env_dev_w || g_pf_bwh == null || rows < 256l || kdim <= 0l || kdim % 32l != 0l
+            || (kdim > DEVW_LONG_K && rows < DEVW_LONG_K_ROWS)
+            || uint64(d * kdim * 2l) > g_pf_bwh_bytes) {
+        return null
+    }
+    var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh
+    g_pf_bwh_flip = !g_pf_bwh_flip
+    let nblk = d * kdim / 32l
+    var dka = CvtArgs(total = uint(nblk))
+    enc_dequant_q8h(enc, bwblob, wboff, bwblob, bwh, dka, (nblk + 255l) / 256l * 256l)
+    return bwh
+}
+
 // the tensor-path pick: dispatch the f16-stream stamp when the caller minted a twin panel
-// (tail forms keep f32 X either way)
-def private enc_gemm_mm_tensor(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; rows, d : int64; yoff : uint64; bxh : MetalBuffer?) {
+// (tail forms keep f32 X either way); with the panel AND kdim known, the dev-W all-device
+// form takes the site (dequant pass + barrier-free half x half GEMM)
+def private enc_gemm_mm_tensor(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; rows, d : int64; yoff : uint64; bxh : MetalBuffer?; kdim : int64 = 0l) {
+    if (bxh != null && g_pf_pso_hmm_th != null) {
+        var bwh = pf_devw_panel(enc, bwblob, wboff, rows, d, kdim)
+        if (bwh != null) {
+            enc_gemm_hmm_th(enc, bwh, bxh, by, yoff, bk, bn, rows, d)
+            return
+        }
+    }
     if (bxh != null && g_pf_pso_mm_th != null) {
         enc_gemm_mm_th_c(enc, bwblob, wboff, bwblob, bxh, by, yoff, bk, bn, rows, d)
     } else {
@@ -2407,7 +2499,7 @@ def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff
         let nfull = npos - r
         if (nfull > 0l) {
             if (g_pf_mm_tensor) {
-                enc_gemm_mm_tensor(enc, bwblob, wboff, bx, by, bk, bn, nfull, d, yoff, bxh)
+                enc_gemm_mm_tensor(enc, bwblob, wboff, bx, by, bk, bn, nfull, d, yoff, bxh, kdim)
             } else {
                 enc_gemm_mm_c(enc, bwblob, wboff, bwblob, bx, by, yoff, bk, bn, nfull, d)
             }
@@ -2416,7 +2508,7 @@ def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff
         return
     }
     if (g_pf_mm_tensor) {
-        enc_gemm_mm_tensor(enc, bwblob, wboff, bx, by, bk, bn, mp, d, yoff, bxh)
+        enc_gemm_mm_tensor(enc, bwblob, wboff, bx, by, bk, bn, mp, d, yoff, bxh, kdim)
     } else {
         enc_gemm_mm_c(enc, bwblob, wboff, bwblob, bx, by, yoff, bk, bn, mp, d)
     }
@@ -2881,6 +2973,14 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     g_pf_bxh2 = want_xh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_xh) : null
     g_pf_bxh_flip = false
     g_pf_bxh_bytes = want_xh ? bytes_xh : 0ul
+    // the dev-W f16 panels: one W site's dequant output (largest layer-site N x K); oversized
+    // sites (the vocab classifier) fail pf_devw_panel's fit check and keep the tg twin
+    let bytes_wh = uint64(2l * max(dim, qd_mx) * max(hid_mx, max(nsh, max(2l * dim, di_dn))))
+    let want_wh = g_pf_env_dev_w && g_pf_pso_hmm_th != null && g_pf_pso_dq_q8 != null && npos >= 256l
+    g_pf_bwh = want_wh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_wh) : null
+    g_pf_bwh2 = want_wh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_wh) : null
+    g_pf_bwh_flip = false
+    g_pf_bwh_bytes = want_wh ? bytes_wh : 0ul
     // upload the embedded rows + this prefill's rope table(s) (built for the chunk's GLOBAL
     // positions — build_rope_table takes start_pos; dual-rope: the sliding class's pair too)
     unsafe {
@@ -3774,6 +3874,15 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         g_pf_bxh2 = null
     }
     g_pf_bxh_bytes = 0ul
+    if (g_pf_bwh != null) {
+        pool_release(g_pf_pool, g_pf_bwh, bytes_wh)
+        g_pf_bwh = null
+    }
+    if (g_pf_bwh2 != null) {
+        pool_release(g_pf_pool, g_pf_bwh2, bytes_wh)
+        g_pf_bwh2 = null
+    }
+    g_pf_bwh_bytes = 0ul
     pool_release(g_pf_pool, batt, bytes_att)
     pool_release(g_pf_pool, bstats, bytes_stat)
     if (gpu_logits) {
@@ -3907,6 +4016,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
 var private g_pf_env_mulmm = true
 var private g_pf_env_mm_tail = true
 var private g_pf_env_half_x = true
+var private g_pf_env_dev_w = true
+// long-K sites (ffn down) need more rows to amortize the dev-W dequant: the W-size-fixed
+// panel round-trip is largest exactly where the all-device GEMM win is thinnest (probe:
+// K=8192 won 0.92 at 512 rows vs K=2048's 0.77)
+let DEVW_LONG_K = 4096l
+let DEVW_LONG_K_ROWS = 1024l
 var private g_pf_env_span = true
 var private g_pf_env_logits = true
 var private g_pf_env_attn = true

@@ -522,7 +522,7 @@ let private MSL_LADDER_OWNED : table<string> <- {
     "make_filled_simdgroup_float8x8", "make_filled_simdgroup_half8x8",
     "simd_sum", "simd_shuffle", "simd_shuffle_up", "simd_shuffle_down", "simd_shuffle_xor",
     "sdot4", "usdot4", "i_das_ptr_add",
-    "tmm2d_f32_bf16_f32", "tmm2d_q8_f32", "tmm2d_q8_f16s", "tmm2d_q8b_f32", "tmm2d_q8u_f32",
+    "tmm2d_f32_bf16_f32", "tmm2d_f16w_f32", "tmm2d_q8_f32", "tmm2d_q8_f16s", "tmm2d_q8b_f32", "tmm2d_q8u_f32",
     "tmm2d_tg_begin", "tmm2d_tg_step", "tmm2d_tg_store", "tmm2d_tg_store_bias", "tmm2d_tg_store_half",
     "tmm2d_tg_begin_deva", "tmm2d_tg_step_deva", "tmm2d_tile_tg", "tmm2d_tg_rowscale",
     "tmm2d_tg_begin_nt", "tmm2d_tg_step_nt", "tmm2d_tg_begin_devant", "tmm2d_tg_step_devant",
@@ -784,7 +784,7 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
             mark_write_target(ctx, ecs.arguments[1])
         }
         // the tensor GEMMs write through their C pointer (arg 7 for the 10-arg forms, 11 for q8xq8)
-        if ((scn == "tmm2d_f32_bf16_f32" && length(ecs.arguments) == 10)
+        if (((scn == "tmm2d_f32_bf16_f32" || scn == "tmm2d_f16w_f32") && length(ecs.arguments) == 10)
                 || (scn == "tmm2d_q8b_f32" && length(ecs.arguments) == 11)) {
             mark_write_target(ctx, ecs.arguments[7])
         }
@@ -2302,6 +2302,24 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
             w |> write("\}")
         }
     }
+    if (kind == "hw" || kind == "hwh") {
+        // all-device f16-W form (a pre-dequantized half panel): same single-run shape as bf,
+        // W typed device half — no threadgroup staging anywhere, so the tg operand tax is out
+        let bat = kind == "hwh" ? "half" : "float"
+        return build_string() $(var w) {
+            w |> write("static void {name}(device const {bat} * a, uint lda, device const half * wv, uint ldw, device float * c, uint ldc, uint kk) \{\n")
+            w |> write("    auto A = tensor<device {bat}, dextents<int32_t, 2>, tensor_inline>((device {bat} *)a, dextents<int32_t, 2>(int(kk), {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+            w |> write("    auto W = tensor<device half, dextents<int32_t, 2>, tensor_inline>((device half *)wv, dextents<int32_t, 2>(int(kk), {int(n)}), metal::array<int32_t, 2>\{1, int(ldw)\});\n")
+            w |> write("    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int(ldc)\});\n")
+            w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, true);\n")
+            w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
+            w |> write("    auto cT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), float>();\n")
+            w |> write("    for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
+            w |> write("    op.run(A, W, cT);\n")
+            w |> write("    cT.store(C);\n")
+            w |> write("\}")
+        }
+    }
     if (kind == "q8b") {
         // interleaved-q8_0 W blocks (34B stride, quants pre-offset +2) x raw f32 activations:
         // f32 chunk accumulate, per-(col,chunk) W scale folded between chunks
@@ -2762,17 +2780,17 @@ def private emit_tmm2d_tg_store_bias(var ctx : MslCtx; ec : ExprCall?; indent : 
 
 def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     let cname = call_base_name("{ec.name}")
-    var kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8u_f32" ? "q8u" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8")))
+    var kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_f16w_f32" ? "hw" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8u_f32" ? "q8u" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8"))))
     if (kind == "q8u" && length(ec.arguments) == 13) {
         // the overload resolves by the activation pointer's pointee: float16 = the half-A stream
         if (tmm2d_a_elem(ec.arguments[6]) == "half") {
             kind = "q8uh"
         }
     }
-    if (kind == "bf" && length(ec.arguments) == 10 && tmm2d_a_elem(ec.arguments[3]) == "half") {
-        kind = "bfh"
+    if ((kind == "bf" || kind == "hw") && length(ec.arguments) == 10 && tmm2d_a_elem(ec.arguments[3]) == "half") {
+        kind = kind == "bf" ? "bfh" : "hwh"
     }
-    let want_args = kind == "bf" || kind == "bfh" ? 10 : (kind == "q8b" ? 11 : (kind == "q8u" || kind == "q8uh" ? 13 : 14))
+    let want_args = kind == "bf" || kind == "bfh" || kind == "hw" || kind == "hwh" ? 10 : (kind == "q8b" ? 11 : (kind == "q8u" || kind == "q8uh" ? 13 : 14))
     if (length(ec.arguments) != want_args) {
         err(ctx, ec.at, "{cname} takes exactly {want_args} arguments")
         return
@@ -3014,7 +3032,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_tg_store_float4(ctx, ec, indent, lines)
         } elif (cname == "simdgroup_multiply_accumulate" || cname == "simdgroup_multiply") {
             emit_sgmat_multiply(ctx, ec, indent, lines)
-        } elif (cname == "tmm2d_f32_bf16_f32" || cname == "tmm2d_q8_f32" || cname == "tmm2d_q8_f16s" || cname == "tmm2d_q8b_f32" || cname == "tmm2d_q8u_f32") {
+        } elif (cname == "tmm2d_f32_bf16_f32" || cname == "tmm2d_f16w_f32" || cname == "tmm2d_q8_f32" || cname == "tmm2d_q8_f16s" || cname == "tmm2d_q8b_f32" || cname == "tmm2d_q8u_f32") {
             emit_tmm2d(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_begin") {
             emit_tmm2d_tg_begin(ctx, ec, indent, lines)

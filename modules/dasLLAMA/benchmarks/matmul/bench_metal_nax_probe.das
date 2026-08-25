@@ -193,6 +193,44 @@ let HALFA_Q8_GEMM = (NAX_COMMON +
     "    tmm_q8h(wt, wsh + blk0 * 17u, wqb + blk0 * 34u + 2u, xh + mBase * kdim, kdim, y + mBase * ndim + nBase, ndim, kdim, kdim / 32u, tid);\n" +
     "\}\n")
 
+// arm D — dequant W to a DEVICE f16 panel (bandwidth pass), then the all-device half x half
+// matmul2d (the bf16 twin's form, W as device half): probes whether paying the W panel
+// traffic per forward escapes the tg-staging tax (the ~60% law) on the GEMM itself.
+// Timed COMBINED (dequant + gemm in one encoder window) — that is the per-forward bill.
+let DEVW_Q8_GEMM = (NAX_COMMON +
+    "kernel void dequant_q8_wh(device const half* wsh [[buffer(0)]],\n" +
+    "        device const char* wqb [[buffer(1)]],\n" +
+    "        device half* wh [[buffer(2)]],\n" +
+    "        constant uint& nblk [[buffer(3)]],\n" +
+    "        uint gid [[thread_position_in_grid]]) \{\n" +
+    "    if (gid >= nblk) return;\n" +
+    "    const half dscale = wsh[gid * 17u];\n" +
+    "    device const char * q = wqb + gid * 34u + 2u;\n" +
+    "    device half * o = wh + gid * 32u;\n" +
+    "    _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 32; ++i) \{ o[i] = dscale * half(q[i]); \}\n" +
+    "\}\n" +
+    "static void tmm_devw(device const half * a, uint lda, device const half * wv, uint ldw, device float * c, uint ldc, uint kk) \{\n" +
+    "    auto A = tensor<device half, dextents<int32_t, 2>, tensor_inline>((device half *)a, dextents<int32_t, 2>(int(kk), 32), metal::array<int32_t, 2>\{1, int(lda)\});\n" +
+    "    auto W = tensor<device half, dextents<int32_t, 2>, tensor_inline>((device half *)wv, dextents<int32_t, 2>(int(kk), 64), metal::array<int32_t, 2>\{1, int(ldw)\});\n" +
+    "    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>(64, 32), metal::array<int32_t, 2>\{1, int(ldc)\});\n" +
+    "    constexpr auto d = mpp::tensor_ops::matmul2d_descriptor(32, 64, static_cast<int>(dynamic_extent), false, true, true);\n" +
+    "    mpp::tensor_ops::matmul2d<d, execution_simdgroups<4>> op;\n" +
+    "    auto cT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), float>();\n" +
+    "    for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n" +
+    "    op.run(A, W, cT);\n" +
+    "    cT.store(C);\n" +
+    "\}\n" +
+    "kernel void devw_q8_gemm(device const half* wh [[buffer(0)]],\n" +
+    "        device const half* xh [[buffer(1)]],\n" +
+    "        device float* y [[buffer(2)]],\n" +
+    "        constant uint& kdim [[buffer(3)]],\n" +
+    "        constant uint& ndim [[buffer(4)]],\n" +
+    "        uint3 wg [[threadgroup_position_in_grid]]) \{\n" +
+    "    uint mBase = wg.x * 32u;\n" +
+    "    uint nBase = wg.y * 64u;\n" +
+    "    tmm_devw(xh + mBase * kdim, kdim, wh + nBase * kdim, kdim, y + mBase * ndim + nBase, ndim, kdim);\n" +
+    "\}\n")
+
 def private cpu_ref(blob : array<int8>; xf : array<float>; var want : array<float>; m, kdim, ndim : int) {
     let nb = kdim / 32
     unsafe {
@@ -240,8 +278,24 @@ def main {   // nolint:STYLE038 — one-shot probe harness; buffers + PSOs stay 
             print("half-A pso: {err}\n")
             return
         }
+        var th_pso = pipeline_from_source(dev, MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, err)
+        if (th_pso == null) {
+            print("q8uh(TH) pso: {err}\n")
+            return
+        }
+        var dq_pso = pipeline_from_source(dev, DEVW_Q8_GEMM, "dequant_q8_wh", true, err)
+        if (dq_pso == null) {
+            print("dequant pso: {err}\n")
+            return
+        }
+        var dw_pso = pipeline_from_source(dev, DEVW_Q8_GEMM, "devw_q8_gemm", true, err)
+        if (dw_pso == null) {
+            print("devw pso: {err}\n")
+            return
+        }
         // the 1B's dominant shapes: gate/up (K=2048 N=8192), down (K=8192 N=2048), qkv-ish
-        for (shp in [(m = 2048, k = 2048, n = 8192), (m = 2048, k = 8192, n = 2048), (m = 2048, k = 2048, n = 2048)]) {
+        for (shp in [(m = 2048, k = 2048, n = 8192), (m = 2048, k = 8192, n = 2048), (m = 2048, k = 2048, n = 2048),
+                     (m = 512, k = 2048, n = 8192), (m = 512, k = 8192, n = 2048), (m = 128, k = 2048, n = 8192)]) {
             let m = shp.m
             let kdim = shp.k
             let ndim = shp.n
@@ -333,6 +387,53 @@ def main {   // nolint:STYLE038 — one-shot probe harness; buffers + PSOs stay 
             let ok3 = race_envelope_ok(by_a, by_b, m * ndim, note3)
             let verdict3 = ok3 ? "outputs-agree" : note3
             print("  half-A: q8u={t_q8u3}ms halfA={t_ha}ms ratio={t_ha / t_q8u3} {verdict3}\n")
+            // arm D vs the PRODUCTION f16-stream twin (the shipping >=256-row form): both
+            // read the same f16 activation panel; arm D's window pays dequant + gemm
+            let nblk = ndim * (kdim / 32)
+            var bwh = race_buf(dev, uint64(ndim * kdim * 2), null)
+            var bnb = race_uniform_u32(dev, uint(nblk))
+            var t_th = -1.0lf
+            var t_dw = -1.0lf
+            race_pair_ms(queue, 5, t_th, t_dw, $(enc) {
+                kn_pipeline(enc, th_pso)
+                kn_tgmem(enc, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem, 0)
+                kn_buffer(enc, bw, 0ul, 0)
+                kn_buffer(enc, bw, 0ul, 1)
+                kn_buffer(enc, bxh, 0ul, 2)
+                kn_buffer(enc, by_a, 0ul, 3)
+                kn_buffer(enc, bk, 0ul, 4)
+                kn_buffer(enc, bn, 0ul, 5)
+                kn_dispatch(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+            }, $(enc) {
+                kn_pipeline(enc, dq_pso)
+                kn_buffer(enc, bw, 0ul, 0)
+                kn_buffer(enc, bw, 0ul, 1)
+                kn_buffer(enc, bwh, 0ul, 2)
+                kn_buffer(enc, bnb, 0ul, 3)
+                kn_dispatch(enc, uint3(uint(nblk / 128), 1u, 1u), uint3(128u, 1u, 1u))
+                kn_pipeline(enc, dw_pso)
+                kn_buffer(enc, bwh, 0ul, 0)
+                kn_buffer(enc, bxh, 0ul, 1)
+                kn_buffer(enc, by_b, 0ul, 2)
+                kn_buffer(enc, bk, 0ul, 3)
+                kn_buffer(enc, bn, 0ul, 4)
+                kn_dispatch(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+            })
+            let t_dw_gemm = race_time_ms(queue, 5) $(enc) {   // wh stays populated: the GEMM-only split
+                kn_pipeline(enc, dw_pso)
+                kn_buffer(enc, bwh, 0ul, 0)
+                kn_buffer(enc, bxh, 0ul, 1)
+                kn_buffer(enc, by_b, 0ul, 2)
+                kn_buffer(enc, bk, 0ul, 3)
+                kn_buffer(enc, bn, 0ul, 4)
+                kn_dispatch(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+            }
+            var note4 = ""
+            let ok4 = race_envelope_ok(by_a, by_b, m * ndim, note4)
+            let verdict4 = ok4 ? "outputs-agree" : note4
+            print("  dev-W: q8uh={t_th}ms dequant+devw={t_dw}ms (gemm-only {t_dw_gemm}ms) ratio={t_dw / t_th} {verdict4}\n")
+            metal_release(bwh)
+            metal_release(bnb)
             metal_release(bxh)
             delete xh
             var note = ""
@@ -372,6 +473,9 @@ def main {   // nolint:STYLE038 — one-shot probe harness; buffers + PSOs stay 
         metal_release(nax_pso)
         metal_release(i8_pso)
         metal_release(q8u_pso)
+        metal_release(th_pso)
+        metal_release(dq_pso)
+        metal_release(dw_pso)
         metal_release(queue)
         metal_release(dev)
     }

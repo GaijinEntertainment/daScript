@@ -298,6 +298,46 @@ def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float16 const?; lda : uint; 
     }
 }
 
+//! f32/f16 activations x DEVICE f16 weights -> f32 tile: the all-device form (no threadgroup
+//! staging, no barriers — the tg-staged operand tax does not apply). W is a pre-dequantized
+//! half panel (n cols x kk, row stride ldw). The float16-A overload streams a half panel;
+//! the emitter picks the operand type by the activation pointer's pointee.
+[unused_argument(sgs), sideeffects]
+def public tmm2d_f16w_f32(m, n, sgs : uint; a : float const?; lda : uint; w : float16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var acc = 0.0
+                for (k in range(int(kk))) {
+                    acc += a[r * int(lda) + k] * float(w[j * int(ldw) + k])
+                }
+                c[r * int(ldc) + j] = acc
+            }
+        }
+    }
+}
+
+[unused_argument(sgs), sideeffects]
+def public tmm2d_f16w_f32(m, n, sgs : uint; a : float16 const?; lda : uint; w : float16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var acc = 0.0
+                for (k in range(int(kk))) {
+                    acc += float(a[r * int(lda) + k]) * float(w[j * int(ldw) + k])
+                }
+                c[r * int(ldc) + j] = acc
+            }
+        }
+    }
+}
+
 //! Q8xQ8 tile with the per-32-block scale fold (exact int32 accumulate per block, then
 //! facc += float(iacc) * as[r][b] * ws[j][b] — the dot_q8q8 contract). Scale row strides in
 //! ELEMENTS (blocks): as at a + r*lda_s, ws at w + j*ldw_s.
