@@ -2459,7 +2459,7 @@ def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kd
 def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; rows, d, kdim : int64) : MetalBuffer? {
     if (!g_pf_env_dev_w || g_pf_bwh == null || rows < 256l || kdim <= 0l || kdim % 32l != 0l
             || (kdim > DEVW_LONG_K && rows < DEVW_LONG_K_ROWS)
-            || uint64(d * kdim * 2l) > g_pf_bwh_bytes) {
+            || uint64(d * kdim * 2l) > min(g_pf_bwh_bytes, DEVW_MAX_PANEL)) {
         return null
     }
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh
@@ -4022,6 +4022,10 @@ var private g_pf_env_dev_w = true
 // K=8192 won 0.92 at 512 rows vs K=2048's 0.77)
 let DEVW_LONG_K = 4096l
 let DEVW_LONG_K_ROWS = 1024l
+// panel-size ceiling: the f16 panel doubles the W bytes the GEMM streams vs the q8 blob
+// (2 vs 1.06 B/w); past cache-adjacent sizes that traffic is raw DRAM per M-tile and sinks
+// the form (8B dim-4096 up/gate 117MB panels measured -22..27% e2e; 33MB panels win)
+let DEVW_MAX_PANEL = 64ul * 1024ul * 1024ul
 var private g_pf_env_span = true
 var private g_pf_env_logits = true
 var private g_pf_env_attn = true
