@@ -303,7 +303,7 @@ namespace das
         if ( autoT->baseType==Type::option ) {
             for ( size_t i=0, is=autoT->argTypes.size(); i!=is; ++i ) {
                 // we copy type qualifiers for each option
-                auto & TT = autoT->argTypes[i];
+                TypeDeclPtr TT = new TypeDecl(*autoT->argTypes[i]);
                 TT->ref = TT->ref || autoT->ref;
                 TT->constant = TT->constant || autoT->constant;
                 TT->temporary = TT->temporary || autoT->temporary;

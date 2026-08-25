@@ -1496,6 +1496,19 @@ namespace das {
 
 // function
 
+    // a function has a restorable identity only while its module still lists it
+    static bool moduleListsFunction ( Function * fn ) {
+        if ( !fn || !fn->module ) return false;
+        auto hName = hash64z(fn->name.c_str());
+        if ( auto it = fn->module->functionsByName.find(hName) ) {
+            for ( auto & f : it->second ) if ( f==fn ) return true;
+        }
+        if ( auto it = fn->module->genericsByName.find(hName) ) {
+            for ( auto & f : it->second ) if ( f==fn ) return true;
+        }
+        return false;
+    }
+
     void Function::serialize ( AstSerializer & ser ) {
         ser.tag(HASH_TAG("Function"));
         ser << name;
@@ -1511,7 +1524,14 @@ namespace das {
         ser << classParentCross;
         if ( classParentCross ) ser.serializePointer(classParent);
         else                    ser << classParent;
-        //ser << fromGeneric;
+        // usually another module's generic, so it binds by name - see Structure::serialize
+        // (parent). an origin its module no longer lists has no identity to write
+        if ( ser.writing ) {
+            Function * origin = moduleListsFunction(fromGeneric) ? fromGeneric : nullptr;
+            ser.serializePointer(origin);
+        } else {
+            ser.serializePointer(fromGeneric);
+        }
         ser << index         << totalStackSize  << totalGenLabel;
         ser << at            << atDecl          << module;
         ser << hash          << aotHash;  // do not serialize inferStack
@@ -2563,7 +2583,19 @@ namespace das {
 
     void Module::serialize ( AstSerializer & ser, bool already_exists ) {
         ser.tag(HASH_TAG("Module"));
+        // builtIn / promoted say whether this module is linked into daScriptEnvironment::modules,
+        // which is a fact about the running process, not about the stream. Restoring them hands
+        // back a module that claims to be a promoted builtin without ever having been linked, and
+        // the next promoteToBuiltin trips its own assert on it
+        const bool selfBuiltIn = builtIn;
+        const bool selfPromoted = promoted;
+        if ( ser.writing ) {
+            builtIn = false;
+            promoted = false;
+        }
         ser << name << nameHash << moduleFlags << inlineTempIndex;
+        builtIn = selfBuiltIn;
+        promoted = selfPromoted;
         ser << annotationData << requireModule;
         // das-declared distinct types round-trip with the module (C++-module annotations
         // re-register on load, parser-created ones don't). they stream BEFORE aliasTypes and
@@ -3229,7 +3261,6 @@ namespace das {
                             throw;
                         }
                         if ( activeWasThisModule ) activeRoot = &throwaway_root;
-                        mod->builtIn = false; // suppress assert
                         mod->promoteToBuiltin(nullptr, promotedRequire);
                     }
                 } else {
