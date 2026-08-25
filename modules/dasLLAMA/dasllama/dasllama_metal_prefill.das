@@ -2359,15 +2359,28 @@ def private enc_gemm_mm_tail(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; 
     }
 }
 
-// the half-X A-panel convert shared by every f16-stream stamp (q8/kq/bf16): encode the f32 ->
-// f16 pass into the flip panel (double-buffered so site i's GEMM overlaps site i+1's convert).
-// Null = f32 form: no panels this forward, no fit (tower shapes), or under the 256-row gate.
-def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kdim : int64) : MetalBuffer? {
-    if (!g_pf_env_half_x || g_pf_bxh == null || kdim <= 0l || rows < 256l || uint64(rows * kdim * 2l) > g_pf_bxh_bytes) {
+// the flip half of the half-X twin rail: hand out the next f16 scratch panel when the knob,
+// the panels and the fit allow (double-buffered so a consumer's GEMM overlaps the next twin's
+// producer). Producers (dual-store stamps) take it ungated by rows - their twin is free.
+def private pf_twin_panel(rows, kdim : int64) : MetalBuffer? {
+    if (!g_pf_env_half_x || g_pf_bxh == null || kdim <= 0l || uint64(rows * kdim * 2l) > g_pf_bxh_bytes) {
         return null
     }
     var bxh = g_pf_bxh_flip ? g_pf_bxh2 : g_pf_bxh
     g_pf_bxh_flip = !g_pf_bxh_flip
+    return bxh
+}
+
+// the CONVERT form (no dual-store producer owns the panel): encode the f32 -> f16 pass; the
+// 256-row gate stays here - under it the convert dispatches outweigh the halved stream.
+def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kdim : int64) : MetalBuffer? {
+    if (rows < 256l) {
+        return null
+    }
+    var bxh = pf_twin_panel(rows, kdim)
+    if (bxh == null) {
+        return null
+    }
     var cka = CvtArgs(total = uint(rows * kdim))
     enc_cvt_half(enc, bx, bxh, cka, rows * kdim)
     return bxh
@@ -2863,7 +2876,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         max(max(bytes_dn_di, bytes_ple_g), moe ? bytes_mg : 0ul)) / 2ul
     let any_th = (g_pf_pso_mm_th != null || g_pf_pso_kq_mm4_th != null || g_pf_pso_kq_mm5_th != null
         || g_pf_pso_kq_mm6_th != null || g_pf_pso_bf16_mm_th != null)
-    let want_xh = any_th && mp >= 256l
+    let want_xh = any_th
     g_pf_bxh = want_xh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_xh) : null
     g_pf_bxh2 = want_xh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_xh) : null
     g_pf_bxh_flip = false
@@ -3138,14 +3151,22 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 // attention: [pending W2 residual +] norm -> [requant ->] Q/K/V -> rope ->
                 // scores+softmax -> P.V -> out-proj (fused path folds each residual add into the
                 // FOLLOWING add+rms+quant; the default path feeds normed f32 rows straight to mul_mm)
+                var bxh_x : MetalBuffer?
                 if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                    pf_enc_rms(enc, bx, 0ul, bw_att, bxb, u_dim, u_eps, npos)
+                    bxh_x = g_pso_rms_hx != null ? pf_twin_panel(mp, dim) : null
+                    if (bxh_x != null) {
+                        pf_enc_rms_hx(enc, bx, 0ul, bw_att, bxb, u_dim, u_eps, bxh_x, npos)
+                    } else {
+                        pf_enc_rms(enc, bx, 0ul, bw_att, bxb, u_dim, u_eps, npos)
+                    }
                 }
                 if (recr) {
                     // deltanet layer (Wave D): batched projections -> conv+SiLU -> q/k L2 -> fused
                     // sequential scan (state walks the whole window in-kernel) -> gated out-norm -> out-proj
                     if (g_pf_skip != "gemm") {
-                        let bxh_x = pf_cvt_panel(enc, bxb, mp, dim)
+                        if (bxh_x == null) {
+                            bxh_x = pf_cvt_panel(enc, bxb, mp, dim)
+                        }
                         let bwqkv = blob_of(g_dev, t, t.dnqkv_offs[l])
                         enc_gemm_mm(enc, bwqkv.buf, bwqkv.boff, bxb, bdnqkv, u_dim, u_dn_cd, mp, cd_dn, 0ul, dim, npos, bxh_x)
                         let bwz = blob_of(g_dev, t, t.dngate_offs[l])
@@ -3187,7 +3208,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 if (!recr && g_pf_skip != "gemm") {
                     // K-quant tensors take their mul_mm twins per tensor (the gate pins the
                     // mm shape for kquant loads); q8-tagged tensors keep the blob path
-                    let bxh_x = pf_cvt_panel(enc, bxb, mp, dim)
+                    if (bxh_x == null) {
+                        bxh_x = pf_cvt_panel(enc, bxb, mp, dim)
+                    }
                     let fq = fmt_at(t.wq_fmt, l)
                     let fk = fmt_at(t.wk_fmt, l)
                     let fv = has_wv ? fmt_at(t.wv_fmt, l) : KqFmt.q8
@@ -3349,6 +3372,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
                 // ffn: [post-attn norm ->] [WO residual +] norm -> [requant ->] W1/W3 ->
                 // swiglu/geglu[+requant] -> W2 [-> post-ffn norm]
+                var bxh_ffn : MetalBuffer?
                 if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     if (c.pre_post_norm) {
                         // gemma sandwich: norm the attention branch IN PLACE before the residual add
@@ -3356,7 +3380,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         pf_enc_rms(enc, bxb2, 0ul, bw_pa, bxb2, u_dim, u_eps, npos)
                     }
                     enc_add(enc, bx, 0ul, bxb2, 0ul, u_total_dim, npos * dim)
-                    pf_enc_rms(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, npos)
+                    bxh_ffn = g_pso_rms_hx != null ? pf_twin_panel(mp, dim) : null
+                    if (bxh_ffn != null) {
+                        pf_enc_rms_hx(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, bxh_ffn, npos)
+                    } else {
+                        pf_enc_rms(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, npos)
+                    }
                 }
                 if (moe && g_pf_skip != "gemm" && g_pf_skip != "moe") {
                     // MoE FFN (Wave C stage 2b): per-position routing + CSR, then one gathered
@@ -3469,7 +3498,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 let u_hid_l = (u_hidden2 == null || hid_l == hidden) ? u_hidden : u_hidden2
                 let u_th_l = (u_total_h2 == null || hid_l == hidden) ? u_total_h : u_total_h2
                 if ((!moe || g4moe) && g_pf_skip != "gemm") {   // g4: the dense parallel shared branch
-                    let bxh_ffn = pf_cvt_panel(enc, bxb, mp, dim)
+                    if (bxh_ffn == null) {
+                        bxh_ffn = pf_cvt_panel(enc, bxb, mp, dim)
+                    }
                     let f1 = fmt_at(t.w1_fmt, l)
                     let f3 = fmt_at(t.w3_fmt, l)
                     if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {
@@ -3492,15 +3523,28 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         enc_gemm_mm(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hid_l, mp, hid_l, 0ul, dim, npos, bxh_ffn)
                     }
                 }
+                var bxh_h : MetalBuffer?
                 if ((!moe || g4moe) && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     if (c.ffn_act != FfnAct.silu) {
-                        enc_geglu(enc, bhb, 0ul, bhb2, 0ul, u_th_l, npos * hid_l)
+                        bxh_h = g_pso_geglu_hx != null ? pf_twin_panel(mp, hid_l) : null
+                        if (bxh_h != null) {
+                            enc_geglu_hx(enc, bhb, 0ul, bhb2, 0ul, u_th_l, bxh_h, npos * hid_l)
+                        } else {
+                            enc_geglu(enc, bhb, 0ul, bhb2, 0ul, u_th_l, npos * hid_l)
+                        }
                     } else {
-                        enc_swiglu(enc, bhb, 0ul, bhb2, 0ul, u_th_l, npos * hid_l)
+                        bxh_h = g_pso_swiglu_hx != null ? pf_twin_panel(mp, hid_l) : null
+                        if (bxh_h != null) {
+                            enc_swiglu_hx(enc, bhb, 0ul, bhb2, 0ul, u_th_l, bxh_h, npos * hid_l)
+                        } else {
+                            enc_swiglu(enc, bhb, 0ul, bhb2, 0ul, u_th_l, npos * hid_l)
+                        }
                     }
                 }
                 if ((!moe || g4moe) && g_pf_skip != "gemm") {
-                    let bxh_h = pf_cvt_panel(enc, bhb, mp, hid_l)
+                    if (bxh_h == null) {
+                        bxh_h = pf_cvt_panel(enc, bhb, mp, hid_l)
+                    }
                     let f2 = fmt_at(t.w2_fmt, l)
                     if (f2 != KqFmt.q8) {
                         pf_enc_kq_site_mm(enc, t, f2, t.w2_offs[l], dim, bhb, bxb, u_hid_l, u_dim, mp, 0ul, bxh_h)

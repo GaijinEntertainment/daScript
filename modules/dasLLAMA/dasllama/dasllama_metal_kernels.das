@@ -3511,11 +3511,13 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     // the GEMV / rms / add / swiglu MSL sources are the prefill module's, verbatim (own PSOs)
     g_pso_gemv = compile_pso(MetalQ8Gemv_metal_q8_gemv_msl, MetalQ8Gemv_metal_q8_gemv_msl_entry, MetalQ8Gemv_metal_q8_gemv_msl_fastmath, ok)
     g_gemv_rows = clamp(int64(g_env_metal.gemv_tg), 1l, 32l)
-    g_pso_rms = compile_pso(metal_rmsnorm_msl, metal_rmsnorm_msl_entry, metal_rmsnorm_msl_fastmath, ok)
+    g_pso_rms = compile_pso(MetalRmsNorm_metal_rmsnorm_msl, MetalRmsNorm_metal_rmsnorm_msl_entry, MetalRmsNorm_metal_rmsnorm_msl_fastmath, ok)
+    g_pso_rms_hx = compile_pso(MetalRmsNormHX_metal_rmsnorm_msl, MetalRmsNormHX_metal_rmsnorm_msl_entry, MetalRmsNormHX_metal_rmsnorm_msl_fastmath, ok)
     g_pso_add = compile_pso(MetalAdd_metal_ew2_msl, MetalAdd_metal_ew2_msl_entry, MetalAdd_metal_ew2_msl_fastmath, ok)
     g_pso_addrms = compile_pso(metal_add_rms_msl, metal_add_rms_msl_entry, metal_add_rms_msl_fastmath, ok)
     g_pso_preaddrms = compile_pso(metal_pre_add_rms_msl, metal_pre_add_rms_msl_entry, metal_pre_add_rms_msl_fastmath, ok)
     g_pso_swiglu = compile_pso(MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, MetalSwiglu_metal_ew2_msl_fastmath, ok)
+    g_pso_swiglu_hx = compile_pso(MetalSwigluHX_metal_ew2_msl, MetalSwigluHX_metal_ew2_msl_entry, MetalSwigluHX_metal_ew2_msl_fastmath, ok)
     g_one = metal_new_buffer(g_dev, 4ul)
     unsafe {
         var onep = reinterpret<float?>(metal_buffer_contents(g_one))
@@ -3527,6 +3529,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         zp[0] = 0u
     }
     g_pso_geglu = compile_pso(MetalGeglu_metal_ew2_msl, MetalGeglu_metal_ew2_msl_entry, MetalGeglu_metal_ew2_msl_fastmath, ok)
+    g_pso_geglu_hx = compile_pso(MetalGegluHX_metal_ew2_msl, MetalGegluHX_metal_ew2_msl_entry, MetalGegluHX_metal_ew2_msl_fastmath, ok)
     g_pso_ln = compile_pso(metal_layernorm_msl, metal_layernorm_msl_entry, metal_layernorm_msl_fastmath, ok)
     g_pso_f32mm = compile_pso(metal_f32_mulmm_msl, metal_f32_mulmm_msl_entry, metal_f32_mulmm_msl_fastmath, ok)
     g_pso_gelu_erf = compile_pso(MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, ok)
@@ -4176,6 +4179,10 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_rms)
         g_pso_rms = null
     }
+    if (g_pso_rms_hx != null) {
+        metal_release(g_pso_rms_hx)
+        g_pso_rms_hx = null
+    }
     release_pso(g_pso_dn_ba)
     release_pso(g_pso_moe_router_b)
     if (g_pso_add != null) {
@@ -4201,6 +4208,10 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     if (g_pso_geglu != null) {
         metal_release(g_pso_geglu)
         g_pso_geglu = null
+    }
+    if (g_pso_geglu_hx != null) {
+        metal_release(g_pso_geglu_hx)
+        g_pso_geglu_hx = null
     }
     if (g_pso_ln != null) {
         metal_release(g_pso_ln)
@@ -4246,6 +4257,10 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
     if (g_pso_swiglu != null) {
         metal_release(g_pso_swiglu)
         g_pso_swiglu = null
+    }
+    if (g_pso_swiglu_hx != null) {
+        metal_release(g_pso_swiglu_hx)
+        g_pso_swiglu_hx = null
     }
     if (g_pso_attn16 != null) {
         metal_release(g_pso_attn16)
@@ -4478,24 +4493,24 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
 
 // ===== family-shared kernel classes (M1: moved from prefill) =====
 
-// One threadgroup per row: cooperative sum of squares (simd_sum + per-simdgroup partials),
-// lane 0 folds partials into rsqrt(mean + eps), every thread scales its strided slice.
-// Three dispatch shapes on one class: decode single-row, batched prologue, prefill (256/tg).
-[metal_dispatch(name = "enc_rms", pso = "g_pso_rms", tgmem = "metal_rmsnorm_msl_tgmem", tg = 1024, grid = "1"),
-    metal_dispatch(name = "enc_rms_b", pso = "g_pso_rms", tgmem = "metal_rmsnorm_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64"),
-    metal_dispatch(name = "pf_enc_rms", pso = "g_pso_rms", tgmem = "metal_rmsnorm_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
-class MetalRmsNorm {
+// One threadgroup per row: cooperative sum of squares, lane 0 folds rsqrt(mean + eps), every
+// thread scales its strided slice. HX = the dual-store stamp: the scale loop also writes the
+// f16 twin panel the half-X GEMM stamps stream — the norm's consumers pay no convert dispatch.
+[ |> template_struct_instance]
+class template MetalRmsNormT {
     @ssbo @binding = 0 @off = "xoff" x : array<float>     // [nrows x dim] source
     @ssbo @binding = 1 @role = "weight" w : array<float>     // [dim] weight
     @ssbo @binding = 2 y : array<float>     // [nrows x dim] out (x aliasing is safe: x is fully
                                             // read before the barrier that precedes any write)
     @uniform @binding = 3 dim : uint
     @uniform @binding = 4 eps : float
+    @ssbo @binding = 5 @role = "write" @template_gate = HX yh : array<float16>   // [nrows x dim] f16 twin
+    @template_constant HX : bool = false
     @workgroup partial : float[32]          // one per simdgroup — width-agnostic up to 1024
                                             // threads (prefill dispatches 256, decode 1024)
     @workgroup inv_sh : float
 
-    [metal_kernel(name="metal_rmsnorm_msl")]
+    [metal_kernel]
     def metal_rmsnorm {
         let row = gl_WorkGroupID.x
         let lid = gl_LocalInvocationID.x
@@ -4524,10 +4539,26 @@ class MetalRmsNorm {
         let inv = inv_sh
         k = lid
         while (k < dim) {
-            y[row * dim + k] = w[k] * (x[row * dim + k] * inv)
+            let ov = w[k] * (x[row * dim + k] * inv)
+            y[row * dim + k] = ov
+            static_if (HX) {
+                yh[row * dim + k] = float16(ov)
+            }
             k += gl_WorkGroupSize.x
         }
     }
+}
+
+// Three dispatch shapes on one stamp: decode single-row, batched prologue, prefill (256/tg).
+[metal_dispatch(name = "enc_rms", pso = "g_pso_rms", tgmem = "MetalRmsNorm_metal_rmsnorm_msl_tgmem", tg = 1024, grid = "1"),
+    metal_dispatch(name = "enc_rms_b", pso = "g_pso_rms", tgmem = "MetalRmsNorm_metal_rmsnorm_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "pf_enc_rms", pso = "g_pso_rms", tgmem = "MetalRmsNorm_metal_rmsnorm_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalRmsNorm : MetalRmsNormT {
+}
+
+[metal_dispatch(name = "pf_enc_rms_hx", pso = "g_pso_rms_hx", tgmem = "MetalRmsNormHX_metal_rmsnorm_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalRmsNormHX : MetalRmsNormT {
+    override HX = true
 }
 
 // LayerNorm (weight + bias), the tower/embedder norm: two-pass mean then POPULATION variance,
@@ -7323,7 +7354,9 @@ class template MetalEw2T {
     @ssbo @binding = 1 @role = "read" @off = "uoff" @span = "total*4" u : array<float>
     @uniform @binding = 2 total : uint      // grid guard
     @uniform @binding = 3 @template_gate = HAS_ASCALE ascale : float
+    @ssbo @binding = 4 @role = "write" @template_gate = HX gh : array<float16>   // f16 twin of g (the dual-store stamps)
     @template_constant HAS_ASCALE : bool = false
+    @template_constant HX : bool = false
 
     def abstract combine(a, b : float) : float
 
@@ -7334,23 +7367,45 @@ class template MetalEw2T {
             return
         }
         let vv = g[gid]
-        g[gid] = combine(vv, u[gid])
+        let res = combine(vv, u[gid])
+        g[gid] = res
+        static_if (HX) {
+            gh[gid] = float16(res)
+        }
     }
 }
 
 // g = silu(g) * u — swiglu exactly (the CPU side's exp4 polynomial vs the GPU exp differ
-// inside the shared tolerance envelope)
+// inside the shared tolerance envelope); silu shared with the HX stamp so both compute one form
+def private msl_silu_mul(a, b : float) : float => (a / (1.0 + exp(-a))) * b
+
 [metal_dispatch(name = "enc_swiglu", pso = "g_pso_swiglu", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSwiglu : MetalEw2T {
-    def override combine(a, b : float) : float => (a / (1.0 + exp(-a))) * b
+    def override combine(a, b : float) : float => msl_silu_mul(a, b)
+}
+
+[metal_dispatch(name = "enc_swiglu_hx", pso = "g_pso_swiglu_hx", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalSwigluHX : MetalEw2T {
+    override HX = true
+
+    def override combine(a, b : float) : float => msl_silu_mul(a, b)
 }
 
 // GeGLU twin (gemma line), the CPU's tanh-approx gelu via the exp identity — Metal tanh NaNs
 // past ~44 while exp saturates: exp(INF) -> denom INF -> the term is 0
+def private msl_geglu_mul(a, b : float) : float => (
+    0.5 * a * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.7978845608028654 * (a + 0.044715 * a * a * a))))) * b)
+
 [metal_dispatch(name = "enc_geglu", pso = "g_pso_geglu", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGeglu : MetalEw2T {
-    def override combine(a, b : float) : float => (
-        0.5 * a * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.7978845608028654 * (a + 0.044715 * a * a * a))))) * b)
+    def override combine(a, b : float) : float => msl_geglu_mul(a, b)
+}
+
+[metal_dispatch(name = "enc_geglu_hx", pso = "g_pso_geglu_hx", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGegluHX : MetalEw2T {
+    override HX = true
+
+    def override combine(a, b : float) : float => msl_geglu_mul(a, b)
 }
 
 // GEGLU-quick (gemma4v): gelu_quick(g)*u with the CPU's f16-table form — both binary16

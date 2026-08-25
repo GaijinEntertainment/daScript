@@ -305,7 +305,7 @@ def test_metal_prefill_kernels(t : T?) {
                 var err : string
 
                 // ===== rmsnorm =====
-                var pso_rms = pipeline_from_source(dev, metal_rmsnorm_msl, metal_rmsnorm_msl_entry, metal_rmsnorm_msl_fastmath, err)
+                var pso_rms = pipeline_from_source(dev, MetalRmsNorm_metal_rmsnorm_msl, MetalRmsNorm_metal_rmsnorm_msl_entry, MetalRmsNorm_metal_rmsnorm_msl_fastmath, err)
                 t |> success(pso_rms != null, "rmsnorm pipeline: {err}")
                 var rx : array<float>
                 var rw : array<float>
@@ -332,7 +332,7 @@ def test_metal_prefill_kernels(t : T?) {
                 var breps = buf_f32(dev, EPS)
                 let rran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
                     metal_set_pipeline(enc, pso_rms)
-                    metal_set_threadgroup_memory_length(enc, metal_rmsnorm_msl_tgmem, 0)
+                    metal_set_threadgroup_memory_length(enc, MetalRmsNorm_metal_rmsnorm_msl_tgmem, 0)
                     metal_set_buffer(enc, brx, 0ul, 0)
                     metal_set_buffer(enc, brw, 0ul, 1)
                     metal_set_buffer(enc, bry, 0ul, 2)

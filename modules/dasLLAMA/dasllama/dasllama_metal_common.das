@@ -159,11 +159,14 @@ var @scratch g_arena_free : array<tuple<off : uint64; size : uint64>>   // sorte
 var g_pso_gemv : MetalComputePipeline?
 var g_gemv_rows = 4l                       // rows (simdgroups) per MoE router/expert GEMV threadgroup (the dense GEMV geometry is fixed)
 var g_pso_rms : MetalComputePipeline?
+var g_pso_rms_hx : MetalComputePipeline?   // dual-store stamp: + the f16 twin panel
 var g_pso_add : MetalComputePipeline?
 var g_pso_addrms : MetalComputePipeline?
 var g_pso_preaddrms : MetalComputePipeline?
 var g_pso_swiglu : MetalComputePipeline?
+var g_pso_swiglu_hx : MetalComputePipeline?   // dual-store stamp
 var g_pso_geglu : MetalComputePipeline?
+var g_pso_geglu_hx : MetalComputePipeline?    // dual-store stamp
 // ===== tower primitives (compiled in the tower driver's init) =====
 var g_pso_ln : MetalComputePipeline?
 var g_pso_gelu_erf : MetalComputePipeline?
