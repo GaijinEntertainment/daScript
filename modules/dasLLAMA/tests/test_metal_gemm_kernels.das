@@ -298,6 +298,42 @@ def private q8_devw_gate(t : T?; dev, queue; m, kdim, ndim : int) {
     if (ran) {
         t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
     }
+    // the N-TILED chain (the production over-knee form): two half-N tiles, each dequant at
+    // the blob column offset + GEMM into y's column slice - same offset math as pf_devw_panel
+    if (ndim % 128 == 0) {
+        let td = ndim / 2
+        let nbr = kdim / 32
+        var by_t = buf_fill(dev, m * ndim, -500.0)
+        var bwh_t = buf_fill(dev, td * kdim, float16(-100.0))
+        var bwh_t2 = buf_fill(dev, td * kdim, float16(-100.0))
+        var tka = CvtArgs(total = uint(td * nbr))
+        let rant = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+            for (ti in range(2)) {
+                let tbase = ti * td
+                var bwh_ti = ti == 0 ? bwh_t : bwh_t2
+                metal_set_pipeline(enc, dq_pso)
+                metal_set_buffer(enc, bw, uint64(tbase * nbr * 34), 0)
+                metal_set_buffer(enc, bw, uint64(tbase * nbr * 34), 1)
+                metal_set_buffer(enc, bwh_ti, 0ul, 2)
+                metal_set_bytes(enc, unsafe(addr<void?>(tka)), uint64(typeinfo sizeof(tka)), 3)
+                metal_dispatch_threadgroups(enc, uint3(uint((td * nbr + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+                metal_set_pipeline(enc, mm_pso)
+                metal_set_buffer(enc, bwh_ti, 0ul, 0)
+                metal_set_buffer(enc, bx, 0ul, 1)
+                metal_set_buffer(enc, by_t, uint64(tbase * 4), 2)
+                metal_set_buffer(enc, bk, 0ul, 3)
+                metal_set_buffer(enc, bn, 0ul, 4)
+                metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(td / 64), 1u), uint3(128u, 1u, 1u))
+            }
+        }
+        t |> success(rant, "{tag}: tiled encode: {err}")
+        if (rant) {
+            t |> equal(buf_mismatch_env(by_t, want, env, 2e-3, "{tag} tiled"), 0)
+        }
+        metal_release(by_t)
+        metal_release(bwh_t)
+        metal_release(bwh_t2)
+    }
     // negative control: the GEMM alone over a poison-only panel (dequant skipped) must MISS
     // the oracle - proves the chained compare above actually rode the dequant output
     var bwh_p = buf_fill(dev, ndim * kdim, float16(-100.0))

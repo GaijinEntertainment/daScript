@@ -2581,59 +2581,97 @@ def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kd
     return bxh
 }
 
-// the dev-W pass: dequant this site's q8 blob into the next f16 W panel (flip pair, so a
-// site's GEMM overlaps the next site's dequant); null when the knob/panels/fit decline and
-// the caller keeps the tg twin. The 256-row gate mirrors pf_cvt_panel: the dequant tax is W-size-fixed.
-def private pf_devw_fit(rows, d, kdim : int64) : MetalBuffer? {   // the shape-map predicate + panel flip, no encode
-    if (!g_pf_env_dev_w || g_pf_bwh == null || kdim <= 0l || kdim % 32l != 0l) {
-        return null
+// dev-W tile count: 1 = whole panel (map rules), >1 = N-column tiles each under the 32MB
+// knee (probe: tiling flips the 112MB class to 0.87-0.96 at >= 512 rows; 47MB does NOT
+// profit — same total dequant bytes), 0 = keep the tg twin. Long-K keeps its e2e rows floor.
+def private pf_devw_tiles(rows, d, kdim : int64) : int64 {
+    if (!g_pf_env_dev_w || g_pf_bwh == null || kdim <= 0l || kdim % 32l != 0l
+            || (kdim > DEVW_LONG_K && rows < DEVW_LONG_K_ROWS)) {
+        return 0l
     }
     let pb = uint64(d * kdim * 2l)
     let small_ok = pb <= DEVW_SMALL_PANEL && (d <= DEVW_WIDE_N || rows >= DEVW_WIDE_N_ROWS)
     let big_ok = pb <= DEVW_BIG_PANEL && rows >= DEVW_BIG_ROWS
-    if (!(small_ok || big_ok) || pb > g_pf_bwh_bytes
-            || (kdim > DEVW_LONG_K && rows < DEVW_LONG_K_ROWS)) {
-        return null
+    if ((small_ok || big_ok) && pb <= g_pf_bwh_bytes) {
+        return 1l
     }
+    // tiled floor 1024: the 0.95 isolated win at 512 rows reads flat-negative e2e (overlap law)
+    if (pb > DEVW_BIG_PANEL && rows >= DEVW_LONG_K_ROWS) {
+        for (tc in range64(2l, 9l)) {
+            if (d % (tc * 64l) == 0l && pb / uint64(tc) <= DEVW_SMALL_PANEL
+                    && uint64(d / tc * kdim * 2l) <= g_pf_bwh_bytes) {
+                return tc
+            }
+        }
+    }
+    return 0l
+}
+
+def private pf_devw_flip : MetalBuffer? {
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh
     g_pf_bwh_flip = !g_pf_bwh_flip
     return bwh
 }
 
-def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; rows, d, kdim : int64) : MetalBuffer? {
-    var bwh = pf_devw_fit(rows, d, kdim)
-    if (bwh == null) {
-        return null
-    }
-    let nblk = d * kdim / 32l
+// one q8 dev-W tile: dequant the [tbase, tbase+td) W columns into the flip panel, GEMM into
+// y's column slice (bn stays the FULL row stride; the y base pointer carries the column base)
+def private pf_enc_devw_q8_tile(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
+                                bxh, by, bk, bn : MetalBuffer?; rows, tbase, td, kdim : int64; yoff : uint64) {
+    var bwh = pf_devw_flip()
+    let nb = kdim / 32l
+    let nblk = td * nb
     var dka = CvtArgs(total = uint(nblk))
-    enc_dequant_q8h(enc, bwblob, wboff, bwblob, bwh, dka, (nblk + 255l) / 256l * 256l)
-    return bwh
+    enc_dequant_q8h(enc, bwblob, wboff + uint64(tbase * nb * 34l), bwblob, bwh, dka, (nblk + 255l) / 256l * 256l)
+    enc_gemm_hmm_th(enc, bwh, bxh, by, yoff + uint64(tbase * 4l), bk, bn, rows, td)
 }
 
-// the kq-format dev-W pass: same panel/predicate, the format's superblock dequant kernel
-def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, d, kdim : int64) : MetalBuffer? {
+def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
+                          bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64) : bool {
+    let tiles = pf_devw_tiles(rows, d, kdim)
+    if (tiles <= 0l) {
+        return false
+    }
+    let td = d / tiles
+    for (ti in range64(tiles)) {
+        pf_enc_devw_q8_tile(enc, bwblob, wboff, bxh, by, bk, bn, rows, ti * td, td, kdim, yoff)
+    }
+    return true
+}
+
+// the kq-format dev-W site: same predicate/tiling, the format's superblock dequant per tile
+// (tile plane offsets: 16B scale blocks, K4 128B / K5 160B / K6 192B quant superblocks + the
+// k6 2B d tail — all per-superblock strides x tbase*nsb)
+def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64;
+                             bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64) : bool {
     let dq = fmt == KqFmt.k6 ? g_pf_pso_dq_k6 : (fmt == KqFmt.k4 ? g_pf_pso_dq_k4 : g_pf_pso_dq_k5)
     if (dq == null) {
-        return null
+        return false
     }
-    var bwh = pf_devw_fit(rows, d, kdim)
-    if (bwh == null) {
-        return null
+    let tiles = pf_devw_tiles(rows, d, kdim)
+    if (tiles <= 0l) {
+        return false
     }
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
-    let nblk = d * kdim / 32l
-    var dka = CvtArgs(total = uint(nblk))
-    let gt = (nblk + 255l) / 256l * 256l
-    if (fmt == KqFmt.k6) {
-        enc_dequant_k6h(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bwh, dka, gt)
-    } elif (fmt == KqFmt.k4) {
-        enc_dequant_k4h(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bwh, dka, gt)
-    } else {
-        enc_dequant_k5h(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bwh, dka, gt)
+    let td = d / tiles
+    let nsb = kdim / 256l
+    for (ti in range64(tiles)) {
+        let tbase = ti * td
+        var bwh = pf_devw_flip()
+        let nblk = td * kdim / 32l
+        var dka = CvtArgs(total = uint(nblk))
+        let gt = (nblk + 255l) / 256l * 256l
+        let so = uint64(tbase * nsb * 16l)
+        if (fmt == KqFmt.k6) {
+            enc_dequant_k6h(enc, bs.buf, bs.doff + uint64(tbase * nsb * 2l), bs.buf, bs.soff + so, bq.buf, bq.qoff + uint64(tbase * nsb * 192l), bwh, dka, gt)
+        } elif (fmt == KqFmt.k4) {
+            enc_dequant_k4h(enc, bs.buf, bs.soff + so, bs.buf, bs.soff + so, bq.buf, bq.qoff + uint64(tbase * nsb * 128l), bwh, dka, gt)
+        } else {
+            enc_dequant_k5h(enc, bs.buf, bs.soff + so, bs.buf, bs.soff + so, bq.buf, bq.qoff + uint64(tbase * nsb * 160l), bwh, dka, gt)
+        }
+        enc_gemm_hmm_th(enc, bwh, bxh, by, yoff + uint64(tbase * 4l), bk, bn, rows, td)
     }
-    return bwh
+    return true
 }
 
 // the tensor-path pick: dispatch the f16-stream stamp when the caller minted a twin panel
@@ -2641,9 +2679,7 @@ def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt;
 // form takes the site (dequant pass + barrier-free half x half GEMM)
 def private enc_gemm_mm_tensor(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; rows, d : int64; yoff : uint64; bxh : MetalBuffer?; kdim : int64 = 0l) {
     if (bxh != null && g_pf_pso_hmm_th != null) {
-        var bwh = pf_devw_panel(enc, bwblob, wboff, rows, d, kdim)
-        if (bwh != null) {
-            enc_gemm_hmm_th(enc, bwh, bxh, by, yoff, bk, bn, rows, d)
+        if (pf_devw_panel(enc, bwblob, wboff, bxh, by, bk, bn, rows, d, kdim, yoff)) {
             return
         }
     }
@@ -2704,9 +2740,7 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
     // dev-W arm: shared all-device GEMM, per-format dequant pass, only behind the fmt's crown
     let fmt_tensor = fmt == KqFmt.k6 ? g_pf_kq_mm6_tensor : (fmt == KqFmt.k4 ? g_pf_kq_mm4_tensor : g_pf_kq_mm5_tensor)
     if (fmt_tensor && bxh != null && g_pf_pso_hmm_th != null && kdim > 0l) {
-        var bwh = pf_devw_panel_kq(enc, t, fmt, woff, mp, rows, kdim)
-        if (bwh != null) {
-            enc_gemm_hmm_th(enc, bwh, bxh, by, yoff, bk, bn, mp, rows)
+        if (pf_devw_panel_kq(enc, t, fmt, woff, bxh, by, bk, bn, mp, rows, kdim, yoff)) {
             return
         }
     }
@@ -3148,9 +3182,10 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     g_pf_bxh2 = want_xh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_xh) : null
     g_pf_bxh_flip = false
     g_pf_bxh_bytes = want_xh ? bytes_xh : 0ul
-    // the dev-W f16 panels: one W site's dequant output (largest layer-site N x K); oversized
-    // sites (the vocab classifier) fail pf_devw_panel's fit check and keep the tg twin
-    let bytes_wh = uint64(2l * max(dim, qd_mx) * max(hid_mx, max(nsh, max(2l * dim, di_dn))))
+    // the dev-W f16 panels: the largest layer-site N x K dequant output, capped at the big-
+    // panel ceiling (over-knee sites run as N-column TILES each under it; the vocab
+    // classifier fails the fit and keeps the tg twin)
+    let bytes_wh = min(uint64(2l * max(dim, qd_mx) * max(hid_mx, max(nsh, max(2l * dim, di_dn)))), DEVW_BIG_PANEL)
     let want_wh = (g_pf_env_dev_w && g_pf_pso_hmm_th != null
         && (g_pf_pso_dq_q8 != null || g_pf_pso_dq_k4 != null || g_pf_pso_dq_k5 != null || g_pf_pso_dq_k6 != null))
     g_pf_bwh = want_wh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_wh) : null

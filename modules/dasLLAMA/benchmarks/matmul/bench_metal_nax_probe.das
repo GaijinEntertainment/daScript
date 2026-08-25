@@ -534,6 +534,75 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             metal_release(bnb)
             delete blob
         }
+        // ===== N-tiled dev-W: the map's over-knee losers split into column tiles, each
+        // dequant+GEMM pair under the 32MB cache knee (double-buffered panels pipeline) =====
+        print("dev-W N-tiled grid (ratio vs q8uh):\n")
+        for (gt in [(k = 2560, n = 9728, m = 512, tiles = 2), (k = 2560, n = 9728, m = 2048, tiles = 2),
+                    (k = 4096, n = 14336, m = 512, tiles = 4), (k = 4096, n = 14336, m = 2048, tiles = 4),
+                    (k = 14336, n = 4096, m = 2048, tiles = 4)]) {
+            let kdim = gt.k
+            let ndim = gt.n
+            let m = gt.m
+            let ntile = ndim / gt.tiles
+            let nb = kdim / 32
+            var blob <- race_q8_blob(ndim * nb)
+            var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+            var bwh1 = race_buf(dev, uint64(ntile * kdim * 2), null)
+            var bwh2 = race_buf(dev, uint64(ntile * kdim * 2), null)
+            var xh <- race_x_f16(m * kdim)
+            var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+            var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+            var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+            var bk = race_uniform_u32(dev, uint(kdim))
+            var bn = race_uniform_u32(dev, uint(ndim))
+            var bnb_t = race_uniform_u32(dev, uint(ntile * nb))
+            var t_th = -1.0lf
+            var t_dw = -1.0lf
+            race_pair_ms(queue, 5, t_th, t_dw, $(enc) {
+                kn_pipeline(enc, th_pso)
+                kn_tgmem(enc, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem, 0)
+                kn_buffer(enc, bw, 0ul, 0)
+                kn_buffer(enc, bw, 0ul, 1)
+                kn_buffer(enc, bxh, 0ul, 2)
+                kn_buffer(enc, by_a, 0ul, 3)
+                kn_buffer(enc, bk, 0ul, 4)
+                kn_buffer(enc, bn, 0ul, 5)
+                kn_dispatch(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+            }, $(enc) {
+                for (ti in range(gt.tiles)) {
+                    let tbase = ti * ntile
+                    var bwh = (ti & 1) == 0 ? bwh1 : bwh2
+                    kn_pipeline(enc, dq_pso)
+                    kn_buffer(enc, bw, uint64(tbase * nb * 34), 0)
+                    kn_buffer(enc, bw, uint64(tbase * nb * 34), 1)
+                    kn_buffer(enc, bwh, 0ul, 2)
+                    kn_buffer(enc, bnb_t, 0ul, 3)
+                    kn_dispatch(enc, uint3(uint((ntile * nb + 127) / 128), 1u, 1u), uint3(128u, 1u, 1u))
+                    kn_pipeline(enc, dw_pso)
+                    kn_buffer(enc, bwh, 0ul, 0)
+                    kn_buffer(enc, bxh, 0ul, 1)
+                    kn_buffer(enc, by_b, uint64(tbase * 4), 2)
+                    kn_buffer(enc, bk, 0ul, 3)
+                    kn_buffer(enc, bn, 0ul, 4)
+                    kn_dispatch(enc, uint3(uint(m / 32), uint(ntile / 64), 1u), uint3(128u, 1u, 1u))
+                }
+            })
+            var tnote = ""
+            let tok2 = race_envelope_ok(by_a, by_b, m * ndim, tnote)
+            let tmb = ntile * kdim * 2 / (1024 * 1024)
+            print("  K={kdim} N={ndim} M={m} x{gt.tiles} tiles ({tmb}MB each): ratio={t_dw / t_th} (q8uh={t_th}ms tiled={t_dw}ms) {tok2 ? "ok" : tnote}\n")
+            metal_release(bw)
+            metal_release(bwh1)
+            metal_release(bwh2)
+            metal_release(bxh)
+            metal_release(by_a)
+            metal_release(by_b)
+            metal_release(bk)
+            metal_release(bn)
+            metal_release(bnb_t)
+            delete blob
+            delete xh
+        }
         metal_release(nax_pso)
         metal_release(i8_pso)
         metal_release(q8u_pso)
