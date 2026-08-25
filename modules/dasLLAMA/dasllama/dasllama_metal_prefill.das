@@ -1273,15 +1273,108 @@ class MetalAttnSoftmax {
     }
 }
 
+// The P weight the AV kernels stage on the fly: raw score -> masked softcapped exp * 1/sum.
+// EXACTLY mirrors metal_attn_rowstat's window/live-length/softcap math — the two must agree
+// or rows renormalize against the wrong max.
+def pf_p_weight(sr : float; jglob, qpos, window : uint; softcap : float; uend, ulo : uint; m, inv : float) : float {
+    let cnt = (uend > 0u && qpos >= ulo && qpos < uend) ? uend : qpos + 1u
+    let jlo = window > 0u && qpos + 1u > window ? qpos + 1u - window : 0u
+    if (jglob < jlo || jglob >= cnt) {
+        return 0.0
+    }
+    let tv = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / softcap))) : sr
+    return exp(tv - m) * inv
+}
+
+// Per-row softmax statistics: rowmax (masked, softcapped, sink included) and 1/sum — the AV
+// kernels apply exp at P staging, so the score slab is written once (QK) and read once (AV).
+[metal_dispatch(name = "enc_rowstat", pso = "g_pf_pso_rowstat", tgmem = "metal_attn_rowstat_msl_tgmem", tg = 128, grid = "npos, heads", params = "npos : int64, heads : int64")]
+class MetalAttnRowstat {
+    @ssbo @binding = 0 @role = "read" att : array<float>   // [n_heads x qrows x np32] RAW scores
+    @uniform @binding = 1 ka : AttnArgs
+    @ssbo @binding = 2 @role = "write" stat : array<float>  // [n_heads x qrows x 2]: rowmax, 1/sum
+    @ssbo @binding = 20 @role = "weight" @default = g_one sink : array<float> // [nheads]; null = identity
+    @workgroup red : float[4]
+    @workgroup bcast : float
+
+    [metal_kernel(name="metal_attn_rowstat_msl")]
+    def metal_attn_rowstat {
+        let qi = gl_WorkGroupID.x
+        let h = gl_WorkGroupID.y
+        let lid = gl_LocalInvocationID.x
+        let nthreads = gl_WorkGroupSize.x
+        let qpos = ka.qoff + qi
+        let cnt = (ka.uend > 0u && qpos >= ka.ulo && qpos < ka.uend) ? ka.uend : qpos + 1u
+        let jlo = ka.window > 0u && ka.qoff + qi + 1u > ka.window ? ka.qoff + qi + 1u - ka.window : 0u
+        let rowbase = (h * ka.qrows + qi) * ka.np32
+        var m = -1.0e30
+        var j = jlo + lid
+        while (j < cnt) {
+            let sr = att[rowbase + j]
+            m = max(m, ka.softcap > 0.0 ? ka.softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / ka.softcap))) : sr)
+            j += nthreads
+        }
+        m = max(m, simd_shuffle_xor(m, 16u))
+        m = max(m, simd_shuffle_xor(m, 8u))
+        m = max(m, simd_shuffle_xor(m, 4u))
+        m = max(m, simd_shuffle_xor(m, 2u))
+        m = max(m, simd_shuffle_xor(m, 1u))
+        if (gl_SubgroupInvocationID == 0u) {
+            red[gl_SubgroupID] = m
+        }
+        barrier()
+        if (lid == 0u) {
+            var mm = red[0]
+            var sgi = 1u
+            while (sgi < gl_NumSubgroups) {
+                mm = max(mm, red[sgi])
+                sgi++
+            }
+            if (ka.hass != 0u) {
+                mm = max(mm, sink[h])
+            }
+            bcast = mm
+        }
+        barrier()
+        let rowmax = bcast
+        var sum = 0.0
+        j = jlo + lid
+        while (j < cnt) {
+            let sr = att[rowbase + j]
+            sum += exp((ka.softcap > 0.0 ? ka.softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / ka.softcap))) : sr) - rowmax)
+            j += nthreads
+        }
+        sum = simd_sum(sum)
+        if (gl_SubgroupInvocationID == 0u) {
+            red[gl_SubgroupID] = sum
+        }
+        barrier()
+        if (lid == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += red[sgi]
+                sgi++
+            }
+            if (ka.hass != 0u) {
+                tot += exp(max(sink[h] - rowmax, -80.0))
+            }
+            stat[(h * ka.qrows + qi) * 2u] = rowmax
+            stat[(h * ka.qrows + qi) * 2u + 1u] = 1.0 / tot
+        }
+    }
+}
+
 // One threadgroup (128 threads = 4 simdgroups) per 32x32 output block: O = P.V walking j in
 // 32-blocks up to the causal limit qi0+32 (P's zeroed tail keeps whole blocks exact). V rows
 // >= npos stage as 0 (pad rows can carry NaN; 0*NaN would still poison). hs % 32 == 0 required.
 [metal_dispatch(name = "enc_av", pso = "g_pf_pso_av", tgmem = "metal_attn_av_msl_tgmem", tg = 128, grid = "mp/32, head_size/32, heads", params = "mp : int64, heads : int64, head_size : int64")]
 class MetalAttnAV {
-    @ssbo @binding = 0 @role = "read" att : array<float>   // [n_heads x qrows x np32] normalized P
+    @ssbo @binding = 0 @role = "read" att : array<float>   // [n_heads x qrows x np32] RAW scores
     @ssbo @binding = 1 @role = "read" v : array<float>     // [nk64 x kv_dim] raw V (existing rows + the chunk)
     @ssbo @binding = 2 @role = "write" xb : array<float>    // [mp x qd] attention output
     @uniform @binding = 3 ka : AttnArgs
+    @ssbo @binding = 4 @role = "read" stat : array<float>  // [n_heads x qrows x 2] rowmax, 1/sum
     @workgroup ta : float[1024]             // P block: 32 qi-rows x 32 j (stride 32)
     @workgroup tb : float[1024]             // V block: 32 j-rows x 32 d (stride 32)
 
@@ -1310,7 +1403,10 @@ class MetalAttnAV {
             while (e < 1024u) {
                 let r = e / 32u
                 let c = e % 32u
-                ta[e] = att[(h * ka.qrows + qi0 + r) * ka.np32 + jb + c]
+                let qpos = ka.qoff + qi0 + r
+                let sbase = (h * ka.qrows + qi0 + r) * 2u
+                let sr = jb + c < ka.np32 ? att[(h * ka.qrows + qi0 + r) * ka.np32 + jb + c] : 0.0
+                ta[e] = pf_p_weight(sr, jb + c, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, stat[sbase], stat[sbase + 1u])
                 tb[e] = jb + r < ka.npos ? v[(jb + r) * ka.kv_dim + kvhoff + d0 + c] : 0.0
                 e += 128u
             }
@@ -1495,6 +1591,8 @@ class MetalAttnAVMmT {
     @ssbo @binding = 1 v : array<float>
     @ssbo @binding = 2 xb : array<float>
     @uniform @binding = 3 ka : AttnArgs
+    @ssbo @binding = 4 @role = "read" stat : array<float>  // [n_heads x qrows x 2] rowmax, 1/sum
+    @workgroup twp : float16[2048]          // P chunk: 32 rows x 64 pos, exp applied at staging
     @workgroup twb : float16[4096]          // V chunk: 64 positions x 64 v-cols, NATURAL rows
 
     [metal_kernel(name="metal_attn_av_mm_t_msl")]
@@ -1505,18 +1603,33 @@ class MetalAttnAVMmT {
         let kvhoff = (h / ka.kv_mul) * ka.head_size
         let lid = gl_LocalInvocationID.x
         // the tile-max walk bound: causal reach, lifted to uend only when the tile holds span
-        // rows (P is softmax-zeroed past each row's live length either way)
+        // rows (P weights are zero past each row's live length by construction)
         let creach = ka.qoff + mBase + 32u
         let klimit = min(ka.uend > 0u && ka.qoff + mBase < ka.uend && creach > ka.ulo ? max(ka.uend, creach) : creach, ka.np32)
         var acc : float[2048]
         var cp = unsafe(addr(xb[mBase * ka.qd + h * ka.head_size + vBase]))
-        tmm2d_tg_begin_devant(acc, 32u, 64u, 4u, 64u)
+        tmm2d_tg_begin_nt(acc, 32u, 64u, 4u, 64u)
         var kb = 0u
         while (kb * 64u < klimit) {
-            // P streams from device (softmax-zeroed past each row's live length); V rows land
-            // NATURAL [pos][col] — coalesced 32-wide copies, no transpose gather; 64-position
-            // chunks halve the staging/barrier rounds of the long np32 walk
+            // P stages with the exp/mask applied (one work item = one row's 16-pos run,
+            // stats hoisted); V rows land NATURAL [pos][col] — coalesced, no transpose gather
             var work = lid
+            while (work < 128u) {
+                let r = work >> 2u
+                let ph = (work & 3u) * 16u
+                let qpos = ka.qoff + mBase + r
+                let sbase = (h * ka.qrows + mBase + r) * 2u
+                let sm = stat[sbase]
+                let sinv = stat[sbase + 1u]
+                let rowb = (h * ka.qrows + mBase + r) * ka.np32
+                for [unroll_full] (t in range(16)) {
+                    let jg = kb * 64u + ph + uint(t)
+                    let sr = jg < ka.np32 ? att[rowb + jg] : 0.0
+                    twp[r * 64u + ph + uint(t)] = float16(pf_p_weight(sr, jg, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv))
+                }
+                work += gl_WorkGroupSize.x
+            }
+            work = lid
             while (work < 128u) {
                 let p = work >> 1u
                 let ch = (work & 1u) * 32u
@@ -1528,8 +1641,7 @@ class MetalAttnAVMmT {
                 work += gl_WorkGroupSize.x
             }
             barrier()
-            let kkc = min(64u, klimit - kb * 64u)
-            tmm2d_tg_step_devant(acc, unsafe(addr(att[h * ka.qrows * ka.np32 + mBase * ka.np32 + kb * 64u])), ka.np32, twb, 32u, 64u, kkc)
+            tmm2d_tg_step_nt(acc, twp, twb, 32u, 64u, 64u)
             barrier()
             kb++
         }
@@ -1539,10 +1651,11 @@ class MetalAttnAVMmT {
 
 [metal_dispatch(name = "enc_av_mm_c", pso = "g_pf_pso_avmm", tgmem = "metal_attn_av_mm_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
 class MetalAttnAVMm : MetalMmTileBase {
-    @ssbo @binding = 0 @role = "read" att : array<float4>  // [n_heads x qrows x np32/4] normalized P
+    @ssbo @binding = 0 @role = "read" att : array<float4>  // [n_heads x qrows x np32/4] RAW scores
     @ssbo @binding = 1 @role = "read" v : array<float4>    // [nk64 x kv_dim/4] raw V (existing rows + the chunk)
     @ssbo @binding = 2 @role = "write" xb : array<float>    // [mp x qd] attention output
     @uniform @binding = 3 ka : AttnArgs
+    @ssbo @binding = 4 @role = "read" stat : array<float>  // [n_heads x qrows x 2] rowmax, 1/sum
     // inherited ta = V tiles (pos row, col col), tb = P tiles (token row, pos col)
 
     [metal_kernel(name="metal_attn_av_mm_msl")]
@@ -1582,8 +1695,21 @@ class MetalAttnAVMm : MetalMmTileBase {
             let a2 = posg < ka.npos ? v[srcA + 2u] : zero
             let a3 = posg < ka.npos ? v[srcA + 3u] : zero
             let srcB = (h * ka.qrows + mBase + lr1) * np324 + (kb * 32u + iy) / 4u
-            let b0 = att[srcB]
-            let b1 = att[srcB + 1u]
+            let qpos = ka.qoff + mBase + lr1
+            let sbase = (h * ka.qrows + mBase + lr1) * 2u
+            let sm = stat[sbase]
+            let sinv = stat[sbase + 1u]
+            let jg = kb * 32u + iy
+            let r0 = att[srcB]
+            let r1 = att[srcB + 1u]
+            let b0 = float4(pf_p_weight(r0.x, jg, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(r0.y, jg + 1u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(r0.z, jg + 2u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(r0.w, jg + 3u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv))
+            let b1 = float4(pf_p_weight(r1.x, jg + 4u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(r1.y, jg + 5u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(r1.z, jg + 6u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(r1.w, jg + 7u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv))
             barrier()
             let tbase = sxyA + (vc16 / 8u) * 64u            // first col-tile this thread touches
             tg_store_half4(ta, tbase, a0)
@@ -1658,6 +1784,7 @@ var private g_pf_pso_rope : MetalComputePipeline?
 var private g_pf_pso_addbias : MetalComputePipeline?
 var private g_pf_pso_qk : MetalComputePipeline?
 var private g_pf_pso_softmax : MetalComputePipeline?
+var private g_pf_pso_rowstat : MetalComputePipeline?
 var private g_pf_pso_av : MetalComputePipeline?
 var private g_pf_pso_cat2 : MetalComputePipeline?
 var private g_pf_pso_mm_t : MetalComputePipeline?  // the mul_mm TENSOR twin; the base is the shared g_pso_mm
@@ -1834,6 +1961,10 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_qk)
         g_pf_pso_qk = null
     }
+    if (g_pf_pso_rowstat != null) {
+        metal_release(g_pf_pso_rowstat)
+        g_pf_pso_rowstat = null
+    }
     if (g_pf_pso_softmax != null) {
         metal_release(g_pf_pso_softmax)
         g_pf_pso_softmax = null
@@ -1921,6 +2052,7 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_addbias = compile_pso(metal_add_bias_rows_msl, metal_add_bias_rows_msl_entry, metal_add_bias_rows_msl_fastmath, ok)
     g_pf_pso_qk = compile_pso(metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, ok)
     g_pf_pso_softmax = compile_pso(metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, ok)
+    g_pf_pso_rowstat = compile_pso(metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, ok)
     g_pf_pso_av = compile_pso(metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, ok)
     g_pf_pso_cat2 = compile_pso(metal_pf_cat2_msl, metal_pf_cat2_msl_entry, metal_pf_cat2_msl_fastmath, ok)
     g_pf_mm_tensor = metal_tensor_crowned("mulmm_q8")
@@ -2308,11 +2440,11 @@ def enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : 
     }
 }
 
-def enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; mp, heads, head_size : int64) {   // public: the tower driver dispatches the crowned trio too
+def enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; bstat : MetalBuffer?; mp, heads, head_size : int64) {   // public: the tower driver dispatches the crowned trio too
     if (g_pf_avmm_tensor && g_pf_pso_avmm_t != null) {
-        enc_av_mm_t_c(enc, batt, bv, bxb, ka, mp, heads, head_size)
+        enc_av_mm_t_c(enc, batt, bv, bxb, ka, bstat, mp, heads, head_size)
     } else {
-        enc_av_mm_c(enc, batt, bv, bxb, ka, mp, heads, head_size)
+        enc_av_mm_c(enc, batt, bv, bxb, ka, bstat, mp, heads, head_size)
     }
 }
 
@@ -2428,6 +2560,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let nsh = !t.blocks.ffn_is_dense ? c.n_ff_shexp : 0l   // shared expert (qwen35moe) rides bhb/bhb2
     let bytes_h = uint64(mp * max(hid_mx, nsh) * 4l)
     let bytes_att = uint64(n_heads * mp * nk64 * 4l)   // per-head score slabs: mp queries x nk64 keys
+    let bytes_stat = uint64(n_heads * mp * 2l * 4l)   // per-row softmax stats: rowmax + 1/sum
     let bytes_tab = uint64(npos * half * 4l)
     let bytes_tab_sw = uint64(npos * half_sw * 4l)   // the swa pair's row width is ITS class's hs/2
     var bx = pool_acquire_pinned(g_pf_pool, g_dev, bytes_x)
@@ -2477,6 +2610,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bdnqg = c.q_gated ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_dn_qg) : null
     var bdngate = c.q_gated ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_q) : null
     var batt = pool_acquire_pinned(g_pf_pool, g_dev, bytes_att)
+    var bstats = pool_acquire_pinned(g_pf_pool, g_dev, bytes_stat)
     // deepstack (qwen3vl dense): the wide quantum's tail slices upload as PER-SLICE contiguous
     // planes so the per-layer add is the existing enc_add at a slice offset — a repack, no kernel
     let nds = s.ds_active ? c.n_deepstack : 0l
@@ -3007,13 +3141,13 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         if (c.attn_sinks) {
                             bsnk = upload_region(unsafe(addr < void? >(t.fblob[t.sinks_off + l * n_heads])), uint64(n_heads * 4l))
                         }
-                        enc_softmax(enc, batt, atka, bsnk, npos, n_heads)
+                        enc_rowstat(enc, batt, atka, bstats, bsnk, npos, n_heads)
                     }
                     if (g_pf_skip != "attn_av") {
                         if (mmattn) {
-                            enc_av_mm(enc, batt, bvs[l], bxb, atka, mp, n_heads, hs_l)
+                            enc_av_mm(enc, batt, bvs[l], bxb, atka, bstats, mp, n_heads, hs_l)
                         } else {
-                            enc_av(enc, batt, bvs[l], bxb, atka, mp, n_heads, hs_l)
+                            enc_av(enc, batt, bvs[l], bxb, atka, bstats, mp, n_heads, hs_l)
                         }
                     }
                 }
@@ -3402,6 +3536,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_upool, u_rot, 4ul)
     }
     pool_release(g_pf_pool, batt, bytes_att)
+    pool_release(g_pf_pool, bstats, bytes_stat)
     if (gpu_logits) {
         pool_release(g_pf_pool, bxf, uint64(dim * 4l))
         pool_release(g_pf_pool, blog, uint64(c.vocab_size * 4l))
@@ -4043,6 +4178,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
         var qv <- race_x_f32(mp * qd)
         var kv <- race_x_f32(np32 * kvd)
         var pv <- race_x_f32(mp * np32 * heads)
+        var sv <- race_x_f32(heads * mp * 2)
         var zeros : array<float>
         zeros |> resize(heads * mp * np32)
         var bq = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(qv[0])))
@@ -4052,6 +4188,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
         var batt_t = race_buf(dev, uint64(heads * mp * np32 * 4), unsafe(addr<void?>(zeros[0])))
         var bxb_b = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(zeros[0])))
         var bxb_t = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(zeros[0])))
+        var bstat = race_buf(dev, uint64(heads * mp * 2 * 4), unsafe(addr<void?>(sv[0])))
         // the race binds the SAME kargs the encoders do — a hand-rolled list silently desyncs
         var rka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = 1u,
             npos = uint(np32), np32 = uint(np32), scale = 0.125, qoff = 0u, qrows = uint(mp),
@@ -4091,6 +4228,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
             kn_pipeline(enc, a_pso)
             kn_tgmem(enc, metal_attn_av_mm_msl_tgmem, 0)
             kn_buffer(enc, bp, 0ul, 0)
+            kn_buffer(enc, bstat, 0ul, 4)
             kn_buffer(enc, bkk, 0ul, 1)
             kn_buffer(enc, bxb_b, 0ul, 2)
             kn_kargs(enc, rka, 3)
@@ -4099,6 +4237,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
             kn_pipeline(enc, at_pso)
             kn_tgmem(enc, metal_attn_av_mm_t_msl_tgmem, 0)
             kn_buffer(enc, bp, 0ul, 0)
+            kn_buffer(enc, bstat, 0ul, 4)
             kn_buffer(enc, bkk, 0ul, 1)
             kn_buffer(enc, bxb_t, 0ul, 2)
             kn_kargs(enc, rka, 3)
@@ -4120,6 +4259,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
         metal_release(batt_t)
         metal_release(bxb_b)
         metal_release(bxb_t)
+        metal_release(bstat)
     }
     if (q_pso != null) {
         metal_release(q_pso)
