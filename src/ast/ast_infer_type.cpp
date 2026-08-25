@@ -4738,6 +4738,21 @@ namespace das {
                 TypeDecl::clone(expr->returnType, func->result);
             }
         }
+        if (expr->subexpr && expr->subexpr->type && expr->subexpr->type->isVoid() && !expr->moveSemantics) {
+            const auto & resT = blocks.size() ? blocks.back()->type : func->result;
+            if (resT && resT->isVoid()) {
+                // lower 'return void_expr' to { void_expr; return; } so the backends
+                // never see a value-carrying return of void
+                auto blk = new ExprBlock();
+                blk->isCollapseable = true;
+                blk->at = expr->at;
+                blk->list.push_back(expr->subexpr);
+                blk->list.push_back(new ExprReturn(expr->at, nullptr));
+                scopes.back()->needCollapse = true;
+                reportAstChanged();
+                return blk;
+            }
+        }
         expr->type = new TypeDecl();
         if (forceInscopePod && func) {
             if (returnCount == 0)

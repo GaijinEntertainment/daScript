@@ -56,7 +56,13 @@ the const away licenses the optimizer to drop the write.
 ```das
 def succ(x : int) => x + 1
 def make_arr() : array<int> => <- [1, 2, 3]      // move-return
+def log_point(x : int) => print("{x}\n")         // void body: the call runs, nothing is returned
 ```
+
+The same rule applies to an explicit `return`: `return void_call()` is legal when the result
+type is void (or a bare `auto`, which it forces to void) and means "evaluate, then return".
+It is an error when the result type is non-void - including a structured auto like `auto?` -
+or with move semantics (`return <- void_call()`).
 
 The body must **start on the `=>` line**; to wrap, open a paren there and break inside it:
 

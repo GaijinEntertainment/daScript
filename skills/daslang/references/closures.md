@@ -38,9 +38,10 @@ plain name or a struct field (`h.fn(21)`); anything else - an array element, a c
 var r = radd(v1) $(var a : int&) : int {          // assumed pipe: trailing block = last argument
     return a++
 }
-goo() { print("inside goo\n") }                   // no '$' when the block takes no arguments
+goo() { print("inside goo\n") }                   // a braced no-arg block drops the '$'
 radd(v1, $(var a : int&) : int { return a++; })   // inline argument
 radd(v1, $(a) => a++)                             // arrow body; types inferred from the block type
+goo() $ => print("side effect\n")                 // void arrow body; the arrow form keeps '$' even with no args
 ```
 
 The assumed pipe also works on method calls (`obj.method() { ... }`, `obj->method() { ... }`), and

@@ -15,6 +15,12 @@ namespace das {
                 if (mb->block->rtti_isBlock()) {
                     auto blk = (ExprBlock *)(mb->block);
                     blk->isGeneratorBlock = true;
+                    // the generator contract fixes the block result to bool; pinning a bare
+                    // auto here keeps return-type diagnostics at the offending return site
+                    if (blk->returnType && blk->returnType->baseType == Type::autoinfer) {
+                        blk->returnType = new TypeDecl(Type::tBool);
+                        blk->returnType->at = blk->at;
+                    }
                 }
             }
         }
