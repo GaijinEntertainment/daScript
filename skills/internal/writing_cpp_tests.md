@@ -44,7 +44,7 @@ Rebuild - `cmake --build build`. The new test appears in `ctest -N` automaticall
 
 ## Adding a big test
 
-A "big" test is anything the single doctest exe can't host: a custom `int main()` (C++ or C), custom link deps, multiple link variants (static + dynamic), or no compiled source at all - `big/style_lint/` is just a `CMakeLists.txt` that registers ctest entries running a daslang script with a `PASS_REGULAR_EXPRESSION`. What makes it "big" is owning its own CMakeLists and carrying `LABELS "big"`. The canonical C++ example is `tests-cpp/big/concurrent_init/` - it has a thread-startup-barrier harness and is built as both `test_concurrent_init` (static) and `test_concurrent_init_dyn` (dynamic).
+A "big" test is anything the single doctest exe can't host: a custom `int main()` (C++ or C), custom link deps, multiple link variants (static + dynamic), or no compiled source at all - `big/style_lint/` is just a `CMakeLists.txt` that registers ctest entries running a daslang script with a `PASS_REGULAR_EXPRESSION`. What makes it "big" is owning its own CMakeLists. The ctest LABEL, not the folder, decides which lane runs it: the default is `LABELS "big"` with `add_dependencies(test-big <exe>)`. A dir that must run on every PR carries `LABELS "small"` with `add_dependencies(test-small <exe>)` instead, so the local small run builds it. Ledgered small-labelled dir: `big/vecmath_backend/` - its scalar arm compiles vecmath with a different `vec4f` than libDaScript was built with, so it cannot link libDaScript and cannot join the small glob exe. The canonical C++ example is `tests-cpp/big/concurrent_init/` - it has a thread-startup-barrier harness and is built as both `test_concurrent_init` (static) and `test_concurrent_init_dyn` (dynamic).
 
 To add one:
 
@@ -66,7 +66,7 @@ Big tests that are C++ executables **don't include doctest** - they keep their o
 
 **A big test's `int main()` owns its module lifetime** - nothing runs `doctest_main.cpp` for it. An exe that resolves modules through the registry calls `Module::Initialize()` / `Module::Shutdown()` itself. An exe whose only context comes from a generated standalone AOT constructor calls neither: that constructor is self-contained and consults no module registry (example: `big/standalone_ctx/`).
 
-A big test is not gated by CI - only the small suite runs there. Run `ninja test-big` locally before pushing one.
+A big-labelled test is not gated by CI - only the small suite runs there. Run `ninja test-big` locally before pushing one.
 
 ## Doctest assertion cheat sheet
 

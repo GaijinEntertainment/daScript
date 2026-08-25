@@ -1428,6 +1428,8 @@ VECTORCALL VECMATH_FINLINE vec4i v_sw_float_to_half_trunc(vec4f v);
   #include "dag_vecMath_pc_sse.h"
 #elif _TARGET_SIMD_NEON
   #include "dag_vecMath_neon.h"
+#elif _TARGET_SIMD_SCALAR
+  #include "dag_vecMath_scalar.h"
 #else
  !error! unsupported target
 #endif

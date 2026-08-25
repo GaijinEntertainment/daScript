@@ -4,7 +4,7 @@
 doc: `skills/internal/writing_cpp_tests.md` (repo root).
 
 **A `*_pin.cpp` file, wherever the diff puts it, answers to the `small/` subfolder's
-checklist.**
+checklist as well as this one.**
 
-**A test that builds its own executable from its own `CMakeLists.txt`, wherever the diff
-puts it, answers to the `big/` subfolder's checklist.**
+**A test that owns its own `CMakeLists.txt`, wherever the diff puts it, answers to the
+`big/` subfolder's checklist as well as this one.**

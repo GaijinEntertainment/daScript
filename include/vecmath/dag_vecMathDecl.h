@@ -56,7 +56,9 @@ typedef const struct bsph3f& bsph3f_cref;
 #endif
 
 #ifndef VECTORCALL
-  #if _TARGET_PC_MACOSX && __SSE__
+  #if defined(_TARGET_SIMD_SCALAR)
+    #define VECTORCALL
+  #elif _TARGET_PC_MACOSX && __SSE__
     #define VECTORCALL [[clang::vectorcall]]
   #elif (defined(_MSC_VER) || defined(__clang__)) && defined(_WIN32) && __SSE__
       //__vectorcall is faster on msvc, even on x64 target
@@ -74,7 +76,7 @@ typedef const struct bsph3f& bsph3f_cref;
 #endif
 
 //if target is not defined, try to auto-detect target
-#ifndef _TARGET_SIMD_SSE
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_SCALAR)
   #if __SSE4_1__ || defined(__AVX__) || defined(__AVX2__)
     #define _TARGET_SIMD_SSE 4
   #elif __SSSE3__
@@ -90,9 +92,11 @@ typedef const struct bsph3f& bsph3f_cref;
   #endif
 #endif
 
-#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON)
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR)
   #if defined(__ARM_NEON) || defined(__ARM_NEON__)
     #define _TARGET_SIMD_NEON 1
+  #else
+    #define _TARGET_SIMD_SCALAR 1
   #endif
 #endif
 
@@ -121,6 +125,30 @@ typedef const struct bsph3f& bsph3f_cref;
   typedef int32x4_t   vec4i;
   typedef const vec4f vec4f_const;
   typedef const vec4i vec4i_const;
+
+#elif _TARGET_SIMD_SCALAR
+  #include <stdint.h>
+
+  //shared with daScript/daScriptC.h - keep identical
+  #ifndef DAS_SCALAR_VEC_TYPES_DEFINED
+  #define DAS_SCALAR_VEC_TYPES_DEFINED
+  struct alignas(16) vec4f_scalar_t { float f[4]; };
+  struct alignas(16) vec4i_scalar_t { int32_t i[4]; };
+  #endif
+  typedef vec4f_scalar_t vec4f;
+  typedef vec4f_scalar_t vec3f;
+  typedef vec4i_scalar_t vec4i;
+
+  typedef const vec4f vec4f_const;
+
+  typedef const union alignas(16) _vec4i_const_name
+  {
+    unsigned m128_u32[4];
+    vec4i m128;
+    vec4f m128f;
+    operator vec4i() const { return m128; }
+    operator vec4f() const { return m128f; }
+  } vec4i_const;
 
 #else
  !error! unsupported target
