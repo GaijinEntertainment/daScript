@@ -11,9 +11,9 @@ mirrors applies this list with the master's.**
 check the emission, not the das spelling.
 
 **The `*_decline_caps` predicates take only the model and the call shape; window-setup state
-is asked by `prefill_decline` / `decode_decline`, never by a caps predicate.** A caps parameter that
-reports the session's setup progress - rather than the CALL, its row count or its span
-shape - is a defect however it is derived.
+is asked by `prefill_decline` / `decode_decline`, never by a caps predicate.** A caps
+parameter that reports the session's setup progress - rather than the CALL, its row count or
+its span shape - is a defect however it is derived.
 
 **A bounds or tail guard inside a kernel's main loop whose answer the host already knows
 when it picks the pipeline is stamped, not branched: the guard sits under `static_if` on a
@@ -46,9 +46,6 @@ scratch serializes the whole chain through its write-after-read hazards.
 **An encoder path that adds dispatches to save bandwidth gates on work size, and the
 threshold is measured at both ends of the size ladder.** The small-work regression hides
 behind the big-work win.
-
-**A kernel declaring `fastmath = false` ships the test that fails with fastmath on.**
-Fastmath is the default and the opt-out exists for demonstrated breakage.
 
 **A shape claim is settled at the one site that is authoritative for that kind of constant,
 never by tracing the das that computes the value.** An in-body tile constant is confirmed
@@ -131,9 +128,9 @@ decline site is a defect.
 **A diff that adds or removes a Metal-only or Vulkan-only hook, role, served path, or
 backend-only capability - anything that changes what one backend can serve and the other
 cannot - lands its `ARCHITECTURE.md` sec.1.5 edit in the same change - including when
-sec.1.5 already carries that class of asymmetry, and including sec.1.5's per-driver lists
-of registered hooks and borrowed kernels.**
-sec.1.5 is the closed list; an asymmetry it does not carry does not exist.
+sec.1.5 already carries that class of asymmetry, and including sec.1.5's per-driver lists of
+registered hooks and borrowed kernels.** sec.1.5 is the closed list; an asymmetry it does not
+carry does not exist.
 
 **A Vulkan pipeline is created only by a `[vk_dispatch]`-generated `ensure_*` and torn down by
 `vk_drop_model_state`.** A hand-written pipeline build anywhere else in the engine is a defect.
@@ -189,9 +186,9 @@ silently drops that codec's GPU path.
 
 **Every resident override - a decode/prefill hook the whole-model residency rail registers
 in `dasllama/dasllama_common.das`'s override registries - gates sessions on the armed mirror
-codec and on the flat (non-paged) cache before touching the mirror.** Mirror bytes move only between same-codec
-session rows and mirror rows; an override that byte-copies across codecs corrupts the host
-authority.
+codec and on the flat (non-paged) cache before touching the mirror.** Mirror bytes move only
+between same-codec session rows and mirror rows; an override that byte-copies across codecs
+corrupts the host authority.
 
 **A descriptor set cached across dispatches lives in state `vk_drop_model_state` clears** - a
 `*_ready` latch, or a field inside `g_gpu` or the weight arena in
