@@ -96,4 +96,8 @@ IF(NOT DAS_OPENGL_INCLUDED)
         PATTERN "_aot_generated" EXCLUDE
     )
 
+    # vendored third-party: Khronos GL/GLES API headers (MIT + Apache-2.0)
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/KHRONOS_GL.LICENSE
+        DESTINATION ${DAS_INSTALL_DOCDIR} RENAME KHRONOS_GL.LICENSE)
+
 ENDIF()

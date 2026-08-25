@@ -1,0 +1,19 @@
+CIPIC HRTF Database - provenance and terms
+
+The HRTF rate tables in this directory derive from Release 1.0 of the CIPIC
+HRTF Database, measured at the UC Davis CIPIC Interface Laboratory.
+
+The authors describe the release as public domain: the accompanying paper
+(V. R. Algazi, R. O. Duda, D. M. Thompson, C. Avendano, "The CIPIC HRTF
+Database", IEEE WASPAA 2001, https://ieeexplore.ieee.org/document/969552)
+opens its abstract with "The 'CIPIC HRTF Database' is a public-domain
+database of high-spatial-resolution head-related transfer function
+measurements".
+
+Citation (as requested by the authors):
+V. R. Algazi, R. O. Duda, D. M. Thompson and C. Avendano, "The CIPIC HRTF
+Database", Proc. 2001 IEEE Workshop on Applications of Signal Processing to
+Audio and Acoustics, pp. 99-102, Mohonk Mountain House, New Paltz, NY,
+Oct. 21-24, 2001.
+
+Copyright (c) 2001 The Regents of the University of California.

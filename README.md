@@ -113,3 +113,8 @@ Build the grammar:
 ```sh
 cmake --build build --target tree_sitter_daslang
 ```
+## License
+
+daslang is licensed under the [BSD 3-Clause License](LICENSE). Vendored
+third-party components keep their own licenses; each installs with the SDK
+beside the code that uses it (`*.LICENSE` files at the bundle root).

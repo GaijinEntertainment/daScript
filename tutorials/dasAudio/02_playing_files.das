@@ -2,7 +2,7 @@
 //
 // This tutorial covers:
 //   - Playing audio directly from a file with play_sound_from_file
-//   - Decoding MP3 to PCM with decode_audio
+//   - Decoding an audio file to PCM with decode_audio
 //   - Looping sounds with play_sound_loop_from_pcm
 //   - Stopping sounds with stop
 //
@@ -35,7 +35,7 @@ def example_play_from_file() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Section 2 — Decode MP3 to PCM, inspect, and play
+// Section 2 — Decode an audio file to PCM, inspect, and play
 // ──────────────────────────────────────────────────────────────────────────
 //
 // decode_audio takes raw file bytes and returns an array<float> of
@@ -44,8 +44,8 @@ def example_play_from_file() {
 // data before playback.
 
 def example_decode_and_play() {
-    print("\n=== Section 2: Decode MP3 to PCM ===\n")
-    let path = "{get_das_root()}/examples/media/audio/music_cc0.mp3"
+    print("\n=== Section 2: Decode audio file to PCM ===\n")
+    let path = "{get_das_root()}/examples/media/audio/music.wav"
     print("  Decoding: {path}\n")
 
     var channels : int
@@ -57,6 +57,10 @@ def example_decode_and_play() {
             return
         }
         fmap(f) $(data) {
+            if (empty(data)) {
+                print("  ERROR: File is empty\n")
+                return
+            }
             samples <- decode_audio(data, channels, rate)
         }
     }
@@ -75,7 +79,7 @@ def example_decode_and_play() {
 
     // Play the first 3 seconds, then stop
     let sid = play_sound_from_pcm(rate, channels, samples)
-    print("  Playing decoded MP3, SID = {sid}\n")
+    print("  Playing decoded audio, SID = {sid}\n")
     sleep(3000u)
     stop(sid, 0.0)
     print("  Stopped\n")
