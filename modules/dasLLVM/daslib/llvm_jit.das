@@ -4069,27 +4069,29 @@ class public LlvmJitVisitor : AstVisitor {
                     range2[ssrc] = LLVMBuildAlloca(g_builder, LLVMPointerType(types.t_int8, 0u), "loop_iter")
                 }
                 var s_ptr = getE(ssrc)
-                // Check if it's das-optimized empty string (just nullptr).
-                var is_empty_str = LLVMBuildIsNull(g_builder, s_ptr, "null_check")
-                var not_empty_str = append_basic_block("not_empty_str")
-                LLVMBuildCondBr(g_builder, is_empty_str, lblk.loop_end, not_empty_str)
-
-                LLVMPositionBuilderAtEnd(g_builder, not_empty_str)
-
                 LLVMBuildStore(g_builder, s_ptr, range2[ssrc])
+                var is_empty_str = LLVMBuildIsNull(g_builder, s_ptr, "null_check")
+                var not_empty_str = append_basic_block("for_{svar.name}_not_empty")
+                var empty_str = append_basic_block("for_{svar.name}_empty")
+                var str_done = append_basic_block("for_{svar.name}_first_done")
+                LLVMBuildCondBr(g_builder, is_empty_str, empty_str, not_empty_str)
+                LLVMPositionBuilderAtEnd(g_builder, empty_str)
+                LLVMBuildStore(g_builder, LLVMConstInt(types.t_int1, 0ul, 0), lblk.need_loop)
+                LLVMBuildBr(g_builder, str_done)
+                LLVMPositionBuilderAtEnd(g_builder, not_empty_str)
                 var cur_chr = LLVMBuildLoad2(g_builder, types.t_int8, s_ptr, "cur_chr")
                 let zero_i8 = types.ConstI8(0 |> int8)
                 let is_null = LLVMBuildICmp(g_builder,
                     LLVMIntPredicate.LLVMIntNE, cur_chr, zero_i8, "is_null")
-                // Just in case check whether string is equal to '\0', e.g. this
-                // is native string.
-                LLVMBuildStore(g_builder, is_null, lblk.need_loop)
-
+                var need_now = LLVMBuildLoad2(g_builder, types.t_int1, lblk.need_loop, "need_loop_str")
+                LLVMBuildStore(g_builder, LLVMBuildAnd(g_builder, need_now, is_null, ""), lblk.need_loop)
                 assume svar_t = svar._type
                 assert(svar_t.baseType == Type.tInt)
                 // Cast to i32, since char is i32 in das.
-                var res = LLVMBuildSExt(g_builder, cur_chr, type_to_llvm_type(svar_t), "sext_cast")
+                var res = LLVMBuildZExt(g_builder, cur_chr, type_to_llvm_type(svar_t), "zext_cast")
                 LLVMBuildStore(g_builder, res, getV(svar))
+                LLVMBuildBr(g_builder, str_done)
+                LLVMPositionBuilderAtEnd(g_builder, str_done)
             } else {
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
             }
@@ -4184,7 +4186,7 @@ class public LlvmJitVisitor : AstVisitor {
 
                 LLVMBuildStore(g_builder, svar_i, range2[ssrc])
                 assert(svar._type.baseType == Type.tInt)
-                var res = LLVMBuildSExt(g_builder, val, type_to_llvm_type(svar._type), "sext_cast")
+                var res = LLVMBuildZExt(g_builder, val, type_to_llvm_type(svar._type), "zext_cast")
                 LLVMBuildStore(g_builder, res, getV(svar))
             } else {
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
