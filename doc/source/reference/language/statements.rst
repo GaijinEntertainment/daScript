@@ -354,6 +354,20 @@ If no expression is given, the function is assumed to return ``void``:
         return
     }
 
+``return`` may also carry a ``void`` expression when the result type is ``void``
+(or a bare ``auto``, which it forces to ``void``): the expression is evaluated
+and the function returns. This is what lets single-expression bodies call
+side-effecting functions:
+
+.. code-block:: das
+
+    def log_twice(msg : string) {
+        return print("{msg}{msg}\n")    // same as: print(...) then return
+    }
+
+Returning a ``void`` expression from a function whose result type is not ``void``
+is an error, as is combining it with move semantics (``return <- void_call()``).
+
 **Move-on-return** transfers ownership of a value using the ``<-`` operator:
 
 .. code-block:: das

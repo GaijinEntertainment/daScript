@@ -95,6 +95,12 @@ The return type may be omitted; it is inferred from the expression:
 
     def succ(x : int) => x + 1
 
+A ``void`` expression works too - the call runs and the function returns nothing:
+
+.. code-block:: das
+
+    def log_point(x : int) => print("{x}\n")
+
 Move-return uses ``=> <-``:
 
 .. code-block:: das

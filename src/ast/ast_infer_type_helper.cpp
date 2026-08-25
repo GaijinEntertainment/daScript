@@ -1050,9 +1050,23 @@ namespace das {
     }
     bool InferTypes::inferReturnType(TypeDeclPtr &resType, ExprReturn *expr) {
         if (expr->subexpr && expr->subexpr->type && expr->subexpr->type->isVoid()) {
-            error("returning void value", "", "",
-                  expr->at, CompilationError::invalid_result);
-            return false;
+            // 'return void_expr' is legal when the result is void, or a bare auto which the
+            // generic machinery below resolves to void (structured autos like auto? reject
+            // there); visit(ExprReturn) then lowers it to { void_expr; return; }
+            if (resType->isVoid() || resType->baseType == Type::autoinfer) {
+                if (expr->moveSemantics) {
+                    error("can't return void value via move", "", "",
+                          expr->at, CompilationError::invalid_result);
+                    return false;
+                }
+                if (resType->isVoid()) {
+                    return false;
+                }
+            } else if (!resType->isAuto()) {
+                error("returning void value, expecting " + describeType(resType), "", "",
+                      expr->at, CompilationError::invalid_result);
+                return false;
+            }
         }
         if (resType->isAuto()) {
             if (expr->subexpr) {
