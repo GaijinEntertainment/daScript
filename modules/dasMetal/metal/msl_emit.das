@@ -518,12 +518,12 @@ def private scan_state_ptr_assign(var ctx : MslCtx; left, right : Expression?) {
 // entry (the builtIn flag and the reserved type names already exclude them)
 let private MSL_LADDER_OWNED : table<string> <- {
     "barrier", "memoryBarrierShared", "simdgroup_load", "simdgroup_store", "tg_store_half4",
-    "tg_store_float4", "simdgroup_multiply", "simdgroup_multiply_accumulate",
+    "tg_store_float4", "simdgroup_multiply", "simdgroup_multiply_accumulate", "sgmat_to_half",
     "make_filled_simdgroup_float8x8", "make_filled_simdgroup_half8x8",
     "simd_sum", "simd_shuffle", "simd_shuffle_up", "simd_shuffle_down", "simd_shuffle_xor",
     "sdot4", "usdot4", "i_das_ptr_add",
     "tmm2d_f32_bf16_f32", "tmm2d_q8_f32", "tmm2d_q8_f16s", "tmm2d_q8b_f32", "tmm2d_q8u_f32",
-    "tmm2d_tg_begin", "tmm2d_tg_step", "tmm2d_tg_store", "tmm2d_tg_store_bias",
+    "tmm2d_tg_begin", "tmm2d_tg_step", "tmm2d_tg_store", "tmm2d_tg_store_bias", "tmm2d_tg_store_half",
     "tmm2d_tg_begin_deva", "tmm2d_tg_step_deva", "tmm2d_tile_tg", "tmm2d_tg_rowscale",
     "tmm2d_tg_begin_nt", "tmm2d_tg_step_nt", "tmm2d_tg_begin_devant", "tmm2d_tg_step_devant",
     "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int"
@@ -794,7 +794,7 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         if (scn == "tmm2d_q8u_f32" && length(ecs.arguments) == 13) {
             mark_write_target(ctx, ecs.arguments[8])
         }
-        if (scn == "tmm2d_tg_store" && length(ecs.arguments) == 5) {
+        if ((scn == "tmm2d_tg_store" || scn == "tmm2d_tg_store_half") && length(ecs.arguments) == 5) {
             mark_write_target(ctx, ecs.arguments[1])
         }
         if (scn == "tmm2d_tg_store_bias" && length(ecs.arguments) == 6) {
@@ -2162,6 +2162,23 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
     lines |> push("{indent}{cname}({mv}, {m.msl_name} + {off}, {stride});")
 }
 
+// sgmat_to_half(d, s): f32 accumulator -> f16 matrix via the public thread_elements() view —
+// simdgroup_store is same-type-only, so half stores of float accumulators convert through this
+def private emit_sgmat_to_half(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 2
+            || sgmat_type_name(ec.arguments[0]._type) != "simdgroup_half8x8"
+            || sgmat_type_name(ec.arguments[1]._type) != "simdgroup_float8x8") {
+        err(ctx, ec.at, "sgmat_to_half takes (simdgroup_half8x8, simdgroup_float8x8)")
+        return
+    }
+    let d = emit_value(ctx, ec.arguments[0])
+    let s = emit_value(ctx, ec.arguments[1])
+    note(ctx, "call.sgmat_to_half")
+    // per-lane elementwise (8x8 over 32 lanes = 2 owned elements): the whole-vector
+    // storage_type conversion crashes Apple's shader compiler (XPC_ERROR_CONNECTION_INTERRUPTED)
+    lines |> push("{indent}for (ushort __sgh = 0; __sgh < 2; ++__sgh) \{ {d}.thread_elements()[__sgh] = half({s}.thread_elements()[__sgh]); \}")
+}
+
 // tg_store_half4(dst, idx, v): one aligned half4 vector store into a float16 @workgroup array —
 // `*(threadgroup half4*)(dst + idx) = half4(v);` (idx % 4 == 0 by contract; 8-byte alignment)
 def private emit_tg_store_half4(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
@@ -2672,6 +2689,30 @@ def private emit_tmm2d_tg_store(var ctx : MslCtx; ec : ExprCall?; indent : strin
     lines |> push("{indent}\}")
 }
 
+// half-destination store: the cooperative store() is same-type-only, so each lane narrows the
+// elements it owns (RNE) and writes them through the device half pointer directly
+def private emit_tmm2d_tg_store_half(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (length(ec.arguments) != 5) {
+        err(ctx, ec.at, "tmm2d_tg_store_half takes exactly 5 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let cp = emit_value(ctx, ec.arguments[1])
+    let m = tmm2d_const_uint(ctx, ec.arguments[2], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[3], "n (tile cols)")
+    let ldc = emit_value(ctx, ec.arguments[4])
+    if (m == 0u || n == 0u) {
+        return
+    }
+    note(ctx, "call.tmm2d_tg_store_half")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) \{")
+    lines |> push("{indent}        auto __ids = __tgf_{acc}.get_multidimensional_index(__i);")
+    lines |> push("{indent}        ({cp})[uint(__ids[1]) * ({ldc}) + uint(__ids[0])] = half(__tgf_{acc}[__i]);")
+    lines |> push("{indent}    \} \}")
+    lines |> push("{indent}\}")
+}
+
 // store with a per-output-column bias folded into the cooperative elements first — each lane
 // edits only elements it owns, so no cross-thread visibility is needed before the store
 def private emit_tmm2d_tg_store_bias(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
@@ -2936,6 +2977,8 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             lines |> push("{indent}threadgroup_barrier(mem_flags::mem_threadgroup);")
         } elif (cname == "simdgroup_load" || cname == "simdgroup_store") {
             emit_sgmat_load_store(ctx, ec, indent, lines)
+        } elif (cname == "sgmat_to_half") {
+            emit_sgmat_to_half(ctx, ec, indent, lines)
         } elif (cname == "tg_store_half4") {
             emit_tg_store_half4(ctx, ec, indent, lines)
         } elif (cname == "tg_store_float4") {
@@ -2962,6 +3005,8 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_tmm2d_tg_step_deva(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_store") {
             emit_tmm2d_tg_store(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_store_half") {
+            emit_tmm2d_tg_store_half(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_store_bias") {
             emit_tmm2d_tg_store_bias(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tile_tg") {

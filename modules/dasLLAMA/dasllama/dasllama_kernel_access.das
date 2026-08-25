@@ -339,7 +339,8 @@ class private AccessVisitor : AstVisitor {
             // the RESULT's use decides, and write_root_name peels back through it
             return
         }
-        if (cname |> ends_with("tmm2d_tg_store") || cname |> ends_with("tmm2d_tg_store_bias")) {
+        if (cname |> ends_with("tmm2d_tg_store") || cname |> ends_with("tmm2d_tg_store_half")
+                || cname |> ends_with("tmm2d_tg_store_bias")) {
             // arg 1 = C (write); store_bias arg 2 = the bias pointer (read)
             let nargs = cname |> ends_with("tmm2d_tg_store_bias") ? 6 : 5
             if (length(expr.arguments) == nargs) {

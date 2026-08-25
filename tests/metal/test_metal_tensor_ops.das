@@ -31,6 +31,7 @@ class TmmKernels {
     @ssbo @binding = 7 wsh : array<uint16>   // ws as binary16 halfwords (the f16s twin)
     @ssbo @binding = 8 bsh : array<float16>  // q8b: 34B-interleaved W blob, half-scale view
     @ssbo @binding = 9 bqb : array<int8>     // q8b: the SAME blob layout, byte view
+    @ssbo @binding = 10 och : array<float16> // C half twin (the store_half arm)
 
     [metal_kernel(name="tmm_bf16_msl"), marker(no_coverage)]
     def tmm_bf16_k {
@@ -133,10 +134,38 @@ class TmmKernels {
         tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
     }
 
+    [metal_kernel(name="tmm_nth_msl"), marker(no_coverage)]
+    def tmm_nth_k {
+        var acc : float[128]
+        var ap = unsafe(addr(xa[0]))
+        var wp = unsafe(addr(wb[0]))
+        var cp = unsafe(addr(och[0]))
+        tmm2d_tg_begin_nt(acc, 8u, 16u, 2u, 32u)
+        var kb = 0u
+        while (kb < 2u) {
+            var i = gl_LocalInvocationID.x
+            while (i < 256u) {
+                tga[i] = float16(unsafe(ap[(i / 32u) * 64u + kb * 32u + i % 32u]))
+                i += gl_WorkGroupSize.x
+            }
+            i = gl_LocalInvocationID.x
+            while (i < 512u) {
+                let k = i / 16u
+                let j = i % 16u
+                tgc[i] = float16(uint_bits_to_float(uint(unsafe(wp[j * 64u + kb * 32u + k])) << 16u))
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step_nt(acc, tga, tgc, 8u, 16u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store_half(acc, cp, 8u, 16u, 16u)
+    }
+
     [metal_kernel(name="tmm_devant_msl"), marker(no_coverage)]
     def tmm_devant_k {
         var acc : float[128]
-        var ap = unsafe(addr(xa[0]))
         var wp = unsafe(addr(wb[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_tg_begin_devant(acc, 8u, 16u, 2u, 32u)
@@ -186,6 +215,7 @@ def private fill_oracle(var o : TmmKernels?) {
     o.wb |> resize(N * KK)
     o.oc |> resize(M * N)
     o.aq |> resize(M * KK)
+    o.och |> resize(M * N)
     o.asf |> resize(M * NB)
     o.wq |> resize(N * KK)
     o.wsf |> resize(N * NB)
@@ -230,6 +260,7 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         t |> success(find(tmm_tg_msl, "__tgop_acc.run(") >= 0, "tg protocol op emitted")
         t |> success(find(tmm_tg_msl, "multiply_accumulate") >= 0, "tg protocol runs in accumulate mode")
         t |> success(find(tmm_tg_msl, "__tgf_acc[__i] += ") < 0, "tg protocol per-element fold removed")
+        t |> success(find(tmm_nth_msl, "half(__tgf_acc[__i])") >= 0, "store_half narrows per owned element")
         t |> success(find(tmm_tg_msl, "float acc[") < 0, "acc local suppressed on GPU")
         t |> success(find(tmm_bf16_msl, "MetalPerformancePrimitives") >= 0, "MPP include present")
         t |> success(find(tmm_bf16_msl, "mpp::tensor_ops") >= 0, "namespace present")
@@ -258,6 +289,9 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         var want_nt : array<float>
         oracle->tmm_nt_k()
         want_nt := oracle.oc
+        var want_nth : array<float16>
+        oracle->tmm_nth_k()
+        want_nth := oracle.och
         var want_dv : array<float>
         oracle->tmm_devant_k()
         want_dv := oracle.oc
@@ -304,9 +338,9 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                 var bbsh = buf_upload(dev, oracle.bsh)
                 var bbqb = buf_upload(dev, oracle.bqb)
                 gpu_bad = 0
-                for (which in range(8)) {
-                    let src = which == 0 ? tmm_bf16_msl : (which == 1 ? tmm_q8_msl : (which == 2 ? tmm_q8h_msl : (which == 3 ? tmm_q8b_msl : (which == 4 ? tmm_tg_msl : (which == 5 ? tmm_q8u_msl : (which == 6 ? tmm_nt_msl : tmm_devant_msl))))))
-                    let entry = which == 0 ? tmm_bf16_msl_entry : (which == 1 ? tmm_q8_msl_entry : (which == 2 ? tmm_q8h_msl_entry : (which == 3 ? tmm_q8b_msl_entry : (which == 4 ? tmm_tg_msl_entry : (which == 5 ? tmm_q8u_msl_entry : (which == 6 ? tmm_nt_msl_entry : tmm_devant_msl_entry))))))
+                for (which in range(9)) {
+                    let src = which == 0 ? tmm_bf16_msl : (which == 1 ? tmm_q8_msl : (which == 2 ? tmm_q8h_msl : (which == 3 ? tmm_q8b_msl : (which == 4 ? tmm_tg_msl : (which == 5 ? tmm_q8u_msl : (which == 6 ? tmm_nt_msl : (which == 7 ? tmm_devant_msl : tmm_nth_msl)))))))
+                    let entry = which == 0 ? tmm_bf16_msl_entry : (which == 1 ? tmm_q8_msl_entry : (which == 2 ? tmm_q8h_msl_entry : (which == 3 ? tmm_q8b_msl_entry : (which == 4 ? tmm_tg_msl_entry : (which == 5 ? tmm_q8u_msl_entry : (which == 6 ? tmm_nt_msl_entry : (which == 7 ? tmm_devant_msl_entry : tmm_nth_msl_entry)))))))
                     var perr : string
                     var pso = pipeline_from_source(dev, src, entry, false, perr)
                     t |> success(pso != null, "pipeline {entry}: {perr}")
@@ -315,13 +349,20 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                         continue
                     }
                     var boc = buf_fill(dev, M * N, 0.0)
+                    var boch = buf_fill(dev, M * N, float16(0.0))
                     let tew = metal_pipeline_thread_execution_width(pso)
-                    var bufs <- [bxa, bwb, boc, baq, basf, bwq, bwsf, bwsh, bbsh, bbqb]
+                    var bufs <- [bxa, bwb, boc, baq, basf, bwq, bwsf, bwsh, bbsh, bbqb, boch]
                     var rerr : string
                     let tpg = tew * SGS
-                    let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr, which == 4 ? tmm_tg_msl_tgmem : (which == 5 ? tmm_q8u_msl_tgmem : (which == 6 ? tmm_nt_msl_tgmem : (which == 7 ? tmm_devant_msl_tgmem : 0ul))))
+                    let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr, which == 4 ? tmm_tg_msl_tgmem : (which == 5 ? tmm_q8u_msl_tgmem : (which == 6 ? tmm_nt_msl_tgmem : (which == 7 ? tmm_devant_msl_tgmem : (which == 8 ? tmm_nth_msl_tgmem : 0ul)))))
                     t |> success(ran, "dispatch {entry}: {rerr}")
-                    if (ran) {
+                    if (ran && which == 8) {
+                        // the half arm: integer-valued data is f16-exact, so the RNE narrow is
+                        // bit-exact against the CPU replay's float16 conversions
+                        let badh = buf_mismatch_exact(boch, want_nth)
+                        t |> equal(badh, 0)
+                        gpu_bad += badh
+                    } elif (ran) {
                         let bad = buf_mismatch_exact(boc, which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : (which == 5 ? want_q8u : (which == 6 ? want_nt : want_dv)))))))
                         if (bad != 0) {
                             var got <- buf_download(boc, M * N, type<float>)
@@ -345,6 +386,7 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                         delete bufs
                     }
                     metal_release(boc)
+                    metal_release(boch)
                     metal_release(pso)
                 }
                 metal_release(bxa)

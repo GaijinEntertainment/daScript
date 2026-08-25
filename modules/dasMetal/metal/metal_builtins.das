@@ -152,6 +152,14 @@ def public simdgroup_store(m : simdgroup_half8x8; var dst; offset : uint; stride
     }
 }
 
+// sgmat_to_half(d, s): per-element f32 -> f16 narrowing of a simdgroup accumulator (RNE both
+// tiers). simdgroup_store is same-type-only, so half stores of float accumulators route here.
+def public sgmat_to_half(var d : simdgroup_half8x8; s : simdgroup_float8x8) {
+    for (k in range(64)) {
+        d.data[k] = float16(s.data[k])
+    }
+}
+
 // simdgroup_multiply_accumulate(d, a, b, c): d = a*b + c. d may alias c (each element is read
 // before its slot is written). The mixed overload is the GEMM workhorse: f16 operand tiles into
 // f32 accumulators — an f16 product is exact in f32, matching the hardware's widened MAC.
@@ -591,6 +599,21 @@ def public tmm2d_tg_store(acc; var c : float?; m, n, ldc : uint) {
         for (r in range(int(m))) {
             for (j in range(int(n))) {
                 c[r * int(ldc) + j] = acc[r * int(n) + j]
+            }
+        }
+    }
+}
+
+//! store, half destination: C[r][j] = float16(acc[r][j]) (overwrite, row stride ldc).
+[sideeffects]
+def public tmm2d_tg_store_half(acc; var c : float16?; m, n, ldc : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                c[r * int(ldc) + j] = float16(acc[r * int(n) + j])
             }
         }
     }

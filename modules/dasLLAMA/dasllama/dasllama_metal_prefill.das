@@ -24,8 +24,9 @@ require dasllama/dasllama_metal_lens   // [metal_dispatch] builders + census pol
 // dasLLAMA CPU twin's math exactly (same formula, same rounding ops):
 //   metal_rmsnorm       ~ rmsnorm                  (w[i] * x[i] * rsqrt(mean(x^2) + eps))
 //   metal_rope          ~ rope_scaled_tab          (NORM adjacent pairs; cos/sin table rows)
-//   metal_attn_qk/_softmax/_av ~ the classic per-head causal scores + softmax + P·V, as a
-//                         tiled sgmat GEMM trio over np32-padded per-head score slabs
+//   metal_attn_qk/_rowstat/_av ~ the classic per-head causal scores + softmax + P·V, as a
+//                         tiled sgmat GEMM trio over np32-padded per-head f16 score slabs
+//                         (rowstat mints rowmax + 1/sum; AV applies exp at P staging)
 //   metal_swiglu        ~ swiglu                   (g = g/(1+exp(-g)) * u)
 //   metal_add           ~ add_inplace
 // Reductions ride simd_sum / a max butterfly over simd_shuffle_xor with hardcoded masks 16..1 —
@@ -1078,9 +1079,9 @@ class MetalAddBiasRows {
     }
 }
 
-// Attention runs as a tiled-GEMM trio over a per-head score slab PADDED to 32-row blocks (np32 =
-// ceil32(npos)): metal_attn_qk (S = scale*Q.K^T) -> metal_attn_softmax (causal, zeroes the tail)
-// -> metal_attn_av (O = P.V). Replaces a naive per-row pair that owned 44% of the prefill's GPU time.
+// Attention: a tiled-GEMM trio over a per-head F16 score slab padded to np32 = ceil32(npos) —
+// metal_attn_qk (S = scale*Q.K^T, written HALF once) -> metal_attn_rowstat (rowmax + 1/sum)
+// -> metal_attn_av (O = P.V, exp at P staging); no separate softmax pass touches the slab.
 
 // One layer's attention geometry as ONE kargs value, shared by all THREE stages and by each
 // stage's mm/tensor twins — the trio walks the same slab, so the caller derives this once per
@@ -1109,7 +1110,7 @@ struct AttnArgs {
 class MetalAttnQK {
     @ssbo @binding = 0 @role = "read" q : array<float>     // [mp x qd], roped
     @ssbo @binding = 1 @role = "read" k : array<float>     // [nk64 x kv_dim], roped (existing rows + the chunk)
-    @ssbo @binding = 2 @role = "write" att : array<float>   // [n_heads x qrows x np32] raw scores out
+    @ssbo @binding = 2 @role = "write" att : array<float16>   // [n_heads x qrows x np32] raw scores out, f16 slab
     @uniform @binding = 3 ka : AttnArgs
     @workgroup ta : float[2048]             // Q block: 32 qi-rows x 64 (row stride 64)
     @workgroup tb : float[2048]             // KT block: 64 k-rows x 32 j-cols (row stride 32)
@@ -1121,7 +1122,7 @@ class MetalAttnQK {
         let h = gl_WorkGroupID.z
         // skip blocks fully past both uend and the causal reach (tail rows above the span stay
         // causal), or fully below every row's sliding ka.window (the first row's wstart is the
-        // block minimum; softmax zeroes P over the skipped region)
+        // block minimum; pf_p_weight zeroes P over the skipped region)
         if ((ka.uend > 0u ? j0 >= max(ka.uend, ka.qoff + qi0 + 32u) : j0 > ka.qoff + qi0 + 31u) ||
                 (ka.window > 0u && ka.qoff + qi0 + 1u > ka.window && j0 + 32u <= ka.qoff + qi0 + 1u - ka.window)) {
             return
@@ -1169,107 +1170,15 @@ class MetalAttnQK {
             ks += 64u
         }
         let row0 = (h * ka.qrows + qi0 + qm) * ka.np32 + (j0 + qn)
-        simdgroup_store(c00, att, row0, ka.np32)
-        simdgroup_store(c01, att, row0 + 8u, ka.np32)
-        simdgroup_store(c10, att, row0 + 8u * ka.np32, ka.np32)
-        simdgroup_store(c11, att, row0 + 8u * ka.np32 + 8u, ka.np32)
-    }
-}
-
-// One threadgroup (128 threads = 4 simdgroups) per (query row < npos, head): causal in-row
-// softmax via a width-32 simd_shuffle_xor butterfly; the tail (cnt, np32) is ZEROED so the AV
-// GEMM can run whole blocks. A continuation chunk sees qoff existing keys: cnt = qoff + qi + 1.
-[metal_dispatch(name = "enc_softmax", pso = "g_pf_pso_softmax", tgmem = "metal_attn_softmax_msl_tgmem", tg = 128, grid = "npos, heads", params = "npos : int64, heads : int64")]
-class MetalAttnSoftmax {
-    @ssbo @binding = 0 @role = "readwrite" att : array<float>   // [n_heads x qrows x np32], normalized in place
-    @uniform @binding = 1 ka : AttnArgs
-    @ssbo @binding = 20 @role = "weight" @default = g_one sink : array<float> // [nheads] this layer's attention sinks (hass models); null = identity
-    @workgroup red : float[4]               // one per simdgroup
-    @workgroup bcast : float
-
-    [metal_kernel(name="metal_attn_softmax_msl")]
-    def metal_attn_softmax {   // nolint:STYLE038 — MSL kernel body; the softmax halves are tgmem-barrier coupled
-        let qi = gl_WorkGroupID.x
-        let h = gl_WorkGroupID.y
-        let lid = gl_LocalInvocationID.x
-        let nthreads = gl_WorkGroupSize.x
-        let qpos = ka.qoff + qi
-        let cnt = (ka.uend > 0u && qpos >= ka.ulo && qpos < ka.uend) ? ka.uend : qpos + 1u
-        let jlo = ka.window > 0u && ka.qoff + qi + 1u > ka.window ? ka.qoff + qi + 1u - ka.window : 0u
-        let rowbase = (h * ka.qrows + qi) * ka.np32
-        var m = -1.0e30
-        var j = jlo + lid
-        while (j < cnt) {
-            let sr = att[rowbase + j]
-            m = max(m, ka.softcap > 0.0 ? ka.softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / ka.softcap))) : sr)
-            j += nthreads
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        if (lid == 0u) {
-            var mm = red[0]
-            var sgi = 1u
-            while (sgi < gl_NumSubgroups) {
-                mm = max(mm, red[sgi])
-                sgi++
-            }
-            if (ka.hass != 0u) {
-                mm = max(mm, sink[h])
-            }
-            bcast = mm
-        }
-        barrier()
-        let rowmax = bcast
-        var sum = 0.0
-        j = jlo + lid
-        while (j < cnt) {
-            let sr = att[rowbase + j]
-            let ev = exp((ka.softcap > 0.0 ? ka.softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / ka.softcap))) : sr) - rowmax)
-            att[rowbase + j] = ev
-            sum += ev
-            j += nthreads
-        }
-        sum = simd_sum(sum)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = sum
-        }
-        barrier()
-        if (lid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += red[sgi]
-                sgi++
-            }
-            if (ka.hass != 0u) {
-                tot += exp(max(sink[h] - rowmax, -80.0))
-            }
-            bcast = 1.0 / tot
-        }
-        barrier()
-        let inv = bcast
-        j = jlo + lid
-        while (j < cnt) {
-            att[rowbase + j] *= inv
-            j += nthreads
-        }
-        j = lid
-        while (j < jlo) {
-            att[rowbase + j] = 0.0          // below-window prefix: P zeroes (QK may have skipped it)
-            j += nthreads
-        }
-        j = cnt + lid
-        while (j < ka.np32) {
-            att[rowbase + j] = 0.0          // the AV GEMM runs whole 32-blocks over this tail
-            j += nthreads
-        }
+        var hc : simdgroup_half8x8
+        sgmat_to_half(hc, c00)
+        simdgroup_store(hc, att, row0, ka.np32)
+        sgmat_to_half(hc, c01)
+        simdgroup_store(hc, att, row0 + 8u, ka.np32)
+        sgmat_to_half(hc, c10)
+        simdgroup_store(hc, att, row0 + 8u * ka.np32, ka.np32)
+        sgmat_to_half(hc, c11)
+        simdgroup_store(hc, att, row0 + 8u * ka.np32 + 8u, ka.np32)
     }
 }
 
@@ -1290,7 +1199,7 @@ def pf_p_weight(sr : float; jglob, qpos, window : uint; softcap : float; uend, u
 // kernels apply exp at P staging, so the score slab is written once (QK) and read once (AV).
 [metal_dispatch(name = "enc_rowstat", pso = "g_pf_pso_rowstat", tgmem = "metal_attn_rowstat_msl_tgmem", tg = 128, grid = "npos, heads", params = "npos : int64, heads : int64")]
 class MetalAttnRowstat {
-    @ssbo @binding = 0 @role = "read" att : array<float>   // [n_heads x qrows x np32] RAW scores
+    @ssbo @binding = 0 @role = "read" att : array<float16>   // [n_heads x qrows x np32] RAW scores, f16 slab
     @uniform @binding = 1 ka : AttnArgs
     @ssbo @binding = 2 @role = "write" stat : array<float>  // [n_heads x qrows x 2]: rowmax, 1/sum
     @ssbo @binding = 20 @role = "weight" @default = g_one sink : array<float> // [nheads]; null = identity
@@ -1310,7 +1219,7 @@ class MetalAttnRowstat {
         var m = -1.0e30
         var j = jlo + lid
         while (j < cnt) {
-            let sr = att[rowbase + j]
+            let sr = float(att[rowbase + j])
             m = max(m, ka.softcap > 0.0 ? ka.softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / ka.softcap))) : sr)
             j += nthreads
         }
@@ -1340,7 +1249,7 @@ class MetalAttnRowstat {
         var sum = 0.0
         j = jlo + lid
         while (j < cnt) {
-            let sr = att[rowbase + j]
+            let sr = float(att[rowbase + j])
             sum += exp((ka.softcap > 0.0 ? ka.softcap * (1.0 - 2.0 / (1.0 + exp(sr * 2.0 / ka.softcap))) : sr) - rowmax)
             j += nthreads
         }
@@ -1370,7 +1279,7 @@ class MetalAttnRowstat {
 // >= npos stage as 0 (pad rows can carry NaN; 0*NaN would still poison). hs % 32 == 0 required.
 [metal_dispatch(name = "enc_av", pso = "g_pf_pso_av", tgmem = "metal_attn_av_msl_tgmem", tg = 128, grid = "mp/32, head_size/32, heads", params = "mp : int64, heads : int64, head_size : int64")]
 class MetalAttnAV {
-    @ssbo @binding = 0 @role = "read" att : array<float>   // [n_heads x qrows x np32] RAW scores
+    @ssbo @binding = 0 @role = "read" att : array<float16>   // [n_heads x qrows x np32] RAW scores, f16 slab
     @ssbo @binding = 1 @role = "read" v : array<float>     // [nk64 x kv_dim] raw V (existing rows + the chunk)
     @ssbo @binding = 2 @role = "write" xb : array<float>    // [mp x qd] attention output
     @uniform @binding = 3 ka : AttnArgs
@@ -1405,7 +1314,7 @@ class MetalAttnAV {
                 let c = e % 32u
                 let qpos = ka.qoff + qi0 + r
                 let sbase = (h * ka.qrows + qi0 + r) * 2u
-                let sr = jb + c < ka.np32 ? att[(h * ka.qrows + qi0 + r) * ka.np32 + jb + c] : 0.0
+                let sr = jb + c < ka.np32 ? float(att[(h * ka.qrows + qi0 + r) * ka.np32 + jb + c]) : 0.0
                 ta[e] = pf_p_weight(sr, jb + c, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, stat[sbase], stat[sbase + 1u])
                 tb[e] = jb + r < ka.npos ? v[(jb + r) * ka.kv_dim + kvhoff + d0 + c] : 0.0
                 e += 128u
@@ -1448,7 +1357,7 @@ class MetalAttnAV {
 class MetalAttnQKMmT {
     @ssbo @binding = 0 q : array<float>
     @ssbo @binding = 1 k : array<float>
-    @ssbo @binding = 2 att : array<float>
+    @ssbo @binding = 2 att : array<float16>
     @uniform @binding = 3 ka : AttnArgs
     @workgroup twb : float16[2048]          // K chunk: 64 keys x 32 k, flat (scale folded here)
 
@@ -1486,7 +1395,7 @@ class MetalAttnQKMmT {
             barrier()
             kb++
         }
-        tmm2d_tg_store(acc, cp, 32u, 64u, ka.np32)
+        tmm2d_tg_store_half(acc, cp, 32u, 64u, ka.np32)
     }
 }
 
@@ -1494,7 +1403,7 @@ class MetalAttnQKMmT {
 class MetalAttnQKMm : MetalMmTileBase {
     @ssbo @binding = 0 @role = "read" q : array<float4>    // [mp x qd/4], roped
     @ssbo @binding = 1 @role = "read" k : array<float4>    // [nk64 x kv_dim/4], roped (existing rows + the chunk)
-    @ssbo @binding = 2 @role = "write" att : array<float>   // [n_heads x qrows x np32] raw scores out
+    @ssbo @binding = 2 @role = "write" att : array<float16>   // [n_heads x qrows x np32] raw scores out, f16 slab
     @uniform @binding = 3 ka : AttnArgs
     // inherited ta = K tiles (k row, key col), tb = Q tiles (query row, k col)
 
@@ -1573,21 +1482,23 @@ class MetalAttnQKMm : MetalMmTileBase {
         let base = h * ka.qrows * ka.np32
         let row0 = mBase + (sg / 2u) * 16u  // accumulator rows = queries
         let col0 = nBase + (sg % 2u) * 32u  // accumulator cols = keys
+        var hc : simdgroup_half8x8
         for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], att, base + (row0 + uint(i / 4) * 8u) * ka.np32 + col0 + uint(i % 4) * 8u, ka.np32)
+            sgmat_to_half(hc, mc[i])
+            simdgroup_store(hc, att, base + (row0 + uint(i / 4) * 8u) * ka.np32 + col0 + uint(i % 4) * 8u, ka.np32)
         }
     }
 }
 
 // AV: O_h = P_h . V_h — C tile 32 tokens x 64 V-columns, k walks the causally limited position
-// axis in 32-blocks. V stages contiguous float4 loads, position rows >= npos ZEROED (causal
-// softmax zeroes P columns >= npos EXACTLY; 0 * NaN from a pad V row would poison the tile).
+// axis in 32-blocks. V stages contiguous float4 loads, position rows >= npos ZEROED (pf_p_weight
+// zeroes P columns >= npos EXACTLY; 0 * NaN from a pad V row would poison the tile).
 
 // Metal-4 staged-tile twin of MetalAttnAVMm: P x V over flat f16 tiles; V staged TRANSPOSED
 // (col-major source) with pad positions >= npos zeroed (0 * stale-NaN would poison the tile).
 [metal_dispatch(name = "enc_av_mm_t_c", pso = "g_pf_pso_avmm_t", tgmem = "metal_attn_av_mm_t_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
 class MetalAttnAVMmT {
-    @ssbo @binding = 0 att : array<float>
+    @ssbo @binding = 0 att : array<float16>
     @ssbo @binding = 1 v : array<float>
     @ssbo @binding = 2 xb : array<float>
     @uniform @binding = 3 ka : AttnArgs
@@ -1624,7 +1535,7 @@ class MetalAttnAVMmT {
                 let rowb = (h * ka.qrows + mBase + r) * ka.np32
                 for [unroll_full] (t in range(16)) {
                     let jg = kb * 64u + ph + uint(t)
-                    let sr = jg < ka.np32 ? att[rowb + jg] : 0.0
+                    let sr = jg < ka.np32 ? float(att[rowb + jg]) : 0.0
                     twp[r * 64u + ph + uint(t)] = float16(pf_p_weight(sr, jg, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv))
                 }
                 work += gl_WorkGroupSize.x
@@ -1651,7 +1562,7 @@ class MetalAttnAVMmT {
 
 [metal_dispatch(name = "enc_av_mm_c", pso = "g_pf_pso_avmm", tgmem = "metal_attn_av_mm_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
 class MetalAttnAVMm : MetalMmTileBase {
-    @ssbo @binding = 0 @role = "read" att : array<float4>  // [n_heads x qrows x np32/4] RAW scores
+    @ssbo @binding = 0 @role = "read" att : array<float16>  // [n_heads x qrows x np32] RAW scores, f16 slab
     @ssbo @binding = 1 @role = "read" v : array<float4>    // [nk64 x kv_dim/4] raw V (existing rows + the chunk)
     @ssbo @binding = 2 @role = "write" xb : array<float>    // [mp x qd] attention output
     @uniform @binding = 3 ka : AttnArgs
@@ -1667,7 +1578,6 @@ class MetalAttnAVMm : MetalMmTileBase {
         let h = gl_WorkGroupID.z
         let kvhoff4 = ((h / ka.kv_mul) * ka.head_size) / 4u
         let kvd4 = ka.kv_dim / 4u
-        let np324 = ka.np32 / 4u
         var mc : simdgroup_float8x8[8]      // C quadrant: 2 row-tiles x 4 col-tiles
         // A split: thread stages one position row x 16 contiguous V columns (4 x tg_store_half4)
         let pr = lid / 4u
@@ -1694,22 +1604,20 @@ class MetalAttnAVMm : MetalMmTileBase {
             let a1 = posg < ka.npos ? v[srcA + 1u] : zero
             let a2 = posg < ka.npos ? v[srcA + 2u] : zero
             let a3 = posg < ka.npos ? v[srcA + 3u] : zero
-            let srcB = (h * ka.qrows + mBase + lr1) * np324 + (kb * 32u + iy) / 4u
+            let srcB = (h * ka.qrows + mBase + lr1) * ka.np32 + kb * 32u + iy
             let qpos = ka.qoff + mBase + lr1
             let sbase = (h * ka.qrows + mBase + lr1) * 2u
             let sm = stat[sbase]
             let sinv = stat[sbase + 1u]
             let jg = kb * 32u + iy
-            let r0 = att[srcB]
-            let r1 = att[srcB + 1u]
-            let b0 = float4(pf_p_weight(r0.x, jg, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
-                pf_p_weight(r0.y, jg + 1u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
-                pf_p_weight(r0.z, jg + 2u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
-                pf_p_weight(r0.w, jg + 3u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv))
-            let b1 = float4(pf_p_weight(r1.x, jg + 4u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
-                pf_p_weight(r1.y, jg + 5u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
-                pf_p_weight(r1.z, jg + 6u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
-                pf_p_weight(r1.w, jg + 7u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv))
+            let b0 = float4(pf_p_weight(float(att[srcB]), jg, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(float(att[srcB + 1u]), jg + 1u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(float(att[srcB + 2u]), jg + 2u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(float(att[srcB + 3u]), jg + 3u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv))
+            let b1 = float4(pf_p_weight(float(att[srcB + 4u]), jg + 4u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(float(att[srcB + 5u]), jg + 5u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(float(att[srcB + 6u]), jg + 6u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv),
+                pf_p_weight(float(att[srcB + 7u]), jg + 7u, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv))
             barrier()
             let tbase = sxyA + (vc16 / 8u) * 64u            // first col-tile this thread touches
             tg_store_half4(ta, tbase, a0)
@@ -1783,7 +1691,6 @@ var private g_pf_inited = false
 var private g_pf_pso_rope : MetalComputePipeline?
 var private g_pf_pso_addbias : MetalComputePipeline?
 var private g_pf_pso_qk : MetalComputePipeline?
-var private g_pf_pso_softmax : MetalComputePipeline?
 var private g_pf_pso_rowstat : MetalComputePipeline?
 var private g_pf_pso_av : MetalComputePipeline?
 var private g_pf_pso_cat2 : MetalComputePipeline?
@@ -1965,10 +1872,6 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_rowstat)
         g_pf_pso_rowstat = null
     }
-    if (g_pf_pso_softmax != null) {
-        metal_release(g_pf_pso_softmax)
-        g_pf_pso_softmax = null
-    }
     if (g_pf_pso_av != null) {
         metal_release(g_pf_pso_av)
         g_pf_pso_av = null
@@ -2051,7 +1954,6 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_rope = compile_pso(metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath, ok)
     g_pf_pso_addbias = compile_pso(metal_add_bias_rows_msl, metal_add_bias_rows_msl_entry, metal_add_bias_rows_msl_fastmath, ok)
     g_pf_pso_qk = compile_pso(metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, ok)
-    g_pf_pso_softmax = compile_pso(metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, ok)
     g_pf_pso_rowstat = compile_pso(metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, ok)
     g_pf_pso_av = compile_pso(metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, ok)
     g_pf_pso_cat2 = compile_pso(metal_pf_cat2_msl, metal_pf_cat2_msl_entry, metal_pf_cat2_msl_fastmath, ok)
@@ -2428,8 +2330,8 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
 
 
 
-// enc_qk / enc_av / enc_softmax are [metal_dispatch]-generated from MetalAttnQK / MetalAttnAV /
-// MetalAttnSoftmax (sink @default = g_one — identity on null). The mm wrappers below pick the
+// enc_qk / enc_av / enc_rowstat are [metal_dispatch]-generated from MetalAttnQK / MetalAttnAV /
+// MetalAttnRowstat (sink @default = g_one — identity on null). The mm wrappers below pick the
 // Metal-4 tensor twin's generated builder (_t_c) when it compiled.
 
 def enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : AttnArgs; mp, nk64, heads : int64) {   // public: the tower driver dispatches the crowned trio too
@@ -2559,7 +2461,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let bytes_q = uint64(mp * qd_mx * 4l)
     let nsh = !t.blocks.ffn_is_dense ? c.n_ff_shexp : 0l   // shared expert (qwen35moe) rides bhb/bhb2
     let bytes_h = uint64(mp * max(hid_mx, nsh) * 4l)
-    let bytes_att = uint64(n_heads * mp * nk64 * 4l)   // per-head score slabs: mp queries x nk64 keys
+    let bytes_att = uint64(n_heads * mp * nk64 * 2l)   // per-head f16 score slabs: mp queries x nk64 keys
     let bytes_stat = uint64(n_heads * mp * 2l * 4l)   // per-row softmax stats: rowmax + 1/sum
     let bytes_tab = uint64(npos * half * 4l)
     let bytes_tab_sw = uint64(npos * half_sw * 4l)   // the swa pair's row width is ITS class's hs/2
@@ -3118,7 +3020,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
                 if (!recr && g_pf_skip != "attn" && g_pf_skip != "nongemm") {
                     // sliding layers bind the span — the QK forms skip fully-below-window blocks,
-                    // the softmax masks + zeroes the below-window prefix; global layers bind 0
+                    // pf_p_weight masks + zeroes the below-window prefix; global layers bind 0
                     // the trio walks one slab, so its whole geometry derives ONCE here
                     var atka = AttnArgs(qd = uint(qd_l), kv_dim = uint(kvd_l), head_size = uint(hs_l),
                         kv_mul = het ? uint(n_heads / kvh_sw) : kv_mul, npos = uint(nk),
@@ -4177,15 +4079,15 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
     } else {
         var qv <- race_x_f32(mp * qd)
         var kv <- race_x_f32(np32 * kvd)
-        var pv <- race_x_f32(mp * np32 * heads)
+        var pv <- race_x_f16(mp * np32 * heads)
         var sv <- race_x_f32(heads * mp * 2)
         var zeros : array<float>
         zeros |> resize(heads * mp * np32)
         var bq = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(qv[0])))
         var bkk = race_buf(dev, uint64(np32 * kvd * 4), unsafe(addr<void?>(kv[0])))
-        var bp = race_buf(dev, uint64(heads * mp * np32 * 4), unsafe(addr<void?>(pv[0])))
-        var batt_b = race_buf(dev, uint64(heads * mp * np32 * 4), unsafe(addr<void?>(zeros[0])))
-        var batt_t = race_buf(dev, uint64(heads * mp * np32 * 4), unsafe(addr<void?>(zeros[0])))
+        var bp = race_buf(dev, uint64(heads * mp * np32 * 2), unsafe(addr<void?>(pv[0])))
+        var batt_b = race_buf(dev, uint64(heads * mp * np32 * 2), unsafe(addr<void?>(zeros[0])))
+        var batt_t = race_buf(dev, uint64(heads * mp * np32 * 2), unsafe(addr<void?>(zeros[0])))
         var bxb_b = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(zeros[0])))
         var bxb_t = race_buf(dev, uint64(mp * qd * 4), unsafe(addr<void?>(zeros[0])))
         var bstat = race_buf(dev, uint64(heads * mp * 2 * 4), unsafe(addr<void?>(sv[0])))
@@ -4217,7 +4119,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
         if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
             res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
             res.note = "dispatch failed"
-        } elif (!race_envelope_ok(batt_b, batt_t, heads * mp * np32, res.note)) {
+        } elif (!race_envelope_ok_h(batt_b, batt_t, heads * mp * np32, res.note)) {
             res.winner = "simdgroup"
         } else {
             res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"

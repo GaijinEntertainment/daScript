@@ -42,7 +42,7 @@ def private approx(x, y : float) : bool {
     return abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
 }
 
-// The tiled sgmat attention trio (QK^T -> softmax -> P.V) vs a direct causal-GQA oracle at one
+// The tiled sgmat attention trio (QK^T -> rowstat -> P.V) vs a direct causal-GQA oracle at one
 // (head_size, heads, kv_heads, npos) shape. Buffers carry np32 rows like the driver's (whole-tile
 // sgmat stores + staging reads walk the padded rows); rows >= npos are pad. GENERIC (untyped
 // dev/queue) so it instantiates only inside the Apple static_if.
@@ -56,8 +56,8 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
         ? pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
         : pipeline_from_source(dev, metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, err))
     t |> success(pso_sc != null, "qk pipeline (mm={mm}): {err}")
-    var pso_sm = pipeline_from_source(dev, metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, err)
-    t |> success(pso_sm != null, "softmax pipeline: {err}")
+    var pso_sm = pipeline_from_source(dev, metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, err)
+    t |> success(pso_sm != null, "rowstat pipeline: {err}")
     var pso_av = (mm
         ? pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err)
         : pipeline_from_source(dev, metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, err))
@@ -110,7 +110,8 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
     var baq = buf_upload(dev, aq)
     var bak = buf_upload(dev, ak)
     var bav = buf_upload(dev, av)
-    var batt = buf_fill(dev, n_heads * np32 * np32, 0.0)
+    var batt = buf_fill(dev, n_heads * np32 * np32, float16(0.0))
+    var bstat = buf_fill(dev, n_heads * np32 * 2, 0.0)
     var bxb = buf_fill(dev, np32 * qd, 0.0)
     // ONE AttnArgs serves all three stages (each ignores the fields it does not read):
     // qoff = 0 / qrows = np32 (fresh start), window/softcap/hass at their llama-shape identities
@@ -127,9 +128,10 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
         metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(np32 / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
         metal_set_pipeline(enc, pso_sm)
-        metal_set_threadgroup_memory_length(enc, metal_attn_softmax_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, metal_attn_rowstat_msl_tgmem, 0)
         metal_set_buffer(enc, batt, 0ul, 0)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 1)
+        metal_set_buffer(enc, bstat, 0ul, 2)
         metal_set_buffer(enc, bcap0, 0ul, 20)   // sink identity (hass = 0)
         metal_dispatch_threadgroups(enc, uint3(uint(npos), uint(n_heads), 1u), uint3(128u, 1u, 1u))
         metal_set_pipeline(enc, pso_av)
@@ -138,16 +140,18 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
         metal_set_buffer(enc, bav, 0ul, 1)
         metal_set_buffer(enc, bxb, 0ul, 2)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+        metal_set_buffer(enc, bstat, 0ul, 4)
         metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(head_size / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
     }
     t |> success(aran, "attention dispatches (hs={head_size}, mm={mm}): {err}")
-    // the mm pair stages HALF — the envelope is the half-precision score shift through
-    // softmax, ~1% of the convex-combination output
-    t |> equal(buf_mismatch_tol(bxb, axb_want, mm ? 2e-2 : 1e-4), 0)
+    // the f16 score slab + half staging — the envelope is the half-precision score shift
+    // through softmax, ~1% of the convex-combination output (both variants)
+    t |> equal(buf_mismatch_tol(bxb, axb_want, 2e-2), 0)
     metal_release(baq)
     metal_release(bak)
     metal_release(bav)
     metal_release(batt)
+    metal_release(bstat)
     metal_release(bxb)
     metal_release(bcap0)
     metal_release(pso_sc)
@@ -181,8 +185,8 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
         ? pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
         : pipeline_from_source(dev, metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, err))
     t |> success(pso_sc != null, "span qk pipeline (mm={mm}): {err}")
-    var pso_sm = pipeline_from_source(dev, metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, err)
-    t |> success(pso_sm != null, "span softmax pipeline: {err}")
+    var pso_sm = pipeline_from_source(dev, metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, err)
+    t |> success(pso_sm != null, "span rowstat pipeline: {err}")
     var pso_av = (mm
         ? pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err)
         : pipeline_from_source(dev, metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, err))
@@ -237,7 +241,8 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
     var baq = buf_upload(dev, aq)
     var bak = buf_upload(dev, ak)
     var bav = buf_upload(dev, av)
-    var batt = buf_fill(dev, n_heads * qp * nkp, 0.0)
+    var batt = buf_fill(dev, n_heads * qp * nkp, float16(0.0))
+    var bstat = buf_fill(dev, n_heads * qp * 2, 0.0)
     var bxb = buf_fill(dev, qp * qd, 0.0)
     var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kv_dim), head_size = uint(head_size),
         kv_mul = uint(kv_mul), npos = uint(nk), np32 = uint(nkp), scale = scale,
@@ -253,9 +258,10 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
         metal_dispatch_threadgroups(enc, uint3(uint(qp / 32), uint(nkp / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
         metal_set_pipeline(enc, pso_sm)
-        metal_set_threadgroup_memory_length(enc, metal_attn_softmax_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, metal_attn_rowstat_msl_tgmem, 0)
         metal_set_buffer(enc, batt, 0ul, 0)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 1)
+        metal_set_buffer(enc, bstat, 0ul, 2)
         metal_set_buffer(enc, bcap0, 0ul, 20)   // sink identity (hass = 0)
         metal_dispatch_threadgroups(enc, uint3(uint(npos), uint(n_heads), 1u), uint3(128u, 1u, 1u))
         metal_set_pipeline(enc, pso_av)
@@ -264,14 +270,16 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
         metal_set_buffer(enc, bav, 0ul, 1)
         metal_set_buffer(enc, bxb, 0ul, 2)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+        metal_set_buffer(enc, bstat, 0ul, 4)
         metal_dispatch_threadgroups(enc, uint3(uint(qp / 32), uint(head_size / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
     }
     t |> success(aran, "span attention dispatches (hs={head_size}, qoff={qoff}, w={window}, mm={mm}, span=[{ulo},{ue})): {err}")
-    t |> equal(buf_mismatch_tol(bxb, axb_want, mm ? 2e-2 : 1e-4), 0)
+    t |> equal(buf_mismatch_tol(bxb, axb_want, 2e-2), 0)
     metal_release(baq)
     metal_release(bak)
     metal_release(bav)
     metal_release(batt)
+    metal_release(bstat)
     metal_release(bxb)
     metal_release(bcap0)
     metal_release(pso_sc)

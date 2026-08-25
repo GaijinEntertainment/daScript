@@ -8,7 +8,6 @@ options _dasllama_internal = true
 // CPU oracle. Causal-only v1: window/softcap/sink/span join before production wiring.
 
 require math
-require daslib/math_bits
 require metal/msl_shader
 require metal/das_metal_boost
 require ?das_metal das_metal
@@ -36,7 +35,7 @@ class LabPfFusedAttn {
     @workgroup tss : float[32]              // running row sum
 
     [metal_kernel(name="lab_pf_fused_attn_msl")]
-    def lab_pf_fused_attn {
+    def lab_pf_fused_attn {   // nolint:STYLE038 — one MSL kernel body, tgmem-barrier coupled
         let qi0 = gl_WorkGroupID.x * 32u
         let h = gl_WorkGroupID.y
         let hs = ka.head_size
@@ -174,7 +173,7 @@ def private cpu_oracle(q, k, v : array<float>; var o : array<float>; np, heads, 
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var dev = metal_create_system_default_device()
         var queue = metal_new_command_queue(dev)
@@ -185,7 +184,7 @@ def main {
             return
         }
         var pso_qk = pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
-        var pso_sm = pipeline_from_source(dev, metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, err)
+        var pso_sm = pipeline_from_source(dev, metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, err)
         var pso_av = pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err)
         var pso_qkt = pipeline_from_source(dev, metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, err)
         var pso_avt = pipeline_from_source(dev, metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, err)
@@ -210,7 +209,8 @@ def main {
             var bv = race_buf(dev, uint64(np * kvd * 4), unsafe(addr<void?>(vh[0])))
             var bo = race_buf(dev, uint64(np * qd * 4), null)
             var bs = race_buf(dev, uint64(np * qd * 4), null)     // three-pass out
-            var batt = race_buf(dev, uint64(heads * np * np * 4), null)
+            var batt = race_buf(dev, uint64(heads * np * np * 2), null)   // f16 score slab
+            var bstat = race_buf(dev, uint64(heads * np * 2 * 4), null)
             var bsink = race_buf(dev, uint64(heads * 4), null)
             var t_fused = -1.0lf
             var t_three = -1.0lf
@@ -223,9 +223,10 @@ def main {
                 kn_kargs(enc, ka, 3)
                 kn_dispatch(enc, uint3(uint(np / 32), uint(np / 64), uint(heads)), uint3(128u, 1u, 1u))
                 kn_pipeline(enc, pso_sm)
-                kn_tgmem(enc, metal_attn_softmax_msl_tgmem, 0)
+                kn_tgmem(enc, metal_attn_rowstat_msl_tgmem, 0)
                 kn_buffer(enc, batt, 0ul, 0)
                 kn_kargs(enc, ka, 1)
+                kn_buffer(enc, bstat, 0ul, 2)
                 kn_buffer(enc, bsink, 0ul, 20)
                 kn_dispatch(enc, uint3(uint(np), uint(heads), 1u), uint3(128u, 1u, 1u))
                 kn_pipeline(enc, pso_av)
@@ -234,6 +235,7 @@ def main {
                 kn_buffer(enc, bv, 0ul, 1)
                 kn_buffer(enc, bs, 0ul, 2)
                 kn_kargs(enc, ka, 3)
+                kn_buffer(enc, bstat, 0ul, 4)
                 kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
             }, $(enc) {
                 kn_pipeline(enc, g_lab_pso_fused)
@@ -288,6 +290,7 @@ def main {
                 kn_buffer(enc, bv, 0ul, 1)
                 kn_buffer(enc, bs, 0ul, 2)
                 kn_kargs(enc, ka, 3)
+                kn_buffer(enc, bstat, 0ul, 4)
                 kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
             }, $(enc) {
                 kn_pipeline(enc, pso_avt)
@@ -296,6 +299,7 @@ def main {
                 kn_buffer(enc, bv, 0ul, 1)
                 kn_buffer(enc, bs, 0ul, 2)
                 kn_kargs(enc, ka, 3)
+                kn_buffer(enc, bstat, 0ul, 4)
                 kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
             })
             print("  av_mm np={np}: base={t_avb}ms tensor={t_avt}ms ratio={t_avt / t_avb}\n")
@@ -306,6 +310,7 @@ def main {
             metal_release(bo)
             metal_release(bs)
             metal_release(batt)
+            metal_release(bstat)
             metal_release(bsink)
             delete qh
             delete kh

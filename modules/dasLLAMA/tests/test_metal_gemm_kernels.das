@@ -135,7 +135,8 @@ def private metal4_tensor_available(dev) : bool {
     return g_m4_ok
 }
 
-// the Metal-4 tensor twin of the (already direct-covered) MetalQ8MulMm — same bindings, no tgmem
+// the Metal-4 tensor twin of the (already direct-covered) MetalQ8MulMm — same bindings; the
+// q8u form dequant-stages W into @workgroup, so the gate binds its tgmem like production
 def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int) {
     let tag = "q8_mulmm_t m={m} k={kdim} n={ndim}"
     var err : string
@@ -176,6 +177,7 @@ def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int) {
     var bn = buf_u32(dev, uint(ndim))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_q8_mulmm_t_msl_tgmem, 0)
         metal_set_buffer(enc, bw, 0ul, 0)
         metal_set_buffer(enc, bw, 0ul, 1)
         metal_set_buffer(enc, bx, 0ul, 2)
@@ -410,9 +412,7 @@ def private q8_gemm_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim, 
     var by = buf_fill(dev, mp32 * ys, -1000.0)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        if (!tensor) {
-            metal_set_threadgroup_memory_length(enc, MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem, 0)
-        }
+        metal_set_threadgroup_memory_length(enc, tensor ? MetalQ8GemmBT_metal_q8_gemm_b_t_msl_tgmem : MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem, 0)
         metal_set_buffer(enc, bw, 0ul, 0)   // byte view
         metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view of the same blob
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -501,9 +501,7 @@ def private q8_gemm_sk_gate(t : T?; dev, queue; tensor : bool; kdim, ndim, kspli
     var by = buf_fill(dev, mp * ndim, -1000.0)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        if (!tensor) {
-            metal_set_threadgroup_memory_length(enc, MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem, 0)
-        }
+        metal_set_threadgroup_memory_length(enc, tensor ? MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_tgmem : MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem, 0)
         metal_set_buffer(enc, bw, 0ul, 0)   // byte view
         metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view of the same blob
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -579,9 +577,7 @@ def private q8_gemm64_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim
     var by = buf_fill(dev, mp32 * ndim, -1000.0)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        if (!tensor) {
-            metal_set_threadgroup_memory_length(enc, metal_q8_gemm64_b_msl_tgmem, 0)
-        }
+        metal_set_threadgroup_memory_length(enc, tensor ? MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_tgmem : metal_q8_gemm64_b_msl_tgmem, 0)
         metal_set_buffer(enc, bw, 0ul, 0)   // byte view
         metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view of the same blob
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -819,6 +815,7 @@ def private moe_mulmm_q8_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : in
         metal_set_buffer(enc, bw, 0ul, 1)   // byte view of the same blob
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
         if (tensor) {   // the tensor twin keeps its compact layout (contiguous-only, no bkt)
+            metal_set_threadgroup_memory_length(enc, metal_moe_mulmm_q8_t_msl_tgmem, 0)
             metal_set_buffer(enc, bx, 0ul, 2)
             metal_set_buffer(enc, by, 0ul, 3)
             metal_set_buffer(enc, bcnt, 0ul, 6)
@@ -1037,7 +1034,7 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
         window = uint(window), uend = uint(uend))
     var bq = buf_upload(dev, qv)
     var bk = buf_upload(dev, kv)
-    var batt = buf_fill(dev, heads * mp * np32, -1000.0)
+    var batt = buf_fill(dev, heads * mp * np32, float16(-1000.0))   // f16 slab; the sentinel is f16-exact
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_threadgroup_memory_length(enc, tensor ? metal_attn_qk_mm_t_msl_tgmem : metal_attn_qk_mm_msl_tgmem, 0)
@@ -1049,7 +1046,7 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
-        t |> equal(buf_mismatch_env(batt, want, env, 2e-3, tag), 0)
+        t |> equal(buf_mismatch_env_h(batt, want, env, 2e-3, tag), 0)
     }
     metal_release(bq)
     metal_release(bk)
@@ -1061,9 +1058,10 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     delete env
 }
 
-// MetalAttnAVMm[T]: xb[m x qd] = P · V with the normalized-P slab causally zero past
-// qoff+m and past npos. The tensor twin zero-guards V rows >= npos — the npos < np32 arm
-// fills the pad rows with garbage to prove the guard is live.
+// MetalAttnAVMm[T]: xb[m x qd] = P · V where P = pf_p_weight(raw f16 score, rowstat) applied
+// at staging — the gate feeds RAW scores + CPU-minted stats and oracles the same transform.
+// The tensor twin zero-guards V rows >= npos — the npos < np32 arm fills the pad rows with
+// garbage to prove the guard is live (their P weights are zero past each row's live length).
 def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, npos, qoff : int; uend : int = 0) {
     let tag = "attn_av_mm{tensor ? "t" : ""} h={heads} hs={hs} m={mp} n={np32} npos={npos} u={uend}"
     var err : string
@@ -1078,14 +1076,27 @@ def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     return if (pso == null)
     let qd = heads * hs
     let kvd = (heads / kv_mul) * hs
-    var attf : array<float>
+    var attf : array<float16>
     attf |> resize(heads * mp * np32)
+    for (i in range(heads * mp * np32)) {
+        attf[i] = float16(float((i * 3) % 13 - 6) * 0.25)   // raw scores, every slot populated
+    }
+    var stats : array<float>
+    stats |> resize(heads * mp * 2)
     for (h in range(heads)) {
         for (m in range(mp)) {
-            for (pos in range(np32)) {
-                let live = (uend > 0 ? pos < uend : pos <= qoff + m) && pos < npos
-                attf[(h * mp + m) * np32 + pos] = live ? float((h * 31 + m * 7 + pos * 3) % 13 - 6) * 0.25 : 0.0
+            let qpos = qoff + m
+            let cnt = uend > 0 && qpos < uend ? uend : qpos + 1
+            var rm = -1.0e30
+            for (pos in range(cnt)) {
+                rm = max(rm, float(attf[(h * mp + m) * np32 + pos]))
             }
+            var sum = 0.0
+            for (pos in range(cnt)) {
+                sum += exp(float(attf[(h * mp + m) * np32 + pos]) - rm)
+            }
+            stats[(h * mp + m) * 2] = rm
+            stats[(h * mp + m) * 2 + 1] = 1.0 / sum
         }
     }
     var vv : array<float>
@@ -1100,11 +1111,14 @@ def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     for (h in range(heads)) {
         let kvhoff = (h / kv_mul) * hs
         for (m in range(mp)) {
+            let qpos = qoff + m
             for (col in range(hs)) {
                 var acc = 0.0lf
                 var ev = 0.0lf
                 for (pos in range(npos)) {
-                    let p = double(attf[(h * mp + m) * np32 + pos]) * double(vv[pos * kvd + kvhoff + col])
+                    let pw = pf_p_weight(float(attf[(h * mp + m) * np32 + pos]), uint(pos), uint(qpos),
+                        0u, 0.0, uint(uend), 0u, stats[(h * mp + m) * 2], stats[(h * mp + m) * 2 + 1])
+                    let p = double(pw) * double(vv[pos * kvd + kvhoff + col])
                     acc += p
                     ev += abs(p)
                 }
@@ -1117,6 +1131,7 @@ def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
         npos = uint(npos), np32 = uint(np32), scale = 1.0, qoff = uint(qoff), qrows = uint(mp),
         uend = uint(uend))
     var batt = buf_upload(dev, attf)
+    var bstat = buf_upload(dev, stats)
     var bv = buf_upload(dev, vv)
     var bxb = buf_fill(dev, mp * qd, -1000.0)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
@@ -1126,6 +1141,7 @@ def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
         metal_set_buffer(enc, bv, 0ul, 1)
         metal_set_buffer(enc, bxb, 0ul, 2)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+        metal_set_buffer(enc, bstat, 0ul, 4)
         metal_dispatch_threadgroups(enc, uint3(uint(mp / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
@@ -1133,10 +1149,12 @@ def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
         t |> equal(buf_mismatch_env(bxb, want, env, 2e-3, tag), 0)
     }
     metal_release(batt)
+    metal_release(bstat)
     metal_release(bv)
     metal_release(bxb)
     metal_release(pso)
     delete attf
+    delete stats
     delete vv
     delete want
     delete env

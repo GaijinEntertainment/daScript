@@ -2090,6 +2090,35 @@ def race_x_f32(count : int) : array<float> {
     return <- xa
 }
 
+// deterministic f16 panel — the f16-slab races (attention scores) feed and compare in half
+def race_x_f16(count : int) : array<float16> {
+    var xa : array<float16>
+    xa |> resize(count)
+    for (i in range(count)) {
+        xa[i] = float16(0.25 * float(i % 17 - 8))
+    }
+    return <- xa
+}
+
+// the half-payload envelope twin: same bands over float16 buffers
+def race_envelope_ok_h(ba, bb : MetalBuffer?; count : int; var note : string&) : bool {
+    var maxref = 0.0lf
+    var maxdiff = 0.0lf
+    unsafe {
+        let pb = reinterpret<float16?>(metal_buffer_contents(ba))
+        let pt = reinterpret<float16?>(metal_buffer_contents(bb))
+        for (i in range(count)) {
+            maxref = max(maxref, abs(double(float(pb[i]))))
+            maxdiff = max(maxdiff, abs(double(float(pt[i])) - double(float(pb[i]))))
+        }
+    }
+    if (maxdiff > 0.05lf * maxref + 1e-6lf) {
+        note = "twin OUTPUT MISMATCH maxdiff={maxdiff} maxref={maxref}"
+        return false
+    }
+    return true
+}
+
 // eligibility envelope: f16-staging noise passes, a garbage twin lands at O(max)
 def race_envelope_ok(ba, bb : MetalBuffer?; count : int; var note : string&) : bool {
     var maxref = 0.0lf
