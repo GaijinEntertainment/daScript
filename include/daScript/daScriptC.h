@@ -22,7 +22,7 @@
 #define DAS_CC_API
 #endif
 //if target is not defined, try to auto-detect target
-#ifndef _TARGET_SIMD_SSE
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_SCALAR)
     #if __SSE4_1__ || defined(__AVX__) || defined(__AVX2__)
         #define _TARGET_SIMD_SSE 4
     #elif __SSSE3__
@@ -32,9 +32,11 @@
     #endif
 #endif
 
-#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON)
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR)
     #if defined(__ARM_NEON) || defined(__ARM_NEON__)
         #define _TARGET_SIMD_NEON 1
+    #else
+        #define _TARGET_SIMD_SCALAR 1
     #endif
 #endif
 
@@ -46,6 +48,23 @@
     #include <arm_neon.h>
     typedef float32x4_t vec4f;
     typedef int32x4_t   vec4i;
+#elif defined(_TARGET_SIMD_SCALAR)
+    //shared with vecmath/dag_vecMathDecl.h - keep identical
+    #ifndef DAS_SCALAR_VEC_TYPES_DEFINED
+    #define DAS_SCALAR_VEC_TYPES_DEFINED
+    #ifdef __cplusplus
+    struct alignas(16) vec4f_scalar_t { float f[4]; };
+    struct alignas(16) vec4i_scalar_t { int32_t i[4]; };
+    #elif defined(_MSC_VER)
+    typedef struct __declspec(align(16)) vec4f_scalar_t { float f[4]; } vec4f_scalar_t;
+    typedef struct __declspec(align(16)) vec4i_scalar_t { int32_t i[4]; } vec4i_scalar_t;
+    #else
+    typedef struct vec4f_scalar_t { float f[4]; } __attribute__((aligned(16))) vec4f_scalar_t;
+    typedef struct vec4i_scalar_t { int32_t i[4]; } __attribute__((aligned(16))) vec4i_scalar_t;
+    #endif
+    #endif
+    typedef vec4f_scalar_t vec4f;
+    typedef vec4i_scalar_t vec4i;
 #else
     #error unsupported target
 #endif

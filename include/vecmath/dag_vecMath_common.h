@@ -379,7 +379,7 @@ VECTORCALL VECMATH_FINLINE vec4f v_remove_nan(vec4f a)
 VECTORCALL VECMATH_FINLINE vec4f v_is_nan(vec4f a)
 {
   volatile vec4f v = a;
-#if !defined(_MSC_VER)
+#if !defined(_MSC_VER) && !defined(_TARGET_SIMD_SCALAR)
   return v_cmp_neq(a, v);
 #else
   return v_cmp_neq(a, (vec4f &)v);
@@ -3299,7 +3299,7 @@ VECTORCALL VECMATH_INLINE void v_get_bilinear_wrap_addr_pow2(vec4i &uv_idx, vec4
 // don't use a pixel centered bilinear filtration because it creates shifts for different
   uv_wrap = v_mul(uv_wrap, dmap);
   uv_wrap = v_sub(uv_wrap, center_ofs);
-#if _TARGET_SIMD_SSE >= 4 || defined(__SSE4_1__)
+#if _TARGET_SIMD_SSE >= 4 || (_TARGET_SIMD_SSE && defined(__SSE4_1__))
   vec4f floored = sse4_floor(uv_wrap);
 #else
   vec4f floored = v_floor(uv_wrap);
@@ -3320,7 +3320,7 @@ VECTORCALL VECMATH_INLINE void v_get_bilinear_wrap_addr(vec4i &uv_idx, vec4f &uv
   vec4f dmap = v_cvt_vec4f(dmapi);
 // don't use a pixel centered bilinear filtration because it creates shifts for different
   uv_wrap = v_sub(uv_wrap, v_div(center_ofs, dmap));
-#if _TARGET_SIMD_SSE >= 4 || defined(__SSE4_1__)
+#if _TARGET_SIMD_SSE >= 4 || (_TARGET_SIMD_SSE && defined(__SSE4_1__))
   uv_wrap = v_mul(v_sub(uv_wrap, sse4_floor(uv_wrap)), dmap);
 #else
   uv_wrap = v_mul(v_sub(uv_wrap, v_floor(uv_wrap)), dmap);

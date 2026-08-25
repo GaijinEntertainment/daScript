@@ -11,8 +11,8 @@ namespace das {
 
     __forceinline vec4f v_gather ( const void * _ptr, vec4f index ) {
         // read 4 floats from memory, using 4 uint32_t indices
-        #if defined(__AVX2__)
-            // note: this is not faster than the scalar version
+        #if defined(__AVX2__) && !defined(_TARGET_SIMD_SCALAR)
+            // note: no faster than the per-lane fallback below
             return (_mm_i32gather_ps((const float *) _ptr, v_cast_vec4i(index), 4));
         #else
             auto ptr = (const int32_t *) _ptr;

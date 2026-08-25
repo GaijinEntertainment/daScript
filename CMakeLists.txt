@@ -55,6 +55,13 @@ option(DAS_ENABLE_PIC "Build static libs as position-independent code (UNIX, req
 # (all daslang targets, every config) and libhv's BUILD_FOR_MT (modules/dasHV) in
 # lockstep, so no target can disagree on /MT vs /MD. See CMakeCommon.txt.
 option(DAS_USE_STATIC_STD_LIBS "Link the static MSVC runtime (/MT); OFF = dynamic (/MD)" OFF)
+# Forces vecmath's scalar per-lane backend on SIMD-capable hosts. The backend is
+# auto-selected on targets with no SIMD ISA (Cortex-M, RISC-V without V); this knob
+# exists so the full test suite can validate it on x64.
+option(DAS_VECMATH_SCALAR "Force the scalar (non-SIMD) vecmath backend" OFF)
+if(DAS_VECMATH_SCALAR)
+    add_compile_definitions(_TARGET_SIMD_SCALAR=1)
+endif()
 # Upper bound on JobQue worker threads (caps get_total_hw_threads / get_total_hw_jobs and the
 # persistent job pool). Empty = platform.h default: 4 on wasm (keeps a web build from spawning one
 # Web Worker per logical core), effectively uncapped elsewhere (the cores-1 rule governs).
