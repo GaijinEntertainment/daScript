@@ -100,10 +100,10 @@ class MetalBf16MulMm : MetalMmTileBase {
     }
 }
 
-// Metal-4 tensor twin of MetalQ8MulMm: the SAME 32x64 tile per threadgroup off the same binds
-// (blob bound twice — half-scale + byte views), lowered to one tmm2d_q8b_f32. Raced vs the
-// simdgroup kernel by the tuner (runtime.metal_tensor crown "mulmm_q8"); dispatch identical.
-[metal_dispatch(name = "enc_gemm_mm_t_c", pso = "g_pf_pso_mm_t", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
+// Metal-4 tensor twin of MetalQ8MulMm (same binds, blob bound twice): tmm2d_q8u_f32 dequant-
+// stages W to a threadgroup f16 tile per K-chunk, streams activations from device, and holds
+// one multiply_accumulate C across the K loop — raced by the tuner (crown "mulmm_q8").
+[metal_dispatch(name = "enc_gemm_mm_t_c", pso = "g_pf_pso_mm_t", tgmem = "metal_q8_mulmm_t_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
 class MetalQ8MulMmT {
     @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16> // 34B-block W blob, half-scale view
     @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>    // the SAME blob buffer, byte view
@@ -111,6 +111,7 @@ class MetalQ8MulMmT {
     @ssbo @binding = 3 @off = "yoff" @span = "mp*d*4" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
+    @workgroup twb : float16[2048]          // W chunk: 64 wcols x 32 k, dequant-staged by the helper
 
     [metal_kernel(name="metal_q8_mulmm_t_msl")]
     def metal_q8_mulmm_t {
@@ -121,7 +122,7 @@ class MetalQ8MulMmT {
         var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
         var ap = unsafe(addr(xf[mBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u)
+        tmm2d_q8u_f32(32u, 64u, 4u, twb, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u, gl_LocalInvocationIndex)
     }
 }
 
@@ -3685,6 +3686,7 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
         kn_dispatch(enc, grid, tg)
     }, $(enc) {
         kn_pipeline(enc, twin_pso)
+        kn_tgmem(enc, metal_q8_mulmm_t_msl_tgmem, 0)
         kn_buffer(enc, bw, 0ul, 0)
         kn_buffer(enc, bw, 0ul, 1)
         kn_buffer(enc, bxa, 0ul, 2)

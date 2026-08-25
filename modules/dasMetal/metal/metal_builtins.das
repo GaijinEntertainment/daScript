@@ -374,12 +374,44 @@ def public tmm2d_q8b_f32(m, n, sgs : uint; wsh : float16 const?; wqb : int8 cons
     }
 }
 
+//! Interleaved-q8_0 W x RAW f32 activations, upstream-geometry walk: the emitter dequantizes
+//! the W tile into `wt` (an n*32 @workgroup float16 scratch, scale folded AT STAGING) per 32-K
+//! chunk, streams activations straight from device memory, and holds ONE multiply_accumulate
+//! cooperative C across the whole K loop. Same blob views and arg meanings as tmm2d_q8b_f32;
+//! `tid` is the caller's gl_LocalInvocationIndex (the staging stride). The CPU replay mirrors
+//! the f16 rounding of the staged dequant so conformance stays exact on f16-exact fixtures.
+[unused_argument(sgs, wt, tid), sideeffects]
+def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 const?; a : float const?; lda : uint; var c : float?; ldc : uint; kk : uint; ldwb : uint; tid : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        let nb = int(kk) / 32
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (b in range(nb)) {
+                    let blk = j * int(ldwb) + b
+                    let ws = float(wsh[blk * 17])
+                    var ch = 0.0
+                    for (k in range(32)) {
+                        ch += a[r * int(lda) + b * 32 + k] * float(float16(float(wqb[blk * 34 + k]) * ws))
+                    }
+                    facc += ch
+                }
+                c[r * int(ldc) + j] = facc
+            }
+        }
+    }
+}
+
 // ===== staged-tile cooperative GEMM protocol (begin / step / store) =====
 // For kernels that DEQUANT-stage weight/activation tiles into @workgroup float16 (mx4 LUT,
 // k-quant sub-scales): stage a FLAT row-major [rows][kk] tile pair per K-chunk, then step.
 // `acc` is an m*n float @workgroup (or local) scratch — the CPU-replay accumulator; on GPU the
 // emitter keys a persistent cooperative tensor to the acc VARIABLE and never touches the array.
-// run() OVERWRITES a cooperative destination (probe-proven), so step folds explicitly.
+// The op is built in multiply_accumulate mode, so each step's run() accumulates into that
+// persistent tensor directly (default-mode run() overwrites — that mode is not used here).
 
 //! begin: zero the accumulator. m/n/sgs/kk must be call-site constants (kk = chunk K width).
 [unused_argument(sgs, kk), sideeffects]

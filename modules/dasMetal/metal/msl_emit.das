@@ -522,7 +522,7 @@ let private MSL_LADDER_OWNED : table<string> <- {
     "make_filled_simdgroup_float8x8", "make_filled_simdgroup_half8x8",
     "simd_sum", "simd_shuffle", "simd_shuffle_up", "simd_shuffle_down", "simd_shuffle_xor",
     "sdot4", "usdot4", "i_das_ptr_add",
-    "tmm2d_f32_bf16_f32", "tmm2d_q8_f32", "tmm2d_q8_f16s", "tmm2d_q8b_f32",
+    "tmm2d_f32_bf16_f32", "tmm2d_q8_f32", "tmm2d_q8_f16s", "tmm2d_q8b_f32", "tmm2d_q8u_f32",
     "tmm2d_tg_begin", "tmm2d_tg_step", "tmm2d_tg_store",
     "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int"
 }
@@ -788,6 +788,9 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         }
         if ((scn == "tmm2d_q8_f32" || scn == "tmm2d_q8_f16s") && length(ecs.arguments) == 14) {
             mark_write_target(ctx, ecs.arguments[11])
+        }
+        if (scn == "tmm2d_q8u_f32" && length(ecs.arguments) == 13) {
+            mark_write_target(ctx, ecs.arguments[8])
         }
         if (scn == "tmm2d_tg_store" && length(ecs.arguments) == 5) {
             mark_write_target(ctx, ecs.arguments[1])
@@ -2299,6 +2302,37 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
             w |> write("\}")
         }
     }
+    if (kind == "q8u") {
+        // interleaved-q8_0 W x raw f32 activations, upstream-geometry walk: W dequantized to a
+        // threadgroup f16 tile per 32-K chunk (scale folded AT STAGING, amortized over the m
+        // activation rows), activations streamed straight from device memory, and ONE
+        // multiply_accumulate cooperative C held across the whole K loop — no per-element
+        // index/fold work anywhere in the hot path
+        return build_string() $(var w) {
+            w |> write("static void {name}(threadgroup half * wt, device const half * ws, device const char * wq, device const float * a, uint lda, device float * c, uint ldc, uint kk, uint ldwb, uint tid) \{\n")
+            w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, false, matmul2d_descriptor::mode::multiply_accumulate);\n")
+            w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
+            w |> write("    using AT = tensor<device float, dextents<int32_t, 2>, tensor_inline>;\n")
+            w |> write("    using WT = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;\n")
+            w |> write("    auto cT = op.get_destination_cooperative_tensor<AT, WT, float>();\n")
+            w |> write("    for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
+            w |> write("    const uint nb = kk / 32u;\n")
+            w |> write("    for (uint b = 0; b < nb; ++b) \{\n")
+            w |> write("        for (uint i = tid; i < {int(n)}u * 32u; i += {int(sgs * 32u)}u) \{\n")
+            w |> write("            const uint blk = (i / 32u) * ldwb + b;\n")
+            w |> write("            wt[i] = half(float(wq[blk * 34u + (i % 32u)]) * float(ws[blk * 17u]));\n")
+            w |> write("        \}\n")
+            w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+            w |> write("        auto A = AT((device float *)(a + b * 32u), dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+            w |> write("        auto W = WT((threadgroup half *)wt, dextents<int32_t, 2>(32, {int(n)}));\n")
+            w |> write("        op.run(A, W, cT);\n")
+            w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+            w |> write("    \}\n")
+            w |> write("    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int(ldc)\});\n")
+            w |> write("    cT.store(C);\n")
+            w |> write("\}")
+        }
+    }
     // q8 / q8_f16s: per-32-block exact int accumulate + scale fold in a float cooperative acc
     let wst = kind == "q8h" ? "device const ushort" : "device const float"
     let wsread = kind == "q8h" ? "float(as_type<half>(ws[uint(ids[0]) * ldws + b]))" : "ws[uint(ids[0]) * ldws + b]"
@@ -2362,7 +2396,7 @@ def private emit_tmm2d_tg_begin(var ctx : MslCtx; ec : ExprCall?; indent : strin
         ctx.tg_accs[string((a0 as ExprVar).name)] = "{int(m)}|{int(n)}|{int(sgs)}|{int(kk)}"
     }
     note(ctx, "call.tmm2d_tg_begin")
-    lines |> push("{indent}constexpr auto __tgd_{acc} = matmul2d_descriptor({int(m)}, {int(n)}, {int(kk)}, false, true, false);")
+    lines |> push("{indent}constexpr auto __tgd_{acc} = matmul2d_descriptor({int(m)}, {int(n)}, {int(kk)}, false, true, false, matmul2d_descriptor::mode::multiply_accumulate);")
     lines |> push("{indent}matmul2d<__tgd_{acc}, execution_simdgroups<{int(sgs)}>> __tgop_{acc};")
     lines |> push("{indent}using __tgt_{acc} = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
     lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgt_{acc}, __tgt_{acc}, float>();")
@@ -2387,9 +2421,7 @@ def private emit_tmm2d_tg_step(var ctx : MslCtx; ec : ExprCall?; indent : string
     lines |> push("{indent}\{")
     lines |> push("{indent}    auto __A = __tgt_{acc}((threadgroup half *){ta}, dextents<int32_t, 2>({int(kk)}, {int(m)}));")
     lines |> push("{indent}    auto __B = __tgt_{acc}((threadgroup half *){tb}, dextents<int32_t, 2>({int(kk)}, {int(n)}));")
-    lines |> push("{indent}    auto __c = __tgop_{acc}.template get_destination_cooperative_tensor<__tgt_{acc}, __tgt_{acc}, float>();")
-    lines |> push("{indent}    __tgop_{acc}.run(__A, __B, __c);")
-    lines |> push("{indent}    for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] += __c[__i]; \}")
+    lines |> push("{indent}    __tgop_{acc}.run(__A, __B, __tgf_{acc});")
     lines |> push("{indent}\}")
 }
 
@@ -2415,8 +2447,8 @@ def private emit_tmm2d_tg_store(var ctx : MslCtx; ec : ExprCall?; indent : strin
 
 def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     let cname = call_base_name("{ec.name}")
-    let kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8"))
-    let want_args = kind == "bf" ? 10 : (kind == "q8b" ? 11 : 14)
+    let kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8u_f32" ? "q8u" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8")))
+    let want_args = kind == "bf" ? 10 : (kind == "q8b" ? 11 : (kind == "q8u" ? 13 : 14))
     if (length(ec.arguments) != want_args) {
         err(ctx, ec.at, "{cname} takes exactly {want_args} arguments")
         return
@@ -2656,7 +2688,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_tg_store_float4(ctx, ec, indent, lines)
         } elif (cname == "simdgroup_multiply_accumulate" || cname == "simdgroup_multiply") {
             emit_sgmat_multiply(ctx, ec, indent, lines)
-        } elif (cname == "tmm2d_f32_bf16_f32" || cname == "tmm2d_q8_f32" || cname == "tmm2d_q8_f16s" || cname == "tmm2d_q8b_f32") {
+        } elif (cname == "tmm2d_f32_bf16_f32" || cname == "tmm2d_q8_f32" || cname == "tmm2d_q8_f16s" || cname == "tmm2d_q8b_f32" || cname == "tmm2d_q8u_f32") {
             emit_tmm2d(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_begin") {
             emit_tmm2d_tg_begin(ctx, ec, indent, lines)

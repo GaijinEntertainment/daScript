@@ -98,6 +98,17 @@ class TmmKernels {
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8b_f32(8u, 16u, 2u, sp, wp, ap, 64u, cp, 16u, 64u, 2u)
     }
+
+    @workgroup tqu : float16[512]    // q8u: 16 wcols x 32 k dequant-staged W chunk
+
+    [metal_kernel(name="tmm_q8u_msl"), marker(no_coverage)]
+    def tmm_q8u_k {
+        var sp = unsafe(addr(bsh[0]))
+        var wp = unsafe(addr(bqb[2]))
+        var ap = unsafe(addr(xa[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_q8u_f32(8u, 16u, 2u, tqu, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex)
+    }
 }
 
 // Metal-4 availability probe: the tensor ops need the MPP framework + MSL 4.0 (macOS 26) —
@@ -158,7 +169,11 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         t |> success(find(tmm_q8_msl, "__das_tmm2d_q8_8_16_2") >= 0, "q8 helper generated")
         t |> success(find(tmm_q8h_msl, "__das_tmm2d_q8h_8_16_2") >= 0, "q8h helper generated")
         t |> success(find(tmm_q8b_msl, "__das_tmm2d_q8b_8_16_2") >= 0, "q8b helper generated")
+        t |> success(find(tmm_q8u_msl, "__das_tmm2d_q8u_8_16_2") >= 0, "q8u helper generated")
+        t |> success(find(tmm_q8u_msl, "multiply_accumulate") >= 0, "q8u holds an accumulate-mode C")
         t |> success(find(tmm_tg_msl, "__tgop_acc.run(") >= 0, "tg protocol op emitted")
+        t |> success(find(tmm_tg_msl, "multiply_accumulate") >= 0, "tg protocol runs in accumulate mode")
+        t |> success(find(tmm_tg_msl, "__tgf_acc[__i] += ") < 0, "tg protocol per-element fold removed")
         t |> success(find(tmm_tg_msl, "float acc[") < 0, "acc local suppressed on GPU")
         t |> success(find(tmm_bf16_msl, "MetalPerformancePrimitives") >= 0, "MPP include present")
         t |> success(find(tmm_bf16_msl, "mpp::tensor_ops") >= 0, "namespace present")
@@ -181,6 +196,9 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         var want_q8b : array<float>
         oracle->tmm_q8b_k()
         want_q8b := oracle.oc
+        var want_q8u : array<float>
+        oracle->tmm_q8u_k()
+        want_q8u := oracle.oc
         var want_tg : array<float>
         oracle->tmm_tg_k()
         want_tg := oracle.oc
@@ -224,9 +242,9 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                 var bbsh = buf_upload(dev, oracle.bsh)
                 var bbqb = buf_upload(dev, oracle.bqb)
                 gpu_bad = 0
-                for (which in range(5)) {
-                    let src = which == 0 ? tmm_bf16_msl : (which == 1 ? tmm_q8_msl : (which == 2 ? tmm_q8h_msl : (which == 3 ? tmm_q8b_msl : tmm_tg_msl)))
-                    let entry = which == 0 ? tmm_bf16_msl_entry : (which == 1 ? tmm_q8_msl_entry : (which == 2 ? tmm_q8h_msl_entry : (which == 3 ? tmm_q8b_msl_entry : tmm_tg_msl_entry)))
+                for (which in range(6)) {
+                    let src = which == 0 ? tmm_bf16_msl : (which == 1 ? tmm_q8_msl : (which == 2 ? tmm_q8h_msl : (which == 3 ? tmm_q8b_msl : (which == 4 ? tmm_tg_msl : tmm_q8u_msl))))
+                    let entry = which == 0 ? tmm_bf16_msl_entry : (which == 1 ? tmm_q8_msl_entry : (which == 2 ? tmm_q8h_msl_entry : (which == 3 ? tmm_q8b_msl_entry : (which == 4 ? tmm_tg_msl_entry : tmm_q8u_msl_entry))))
                     var perr : string
                     var pso = pipeline_from_source(dev, src, entry, false, perr)
                     t |> success(pso != null, "pipeline {entry}: {perr}")
@@ -239,13 +257,13 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                     var bufs <- [bxa, bwb, boc, baq, basf, bwq, bwsf, bwsh, bbsh, bbqb]
                     var rerr : string
                     let tpg = tew * SGS
-                    let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr, which == 4 ? tmm_tg_msl_tgmem : 0ul)
+                    let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr, which == 4 ? tmm_tg_msl_tgmem : (which == 5 ? tmm_q8u_msl_tgmem : 0ul))
                     t |> success(ran, "dispatch {entry}: {rerr}")
                     if (ran) {
-                        let bad = buf_mismatch_exact(boc, which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : want_tg))))
+                        let bad = buf_mismatch_exact(boc, which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : want_q8u)))))
                         if (bad != 0) {
                             var got <- buf_download(boc, M * N, type<float>)
-                            let wref & = unsafe(which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : want_tg))))
+                            let wref & = unsafe(which == 0 ? want_bf : (which == 1 ? want_q8 : (which == 2 ? want_q8h : (which == 3 ? want_q8b : (which == 4 ? want_tg : want_q8u)))))
                             var shown = 0
                             for (i in range(M * N)) {
                                 if (got[i] != wref[i] && shown < 4) {

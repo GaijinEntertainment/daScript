@@ -105,6 +105,9 @@ def private tmm2d_c_arg(cname : string) : int {
     if (cname |> ends_with("tmm2d_f32_bf16_f32") || cname |> ends_with("tmm2d_q8b_f32")) {
         return 7
     }
+    if (cname |> ends_with("tmm2d_q8u_f32")) {
+        return 8
+    }
     return cname |> ends_with("tmm2d_q8_f32") || cname |> ends_with("tmm2d_q8_f16s") ? 11 : -1
 }
 
