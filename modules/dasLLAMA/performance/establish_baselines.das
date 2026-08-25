@@ -44,7 +44,8 @@ struct Args {
     help : bool
 }
 
-// llama-bench binary; override with LLAMA_BENCH. Defaults are the clean builds (upstream ebd048f, no
+// llama-bench binary; override with LLAMA_BENCH. Defaults are the clean builds (the standing ref
+// pin — setup_lcpp_ref DEFAULT_REF_SHA, no
 // Accelerate/AMX/BLAS, no op-profile instrumentation): the CPU-only build for ngl==0 — the fair
 // kernel-vs-kernel reference — and the Metal-enabled build for GPU-offload sweeps.
 def llama_bench_bin(ngl : int) : string {
