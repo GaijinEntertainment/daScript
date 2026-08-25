@@ -2457,9 +2457,14 @@ def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kd
 // site's GEMM overlaps the next site's dequant); null when the knob/panels/fit decline and
 // the caller keeps the tg twin. The 256-row gate mirrors pf_cvt_panel: the dequant tax is W-size-fixed.
 def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; rows, d, kdim : int64) : MetalBuffer? {
-    if (!g_pf_env_dev_w || g_pf_bwh == null || rows < 256l || kdim <= 0l || kdim % 32l != 0l
-            || (kdim > DEVW_LONG_K && rows < DEVW_LONG_K_ROWS)
-            || uint64(d * kdim * 2l) > min(g_pf_bwh_bytes, DEVW_MAX_PANEL)) {
+    if (!g_pf_env_dev_w || g_pf_bwh == null || kdim <= 0l || kdim % 32l != 0l) {
+        return null
+    }
+    let pb = uint64(d * kdim * 2l)
+    let small_ok = pb <= DEVW_SMALL_PANEL && (d <= DEVW_WIDE_N || rows >= DEVW_WIDE_N_ROWS)
+    let big_ok = pb <= DEVW_BIG_PANEL && rows >= DEVW_BIG_ROWS
+    if (!(small_ok || big_ok) || pb > g_pf_bwh_bytes
+            || (kdim > DEVW_LONG_K && rows < DEVW_LONG_K_ROWS)) {
         return null
     }
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh
@@ -4017,15 +4022,19 @@ var private g_pf_env_mulmm = true
 var private g_pf_env_mm_tail = true
 var private g_pf_env_half_x = true
 var private g_pf_env_dev_w = true
-// long-K sites (ffn down) need more rows to amortize the dev-W dequant: the W-size-fixed
-// panel round-trip is largest exactly where the all-device GEMM win is thinnest (probe:
-// K=8192 won 0.92 at 512 rows vs K=2048's 0.77)
+// dev-W engage rules = the probe's M5 shape map (bench_metal_nax_probe grid): PANEL SIZE
+// dominates (<=32MB wins at every M, 47MB only at >=2048 rows, 112MB loses everywhere —
+// the f16 panel's 2-vs-1.06 B/w W stream past cache); wide-N panels' dequant tax needs rows.
+let DEVW_SMALL_PANEL = 32ul * 1024ul * 1024ul
+let DEVW_BIG_PANEL = 48ul * 1024ul * 1024ul
+let DEVW_WIDE_N = 4096l
+let DEVW_WIDE_N_ROWS = 512l
+let DEVW_BIG_ROWS = 2048l
+// e2e-only clause the isolated grid cannot see (it races one site; production overlaps):
+// a long-K (down) dequant serializes on the panel pair behind the up/gate GEMM chain at
+// small M — 1B pp512 measured −2.5% with it engaged despite the site's 0.88 isolated win
 let DEVW_LONG_K = 4096l
 let DEVW_LONG_K_ROWS = 1024l
-// panel-size ceiling: the f16 panel doubles the W bytes the GEMM streams vs the q8 blob
-// (2 vs 1.06 B/w); past cache-adjacent sizes that traffic is raw DRAM per M-tile and sinks
-// the form (8B dim-4096 up/gate 117MB panels measured -22..27% e2e; 33MB panels win)
-let DEVW_MAX_PANEL = 64ul * 1024ul * 1024ul
 var private g_pf_env_span = true
 var private g_pf_env_logits = true
 var private g_pf_env_attn = true

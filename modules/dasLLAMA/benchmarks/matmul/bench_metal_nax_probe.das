@@ -253,7 +253,7 @@ def private cpu_ref(blob : array<int8>; xf : array<float>; var want : array<floa
 }
 
 [export]
-def main {   // nolint:STYLE038 — one-shot probe harness; buffers + PSOs stay live to the release tail
+def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + PSOs stay live to the release tail
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var dev = metal_create_system_default_device()
         var queue = metal_new_command_queue(dev)
@@ -469,6 +469,70 @@ def main {   // nolint:STYLE038 — one-shot probe harness; buffers + PSOs stay 
             metal_release(bn)
             delete blob
             delete xf
+        }
+        // ===== the M5 dev-W shape grid: production q8uh (tg-staged) vs dequant+devw =====
+        // (K, N) pairs are real model sites: E2B kv/up, 1B qkv/up/down, 4B up/down,
+        // 8B qkv/up/down; ratio < 1 = dev-W wins the combined window
+        print("dev-W shape grid (ratio = (dequant+devw)/q8uh):\n")
+        for (g in [(k = 1536, n = 512), (k = 2048, n = 2048), (k = 1536, n = 8192), (k = 2048, n = 8192),
+                   (k = 2560, n = 9728), (k = 8192, n = 2048), (k = 9728, n = 2560), (k = 4096, n = 4096),
+                   (k = 4096, n = 14336), (k = 14336, n = 4096)]) {
+            let kdim = g.k
+            let ndim = g.n
+            let nblk = ndim * (kdim / 32)
+            var blob <- race_q8_blob(nblk)
+            var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+            var bwh = race_buf(dev, uint64(ndim * kdim * 2), null)
+            var bk = race_uniform_u32(dev, uint(kdim))
+            var bn = race_uniform_u32(dev, uint(ndim))
+            var bnb = race_uniform_u32(dev, uint(nblk))
+            let mb = ndim * kdim * 2 / (1024 * 1024)
+            for (m in [128, 512, 2048]) {
+                var xh <- race_x_f16(m * kdim)
+                var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+                var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                var t_th = -1.0lf
+                var t_dw = -1.0lf
+                race_pair_ms(queue, 5, t_th, t_dw, $(enc) {
+                    kn_pipeline(enc, th_pso)
+                    kn_tgmem(enc, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem, 0)
+                    kn_buffer(enc, bw, 0ul, 0)
+                    kn_buffer(enc, bw, 0ul, 1)
+                    kn_buffer(enc, bxh, 0ul, 2)
+                    kn_buffer(enc, by_a, 0ul, 3)
+                    kn_buffer(enc, bk, 0ul, 4)
+                    kn_buffer(enc, bn, 0ul, 5)
+                    kn_dispatch(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                }, $(enc) {
+                    kn_pipeline(enc, dq_pso)
+                    kn_buffer(enc, bw, 0ul, 0)
+                    kn_buffer(enc, bw, 0ul, 1)
+                    kn_buffer(enc, bwh, 0ul, 2)
+                    kn_buffer(enc, bnb, 0ul, 3)
+                    kn_dispatch(enc, uint3(uint((nblk + 127) / 128), 1u, 1u), uint3(128u, 1u, 1u))
+                    kn_pipeline(enc, dw_pso)
+                    kn_buffer(enc, bwh, 0ul, 0)
+                    kn_buffer(enc, bxh, 0ul, 1)
+                    kn_buffer(enc, by_b, 0ul, 2)
+                    kn_buffer(enc, bk, 0ul, 3)
+                    kn_buffer(enc, bn, 0ul, 4)
+                    kn_dispatch(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                })
+                var gnote = ""
+                let gok = race_envelope_ok(by_a, by_b, m * ndim, gnote)
+                print("  K={kdim} N={ndim} M={m} panel={mb}MB: ratio={t_dw / t_th} (q8uh={t_th}ms devw={t_dw}ms) {gok ? "ok" : gnote}\n")
+                metal_release(bxh)
+                metal_release(by_a)
+                metal_release(by_b)
+                delete xh
+            }
+            metal_release(bw)
+            metal_release(bwh)
+            metal_release(bk)
+            metal_release(bn)
+            metal_release(bnb)
+            delete blob
         }
         metal_release(nax_pso)
         metal_release(i8_pso)
