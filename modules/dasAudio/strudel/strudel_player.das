@@ -63,12 +63,15 @@ var private g_done_status : JobStatus?
 var private g_sf2 : SF2File?
 var private g_sf2_path : string
 var private g_cmd_fn : function<(cmd : string) : void>
-var private g_playback_box : LockBox?
+var private g_playback_box : SeqBox?
 var private g_tracks : array<StrudelTrack?>
 var private g_look_ahead : float = 0.1
 var private g_chunk_seconds : float = 0.05
 var private g_tick_status_box : SeqBox?   // buffer level feedback for strudel_tick
 var private g_tick_pcm_box : LockBox?    // lock box for append_box_to_pcm in main-thread mode
+
+let private PCM_GRAB_TIMEOUT_MS = 2000
+let private WORKER_EXIT_TIMEOUT_MS = 5000
 
 //! Per-track PCM output written by strudel_tick (main-thread mode only), indexed by track index.
 //! Visualizer combinators read this to render per-track waveforms.
@@ -108,13 +111,12 @@ struct private PlaybackTime {
 
 def public strudel_get_playback_time() : tuple<double; double> {
     //! Get current playback wall-clock time and tempo as (wall_time, cps).
-    //! In threaded mode reads from a lockbox; in main-thread mode uses the hardware
-    //! consumed position (smooth, matches what you hear) and lags g_wall_time by the audio buffer depth.
+    //! In threaded mode reads the strudel thread's latest snapshot; in main-thread mode uses the
+    //! hardware consumed position (smooth, matches what you hear) and lags g_wall_time by the audio buffer depth.
     var wt = 0.0lf
     var cp = 0.5lf
     if (g_playback_box != null) {
-        // threaded mode — read from lockbox
-        g_playback_box |> get() $(pt : PlaybackTime#) {
+        g_playback_box |> read() $(pt : PlaybackTime) {
             wt = pt.wall_time
             cp = pt.cps
         }
@@ -768,12 +770,8 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         let chunkFrames = chunkSamples / 2
         g_wall_samples += int64(chunkFrames)
         g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
-        // update playback time for main thread
         if (g_playback_box != null) {
-            g_playback_box |> update() $(var pt : PlaybackTime#) {
-                pt.wall_time = g_wall_time
-                pt.cps = g_cps
-            }
+            g_playback_box |> publish(PlaybackTime(wall_time = g_wall_time, cps = g_cps))
         }
         // buffer level feedback
         var que_len = 0
@@ -795,8 +793,11 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
             to_log(0, "strudel mem: heap {mem_heap_cur/1024ul}kb / str {mem_str_cur/1024ul}kb (max heap {mem_heap_max/1024ul}kb / str {mem_str_max/1024ul}kb)\n")
         }
     }
-    pcm_box |> join()
-    unsafe(lock_box_remove(pcm_box))
+    if (pcm_box |> join(PCM_GRAB_TIMEOUT_MS)) {
+        unsafe(lock_box_remove(pcm_box))
+    } else {
+        to_log(LOG_ERROR, "strudel: audio thread did not take the final PCM chunk within {PCM_GRAB_TIMEOUT_MS}ms; leaking the pcm box\n")
+    }
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
     unset_status_update(g_sid)
     status_box |> seq_box_release
@@ -838,9 +839,8 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
         panic("strudel_init: audio system not initialized. Call audio_system_create() first.")
     }
     g_cmd_fn = cmd_fn
-    // create playback time lockbox
     if (g_playback_box == null) {
-        g_playback_box = lock_box_create()
+        g_playback_box = seq_box_create()
     }
     // create command stream and done status (thread-exit signal, wait group of 1).
     // @capture auto-bumps refcount for Stream and JobStatus — no manual add_ref needed.
@@ -882,32 +882,39 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
             set_audio_thread_command_stream(null)
         }
         cmd_st |> release()
-        pb_box |> release()
+        pb_box |> seq_box_release
         done_st |> notify_and_release
+    }
+}
+
+def private shutdown_worker_thread() {
+    return if (g_cmd_stream == null)
+    g_cmd_stream |> push_archive(StrudelCommand(shutdown = true))
+    if (g_done_status |> join(WORKER_EXIT_TIMEOUT_MS)) {
+        unsafe(stream_remove(g_cmd_stream))
+        unsafe(job_status_remove(g_done_status))
+        g_cmd_stream = null
+        g_done_status = null
+    } else {
+        to_log(LOG_ERROR, "strudel: worker thread did not exit within {WORKER_EXIT_TIMEOUT_MS}ms; leaking its stream and done status\n")
+    }
+    if (g_playback_box != null) {
+        g_playback_box |> seq_box_release
     }
 }
 
 def public strudel_shutdown() {
     //! Shut down playback: signal the strudel thread to stop, release stream/status/lockboxes, free all tracks.
     //! Safe to call from the main thread; also finalizes memory/utilization stats.
-    if (g_cmd_stream != null) {
-        g_cmd_stream |> push_archive(StrudelCommand(shutdown = true))
-        // wait for worker thread to exit (notify_and_release on done_status)
-        g_done_status |> join
-        // refcount was 2 after init; worker's release made it 1; *_remove decrements to 0 and deletes
-        unsafe(stream_remove(g_cmd_stream))
-        unsafe(job_status_remove(g_done_status))
-        g_cmd_stream = null
-        g_done_status = null
-        // player box
-        unsafe(lock_box_remove(g_playback_box))
-        g_playback_box = null
-    }
+    shutdown_worker_thread()
     // pcm box (main-thread mode)
     if (g_tick_pcm_box != null) {
-        g_tick_pcm_box |> join()
-        unsafe(lock_box_remove(g_tick_pcm_box))
-        g_tick_pcm_box = null
+        if (g_tick_pcm_box |> join(PCM_GRAB_TIMEOUT_MS)) {
+            unsafe(lock_box_remove(g_tick_pcm_box))
+            g_tick_pcm_box = null
+        } else {
+            to_log(LOG_ERROR, "strudel: audio thread did not take the final tick PCM chunk within {PCM_GRAB_TIMEOUT_MS}ms; leaking the pcm box\n")
+        }
     }
     // status box (main-thread mode: created in strudel_create_channel). No ordering with the
     // audio thread: whichever side drops the last reference deletes the box.
