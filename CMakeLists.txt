@@ -1109,12 +1109,16 @@ src/simulate/standalone_ctx_utils.cpp
 src/simulate/simulate.cpp
 src/simulate/simulate_exceptions.cpp
 src/simulate/simulate_gc.cpp
+src/simulate/simulate_gc_pod.cpp
+src/simulate/aot_library.cpp
 src/simulate/simulate_tracking.cpp
 src/simulate/simulate_visit.cpp
 src/simulate/simulate_print.cpp
 src/simulate/simulate_fn_hash.cpp
 src/simulate/simulate_instrument.cpp
 include/daScript/simulate/cast.h
+include/daScript/simulate/annotation_arguments.h
+include/daScript/simulate/code_of_policies.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/heap.h
 src/simulate/heap.cpp
@@ -1721,6 +1725,8 @@ SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/bind_enum.h
     include/daScript/simulate/bin_serializer.h
     include/daScript/simulate/cast.h
+    include/daScript/simulate/annotation_arguments.h
+    include/daScript/simulate/code_of_policies.h
     include/daScript/simulate/das_qsort_r.h
     include/daScript/simulate/data_walker.h
     include/daScript/simulate/debug_info.h

@@ -89,13 +89,6 @@ namespace das
         {   Type::fakeLineInfo,  "__lineInfo"},
     };
 
-    TypeAnnotation * TypeInfo::getAnnotation() const {
-        if ( type != Type::tHandle ) {
-            return nullptr;
-        }
-        return Module::resolveAnnotation(this);
-    }
-
     StructInfo * TypeInfo::getStructType() const {
         if ( type != Type::tStructure ) {
             return nullptr;
@@ -108,11 +101,6 @@ namespace das
         }
         return enumType;
     }
-
-    void TypeInfo::resolveAnnotation() const {
-        if ( daScriptEnvironment::getBound()->modules ) Module::resolveAnnotation(this);
-    }
-
 
     string das_to_string ( Type t ) {
         return g_typeTable.find(t);

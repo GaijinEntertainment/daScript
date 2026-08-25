@@ -123,8 +123,10 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     }
 
     let min_init_stack = 16384
-    let stack_opt = program._options |> find_arg("stack") ?as tInt ?? int(program.policies.stack)
-    let stack_size = max(stack_opt, min_init_stack) + int(program.globalInitStackSize)
+    let stack_arg = program._options |> find_arg("stack")
+    let requested_stack = stack_arg ?as tInt ?? int(program.policies.stack)
+    let stack_base = requested_stack > 0 && stack_arg is tInt ? requested_stack : max(requested_stack, min_init_stack)
+    let stack_size = stack_base + int(program.globalInitStackSize)
     write(tw, "{cfg.class_name}::{cfg.class_name}() : Context({stack_size}/*stack*/) \{\n");
     write(tw, "    auto & context = *this;\n");
     write(tw, "    CodeOfPolicies policies;");
@@ -208,14 +210,6 @@ def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var
 
     writeStandaloneContextMethods(program, source, "{cfg.class_name}::", false, cfg);
     writeStandaloneCtor(cfg, initFunctions, source, program, context);
-
-    write(source, "#ifdef STANDALONE_CONTEXT_TESTS\n");
-    write(source, "static Context * registerStandaloneTest ( ) \{\n");
-    write(source, "    auto ctx = new StandaloneContext();\n");
-    write(source, "    return ctx;\n");
-    write(source, "\}\n");
-    write(source, "StandaloneContextNode node(registerStandaloneTest);\n");
-    write(source, "#endif\n");
 }
 
 class StandaloneContextGen : CppAot {

@@ -2,7 +2,11 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`. A diff changing a `debug_info.h` struct layout applies
-`skills/internal/abi_break_sweep.md` too.
+`skills/internal/abi_break_sweep.md` too. A diff that changes or removes a name under this
+folder that a `daslib/*.das` file spells out - a struct or member the AOT C++ emitter writes
+into generated code, a flag or field a daslib predicate reads - applies `daslib/REVIEW.md`
+too; checklist discovery walks changed paths only, so the C++ half never opens the daslib
+checklist on its own.
 
 - **The hot path must not become more expensive per evaluated expression - new work is a
   defect, and so is degrading existing work: a direct call becoming indirect, a static

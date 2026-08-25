@@ -246,8 +246,14 @@ an entry lands here only when no name, shape, or test can carry it.
   `__init_shared` is hardcoded `true` (a fresh standalone context always owns its
   shared globals), there is no separate init stack (init locals are C++ locals in AOT;
   instead the ctor's base `Context(N)` folds the init headroom in: N =
-  `max(options stack, 16384) + globalInitStackSize`, mirroring the interpreter's
-  init-stack formula in `src/ast/ast_simulate.cpp` - a pair; `globalInitStackSize`
+  `options stack + globalInitStackSize` when the script sets `options stack` to a
+  positive value (honored exactly, below the interpreter's floor included - the floor
+  protects INTERPRETED init, while standalone init is AOT, so an embedded target's stack
+  budget wins; zero and negative fall through - `Context(0)` deliberately owns no stack,
+  so any prologue would assert), else `max(policies.stack, 16384) + globalInitStackSize`, the
+  no-option arm mirroring the interpreter's init-stack formula in
+  `src/ast/ast_simulate.cpp` - a pair, deliberately divergent on the explicit-option arm;
+  `globalInitStackSize`
   reaches the emitter through the rtti `Program` binding in
   `src/builtin/module_builtin_rtti.cpp` - so an `invoke` during init still
   has das stack to push a prologue onto), and there is no `!stopFlags` guard between

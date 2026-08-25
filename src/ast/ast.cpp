@@ -2,53 +2,9 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/simulate/standalone_ctx_utils.h"
 
 namespace das {
-
-    // AOT
-
-    AotListBase * AotListBase::head = nullptr;
-
-    SimNode* AotFactory::operator()(Context& ctx) const
-    {
-        if (is_jit) {
-            return makeAotJitNode(ctx, fn);
-        } else if (is_cmres) {
-            return ctx.code->makeNode<SimNode_AotCMRES>(fn, wrappedFn);
-        } else {
-            return ctx.code->makeNode<SimNode_Aot>(fn, wrappedFn);
-        }
-    }
-
-    AotListBase::AotListBase( RegisterAotFunctions prfn ) {
-        tail = head;
-        head = this;
-        regFn = prfn;
-    }
-
-    void AotListBase::registerAot ( AotLibrary & lib ) {
-        auto it = head;
-        while ( it ) {
-            (*it->regFn)(lib);
-            it = it->tail;
-        }
-    }
-
-    // aot library
-
-    DAS_THREAD_LOCAL(unique_ptr<AotLibrary>) g_AOT_lib;
-
-    AotLibrary & getGlobalAotLibrary() {
-        if ( !*g_AOT_lib ) {
-            *g_AOT_lib = make_unique<AotLibrary>();
-            AotListBase::registerAot(**g_AOT_lib);
-        }
-        return **g_AOT_lib;
-    }
-
-    void clearGlobalAotLibrary() {
-        g_AOT_lib->reset();
-    }
 
     // annotations
 
@@ -703,7 +659,7 @@ namespace das {
     }
 
     uint64_t Variable::getMNHash(const string &mangledName) {
-        return hash_blockz64((uint8_t *)mangledName.c_str());
+        return mangledNameHashOf(mangledName);
     }
 
     bool Variable::isAccessUnused() const {
