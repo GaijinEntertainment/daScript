@@ -259,7 +259,9 @@ def public simdgroup_multiply(var d : simdgroup_half8x8; a, b : simdgroup_half8x
 // W = weights, n output cols x kk, row stride ldw; C = m x n, row stride ldc, OVERWRITTEN.
 // m/n/sgs (tile rows, tile cols, cooperating simdgroups) must be call-site constants.
 
-//! f32 activations x bf16 weights -> f32 tile (raw bf16 halfwords in `w`).
+//! f32 activations x bf16 weights -> f32 tile (raw bf16 halfwords in `w`). The float16-A
+//! overload streams a converted half panel — the emitter picks the operand type by the
+//! activation pointer's pointee, same contract as tmm2d_q8u_f32.
 [unused_argument(sgs), sideeffects]
 def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float const?; lda : uint; w : uint16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
     if (gl_LocalInvocationID.x != 0u) {
@@ -271,6 +273,24 @@ def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float const?; lda : uint; w 
                 var acc = 0.0
                 for (k in range(int(kk))) {
                     acc += a[r * int(lda) + k] * uint_bits_to_float(uint(w[j * int(ldw) + k]) << 16u)
+                }
+                c[r * int(ldc) + j] = acc
+            }
+        }
+    }
+}
+
+[unused_argument(sgs), sideeffects]
+def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float16 const?; lda : uint; w : uint16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var acc = 0.0
+                for (k in range(int(kk))) {
+                    acc += float(a[r * int(lda) + k]) * uint_bits_to_float(uint(w[j * int(ldw) + k]) << 16u)
                 }
                 c[r * int(ldc) + j] = acc
             }
@@ -506,10 +526,23 @@ def public tmm2d_tg_rowscale(var acc; f; m, n : uint) {
     }
 }
 
-//! begin, deva flavor: the accumulator's LEFT operand is a device float stream (activations
-//! read straight from device memory), only the right tile is threadgroup-staged f16.
-[unused_argument(sgs, kk), sideeffects]
-def public tmm2d_tg_begin_deva(var acc; m, n, sgs, kk : uint) {
+//! begin, deva flavor: the accumulator's LEFT operand is a device stream (activations read
+//! straight from device memory), only the right tile is threadgroup-staged f16. `a` is a TYPE
+//! WITNESS: the GPU destination tensor's layout is parameterized by the A element type, so the
+//! begin must see the same pointer the steps will stream — float or float16 picks the operand
+//! type (a float A operand keeps matmul2d off the native half x half path).
+[unused_argument(a, sgs, kk), sideeffects]
+def public tmm2d_tg_begin_deva(var acc; a : float const?; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (i in range(int(m * n))) {
+        acc[i] = 0.0
+    }
+}
+
+[unused_argument(a, sgs, kk), sideeffects]
+def public tmm2d_tg_begin_deva(var acc; a : float16 const?; m, n, sgs, kk : uint) {
     if (gl_LocalInvocationID.x != 0u) {
         return
     }
@@ -519,7 +552,7 @@ def public tmm2d_tg_begin_deva(var acc; m, n, sgs, kk : uint) {
 }
 
 //! step, deva flavor: acc[r][j] += a[r*lda + k] * tb[j][k] over one K-chunk — `a` points at
-//! the chunk's first activation (device f32, row stride lda), tb flat [n][kk] f16 staged.
+//! the chunk's first activation (device f32 or f16, row stride lda), tb flat [n][kk] f16 staged.
 [sideeffects]
 def public tmm2d_tg_step_deva(var acc; a : float const?; lda : uint; tb; m, n, kk : uint) {
     if (gl_LocalInvocationID.x != 0u) {
@@ -531,6 +564,24 @@ def public tmm2d_tg_step_deva(var acc; a : float const?; lda : uint; tb; m, n, k
                 var facc = 0.0
                 for (k in range(int(kk))) {
                     facc += a[r * int(lda) + k] * float(tb[j * int(kk) + k])
+                }
+                acc[r * int(n) + j] += facc
+            }
+        }
+    }
+}
+
+[sideeffects]
+def public tmm2d_tg_step_deva(var acc; a : float16 const?; lda : uint; tb; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (k in range(int(kk))) {
+                    facc += float(a[r * int(lda) + k]) * float(tb[j * int(kk) + k])
                 }
                 acc[r * int(n) + j] += facc
             }

@@ -800,7 +800,8 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         if (scn == "tmm2d_tg_store_bias" && length(ecs.arguments) == 6) {
             mark_write_target(ctx, ecs.arguments[1])
         }
-        if ((scn == "tmm2d_tg_begin" || scn == "tmm2d_tg_begin_deva" || scn == "tmm2d_tg_begin_nt" || scn == "tmm2d_tg_begin_devant") && length(ecs.arguments) == 5) {
+        if (((scn == "tmm2d_tg_begin" || scn == "tmm2d_tg_begin_nt" || scn == "tmm2d_tg_begin_devant") && length(ecs.arguments) == 5)
+                || (scn == "tmm2d_tg_begin_deva" && length(ecs.arguments) == 6)) {
             var acc0 = ecs.arguments[0]
             if (acc0 is ExprRef2Value) {
                 acc0 = (acc0 as ExprRef2Value).subexpr
@@ -2284,10 +2285,12 @@ def private tmm2d_const_uint(var ctx : MslCtx; e : Expression?; what : string) :
 def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
     let name = "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}"
     let ct = "tensor<device int8_t, dextents<int32_t, 2>, tensor_inline>"
-    if (kind == "bf") {
+    if (kind == "bf" || kind == "bfh") {
+        // bfh streams HALF activations — same operand-type contract as q8uh
+        let bat = kind == "bfh" ? "half" : "float"
         return build_string() $(var w) {
-            w |> write("static void {name}(device const float * a, uint lda, device const ushort * bw, uint ldw, device float * c, uint ldc, uint kk) \{\n")
-            w |> write("    auto A = tensor<device float, dextents<int32_t, 2>, tensor_inline>((device float *)a, dextents<int32_t, 2>(int(kk), {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+            w |> write("static void {name}(device const {bat} * a, uint lda, device const ushort * bw, uint ldw, device float * c, uint ldc, uint kk) \{\n")
+            w |> write("    auto A = tensor<device {bat}, dextents<int32_t, 2>, tensor_inline>((device {bat} *)a, dextents<int32_t, 2>(int(kk), {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
             w |> write("    auto W = tensor<device bfloat, dextents<int32_t, 2>, tensor_inline>((device bfloat *)bw, dextents<int32_t, 2>(int(kk), {int(n)}), metal::array<int32_t, 2>\{1, int(ldw)\});\n")
             w |> write("    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int(ldc)\});\n")
             w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, true);\n")
@@ -2595,18 +2598,32 @@ def private emit_tmm2d_tg_step_devant(var ctx : MslCtx; ec : ExprCall?; indent :
     lines |> push("{indent}\}")
 }
 
-// the deva flavor: destination typed <device-float A, threadgroup-half B> — activations
-// stream straight from device memory (the measured M5 fast path), only W is staged
+// the A-stream element type of a deva-family call: the das overload resolves by the pointer's
+// pointee, and the emitted operand tensor follows it — float16 = the converted half panel
+// (a float A operand keeps matmul2d off the native half x half path)
+def private tmm2d_a_elem(e : Expression?) : string {
+    let t = e._type
+    if (t != null && t.firstType != null && t.firstType.baseType == Type.tFloat16) {
+        return "half"
+    }
+    return "float"
+}
+
+// the deva flavor: destination typed <device A, threadgroup-half B> — activations stream
+// straight from device memory (the measured M5 fast path), only W is staged. Arg 1 is the A
+// TYPE WITNESS: the destination cooperative tensor's layout is parameterized by the A element
+// type, so the begin must type the operand the steps will stream.
 def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
-    if (length(ec.arguments) != 5) {
-        err(ctx, ec.at, "tmm2d_tg_begin_deva takes exactly 5 arguments")
+    if (length(ec.arguments) != 6) {
+        err(ctx, ec.at, "tmm2d_tg_begin_deva takes exactly 6 arguments")
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
-    let m = tmm2d_const_uint(ctx, ec.arguments[1], "m (tile rows)")
-    let n = tmm2d_const_uint(ctx, ec.arguments[2], "n (tile cols)")
-    let sgs = tmm2d_const_uint(ctx, ec.arguments[3], "sgs (simdgroups)")
-    let kk = tmm2d_const_uint(ctx, ec.arguments[4], "kk (chunk K width)")
+    let at = tmm2d_a_elem(ec.arguments[1])
+    let m = tmm2d_const_uint(ctx, ec.arguments[2], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[3], "n (tile cols)")
+    let sgs = tmm2d_const_uint(ctx, ec.arguments[4], "sgs (simdgroups)")
+    let kk = tmm2d_const_uint(ctx, ec.arguments[5], "kk (chunk K width)")
     if (m == 0u || n == 0u || sgs == 0u || kk == 0u) {
         return
     }
@@ -2621,7 +2638,7 @@ def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : 
     lines |> push("{indent}constexpr auto __tgd_{acc} = matmul2d_descriptor({int(m)}, {int(n)}, {int(kk)}, false, true, true, matmul2d_descriptor::mode::multiply_accumulate);")
     lines |> push("{indent}matmul2d<__tgd_{acc}, execution_simdgroups<{int(sgs)}>> __tgop_{acc};")
     lines |> push("{indent}using __tgt_{acc} = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
-    lines |> push("{indent}using __tgta_{acc} = tensor<device float, dextents<int32_t, 2>, tensor_inline>;")
+    lines |> push("{indent}using __tgta_{acc} = tensor<device {at}, dextents<int32_t, 2>, tensor_inline>;")
     lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgta_{acc}, __tgt_{acc}, float>();")
     lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] = 0.0f; \}")
 }
@@ -2632,6 +2649,7 @@ def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : s
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
+    let at = tmm2d_a_elem(ec.arguments[1])
     let ap = emit_value(ctx, ec.arguments[1])
     let lda = emit_value(ctx, ec.arguments[2])
     let tb = emit_value(ctx, ec.arguments[3])
@@ -2643,7 +2661,7 @@ def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : s
     }
     note(ctx, "call.tmm2d_tg_step_deva")
     lines |> push("{indent}\{")
-    lines |> push("{indent}    auto __A = __tgta_{acc}((device float *)({ap}), dextents<int32_t, 2>({int(kk)}, {int(m)}), metal::array<int32_t, 2>\{1, int({lda})\});")
+    lines |> push("{indent}    auto __A = __tgta_{acc}((device {at} *)({ap}), dextents<int32_t, 2>({int(kk)}, {int(m)}), metal::array<int32_t, 2>\{1, int({lda})\});")
     lines |> push("{indent}    auto __B = __tgt_{acc}((threadgroup half *){tb}, dextents<int32_t, 2>({int(kk)}, {int(n)}));")
     lines |> push("{indent}    __tgop_{acc}.run(__A, __B, __tgf_{acc});")
     lines |> push("{indent}\}")
@@ -2747,12 +2765,14 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     var kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8u_f32" ? "q8u" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8")))
     if (kind == "q8u" && length(ec.arguments) == 13) {
         // the overload resolves by the activation pointer's pointee: float16 = the half-A stream
-        let apt = ec.arguments[6]._type
-        if (apt != null && apt.firstType != null && apt.firstType.baseType == Type.tFloat16) {
+        if (tmm2d_a_elem(ec.arguments[6]) == "half") {
             kind = "q8uh"
         }
     }
-    let want_args = kind == "bf" ? 10 : (kind == "q8b" ? 11 : (kind == "q8u" || kind == "q8uh" ? 13 : 14))
+    if (kind == "bf" && length(ec.arguments) == 10 && tmm2d_a_elem(ec.arguments[3]) == "half") {
+        kind = "bfh"
+    }
+    let want_args = kind == "bf" || kind == "bfh" ? 10 : (kind == "q8b" ? 11 : (kind == "q8u" || kind == "q8uh" ? 13 : 14))
     if (length(ec.arguments) != want_args) {
         err(ctx, ec.at, "{cname} takes exactly {want_args} arguments")
         return
