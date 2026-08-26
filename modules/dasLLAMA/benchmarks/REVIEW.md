@@ -25,10 +25,10 @@ reference, and the bound it passed.**
 precision prints the bit-exact compare over the sampled region - the output elements the run
 compares - on the report's "bit-exact vs ..." line.**
 
-**An instrument that races two implementations to pick one compares its baseline arm - the
-arm it treats as already correct - against a CPU reference over the same output region it
-compares the arms over, in the same run.** The arm-vs-baseline compare proves the two agree,
-not that either is right.
+**A race that picks between two implementations also checks its baseline arm against a CPU
+reference.** The baseline arm is the arm the race already trusts. The reference check runs in
+the same process, on the same output elements the arms are judged on. Two arms can agree and
+both be wrong; only the reference makes the winner right.
 
 **A knockout or sweep instrument - one whose arms ATTRIBUTE cost across stages rather than
 select between two implementations - carries the literal text `ATTRIBUTION SWEEP` in its
