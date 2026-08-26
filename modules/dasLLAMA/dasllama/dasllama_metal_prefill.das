@@ -2582,21 +2582,22 @@ def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kd
 }
 
 // dev-W tile count: 1 = whole panel (map rules), >1 = N-column tiles each under the 32MB
-// knee (probe: tiling flips the 112MB class to 0.87-0.96 at >= 512 rows; 47MB does NOT
-// profit — same total dequant bytes), 0 = keep the tg twin. Long-K keeps its e2e rows floor.
-def private pf_devw_tiles(rows, d, kdim : int64) : int64 {
+// knee, 0 = keep the tg twin; slow_fb (kq fallback ~1.28x q8uh) lowers the over-knee bar
+// and the tiled rows floor — the tiled 1.06-vs-q8uh read still beats THAT fallback
+def private pf_devw_tiles(rows, d, kdim : int64; slow_fb : bool = false) : int64 {
     if (!g_pf_env_dev_w || g_pf_bwh == null || kdim <= 0l || kdim % 32l != 0l
-            || (kdim > DEVW_LONG_K && rows < DEVW_LONG_K_ROWS)) {
+            || (kdim > DEVW_LONG_K && rows < (slow_fb ? DEVW_WIDE_N_ROWS : DEVW_LONG_K_ROWS))) {
         return 0l
     }
     let pb = uint64(d * kdim * 2l)
-    let small_ok = pb <= DEVW_SMALL_PANEL && (d <= DEVW_WIDE_N || rows >= DEVW_WIDE_N_ROWS)
-    let big_ok = pb <= DEVW_BIG_PANEL && rows >= DEVW_BIG_ROWS
-    if ((small_ok || big_ok) && pb <= g_pf_bwh_bytes) {
+    if (pb <= DEVW_SMALL_PANEL && (d <= DEVW_WIDE_N || rows >= DEVW_WIDE_N_ROWS)
+            && pb <= g_pf_bwh_bytes) {
         return 1l
     }
-    // tiled floor 1024: the 0.95 isolated win at 512 rows reads flat-negative e2e (overlap law)
-    if (pb > DEVW_BIG_PANEL && rows >= DEVW_LONG_K_ROWS) {
+    // fast-fallback floor 1024: the 0.95 isolated tiled win at 512 rows read flat-negative e2e
+    let tile_floor = slow_fb ? DEVW_WIDE_N_ROWS : DEVW_LONG_K_ROWS
+    let tile_over = slow_fb ? DEVW_SMALL_PANEL : DEVW_BIG_PANEL
+    if (pb > tile_over && rows >= tile_floor) {
         for (tc in range64(2l, 9l)) {
             if (d % (tc * 64l) == 0l && pb / uint64(tc) <= DEVW_SMALL_PANEL
                     && uint64(d / tc * kdim * 2l) <= g_pf_bwh_bytes) {
@@ -2604,10 +2605,14 @@ def private pf_devw_tiles(rows, d, kdim : int64) : int64 {
             }
         }
     }
+    // whole-panel 32-48MiB at deep M: the fallback when no tile split divides
+    if (pb <= DEVW_BIG_PANEL && rows >= DEVW_BIG_ROWS && pb <= g_pf_bwh_bytes) {
+        return 1l
+    }
     return 0l
 }
 
-def private pf_devw_flip : MetalBuffer? {
+def private pf_devw_flip : MetalBuffer ? {
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh
     g_pf_bwh_flip = !g_pf_bwh_flip
     return bwh
@@ -2647,7 +2652,7 @@ def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt;
     if (dq == null) {
         return false
     }
-    let tiles = pf_devw_tiles(rows, d, kdim)
+    let tiles = pf_devw_tiles(rows, d, kdim, slow_fb = true)
     if (tiles <= 0l) {
         return false
     }

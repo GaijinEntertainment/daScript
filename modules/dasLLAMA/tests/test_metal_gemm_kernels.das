@@ -458,6 +458,44 @@ def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     if (ran) {
         t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
     }
+    // the N-TILED chain: per-format tile plane offsets (16B scales, 128/160/192B quant
+    // superblocks, the k6 2B d tail) - same math as pf_devw_panel_kq
+    if (ndim % 128 == 0) {
+        let td = ndim / 2
+        let qstride = fmt == 4 ? 128 : (fmt == 5 ? 160 : 192)
+        var by_t = buf_fill(dev, m * ndim, -500.0)
+        var bwh_t = buf_fill(dev, td * kdim, float16(-100.0))
+        var bwh_t2 = buf_fill(dev, td * kdim, float16(-100.0))
+        var tka = CvtArgs(total = uint(td * (kdim / 32)))
+        let rant = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+            for (ti in range(2)) {
+                let tbase = ti * td
+                var bwh_ti = ti == 0 ? bwh_t : bwh_t2
+                let so = uint64(tbase * nb * 16)
+                metal_set_pipeline(enc, dq_pso)
+                metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16 + tbase * nb * 2) : so, 0)
+                metal_set_buffer(enc, bks, so, 1)
+                metal_set_buffer(enc, bkq, uint64(tbase * nb * qstride), 2)
+                metal_set_buffer(enc, bwh_ti, 0ul, 3)
+                metal_set_bytes(enc, unsafe(addr<void?>(tka)), uint64(typeinfo sizeof(tka)), 4)
+                metal_dispatch_threadgroups(enc, uint3(uint((td * (kdim / 32) + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+                metal_set_pipeline(enc, mm_pso)
+                metal_set_buffer(enc, bwh_ti, 0ul, 0)
+                metal_set_buffer(enc, bx, 0ul, 1)
+                metal_set_buffer(enc, by_t, uint64(tbase * 4), 2)
+                metal_set_buffer(enc, bk, 0ul, 3)
+                metal_set_buffer(enc, bn, 0ul, 4)
+                metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(td / 64), 1u), uint3(128u, 1u, 1u))
+            }
+        }
+        t |> success(rant, "{tag}: tiled encode: {err}")
+        if (rant) {
+            t |> equal(buf_mismatch_env(by_t, want, env, 2e-4, "{tag} tiled"), 0)
+        }
+        metal_release(by_t)
+        metal_release(bwh_t)
+        metal_release(bwh_t2)
+    }
     // negative control: the GEMM alone over a poison-only panel must MISS the oracle
     var bwh_p = buf_fill(dev, ndim * kdim, float16(-100.0))
     var by_p = buf_fill(dev, m * ndim, -1000.0)
@@ -1522,6 +1560,7 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_devw_gate(t, dev, queue, 32, 288, 128)   // non-256-multiple block count arms the dequant tail guard
                 for (fmt in [4, 5, 6]) {
                     kq_devw_gate(t, dev, queue, fmt, 64, 512, 64)
+                    kq_devw_gate(t, dev, queue, fmt, 32, 512, 128)   // ndim%128: the tiled leg runs
                 }
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)
