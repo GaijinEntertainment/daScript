@@ -175,6 +175,9 @@ def public pool_acquire_untracked(var pool : MetalBufferPool; dev : MetalDevice?
 }
 
 def public pool_release(var pool : MetalBufferPool; var buf : MetalBuffer?; bytes : uint64) {
+    if (buf == null) {
+        panic("pool_release: null buffer - a null in a free list surfaces later as an unrelated null bind")
+    }
     pool.free_bufs[pool_bucket(bytes)] |> push(buf)
 }
 

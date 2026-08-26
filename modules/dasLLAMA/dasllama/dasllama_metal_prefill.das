@@ -642,6 +642,47 @@ def private moe_mm_mx4_ka(kdim, ndim, nk : int64; gather, hasb : bool) : MoeMmAr
     MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(kdim * ndim / 32l),
         nk = uint(nk), gather = gather ? 1u : 0u, hasb = hasb ? 1u : 0u))
 
+struct MoeGxArgs {
+    dim : uint
+    nk : uint
+    ne : uint
+}
+
+// gather-X materialization: the bucket's token rows copied into a CONTIGUOUS f16 panel, pad
+// rows zeroed — up/gate sites then ride the contiguous tensor twin instead of the in-kernel
+// gather form (bkt pad entries are unwritten, so validity derives from basep/cnt)
+[metal_dispatch(name = "enc_moe_gather_x", pso = "g_pf_pso_moe_gx", tg = 256, grid = "rows", params = "rows : int64")]
+class MetalMoeGatherX {
+    @ssbo @binding = 0 @role = "read" bkt : array<uint>
+    @ssbo @binding = 1 @role = "read" cnt : array<uint>
+    @ssbo @binding = 2 @role = "read" basep : array<uint>
+    @ssbo @binding = 3 @role = "read" xf : array<float>
+    @ssbo @binding = 4 @role = "write" xg : array<float16>
+    @uniform @binding = 5 ka : MoeGxArgs
+
+    [metal_kernel(name="metal_moe_gather_x_msl")]
+    def metal_moe_gather_x {
+        let r = gl_WorkGroupID.x
+        var isreal = false
+        var e = 0u
+        while (e < ka.ne) {
+            let b = basep[e]
+            if (r >= b && r < b + (cnt[e] + 31u) / 32u * 32u) {
+                isreal = r - b < cnt[e]
+                e = ka.ne
+            } else {
+                e++
+            }
+        }
+        let token = isreal ? bkt[r] / ka.nk : 0u
+        var i = gl_LocalInvocationID.x
+        while (i < ka.dim) {
+            xg[r * ka.dim + i] = isreal ? float16(xf[token * ka.dim + i]) : float16(0.0)
+            i += 256u
+        }
+    }
+}
+
 // Metal-4 staged-tile twin of MetalMoeMulMmMx4 — CONTIGUOUS (down-site) shape: flat f16 tiles
 // per K-chunk (per-element LUT dequant), bias folded as one extra rank-1 chunk (f16-staged —
 // parity-tolerance vs the base's f32 seed). XT = the A stream codec.
@@ -2019,6 +2060,7 @@ var private g_pf_pso_moe_mm_q8_th : MetalComputePipeline?
 var private g_pf_moe_mm_mx4_tensor : bool // "moe_mulmm_mx4" crowned (contiguous sites only)
 var private g_pf_pso_moe_mm_mx4_t : MetalComputePipeline?
 var private g_pf_pso_moe_mm_mx4_th : MetalComputePipeline?
+var private g_pf_pso_moe_gx : MetalComputePipeline?   // gather-X materialization (up/gate contiguous form)
 var private g_pf_kq_mm4_tensor : bool     // "kq_mulmm_k4" crowned
 var private g_pf_pso_kq_mm4_t : MetalComputePipeline?
 var private g_pf_pso_kq_mm4_th : MetalComputePipeline?
@@ -2188,6 +2230,10 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     if (g_pf_pso_moe_mm_mx4_t != null) {
         metal_release(g_pf_pso_moe_mm_mx4_t)
         g_pf_pso_moe_mm_mx4_t = null
+    }
+    if (g_pf_pso_moe_gx != null) {
+        metal_release(g_pf_pso_moe_gx)
+        g_pf_pso_moe_gx = null
     }
     if (g_pf_pso_moe_mm_mx4_th != null) {
         metal_release(g_pf_pso_moe_mm_mx4_th)
@@ -2451,6 +2497,7 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         g_pf_pso_moe_mm_mx4_th = compile_pso(MetalMoeMulMmMx4TH_metal_moe_mulmm_mx4_t_msl, MetalMoeMulMmMx4TH_metal_moe_mulmm_mx4_t_msl_entry, MetalMoeMulMmMx4TH_metal_moe_mulmm_mx4_t_msl_fastmath, ok)
     }
     g_pf_pso_moe_mm_q51 = compile_pso(metal_moe_mulmm_q51_msl, metal_moe_mulmm_q51_msl_entry, metal_moe_mulmm_q51_msl_fastmath, ok)
+    g_pf_pso_moe_gx = compile_pso(metal_moe_gather_x_msl, metal_moe_gather_x_msl_entry, metal_moe_gather_x_msl_fastmath, ok)
     if (!ok) {
         metal_prefill_shutdown()
         g_pf_failed = true
@@ -2952,6 +2999,18 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
     }
 }
 
+// mint the contiguous gather-X panel once per layer (shared by the up AND gate sites);
+// null = the caller keeps the in-kernel gather form
+def private pf_moe_gather_panel(enc : MetalComputeEncoder?; bbkt, bcnt, bbase, bx : MetalBuffer?; var bmxg : MetalBuffer?;
+                                th_ok : bool; dim, nk, ne, mpad : int64) : MetalBuffer? {
+    if (!th_ok || bmxg == null || g_pf_pso_moe_gx == null) {
+        return null
+    }
+    var gxka = MoeGxArgs(dim = uint(dim), nk = uint(nk), ne = uint(ne))
+    enc_moe_gather_x(enc, bbkt, bcnt, bbase, bx, bmxg, gxka, mpad)
+    return bmxg
+}
+
 // gemma4 router-input norm rows (weightless rms * 1/sqrt(dim) * rscale, one tg per position)
 // the MXFP4 gathered expert mul_mm (gpt-oss)
 def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, npos : int64;
@@ -3156,6 +3215,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bmg = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mg) : null
     var bmg2 = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mg) : null
     var bmdn = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mdn) : null
+    let want_mxg = moe && g_pf_pso_moe_gx != null && npos >= 256l
+    let bytes_mxg = uint64(mpad * dim * 2l)
+    var bmxg = want_mxg ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mxg) : null
     var bmg4rt = g4moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_x) : null
     // deltanet scratch (recurrent layers) — GEMM outputs pad to mp rows like every panel
     let cd_dn = dn ? dn_conv_dim(c) : 0l
@@ -3821,15 +3883,22 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             var bwb1 = upload_region(unsafe(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp])), uint64(c.n_expert * c.n_ff_exp * 4l))
                             var bwb3 = upload_region(unsafe(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp])), uint64(c.n_expert * c.n_ff_exp * 4l))
                             var kaup = moe_mm_mx4_ka(dim, c.n_ff_exp, c.n_expert_used, true, hasb)
+                            let bxg1 = pf_moe_gather_panel(enc, bmbkt, bmcnt, bmbase, g4moe ? bxb2 : bxb, bmxg,
+                                g_pf_pso_moe_mm_mx4_th != null, dim, c.n_expert_used, c.n_expert, mpad)
                             pf_enc_moe_mm_mx4(enc, t, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
-                                bmcnt, bmbase, bmbkt, bwb1, kaup)
+                                bmcnt, bmbase, bmbkt, bwb1, kaup, contiguous = bxg1 != null, bxh = bxg1)
                             pf_enc_moe_mm_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg2,
-                                bmcnt, bmbase, bmbkt, bwb3, kaup)
+                                bmcnt, bmbase, bmbkt, bwb3, kaup, contiguous = bxg1 != null, bxh = bxg1)
                         } else {
+                            let gx_q8 = fe1 == KqFmt.q8 && fe3 == KqFmt.q8 && g_pf_pso_moe_mm_q8_th != null
+                            let bxg1 = pf_moe_gather_panel(enc, bmbkt, bmcnt, bmbase, g4moe ? bxb2 : bxb, bmxg,
+                                gx_q8, dim, c.n_expert_used, c.n_expert, mpad)
                             pf_enc_moe_mm(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
-                                bmcnt, bmbase, bmbkt, moe_mm_ka(fe1, dim, c.n_ff_exp, c.n_expert_used, true))
+                                bmcnt, bmbase, bmbkt, moe_mm_ka(fe1, dim, c.n_ff_exp, c.n_expert_used, true),
+                                contiguous = bxg1 != null, bxh = bxg1)
                             pf_enc_moe_mm(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg2,
-                                bmcnt, bmbase, bmbkt, moe_mm_ka(fe3, dim, c.n_ff_exp, c.n_expert_used, true))
+                                bmcnt, bmbase, bmbkt, moe_mm_ka(fe3, dim, c.n_ff_exp, c.n_expert_used, true),
+                                contiguous = bxg1 != null, bxh = bxg1)
                         }
                         if (nsh > 0l) {
                             // shexp gate/up: dense q8 mul_mm at the wsh planes (bhb/bhb2 sized max(hidden, nsh))
@@ -4137,6 +4206,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_pool, bmg, bytes_mg)
         pool_release(g_pf_pool, bmg2, bytes_mg)
         pool_release(g_pf_pool, bmdn, bytes_mdn)
+        if (bmxg != null) {
+            pool_release(g_pf_pool, bmxg, bytes_mxg)
+        }
         if (g4moe) {
             pool_release(g_pf_pool, bmg4rt, bytes_x)
         }
