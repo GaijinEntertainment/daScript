@@ -17,10 +17,10 @@ its span shape - is a defect however it is derived.
 
 **A bounds or tail guard inside a kernel's main loop whose answer the host already knows when
 it picks the pipeline is stamped, not branched: it rides a `@template_constant` - a
-`static_if` block, or a value select on the constant - and the guard is absent from the clean
-instance's generated `*_msl` global.** A diff that edits an existing kernel's loop answers to
-this exactly as a new kernel class does; a per-iteration guard the host could have compiled
-out is a defect.
+`static_if` block, or a value select on the constant - and the guard is absent from the
+guard-free instance's generated `*_msl` global - the instance stamped without the guard.** A
+diff that edits an existing kernel's loop answers to this exactly as a new kernel class
+does; a per-iteration guard the host could have compiled out is a defect.
 
 **A `matmul2d` left or right operand reaches the op as `float` only in a kernel class stamped
 `[metal_kernel(float_a_ok=true)]`; everywhere else it is converted in the pass that writes
@@ -47,9 +47,9 @@ bounds or tail guard - shows that every address that instance touches stays insi
 holding real data; one extent dividing evenly is not that showing.** A padded chunk's walk
 can run past the live extent, and one poisoned read in a shared tile corrupts real rows.
 
-**Scratch a pipeline of dispatches reuses carries at least as many buffers as the chain has
-dispatches in flight, or a fresh buffer per site.** One shared scratch serializes the whole
-chain through its write-after-read hazards.
+**A pipeline of dispatches that shares one scratch buffer carries at least as many scratch
+buffers as it has dispatches in flight, or gives each site its own buffer.** One shared
+scratch serializes the whole chain through its write-after-read hazards.
 
 **An encoder path that adds dispatches to save bandwidth gates on work size, and the
 threshold is measured at both ends of the size ladder.** The small-work regression hides
@@ -66,14 +66,15 @@ read at the single writer that fills its buffer, and nowhere upstream of it.
 (kernel-argument struct) type at the same binding numbers**, even where one twin ignores a
 field; shifting the other twin's fields to different slots is a defect.
 
-**Kernel twins share a template.** Two kernel classes whose bodies differ on one stamp axis
-are twins, whatever the axis (single/batch, format, single-pass/chunked); they stamp one
-`class template`: body divergence rides a stamp axis (`@template_constant`, or an overridden
-method spliced flat at emission), a stamp-varying binding rides `@template_gate`. A
-copy-pasted twin, a kernel split into hand instances where a `static_if` on a
-`@template_constant` serves, or a dummy-bound field where a gate serves, is a defect. A
-fork OUT of a shared template is legitimate only when the bodies no longer differ on a
-single axis, and the surviving template's comment says which axis is gone.
+**Kernel twins stamp one `class template`, whatever the stamp axis (single/batch, format,
+single-pass/chunked).** Body divergence rides the stamp axis - a `@template_constant`, or an
+overridden method spliced flat at emission; a stamp-varying binding rides `@template_gate`.
+A copy-pasted twin, a kernel split into hand instances where a `static_if` on a
+`@template_constant` serves, or a dummy-bound field where a gate serves, is a defect.
+
+**A diff that forks a kernel class out of a shared template shows the bodies no longer
+differ on a single stamp axis, and names the axis that is gone in the surviving template's
+comment.**
 
 **A `[metal_dispatch]` / `[vk_dispatch]` field carries `@role = "weight"` exactly when its
 memory is load-once - a model plane, or an `upload_region` upload never written after
@@ -92,10 +93,12 @@ other hand-written `enc_*` body is a defect.
 **A kernel is dispatched only through its `enc_*` builder** - a hand-rolled bind list in
 `dasllama/` or `performance/` is a defect.
 
-**No value reaches an encoder twice DEVICE-side.** A scalar the kernel receives twice - as a
-uniform buffer and as a kargs field - or that the other bound scalars determine, is a defect;
-a `params=` value the `grid=`/`tg=` spec consumes host-side never reaches the device and does
-not count.
+**No value reaches an encoder twice DEVICE-side.** A scalar the kernel receives both as a
+uniform buffer and as a kargs field is a defect; a `params=` value the `grid=`/`tg=` spec
+consumes host-side never reaches the device and does not count.
+
+**A scalar the other bound scalars determine is derived in the builder, not bound.** Each one
+bound separately is a second place to get it wrong.
 
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
@@ -109,9 +112,8 @@ gates), `_tower` (the encoder-tower driver), `_asr_dec` (the ASR-decoder driver)
 `_dispatch` on Vulkan); Vulkan's backend entry - the capability probe, the arm, the `.dlim`
 identity source, and the `[init]` that installs every hook - is
 `dasllama/dasllama_math_vulkan.das`. A backend carries a role's file only once it has the
-capability. A capability with no matching role gets its own role file - and adds its role to
-this list and to `REVIEW.das`'s `GPU_ROLES_METAL` / `GPU_ROLES_VULKAN` set in the same
-change; anything else is a grab-bag, and a grab-bag file is a defect.
+capability. A capability with no matching role gets its own role file; anything else is a
+grab-bag, and a grab-bag file is a defect.
 
 **A GPU family shares ONE device and queue from `dasllama/dasllama_<gpu>_common.das`'s
 init.** A module creating its own is a defect.
@@ -119,12 +121,12 @@ init.** A module creating its own is a defect.
 **A Metal PSO serving the engine is compiled and released by the file that owns its kernel
 class**, through its init/release pair - `metal_decode_init` / `metal_kernels_release` in
 `dasllama/dasllama_metal_kernels.das`, `metal_prefill_init` / `metal_prefill_shutdown` in
-`dasllama/dasllama_metal_prefill.das`. A kernel-unit gate's short-lived pipeline is its own.
+`dasllama/dasllama_metal_prefill.das`. A pipeline a per-kernel unit test under `tests/`
+builds for its own run is that test's to compile and release.
 
 **Race code - the in-engine base-vs-twin check that times both kernels on one queue and
-compares their outputs - lives in the file that owns the kernel family**:
-`dasllama/dasllama_metal_kernels.das` races its families, `dasllama/dasllama_metal_prefill.das`
-its own; the shared scaffolding (`race_buf`, `race_envelope_ok`, `race_pair_ms`) is
+compares their outputs - lives in the file that owns the kernel family**; the shared
+scaffolding (`race_buf`, `race_envelope_ok`, `race_pair_ms`) is
 `dasllama/dasllama_<gpu>_common.das`'s.
 
 **A Metal decline reason is an enum value in `dasllama/dasllama_metal_shapes.das`, one enum
@@ -184,11 +186,11 @@ a `tests/test_model_image.das` run with the `mtower` arm** - its CPU-vs-GPU tran
 are the ASR-decoder driver's parity instrument, and the shared common paths and borrowed
 kernels reach that driver with no line of its own file touched.
 
-**A kernel that reads or writes the residency rail's `k_mirror`/`v_mirror` slabs leaves
-neither K/V codec - the mirror's element type, f16 or f32 - unserved**: both codecs covered
-by instances of one template, or single-codec with a sibling serving the other codec behind
-an arming gate that keys on `kv16`. The rail serves both codecs, so a codec no kernel covers
-silently drops that codec's GPU path.
+**A kernel that reads or writes the residency rail's `k_mirror`/`v_mirror` slabs serves BOTH
+K/V codecs - the mirror's element type, f16 and f32**: both covered by instances of one
+template, or single-codec with a sibling serving the other codec behind an arming gate that
+keys on `kv16`. The rail serves both codecs, so a codec no kernel covers silently drops that
+codec's GPU path.
 
 **An f16 store into any GPU-resident K/V clamps to the f16 finite range (+/-65504).**
 

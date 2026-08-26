@@ -11,12 +11,13 @@ two followup ledgers.
 **A timing rig - a script whose output is a measured wall or rate - wherever the diff puts
 it, answers to `benchmarks/REVIEW.md`.**
 
-**A change to what enters `performance/records/` or its manifests, an exchange change - the client or
-schema for the sidecar exchange that boxes download tune winners from and submit winners
-to - or a provenance-manifest change, or a change to WHICH model file (a `.gguf`, a `.dlim`, an
-mmproj, or an image or audio fixture) a recorded row or manifest pins, answers to
-`performance/REVIEW.md`.** A test or tool merely opening a stocked model file by name does
-not route.
+**A change to what enters `performance/records/` or a provenance manifest, or a change to
+WHICH model file (a `.gguf`, a `.dlim`, an mmproj, an image or audio fixture) a recorded row
+or manifest pins, answers to `performance/REVIEW.md`.** A test or tool merely opening a
+stocked model file by name does not route.
+
+**A change to the sidecar-exchange client or schema - the code that downloads tune winners to
+a box and submits that box's winners back - answers to `performance/REVIEW.md`.**
 
 **Every `dasllama/` change applies `tests/REVIEW.md`.**
 
@@ -56,10 +57,11 @@ can this value change between dispatches? If yes it is data and belongs in a uni
 field, or an `@off` bind offset; if no it is shape and must not reach the kernel as a uniform,
 a kargs field, an `@off` bind offset, or a helper parameter.
 
-**A diff that changes a kernel-selection predicate or a raced constant in `dasllama/` rests on
-timing that ran both variants interleaved in one process, under one instrument.** A reading
-taken across two processes or across two commits says which way the wall moved, not which
-implementation to adopt.
+**A diff that changes a kernel-selection predicate, or a constant whose value was chosen by
+timing two candidates against each other, in `dasllama/` rests on timing that ran both
+variants interleaved in one process, under one instrument.** A reading taken across two
+processes or across two commits says which way the wall moved, not which implementation to
+adopt.
 
 **Peak memory wins ties against load cost.** A change to an allocation reached from a load,
 bake, or convert path (judge a shared helper at each call site) that trades footprint for speed
@@ -122,20 +124,19 @@ the override by the spelling a user would set - the environment variable name, t
 key, or the setter's function name. Per-site repeats are fine. Adding one, or giving one a
 new effect, without the announce is a defect.
 
-**A self-measured served-turn time - tok/s, a turn wall - entering
-`performance/records/<box>.json` or `PERF_LEDGER.md` comes from the released `lcpp_bench`
-exe - `benchmarks/lcpp_bench.das` built by `daspkg release`, spawned by
-`performance/gen_bench_records.das` or run by hand where the cell's `PROFILE.md` section says
-so - never from the `-jit` script** (a `--for-debug-purposes` row is a debug instrument). A
-tutorial's printed wall-clock is teaching output, feeding no board.
+**A self-measured served-turn time - tok/s, a turn wall - entering `PERF_LEDGER.md` comes
+from the released `lcpp_bench` exe - `benchmarks/lcpp_bench.das` built by `daspkg release`,
+spawned by `performance/gen_bench_records.das` or run by hand where the cell's `PROFILE.md`
+section says so - never from the `-jit` script** (a `--for-debug-purposes` row is a debug
+instrument). A tutorial's printed wall-clock is teaching output, feeding no board.
 
 **A subtraction of two measured walls written into `PERF_LEDGER.md` carries both raw walls
 in the entry.**
 
 **A diff that adds an entry to `PERF_LEDGER.md` carrying a reading no board cell produced
-names the instrument that produced it and the reading's grade: direction-grade when it
-compares across two processes or two commits, out-of-process when the wall was measured from
-outside the benchmark process.**
+names the instrument that produced it.** The entry also tags the reading `direction-grade`
+when it compares across two processes or two commits, and `out-of-process` when the wall was
+measured from outside the benchmark process; a reading that is neither carries no tag.
 
 **A diff that adds an entry to `PERF_LEDGER.md` never records a lab's A/B selection timing** -
 that timing settles its adoption decision in the lab's own report and in the PR that lands
@@ -175,21 +176,22 @@ permuting belong to the mint. A transform on the go-live path is a defect.
 or releasing an image backing, anywhere else is a defect - and a second mint path, per family,
 per format, or per backend, is a defect even where its output is identical.
 
-**A DECODER mint never holds the whole model.** It sizes the image before the first byte goes
-out and writes each plane as it is produced. Keeping the source model resident to write from is
-a defect, and a mint that is slower in exchange for a lower peak is correct.
+**A decoder mint - the mint of an LLM decoder model, not a tower or embedder carrier - never
+holds the whole model.** It sizes the image before the first byte goes out and writes each
+plane as it is produced. Keeping the source model resident to write from is a defect, and a
+mint that is slower in exchange for a lower peak is correct.
 
 **A staged carrier mint (`cache_via_image_staged`) either refuses a source file at or past
-1 GiB, naming that file in the refusal, or streams it like a decoder** - the staged form holds
-source and image at once, and that doubled peak is what the line caps.
+1 GiB, naming that file in the refusal, or streams it the way a decoder mint does** - the
+staged form holds source and image at once, and that doubled peak is what the line caps.
 
 **A `.dlim` is box- and config-specific, not a portable format.** `image_identity` names the
 box profile, the knobs, and the flavor a file was baked for, and a mismatch declines loudly. A
 path that reinterprets a mismatched image, or widens an identity so that more files match, is a
 defect.
 
-**A bake reaps only its own lane** - an identity's (quant, tag) pair. A save drops AT MOST that
-lane's dead siblings plus BROKEN/version-stale images in any lane, nothing else.
+**An image save reaps only its own lane** - an identity's (quant, tag) pair. A save drops AT
+MOST that lane's dead siblings plus BROKEN/version-stale images in any lane, nothing else.
 
 **Only a process that can recompute an image's identity may judge it dead.** Reaping an image
 whose identity the code cannot recompute - another flavor's, another family's - is a defect.
@@ -198,9 +200,11 @@ whose identity the code cannot recompute - another flavor's, another family's - 
 with the meta flags describing the layout - a per-tensor type split is not a second flavor.
 
 **An image carries only what its flavor uses.** A plane the target platform or config never
-reads is not written - the mint decides, not the load. A flavor takes its file through
-`image_path_for` and its tag through `register_image_family_tag`; carrying another flavor's
-planes is a defect.
+reads is not written - the mint decides, not the load. Carrying another flavor's planes is a
+defect.
+
+**A flavor takes its image file through `image_path_for` and its tag through
+`register_image_family_tag`.** A path or tag formed any other way is a defect.
 
 **A change to user-facing API updates every place it is shown.** User-facing means anything a
 consumer outside this repo can depend on - what it calls, types, requires, or parses
@@ -260,9 +264,11 @@ a struct the renderer emits but the registry does not is caught by
 **A diff that adds a file under `dasllama/`, adds a file beside one that has its own sec.1
 charter line, moves code between files, or changes what a file owns lands the sec.1 edit
 that keeps the charters true, in the same change** (a module-root doc file - a ledger, a
-plan, `LAWS.md` - has no charter line and lands free). A per-file inventory restated in this
-checklist is a defect of the checklist (a rule naming what KIND of code lands in which file
-is the checklist's own).
+plan, `LAWS.md` - has no charter line and lands free).
+
+**A per-file inventory restated in this checklist is a defect of the checklist** -
+`ARCHITECTURE.md` sec.1 owns the per-file list; a rule naming what KIND of code lands in
+which file is the checklist's own.
 
 **A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
@@ -278,21 +284,21 @@ its format family kept whole.** GPU twins land in their backend kernel file.
 (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
 **A kernel body lands in its owner's backend file: a GPU kernel where its PSO is compiled
-and released, a CPU-tier kernel in that tier's math backend file** - never in
-`dasllama/dasllama_math.das` or a lens/dispatch macro file.
+and released, a CPU-tier kernel in that tier's `dasllama/dasllama_math_<tier>.das`** - never
+in `dasllama/dasllama_math.das` or a lens/dispatch macro file.
 
 **A family quirk lands in the family file; a piece two families need moves UP into the
 concern's shared file (its own file when none exists)** - never sideways into a sibling.
 
 **A family gaining an arm for a media kind adds that kind's span markers - the template text
 that opens and closes the media rows - to that family's chat template, never a second
-renderer.** A family whose template or vocab lacks them has no arm for that media kind - 
+renderer.** A family whose template or vocab lacks them has no arm for that media kind -
 `create_chat_` panics at create, not at render.
 
 **No signature in `dasllama/dasllama_tower.das` - the shared encoder-tower home - takes a
-type `dasllama/dasllama_audio.das` or a family file declares, and the file requires neither
-`dasllama/dasllama_audio.das` nor any family file.** A doc comment naming the family a
-helper was built for is fine; the code stays family-blind.
+type `dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file
+declares, and the file requires none of them.** A doc comment naming the family a helper was
+built for is fine; the code stays family-blind.
 
 **A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's
 file** - a single-caller helper sanctioned as tower-worthy is ledgered on `ARCHITECTURE.md`

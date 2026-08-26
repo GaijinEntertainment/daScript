@@ -16,11 +16,17 @@ together with its own list.**
 - **Everything outside the lowered subset is a clean compile error naming the construct** -
   never a silently wrong kernel.
 
-- **A shape constant never enters a kernel as a runtime value: tile rows, tile cols,
-  cooperating simdgroups, and staged chunk depth are call-site constants, and a K width that
-  streams at runtime rides the emitter's runtime-extent descriptor (`dynamic_extent` on
-  Metal).** The capability ships a specialization path beside it, or the module's
-  `MASTERPLAN.md` records that it cannot.
+- **A shape constant reaches a kernel as a call-site constant, never as a runtime argument** -
+  a shape constant is a tile row count, tile column count, cooperating-simdgroup count, staged
+  chunk depth, or any other value that fixes the kernel's tiling.
+
+- **A K width known only at run time rides the emitter's runtime-extent descriptor**
+  (`dynamic_extent` on Metal; a `tensorLayout2D` / `tensorLayout2DPad` whose dimension
+  `tensorLayoutSetDimension` sets on SPIR-V).
+
+- **A new kernel capability that would need a runtime shape value ships a specialization path -
+  one compiled variant per constant shape - or the module's `MASTERPLAN.md` records that it
+  cannot.**
 
 - **A claim about emitted shape is checked in the emitted words or text, never the das
   source.**
@@ -28,6 +34,6 @@ together with its own list.**
 - **A kernel-model capability lands on both emitters, or the asymmetry is recorded** in
   the shared ledger (`modules/dasMetal/MASTERPLAN.md`).
 
-- **A rail diff that consumes a new `daslib/shader_lingua_franca` declaration ships that
-  rail's lowering of it, or the fail-closed fixture that rejects it by name, in the same
-  change.** A declaration in that module is granted to every shader rail.
+- **An emitter diff that uses a `daslib/shader_lingua_franca` declaration this emitter does not
+  yet handle ships that emitter's lowering of it, or the fail-closed fixture that rejects it by
+  name, in the same change.** A declaration in that module is available to both emitters.

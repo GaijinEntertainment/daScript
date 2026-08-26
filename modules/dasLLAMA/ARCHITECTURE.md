@@ -632,7 +632,7 @@ re-buying a measured loss.
 The probe also RETAINS the decided-and-shipped arms (the half-A stream, the dev-W all-device
 form, the tall M-tile twin, the bk staging depths, the no-zero-init form) as hand-written MSL
 reference implementations beside the refuted ones - they are the arc's bisect ledger, and the
-sync duty is REVIEW_GPU.md's hand-binding-lab rule: a diff changing what a lab arm mirrors
+sync duty is REVIEW_GPU.md's - the rule that a diff changing what a hand-binding arm mirrors
 fixes or deletes that arm in the same change.
 
 - **Per-simdgroup register-fragment matmul2d (16x32x16, device -> `vec<T,8>` fragments):**
@@ -643,11 +643,12 @@ fixes or deletes that arm in the same change.
   3.5x slower - the mixed-int combinations exist in MPP's type lists but lower off the NAX
   fast path. W8A8 claims from other stacks do not transfer through MPP.
 
-**Sanctioned float-A stamps** (the REVIEW_GPU half-operand rule's licensed set, each carrying
-`[metal_kernel(float_a_ok=true)]`): every tensor template's `XT = float` stamp - the live
-fallback wherever the half panel is absent (below the convert row floor, panel does not fit,
-half-X pinned off) - and the batch-decode/classifier `MetalQ8GemmTensorT` family, whose half-X
-extension is an open ledger item. A float A operand anywhere else is the defect the rule names.
+**Sanctioned float-A stamps** (the licensed set of the rule that a `matmul2d` operand reaches
+the op as `float` only in a class stamped `[metal_kernel(float_a_ok=true)]`, each carrying
+that stamp): every tensor template's `XT = float` stamp - the live fallback wherever the half
+panel is absent (below the convert row floor, panel does not fit, half-X pinned off) - and the
+batch-decode/classifier `MetalQ8GemmTensorT` family, whose half-X extension is an open ledger
+item. A float A operand anywhere else is the defect the rule names.
 - **Fused single-kernel attention (scores in threadgroup, online softmax):** loses 10-80% to
   the pipelined three-pass at real shapes (`benchmarks/attn/bench_metal_pf_fused_attn.das`) -
   Metal's cross-kernel pipelining plus full-width softmax beat tg-scope fusion.

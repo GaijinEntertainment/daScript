@@ -13,19 +13,25 @@ that gate is a defect.
 row, or a sidecar minted under noise, is a defect - re-mint on a box with no remote-desktop
 session.
 
-**A row or sidecar entering `records/` names commits a reader can resolve: a `das` row's
-`sha` and the sidecar's `provenance.engine_sha` name commits reachable from the branch under
-review; a reference-engine row's `sha` matches the standing ref pin (`DEFAULT_REF_SHA`,
-`../benchmarks/setup_lcpp_ref.das`); and the sidecar's `provenance.dasllama_version` equals
-`DASLLAMA_VERSION` (`../dasllama/dasllama_version.das`) at the commit its `engine_sha`
-names.** A stamp naming no resolvable commit, or a version mismatch, is a defect - re-mint.
+**A `das` row's `sha` and a sidecar's `provenance.engine_sha` entering `records/` name commits
+reachable from the branch under review.** A stamp naming no resolvable commit is a defect -
+re-mint.
+
+**A reference-engine row's `sha` entering `records/` matches the standing ref pin
+(`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`).** A row naming another reference
+build is a defect - re-mint.
+
+**A sidecar entering `records/` carries a `provenance.dasllama_version` equal to
+`DASLLAMA_VERSION` (`../dasllama/dasllama_version.das`) at the commit its
+`provenance.engine_sha` names.** A version mismatch is a defect - re-mint.
 
 **A diff that adds a row to `records/<box>.json` mints that row from a board cell - one
 `gen_bench_records.das` spawns, or a manual `../benchmarks/lcpp_bench.das` cell its
 `../PROFILE.md` section documents.** A timing taken any other way - a lab's A/B arm, a
 reading compared across two processes or two commits, a wall measured from outside the
 benchmark process - settles its own decision in its own report and never reaches a record
-file.
+file. The cell runs the released `lcpp_bench` exe (`daspkg release`), never the `-jit`
+script.
 
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the
@@ -39,7 +45,7 @@ to enforce.
 **Weakening the exchange download gate (content sha, schema, `DASLLAMA_VERSION`), the
 submission strip, or the submit rails that keep exchange-sourced and foreign-box sidecars
 from going back up is a defect** - `utils/dasllama-server/test_exchange_client.das` enforces
-all three.
+the download gate, the strip, and the rails.
 
 **Every submission goes through `exchange_strip_private`.** A submission path around it is a
 defect even where the strip itself is intact.
@@ -49,23 +55,25 @@ fails is a defect.
 
 **`model_specs.das`'s `model_specs()` (text) and `profile_common.das`'s `asr_catalog()`
 (audio) are the model set; a third FUNCTION in `.das` under this folder listing model files,
-quants, board membership - which models the site results board shows - provenance, or parity
+quants, board membership (which models the site results board shows), provenance, or parity
 fixtures is a defect** - a new list is written as a view over those two: it recomputes from
 them on every call and stores no `url`/`bytes`/`sha256` of its own.
 
 **A diff that makes a recorded row or manifest under this folder pin a model file keeps that
 file's provenance on its own row in `model_specs()` (`model_specs.das`) or `asr_catalog()`
-(`profile_common.das`) - directly, or through one named accessor call: a function in
-`model_specs.das` whose body carries the `url` + `bytes` + `sha256` itself (one hop - an
-accessor forwarding to another accessor, or an unnamed table lookup, does not count) - or a
-`recipe` a reader can run.**
+(`profile_common.das`).** The row carries the `url` + `bytes` + `sha256` itself, or a
+`recipe` a reader can run. One named accessor call may stand in for the row: a function in
+`model_specs.das` whose own body carries those three fields. A second hop - an accessor
+forwarding to another accessor, or an unnamed table lookup - does not count.
 
 **A companion artifact (an mmproj, an image fixture) rides the `companions` of the row that
 pins its carrier.** A companion several rows consume is referenced from the other rows by
 name - uniqueness itself is `../tests/test_model_specs.das`'s to enforce.
 
 **`fetch_models.das --fetch` downloads only.** A convert, a bench, or a tune-state write
-added to it is a defect.
+reached from `--fetch` is a defect - a conversion recipe runs under `--convert`, a timing in
+a board cell (`gen_bench_records.das` or a `../benchmarks/lcpp_bench.das` cell), a tune
+sidecar under a `--tune` run.
 
 **A change to a model row's provenance that alters which bytes verify - `bytes`, `sha256`,
 `recipe`, a new row or a new `companions` entry in `model_specs.das` or

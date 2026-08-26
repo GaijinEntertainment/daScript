@@ -1,19 +1,19 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`.
+doc: this folder's `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`.
 
 **Every PR runs `run.das -- --suite model-free`, plus every test here the change reaches - never
 the whole directory.** A change reaches a test when it alters anything the test's result
 depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture or
 corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
-**A test file with at least one cell that RUNS (not skips) with no model file present is
-listed in `run.das`'s `model-free` suite in the same change it is added.**
-
-**A test file in no `run.das` model suite (every suite but `model-free`), whose every cell is
-model-gated, is listed in the `model-free` suite too and skips honestly without its models** - 
-the per-PR gate then runs it wherever the models are stocked.
+**A test file in no `run.das` model suite (every suite but `model-free`), whose cells still
+assert what they claim under the environment the runner arms for `model-free`
+(`DASLLAMA_CPU_PREFILL=1`), is listed in the `model-free` suite in the same change it is
+added and skips honestly without its models** - the per-PR gate then runs it wherever the
+models are stocked; a file that environment disarms says so in its header and is listed in
+no suite.
 
 **A test file in a `run.das` model suite (every suite but `model-free`) runs only through
 `run.das`; dastest invoked directly on such a file is a defect. A `model-free` file runs
@@ -61,17 +61,17 @@ defect.** Cache keys are token ids, and the KV past the splice does not follow f
 
 **A test passes or skips explicitly on every platform.** A test that silently vanishes on one
 platform is a defect, and so is a zero-assertion pass - a cell whose whole body is
-platform-gated prints a skip or feint on the platforms where that body compiles out.
+platform-gated registers `t |> skip` on the platforms where that body compiles out.
 
 **A skip gate keys on a device capability, a run-mode knob's value, or a stocked fixture beside
 the models (a model file, an mmproj, an oracle dump - a model gate) - never on the existence of
 an artifact this repo's build or a previous test run produced (a mint, a generated binary, a
 dump a test wrote).** An artifact gate goes permanently false when its producer moves.
 
-**A test loading a model over 6 GiB runs only under `DASLLAMA_PARITY_FULL=1`** - a final pre-PR
-gate, not the iteration loop. Here the spelling is `model_available` (`_model_tier.das`); a
-serving leg, which cannot require this folder's fixtures, open-codes the same gate. Check what a
-test loads first.
+**A test loading a model over 6 GiB gates on `DASLLAMA_PARITY_FULL=1`** - a final pre-PR
+gate, not the iteration loop. In this folder the spelling is `model_available`
+(`_model_tier.das`); a test that cannot require `_model_tier.das` open-codes the same env
+check.
 
 **A test whose subject is not the `.dlim` image rail loads each carrier through its own
 loader - decoders through `load_model_` (`../dasllama/dasllama_load.das`), towers, embedders,
@@ -79,9 +79,8 @@ and union carriers through their family or carrier loaders - never `load_model`,
 `load_model_cached`, or `load_model_image`.**
 
 **A function that gains a parameter, or a parameter that gains an accepted value, ships a
-test here feeding the new value and checking the result** - an engine function under
-`dasllama/` arrives here with the diff that changed it; this folder's own gate helpers arrive
-directly. "The model still runs" is not that test.
+test in this folder feeding the new value and checking the result, in the same change** -
+"the model still runs" is not that test.
 
 **A predicate whose value is fixed by the build platform - it cannot differ between two runs on
 one machine - is tested through the argv it gates or the mode it selects**, never through the
@@ -90,13 +89,14 @@ predicate's value.
 **An added, moved, or edited registration's test observes reachability** - the registered
 thing is reached through its registry, not called directly. The registries this governs:
 the arch registrations (`register_decode_override` and its sibling `register_*` hooks), the
-`[EnvConfig]` env registry, and the format/backend dispatch tables. A `[metal_dispatch]`
-declaration is not one of them.
+`[EnvConfig]` env registry, and the format/backend dispatch tables - a new registry joins
+this list in the same change. A `[metal_dispatch]` declaration is not one of them.
 
 **A hand-bound kernel gate dispatches the geometry and threadgroup memory its production
 encoder does** - a change to anything a kernel dispatches with, binds, or reads from its
-kargs updates every gate that hand-binds that kernel in the same change (the mechanism -
-why a missed tgmem fails silently - is `CLAUDE.md`'s "Metal kernel gates" section).
+kargs (the kernel-argument struct) updates every gate that hand-binds that kernel in the
+same change (the mechanism - why a missed threadgroup-memory length fails silently - is
+`CLAUDE.md`'s "Metal kernel gates" section).
 
 **A kernel that gains an in-body branch keyed on a kargs field ships, in the same change, a
 gate cell that sets that field to the value selecting the new branch.**
@@ -112,19 +112,25 @@ BOTH sides: the decoded text where the model carries a vocab (`log_gen_texts` in
 red, or a suspicious green, must be readable in the log, not only as an id or float
 difference.
 
+**A fixture claiming a size or depth property asserts the actual number in the test**; a
+resize cap is not evidence.
+
+**A freeform token-parity cell is a defect** - freeform coverage uses the forced-feed
+logits-tolerance form; counting cells stay token-exact.
+
 **A diff that adds a `[metal_kernel]` under `../dasllama/` either has that kernel dispatched
 by a census row in `test_kernel_coverage.das` - a row on a small model, one the suite runs
 without `DASLLAMA_PARITY_FULL=1` - or names its kernel class in that file's
 `CENSUS_NEVER_DISPATCHED`, with the reason no row can reach it.** Naming a kernel a census
 row could dispatch is a defect.
 
-**A kernel-unit arm whose property a CPU oracle can witness compares its kernel against that
+**A kernel-unit cell whose property a CPU oracle can witness compares its kernel against that
 oracle.**
 
-**A kernel-unit arm testing cross-dispatch bit-identity - a property no CPU oracle can
+**A kernel-unit cell testing cross-dispatch bit-identity - a property no CPU oracle can
 witness - compares GPU against GPU with its output buffers prefilled with a sentinel.**
 
-**A kernel-unit arm whose output plane is its input plane, and whose CPU oracle does not
+**A kernel-unit cell whose output plane is its input plane, and whose CPU oracle does not
 differ from the input by construction, pairs its compare with an assert that the output
 differs from the input at a known index** - an in-place kernel that never ran leaves the
 input, which can wrongly satisfy a tolerant compare.
@@ -134,10 +140,10 @@ reference leg, external dump or CPU control alike.
 
 **A stocked artifact a test in this folder loads - a model file, mmproj, image fixture, or
 oracle dump - has a row in `../performance/model_specs.das` (or `asr_catalog` in
-`../performance/profile_common.das`), rides a row's `companions` list, has a convert script
-checked in beside the table in `../performance/`, or (an oracle dump) has a mint script that
-regenerates it, beside the dumps under `models_dir()`, named in the test that loads the
-dump.**
+`../performance/profile_common.das`), or rides a row's `companions` list, or has a convert
+script checked in beside the table in `../performance/`, or - an oracle dump - has a mint
+script that regenerates it, beside the dumps under `models_dir()`, named in the test that
+loads the dump.**
 
 **A test that reads a vision encode oracle dump names the minting arm in its header - the
 backend, the flash-attention setting, and the mmproj precision the dump came from.**
@@ -146,9 +152,22 @@ backend, the flash-attention setting, and the mmproj precision the dump came fro
 restores it before returning** - a hook here is any process-wide setter with no read-back,
 so a cell that changes one sets it back to its default before returning, and a cell whose
 claim needs the DEFAULT establishes that default too (the environment can carry the knob
-either way); a family serving-lane pin `set_<family>_q8` is undone with
-`reset_<family>_q8` - never a runtime decline standing in for a pin. The mechanism (why the
-hooks flip legs silently) is `CLAUDE.md`'s "Metal fixtures" section.
+either way). The mechanism (why the hooks flip legs silently) is `CLAUDE.md`'s "Metal
+fixtures" section.
+
+**A cell claiming a family serving lane pins it with `set_<family>_q8` and undoes the pin
+with `reset_<family>_q8`** - a runtime decline standing in for a pin is a defect: it measures
+whichever lane the box's policy picked.
+
+**Every CPU-vs-GPU arm runs a PLANAR model for its CPU stages and that model's
+`blob_twin(t, path, seq_cap)` for override-selected stages** - one session spans both models,
+since sessions are geometry-bound. A decline-reason cell keeps the planar model.
+
+**A new model-loading block is tagged with its family** - an untagged block silently joins
+every family's gate.
+
+**No CPU-control batch parity runs against the 70B** - its batch coverage is ENGAGE-only in
+the support matrix, and the batched code paths get their parity on small models via pins.
 
 **A knob a cell can reach only through the environment is armed in the environment of a
 process started after the arming - a child the cell spawns, or the runner's own - and needs

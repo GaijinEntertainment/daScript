@@ -22,9 +22,11 @@
   (repo root) fixture and asserts its error needle - the substring of the compile error naming
   the rejected construct - in `tests/msl/test_msl_fail_closed.das`, in the same change.**
 
-- **A kernel behavioral change ships a CPU-oracle test under `tests/metal/` (repo root); a
-  change visible only in the emitted text ships a `tests/msl/` (repo root) fixture asserting
-  the helper it generates.** A dasMetal-only regression must red here.
+- **A kernel behavioral change ships a CPU-oracle test under `tests/metal/` (repo root).** A
+  dasMetal-only regression must red in this module's own suites.
+
+- **A change visible only in the emitted text ships a `tests/msl/` (repo root) fixture
+  asserting the emitted text it changes.**
 
 - **A new or changed host extern under `modules/dasMetal/src/`, or a changed public function
   in `metal/das_metal_boost.das`, ships a host-side test under `tests/metal/` (repo root)
