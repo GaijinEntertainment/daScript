@@ -83,7 +83,8 @@ struct private MslCtx {
     helpers : table<string>                     // preamble helper functions referenced by lowered calls
     gen_helpers : table<string; string>         // GENERATED preamble helpers (tensor ops): mangled name -> text
     scan_ptrs : table<string; string>           // scan-time pointer local -> member (write-set resolution)
-    tg_accs : table<string; string>             // staged-GEMM acc local -> "m|n|sgs|kk" (decl suppressed on GPU)
+    tg_accs : table<string; string>             // staged-GEMM acc local -> "m|n|sgs|kk|at" (decl suppressed on GPU)
+    mpp_used : bool                             // a tile_tg/rowscale-only kernel still needs the MPP include
     self_name : string
     user_fns : table<string; int>               // ufn key -> ufns index
     ufns : array<UserFn>
@@ -2523,6 +2524,7 @@ def private emit_tmm2d_tile_tg(var ctx : MslCtx; ec : ExprCall?; indent : string
     if (m == 0u || n == 0u || sgs == 0u || kk == 0u) {
         return
     }
+    ctx.mpp_used = true
     note(ctx, "call.tmm2d_tile_tg")
     lines |> push("{indent}\{")
     lines |> push("{indent}    constexpr auto __tld = matmul2d_descriptor({int(m)}, {int(n)}, {int(kk)}, false, true, true);")
@@ -2551,6 +2553,7 @@ def private emit_tmm2d_tg_rowscale(var ctx : MslCtx; ec : ExprCall?; indent : st
     if (m == 0u || n == 0u) {
         return
     }
+    ctx.mpp_used = true
     note(ctx, "call.tmm2d_tg_rowscale")
     lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) \{")
     lines |> push("{indent}    auto __ids = __tgf_{acc}.get_multidimensional_index(__i);")
@@ -3613,7 +3616,7 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         helper_text = join(us, "\n") + "\n" + helper_text
     }
     var mpp_include = ""
-    if (!empty(ctx.gen_helpers) || !empty(ctx.tg_accs)) {
+    if (!empty(ctx.gen_helpers) || !empty(ctx.tg_accs) || ctx.mpp_used) {
         // Metal-4 tensor ops: the MPP include + namespace (the tg protocol emits inline —
         // no helpers, include still required), then generated helpers in pinned (sorted) order
         mpp_include = "#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\nusing namespace mpp::tensor_ops;\n"

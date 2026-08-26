@@ -789,6 +789,206 @@ class DerivedName {
     }
 }
 
+// ===== Metal-4 tensor ops (mpp::tensor_ops::matmul2d) =====
+// Two lowering shapes share one class. The all-device forms (tmm2d_f16w_f32, tmm2d_q8u_f32)
+// each become ONE generated preamble helper named by kind/m/n/sgs — and, for the q8u family,
+// by the staged K-chunk depth bk, so the 32-deep helper's name is a strict PREFIX of the
+// 64-deep one. The staged protocol (begin / step / rowscale / store) keys a persistent
+// cooperative tensor to the acc local, whose declaration is suppressed on the GPU.
+// A FLOAT A operand keeps matmul2d off the native half x half path, so every float-A kernel
+// below carries the deliberate `float_a_ok=true` license and every half-A twin needs none.
+// Shape throughout: m = 8 rows, n = 16 cols, sgs = 2 simdgroups, K = 64 walked in 32-wide chunks.
+class TmmTensor {
+    @ssbo @binding = 0 xa : array<float>        // A: 8 x 64 f32 activations
+    @ssbo @binding = 1 xah : array<float16>     // A: the f16 twin
+    @ssbo @binding = 2 wh : array<float16>      // W: 16 x 64 pre-dequantized device-half panel
+    @ssbo @binding = 3 bsh : array<float16>     // interleaved q8_0 blob, half-scale view
+    @ssbo @binding = 4 bqb : array<int8>        // the SAME blob, byte view (quants pre-offset +2)
+    @ssbo @binding = 5 bs : array<float>        // per-output-column bias
+    @ssbo @binding = 6 oc : array<float>        // C: 8 x 16
+    @ssbo @binding = 7 och : array<float16>     // C: the f16 twin
+    @workgroup tga : float16[256]               // A chunk, flat [8][32]
+    @workgroup tgb : float16[512]               // B chunk, transposed [16][32]
+    @workgroup tgc : float16[512]               // B chunk, NATURAL [32][16] (the nt flavors)
+    @workgroup tqu : float16[512]               // q8u staged W tile, bk = 32
+    @workgroup tq64 : float16[1024]             // q8u staged W tile, bk = 64
+    @workgroup tso : float[128]                 // tile_tg destination scratch
+    @workgroup trow : float[8]                  // rowscale factors, one per tile row
+
+    [metal_kernel(name="tmmhw_msl", float_a_ok=true), marker(no_coverage)]
+    def tmm_hw {
+        var ap = unsafe(addr(xa[0]))
+        var wp = unsafe(addr(wh[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_f16w_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
+    }
+
+    [metal_kernel(name="tmmhwh_msl"), marker(no_coverage)]
+    def tmm_hwh {
+        var ap = unsafe(addr(xah[0]))
+        var wp = unsafe(addr(wh[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_f16w_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
+    }
+
+    [metal_kernel(name="tmmq8u_msl", float_a_ok=true), marker(no_coverage)]
+    def tmm_q8u {
+        var sp = unsafe(addr(bsh[0]))
+        var wp = unsafe(addr(bqb[2]))
+        var ap = unsafe(addr(xa[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_q8u_f32(8u, 16u, 2u, tqu, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex)
+    }
+
+    [metal_kernel(name="tmmq8uh_msl"), marker(no_coverage)]
+    def tmm_q8uh {
+        var sp = unsafe(addr(bsh[0]))
+        var wp = unsafe(addr(bqb[2]))
+        var ap = unsafe(addr(xah[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_q8u_f32(8u, 16u, 2u, tqu, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex)
+    }
+
+    // the bk = 64 twin: same kind/m/n/sgs, a distinct `_k64` helper over an n*64 staging tile
+    [metal_kernel(name="tmmq8uh64_msl"), marker(no_coverage)]
+    def tmm_q8uh64 {
+        var sp = unsafe(addr(bsh[0]))
+        var wp = unsafe(addr(bqb[2]))
+        var ap = unsafe(addr(xah[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_q8u_f32(8u, 16u, 2u, tq64, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex, 64u)
+    }
+
+    // deva: A streams from device memory, only B is staged. The begin's second argument is the A
+    // TYPE WITNESS — the destination tensor's layout follows it, so begin and every step must
+    // stream the same element type.
+    [metal_kernel(name="tmmdeva_msl"), marker(no_coverage)]
+    def tmm_deva {
+        var acc : float[128]
+        var cp = unsafe(addr(och[0]))
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xah[0])), 8u, 16u, 2u, 32u)
+        let lid = gl_LocalInvocationID.x
+        if (lid < 8u) {
+            trow[lid] = 0.5
+        }
+        var kb = 0u
+        while (kb < 2u) {
+            var i = lid
+            while (i < 512u) {
+                tgb[i] = wh[(i / 32u) * 64u + kb * 32u + i % 32u]
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step_deva(acc, unsafe(addr(xah[kb * 32u])), 64u, tgb, 8u, 16u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_rowscale(acc, trow, 8u, 16u)
+        tmm2d_tg_store_half(acc, cp, 8u, 16u, 16u)
+    }
+
+    // the licensed float-A deva twin: same protocol, a f32 witness types the operand tensor
+    [metal_kernel(name="tmmdevaf_msl", float_a_ok=true), marker(no_coverage)]
+    def tmm_devaf {
+        var acc : float[128]
+        var cp = unsafe(addr(oc[0]))
+        var bp = unsafe(addr(bs[0]))
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xa[0])), 8u, 16u, 2u, 32u)
+        var kb = 0u
+        while (kb < 2u) {
+            var i = gl_LocalInvocationID.x
+            while (i < 512u) {
+                tgb[i] = wh[(i / 32u) * 64u + kb * 32u + i % 32u]
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step_deva(acc, unsafe(addr(xa[kb * 32u])), 64u, tgb, 8u, 16u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store_bias(acc, cp, bp, 8u, 16u, 16u)
+    }
+
+    // nt: the B tile is staged in its NATURAL [kk][n] order (transpose_right = false). The
+    // fused-attention shape rides here too — tile_tg lands a whole score tile in THREADGROUP
+    // float scratch (computed and consumed without touching device memory) before the held
+    // accumulator walks K.
+    [metal_kernel(name="tmmnt_msl"), marker(no_coverage)]
+    def tmm_nt {
+        var acc : float[128]
+        var cp = unsafe(addr(oc[0]))
+        var bp = unsafe(addr(bs[0]))
+        var i = gl_LocalInvocationID.x
+        while (i < 256u) {
+            tga[i] = xah[i]
+            i += gl_WorkGroupSize.x
+        }
+        i = gl_LocalInvocationID.x
+        while (i < 512u) {
+            tgb[i] = wh[i]
+            i += gl_WorkGroupSize.x
+        }
+        barrier()
+        tmm2d_tile_tg(tga, tgb, tso, 8u, 16u, 2u, 32u)
+        barrier()
+        tmm2d_tg_begin_nt(acc, 8u, 16u, 2u, 32u)
+        var kb = 0u
+        while (kb < 2u) {
+            i = gl_LocalInvocationID.x
+            while (i < 256u) {
+                tga[i] = xah[(i / 32u) * 64u + kb * 32u + i % 32u]
+                i += gl_WorkGroupSize.x
+            }
+            i = gl_LocalInvocationID.x
+            while (i < 512u) {
+                tgc[i] = wh[(i % 16u) * 64u + kb * 32u + i / 16u]
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step_nt(acc, tga, tgc, 8u, 16u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store_bias(acc, cp, bp, 8u, 16u, 16u)
+    }
+
+    // devant: A streams from device f32 (the license is unconditional here) and B is natural
+    [metal_kernel(name="tmmdevant_msl", float_a_ok=true), marker(no_coverage)]
+    def tmm_devant {
+        var acc : float[128]
+        var cp = unsafe(addr(och[0]))
+        tmm2d_tg_begin_devant(acc, 8u, 16u, 2u, 32u)
+        var kb = 0u
+        while (kb < 2u) {
+            var i = gl_LocalInvocationID.x
+            while (i < 512u) {
+                tgc[i] = wh[(i % 16u) * 64u + kb * 32u + i / 16u]
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step_devant(acc, unsafe(addr(xa[kb * 32u])), 64u, tgc, 8u, 16u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store_half(acc, cp, 8u, 16u, 16u)
+    }
+
+    // sgmat_to_half: simdgroup_store is same-type-only, so a half store of an f32 accumulator
+    // narrows through the public thread_elements() view first
+    [metal_kernel(name="sgmathalf_msl"), marker(no_coverage)]
+    def sgmat_half {
+        var ma : simdgroup_half8x8
+        var mb : simdgroup_half8x8
+        simdgroup_load(ma, xah, 0u, 8u)
+        simdgroup_load(mb, wh, 0u, 8u)
+        var acc : simdgroup_float8x8
+        simdgroup_multiply_accumulate(acc, ma, mb, acc)
+        var hout : simdgroup_half8x8
+        sgmat_to_half(hout, acc)
+        simdgroup_store(hout, och, 0u, 8u)
+    }
+}
+
 //! Gate B: exactly the construct kinds the fixture set must emit — the census meta-test
 //! asserts equality with the observed union in both directions.
 def public declared_msl_census : table<string> {   // nolint:STYLE038 — one flat literal per construct kind; the gate-B contract IS this list
@@ -1003,6 +1203,21 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "call.sgmat_mac.f32",
         "call.sgmat_mac.f16",
         "call.sgmat_mac.mixed",
+        "call.sgmat_to_half",
+        // Metal-4 tensor ops: the all-device helper forms + the staged begin/step/store protocol
+        // (deva = device A stream, nt = natural B tile, devant = both)
+        "call.tmm2d_f16w_f32",
+        "call.tmm2d_q8u_f32",
+        "call.tmm2d_tg_begin_deva",
+        "call.tmm2d_tg_step_deva",
+        "call.tmm2d_tg_begin_nt",
+        "call.tmm2d_tg_step_nt",
+        "call.tmm2d_tg_begin_devant",
+        "call.tmm2d_tg_step_devant",
+        "call.tmm2d_tile_tg",
+        "call.tmm2d_tg_rowscale",
+        "call.tmm2d_tg_store_half",
+        "call.tmm2d_tg_store_bias",
         // math builtins (Phase 6): 1:1 MSL spellings — float scalar + vector classes
         // (abs also signed int; min/max any numeric class)
         "call.math.exp.f32",
@@ -1081,5 +1296,8 @@ def public all_msl_censuses : array<string> {
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
         sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
         ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, statearr_msl_census,
+        tmmhw_msl_census, tmmhwh_msl_census, tmmq8u_msl_census, tmmq8uh_msl_census,
+        tmmq8uh64_msl_census, tmmdeva_msl_census, tmmdevaf_msl_census, tmmnt_msl_census,
+        tmmdevant_msl_census, sgmathalf_msl_census,
         DerivedName_dkern_msl_census]
 }

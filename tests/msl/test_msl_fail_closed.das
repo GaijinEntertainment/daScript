@@ -18,7 +18,9 @@ options no_aot     // invokes the compiler at runtime (compile_file) — not AOT
 // pointer, unbound pointer, dual-root pointer), and the splice argument binder (writable scalar
 // and writable pointer in value position, an un-lowerable parameter type, a twice-named
 // parameter, an untraceable pointer space, a non-pointer argument, a non-aliasable `&`
-// argument).
+// argument); and the Metal-4 tensor-op surface: an unlicensed FLOAT A operand, a staged K-chunk
+// depth that names no generated helper, and a deva step streaming the element type the begin's
+// witness did not type.
 
 require dastest/testing_boost public
 require daslib/ast
@@ -92,5 +94,9 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_splice_ptr_trace", "pointer parameter `p` has no traceable address space")
         check_rejects(t, "_fc_splice_ptr_arg", "buffer/pointer parameter `p` needs a member, pointer local, or addr() argument")
         check_rejects(t, "_fc_splice_ref_arg", "`&` parameter `acc` needs an lvalue argument")
+        // the Metal-4 tensor-op surface
+        check_rejects(t, "_fc_tmm2d_float_a", "FLOAT A operand")
+        check_rejects(t, "_fc_tmm2d_bk", "bk must be 32 or 64")
+        check_rejects(t, "_fc_tmm2d_deva_witness", "begin_deva's witness typed")
     }
 }
