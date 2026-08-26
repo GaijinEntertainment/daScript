@@ -8,14 +8,24 @@ record stores and tune sidecars.** A second validator is a defect. The engine-fr
 `dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
 that gate is a defect.
 
-**A row entering `records/` names a quiet box: its `hardware.remote_desktop` is `off`.** A
-`parsec` row is a defect - re-mint on a box with no remote-desktop session.
+**A row or sidecar entering `records/` was minted on a quiet box: a row's
+`hardware.remote_desktop` is `off`, and a sidecar's `provenance.noise` is `ok`.** A `parsec`
+row, or a sidecar minted under noise, is a defect - re-mint on a box with no remote-desktop
+session.
 
-**A row or sidecar entering `records/` names commits a reader can resolve: the row's `sha`
-and the sidecar's `provenance.engine_sha` name commits reachable from the branch under
-review, and the sidecar's `provenance.dasllama_version` equals `DASLLAMA_VERSION`
-(`../dasllama/dasllama_version.das`) at the commit its `engine_sha` names.** A stamp naming
-no reachable commit, or a version mismatch, is a defect - re-mint.
+**A row or sidecar entering `records/` names commits a reader can resolve: a `das` row's
+`sha` and the sidecar's `provenance.engine_sha` name commits reachable from the branch under
+review; a reference-engine row's `sha` matches the standing ref pin (`DEFAULT_REF_SHA`,
+`../benchmarks/setup_lcpp_ref.das`); and the sidecar's `provenance.dasllama_version` equals
+`DASLLAMA_VERSION` (`../dasllama/dasllama_version.das`) at the commit its `engine_sha`
+names.** A stamp naming no resolvable commit, or a version mismatch, is a defect - re-mint.
+
+**A diff that adds a row to `records/<box>.json` mints that row from a board cell - one
+`gen_bench_records.das` spawns, or a manual `../benchmarks/lcpp_bench.das` cell its
+`../PROFILE.md` section documents.** A timing taken any other way - a lab's A/B arm, a
+reading compared across two processes or two commits, a wall measured from outside the
+benchmark process - settles its own decision in its own report and never reaches a record
+file.
 
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the
@@ -38,15 +48,17 @@ defect even where the strip itself is intact.
 fails is a defect.
 
 **`model_specs.das`'s `model_specs()` (text) and `profile_common.das`'s `asr_catalog()`
-(audio) are the model set; a third list of model files, quants, board membership,
-provenance, or parity fixtures is a defect** - a new list is written as a view over those
-two: it recomputes from them on every call and stores no `url`/`bytes`/`sha256` of its own.
+(audio) are the model set; a third FUNCTION in `.das` under this folder listing model files,
+quants, board membership - which models the site results board shows - provenance, or parity
+fixtures is a defect** - a new list is written as a view over those two: it recomputes from
+them on every call and stores no `url`/`bytes`/`sha256` of its own.
 
-**A model file named by any file under `modules/dasLLAMA/` carries its provenance on its own
-row in `model_specs()` (`model_specs.das`) or `asr_catalog()` (`profile_common.das`) -
-directly, or through one named accessor call: a function in `model_specs.das` whose body
-carries the `url` + `bytes` + `sha256` itself (one hop - an accessor forwarding to another
-accessor, or an unnamed table lookup, does not count) - or a `recipe` a reader can run.**
+**A diff that makes a recorded row or manifest under this folder pin a model file keeps that
+file's provenance on its own row in `model_specs()` (`model_specs.das`) or `asr_catalog()`
+(`profile_common.das`) - directly, or through one named accessor call: a function in
+`model_specs.das` whose body carries the `url` + `bytes` + `sha256` itself (one hop - an
+accessor forwarding to another accessor, or an unnamed table lookup, does not count) - or a
+`recipe` a reader can run.**
 
 **A companion artifact (an mmproj, an image fixture) rides the `companions` of the row that
 pins its carrier.** A companion several rows consume is referenced from the other rows by

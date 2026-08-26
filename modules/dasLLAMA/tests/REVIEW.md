@@ -73,15 +73,15 @@ gate, not the iteration loop. Here the spelling is `model_available` (`_model_ti
 serving leg, which cannot require this folder's fixtures, open-codes the same gate. Check what a
 test loads first.
 
-**Every suite but `test_model_image.das` and `test_model_image_vulkan.das` - the image-rail
-coverage pair (mint, map, GC, flavors) - loads each carrier through its own loader, never the
-`.dlim` image rail (`load_model`, `load_model_cached`, `load_model_image`):** decoders through
-`load_model_` (`../dasllama/dasllama_load.das`); towers, embedders, and union carriers through
-their family or carrier loaders.
+**A test whose subject is not the `.dlim` image rail loads each carrier through its own
+loader - decoders through `load_model_` (`../dasllama/dasllama_load.das`), towers, embedders,
+and union carriers through their family or carrier loaders - never `load_model`,
+`load_model_cached`, or `load_model_image`.**
 
 **A function that gains a parameter, or a parameter that gains an accepted value, ships a
-test feeding the new value and checking the result.** "The model still runs" is not that
-test.
+test here feeding the new value and checking the result** - an engine function under
+`dasllama/` arrives here with the diff that changed it; this folder's own gate helpers arrive
+directly. "The model still runs" is not that test.
 
 **A predicate whose value is fixed by the build platform - it cannot differ between two runs on
 one machine - is tested through the argv it gates or the mode it selects**, never through the
@@ -96,7 +96,7 @@ declaration is not one of them.
 **A hand-bound kernel gate dispatches the geometry and threadgroup memory its production
 encoder does** - a change to anything a kernel dispatches with, binds, or reads from its
 kargs updates every gate that hand-binds that kernel in the same change (the mechanism -
-why a missed tgmem fails silently - is `CLAUDE.md`'s "Arm filter mechanics" section).
+why a missed tgmem fails silently - is `CLAUDE.md`'s "Metal kernel gates" section).
 
 **A kernel that gains an in-body branch keyed on a kargs field ships, in the same change, a
 gate cell that sets that field to the value selecting the new branch.**
@@ -112,8 +112,11 @@ BOTH sides: the decoded text where the model carries a vocab (`log_gen_texts` in
 red, or a suspicious green, must be readable in the log, not only as an id or float
 difference.
 
-**A GPU kernel whose MSL entry symbol the census in `test_kernel_coverage.das` has not seen
-before ships with a small model in that file's coverage suite** that dispatches it.
+**A diff that adds a `[metal_kernel]` under `../dasllama/` either has that kernel dispatched
+by a census row in `test_kernel_coverage.das` - a row on a small model, one the suite runs
+without `DASLLAMA_PARITY_FULL=1` - or names its kernel class in that file's
+`CENSUS_NEVER_DISPATCHED`, with the reason no row can reach it.** Naming a kernel a census
+row could dispatch is a defect.
 
 **A kernel-unit arm whose property a CPU oracle can witness compares its kernel against that
 oracle.**

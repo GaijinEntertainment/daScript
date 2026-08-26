@@ -56,6 +56,11 @@ can this value change between dispatches? If yes it is data and belongs in a uni
 field, or an `@off` bind offset; if no it is shape and must not reach the kernel as a uniform,
 a kargs field, an `@off` bind offset, or a helper parameter.
 
+**A diff that changes a kernel-selection predicate or a raced constant in `dasllama/` rests on
+timing that ran both variants interleaved in one process, under one instrument.** A reading
+taken across two processes or across two commits says which way the wall moved, not which
+implementation to adopt.
+
 **Peak memory wins ties against load cost.** A change to an allocation reached from a load,
 bake, or convert path (judge a shared helper at each call site) that trades footprint for speed
 ships the measured pair - peak footprint and wall-clock - and an explicit stated decision.
@@ -112,10 +117,10 @@ knob or an exported runtime setter that moves a gate, policy, or threshold off i
 and thereby changes what the run writes, reads, mints, or computes - including a knob or
 setter whose purpose is timing when it moves computed numerics, since two GEMM forms of
 the same math differ in float terms. A knob or setter that changes only WHEN work happens
-is not an override, and a CLI flag is never one. A run that engages one prints a line
-naming it by its own spelling (the env variable name, or the setter's function name);
-set-but-inert stays silent, per-site repeats are fine. Adding one, or giving one a new
-effect, without the announce is a defect.
+is not an override, and a CLI flag is never one. A run that engages one prints a line naming
+the override by the spelling a user would set - the environment variable name, the sidecar
+key, or the setter's function name. Per-site repeats are fine. Adding one, or giving one a
+new effect, without the announce is a defect.
 
 **A self-measured served-turn time - tok/s, a turn wall - entering
 `performance/records/<box>.json` or `PERF_LEDGER.md` comes from the released `lcpp_bench`
@@ -126,6 +131,15 @@ tutorial's printed wall-clock is teaching output, feeding no board.
 
 **A subtraction of two measured walls written into `PERF_LEDGER.md` carries both raw walls
 in the entry.**
+
+**A diff that adds an entry to `PERF_LEDGER.md` carrying a reading no board cell produced
+names the instrument that produced it and the reading's grade: direction-grade when it
+compares across two processes or two commits, out-of-process when the wall was measured from
+outside the benchmark process.**
+
+**A diff that adds an entry to `PERF_LEDGER.md` never records a lab's A/B selection timing** -
+that timing settles its adoption decision in the lab's own report and in the PR that lands
+the kernel, and the ledger learns the winner only through a re-measured cell.
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
@@ -139,7 +153,8 @@ or engine comparison - is a defect wherever it is written down with no cell behi
 checked-in doc, a ledger, a code comment, or a PR description.** The cell states its quant
 mode and stamps box and engine provenance, so a number can never silently describe a format
 nobody serves or a kernel set nobody ships. A rig-internal measurement margin - a crown
-delta, a noise floor, tuner timing - is settled by the sidecar or manifest stamp it rides in.
+delta, a noise floor, tuner timing - is settled by the sidecar or manifest that carries the
+value; written into a source comment or a doc it is a timing figure like any other.
 
 **A figure measuring one engine stage inside a served turn - a stage wall, a stage share, a
 stage speedup, or a cross-engine comparison of one stage; never a board cell's `pp`/`tg`
@@ -214,8 +229,9 @@ a check's licensed set - the names that check does not flag - or a finding text 
 longer names what failed. What the gate enforces is read from the gate itself; each check's
 finding text states its own rule.
 
-**A new `REVIEW.das` check ships with its licensed set ledgered in `ARCHITECTURE.md` sec.1, in
-the same change.**
+**A new `REVIEW.das` check ships its `ARCHITECTURE.md` sec.1 line in the same change: a line
+naming the check and the names it licenses - the names that check does not flag - and saying
+so when it licenses none.**
 
 **An upstream mechanism is described in our own terms, not attributed** - no
 "lifted/ported verbatim from" and no upstream symbol, header, or constant names in a `.md`
@@ -261,8 +277,9 @@ its format family kept whole.** GPU twins land in their backend kernel file.
 **A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its backend file
 (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
-**A kernel body lands in its tier or backend kernel file** - never in `dasllama/dasllama_math.das` or a
-lens/dispatch macro file.
+**A kernel body lands in its owner's backend file: a GPU kernel where its PSO is compiled
+and released, a CPU-tier kernel in that tier's math backend file** - never in
+`dasllama/dasllama_math.das` or a lens/dispatch macro file.
 
 **A family quirk lands in the family file; a piece two families need moves UP into the
 concern's shared file (its own file when none exists)** - never sideways into a sibling.
@@ -289,9 +306,10 @@ SOURCE tensors, per weight region - the set of source tensors a carrier stores i
 tensors disagree on element type is refused in a message naming the offending tensor and
 both element types.**
 
-**A lane that requantizes or converts the file's planes (a q8 block-GEMM lane, an f32
-serving restage) is a separate flavor under its own image identity, and the load that picks
-it prints which lane it picked.**
+**A lane that PERSISTS a converted form of the file's planes - a form an image could carry -
+is a separate flavor under its own image identity, and the load that picks it prints which
+lane it picked.** A conversion made and dropped inside one forward pass persists nothing and
+is not such a lane.
 
 **A harness that prints output for another tool to compare fails loudly when it has nothing to
 print.** A run that ends without its comparison lines - wrong flags, failed load - exits

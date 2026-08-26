@@ -27,7 +27,7 @@ require strings
 require _model_tier
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
-// The KERNEL COVERAGE census (REVIEW: "A GPU kernel whose MSL entry symbol the census in test_kernel_coverage.das has not seen before ships with a small model in that file's coverage suite"): drive the small-model zoo across the
+// The KERNEL COVERAGE census (REVIEW: "A diff that adds a [metal_kernel] under ../dasllama/ either has that kernel dispatched by a census row in test_kernel_coverage.das ... or names its kernel class in that file's CENSUS_NEVER_DISPATCHED"): drive the small-model zoo across the
 // format / graph / batch-shape / KV-codec axes and report which compiled kernels were never
 // dispatched — LOUD WARNINGS, never an auto-dead verdict. A zero means "nothing this zoo runs
 // dispatched it", never "unreachable" — deleting a kernel additionally needs a reachability
@@ -38,6 +38,19 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites si
 // DASLLAMA_PARITY_FULL=1); the report stays honest about what THIS run covered. The vulkan
 // half: arm `coverage` = the device-free rail unit (spec parse + zero table); arm `coverage-vk`
 // = the SERVING census (needs a vulkan device + DASLLAMA_GPU=1 + the local model zoo).
+
+// The census's DECLARED blind spots: kernel classes no zoo row below can dispatch, each with
+// the reason. A new [metal_kernel] belongs in a census row, not here; a class lands here only
+// when no stocked carrier can reach it, and it leaves the moment a row can. Reconcile the list
+// against the report's NEVER DISPATCHED warnings — a name here that the report shows dispatched
+// is stale, and a warning with no entry here is a coverage gap to close with a row.
+let private CENSUS_NEVER_DISPATCHED <- [
+    // the MoE expert mul_mm tall M-tile pairs (128-row floor + remainder) for q5_K and q6_K
+    // experts: the zoo's MoE carriers are Q4_K_M, mxfp4 and Q8_0, and no q5_K/q6_K MoE file
+    // is stocked, so the k4/mx4/q8 pairs cover the form and these two formats never engage
+    "MetalMoeMulMmK5TH128", "MetalMoeMulMmK5THR",
+    "MetalMoeMulMmK6TH128", "MetalMoeMulMmK6THR"
+]
 
 def private counting_prompt(start, last : int) : string {
     return build_string() $(var w) {
@@ -356,6 +369,9 @@ def test_metal_kernel_coverage(tst : T?) {
             // the census verdict: the report prints counts + LOUD WARNINGS for the zeros;
             // the assert pins only that the RAIL counts — coverage gaps are human calls
             metal_kernel_coverage_report()
+            for (blind in CENSUS_NEVER_DISPATCHED) {
+                to_log(LOG_INFO, "metal kernel coverage: {blind} is a DECLARED blind spot - no stocked carrier reaches it\n")
+            }
             var cov <- metal_kernel_coverage()
             var served = 0
             for (n in values(cov)) {

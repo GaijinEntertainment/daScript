@@ -15,25 +15,27 @@ is asked by `prefill_decline` / `decode_decline`, never by a caps predicate.** A
 parameter that reports the session's setup progress - rather than the CALL, its row count or
 its span shape - is a defect however it is derived.
 
-**A bounds or tail guard inside a kernel's main loop whose answer the host already knows
-when it picks the pipeline is stamped, not branched: the guard sits under `static_if` on a
-`@template_constant`, so one template yields both the checked instance and the clean one,
-and the encoder picks by the shape it already holds.** A diff that edits an existing
-kernel's loop answers to this exactly as a new kernel class does; a per-iteration guard the
-host could have compiled out is a defect.
+**A bounds or tail guard inside a kernel's main loop whose answer the host already knows when
+it picks the pipeline is stamped, not branched: it rides a `@template_constant` - a
+`static_if` block, or a value select on the constant - and the guard is absent from the clean
+instance's generated `*_msl` global.** A diff that edits an existing kernel's loop answers to
+this exactly as a new kernel class does; a per-iteration guard the host could have compiled
+out is a defect.
 
-**A `matmul2d` left or right operand never reaches the op as `float`: convert it in the
-pass that writes the operand's buffer or in the staging loop that reads it.** A float
-operand keeps the op off its native fast path; a tensor GEMM fed a float operand is a
-defect.
+**A `matmul2d` left or right operand reaches the op as `float` only in a kernel class stamped
+`[metal_kernel(float_a_ok=true)]`; everywhere else it is converted in the pass that writes
+the operand's buffer or in the staging loop that reads it.** A float operand keeps the op off
+its native fast path; the stamped set is ledgered in `ARCHITECTURE.md` sec.2.2b, and a stamp
+that lands without its ledger line is a defect.
 
 **A `matmul2d` operand is threadgroup-staged only when the staged form differs from the
 stored form - a dequant, a transpose, a layout or element-type change; an operand consumed
 as stored streams from device.** A staged pass-through costs the op more than the reads it
 saves.
 
-**A staging loop assigns each work item a consecutive run of elements, not a stride.**
-Per-element strided staging with div/mod addressing pays multiples of the contiguous form.
+**A loop that fills a `@workgroup` tile assigns each work item a consecutive run of elements,
+not a stride.** Per-element strided staging with div/mod addressing pays multiples of the
+contiguous form; a device-to-device copy loop fills no tile and is already coalesced.
 
 **A kernel decides its row's validity or owner by reading one per-row entry the
 bucket-building kernel stamped, never by scanning the per-bucket base and count arrays.**
@@ -45,8 +47,9 @@ bounds or tail guard - shows that every address that instance touches stays insi
 holding real data; one extent dividing evenly is not that showing.** A padded chunk's walk
 can run past the live extent, and one poisoned read in a shared tile corrupts real rows.
 
-**Scratch that a pipeline of dispatches reuses is double-buffered or per-site.** One shared
-scratch serializes the whole chain through its write-after-read hazards.
+**Scratch a pipeline of dispatches reuses carries at least as many buffers as the chain has
+dispatches in flight, or a fresh buffer per site.** One shared scratch serializes the whole
+chain through its write-after-read hazards.
 
 **An encoder path that adds dispatches to save bandwidth gates on work size, and the
 threshold is measured at both ends of the size ladder.** The small-work regression hides

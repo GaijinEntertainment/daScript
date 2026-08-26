@@ -3,46 +3,37 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `../PROFILE.md`.
 
-**A timed rep that runs the model runtime's kernel-selected path - anything reaching a
-`Model`'s decoder or encoder, the shipped facades (`respond_`, `transcribe`) included - calls
-`tune_gate()` (`../performance/profile_common.das`) before its first timed rep**, or it
-measures fallback kernels silently. Tokenizing and detokenizing (`encode` / `encode_` /
-`decode` / `decode_`, on a `Model` or a `Tokenizer`) run no forward pass, and a timed rep
-that dispatches only pipelines the lab compiled itself never enters that path - nothing to
-gate.
+**A diff that also lands a row in `../performance/records/<box>.json` applies
+`../performance/REVIEW.md`, and one that also lands an entry in `../PERF_LEDGER.md` applies
+`../REVIEW.md`.**
 
-**A choice between two implementations of the same compute is made only on timing that ran
-both variants interleaved in one process under one instrument, whatever rig produced it and
-whichever knob picks the variant inside that process.** A reading taken across two
-processes or across two commits is direction-grade - it says which way the wall moved, not
-which implementation to adopt - and using one to make the choice is a defect. A board bench
-cell re-measured for the record makes no choice and is not selection timing.
+**A timed rep that dispatches a pipeline the model runtime selected - not one the lab
+compiled itself - calls `tune_gate()` (`../performance/profile_common.das`) before its first
+timed rep**, or it measures fallback kernels silently. Tokenizing and detokenizing (`encode` /
+`encode_` / `decode` / `decode_`, on a `Model` or a `Tokenizer`) run no forward pass, so
+nothing there is gated.
 
-**An A/B arm whose timing is reported as adoptable evidence is first shown bit-exact against
-the lab's baseline arm or its CPU reference over the sampled region** (the report's
-"bit-exact vs ..." line), the baseline arm itself answering to the CPU reference; an arm
-reported as evidence without that compare is a defect.
+**A race in this folder that compares two implementations times both arms interleaved in one
+process (`race_pair_ms`).** Two separate runs measure the box's drift between them as much as
+the arms.
 
-**An A/B arm that skips the bit-exact compare against the CPU reference - a timing-only
-arm - says so in its report line.**
+**An A/B arm reported as adoptable evidence shows the compare its form calls for: an arm
+whose form differs from the baseline only in timing carries the literal token `timing-only`
+in its report line; an arm whose form differs in PRECISION prints a bounded-difference
+compare against the baseline arm or the CPU reference and the bound it passed; an arm of the
+same form prints the bit-exact compare over the sampled region (the report's "bit-exact
+vs ..." line).** An arm reported as evidence showing none of the three is a defect.
+
+**A lab's baseline arm is compared against a CPU reference over the sampled region, in the
+same run.** The arm-vs-baseline compare proves the two agree, not that either is right.
 
 **A knockout or sweep instrument - one whose arms ATTRIBUTE cost across stages rather than
 select between two implementations - carries the literal text `ATTRIBUTION SWEEP` in its
 file header comment, on a line that also names what its arms attribute.** Without it the
 instrument reads as a lab and is deleted with a decision it never made.
 
-**A lab's selection timings never enter `../PERF_LEDGER.md` or
-`../performance/records/<box>.json`** - they settle the adoption decision in the lab's own
-report and the PR that lands the kernel; the board learns the winner only through a
-re-measured cell row.
-
-**A direction-grade reading from an instrument under this folder enters `../PERF_LEDGER.md`
-only in an entry that names the instrument that produced it and calls the reading
-direction-grade, and never enters `../performance/records/<box>.json`.**
-
 **An out-of-process observer - a script that measures a benchmark process from outside -
-measures only what a process cannot measure about itself; its numbers may enter
-`../PERF_LEDGER.md` and no record file.**
+measures only what a process cannot measure about itself.**
 
 **A timing instrument this checklist governs never writes the wall time of a binary this
 repository does not build - a third-party reference tool - into
@@ -53,7 +44,6 @@ tool on a board workload.
 **An instrument under this folder that prints a number formed by subtracting one measured
 wall from another prints both raw walls on that report line.**
 
-**A change to the timed body or the measured input of a cell whose numbers are reported as
-evidence - a cell that mints rows into `../performance/records/<box>.json`, or the `--tok`
-ladder (`lcpp_bench.das`) - ships comparable before/after rows for each affected cell and
-corpus, or a statement that the measured quantity is unchanged.**
+**A change to what a board cell times - its code, its input corpus, or the pinned reference
+build (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`) - ships before/after rows for each affected
+cell and corpus, or a statement that the measured quantity is unchanged.**

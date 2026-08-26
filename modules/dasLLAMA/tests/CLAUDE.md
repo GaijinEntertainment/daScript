@@ -74,20 +74,7 @@ CPU differs from any float implementation by ~2.5 logits/step by construction;
 fam-qwen35/fam-qwen35moe are deltanet hybrids whose batch cell asserts the per-row FALLBACK
 shape - metal batch steps 0, both rows served on the single-decode path; fam-qwen2moe's
 batch cell asserts the `graph` DECLINE on the planar model - shexp has no batch arm, and a
-blob twin's CPU batch fallback would trip the blob-only panic). The
-`kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels - 
-model-less per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has
-no arms; remember it exists (the hand-bound-gate sync obligation is `REVIEW.md`'s). Shared
-fixtures (buf helpers, eyeball-dump compares, kq plane + q8 blob
-builders) live in `_metal_kernel_common.das`; `test_metal_prefill_kernels.das` keeps its tag-less
-mismatch compares local - a same-arity twin would collide with the shared tagged one.
-`_mtl_toy.das` is the `[metal_dispatch]` multi-kernel (kernel=) fixture - its gate in
-the misc file dispatches through the GENERATED builders (kn_ rail), not hand binds.
-The control obligation for a new gate or bar is `REVIEW.md`'s (a control the bar reds, same
-change); the sizing mechanics: an additive poison beats rel*env at the longest dot, and
-every derived-truth compare gets its own poison. A kernel with `@workgroup` state needs
-`metal_set_threadgroup_memory_length` in the gate exactly as in its production encoder - 
-missing tgmem reads garbage silently.
+blob twin's CPU batch fallback would trip the blob-only panic).
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free - the one image-suite arm that runs with no model stocked) `smol metal gemma tower whisper voxtral parakeet qwen3a canary
 canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e mtower`; `gemma4e` is the E2B metal-blob
@@ -119,7 +106,7 @@ GPU-less boxes), and the flavor image round-trips the plan verbatim.
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
 under `DASLLAMA_PARITY_FULL=1`) is the KERNEL COVERAGE census
-(REVIEW: "A GPU kernel whose MSL entry symbol the census in test_kernel_coverage.das has not seen before ships with a small model in that file's coverage suite"): the small-model zoo swept across format/graph/batch/KV axes, then a
+(REVIEW: "A diff that adds a [metal_kernel] under ../dasllama/ either has that kernel dispatched by a census row in test_kernel_coverage.das ... or names its kernel class in that file's CENSUS_NEVER_DISPATCHED"): the small-model zoo swept across format/graph/batch/KV axes, then a
 report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
 kernels - never an auto-dead verdict. A zero means "nothing THIS zoo runs dispatched it",
 never "unreachable": the deletion gate is a reachability AUDIT of the kernel's dispatch
@@ -130,6 +117,22 @@ small-model run joins it. Small-tier warnings for kernels whose carriers sit abo
 (MoE/mx4/suppress) are expected - their census rows serve only under `DASLLAMA_PARITY_FULL=1`;
 the served-count floor is asserted only on family-unfiltered runs. The vulkan half here is
 the device-free rail unit; the serving vulkan census runs on the PC box.
+
+## Metal kernel gates
+
+The `kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels - 
+model-less per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has
+no arms; remember it exists (the hand-bound-gate sync obligation is `REVIEW.md`'s). Shared
+fixtures (buf helpers, eyeball-dump compares, kq plane + q8 blob
+builders) live in `_metal_kernel_common.das`; `test_metal_prefill_kernels.das` keeps its tag-less
+mismatch compares local - a same-arity twin would collide with the shared tagged one.
+`_mtl_toy.das` is the `[metal_dispatch]` multi-kernel (kernel=) fixture - its gate in
+the misc file dispatches through the GENERATED builders (kn_ rail), not hand binds.
+The control obligation for a new gate or bar is `REVIEW.md`'s (a control the bar reds, same
+change); the sizing mechanics: an additive poison beats rel*env at the longest dot, and
+every derived-truth compare gets its own poison. A kernel with `@workgroup` state needs
+`metal_set_threadgroup_memory_length` in the gate exactly as in its production encoder - 
+missing tgmem reads garbage silently.
 
 ## Model-free / no-arm tests
 
@@ -341,7 +344,7 @@ encodes delta (GPU-served), then a knob-off chat repeats the turn on the CPU emb
 must clear the same caption bar - the caption names the cats and is a description, not a
 fragment - with zero tower dispatches and the knob decline counted.
 
-## Model loads - never the image rail (REVIEW: "loads each carrier through its own loader, never the `.dlim` image rail")
+## Model loads - never the image rail (REVIEW: "A test whose subject is not the `.dlim` image rail loads each carrier through its own loader")
 
 Suites load decoders with `load_model_` (the direct gguf load) and towers, embedders, and
 union carriers through their family or carrier loaders - never `load_model` /
