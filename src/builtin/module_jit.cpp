@@ -11,7 +11,7 @@
 
 #include "daScript/ast/ast.h"                     // astTypeInfo
 #include "daScript/ast/ast_handle.h"              // addConstant
-#include "daScript/ast/ast_interop.h"             // addExtern
+#include "daScript/ast/ast_interop.h"             // addExternInline
 
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/aot_builtin_jit.h"
@@ -1517,166 +1517,166 @@ extern "C" {
             lib.addBuiltInModule();
             addBuiltinDependency(lib, Module::require("rtti_core"));
             addBuiltinDependency(lib, Module::require("ast_core"));
-            addExtern<DAS_BIND_FUN(das_invoke_code)>(*this, lib, "invoke_code",
+            addExternInline<DAS_BIND_FUN(das_invoke_code)>(*this, lib, "invoke_code",
                 SideEffects::worstDefault, "das_invoke_code")
                     ->args({"code","arguments","cmres","context"})->unsafeOperation = true;
-            addExtern<DAS_BIND_FUN(das_instrument_jit)>(*this, lib, "instrument_jit",
+            addExternInline<DAS_BIND_FUN(das_instrument_jit)>(*this, lib, "instrument_jit",
                 SideEffects::worstDefault, "das_instrument_jit")
                     ->args({"code","function","at", "context"})->unsafeOperation = true;
-            addExtern<DAS_BIND_FUN(das_remove_jit)>(*this, lib, "remove_jit",
+            addExternInline<DAS_BIND_FUN(das_remove_jit)>(*this, lib, "remove_jit",
                 SideEffects::worstDefault, "das_remove_jit")
                     ->args({"function"})->unsafeOperation = true;
-            addExtern<DAS_BIND_FUN(das_has_jit_fastpath)>(*this, lib, "has_jit_fastpath",
+            addExternInline<DAS_BIND_FUN(das_has_jit_fastpath)>(*this, lib, "has_jit_fastpath",
                 SideEffects::none, "das_has_jit_fastpath")
                     ->args({"function"});
-            addExtern<DAS_BIND_FUN(das_instrument_line_info)>(*this, lib, "instrument_line_info",
+            addExternInline<DAS_BIND_FUN(das_instrument_line_info)>(*this, lib, "instrument_line_info",
                 SideEffects::worstDefault, "das_instrument_line_info")
                     ->args({"info","context","at"});
-            addExtern<DAS_BIND_FUN(das_get_jit_exception)>(*this, lib, "get_jit_exception",
+            addExternInline<DAS_BIND_FUN(das_get_jit_exception)>(*this, lib, "get_jit_exception",
                 SideEffects::none, "das_get_jit_exception");
-            addExtern<DAS_BIND_FUN(das_get_jit_call_or_fastcall)>(*this, lib, "get_jit_call_or_fastcall",
+            addExternInline<DAS_BIND_FUN(das_get_jit_call_or_fastcall)>(*this, lib, "get_jit_call_or_fastcall",
                 SideEffects::none, "das_get_jit_call_or_fastcall");
-            addExtern<DAS_BIND_FUN(das_get_jit_call_with_cmres)>(*this, lib, "get_jit_call_with_cmres",
+            addExternInline<DAS_BIND_FUN(das_get_jit_call_with_cmres)>(*this, lib, "get_jit_call_with_cmres",
                 SideEffects::none, "das_get_jit_call_with_cmres");
-            addExtern<DAS_BIND_FUN(das_get_jit_invoke_block)>(*this, lib, "get_jit_invoke_block",
+            addExternInline<DAS_BIND_FUN(das_get_jit_invoke_block)>(*this, lib, "get_jit_invoke_block",
                 SideEffects::none, "das_get_jit_invoke_block");
-            addExtern<DAS_BIND_FUN(das_get_jit_invoke_block_with_cmres)>(*this, lib, "get_jit_invoke_block_with_cmres",
+            addExternInline<DAS_BIND_FUN(das_get_jit_invoke_block_with_cmres)>(*this, lib, "get_jit_invoke_block_with_cmres",
                 SideEffects::none, "das_get_jit_invoke_block_with_cmres");
-            addExtern<DAS_BIND_FUN(das_get_jit_string_builder)>(*this, lib, "get_jit_string_builder",
+            addExternInline<DAS_BIND_FUN(das_get_jit_string_builder)>(*this, lib, "get_jit_string_builder",
                 SideEffects::none, "das_get_jit_string_builder");
-            addExtern<DAS_BIND_FUN(das_get_jit_string_builder_temp)>(*this, lib, "get_jit_string_builder_temp",
+            addExternInline<DAS_BIND_FUN(das_get_jit_string_builder_temp)>(*this, lib, "get_jit_string_builder_temp",
                 SideEffects::none, "das_get_jit_string_builder_temp");
-            addExtern<DAS_BIND_FUN(das_get_jit_simnode_interop)>(*this, lib, "get_jit_simnode_interop",
+            addExternInline<DAS_BIND_FUN(das_get_jit_simnode_interop)>(*this, lib, "get_jit_simnode_interop",
                 SideEffects::none, "das_get_jit_simnode_interop");
-            addExtern<DAS_BIND_FUN(das_get_jit_free_simnode_interop)>(*this, lib, "get_jit_free_simnode_interop",
+            addExternInline<DAS_BIND_FUN(das_get_jit_free_simnode_interop)>(*this, lib, "get_jit_free_simnode_interop",
                 SideEffects::none, "das_get_jit_free_simnode_interop");
-            addExtern<DAS_BIND_FUN(das_get_jit_init_extern_function)>(*this, lib, "get_jit_init_extern_function",
+            addExternInline<DAS_BIND_FUN(das_get_jit_init_extern_function)>(*this, lib, "get_jit_init_extern_function",
                 SideEffects::none, "get_jit_init_extern_function");
-            addExtern<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
+            addExternInline<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
                 SideEffects::none, "das_get_jit_get_global_mnh");
-            addExtern<DAS_BIND_FUN(das_get_jit_get_shared_mnh)>(*this, lib, "get_jit_get_shared_mnh",
+            addExternInline<DAS_BIND_FUN(das_get_jit_get_shared_mnh)>(*this, lib, "get_jit_get_shared_mnh",
                 SideEffects::none, "das_get_jit_get_shared_mnh");
-            addExtern<DAS_BIND_FUN(das_get_jit_get_handled_field_offset)>(*this, lib, "get_jit_get_handled_field_offset",
+            addExternInline<DAS_BIND_FUN(das_get_jit_get_handled_field_offset)>(*this, lib, "get_jit_get_handled_field_offset",
                 SideEffects::none, "das_get_jit_get_handled_field_offset");
-            addExtern<DAS_BIND_FUN(das_get_jit_check_handled_type_size)>(*this, lib, "get_jit_check_handled_type_size",
+            addExternInline<DAS_BIND_FUN(das_get_jit_check_handled_type_size)>(*this, lib, "get_jit_check_handled_type_size",
                 SideEffects::none, "das_get_jit_check_handled_type_size");
-            addExtern<DAS_BIND_FUN(das_get_jit_check_handled_field_offset)>(*this, lib, "get_jit_check_handled_field_offset",
+            addExternInline<DAS_BIND_FUN(das_get_jit_check_handled_field_offset)>(*this, lib, "get_jit_check_handled_field_offset",
                 SideEffects::none, "das_get_jit_check_handled_field_offset");
-            addExtern<DAS_BIND_FUN(das_get_jit_handled_abi_check_report)>(*this, lib, "get_jit_handled_abi_check_report",
+            addExternInline<DAS_BIND_FUN(das_get_jit_handled_abi_check_report)>(*this, lib, "get_jit_handled_abi_check_report",
                 SideEffects::none, "das_get_jit_handled_abi_check_report");
-            addExtern<DAS_BIND_FUN(das_get_jit_alloc_heap)>(*this, lib, "get_jit_alloc_heap",
+            addExternInline<DAS_BIND_FUN(das_get_jit_alloc_heap)>(*this, lib, "get_jit_alloc_heap",
                 SideEffects::none, "das_get_jit_alloc_heap");
-            addExtern<DAS_BIND_FUN(das_get_jit_alloc_persistent)>(*this, lib, "get_jit_alloc_persistent",
+            addExternInline<DAS_BIND_FUN(das_get_jit_alloc_persistent)>(*this, lib, "get_jit_alloc_persistent",
                 SideEffects::none, "das_get_jit_alloc_persistent");
-            addExtern<DAS_BIND_FUN(das_get_jit_free_heap)>(*this, lib, "get_jit_free_heap",
+            addExternInline<DAS_BIND_FUN(das_get_jit_free_heap)>(*this, lib, "get_jit_free_heap",
                 SideEffects::none, "das_get_jit_free_heap");
-            addExtern<DAS_BIND_FUN(das_get_jit_free_persistent)>(*this, lib, "get_jit_free_persistent",
+            addExternInline<DAS_BIND_FUN(das_get_jit_free_persistent)>(*this, lib, "get_jit_free_persistent",
                 SideEffects::none, "das_get_jit_free_persistent");
-            addExtern<DAS_BIND_FUN(das_get_jit_array_lock)>(*this, lib, "get_jit_array_lock",
+            addExternInline<DAS_BIND_FUN(das_get_jit_array_lock)>(*this, lib, "get_jit_array_lock",
                 SideEffects::none, "das_get_jit_array_lock");
-            addExtern<DAS_BIND_FUN(das_get_jit_array_unlock)>(*this, lib, "get_jit_array_unlock",
+            addExternInline<DAS_BIND_FUN(das_get_jit_array_unlock)>(*this, lib, "get_jit_array_unlock",
                 SideEffects::none, "das_get_jit_array_unlock");
-            addExtern<DAS_BIND_FUN(das_get_jit_table_lock)>(*this, lib, "get_jit_table_lock",
+            addExternInline<DAS_BIND_FUN(das_get_jit_table_lock)>(*this, lib, "get_jit_table_lock",
                 SideEffects::none, "das_get_jit_table_lock");
-            addExtern<DAS_BIND_FUN(das_get_jit_table_unlock)>(*this, lib, "get_jit_table_unlock",
+            addExternInline<DAS_BIND_FUN(das_get_jit_table_unlock)>(*this, lib, "get_jit_table_unlock",
                 SideEffects::none, "das_get_jit_table_unlock");
-            addExtern<DAS_BIND_FUN(das_get_jit_array_resize)>(*this, lib, "get_jit_array_resize",
+            addExternInline<DAS_BIND_FUN(das_get_jit_array_resize)>(*this, lib, "get_jit_array_resize",
                 SideEffects::none, "das_get_jit_array_resize");
-            addExtern<DAS_BIND_FUN(das_get_jit_table_at)>(*this, lib, "get_jit_table_at",
+            addExternInline<DAS_BIND_FUN(das_get_jit_table_at)>(*this, lib, "get_jit_table_at",
                 SideEffects::none, "das_get_jit_table_at");
-            addExtern<DAS_BIND_FUN(das_get_jit_table_erase)>(*this, lib, "get_jit_table_erase",
+            addExternInline<DAS_BIND_FUN(das_get_jit_table_erase)>(*this, lib, "get_jit_table_erase",
                 SideEffects::none, "das_get_jit_table_erase");
-            addExtern<DAS_BIND_FUN(das_get_jit_table_find)>(*this, lib, "get_jit_table_find",
+            addExternInline<DAS_BIND_FUN(das_get_jit_table_find)>(*this, lib, "get_jit_table_find",
                 SideEffects::none, "das_get_jit_table_find");
-            addExtern<DAS_BIND_FUN(das_get_jit_string_table_at_with_hash)>(*this, lib, "get_jit_string_table_at_with_hash",
+            addExternInline<DAS_BIND_FUN(das_get_jit_string_table_at_with_hash)>(*this, lib, "get_jit_string_table_at_with_hash",
                 SideEffects::none, "das_get_jit_string_table_at_with_hash");
-            addExtern<DAS_BIND_FUN(das_get_jit_string_table_at_after_packed_miss)>(*this, lib, "get_jit_string_table_at_after_packed_miss",
+            addExternInline<DAS_BIND_FUN(das_get_jit_string_table_at_after_packed_miss)>(*this, lib, "get_jit_string_table_at_after_packed_miss",
                 SideEffects::none, "das_get_jit_string_table_at_after_packed_miss");
-            addExtern<DAS_BIND_FUN(das_get_global_variable_offset)>(*this, lib, "get_global_variable_offset",
+            addExternInline<DAS_BIND_FUN(das_get_global_variable_offset)>(*this, lib, "get_global_variable_offset",
                 SideEffects::none, "das_get_global_variable_offset");
-            addExtern<DAS_BIND_FUN(das_get_global_variable_mnh)>(*this, lib, "get_global_variable_mnh",
+            addExternInline<DAS_BIND_FUN(das_get_global_variable_mnh)>(*this, lib, "get_global_variable_mnh",
                 SideEffects::none, "das_get_global_variable_mnh");
-            addExtern<DAS_BIND_FUN(das_get_global_variable_debug_info)>(*this, lib, "get_global_variable_debug_info",
+            addExternInline<DAS_BIND_FUN(das_get_global_variable_debug_info)>(*this, lib, "get_global_variable_debug_info",
                 SideEffects::none, "das_get_global_variable_debug_info");
-            addExtern<DAS_BIND_FUN(das_get_global_variable_shared)>(*this, lib, "get_global_variable_shared",
+            addExternInline<DAS_BIND_FUN(das_get_global_variable_shared)>(*this, lib, "get_global_variable_shared",
                 SideEffects::none, "das_get_global_variable_shared");
-            addExtern<DAS_BIND_FUN(das_get_context_globals_size)>(*this, lib, "get_context_globals_size",
+            addExternInline<DAS_BIND_FUN(das_get_context_globals_size)>(*this, lib, "get_context_globals_size",
                 SideEffects::none, "das_get_context_globals_size");
-            addExtern<DAS_BIND_FUN(das_get_context_shared_size)>(*this, lib, "get_context_shared_size",
+            addExternInline<DAS_BIND_FUN(das_get_context_shared_size)>(*this, lib, "get_context_shared_size",
                 SideEffects::none, "das_get_context_shared_size");
-            addExtern<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
+            addExternInline<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
                 SideEffects::none, "das_get_jit_str_cmp");
-            addExtern<DAS_BIND_FUN(das_get_jit_str_cat)>(*this, lib, "get_jit_str_cat",
+            addExternInline<DAS_BIND_FUN(das_get_jit_str_cat)>(*this, lib, "get_jit_str_cat",
                 SideEffects::none, "das_get_jit_str_cat");
-            addExtern<DAS_BIND_FUN(das_get_jit_prologue)>(*this, lib, "get_jit_prologue",
+            addExternInline<DAS_BIND_FUN(das_get_jit_prologue)>(*this, lib, "get_jit_prologue",
                 SideEffects::none, "das_get_jit_prologue");
-            addExtern<DAS_BIND_FUN(das_get_jit_epilogue)>(*this, lib, "get_jit_epilogue",
+            addExternInline<DAS_BIND_FUN(das_get_jit_epilogue)>(*this, lib, "get_jit_epilogue",
                 SideEffects::none, "das_get_jit_epilogue");
-            addExtern<DAS_BIND_FUN(das_get_jit_make_block)>(*this, lib, "get_jit_make_block",
+            addExternInline<DAS_BIND_FUN(das_get_jit_make_block)>(*this, lib, "get_jit_make_block",
                 SideEffects::none, "das_get_jit_make_block");
-            addExtern<DAS_BIND_FUN(das_get_jit_ad_by_sid)>(*this, lib, "get_jit_ad_by_sid",
+            addExternInline<DAS_BIND_FUN(das_get_jit_ad_by_sid)>(*this, lib, "get_jit_ad_by_sid",
                 SideEffects::none, "das_get_jit_ad_by_sid");
-            addExtern<DAS_BIND_FUN(das_get_jit_debug)>(*this, lib, "get_jit_debug",
+            addExternInline<DAS_BIND_FUN(das_get_jit_debug)>(*this, lib, "get_jit_debug",
                 SideEffects::none, "das_get_jit_debug");
-            addExtern<DAS_BIND_FUN(das_get_jit_iterator_iterate)>(*this, lib, "get_jit_iterator_iterate",
+            addExternInline<DAS_BIND_FUN(das_get_jit_iterator_iterate)>(*this, lib, "get_jit_iterator_iterate",
                 SideEffects::none, "das_get_jit_iterator_iterate");
-            addExtern<DAS_BIND_FUN(das_get_jit_iterator_delete)>(*this, lib, "get_jit_iterator_delete",
+            addExternInline<DAS_BIND_FUN(das_get_jit_iterator_delete)>(*this, lib, "get_jit_iterator_delete",
                 SideEffects::none, "das_get_jit_iterator_delete");
-            addExtern<DAS_BIND_FUN(das_get_jit_iterator_first)>(*this, lib, "get_jit_iterator_first",
+            addExternInline<DAS_BIND_FUN(das_get_jit_iterator_first)>(*this, lib, "get_jit_iterator_first",
                 SideEffects::none, "das_get_jit_iterator_first");
-            addExtern<DAS_BIND_FUN(das_get_jit_iterator_next)>(*this, lib, "get_jit_iterator_next",
+            addExternInline<DAS_BIND_FUN(das_get_jit_iterator_next)>(*this, lib, "get_jit_iterator_next",
                 SideEffects::none, "das_get_jit_iterator_next");
-            addExtern<DAS_BIND_FUN(das_get_jit_iterator_close)>(*this, lib, "get_jit_iterator_close",
+            addExternInline<DAS_BIND_FUN(das_get_jit_iterator_close)>(*this, lib, "get_jit_iterator_close",
                 SideEffects::none, "das_get_jit_iterator_close");
-            addExtern<DAS_BIND_FUN(das_get_jit_ast_typedecl)>(*this, lib, "get_jit_ast_typedecl",
+            addExternInline<DAS_BIND_FUN(das_get_jit_ast_typedecl)>(*this, lib, "get_jit_ast_typedecl",
                 SideEffects::none, "das_get_jit_ast_typedecl");
-            addExtern<DAS_BIND_FUN(das_get_jit_new)>(*this, lib,  "get_jit_new",
+            addExternInline<DAS_BIND_FUN(das_get_jit_new)>(*this, lib,  "get_jit_new",
                 SideEffects::none, "das_get_jit_new")->args({"ann"});
-            addExtern<DAS_BIND_FUN(das_get_jit_delete)>(*this, lib,  "get_jit_delete",
+            addExternInline<DAS_BIND_FUN(das_get_jit_delete)>(*this, lib,  "get_jit_delete",
                 SideEffects::none, "das_get_jit_delete")->args({"ann"});
-            addExtern<DAS_BIND_FUN(das_get_jit_clone)>(*this, lib, "get_jit_clone",
+            addExternInline<DAS_BIND_FUN(das_get_jit_clone)>(*this, lib, "get_jit_clone",
                 SideEffects::none, "das_get_jit_clone")->args({"ann"});
-            addExtern<DAS_BIND_FUN(das_get_jit_debug_enter)>(*this, lib,  "get_jit_debug_enter",
+            addExternInline<DAS_BIND_FUN(das_get_jit_debug_enter)>(*this, lib,  "get_jit_debug_enter",
                 SideEffects::none, "das_get_jit_debug_enter");
-            addExtern<DAS_BIND_FUN(das_get_jit_debug_exit)>(*this, lib,  "get_jit_debug_exit",
+            addExternInline<DAS_BIND_FUN(das_get_jit_debug_exit)>(*this, lib,  "get_jit_debug_exit",
                 SideEffects::none, "das_get_jit_debug_exit");
-            addExtern<DAS_BIND_FUN(das_get_jit_debug_line)>(*this, lib,  "get_jit_debug_line",
+            addExternInline<DAS_BIND_FUN(das_get_jit_debug_line)>(*this, lib,  "get_jit_debug_line",
                 SideEffects::none, "das_get_jit_debug_line");
-            addExtern<DAS_BIND_FUN(das_get_jit_initialize_fileinfo)>(*this, lib,  "get_jit_initialize_fileinfo",
+            addExternInline<DAS_BIND_FUN(das_get_jit_initialize_fileinfo)>(*this, lib,  "get_jit_initialize_fileinfo",
                 SideEffects::none, "das_get_jit_initialize_fileinfo");
-            addExtern<DAS_BIND_FUN(das_get_jit_free_fileinfo)>(*this, lib,  "get_jit_free_fileinfo",
+            addExternInline<DAS_BIND_FUN(das_get_jit_free_fileinfo)>(*this, lib,  "get_jit_free_fileinfo",
                 SideEffects::none, "das_get_jit_free_fileinfo");
-            addExtern<DAS_BIND_FUN(das_recreate_fileinfo_name)>(*this, lib,  "recreate_fileinfo_name",
+            addExternInline<DAS_BIND_FUN(das_recreate_fileinfo_name)>(*this, lib,  "recreate_fileinfo_name",
                 SideEffects::worstDefault, "das_recreate_fileinfo_name");
-            addExtern<DAS_BIND_FUN(loadDynamicLibrary)>(*this, lib,  "load_dynamic_library",
+            addExternInline<DAS_BIND_FUN(loadDynamicLibrary)>(*this, lib,  "load_dynamic_library",
                 SideEffects::worstDefault, "loadDynamicLibrary")
                     ->args({"filename"});
-            addExtern<DAS_BIND_FUN(getFunctionAddress)>(*this, lib,  "get_function_address",
+            addExternInline<DAS_BIND_FUN(getFunctionAddress)>(*this, lib,  "get_function_address",
                 SideEffects::worstDefault, "getFunctionAddress")
                     ->args({"library","name"});
-            addExtern<DAS_BIND_FUN(closeLibrary)>(*this, lib,  "close_dynamic_library",
+            addExternInline<DAS_BIND_FUN(closeLibrary)>(*this, lib,  "close_dynamic_library",
                 SideEffects::worstDefault, "closeLibrary")
                     ->args({"library"});
-            addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
+            addExternInline<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","dasLib","customLinker","extraLinkerArgs","isShared","linkWholeLib","debugInfo","context"});
-            addExtern<DAS_BIND_FUN(jit_par_emit_begin)>(*this, lib,  "jit_par_emit_begin",
+            addExternInline<DAS_BIND_FUN(jit_par_emit_begin)>(*this, lib,  "jit_par_emit_begin",
                 SideEffects::worstDefault, "jit_par_emit_begin");
-            addExtern<DAS_BIND_FUN(jit_par_emit_add)>(*this, lib,  "jit_par_emit_add",
+            addExternInline<DAS_BIND_FUN(jit_par_emit_add)>(*this, lib,  "jit_par_emit_add",
                 SideEffects::worstDefault, "jit_par_emit_add")
                     ->args({"mod","tm","pbo","pipeline","objPath"});
-            addExtern<DAS_BIND_FUN(jit_par_emit_run)>(*this, lib,  "jit_par_emit_run",
+            addExternInline<DAS_BIND_FUN(jit_par_emit_run)>(*this, lib,  "jit_par_emit_run",
                 SideEffects::worstDefault, "jit_par_emit_run")
                     ->args({"threads","fileType","fnRunPasses","fnVerifyModule","fnEmitToFile","fnGetErrorMessage","fnDisposeErrorMessage","fnDisposeMessage","logTimes","context"});
-            addExtern<DAS_BIND_FUN(host_jit_triple)>(*this, lib, "host_jit_triple",
+            addExternInline<DAS_BIND_FUN(host_jit_triple)>(*this, lib, "host_jit_triple",
                 SideEffects::none, "host_jit_triple");
-            addExtern<DAS_BIND_FUN(link_wasm)>(*this, lib,  "link_wasm",
+            addExternInline<DAS_BIND_FUN(link_wasm)>(*this, lib,  "link_wasm",
                 SideEffects::worstDefault, "link_wasm")
                     ->args({"objFilePath","wasmPath","runtimeLibPath","customEmcc","memory64","context"});
-            addExtern<DAS_BIND_FUN(jit_set_jit_state)>(*this, lib,  "set_jit_state",
+            addExternInline<DAS_BIND_FUN(jit_set_jit_state)>(*this, lib,  "set_jit_state",
                 SideEffects::worstDefault, "jit_set_jit_state")
                     ->args({"context","shared_lib","llvm_ee","llvm_ctx"});
-            addExtern<DAS_BIND_FUN(jit_get_jit_state)>(*this, lib,  "get_jit_state",
+            addExternInline<DAS_BIND_FUN(jit_get_jit_state)>(*this, lib,  "get_jit_state",
                 SideEffects::worstDefault, "jit_get_jit_state")
                     ->args({"block","context","at"});
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));

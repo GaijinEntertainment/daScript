@@ -35,8 +35,8 @@ correctness required it, and the alternative that was rejected.
   call in place of a direct, potentially inlined one - measured at 3-4.5% on loops that
   are nothing but extern calls, noise on real programs (dasProfile lane medians >=1.00).
   Binds that need the old profile opt into the NTTP flavor (`addExternInline` ->
-  `SimNode_ExtFuncCallInline`; builtin/math/strings bind that way by policy -
-  `src/builtin/REVIEW.md`). The cmres and ref flavors have no NTTP twin yet, so those
+  `SimNode_ExtFuncCallInline`; the modules `src/builtin/REVIEW.md` names bind that
+  way by policy). The cmres and ref flavors have no NTTP twin yet, so those
   binds pay the indirect call unconditionally. Cross-slot and lattice typed reads route
   through the base as `cast<Carrier>::to(this->eval(ctx))` - a second virtual dispatch
   plus a vec4f round-trip on paths that are rare by construction (the compiler emits the
