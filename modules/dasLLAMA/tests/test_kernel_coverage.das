@@ -45,11 +45,16 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites si
 // against the report's NEVER DISPATCHED warnings — a name here that the report shows dispatched
 // is stale, and a warning with no entry here is a coverage gap to close with a row.
 let private CENSUS_NEVER_DISPATCHED <- [
-    // the MoE expert mul_mm tall M-tile pairs (128-row floor + remainder) for q5_K and q6_K
-    // experts: the zoo's MoE carriers are Q4_K_M, mxfp4 and Q8_0, and no q5_K/q6_K MoE file
-    // is stocked, so the k4/mx4/q8 pairs cover the form and these two formats never engage
+    // the MoE expert mul_mm tall M-tile pairs (128-row floor + remainder), ALL formats: the
+    // tall stamps engage at npos * n_expert_used >= 128 * n_expert, and the stocked MoE
+    // carriers (128/8, 60/4, 32/4 experts) put that floor at 1024-2048 rows - past the
+    // ~590-token census prompt under the 1024-row session cap. Their coverage is the
+    // tall-pair kernel-unit gate in test_metal_gemm_kernels.das
+    "MetalMoeMulMmK4TH128", "MetalMoeMulMmK4THR",
     "MetalMoeMulMmK5TH128", "MetalMoeMulMmK5THR",
-    "MetalMoeMulMmK6TH128", "MetalMoeMulMmK6THR"
+    "MetalMoeMulMmK6TH128", "MetalMoeMulMmK6THR",
+    "MetalMoeMulMmQ8TH128", "MetalMoeMulMmQ8THR",
+    "MetalMoeMulMmMx4TH128", "MetalMoeMulMmMx4THR"
 ]
 
 def private counting_prompt(start, last : int) : string {
@@ -371,10 +376,19 @@ def test_metal_kernel_coverage(tst : T?) {
             // the census verdict: the report prints counts + LOUD WARNINGS for the zeros;
             // the assert pins only that the RAIL counts — coverage gaps are human calls
             metal_kernel_coverage_report()
-            for (blind in CENSUS_NEVER_DISPATCHED) {
-                to_log(LOG_INFO, "metal kernel coverage: {blind} is a DECLARED blind spot - no stocked carrier reaches it\n")
-            }
             var cov <- metal_kernel_coverage()
+            // the blind-spot list self-drains: census keys are class-qualified MSL entry
+            // names, so a declared class whose entry counted dispatches is a STALE entry
+            for (blind in CENSUS_NEVER_DISPATCHED) {
+                var hits = 0l
+                for (k, n in keys(cov), values(cov)) {
+                    if (starts_with(k, blind)) {
+                        hits += n
+                    }
+                }
+                t |> success(hits == 0l,
+                    "{blind} is a DECLARED blind spot - a stocked carrier now dispatches it ({hits}): drop the entry, add its census row")
+            }
             var served = 0
             for (n in values(cov)) {
                 if (n > 0l) {

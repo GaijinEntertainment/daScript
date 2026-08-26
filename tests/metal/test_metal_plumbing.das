@@ -148,19 +148,14 @@ def test_residency_heartbeat(t : T?) {
     }
 }
 
-// the pool_release null guard panics in a CHILD (dastest has no panic assert): the fixture
-// exits 0 with NO-DEVICE where Metal is absent, so the cell feints instead of failing there
+// the pool_release null guard panics in a CHILD (dastest has no panic assert): the guard is
+// pure daslang - no device probe, so the fixture asserts on every Apple build
 def private pool_null_fixture() : string {
     return build_string() $(var w) {
         w |> write("options gen2\n")
         w |> write("require metal/das_metal_boost\n")
         w |> write("[export]\n")
         w |> write("def main \{\n")
-        w |> write("    var dev = metal_create_system_default_device()\n")
-        w |> write("    if (dev == null) \{\n")
-        w |> write("        print(\"NO-DEVICE\\n\")\n")
-        w |> write("        return\n")
-        w |> write("    \}\n")
         w |> write("    var pool : MetalBufferPool\n")
         w |> write("    var nb : MetalBuffer?\n")
         w |> write("    pool_release(pool, nb, 16ul)\n")
@@ -172,25 +167,25 @@ def private pool_null_fixture() : string {
 [test]
 def test_pool_release_null_guard(t : T?) {
     t |> run("pool_release refuses a null buffer (a null in a free list surfaces later as an unrelated bind)") @(t : T?) {
-        let dir_r = create_temp_directory_result("metal_pool_null")
-        if (!(dir_r is value)) {
-            t |> success(false, "temp dir failed")
-            return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let dir_r = create_temp_directory_result("metal_pool_null")
+            if (!(dir_r is value)) {
+                t |> success(false, "temp dir failed")
+                return
+            }
+            let dir = unsafe(dir_r.value)
+            let path = path_join(dir, "prog.das")
+            t |> success(fwrite(path, pool_null_fixture()), "fixture written")
+            let argv <- get_command_line_arguments()
+            let self = find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
+            var out : string
+            let rc = run_and_capture([self, path], out, 120.0)
+            rmdir_rec_result(dir)
+            t |> success(rc != 0, "the null release must panic the child (rc={rc})")
+            t |> success(find(out, "pool_release") >= 0, "the panic names the guard: {slice(out, 0, 300)}")
+            t |> success(find(out, "UNREACHED") < 0, "the child never survives the release")
+        } else {
+            feint("das_metal is not built on this platform; nothing to check\n")
         }
-        let dir = unsafe(dir_r.value)
-        let path = path_join(dir, "prog.das")
-        t |> success(fwrite(path, pool_null_fixture()), "fixture written")
-        let argv <- get_command_line_arguments()
-        let self = find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
-        var out : string
-        let rc = run_and_capture([self, path], out, 120.0)
-        rmdir_rec_result(dir)
-        if (find(out, "NO-DEVICE") >= 0) {
-            feint("no Metal device on this box; the null-guard child skipped\n")
-            return
-        }
-        t |> success(rc != 0, "the null release must panic the child (rc={rc})")
-        t |> success(find(out, "pool_release") >= 0, "the panic names the guard: {slice(out, 0, 300)}")
-        t |> success(find(out, "UNREACHED") < 0, "the child never survives the release")
     }
 }

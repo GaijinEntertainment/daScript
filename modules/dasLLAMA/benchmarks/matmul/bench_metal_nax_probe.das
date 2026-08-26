@@ -576,6 +576,10 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                 kn_buffer(enc, bn, 0ul, 5)
                 kn_dispatch(enc, uint3(uint(m / 64), uint(ndim / 256), 1u), uint3(128u, 1u, 1u))
             })
+            // verdict read HERE, before the later arms overwrite by_a/by_b
+            var note = ""
+            let ok = race_envelope_ok(by_a, by_b, m * ndim, note)
+            let verdict = ok ? "outputs-agree" : note
             var t_q8u2 = -1.0lf
             var t_i8 = -1.0lf
             race_pair_ms(queue, 5, t_q8u2, t_i8, $(enc) {
@@ -683,9 +687,6 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             metal_release(bnb)
             metal_release(bxh)
             delete xh
-            var note = ""
-            let ok = race_envelope_ok(by_a, by_b, m * ndim, note)
-            let verdict = ok ? "outputs-agree" : note
             print("K={kdim} N={ndim}: q8u={t_q8u}ms nax={t_nax}ms ratio={t_nax / t_q8u} {verdict}\n")
             // spot CPU truth on a corner slab (full oracle is O(m*k*n) — 64 rows suffice)
             if (kdim == 2048 && ndim == 2048) {

@@ -157,7 +157,11 @@ def public pool_acquire(var pool : MetalBufferPool; dev : MetalDevice?; bytes : 
         lst |> pop()
         return buf
     }
-    return metal_new_buffer(dev, bucket)
+    var nb = metal_new_buffer(dev, bucket)
+    if (nb == null) {
+        panic("pool_acquire: buffer allocation failed ({bucket} bytes) - the failure names itself here, not at a later bind")
+    }
+    return nb
 }
 
 //! The UNTRACKED-pool twin, for GPU-read-only pool data the CPU fills before commit (uniforms,
@@ -171,7 +175,11 @@ def public pool_acquire_untracked(var pool : MetalBufferPool; dev : MetalDevice?
         lst |> pop()
         return buf
     }
-    return metal_new_buffer_untracked(dev, bucket)
+    var nb = metal_new_buffer_untracked(dev, bucket)
+    if (nb == null) {
+        panic("pool_acquire_untracked: buffer allocation failed ({bucket} bytes) - the failure names itself here, not at a later bind")
+    }
+    return nb
 }
 
 def public pool_release(var pool : MetalBufferPool; var buf : MetalBuffer?; bytes : uint64) {

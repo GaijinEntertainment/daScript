@@ -1162,7 +1162,10 @@ def private moe_mulmm_kq_gate(t : T?; dev, queue; fmt : int; kdim, ndim : int; c
                 : (fmt == 5
                     ? pipeline_from_source(dev, MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl_fastmath, terr)
                     : pipeline_from_source(dev, MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl, MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl_entry, MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl_fastmath, terr)))
-            if (tw_pso != null && tl_pso != null && rm_pso != null) {
+            // the toolchain is proven (tw_pso compiled), so a tall-pair PSO that fails to
+            // compile is a RED, never a silent skip - this gate is the pair's only coverage
+            t |> success(tl_pso != null && rm_pso != null, "{tag} tall pair: pipeline: {terr}")
+            if (tl_pso != null && rm_pso != null) {
                 var maxce = 0
                 for (c in fx.cnt) {
                     maxce = max(maxce, int(c))
