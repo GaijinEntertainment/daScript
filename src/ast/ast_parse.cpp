@@ -1084,8 +1084,9 @@ namespace das {
                 *totInfer += inferLegT;
             }
             if ( !program->failed() ) {
-                // buildAccessFlags is the FIRST pass to read the finished tree, and it
-                // dereferences expr->type unguarded - so the verifier has to precede it
+                // the only post-infer firing: inference just finished, and buildAccessFlags -
+                // the first pass to read the tree - dereferences expr->type unguarded.
+                // What later passes and user macros rewrite belongs to a [simulate_macro]
                 applyPostInferMacros(program.get());
                 program->buildAccessFlags(logs);    // this is used by the lint pass
                 if ( program->patchAnnotations() ) {
@@ -1149,9 +1150,6 @@ namespace das {
             }
             if ( !program->failed() ) {
                 program->normalizeOptionTypes();
-                // lint / folding / codegen are the first consumers of the finished tree, and
-                // they dereference expr->type unguarded - so this is where a verifier can see it
-                applyPostInferMacros(program.get());
                 if (!program->failed())
                     program->lint(logs, libGroup);
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
@@ -1163,7 +1161,6 @@ namespace das {
                         callCompilationCallback(moduleName, fileName, "optimize");
                         optimizeProgram(program.get(),logs,libGroup);
                     } else {
-                        applyPostInferMacros(program.get());
                         program->buildAccessFlags(logs);
                     }
                 }
