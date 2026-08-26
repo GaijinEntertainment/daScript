@@ -148,7 +148,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
         // the patch GEMM: per-plane format (gemma-4's shipped mmproj is MIXED)
         if (t.patch_bf16) {
             var bwblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped)
-            pf_enc_bf16_mm(enc, bwblob, uint64(t.patch_w * 2l), bx0, bx1, u_pdim, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(t.patch_w * 2l), bx0, bx1, u_pdim, u_d, mp, d, kdim = t.patch_dim)
         } else {
             enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, bx1, 0ul, u_pdim, u_d, mp, d)
         }
@@ -159,7 +159,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
         pf_enc_rms(enc, bx1, 0ul, g_tw_ones, bx1, u_d, u_rms_eps, npos)
         if (t.proj_bf16) {
             var bwblob2 = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped)
-            pf_enc_bf16_mm(enc, bwblob2, uint64(t.proj_w * 2l), bx1, bout, u_d, u_nproj, mp, t.proj_dim)
+            pf_enc_bf16_mm(enc, bwblob2, uint64(t.proj_w * 2l), bx1, bout, u_d, u_nproj, mp, t.proj_dim, kdim = d)
         } else {
             enc_f32_mm(enc, bblob, uint64(t.proj_w * 4l), bx1, bout, 0ul, u_d, u_nproj, mp, t.proj_dim)
         }
@@ -407,13 +407,13 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
             // each of q/k/v clamps its own copy of the normed input into bxb2 (the bounds differ per GEMM)
             pf_enc_rms(enc, bx, 0ul, bw_ln1, bxb, u_d, u_eps, npos)
             enc_clamp(enc, bxb, 0ul, bxb2, 0ul, bblob, cb_q, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_Q] * 2l), bxb2, bq, u_d, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_Q] * 2l), bxb2, bq, u_d, u_d, mp, d, kdim = d)
             enc_clamp(enc, bq, 0ul, bq, 0ul, bblob, cb_q, u_out, u_totd, npos * d)
             enc_clamp(enc, bxb, 0ul, bxb2, 0ul, bblob, cb_k, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_K] * 2l), bxb2, bk, u_d, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_K] * 2l), bxb2, bk, u_d, u_d, mp, d, kdim = d)
             enc_clamp(enc, bk, 0ul, bk, 0ul, bblob, cb_k, u_out, u_totd, npos * d)
             enc_clamp(enc, bxb, 0ul, bxb2, 0ul, bblob, cb_v, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_V] * 2l), bxb2, bv, u_d, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_V] * 2l), bxb2, bv, u_d, u_d, mp, d, kdim = d)
             enc_clamp(enc, bv, 0ul, bv, 0ul, bblob, cb_v, u_out, u_totd, npos * d)
             pf_enc_rms(enc, bq, 0ul, bw_qn, bq, u_hs, u_eps, npos * t.n_head)
             pf_enc_rms(enc, bk, 0ul, bw_kn, bk, u_hs, u_eps, npos * t.n_head)
@@ -425,21 +425,21 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
             enc_av_mm(enc, batt, bv, bxb2, ka, bstat, mp, t.n_head, hs)
             // o-proj (clamped both sides) → post-norm in place → residual
             enc_clamp(enc, bxb2, 0ul, bxb2, 0ul, bblob, cb_o, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_O] * 2l), bxb2, bxb, u_d, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_O] * 2l), bxb2, bxb, u_d, u_d, mp, d, kdim = d)
             enc_clamp(enc, bxb, 0ul, bxb, 0ul, bblob, cb_o, u_out, u_totd, npos * d)
             pf_enc_rms(enc, bxb, 0ul, bw_ap, bxb, u_d, u_eps, npos)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
             // ffn: rms → gate / up (each its own input clamp) → GEGLU-quick → down → post-norm → residual
             pf_enc_rms(enc, bx, 0ul, bw_ln2, bxb, u_d, u_eps, npos)
             enc_clamp(enc, bxb, 0ul, bxb2, 0ul, bblob, cb_gate, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_GATE] * 2l), bxb2, bhg, u_d, u_ff, mp, ff)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_GATE] * 2l), bxb2, bhg, u_d, u_ff, mp, ff, kdim = d)
             enc_clamp(enc, bhg, 0ul, bhg, 0ul, bblob, cb_gate, u_out, u_totff, npos * ff)
             enc_clamp(enc, bxb, 0ul, bxb2, 0ul, bblob, cb_up, u_in, u_totd, npos * d)
-            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_UP] * 2l), bxb2, bhu, u_d, u_ff, mp, ff)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_UP] * 2l), bxb2, bhu, u_d, u_ff, mp, ff, kdim = d)
             enc_clamp(enc, bhu, 0ul, bhu, 0ul, bblob, cb_up, u_out, u_totff, npos * ff)
             enc_geglu_quick(enc, bhg, 0ul, bhu, 0ul, u_totff, npos * ff)
             enc_clamp(enc, bhg, 0ul, bhg, 0ul, bblob, cb_down, u_in, u_totff, npos * ff)
-            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_DOWN] * 2l), bhg, bxb, u_ff, u_d, mp, d)
+            pf_enc_bf16_mm(enc, bwblob, uint64(o.w[GEMMA4V_GEMM_DOWN] * 2l), bhg, bxb, u_ff, u_d, mp, d, kdim = ff)
             enc_clamp(enc, bxb, 0ul, bxb, 0ul, bblob, cb_down, u_out, u_totd, npos * d)
             pf_enc_rms(enc, bxb, 0ul, bw_fp, bxb, u_d, u_eps, npos)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)

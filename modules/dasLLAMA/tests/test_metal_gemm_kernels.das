@@ -631,14 +631,18 @@ def private f32_mulmm_gate(t : T?; dev, queue; exact : bool; m, mp, kdim, ndim :
     delete env
 }
 
-def private bf16_mulmm_gate(t : T?; dev, queue; tensor : bool; m, kdim, ndim : int; halfx : bool = false) {
-    let tag = "bf16_mulmm{tensor ? "_t" : ""}{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim}"
+def private bf16_mulmm_gate(t : T?; dev, queue; tensor : bool; m, kdim, ndim : int; halfx : bool = false; mt : int = 32) {
+    let tag = "bf16_mulmm{tensor ? "_t" : ""}{halfx ? " halfx" : ""} mt{mt} m={m} k={kdim} n={ndim}"
     var err : string
-    var pso = (tensor
+    var pso = (mt == 128
         ? (halfx
-            ? pipeline_from_source(dev, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl_fastmath, err)
-            : pipeline_from_source(dev, MetalBf16MulMmT_metal_bf16_mulmm_t_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_fastmath, err))
-        : pipeline_from_source(dev, metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, err))
+            ? pipeline_from_source(dev, MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl, MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl_fastmath, err)
+            : pipeline_from_source(dev, MetalBf16MulMmT128_metal_bf16_mulmm_t_msl, MetalBf16MulMmT128_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT128_metal_bf16_mulmm_t_msl_fastmath, err))
+        : (tensor
+            ? (halfx
+                ? pipeline_from_source(dev, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl_fastmath, err)
+                : pipeline_from_source(dev, MetalBf16MulMmT_metal_bf16_mulmm_t_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_fastmath, err))
+            : pipeline_from_source(dev, metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, err)))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
         return
@@ -700,7 +704,7 @@ def private bf16_mulmm_gate(t : T?; dev, queue; tensor : bool; m, kdim, ndim : i
         metal_set_buffer(enc, by, 0ul, 3)
         metal_set_buffer(enc, bk, 0ul, 4)
         metal_set_buffer(enc, bn, 0ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
@@ -1619,6 +1623,8 @@ def test_metal_gemm_kernels(t : T?) {
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64, halfx = true)
+                bf16_mulmm_gate(t, dev, queue, true, 128, 256, 64, mt = 128)   // tall M-tile stamps
+                bf16_mulmm_gate(t, dev, queue, true, 256, 256, 64, halfx = true, mt = 128)
 
                 // ===== the dense f32 tower stamp =====
                 f32_mulmm_gate(t, dev, queue, true, 32, 32, 384, 384)      // whisper-tiny qkv/o, exact stage

@@ -326,25 +326,26 @@ class MetalHalfMulMmTH128 : MetalHalfMulMmTensorT {
     override MT = 128u
 }
 
-// Metal-4 tensor twin of MetalBf16MulMm: the SAME 32x64 tile per threadgroup off the same
-// binds, lowered to mpp matmul2d over tensor_inline views (tuner crown "mulmm_bf16", dispatch
-// shape identical). XT = the A stream codec, same contract as MetalQ8MulMmTensorT.
+// Metal-4 tensor twin of MetalBf16MulMm: the SAME tile shape off the same binds, lowered to
+// mpp matmul2d over tensor_inline views (tuner crown "mulmm_bf16"). XT = the A stream codec,
+// same contract as MetalQ8MulMmTensorT; MT = M-tile rows (all-device W streams M/MT times).
 [ |> template_struct_instance]
 class template MetalBf16MulMmTensorT {
+    @template_constant MT : uint = 32u
     @ssbo @binding = 0 @role = "weight" @off = "wboff" wbh : array<uint16> // bf16 W rows, halfword view
-    @ssbo @binding = 2 xf : array<XT>      // raw activations (float, or the converted f16 panel)
-    @ssbo @binding = 3 y : array<float>
+    @ssbo @binding = 2 @off = "xoff" xf : array<XT>  // raw activations (float, or the converted f16 panel)
+    @ssbo @binding = 3 @off = "yoff" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
 
     [metal_kernel]
     def metal_bf16_mulmm_t {
-        let mBase = gl_WorkGroupID.x * 32u
+        let mBase = gl_WorkGroupID.x * MT
         let nBase = gl_WorkGroupID.y * 64u
         var ap = unsafe(addr(xf[mBase * kdim]))
         var wp = unsafe(addr(wbh[nBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_f32_bf16_f32(32u, 64u, 4u, ap, kdim, wp, kdim, cp, ndim, kdim)
+        tmm2d_f32_bf16_f32(MT, 64u, 4u, ap, kdim, wp, kdim, cp, ndim, kdim)
     }
 }
 
@@ -356,6 +357,18 @@ class MetalBf16MulMmT : MetalBf16MulMmTensorT {
 [metal_dispatch(name = "pf_enc_bf16_mm_th_c", pso = "g_pf_pso_bf16_mm_th", tg = 128, grid = "mp/32, nd/64", params = "mp : int64, nd : int64")]
 class MetalBf16MulMmTH : MetalBf16MulMmTensorT {
     typedef XT = float16
+}
+
+[metal_dispatch(name = "pf_enc_bf16_mm_t128_c", pso = "g_pf_pso_bf16_mm_t128", tg = 128, grid = "mp/128, nd/64", params = "mp : int64, nd : int64")]
+class MetalBf16MulMmT128 : MetalBf16MulMmTensorT {
+    typedef XT = float
+    override MT = 128u
+}
+
+[metal_dispatch(name = "pf_enc_bf16_mm_th128_c", pso = "g_pf_pso_bf16_mm_th128", tg = 128, grid = "mp/128, nd/64", params = "mp : int64, nd : int64")]
+class MetalBf16MulMmTH128 : MetalBf16MulMmTensorT {
+    typedef XT = float16
+    override MT = 128u
 }
 
 // The E-series PLE pre-step's two device stages walk the SAME [n_layers x npos x ple] panel, so
@@ -2232,6 +2245,8 @@ var private g_pf_bwh_flip : bool
 var private g_pf_bwh_bytes : uint64
 var private g_pf_pso_bf16_mm : MetalComputePipeline?   // native-BF16 A twin (E-series model_proj)
 var private g_pf_pso_bf16_mm_th : MetalComputePipeline? // its half-X stamp (tensor-crowned only)
+var private g_pf_pso_bf16_mm_t128 : MetalComputePipeline?   // tall 128-row M-tile stamps
+var private g_pf_pso_bf16_mm_th128 : MetalComputePipeline?
 var private g_pf_bf16_mm_tensor : bool   // crowned tensor twin selected (no tgmem bind)
 var private g_pf_mm_tensor : bool        // ditto for the production q8 mul_mm
 var private g_pf_moe_mm_q8_tensor : bool // "moe_mulmm_q8" crowned (contiguous sites only)
@@ -2535,6 +2550,14 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     }
     if (g_pf_pso_bf16_mm_th != null) {
         metal_release(g_pf_pso_bf16_mm_th)
+    }
+    if (g_pf_pso_bf16_mm_t128 != null) {
+        metal_release(g_pf_pso_bf16_mm_t128)
+        g_pf_pso_bf16_mm_t128 = null
+    }
+    if (g_pf_pso_bf16_mm_th128 != null) {
+        metal_release(g_pf_pso_bf16_mm_th128)
+        g_pf_pso_bf16_mm_th128 = null
         g_pf_pso_bf16_mm_th = null
     }
     if (g_pf_pso_ple_gather != null) {
@@ -2647,6 +2670,8 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         : compile_pso(metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, ok))
     if (g_pf_bf16_mm_tensor) {
         g_pf_pso_bf16_mm_th = compile_pso(MetalBf16MulMmTH_metal_bf16_mulmm_t_msl, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl_fastmath, ok)
+        g_pf_pso_bf16_mm_t128 = compile_pso(MetalBf16MulMmT128_metal_bf16_mulmm_t_msl, MetalBf16MulMmT128_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT128_metal_bf16_mulmm_t_msl_fastmath, ok)
+        g_pf_pso_bf16_mm_th128 = compile_pso(MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl, MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl_fastmath, ok)
     }
     g_pf_pso_ple_gather = compile_pso(metal_ple_gather_q8_msl, metal_ple_gather_q8_msl_entry, metal_ple_gather_q8_msl_fastmath, ok)
     g_pf_pso_ple_finish = compile_pso(metal_ple_finish_msl, metal_ple_finish_msl_entry, metal_ple_finish_msl_fastmath, ok)
@@ -3064,16 +3089,35 @@ def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff
     }
 }
 
-// the E-series model_proj GEMM off the kept-bf16 blob — ONE PSO global holds whichever of the
-// base/tensor pair compiled (crown resolved at init), so the pick is the tgmem/binding layout.
-// bxh = the caller-minted f16 twin of bx (tower shapes pass none and keep f32 X).
+// the E-series model_proj GEMM off the kept-bf16 blob — the crown-resolved pick; kdim feeds
+// the tall/remainder split's X stride (kdim-less callers stay whole-dispatch 32-tile)
 def pf_enc_bf16_mm(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64;
-                   bx, by, bk, bn : MetalBuffer?; mp, nd : int64; bxh : MetalBuffer? = null) {
+                   bx, by, bk, bn : MetalBuffer?; mp, nd : int64; bxh : MetalBuffer? = null; kdim : int64 = 0l) {
     if (g_pf_bf16_mm_tensor) {
-        if (bxh != null && g_pf_pso_bf16_mm_th != null) {
-            pf_enc_bf16_mm_th_c(enc, bw, wboff, bxh, by, bk, bn, mp, nd)
+        let half_form = bxh != null && g_pf_pso_bf16_mm_th != null
+        var r0 = 0l
+        // same 128-threadgroup occupancy floor as the mul_mm/dev-W picks
+        if (g_pf_env_tall && mp >= 128l && (kdim > 0l || mp % 128l == 0l)
+                && mp / 128l * (nd / 64l) >= 128l) {
+            let tall = half_form ? g_pf_pso_bf16_mm_th128 : g_pf_pso_bf16_mm_t128
+            if (tall != null) {
+                r0 = mp / 128l * 128l
+                if (half_form) {
+                    pf_enc_bf16_mm_th128_c(enc, bw, wboff, bxh, 0ul, by, 0ul, bk, bn, r0, nd)
+                } else {
+                    pf_enc_bf16_mm_t128_c(enc, bw, wboff, bx, 0ul, by, 0ul, bk, bn, r0, nd)
+                }
+            }
+        }
+        if (mp - r0 <= 0l) {
+            return
+        }
+        let xoff = uint64(r0 * kdim * (half_form ? 2l : 4l))
+        let yo = uint64(r0 * nd * 4l)
+        if (half_form) {
+            pf_enc_bf16_mm_th_c(enc, bw, wboff, bxh, xoff, by, yo, bk, bn, mp - r0, nd)
         } else {
-            pf_enc_bf16_mm_t_c(enc, bw, wboff, bx, by, bk, bn, mp, nd)
+            pf_enc_bf16_mm_t_c(enc, bw, wboff, bx, xoff, by, yo, bk, bn, mp - r0, nd)
         }
     } else {
         pf_enc_bf16_mm_c(enc, bw, wboff, bx, by, bk, bn, mp, nd)
@@ -3798,7 +3842,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     let bemb = blob_of(g_dev, t, t.ple_emb_off)
                     pf_enc_ple_gather(enc, bemb.buf, bemb.boff, bemb.buf, bple_tok, bple, pka, c.n_layers, npos, ple_n)
                     let bwp = bf16_of(g_dev, t, t.ple_model_off)
-                    pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim))
+                    pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim), dim)
                     var bw_pn = upload_region(addr < void? >(t.fblob[t.ple_pnorm_off]), uint64(ple_n * 4l))
                     pf_enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers, npos, ple_n)
                 }
