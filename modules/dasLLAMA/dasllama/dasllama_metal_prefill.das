@@ -667,27 +667,16 @@ struct MoeGxArgs {
 [metal_dispatch(name = "enc_moe_gather_x", pso = "g_pf_pso_moe_gx", tg = 256, grid = "rows", params = "rows : int64")]
 class MetalMoeGatherX {
     @ssbo @binding = 0 @role = "read" bkt : array<uint>
-    @ssbo @binding = 1 @role = "read" cnt : array<uint>
-    @ssbo @binding = 2 @role = "read" basep : array<uint>
-    @ssbo @binding = 3 @role = "read" xf : array<float>
-    @ssbo @binding = 4 @role = "write" xg : array<float16>
-    @uniform @binding = 5 ka : MoeGxArgs
+    @ssbo @binding = 1 @role = "read" xf : array<float>
+    @ssbo @binding = 2 @role = "write" xg : array<float16>
+    @uniform @binding = 3 ka : MoeGxArgs
 
     [metal_kernel(name="metal_moe_gather_x_msl")]
     def metal_moe_gather_x {
         let r = gl_WorkGroupID.x
-        var isreal = false
-        var e = 0u
-        while (e < ka.ne) {
-            let b = basep[e]
-            if (r >= b && r < b + (cnt[e] + 31u) / 32u * 32u) {
-                isreal = r - b < cnt[e]
-                e = ka.ne
-            } else {
-                e++
-            }
-        }
-        let token = isreal ? bkt[r] / ka.nk : 0u
+        let v = bkt[r]
+        let isreal = v != 0xFFFFFFFF   // the bucket kernel's pad-tail sentinel
+        let token = isreal ? v / ka.nk : 0u
         var i = gl_LocalInvocationID.x
         while (i < ka.dim) {
             xg[r * ka.dim + i] = isreal ? float16(xf[token * ka.dim + i]) : float16(0.0)
@@ -893,6 +882,14 @@ class MetalMoeBucket {
                 b++
             }
             t++
+        }
+        // pad-tail sentinel so the gather's per-row validity is one bkt read instead of
+        // an O(ne) basep/cnt search (the gather-x kernel keys on it)
+        let ce = cnt[e]
+        var pr = ce + lane
+        while (pr < (ce + 31u) / 32u * 32u) {
+            bkt[pacc + pr] = 0xFFFFFFFF
+            pr += 32u
         }
     }
 }
@@ -3031,13 +3028,16 @@ def private pf_twin_panel(rows, kdim : int64) : MetalBuffer? {
 
 // the CONVERT form (no dual-store producer owns the panel): encode the f32 -> f16 pass; the
 // 256-row gate stays here - under it the convert dispatches outweigh the halved stream.
-def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kdim : int64) : MetalBuffer? {
+def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kdim : int64; ko : bool = false) : MetalBuffer? {
     if (rows < 256l) {
         return null
     }
     var bxh = pf_twin_panel(rows, kdim)
     if (bxh == null) {
         return null
+    }
+    if (ko) {   // attribution: stale halves, twin path unchanged
+        return bxh
     }
     var cka = CvtArgs(total = uint(rows * kdim))
     enc_cvt_half(enc, bx, bxh, cka, rows * kdim)
@@ -3358,6 +3358,7 @@ def private kn_moe_mm_family_tail(enc : MetalComputeEncoder?; bx, by, bcnt, bbas
 def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, rows, npos : int64;
                           bx, by, bcnt, bbase, bbkt : MetalBuffer?; var ka : MoeMmArgs;
                           contiguous : bool = false; bxh : MetalBuffer? = null) {
+    return if (g_pf_skip == "moe_mm_disp")   // attribution: gather+cvt kept, mm dispatches out
     let ne = t.config.n_expert
     if (fmt == KqFmt.q8) {
         let bw = blob_of(g_dev, t, stack_off)
@@ -3434,13 +3435,15 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
 
 // mint the contiguous gather-X panel once per layer (shared by the up AND gate sites);
 // null = the caller keeps the in-kernel gather form
-def private pf_moe_gather_panel(enc : MetalComputeEncoder?; bbkt, bcnt, bbase, bx : MetalBuffer?; var bmxg : MetalBuffer?;
+def private pf_moe_gather_panel(enc : MetalComputeEncoder?; bbkt, bx : MetalBuffer?; var bmxg : MetalBuffer?;
                                 th_ok : bool; dim, nk, ne, mpad : int64) : MetalBuffer? {
     if (!th_ok || bmxg == null || g_pf_pso_moe_gx == null) {
         return null
     }
     var gxka = MoeGxArgs(dim = uint(dim), nk = uint(nk), ne = uint(ne))
-    enc_moe_gather_x(enc, bbkt, bcnt, bbase, bx, bmxg, gxka, mpad)
+    if (g_pf_skip != "moe_gather") {   // attribution: stale panel, twin path unchanged
+        enc_moe_gather_x(enc, bbkt, bx, bmxg, gxka, mpad)
+    }
     return bmxg
 }
 
@@ -3449,6 +3452,7 @@ def private pf_moe_gather_panel(enc : MetalComputeEncoder?; bbkt, bcnt, bbase, b
 def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, npos : int64;
                               bx, by, bcnt, bbase, bbkt, bwb : MetalBuffer?; var ka : MoeMmArgs;
                               contiguous : bool = false; bxh : MetalBuffer? = null) {
+    return if (g_pf_skip == "moe_mm_disp")   // attribution: gather+cvt kept, mm dispatches out
     let ne = t.config.n_expert
     let mp = mx4_of(g_dev, t, stack_off)
     if (g_pf_moe_mm_mx4_tensor && contiguous && g_pf_pso_moe_mm_mx4_t != null) {
@@ -4328,7 +4332,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             var bwb1 = upload_region(unsafe(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp])), uint64(c.n_expert * c.n_ff_exp * 4l))
                             var bwb3 = upload_region(unsafe(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp])), uint64(c.n_expert * c.n_ff_exp * 4l))
                             var kaup = moe_mm_mx4_ka(dim, c.n_ff_exp, c.n_expert_used, true, hasb)
-                            let bxg1 = pf_moe_gather_panel(enc, bmbkt, bmcnt, bmbase, g4moe ? bxb2 : bxb, bmxg,
+                            let bxg1 = pf_moe_gather_panel(enc, bmbkt, g4moe ? bxb2 : bxb, bmxg,
                                 g_pf_pso_moe_mm_mx4_th != null, dim, c.n_expert_used, c.n_expert, mpad)
                             pf_enc_moe_mm_mx4(enc, t, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
                                 bmcnt, bmbase, bmbkt, bwb1, kaup, contiguous = bxg1 != null, bxh = bxg1)
@@ -4338,7 +4342,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             let gx_th1 = fe1 == KqFmt.q8 ? g_pf_pso_moe_mm_q8_th : (fe1 == KqFmt.k4 ? g_pf_pso_moe_mm_k4_th : (fe1 == KqFmt.k5 ? g_pf_pso_moe_mm_k5_th : (fe1 == KqFmt.k6 ? g_pf_pso_moe_mm_k6_th : null)))
                             let gx_th3 = fe3 == KqFmt.q8 ? g_pf_pso_moe_mm_q8_th : (fe3 == KqFmt.k4 ? g_pf_pso_moe_mm_k4_th : (fe3 == KqFmt.k5 ? g_pf_pso_moe_mm_k5_th : (fe3 == KqFmt.k6 ? g_pf_pso_moe_mm_k6_th : null)))
                             let gx_q8 = gx_th1 != null && gx_th3 != null
-                            let bxg1 = pf_moe_gather_panel(enc, bmbkt, bmcnt, bmbase, g4moe ? bxb2 : bxb, bmxg,
+                            let bxg1 = pf_moe_gather_panel(enc, bmbkt, g4moe ? bxb2 : bxb, bmxg,
                                 gx_q8, dim, c.n_expert_used, c.n_expert, mpad)
                             pf_enc_moe_mm(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
                                 bmcnt, bmbase, bmbkt, moe_mm_ka(fe1, dim, c.n_ff_exp, c.n_expert_used, true),
@@ -4383,7 +4387,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                                         fe2 == KqFmt.k6 && g_pf_pso_moe_mm_k6_th != null))))
                         // the bucket panel is PADDED — the twin indexes rows via basep, so the
                         // convert must cover mpad rows, not the mtot prefix (tail experts read f16)
-                        let bxh_mg = down_th ? pf_cvt_panel(enc, bmg, mpad, c.n_ff_exp) : null
+                        let bxh_mg = down_th ? pf_cvt_panel(enc, bmg, mpad, c.n_ff_exp, g_pf_skip == "moe_cvt") : null
                         if (t.experts_mx4) {
                             var bwb2 = upload_region(unsafe(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim])), uint64(c.n_expert * dim * 4l))
                             pf_enc_moe_mm_mx4(enc, t, t.we2_offs[l], dim, npos, bmg, bmdn,
@@ -4843,6 +4847,7 @@ var private g_pf_env_tall = true
 // dev-W engage rules = the probe's M5 shape map (bench_metal_nax_probe grid): PANEL SIZE
 // dominates (<=32MB wins at every M, 47MB only at >=2048 rows, 112MB loses everywhere —
 // the f16 panel's 2-vs-1.06 B/w W stream past cache); wide-N panels' dequant tax needs rows.
+
 // tall M-tile occupancy floor, in 128-row-x-64-col threadgroups (raced 32/64/128 at pp512:
 // 64 wins +0.6..2% over 128 across 4B/E2B/Q4KM, 32 adds nothing; pp128 guard green — at
 // rows=128 the d>=4096 demand keeps small-d sites short). Sidecar tune knob at arc end.

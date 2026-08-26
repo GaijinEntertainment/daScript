@@ -946,7 +946,8 @@ def private moe_router_b_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bo
 
 // the atomics-free CSR pair (MetalMoeCount -> MetalMoeBucket) chained as production dispatches
 // them: cnt, then padded-prefix basep + serial-order bkt/inv — all four outputs checked exactly
-// (pad bkt slots stay at the 0xFFFFFFFF sentinel)
+// (the kernel must STAMP pad bkt slots to 0xFFFFFFFF — the gather-x sentinel — so the
+// gate seeds bkt with a different poison)
 def private moe_csr_gate(t : T?; dev, queue; npos, ne, nk : int) {
     let tag = "moe_csr np={npos} ne={ne} nk={nk}"
     var err : string
@@ -1006,7 +1007,7 @@ def private moe_csr_gate(t : T?; dev, queue; npos, ne, nk : int) {
     var bsel = buf_upload(dev, sel)
     var bcnt = buf_fill(dev, ne, 0xFFFFFFFF)
     var bbase = buf_fill(dev, ne, 0xFFFFFFFF)
-    var bbkt = buf_fill(dev, pad, 0xFFFFFFFF)
+    var bbkt = buf_fill(dev, pad, 0xEEEEEEEE)
     var binv = buf_fill(dev, total, 0xFFFFFFFF)
     var btot = buf_u32(dev, uint(total))
     var bnk = buf_u32(dev, uint(nk))
