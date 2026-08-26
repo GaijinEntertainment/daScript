@@ -393,18 +393,19 @@ def private tile_q8uh_hoist_msl(mt : int) : string {
     }
 }
 
-def private tile_q8uh_msl(mt : int; kstatic : bool = false; reg_stage : bool = false; nozero : bool = false) : string {
-    let kd = kstatic ? "32" : "static_cast<int>(dynamic_extent)"
+def private tile_q8uh_msl(mt : int; kstatic : bool = false; reg_stage : bool = false; nozero : bool = false; bk : int = 32) : string {
+    let kd = kstatic ? "{bk}" : "static_cast<int>(dynamic_extent)"
+    let bks = bk != 32 ? "b{bk}" : ""
     return build_string() $(var w) {
         w |> write("#include <metal_stdlib>\n#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\n")
         w |> write("using namespace metal;\nusing namespace mpp::tensor_ops;\n")
-        w |> write("kernel void tile{mt}{kstatic ? "s" : ""}{reg_stage ? "r" : ""}{nozero ? "z" : ""}_q8uh(\n")
+        w |> write("kernel void tile{mt}{kstatic ? "s" : ""}{reg_stage ? "r" : ""}{nozero ? "z" : ""}{bks}_q8uh(\n")
         w |> write("    device const half* wsh [[buffer(0)]], device const char* wqb [[buffer(1)]],\n")
         w |> write("    device const half* xh [[buffer(2)]], device float* y [[buffer(3)]],\n")
         w |> write("    constant uint& kdim [[buffer(4)]], constant uint& ndim [[buffer(5)]],\n")
         w |> write("    uint3 tgp [[threadgroup_position_in_grid]], ushort tid [[thread_index_in_threadgroup]])\n")
         w |> write("\{\n")
-        w |> write("  threadgroup half wt[2048];\n")
+        w |> write("  threadgroup half wt[{64 * bk}];\n")
         w |> write("  const uint ldwb = kdim / 32u;\n")
         w |> write("  const uint blk0 = tgp.y * 64u * ldwb;\n")
         w |> write("  device const half* ws = wsh + blk0 * 17u;\n")
@@ -419,14 +420,15 @@ def private tile_q8uh_msl(mt : int; kstatic : bool = false; reg_stage : bool = f
         if (!nozero) {
             w |> write("  for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
         }
-        w |> write("  const uint nb = kdim / 32u;\n")
+        w |> write("  const uint nb = kdim / {bk}u;\n")
         w |> write("  for (uint b = 0; b < nb; ++b) \{\n")
-        w |> write("    for (uint work = tid; work < 128u; work += 128u) \{\n")
-        w |> write("      const uint col = work >> 1; const uint kh = (work & 1u) * 16u;\n")
-        w |> write("      const uint blk = col * ldwb + b;\n")
+        w |> write("    for (uint work = tid; work < {4 * bk}u; work += 128u) \{\n")
+        w |> write("      const uint col = work / {bk / 16}u; const uint sub = work % {bk / 16}u;\n")
+        w |> write("      const uint blk = col * ldwb + b * {bk / 32}u + (sub >> 1);\n")
+        w |> write("      const uint kh = (sub & 1u) * 16u;\n")
         w |> write("      const float sc = float(ws[blk * 17u]);\n")
         w |> write("      device const char * q = wq + blk * 34u + kh;\n")
-        w |> write("      threadgroup half * dstp = wt + col * 32u + kh;\n")
+        w |> write("      threadgroup half * dstp = wt + col * {bk}u + sub * 16u;\n")
         if (reg_stage) {
             w |> write("      float4x4 reg_f;\n")
             w |> write("      for (int i = 0; i < 16; i++) \{ reg_f[i/4][i%4] = float(q[i]) * sc; \}\n")
@@ -437,8 +439,8 @@ def private tile_q8uh_msl(mt : int; kstatic : bool = false; reg_stage : bool = f
         }
         w |> write("    \}\n")
         w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
-        w |> write("    auto A = AT((device half *)(a + b * 32u), dextents<int32_t, 2>(32, {mt}), metal::array<int32_t, 2>\{1, int(kdim)\});\n")
-        w |> write("    auto W = WT((threadgroup half *)wt, dextents<int32_t, 2>(32, 64));\n")
+        w |> write("    auto A = AT((device half *)(a + b * {bk}u), dextents<int32_t, 2>({bk}, {mt}), metal::array<int32_t, 2>\{1, int(kdim)\});\n")
+        w |> write("    auto W = WT((threadgroup half *)wt, dextents<int32_t, 2>({bk}, 64));\n")
         w |> write("    op.run(A, W, cT);\n")
         w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
         w |> write("  \}\n")
@@ -1065,6 +1067,94 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                     var rnote = ""
                     let rok = race_envelope_ok(by_a, by_b, m * ndim, rnote)
                     print("  K={kdim} N={ndim} M={m}: ratio={t_reg / t_ours} (ours={t_ours}ms regstage={t_reg}ms) {rok ? "ok" : rnote}\n")
+                    metal_release(bw)
+                    metal_release(bxh)
+                    metal_release(by_a)
+                    metal_release(by_b)
+                    metal_release(bk)
+                    metal_release(bn)
+                    delete blob
+                    delete xh
+                }
+            }
+            // ===== BK K-chunk depth race: 64/128-deep W tiles vs the 32 baseline — the
+            // staging barriers halve/quarter per tile (MLX's NAX kernels run BK 64-512) =====
+            var t32bk_pso = pipeline_from_source(dev, tile_q8uh_msl(32), "tile32_q8uh", true, err)
+            var t32b64_pso = pipeline_from_source(dev, tile_q8uh_msl(32, bk = 64), "tile32b64_q8uh", true, err)
+            var t128b64_pso = pipeline_from_source(dev, tile_q8uh_msl(128, bk = 64), "tile128b64_q8uh", true, err)
+            var t128b128_pso = pipeline_from_source(dev, tile_q8uh_msl(128, bk = 128), "tile128b128_q8uh", true, err)
+            if (t32bk_pso == null || t32b64_pso == null || t128b64_pso == null || t128b128_pso == null) {
+                print("bk pso: {err}\n")
+            } else {
+                print("BK-depth race (ratio = bkN/bk32 per pair; <1 = deeper K-chunk wins):\n")
+                for (g in [(mt = 128, k = 2560, n = 9728, m = 512), (mt = 128, k = 9728, n = 2560, m = 512),
+                           (mt = 128, k = 2560, n = 4096, m = 512), (mt = 128, k = 2560, n = 9728, m = 2048),
+                           (mt = 32, k = 2048, n = 768, m = 4096), (mt = 32, k = 768, n = 2048, m = 4096),
+                           (mt = 32, k = 2048, n = 768, m = 1024)]) {
+                    let kdim = g.k
+                    let ndim = g.n
+                    let m = g.m
+                    let mt = g.mt
+                    var base_pso = mt == 128 ? t128d_pso : t32bk_pso
+                    var b64_pso = mt == 128 ? t128b64_pso : t32b64_pso
+                    var blob <- race_q8_blob(ndim * (kdim / 32))
+                    var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                    var xh <- race_x_f16(m * kdim)
+                    var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                    var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+                    var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                    var bk = race_uniform_u32(dev, uint(kdim))
+                    var bn = race_uniform_u32(dev, uint(ndim))
+                    var t_32 = -1.0lf
+                    var t_64 = -1.0lf
+                    race_pair_ms(queue, 5, t_32, t_64, $(enc) {
+                        kn_pipeline(enc, base_pso)
+                        kn_buffer(enc, bw, 0ul, 0)
+                        kn_buffer(enc, bw, 0ul, 1)
+                        kn_buffer(enc, bxh, 0ul, 2)
+                        kn_buffer(enc, by_a, 0ul, 3)
+                        kn_buffer(enc, bk, 0ul, 4)
+                        kn_buffer(enc, bn, 0ul, 5)
+                        kn_dispatch(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                    }, $(enc) {
+                        kn_pipeline(enc, b64_pso)
+                        kn_buffer(enc, bw, 0ul, 0)
+                        kn_buffer(enc, bw, 0ul, 1)
+                        kn_buffer(enc, bxh, 0ul, 2)
+                        kn_buffer(enc, by_b, 0ul, 3)
+                        kn_buffer(enc, bk, 0ul, 4)
+                        kn_buffer(enc, bn, 0ul, 5)
+                        kn_dispatch(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                    })
+                    var b64note = ""
+                    let b64ok = race_envelope_ok(by_a, by_b, m * ndim, b64note)
+                    print("  mt={mt} K={kdim} N={ndim} M={m}: bk64 ratio={t_64 / t_32} (bk32={t_32}ms bk64={t_64}ms) {b64ok ? "ok" : b64note}\n")
+                    if (mt == 128) {
+                        var t_32b = -1.0lf
+                        var t_128 = -1.0lf
+                        race_pair_ms(queue, 5, t_32b, t_128, $(enc) {
+                            kn_pipeline(enc, base_pso)
+                            kn_buffer(enc, bw, 0ul, 0)
+                            kn_buffer(enc, bw, 0ul, 1)
+                            kn_buffer(enc, bxh, 0ul, 2)
+                            kn_buffer(enc, by_a, 0ul, 3)
+                            kn_buffer(enc, bk, 0ul, 4)
+                            kn_buffer(enc, bn, 0ul, 5)
+                            kn_dispatch(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                        }, $(enc) {
+                            kn_pipeline(enc, t128b128_pso)
+                            kn_buffer(enc, bw, 0ul, 0)
+                            kn_buffer(enc, bw, 0ul, 1)
+                            kn_buffer(enc, bxh, 0ul, 2)
+                            kn_buffer(enc, by_b, 0ul, 3)
+                            kn_buffer(enc, bk, 0ul, 4)
+                            kn_buffer(enc, bn, 0ul, 5)
+                            kn_dispatch(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                        })
+                        var b128note = ""
+                        let b128ok = race_envelope_ok(by_a, by_b, m * ndim, b128note)
+                        print("  mt={mt} K={kdim} N={ndim} M={m}: bk128 ratio={t_128 / t_32b} (bk32={t_32b}ms bk128={t_128}ms) {b128ok ? "ok" : b128note}\n")
+                    }
                     metal_release(bw)
                     metal_release(bxh)
                     metal_release(by_a)

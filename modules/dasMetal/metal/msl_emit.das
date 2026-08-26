@@ -795,7 +795,7 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         if ((scn == "tmm2d_q8_f32" || scn == "tmm2d_q8_f16s") && length(ecs.arguments) == 14) {
             mark_write_target(ctx, ecs.arguments[11])
         }
-        if (scn == "tmm2d_q8u_f32" && length(ecs.arguments) == 13) {
+        if (scn == "tmm2d_q8u_f32" && length(ecs.arguments) == 14) {
             mark_write_target(ctx, ecs.arguments[8])
         }
         if ((scn == "tmm2d_tg_store" || scn == "tmm2d_tg_store_half") && length(ecs.arguments) == 5) {
@@ -2286,8 +2286,8 @@ def private tmm2d_const_uint(var ctx : MslCtx; e : Expression?; what : string) :
     return 0u
 }
 
-def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
-    let name = "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}"
+def private tmm2d_helper_text(kind : string; m, n, sgs : uint; bk : uint = 32u) : string {
+    let name = bk == 32u ? "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}" : "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}_k{int(bk)}"
     let ct = "tensor<device int8_t, dextents<int32_t, 2>, tensor_inline>"
     if (kind == "bf" || kind == "bfh") {
         // bfh streams HALF activations — same operand-type contract as q8uh
@@ -2357,6 +2357,56 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
         // index/fold work anywhere in the hot path. q8uh streams HALF activations: a float A
         // operand keeps matmul2d off the native half x half path (measured 8-11% per GEMM)
         let at = kind == "q8uh" ? "half" : "float"
+        if (bk == 64u) {
+            // 64-deep staged chunks: half the barriers per K walk (raced 5-11% per GEMM on
+            // M5); wt is n*64; a kk % 64 == 32 K width finishes with one classic 32-chunk
+            return build_string() $(var w) {
+                w |> write("static void {name}(threadgroup half * wt, device const half * ws, device const char * wq, device const {at} * a, uint lda, device float * c, uint ldc, uint kk, uint ldwb, uint tid) \{\n")
+                w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, true, matmul2d_descriptor::mode::multiply_accumulate);\n")
+                w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
+                w |> write("    using AT = tensor<device {at}, dextents<int32_t, 2>, tensor_inline>;\n")
+                w |> write("    using WT = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;\n")
+                w |> write("    auto cT = op.get_destination_cooperative_tensor<AT, WT, float>();\n")
+                w |> write("    const uint nb = kk / 64u;\n")
+                w |> write("    for (uint b = 0; b < nb; ++b) \{\n")
+                w |> write("        for (uint work = tid; work < {int(n)}u * 4u; work += {int(sgs * 32u)}u) \{\n")
+                w |> write("            const uint col = work >> 2;\n")
+                w |> write("            const uint sub = work & 3u;\n")
+                w |> write("            const uint blk = col * ldwb + b * 2u + (sub >> 1);\n")
+                w |> write("            const uint kh = (sub & 1u) * 16u;\n")
+                w |> write("            const float sc = float(ws[blk * 17u]);\n")
+                w |> write("            device const char * q = wq + blk * 34u + kh;\n")
+                w |> write("            threadgroup half * dstp = wt + col * 64u + sub * 16u;\n")
+                w |> write("            _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+                w |> write("        \}\n")
+                w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+                w |> write("        auto A = AT((device {at} *)(a + b * 64u), dextents<int32_t, 2>(64, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+                w |> write("        auto W = WT((threadgroup half *)wt, dextents<int32_t, 2>(64, {int(n)}));\n")
+                w |> write("        op.run(A, W, cT);\n")
+                w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+                w |> write("    \}\n")
+                w |> write("    if ((kk & 32u) != 0u) \{\n")
+                w |> write("        const uint b32 = nb * 2u;\n")
+                w |> write("        for (uint work = tid; work < {int(n)}u * 2u; work += {int(sgs * 32u)}u) \{\n")
+                w |> write("            const uint col = work >> 1;\n")
+                w |> write("            const uint kh = (work & 1u) * 16u;\n")
+                w |> write("            const uint blk = col * ldwb + b32;\n")
+                w |> write("            const float sc = float(ws[blk * 17u]);\n")
+                w |> write("            device const char * q = wq + blk * 34u + kh;\n")
+                w |> write("            threadgroup half * dstp = wt + col * 32u + kh;\n")
+                w |> write("            _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+                w |> write("        \}\n")
+                w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+                w |> write("        auto A = AT((device {at} *)(a + nb * 64u), dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+                w |> write("        auto W = WT((threadgroup half *)wt, dextents<int32_t, 2>(32, {int(n)}));\n")
+                w |> write("        op.run(A, W, cT);\n")
+                w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+                w |> write("    \}\n")
+                w |> write("    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int(ldc)\});\n")
+                w |> write("    cT.store(C);\n")
+                w |> write("\}")
+            }
+        }
         return build_string() $(var w) {
             w |> write("static void {name}(threadgroup half * wt, device const half * ws, device const char * wq, device const {at} * a, uint lda, device float * c, uint ldc, uint kk, uint ldwb, uint tid) \{\n")
             w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, true, matmul2d_descriptor::mode::multiply_accumulate);\n")
@@ -2782,7 +2832,7 @@ def private emit_tmm2d_tg_store_bias(var ctx : MslCtx; ec : ExprCall?; indent : 
 def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     let cname = call_base_name("{ec.name}")
     var kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_f16w_f32" ? "hw" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8u_f32" ? "q8u" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8"))))
-    if (kind == "q8u" && length(ec.arguments) == 13) {
+    if (kind == "q8u" && length(ec.arguments) == 14) {
         // the overload resolves by the activation pointer's pointee: float16 = the half-A stream
         if (tmm2d_a_elem(ec.arguments[6]) == "half") {
             kind = "q8uh"
@@ -2794,7 +2844,7 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     if ((kind == "q8u" || kind == "bf" || kind == "hw") && !ctx.float_a_ok) {
         err(ctx, ec.at, "{cname}: FLOAT A operand keeps matmul2d off the native half path (measured 8-11% per GEMM) - pass the f16 activation panel (the overload picks the half helper by pointee), or license the deliberate f32 fallback with [metal_kernel(float_a_ok=true)]")
     }
-    let want_args = kind == "bf" || kind == "bfh" || kind == "hw" || kind == "hwh" ? 10 : (kind == "q8b" ? 11 : (kind == "q8u" || kind == "q8uh" ? 13 : 14))
+    let want_args = kind == "bf" || kind == "bfh" || kind == "hw" || kind == "hwh" ? 10 : (kind == "q8b" ? 11 : 14)
     if (length(ec.arguments) != want_args) {
         err(ctx, ec.at, "{cname} takes exactly {want_args} arguments")
         return
@@ -2805,11 +2855,23 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     if (m == 0u || n == 0u || sgs == 0u) {
         return
     }
-    let hname = "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}"
-    if (!key_exists(ctx.gen_helpers, hname)) {
-        ctx.gen_helpers[hname] = tmm2d_helper_text(kind, m, n, sgs)
+    // q8u/q8uh: trailing bk constant = the staged K-chunk depth (32 = the classic body);
+    // compile-time only — it names the helper and never reaches the emitted call
+    var bk = 32u
+    var nvals = length(ec.arguments)
+    if (kind == "q8u" || kind == "q8uh") {
+        bk = tmm2d_const_uint(ctx, ec.arguments[13], "bk (staged K-chunk depth)")
+        if (bk != 32u && bk != 64u) {
+            err(ctx, ec.at, "{cname}: bk must be 32 or 64")
+            return
+        }
+        nvals = 13
     }
-    let vals <- [for (i in range(3, length(ec.arguments))); emit_value(ctx, ec.arguments[i])]
+    let hname = bk == 32u ? "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}" : "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}_k{int(bk)}"
+    if (!key_exists(ctx.gen_helpers, hname)) {
+        ctx.gen_helpers[hname] = tmm2d_helper_text(kind, m, n, sgs, bk)
+    }
+    let vals <- [for (i in range(3, nvals)); emit_value(ctx, ec.arguments[i])]
     note(ctx, "call.{cname}")
     lines |> push("{indent}{hname}({join(vals, ", ")});")
 }

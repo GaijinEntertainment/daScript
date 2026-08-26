@@ -113,7 +113,7 @@ class template MetalQ8MulMmTensorT {
     @ssbo @binding = 3 @off = "yoff" @span = "mp*d*4" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
-    @workgroup twb : float16[2048]          // W chunk: 64 wcols x 32 k, dequant-staged by the helper
+    @workgroup twb : float16[4096]          // W chunk: 64 wcols x 64 k (bk=64), dequant-staged by the helper
 
     [metal_kernel(float_a_ok=true)]
     def metal_q8_mulmm_t {
@@ -124,7 +124,7 @@ class template MetalQ8MulMmTensorT {
         var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
         var ap = unsafe(addr(xf[mBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_q8u_f32(MT, 64u, 4u, twb, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u, gl_LocalInvocationIndex)
+        tmm2d_q8u_f32(MT, 64u, 4u, twb, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u, gl_LocalInvocationIndex, 64u)
     }
 }
 
@@ -936,7 +936,7 @@ class template MetalMoeMulMmQ8TensorT {
     @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 6 cnt : array<uint>
     @ssbo @binding = 7 basep : array<uint>
-    @workgroup twb : float16[2048]          // W chunk: 64 wcols x 32 k, dequant-staged by the helper
+    @workgroup twb : float16[4096]          // W chunk: 64 wcols x 64 k (bk=64), dequant-staged by the helper
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_q8_t {
@@ -954,7 +954,7 @@ class template MetalMoeMulMmQ8TensorT {
         var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
         var ap = unsafe(addr(xf[(rbase + mBase) * ka.kdim]))
         var cp = unsafe(addr(y[(rbase + mBase) * ka.ndim + nBase]))
-        tmm2d_q8u_f32(MT, 64u, 4u, twb, sp, wp, ap, ka.kdim, cp, ka.ndim, ka.kdim, ka.kdim / 32u, gl_LocalInvocationIndex)
+        tmm2d_q8u_f32(MT, 64u, 4u, twb, sp, wp, ap, ka.kdim, cp, ka.ndim, ka.kdim, ka.kdim / 32u, gl_LocalInvocationIndex, 64u)
     }
 }
 
