@@ -1058,6 +1058,7 @@ namespace das {
                     }
                 }
             }
+            if (blk->isClosure) break;
         }
         return nullptr;
     }
