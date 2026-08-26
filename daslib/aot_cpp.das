@@ -1506,7 +1506,12 @@ class public CppAot : AstVisitor {
     }
     def write_local_temp_type(tmp : Expression?) : void {
         write(*ss, tabs())
-        describeVarLocalCppType(ss, tmp._type, cross_platform)
+        if (tmp._type.flags.ref) {
+            write(*ss, describeCppType(tmp._type, DescribeConfig(skip_ref = true,
+                skip_const = true, cross_platform = cross_platform)))
+        } else {
+            describeVarLocalCppType(ss, tmp._type, cross_platform)
+        }
     }
 
     def override preVisitGlobalLet(prog : ProgramPtr) {
