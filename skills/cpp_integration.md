@@ -286,6 +286,35 @@ Generate stubs with `bin/daslang -aot input.das output.cpp`, adding `-aot-macros
 script defines macros. `error[50101]: AOT link failed on <fn>` means the recorded hash no
 longer matches the source - regenerate and rebuild.
 
+## Shipping without the compiler - `libDaScriptNano`
+
+A program that only ever RUNS daslang - never compiles any - does not need `libDaScript`.
+Compile the script to C++ ahead of time (`daslang utils/aot/main.das -- -ctx script.das out/`)
+and link the result against nano instead:
+
+```cpp
+#include "daScript/nano_print.h"
+#include "script.das.h"
+
+das::das_nano_set_print(&my_uart_write);   // every print leaves through this
+script::Standalone ctx;                    // a plain C++ object
+int answer = ctx.exported_function(21);
+```
+
+No `daScript.h`, no `Program`, no module registration, no file system. Everything the runtime
+prints goes to the one sink above, which is why this works on a target with no stdout.
+
+Three things to know before choosing it. **Anything the runtime does not carry fails to LINK, not
+at run time** - string interpolation and the string builders, every builtin module including
+`math`, the GC, the debugger, the JIT, the serializer, threads. **A target that links nano
+decides its own header search order**: put `nano/include` ahead of `include/`, and in CMake add
+`set_property(DIRECTORY PROPERTY INCLUDE_DIRECTORIES "")` to the directory holding the target,
+or it compiles against the full runtime's headers while linking nano's library - a mismatch with
+no diagnostic. **It is not freestanding yet**: it builds where the full runtime builds, minus the
+compiler, and cross-compiling for bare metal still needs portability work in the shared headers.
+
+`nano/README.md` is the build recipe and `nano/ARCHITECTURE.md` lists what nano trades away.
+
 ## Diagnostics - `TextPrinter`, never `fprintf(stderr, ...)`
 
 ```cpp
