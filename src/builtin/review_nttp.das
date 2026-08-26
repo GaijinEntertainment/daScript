@@ -7,6 +7,7 @@ require daslib/macro_boost
 require math // nolint:STYLE030 — coverage require: pulls the module into the scanned registry
 require strings
 require jit // nolint:STYLE030 — coverage require
+require dasbind // coverage require: not a policy module, so the scan asserts its binds stay non-NTTP
 require daslib/fio // nolint:STYLE030 — coverage require
 require daslib/rtti // coverage require
 require daslib/jobque_boost // coverage require
