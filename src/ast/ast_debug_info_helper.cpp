@@ -268,7 +268,7 @@ namespace das {
         Function & fakeFunc = *fakeFuncPtr;
         fakeFunc.name = "invoke " + blk->describe();
         fakeFunc.at = at;
-        gc_local<TypeDecl> voidType(new TypeDecl(Type::tVoid));
+        gc_local<TypeDecl> voidType(new TypeDecl(Type::tVoid, at));
         fakeFunc.result = blk->firstType ? blk->firstType : (TypeDecl*)voidType;
         fakeFunc.totalStackSize = sizeof(Prologue);
         for ( size_t ai=0, ais=blk->argTypes.size(); ai!=ais; ++ ai ) {

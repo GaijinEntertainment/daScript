@@ -16,7 +16,7 @@ namespace das {
     template <>
     struct typeFactory<Point3> {
         static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tFloat3);
+            auto t = new TypeDecl(Type::tFloat3, cppBindingLineInfo("Point3"));
             t->alias = "Point3";
             t->aotAlias = true;
             return t;
@@ -47,7 +47,7 @@ namespace das {
   template <>
   struct typeFactory<SampleVariant> {
       static TypeDeclPtr make(const ModuleLibrary & library ) {
-          auto vtype = new TypeDecl(Type::tVariant);
+          auto vtype = new TypeDecl(Type::tVariant, cppBindingLineInfo());
           vtype->alias = "SampleVariant";
           vtype->aotAlias = true;
           vtype->addVariant("i_value", typeFactory<decltype(SampleVariant::i_value)>::make(library));
@@ -136,7 +136,7 @@ struct CheckRange : StructureAnnotation {
         // this is here for the 'example' purposes
         // lets add a sample 'dummy' field
         if (args.getBoolOption("dummy",false) && !st->findField("dummy")) {
-            st->fields.emplace_back("dummy", new TypeDecl(Type::tInt),
+            st->fields.emplace_back("dummy", new TypeDecl(Type::tInt, cppBindingLineInfo()),
                 nullptr /*init*/, AnnotationArgumentList(), false /*move_to_init*/, LineInfo());
             st->fieldLookup.clear();
         }
@@ -244,7 +244,7 @@ struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
             if (!starg->getValue().empty()) {
                 auto hv = hash_blockz64((uint8_t *)starg->text.c_str());
                 auto hconst = new ExprConstUInt64(arg->at, hv);
-                hconst->type = new TypeDecl(Type::tUInt64);
+                hconst->type = new TypeDecl(Type::tUInt64, cppBindingLineInfo());
                 hconst->type->constant = true;
                 auto newCall = static_cast<ExprCallFunc*>(call->clone());
                 newCall->arguments.insert(newCall->arguments.begin() + 2, hconst);
@@ -313,11 +313,11 @@ struct EventRegistrator : StructureAnnotation {
     EventRegistrator() : StructureAnnotation("event") {}
     bool touch ( const StructurePtr & st, ModuleGroup & /*libGroup*/,
         const AnnotationArgumentList & /*args*/, string & /*err*/ ) override {
-        st->fields.emplace(st->fields.begin(), "eventFlags", new TypeDecl(Type::tUInt16),
+        st->fields.emplace(st->fields.begin(), "eventFlags", new TypeDecl(Type::tUInt16, cppBindingLineInfo()),
             ExpressionPtr(), AnnotationArgumentList(), false, st->at);
-        st->fields.emplace(st->fields.begin(), "eventSize", new TypeDecl(Type::tUInt16),
+        st->fields.emplace(st->fields.begin(), "eventSize", new TypeDecl(Type::tUInt16, cppBindingLineInfo()),
             ExpressionPtr(), AnnotationArgumentList(), false, st->at);
-        st->fields.emplace(st->fields.begin(), "eventType", new TypeDecl(Type::tUInt64),
+        st->fields.emplace(st->fields.begin(), "eventType", new TypeDecl(Type::tUInt64, cppBindingLineInfo()),
             ExpressionPtr(), AnnotationArgumentList(), false, st->at);
         return true;
     }

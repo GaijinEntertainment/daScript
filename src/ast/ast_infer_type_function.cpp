@@ -2128,7 +2128,7 @@ namespace das {
         }
     }
     ExpressionPtr InferTypes::inferGenericOperatorWithName(const string &opN, const LineInfo &expr_at, ExpressionPtr arg0, const string &arg1, InferCallError err) {
-        auto conststring = new TypeDecl(Type::tString);
+        auto conststring = new TypeDecl(Type::tString, expr_at);
         conststring->constant = true;
         auto fieldName = new ExprConstString(expr_at, arg1);
         fieldName->type = conststring;

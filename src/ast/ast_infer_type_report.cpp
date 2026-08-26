@@ -83,7 +83,7 @@ namespace das {
             if (!aT) {
                 auto bT = nameToBasicType(decl->alias);
                 if (bT != Type::none) {
-                    aT = new TypeDecl(bT);
+                    aT = new TypeDecl(bT, decl->at);
                 }
             }
             if (!aT) {

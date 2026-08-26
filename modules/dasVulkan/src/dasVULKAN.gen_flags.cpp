@@ -6,7 +6,7 @@ namespace das {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkFramebufferCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkFramebufferCreateFlags";
     ft->argNames = { "imageless" };
     return ft;
@@ -15,7 +15,7 @@ TypeDeclPtr makeVkFlags_VkFramebufferCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkQueryPoolCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkQueryPoolCreateFlags";
     ft->argNames = { "reset_khr" };
     return ft;
@@ -24,7 +24,7 @@ TypeDeclPtr makeVkFlags_VkQueryPoolCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkRenderPassCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkRenderPassCreateFlags";
     ft->argNames = { "_b0", "transform_qcom", "per_layer_fragment_density_valve" };
     return ft;
@@ -33,7 +33,7 @@ TypeDeclPtr makeVkFlags_VkRenderPassCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkSamplerCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSamplerCreateFlags";
     ft->argNames = { "subsampled_ext", "subsampled_coarse_reconstruction_ext", "non_seamless_cube_map_ext", "descriptor_buffer_capture_replay_ext", "image_processing_qcom" };
     return ft;
@@ -42,7 +42,7 @@ TypeDeclPtr makeVkFlags_VkSamplerCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineLayoutCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineLayoutCreateFlags";
     ft->argNames = { "_b0", "independent_sets_ext", "no_task_shader_khr" };
     return ft;
@@ -51,7 +51,7 @@ TypeDeclPtr makeVkFlags_VkPipelineLayoutCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineCacheCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineCacheCreateFlags";
     ft->argNames = { "externally_synchronized", "_b1", "_b2", "internally_synchronized_merge_khr" };
     return ft;
@@ -60,7 +60,7 @@ TypeDeclPtr makeVkFlags_VkPipelineCacheCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineDepthStencilStateCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineDepthStencilStateCreateFlags";
     ft->argNames = { "rasterization_order_attachment_depth_access_ext", "rasterization_order_attachment_stencil_access_ext" };
     return ft;
@@ -69,7 +69,7 @@ TypeDeclPtr makeVkFlags_VkPipelineDepthStencilStateCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineDynamicStateCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineDynamicStateCreateFlags";
     return ft;
 }
@@ -77,7 +77,7 @@ TypeDeclPtr makeVkFlags_VkPipelineDynamicStateCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineColorBlendStateCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineColorBlendStateCreateFlags";
     ft->argNames = { "rasterization_order_attachment_access_ext" };
     return ft;
@@ -86,7 +86,7 @@ TypeDeclPtr makeVkFlags_VkPipelineColorBlendStateCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineMultisampleStateCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineMultisampleStateCreateFlags";
     return ft;
 }
@@ -94,7 +94,7 @@ TypeDeclPtr makeVkFlags_VkPipelineMultisampleStateCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineRasterizationStateCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineRasterizationStateCreateFlags";
     return ft;
 }
@@ -102,7 +102,7 @@ TypeDeclPtr makeVkFlags_VkPipelineRasterizationStateCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineViewportStateCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineViewportStateCreateFlags";
     return ft;
 }
@@ -110,7 +110,7 @@ TypeDeclPtr makeVkFlags_VkPipelineViewportStateCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineTessellationStateCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineTessellationStateCreateFlags";
     return ft;
 }
@@ -118,7 +118,7 @@ TypeDeclPtr makeVkFlags_VkPipelineTessellationStateCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineInputAssemblyStateCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineInputAssemblyStateCreateFlags";
     return ft;
 }
@@ -126,7 +126,7 @@ TypeDeclPtr makeVkFlags_VkPipelineInputAssemblyStateCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineVertexInputStateCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineVertexInputStateCreateFlags";
     return ft;
 }
@@ -134,7 +134,7 @@ TypeDeclPtr makeVkFlags_VkPipelineVertexInputStateCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineShaderStageCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineShaderStageCreateFlags";
     ft->argNames = { "allow_varying_subgroup_size", "require_full_subgroups" };
     return ft;
@@ -143,7 +143,7 @@ TypeDeclPtr makeVkFlags_VkPipelineShaderStageCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkDescriptorSetLayoutCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDescriptorSetLayoutCreateFlags";
     ft->argNames = { "push_descriptor", "update_after_bind_pool", "host_only_pool_ext", "_b3", "descriptor_buffer_ext", "embedded_immutable_samplers_ext", "per_stage_nv", "indirect_bindable_nv" };
     return ft;
@@ -152,7 +152,7 @@ TypeDeclPtr makeVkFlags_VkDescriptorSetLayoutCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkBufferViewCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkBufferViewCreateFlags";
     return ft;
 }
@@ -160,7 +160,7 @@ TypeDeclPtr makeVkFlags_VkBufferViewCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkInstanceCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkInstanceCreateFlags";
     ft->argNames = { "enumerate_portability_khr" };
     return ft;
@@ -169,7 +169,7 @@ TypeDeclPtr makeVkFlags_VkInstanceCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkDeviceCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDeviceCreateFlags";
     return ft;
 }
@@ -177,7 +177,7 @@ TypeDeclPtr makeVkFlags_VkDeviceCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkDeviceQueueCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDeviceQueueCreateFlags";
     ft->argNames = { "protected", "_b1", "internally_synchronized_khr" };
     return ft;
@@ -186,7 +186,7 @@ TypeDeclPtr makeVkFlags_VkDeviceQueueCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkQueueFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkQueueFlags";
     ft->argNames = { "graphics", "compute", "transfer", "sparse_binding", "protected", "video_decode_khr", "video_encode_khr", "_b7", "optical_flow_nv", "_b9", "data_graph_arm" };
     return ft;
@@ -195,7 +195,7 @@ TypeDeclPtr makeVkFlags_VkQueueFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkMemoryPropertyFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkMemoryPropertyFlags";
     ft->argNames = { "device_local", "host_visible", "host_coherent", "host_cached", "lazily_allocated", "protected", "device_coherent_amd", "device_uncached_amd", "rdma_capable_nv" };
     return ft;
@@ -204,7 +204,7 @@ TypeDeclPtr makeVkFlags_VkMemoryPropertyFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkMemoryHeapFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkMemoryHeapFlags";
     ft->argNames = { "device_local", "multi_instance", "_b2", "tile_memory_qcom" };
     return ft;
@@ -213,7 +213,7 @@ TypeDeclPtr makeVkFlags_VkMemoryHeapFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkAccessFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkAccessFlags";
     ft->argNames = { "indirect_command_read", "index_read", "vertex_attribute_read", "uniform_read", "input_attachment_read", "shader_read", "shader_write", "color_attachment_read", "color_attachment_write", "depth_stencil_attachment_read", "depth_stencil_attachment_write", "transfer_read", "transfer_write", "host_read", "host_write", "memory_read", "memory_write", "command_preprocess_read_ext", "command_preprocess_write_ext", "color_attachment_read_noncoherent_ext", "conditional_rendering_read_ext", "acceleration_structure_read_khr", "acceleration_structure_write_khr", "fragment_shading_rate_attachment_read_khr", "fragment_density_map_read_ext", "transform_feedback_write_ext", "transform_feedback_counter_read_ext", "transform_feedback_counter_write_ext" };
     return ft;
@@ -222,7 +222,7 @@ TypeDeclPtr makeVkFlags_VkAccessFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkBufferUsageFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkBufferUsageFlags";
     ft->argNames = { "transfer_src", "transfer_dst", "uniform_texel_buffer", "storage_texel_buffer", "uniform_buffer", "storage_buffer", "index_buffer", "vertex_buffer", "indirect_buffer", "conditional_rendering_ext", "shader_binding_table_khr", "transform_feedback_buffer_ext", "transform_feedback_counter_buffer_ext", "video_decode_src_khr", "video_decode_dst_khr", "video_encode_dst_khr", "video_encode_src_khr", "shader_device_address", "_b18", "acceleration_structure_build_input_read_only_khr", "acceleration_structure_storage_khr", "sampler_descriptor_buffer_ext", "resource_descriptor_buffer_ext", "micromap_build_input_read_only_ext", "micromap_storage_ext", "execution_graph_scratch_amdx", "push_descriptors_descriptor_buffer_ext", "tile_memory_qcom", "descriptor_heap_ext" };
     return ft;
@@ -231,7 +231,7 @@ TypeDeclPtr makeVkFlags_VkBufferUsageFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkBufferCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkBufferCreateFlags";
     ft->argNames = { "sparse_binding", "sparse_residency", "sparse_aliased", "protected", "device_address_capture_replay", "descriptor_buffer_capture_replay_ext", "video_profile_independent_khr" };
     return ft;
@@ -240,7 +240,7 @@ TypeDeclPtr makeVkFlags_VkBufferCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkShaderStageFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkShaderStageFlags";
     ft->argNames = { "vertex", "tessellation_control", "tessellation_evaluation", "geometry", "fragment", "compute", "task_ext", "mesh_ext", "raygen_khr", "any_hit_khr", "closest_hit_khr", "miss_khr", "intersection_khr", "callable_khr", "subpass_shading_huawei", "_b15", "_b16", "_b17", "_b18", "cluster_culling_huawei" };
     return ft;
@@ -249,7 +249,7 @@ TypeDeclPtr makeVkFlags_VkShaderStageFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkImageUsageFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkImageUsageFlags";
     ft->argNames = { "transfer_src", "transfer_dst", "sampled", "storage", "color_attachment", "depth_stencil_attachment", "transient_attachment", "input_attachment", "fragment_shading_rate_attachment_khr", "fragment_density_map_ext", "video_decode_dst_khr", "video_decode_src_khr", "video_decode_dpb_khr", "video_encode_dst_khr", "video_encode_src_khr", "video_encode_dpb_khr", "_b16", "_b17", "invocation_mask_huawei", "attachment_feedback_loop_ext", "sample_weight_qcom", "sample_block_match_qcom", "host_transfer", "tensor_aliasing_arm", "_b24", "video_encode_quantization_delta_map_khr", "video_encode_emphasis_map_khr", "tile_memory_qcom" };
     return ft;
@@ -258,7 +258,7 @@ TypeDeclPtr makeVkFlags_VkImageUsageFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkImageCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkImageCreateFlags";
     ft->argNames = { "sparse_binding", "sparse_residency", "sparse_aliased", "mutable_format", "cube_compatible", "_2d_array_compatible", "split_instance_bind_regions", "block_texel_view_compatible", "extended_usage", "disjoint", "alias", "protected", "sample_locations_compatible_depth_ext", "corner_sampled_nv", "subsampled_ext", "fragment_density_map_offset_ext", "descriptor_heap_capture_replay_ext", "_2d_view_compatible_ext", "multisampled_render_to_single_sampled_ext", "_b19", "video_profile_independent_khr", "_b21", "alias_single_layer_descriptor_khr" };
     return ft;
@@ -267,7 +267,7 @@ TypeDeclPtr makeVkFlags_VkImageCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkImageViewCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkImageViewCreateFlags";
     ft->argNames = { "fragment_density_map_dynamic_ext", "fragment_density_map_deferred_ext", "descriptor_buffer_capture_replay_ext" };
     return ft;
@@ -276,7 +276,7 @@ TypeDeclPtr makeVkFlags_VkImageViewCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineCreateFlags";
     ft->argNames = { "disable_optimization", "allow_derivatives", "derivative", "view_index_from_device_index", "dispatch_base", "defer_compile_nv", "capture_statistics_khr", "capture_internal_representations_khr", "fail_on_pipeline_compile_required", "early_return_on_failure", "link_time_optimization_ext", "library_khr", "ray_tracing_skip_triangles_khr", "ray_tracing_skip_aabbs_khr", "ray_tracing_no_null_any_hit_shaders_khr", "ray_tracing_no_null_closest_hit_shaders_khr", "ray_tracing_no_null_miss_shaders_khr", "ray_tracing_no_null_intersection_shaders_khr", "indirect_bindable_nv", "ray_tracing_shader_group_handle_capture_replay_khr", "ray_tracing_allow_motion_nv", "rendering_fragment_shading_rate_attachment_khr", "rendering_fragment_density_map_attachment_ext", "retain_link_time_optimization_info_ext", "ray_tracing_opacity_micromap_ext", "color_attachment_feedback_loop_ext", "depth_stencil_attachment_feedback_loop_ext", "no_protected_access", "ray_tracing_displacement_micromap_nv", "descriptor_buffer_ext", "protected_access_only" };
     return ft;
@@ -285,7 +285,7 @@ TypeDeclPtr makeVkFlags_VkPipelineCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkColorComponentFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkColorComponentFlags";
     ft->argNames = { "r", "g", "b", "a" };
     return ft;
@@ -294,7 +294,7 @@ TypeDeclPtr makeVkFlags_VkColorComponentFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkFenceCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkFenceCreateFlags";
     ft->argNames = { "signaled" };
     return ft;
@@ -303,7 +303,7 @@ TypeDeclPtr makeVkFlags_VkFenceCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkSemaphoreCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSemaphoreCreateFlags";
     return ft;
 }
@@ -311,7 +311,7 @@ TypeDeclPtr makeVkFlags_VkSemaphoreCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkFormatFeatureFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkFormatFeatureFlags";
     ft->argNames = { "sampled_image", "storage_image", "storage_image_atomic", "uniform_texel_buffer", "storage_texel_buffer", "storage_texel_buffer_atomic", "vertex_buffer", "color_attachment", "color_attachment_blend", "depth_stencil_attachment", "blit_src", "blit_dst", "sampled_image_filter_linear", "sampled_image_filter_cubic_ext", "transfer_src", "transfer_dst", "sampled_image_filter_minmax", "midpoint_chroma_samples", "sampled_image_ycbcr_conversion_linear_filter", "sampled_image_ycbcr_conversion_separate_reconstruction_filter", "sampled_image_ycbcr_conversion_chroma_reconstruction_explicit", "sampled_image_ycbcr_conversion_chroma_reconstruction_explicit_forceable", "disjoint", "cosited_chroma_samples", "fragment_density_map_ext", "video_decode_output_khr", "video_decode_dpb_khr", "video_encode_input_khr", "video_encode_dpb_khr", "acceleration_structure_vertex_buffer_khr", "fragment_shading_rate_attachment_khr" };
     return ft;
@@ -320,7 +320,7 @@ TypeDeclPtr makeVkFlags_VkFormatFeatureFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkQueryControlFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkQueryControlFlags";
     ft->argNames = { "precise" };
     return ft;
@@ -329,7 +329,7 @@ TypeDeclPtr makeVkFlags_VkQueryControlFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkQueryResultFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkQueryResultFlags";
     ft->argNames = { "_64", "wait", "with_availability", "partial", "with_status_khr" };
     return ft;
@@ -338,7 +338,7 @@ TypeDeclPtr makeVkFlags_VkQueryResultFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkShaderModuleCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkShaderModuleCreateFlags";
     return ft;
 }
@@ -346,7 +346,7 @@ TypeDeclPtr makeVkFlags_VkShaderModuleCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkEventCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkEventCreateFlags";
     ft->argNames = { "device_only" };
     return ft;
@@ -355,7 +355,7 @@ TypeDeclPtr makeVkFlags_VkEventCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkCommandPoolCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkCommandPoolCreateFlags";
     ft->argNames = { "transient", "reset_command_buffer", "protected" };
     return ft;
@@ -364,7 +364,7 @@ TypeDeclPtr makeVkFlags_VkCommandPoolCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkCommandPoolResetFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkCommandPoolResetFlags";
     ft->argNames = { "release_resources" };
     return ft;
@@ -373,7 +373,7 @@ TypeDeclPtr makeVkFlags_VkCommandPoolResetFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkCommandBufferResetFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkCommandBufferResetFlags";
     ft->argNames = { "release_resources" };
     return ft;
@@ -382,7 +382,7 @@ TypeDeclPtr makeVkFlags_VkCommandBufferResetFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkCommandBufferUsageFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkCommandBufferUsageFlags";
     ft->argNames = { "one_time_submit", "render_pass_continue", "simultaneous_use" };
     return ft;
@@ -391,7 +391,7 @@ TypeDeclPtr makeVkFlags_VkCommandBufferUsageFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkQueryPipelineStatisticFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkQueryPipelineStatisticFlags";
     ft->argNames = { "input_assembly_vertices", "input_assembly_primitives", "vertex_shader_invocations", "geometry_shader_invocations", "geometry_shader_primitives", "clipping_invocations", "clipping_primitives", "fragment_shader_invocations", "tessellation_control_shader_patches", "tessellation_evaluation_shader_invocations", "compute_shader_invocations", "task_shader_invocations_ext", "mesh_shader_invocations_ext", "cluster_culling_shader_invocations_huawei" };
     return ft;
@@ -400,7 +400,7 @@ TypeDeclPtr makeVkFlags_VkQueryPipelineStatisticFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkMemoryMapFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkMemoryMapFlags";
     ft->argNames = { "placed_ext" };
     return ft;
@@ -409,7 +409,7 @@ TypeDeclPtr makeVkFlags_VkMemoryMapFlags() {
 
 #if defined(VK_VERSION_1_4)
 TypeDeclPtr makeVkFlags_VkMemoryUnmapFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkMemoryUnmapFlags";
     ft->argNames = { "reserve_ext" };
     return ft;
@@ -418,7 +418,7 @@ TypeDeclPtr makeVkFlags_VkMemoryUnmapFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkImageAspectFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkImageAspectFlags";
     ft->argNames = { "color", "depth", "stencil", "metadata", "plane_0", "plane_1", "plane_2", "memory_plane_0_ext", "memory_plane_1_ext", "memory_plane_2_ext", "memory_plane_3_ext" };
     return ft;
@@ -427,7 +427,7 @@ TypeDeclPtr makeVkFlags_VkImageAspectFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkSparseMemoryBindFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSparseMemoryBindFlags";
     ft->argNames = { "metadata" };
     return ft;
@@ -436,7 +436,7 @@ TypeDeclPtr makeVkFlags_VkSparseMemoryBindFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkSparseImageFormatFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSparseImageFormatFlags";
     ft->argNames = { "single_miptail", "aligned_mip_size", "nonstandard_block_size" };
     return ft;
@@ -445,7 +445,7 @@ TypeDeclPtr makeVkFlags_VkSparseImageFormatFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkSubpassDescriptionFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSubpassDescriptionFlags";
     ft->argNames = { "per_view_attributes_nvx", "per_view_position_x_only_nvx", "fragment_region_ext", "custom_resolve_ext", "rasterization_order_attachment_color_access_ext", "rasterization_order_attachment_depth_access_ext", "rasterization_order_attachment_stencil_access_ext", "enable_legacy_dithering_ext", "tile_shading_apron_qcom" };
     return ft;
@@ -454,7 +454,7 @@ TypeDeclPtr makeVkFlags_VkSubpassDescriptionFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkPipelineStageFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineStageFlags";
     ft->argNames = { "top_of_pipe", "draw_indirect", "vertex_input", "vertex_shader", "tessellation_control_shader", "tessellation_evaluation_shader", "geometry_shader", "fragment_shader", "early_fragment_tests", "late_fragment_tests", "color_attachment_output", "compute_shader", "transfer", "bottom_of_pipe", "host", "all_graphics", "all_commands", "command_preprocess_ext", "conditional_rendering_ext", "task_shader_ext", "mesh_shader_ext", "ray_tracing_shader_khr", "fragment_shading_rate_attachment_khr", "fragment_density_process_ext", "transform_feedback_ext", "acceleration_structure_build_khr" };
     return ft;
@@ -463,7 +463,7 @@ TypeDeclPtr makeVkFlags_VkPipelineStageFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkSampleCountFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSampleCountFlags";
     ft->argNames = { "_1", "_2", "_4", "_8", "_16", "_32", "_64" };
     return ft;
@@ -472,7 +472,7 @@ TypeDeclPtr makeVkFlags_VkSampleCountFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkAttachmentDescriptionFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkAttachmentDescriptionFlags";
     ft->argNames = { "may_alias", "resolve_skip_transfer_function_khr", "resolve_enable_transfer_function_khr" };
     return ft;
@@ -481,7 +481,7 @@ TypeDeclPtr makeVkFlags_VkAttachmentDescriptionFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkStencilFaceFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkStencilFaceFlags";
     ft->argNames = { "front", "back" };
     return ft;
@@ -490,7 +490,7 @@ TypeDeclPtr makeVkFlags_VkStencilFaceFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkCullModeFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkCullModeFlags";
     ft->argNames = { "front", "back" };
     return ft;
@@ -499,7 +499,7 @@ TypeDeclPtr makeVkFlags_VkCullModeFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkDescriptorPoolCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDescriptorPoolCreateFlags";
     ft->argNames = { "free_descriptor_set", "update_after_bind", "host_only_ext", "allow_overallocation_sets_nv", "allow_overallocation_pools_nv" };
     return ft;
@@ -508,7 +508,7 @@ TypeDeclPtr makeVkFlags_VkDescriptorPoolCreateFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkDescriptorPoolResetFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDescriptorPoolResetFlags";
     return ft;
 }
@@ -516,7 +516,7 @@ TypeDeclPtr makeVkFlags_VkDescriptorPoolResetFlags() {
 
 #if defined(VK_VERSION_1_0)
 TypeDeclPtr makeVkFlags_VkDependencyFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDependencyFlags";
     ft->argNames = { "by_region", "view_local", "device_group", "feedback_loop_ext", "_b4", "queue_family_ownership_transfer_use_all_stages_khr", "asymmetric_event_khr" };
     return ft;
@@ -525,7 +525,7 @@ TypeDeclPtr makeVkFlags_VkDependencyFlags() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkSubgroupFeatureFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSubgroupFeatureFlags";
     ft->argNames = { "basic", "vote", "arithmetic", "ballot", "shuffle", "shuffle_relative", "clustered", "quad", "partitioned_ext", "rotate", "rotate_clustered" };
     return ft;
@@ -534,7 +534,7 @@ TypeDeclPtr makeVkFlags_VkSubgroupFeatureFlags() {
 
 #if defined(VK_NV_device_generated_commands)
 TypeDeclPtr makeVkFlags_VkIndirectCommandsLayoutUsageFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkIndirectCommandsLayoutUsageFlagsNV";
     ft->argNames = { "explicit_preprocess_nv", "indexed_sequences_nv", "unordered_sequences_nv" };
     return ft;
@@ -543,7 +543,7 @@ TypeDeclPtr makeVkFlags_VkIndirectCommandsLayoutUsageFlagsNV() {
 
 #if defined(VK_NV_device_generated_commands)
 TypeDeclPtr makeVkFlags_VkIndirectStateFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkIndirectStateFlagsNV";
     ft->argNames = { "flag_frontface_nv" };
     return ft;
@@ -552,7 +552,7 @@ TypeDeclPtr makeVkFlags_VkIndirectStateFlagsNV() {
 
 #if defined(VK_KHR_acceleration_structure)
 TypeDeclPtr makeVkFlags_VkGeometryFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkGeometryFlagsKHR";
     ft->argNames = { "opaque_khr", "no_duplicate_any_hit_invocation_khr" };
     return ft;
@@ -561,7 +561,7 @@ TypeDeclPtr makeVkFlags_VkGeometryFlagsKHR() {
 
 #if defined(VK_KHR_acceleration_structure)
 TypeDeclPtr makeVkFlags_VkGeometryInstanceFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkGeometryInstanceFlagsKHR";
     ft->argNames = { "triangle_facing_cull_disable_khr", "triangle_flip_facing_khr", "force_opaque_khr", "force_no_opaque_khr", "force_opacity_micromap_2_state_ext", "disable_opacity_micromaps_ext" };
     return ft;
@@ -570,7 +570,7 @@ TypeDeclPtr makeVkFlags_VkGeometryInstanceFlagsKHR() {
 
 #if defined(VK_NV_cluster_acceleration_structure)
 TypeDeclPtr makeVkFlags_VkClusterAccelerationStructureGeometryFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkClusterAccelerationStructureGeometryFlagsNV";
     ft->argNames = { "cull_disable_nv", "no_duplicate_anyhit_invocation_nv", "opaque_nv" };
     return ft;
@@ -579,7 +579,7 @@ TypeDeclPtr makeVkFlags_VkClusterAccelerationStructureGeometryFlagsNV() {
 
 #if defined(VK_NV_cluster_acceleration_structure)
 TypeDeclPtr makeVkFlags_VkClusterAccelerationStructureClusterFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkClusterAccelerationStructureClusterFlagsNV";
     ft->argNames = { "allow_disable_opacity_micromaps_nv" };
     return ft;
@@ -588,7 +588,7 @@ TypeDeclPtr makeVkFlags_VkClusterAccelerationStructureClusterFlagsNV() {
 
 #if defined(VK_NV_cluster_acceleration_structure)
 TypeDeclPtr makeVkFlags_VkClusterAccelerationStructureAddressResolutionFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkClusterAccelerationStructureAddressResolutionFlagsNV";
     ft->argNames = { "indirected_dst_implicit_data_nv", "indirected_scratch_data_nv", "indirected_dst_address_array_nv", "indirected_dst_sizes_array_nv", "indirected_src_infos_array_nv", "indirected_src_infos_count_nv" };
     return ft;
@@ -597,7 +597,7 @@ TypeDeclPtr makeVkFlags_VkClusterAccelerationStructureAddressResolutionFlagsNV()
 
 #if defined(VK_KHR_acceleration_structure)
 TypeDeclPtr makeVkFlags_VkBuildAccelerationStructureFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkBuildAccelerationStructureFlagsKHR";
     ft->argNames = { "allow_update_khr", "allow_compaction_khr", "prefer_fast_trace_khr", "prefer_fast_build_khr", "low_memory_khr", "motion_nv", "allow_opacity_micromap_update_ext", "allow_disable_opacity_micromaps_ext", "allow_opacity_micromap_data_update_ext", "allow_displacement_micromap_update_nv", "_b10", "allow_data_access_khr", "allow_cluster_opacity_micromaps_nv" };
     return ft;
@@ -606,7 +606,7 @@ TypeDeclPtr makeVkFlags_VkBuildAccelerationStructureFlagsKHR() {
 
 #if defined(VK_VERSION_1_3)
 TypeDeclPtr makeVkFlags_VkPrivateDataSlotCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPrivateDataSlotCreateFlags";
     return ft;
 }
@@ -614,7 +614,7 @@ TypeDeclPtr makeVkFlags_VkPrivateDataSlotCreateFlags() {
 
 #if defined(VK_KHR_acceleration_structure)
 TypeDeclPtr makeVkFlags_VkAccelerationStructureCreateFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkAccelerationStructureCreateFlagsKHR";
     ft->argNames = { "device_address_capture_replay_khr", "_b1", "motion_nv", "descriptor_buffer_capture_replay_ext" };
     return ft;
@@ -623,7 +623,7 @@ TypeDeclPtr makeVkFlags_VkAccelerationStructureCreateFlagsKHR() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkDescriptorUpdateTemplateCreateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDescriptorUpdateTemplateCreateFlags";
     return ft;
 }
@@ -631,7 +631,7 @@ TypeDeclPtr makeVkFlags_VkDescriptorUpdateTemplateCreateFlags() {
 
 #if defined(VK_VERSION_1_3)
 TypeDeclPtr makeVkFlags_VkPipelineCreationFeedbackFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineCreationFeedbackFlags";
     ft->argNames = { "valid", "application_pipeline_cache_hit", "base_pipeline_acceleration" };
     return ft;
@@ -640,7 +640,7 @@ TypeDeclPtr makeVkFlags_VkPipelineCreationFeedbackFlags() {
 
 #if defined(VK_KHR_performance_query)
 TypeDeclPtr makeVkFlags_VkPerformanceCounterDescriptionFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPerformanceCounterDescriptionFlagsKHR";
     ft->argNames = { "performance_impacting_khr", "concurrently_impacted_khr" };
     return ft;
@@ -649,7 +649,7 @@ TypeDeclPtr makeVkFlags_VkPerformanceCounterDescriptionFlagsKHR() {
 
 #if defined(VK_KHR_performance_query)
 TypeDeclPtr makeVkFlags_VkAcquireProfilingLockFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkAcquireProfilingLockFlagsKHR";
     return ft;
 }
@@ -657,7 +657,7 @@ TypeDeclPtr makeVkFlags_VkAcquireProfilingLockFlagsKHR() {
 
 #if defined(VK_VERSION_1_2)
 TypeDeclPtr makeVkFlags_VkSemaphoreWaitFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSemaphoreWaitFlags";
     ft->argNames = { "any" };
     return ft;
@@ -666,7 +666,7 @@ TypeDeclPtr makeVkFlags_VkSemaphoreWaitFlags() {
 
 #if defined(VK_AMD_pipeline_compiler_control)
 TypeDeclPtr makeVkFlags_VkPipelineCompilerControlFlagsAMD() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineCompilerControlFlagsAMD";
     return ft;
 }
@@ -674,7 +674,7 @@ TypeDeclPtr makeVkFlags_VkPipelineCompilerControlFlagsAMD() {
 
 #if defined(VK_AMD_shader_core_properties2)
 TypeDeclPtr makeVkFlags_VkShaderCorePropertiesFlagsAMD() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkShaderCorePropertiesFlagsAMD";
     return ft;
 }
@@ -682,7 +682,7 @@ TypeDeclPtr makeVkFlags_VkShaderCorePropertiesFlagsAMD() {
 
 #if defined(VK_NV_device_diagnostics_config)
 TypeDeclPtr makeVkFlags_VkDeviceDiagnosticsConfigFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDeviceDiagnosticsConfigFlagsNV";
     ft->argNames = { "enable_shader_debug_info_nv", "enable_resource_tracking_nv", "enable_automatic_checkpoints_nv", "enable_shader_error_reporting_nv" };
     return ft;
@@ -691,7 +691,7 @@ TypeDeclPtr makeVkFlags_VkDeviceDiagnosticsConfigFlagsNV() {
 
 #if defined(VK_VERSION_1_3)
 TypeDeclPtr makeVkFlags_VkAccessFlags2() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkAccessFlags2";
     ft->argNames = { "indirect_command_read", "index_read", "vertex_attribute_read", "uniform_read", "input_attachment_read", "shader_read", "shader_write", "color_attachment_read", "color_attachment_write", "depth_stencil_attachment_read", "depth_stencil_attachment_write", "transfer_read", "transfer_write", "host_read", "host_write", "memory_read", "memory_write", "command_preprocess_read_ext", "command_preprocess_write_ext", "color_attachment_read_noncoherent_ext", "conditional_rendering_read_ext", "acceleration_structure_read_khr", "acceleration_structure_write_khr", "fragment_shading_rate_attachment_read_khr", "fragment_density_map_read_ext", "transform_feedback_write_ext", "transform_feedback_counter_read_ext", "transform_feedback_counter_write_ext", "_b28", "_b29", "_b30", "_b31", "shader_sampled_read", "shader_storage_read", "shader_storage_write", "video_decode_read_khr", "video_decode_write_khr", "video_encode_read_khr", "video_encode_write_khr", "invocation_mask_read_huawei", "shader_binding_table_read_khr", "descriptor_buffer_read_ext", "optical_flow_read_nv", "optical_flow_write_nv", "micromap_read_ext", "micromap_write_ext", "_b46", "data_graph_read_arm", "data_graph_write_arm", "_b49", "_b50", "shader_tile_attachment_read_qcom", "shader_tile_attachment_write_qcom", "_b53", "_b54", "memory_decompression_read_ext", "memory_decompression_write_ext", "sampler_heap_read_ext", "resource_heap_read_ext" };
     return ft;
@@ -700,7 +700,7 @@ TypeDeclPtr makeVkFlags_VkAccessFlags2() {
 
 #if defined(VK_VERSION_1_3)
 TypeDeclPtr makeVkFlags_VkPipelineStageFlags2() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkPipelineStageFlags2";
     ft->argNames = { "top_of_pipe", "draw_indirect", "vertex_input", "vertex_shader", "tessellation_control_shader", "tessellation_evaluation_shader", "geometry_shader", "fragment_shader", "early_fragment_tests", "late_fragment_tests", "color_attachment_output", "compute_shader", "all_transfer", "bottom_of_pipe", "host", "all_graphics", "all_commands", "command_preprocess_ext", "conditional_rendering_ext", "task_shader_ext", "mesh_shader_ext", "ray_tracing_shader_khr", "fragment_shading_rate_attachment_khr", "fragment_density_process_ext", "transform_feedback_ext", "acceleration_structure_build_khr", "video_decode_khr", "video_encode_khr", "acceleration_structure_copy_khr", "optical_flow_nv", "micromap_build_ext", "_b31", "copy", "resolve", "blit", "clear", "index_input", "vertex_attribute_input", "pre_rasterization_shaders", "subpass_shader_huawei", "invocation_mask_huawei", "cluster_culling_shader_huawei", "data_graph_arm", "_b43", "convert_cooperative_vector_matrix_nv", "memory_decompression_ext", "copy_indirect_khr" };
     return ft;
@@ -709,7 +709,7 @@ TypeDeclPtr makeVkFlags_VkPipelineStageFlags2() {
 
 #if defined(VK_NV_ray_tracing_motion_blur)
 TypeDeclPtr makeVkFlags_VkAccelerationStructureMotionInfoFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkAccelerationStructureMotionInfoFlagsNV";
     return ft;
 }
@@ -717,7 +717,7 @@ TypeDeclPtr makeVkFlags_VkAccelerationStructureMotionInfoFlagsNV() {
 
 #if defined(VK_NV_ray_tracing_motion_blur)
 TypeDeclPtr makeVkFlags_VkAccelerationStructureMotionInstanceFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkAccelerationStructureMotionInstanceFlagsNV";
     return ft;
 }
@@ -725,7 +725,7 @@ TypeDeclPtr makeVkFlags_VkAccelerationStructureMotionInstanceFlagsNV() {
 
 #if defined(VK_VERSION_1_3)
 TypeDeclPtr makeVkFlags_VkFormatFeatureFlags2() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkFormatFeatureFlags2";
     ft->argNames = { "sampled_image", "storage_image", "storage_image_atomic", "uniform_texel_buffer", "storage_texel_buffer", "storage_texel_buffer_atomic", "vertex_buffer", "color_attachment", "color_attachment_blend", "depth_stencil_attachment", "blit_src", "blit_dst", "sampled_image_filter_linear", "sampled_image_filter_cubic", "transfer_src", "transfer_dst", "sampled_image_filter_minmax", "midpoint_chroma_samples", "sampled_image_ycbcr_conversion_linear_filter", "sampled_image_ycbcr_conversion_separate_reconstruction_filter", "sampled_image_ycbcr_conversion_chroma_reconstruction_explicit", "sampled_image_ycbcr_conversion_chroma_reconstruction_explicit_forceable", "disjoint", "cosited_chroma_samples", "fragment_density_map_ext", "video_decode_output_khr", "video_decode_dpb_khr", "video_encode_input_khr", "video_encode_dpb_khr", "acceleration_structure_vertex_buffer_khr", "fragment_shading_rate_attachment_khr", "storage_read_without_format", "storage_write_without_format", "sampled_image_depth_comparison", "weight_image_qcom", "weight_sampled_image_qcom", "block_matching_qcom", "box_filter_sampled_qcom", "linear_color_attachment_nv", "tensor_shader_arm", "optical_flow_image_nv", "optical_flow_vector_nv", "optical_flow_cost_nv", "tensor_image_aliasing_arm", "_b44", "_b45", "host_image_transfer", "_b47", "tensor_data_graph_arm", "video_encode_quantization_delta_map_khr", "video_encode_emphasis_map_khr", "acceleration_structure_radius_buffer_nv", "depth_copy_on_compute_queue_khr", "depth_copy_on_transfer_queue_khr", "stencil_copy_on_compute_queue_khr", "stencil_copy_on_transfer_queue_khr", "data_graph_optical_flow_image_arm", "data_graph_optical_flow_vector_arm", "data_graph_optical_flow_cost_arm", "copy_image_indirect_dst_khr" };
     return ft;
@@ -734,7 +734,7 @@ TypeDeclPtr makeVkFlags_VkFormatFeatureFlags2() {
 
 #if defined(VK_VERSION_1_3)
 TypeDeclPtr makeVkFlags_VkRenderingFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkRenderingFlags";
     ft->argNames = { "contents_secondary_command_buffers", "suspending", "resuming", "enable_legacy_dithering_ext", "contents_inline_khr", "per_layer_fragment_density_valve", "fragment_region_ext", "custom_resolve_ext", "local_read_concurrent_access_control_khr" };
     return ft;
@@ -743,7 +743,7 @@ TypeDeclPtr makeVkFlags_VkRenderingFlags() {
 
 #if defined(VK_EXT_memory_decompression)
 TypeDeclPtr makeVkFlags_VkMemoryDecompressionMethodFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkMemoryDecompressionMethodFlagsEXT";
     ft->argNames = { "gdeflate_1_0_ext" };
     return ft;
@@ -752,7 +752,7 @@ TypeDeclPtr makeVkFlags_VkMemoryDecompressionMethodFlagsEXT() {
 
 #if defined(VK_KHR_device_fault)
 TypeDeclPtr makeVkFlags_VkDeviceFaultFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDeviceFaultFlagsKHR";
     ft->argNames = { "flag_device_lost_khr", "flag_memory_address_khr", "flag_instruction_address_khr", "flag_vendor_khr", "flag_watchdog_timeout_khr", "flag_overflow_khr" };
     return ft;
@@ -761,7 +761,7 @@ TypeDeclPtr makeVkFlags_VkDeviceFaultFlagsKHR() {
 
 #if defined(VK_EXT_opacity_micromap)
 TypeDeclPtr makeVkFlags_VkBuildMicromapFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkBuildMicromapFlagsEXT";
     ft->argNames = { "prefer_fast_trace_ext", "prefer_fast_build_ext", "allow_compaction_ext" };
     return ft;
@@ -770,7 +770,7 @@ TypeDeclPtr makeVkFlags_VkBuildMicromapFlagsEXT() {
 
 #if defined(VK_EXT_opacity_micromap)
 TypeDeclPtr makeVkFlags_VkMicromapCreateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkMicromapCreateFlagsEXT";
     ft->argNames = { "device_address_capture_replay_ext" };
     return ft;
@@ -779,7 +779,7 @@ TypeDeclPtr makeVkFlags_VkMicromapCreateFlagsEXT() {
 
 #if defined(VK_EXT_device_generated_commands)
 TypeDeclPtr makeVkFlags_VkIndirectCommandsLayoutUsageFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkIndirectCommandsLayoutUsageFlagsEXT";
     ft->argNames = { "explicit_preprocess_ext", "unordered_sequences_ext" };
     return ft;
@@ -788,7 +788,7 @@ TypeDeclPtr makeVkFlags_VkIndirectCommandsLayoutUsageFlagsEXT() {
 
 #if defined(VK_EXT_device_generated_commands)
 TypeDeclPtr makeVkFlags_VkIndirectCommandsInputModeFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkIndirectCommandsInputModeFlagsEXT";
     ft->argNames = { "vulkan_index_buffer_ext", "dxgi_index_buffer_ext" };
     return ft;
@@ -797,7 +797,7 @@ TypeDeclPtr makeVkFlags_VkIndirectCommandsInputModeFlagsEXT() {
 
 #if defined(VK_LUNARG_direct_driver_loading)
 TypeDeclPtr makeVkFlags_VkDirectDriverLoadingFlagsLUNARG() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDirectDriverLoadingFlagsLUNARG";
     return ft;
 }
@@ -805,7 +805,7 @@ TypeDeclPtr makeVkFlags_VkDirectDriverLoadingFlagsLUNARG() {
 
 #if defined(VK_VERSION_1_4)
 TypeDeclPtr makeVkFlags_VkPipelineCreateFlags2() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkPipelineCreateFlags2";
     ft->argNames = { "disable_optimization", "allow_derivatives", "derivative", "view_index_from_device_index", "dispatch_base", "defer_compile_nv", "capture_statistics_khr", "capture_internal_representations_khr", "fail_on_pipeline_compile_required", "early_return_on_failure", "link_time_optimization_ext", "library_khr", "ray_tracing_skip_triangles_khr", "ray_tracing_skip_aabbs_khr", "ray_tracing_no_null_any_hit_shaders_khr", "ray_tracing_no_null_closest_hit_shaders_khr", "ray_tracing_no_null_miss_shaders_khr", "ray_tracing_no_null_intersection_shaders_khr", "indirect_bindable_nv", "ray_tracing_shader_group_handle_capture_replay_khr", "ray_tracing_allow_motion_nv", "rendering_fragment_shading_rate_attachment_khr", "rendering_fragment_density_map_attachment_ext", "retain_link_time_optimization_info_ext", "ray_tracing_opacity_micromap_ext", "color_attachment_feedback_loop_ext", "depth_stencil_attachment_feedback_loop_ext", "no_protected_access", "ray_tracing_displacement_micromap_nv", "descriptor_buffer_ext", "protected_access_only", "capture_data_khr", "execution_graph_amdx", "ray_tracing_allow_spheres_and_linear_swept_spheres_nv", "enable_legacy_dithering_ext", "_b35", "descriptor_heap_ext", "disallow_opacity_micromap_arm", "indirect_bindable_ext", "instrument_shaders_arm", "per_layer_fragment_density_valve", "_b41", "_b42", "_64_indexing_ext" };
     return ft;
@@ -814,7 +814,7 @@ TypeDeclPtr makeVkFlags_VkPipelineCreateFlags2() {
 
 #if defined(VK_VERSION_1_4)
 TypeDeclPtr makeVkFlags_VkBufferUsageFlags2() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkBufferUsageFlags2";
     ft->argNames = { "transfer_src", "transfer_dst", "uniform_texel_buffer", "storage_texel_buffer", "uniform_buffer", "storage_buffer", "index_buffer", "vertex_buffer", "indirect_buffer", "conditional_rendering_ext", "shader_binding_table_khr", "transform_feedback_buffer_ext", "transform_feedback_counter_buffer_ext", "video_decode_src_khr", "video_decode_dst_khr", "video_encode_dst_khr", "video_encode_src_khr", "shader_device_address", "_b18", "acceleration_structure_build_input_read_only_khr", "acceleration_structure_storage_khr", "sampler_descriptor_buffer_ext", "resource_descriptor_buffer_ext", "micromap_build_input_read_only_ext", "micromap_storage_ext", "execution_graph_scratch_amdx", "push_descriptors_descriptor_buffer_ext", "tile_memory_qcom", "descriptor_heap_ext", "data_graph_foreign_descriptor_arm", "_b30", "preprocess_buffer_ext", "memory_decompression_ext", "compressed_data_dgf1_amdx" };
     return ft;
@@ -823,7 +823,7 @@ TypeDeclPtr makeVkFlags_VkBufferUsageFlags2() {
 
 #if defined(VK_KHR_copy_memory_indirect)
 TypeDeclPtr makeVkFlags_VkAddressCopyFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkAddressCopyFlagsKHR";
     ft->argNames = { "device_local_khr", "sparse_khr", "protected_khr" };
     return ft;
@@ -832,7 +832,7 @@ TypeDeclPtr makeVkFlags_VkAddressCopyFlagsKHR() {
 
 #if defined(VK_ARM_tensors)
 TypeDeclPtr makeVkFlags_VkTensorCreateFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkTensorCreateFlagsARM";
     ft->argNames = { "mutable_format_arm", "protected_arm", "descriptor_buffer_capture_replay_arm", "descriptor_heap_capture_replay_arm" };
     return ft;
@@ -841,7 +841,7 @@ TypeDeclPtr makeVkFlags_VkTensorCreateFlagsARM() {
 
 #if defined(VK_ARM_tensors)
 TypeDeclPtr makeVkFlags_VkTensorUsageFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkTensorUsageFlagsARM";
     ft->argNames = { "_b0", "shader_arm", "transfer_src_arm", "transfer_dst_arm", "image_aliasing_arm", "data_graph_arm" };
     return ft;
@@ -850,7 +850,7 @@ TypeDeclPtr makeVkFlags_VkTensorUsageFlagsARM() {
 
 #if defined(VK_EXT_descriptor_heap)
 TypeDeclPtr makeVkFlags_VkTensorViewCreateFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkTensorViewCreateFlagsARM";
     ft->argNames = { "descriptor_buffer_capture_replay_arm" };
     return ft;
@@ -859,7 +859,7 @@ TypeDeclPtr makeVkFlags_VkTensorViewCreateFlagsARM() {
 
 #if defined(VK_ARM_data_graph)
 TypeDeclPtr makeVkFlags_VkDataGraphPipelineSessionCreateFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkDataGraphPipelineSessionCreateFlagsARM";
     ft->argNames = { "protected_arm", "optical_flow_cache_arm" };
     return ft;
@@ -868,7 +868,7 @@ TypeDeclPtr makeVkFlags_VkDataGraphPipelineSessionCreateFlagsARM() {
 
 #if defined(VK_ARM_data_graph)
 TypeDeclPtr makeVkFlags_VkDataGraphPipelineDispatchFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkDataGraphPipelineDispatchFlagsARM";
     return ft;
 }
@@ -876,7 +876,7 @@ TypeDeclPtr makeVkFlags_VkDataGraphPipelineDispatchFlagsARM() {
 
 #if defined(VK_VALVE_video_encode_rgb_conversion)
 TypeDeclPtr makeVkFlags_VkVideoEncodeRgbModelConversionFlagsVALVE() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeRgbModelConversionFlagsVALVE";
     ft->argNames = { "rgb_identity_valve", "ycbcr_identity_valve", "ycbcr_709_valve", "ycbcr_601_valve", "ycbcr_2020_valve" };
     return ft;
@@ -885,7 +885,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeRgbModelConversionFlagsVALVE() {
 
 #if defined(VK_VALVE_video_encode_rgb_conversion)
 TypeDeclPtr makeVkFlags_VkVideoEncodeRgbRangeCompressionFlagsVALVE() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeRgbRangeCompressionFlagsVALVE";
     ft->argNames = { "full_range_valve", "narrow_range_valve" };
     return ft;
@@ -894,7 +894,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeRgbRangeCompressionFlagsVALVE() {
 
 #if defined(VK_VALVE_video_encode_rgb_conversion)
 TypeDeclPtr makeVkFlags_VkVideoEncodeRgbChromaOffsetFlagsVALVE() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeRgbChromaOffsetFlagsVALVE";
     ft->argNames = { "cosited_even_valve", "midpoint_valve" };
     return ft;
@@ -903,7 +903,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeRgbChromaOffsetFlagsVALVE() {
 
 #if defined(VK_EXT_descriptor_heap)
 TypeDeclPtr makeVkFlags_VkSpirvResourceTypeFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSpirvResourceTypeFlagsEXT";
     ft->argNames = { "sampler_ext", "sampled_image_ext", "read_only_image_ext", "read_write_image_ext", "combined_sampled_image_ext", "uniform_buffer_ext", "read_only_storage_buffer_ext", "read_write_storage_buffer_ext", "acceleration_structure_ext", "tensor_arm" };
     return ft;
@@ -912,7 +912,7 @@ TypeDeclPtr makeVkFlags_VkSpirvResourceTypeFlagsEXT() {
 
 #if defined(VK_KHR_device_address_commands)
 TypeDeclPtr makeVkFlags_VkAddressCommandFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkAddressCommandFlagsKHR";
     ft->argNames = { "protected_khr", "fully_bound_khr", "storage_buffer_usage_khr", "unknown_storage_buffer_usage_khr", "transform_feedback_buffer_usage_khr", "unknown_transform_feedback_buffer_usage_khr" };
     return ft;
@@ -921,7 +921,7 @@ TypeDeclPtr makeVkFlags_VkAddressCommandFlagsKHR() {
 
 #if defined(VK_KHR_surface)
 TypeDeclPtr makeVkFlags_VkCompositeAlphaFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkCompositeAlphaFlagsKHR";
     ft->argNames = { "opaque_khr", "pre_multiplied_khr", "post_multiplied_khr", "inherit_khr" };
     return ft;
@@ -930,7 +930,7 @@ TypeDeclPtr makeVkFlags_VkCompositeAlphaFlagsKHR() {
 
 #if defined(VK_KHR_display)
 TypeDeclPtr makeVkFlags_VkDisplayPlaneAlphaFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDisplayPlaneAlphaFlagsKHR";
     ft->argNames = { "opaque_khr", "global_khr", "per_pixel_khr", "per_pixel_premultiplied_khr" };
     return ft;
@@ -939,7 +939,7 @@ TypeDeclPtr makeVkFlags_VkDisplayPlaneAlphaFlagsKHR() {
 
 #if defined(VK_KHR_surface)
 TypeDeclPtr makeVkFlags_VkSurfaceTransformFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSurfaceTransformFlagsKHR";
     ft->argNames = { "identity_khr", "rotate_90_khr", "rotate_180_khr", "rotate_270_khr", "horizontal_mirror_khr", "horizontal_mirror_rotate_90_khr", "horizontal_mirror_rotate_180_khr", "horizontal_mirror_rotate_270_khr", "inherit_khr" };
     return ft;
@@ -948,7 +948,7 @@ TypeDeclPtr makeVkFlags_VkSurfaceTransformFlagsKHR() {
 
 #if defined(VK_KHR_swapchain)
 TypeDeclPtr makeVkFlags_VkSwapchainCreateFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSwapchainCreateFlagsKHR";
     ft->argNames = { "split_instance_bind_regions_khr", "protected_khr", "mutable_format_khr", "deferred_memory_allocation_khr", "_b4", "_b5", "present_id_2_khr", "present_wait_2_khr", "_b8", "present_timing_ext" };
     return ft;
@@ -957,7 +957,7 @@ TypeDeclPtr makeVkFlags_VkSwapchainCreateFlagsKHR() {
 
 #if defined(VK_KHR_display)
 TypeDeclPtr makeVkFlags_VkDisplayModeCreateFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDisplayModeCreateFlagsKHR";
     return ft;
 }
@@ -965,7 +965,7 @@ TypeDeclPtr makeVkFlags_VkDisplayModeCreateFlagsKHR() {
 
 #if defined(VK_KHR_display)
 TypeDeclPtr makeVkFlags_VkDisplaySurfaceCreateFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDisplaySurfaceCreateFlagsKHR";
     return ft;
 }
@@ -973,7 +973,7 @@ TypeDeclPtr makeVkFlags_VkDisplaySurfaceCreateFlagsKHR() {
 
 #if defined(VK_KHR_wayland_surface) && defined(VK_USE_PLATFORM_WAYLAND_KHR)
 TypeDeclPtr makeVkFlags_VkWaylandSurfaceCreateFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkWaylandSurfaceCreateFlagsKHR";
     return ft;
 }
@@ -981,7 +981,7 @@ TypeDeclPtr makeVkFlags_VkWaylandSurfaceCreateFlagsKHR() {
 
 #if defined(VK_KHR_win32_surface) && defined(VK_USE_PLATFORM_WIN32_KHR)
 TypeDeclPtr makeVkFlags_VkWin32SurfaceCreateFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkWin32SurfaceCreateFlagsKHR";
     return ft;
 }
@@ -989,7 +989,7 @@ TypeDeclPtr makeVkFlags_VkWin32SurfaceCreateFlagsKHR() {
 
 #if defined(VK_KHR_xlib_surface) && defined(VK_USE_PLATFORM_XLIB_KHR)
 TypeDeclPtr makeVkFlags_VkXlibSurfaceCreateFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkXlibSurfaceCreateFlagsKHR";
     return ft;
 }
@@ -997,7 +997,7 @@ TypeDeclPtr makeVkFlags_VkXlibSurfaceCreateFlagsKHR() {
 
 #if defined(VK_EXT_metal_surface) && defined(VK_USE_PLATFORM_METAL_EXT)
 TypeDeclPtr makeVkFlags_VkMetalSurfaceCreateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkMetalSurfaceCreateFlagsEXT";
     return ft;
 }
@@ -1005,7 +1005,7 @@ TypeDeclPtr makeVkFlags_VkMetalSurfaceCreateFlagsEXT() {
 
 #if defined(VK_EXT_headless_surface)
 TypeDeclPtr makeVkFlags_VkHeadlessSurfaceCreateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkHeadlessSurfaceCreateFlagsEXT";
     return ft;
 }
@@ -1013,7 +1013,7 @@ TypeDeclPtr makeVkFlags_VkHeadlessSurfaceCreateFlagsEXT() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkPeerMemoryFeatureFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPeerMemoryFeatureFlags";
     ft->argNames = { "copy_src", "copy_dst", "generic_src", "generic_dst" };
     return ft;
@@ -1022,7 +1022,7 @@ TypeDeclPtr makeVkFlags_VkPeerMemoryFeatureFlags() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkMemoryAllocateFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkMemoryAllocateFlags";
     ft->argNames = { "device_mask", "device_address", "device_address_capture_replay", "zero_initialize_ext" };
     return ft;
@@ -1031,7 +1031,7 @@ TypeDeclPtr makeVkFlags_VkMemoryAllocateFlags() {
 
 #if defined(VK_KHR_swapchain)
 TypeDeclPtr makeVkFlags_VkDeviceGroupPresentModeFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDeviceGroupPresentModeFlagsKHR";
     ft->argNames = { "local_khr", "remote_khr", "sum_khr", "local_multi_device_khr" };
     return ft;
@@ -1040,7 +1040,7 @@ TypeDeclPtr makeVkFlags_VkDeviceGroupPresentModeFlagsKHR() {
 
 #if defined(VK_EXT_debug_report)
 TypeDeclPtr makeVkFlags_VkDebugReportFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDebugReportFlagsEXT";
     ft->argNames = { "information_ext", "warning_ext", "performance_warning_ext", "error_ext", "debug_ext" };
     return ft;
@@ -1049,7 +1049,7 @@ TypeDeclPtr makeVkFlags_VkDebugReportFlagsEXT() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkCommandPoolTrimFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkCommandPoolTrimFlags";
     return ft;
 }
@@ -1057,7 +1057,7 @@ TypeDeclPtr makeVkFlags_VkCommandPoolTrimFlags() {
 
 #if defined(VK_NV_external_memory_capabilities)
 TypeDeclPtr makeVkFlags_VkExternalMemoryHandleTypeFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkExternalMemoryHandleTypeFlagsNV";
     ft->argNames = { "opaque_win32_nv", "opaque_win32_kmt_nv", "d3d11_image_nv", "d3d11_image_kmt_nv" };
     return ft;
@@ -1066,7 +1066,7 @@ TypeDeclPtr makeVkFlags_VkExternalMemoryHandleTypeFlagsNV() {
 
 #if defined(VK_NV_cluster_acceleration_structure)
 TypeDeclPtr makeVkFlags_VkClusterAccelerationStructureIndexFormatFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkClusterAccelerationStructureIndexFormatFlagsNV";
     ft->argNames = { "_8bit_nv", "_16bit_nv", "_32bit_nv" };
     return ft;
@@ -1075,7 +1075,7 @@ TypeDeclPtr makeVkFlags_VkClusterAccelerationStructureIndexFormatFlagsNV() {
 
 #if defined(VK_NV_external_memory_capabilities)
 TypeDeclPtr makeVkFlags_VkExternalMemoryFeatureFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkExternalMemoryFeatureFlagsNV";
     ft->argNames = { "dedicated_only_nv", "exportable_nv", "importable_nv" };
     return ft;
@@ -1084,7 +1084,7 @@ TypeDeclPtr makeVkFlags_VkExternalMemoryFeatureFlagsNV() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkExternalMemoryHandleTypeFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkExternalMemoryHandleTypeFlags";
     ft->argNames = { "opaque_fd", "opaque_win32", "opaque_win32_kmt", "d3d11_texture", "d3d11_texture_kmt", "d3d12_heap", "d3d12_resource", "host_allocation_ext", "host_mapped_foreign_memory_ext", "dma_buf_ext", "android_hardware_buffer_android", "zircon_vmo_fuchsia", "rdma_address_nv", "_b13", "screen_buffer_qnx", "oh_native_buffer_ohos", "mtlbuffer_ext", "mtltexture_ext", "mtlheap_ext" };
     return ft;
@@ -1093,7 +1093,7 @@ TypeDeclPtr makeVkFlags_VkExternalMemoryHandleTypeFlags() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkExternalMemoryFeatureFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkExternalMemoryFeatureFlags";
     ft->argNames = { "dedicated_only", "exportable", "importable" };
     return ft;
@@ -1102,7 +1102,7 @@ TypeDeclPtr makeVkFlags_VkExternalMemoryFeatureFlags() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkExternalSemaphoreHandleTypeFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkExternalSemaphoreHandleTypeFlags";
     ft->argNames = { "opaque_fd", "opaque_win32", "opaque_win32_kmt", "d3d12_fence", "sync_fd", "_b5", "_b6", "zircon_event_fuchsia" };
     return ft;
@@ -1111,7 +1111,7 @@ TypeDeclPtr makeVkFlags_VkExternalSemaphoreHandleTypeFlags() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkExternalSemaphoreFeatureFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkExternalSemaphoreFeatureFlags";
     ft->argNames = { "exportable", "importable" };
     return ft;
@@ -1120,7 +1120,7 @@ TypeDeclPtr makeVkFlags_VkExternalSemaphoreFeatureFlags() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkSemaphoreImportFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSemaphoreImportFlags";
     ft->argNames = { "temporary" };
     return ft;
@@ -1129,7 +1129,7 @@ TypeDeclPtr makeVkFlags_VkSemaphoreImportFlags() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkExternalFenceHandleTypeFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkExternalFenceHandleTypeFlags";
     ft->argNames = { "opaque_fd", "opaque_win32", "opaque_win32_kmt", "sync_fd" };
     return ft;
@@ -1138,7 +1138,7 @@ TypeDeclPtr makeVkFlags_VkExternalFenceHandleTypeFlags() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkExternalFenceFeatureFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkExternalFenceFeatureFlags";
     ft->argNames = { "exportable", "importable" };
     return ft;
@@ -1147,7 +1147,7 @@ TypeDeclPtr makeVkFlags_VkExternalFenceFeatureFlags() {
 
 #if defined(VK_VERSION_1_1)
 TypeDeclPtr makeVkFlags_VkFenceImportFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkFenceImportFlags";
     ft->argNames = { "temporary" };
     return ft;
@@ -1156,7 +1156,7 @@ TypeDeclPtr makeVkFlags_VkFenceImportFlags() {
 
 #if defined(VK_EXT_display_surface_counter)
 TypeDeclPtr makeVkFlags_VkSurfaceCounterFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSurfaceCounterFlagsEXT";
     ft->argNames = { "vblank_ext" };
     return ft;
@@ -1165,7 +1165,7 @@ TypeDeclPtr makeVkFlags_VkSurfaceCounterFlagsEXT() {
 
 #if defined(VK_NV_viewport_swizzle)
 TypeDeclPtr makeVkFlags_VkPipelineViewportSwizzleStateCreateFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineViewportSwizzleStateCreateFlagsNV";
     return ft;
 }
@@ -1173,7 +1173,7 @@ TypeDeclPtr makeVkFlags_VkPipelineViewportSwizzleStateCreateFlagsNV() {
 
 #if defined(VK_EXT_discard_rectangles)
 TypeDeclPtr makeVkFlags_VkPipelineDiscardRectangleStateCreateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineDiscardRectangleStateCreateFlagsEXT";
     return ft;
 }
@@ -1181,7 +1181,7 @@ TypeDeclPtr makeVkFlags_VkPipelineDiscardRectangleStateCreateFlagsEXT() {
 
 #if defined(VK_NV_fragment_coverage_to_color)
 TypeDeclPtr makeVkFlags_VkPipelineCoverageToColorStateCreateFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineCoverageToColorStateCreateFlagsNV";
     return ft;
 }
@@ -1189,7 +1189,7 @@ TypeDeclPtr makeVkFlags_VkPipelineCoverageToColorStateCreateFlagsNV() {
 
 #if defined(VK_NV_framebuffer_mixed_samples)
 TypeDeclPtr makeVkFlags_VkPipelineCoverageModulationStateCreateFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineCoverageModulationStateCreateFlagsNV";
     return ft;
 }
@@ -1197,7 +1197,7 @@ TypeDeclPtr makeVkFlags_VkPipelineCoverageModulationStateCreateFlagsNV() {
 
 #if defined(VK_NV_coverage_reduction_mode)
 TypeDeclPtr makeVkFlags_VkPipelineCoverageReductionStateCreateFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineCoverageReductionStateCreateFlagsNV";
     return ft;
 }
@@ -1205,7 +1205,7 @@ TypeDeclPtr makeVkFlags_VkPipelineCoverageReductionStateCreateFlagsNV() {
 
 #if defined(VK_EXT_validation_cache)
 TypeDeclPtr makeVkFlags_VkValidationCacheCreateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkValidationCacheCreateFlagsEXT";
     return ft;
 }
@@ -1213,7 +1213,7 @@ TypeDeclPtr makeVkFlags_VkValidationCacheCreateFlagsEXT() {
 
 #if defined(VK_EXT_debug_utils)
 TypeDeclPtr makeVkFlags_VkDebugUtilsMessageSeverityFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDebugUtilsMessageSeverityFlagsEXT";
     ft->argNames = { "verbose_ext", "_b1", "_b2", "_b3", "info_ext", "_b5", "_b6", "_b7", "warning_ext", "_b9", "_b10", "_b11", "error_ext" };
     return ft;
@@ -1222,7 +1222,7 @@ TypeDeclPtr makeVkFlags_VkDebugUtilsMessageSeverityFlagsEXT() {
 
 #if defined(VK_EXT_debug_utils)
 TypeDeclPtr makeVkFlags_VkDebugUtilsMessageTypeFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDebugUtilsMessageTypeFlagsEXT";
     ft->argNames = { "general_ext", "validation_ext", "performance_ext", "device_address_binding_ext" };
     return ft;
@@ -1231,7 +1231,7 @@ TypeDeclPtr makeVkFlags_VkDebugUtilsMessageTypeFlagsEXT() {
 
 #if defined(VK_EXT_debug_utils)
 TypeDeclPtr makeVkFlags_VkDebugUtilsMessengerCreateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDebugUtilsMessengerCreateFlagsEXT";
     return ft;
 }
@@ -1239,7 +1239,7 @@ TypeDeclPtr makeVkFlags_VkDebugUtilsMessengerCreateFlagsEXT() {
 
 #if defined(VK_EXT_debug_utils)
 TypeDeclPtr makeVkFlags_VkDebugUtilsMessengerCallbackDataFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDebugUtilsMessengerCallbackDataFlagsEXT";
     return ft;
 }
@@ -1247,7 +1247,7 @@ TypeDeclPtr makeVkFlags_VkDebugUtilsMessengerCallbackDataFlagsEXT() {
 
 #if defined(VK_EXT_device_memory_report)
 TypeDeclPtr makeVkFlags_VkDeviceMemoryReportFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDeviceMemoryReportFlagsEXT";
     return ft;
 }
@@ -1255,7 +1255,7 @@ TypeDeclPtr makeVkFlags_VkDeviceMemoryReportFlagsEXT() {
 
 #if defined(VK_EXT_conservative_rasterization)
 TypeDeclPtr makeVkFlags_VkPipelineRasterizationConservativeStateCreateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineRasterizationConservativeStateCreateFlagsEXT";
     return ft;
 }
@@ -1263,7 +1263,7 @@ TypeDeclPtr makeVkFlags_VkPipelineRasterizationConservativeStateCreateFlagsEXT()
 
 #if defined(VK_VERSION_1_2)
 TypeDeclPtr makeVkFlags_VkDescriptorBindingFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDescriptorBindingFlags";
     ft->argNames = { "update_after_bind", "update_unused_while_pending", "partially_bound", "variable_descriptor_count" };
     return ft;
@@ -1272,7 +1272,7 @@ TypeDeclPtr makeVkFlags_VkDescriptorBindingFlags() {
 
 #if defined(VK_EXT_conditional_rendering)
 TypeDeclPtr makeVkFlags_VkConditionalRenderingFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkConditionalRenderingFlagsEXT";
     ft->argNames = { "inverted_ext" };
     return ft;
@@ -1281,7 +1281,7 @@ TypeDeclPtr makeVkFlags_VkConditionalRenderingFlagsEXT() {
 
 #if defined(VK_VERSION_1_2)
 TypeDeclPtr makeVkFlags_VkResolveModeFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkResolveModeFlags";
     ft->argNames = { "sample_zero", "average", "min", "max", "external_format_downsample_android", "custom_ext" };
     return ft;
@@ -1290,7 +1290,7 @@ TypeDeclPtr makeVkFlags_VkResolveModeFlags() {
 
 #if defined(VK_EXT_transform_feedback)
 TypeDeclPtr makeVkFlags_VkPipelineRasterizationStateStreamCreateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineRasterizationStateStreamCreateFlagsEXT";
     return ft;
 }
@@ -1298,7 +1298,7 @@ TypeDeclPtr makeVkFlags_VkPipelineRasterizationStateStreamCreateFlagsEXT() {
 
 #if defined(VK_EXT_depth_clip_enable)
 TypeDeclPtr makeVkFlags_VkPipelineRasterizationDepthClipStateCreateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPipelineRasterizationDepthClipStateCreateFlagsEXT";
     return ft;
 }
@@ -1306,7 +1306,7 @@ TypeDeclPtr makeVkFlags_VkPipelineRasterizationDepthClipStateCreateFlagsEXT() {
 
 #if defined(VK_VERSION_1_3)
 TypeDeclPtr makeVkFlags_VkToolPurposeFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkToolPurposeFlags";
     ft->argNames = { "validation", "profiling", "tracing", "additional_features", "modifying_features", "debug_reporting_ext", "debug_markers_ext" };
     return ft;
@@ -1315,7 +1315,7 @@ TypeDeclPtr makeVkFlags_VkToolPurposeFlags() {
 
 #if defined(VK_VERSION_1_3)
 TypeDeclPtr makeVkFlags_VkSubmitFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkSubmitFlags";
     ft->argNames = { "protected" };
     return ft;
@@ -1324,7 +1324,7 @@ TypeDeclPtr makeVkFlags_VkSubmitFlags() {
 
 #if defined(VK_VERSION_1_4)
 TypeDeclPtr makeVkFlags_VkHostImageCopyFlags() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkHostImageCopyFlags";
     ft->argNames = { "memcpy" };
     return ft;
@@ -1333,7 +1333,7 @@ TypeDeclPtr makeVkFlags_VkHostImageCopyFlags() {
 
 #if defined(VK_NV_partitioned_acceleration_structure)
 TypeDeclPtr makeVkFlags_VkPartitionedAccelerationStructureInstanceFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPartitionedAccelerationStructureInstanceFlagsNV";
     ft->argNames = { "flag_triangle_facing_cull_disable_nv", "flag_triangle_flip_facing_nv", "flag_force_opaque_nv", "flag_force_no_opaque_nv", "flag_enable_explicit_bounding_box_nv" };
     return ft;
@@ -1342,7 +1342,7 @@ TypeDeclPtr makeVkFlags_VkPartitionedAccelerationStructureInstanceFlagsNV() {
 
 #if defined(VK_EXT_graphics_pipeline_library)
 TypeDeclPtr makeVkFlags_VkGraphicsPipelineLibraryFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkGraphicsPipelineLibraryFlagsEXT";
     ft->argNames = { "vertex_input_interface_ext", "pre_rasterization_shaders_ext", "fragment_shader_ext", "fragment_output_interface_ext" };
     return ft;
@@ -1351,7 +1351,7 @@ TypeDeclPtr makeVkFlags_VkGraphicsPipelineLibraryFlagsEXT() {
 
 #if defined(VK_EXT_image_compression_control)
 TypeDeclPtr makeVkFlags_VkImageCompressionFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkImageCompressionFlagsEXT";
     ft->argNames = { "fixed_rate_default_ext", "fixed_rate_explicit_ext", "disabled_ext" };
     return ft;
@@ -1360,7 +1360,7 @@ TypeDeclPtr makeVkFlags_VkImageCompressionFlagsEXT() {
 
 #if defined(VK_EXT_image_compression_control)
 TypeDeclPtr makeVkFlags_VkImageCompressionFixedRateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkImageCompressionFixedRateFlagsEXT";
     ft->argNames = { "_1bpc_ext", "_2bpc_ext", "_3bpc_ext", "_4bpc_ext", "_5bpc_ext", "_6bpc_ext", "_7bpc_ext", "_8bpc_ext", "_9bpc_ext", "_10bpc_ext", "_11bpc_ext", "_12bpc_ext", "_13bpc_ext", "_14bpc_ext", "_15bpc_ext", "_16bpc_ext", "_17bpc_ext", "_18bpc_ext", "_19bpc_ext", "_20bpc_ext", "_21bpc_ext", "_22bpc_ext", "_23bpc_ext", "_24bpc_ext" };
     return ft;
@@ -1369,7 +1369,7 @@ TypeDeclPtr makeVkFlags_VkImageCompressionFixedRateFlagsEXT() {
 
 #if defined(VK_EXT_metal_objects) && defined(VK_USE_PLATFORM_METAL_EXT)
 TypeDeclPtr makeVkFlags_VkExportMetalObjectTypeFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkExportMetalObjectTypeFlagsEXT";
     ft->argNames = { "metal_device_ext", "metal_command_queue_ext", "metal_buffer_ext", "metal_texture_ext", "metal_iosurface_ext", "metal_shared_event_ext" };
     return ft;
@@ -1378,7 +1378,7 @@ TypeDeclPtr makeVkFlags_VkExportMetalObjectTypeFlagsEXT() {
 
 #if defined(VK_KHR_maintenance10)
 TypeDeclPtr makeVkFlags_VkRenderingAttachmentFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkRenderingAttachmentFlagsKHR";
     ft->argNames = { "input_attachment_feedback_khr", "resolve_skip_transfer_function_khr", "resolve_enable_transfer_function_khr" };
     return ft;
@@ -1387,7 +1387,7 @@ TypeDeclPtr makeVkFlags_VkRenderingAttachmentFlagsKHR() {
 
 #if defined(VK_KHR_maintenance10)
 TypeDeclPtr makeVkFlags_VkResolveImageFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkResolveImageFlagsKHR";
     ft->argNames = { "skip_transfer_function_khr", "enable_transfer_function_khr" };
     return ft;
@@ -1396,7 +1396,7 @@ TypeDeclPtr makeVkFlags_VkResolveImageFlagsKHR() {
 
 #if defined(VK_EXT_device_address_binding_report)
 TypeDeclPtr makeVkFlags_VkDeviceAddressBindingFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDeviceAddressBindingFlagsEXT";
     ft->argNames = { "internal_object_ext" };
     return ft;
@@ -1405,7 +1405,7 @@ TypeDeclPtr makeVkFlags_VkDeviceAddressBindingFlagsEXT() {
 
 #if defined(VK_NV_optical_flow)
 TypeDeclPtr makeVkFlags_VkOpticalFlowGridSizeFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkOpticalFlowGridSizeFlagsNV";
     ft->argNames = { "_1x1_nv", "_2x2_nv", "_4x4_nv", "_8x8_nv" };
     return ft;
@@ -1414,7 +1414,7 @@ TypeDeclPtr makeVkFlags_VkOpticalFlowGridSizeFlagsNV() {
 
 #if defined(VK_NV_optical_flow)
 TypeDeclPtr makeVkFlags_VkOpticalFlowUsageFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkOpticalFlowUsageFlagsNV";
     ft->argNames = { "input_nv", "output_nv", "hint_nv", "cost_nv", "global_flow_nv" };
     return ft;
@@ -1423,7 +1423,7 @@ TypeDeclPtr makeVkFlags_VkOpticalFlowUsageFlagsNV() {
 
 #if defined(VK_NV_optical_flow)
 TypeDeclPtr makeVkFlags_VkOpticalFlowSessionCreateFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkOpticalFlowSessionCreateFlagsNV";
     ft->argNames = { "enable_hint_nv", "enable_cost_nv", "enable_global_flow_nv", "allow_regions_nv", "both_directions_nv" };
     return ft;
@@ -1432,7 +1432,7 @@ TypeDeclPtr makeVkFlags_VkOpticalFlowSessionCreateFlagsNV() {
 
 #if defined(VK_NV_optical_flow)
 TypeDeclPtr makeVkFlags_VkOpticalFlowExecuteFlagsNV() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkOpticalFlowExecuteFlagsNV";
     ft->argNames = { "disable_temporal_hints_nv" };
     return ft;
@@ -1441,7 +1441,7 @@ TypeDeclPtr makeVkFlags_VkOpticalFlowExecuteFlagsNV() {
 
 #if defined(VK_EXT_frame_boundary)
 TypeDeclPtr makeVkFlags_VkFrameBoundaryFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkFrameBoundaryFlagsEXT";
     ft->argNames = { "frame_end_ext" };
     return ft;
@@ -1450,7 +1450,7 @@ TypeDeclPtr makeVkFlags_VkFrameBoundaryFlagsEXT() {
 
 #if defined(VK_KHR_surface_maintenance1)
 TypeDeclPtr makeVkFlags_VkPresentScalingFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPresentScalingFlagsKHR";
     ft->argNames = { "one_to_one_khr", "aspect_ratio_stretch_khr", "stretch_khr" };
     return ft;
@@ -1459,7 +1459,7 @@ TypeDeclPtr makeVkFlags_VkPresentScalingFlagsKHR() {
 
 #if defined(VK_KHR_surface_maintenance1)
 TypeDeclPtr makeVkFlags_VkPresentGravityFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPresentGravityFlagsKHR";
     ft->argNames = { "min_khr", "max_khr", "centered_khr" };
     return ft;
@@ -1468,7 +1468,7 @@ TypeDeclPtr makeVkFlags_VkPresentGravityFlagsKHR() {
 
 #if defined(VK_EXT_shader_object)
 TypeDeclPtr makeVkFlags_VkShaderCreateFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkShaderCreateFlagsEXT";
     ft->argNames = { "link_stage_ext", "allow_varying_subgroup_size_ext", "require_full_subgroups_ext", "no_task_shader_ext", "dispatch_base_ext", "fragment_shading_rate_attachment_ext", "fragment_density_map_attachment_ext", "indirect_bindable_ext", "_b8", "_b9", "descriptor_heap_ext", "instrument_shader_arm", "_b12", "_b13", "_b14", "_64_indexing_ext", "_b16", "_b17", "independent_sets_khr" };
     return ft;
@@ -1477,7 +1477,7 @@ TypeDeclPtr makeVkFlags_VkShaderCreateFlagsEXT() {
 
 #if defined(VK_QCOM_tile_shading)
 TypeDeclPtr makeVkFlags_VkTileShadingRenderPassFlagsQCOM() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkTileShadingRenderPassFlagsQCOM";
     ft->argNames = { "enable_qcom", "per_tile_execution_qcom" };
     return ft;
@@ -1486,7 +1486,7 @@ TypeDeclPtr makeVkFlags_VkTileShadingRenderPassFlagsQCOM() {
 
 #if defined(VK_ARM_scheduling_controls)
 TypeDeclPtr makeVkFlags_VkPhysicalDeviceSchedulingControlsFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkPhysicalDeviceSchedulingControlsFlagsARM";
     ft->argNames = { "shader_core_count_arm", "dispatch_parameters_arm" };
     return ft;
@@ -1495,7 +1495,7 @@ TypeDeclPtr makeVkFlags_VkPhysicalDeviceSchedulingControlsFlagsARM() {
 
 #if defined(VK_EXT_present_timing)
 TypeDeclPtr makeVkFlags_VkPresentStageFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPresentStageFlagsEXT";
     ft->argNames = { "queue_operations_end_ext", "request_dequeued_ext", "image_first_pixel_out_ext", "image_first_pixel_visible_ext" };
     return ft;
@@ -1504,7 +1504,7 @@ TypeDeclPtr makeVkFlags_VkPresentStageFlagsEXT() {
 
 #if defined(VK_EXT_present_timing)
 TypeDeclPtr makeVkFlags_VkPastPresentationTimingFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPastPresentationTimingFlagsEXT";
     ft->argNames = { "allow_partial_results_ext", "allow_out_of_order_results_ext" };
     return ft;
@@ -1513,7 +1513,7 @@ TypeDeclPtr makeVkFlags_VkPastPresentationTimingFlagsEXT() {
 
 #if defined(VK_EXT_present_timing)
 TypeDeclPtr makeVkFlags_VkPresentTimingInfoFlagsEXT() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPresentTimingInfoFlagsEXT";
     ft->argNames = { "present_at_relative_time_ext", "present_at_nearest_refresh_cycle_ext" };
     return ft;
@@ -1522,7 +1522,7 @@ TypeDeclPtr makeVkFlags_VkPresentTimingInfoFlagsEXT() {
 
 #if defined(VK_ARM_performance_counters_by_region)
 TypeDeclPtr makeVkFlags_VkPerformanceCounterDescriptionFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkPerformanceCounterDescriptionFlagsARM";
     return ft;
 }
@@ -1530,7 +1530,7 @@ TypeDeclPtr makeVkFlags_VkPerformanceCounterDescriptionFlagsARM() {
 
 #if defined(VK_ARM_shader_instrumentation)
 TypeDeclPtr makeVkFlags_VkShaderInstrumentationValuesFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkShaderInstrumentationValuesFlagsARM";
     return ft;
 }
@@ -1538,7 +1538,7 @@ TypeDeclPtr makeVkFlags_VkShaderInstrumentationValuesFlagsARM() {
 
 #if defined(VK_ARM_data_graph_instruction_set_tosa)
 TypeDeclPtr makeVkFlags_VkDataGraphTOSAQualityFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDataGraphTOSAQualityFlagsARM";
     ft->argNames = { "accelerated_arm", "conformant_arm", "experimental_arm", "deprecated_arm" };
     return ft;
@@ -1547,7 +1547,7 @@ TypeDeclPtr makeVkFlags_VkDataGraphTOSAQualityFlagsARM() {
 
 #if defined(VK_ARM_data_graph_optical_flow)
 TypeDeclPtr makeVkFlags_VkDataGraphOpticalFlowGridSizeFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDataGraphOpticalFlowGridSizeFlagsARM";
     ft->argNames = { "_1x1_arm", "_2x2_arm", "_4x4_arm", "_8x8_arm" };
     return ft;
@@ -1556,7 +1556,7 @@ TypeDeclPtr makeVkFlags_VkDataGraphOpticalFlowGridSizeFlagsARM() {
 
 #if defined(VK_ARM_data_graph_optical_flow)
 TypeDeclPtr makeVkFlags_VkDataGraphOpticalFlowImageUsageFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDataGraphOpticalFlowImageUsageFlagsARM";
     ft->argNames = { "input_arm", "output_arm", "hint_arm", "cost_arm" };
     return ft;
@@ -1565,7 +1565,7 @@ TypeDeclPtr makeVkFlags_VkDataGraphOpticalFlowImageUsageFlagsARM() {
 
 #if defined(VK_ARM_data_graph_optical_flow)
 TypeDeclPtr makeVkFlags_VkDataGraphOpticalFlowCreateFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDataGraphOpticalFlowCreateFlagsARM";
     ft->argNames = { "enable_hint_arm", "enable_cost_arm", "_b2", "_b3", "_b4", "_b5", "_b6", "_b7", "_b8", "_b9", "_b10", "_b11", "_b12", "_b13", "_b14", "_b15", "_b16", "_b17", "_b18", "_b19", "_b20", "_b21", "_b22", "_b23", "_b24", "_b25", "_b26", "_b27", "_b28", "_b29", "reserved_30_arm" };
     return ft;
@@ -1574,7 +1574,7 @@ TypeDeclPtr makeVkFlags_VkDataGraphOpticalFlowCreateFlagsARM() {
 
 #if defined(VK_ARM_data_graph_optical_flow)
 TypeDeclPtr makeVkFlags_VkDataGraphOpticalFlowExecuteFlagsARM() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkDataGraphOpticalFlowExecuteFlagsARM";
     ft->argNames = { "disable_temporal_hints_arm", "input_unchanged_arm", "reference_unchanged_arm", "input_is_previous_reference_arm", "reference_is_previous_input_arm" };
     return ft;
@@ -1583,7 +1583,7 @@ TypeDeclPtr makeVkFlags_VkDataGraphOpticalFlowExecuteFlagsARM() {
 
 #if defined(VK_KHR_video_queue)
 TypeDeclPtr makeVkFlags_VkVideoCodecOperationFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoCodecOperationFlagsKHR";
     ft->argNames = { "decode_h264_khr", "decode_h265_khr", "decode_av1_khr", "decode_vp9_khr", "_b4", "_b5", "_b6", "_b7", "_b8", "_b9", "_b10", "_b11", "_b12", "_b13", "_b14", "_b15", "encode_h264_khr", "encode_h265_khr", "encode_av1_khr" };
     return ft;
@@ -1592,7 +1592,7 @@ TypeDeclPtr makeVkFlags_VkVideoCodecOperationFlagsKHR() {
 
 #if defined(VK_KHR_video_queue)
 TypeDeclPtr makeVkFlags_VkVideoCapabilityFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoCapabilityFlagsKHR";
     ft->argNames = { "protected_content_khr", "separate_reference_images_khr" };
     return ft;
@@ -1601,7 +1601,7 @@ TypeDeclPtr makeVkFlags_VkVideoCapabilityFlagsKHR() {
 
 #if defined(VK_KHR_video_queue)
 TypeDeclPtr makeVkFlags_VkVideoSessionCreateFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoSessionCreateFlagsKHR";
     ft->argNames = { "protected_content_khr", "allow_encode_parameter_optimizations_khr", "inline_queries_khr", "allow_encode_quantization_delta_map_khr", "allow_encode_emphasis_map_khr", "inline_session_parameters_khr" };
     return ft;
@@ -1610,7 +1610,7 @@ TypeDeclPtr makeVkFlags_VkVideoSessionCreateFlagsKHR() {
 
 #if defined(VK_KHR_video_queue)
 TypeDeclPtr makeVkFlags_VkVideoSessionParametersCreateFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoSessionParametersCreateFlagsKHR";
     ft->argNames = { "quantization_map_compatible_khr" };
     return ft;
@@ -1619,7 +1619,7 @@ TypeDeclPtr makeVkFlags_VkVideoSessionParametersCreateFlagsKHR() {
 
 #if defined(VK_KHR_video_queue)
 TypeDeclPtr makeVkFlags_VkVideoBeginCodingFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoBeginCodingFlagsKHR";
     return ft;
 }
@@ -1627,7 +1627,7 @@ TypeDeclPtr makeVkFlags_VkVideoBeginCodingFlagsKHR() {
 
 #if defined(VK_KHR_video_queue)
 TypeDeclPtr makeVkFlags_VkVideoEndCodingFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEndCodingFlagsKHR";
     return ft;
 }
@@ -1635,7 +1635,7 @@ TypeDeclPtr makeVkFlags_VkVideoEndCodingFlagsKHR() {
 
 #if defined(VK_KHR_video_queue)
 TypeDeclPtr makeVkFlags_VkVideoCodingControlFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoCodingControlFlagsKHR";
     ft->argNames = { "reset_khr", "encode_rate_control_khr", "encode_quality_level_khr" };
     return ft;
@@ -1644,7 +1644,7 @@ TypeDeclPtr makeVkFlags_VkVideoCodingControlFlagsKHR() {
 
 #if defined(VK_KHR_video_decode_queue)
 TypeDeclPtr makeVkFlags_VkVideoDecodeUsageFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoDecodeUsageFlagsKHR";
     ft->argNames = { "transcoding_khr", "offline_khr", "streaming_khr" };
     return ft;
@@ -1653,7 +1653,7 @@ TypeDeclPtr makeVkFlags_VkVideoDecodeUsageFlagsKHR() {
 
 #if defined(VK_KHR_video_decode_queue)
 TypeDeclPtr makeVkFlags_VkVideoDecodeCapabilityFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoDecodeCapabilityFlagsKHR";
     ft->argNames = { "dpb_and_output_coincide_khr", "dpb_and_output_distinct_khr" };
     return ft;
@@ -1662,7 +1662,7 @@ TypeDeclPtr makeVkFlags_VkVideoDecodeCapabilityFlagsKHR() {
 
 #if defined(VK_KHR_video_decode_queue)
 TypeDeclPtr makeVkFlags_VkVideoDecodeFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoDecodeFlagsKHR";
     return ft;
 }
@@ -1670,7 +1670,7 @@ TypeDeclPtr makeVkFlags_VkVideoDecodeFlagsKHR() {
 
 #if defined(VK_KHR_video_decode_h264)
 TypeDeclPtr makeVkFlags_VkVideoDecodeH264PictureLayoutFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoDecodeH264PictureLayoutFlagsKHR";
     ft->argNames = { "video_decode_h264_picture_layout_interlaced_interleaved_lines_khr", "video_decode_h264_picture_layout_interlaced_separate_planes_khr" };
     return ft;
@@ -1679,7 +1679,7 @@ TypeDeclPtr makeVkFlags_VkVideoDecodeH264PictureLayoutFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_queue)
 TypeDeclPtr makeVkFlags_VkVideoEncodeFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeFlagsKHR";
     ft->argNames = { "with_quantization_delta_map_khr", "with_emphasis_map_khr", "intra_refresh_khr" };
     return ft;
@@ -1688,7 +1688,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_queue)
 TypeDeclPtr makeVkFlags_VkVideoEncodeUsageFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeUsageFlagsKHR";
     ft->argNames = { "transcoding_khr", "streaming_khr", "recording_khr", "conferencing_khr" };
     return ft;
@@ -1697,7 +1697,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeUsageFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_queue)
 TypeDeclPtr makeVkFlags_VkVideoEncodeContentFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeContentFlagsKHR";
     ft->argNames = { "camera_khr", "desktop_khr", "rendered_khr" };
     return ft;
@@ -1706,7 +1706,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeContentFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_queue)
 TypeDeclPtr makeVkFlags_VkVideoEncodeCapabilityFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeCapabilityFlagsKHR";
     ft->argNames = { "preceding_externally_encoded_bytes_khr", "insufficient_bitstream_buffer_range_detection_khr", "quantization_delta_map_khr", "emphasis_map_khr" };
     return ft;
@@ -1715,7 +1715,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeCapabilityFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_queue)
 TypeDeclPtr makeVkFlags_VkVideoEncodeFeedbackFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeFeedbackFlagsKHR";
     ft->argNames = { "bitstream_buffer_offset_khr", "bitstream_bytes_written_khr", "bitstream_has_overrides_khr" };
     return ft;
@@ -1724,7 +1724,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeFeedbackFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_queue)
 TypeDeclPtr makeVkFlags_VkVideoEncodeRateControlFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeRateControlFlagsKHR";
     return ft;
 }
@@ -1732,7 +1732,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeRateControlFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_queue)
 TypeDeclPtr makeVkFlags_VkVideoEncodeRateControlModeFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeRateControlModeFlagsKHR";
     ft->argNames = { "disabled_khr", "cbr_khr", "vbr_khr" };
     return ft;
@@ -1741,7 +1741,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeRateControlModeFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_intra_refresh)
 TypeDeclPtr makeVkFlags_VkVideoEncodeIntraRefreshModeFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeIntraRefreshModeFlagsKHR";
     ft->argNames = { "per_picture_partition_khr", "block_based_khr", "block_row_based_khr", "block_column_based_khr" };
     return ft;
@@ -1750,7 +1750,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeIntraRefreshModeFlagsKHR() {
 
 #if defined(VK_KHR_video_queue)
 TypeDeclPtr makeVkFlags_VkVideoChromaSubsamplingFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoChromaSubsamplingFlagsKHR";
     ft->argNames = { "monochrome_khr", "_420_khr", "_422_khr", "_444_khr" };
     return ft;
@@ -1759,7 +1759,7 @@ TypeDeclPtr makeVkFlags_VkVideoChromaSubsamplingFlagsKHR() {
 
 #if defined(VK_KHR_video_queue)
 TypeDeclPtr makeVkFlags_VkVideoComponentBitDepthFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoComponentBitDepthFlagsKHR";
     ft->argNames = { "_8_khr", "_b1", "_10_khr", "_b3", "_12_khr" };
     return ft;
@@ -1768,7 +1768,7 @@ TypeDeclPtr makeVkFlags_VkVideoComponentBitDepthFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_h264)
 TypeDeclPtr makeVkFlags_VkVideoEncodeH264CapabilityFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeH264CapabilityFlagsKHR";
     ft->argNames = { "video_encode_h264_capability_hrd_compliance_khr", "video_encode_h264_capability_prediction_weight_table_generated_khr", "video_encode_h264_capability_row_unaligned_slice_khr", "video_encode_h264_capability_different_slice_type_khr", "video_encode_h264_capability_b_frame_in_l0_list_khr", "video_encode_h264_capability_b_frame_in_l1_list_khr", "video_encode_h264_capability_per_picture_type_min_max_qp_khr", "video_encode_h264_capability_per_slice_constant_qp_khr", "video_encode_h264_capability_generate_prefix_nalu_khr", "video_encode_h264_capability_mb_qp_diff_wraparound_khr", "video_encode_h264_capability_b_picture_intra_refresh_khr" };
     return ft;
@@ -1777,7 +1777,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeH264CapabilityFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_h264)
 TypeDeclPtr makeVkFlags_VkVideoEncodeH264StdFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeH264StdFlagsKHR";
     ft->argNames = { "video_encode_h264_std_separate_color_plane_flag_set_khr", "video_encode_h264_std_qpprime_y_zero_transform_bypass_flag_set_khr", "video_encode_h264_std_scaling_matrix_present_flag_set_khr", "video_encode_h264_std_chroma_qp_index_offset_khr", "video_encode_h264_std_second_chroma_qp_index_offset_khr", "video_encode_h264_std_pic_init_qp_minus26_khr", "video_encode_h264_std_weighted_pred_flag_set_khr", "video_encode_h264_std_weighted_bipred_idc_explicit_khr", "video_encode_h264_std_weighted_bipred_idc_implicit_khr", "video_encode_h264_std_transform_8x8_mode_flag_set_khr", "video_encode_h264_std_direct_spatial_mv_pred_flag_unset_khr", "video_encode_h264_std_entropy_coding_mode_flag_unset_khr", "video_encode_h264_std_entropy_coding_mode_flag_set_khr", "video_encode_h264_std_direct_8x8_inference_flag_unset_khr", "video_encode_h264_std_constrained_intra_pred_flag_set_khr", "video_encode_h264_std_deblocking_filter_disabled_khr", "video_encode_h264_std_deblocking_filter_enabled_khr", "video_encode_h264_std_deblocking_filter_partial_khr", "_b18", "video_encode_h264_std_slice_qp_delta_khr", "video_encode_h264_std_different_slice_qp_delta_khr" };
     return ft;
@@ -1786,7 +1786,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeH264StdFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_h264)
 TypeDeclPtr makeVkFlags_VkVideoEncodeH264RateControlFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeH264RateControlFlagsKHR";
     ft->argNames = { "video_encode_h264_rate_control_attempt_hrd_compliance_khr", "video_encode_h264_rate_control_regular_gop_khr", "video_encode_h264_rate_control_reference_pattern_flat_khr", "video_encode_h264_rate_control_reference_pattern_dyadic_khr", "video_encode_h264_rate_control_temporal_layer_pattern_dyadic_khr" };
     return ft;
@@ -1795,7 +1795,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeH264RateControlFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_h265)
 TypeDeclPtr makeVkFlags_VkVideoEncodeH265CapabilityFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeH265CapabilityFlagsKHR";
     ft->argNames = { "video_encode_h265_capability_hrd_compliance_khr", "video_encode_h265_capability_prediction_weight_table_generated_khr", "video_encode_h265_capability_row_unaligned_slice_segment_khr", "video_encode_h265_capability_different_slice_segment_type_khr", "video_encode_h265_capability_b_frame_in_l0_list_khr", "video_encode_h265_capability_b_frame_in_l1_list_khr", "video_encode_h265_capability_per_picture_type_min_max_qp_khr", "video_encode_h265_capability_per_slice_segment_constant_qp_khr", "video_encode_h265_capability_multiple_tiles_per_slice_segment_khr", "video_encode_h265_capability_multiple_slice_segments_per_tile_khr", "video_encode_h265_capability_cu_qp_diff_wraparound_khr", "video_encode_h265_capability_b_picture_intra_refresh_khr" };
     return ft;
@@ -1804,7 +1804,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeH265CapabilityFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_h265)
 TypeDeclPtr makeVkFlags_VkVideoEncodeH265StdFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeH265StdFlagsKHR";
     ft->argNames = { "video_encode_h265_std_separate_color_plane_flag_set_khr", "video_encode_h265_std_sample_adaptive_offset_enabled_flag_set_khr", "video_encode_h265_std_scaling_list_data_present_flag_set_khr", "video_encode_h265_std_pcm_enabled_flag_set_khr", "video_encode_h265_std_sps_temporal_mvp_enabled_flag_set_khr", "video_encode_h265_std_init_qp_minus26_khr", "video_encode_h265_std_weighted_pred_flag_set_khr", "video_encode_h265_std_weighted_bipred_flag_set_khr", "video_encode_h265_std_log2_parallel_merge_level_minus2_khr", "video_encode_h265_std_sign_data_hiding_enabled_flag_set_khr", "video_encode_h265_std_transform_skip_enabled_flag_set_khr", "video_encode_h265_std_transform_skip_enabled_flag_unset_khr", "video_encode_h265_std_pps_slice_chroma_qp_offsets_present_flag_set_khr", "video_encode_h265_std_transquant_bypass_enabled_flag_set_khr", "video_encode_h265_std_constrained_intra_pred_flag_set_khr", "video_encode_h265_std_entropy_coding_sync_enabled_flag_set_khr", "video_encode_h265_std_deblocking_filter_override_enabled_flag_set_khr", "video_encode_h265_std_dependent_slice_segments_enabled_flag_set_khr", "video_encode_h265_std_dependent_slice_segment_flag_set_khr", "video_encode_h265_std_slice_qp_delta_khr", "video_encode_h265_std_different_slice_qp_delta_khr" };
     return ft;
@@ -1813,7 +1813,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeH265StdFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_h265)
 TypeDeclPtr makeVkFlags_VkVideoEncodeH265RateControlFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeH265RateControlFlagsKHR";
     ft->argNames = { "video_encode_h265_rate_control_attempt_hrd_compliance_khr", "video_encode_h265_rate_control_regular_gop_khr", "video_encode_h265_rate_control_reference_pattern_flat_khr", "video_encode_h265_rate_control_reference_pattern_dyadic_khr", "video_encode_h265_rate_control_temporal_sub_layer_pattern_dyadic_khr" };
     return ft;
@@ -1822,7 +1822,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeH265RateControlFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_h265)
 TypeDeclPtr makeVkFlags_VkVideoEncodeH265CtbSizeFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeH265CtbSizeFlagsKHR";
     ft->argNames = { "video_encode_h265_ctb_size_16_khr", "video_encode_h265_ctb_size_32_khr", "video_encode_h265_ctb_size_64_khr" };
     return ft;
@@ -1831,7 +1831,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeH265CtbSizeFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_h265)
 TypeDeclPtr makeVkFlags_VkVideoEncodeH265TransformBlockSizeFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeH265TransformBlockSizeFlagsKHR";
     ft->argNames = { "video_encode_h265_transform_block_size_4_khr", "video_encode_h265_transform_block_size_8_khr", "video_encode_h265_transform_block_size_16_khr", "video_encode_h265_transform_block_size_32_khr" };
     return ft;
@@ -1840,7 +1840,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeH265TransformBlockSizeFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_av1)
 TypeDeclPtr makeVkFlags_VkVideoEncodeAV1CapabilityFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeAV1CapabilityFlagsKHR";
     ft->argNames = { "video_encode_av1_capability_per_rate_control_group_min_max_q_index_khr", "video_encode_av1_capability_generate_obu_extension_header_khr", "video_encode_av1_capability_primary_reference_cdf_only_khr", "video_encode_av1_capability_frame_size_override_khr", "video_encode_av1_capability_motion_vector_scaling_khr", "video_encode_av1_capability_compound_prediction_intra_refresh_khr" };
     return ft;
@@ -1849,7 +1849,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeAV1CapabilityFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_av1)
 TypeDeclPtr makeVkFlags_VkVideoEncodeAV1StdFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeAV1StdFlagsKHR";
     ft->argNames = { "video_encode_av1_std_uniform_tile_spacing_flag_set_khr", "video_encode_av1_std_skip_mode_present_unset_khr", "video_encode_av1_std_primary_ref_frame_khr", "video_encode_av1_std_delta_q_khr" };
     return ft;
@@ -1858,7 +1858,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeAV1StdFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_av1)
 TypeDeclPtr makeVkFlags_VkVideoEncodeAV1RateControlFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeAV1RateControlFlagsKHR";
     ft->argNames = { "video_encode_av1_rate_control_regular_gop_khr", "video_encode_av1_rate_control_temporal_layer_pattern_dyadic_khr", "video_encode_av1_rate_control_reference_pattern_flat_khr", "video_encode_av1_rate_control_reference_pattern_dyadic_khr" };
     return ft;
@@ -1867,7 +1867,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeAV1RateControlFlagsKHR() {
 
 #if defined(VK_KHR_video_encode_av1)
 TypeDeclPtr makeVkFlags_VkVideoEncodeAV1SuperblockSizeFlagsKHR() {
-    auto ft = new TypeDecl(Type::tBitfield);
+    auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
     ft->alias = "VkVideoEncodeAV1SuperblockSizeFlagsKHR";
     ft->argNames = { "video_encode_av1_superblock_size_64_khr", "video_encode_av1_superblock_size_128_khr" };
     return ft;
@@ -1876,7 +1876,7 @@ TypeDeclPtr makeVkFlags_VkVideoEncodeAV1SuperblockSizeFlagsKHR() {
 
 #if defined(VK_KHR_maintenance8)
 TypeDeclPtr makeVkFlags_VkAccessFlags3KHR() {
-    auto ft = new TypeDecl(Type::tBitfield64);
+    auto ft = new TypeDecl(Type::tBitfield64, cppBindingLineInfo());
     ft->alias = "VkAccessFlags3KHR";
     return ft;
 }

@@ -56,9 +56,11 @@ namespace das {
         TypeDecl() { gc_magic = GC_MAGIC_TYPEDECL; }
         TypeDecl(const TypeDecl & decl);
         TypeDecl & operator = (const TypeDecl & decl) = delete;
-        TypeDecl(Type tt) : baseType(tt) { gc_magic = GC_MAGIC_TYPEDECL; }
+        TypeDecl(Type tt, const LineInfo & att) : baseType(tt), at(att) { gc_magic = GC_MAGIC_TYPEDECL; }
         TypeDecl(Structure * sp) : baseType(Type::tStructure), structType(sp) { gc_magic = GC_MAGIC_TYPEDECL; }
+        TypeDecl(Structure * sp, const LineInfo & att) : baseType(Type::tStructure), structType(sp), at(att) { gc_magic = GC_MAGIC_TYPEDECL; }
         TypeDecl(Enumeration * ep);
+        TypeDecl(Enumeration * ep, const LineInfo & att);
         TypeDeclPtr visit ( Visitor & vis );
         friend StringWriter& operator<< (StringWriter& stream, const TypeDecl & decl);
         string getMangledName ( bool fullName=false ) const;
@@ -437,8 +439,7 @@ namespace das {
     template <>
     struct typeFactory<EnumStub8> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tEnumeration8);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tEnumeration8, cppBindingLineInfo());
             t->enumStubBinding = true;
             return t;
         }
@@ -447,8 +448,7 @@ namespace das {
     template <>
     struct typeFactory<EnumStub16> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tEnumeration16);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tEnumeration16, cppBindingLineInfo());
             t->enumStubBinding = true;
             return t;
         }
@@ -457,8 +457,7 @@ namespace das {
     template <>
     struct typeFactory<EnumStub64> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tEnumeration64);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tEnumeration64, cppBindingLineInfo());
             t->enumStubBinding = true;
             return t;
         }
@@ -467,8 +466,7 @@ namespace das {
     template <>
     struct typeFactory<EnumStub8u> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tEnumeration8);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tEnumeration8, cppBindingLineInfo());
             t->enumStubBinding = true;
             t->enumStubIsUnsigned = true;
             return t;
@@ -478,8 +476,7 @@ namespace das {
     template <>
     struct typeFactory<EnumStub16u> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tEnumeration16);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tEnumeration16, cppBindingLineInfo());
             t->enumStubBinding = true;
             t->enumStubIsUnsigned = true;
             return t;
@@ -489,8 +486,7 @@ namespace das {
     template <>
     struct typeFactory<EnumStub64u> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tEnumeration64);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tEnumeration64, cppBindingLineInfo());
             t->enumStubBinding = true;
             t->enumStubIsUnsigned = true;
             return t;
@@ -500,8 +496,7 @@ namespace das {
     template <>
     struct typeFactory<char *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tString);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tString, cppBindingLineInfo());
             return t;
         }
     };
@@ -509,8 +504,7 @@ namespace das {
     template <>
     struct typeFactory<const char *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tString);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tString, cppBindingLineInfo());
             t->constant = true;
             return t;
         }
@@ -519,8 +513,7 @@ namespace das {
     template <typename TT>
     struct typeFactory<smart_ptr<TT>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = new TypeDecl(Type::tPointer);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tPointer, cppBindingLineInfo());
             t->firstType = typeFactory<TT>::make(lib);
             t->smartPtr = true;
             t->smartPtrNative = true;
@@ -531,8 +524,7 @@ namespace das {
     template <typename TT>
     struct typeFactory<smart_ptr_raw<TT>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = new TypeDecl(Type::tPointer);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tPointer, cppBindingLineInfo());
             t->firstType = typeFactory<TT>::make(lib);
             t->smartPtr = true;
             return t;
@@ -542,8 +534,7 @@ namespace das {
     template <>
     struct typeFactory<Array *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tArray);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tArray, cppBindingLineInfo());
             return t;
         }
     };
@@ -551,8 +542,7 @@ namespace das {
     template <>
     struct typeFactory<Iterator *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tIterator);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tIterator, cppBindingLineInfo());
             return t;
         }
     };
@@ -560,8 +550,7 @@ namespace das {
     template <>
     struct typeFactory<const Iterator *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tIterator);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tIterator, cppBindingLineInfo());
             t->constant = true;
             return t;
         }
@@ -570,8 +559,7 @@ namespace das {
     template <>
     struct typeFactory<Table *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::tTable);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tTable, cppBindingLineInfo());
             return t;
         }
     };
@@ -579,8 +567,7 @@ namespace das {
     template <>
     struct typeFactory<Context *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::fakeContext);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::fakeContext, cppBindingLineInfo());
             return t;
         }
     };
@@ -588,8 +575,7 @@ namespace das {
     template <>
     struct typeFactory<LineInfoArg *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = new TypeDecl(Type::fakeLineInfo);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::fakeLineInfo, cppBindingLineInfo());
             return t;
         }
     };
@@ -597,8 +583,7 @@ namespace das {
     template <typename ResultType, typename ...Args>
     struct typeFactory<TBlock<ResultType,Args...>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = new TypeDecl(Type::tBlock);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tBlock, cppBindingLineInfo());
             t->firstType = typeFactory<ResultType>::make(lib);
             t->argTypes = { typeFactory<Args>::make(lib)... };
             return t;
@@ -607,8 +592,7 @@ namespace das {
     template <typename ResultType, typename ...Args>
     struct typeFactory<TFunc<ResultType,Args...>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = new TypeDecl(Type::tFunction);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tFunction, cppBindingLineInfo());
             t->firstType = typeFactory<ResultType>::make(lib);
             t->argTypes = { typeFactory<Args>::make(lib)... };
             return t;
@@ -618,8 +602,7 @@ namespace das {
     template <typename ResultType, typename ...Args>
     struct typeFactory<TLambda<ResultType,Args...>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = new TypeDecl(Type::tLambda);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tLambda, cppBindingLineInfo());
             t->firstType = typeFactory<ResultType>::make(lib);
             t->argTypes = { typeFactory<Args>::make(lib)... };
             return t;
@@ -662,8 +645,7 @@ namespace das {
     template <typename TT>
     struct typeFactory<TArray<TT>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = new TypeDecl(Type::tArray);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tArray, cppBindingLineInfo());
             t->firstType = typeFactory<TT>::make(lib);
             return t;
         }
@@ -675,8 +657,7 @@ namespace das {
     // FIXED_ARRAY_REWORK.md, 1c: wrap an element type in a tFixedArray node, hoisting the
     // canonical qualifiers — ref/const/temporary live on the outermost FA node only
     inline TypeDeclPtr makeFixedArrayTypeDecl ( int32_t size, TypeDeclPtr element ) {
-        auto fa = new TypeDecl(Type::tFixedArray);
-        fa->at = cppBindingLineInfo();
+        auto fa = new TypeDecl(Type::tFixedArray, cppBindingLineInfo());
         fa->fixedDim = size;
         fa->firstType = element;
         fa->ref = element->ref;             element->ref = false;
@@ -698,8 +679,7 @@ namespace das {
     template <typename TK, typename TV>
     struct typeFactory<TTable<TK,TV>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = new TypeDecl(Type::tTable);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tTable, cppBindingLineInfo());
             t->firstType = typeFactory<TK>::make(lib);
             t->secondType = typeFactory<TV>::make(lib);
             return t;
@@ -712,8 +692,7 @@ namespace das {
     template <typename TT>
     struct typeFactory<TSequence<TT>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = new TypeDecl(Type::tIterator);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tIterator, cppBindingLineInfo());
             t->firstType = typeFactory<TT>::make(lib);
             return t;
         }
@@ -735,8 +714,7 @@ namespace das {
     template <typename TT>
     struct typeFactory<TT *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto pt = new TypeDecl(Type::tPointer);
-            pt->at = cppBindingLineInfo();
+            auto pt = new TypeDecl(Type::tPointer, cppBindingLineInfo());
             if ( !is_void<TT>::value ) {
                 pt->firstType = typeFactory<TT>::make(lib);
             }
@@ -747,8 +725,7 @@ namespace das {
     template <typename TT>
     struct typeFactory<const TT *> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto pt = new TypeDecl(Type::tPointer);
-            pt->at = cppBindingLineInfo();
+            auto pt = new TypeDecl(Type::tPointer, cppBindingLineInfo());
             if ( !is_void<TT>::value ) {
                 pt->firstType = typeFactory<TT>::make(lib);
                 pt->firstType->constant = true;
@@ -789,8 +766,7 @@ namespace das {
     template <typename FT, typename ST>
     struct typeFactory<pair<FT,ST>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = new TypeDecl(Type::tTuple);
-            t->at = cppBindingLineInfo();
+            auto t = new TypeDecl(Type::tTuple, cppBindingLineInfo());
             t->argTypes.push_back(typeFactory<FT>::make(lib));
             t->argTypes.push_back(typeFactory<ST>::make(lib));
             return t;
@@ -843,7 +819,11 @@ namespace das {
 
     class DAS_API MangledNameParser {
     public:
+        // a mangled name has no source of its own; the caller says where the reconstructed
+        // types come from - a das call site, or the binding that supplied the string
+        explicit MangledNameParser ( const LineInfo & att ) : at(att) {}
         virtual ~MangledNameParser () = default;
+        LineInfo at;
     protected:
         virtual void error ( const string &, const char * );
         string parseAnyName ( const char * & ch, bool allowModule );

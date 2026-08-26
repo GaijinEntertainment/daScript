@@ -892,7 +892,7 @@ namespace das
     void addConstant ( Module & mod, const string & name, const TT & value ) {
         VariablePtr pVar = new Variable();
         pVar->name = name;
-        pVar->type = new TypeDecl((Type)ToBasicType<TT>::type);
+        pVar->type = new TypeDecl((Type)ToBasicType<TT>::type, cppBindingLineInfo());
         pVar->type->constant = true;
         pVar->init = Program::makeConst(LineInfo(),pVar->type,cast<TT>::from(value));
         pVar->init->type = new TypeDecl(*pVar->type);
@@ -905,7 +905,7 @@ namespace das
     __forceinline void addConstant ( Module & mod, const string & name, const string & value ) {
         VariablePtr pVar = new Variable();
         pVar->name = name;
-        pVar->type = new TypeDecl(Type::tString);
+        pVar->type = new TypeDecl(Type::tString, cppBindingLineInfo());
         pVar->type->constant = true;
         pVar->init = new ExprConstString(LineInfo(),value);
         pVar->init->type = new TypeDecl(*pVar->type);

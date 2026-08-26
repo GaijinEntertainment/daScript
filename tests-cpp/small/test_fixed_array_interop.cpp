@@ -43,7 +43,7 @@ TEST_CASE("typeFactory produces tFixedArray chains") {
         CHECK_EQ(nested->describe(), "int[3][4]");
     }
     SUBCASE("const element hoists to the FA head (canonical form)") {
-        auto elem = new TypeDecl(Type::tInt);
+        auto elem = new TypeDecl(Type::tInt, cppBindingLineInfo());
         elem->constant = true;
         auto t = makeFixedArrayTypeDecl(4, elem);
         CHECK(bool(t->constant));
@@ -72,7 +72,7 @@ TEST_CASE("makeTypeInfo flattens tFixedArray chains byte-equal to dim-vector inp
     }
     SUBCASE("head qualifiers ride into the flattened flags") {
         DebugInfoHelper faHelp;
-        auto fa = makeFixedArrayTypeDecl(4, new TypeDecl(Type::tInt));
+        auto fa = makeFixedArrayTypeDecl(4, new TypeDecl(Type::tInt, cppBindingLineInfo()));
         fa->constant = true;
         auto faInfo = faHelp.makeTypeInfo(nullptr, fa);
         CHECK((faInfo->flags & TypeInfo::flag_isConst) != 0u);

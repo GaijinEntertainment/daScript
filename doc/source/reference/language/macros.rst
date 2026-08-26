@@ -834,8 +834,9 @@ node. Reach for it first, not last::
 That form re-checks before every inference pass, so a break is caught on the
 pass right after it happens, and after inference it sweeps every module on each
 firing. ``--ast-verify-batch`` is the CI gate form for many files: no pre-infer
-checks, and after inference only the module being compiled is checked - the
-tree handed to lint, folding and codegen is valid, at a fraction of the cost.
+checks, and the module being compiled is walked once, right after inference -
+so the tree handed to lint, folding and codegen is valid, at a fraction of the
+cost.
 
 Without it, a macro that leaves a variable untyped crashes:
 

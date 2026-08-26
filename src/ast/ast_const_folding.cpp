@@ -439,7 +439,7 @@ namespace das {
             expr->type->ref = b4ref;
             auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
             auto sim = new ExprConstString(expr->at, res);
-            sim->type = new TypeDecl(Type::tString);
+            sim->type = new TypeDecl(Type::tString, sim->at);
             sim->constexpression = true;
             sim->foldedNonConst = !expr->type->constant;
             sim->at = encloseAt(expr);
@@ -481,7 +481,7 @@ namespace das {
         if ( expr->elements.size()==0 ) {
             // empty string builder is "" string
             auto estr = new ExprConstString(expr->at,"");
-            estr->type = new TypeDecl(Type::tString);
+            estr->type = new TypeDecl(Type::tString, estr->at);
             estr->constexpression = true;
             estr->foldedNonConst = !expr->type->constant;
             reportFolding();
@@ -665,8 +665,8 @@ namespace das {
                             }
                         }
                         auto vecType = swz->type->getVectorType(baseType, int(fields.size()));
-                        auto constValue = program->makeConst(expr->at, new TypeDecl(vecType), resData);
-                        constValue->type = new TypeDecl(vecType);
+                        auto constValue = program->makeConst(expr->at, new TypeDecl(vecType, expr->at), resData);
+                        constValue->type = new TypeDecl(vecType, constValue->at);
                         constValue->type->at = expr->at;
                         return constValue;
                     }
@@ -1314,7 +1314,7 @@ namespace das {
                     if ( auto notFn = findBuiltinOperator("!", expr->subexpr->type) ) {
                         auto notE = new ExprOp1(expr->at, "!", expr->subexpr);
                         notE->func = notFn;
-                        notE->type = new TypeDecl(Type::tBool);
+                        notE->type = new TypeDecl(Type::tBool, notE->at);
                         reportFolding();
                         return notE;
                     }

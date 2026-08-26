@@ -20,8 +20,9 @@ module ast_verify shared private
 //! pass right after it happens, and each post-infer firing sweeps every module.
 //! ``--ast-verify-batch`` is the CI gate: no pre-infer checks (a tree a macro breaks
 //! mid-inference crashes the compiler instead of being repaired - the gates count that as red),
-//! and each post-infer firing checks only the module being compiled: the tree handed to
-//! lint/fold/codegen is valid, at a fraction of the cost. Under the CLI force-include every
+//! and the module being compiled is walked once, on the firing right before the finished tree's
+//! first consumer - the ~10 post-infer firings per module all walk one tree, and paying for one of
+//! them is what makes the gate cheap enough for many files. Under the CLI force-include every
 //! non-builtin module compiles after the verifier registered, so each is still checked once as
 //! the module being compiled (the verifier's own requires are promoted builtin - neither mode
 //! walks those); a module read from a module cache, or required before a source
@@ -1369,9 +1370,9 @@ def public verify_module_after_infer(prog : ProgramPtr; mod : Module?) : int {
 
 [post_infer_macro]
 class AstPostInferVerifyMacro : AstPassMacro {
-    //! Fires before every consumer of the finished tree (after each inference run, lint, every
-    //! optimizer round). Plain mode also sweeps every OTHER non-builtin module (a source ``require``
-    //! parses the ones before it unverified); under the CLI force-include each was verified as thisMod.
+    //! Fires once per inference leg, before the first pass that reads the finished tree. Plain
+    //! mode also sweeps every OTHER non-builtin module; batch mode checks only the module being
+    //! compiled. The tree every later pass leaves behind belongs to [[AstSimulateVerifyMacro]].
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         if (mod == null || mod.moduleFlags.builtIn) {
             return true
@@ -1514,6 +1515,29 @@ class AstGcRootVerifyMacro : AstPassMacro {
         if (mod != null && (prog._options |> find_arg("_ast_verify_gc_root") ?as tBool ?? false)) {
             verify_module_gc_root(prog, mod)
         }
+        return true
+    }
+}
+
+
+[simulate_macro]
+class AstSimulateVerifyMacro : AstSimulateMacro {
+    //! The last look at the tree: simulate runs after lint, folding, every optimizer round and
+    //! every codegen-prep pass, so whatever they and the user's own macros left behind is checked
+    //! here. Not reached under -compile-only, which never simulates.
+    def override preSimulate(_prog : Program?; _ctx : Context?) : bool {
+        let mod = compiling_module()
+        if (mod != null && !mod.moduleFlags.builtIn) {
+            if (batch_mode()) {
+                verify_module_after_infer(compiling_program(), mod)
+            } else {
+                verify_program_after_infer(compiling_program(), mod)
+            }
+        }
+        return true
+    }
+
+    def override simulate(_prog : Program?; _ctx : Context?) : bool {
         return true
     }
 }

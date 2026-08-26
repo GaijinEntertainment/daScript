@@ -370,7 +370,7 @@ namespace das {
     template <>
     struct typeFactory<RttiValue> {
         static TypeDeclPtr make(const ModuleLibrary & library ) {
-            auto vtype = new TypeDecl(Type::tVariant);
+            auto vtype = new TypeDecl(Type::tVariant, cppBindingLineInfo());
             vtype->alias = "RttiValue";
             vtype->aotAlias = false;
             vtype->addVariant("tBool",   typeFactory<RttiValue::NthType<RttiBool>>::make(library));
@@ -390,7 +390,7 @@ namespace das {
     };
 
     TypeDeclPtr makeModuleFlags() {
-        auto ft = new TypeDecl(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "ModuleFlags";
         ft->argNames = {
             "builtIn", "promoted", "isPublic", "isModule", "isSolidContext",
@@ -448,7 +448,7 @@ namespace das {
     };
 
     TypeDeclPtr makeContextCategoryFlags() {
-        auto ft = new TypeDecl(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "context_category_flags";
         ft->argNames = { "dead", "debug_context", "thread_clone", "job_clone", "opengl",
             "debugger_tick", "debugger_attached", "macro_context", "folding_context", "audio" };
@@ -494,7 +494,7 @@ namespace das {
     };
 
     TypeDeclPtr makeSimFunctionFlags() {
-        auto ft = new TypeDecl(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "SimFunctionFlags";
         ft->argNames = { "aot", "fastcall", "builtin", "jit", "unsafe", "cmres", "pinvoke" };
         return ft;
@@ -524,7 +524,7 @@ namespace das {
     };
 
     TypeDeclPtr makeProgramFlags() {
-        auto ft = new TypeDecl(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "ProgramFlags";
         ft->argNames = { "failToCompile", "_unsafe", "isCompiling", "isSimulating",
             "isCompilingMacros", "needMacroModule", "promoteToBuiltin",
@@ -584,7 +584,7 @@ namespace das {
     };
 
     TypeDeclPtr makeAnnotationDeclarationFlags() {
-        auto ft = new TypeDecl(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "AnnotationDeclarationFlags";
         ft->argNames = { "inherited" };
         return ft;
@@ -777,7 +777,7 @@ namespace das {
 
 
     TypeDeclPtr makeStructInfoFlags() {
-        auto ft = new TypeDecl(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "StructInfoFlags";
         ft->argNames = { "_class", "_lambda", "heapGC", "stringHeapGC" };
         return ft;
@@ -810,7 +810,7 @@ namespace das {
     }
 
     TypeDeclPtr makeTypeInfoFlags() {
-        auto ft = new TypeDecl(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "TypeInfoFlags";
         ft->argNames = { "ref", "refType", "canCopy", "isPod", "isRawPod", "isConst", "isTemp", "isImplicit",
             "refValue", "hasInitValue", "isSmartPtr", "isSmartPtrNative", "isHandled",
@@ -877,7 +877,7 @@ namespace das {
     };
 
     TypeDeclPtr makeLocalVariableInfoFlagsFlags() {
-        auto ft = new TypeDecl(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "LocalVariableInfoFlags";
         ft->argNames = { "cmres" };
         return ft;

@@ -1089,11 +1089,11 @@ namespace das {
         w->arguments.push_back(inner);
         auto fakeContext = new ExprFakeContext(inner->at);
         fakeContext->generated = true;
-        fakeContext->type = new TypeDecl(Type::fakeContext);
+        fakeContext->type = new TypeDecl(Type::fakeContext, fakeContext->at);
         w->arguments.push_back(fakeContext);
         auto fakeLineInfo = new ExprFakeLineInfo(inner->at);
         fakeLineInfo->generated = true;
-        fakeLineInfo->type = new TypeDecl(Type::fakeLineInfo);
+        fakeLineInfo->type = new TypeDecl(Type::fakeLineInfo, fakeLineInfo->at);
         w->arguments.push_back(fakeLineInfo);
         return w;
     }

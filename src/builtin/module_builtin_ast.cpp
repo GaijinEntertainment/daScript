@@ -694,15 +694,14 @@ namespace das {
             context->throw_error_at(at, "%s, near %s", err.c_str(), ch );
         }
     public:
+        MangledNameParserCtx ( const LineInfo & att ) : MangledNameParser(att) {}
         Context *   context = nullptr;
-        LineInfo *  at = nullptr;
     };
 
     TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at ) {
         if ( !txt ) context->throw_error_at(at, "can't parse empty mangled name");
-        MangledNameParserCtx parser;
+        MangledNameParserCtx parser(*at);
         parser.context = context;
-        parser.at = at;
         return parser.parseTypeFromMangledName(txt, lib, thisModule);
     }
 

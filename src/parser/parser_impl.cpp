@@ -30,8 +30,7 @@ namespace das {
     }
 
     static TypeDecl * makeFixedArrayNode ( Expression * dimExpr, const LineInfo & at ) {
-        auto fa = new TypeDecl(Type::tFixedArray);
-        fa->at = at;
+        auto fa = new TypeDecl(Type::tFixedArray, at);
         if ( dimExpr ) {
             fa->fixedDim = TypeDecl::dimConst;
             if ( dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array
@@ -736,7 +735,7 @@ namespace das {
                 func->name = yyextra->g_thisStructure->name + "`" + func->name;
                 auto vars = new vector<VariableNameAndPosition>();
                 vars->emplace_back(VariableNameAndPosition(varName,"",func->at));
-                TypeDecl * funcType = new TypeDecl(Type::tFunction);
+                TypeDecl * funcType = new TypeDecl(Type::tFunction, func->at);
                 funcType->at = func->at;
                 swap ( funcType->firstType, func->result );
                 funcType->argTypes.reserve ( func->arguments.size() );
@@ -837,15 +836,15 @@ namespace das {
                     vars->emplace_back(VariableNameAndPosition(varName,"",func->at));
                     Expression * finit = new ExprAddr(func->at, inThisModule(func->name));
                     if ( ovr == OVERRIDE_OVERRIDE ) {
-                        finit = new ExprCast(func->at, finit, new TypeDecl(Type::autoinfer));
+                        finit = new ExprCast(func->at, finit, new TypeDecl(Type::autoinfer, func->at));
                     } else if ( ovr == OVERRIDE_SEALED ) {
                         if ( yyextra->g_thisStructure->findField(varName) ) { // only if we are actually overriding a field
-                            finit = new ExprCast(func->at, finit, new TypeDecl(Type::autoinfer));
+                            finit = new ExprCast(func->at, finit, new TypeDecl(Type::autoinfer, func->at));
                         }
                     }
                     VariableDeclaration * decl = new VariableDeclaration(
                         vars,
-                        new TypeDecl(Type::autoinfer),
+                        new TypeDecl(Type::autoinfer, func->at),
                         finit
                     );
                     decl->override = ovr == OVERRIDE_OVERRIDE;

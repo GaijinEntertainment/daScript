@@ -677,7 +677,7 @@ void das_module_bind_interop_function_n ( das_module * mod, das_module_group * l
     auto fn = new CFunction(name_string.c_str(), *(ModuleLibrary *)lib, cpp_name_string.c_str(), fun);
     fn->setSideEffects((das::SideEffects) sideffects);
     vector <TypeDeclPtr> arguments;
-    MangledNameParser parser;
+    MangledNameParser parser(cppBindingLineInfo(name_string.c_str()));
     const char * arg = args_string.c_str();
     while ( *arg ) {
         auto tt = parser.parseTypeFromMangledName(arg, *(ModuleLibrary*)lib,(Module *)mod);
@@ -706,7 +706,7 @@ void das_module_bind_interop_function_unaligned_n ( das_module * mod, das_module
     auto fn = new CFunction_Unaligned(name_string.c_str(), *(ModuleLibrary *)lib, cpp_name_string.c_str(), fun);
     fn->setSideEffects((das::SideEffects) sideffects);
     vector <TypeDeclPtr> arguments;
-    MangledNameParser parser;
+    MangledNameParser parser(cppBindingLineInfo(name_string.c_str()));
     const char * arg = args_string.c_str();
     while ( *arg ) {
         auto tt = parser.parseTypeFromMangledName(arg, *(ModuleLibrary*)lib,(Module *)mod);
@@ -728,7 +728,7 @@ void das_module_bind_alias_n ( das_module * mod, das_module_group * lib,
                                const char * tname, size_t tname_length ) {
     auto alias_name = string_from_range(aname, aname_length, "aname");
     auto type_name = c_string_from_range(tname, tname_length, "tname");
-    MangledNameParser parser;
+    MangledNameParser parser(cppBindingLineInfo(alias_name.c_str()));
     auto tt = type_name.c_str();
     auto at = parser.parseTypeFromMangledName(tt, *(ModuleLibrary*)lib,(Module *)mod);
     DAS_ASSERT(at->alias.empty() && "already an alias");
@@ -783,7 +783,7 @@ void das_structure_add_field_n ( das_structure * st, das_module * mod, das_modul
     auto name_string = string_from_range(name, name_length, "name");
     auto cpp_name_string = string_from_range(cppname, cppname_length, "cppname");
     auto type_name = c_string_from_range(tname, tname_length, "tname");
-    MangledNameParser parser;
+    MangledNameParser parser(cppBindingLineInfo(name_string.c_str()));
     auto tt = type_name.c_str();
     auto at = parser.parseTypeFromMangledName(tt, *(ModuleLibrary*)lib,(Module *)mod);
     ((CStructureAnnotation *)st)->addFieldEx(name_string, cpp_name_string, checked_u32(offset, "offset"), at);

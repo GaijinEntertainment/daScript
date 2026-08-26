@@ -18,7 +18,7 @@ namespace das {
                     // the generator contract fixes the block result to bool; pinning a bare
                     // auto here keeps return-type diagnostics at the offending return site
                     if (blk->returnType && blk->returnType->baseType == Type::autoinfer) {
-                        blk->returnType = new TypeDecl(Type::tBool);
+                        blk->returnType = new TypeDecl(Type::tBool, blk->at);
                         blk->returnType->at = blk->at;
                     }
                 }
@@ -90,8 +90,7 @@ namespace das {
                         if (!expr->iterType->isVoid()) {
                             auto yva = new Variable();
                             if (expr->iterType->ref) {
-                                yva->type = new TypeDecl(Type::tPointer);
-                                yva->type->at = block->at;
+                                yva->type = new TypeDecl(Type::tPointer, block->at);
                                 yva->type->firstType = new TypeDecl(*expr->iterType);
                                 if ( !yva->type->firstType->at.fileInfo ) yva->type->firstType->at = block->at;
                                 yva->type->firstType->ref = false;
@@ -1133,7 +1132,7 @@ namespace das {
         if (expr->type->isString()) {
             reportAstChanged();
             auto ecs = new ExprConstString(expr->at);
-            ecs->type = new TypeDecl(Type::tString);
+            ecs->type = new TypeDecl(Type::tString, ecs->at);
             return ecs;
         } else if (expr->type->isEnumT()) {
             auto f0 = expr->type->enumType->find(0, "");
@@ -1301,8 +1300,7 @@ namespace das {
                         expr->at, CompilationError::mismatching_tuple_argument_count);
                 return Visitor::visit(expr);
             }
-            auto mkt = new TypeDecl(Type::tTuple);
-            mkt->at = expr->at;
+            auto mkt = new TypeDecl(Type::tTuple, expr->at);
             for (size_t ai = 0; ai != argCount; ++ai) {
                 const auto &val = expr->values[ai];
                 const auto &argT = expr->recordType->argTypes[ai];
@@ -1323,8 +1321,7 @@ namespace das {
             }
             expr->makeType = mkt;
         } else {
-            auto mkt = new TypeDecl(Type::tTuple);
-            mkt->at = expr->at;
+            auto mkt = new TypeDecl(Type::tTuple, expr->at);
             for (auto &val : expr->values) {
                 auto valT = new TypeDecl(*val->type);
                 valT->at = expr->at;
@@ -1573,8 +1570,7 @@ namespace das {
         if (expr->gen2 && expr->makeArrayOnHeap) {
             // heap array literal: type directly as array<T> (not the stack fixed array); codegen
             // builds it on the heap, and to_array_move/to_table_move resolve their array<T> overload.
-            resT = new TypeDecl(Type::tArray);
-            resT->at = expr->at;
+            resT = new TypeDecl(Type::tArray, expr->at);
             resT->constant = false;
             resT->removeConstant = true;
             resT->firstType = new TypeDecl(*expr->recordType);

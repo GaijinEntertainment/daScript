@@ -233,7 +233,7 @@ namespace das {
             const char * fieldNames [] = {"x","y","z","w"};
             for ( int r=0; r!=RowC; ++r ) {
                 this->addFieldEx(fieldNames[r], "m[" + to_string(r) + "]", r*ColC*sizeof(float),
-                    new TypeDecl(TypeDecl::getVectorType(Type::tFloat, ColC)));
+                    new TypeDecl(TypeDecl::getVectorType(Type::tFloat, ColC), cppBindingLineInfo()));
             }
         }
         virtual bool isIndexable ( const TypeDeclPtr & decl ) const override {
@@ -243,7 +243,7 @@ namespace das {
             auto decl = idx->type;
             if ( !decl->isIndex() ) return nullptr;
             auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
-            auto pt = new TypeDecl(bt);
+            auto pt = new TypeDecl(bt, idx->at);
             pt->ref = true;
             return pt;
         }
@@ -268,7 +268,7 @@ namespace das {
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
-            gc_local<TypeDecl> none = new TypeDecl(Type::none);
+            gc_local<TypeDecl> none = new TypeDecl(Type::none, cppBindingLineInfo());
             if ( auto tnode = trySimulate(context, rv, idx, none.ptr, ofs) ) {
                 return tnode;
             } else {
@@ -281,7 +281,7 @@ namespace das {
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & readType,
                                             ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
             auto r2vType = readType->baseType;
-            gc_local<TypeDecl> r2vTypeDecl = new TypeDecl(r2vType);
+            gc_local<TypeDecl> r2vTypeDecl = new TypeDecl(r2vType, cppBindingLineInfo());
             if ( auto tnode = trySimulate(context, rv, idx, r2vTypeDecl.ptr, ofs) ) {
                 return tnode;
             } else {

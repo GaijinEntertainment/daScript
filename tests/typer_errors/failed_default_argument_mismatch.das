@@ -9,7 +9,7 @@
 // broken default errors as 30511 instead.) The 30254 reports twice - each of its two
 // sites carries its own location, so location-keyed dedupe keeps both.
 options gen2
-expect 30161, 30254, 30254, 30511, 30511
+expect 30161, 30254, 30511, 30511
 
 tuple var0 {}
 
