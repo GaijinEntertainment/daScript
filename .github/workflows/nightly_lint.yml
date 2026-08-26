@@ -12,6 +12,10 @@ name: nightly whole-tree lint
 #      consumed nothing" is a true statement, because every consumer's
 #      instantiations feed one ledger.
 #
+# Both passes run on every build, and the job is red if either found something.
+# They report different defect classes, so stopping at the first would hide the
+# second until some later night when pass 1 happens to be clean.
+#
 # The summary's "skipped" count is coverage: a silent shrink is a regression
 # (dasLLVM, dasSMT/z3, macOS-only files surface there, not as reds).
 
@@ -58,6 +62,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
 
       - name: "Build daslang + shared modules"
+        id: build
         # Broadest module set this runner can build — every module missing here
         # moves its .das files from "linted" to the skipped count, so never
         # shrink this list without saying why here.
@@ -90,6 +95,14 @@ jobs:
             -q --silent -j 0 --disable LINT019
 
       - name: "Stale-nolint pass (single process)"
+        # The two passes find different defect classes, so a finding in the first
+        # must not hide the second: run whenever there is a binary to run, and let
+        # the job fail on either. always() is load-bearing — an `if` with no status
+        # function gets an implicit success() and would skip after a red pass 1.
+        # outcome, not conclusion: outcome is the build's real result, while
+        # conclusion reports success for a failed step that continue-on-error waved
+        # through - and a waved-through build leaves no binary to lint with.
+        if: always() && steps.build.outcome == 'success'
         # -j 1 is load-bearing: the nolint-consumption ledger is per-process.
         run: |
           set -eux
