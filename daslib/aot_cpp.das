@@ -1708,6 +1708,14 @@ class public CppAot : AstVisitor {
             var init_val = isLocalVec(variable._type) ? "v_zero()" : "0";
             if (variable._type.baseType == Type.tFloat16) {
                 init_val = "float16_t(0.f)";
+            } elif (variable._type.baseType == Type.tBitfield64) {
+                init_val = "das::Bitfield64(UINT64_C(0))";
+            } elif (variable._type.baseType == Type.tBitfield16) {
+                init_val = "das::Bitfield16(uint16_t(0))";
+            } elif (variable._type.baseType == Type.tBitfield8) {
+                init_val = "das::Bitfield8(uint8_t(0))";
+            } elif (variable._type.baseType == Type.tBitfield) {
+                init_val = "das::Bitfield(0u)";
             }
             write(*ss, "{cvname} = {init_val}");
         } else {
