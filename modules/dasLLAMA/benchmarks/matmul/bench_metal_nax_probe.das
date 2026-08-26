@@ -236,16 +236,81 @@ let DEVW_Q8_GEMM = (NAX_COMMON +
 // only the descriptor M and the per-threadgroup A slice grow (upstream's mul_mm runs 128
 // act-rows x 64 wcols — M/128 W re-streams vs our M/32; the old 128-tile loss predates
 // accumulate mode)
-def private tile_q8uh_msl(mt : int) : string {
+// upstream's kernel_mul_mm_q8_0 (98c4764b6), literal-specialized: same 128x64xK32 tile,
+// W dequanted inline to a tg half tile, X streamed from device (f32 in their production
+// prefill, f16 twin for the dtype-matched compare), one accumulate-mode cooperative C
+def private their_mm_msl(kdim, ndim, m : int; xf16 : bool; inline_t : bool = false; uintidx : bool = false) : string {
+    let xt = xf16 ? "half" : "float"
+    let it = uintidx ? "uint" : "int"
+    let nm = uintidx ? "their_uidx" : (inline_t ? "their_inl" : (xf16 ? "their_f16" : "their_f32"))
     return build_string() $(var w) {
         w |> write("#include <metal_stdlib>\n#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\n")
         w |> write("using namespace metal;\nusing namespace mpp::tensor_ops;\n")
-        w |> write("kernel void tile{mt}_q8uh(\n")
+        w |> write("struct block_q8h \{ half d; char qs[32]; \};\n")
+        w |> write("kernel void {nm}(\n")
+        w |> write("    device const char* srcA [[buffer(0)]], device const {xt}* srcB [[buffer(1)]],\n")
+        w |> write("    device float* dst [[buffer(2)]],\n")
+        w |> write("    uint3 tgpig [[threadgroup_position_in_grid]], ushort tiitg [[thread_index_in_threadgroup]])\n")
+        w |> write("\{\n")
+        w |> write("  constexpr int K = {kdim}; constexpr int M = {ndim}; constexpr int N = {m};\n")
+        w |> write("  const {it} ra = tgpig.y * 64;\n")
+        w |> write("  const {it} rb = tgpig.x * 128;\n")
+        w |> write("  threadgroup half sa[2048];\n")
+        if (inline_t) {
+            w |> write("  auto tA = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>(sa, dextents<int32_t, 2>(32, 64));\n")
+            w |> write("  auto tB = tensor<device {xt}, dextents<int32_t, 2>, tensor_inline>((device {xt}*)srcB, dextents<int32_t, 2>(K, N), array<int, 2>(\{1, K\}));\n")
+        } else {
+            w |> write("  auto tA = tensor(sa, dextents<int32_t, 2>(32, 64));\n")
+            w |> write("  auto tB = tensor((device {xt}*)srcB, dextents<int32_t, 2>(K, N), array<int, 2>(\{1, K\}));\n")
+        }
+        w |> write("  matmul2d<matmul2d_descriptor(128, 64, 32, false, true, true, matmul2d_descriptor::mode::multiply_accumulate), execution_simdgroups<4>> mm;\n")
+        w |> write("  auto cT = mm.get_destination_cooperative_tensor<decltype(tB), decltype(tA), float>();\n")
+        w |> write("  for ({it} loop_k = 0; loop_k < K; loop_k += 32) \{\n")
+        w |> write("    for ({it} work = tiitg; work < 128; work += 128) \{\n")
+        w |> write("      const {it} row = work / 2;\n")
+        w |> write("      const {it} k_chunk = work % 2;\n")
+        w |> write("      const {it} k_pos = loop_k + k_chunk * 16;\n")
+        w |> write("      const short k_base = k_chunk * 16;\n")
+        w |> write("      const {it} block_idx = k_pos / 32;\n")
+        w |> write("      const {it} il = (k_pos / 16) % 2;\n")
+        w |> write("      device const block_q8h * row_ptr = (device const block_q8h *)(srcA + {kdim / 32 * 34} * (ra + row));\n")
+        w |> write("      device const char * qs = row_ptr[block_idx].qs;\n")
+        w |> write("      const float d = row_ptr[block_idx].d;\n")
+        w |> write("      float4x4 reg_f;\n")
+        w |> write("      for (int i = 0; i < 16; i++) \{ reg_f[i/4][i%4] = (qs[i + 16*il] * d); \}\n")
+        w |> write("      half4x4 temp_a = (half4x4) reg_f;\n")
+        w |> write("      _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{\n")
+        w |> write("        sa[row * 32 + (k_base + i)] = temp_a[i/4][i%4];\n")
+        w |> write("      \}\n")
+        w |> write("    \}\n")
+        w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+        w |> write("    auto mA = tA.slice(0, 0);\n")
+        w |> write("    auto mB = tB.slice(int(loop_k), int(rb));\n")
+        w |> write("    mm.run(mB, mA, cT);\n")
+        w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+        w |> write("  \}\n")
+        if (inline_t) {
+            w |> write("  auto tD = tensor<device float, dextents<int32_t, 2>, tensor_inline>(dst, dextents<int32_t, 2>(M, N), array<int, 2>(\{1, M\}));\n")
+        } else {
+            w |> write("  auto tD = tensor(dst, dextents<int32_t, 2>(M, N), array<int, 2>(\{1, M\}));\n")
+        }
+        w |> write("  cT.store(tD.slice(int(ra), int(rb)));\n")
+        w |> write("\}\n")
+    }
+}
+
+// ours verbatim, but K/N baked as literals (per-shape PSO) — the specialization race
+def private tile_q8uh_lit_msl(mt, kdim, ndim : int) : string {
+    return build_string() $(var w) {
+        w |> write("#include <metal_stdlib>\n#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\n")
+        w |> write("using namespace metal;\nusing namespace mpp::tensor_ops;\n")
+        w |> write("kernel void tile{mt}l_q8uh(\n")
         w |> write("    device const half* wsh [[buffer(0)]], device const char* wqb [[buffer(1)]],\n")
         w |> write("    device const half* xh [[buffer(2)]], device float* y [[buffer(3)]],\n")
-        w |> write("    constant uint& kdim [[buffer(4)]], constant uint& ndim [[buffer(5)]],\n")
+        w |> write("    constant uint& kdim_u [[buffer(4)]], constant uint& ndim_u [[buffer(5)]],\n")
         w |> write("    uint3 tgp [[threadgroup_position_in_grid]], ushort tid [[thread_index_in_threadgroup]])\n")
         w |> write("\{\n")
+        w |> write("  constexpr uint kdim = {kdim}u; constexpr uint ndim = {ndim}u;\n")
         w |> write("  threadgroup half wt[2048];\n")
         w |> write("  const uint ldwb = kdim / 32u;\n")
         w |> write("  const uint blk0 = tgp.y * 64u * ldwb;\n")
@@ -268,6 +333,108 @@ def private tile_q8uh_msl(mt : int) : string {
         w |> write("      device const char * q = wq + blk * 34u + kh;\n")
         w |> write("      threadgroup half * dstp = wt + col * 32u + kh;\n")
         w |> write("      _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+        w |> write("    \}\n")
+        w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+        w |> write("    auto A = AT((device half *)(a + b * 32u), dextents<int32_t, 2>(32, {mt}), metal::array<int32_t, 2>\{1, int(kdim)\});\n")
+        w |> write("    auto W = WT((threadgroup half *)wt, dextents<int32_t, 2>(32, 64));\n")
+        w |> write("    op.run(A, W, cT);\n")
+        w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+        w |> write("  \}\n")
+        w |> write("  auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>(64, {mt}), metal::array<int32_t, 2>\{1, int(ndim)\});\n")
+        w |> write("  cT.store(C);\n")
+        w |> write("\}\n")
+    }
+}
+
+// hoist=true: upstream's matmul idiom — tensors built ONCE outside the K loop, advanced
+// by slice(), static-32 descriptor K; the staging phase and C store stay ours
+def private tile_q8uh_hoist_msl(mt : int) : string {
+    return build_string() $(var w) {
+        w |> write("#include <metal_stdlib>\n#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\n")
+        w |> write("using namespace metal;\nusing namespace mpp::tensor_ops;\n")
+        w |> write("kernel void tile{mt}h_q8uh(\n")
+        w |> write("    device const half* wsh [[buffer(0)]], device const char* wqb [[buffer(1)]],\n")
+        w |> write("    device const half* xh [[buffer(2)]], device float* y [[buffer(3)]],\n")
+        w |> write("    constant uint& kdim [[buffer(4)]], constant uint& ndim [[buffer(5)]],\n")
+        w |> write("    uint3 tgp [[threadgroup_position_in_grid]], ushort tid [[thread_index_in_threadgroup]])\n")
+        w |> write("\{\n")
+        w |> write("  threadgroup half wt[2048];\n")
+        w |> write("  const uint ldwb = kdim / 32u;\n")
+        w |> write("  const uint blk0 = tgp.y * 64u * ldwb;\n")
+        w |> write("  device const half* ws = wsh + blk0 * 17u;\n")
+        w |> write("  device const char* wq = wqb + blk0 * 34u + 2u;\n")
+        w |> write("  constexpr auto d = matmul2d_descriptor({mt}, 64, 32, false, true, true, matmul2d_descriptor::mode::multiply_accumulate);\n")
+        w |> write("  matmul2d<d, execution_simdgroups<4>> op;\n")
+        w |> write("  auto tW = tensor(wt, dextents<int32_t, 2>(32, 64));\n")
+        w |> write("  device const half* a = xh + tgp.x * {mt}u * kdim;\n")
+        w |> write("  auto tX = tensor((device half *)a, dextents<int32_t, 2>(int(kdim), {mt}), array<int, 2>(\{1, int(kdim)\}));\n")
+        w |> write("  auto cT = op.get_destination_cooperative_tensor<decltype(tX), decltype(tW), float>();\n")
+        w |> write("  for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
+        w |> write("  const uint nb = kdim / 32u;\n")
+        w |> write("  for (uint b = 0; b < nb; ++b) \{\n")
+        w |> write("    for (uint work = tid; work < 128u; work += 128u) \{\n")
+        w |> write("      const uint col = work >> 1; const uint kh = (work & 1u) * 16u;\n")
+        w |> write("      const uint blk = col * ldwb + b;\n")
+        w |> write("      const float sc = float(ws[blk * 17u]);\n")
+        w |> write("      device const char * q = wq + blk * 34u + kh;\n")
+        w |> write("      threadgroup half * dstp = wt + col * 32u + kh;\n")
+        w |> write("      _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+        w |> write("    \}\n")
+        w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+        w |> write("    auto mX = tX.slice(int(b) * 32, 0);\n")
+        w |> write("    auto mW = tW.slice(0, 0);\n")
+        w |> write("    op.run(mX, mW, cT);\n")
+        w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+        w |> write("  \}\n")
+        w |> write("  device float * c = y + tgp.x * {mt}u * ndim + tgp.y * 64u;\n")
+        w |> write("  auto C = tensor(c, dextents<int32_t, 2>(64, {mt}), array<int, 2>(\{1, int(ndim)\}));\n")
+        w |> write("  cT.store(C);\n")
+        w |> write("\}\n")
+    }
+}
+
+def private tile_q8uh_msl(mt : int; kstatic : bool = false; reg_stage : bool = false; nozero : bool = false) : string {
+    let kd = kstatic ? "32" : "static_cast<int>(dynamic_extent)"
+    return build_string() $(var w) {
+        w |> write("#include <metal_stdlib>\n#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\n")
+        w |> write("using namespace metal;\nusing namespace mpp::tensor_ops;\n")
+        w |> write("kernel void tile{mt}{kstatic ? "s" : ""}{reg_stage ? "r" : ""}{nozero ? "z" : ""}_q8uh(\n")
+        w |> write("    device const half* wsh [[buffer(0)]], device const char* wqb [[buffer(1)]],\n")
+        w |> write("    device const half* xh [[buffer(2)]], device float* y [[buffer(3)]],\n")
+        w |> write("    constant uint& kdim [[buffer(4)]], constant uint& ndim [[buffer(5)]],\n")
+        w |> write("    uint3 tgp [[threadgroup_position_in_grid]], ushort tid [[thread_index_in_threadgroup]])\n")
+        w |> write("\{\n")
+        w |> write("  threadgroup half wt[2048];\n")
+        w |> write("  const uint ldwb = kdim / 32u;\n")
+        w |> write("  const uint blk0 = tgp.y * 64u * ldwb;\n")
+        w |> write("  device const half* ws = wsh + blk0 * 17u;\n")
+        w |> write("  device const char* wq = wqb + blk0 * 34u + 2u;\n")
+        w |> write("  device const half* a = xh + tgp.x * {mt}u * kdim;\n")
+        w |> write("  device float* c = y + tgp.x * {mt}u * ndim + tgp.y * 64u;\n")
+        w |> write("  constexpr auto d = matmul2d_descriptor({mt}, 64, {kd}, false, true, true, matmul2d_descriptor::mode::multiply_accumulate);\n")
+        w |> write("  matmul2d<d, execution_simdgroups<4>> op;\n")
+        w |> write("  using AT = tensor<device half, dextents<int32_t, 2>, tensor_inline>;\n")
+        w |> write("  using WT = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;\n")
+        w |> write("  auto cT = op.get_destination_cooperative_tensor<AT, WT, float>();\n")
+        if (!nozero) {
+            w |> write("  for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
+        }
+        w |> write("  const uint nb = kdim / 32u;\n")
+        w |> write("  for (uint b = 0; b < nb; ++b) \{\n")
+        w |> write("    for (uint work = tid; work < 128u; work += 128u) \{\n")
+        w |> write("      const uint col = work >> 1; const uint kh = (work & 1u) * 16u;\n")
+        w |> write("      const uint blk = col * ldwb + b;\n")
+        w |> write("      const float sc = float(ws[blk * 17u]);\n")
+        w |> write("      device const char * q = wq + blk * 34u + kh;\n")
+        w |> write("      threadgroup half * dstp = wt + col * 32u + kh;\n")
+        if (reg_stage) {
+            w |> write("      float4x4 reg_f;\n")
+            w |> write("      for (int i = 0; i < 16; i++) \{ reg_f[i/4][i%4] = float(q[i]) * sc; \}\n")
+            w |> write("      half4x4 tmp = (half4x4) reg_f;\n")
+            w |> write("      _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = tmp[i/4][i%4]; \}\n")
+        } else {
+            w |> write("      _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+        }
         w |> write("    \}\n")
         w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
         w |> write("    auto A = AT((device half *)(a + b * 32u), dextents<int32_t, 2>(32, {mt}), metal::array<int32_t, 2>\{1, int(kdim)\});\n")
@@ -743,6 +910,378 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                 delete blob
                 delete xh
             }
+        }
+        // ===== descriptor-K race: dynamic_extent vs static 32 (upstream's mul_mm carries
+        // static K in the descriptor; every run() here is a fixed 32-chunk, so dynamic is
+        // gratuitous — does MPP specialize?) =====
+        var t128d_pso = pipeline_from_source(dev, tile_q8uh_msl(128), "tile128_q8uh", true, err)
+        var t128s_pso = pipeline_from_source(dev, tile_q8uh_msl(128, kstatic = true), "tile128s_q8uh", true, err)
+        if (t128d_pso == null || t128s_pso == null) {
+            print("kstatic pso: {err}\n")
+        } else {
+            print("descriptor-K race (ratio = static32/dynamic; <1 = static wins):\n")
+            for (g in [(k = 2560, n = 9728, m = 512), (k = 9728, n = 2560, m = 512),
+                       (k = 2560, n = 4096, m = 512), (k = 4096, n = 2560, m = 512),
+                       (k = 2560, n = 9728, m = 2048), (k = 9728, n = 2560, m = 2048)]) {
+                let kdim = g.k
+                let ndim = g.n
+                let m = g.m
+                var blob <- race_q8_blob(ndim * (kdim / 32))
+                var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                var xh <- race_x_f16(m * kdim)
+                var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+                var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                var bk = race_uniform_u32(dev, uint(kdim))
+                var bn = race_uniform_u32(dev, uint(ndim))
+                var t_dyn = -1.0lf
+                var t_sta = -1.0lf
+                race_pair_ms(queue, 5, t_dyn, t_sta, $(enc) {
+                    kn_pipeline(enc, t128d_pso)
+                    kn_buffer(enc, bw, 0ul, 0)
+                    kn_buffer(enc, bw, 0ul, 1)
+                    kn_buffer(enc, bxh, 0ul, 2)
+                    kn_buffer(enc, by_a, 0ul, 3)
+                    kn_buffer(enc, bk, 0ul, 4)
+                    kn_buffer(enc, bn, 0ul, 5)
+                    kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                }, $(enc) {
+                    kn_pipeline(enc, t128s_pso)
+                    kn_buffer(enc, bw, 0ul, 0)
+                    kn_buffer(enc, bw, 0ul, 1)
+                    kn_buffer(enc, bxh, 0ul, 2)
+                    kn_buffer(enc, by_b, 0ul, 3)
+                    kn_buffer(enc, bk, 0ul, 4)
+                    kn_buffer(enc, bn, 0ul, 5)
+                    kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                })
+                var knote = ""
+                let kok = race_envelope_ok(by_a, by_b, m * ndim, knote)
+                print("  K={kdim} N={ndim} M={m}: ratio={t_sta / t_dyn} (dyn={t_dyn}ms static={t_sta}ms) {kok ? "ok" : knote}\n")
+                metal_release(bw)
+                metal_release(bxh)
+                metal_release(by_a)
+                metal_release(by_b)
+                metal_release(bk)
+                metal_release(bn)
+                delete blob
+                delete xh
+            }
+        }
+        // ===== hoist-idiom race: our kernel on their matmul idiom (hoisted tensors +
+        // slice + static K; staging/store stay ours) vs our per-chunk-construction form =====
+        var t128h_pso = pipeline_from_source(dev, tile_q8uh_hoist_msl(128), "tile128h_q8uh", true, err)
+        if (t128h_pso == null) {
+            print("hoist pso: {err}\n")
+        } else {
+            var tnz_pso = pipeline_from_source(dev, tile_q8uh_msl(128, nozero = true), "tile128z_q8uh", true, err)
+            if (tnz_pso != null) {
+                print("no-zero-init race (ratio = nozero/ours; <1 = dropping the init loop wins):\n")
+                for (g in [(k = 2560, n = 9728, m = 512), (k = 9728, n = 2560, m = 512),
+                           (k = 2560, n = 4096, m = 512), (k = 2560, n = 9728, m = 2048)]) {
+                    let kdim = g.k
+                    let ndim = g.n
+                    let m = g.m
+                    var blob <- race_q8_blob(ndim * (kdim / 32))
+                    var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                    var xh <- race_x_f16(m * kdim)
+                    var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                    var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+                    var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                    var bk = race_uniform_u32(dev, uint(kdim))
+                    var bn = race_uniform_u32(dev, uint(ndim))
+                    var t_ours = -1.0lf
+                    var t_nz = -1.0lf
+                    race_pair_ms(queue, 5, t_ours, t_nz, $(enc) {
+                        kn_pipeline(enc, t128d_pso)
+                        kn_buffer(enc, bw, 0ul, 0)
+                        kn_buffer(enc, bw, 0ul, 1)
+                        kn_buffer(enc, bxh, 0ul, 2)
+                        kn_buffer(enc, by_a, 0ul, 3)
+                        kn_buffer(enc, bk, 0ul, 4)
+                        kn_buffer(enc, bn, 0ul, 5)
+                        kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                    }, $(enc) {
+                        kn_pipeline(enc, tnz_pso)
+                        kn_buffer(enc, bw, 0ul, 0)
+                        kn_buffer(enc, bw, 0ul, 1)
+                        kn_buffer(enc, bxh, 0ul, 2)
+                        kn_buffer(enc, by_b, 0ul, 3)
+                        kn_buffer(enc, bk, 0ul, 4)
+                        kn_buffer(enc, bn, 0ul, 5)
+                        kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                    })
+                    var znote = ""
+                    let zok = race_envelope_ok(by_a, by_b, m * ndim, znote)
+                    print("  K={kdim} N={ndim} M={m}: ratio={t_nz / t_ours} (ours={t_ours}ms nozero={t_nz}ms) {zok ? "ok" : znote}\n")
+                    metal_release(bw)
+                    metal_release(bxh)
+                    metal_release(by_a)
+                    metal_release(by_b)
+                    metal_release(bk)
+                    metal_release(bn)
+                    delete blob
+                    delete xh
+                }
+            }
+            var tregs_pso = pipeline_from_source(dev, tile_q8uh_msl(128, reg_stage = true), "tile128r_q8uh", true, err)
+            if (tregs_pso != null) {
+                print("reg-staging race (ratio = regstage/ours; <1 = their staging wins):\n")
+                for (g in [(k = 2560, n = 9728, m = 512), (k = 9728, n = 2560, m = 512),
+                           (k = 4096, n = 2560, m = 512), (k = 2560, n = 4096, m = 512),
+                           (k = 2560, n = 9728, m = 2048)]) {
+                    let kdim = g.k
+                    let ndim = g.n
+                    let m = g.m
+                    var blob <- race_q8_blob(ndim * (kdim / 32))
+                    var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                    var xh <- race_x_f16(m * kdim)
+                    var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                    var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+                    var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                    var bk = race_uniform_u32(dev, uint(kdim))
+                    var bn = race_uniform_u32(dev, uint(ndim))
+                    var t_ours = -1.0lf
+                    var t_reg = -1.0lf
+                    race_pair_ms(queue, 5, t_ours, t_reg, $(enc) {
+                        kn_pipeline(enc, t128d_pso)
+                        kn_buffer(enc, bw, 0ul, 0)
+                        kn_buffer(enc, bw, 0ul, 1)
+                        kn_buffer(enc, bxh, 0ul, 2)
+                        kn_buffer(enc, by_a, 0ul, 3)
+                        kn_buffer(enc, bk, 0ul, 4)
+                        kn_buffer(enc, bn, 0ul, 5)
+                        kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                    }, $(enc) {
+                        kn_pipeline(enc, tregs_pso)
+                        kn_buffer(enc, bw, 0ul, 0)
+                        kn_buffer(enc, bw, 0ul, 1)
+                        kn_buffer(enc, bxh, 0ul, 2)
+                        kn_buffer(enc, by_b, 0ul, 3)
+                        kn_buffer(enc, bk, 0ul, 4)
+                        kn_buffer(enc, bn, 0ul, 5)
+                        kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                    })
+                    var rnote = ""
+                    let rok = race_envelope_ok(by_a, by_b, m * ndim, rnote)
+                    print("  K={kdim} N={ndim} M={m}: ratio={t_reg / t_ours} (ours={t_ours}ms regstage={t_reg}ms) {rok ? "ok" : rnote}\n")
+                    metal_release(bw)
+                    metal_release(bxh)
+                    metal_release(by_a)
+                    metal_release(by_b)
+                    metal_release(bk)
+                    metal_release(bn)
+                    delete blob
+                    delete xh
+                }
+            }
+            print("shape-literal race (ratio = literal/ours; <1 = literal wins):\n")
+            for (g in [(k = 2560, n = 9728, m = 512), (k = 9728, n = 2560, m = 512),
+                       (k = 4096, n = 2560, m = 512), (k = 2560, n = 9728, m = 2048)]) {
+                var tlit_pso = pipeline_from_source(dev, tile_q8uh_lit_msl(128, g.k, g.n), "tile128l_q8uh", true, err)
+                if (tlit_pso == null) {
+                    print("lit pso: {err}\n")
+                    continue
+                }
+                {
+                    let kdim = g.k
+                    let ndim = g.n
+                    let m = g.m
+                    var blob <- race_q8_blob(ndim * (kdim / 32))
+                    var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                    var xh <- race_x_f16(m * kdim)
+                    var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                    var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+                    var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                    var bk = race_uniform_u32(dev, uint(kdim))
+                    var bn = race_uniform_u32(dev, uint(ndim))
+                    var t_ours = -1.0lf
+                    var t_lit = -1.0lf
+                    race_pair_ms(queue, 5, t_ours, t_lit, $(enc) {
+                        kn_pipeline(enc, t128d_pso)
+                        kn_buffer(enc, bw, 0ul, 0)
+                        kn_buffer(enc, bw, 0ul, 1)
+                        kn_buffer(enc, bxh, 0ul, 2)
+                        kn_buffer(enc, by_a, 0ul, 3)
+                        kn_buffer(enc, bk, 0ul, 4)
+                        kn_buffer(enc, bn, 0ul, 5)
+                        kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                    }, $(enc) {
+                        kn_pipeline(enc, tlit_pso)
+                        kn_buffer(enc, bw, 0ul, 0)
+                        kn_buffer(enc, bw, 0ul, 1)
+                        kn_buffer(enc, bxh, 0ul, 2)
+                        kn_buffer(enc, by_b, 0ul, 3)
+                        kn_buffer(enc, bk, 0ul, 4)
+                        kn_buffer(enc, bn, 0ul, 5)
+                        kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                    })
+                    var lnote = ""
+                    let lok = race_envelope_ok(by_a, by_b, m * ndim, lnote)
+                    print("  K={kdim} N={ndim} M={m}: ratio={t_lit / t_ours} (ours={t_ours}ms literal={t_lit}ms) {lok ? "ok" : lnote}\n")
+                    metal_release(bw)
+                    metal_release(bxh)
+                    metal_release(by_a)
+                    metal_release(by_b)
+                    metal_release(bk)
+                    metal_release(bn)
+                    delete blob
+                    delete xh
+                }
+                metal_release(tlit_pso)
+            }
+        }
+        if (false) {
+            print("hoist-idiom race (ratio = hoist/ours; <1 = hoist wins):\n")
+            for (g in [(k = 2560, n = 9728, m = 512), (k = 9728, n = 2560, m = 512),
+                       (k = 4096, n = 2560, m = 512), (k = 2560, n = 9728, m = 2048)]) {
+                let kdim = g.k
+                let ndim = g.n
+                let m = g.m
+                var blob <- race_q8_blob(ndim * (kdim / 32))
+                var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                var xh <- race_x_f16(m * kdim)
+                var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+                var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                var bk = race_uniform_u32(dev, uint(kdim))
+                var bn = race_uniform_u32(dev, uint(ndim))
+                var t_ours = -1.0lf
+                var t_hoist = -1.0lf
+                race_pair_ms(queue, 5, t_ours, t_hoist, $(enc) {
+                    kn_pipeline(enc, t128d_pso)
+                    kn_buffer(enc, bw, 0ul, 0)
+                    kn_buffer(enc, bw, 0ul, 1)
+                    kn_buffer(enc, bxh, 0ul, 2)
+                    kn_buffer(enc, by_a, 0ul, 3)
+                    kn_buffer(enc, bk, 0ul, 4)
+                    kn_buffer(enc, bn, 0ul, 5)
+                    kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                }, $(enc) {
+                    kn_pipeline(enc, t128h_pso)
+                    kn_buffer(enc, bw, 0ul, 0)
+                    kn_buffer(enc, bw, 0ul, 1)
+                    kn_buffer(enc, bxh, 0ul, 2)
+                    kn_buffer(enc, by_b, 0ul, 3)
+                    kn_buffer(enc, bk, 0ul, 4)
+                    kn_buffer(enc, bn, 0ul, 5)
+                    kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                })
+                var hnote2 = ""
+                let hok2 = race_envelope_ok(by_a, by_b, m * ndim, hnote2)
+                print("  K={kdim} N={ndim} M={m}: ratio={t_hoist / t_ours} (ours={t_ours}ms hoist={t_hoist}ms) {hok2 ? "ok" : hnote2}\n")
+                metal_release(bw)
+                metal_release(bxh)
+                metal_release(by_a)
+                metal_release(by_b)
+                metal_release(bk)
+                metal_release(bn)
+                delete blob
+                delete xh
+            }
+        }
+        // ===== upstream-kernel race: their kernel_mul_mm_q8_0 (ported verbatim, literal-
+        // specialized) vs our t128 q8uh — the direct per-GEMM comparison; f32 X = their
+        // production form (no cvt pass on their side), f16 X = the dtype-matched twin =====
+        print("upstream-kernel race (ratio = theirs/ours; <1 = theirs wins):\n")
+        for (g in [(k = 2560, n = 9728, m = 512), (k = 9728, n = 2560, m = 512),
+                   (k = 4096, n = 2560, m = 512), (k = 2560, n = 4096, m = 512),
+                   (k = 2560, n = 9728, m = 2048)]) {
+            let kdim = g.k
+            let ndim = g.n
+            let m = g.m
+            var thf32_pso = pipeline_from_source(dev, their_mm_msl(kdim, ndim, m, false), "their_f32", true, err)
+            var thf16_pso = pipeline_from_source(dev, their_mm_msl(kdim, ndim, m, true), "their_f16", true, err)
+            var thinl_pso = pipeline_from_source(dev, their_mm_msl(kdim, ndim, m, true, inline_t = true), "their_inl", true, err)
+            var thuidx_pso = pipeline_from_source(dev, their_mm_msl(kdim, ndim, m, true, uintidx = true), "their_uidx", true, err)
+            if (thinl_pso != null) {
+                var xh2 <- race_x_f16(m * kdim)
+                var bxh2 = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh2[0])))
+                var blob2 <- race_q8_blob(ndim * (kdim / 32))
+                var bw2 = race_buf(dev, uint64(long_length(blob2)), unsafe(addr<void?>(blob2[0])))
+                var bya2 = race_buf(dev, uint64(m * ndim * 4), null)
+                var byb2 = race_buf(dev, uint64(m * ndim * 4), null)
+                var t_def = -1.0lf
+                var t_inl = -1.0lf
+                race_pair_ms(queue, 5, t_def, t_inl, $(enc) {
+                    kn_pipeline(enc, thf16_pso)
+                    kn_buffer(enc, bw2, 0ul, 0)
+                    kn_buffer(enc, bxh2, 0ul, 1)
+                    kn_buffer(enc, bya2, 0ul, 2)
+                    kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                }, $(enc) {
+                    kn_pipeline(enc, thinl_pso)
+                    kn_buffer(enc, bw2, 0ul, 0)
+                    kn_buffer(enc, bxh2, 0ul, 1)
+                    kn_buffer(enc, byb2, 0ul, 2)
+                    kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                })
+                print("  K={kdim} N={ndim} M={m} INLINE-FLAVOR: ratio={t_inl / t_def} (default={t_def}ms tensor_inline={t_inl}ms)\n")
+                metal_release(bw2)
+                metal_release(bxh2)
+                metal_release(bya2)
+                metal_release(byb2)
+                delete blob2
+                delete xh2
+            }
+            if (thf32_pso == null || thf16_pso == null) {
+                print("their pso: {err}\n")
+                continue
+            }
+            print("  PSO caps: ours max={metal_pipeline_max_total_threads(t128d_pso)} theirs max={metal_pipeline_max_total_threads(thf16_pso)}\n")
+            var blob <- race_q8_blob(ndim * (kdim / 32))
+            var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+            var xh <- race_x_f16(m * kdim)
+            var xf : array<float>
+            xf |> resize(m * kdim)
+            for (i in range(m * kdim)) {
+                xf[i] = float(xh[i])
+            }
+            var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+            var bxf = race_buf(dev, uint64(m * kdim * 4), unsafe(addr<void?>(xf[0])))
+            var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+            var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+            var bk = race_uniform_u32(dev, uint(kdim))
+            var bn = race_uniform_u32(dev, uint(ndim))
+            for (leg in [(pso = thf32_pso, bx = bxf, name = "f32X"), (pso = thf16_pso, bx = bxh, name = "f16X"),
+                         (pso = thinl_pso, bx = bxh, name = "inlX"), (pso = thuidx_pso, bx = bxh, name = "uidxX")]) {
+                if (leg.pso == null) {
+                    continue
+                }
+                var t_ours = -1.0lf
+                var t_them = -1.0lf
+                race_pair_ms(queue, 5, t_ours, t_them, $(enc) {
+                    kn_pipeline(enc, t128d_pso)
+                    kn_buffer(enc, bw, 0ul, 0)
+                    kn_buffer(enc, bw, 0ul, 1)
+                    kn_buffer(enc, bxh, 0ul, 2)
+                    kn_buffer(enc, by_a, 0ul, 3)
+                    kn_buffer(enc, bk, 0ul, 4)
+                    kn_buffer(enc, bn, 0ul, 5)
+                    kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                }, $(enc) {
+                    kn_pipeline(enc, leg.pso)
+                    kn_buffer(enc, bw, 0ul, 0)
+                    kn_buffer(enc, leg.bx, 0ul, 1)
+                    kn_buffer(enc, by_b, 0ul, 2)
+                    kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                })
+                var unote = ""
+                let uok = race_envelope_ok(by_a, by_b, m * ndim, unote)
+                print("  K={kdim} N={ndim} M={m} {leg.name}: ratio={t_them / t_ours} (ours={t_ours}ms theirs={t_them}ms) {uok ? "ok" : unote}\n")
+            }
+            metal_release(bw)
+            metal_release(bxh)
+            metal_release(bxf)
+            metal_release(by_a)
+            metal_release(by_b)
+            metal_release(bk)
+            metal_release(bn)
+            metal_release(thf32_pso)
+            metal_release(thf16_pso)
+            delete blob
+            delete xh
+            delete xf
         }
         // ===== tall dev-W GEMM: the all-device form at M-tile 128 vs 32 (GEMM-only over a
         // pre-dequanted panel — does the cache knee move with 4x fewer panel re-reads?) =====

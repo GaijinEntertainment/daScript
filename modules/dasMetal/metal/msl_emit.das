@@ -2300,7 +2300,6 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
             w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, true);\n")
             w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
             w |> write("    auto cT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), float>();\n")
-            w |> write("    for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
             w |> write("    op.run(A, W, cT);\n")
             w |> write("    cT.store(C);\n")
             w |> write("\}")
@@ -2318,7 +2317,6 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
             w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, true);\n")
             w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
             w |> write("    auto cT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), float>();\n")
-            w |> write("    for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
             w |> write("    op.run(A, W, cT);\n")
             w |> write("    cT.store(C);\n")
             w |> write("\}")
@@ -2341,7 +2339,6 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
             w |> write("        auto A = tensor<device float, dextents<int32_t, 2>, tensor_inline>((device float *)(a + b * 32u), dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
             w |> write("        auto W = {ct}((device int8_t *)(wq + b * 34u), dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, int(ldwb * 34u)\});\n")
             w |> write("        auto cT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), float>();\n")
-            w |> write("        for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
             w |> write("        op.run(A, W, cT);\n")
             w |> write("        for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) \{\n")
             w |> write("            auto ids = cT.get_multidimensional_index(i);\n")
@@ -2367,7 +2364,6 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
             w |> write("    using AT = tensor<device {at}, dextents<int32_t, 2>, tensor_inline>;\n")
             w |> write("    using WT = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;\n")
             w |> write("    auto cT = op.get_destination_cooperative_tensor<AT, WT, float>();\n")
-            w |> write("    for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
             w |> write("    const uint nb = kk / 32u;\n")
             w |> write("    for (uint b = 0; b < nb; ++b) \{\n")
             w |> write("        for (uint work = tid; work < {int(n)}u * 2u; work += {int(sgs * 32u)}u) \{\n")
@@ -2407,7 +2403,6 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint) : string {
         w |> write("        auto A = {ct}((device int8_t *)(aq + b * 32u), dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
         w |> write("        auto W = {ct}((device int8_t *)(wq + b * 32u), dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, int(ldw)\});\n")
         w |> write("        auto iT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), int32_t>();\n")
-        w |> write("        for (uint16_t i = 0; i < iT.get_capacity(); ++i) \{ if (iT.is_valid_element(i)) iT[i] = 0; \}\n")
         w |> write("        op.run(A, W, iT);\n")
         w |> write("        for (uint16_t i = 0; i < iT.get_capacity(); ++i) \{ if (iT.is_valid_element(i)) \{\n")
         w |> write("            auto ids = iT.get_multidimensional_index(i);\n")
@@ -2457,7 +2452,6 @@ def private emit_tmm2d_tg_begin(var ctx : MslCtx; ec : ExprCall?; indent : strin
     lines |> push("{indent}matmul2d<__tgd_{acc}, execution_simdgroups<{int(sgs)}>> __tgop_{acc};")
     lines |> push("{indent}using __tgt_{acc} = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
     lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgt_{acc}, __tgt_{acc}, float>();")
-    lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] = 0.0f; \}")
 }
 
 // one whole tile matmul with the result landing in THREADGROUP scratch (the fused-attention
@@ -2540,7 +2534,6 @@ def private emit_tmm2d_tg_begin_nt(var ctx : MslCtx; ec : ExprCall?; indent : st
     lines |> push("{indent}matmul2d<__tgd_{acc}, execution_simdgroups<{int(sgs)}>> __tgop_{acc};")
     lines |> push("{indent}using __tgt_{acc} = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
     lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgt_{acc}, __tgt_{acc}, float>();")
-    lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] = 0.0f; \}")
 }
 
 def private emit_tmm2d_tg_step_nt(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
@@ -2597,7 +2590,6 @@ def private emit_tmm2d_tg_begin_devant(var ctx : MslCtx; ec : ExprCall?; indent 
     lines |> push("{indent}using __tgt_{acc} = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
     lines |> push("{indent}using __tgta_{acc} = tensor<device float, dextents<int32_t, 2>, tensor_inline>;")
     lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgta_{acc}, __tgt_{acc}, float>();")
-    lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] = 0.0f; \}")
 }
 
 def private emit_tmm2d_tg_step_devant(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
@@ -2668,7 +2660,6 @@ def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : 
     lines |> push("{indent}using __tgt_{acc} = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;")
     lines |> push("{indent}using __tgta_{acc} = tensor<device {at}, dextents<int32_t, 2>, tensor_inline>;")
     lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgta_{acc}, __tgt_{acc}, float>();")
-    lines |> push("{indent}for (uint16_t __i = 0; __i < __tgf_{acc}.get_capacity(); ++__i) \{ if (__tgf_{acc}.is_valid_element(__i)) __tgf_{acc}[__i] = 0.0f; \}")
 }
 
 def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
