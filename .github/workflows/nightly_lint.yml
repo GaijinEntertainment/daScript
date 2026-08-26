@@ -86,7 +86,7 @@ jobs:
         run: |
           set -eux
           ./bin/daslang utils/lint/main.das -- \
-            daslib utils modules tutorials examples tests \
+            daslib utils modules tutorials examples tests src \
             -q --silent -j 0 --disable LINT019
 
       - name: "Stale-nolint pass (single process)"
@@ -94,5 +94,5 @@ jobs:
         run: |
           set -eux
           ./bin/daslang utils/lint/main.das -- \
-            daslib utils modules tutorials examples tests \
+            daslib utils modules tutorials examples tests src \
             -q --silent -j 1

@@ -14,11 +14,13 @@ flavors exist, and the choice is per bind:
   node instantiation per function; buys direct-call/inlined dispatch. Functions bound this
   way carry `Function::moreFlags2.nttp`, which `daslib/only_nttp.das` and tooling key on.
 
-The policy: **builtin (`$`), math, and strings bind NTTP; every other module binds
-per-signature.** The trio is on every interpreter hot path, its bind count is bounded, and
-misjudgment is one-sided - a needlessly-NTTP cold function costs ~1KB of binary, a missed
-hot one costs a few percent forever. Exempt by construction, because the NTTP entry points
-cannot express them: cmres binds (a struct/array/tuple-shaped result the callee writes
+The policy: **the modules `REVIEW.md` names bind NTTP; every other module binds
+per-signature.** Those modules are on interpreter hot paths, their bind count is bounded,
+and misjudgment is one-sided - a needlessly-NTTP cold function costs ~1KB of binary, a
+missed hot one costs a few percent forever. The list lives in the rule and in the gate that
+enforces it (`review_nttp.das`); repeating it here is how it goes stale. Exempt by
+construction, because the NTTP entry points cannot express them: cmres binds (a
+struct/array/tuple-shaped result the callee writes
 into the caller's result slot - `SimNode_ExtFuncCallAndCopyOrMove`), ref-returning binds
 (`SimNode_ExtFuncCallRef`), and interop binds (`addInterop`, raw argument array).
 
