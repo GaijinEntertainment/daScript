@@ -1,5 +1,7 @@
 #pragma once
 
+#include <type_traits>
+
 namespace das {
     struct SimNode;
     struct TypeInfo;
@@ -245,11 +247,13 @@ namespace das {
     struct BitfieldAny {
         ST value;
         __forceinline BitfieldAny() {}
-        // exact width converts implicitly (bitfield math decays to ST through operator ST&,
-        // and every cast/call boundary must convert back); any other width converts only
-        // through an explicit cast, so implicit narrowing still dies at the call site
-        __forceinline BitfieldAny(ST v) : value(v) {}
-        template <typename QQ> __forceinline explicit BitfieldAny(QQ v) : value(ST(v)) {}
+        // exactly ST converts implicitly (bitfield math decays to ST through operator ST&,
+        // and every cast/call boundary must convert back); every other type converts only
+        // through an explicit cast, so implicit narrowing - int included - dies at the call site
+        template <typename QQ, typename std::enable_if<std::is_same<QQ,ST>::value,int>::type = 0>
+        __forceinline BitfieldAny(QQ v) : value(v) {}
+        template <typename QQ, typename std::enable_if<!std::is_same<QQ,ST>::value,int>::type = 0>
+        __forceinline explicit BitfieldAny(QQ v) : value(ST(v)) {}
         __forceinline operator ST &() { return value; }
         __forceinline operator float() const { return float(value); }
         __forceinline operator double() const { return double(value); }
