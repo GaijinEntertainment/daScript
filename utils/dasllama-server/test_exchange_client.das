@@ -12,7 +12,7 @@ require daslib/sha_256
 require daslib/fio
 require strings
 
-let TEST_PORT = 18131   // 18097/18099/18101/18120/18121 are the openai-server suites'
+let TEST_PORT = 18131   // 18097/18098/18099/18101/18102/18120/18121 are the openai-server suites'
 
 // The exchange client against a FAKE exchange whose response shapes mirror the repo's
 // dasllama-ladder service (its contract is pinned by that dir's own suite): lookup parse,
