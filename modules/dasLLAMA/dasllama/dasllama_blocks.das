@@ -1608,6 +1608,7 @@ def eval_embd_(t : Model; var s : Session; embd : array<float>; npos : int64; no
     if (npos <= 0l) {
         return
     }
+    kv_capacity_check(t, npos, s.n_past)
     forward_prefill_embd(t, s, embd, npos, s.n_past, non_causal, ds_wide = embd_is_ds_wide(t, embd, npos))
     s.n_past += npos
 }
@@ -1645,6 +1646,7 @@ def eval_embd_span_(t : Model; var s : Session; embd : array<float>; npos, span_
     if (span_lo < 0l || span_hi > npos || span_hi <= span_lo) {
         panic("eval_embd_span_: span [{span_lo},{span_hi}) outside [0,{npos})")
     }
+    kv_capacity_check(t, npos, s.n_past)
     if (span_fusable()) {
         forward_prefill_embd(t, s, embd, npos, s.n_past, span_lo = span_lo, span_hi = span_hi,
                              ds_wide = embd_is_ds_wide(t, embd, npos))
@@ -1685,6 +1687,7 @@ def eval_embd_span_mrope_(t : Model; var s : Session; embd : array<float>; npos,
     if (span_lo < 0l || span_hi > npos || span_hi <= span_lo) {
         panic("eval_embd_span_mrope_: span [{span_lo},{span_hi}) outside [0,{npos})")
     }
+    kv_capacity_check(t, npos, s.n_past)
     let sect = t.config.rope_sections
     if (sect.x + sect.y + sect.z + sect.w == 0) {
         panic("eval_embd_span_mrope_: the model carries no rope.dimension_sections - not an mrope arch")

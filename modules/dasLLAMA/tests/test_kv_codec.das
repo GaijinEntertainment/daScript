@@ -964,3 +964,51 @@ def test_kv_store_row_roundtrip(t : T?) {
         delete s
     }
 }
+
+[test]
+def test_kv_capacity_tripwire(t : T?) {
+    t |> run("eval past config seq_len panics - never a silent write past the cache (needs stories15M.bin)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        if (!stat(MODEL_PATH).is_valid) {
+            t |> skip("stories15M.bin not present")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        // every session buffer (KV planes, att scratch, run tables) is sized by config seq_len,
+        // and the store paths write through unsafe pointers - an oversized eval corrupts the das
+        // heap with no diagnostic, so the tripwire must fire BEFORE the first store
+        tr.config.seq_len = 8l
+        quantize_weights(tr)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var toks <- [for (_i in range(16)); 1l]
+            var s <- make_run_state(tr.config)
+            var tripped = false
+            try {
+                eval_(tr, s, toks)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "a 16-token prefill into an 8-row session trips")
+            delete s
+            var s2 <- make_run_state(tr.config)
+            toks |> resize(8)
+            eval_(tr, s2, toks)   // exactly at capacity - legal, must not trip
+            var one <- [1l]
+            var stepped = false
+            try {
+                eval_(tr, s2, one)   // position 8 in an 8-row session - the decode arm trips too
+            } recover {
+                stepped = true
+            }
+            t |> success(stepped, "the decode step crossing seq_len trips")
+            delete one
+            delete s2
+            delete toks
+        }
+        delete tr
+    }
+}

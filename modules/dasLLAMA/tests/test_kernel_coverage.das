@@ -86,7 +86,9 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
             delete tr
             return
         }
-        tr.config.seq_len = min(tr.config.seq_len, 512l)
+        // 1024, not 512: the digit-splitting tokenizers (gemma, qwen) encode the 140-number
+        // counting prompt to ~590 tokens, and the eval capacity tripwire panics past seq_len
+        tr.config.seq_len = min(tr.config.seq_len, 1024l)
         let vocab = tr.config.vocab_size
         select_prefill_override("metal")
         select_decode_override("metal")

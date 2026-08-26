@@ -2097,6 +2097,7 @@ def public metal_tensor_crowned(family : string) : bool {
 }
 
 // ===== Metal prefill raced constants (sidecar "runtime" knobs; prefill caches at its init) =====
+
 //! Defaults are the M5 race winners; another box's sidecar overrides without a rebuild.
 //! CACHED at metal_prefill_init (like the tensor crowns) - a setter call after the first
 //! prefill is inert until a full metal_prefill_shutdown()/re-init.
@@ -2494,6 +2495,15 @@ def release_kv_pages_(var s : Session) {
 def private kv_grow_block_table(var s : Session; np : int64) {
     while (long_length(s.block_table) < np) {
         s.block_table |> push(kv_pool_alloc_group(*s.kv_pool))
+    }
+}
+
+// The eval capacity tripwire: every session buffer (KV planes, att scratch, run tables) is sized
+// by config seq_len and the store paths write through unsafe pointers, so an eval crossing
+// seq_len corrupts the das heap silently - every eval entry calls this before its first store
+def kv_capacity_check(t : Model; npos, start_pos : int64) {
+    if (start_pos + npos > t.config.seq_len) {
+        panic("dasLLAMA: eval of {npos} positions at {start_pos} exceeds the session's seq_len {t.config.seq_len} - raise config seq_len before make_run_state, or trim the prompt")
     }
 }
 
@@ -4791,6 +4801,7 @@ def zeroed_resize(@scratch var a : array<auto(numT)>; need : int64) {
 //! forward() (decode); npos>1 to forward_prefill. Leaves s.logits at the last token, extends KV by npos.
 [no_alloc, no_env, no_io]
 def forward_batch(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
+    kv_capacity_check(t, npos, start_pos)
     if (npos == 1l) {
         forward(t, s, tokens[0], start_pos)
     } else {
