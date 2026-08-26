@@ -290,6 +290,18 @@ jobs:
       if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.target != 'windows'
       run: $BIN/daslang ./utils/internal/doc-verify/main.das -- --daslang $BIN/daslang
 
+    - name: "Cross-compile nano for cortex-m4"
+      # nano's drift tripwire - the only freestanding build in CI. Linux only:
+      # one arch catches the drift, and the toolchain is an apt away.
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        # newlib and its libstdc++ are only *recommended* by gcc-arm-none-eabi,
+        # so --no-install-recommends leaves a compiler with no C library at all.
+        sudo bash ci/apt_install.sh --no-install-recommends \
+          gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+        ci/nano_arm_build.sh "$BIN/daslang"
+
     - name: "Build standalone executables"
       run: |
         set -eux

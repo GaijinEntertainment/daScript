@@ -476,10 +476,22 @@ inline void *das_aligned_alloc16(size_t size) {
     p = _aligned_malloc(size, DAS_ALLOC_ALIGNMENT_WIN);
 #else
     p = nullptr;
+#if defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__) || defined(_EMSCRIPTEN_VER)
     if (posix_memalign(&p, das_alloc_alignment(size), size)) {
         DAS_ASSERTF(0, "posix_memalign returned nullptr");
         return nullptr;
     }
+#else
+    // no POSIX: C11 aligned_alloc, which unlike posix_memalign wants size rounded up
+    {
+        const size_t alignment = das_alloc_alignment(size);
+        p = aligned_alloc(alignment, (size + alignment - 1) & ~(alignment - 1));
+        if (!p) {
+            DAS_ASSERTF(0, "aligned_alloc returned nullptr");
+            return nullptr;
+        }
+    }
+#endif
 #if defined(__linux__)
     if (size >= 2*1024*1024) {
         // interior only (size rounded DOWN to 2MB): hinting the partial tail page would back
@@ -501,9 +513,12 @@ inline void das_aligned_free16(void *ptr) {
 }
 #if defined(__APPLE__)
 #include <malloc/malloc.h>
-#elif defined (__linux__) || defined (_EMSCRIPTEN_VER) || defined __HAIKU__ || defined(_WIN32)
-// Windows: <malloc.h> declares _aligned_msize for MSVC and the MinGW-w64 CRT.
+#elif __has_include(<malloc.h>)
+// _aligned_msize on the MS CRT, malloc_usable_size everywhere else including newlib
 #include <malloc.h>
+#endif
+#if __has_include(<alloca.h>)
+#include <alloca.h>
 #endif
 inline size_t das_aligned_memsize(void * ptr){
 #if defined(_WIN32)

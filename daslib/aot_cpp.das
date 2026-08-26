@@ -2590,13 +2590,13 @@ class public CppAot : AstVisitor {
     }
     def override visitExprConstBitfield(var c : ExprConstBitfield?) : ExpressionPtr {
         if (c._type.baseType == Type.tBitfield64) {
-            write(*ss, "UINT64_C(0x{c.getValue:x})");
+            write(*ss, "das::Bitfield64(UINT64_C(0x{c.getValue:x}))");
         } elif (c._type.baseType == Type.tBitfield16) {
-            write(*ss, "uint16_t(0x{uint(c.getValue):x})");
+            write(*ss, "das::Bitfield16(uint16_t(0x{uint(c.getValue):x}))");
         } elif (c._type.baseType == Type.tBitfield8) {
-            write(*ss, "uint8_t(0x{uint(c.getValue):x})");
+            write(*ss, "das::Bitfield8(uint8_t(0x{uint(c.getValue):x}))");
         } else {
-            write(*ss, "0x{c.getValue:x}u");
+            write(*ss, "das::Bitfield(0x{c.getValue:x}u)");
         }
         return c;
     }
