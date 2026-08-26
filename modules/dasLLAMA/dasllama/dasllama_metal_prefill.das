@@ -106,9 +106,10 @@ class MetalBf16MulMm : MetalMmTileBase {
 // "mulmm_q8"). XT = the A stream codec: a float A operand is off the native half path.
 [ |> template_struct_instance]
 class template MetalQ8MulMmTensorT {
+    @template_constant MT : uint = 32u      // M-tile rows: W re-streams M/MT times (128 = upstream's tall tile)
     @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16> // 34B-block W blob, half-scale view
     @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>    // the SAME blob buffer, byte view
-    @ssbo @binding = 2 xf : array<XT>       // raw activations (float, or the converted f16 panel)
+    @ssbo @binding = 2 @off = "xoff" xf : array<XT>  // raw activations (float, or the converted f16 panel)
     @ssbo @binding = 3 @off = "yoff" @span = "mp*d*4" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
@@ -116,14 +117,14 @@ class template MetalQ8MulMmTensorT {
 
     [metal_kernel]
     def metal_q8_mulmm_t {
-        let mBase = gl_WorkGroupID.x * 32u
+        let mBase = gl_WorkGroupID.x * MT
         let nBase = gl_WorkGroupID.y * 64u
         let blk0 = nBase * (kdim / 32u)
         var sp = unsafe(addr(wsh[blk0 * 17u]))
         var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
         var ap = unsafe(addr(xf[mBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_q8u_f32(32u, 64u, 4u, twb, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u, gl_LocalInvocationIndex)
+        tmm2d_q8u_f32(MT, 64u, 4u, twb, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u, gl_LocalInvocationIndex)
     }
 }
 
@@ -135,6 +136,18 @@ class MetalQ8MulMmT : MetalQ8MulMmTensorT {
 [metal_dispatch(name = "enc_gemm_mm_th_c", pso = "g_pf_pso_mm_th", tgmem = "MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
 class MetalQ8MulMmTH : MetalQ8MulMmTensorT {
     typedef XT = float16
+}
+
+[metal_dispatch(name = "enc_gemm_mm_t128_c", pso = "g_pf_pso_mm_t128", tgmem = "MetalQ8MulMmT128_metal_q8_mulmm_t_msl_tgmem", tg = 128, grid = "mp/128, d/64", params = "mp : int64, d : int64")]
+class MetalQ8MulMmT128 : MetalQ8MulMmTensorT {
+    typedef XT = float
+    override MT = 128u
+}
+
+[metal_dispatch(name = "enc_gemm_mm_th128_c", pso = "g_pf_pso_mm_th128", tgmem = "MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_tgmem", tg = 128, grid = "mp/128, d/64", params = "mp : int64, d : int64")]
+class MetalQ8MulMmTH128 : MetalQ8MulMmTensorT {
+    typedef XT = float16
+    override MT = 128u
 }
 
 // The f32 -> f16 activation panel conversion feeding the half-X mul_mm stamp: one pass over
@@ -1970,6 +1983,8 @@ var private g_pf_pso_av : MetalComputePipeline?
 var private g_pf_pso_cat2 : MetalComputePipeline?
 var private g_pf_pso_mm_t : MetalComputePipeline?  // the mul_mm TENSOR twin; the base is the shared g_pso_mm
 var private g_pf_pso_mm_th : MetalComputePipeline?  // its half-X stamp (the converted f16 activation panel)
+var private g_pf_pso_mm_t128 : MetalComputePipeline?   // tall 128-row M-tile stamps: W streams M/128 times
+var private g_pf_pso_mm_th128 : MetalComputePipeline?
 var private g_pf_pso_cvt_half : MetalComputePipeline?
 var private g_pf_bxh : MetalBuffer?     // per-forward f16 activation scratch panels (null = f32 path);
 var private g_pf_bxh2 : MetalBuffer?    // ... double-buffered so a site's GEMM overlaps the next site's convert
@@ -2088,6 +2103,12 @@ def public set_metal_prefill_half_x(v : bool) {
 //! half-X — the same row-gated form-swap class.
 def public set_metal_prefill_dev_w(v : bool) {
     g_pf_env_dev_w = v
+}
+
+//! A/B seat: the tall 128-row M-tile mul_mm stamps (W streamed M/128 times) vs 32-row-only.
+//! Default on; identity witnesses pin it off with half-X — the same row-gated form-swap class.
+def public set_metal_prefill_tall(v : bool) {
+    g_pf_env_tall = v
 }
 
 //! The prefill knockout rail as an in-process setter (timing attribution — served output is
@@ -2219,6 +2240,14 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_mm_th)
         g_pf_pso_mm_th = null
     }
+    if (g_pf_pso_mm_t128 != null) {
+        metal_release(g_pf_pso_mm_t128)
+        g_pf_pso_mm_t128 = null
+    }
+    if (g_pf_pso_mm_th128 != null) {
+        metal_release(g_pf_pso_mm_th128)
+        g_pf_pso_mm_th128 = null
+    }
     if (g_pf_pso_cvt_half != null) {
         metal_release(g_pf_pso_cvt_half)
         g_pf_pso_cvt_half = null
@@ -2334,6 +2363,8 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     if (g_pf_mm_tensor) {
         g_pf_pso_mm_t = compile_pso(MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, ok)
         g_pf_pso_mm_th = compile_pso(MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, ok)
+        g_pf_pso_mm_t128 = compile_pso(MetalQ8MulMmT128_metal_q8_mulmm_t_msl, MetalQ8MulMmT128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT128_metal_q8_mulmm_t_msl_fastmath, ok)
+        g_pf_pso_mm_th128 = compile_pso(MetalQ8MulMmTH128_metal_q8_mulmm_t_msl, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_fastmath, ok)
         g_pf_pso_dq_q8 = compile_pso(metal_dequant_q8h_msl, metal_dequant_q8h_msl_entry, metal_dequant_q8h_msl_fastmath, ok)
     }
     g_pf_bf16_mm_tensor = metal_tensor_crowned("mulmm_bf16")
@@ -2679,19 +2710,39 @@ def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt;
     return true
 }
 
-// the tensor-path pick: dispatch the f16-stream stamp when the caller minted a twin panel
-// (tail forms keep f32 X either way); with the panel AND kdim known, the dev-W all-device
-// form takes the site (dequant pass + barrier-free half x half GEMM)
+// the tensor-path pick: dev-W panel > tall 128-row M-tiles on the rows' 128-floor (W
+// streamed M/128 times) > the 32-tile stamp for the remainder at its row offset — the
+// remainder's X stride needs kdim, so kdim-less callers stay whole-dispatch 32-tile
 def private enc_gemm_mm_tensor(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; rows, d : int64; yoff : uint64; bxh : MetalBuffer?; kdim : int64 = 0l) {
     if (bxh != null && g_pf_pso_hmm_th != null) {
         if (pf_devw_panel(enc, bwblob, wboff, bxh, by, bk, bn, rows, d, kdim, yoff)) {
             return
         }
     }
-    if (bxh != null && g_pf_pso_mm_th != null) {
-        enc_gemm_mm_th_c(enc, bwblob, wboff, bwblob, bxh, by, yoff, bk, bn, rows, d)
+    let half_form = bxh != null && g_pf_pso_mm_th != null
+    var r0 = 0l
+    // occupancy floor: a tall grid under 128 threadgroups starves the GPU (1B pp128 -15%)
+    if (g_pf_env_tall && rows >= 128l && (kdim > 0l || rows % 128l == 0l)
+            && rows / 128l * (d / 64l) >= 128l) {
+        let tall = half_form ? g_pf_pso_mm_th128 : g_pf_pso_mm_t128
+        if (tall != null) {
+            r0 = rows / 128l * 128l
+            if (half_form) {
+                enc_gemm_mm_th128_c(enc, bwblob, wboff, bwblob, bxh, 0ul, by, yoff, bk, bn, r0, d)
+            } else {
+                enc_gemm_mm_t128_c(enc, bwblob, wboff, bwblob, bx, 0ul, by, yoff, bk, bn, r0, d)
+            }
+        }
+    }
+    if (rows - r0 <= 0l) {
+        return
+    }
+    let xoff = uint64(r0 * kdim * (half_form ? 2l : 4l))
+    let yo = yoff + uint64(r0 * d * 4l)
+    if (half_form) {
+        enc_gemm_mm_th_c(enc, bwblob, wboff, bwblob, bxh, xoff, by, yo, bk, bn, rows - r0, d)
     } else {
-        enc_gemm_mm_t_c(enc, bwblob, wboff, bwblob, bx, by, yoff, bk, bn, rows, d)
+        enc_gemm_mm_t_c(enc, bwblob, wboff, bwblob, bx, xoff, by, yo, bk, bn, rows - r0, d)
     }
 }
 
@@ -4233,6 +4284,7 @@ var private g_pf_env_mulmm = true
 var private g_pf_env_mm_tail = true
 var private g_pf_env_half_x = true
 var private g_pf_env_dev_w = true
+var private g_pf_env_tall = true
 // dev-W engage rules = the probe's M5 shape map (bench_metal_nax_probe grid): PANEL SIZE
 // dominates (<=32MB wins at every M, 47MB only at >=2048 rows, 112MB loses everywhere —
 // the f16 panel's 2-vs-1.06 B/w W stream past cache); wide-N panels' dequant tax needs rows.

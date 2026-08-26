@@ -154,12 +154,17 @@ def private metal4_tensor_available(dev) : bool {
 
 // the Metal-4 tensor twin of the (already direct-covered) MetalQ8MulMm — same bindings; the
 // q8u form dequant-stages W into @workgroup, so the gate binds its tgmem like production
-def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int; halfx : bool = false) {
-    let tag = "q8_mulmm_t{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim}"
+def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int; halfx : bool = false; mt : int = 32) {
+    let hx = halfx ? " halfx" : ""
+    let tag = "q8_mulmm_t{hx} mt{mt} m={m} k={kdim} n={ndim}"
     var err : string
-    var pso = (halfx
-        ? pipeline_from_source(dev, MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, err)
-        : pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err))
+    var pso = (mt == 128
+        ? (halfx
+            ? pipeline_from_source(dev, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_fastmath, err)
+            : pipeline_from_source(dev, MetalQ8MulMmT128_metal_q8_mulmm_t_msl, MetalQ8MulMmT128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT128_metal_q8_mulmm_t_msl_fastmath, err))
+        : (halfx
+            ? pipeline_from_source(dev, MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, err)
+            : pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err)))
     if (pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
         return
@@ -203,14 +208,16 @@ def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int; halfx : boo
     var bn = buf_u32(dev, uint(ndim))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, halfx ? MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem : MetalQ8MulMmT_metal_q8_mulmm_t_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, mt == 128
+            ? (halfx ? MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_tgmem : MetalQ8MulMmT128_metal_q8_mulmm_t_msl_tgmem)
+            : (halfx ? MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem : MetalQ8MulMmT_metal_q8_mulmm_t_msl_tgmem), 0)
         metal_set_buffer(enc, bw, 0ul, 0)
         metal_set_buffer(enc, bw, 0ul, 1)
         metal_set_buffer(enc, bx, 0ul, 2)
         metal_set_buffer(enc, by, 0ul, 3)
         metal_set_buffer(enc, bk, 0ul, 4)
         metal_set_buffer(enc, bn, 0ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
@@ -1556,6 +1563,8 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 4, false, 32, 256, 128)   // second shape: 2 col tiles
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64)
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64, halfx = true)
+                q8_mulmm_t_gate(t, dev, queue, 128, 256, 64, mt = 128)   // tall M-tile stamps
+                q8_mulmm_t_gate(t, dev, queue, 256, 256, 64, halfx = true, mt = 128)
                 q8_devw_gate(t, dev, queue, 64, 256, 64)
                 q8_devw_gate(t, dev, queue, 32, 288, 128)   // non-256-multiple block count arms the dequant tail guard
                 for (fmt in [4, 5, 6]) {
