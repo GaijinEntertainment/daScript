@@ -1000,7 +1000,7 @@ namespace das {
                             } else if ( expr->type->baseType==Type::tString ) {
                                 reportFolding();
                                 auto exprV = new ExprConstString(expr->at);
-                                exprV->type = new TypeDecl(Type::tString);
+                                exprV->type = new TypeDecl(Type::tString, exprV->at);
                                 exprV->type->constant = true;
                                 return exprV;
                             } else {

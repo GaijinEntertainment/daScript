@@ -718,7 +718,7 @@ namespace das
             // lets set variant index
             uint32_t voffset = mkv->extraOffset + index*stride;
             auto vconst = new ExprConstInt(mkv->at, int32_t(fieldVariant));
-            vconst->type = new TypeDecl(Type::tInt);
+            vconst->type = new TypeDecl(Type::tInt, vconst->at);
             setE(vconst, context.code->makeNode<SimNode_ConstValue>(vconst->at, vconst->value));
             SimNode * svi;
             if ( mkv->useCMRES ) {
@@ -870,7 +870,7 @@ namespace das
             string fakeName = "__makelocal";
             auto fakeVariable = new Variable();
             fakeVariable->name = fakeName;
-            fakeVariable->type = new TypeDecl(Type::tHandle);
+            fakeVariable->type = new TypeDecl(Type::tHandle, fakeVariable->at);
             fakeVariable->type->annotation = ann;
             fakeVariable->at = mks->at;
             if ( mks->useCMRES ) {
@@ -896,9 +896,9 @@ namespace das
             if ( mks->useStackRef && total > 1 ) {
                 // if its stackRef with multiple indices, its actually var[total], and lookup is var[index]
                 indexExpr = new ExprConstInt(mks->at, 0);
-                indexExpr->type = new TypeDecl(Type::tInt);
+                indexExpr->type = new TypeDecl(Type::tInt, indexExpr->at);
                 fakeExpr = new ExprAt(mks->at, fakeExpr, indexExpr);
-                fakeExpr->type = new TypeDecl(Type::tHandle);
+                fakeExpr->type = new TypeDecl(Type::tHandle, fakeExpr->at);
                 fakeExpr->type->annotation = ann;
                 fakeExpr->type->ref = true;
             }
@@ -2019,7 +2019,7 @@ namespace das
             if ( expr->r2v ) {
                 setE(expr, sv_trySimulate(expr, 0, expr->type));
             } else {
-                gc_local<TypeDecl> noneType = new TypeDecl(Type::none);
+                gc_local<TypeDecl> noneType = new TypeDecl(Type::none, expr->at);
                 setE(expr, sv_trySimulate(expr, 0, noneType));
             }
         }
@@ -2348,7 +2348,7 @@ namespace das
             if ( expr->r2v ) {
                 setE(expr, sv_trySimulate(expr, 0, expr->type));
             } else {
-                gc_local<TypeDecl> noneType = new TypeDecl(Type::none);
+                gc_local<TypeDecl> noneType = new TypeDecl(Type::none, expr->at);
                 setE(expr, sv_trySimulate(expr, 0, noneType));
             }
         }
@@ -2365,7 +2365,7 @@ namespace das
             if ( expr->r2v ) {
                 setE(expr, sv_trySimulate(expr, 0, expr->type));
             } else {
-                gc_local<TypeDecl> noneType = new TypeDecl(Type::none);
+                gc_local<TypeDecl> noneType = new TypeDecl(Type::none, expr->at);
                 setE(expr, sv_trySimulate(expr, 0, noneType));
             }
         }
@@ -2598,7 +2598,7 @@ namespace das
             if ( expr->r2v ) {
                 setE(expr, sv_trySimulate(expr, 0, expr->type));
             } else {
-                gc_local<TypeDecl> noneType = new TypeDecl(Type::none);
+                gc_local<TypeDecl> noneType = new TypeDecl(Type::none, expr->at);
                 setE(expr, sv_trySimulate(expr, 0, noneType));
             }
         } else if ( expr->argument) {

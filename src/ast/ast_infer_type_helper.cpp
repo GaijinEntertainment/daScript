@@ -409,7 +409,7 @@ namespace das {
             if (!aT) {
                 auto bT = nameToBasicType(decl->alias);
                 if (bT != Type::none) {
-                    aT = new TypeDecl(bT);
+                    aT = new TypeDecl(bT, decl->at);
                 }
             }
             if (aT) {
@@ -1094,8 +1094,7 @@ namespace das {
                     return true;
                 }
             } else {
-                resType = new TypeDecl(Type::tVoid);
-                resType->at = expr->at;
+                resType = new TypeDecl(Type::tVoid, expr->at);
                 reportAstChanged();
                 return true;
             }

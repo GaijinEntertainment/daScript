@@ -52,7 +52,7 @@ namespace das {
     }
 
     TypeDeclPtr Enumeration::makeBaseType() const {
-        return new TypeDecl(baseType);
+        return new TypeDecl(baseType, at);
     }
 
     Type Enumeration::getEnumType() const {
@@ -80,16 +80,16 @@ namespace das {
         switch (baseType) {
         case Type::tInt8:
         case Type::tUInt8:
-            res = new TypeDecl(Type::tEnumeration8); break;
+            res = new TypeDecl(Type::tEnumeration8, at); break;
         case Type::tInt16:
         case Type::tUInt16:
-            res = new TypeDecl(Type::tEnumeration16); break;
+            res = new TypeDecl(Type::tEnumeration16, at); break;
         case Type::tInt:
         case Type::tUInt:
-            res = new TypeDecl(Type::tEnumeration); break;
+            res = new TypeDecl(Type::tEnumeration, at); break;
         case Type::tInt64:
         case Type::tUInt64:
-            res = new TypeDecl(Type::tEnumeration64); break;
+            res = new TypeDecl(Type::tEnumeration64, at); break;
         default:
             DAS_ASSERTF(0, "we should not be here. unsupported enumeration base type.");
             return nullptr;
@@ -1777,8 +1777,7 @@ namespace das {
     TypeDeclPtr ExprBlock::makeBlockType () const {
         // the block's own location stands for every slot copied here - an inferred block type
         // or argument type has none of its own, and this is where the copy is allocated
-        auto eT = new TypeDecl(Type::tBlock);
-        eT->at = at;
+        auto eT = new TypeDecl(Type::tBlock, at);
         eT->constant = true;
         if ( type ) {
             eT->firstType = new TypeDecl(*type);

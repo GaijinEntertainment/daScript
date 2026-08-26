@@ -9,21 +9,21 @@ using namespace das;
 TEST_CASE("isFullySealed checks secondType independently of firstType") {
     gc_guard guard;
     SUBCASE("sealed key, unsealed value") {
-        auto t = new TypeDecl(Type::tTable);
-        t->firstType = new TypeDecl(Type::tInt);
-        t->secondType = new TypeDecl(Type::autoinfer);
+        auto t = new TypeDecl(Type::tTable, cppBindingLineInfo());
+        t->firstType = new TypeDecl(Type::tInt, cppBindingLineInfo());
+        t->secondType = new TypeDecl(Type::autoinfer, cppBindingLineInfo());
         CHECK_FALSE(t->isFullySealed());
     }
     SUBCASE("unsealed key, sealed value") {
-        auto t = new TypeDecl(Type::tTable);
-        t->firstType = new TypeDecl(Type::autoinfer);
-        t->secondType = new TypeDecl(Type::tFloat);
+        auto t = new TypeDecl(Type::tTable, cppBindingLineInfo());
+        t->firstType = new TypeDecl(Type::autoinfer, cppBindingLineInfo());
+        t->secondType = new TypeDecl(Type::tFloat, cppBindingLineInfo());
         CHECK_FALSE(t->isFullySealed());
     }
     SUBCASE("both sealed") {
-        auto t = new TypeDecl(Type::tTable);
-        t->firstType = new TypeDecl(Type::tInt);
-        t->secondType = new TypeDecl(Type::tFloat);
+        auto t = new TypeDecl(Type::tTable, cppBindingLineInfo());
+        t->firstType = new TypeDecl(Type::tInt, cppBindingLineInfo());
+        t->secondType = new TypeDecl(Type::tFloat, cppBindingLineInfo());
         CHECK(t->isFullySealed());
     }
 }

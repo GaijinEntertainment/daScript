@@ -46,14 +46,14 @@ TypeDecl * checkChain ( TypeDecl * t, std::initializer_list<int32_t> dims, Type 
 }
 
 TypeDecl * makeFA ( int32_t d, TypeDecl * elem ) {
-    auto fa = new TypeDecl(Type::tFixedArray);
+    auto fa = new TypeDecl(Type::tFixedArray, cppBindingLineInfo());
     fa->fixedDim = d;
     fa->firstType = elem;
     return fa;
 }
 
 TypeDecl * makeFAChain ( Type bt, std::initializer_list<int32_t> dims ) {
-    auto t = new TypeDecl(bt);
+    auto t = new TypeDecl(bt, cppBindingLineInfo());
     TypeDecl * result = t;
     for ( auto it = rbegin(dims); it != rend(dims); ++it ) {
         result = makeFA(*it, result);
@@ -63,7 +63,7 @@ TypeDecl * makeFAChain ( Type bt, std::initializer_list<int32_t> dims ) {
 
 TypeDeclPtr reparse ( const string & mangled ) {
     ModuleLibrary lib;
-    MangledNameParser parser;
+    MangledNameParser parser(cppBindingLineInfo("test_fixed_array_parser"));
     const char * ch = mangled.c_str();
     auto t = parser.parseTypeFromMangledName(ch, lib, nullptr);
     CHECK_EQ(*ch, 0);    // consumed the whole name
@@ -275,7 +275,7 @@ TEST_CASE("mangled name parse builds tFixedArray and round-trips the emit") {
         CHECK_EQ(t->getMangledName(true), full);
     }
     SUBCASE("FA nested in containers round-trips") {
-        auto arr = new TypeDecl(Type::tArray);
+        auto arr = new TypeDecl(Type::tArray, cppBindingLineInfo());
         arr->firstType = makeFAChain(Type::tInt,{4});
         auto t = reparse(arr->getMangledName());
         CHECK(t->isSameType(*arr, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes));

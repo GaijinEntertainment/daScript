@@ -1420,9 +1420,9 @@ namespace das {
         ss << fileName;
         auto rtti_require = new Variable();
         rtti_require->name = "__rtti_require";
-        rtti_require->type = new TypeDecl(Type::tString);
+        rtti_require->type = new TypeDecl(Type::tString, rtti_require->at);
         rtti_require->init = new ExprConstString(ss.str());
-        rtti_require->init->type = new TypeDecl(Type::tString);
+        rtti_require->init->type = new TypeDecl(Type::tString, rtti_require->init->at);
         rtti_require->used = true;
         rtti_require->private_variable = true;
         res->thisModule->addVariable(rtti_require);

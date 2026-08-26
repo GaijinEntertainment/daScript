@@ -1134,8 +1134,7 @@ namespace das {
             var->name = name;
             var->at = at;
             var->generated = true;
-            var->type = new TypeDecl(Type::autoinfer);
-            var->type->at = at;
+            var->type = new TypeDecl(Type::autoinfer, at);
             var->type->constant = isConst;
             var->type->removeConstant = !isConst;
             var->type->ref = isRef;

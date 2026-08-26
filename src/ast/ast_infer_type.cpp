@@ -326,7 +326,7 @@ namespace das {
             program->stickyError("malformed AST, structure field '" + decl.name + "' is missing its type",
                   "likely a macro-generated declaration; set its type to auto to request inference", "",
                   decl.at, CompilationError::internal_field);
-            decl.type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            decl.type = new TypeDecl(Type::autoinfer, decl.at);  // repair in place; the sticky error still fails the compile
             decl.type->at = decl.at;
         }
         if (decl.type->isAuto() && !decl.init) {
@@ -494,7 +494,7 @@ namespace das {
                 getOrCreateDummy(thisModule);
             }
         }
-        auto tt = new TypeDecl(Type::tStructure);
+        auto tt = new TypeDecl(Type::tStructure, var->at);
         tt->structType = var;
         if (isCircularType(tt)) {
             var->circular = true;
@@ -511,7 +511,7 @@ namespace das {
             program->stickyError("malformed AST, global variable '" + var->name + "' is missing its type",
                   "likely a macro-generated declaration; set its type to auto to request inference", "",
                   var->at, CompilationError::internal_variable);
-            var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            var->type = new TypeDecl(Type::autoinfer, var->at);  // repair in place; the sticky error still fails the compile
             var->type->at = var->at;
         }
         if (noUnsafeUninitializedStructs && !var->init && var->type->unsafeInit()) {
@@ -719,7 +719,7 @@ namespace das {
             program->stickyError("malformed AST, function '" + f->name + "' is missing its result type",
                   "likely a macro-generated function; set result to auto to request inference", "",
                   f->at, CompilationError::internal_function);
-            f->result = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            f->result = new TypeDecl(Type::autoinfer, f->at);  // repair in place; the sticky error still fails the compile
             f->result->at = f->at;
         }
         for (auto it = f->arguments.begin(); it != f->arguments.end();) {
@@ -760,7 +760,7 @@ namespace das {
             program->stickyError("malformed AST, function argument '" + var->name + "' is missing its type",
                   "likely a macro-generated declaration; set its type to auto to request inference", "",
                   var->at, CompilationError::internal_variable);
-            var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            var->type = new TypeDecl(Type::autoinfer, var->at);  // repair in place; the sticky error still fails the compile
             var->type->at = var->at;
         }
         if (var->type->isAlias()) {
@@ -836,8 +836,7 @@ namespace das {
         // if function got no 'result', function is a void function
         if (!func->hasReturn && canFoldResult) {
             if (func->result->isAuto()) {
-                func->result = new TypeDecl(Type::tVoid);
-                func->result->at = func->at;
+                func->result = new TypeDecl(Type::tVoid, func->at);
                 reportAstChanged();
             } else if (!func->result->isVoid()) {
                 error("function does not return a value", "", "",
@@ -1014,11 +1013,11 @@ namespace das {
                 TypeDecl::clone(c->type, cB->bitfieldType);
                 c->type->ref = false;
             } else {
-                c->type = new TypeDecl(c->baseType);
+                c->type = new TypeDecl(c->baseType, c->at);
             }
             c->type->constant = isConstantType(c);
         } else if (c->baseType == Type::tPointer) {
-            c->type = new TypeDecl(c->baseType);
+            c->type = new TypeDecl(c->baseType, c->at);
             auto cptr = static_cast<ExprConstPtr *>(c);
             c->type->smartPtr = cptr->isSmartPtr;
             if (cptr->ptrType) {
@@ -1028,7 +1027,7 @@ namespace das {
                 c->type->constant = false; // true;
             }
         } else {
-            c->type = new TypeDecl(c->baseType);
+            c->type = new TypeDecl(c->baseType, c->at);
             c->type->constant = isConstantType(c);
         }
         return Visitor::visit(c);
@@ -1178,7 +1177,7 @@ namespace das {
             // however having auto or alias in the result may cause problems, so we swap it to void
             // and then swap it back to whatever it was
             auto retT = expr->funcType->firstType;
-            expr->funcType->firstType = new TypeDecl(Type::tVoid);
+            expr->funcType->firstType = new TypeDecl(Type::tVoid, expr->at);
             if (expr->funcType->isAlias()) {
                 auto aT = inferAlias(expr->funcType);
                 if (aT) {
@@ -1212,8 +1211,7 @@ namespace das {
             expr->func = fns.back();
             expr->func->addr = true;
             expr->func->fastCall = false;
-            expr->type = new TypeDecl(Type::tFunction);
-            expr->type->at = expr->at;
+            expr->type = new TypeDecl(Type::tFunction, expr->at);
             expr->type->firstType = new TypeDecl(*expr->func->result);
             if ( !expr->type->firstType->at.fileInfo ) expr->type->firstType->at = expr->at;
             expr->type->argTypes.reserve(expr->func->arguments.size());
@@ -1351,7 +1349,7 @@ namespace das {
                     }
                 }
             }
-            expr->type = new TypeDecl(Type::tPointer);
+            expr->type = new TypeDecl(Type::tPointer, expr->at);
             expr->type->firstType = new TypeDecl(*expr->subexpr->type);
             expr->type->firstType->ref = false;
             expr->type->constant |= expr->subexpr->type->constant;
@@ -1513,7 +1511,7 @@ namespace das {
             }
         }
 
-        expr->type = new TypeDecl(Type::tVoid);
+        expr->type = new TypeDecl(Type::tVoid, expr->at);
         return Visitor::visit(expr);
     }
     void InferTypes::preVisit(ExprAssert *expr) {
@@ -1547,7 +1545,7 @@ namespace das {
             error("assert comment must be string constant", "", "",
                   expr->at, CompilationError::invalid_assert_comment_type);
         }
-        expr->type = new TypeDecl(Type::tVoid);
+        expr->type = new TypeDecl(Type::tVoid, expr->at);
         return Visitor::visit(expr);
     }
     ExpressionPtr InferTypes::visit(ExprQuote *expr) {
@@ -1557,10 +1555,8 @@ namespace das {
             return Visitor::visit(expr);
         }
         // infer
-        expr->type = new TypeDecl(Type::tPointer);
-        expr->type->at = expr->at;
-        expr->type->firstType = new TypeDecl(Type::tHandle);
-        expr->type->firstType->at = expr->at;
+        expr->type = new TypeDecl(Type::tPointer, expr->at);
+        expr->type->firstType = new TypeDecl(Type::tHandle, expr->at);
         expr->type->firstType->annotation = (TypeAnnotation *)Module::require("ast_core")->findAnnotation("Expression");
         // mark quote as noAot, unless daslib/quote lowering will replace it
         // (aot_macros or jit_enabled policy, or per-module `options aot_macros` — same gate
@@ -1664,7 +1660,7 @@ namespace das {
                     // arg 1 becomes cast<auto> deref(field.value)
                     auto pCast = new ExprCast();
                     pCast->at = expr->at;
-                    pCast->castType = new TypeDecl(Type::autoinfer);
+                    pCast->castType = new TypeDecl(Type::autoinfer, pCast->at);
                     pCast->subexpr = new ExprPtr2Ref(expr->at, eField->value);
                     pCast->subexpr->alwaysSafe = true;
                     expr->arguments[1] = pCast;
@@ -1708,7 +1704,7 @@ namespace das {
                                 }
                             }
                             vector<TypeDeclPtr> argTypes;
-                            auto selfType = new TypeDecl(Type::tStructure);
+                            auto selfType = new TypeDecl(Type::tStructure, func->classParent->at);
                             selfType->structType = func->classParent;
                             argTypes.push_back(selfType);
                             for (size_t i = 2; i != expr->arguments.size(); ++i) {
@@ -2094,7 +2090,7 @@ namespace das {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
                       expr->at, CompilationError::invalid_table_key_type);
-            expr->type = new TypeDecl(Type::tBool);
+            expr->type = new TypeDecl(Type::tBool, expr->at);
         } else {
             error("first argument must be fully qualified table", "", "",
                   expr->at, CompilationError::invalid_table_argument_type);
@@ -2126,7 +2122,7 @@ namespace das {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
                       expr->at, CompilationError::invalid_table_key_type);
-            expr->type = new TypeDecl(Type::tBool);
+            expr->type = new TypeDecl(Type::tBool, expr->at);
         } else {
             error("first argument must be fully qualified table", "", "",
                   expr->at, CompilationError::invalid_table_argument_type);
@@ -2158,7 +2154,7 @@ namespace das {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
                       expr->at, CompilationError::invalid_table_key_type);
-            expr->type = new TypeDecl(Type::tPointer);
+            expr->type = new TypeDecl(Type::tPointer, expr->at);
             expr->type->firstType = new TypeDecl(*containerType->secondType);
         } else {
             error("first argument must be fully qualified table", "", "",
@@ -2192,7 +2188,7 @@ namespace das {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
                       expr->at, CompilationError::invalid_table_key_type);
-            expr->type = new TypeDecl(Type::tBool);
+            expr->type = new TypeDecl(Type::tBool, expr->at);
         } else {
             error("first argument must be fully qualified table", "", "",
                   expr->at, CompilationError::invalid_table_argument_type);
@@ -2940,7 +2936,7 @@ namespace das {
                     // Struct finalize substitution via base type matches at the immediate parent
                     // even when only an ancestor defines `def operator delete`.
                     while (baseStruct) {
-                        auto baseType = new TypeDecl(Type::tStructure);
+                        auto baseType = new TypeDecl(Type::tStructure, baseStruct->at);
                         baseType->structType = baseStruct;
                         vector<TypeDeclPtr> argTypes;
                         argTypes.push_back(baseType);
@@ -3219,7 +3215,7 @@ namespace das {
         if (expr->ascType) {
             TypeDecl::clone(expr->type, expr->ascType);
         } else {
-            expr->type = new TypeDecl(Type::tPointer);
+            expr->type = new TypeDecl(Type::tPointer, expr->at);
             expr->type->firstType = new TypeDecl(*expr->subexpr->type);
             expr->type->firstType->ref = false;
             if (expr->type->firstType->baseType == Type::tHandle) {
@@ -3305,16 +3301,14 @@ namespace das {
                 error("invalid syntax for 'new' of class, expected syntax: 'new " + describeType(expr->typeexpr) + "()'", "", "",
                       expr->at, CompilationError::invalid_new_class_syntax);
             }
-            auto pt = new TypeDecl(Type::tPointer);
-            pt->at = expr->at;
+            auto pt = new TypeDecl(Type::tPointer, expr->at);
             pt->firstType = new TypeDecl(*baseT);
             if ( !pt->firstType->at.fileInfo ) pt->firstType->at = expr->at;
             expr->type = wrapNewDimChain(pt);
             expr->name = baseT->structType->getMangledName();
         } else if (baseT->baseType == Type::tHandle) {
             if (baseT->annotation->canNew()) {
-                auto pt = new TypeDecl(Type::tPointer);
-                pt->at = expr->at;
+                auto pt = new TypeDecl(Type::tPointer, expr->at);
                 pt->firstType = new TypeDecl(*baseT);
                 if ( !pt->firstType->at.fileInfo ) pt->firstType->at = expr->at;
                 pt->smartPtr = baseT->annotation->isSmart();
@@ -3330,8 +3324,7 @@ namespace das {
                       expr->at, CompilationError::invalid_new_type);
                 return Visitor::visit(expr);
             }
-            auto pt = new TypeDecl(Type::tPointer);
-            pt->at = expr->at;
+            auto pt = new TypeDecl(Type::tPointer, expr->at);
             pt->firstType = new TypeDecl(*baseT);
             if ( !pt->firstType->at.fileInfo ) pt->firstType->at = expr->at;
             expr->type = wrapNewDimChain(pt);
@@ -3342,8 +3335,7 @@ namespace das {
                       expr->at, CompilationError::invalid_new_type);
                 return Visitor::visit(expr);
             }
-            auto pt = new TypeDecl(Type::tPointer);
-            pt->at = expr->at;
+            auto pt = new TypeDecl(Type::tPointer, expr->at);
             pt->firstType = new TypeDecl(*baseT);
             if ( !pt->firstType->at.fileInfo ) pt->firstType->at = expr->at;
             expr->type = wrapNewDimChain(pt);
@@ -3537,7 +3529,7 @@ namespace das {
                       expr->index->at, CompilationError::invalid_index_type);
                 return Visitor::visit(expr);
             } else if (seT->isVectorType()) {
-                expr->type = new TypeDecl(seT->getVectorBaseType());
+                expr->type = new TypeDecl(seT->getVectorBaseType(), expr->at);
                 expr->type->ref = seT->ref;
                 expr->type->constant = seT->constant;
             } else {
@@ -3585,7 +3577,7 @@ namespace das {
                           expr->index->at, CompilationError::invalid_table_safe_index_type);
                     return Visitor::visit(expr);
                 }
-                expr->type = new TypeDecl(Type::tPointer);
+                expr->type = new TypeDecl(Type::tPointer, expr->at);
                 expr->type->firstType = new TypeDecl(*seT->secondType);
                 expr->type->constant |= seT->constant;
             } else if (seT->isHandle()) {
@@ -3608,15 +3600,15 @@ namespace das {
                           expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 } else if (seT->isVectorType()) {
-                    expr->type = new TypeDecl(Type::tPointer);
-                    expr->type->firstType = new TypeDecl(seT->getVectorBaseType());
+                    expr->type = new TypeDecl(Type::tPointer, expr->at);
+                    expr->type->firstType = new TypeDecl(seT->getVectorBaseType(), expr->at);
                     expr->type->firstType->constant = seT->constant;
                 } else if (seT->isGoodArrayType()) {
                     if (!safeExpression(expr)) {
                         error("safe-index of array<> must be inside the 'unsafe' block", "", "",
                               expr->at, CompilationError::unsafe_array_safe_index);
                     }
-                    expr->type = new TypeDecl(Type::tPointer);
+                    expr->type = new TypeDecl(Type::tPointer, expr->at);
                     expr->type->firstType = new TypeDecl(*seT->firstType);
                     expr->type->firstType->constant |= seT->constant;
                 } else if (seT->baseType==Type::tFixedArray) {
@@ -3625,7 +3617,7 @@ namespace das {
                               expr->subexpr->at, CompilationError::not_resolved_yet_array_dimension);
                         return Visitor::visit(expr);
                     } else {
-                        expr->type = new TypeDecl(Type::tPointer);
+                        expr->type = new TypeDecl(Type::tPointer, expr->at);
                         expr->type->firstType = new TypeDecl(*seT->firstType);
                         expr->type->firstType->constant |= seT->constant;
                     }
@@ -3657,7 +3649,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             auto seT = expr->subexpr->type;
-            expr->type = new TypeDecl(Type::tPointer);
+            expr->type = new TypeDecl(Type::tPointer, expr->at);
             expr->type->firstType = new TypeDecl(*seT->firstType);
             expr->type->firstType->constant |= seT->constant;
         } else if (expr->subexpr->type->isGoodTableType()) {
@@ -3676,7 +3668,7 @@ namespace das {
                       expr->index->at, CompilationError::cant_safe_index_table);
                 return Visitor::visit(expr);
             }
-            expr->type = new TypeDecl(Type::tPointer);
+            expr->type = new TypeDecl(Type::tPointer, expr->at);
             expr->type->firstType = new TypeDecl(*seT->secondType);
             expr->type->constant |= seT->constant;
         } else if (expr->subexpr->type->baseType==Type::tFixedArray) {
@@ -3694,7 +3686,7 @@ namespace das {
                 error("type dimensions are not resolved yet: '" + describeType(seT) + "'", "", "",
                       expr->subexpr->at, CompilationError::not_resolved_yet_array_dimension);
             }
-            expr->type = new TypeDecl(Type::tPointer);
+            expr->type = new TypeDecl(Type::tPointer, expr->at);
             expr->type->firstType = new TypeDecl(*seT->firstType);
             expr->type->firstType->constant |= seT->constant;
         } else if (expr->subexpr->type->isVectorType() && expr->subexpr->type->isRef()) {
@@ -3704,8 +3696,8 @@ namespace das {
                 return Visitor::visit(expr);
             }
             const auto &seT = expr->subexpr->type;
-            expr->type = new TypeDecl(Type::tPointer);
-            expr->type->firstType = new TypeDecl(seT->getVectorBaseType());
+            expr->type = new TypeDecl(Type::tPointer, expr->at);
+            expr->type->firstType = new TypeDecl(seT->getVectorBaseType(), expr->at);
             expr->type->firstType->constant = seT->constant;
         } else {
             error("type can't be safe-indexed: '" + describeType(expr->subexpr->type) + "'", "", "",
@@ -3760,7 +3752,7 @@ namespace das {
             program->stickyError("malformed AST, block argument '" + var->name + "' is missing its type",
                   "likely a macro-generated declaration; set its type to auto to request inference", "",
                   var->at, CompilationError::internal_variable);
-            var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            var->type = new TypeDecl(Type::autoinfer, var->at);  // repair in place; the sticky error still fails the compile
             var->type->at = var->at;
         }
         if (!var->can_shadow && !program->policies.allow_block_variable_shadowing) {
@@ -3895,10 +3887,8 @@ namespace das {
                 }
             }
             if (!block->hasReturn && canFoldResult && block->type->isAuto()) {
-                block->returnType = new TypeDecl(Type::tVoid);
-                block->returnType->at = block->at;
-                block->type = new TypeDecl(Type::tVoid);
-                block->type->at = block->at;
+                block->returnType = new TypeDecl(Type::tVoid, block->at);
+                block->type = new TypeDecl(Type::tVoid, block->at);
                 setBlockCopyMoveFlags(block);
                 reportAstChanged();
             }
@@ -3950,7 +3940,7 @@ namespace das {
         } else {
             auto bt = valT->getVectorBaseType();
             auto rt = valT->isRange() ? TypeDecl::getRangeType(bt, int(expr->fields.size())) : TypeDecl::getVectorType(bt, int(expr->fields.size()));
-            expr->type = new TypeDecl(rt);
+            expr->type = new TypeDecl(rt, expr->at);
             expr->type->constant = valT->constant;
             expr->type->ref = valT->ref;
             if (expr->type->ref) {
@@ -4041,7 +4031,7 @@ namespace das {
         expr->skipQQ = expr->type->isPointer();
         if (!expr->skipQQ) {
             auto fieldType = expr->type;
-            expr->type = new TypeDecl(Type::tPointer);
+            expr->type = new TypeDecl(Type::tPointer, expr->at);
             expr->type->firstType = fieldType;
         }
         expr->type->constant |= valT->constant || expr->value->type->constant;
@@ -4077,7 +4067,7 @@ namespace das {
             return Visitor::visit(expr);
         }
         expr->fieldIndex = index;
-        expr->type = new TypeDecl(Type::tBool);
+        expr->type = new TypeDecl(Type::tBool, expr->at);
         return Visitor::visit(expr);
     }
     ExpressionPtr InferTypes::visit(ExprField *expr) {
@@ -4339,7 +4329,7 @@ namespace das {
             }
         } else if (expr->fieldIndex != -1) {
             if (valT->isBitfield()) {
-                expr->type = new TypeDecl(Type::tBool);
+                expr->type = new TypeDecl(Type::tBool, expr->at);
             } else {
                 auto tupleT = valT->isPointer() ? valT->firstType : valT;
                 auto & tt = tupleT->argTypes[expr->fieldIndex];
@@ -4359,7 +4349,7 @@ namespace das {
                 collectMissingOperators(".", mf, true);
                 if (!mf.empty()) {
                     reportDualFunctionNotFound(".`" + expr->name, "field '" + expr->name + "' not found in " + describeType(valT),
-                                               expr->at, mf, {valT}, {valT, new TypeDecl(Type::tString)}, true, false, true,
+                                               expr->at, mf, {valT}, {valT, new TypeDecl(Type::tString, expr->at)}, true, false, true,
                                                CompilationError::cant_get_field, 0, "");
                 } else {
                     error("field '" + expr->name + "' not found in " + describeType(valT), "", "",
@@ -4393,7 +4383,7 @@ namespace das {
                 collectMissingOperators("?.", mf, true);
                 if (!mf.empty()) {
                     reportDualFunctionNotFound("?.`" + expr->name, "can only safe dereference a variant or a pointer to a tuple, a structure or a handle " + describeType(valT),
-                                               expr->at, mf, {expr->value->type}, {expr->value->type, new TypeDecl(Type::tString)}, true, false, true,
+                                               expr->at, mf, {expr->value->type}, {expr->value->type, new TypeDecl(Type::tString, expr->at)}, true, false, true,
                                                CompilationError::invalid_safe_dereference_type, 0, "");
                 } else {
                     error("can only safe dereference a variant or a pointer to a tuple, a structure or a handle " + describeType(valT), "", "",
@@ -4460,7 +4450,7 @@ namespace das {
         expr->skipQQ = expr->type->isPointer();
         if (!expr->skipQQ) {
             auto fieldType = expr->type;
-            expr->type = new TypeDecl(Type::tPointer);
+            expr->type = new TypeDecl(Type::tPointer, expr->at);
             expr->type->firstType = fieldType;
         }
         expr->type->constant |= valT->constant;
@@ -5236,11 +5226,11 @@ namespace das {
                 pVar->type = new TypeDecl(*src->type->firstType);
                 pVar->type->ref = true;
             } else if (src->type->isRange()) {
-                pVar->type = new TypeDecl(src->type->getRangeBaseType());
+                pVar->type = new TypeDecl(src->type->getRangeBaseType(), pVar->at);
                 pVar->type->ref = false;
                 pVar->type->constant = true;
             } else if (src->type->isString()) {
-                pVar->type = new TypeDecl(Type::tInt);
+                pVar->type = new TypeDecl(Type::tInt, pVar->at);
                 pVar->type->ref = false;
                 pVar->type->constant = true;
             } else if (src->type->isHandle() && src->type->annotation->isIterable()) {
@@ -5428,7 +5418,7 @@ namespace das {
             program->stickyError("malformed AST, variable '" + var->name + "' is missing its type",
                   "likely a macro-generated declaration; set its type to auto to request inference", "",
                   var->at, CompilationError::internal_variable);
-            var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+            var->type = new TypeDecl(Type::autoinfer, var->at);  // repair in place; the sticky error still fails the compile
             var->type->at = var->at;
         }
         if (var->type && var->type->isExprType()) {
@@ -6089,7 +6079,7 @@ namespace das {
         if (func && func->isClassMethod && func->classParent && expr->name == "super") {
             if (auto baseClass = func->classParent->parent) {
                 vector<TypeDeclPtr> argumentTypes;
-                auto selfType = new TypeDecl(Type::tStructure);
+                auto selfType = new TypeDecl(Type::tStructure, func->classParent->at);
                 selfType->structType = func->classParent;
                 argumentTypes.reserve(1 + expr->arguments.size());
                 argumentTypes.push_back(selfType);
@@ -6387,7 +6377,7 @@ namespace das {
         }
     }
     ExpressionPtr InferTypes::visit(ExprStringBuilder *expr) {
-        expr->type = new TypeDecl(Type::tString);
+        expr->type = new TypeDecl(Type::tString, expr->at);
         return evalAndFoldStringBuilder(expr);
     }
 

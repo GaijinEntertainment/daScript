@@ -11,14 +11,14 @@ using namespace das;
 namespace {
 
 TypeDecl * makeFA ( int32_t d, TypeDecl * elem ) {
-    auto fa = new TypeDecl(Type::tFixedArray);
+    auto fa = new TypeDecl(Type::tFixedArray, cppBindingLineInfo());
     fa->fixedDim = d;
     fa->firstType = elem;
     return fa;
 }
 
 TypeDecl * makeFAChain ( Type bt, std::initializer_list<int32_t> dims ) {
-    auto t = new TypeDecl(bt);
+    auto t = new TypeDecl(bt, cppBindingLineInfo());
     TypeDecl * result = t;
     for ( auto it = rbegin(dims); it != rend(dims); ++it ) {
         result = makeFA(*it, result);
@@ -85,9 +85,9 @@ TEST_CASE("tFixedArray identity") {
     auto f44a = makeFAChain(Type::tFloat,{4,4});
     auto f44b = makeFAChain(Type::tFloat,{4,4});
     auto f34  = makeFAChain(Type::tFloat,{3,4});
-    auto justInt = new TypeDecl(Type::tInt);
-    auto arrInt = new TypeDecl(Type::tArray);
-    arrInt->firstType = new TypeDecl(Type::tInt);
+    auto justInt = new TypeDecl(Type::tInt, cppBindingLineInfo());
+    auto arrInt = new TypeDecl(Type::tArray, cppBindingLineInfo());
+    arrInt->firstType = new TypeDecl(Type::tInt, cppBindingLineInfo());
     auto same = [](TypeDecl * a, TypeDecl * b) {
         return a->isSameType(*b, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes);
     };
@@ -110,7 +110,7 @@ TEST_CASE("tFixedArray identity") {
 TEST_CASE("tFixedArray lifecycle and hashes") {
     gc_guard guard;
     SUBCASE("copy constructor deep-copies the new fields") {
-        auto src = makeFA(TypeDecl::dimConst, new TypeDecl(Type::tInt));
+        auto src = makeFA(TypeDecl::dimConst, new TypeDecl(Type::tInt, cppBindingLineInfo()));
         src->fixedDimExpr = new ExprConstInt(7);
         auto copy = new TypeDecl(*src);
         CHECK_EQ(copy->fixedDim, TypeDecl::dimConst);
@@ -120,7 +120,7 @@ TEST_CASE("tFixedArray lifecycle and hashes") {
         CHECK_EQ(copy->firstType->baseType, Type::tInt);
     }
     SUBCASE("static clone deep-copies the new fields") {
-        auto src = makeFA(TypeDecl::dimConst, new TypeDecl(Type::tInt));
+        auto src = makeFA(TypeDecl::dimConst, new TypeDecl(Type::tInt, cppBindingLineInfo()));
         src->fixedDimExpr = new ExprConstInt(7);
         TypeDeclPtr dest = nullptr;
         TypeDecl::clone(dest, src);
@@ -134,7 +134,7 @@ TEST_CASE("tFixedArray lifecycle and hashes") {
         auto i3 = makeFAChain(Type::tInt,{3});
         auto f4 = makeFAChain(Type::tFloat,{4});
         auto i44 = makeFAChain(Type::tInt,{4,4});
-        auto justInt = new TypeDecl(Type::tInt);
+        auto justInt = new TypeDecl(Type::tInt, cppBindingLineInfo());
         CHECK_NE(i4->getSemanticHash(), i3->getSemanticHash());
         CHECK_NE(i4->getSemanticHash(), f4->getSemanticHash());
         CHECK_NE(i4->getSemanticHash(), i44->getSemanticHash());
@@ -181,7 +181,7 @@ TEST_CASE("tFixedArray classification") {
         auto faA = makeFAChain(Type::tInt,{TypeDecl::dimAuto});
         CHECK(faA->isAuto());
         CHECK_FALSE(faA->isAutoArrayResolved());
-        auto faElemAuto = makeFA(4, new TypeDecl(Type::autoinfer));
+        auto faElemAuto = makeFA(4, new TypeDecl(Type::autoinfer, cppBindingLineInfo()));
         CHECK(faElemAuto->isAuto());
     }
     SUBCASE("dimConst registers as expression type") {

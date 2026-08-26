@@ -470,7 +470,7 @@ def public emit_flags(reg : VkRegistry; em : EmitModel; out_dir : string; var he
             guard_open(f, b.guard, b.protect)
             fprint(f, "TypeDeclPtr makeVkFlags_{b.flags_name}() {OB}\n")
             let bft = b.is64 ? "Type::tBitfield64" : "Type::tBitfield"
-            fprint(f, "    auto ft = new TypeDecl({bft});\n")
+            fprint(f, "    auto ft = new TypeDecl({bft}, cppBindingLineInfo());\n")
             fprint(f, "    ft->alias = \"{b.flags_name}\";\n")
             if (!empty(b.bit_names)) {
                 fprint(f, "    ft->argNames = {OB} ")

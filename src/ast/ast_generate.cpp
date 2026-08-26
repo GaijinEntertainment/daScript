@@ -69,7 +69,7 @@ namespace das {
         auto compName = "__acomp_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
         auto pClosure = new ExprBlock();
         pClosure->at = expr->subexpr->at;
-        pClosure->returnType = new TypeDecl(Type::autoinfer);
+        pClosure->returnType = new TypeDecl(Type::autoinfer, pClosure->at);
         pClosure->generated = true;
         // temp : Array<expr->subexpr->type>
         auto pVar = new Variable();
@@ -77,8 +77,7 @@ namespace das {
         pVar->can_shadow = true;
         pVar->at = expr->at;
         pVar->name = compName;
-        pVar->type = new TypeDecl(Type::tArray);
-        pVar->type->at = expr->at;
+        pVar->type = new TypeDecl(Type::tArray, expr->at);
         pVar->type->constant = false;
         pVar->type->removeConstant = true;
         pVar->type->firstType = new TypeDecl(*expr->subexpr->type);
@@ -163,7 +162,7 @@ namespace das {
     ExpressionPtr generateComprehensionIterator ( ExprArrayComprehension * expr ) {
         auto pClosure = new ExprBlock();
         pClosure->at = expr->subexpr->at;
-        pClosure->returnType = new TypeDecl(Type::autoinfer);
+        pClosure->returnType = new TypeDecl(Type::autoinfer, pClosure->at);
         // yield subexpr
         auto pYield = new ExprYield(expr->at, expr->subexpr->clone());
         if ( !expr->subexpr->type->canCopy() ) {
@@ -211,7 +210,7 @@ namespace das {
         auto pAt = new ExprField(at, a, b, no_promo);
         pInvoke->arguments.push_back(pAt);
         pInvoke->isInvokeMethod = true;
-        auto pTypeAuto = new ExprTypeDecl(at, new TypeDecl(Type::autoinfer));
+        auto pTypeAuto = new ExprTypeDecl(at, new TypeDecl(Type::autoinfer, at));
         pTypeAuto->typeexpr->at = at;
         pInvoke->arguments.push_back(pTypeAuto);
         return pInvoke;
@@ -220,8 +219,7 @@ namespace das {
     /* a->b(args) is short for invoke(type<callStruct>.b, cast<auto> deref(a), args)  */
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, Structure * callStruct, Expression * a, const string & b ) {
         auto pInvoke = new ExprInvoke(at, "invoke");
-        auto callType = new TypeDecl(Type::tStructure);
-        callType->at = at;
+        auto callType = new TypeDecl(Type::tStructure, at);
         callType->structType = callStruct;
         auto callTypeExpr = new ExprTypeDecl(at, callType);
         auto pAt = new ExprField(at, callTypeExpr, b);
@@ -229,7 +227,7 @@ namespace das {
         pInvoke->isInvokeMethod = true;
         auto pCast = new ExprCast();
         pCast->at = at;
-        pCast->castType = new TypeDecl(Type::autoinfer);
+        pCast->castType = new TypeDecl(Type::autoinfer, pCast->at);
         pCast->subexpr = new ExprPtr2Ref(at,a);
         pCast->subexpr->alwaysSafe = true;
         pInvoke->arguments.push_back(pCast);
@@ -267,7 +265,7 @@ namespace das {
         fn->privateFunction = isPrivate;
         fn->name = str->name;
         fn->at = fn->atDecl = str->at;
-        fn->result = new TypeDecl(str);
+        fn->result = new TypeDecl(str, fn->at);
         fn->result->at = str->at;
         if ( str->isClass ) {
             fn->isClassMethod = true;
@@ -356,13 +354,13 @@ namespace das {
     FunctionPtr makeClone ( Structure * str ) {
         auto varA = new Variable();
         varA->name = "a";
-        varA->type = new TypeDecl(str);
+        varA->type = new TypeDecl(str, varA->at);
         varA->type->at = str->at;
         varA->type->isExplicit = true;
         varA->at = str->at;
         auto varB = new Variable();
         varB->name = "b";
-        varB->type = new TypeDecl(str);
+        varB->type = new TypeDecl(str, varB->at);
         varB->type->at = str->at;
         varB->type->constant = str->canCloneFromConst();    // allow to clone from const
         varB->type->implicit = true;
@@ -418,7 +416,7 @@ namespace das {
             auto vsiz = new Variable();
             vsiz->at = at;
             vsiz->name = "__size";
-            vsiz->type = new TypeDecl(Type::autoinfer);
+            vsiz->type = new TypeDecl(Type::autoinfer, vsiz->at);
             if ( !vsiz->type->at.fileInfo ) vsiz->type->at = vsiz->at;
             vsiz->type->constant = true;
             auto crs = new ExprCall(at,"class_rtti_size");
@@ -433,7 +431,7 @@ namespace das {
             invk->arguments.push_back(pAt);
             auto pCast = new ExprCast();
             pCast->at = at;
-            pCast->castType = new TypeDecl(Type::autoinfer);
+            pCast->castType = new TypeDecl(Type::autoinfer, pCast->at);
             auto THISAA = new ExprVar(at, "__this");
             pCast->subexpr = new ExprPtr2Ref(at,THISAA);
             pCast->subexpr->alwaysSafe = true;
@@ -464,8 +462,7 @@ namespace das {
         fb->at = at;
         fb->list.push_back(ife);
         pFunc->body = fb;
-        pFunc->result = new TypeDecl(Type::tVoid);
-        pFunc->result->at = pFunc->at;
+        pFunc->result = new TypeDecl(Type::tVoid, pFunc->at);
         auto cTHIS = new Variable();
         cTHIS->name = "__this";
         cTHIS->at = at;
@@ -542,12 +539,11 @@ namespace das {
         mz->arguments.push_back(lvar);
         fb->list.push_back(mz);
         pFunc->body = fb;
-        pFunc->result = new TypeDecl(Type::tVoid);
-        pFunc->result->at = pFunc->at;
+        pFunc->result = new TypeDecl(Type::tVoid, pFunc->at);
         auto cTHIS = new Variable();
         cTHIS->at = ls->at;
         cTHIS->name = "__this";
-        cTHIS->type = new TypeDecl(ls);
+        cTHIS->type = new TypeDecl(ls, cTHIS->at);
         cTHIS->type->at = ls->at;
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
@@ -605,14 +601,12 @@ namespace das {
         delit1->alwaysSafe = true;
         fb->list.push_back(delit1);
         // function goo
-        pFunc->result = new TypeDecl(Type::tVoid);
-        pFunc->result->at = pFunc->at;
+        pFunc->result = new TypeDecl(Type::tVoid, pFunc->at);
         auto cTHIS = new Variable();
         cTHIS->at = ls->at;
         cTHIS->name = "__this";
-        cTHIS->type = new TypeDecl(Type::tPointer);
-        cTHIS->type->at = ls->at;
-        cTHIS->type->firstType = new TypeDecl(ls);
+        cTHIS->type = new TypeDecl(Type::tPointer, ls->at);
+        cTHIS->type->firstType = new TypeDecl(ls, cTHIS->at);
         cTHIS->type->firstType->at = ls->at;
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
@@ -690,7 +684,7 @@ namespace das {
         cTHIS->generated = true;
         cTHIS->at = block->at;
         cTHIS->name = "__this";
-        cTHIS->type = new TypeDecl(ls);
+        cTHIS->type = new TypeDecl(ls, cTHIS->at);
         cTHIS->type->at = ls->at;
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
@@ -739,24 +733,20 @@ namespace das {
         pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
         pStruct->fields.back().generated = true;
         pStruct->fields.back().type->sanitize();
-        auto finFunc = new TypeDecl(Type::tFunction);
-        finFunc->at = block->at;
-        auto finArg = new TypeDecl(Type::tPointer);
-        finArg->at = block->at;
+        auto finFunc = new TypeDecl(Type::tFunction, block->at);
+        auto finArg = new TypeDecl(Type::tPointer, block->at);
         finArg->firstType = new TypeDecl(pStruct);
         finArg->firstType->at = block->at;
         finArg->constant = false;
         finArg->removeConstant = true;
         finFunc->argTypes.push_back(finArg);
         finFunc->argNames.push_back("__this");
-        finFunc->firstType = new TypeDecl(Type::tVoid);
-        finFunc->firstType->at = block->at;
+        finFunc->firstType = new TypeDecl(Type::tVoid, block->at);
         pStruct->fields.emplace_back("__finalize", finFunc, nullptr, AnnotationArgumentList(), false, block->at);
         pStruct->fields.back().generated = true;
         pStruct->fields.back().type->sanitize();
         if ( needYield ) {
-            auto yt = new TypeDecl(Type::tInt);
-            yt->at = block->at;
+            auto yt = new TypeDecl(Type::tInt, block->at);
             pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
             auto & fldb = pStruct->fields.back();
             fldb.generated = true;
@@ -776,8 +766,7 @@ namespace das {
             if ( isCaptureAsRef(var) || mode==CaptureMode::capture_by_reference ) {
                 td->ref = false;
                 td->constant = var->type->constant;
-                auto ptd = new TypeDecl(Type::tPointer);
-                ptd->at = var->at;
+                auto ptd = new TypeDecl(Type::tPointer, var->at);
                 ptd->firstType = td;
                 td = ptd;
                 pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
@@ -1156,8 +1145,7 @@ namespace das {
             if ( !vtd->at.fileInfo ) vtd->at = var->at;
             bool isRef = vtd->ref;
             if ( isRef ) {
-                auto pvtd = new TypeDecl(Type::tPointer);
-                pvtd->at = var->at;
+                auto pvtd = new TypeDecl(Type::tPointer, var->at);
                 pvtd->firstType = vtd;
                 vtd->ref = false;
                 vtd = pvtd;
@@ -1311,7 +1299,7 @@ namespace das {
             bvar->generated = true;
             bvar->at = expr->at;
             bvar->name = breakFlag;
-            bvar->type = new TypeDecl(Type::tBool);
+            bvar->type = new TypeDecl(Type::tBool, bvar->at);
             if ( !bvar->type->at.fileInfo ) bvar->type->at = bvar->at;
             bvar->init = new ExprConstBool(expr->at, false);
             leqt->variables.push_back(bvar);
@@ -1327,7 +1315,7 @@ namespace das {
             rvar->generated = true;
             rvar->at = expr->at;
             rvar->name = returnFlag;
-            rvar->type = new TypeDecl(Type::tBool);
+            rvar->type = new TypeDecl(Type::tBool, rvar->at);
             if ( !rvar->type->at.fileInfo ) rvar->type->at = rvar->at;
             if ( !rvar->type->at.fileInfo ) rvar->type->at = rvar->at;
             rvar->init = new ExprConstBool(expr->at, false);
@@ -1416,7 +1404,7 @@ namespace das {
     }
 
     ExpressionPtr makeCounterRef ( const LineInfo & at, const string & pVarName, const TypeDeclPtr & elemType ) {
-        auto ptrT = new TypeDecl(Type::tPointer);
+        auto ptrT = new TypeDecl(Type::tPointer, at);
         ptrT->at = at;
         ptrT->firstType = new TypeDecl(*elemType);
         ptrT->firstType->at = at;
@@ -1488,7 +1476,7 @@ namespace das {
         lvar->generated = true;
         lvar->at = expr->at;
         lvar->name = loopVar;
-        lvar->type = new TypeDecl(Type::tBool);
+        lvar->type = new TypeDecl(Type::tBool, lvar->at);
         if ( !lvar->type->at.fileInfo ) lvar->type->at = lvar->at;
         lvar->init = new ExprConstBool(expr->at, true);
         leqt->variables.push_back(lvar);
@@ -1503,7 +1491,7 @@ namespace das {
             bvar->generated = true;
             bvar->at = expr->at;
             bvar->name = breakFlag;
-            bvar->type = new TypeDecl(Type::tBool);
+            bvar->type = new TypeDecl(Type::tBool, bvar->at);
             if ( !bvar->type->at.fileInfo ) bvar->type->at = bvar->at;
             bvar->init = new ExprConstBool(expr->at, false);
             bleqt->variables.push_back(bvar);
@@ -1519,7 +1507,7 @@ namespace das {
             rvar->generated = true;
             rvar->at = expr->at;
             rvar->name = returnFlag;
-            rvar->type = new TypeDecl(Type::tBool);
+            rvar->type = new TypeDecl(Type::tBool, rvar->at);
             if ( !rvar->type->at.fileInfo ) rvar->type->at = rvar->at;
             rvar->init = new ExprConstBool(expr->at, false);
             rleqt->variables.push_back(rvar);
@@ -1560,8 +1548,7 @@ namespace das {
                 svar->generated = true;
                 svar->at = expr->at;
                 svar->name = srcName + "_temp_var";
-                svar->type = new TypeDecl(Type::autoinfer);
-                svar->type->at = svar->at;
+                svar->type = new TypeDecl(Type::autoinfer, svar->at);
                 svar->init_via_move = true;
                 svar->init = src->clone();
                 tempLet->variables.push_back(svar);
@@ -1576,8 +1563,7 @@ namespace das {
             svar->generated = true;
             svar->at = expr->at;
             svar->name = srcName;
-            svar->type = new TypeDecl(Type::autoinfer);
-            svar->type->at = svar->at;
+            svar->type = new TypeDecl(Type::autoinfer, svar->at);
             svar->init_via_move = !plainRange;
             if ( src->type->isGoodIteratorType() || plainRange ) {
                 svar->init = src->clone();
@@ -1604,8 +1590,7 @@ namespace das {
             srcv->name = srcVarName;
             if ( iterv->type->ref ) {
                 srcv->do_not_delete = true;
-                srcv->type = new TypeDecl(Type::tPointer);
-                srcv->type->at = srcv->at;
+                srcv->type = new TypeDecl(Type::tPointer, srcv->at);
                 srcv->type->firstType = new TypeDecl(*iterv->type);
                 if ( !srcv->type->firstType->at.fileInfo ) srcv->type->firstType->at = srcv->at;
                 srcv->type->firstType->constant |= src->type->constant;
@@ -1628,10 +1613,8 @@ namespace das {
             auto adri = new ExprRef2Ptr(expr->at, vit0);
             adri->generated = true;     // lowering artifact, not user source (STYLE034 guard)
             adri->alwaysSafe = true;
-            auto pvoid = new TypeDecl(Type::tPointer);
-            pvoid->at = expr->at;
-            pvoid->firstType = new TypeDecl(Type::tVoid);
-            pvoid->firstType->at = expr->at;
+            auto pvoid = new TypeDecl(Type::tPointer, expr->at);
+            pvoid->firstType = new TypeDecl(Type::tVoid, expr->at);
             auto rein = new ExprCast(expr->at, adri, pvoid);
             rein->generated = true;
             rein->reinterpret = true;
@@ -1772,8 +1755,7 @@ namespace das {
         fn->privateFunction = true;
         fn->name = "clone";
         fn->at = fn->atDecl = at;
-        fn->result = new TypeDecl(Type::tVoid);
-        fn->result->at = fn->at;
+        fn->result = new TypeDecl(Type::tVoid, fn->at);
         auto arg0 = new Variable();
         arg0->at = at;
         arg0->name = "dest";
@@ -1813,8 +1795,7 @@ namespace das {
         fn->generated = true;
         fn->name = "finalize";
         fn->at = fn->atDecl = at;
-        fn->result = new TypeDecl(Type::tVoid);
-        fn->result->at = fn->at;
+        fn->result = new TypeDecl(Type::tVoid, fn->at);
         auto arg0 = new Variable();
         arg0->at = at;
         arg0->name = "__this";
@@ -1859,8 +1840,7 @@ namespace das {
         fn->privateFunction = true;
         fn->name = "clone";
         fn->at = fn->atDecl = at;
-        fn->result = new TypeDecl(Type::tVoid);
-        fn->result->at = fn->at;
+        fn->result = new TypeDecl(Type::tVoid, fn->at);
         auto arg0 = new Variable();
         arg0->at = at;
         arg0->name = "dest";
@@ -1924,8 +1904,7 @@ namespace das {
         fn->generated = true;
         fn->name = "finalize";
         fn->at = fn->atDecl = at;
-        fn->result = new TypeDecl(Type::tVoid);
-        fn->result->at = fn->at;
+        fn->result = new TypeDecl(Type::tVoid, fn->at);
         auto arg0 = new Variable();
         arg0->at = at;
         arg0->name = "__this";
@@ -1988,8 +1967,7 @@ namespace das {
         fn->privateFunction = true;
         fn->name = "clone";
         fn->at = fn->atDecl = at;
-        fn->result = new TypeDecl(Type::tVoid);
-        fn->result->at = fn->at;
+        fn->result = new TypeDecl(Type::tVoid, fn->at);
         auto arg0 = new Variable();
         arg0->at = at;
         arg0->name = "dest";
@@ -2236,7 +2214,7 @@ namespace das {
         func->at = method->at;
         func->atDecl = method->at;
         func->name = baseClass->name;
-        func->result = new TypeDecl(baseClass);
+        func->result = new TypeDecl(baseClass, func->at);
         func->result->at = func->at;
         func->isClassMethod = true;
         func->classParent = baseClass;
@@ -2304,10 +2282,8 @@ namespace das {
             fd->parentType = fd->type->isAuto();
             fd->generated = true;
         } else {
-            auto pvoid = new TypeDecl(Type::tPointer);
-            pvoid->at = baseClass->at;
-            pvoid->firstType = new TypeDecl(Type::tVoid);
-            pvoid->firstType->at = baseClass->at;
+            auto pvoid = new TypeDecl(Type::tPointer, baseClass->at);
+            pvoid->firstType = new TypeDecl(Type::tVoid, baseClass->at);
             baseClass->fields.emplace_back(
                 "__rtti",
                 pvoid,
@@ -2329,14 +2305,12 @@ namespace das {
         ExpressionPtr finit = new ExprAddr(baseClass->at, (baseClass->isTemplate ? "_::" : "__::") + fname);
         if ( baseClass->parent ) {
             auto fd = (Structure::FieldDeclaration *) baseClass->findField("__finalize");
-            auto castT = new TypeDecl(Type::autoinfer);
-            castT->at = baseClass->at;
+            auto castT = new TypeDecl(Type::autoinfer, baseClass->at);
             fd->init = new ExprCast(baseClass->at, finit, castT);
             fd->parentType = fd->type->isAuto();
             fd->generated = true;
         } else {
-            auto finT = new TypeDecl(Type::autoinfer);
-            finT->at = baseClass->at;
+            auto finT = new TypeDecl(Type::autoinfer, baseClass->at);
             baseClass->fields.emplace_back(
                 "__finalize",
                 finT,
@@ -2353,8 +2327,7 @@ namespace das {
         func->at = baseClass->at;
         func->atDecl = baseClass->at;
         func->name = fname;
-        func->result = new TypeDecl(Type::tVoid);
-        func->result->at = func->at;
+        func->result = new TypeDecl(Type::tVoid, func->at);
         func->isClassMethod = true;
         func->classParent = baseClass;
         func->isTemplate = baseClass->isTemplate;
@@ -2412,8 +2385,7 @@ namespace das {
         auto block = new ExprBlock();
         block->at = mks->at;
         block->isClosure = true;
-        block->returnType = new TypeDecl(Type::tVoid);
-        block->returnType->at = block->at;
+        block->returnType = new TypeDecl(Type::tVoid, block->at);
         // only one argument, and its 'self'
         auto mkBaseT = mks->makeType;
         while ( mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType ) mkBaseT = mkBaseT->firstType;

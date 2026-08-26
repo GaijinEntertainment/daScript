@@ -7,7 +7,7 @@ namespace das {
 
 template <> struct typeFactory<ImColor> {
 	static TypeDeclPtr make(const ModuleLibrary &) {
-		auto t = new TypeDecl(Type::tFloat4);
+		auto t = new TypeDecl(Type::tFloat4, cppBindingLineInfo());
 		t->alias = "ImColor";
 		t->aotAlias = true;
 		return t;
@@ -25,7 +25,7 @@ struct cast_arg<const ImColor &> {
 
 template <> struct typeFactory<ImVec2> {
 	static TypeDeclPtr make(const ModuleLibrary &) {
-		auto t = new TypeDecl(Type::tFloat2);
+		auto t = new TypeDecl(Type::tFloat2, cppBindingLineInfo());
 		t->alias = "ImVec2";
 		t->aotAlias = true;
 		return t;
@@ -42,7 +42,7 @@ template <> struct cast_arg<const ImVec2 &> {
 
 template <> struct typeFactory<ImVec4> {
 	static TypeDeclPtr make(const ModuleLibrary &) {
-		auto t = new TypeDecl(Type::tFloat4);
+		auto t = new TypeDecl(Type::tFloat4, cppBindingLineInfo());
 		t->alias = "ImVec4";
 		t->aotAlias = true;
 		return t;
@@ -82,7 +82,7 @@ template<> struct WrapArgType<const ImVec4&> { using type = const WrapArgType<Im
 static_assert(sizeof(ImRect) == sizeof(float) * 4, "ImRect must be 4 contiguous floats to alias float4");
 template <> struct typeFactory<ImRect> {
 	static TypeDeclPtr make(const ModuleLibrary &) {
-		auto t = new TypeDecl(Type::tFloat4);
+		auto t = new TypeDecl(Type::tFloat4, cppBindingLineInfo());
 		t->alias = "ImRect";
 		t->aotAlias = true;
 		return t;

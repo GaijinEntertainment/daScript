@@ -272,7 +272,7 @@ namespace das
         // `half` spells float16 without reserving the identifier (audit: `half` is a common
         // local name — 107 uses in-tree; an alias coexists with same-named locals)
         {
-            auto halfT = new TypeDecl(Type::tFloat16);
+            auto halfT = new TypeDecl(Type::tFloat16, cppBindingLineInfo());
             halfT->alias = "half";
             addAlias(halfT);
         }

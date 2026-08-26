@@ -283,7 +283,7 @@ namespace das {
                             at,CompilationError::invalid_distinct_type);
                         return nullptr;
                     }
-                    auto pTD = new TypeDecl(Type::tDistinct);
+                    auto pTD = new TypeDecl(Type::tDistinct, at);
                     pTD->annotation = dann;
                     if ( dann->underlyingType ) {
                         pTD->firstType = new TypeDecl(*dann->underlyingType);
@@ -291,7 +291,7 @@ namespace das {
                     pTD->at = at;
                     return pTD;
                 } else if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
-                    auto pTD = new TypeDecl(Type::tHandle);
+                    auto pTD = new TypeDecl(Type::tHandle, at);
                     pTD->annotation = static_cast<TypeAnnotation *>(handles.back());
                     pTD->at = at;
                     return pTD;
@@ -330,7 +330,7 @@ namespace das {
                 return nullptr;
             }
         } else {
-            auto tt = new TypeDecl(Type::alias);
+            auto tt = new TypeDecl(Type::alias, at);
             tt->alias = name;
             tt->at = at;
             return tt;

@@ -71,6 +71,12 @@ namespace das
         gc_magic = GC_MAGIC_TYPEDECL;
     }
 
+    TypeDecl::TypeDecl(Enumeration * ep, const LineInfo & att)
+        : baseType(ep->getEnumType()), enumType(ep), at(att)
+    {
+        gc_magic = GC_MAGIC_TYPEDECL;
+    }
+
     LineInfo TypeDecl::getDeclarationLocation() const {
         if ( !at.empty() ) return at;
         switch ( baseType ) {
@@ -3774,7 +3780,7 @@ namespace das
         aMain.first = td;
         aMain.second |= viaPointer;
         if ( td->isBaseVectorType() ) {
-            auto bt = new TypeDecl(td->getVectorBaseType());
+            auto bt = new TypeDecl(td->getVectorBaseType(), td->at);
             auto & aSub = aliases[bt->getMangledName()];
             aSub.first = bt;
             aSub.second |= viaPointer;
@@ -4329,7 +4335,7 @@ namespace das
                 ch ++;
                 int di = atoi(numT.c_str());
                 if ( neg ) di = -di;
-                auto pt = new TypeDecl(Type::tFixedArray);
+                auto pt = new TypeDecl(Type::tFixedArray, at);
                 pt->fixedDim = di;
                 // fullName remove-suffixes emitted right after this node's [d] land back on it
                 for ( ;; ) {
@@ -4372,7 +4378,7 @@ namespace das
             };
             case 'H': {
                 ch ++;
-                auto pt = new TypeDecl(Type::tHandle);
+                auto pt = new TypeDecl(Type::tHandle, at);
                 auto annName = parseAnyNameInBrackets(ch,true);
                 auto ann = library.findAnnotation(annName,thisModule);
                 if ( thisModule && ann.size()==0 ) {
@@ -4399,7 +4405,7 @@ namespace das
             };
             case 'Q': {
                 ch ++;
-                auto pt = new TypeDecl(Type::tDistinct);
+                auto pt = new TypeDecl(Type::tDistinct, at);
                 auto annName = parseAnyNameInBrackets(ch,true);
                 auto ann = library.findAnnotation(annName,thisModule);
                 if ( thisModule && ann.size()==0 ) {
@@ -4426,7 +4432,7 @@ namespace das
             case 'S': {
                 ch ++;
                 auto sname = parseAnyNameInBrackets(ch,true);
-                auto pt = new TypeDecl(Type::tStructure);
+                auto pt = new TypeDecl(Type::tStructure, at);
                 auto stt = library.findStructure(sname, thisModule);
                 if ( thisModule && stt.size()==0 ) {
                     if ( auto tstt = thisModule->findStructure(sname) ) {
@@ -4471,15 +4477,15 @@ namespace das
                 TypeDeclPtr pt = nullptr;
                 if ( *ch=='8' ) {
                     ch ++;
-                    pt = new TypeDecl(Type::tEnumeration8);
+                    pt = new TypeDecl(Type::tEnumeration8, at);
                 } else if ( ch[0]=='1' && ch[1]=='6' ) {
                     ch += 2;
-                    pt = new TypeDecl(Type::tEnumeration16);
+                    pt = new TypeDecl(Type::tEnumeration16, at);
                 } else if ( ch[0]=='6' && ch[1]=='4' ) {
                     ch += 2;
-                    pt = new TypeDecl(Type::tEnumeration64);
+                    pt = new TypeDecl(Type::tEnumeration64, at);
                 } else {
-                    pt = new TypeDecl(Type::tEnumeration);
+                    pt = new TypeDecl(Type::tEnumeration, at);
                 }
                 if ( *ch=='<' ) {
                     auto sname = parseAnyNameInBrackets(ch,true);
@@ -4502,66 +4508,66 @@ namespace das
                 return pt;
             };
             case '_': {
-                        if ( ch[1]=='c' )                   { ch+=2; return new TypeDecl(Type::fakeContext); }
-                else    if ( ch[1]=='l' )                   { ch+=2; return new TypeDecl(Type::fakeLineInfo); }
+                        if ( ch[1]=='c' )                   { ch+=2; return new TypeDecl(Type::fakeContext, at); }
+                else    if ( ch[1]=='l' )                   { ch+=2; return new TypeDecl(Type::fakeLineInfo, at); }
                 else                                        { error("unsupported mangled name format - expecting fake...", ch); return new TypeDecl(); }
             }
             case 'i': {
-                        if ( ch[1]=='2' )                   { ch+=2; return new TypeDecl(Type::tInt2); }
-                else    if ( ch[1]=='3' )                   { ch+=2; return new TypeDecl(Type::tInt3); }
-                else    if ( ch[1]=='4' )                   { ch+=2; return new TypeDecl(Type::tInt4); }
-                else    if ( ch[1]=='8' )                   { ch+=2; return new TypeDecl(Type::tInt8); }
-                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return new TypeDecl(Type::tInt16); }
-                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tInt64); }
-                else                                        { ch+=1; return new TypeDecl(Type::tInt); }
+                        if ( ch[1]=='2' )                   { ch+=2; return new TypeDecl(Type::tInt2, at); }
+                else    if ( ch[1]=='3' )                   { ch+=2; return new TypeDecl(Type::tInt3, at); }
+                else    if ( ch[1]=='4' )                   { ch+=2; return new TypeDecl(Type::tInt4, at); }
+                else    if ( ch[1]=='8' )                   { ch+=2; return new TypeDecl(Type::tInt8, at); }
+                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return new TypeDecl(Type::tInt16, at); }
+                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tInt64, at); }
+                else                                        { ch+=1; return new TypeDecl(Type::tInt, at); }
             }
             case 'u': {
-                        if ( ch[1]=='2' )                   { ch+=2; return new TypeDecl(Type::tUInt2); }
-                else    if ( ch[1]=='3' )                   { ch+=2; return new TypeDecl(Type::tUInt3); }
-                else    if ( ch[1]=='4' )                   { ch+=2; return new TypeDecl(Type::tUInt4); }
-                else    if ( ch[1]=='8' )                   { ch+=2; return new TypeDecl(Type::tUInt8); }
-                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return new TypeDecl(Type::tUInt16); }
-                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tUInt64); }
-                else                                        { ch+=1; return new TypeDecl(Type::tUInt); }
+                        if ( ch[1]=='2' )                   { ch+=2; return new TypeDecl(Type::tUInt2, at); }
+                else    if ( ch[1]=='3' )                   { ch+=2; return new TypeDecl(Type::tUInt3, at); }
+                else    if ( ch[1]=='4' )                   { ch+=2; return new TypeDecl(Type::tUInt4, at); }
+                else    if ( ch[1]=='8' )                   { ch+=2; return new TypeDecl(Type::tUInt8, at); }
+                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return new TypeDecl(Type::tUInt16, at); }
+                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tUInt64, at); }
+                else                                        { ch+=1; return new TypeDecl(Type::tUInt, at); }
             }
             case 'f': {
-                        if ( ch[1]=='2' )                   { ch+=2; return new TypeDecl(Type::tFloat2); }
-                else    if ( ch[1]=='3' )                   { ch+=2; return new TypeDecl(Type::tFloat3); }
-                else    if ( ch[1]=='4' )                   { ch+=2; return new TypeDecl(Type::tFloat4); }
-                else                                        { ch+=1; return new TypeDecl(Type::tFloat); }
-            case '.':   ch++; return new TypeDecl(Type::autoinfer);
-            case '|':   ch++; return new TypeDecl(Type::option);
-            case 'D':   ch++; return new TypeDecl(Type::typeDecl);
-            case '^':   ch++; return new TypeDecl(Type::typeMacro);
-            case '*':   ch++; return new TypeDecl(Type::anyArgument);
-            case 'L':   ch++; return new TypeDecl(Type::alias);
-            case 'A':   ch++; return new TypeDecl(Type::tArray);
-            case 'T':   ch++; return new TypeDecl(Type::tTable);
-            case 'G':   ch++; return new TypeDecl(Type::tIterator);
-            case '$':   ch++; return new TypeDecl(Type::tBlock);
-            case 'U':   ch++; return new TypeDecl(Type::tTuple);
-            case 'V':   ch++; return new TypeDecl(Type::tVariant);
+                        if ( ch[1]=='2' )                   { ch+=2; return new TypeDecl(Type::tFloat2, at); }
+                else    if ( ch[1]=='3' )                   { ch+=2; return new TypeDecl(Type::tFloat3, at); }
+                else    if ( ch[1]=='4' )                   { ch+=2; return new TypeDecl(Type::tFloat4, at); }
+                else                                        { ch+=1; return new TypeDecl(Type::tFloat, at); }
+            case '.':   ch++; return new TypeDecl(Type::autoinfer, at);
+            case '|':   ch++; return new TypeDecl(Type::option, at);
+            case 'D':   ch++; return new TypeDecl(Type::typeDecl, at);
+            case '^':   ch++; return new TypeDecl(Type::typeMacro, at);
+            case '*':   ch++; return new TypeDecl(Type::anyArgument, at);
+            case 'L':   ch++; return new TypeDecl(Type::alias, at);
+            case 'A':   ch++; return new TypeDecl(Type::tArray, at);
+            case 'T':   ch++; return new TypeDecl(Type::tTable, at);
+            case 'G':   ch++; return new TypeDecl(Type::tIterator, at);
+            case '$':   ch++; return new TypeDecl(Type::tBlock, at);
+            case 'U':   ch++; return new TypeDecl(Type::tTuple, at);
+            case 'V':   ch++; return new TypeDecl(Type::tVariant, at);
             case 't':   {
-                        if ( ch[1]=='8' )                   { ch+=2; return new TypeDecl(Type::tBitfield8); }
-                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return new TypeDecl(Type::tBitfield16); }
-                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tBitfield64); }
-                else                                        { ch++; return new TypeDecl(Type::tBitfield); }
+                        if ( ch[1]=='8' )                   { ch+=2; return new TypeDecl(Type::tBitfield8, at); }
+                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return new TypeDecl(Type::tBitfield16, at); }
+                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tBitfield64, at); }
+                else                                        { ch++; return new TypeDecl(Type::tBitfield, at); }
             }
             case 'r':   {
-                        if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tRange64); }
-                else                                        { ch+=1; return new TypeDecl(Type::tRange); }
+                        if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tRange64, at); }
+                else                                        { ch+=1; return new TypeDecl(Type::tRange, at); }
             }
             case 'z':   {
-                        if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tURange64); }
-                else                                        { ch+=1; return new TypeDecl(Type::tURange); }
+                        if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tURange64, at); }
+                else                                        { ch+=1; return new TypeDecl(Type::tURange, at); }
             }
-            case 'd':   ch++; return new TypeDecl(Type::tDouble);
-            case 's':   ch++; return new TypeDecl(Type::tString);
-            case 'v':   ch++; return new TypeDecl(Type::tVoid);
-            case 'b':   ch++; return new TypeDecl(Type::tBool);
+            case 'd':   ch++; return new TypeDecl(Type::tDouble, at);
+            case 's':   ch++; return new TypeDecl(Type::tString, at);
+            case 'v':   ch++; return new TypeDecl(Type::tVoid, at);
+            case 'b':   ch++; return new TypeDecl(Type::tBool, at);
             case '?':   {
                 ch++;
-                auto pt = new TypeDecl(Type::tPointer);
+                auto pt = new TypeDecl(Type::tPointer, at);
                 if ( *ch=='M' ) {
                     pt->smartPtr = true;
                     pt->smartPtrNative = false;
@@ -4576,10 +4582,10 @@ namespace das
             case '@':   {
                 if ( ch[1]=='@' ) {
                     ch+=2;
-                    return new TypeDecl(Type::tFunction);
+                    return new TypeDecl(Type::tFunction, at);
                 } else {
                     ch++;
-                    return new TypeDecl(Type::tLambda);
+                    return new TypeDecl(Type::tLambda, at);
                 }
             };
             case '&': {
@@ -4668,11 +4674,6 @@ namespace das
         }
         error("unsupported mangled name format symbol", ch);
         return new TypeDecl();
-    }
-
-    TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library, Module * thisModule ) {
-        MangledNameParser parser;
-        return parser.parseTypeFromMangledName(ch, library, thisModule);
     }
 
     bool hasImplicit ( const TypeDeclPtr & type ) {

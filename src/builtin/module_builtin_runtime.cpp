@@ -1697,7 +1697,7 @@ namespace das
     };
 
     TypeDeclPtr makePrintFlags() {
-        auto ft = new TypeDecl(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "print_flags";
         ft->argNames = { "escapeString", "namesAndDimensions", "typeQualifiers", "refAddresses", "singleLine", "fixedPoint", "fullTypeInfo" };
         return ft;
