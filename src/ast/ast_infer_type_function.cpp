@@ -1898,7 +1898,7 @@ namespace das {
                                 auto it = options.find(argType);
                                 if (it != options.end()) {
                                     auto optionType = argType->argTypes[it->second];
-                                    defaultRef[ai] = optionType->ref;
+                                    defaultRef[ai] = optionType->ref || argType->ref;
                                 }
                             } else {
                                 defaultRef[ai] = argType->ref;

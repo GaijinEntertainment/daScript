@@ -166,6 +166,7 @@ SET(DAS_UTILS_TO_TEST
     find-dupe/tests
     gen1-to-gen2/tests
     internal/hygiene
+    internal/preflight/tests
     internal/ast-fuzz
     internal/requirefix
     internal/test-release

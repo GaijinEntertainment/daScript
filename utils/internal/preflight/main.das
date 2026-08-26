@@ -28,6 +28,7 @@ require ../../common/parallel_workers.das
 require ../../common/git_signature.das
 require ../../../dastest/worker_policy.das
 require config
+require compile_db
 
 
 [CommandLineArgs]
@@ -707,7 +708,79 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
         output = output)
 }
 
-def gate_cpp_syntax(ctx : PreflightCtx) : GateResult { // nolint:STYLE038
+// One clang argv per group of TUs that share a flag set. Flags come from compile_commands
+// when the build tree has an entry for the TU, else from the hand-rolled include list.
+def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tuple<argvs : array<array<string>>; from_db : int> {
+    // parse + analyze only, warnings off: this gate reports errors, and a -Werror carried in
+    // from the real compile line must not promote a warning into one
+    var syntax_flags : array<string>
+    if (ctx.clang_is_cl) {
+        syntax_flags <- ["/Zs", "/W0"]                  // nolint:PERF030 — fresh empty target, branch-initialized
+    } else {
+        syntax_flags <- ["-fsyntax-only", "-w"]         // nolint:PERF030 — fresh empty target, branch-initialized
+    }
+    var fallback_flags : array<string>
+    if (ctx.clang_is_cl) {
+        fallback_flags <- ["/EHsc", "/std:c++17"]       // nolint:PERF030 — fresh empty target, branch-initialized
+    } else {
+        fallback_flags <- ["-std=c++17"]                // nolint:PERF030 — fresh empty target, branch-initialized
+    }
+    var includes <- ["include", "3rdparty/fmt/include", "3rdparty/uriparser/include", "tests-cpp/3rdparty"]
+    if (!empty(ctx.build_dir)) {
+        // configure-time generated headers (modules/external_*.inc) — without
+        // this root, TUs like src/simulate/fs_file_info.cpp false-fail
+        includes |> push(path_join(ctx.build_dir, "include"))
+    }
+    fallback_flags |> reserve(length(fallback_flags) + length(includes))
+    for (inc in includes) {
+        fallback_flags |> push("-I{inc}")
+    }
+    var cc <- load_compile_commands(ctx.build_dir, ctx.clang_is_cl)
+    let cwd = getcwd()
+    // run_chunk_workers spawns one thread per argv, so per-TU flags must not become per-TU
+    // argvs: group the sweep by identical flag set first (the whole tree collapses to a
+    // handful of sets), then chunk inside each group
+    var groups : table<string; array<string>>
+    var group_flags : table<string; array<string>>
+    var from_db = 0
+    for (f in in_scope) {
+        let abs = path_join(cwd, f)
+        var flags : array<string>
+        if (cc |> key_exists(abs)) {
+            flags := cc[abs]
+            from_db++
+        } else {
+            flags := fallback_flags
+        }
+        let key = join(flags, "\n")
+        if (!(group_flags |> key_exists(key))) {
+            var gf : array<string>
+            gf := flags
+            group_flags[key] <- gf
+            groups[key] |> reserve(length(in_scope))
+        }
+        groups[key] |> push(f)
+    }
+    let workers = compute_worker_count(length(in_scope), ctx.jobs)
+    let total = length(in_scope)
+    var argvs : array<array<string>>
+    argvs |> reserve(workers + length(group_flags))
+    for (key, files in keys(groups), values(groups)) {
+        let share = max(1, (workers * length(files) + total - 1) / total)
+        let chunks <- chunk_files(files, share)
+        for (chunk in chunks) {
+            var av : array<string>
+            av |> reserve(1 + length(group_flags[key]) + length(syntax_flags) + length(chunk))
+            av |> push(ctx.clang)
+            av |> push_from(group_flags[key], syntax_flags, chunk)
+            argvs |> emplace(av)
+        }
+    }
+    return <- (argvs <- argvs, from_db = from_db)
+}
+
+
+def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     if (empty(ctx.changed_cpp) && ctx.changed_hdr == 0) {
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
@@ -753,34 +826,9 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult { // nolint:STYLE038
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "changed C++ is outside src/include/tests-cpp ({join(skipped, ", ")}) — needs module/external deps; no local clang gate compiles it, CI's clang-cl lane does")
     }
-    var flags : array<string>
-    if (ctx.clang_is_cl) {
-        flags <- ["/Zs", "/EHsc", "/std:c++17", "/W0"]   // nolint:PERF030 — fresh empty target, branch-initialized
-    } else {
-        flags <- ["-fsyntax-only", "-std=c++17", "-w"]   // nolint:PERF030 — fresh empty target, branch-initialized
-    }
-    var includes <- ["include", "3rdparty/fmt/include", "3rdparty/uriparser/include", "tests-cpp/3rdparty"]
-    if (!empty(ctx.build_dir)) {
-        // configure-time generated headers (modules/external_*.inc) — without
-        // this root, TUs like src/simulate/fs_file_info.cpp false-fail
-        includes |> push(path_join(ctx.build_dir, "include"))
-    }
-    let workers = compute_worker_count(length(in_scope), ctx.jobs)
-    let chunks <- chunk_files(in_scope, workers)
-    var argvs : array<array<string>>
-    argvs |> reserve(length(chunks))
-    for (chunk in chunks) {
-        var av : array<string>
-        av |> reserve(1 + length(flags) + length(includes) + length(chunk))
-        av |> push(ctx.clang)
-        av |> push_from(flags)
-        for (inc in includes) {
-            av |> push("-I{inc}")
-        }
-        av |> push_from(chunk)
-        argvs |> emplace(av)
-    }
-    var results <- run_chunk_workers(argvs)
+    let sweep <- build_sweep_argvs(ctx, in_scope)
+    let from_db = sweep.from_db
+    var results <- run_chunk_workers(sweep.argvs)
     var failed = false
     for (r in results) {
         if (r.exit_code != 0) {
@@ -796,6 +844,7 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult { // nolint:STYLE038
         }
     }
     var detail = "{sweep_note}{length(in_scope)} file(s) via {ctx.clang}"
+    detail = "{detail}; {from_db} from compile_commands, {length(in_scope) - from_db} via the fallback include list"
     if (!empty(skipped)) {
         detail = "{detail}; out of scope: {join(skipped, ", ")}"
     }
