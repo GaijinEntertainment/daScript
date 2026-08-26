@@ -93,12 +93,8 @@ def private check_kebab_case(externals, internals : array<string>) {
     }
 }
 
-// CMake commands are case-insensitive and this tree spells both install( and INSTALL(
 def private install_blocks_of(text : string) : array<string> {
-    var out <- cmake_command_blocks(text, "install")
-    var inscope upper <- cmake_command_blocks(text, "INSTALL")
-    out |> push_from(upper)
-    return <- out
+    return <- cmake_command_blocks(text, "install")
 }
 
 def private check_install_symmetry(externals : array<string>) {

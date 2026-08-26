@@ -250,7 +250,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 
 **Complexity/length lint (STYLE037/STYLE038): new code meets both limits from the start.** On a hit in existing code, the suppress-vs-split resolution policy is `skills/style_lint.md` - never force a split on an honest shape.
 
-**Comment hygiene, all languages: `skills/comment_style_hygiene.md` is the rulebook.** For `.das` outside tutorials/examples the headline is that no comment outside the skill's kept set survives to a commit - scaffolding is welcome while you work, and the PR gate drains it (`skills/internal/make_pr.md`, the Comment drain row). For C/C++ it is no NEW comments. The kept sets, teaching-code boundary, naming and code-shape rules all live in the skill; the `style-hygiene-auditor` agent applies them to every PR's new code (mandatory run in `skills/internal/make_pr.md`, findings persuade rather than block).
+**Comment hygiene, all languages: `skills/comment_style_hygiene.md` is the rulebook.** For `.das` in a folder whose `.lint_config` arms `force_clean_comments` the headline is that no comment outside the skill's kept set survives to a commit - scaffolding is welcome while you work, and the PR gate drains it (`skills/internal/make_pr.md`, the Comment drain row); elsewhere the kept set still holds and every other `.das` comment answers to the skill's deletion test. For C/C++ it is no NEW comments. The kept sets, teaching-code boundary, naming and code-shape rules all live in the skill; the `style-hygiene-auditor` agent applies them to every PR's new code (mandatory run in `skills/internal/make_pr.md`, findings persuade rather than block).
 
 ## Key Directories
 

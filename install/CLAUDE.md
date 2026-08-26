@@ -186,7 +186,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 
 **`print` is fine for application scripts.** In library and tool code prefer `to_log(LOG_INFO|LOG_WARNING|LOG_ERROR)` - same stdout, but level-tagged and filterable.
 
-**Comment hygiene (.das): ABSOLUTELY NO comments that are not documentation or lint suppression.** The kept set is exactly: `//!` docs on public API (never on private symbols), `// nolint:CODE` / `@nolint` suppressions carrying their one-line why, `//fmt:` formatter directives, and a file's leading header block. Everything else - narration, banners, section dividers, commented-out code - does not exist; the MCP `format_file` tool applies this file-wide by default, fail-closed. Teaching code (tutorials, examples) is the one exception: prose carrying the lesson stays - the folder's `.lint_config` `[format]` policy opts it out (`force_clean_comments = false`), so the same `format_file` call is safe everywhere.
+**Comment hygiene (.das): the folder's `.lint_config` decides.** Where `[format] force_clean_comments = true`, only the kept set survives a format - `//!` docs on a contract a caller must know, `// nolint:CODE` / `@nolint` suppressions carrying their one-line why, `//fmt:` directives, license comments, and the file's leading header block; the MCP `format_file` tool strips everything else, fail-closed. The key defaults to `false` - teaching code (tutorials, examples) declares that default explicitly - and wherever it is false the kept set still holds and every other comment answers to the deletion test instead: remove it and re-read; if the WHY goes dark, restore it, otherwise it was noise. The same `format_file` call is safe everywhere.
 
 ## SDK Directory Layout
 

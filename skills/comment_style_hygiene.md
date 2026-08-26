@@ -14,6 +14,10 @@ this guide.** Mark it like any other finding - a guide defect blocks nothing, bu
 fix (a rewrite or a removal, never silent tolerance) lands with the round's other
 fixes.
 
+**DON'T PROPOSE MINOR CHANGES TO THIS ONE.** A defect in this guide that changes what a
+reviewer checks or concludes is a finding; wording, ordering and coverage you would like
+added are not.
+
 ## How this guide is applied
 
 - **Findings speak plain.** A review finding - and the commit fixing one - states the
@@ -24,27 +28,35 @@ fixes.
   carries the boundary for when a departure stands.
 - **The audit is not a gate.** Style review runs on every PR; findings persuade, lint
   compels. Fix or consciously decline - there is no re-run-until-clean loop.
+- **Third-party libraries go as is.** A file this repo syncs from an upstream project
+  rather than authors answers to that project, not to this guide - editing it to these
+  rules is fork drift. A folder is vendored when it is a `3rdparty/` tree or its own
+  `CLAUDE.md` names an upstream and records the synced revision; inside one, the files
+  that `CLAUDE.md` marks as written or maintained here - fork-local hooks, this repo's
+  own docs - answer to these rules, and every file it leaves to upstream does not.
 
 Rules marked *(lintable)* are mechanical enough for a lint to enforce; where a rule notes
 an existing lint, the lint compels - an unnoted rule is the reviewer's.
 
 ## Comments
 
-**.das outside teaching code: ABSOLUTELY NO comments that are not documentation or lint
-suppression.** The kept set is exactly: `//!` docs on a contract a CALLER must know -
-public API always, a private helper only when callers inside the module need the contract
-(narration of an implementation goes to a name, a test, or the module's `.md`) -
-`// nolint:CODE` / `@nolint` suppressions carrying their one-line why, `//fmt:` formatter
-directives, license comments (Copyright / SPDX), and the file's leading header block (which
-may sit below the `options` / `module` / `require` preamble). Everything else - narration,
-banners, section dividers, commented-out code - does not exist. The formatter enforces this
-per folder, fail-closed (a strip must compile or the file is restored); the policy mechanics
-are `skills/das_formatting.md`. A `//` comment outside the kept set is therefore EPHEMERAL:
-anything worth preserving becomes code (a name, a `//!` doc, an assert) or lands in an `.md`
-beside the code. The ban is on what survives to a commit, not on writing - scaffold freely
-while working; the PR gate drains what remains. The boundary is the folder's `.lint_config`: teaching code (tutorials,
-examples) and load-bearing fixture corpora opt out there, and prose carrying the lesson
-stays - comments that add nothing to their line still go.
+**.das in a folder whose `.lint_config` arms `force_clean_comments`: ABSOLUTELY NO comments
+that are not documentation or lint suppression.** The kept set is exactly: `//!` docs on a
+contract a CALLER must know - public API always, a private helper only when callers inside
+the module need the contract (narration of an implementation goes to a name, a test, or the
+module's `.md`) - `// nolint:CODE` / `@nolint` suppressions carrying their one-line why,
+`//fmt:` formatter directives, license comments (Copyright / SPDX), and the file's leading
+header block (which may sit below the `options` / `module` / `require` preamble). Everything
+else - narration, banners, section dividers, commented-out code - does not exist. The
+formatter enforces this per folder, fail-closed (a strip must compile or the file is
+restored); the policy mechanics are `skills/das_formatting.md`. A `//` comment outside the
+kept set is therefore EPHEMERAL: anything worth preserving becomes code (a name, a `//!`
+doc, an assert) or lands in an `.md` beside the code. The ban is on what survives to a
+commit, not on writing - scaffold freely while working; the PR gate drains what remains.
+Where the key is unset or false, the kept set above still holds and every other `//` comment
+answers to the deletion test instead; in teaching folders (tutorials, examples) and
+load-bearing fixture corpora the prose carrying the lesson passes that test, and a comment
+that adds nothing to its line still goes.
 
 **The header block - the comments above the first declaration - describes the FILE.** A
 comment there that describes the next declaration moves onto that declaration: as a `//!`

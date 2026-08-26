@@ -95,6 +95,31 @@ def private is_ident_byte(b : int) : bool {
     return is_alnum(b) || b == '_'
 }
 
+def private to_lower_byte(b : int) : int {
+    return b >= 'A' && b <= 'Z' ? b + 32 : b
+}
+
+def private lowered_bytes(s : string) : array<int> {
+    var out : array<int>
+    peek_data(s) $(d) {
+        out |> reserve(length(d))
+        for (i in range(length(d))) {
+            out |> push(to_lower_byte(int(d[i])))
+        }
+    }
+    return <- out
+}
+
+// CMake command names are case-insensitive, so `Add_Test(` opens a block like `add_test(`.
+def private matches_lowered(d; at : int; lowered : array<int>) : bool {
+    let m = length(lowered)
+    return false if (at + m > length(d))
+    for (i in range(m)) {
+        return false if (to_lower_byte(int(d[at + i])) != lowered[i])
+    }
+    return true
+}
+
 //! `text` with every // comment cut to end-of-line (string-literal-aware, so a "//" inside
 //! a quoted URL survives). Use before scanning sources or descriptors: a name mentioned
 //! only in a comment must not count.
@@ -203,9 +228,10 @@ def gate_descriptor_census(descriptor_path : string; census_dirs : array<string>
 //! double-quoted strings respected. Each result is the full block text, command name included.
 def cmake_command_blocks(text : string; command : string) : array<string> {
     var out : array<string>
+    var inscope needle <- lowered_bytes(command)
     peek_data(text) $(d) {
         let n = length(d)
-        let m = length(command)
+        let m = length(needle)
         var i = 0
         while (i < n) {
             if (int(d[i]) == '#') {   // a commented-out invocation must not open a block
@@ -214,7 +240,7 @@ def cmake_command_blocks(text : string; command : string) : array<string> {
                 }
                 continue
             }
-            if (!starts_with(d, i, command)) {
+            if (!matches_lowered(d, i, needle)) {
                 i++
                 continue
             }
@@ -267,11 +293,155 @@ def cmake_command_blocks(text : string; command : string) : array<string> {
     return <- out
 }
 
+//! Words of CMake text, `#` comments dropped, whitespace treated as a separator. A
+//! double-quoted run is one word: quotes removed, backslashes kept as written. `(` and `)`
+//! are words of their own, so a caller can see where one command's arguments end.
+def cmake_words(text : string) : array<string> {
+    var out : array<string>
+    peek_data(text) $(d) {
+        let n = length(d)
+        var i = 0
+        while (i < n) {
+            let c = int(d[i])
+            if (c == '#') {
+                while (i < n && int(d[i]) != '\n') {
+                    i++
+                }
+            } elif (c == '"') {
+                var j = i + 1
+                while (j < n && int(d[j]) != '"') {
+                    if (int(d[j]) == '\\' && j + 1 < n) {
+                        j++
+                    }
+                    j++
+                }
+                out |> push(slice(d, i + 1, j))
+                i = j + 1
+            } elif (c == '(' || c == ')') {
+                out |> push(slice(d, i, i + 1))
+                i++
+            } elif (is_white_space(c)) {
+                i++
+            } else {
+                var j = i
+                while (j < n && !is_word_break_byte(int(d[j]))) {
+                    j++
+                }
+                out |> push(slice(d, i, j))
+                i = j
+            }
+        }
+    }
+    return <- out
+}
+
+def private is_word_break_byte(b : int) : bool {
+    return is_white_space(b) || b == '(' || b == ')' || b == '#' || b == '"'
+}
+
+//! The argument words of one `command(...)` block - the command name and the enclosing
+//! parens dropped.
+def cmake_args(command_block : string) : array<string> {
+    var inscope words <- cmake_words(command_block)
+    var out : array<string>
+    var depth = 0
+    out |> reserve(length(words))
+    for (w in words) {
+        if (w == "(") {
+            depth++
+            continue if (depth == 1)
+        } elif (w == ")") {
+            break if (depth == 1)
+            depth--
+        }
+        out |> push(w) if (depth >= 1)
+    }
+    return <- out
+}
+
+//! True for a word CMake reads as a keyword rather than a value: caps, digits and
+//! underscores only, with at least one letter (`PROPERTIES`, `PASS_REGULAR_EXPRESSION`).
+def is_cmake_keyword(word : string) : bool {
+    var letters = 0
+    var ok = !empty(word)
+    peek_data(word) $(d) {
+        for (i in range(length(d))) {
+            let b = int(d[i])
+            if (b >= 'A' && b <= 'Z') {
+                letters++
+            } elif (!is_number(b) && b != '_') {
+                ok = false
+                break
+            }
+        }
+    }
+    return ok && letters > 0
+}
+
+//! Every ctest label the file's `LABELS` properties name, in order, without duplicates.
+//! Both spellings count: `LABELS "big;style_lint"` and the `LABELS big style_lint` an
+//! unquoted list expands to. Command-agnostic on purpose: `add_test`,
+//! `set_tests_properties` and a discovery macro's `PROPERTIES LABELS` all count.
+def cmake_test_labels(text : string) : array<string> {
+    var out : array<string>
+    var seen : table<string>
+    var inscope words <- cmake_words(text)
+    let n = length(words)
+    var i = 0
+    while (i < n) {
+        if (words[i] != "LABELS") {
+            i++
+            continue
+        }
+        // the value run ends at the next property keyword or at the end of the command
+        var j = i + 1
+        while (j < n && words[j] != ")" && words[j] != "(" && !is_cmake_keyword(words[j])) {
+            for (lab in split(words[j], ";")) {
+                continue if (empty(lab) || key_exists(seen, lab))
+                seen |> insert(lab)
+                out |> push(lab)
+            }
+            j++
+        }
+        i = j
+    }
+    return <- out
+}
+
+//! The word after `COMMAND` in every `add_test` block, verbatim - the thing that runs the
+//! test, which may be a target name, a `$<TARGET_FILE:x>` expression, or an interpreter.
+def cmake_test_commands(text : string) : array<string> {
+    var out : array<string>
+    for (blk in cmake_command_blocks(text, "add_test")) {
+        var inscope args <- cmake_args(blk)
+        for (i in range(length(args) - 1)) {
+            if (args[i] == "COMMAND") {
+                out |> push(args[i + 1])
+                break
+            }
+        }
+    }
+    return <- out
+}
+
+//! Name of the first argument of every `command(...)` block, in order - the target a
+//! `add_dependencies` / `add_custom_target` / `add_executable` block names.
+def cmake_command_targets(text : string; command : string) : array<string> {
+    var out : array<string>
+    for (blk in cmake_command_blocks(text, command)) {
+        var inscope args <- cmake_args(blk)
+        if (!empty(args)) {
+            out |> push(args[0])
+        }
+    }
+    return <- out
+}
+
 //! Entries of a CMake list across its `set(NAME ...)` and `list(APPEND NAME ...)` blocks,
 //! in order, `#` comments dropped. `${...}` references come back verbatim.
 def cmake_list_entries(text : string; listname : string) : array<string> {
     var out : array<string>
-    for (cmd in ["set", "SET", "list", "LIST"]) {
+    for (cmd in ["set", "list"]) {
         for (blk in cmake_command_blocks(text, cmd)) {
             let open = find(blk, "(")
             let body = slice(blk, open + 1, length(blk) - 1)

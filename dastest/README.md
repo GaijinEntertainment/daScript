@@ -85,5 +85,8 @@ Not part of the test runner: `dastest/review_gate.das` is the support library fo
 contract lives in `REVIEW_COMMON.md` at the repo root, vendored by repos that adopt it). It
 provides finding accumulation and the exit verdict (`gate_finding`, `gate_findings`,
 `gate_reset`, `gate_verdict`), plus tree-analysis helpers: `das_requires`,
-`cmake_command_blocks`, `cmake_list_entries`, `is_kebab_case`, `find_line`. It lives under
+`cmake_command_blocks`, `cmake_command_targets`, `cmake_words`, `cmake_args`,
+`cmake_list_entries`, `cmake_test_labels`, `cmake_test_commands`, `is_cmake_keyword`,
+`is_kebab_case`, `find_line`. The CMake helpers match command names case-insensitively, as
+CMake itself does. It lives under
 `dastest/` so an installed SDK carries it the same way it carries the test framework.
