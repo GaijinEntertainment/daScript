@@ -1124,6 +1124,25 @@ namespace das {
         }
     };
 
+    // signedness decided here, not by overload, so the negative test compiles away when unsigned
+    template <typename IndexT>
+    __forceinline bool das_dim_index_ok ( IndexT index, int size ) {
+        if ( is_signed<IndexT>::value && index < IndexT(0) ) return false;
+        return uint64_t(index) < uint64_t(size);
+    }
+
+    template <typename IndexT>
+    DAS_NORETURN_PREFIX __forceinline void das_dim_index_error ( IndexT index, int size, Context * __context__ ) DAS_NORETURN_SUFFIX;
+
+    template <typename IndexT>
+    __forceinline void das_dim_index_error ( IndexT index, int size, Context * __context__ ) {
+        if ( is_signed<IndexT>::value ) {
+            __context__->throw_error_ex("index out of range, %lld of %d", (long long)index, size);
+        } else {
+            __context__->throw_error_ex("index out of range, %llu of %d", (unsigned long long)index, size);
+        }
+    }
+
     template <typename TT, int size>
     struct TDim {
         using THIS_TYPE = TDim<TT, size>;
@@ -1136,38 +1155,16 @@ namespace das {
         __forceinline const TT & operator [] ( int32_t index ) const {
             return data[index];
         }
-    // index
-        __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
-            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %d of %d", index, size);
+    // index - one candidate per constness, since an index literal is an int by language rule
+        template <typename IndexT, typename = enable_if_t<is_integral<IndexT>::value>>
+        __forceinline TT & operator () ( IndexT index, Context * __context__ ) {
+            if ( !das_dim_index_ok(index, size) ) das_dim_index_error(index, size, __context__);
             return data[index];
         }
-        __forceinline const TT & operator () ( int32_t index, Context * __context__ ) const {
-            if ( index<0 || uint32_t(index)>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %d of %d", index, size);
+        template <typename IndexT, typename = enable_if_t<is_integral<IndexT>::value>>
+        __forceinline const TT & operator () ( IndexT index, Context * __context__ ) const {
+            if ( !das_dim_index_ok(index, size) ) das_dim_index_error(index, size, __context__);
             return data[index];
-        }
-        __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
-            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %u of %d", idx, size);
-            return data[idx];
-        }
-        __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
-            if ( idx>=uint32_t(size) ) __context__->throw_error_ex("index out of range, %u of %d", idx, size);
-            return data[idx];
-        }
-        __forceinline TT & operator () ( int64_t index, Context * __context__ ) {
-            if ( index<0 || uint64_t(index)>=uint64_t(size) ) __context__->throw_error_ex("index out of range, %lld of %d", (long long)index, size);
-            return data[index];
-        }
-        __forceinline const TT & operator () ( int64_t index, Context * __context__ ) const {
-            if ( index<0 || uint64_t(index)>=uint64_t(size) ) __context__->throw_error_ex("index out of range, %lld of %d", (long long)index, size);
-            return data[index];
-        }
-        __forceinline TT & operator () ( uint64_t idx, Context * __context__ ) {
-            if ( idx>=uint64_t(size) ) __context__->throw_error_ex("index out of range, %llu of %d", (unsigned long long)idx, size);
-            return data[idx];
-        }
-        __forceinline const TT & operator () ( uint64_t idx, Context * __context__ ) const {
-            if ( idx>=uint64_t(size) ) __context__->throw_error_ex("index out of range, %llu of %d", (unsigned long long)idx, size);
-            return data[idx];
         }
     // safe index
         static __forceinline TT * safe_index ( THIS_TYPE * that, int32_t index, Context * ) {

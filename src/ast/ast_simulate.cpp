@@ -3647,7 +3647,7 @@ namespace das
             macroStackSize = das::max(macroStackSize, 1 * 1024 * 1024);
         }
         thisModule->macroContext = get_context(macroStackSize);
-        thisModule->macroContext->category = uint32_t(das::ContextCategory::macro_context);
+        thisModule->macroContext->category = das::Bitfield(uint32_t(das::ContextCategory::macro_context));
         auto oldAot = policies.aot;
         auto oldHeap = policies.persistent_heap;
         policies.aot = false;

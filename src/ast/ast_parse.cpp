@@ -1391,15 +1391,11 @@ namespace das {
             size_t len_at = serializer_write->buffer->writingSize();
             *serializer_write << payload_size;
             size_t payload_start = serializer_write->buffer->writingSize();
-            if ( program->thisModule && program->thisModule->name.empty() )  {
-                serializer_write->serializeProgram(program, libGroup);
-            } else if ( program->thisModule.get() == thisModule ) {
-                // the ENTRY program still owns its module (dependency programs released
-                // theirs in addNewModules) - re-attaching via reset(get()) would delete
-                // the module and leave a dangling pointer
+            if ( program->thisModule )  {
+                // the program owns its module (entry script) - write as is, never mutate it
                 serializer_write->serializeProgram(program, libGroup);
             } else {
-                // set thisModule to program
+                // module was moved into the group by addNewModules - reattach for the write
                 program->thisModule.reset(thisModule);
                 serializer_write->serializeProgram(program, libGroup);
                 program->thisModule.release();

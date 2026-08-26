@@ -2,17 +2,9 @@
 # Cross-compile libDaScriptNano and the tier-A standalone example for a
 # cortex-m4, and print the size of what comes out.
 #
-# THIS DOES NOT PASS YET, and it is not wired into CI. It is the acceptance test
-# for the freestanding port, and running it names the work: newlib has no
-# posix_memalign / malloc_usable_size / madvise, its libstdc++ is built without
-# threads so <mutex> declares nothing, its uint32_t is `unsigned long` (which
-# makes every BitfieldAny and vec4<uint32_t> conversion ambiguous), and alloca
-# needs its own include. Those live in platform.h, smart_ptr.h, arraytype.h and
-# vectypes.h - shared headers every platform compiles, which is why the port is
-# its own change rather than a corner of nano.
-#
-# Once it is green it becomes nano's drift tripwire: a change that pulls the
-# compiler, fmt or the host's I/O back into the runtime fails here first.
+# nano's drift tripwire: nothing else in CI builds freestanding, so a change that
+# pulls the compiler, fmt, the host's I/O or a thread primitive back into the
+# minimal runtime fails here first and nowhere else.
 #
 # Usage: ci/nano_arm_build.sh <path-to-daslang> [out-dir]
 # Toolchain: apt-get install gcc-arm-none-eabi

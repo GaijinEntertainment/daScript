@@ -245,16 +245,8 @@ namespace das {
     struct BitfieldAny {
         ST value;
         __forceinline BitfieldAny() {}
-        __forceinline BitfieldAny(int32_t v) : value(ST(v)) {}
-        __forceinline BitfieldAny(uint32_t v) : value(ST(v)) {}
-        __forceinline BitfieldAny(int64_t v) : value(ST(v)) {}
-        __forceinline BitfieldAny(uint64_t v) : value(ST(v)) {}
-        __forceinline BitfieldAny(int8_t v) : value(ST(v)) {}
-        __forceinline BitfieldAny(uint8_t v) : value(ST(v)) {}
-        __forceinline BitfieldAny(int16_t v) : value(ST(v)) {}
-        __forceinline BitfieldAny(uint16_t v) : value(ST(v)) {}
-        __forceinline BitfieldAny(float v) : value(ST(v)) {}
-        __forceinline BitfieldAny(double v) : value(ST(v)) {}
+        // one candidate cannot be ambiguous, and explicit keeps narrowing at the call site
+        __forceinline explicit BitfieldAny(ST v) : value(v) {}
         __forceinline operator ST &() { return value; }
         __forceinline operator float() const { return float(value); }
         __forceinline operator double() const { return double(value); }
