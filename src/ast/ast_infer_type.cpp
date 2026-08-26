@@ -305,17 +305,23 @@ namespace das {
     }
     bool InferTypes::canVisitStructure(Structure *st) {
         if ( fatalAliasLoop ) return false;
-        return !st->isTemplate; // we don't do a thing with templates
-    }
-    void InferTypes::preVisitStructureAlias(Structure *var, const string &name, TypeDecl *at) {
-        Visitor::preVisitStructureAlias(var, name, at);
-        vector<string> visited;
-        visited.push_back(name);
-        if ( isLoop(visited, at) ) {
+        if ( st->isTemplate ) return false; // we don't do a thing with templates
+        bool aliasLoop = false;
+        st->aliases.foreach([&](const TypeDeclPtr & atype) -> bool {
+            vector<string> visited;
+            visited.push_back(atype->alias);
+            if ( isLoop(visited, atype) ) {
+                aliasLoop = true;
+                error("alias loop detected: '" + describeType(atype) + "'", "", "",
+                      atype->at, CompilationError::recursion_type_alias);
+            }
+            return true;
+        });
+        if ( aliasLoop ) {
             fatalAliasLoop = true;
-            error("alias loop detected: '" + describeType(at) + "'", "", "",
-                  at->at, CompilationError::recursion_type_alias);
+            return false;
         }
+        return true;
     }
     void InferTypes::preVisit(Structure *that) {
         Visitor::preVisit(that);

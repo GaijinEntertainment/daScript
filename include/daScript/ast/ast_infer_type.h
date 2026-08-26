@@ -337,7 +337,6 @@ namespace das {
 
         // strcuture
         virtual bool canVisitStructure(Structure *st) override;
-        virtual void preVisitStructureAlias(Structure *var, const string &name, TypeDecl *at) override;
         virtual void preVisit(Structure *that) override;
         virtual void preVisitStructureField(Structure *that, Structure::FieldDeclaration &decl, bool last) override;
         bool hasSafeWhenUninitialized(const AnnotationArgumentList &args) const;
