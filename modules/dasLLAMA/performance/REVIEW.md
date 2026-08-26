@@ -14,8 +14,8 @@ row, or a sidecar minted under noise, is a defect - re-mint on a box with no rem
 session.
 
 **A `das` row's `sha` and a sidecar's `provenance.engine_sha` entering `records/` name commits
-reachable from the branch under review.** A stamp naming no resolvable commit is a defect -
-re-mint.
+reachable from the branch under review.** A stamp naming a commit the branch under review
+cannot reach, one that resolves nowhere included, is a defect - re-mint.
 
 **A reference-engine row's `sha` entering `records/` matches the standing ref pin
 (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`).** A row naming another reference
@@ -30,8 +30,10 @@ build is a defect - re-mint.
 `../PROFILE.md` section documents.** A timing taken any other way - a lab's A/B arm, a
 reading compared across two processes or two commits, a wall measured from outside the
 benchmark process - settles its own decision in its own report and never reaches a record
-file. The cell runs the released `lcpp_bench` exe (`daspkg release`), never the `-jit`
-script.
+file.
+
+**A row entering `records/<box>.json` was timed by the released `lcpp_bench` exe
+(`../benchmarks/lcpp_bench.das` built by `daspkg release`), never by the `-jit` script.**
 
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the

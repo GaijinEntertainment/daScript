@@ -1,7 +1,8 @@
 # dasLLAMA benchmarks Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../PROFILE.md`.
+doc: `../PROFILE.md`. Planned work: `../PERF_LEDGER.md` for a performance followup,
+`../followup_general.md` for everything else.
 
 **An instrument whose timed body dispatches a pipeline the model runtime selected - not one
 the instrument compiled itself - calls `tune_gate()` (`../performance/profile_common.das`)
@@ -46,8 +47,8 @@ tool on a board workload.
 **An instrument this checklist governs that prints a number formed by subtracting one measured
 wall from another prints both raw walls on that report line.**
 
-**A change to what a board cell times - a timed cell of the published results board, one
-`../performance/gen_bench_records.das` spawns or a manual `lcpp_bench.das` cell
-`../PROFILE.md` documents - its code, its input corpus, or the pinned reference build
-(`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`) ships before/after rows for each affected cell
-and corpus, or a statement that the measured quantity is unchanged.**
+**A diff that changes what a board cell times - its code, its input corpus, or the pinned
+reference build (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`) - ships before/after rows for
+each affected cell and corpus, or states that the measured quantity is unchanged.** A board
+cell is a timed cell of the published results board: one `../performance/gen_bench_records.das`
+spawns, or a manual `lcpp_bench.das` cell with its own `../PROFILE.md` section.

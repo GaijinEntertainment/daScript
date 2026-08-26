@@ -12,16 +12,18 @@ corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 assert what they claim under the environment the runner arms for `model-free`
 (`DASLLAMA_CPU_PREFILL=1`), is listed in the `model-free` suite in the same change it is
 added and skips honestly without its models** - the per-PR gate then runs it wherever the
-models are stocked; a file that environment disarms says so in its header and is listed in
-no suite.
+models are stocked.
+
+**A test file that `DASLLAMA_CPU_PREFILL=1` disarms - the runner's `model-free`
+environment - says so in its header and is listed in no `run.das` suite.**
 
 **A test file in a `run.das` model suite (every suite but `model-free`) runs only through
 `run.das`; dastest invoked directly on such a file is a defect. A `model-free` file runs
 through the runner or under plain dastest.**
 
 **Every test RUN runs under `-jit`** - never the interpreter, never AOT. A compile-only CI lane
-passes dastest's `--compile-only`; a model-gated suite run interpreted, with skips standing in
-for the guard, is a defect.
+passes dastest's `--compile-only`; a model-gated suite run under the interpreter is a defect -
+its cells skip, and a run of skips is not the coverage the suite owes.
 
 **A `[test]` file that requires any `dasllama/*` module lives in this folder.** Out-of-folder
 instances are ledgered in `CLAUDE.md`'s "Out-of-folder test files" note.
@@ -139,21 +141,20 @@ input, which can wrongly satisfy a tolerant compare.
 reference leg, external dump or CPU control alike.
 
 **A stocked artifact a test in this folder loads - a model file, mmproj, image fixture, or
-oracle dump - has a row in `../performance/model_specs.das` (or `asr_catalog` in
-`../performance/profile_common.das`), or rides a row's `companions` list, or has a convert
-script checked in beside the table in `../performance/`, or - an oracle dump - has a mint
-script that regenerates it, beside the dumps under `models_dir()`, named in the test that
-loads the dump.**
+oracle dump - is traceable to something checked in.** Any one of these counts: a row in
+`../performance/model_specs.das`; a row's `companions` list; a row in `asr_catalog`
+(`../performance/profile_common.das`); a convert script beside `model_specs.das` in
+`../performance/`; or, for an oracle dump, a mint script that regenerates it, beside the
+dumps under `models_dir()` and named in the test that loads the dump.
 
 **A test that reads a vision encode oracle dump names the minting arm in its header - the
 backend, the flash-attention setting, and the mmproj precision the dump came from.**
 
-**A cell establishes every driver hook and serving-lane knob its claim depends on, and
-restores it before returning** - a hook here is any process-wide setter with no read-back,
-so a cell that changes one sets it back to its default before returning, and a cell whose
-claim needs the DEFAULT establishes that default too (the environment can carry the knob
-either way). The mechanism (why the hooks flip legs silently) is `CLAUDE.md`'s "Metal
-fixtures" section.
+**A cell establishes every driver hook and serving-lane knob its claim depends on - including
+one whose claim needs the knob at its DEFAULT - and restores each to its default before
+returning.** A hook is any process-wide setter with no read-back, and the environment can
+carry a knob either way. The mechanism (why the hooks flip legs silently) is `CLAUDE.md`'s
+"Metal fixtures" section.
 
 **A cell claiming a family serving lane pins it with `set_<family>_q8` and undoes the pin
 with `reset_<family>_q8`** - a runtime decline standing in for a pin is a defect: it measures
@@ -163,16 +164,20 @@ whichever lane the box's policy picked.
 `blob_twin(t, path, seq_cap)` for override-selected stages** - one session spans both models,
 since sessions are geometry-bound. A decline-reason cell keeps the planar model.
 
-**A new model-loading block is tagged with its family** - an untagged block silently joins
-every family's gate.
+**A new model-loading block is tagged with its family - the token passed to
+`family_on(t, name)` (`_model_tier.das`)** - an untagged block silently joins every
+family's gate.
 
 **No CPU-control batch parity runs against the 70B** - its batch coverage is ENGAGE-only in
 the support matrix, and the batched code paths get their parity on small models via pins.
 
-**A knob a cell can reach only through the environment is armed in the environment of a
-process started after the arming - a child the cell spawns, or the runner's own - and needs
-no restore; a cell that cannot arm it names in its assert text the value it asserts under.**
-An in-cell set is invisible to the running config, which is read once at context init.
+**A knob a cell can reach only through the environment is set before the process that reads
+it starts - a child the cell spawns, or the runner's own - and needs no restore.** An in-cell
+set is invisible to the running config, which is read once at context init.
+
+**A cell that cannot set an environment-read knob - one the running config reads once, at
+context init - before its reader starts names, in its assert text, the value it asserts
+under.**
 
 **A cell asserting the UNPINNED default lane compares against the predicates the lane policy
 itself consults - `float_batch_override_active()` and the family's `<family>_gpu_would_serve()`

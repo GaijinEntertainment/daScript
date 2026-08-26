@@ -72,8 +72,8 @@ f32 fallback is for correctness rails only.** A new call to an f32 matmul (`matm
 `mm_blob_b`, per-head `gemm_f32`, or an f32 GPU mm) outside a parity or oracle rail, where a
 faster-format twin already serves the same weights and shape, is a defect. Weights with no
 faster twin (unquantized planes) are out of scope; a site that must stay f32 for another
-reason is ledgered on the site's `ARCHITECTURE.md` sec.1 charter line, not commented into
-compliance.
+reason is ledgered on its own file's charter line in `ARCHITECTURE.md` sec.1, not commented
+into compliance.
 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
 file.** A platform-neutral engine file carrying it is a defect.
@@ -158,12 +158,12 @@ delta, a noise floor, tuner timing - is settled by the sidecar or manifest that 
 value; written into a source comment or a doc it is a timing figure like any other.
 
 **A figure measuring one engine stage inside a served turn - a stage wall, a stage share, a
-stage speedup, or a cross-engine comparison of one stage; never a board cell's `pp`/`tg`
-rate and never the whole wall of a `benchmarks/lcpp_bench.das` `-p`/`-n` cell - names the
-harness and flags that produced it, wherever it is written down: a checked-in doc, a
-ledger, a code comment, or a PR description.** The naming rides the
-figure's own sentence, a table heading that covers the table's rows, or a section-level
-provenance line that covers the paragraphs under it.
+stage speedup, or a cross-engine comparison of one stage - names the harness and flags that
+produced it, wherever it is written down: a checked-in doc, a ledger, a code comment, or a
+PR description.** A board cell's `pp`/`tg` rate and the whole wall of a
+`benchmarks/lcpp_bench.das` `-p`/`-n` cell measure the turn, not a stage, and are not stage
+figures. The naming rides the figure's own sentence, a table heading that covers the
+table's rows, or a section-level provenance line that covers the paragraphs under it.
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
 `parse_image`'s mapping, and going live does no real work - repacking, quantizing, folding,

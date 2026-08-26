@@ -167,8 +167,8 @@ driver declines codec-mismatched sessions silently.
 kernel class the tower dispatches or builder the tower borrows, or to state the whole
 driver shares (a module-level `g_tw_*` variable, `metal_tower_init`,
 `dasllama_metal_tower_register` - reachable from every hook) runs the gate of every
-registered tower hook the changed code is reachable from.** The gates: the
-family gates `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, `tests/test_gemma3v.das`, and
+registered tower hook the changed code is reachable from.** The gates: the family gates
+`tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, `tests/test_gemma3v.das`, and
 `test_qwen3v_tier1_metal` in `tests/test_qwen3v.das`; the encoder-blocks leg's
 `tests/test_whisper.das`; the conv legs' `tests/test_audio.das` and
 `tests/test_audio_embedder.das`; plus a `tests/test_model_image.das` run with the `mtower`

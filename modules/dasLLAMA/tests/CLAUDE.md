@@ -15,11 +15,9 @@ one-arm fix into an afternoon.
 `test_model_image` - it omits `image-vulkan`, `coverage` and `model-free`.
 
 Every suite but `model-free` needs `--arm`; `--full` parses and is then refused, so `--arm` is
-the only way in. `--suite model-free` takes neither - it is the whole gate. Scope every gate
-with `--arm` to the arms the change can actually affect (a whole-zoo pass buys soak time, not
-coverage; e.g. a driver change gates on `--arm arm,batch --suite decode`). The runner tees
-the COMPLETE output to a log file (path printed on the DONE line), owns the dastest timeout,
-and repeats only when `--nreps` is passed explicitly (default 1, never best-of-N).
+the only way in. `--suite model-free` takes neither - it is the whole gate. The runner tees the
+COMPLETE output to a log file (path printed on the DONE line), owns the dastest timeout, and
+repeats only when `--nreps` is passed explicitly (default 1, never best-of-N).
 
 ## The iteration loop
 
@@ -31,7 +29,8 @@ and repeats only when `--nreps` is passed explicitly (default 1, never best-of-N
   needs a large model, it needs a large model.
 - Batch every pending fix; never re-run a full suite per fix.
 - The pre-commit gate is the `--arm` set covering every arm the batched fixes can affect
-  (e.g. `--arm arm,batch --suite decode` plus the touched suites' arms).
+  (e.g. `--arm arm,batch --suite decode` plus the touched suites' arms) - a whole-zoo pass
+  buys soak time, not coverage.
 
 ## Arm filter mechanics
 
@@ -65,6 +64,7 @@ per backend, the prefill logits with the tails minus the same logits with the ta
 the GPU's contribution must clear a 0.01 floor and its max difference from the CPU's must
 stay under half the GPU's own contribution - greedy tokens tie on the counting fixture, so
 a skipped add hides from them).
+
 Support matrix: `cells-q8 window cells-s16 mode kq tensor dim8b dim70b` + the
 family matrix `fam-qwen3 fam-qwen2 fam-phi3 fam-gemma2 fam-gemma3 fam-gemma4 fam-qwen3moe
 fam-gemma4moe fam-gptoss fam-gemma4e fam-qwen35 fam-qwen35moe fam-qwen2moe` (needs-derivation pins +
@@ -77,9 +77,11 @@ fam-qwen35/fam-qwen35moe are deltanet hybrids whose batch cell asserts the per-r
 shape - metal batch steps 0, both rows served on the single-decode path; fam-qwen2moe's
 batch cell asserts the `graph` DECLINE on the planar model - shexp has no batch arm, and a
 blob twin's CPU batch fallback would trip the blob-only panic).
+
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
-carrier, model-free - the one image-suite arm that runs with no model stocked) `smol metal gemma tower whisper voxtral parakeet qwen3a canary
-canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e mtower`; `gemma4e` is the E2B metal-blob
+carrier, model-free - runs with no model stocked) `smol metal gemma tower whisper voxtral
+parakeet qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
+mtower`; `gemma4e` is the E2B metal-blob
 mint+map arm - the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
 embedding table's plane is short) runs after the blob plane borrows, so a fresh mint and a warm
 map must both clear it; `gemma4uv-metal` is the GPU tower
@@ -88,11 +90,10 @@ gemma4uv` selects it too - arm filters match by substring); `mtower` is the whis
 tower-blocks gate, Apple builds only - whisper tiny + large-v3-turbo transcript-exact and
 qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter deltas, plus
 the tower q8-decline (the serving default never dispatches the TOWER), required-mode panic, and
-Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv` cell in
-`test_model_image.das` - 
-GPU cross-KV on the q8 serving default, transcript-exact against the CPU chain with
-window/step counter deltas and the knob and quant_mode declines, required-mode, step-floor and shutdown-re-arm
-contract; the voxtral arm re-saves a
+Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv`
+cell in `test_model_image.das` - GPU cross-KV on the q8 serving default, transcript-exact
+against the CPU chain with window/step counter deltas and the knob and quant_mode declines,
+required-mode, step-floor and shutdown-re-arm contract; the voxtral arm re-saves a
 5.4 GB image from cold every run by design (it IS the >2 GiB-plane IO coverage); the `metal`
 arm mints/maps the blob-only metal flavor (SmolLM2) incl. the CPU-tripwire and a
 teacher-forced logits-tolerance parity cell (greedy token equality is NOT a valid bar on a
@@ -101,10 +102,12 @@ arms (`parakeet` transcript-exact, `qwen3a`/`canary`/`gemma4a` element-exact pla
 `canary-dec` = the opt-in fp32 Model rail, token-exact) re-save their images from cold each
 run like the voxtral arm. The canary arm carries both lanes: the f32 element-exact cell and
 the q8 cell (read-time transcode - qblob/qscales/compact-blob element-exact vs a staged read).
+
 The `image-vulkan` suite (test_model_image_vulkan, arm `vulkan`) covers the OFFLINE vulkan
 bake: the runner arms DASLLAMA_GPU + a small VRAM budget so the probed config carries a
 vulkan section, the DRY tier collects a role-stamped plan with no device calls (safe on
 GPU-less boxes), and the flavor image round-trips the plan verbatim.
+
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
 under `DASLLAMA_PARITY_FULL=1`) is the KERNEL COVERAGE census (the census-row obligation is
@@ -121,8 +124,8 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 
 ## Metal kernel gates
 
-The `kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels - 
-model-less per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has
+The `kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels - model-less
+per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has
 no arms; remember it exists (the hand-bound-gate sync obligation is `REVIEW.md`'s). Shared
 fixtures (buf helpers, the mismatch compares that dump both sides, kq plane + q8 blob
 builders) live in `_metal_kernel_common.das`; `test_metal_prefill_kernels.das` keeps its tag-less
@@ -140,9 +143,9 @@ garbage silently - no error, a plausible wrong number.
 
 Which files belong to the `model-free` suite is `REVIEW.md`'s to say. The runner sets
 `DASLLAMA_CPU_PREFILL=1` for every child, which is why the CPU-prefill tripwire cannot ride
-the `model-free` suite - the runner disarms the guard it asserts. Such a file runs under
-plain dastest (still `-jit`) or as a set through `run.das -- --suite model-free`, the per-PR
-gate. The map below is partial: `run.das`'s `model-free` list is the census.
+the `model-free` suite - the runner disarms the guard it asserts. A `model-free` file runs
+under plain dastest (still `-jit`) or as a set through `run.das -- --suite model-free`, the
+per-PR gate. The map below is partial: `run.das`'s `model-free` list is the census.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
@@ -177,14 +180,13 @@ prefill intent.
 `test_audio.das` - model-free: the audio front-end units (gelu-erf, hann window, mel
 filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle gates
 (ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles - CPU-claim cells, tower knob
-pinned OFF per the fixtures section) and the `test_encoder_blocks_gpu` cell, the qwen2audio +
-voxtral 32-layer CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas - 
-Apple builds, `-jit`; skips honestly without the qwen2audio / voxtral mmprojs.
+pinned OFF) and the `test_encoder_blocks_gpu` cell, the qwen2audio + voxtral 32-layer
+CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas - Apple builds, `-jit`;
+skips honestly without the qwen2audio / voxtral mmprojs.
 `test_whisper.das` - model-free suite; model-gated: the whisper/parakeet/canary/gemma4a/omni
 oracle cells, the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
 f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp), and the q8-gate CPU-vs-CPU claims
-(CPU-claim cells, wdec knob pinned OFF per the fixtures section); its ungated cells are the
-model-free half.
+(CPU-claim cells, wdec knob pinned OFF); its ungated cells are the model-free half.
 `test_asr_verbs.das` - model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
 `asr_encode_bucket`) over constructed structs and parakeet's SPM detokenizer over a toy vocab.
 `test_model_specs.das` - model-free: the model-set table's shape invariants
@@ -196,7 +198,7 @@ by position; >= 2 official vision rows), and the pinned image fixture's provenan
 `test_parity.das` - model-free suite; model-gated: the frozen token-for-token parity gates. ONE
 generic loop drives every evidence-carrying spec of the model-set table through its declared
 pinned arms (evidence is DATA on `ModelSpec.parity` - ids + arms, regenerated via
-`harness/parity.sh`); hand-written arms remain only for the tied-cls bit-match and the gpt-oss
+`../harness/parity.sh`); hand-written arms remain only for the tied-cls bit-match and the gpt-oss
 shared-load double fixture. Every compare logs both decoded streams. Large carriers gate
 on `DASLLAMA_PARITY_FULL=1` via `model_available`.
 `test_parity_pregate.das` - model-free suite; model-gated: the board parity pregate
@@ -235,9 +237,9 @@ fixture by the encodes counter.
 minted on the f32-widened mmproj, CPU, `-fa off` (`mint_e2b.sh` / `mint_e4b.sh`): eight E2B
 fixtures (96^2 cb through 672x336) on the scale-relative bar 2e-4 + 4e-3*token-rms, the measured
 maxdiff logged per fixture; plus the clamp knockout (every block clamp disarmed through the
-staging planes must miss the oracle - the sidecar scalars are load-bearing); plus the E4B rung - 
-the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam subset
-with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps.
+staging planes must miss the oracle - the sidecar scalars are load-bearing); plus the E4B
+rung - the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam
+subset with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps.
 `test_gemma3v.das` - the gemma3 SigLIP tower (gemma-3-4b mmproj) tier-1 parity vs the
 `-p encode` dumps minted on the f32-widened f16 mmproj, CPU, `-fa off`
 (`gemma3-vision-oracle/mint_gemma3.sh`): the canvas is FIXED 896^2 (learned position table), so
@@ -258,9 +260,9 @@ merged-patch-grid panic gate; and the Qwen3-VL 4B DEEPSTACK leg (taps 5/11/17, w
 10240-float rows) on four fixtures at 2e-4 + 4e-2*rms - the 4B dumps carry q1/q2/q3 quarter-offset probe
 fields - the compare applies them when the dump has them - hitting each concatenated
 slice's first element (a skipped-tap poison lands at 6.9-9.7 on them, 600x; mean+v0..v3
-alone are BLIND to a zeroed slice). The q8 serving lane (the CPU policy default when
-neither the Metal tower nor the accelerate float-batch tier serves - 
-`qwen3v_gpu_would_serve()` is the driver clause) gets its own cells, each bar carrying its own
+alone are BLIND to a zeroed slice). The q8 serving lane (the CPU policy default when neither
+the Metal tower nor the accelerate float-batch tier serves - `qwen3v_gpu_would_serve()` is the
+driver clause) gets its own cells, each bar carrying its own
 must-EXCEED poison leg - a block's qblob region zeroed through the staging planes, scored
 by `encode_excess`: the Omni leg on gray448 + cb448 + cb96 at its measured 5.2e-1*rms bar,
 poisoned at a mid-stack block; the deepstack leg on cb448 + cb96 at 6.5e-1, poisoned at
@@ -275,9 +277,10 @@ The model-gated cells skip honestly without the mmprojs or dumps (the metal cell
 gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - the qwen25v tower (Qwen2.5-Omni's window-attention ViT, projector
 `qwen2.5o`) tier-1 parity vs the `-p encode` dumps minted on the f32-widened dual-tower
-mmproj, CPU (`qwen3vl-vision-oracle/mint_25o.sh`): five fixtures, four of them shaped - 
-cb112 = the single-window arm, cb448 = four full windows, cb616x336 = ragged window edges, and quad448 = the WINDOW
-DISCRIMINATOR (four exact-value quadrants; uniform/periodic fixtures make every window
+mmproj, CPU (`qwen3vl-vision-oracle/mint_25o.sh`): five fixtures, four of them shaped - cb112 =
+the single-window arm, cb448 = four full windows, cb616x336 = ragged window edges, and
+quad448 = the WINDOW DISCRIMINATOR (four exact-value quadrants; uniform/periodic fixtures
+make every window
 statistically identical, so an all-full-attention poison hides under them - quad reds it at
 10.7 vs the 2e-4 + 1e-2*rms bar) - plus the merged-patch-grid panic gate. No q8 lane in
 this tower, so no q8-lane cells. Skips honestly without the mmproj or dumps.
@@ -315,9 +318,8 @@ fixture (test_flash's), skips without it.
 causal, MROPE-quantum, and DEEPSTACK-quantum alike (the metal rail serves all four, so a
 CPU-served one is a silent fallback);
 same stories15M fixture, deliberately never calls `allow_cpu_prefill()` (which is why it
-cannot live in test_attn_span - that file arms it in `[init]`, and why it stays out of the
-runner's `model-free` suite - the runner sets `DASLLAMA_CPU_PREFILL=1`). Metal-capable builds
-only; plain dastest only.
+cannot live in test_attn_span - that file arms it in `[init]`). Metal-capable builds only;
+plain dastest only.
 `test_vision_chat.das` - the image chat turn end to end, one pair per vision carrier plus the
 showcase: the 12B gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`), the E2B
 gemma4v pair (E2B Q8 decoder + bf16 mmproj - small tier, runs without the flag), the
@@ -339,8 +341,7 @@ the prompt stream shape around the splice
 (marker ids, media-first, span length from the geometry) and the greedy caption, logged in
 full. NOT token-parity with
 llama-mtmd-cli - the oracle renders its jinja template in thinking mode while dasLLAMA's gemma-4
-arm defaults to instruct, and freeform token-parity cells are banned - freeform coverage uses
-the forced-feed logits-tolerance form. On Apple
+arm defaults to instruct. On Apple
 builds the turn also carries the tower legs: the default caption's image encode must show an
 encodes delta (GPU-served), then a knob-off chat repeats the turn on the CPU embedder and
 must clear the same caption bar - the caption names the cats and is a description, not a
@@ -377,7 +378,9 @@ required-mode panic cell uses it.
 `--family <tokens>` (env `DASLLAMA_TEST_FAMILY`, comma list) composes with `--arm`: only
 model blocks tagged with a listed family run - `family_on(t, name)` in
 `_model_tier.das`, EXACT token match, loud `t |> skip` like the arm filter. Model-free blocks
-(the `kernels` suite, the image `mechanics` arm) carry no tag and always run. Family tokens: `llama` (all four metal suites + the image smol arm), `qwen2`, `qwen3`, `phi3`,
+carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`, `matrix` and
+`coverage`, plus the image `smol` and `metal` arms and the `image-vulkan` `vulkan` arm),
+`qwen2`, `qwen3`, `phi3`,
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe` (the support-matrix family cells), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
 `gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0 and
@@ -399,8 +402,8 @@ that carry that coverage instead are e.g. `set_metal_batch_addrms_unfused`.
 
 ## Log discipline
 
-Always capture COMPLETE logs (the runner does this); grep afterwards, never at capture time - 
-a capture-time filter can hide the exact proof line the run exists to produce, and the silent
+Always capture COMPLETE logs (the runner does this); grep afterwards, never at capture time - a
+capture-time filter can hide the exact proof line the run exists to produce, and the silent
 capture reads as success.
 The size/depth-claim assert ("2030 tokens", "crosses 2048") is `REVIEW.md`'s obligation.
 Logging both decoded streams is too; the mechanism is that a near-tie synonym flip and real

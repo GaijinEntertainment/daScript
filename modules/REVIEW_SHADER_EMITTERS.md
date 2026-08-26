@@ -20,9 +20,11 @@ together with its own list.**
   a shape constant is a tile row count, tile column count, cooperating-simdgroup count, staged
   chunk depth, or any other value that fixes the kernel's tiling.
 
-- **A K width known only at run time rides the emitter's runtime-extent descriptor**
-  (`dynamic_extent` on Metal; a `tensorLayout2D` / `tensorLayout2DPad` whose dimension
-  `tensorLayoutSetDimension` sets on SPIR-V).
+- **A matmul reduction width - the K dimension, the length of the loop the kernel accumulates
+  over - that is known only at run time is passed through the emitter's runtime-extent
+  descriptor** (`dynamic_extent` on Metal; a `tensorLayout2D` / `tensorLayout2DPad` whose
+  dimension `tensorLayoutSetDimension` sets on SPIR-V). K does not fix tiling, so it is not
+  a shape constant.
 
 - **A new kernel capability that would need a runtime shape value ships a specialization path -
   one compiled variant per constant shape - or the module's `MASTERPLAN.md` records that it
@@ -35,5 +37,5 @@ together with its own list.**
   the shared ledger (`modules/dasMetal/MASTERPLAN.md`).
 
 - **An emitter diff that uses a `daslib/shader_lingua_franca` declaration this emitter does not
-  yet handle ships that emitter's lowering of it, or the fail-closed fixture that rejects it by
+  handle ships that emitter's lowering of it, or the fail-closed fixture that rejects it by
   name, in the same change.** A declaration in that module is available to both emitters.
