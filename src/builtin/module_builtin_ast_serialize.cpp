@@ -3087,6 +3087,12 @@ namespace das {
                 }
             }
 
+            if ( program->library.getModules().empty() ) {
+                LOG(LogLevel::warning) << "das: serialize: program '" << program->thisModuleName << "' stream has no modules\n";
+                program->failToCompile = true;
+                return;
+            }
+
             program->thisModule.reset(program->library.getModules().back());
             // the deserialized module is the program's module now — new nodes and the
             // ModuleGcFinalize collect belong on its root
