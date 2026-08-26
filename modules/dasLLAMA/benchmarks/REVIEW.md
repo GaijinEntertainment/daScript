@@ -4,39 +4,45 @@
 doc: `../PROFILE.md`. Planned work: `../PERF_LEDGER.md` for a performance followup,
 `../followup_general.md` for everything else.
 
-**An instrument whose timed body dispatches a pipeline the model runtime selected - not one
-the instrument compiled itself - calls `tune_gate()` (`../performance/profile_common.das`)
-before its first timed rep**, or it measures fallback kernels silently. Tokenizing and
-detokenizing (`encode` / `encode_` / `decode` / `decode_`, on a `Model` or a `Tokenizer`) run
-no forward pass, so nothing there is gated.
+**An instrument whose timed body dispatches a pipeline the model runtime selected calls
+`tune_gate()` (`../performance/profile_common.das`) before its first timed rep.** A pipeline
+the instrument compiled itself is not one the runtime selected, and it does not fire this rule.
+Tokenizing and detokenizing run no forward pass, so nothing there is gated: `encode`,
+`encode_`, `decode`, and `decode_`, on a `Model` or a `Tokenizer`. Without the gate the
+instrument measures fallback kernels silently.
 
-**A race this checklist governs - an instrument that compares two implementations - times
-both arms interleaved in one process; a Metal race does that through `race_pair_ms`.** Two
-separate runs measure the box's drift between them as much as the arms.
+**A race times both arms interleaved in one process.** A race is an instrument that compares
+two implementations. The rule fires on every race this checklist governs. A Metal race
+interleaves through `race_pair_ms`. Two separate runs measure the box's drift between them as
+much as they measure the arms.
 
-**An A/B arm reported as adoptable evidence that produces no comparable output - it exists
-only to time work - carries the literal token `timing-only` in its report line.**
+**An A/B arm that produces no comparable output carries the literal token `timing-only` in its
+report line.** The rule fires on an arm reported as adoptable evidence. An arm with no
+comparable output exists only to time work.
 
-**An A/B arm reported as adoptable evidence that computes the baseline's result in a
-different precision prints a bounded-difference compare against the baseline arm or the CPU
-reference, and the bound it passed.**
+**An A/B arm that computes the baseline's result in a different precision prints a
+bounded-difference compare.** The rule fires on an arm reported as adoptable evidence. The
+compare runs against the baseline arm or against the CPU reference. The report line also
+prints the bound the arm passed.
 
-**An A/B arm reported as adoptable evidence that computes the baseline's result in the same
-precision prints the bit-exact compare over the sampled region - the output elements the run
-compares - on the report's "bit-exact vs ..." line.**
+**An A/B arm that computes the baseline's result in the same precision prints the bit-exact
+compare over the sampled region.** The rule fires on an arm reported as adoptable evidence.
+The sampled region is the set of output elements the run compares. The compare prints on the
+report's "bit-exact vs ..." line.
 
 **A race that picks between two implementations also checks its baseline arm against a CPU
 reference.** The baseline arm is the arm the race already trusts. The reference check runs in
 the same process, on the same output elements the arms are judged on. Two arms can agree and
 both be wrong; only the reference makes the winner right.
 
-**A knockout or sweep instrument - one whose arms ATTRIBUTE cost across stages rather than
-select between two implementations - carries the literal text `ATTRIBUTION SWEEP` in its
-file header comment, on a line that also names what its arms attribute.** Without it a reader
-takes the sweep's arms for an adoption decision it never made.
+**A knockout or sweep instrument carries the literal text `ATTRIBUTION SWEEP` in its file
+header comment.** A knockout or sweep instrument is one whose arms ATTRIBUTE cost across
+stages instead of selecting between two implementations. The same header line also names what
+its arms attribute. Without that text a reader takes the sweep's arms for an adoption decision
+it never made.
 
-**An out-of-process observer - a script that measures a benchmark process from outside -
-measures only what a process cannot measure about itself.**
+**An out-of-process observer measures only what a process cannot measure about itself.** An
+out-of-process observer is a script that measures a benchmark process from outside.
 
 **A timing instrument this checklist governs never writes the wall time of a binary this
 repository does not build - a third-party reference tool - into
@@ -44,11 +50,13 @@ repository does not build - a third-party reference tool - into
 the reference cells of `../performance/gen_bench_records.das`, the cells that time such a
 tool on a board workload.
 
-**An instrument this checklist governs that prints a number formed by subtracting one measured
-wall from another prints both raw walls on that report line.**
+**An instrument that prints a number formed by subtracting one measured wall from another
+prints both raw walls on that report line.** The rule fires on every instrument this checklist
+governs.
 
-**A diff that changes what a board cell times - its code, its input corpus, or the pinned
-reference build (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`) - ships before/after rows for
-each affected cell and corpus, or states that the measured quantity is unchanged.** A board
-cell is a timed cell of the published results board: one `../performance/gen_bench_records.das`
-spawns, or a manual `lcpp_bench.das` cell with its own `../PROFILE.md` section.
+**A diff that changes what a board cell times ships before/after rows for each affected cell
+and corpus.** A board cell is a timed cell of the published results board: one
+`../performance/gen_bench_records.das` spawns, or a manual `lcpp_bench.das` cell with its own
+`../PROFILE.md` section. What a cell times changes when its code changes, when its input
+corpus changes, or when the pinned reference build changes (`DEFAULT_REF_SHA` in
+`setup_lcpp_ref.das`). The diff may instead state that the measured quantity is unchanged.

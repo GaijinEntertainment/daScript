@@ -14,23 +14,23 @@ one-arm fix into an afternoon.
 `all` (the default) runs the parity suites, the support matrix, the kernel files and
 `test_model_image` - it omits `image-vulkan`, `coverage` and `model-free`.
 
-Every suite but `model-free` needs `--arm`; `--full` parses and is then refused, so `--arm` is
-the only way in. `--suite model-free` takes neither - it is the whole gate. The runner tees the
-COMPLETE output to a log file (path printed on the DONE line), owns the dastest timeout, and
-repeats only when `--nreps` is passed explicitly (default 1, never best-of-N).
+Every suite but `model-free` needs `--arm`. `--full` parses and is then refused, so `--arm` is
+the only way in. `--suite model-free` takes neither - it is the whole gate. The runner tees
+the COMPLETE output to a log file, and prints that path on the DONE line. It owns the dastest
+timeout. It repeats only when `--nreps` is passed explicitly (default 1, never best-of-N).
 
 ## The iteration loop
 
-- Before launching any suite, state what the change can affect; a default-off knob or a
+- Before launching any suite, state what the change can affect. A default-off knob or a
   comment edit does not need a rerun.
 - Fixing or adding one arm runs exactly that arm: `--arm arm12 --suite decode`.
-- Coverage is a cell in a suite, never a scratchpad probe - a probe proves nothing after the
-  session that wrote it and its setup diverges from the suite's silently. If covering a path
+- Coverage is a cell in a suite, never a scratchpad probe. A probe proves nothing after the
+  session that wrote it, and its setup diverges from the suite's silently. If covering a path
   needs a large model, it needs a large model.
-- Batch every pending fix; never re-run a full suite per fix.
-- The pre-commit gate is the `--arm` set covering every arm the batched fixes can affect
-  (e.g. `--arm arm,batch --suite decode` plus the touched suites' arms) - a whole-zoo pass
-  buys soak time, not coverage.
+- Batch every pending fix. Never re-run a full suite per fix.
+- The pre-commit gate is the `--arm` set covering every arm the batched fixes can affect -
+  for example `--arm arm,batch --suite decode` plus the touched suites' arms. A whole-zoo
+  pass buys soak time, not coverage.
 
 ## Arm filter mechanics
 
@@ -114,10 +114,10 @@ under `DASLLAMA_PARITY_FULL=1`) is the KERNEL COVERAGE census (the census-row ob
 `REVIEW.md`'s): the small-model zoo swept across format/graph/batch/KV axes, then a
 report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
 kernels - never an auto-dead verdict. A zero means "nothing THIS zoo runs dispatched it",
-never "unreachable": a kernel's dispatch predicate can be satisfiable by a servable model,
-quant, or shape nobody stocks locally, and by any family registered later, so before
-deleting a kernel the census only points the reachability audit of that predicate - it never
-settles it. Small-tier warnings for kernels whose carriers sit above the tier
+never "unreachable". A kernel's dispatch predicate can be satisfiable by a servable model,
+quant, or shape nobody stocks locally, and by any family registered later. So before a kernel
+is deleted, the census only points the reachability audit of that predicate; it never settles
+it. Small-tier warnings for kernels whose carriers sit above the tier
 (MoE/mx4/suppress) are expected - their census rows serve only under `DASLLAMA_PARITY_FULL=1`;
 the served-count floor is asserted only on family-unfiltered runs. The vulkan half here is
 the device-free rail unit; the serving vulkan census runs on the PC box.
@@ -125,15 +125,16 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 ## Metal kernel gates
 
 The `kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels - model-less
-per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has
-no arms; remember it exists (the hand-bound-gate sync obligation is `REVIEW.md`'s). Shared
-fixtures (buf helpers, the mismatch compares that dump both sides, kq plane + q8 blob
-builders) live in `_metal_kernel_common.das`; `test_metal_prefill_kernels.das` keeps its tag-less
-mismatch compares local - a same-arity twin would collide with the shared tagged one.
-`_mtl_toy.das` is the `[metal_dispatch]` multi-kernel (kernel=) fixture - its gate in
-the misc file dispatches through the GENERATED builders (kn_ rail), not hand binds.
+per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has no arms;
+remember it exists (the hand-bound-gate sync obligation is `REVIEW.md`'s). Shared fixtures
+(buf helpers, the mismatch compares that dump both sides, kq plane + q8 blob builders) live
+in `_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
+compares local - a same-arity twin would collide with the shared tagged one. `_mtl_toy.das`
+is the `[metal_dispatch]` multi-kernel (kernel=) fixture; its gate in the misc file
+dispatches through the GENERATED builders (kn_ rail), not hand binds.
+
 The control obligation for a new gate or bar is `REVIEW.md`'s. Size a poison as a value ADDED
-to the expected result, not as a multiple of the tolerance: a tolerance that scales with the
+to the expected result, not as a multiple of the tolerance. A tolerance that scales with the
 accumulation length swallows a scaled poison at the kernel's longest dot product, which is
 exactly where a bug hides. Every compare against a derived truth gets its own poison. A gate
 that skips `metal_set_threadgroup_memory_length` for a kernel with `@workgroup` state reads
@@ -142,10 +143,11 @@ garbage silently - no error, a plausible wrong number.
 ## Model-free / no-arm tests
 
 Which files belong to the `model-free` suite is `REVIEW.md`'s to say. The runner sets
-`DASLLAMA_CPU_PREFILL=1` for every child, which is why the CPU-prefill tripwire cannot ride
-the `model-free` suite - the runner disarms the guard it asserts. A `model-free` file runs
-under plain dastest (still `-jit`) or as a set through `run.das -- --suite model-free`, the
-per-PR gate. The map below is partial: `run.das`'s `model-free` list is the census.
+`DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride
+the `model-free` suite: the runner disarms the guard that tripwire asserts. A `model-free`
+file runs under plain dastest (still `-jit`), or as a set through
+`run.das -- --suite model-free`, the per-PR gate. The map below is partial. `run.das`'s
+`model-free` list is the census.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
@@ -350,8 +352,8 @@ fragment - with zero tower dispatches and the knob decline counted.
 ## Model loads - never the image rail
 
 The loader obligation is `REVIEW.md`'s. The mechanism: the `.dlim` image rail stamps every
-mint with the box identity (backend pin, wscale, tune manifest) and GC-purges sibling
-flavors; a suite child's pinned identity differs from the serving rig's, so a suite on the
+mint with the box identity (backend pin, wscale, tune manifest), and GC-purges sibling
+flavors. A suite child's pinned identity differs from the serving rig's. So a suite on the
 rail both re-mints multi-GB images the rig cannot use and purges the flavors the rig depends
 on. Image-rail coverage (mint, map, GC, flavors) lives in the image suites alone
 (`test_model_image`, `test_model_image_vulkan`).
@@ -359,19 +361,19 @@ on. Image-rail coverage (mint, map, GC, flavors) lives in the image suites alone
 ## Metal fixtures - driver knobs and the two-model pattern
 
 The establish-and-restore obligation is `REVIEW.md`'s. The mechanism: the hooks are on by
-default, so they flip a q8 leg to the GPU silently, and an f32 leg records a quant_mode
-decline that panics under required mode - either way the cell stops measuring what its name
-says. The family serving-lane pins (`set_<family>_q8`) are the same trap in the other
-direction: an unpinned lane cell measures whichever lane the box's policy picked.
+default. They flip a q8 leg to the GPU silently, and an f32 leg records a quant_mode decline
+that panics under required mode. Either way the cell stops measuring what its name says. The
+family serving-lane pins (`set_<family>_q8`) are the same trap in the other direction: an
+unpinned lane cell measures whichever lane the box's policy picked.
 
-The Metal drivers serve ONLY blob-form models (`convert_model_to_metal_blob` /
-metal-flavor images), and CPU inference on a blob model PANICS - which is why a CPU-vs-GPU
-arm needs the planar model plus its `blob_twin(t, path, seq_cap)`. Decline-reason cells keep
-the planar model: capability reasons (`feature`, `graph`, `shape`, ...) out-rank the
-`planar` decline in every gate, and the planar CPU fallback serves quietly. The prefill
-npos POLICY window is planar-only (a blob model serves any npos - no CPU fallback
-exists); `set_metal_prefill_mulmm_legacy` forces a `planar` capability decline - the
-required-mode panic cell uses it.
+The Metal drivers serve ONLY blob-form models (`convert_model_to_metal_blob` / metal-flavor
+images), and CPU inference on a blob model PANICS. That is why a CPU-vs-GPU arm needs the
+planar model plus its `blob_twin(t, path, seq_cap)`. Decline-reason cells keep the planar
+model: capability reasons (`feature`, `graph`, `shape`, ...) out-rank the `planar` decline in
+every gate, and the planar CPU fallback serves quietly. The prefill npos POLICY window is
+planar-only - a blob model serves any npos, because no CPU fallback exists.
+`set_metal_prefill_mulmm_legacy` forces a `planar` capability decline; the required-mode
+panic cell uses it.
 
 ## Family filter (profiling cadence)
 
@@ -393,11 +395,11 @@ model-loading block is `REVIEW.md`'s obligation.
 
 ## Model tiers
 
-`model_available(t, path)` is the size gate (the tier rule is `REVIEW.md`'s): set
+`model_available(t, path)` is the size gate; the tier rule is `REVIEW.md`'s. Set
 `DASLLAMA_PARITY_FULL=1` explicitly with an `--arm` run when a change genuinely needs the
 large tier. A run reporting SKIPPED for those arms is correct, not a failure. The 70B's
-no-CPU-control-batch-parity restriction (also `REVIEW.md`'s) is there because streaming 40GB
-on the CPU while the GPU has the same bytes wired OOM-kills a 64GB box; the small-model pins
+no-CPU-control-batch-parity restriction is `REVIEW.md`'s too. The reason: streaming 40GB on
+the CPU while the GPU has the same bytes wired OOM-kills a 64GB box. The small-model pins
 that carry that coverage instead are e.g. `set_metal_batch_addrms_unfused`.
 
 ## Log discipline
@@ -406,11 +408,11 @@ Always capture COMPLETE logs (the runner does this); grep afterwards, never at c
 capture-time filter can hide the exact proof line the run exists to produce, and the silent
 capture reads as success.
 The size/depth-claim assert ("2030 tokens", "crosses 2048") is `REVIEW.md`'s obligation.
-Logging both decoded streams is too; the mechanism is that a near-tie synonym flip and real
-garbage look identical as id diffs and completely different as text, so read the text before
-trusting a red or a suspicious green. A token-for-token generate cell has `log_gen_texts`
-(`_model_tier.das`) for it; a logits-tolerance cell logs a decoded text form instead - the
-forced stream plus the GPU's greedy would-be picks, or both next-token pieces.
+Logging both decoded streams is `REVIEW.md`'s too. The mechanism: a near-tie synonym flip and
+real garbage look identical as id diffs, and completely different as text. So read the text
+before trusting a red or a suspicious green. A token-for-token generate cell has
+`log_gen_texts` (`_model_tier.das`) for it. A logits-tolerance cell logs a decoded text form
+instead - the forced stream plus the GPU's greedy would-be picks, or both next-token pieces.
 
 ## Stale truth caches (`<model>.ref.<key>.tsv`)
 
@@ -423,9 +425,9 @@ tsv aside and rerun - a fresh-truth green means stale cache, keep the refreshed 
 caches are tie-proof by construction and should NOT move; a counting-cache mismatch is a real
 red.
 
-The freeform-token-parity ban is `REVIEW.md`'s; the form that replaces it is the k4 freeform
+The freeform-token-parity ban is `REVIEW.md`'s. The form that replaces it is the k4 freeform
 cell's, cached stream `gen_free_n128`. For that form the cache is a FEED, not a truth: both
-sides force through the same tokens, so a stale feed stays a valid instrument and the
+sides force through the same tokens. So a stale feed stays a valid instrument, and the
 stale-cache red class does not exist for it.
 
 ## Out-of-folder test files (the checklist's placement ledger)
@@ -443,6 +445,6 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
   `matmul_variants` by bare same-dir name.
 
 The ladder tests (`utils/internal/dasllama-ladder/test_*.das`) answer to that folder's own
-`REVIEW.md` - not dasLLAMA tests, not ledger entries - even though `ladder_store.das`, which
-`test_ladder_store.das` and `test_ladder_server.das` reach, requires
-`dasllama/dasllama_exchange_schema` publicly.
+`REVIEW.md` - not dasLLAMA tests, not ledger entries. That holds even though two of them,
+`test_ladder_store.das` and `test_ladder_server.das`, reach `ladder_store.das`, which
+requires `dasllama/dasllama_exchange_schema` publicly.

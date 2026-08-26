@@ -11,13 +11,14 @@ two followup ledgers.
 **A timing rig - a script whose output is a measured wall or rate - wherever the diff puts
 it, answers to `benchmarks/REVIEW.md`.**
 
-**A change to what enters `performance/records/` or a provenance manifest, or a change to
-WHICH model file (a `.gguf`, a `.dlim`, an mmproj, an image or audio fixture) a recorded row
-or manifest pins, answers to `performance/REVIEW.md`.** A test or tool merely opening a
-stocked model file by name does not route.
+**A change to what enters `performance/records/`, or to a provenance manifest, answers to
+`performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
+answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj, or an image or audio
+fixture. A test or tool merely opening a stocked model file by name does not route.
 
-**A change to the sidecar-exchange client or schema - the code that downloads tune winners to
-a box and submits that box's winners back - answers to `performance/REVIEW.md`.**
+**A change to the sidecar-exchange client or schema answers to `performance/REVIEW.md`.** The
+sidecar exchange is the code that downloads tune winners to a box and submits that box's
+winners back.
 
 **Every `dasllama/` change applies `tests/REVIEW.md`.**
 
@@ -57,11 +58,11 @@ can this value change between dispatches? If yes it is data and belongs in a uni
 field, or an `@off` bind offset; if no it is shape and must not reach the kernel as a uniform,
 a kargs field, an `@off` bind offset, or a helper parameter.
 
-**A diff that changes a kernel-selection predicate, or a constant whose value was chosen by
-timing two candidates against each other, in `dasllama/` rests on timing that ran both
-variants interleaved in one process, under one instrument.** A reading taken across two
-processes or across two commits says which way the wall moved, not which implementation to
-adopt.
+**A diff that changes a kernel-selection predicate in `dasllama/` rests on timing that ran
+both variants interleaved in one process, under one instrument.** The same holds for a
+constant in `dasllama/` whose value was chosen by timing two candidates against each other. A
+reading taken across two processes, or across two commits, says which way the wall moved, not
+which implementation to adopt.
 
 **Peak memory wins ties against load cost.** A change to an allocation reached from a load,
 bake, or convert path (judge a shared helper at each call site) that trades footprint for speed
@@ -121,26 +122,28 @@ setter whose purpose is timing when it moves computed numerics, since two GEMM f
 the same math differ in float terms. A knob or setter that changes only WHEN work happens
 is not an override, and a CLI flag is never one. A run that engages one prints a line naming
 the override by the spelling a user would set - the environment variable name, the sidecar
-key, or the setter's function name. Per-site repeats are fine. Adding one, or giving one a
-new effect, without the announce is a defect.
+key, or the setter's function name. Per-site repeats are fine. A set-but-inert override
+stays silent. Adding one, or giving one a new effect, without the announce is a defect.
 
-**A self-measured served-turn time - tok/s, a turn wall - entering `PERF_LEDGER.md` comes
-from the released `lcpp_bench` exe - `benchmarks/lcpp_bench.das` built by `daspkg release`,
-spawned by `performance/gen_bench_records.das` or run by hand where the cell's `PROFILE.md`
-section says so - never from the `-jit` script** (a `--for-debug-purposes` row is a debug
-instrument). A tutorial's printed wall-clock is teaching output, feeding no board.
+**A self-measured served-turn time entering `PERF_LEDGER.md` comes from the released
+`lcpp_bench` exe, never from the `-jit` script.** A served-turn time is a tok/s figure or a
+turn wall. The released exe is `benchmarks/lcpp_bench.das` built by `daspkg release`. It is
+spawned by `performance/gen_bench_records.das`, or run by hand where the cell's `PROFILE.md`
+section says so. A `--for-debug-purposes` row is a debug instrument. A tutorial's printed
+wall-clock is teaching output, feeding no board.
 
 **A subtraction of two measured walls written into `PERF_LEDGER.md` carries both raw walls
 in the entry.**
 
-**A diff that adds an entry to `PERF_LEDGER.md` carrying a reading no board cell produced
-names the instrument that produced it.** The entry also tags the reading `direction-grade`
-when it compares across two processes or two commits, and `out-of-process` when the wall was
-measured from outside the benchmark process; a reading that is neither carries no tag.
+**A diff that adds an entry to `PERF_LEDGER.md` names the instrument that produced the entry's
+reading.** The rule fires only for a reading no board cell produced. The entry also tags that
+reading `direction-grade` when the reading compares across two processes or two commits. The
+entry tags the reading `out-of-process` when the wall was measured from outside the benchmark
+process. A reading that is neither carries no tag.
 
-**A diff that adds an entry to `PERF_LEDGER.md` never records a lab's A/B selection timing** -
-that timing settles its adoption decision in the lab's own report and in the PR that lands
-the kernel, and the ledger learns the winner only through a re-measured cell.
+**A diff that adds an entry to `PERF_LEDGER.md` never records a lab's A/B selection timing.**
+That timing settles its adoption decision in the lab's own report and in the PR that lands the
+kernel. The ledger learns the winner only through a re-measured cell.
 
 **A new servable capability gets its cell in the same change**: a board row spawned by
 `performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
@@ -155,15 +158,16 @@ checked-in doc, a ledger, a code comment, or a PR description.** The cell states
 mode and stamps box and engine provenance, so a number can never silently describe a format
 nobody serves or a kernel set nobody ships. A rig-internal measurement margin - a crown
 delta, a noise floor, tuner timing - is settled by the sidecar or manifest that carries the
-value; written into a source comment or a doc it is a timing figure like any other.
+value. A margin written into a source comment or a doc is a timing figure like any other.
 
-**A figure measuring one engine stage inside a served turn - a stage wall, a stage share, a
-stage speedup, or a cross-engine comparison of one stage - names the harness and flags that
-produced it, wherever it is written down: a checked-in doc, a ledger, a code comment, or a
-PR description.** A board cell's `pp`/`tg` rate and the whole wall of a
-`benchmarks/lcpp_bench.das` `-p`/`-n` cell measure the turn, not a stage, and are not stage
-figures. The naming rides the figure's own sentence, a table heading that covers the
-table's rows, or a section-level provenance line that covers the paragraphs under it.
+**A figure measuring one engine stage inside a served turn names the harness and flags that
+produced it.** A stage figure is a stage wall, a stage share, a stage speedup, or a
+cross-engine comparison of one stage. The rule holds wherever the figure is written down: a
+checked-in doc, a ledger, a code comment, or a PR description. A board cell's `pp`/`tg` rate
+and the whole wall of a `benchmarks/lcpp_bench.das` `-p`/`-n` cell measure the turn, not a
+stage, and are not stage figures. The naming rides the figure's own sentence, a table heading
+that covers the table's rows, or a section-level provenance line that covers the paragraphs
+under it.
 
 **Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
 `parse_image`'s mapping, and going live does no real work - repacking, quantizing, folding,
@@ -176,13 +180,13 @@ permuting belong to the mint. A transform on the go-live path is a defect.
 or releasing an image backing, anywhere else is a defect - and a second mint path, per family,
 per format, or per backend, is a defect even where its output is identical.
 
-**A decoder mint - the mint of an LLM decoder model, not a tower or embedder carrier - never
-holds the whole model.** It sizes the image before the first byte goes out and writes each
-plane as it is produced. Keeping the source model resident to write from is a defect, and a
-mint that is slower in exchange for a lower peak is correct.
+**A decoder mint never holds the whole model.** A decoder mint is the mint of an LLM decoder
+model, not of a tower or embedder carrier. It sizes the image before the first byte goes out
+and writes each plane as it is produced. Keeping the source model resident to write from is a
+defect. A mint that is slower in exchange for a lower peak is correct.
 
-**A staged carrier mint (`cache_via_image_staged`) either refuses a source file at or past
-1 GiB, naming that file in the refusal, or streams it the way a decoder mint does** - the
+**A staged carrier mint (`cache_via_image_staged`) meeting a source file at or past 1 GiB
+either refuses it or streams it the way a decoder mint does.** A refusal names that file. The
 staged form holds source and image at once, and that doubled peak is what the line caps.
 
 **A `.dlim` is box- and config-specific, not a portable format.** `image_identity` names the
@@ -190,8 +194,9 @@ box profile, the knobs, and the flavor a file was baked for, and a mismatch decl
 path that reinterprets a mismatched image, or widens an identity so that more files match, is a
 defect.
 
-**An image save reaps only its own lane** - an identity's (quant, tag) pair. A save drops AT
-MOST that lane's dead siblings plus BROKEN/version-stale images in any lane, nothing else.
+**An image save reaps only its own lane.** A lane is an identity's (quant, tag) pair. A save
+drops AT MOST that lane's dead siblings plus BROKEN/version-stale images in any lane, nothing
+else.
 
 **Only a process that can recompute an image's identity may judge it dead.** Reaping an image
 whose identity the code cannot recompute - another flavor's, another family's - is a defect.
@@ -233,9 +238,9 @@ a check's licensed set - the names that check does not flag - or a finding text 
 longer names what failed. What the gate enforces is read from the gate itself; each check's
 finding text states its own rule.
 
-**A new `REVIEW.das` check ships its `ARCHITECTURE.md` sec.1 line in the same change: a line
-naming the check and the names it licenses - the names that check does not flag - and saying
-so when it licenses none.**
+**A new `REVIEW.das` check ships its `ARCHITECTURE.md` sec.1 line in the same change.** The
+line names the check and the names it licenses. A licensed name is one that check does not
+flag. When the check licenses no names, the line says so.
 
 **An upstream mechanism is described in our own terms, not attributed** - no
 "lifted/ported verbatim from" and no upstream symbol, header, or constant names in a `.md`
@@ -261,14 +266,14 @@ a struct the renderer emits but the registry does not is caught by
 **`dasllama/dasllama_unicode.das`'s RANGES/WS tables are generated - retranscoded from
 `$LCPP/src/unicode-data.cpp` (the reference checkout); hand-editing them is a defect.**
 
-**A diff that adds a file under `dasllama/`, adds a file beside one that has its own sec.1
-charter line, moves code between files, or changes what a file owns lands the sec.1 edit
-that keeps the charters true, in the same change** (a module-root doc file - a ledger, a
-plan, `LAWS.md` - has no charter line and lands free).
+**A diff that adds a file under `dasllama/`, moves code between files, or changes what a file
+owns lands the sec.1 edit that keeps the charters true, in the same change.** A diff that adds
+a file beside one that has its own sec.1 charter line lands that edit too. A module-root doc
+file - a ledger, a plan, `LAWS.md` - has no charter line and lands free.
 
-**A per-file inventory restated in this checklist is a defect of the checklist** -
-`ARCHITECTURE.md` sec.1 owns the per-file list; a rule naming what KIND of code lands in
-which file is the checklist's own.
+**A per-file inventory restated in this checklist is a defect of the checklist.**
+`ARCHITECTURE.md` sec.1 owns the per-file list. A rule naming what KIND of code lands in which
+file is the checklist's own.
 
 **A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
@@ -283,22 +288,24 @@ its format family kept whole.** GPU twins land in their backend kernel file.
 **A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its backend file
 (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
-**A kernel body lands in its owner's backend file: a GPU kernel where its PSO is compiled
-and released, a CPU-tier kernel in that tier's `dasllama/dasllama_math_<tier>.das`** - never
-in `dasllama/dasllama_math.das` or a lens/dispatch macro file.
+**A kernel body lands in its owner's backend file.** A GPU kernel body lands in the file where
+its PSO is compiled and released. A CPU-tier kernel body lands in that tier's
+`dasllama/dasllama_math_<tier>.das`. A kernel body never lands in
+`dasllama/dasllama_math.das` or in a lens/dispatch macro file.
 
 **A family quirk lands in the family file; a piece two families need moves UP into the
 concern's shared file (its own file when none exists)** - never sideways into a sibling.
 
-**A family gaining an arm for a media kind adds that kind's span markers - the template text
-that opens and closes the media rows - to that family's chat template, never a second
-renderer.** A family whose template or vocab lacks them has no arm for that media kind -
-`create_chat_` panics at create, not at render.
+**A family gaining an arm for a media kind adds that kind's span markers to that family's chat
+template, never to a second renderer.** Span markers are the template text that opens and
+closes the media rows. A family whose template or vocab lacks them has no arm for that media
+kind - `create_chat_` panics at create, not at render.
 
-**No signature in `dasllama/dasllama_tower.das` - the shared encoder-tower home - takes a
-type `dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file
-declares, and the file requires none of them.** A doc comment naming the family a helper was
-built for is fine; the code stays family-blind.
+**No signature in `dasllama/dasllama_tower.das` takes a type that
+`dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file declares.**
+`dasllama/dasllama_tower.das` is the shared encoder-tower home, and it requires none of those
+files. A doc comment naming the family a helper was built for is fine. The code stays
+family-blind.
 
 **A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's
 file** - a single-caller helper sanctioned as tower-worthy is ledgered on `ARCHITECTURE.md`
@@ -312,10 +319,10 @@ SOURCE tensors, per weight region - the set of source tensors a carrier stores i
 tensors disagree on element type is refused in a message naming the offending tensor and
 both element types.**
 
-**A lane that PERSISTS a converted form of the file's planes - a form an image could carry -
-is a separate flavor under its own image identity, and the load that picks it prints which
-lane it picked.** A conversion made and dropped inside one forward pass persists nothing and
-is not such a lane.
+**A lane that PERSISTS a converted form of the file's planes is a separate flavor under its
+own image identity.** A persisted form is one an image could carry. The load that picks such a
+lane prints which lane it picked. A conversion made and dropped inside one forward pass
+persists nothing and is not such a lane.
 
 **A harness that prints output for another tool to compare fails loudly when it has nothing to
 print.** A run that ends without its comparison lines - wrong flags, failed load - exits
