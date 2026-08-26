@@ -24,3 +24,9 @@
   `fastmath = false` opt-out ships only with a failing test provided (the kernel
   demonstrably "goes bonkers" under fastmath); the fastmath audit joins the end-of-arc
   kernel sweep. (Census at ruling time: zero engine kernels opt out.)
+
+- **2026-08-26** (`REVIEW_GPU.md`): Boris approved the bucketed-dispatch stamped-table rule
+  ("good rule", on the MoE gather find: an O(experts) per-row basep/cnt search on all 256
+  threads of every row threadgroup cost 24% of the qwen3moe pp512 forward) - per-row
+  validity/ownership in a bucketed dispatch is answered by a table the bucket builder
+  stamps, never by a per-row search over the bucket directory.

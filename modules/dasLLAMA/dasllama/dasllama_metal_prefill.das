@@ -1886,7 +1886,9 @@ class MetalAttnAV {
                 let c = e % 32u
                 let qpos = ka.qoff + qi0 + r
                 let sbase = (h * ka.qrows + qi0 + r) * 2u
-                let sr = jb + c < ka.np32 ? float(att[(h * ka.qrows + qi0 + r) * ka.np32 + jb + c]) : 0.0
+                // jb caps at np32 - 32 (jlimit is np32-clamped, jb steps by 32), so jb + c is
+                // always a live score column — no bound needed
+                let sr = float(att[(h * ka.qrows + qi0 + r) * ka.np32 + jb + c])
                 ta[e] = pf_p_weight(sr, jb + c, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, stat[sbase], stat[sbase + 1u])
                 tb[e] = jb + r < ka.npos ? v[(jb + r) * ka.kv_dim + kvhoff + d0 + c] : 0.0
                 e += 128u
@@ -2120,7 +2122,9 @@ class template MetalAttnAVMmTensorT {
                 let rowb = (h * ka.qrows + mBase + r) * ka.np32
                 for [unroll_full] (t in range(16)) {
                     let jg = kb * 64u + ph + uint(t)
-                    let sr = PADFREE ? float(att[rowb + jg]) : (jg < ka.np32 ? float(att[rowb + jg]) : 0.0)
+                    // jg < klimit <= np32 on both stamps (np32 % 64 == 0) — the PADFREE axis
+                    // carries only the V-row guard below
+                    let sr = float(att[rowb + jg])
                     twp[r * 64u + ph + uint(t)] = float16(pf_p_weight(sr, jg, qpos, ka.window, ka.softcap, ka.uend, ka.ulo, sm, sinv))
                 }
                 work += gl_WorkGroupSize.x
@@ -2781,6 +2785,10 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         g_pf_failed = true
         return false
     }
+    // raced-constant knobs from the box sidecar (defaults = the M5 race winners)
+    TALL_OCC_FLOOR = metal_tall_floor()
+    DEVW_SMALL_PANEL = uint64(metal_devw_small_panel_mb()) * 1024ul * 1024ul
+    CVT_MIN_ROWS = metal_cvt_min_rows()
     var ok = true
     g_pf_pso_rope = compile_pso(metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath, ok)
     g_pf_pso_addbias = compile_pso(metal_add_bias_rows_msl, metal_add_bias_rows_msl_entry, metal_add_bias_rows_msl_fastmath, ok)
@@ -3041,7 +3049,7 @@ def private pf_twin_panel(rows, kdim : int64) : MetalBuffer? {
 // the CONVERT form (no dual-store producer owns the panel): encode the f32 -> f16 pass; the
 // 256-row gate stays here - under it the convert dispatches outweigh the halved stream.
 def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kdim : int64; ko : bool = false) : MetalBuffer? {
-    if (rows < 256l) {
+    if (rows < CVT_MIN_ROWS) {
         return null
     }
     var bxh = pf_twin_panel(rows, kdim)
@@ -4863,8 +4871,9 @@ var private g_pf_env_tall = true
 // tall M-tile occupancy floor, in 128-row-x-64-col threadgroups (raced 32/64/128 at pp512:
 // 64 wins +0.6..2% over 128 across 4B/E2B/Q4KM, 32 adds nothing; pp128 guard green — at
 // rows=128 the d>=4096 demand keeps small-d sites short). Sidecar tune knob at arc end.
-let TALL_OCC_FLOOR = 64l
-let DEVW_SMALL_PANEL = 32ul * 1024ul * 1024ul
+var private CVT_MIN_ROWS = 256l          // sidecar knob "metal_cvt_min_rows" — cached at init
+var private TALL_OCC_FLOOR = 64l         // sidecar knob "metal_tall_floor" — cached at init
+var private DEVW_SMALL_PANEL = 32ul * 1024ul * 1024ul   // sidecar knob "metal_devw_small_panel_mb"
 let DEVW_BIG_PANEL = 48ul * 1024ul * 1024ul
 let DEVW_WIDE_N = 4096l
 let DEVW_WIDE_N_ROWS = 512l

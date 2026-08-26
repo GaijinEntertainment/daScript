@@ -35,6 +35,11 @@ saves.
 **A staging loop assigns each work item a consecutive run of elements, not a stride.**
 Per-element strided staging with div/mod addressing pays multiples of the contiguous form.
 
+**A kernel decides its row's validity or owner by reading one per-row entry the
+bucket-building kernel stamped, never by scanning the per-bucket base and count arrays.**
+The scan repeats on every thread of every row's threadgroup and grows with the bucket
+count.
+
 **An encoder that picks a kernel's guard-free instance - the one stamped without the loop's
 bounds or tail guard - shows that every address that instance touches stays inside rows
 holding real data; one extent dividing evenly is not that showing.** A padded chunk's walk

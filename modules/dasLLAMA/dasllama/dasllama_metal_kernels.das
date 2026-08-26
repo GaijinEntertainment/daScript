@@ -7108,9 +7108,9 @@ class MetalKqMvB4K5 : MetalKqMvK5T {
     override NRU = 4u
 }
 
-// The B8 K4/K5 pair as one template — same X-panel algorithm, q5_K adds the qh overlay. QH arms
-// run through the acc loop (w4 is arm-scoped) to keep each production line order; K4's stamp
-// carries one dead uninitialized hq decl (no dataflow — below the measured-free bar). K6 stays.
+// The B8 K4/K5 pair as one template — same X-panel algorithm, q5_K adds the qh overlay (w4 is
+// arm-scoped; K4's stamp carries one dead hq decl, below the measured-free bar). K6 stays forked
+// on the weight-decode axis (its 48B superblock walk shares no BLK/QH shape with these).
 [ |> template_struct_instance]
 class template MetalKqMvB8K45T {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)

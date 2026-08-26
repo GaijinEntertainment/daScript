@@ -141,6 +141,11 @@ Any trait name not on this list is dispatched to the user-extensible typeinfo-ma
 `static_if (cond) { } static_elif (cond) { } else { }` - parentheses required; only the selected
 branch is compiled, so the others may be invalid for the current types.
 
+Statement form only. A value-position ternary `cond ? a : b` infers BOTH arms even when `cond`
+is a compile-time constant, so arms whose types diverge (or where one arm is invalid for the
+current types) must select via statement `static_if` into a variable, never a ternary
+(probe-verified 2026-08-26).
+
 - `static_assert(cond, "message")` - reports **at the assert**, inside the generic.
 - `concept_assert(cond, "message")` - reports **at the call site**; prefer it for preconditions a
   caller can act on.

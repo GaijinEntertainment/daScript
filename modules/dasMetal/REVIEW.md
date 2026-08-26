@@ -35,3 +35,8 @@ Architecture doc: `MASTERPLAN.md`.
   `metal/msl_emit.das` writes sets `relaxed_precision = true` - is a defect**, including
   narrowing the file it scans or its finding text no longer naming what failed. RP = false
   keeps the op off the tensor-unit fast path.
+
+- **A cooperative tensor that a `matmul2d` `run` accumulates into gets no zero-init element
+  walk - `get_destination_cooperative_tensor` hands it back already zeroed.** The walk
+  forces every element into real storage before the K loop and costs the op its fast path
+  for the whole loop.

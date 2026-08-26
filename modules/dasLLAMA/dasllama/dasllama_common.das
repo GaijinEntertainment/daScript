@@ -1322,6 +1322,9 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us(v) }
     apply_i64_knob(rt, "jobque_join_poll") $(v) { set_jobque_join_poll(v) }
     apply_i64_knob(rt, "team_rank_gate") $(v) { set_team_rank_gate(int(min(v, 1l))) }
+    apply_i64_knob(rt, "metal_tall_floor") $(v) { set_metal_tall_floor(v) }
+    apply_i64_knob(rt, "metal_devw_small_panel_mb") $(v) { set_metal_devw_small_panel_mb(v) }
+    apply_i64_knob(rt, "metal_cvt_min_rows") $(v) { set_metal_cvt_min_rows(v) }
     let mtc = read_json_field(rt, "metal_tensor", "")
     if (mtc != "") {
         set_metal_tensor_crowns(mtc)
@@ -2092,6 +2095,30 @@ def public set_metal_tensor_crowns(list : string) {
 def public metal_tensor_crowned(family : string) : bool {
     return key_exists(g_tensor_crowns, family)
 }
+
+// ===== Metal prefill raced constants (sidecar "runtime" knobs; prefill caches at its init) =====
+// Defaults are the M5 race winners; another box's sidecar overrides without a rebuild.
+var private g_metal_tall_floor = 64l           // tall M-tile occupancy floor, in 128x64 tgs
+var private g_metal_devw_small_panel_mb = 32l  // dev-W dequant-panel engage knee
+var private g_metal_cvt_min_rows = 256l        // half-X panel conversion row floor
+
+def public set_metal_tall_floor(v : int64) {
+    g_metal_tall_floor = v
+}
+
+def public metal_tall_floor : int64 => g_metal_tall_floor
+
+def public set_metal_devw_small_panel_mb(v : int64) {
+    g_metal_devw_small_panel_mb = v
+}
+
+def public metal_devw_small_panel_mb : int64 => g_metal_devw_small_panel_mb
+
+def public set_metal_cvt_min_rows(v : int64) {
+    g_metal_cvt_min_rows = v
+}
+
+def public metal_cvt_min_rows : int64 => g_metal_cvt_min_rows
 
 //! Encode text to token ids using the model's tokenizer.
 def encode_(m : Model; text : string; add_special = true; parse_special = false) : array<int64> {
