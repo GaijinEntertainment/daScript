@@ -1150,6 +1150,64 @@ def private moe_mulmm_kq_gate(t : T?; dev, queue; fmt : int; kdim, ndim : int; c
             if (rant) {
                 t |> equal(buf_mismatch_env(by_t, want, env, 2e-4, "{tag} twin"), 0)
             }
+            // the tall pair: 128-floor stamp + remainder stamp over the same fixtures — the
+            // production >=256-row moe dispatch shape (counts crossing 128 exercise both)
+            var tl_pso = (fmt == 4
+                ? pipeline_from_source(dev, MetalMoeMulMmK4TH128_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK4TH128_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK4TH128_metal_moe_mulmm_k45_t_msl_fastmath, terr)
+                : (fmt == 5
+                    ? pipeline_from_source(dev, MetalMoeMulMmK5TH128_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK5TH128_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK5TH128_metal_moe_mulmm_k45_t_msl_fastmath, terr)
+                    : pipeline_from_source(dev, MetalMoeMulMmK6TH128_metal_moe_mulmm_k6_t_msl, MetalMoeMulMmK6TH128_metal_moe_mulmm_k6_t_msl_entry, MetalMoeMulMmK6TH128_metal_moe_mulmm_k6_t_msl_fastmath, terr)))
+            var rm_pso = (fmt == 4
+                ? pipeline_from_source(dev, MetalMoeMulMmK4THR_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK4THR_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK4THR_metal_moe_mulmm_k45_t_msl_fastmath, terr)
+                : (fmt == 5
+                    ? pipeline_from_source(dev, MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl_fastmath, terr)
+                    : pipeline_from_source(dev, MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl, MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl_entry, MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl_fastmath, terr)))
+            if (tw_pso != null && tl_pso != null && rm_pso != null) {
+                var maxce = 0
+                for (c in fx.cnt) {
+                    maxce = max(maxce, int(c))
+                }
+                var by_p = buf_fill(dev, fx.pad * ndim, -700.0)
+                let ranp2 = with_compute_encoder(queue, terr) $(enc : MetalComputeEncoder?) {
+                    metal_set_pipeline(enc, tl_pso)
+                    metal_set_threadgroup_memory_length(enc, fmt == 4
+                        ? MetalMoeMulMmK4TH128_metal_moe_mulmm_k45_t_msl_tgmem
+                        : (fmt == 5 ? MetalMoeMulMmK5TH128_metal_moe_mulmm_k45_t_msl_tgmem : MetalMoeMulMmK6TH128_metal_moe_mulmm_k6_t_msl_tgmem), 0)
+                    metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)
+                    metal_set_buffer(enc, bks, 0ul, 1)
+                    metal_set_buffer(enc, bkq, 0ul, 2)
+                    metal_set_buffer(enc, bxh, 0ul, 3)
+                    metal_set_buffer(enc, by_p, 0ul, 4)
+                    metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+                    metal_set_buffer(enc, bcnt, 0ul, 6)
+                    metal_set_buffer(enc, bbase, 0ul, 7)
+                    metal_dispatch_threadgroups(enc, uint3(uint((maxce + 127) / 128), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+                    metal_set_pipeline(enc, rm_pso)
+                    metal_set_threadgroup_memory_length(enc, fmt == 4
+                        ? MetalMoeMulMmK4THR_metal_moe_mulmm_k45_t_msl_tgmem
+                        : (fmt == 5 ? MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl_tgmem : MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl_tgmem), 0)
+                    metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)
+                    metal_set_buffer(enc, bks, 0ul, 1)
+                    metal_set_buffer(enc, bkq, 0ul, 2)
+                    metal_set_buffer(enc, bxh, 0ul, 3)
+                    metal_set_buffer(enc, by_p, 0ul, 4)
+                    metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+                    metal_set_buffer(enc, bcnt, 0ul, 6)
+                    metal_set_buffer(enc, bbase, 0ul, 7)
+                    metal_dispatch_threadgroups(enc, uint3(4u, uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+                }
+                t |> success(ranp2, "{tag} tall pair: encode: {terr}")
+                if (ranp2) {
+                    t |> equal(buf_mismatch_env(by_p, want, env, 2e-4, "{tag} tall pair"), 0)
+                }
+                metal_release(by_p)
+            }
+            if (tl_pso != null) {
+                metal_release(tl_pso)
+            }
+            if (rm_pso != null) {
+                metal_release(rm_pso)
+            }
             metal_release(bxh)
             metal_release(by_t)
             metal_release(tw_pso)
@@ -1652,6 +1710,7 @@ def test_metal_gemm_kernels(t : T?) {
                 moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [8, 33], false)   // 2 col tiles + contiguous
                 moe_mulmm_kq_gate(t, dev, queue, 5, 256, 128, [8, 33], false)   // twin legs per format
                 moe_mulmm_kq_gate(t, dev, queue, 6, 256, 128, [8, 33], false)
+                moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [130, 40, 200], false)   // tall pair: counts cross 128
                 moe_mulmm_q8_gate(t, dev, queue, false, 96, 64, [32, 40, 8], true)
                 moe_mulmm_q8_gate(t, dev, queue, false, 128, 64, [8, 33], false)
                 moe_mulmm_q8_gate(t, dev, queue, true, 128, 64, [8, 33], false)
