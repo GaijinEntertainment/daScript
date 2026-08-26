@@ -466,7 +466,7 @@ class template MetalKqMulMmK45TensorT {
     @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @workgroup twb : float16[2048]          // W chunk: 64 wrows x 32 k, flat row-major
+    @workgroup twb : float16[4096]          // W chunk: 64 wrows x 64 k (bk=64), flat row-major
     @template_constant BLK : uint = 32u
     @template_constant QH : bool = false
 
@@ -479,17 +479,19 @@ class template MetalKqMulMmK45TensorT {
         let lid = gl_LocalInvocationID.x
         var acc : float[2048]
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), 32u, 64u, 4u, 32u)
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), 32u, 64u, 4u, 64u)
         var kb = 0u
         while (kb < nkb) {
-            let sb = kb / 8u
-            let js = kb % 8u
-            // one work item = one (wrow, 16-element half): the sub-scale decode runs once per
-            // item and the quant reads sit on consecutive elements
+            // one work item = one (wrow, 16-element half) of the 64-deep chunk — jsl names
+            // its 32-block; the sub-scale decode runs once per item
             var work = lid
-            while (work < 128u) {
-                let j = work >> 1u
-                let kh = (work & 1u) * 16u
+            while (work < 256u) {
+                let j = work >> 2u
+                let sub = work & 3u
+                let jsl = kb + (sub >> 1u)
+                let sb = jsl / 8u
+                let js = jsl % 8u
+                let kh = (sub & 1u) * 16u
                 let blk = (nBase + j) * nsb + sb
                 let sv = ks4[blk]
                 var sc = 0u
@@ -511,18 +513,18 @@ class template MetalKqMulMmK45TensorT {
                         let u = kqu[blk * BLK + (js / 2u) * 8u + e / 4u]
                         let hu = kqu[blk * BLK + 32u + e / 4u]
                         let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
-                        twb[j * 32u + e] = float16(dsc * float(q) - dmn)
+                        twb[j * 64u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
                     } else {
                         let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
-                        twb[j * 32u + e] = float16(dsc * float(q) - dmn)
+                        twb[j * 64u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
                     }
                 }
                 work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, 32u, 64u, 32u)
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, 32u, 64u, 64u)
             barrier()
-            kb++
+            kb += 2u
         }
         tmm2d_tg_store(acc, cp, 32u, 64u, ndim)
     }
@@ -563,7 +565,7 @@ class template MetalKqMulMmK6TensorT {
     @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @workgroup twb : float16[2048]
+    @workgroup twb : float16[4096]
 
     [metal_kernel(float_a_ok=true)]
     def metal_kq_mulmm_k6_t {
@@ -574,21 +576,23 @@ class template MetalKqMulMmK6TensorT {
         let lid = gl_LocalInvocationID.x
         var acc : float[2048]
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), 32u, 64u, 4u, 32u)
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), 32u, 64u, 4u, 64u)
         var kb = 0u
         while (kb < nkb) {
-            let sb = kb / 8u
-            let js = kb % 8u
-            let half6 = js / 4u
-            let gg = js % 4u
-            let nsh = (gg / 2u) * 4u
-            let hsh = gg * 2u
-            // one work item = one (wrow, 16-element half): dall/sub-scale decode once per item
-            // (ile is constant across a half), quant words shared by each 4-element run
+            // one work item = one (wrow, 16-element half) of the 64-deep chunk — jsl names
+            // its 32-block; dall/sub-scale decode once per item
             var work = lid
-            while (work < 128u) {
-                let j = work >> 1u
-                let kh = (work & 1u) * 16u
+            while (work < 256u) {
+                let j = work >> 2u
+                let sub = work & 3u
+                let jsl = kb + (sub >> 1u)
+                let sb = jsl / 8u
+                let js = jsl % 8u
+                let half6 = js / 4u
+                let gg = js % 4u
+                let nsh = (gg / 2u) * 4u
+                let hsh = gg * 2u
+                let kh = (sub & 1u) * 16u
                 let ile = kh / 16u
                 let blk = (nBase + j) * nsb + sb
                 let dall = float(kdh[blk])
@@ -603,14 +607,14 @@ class template MetalKqMulMmK6TensorT {
                     let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
                     let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
                     let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                    twb[j * 32u + kh + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
+                    twb[j * 64u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
                 }
                 work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, 32u, 64u, 32u)
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[mBase * kdim + kb * 32u])), kdim, twb, 32u, 64u, 64u)
             barrier()
-            kb++
+            kb += 2u
         }
         tmm2d_tg_store(acc, cp, 32u, 64u, ndim)
     }
@@ -995,7 +999,7 @@ class template MetalMoeMulMmK45TensorT {
     @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 6 cnt : array<uint>
     @ssbo @binding = 7 basep : array<uint>
-    @workgroup twb : float16[2048]
+    @workgroup twb : float16[4096]
     @template_constant BLK : uint = 32u
     @template_constant QH : bool = false
 
@@ -1015,15 +1019,19 @@ class template MetalMoeMulMmK45TensorT {
         let lid = gl_LocalInvocationID.x
         var acc : float[8192]
         var cp = unsafe(addr(y[(rbase + mBase) * ka.ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 32u)
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
         var kb = 0u
         while (kb < nkb) {
-            let sb = kb / 8u
-            let js = kb % 8u
+            // one work item = one (wrow, 16-element half) of the 64-deep chunk — jsl names
+            // its 32-block; the sub-scale decode runs once per item
             var work = lid
-            while (work < 128u) {
-                let j = work >> 1u
-                let kh = (work & 1u) * 16u
+            while (work < 256u) {
+                let j = work >> 2u
+                let sub = work & 3u
+                let jsl = kb + (sub >> 1u)
+                let sb = jsl / 8u
+                let js = jsl % 8u
+                let kh = (sub & 1u) * 16u
                 let blk = e * ka.eplane + (nBase + j) * nsb + sb
                 let sv = ks4[blk]
                 var sc = 0u
@@ -1045,18 +1053,18 @@ class template MetalMoeMulMmK45TensorT {
                         let u = kqu[blk * BLK + (js / 2u) * 8u + el / 4u]
                         let hu = kqu[blk * BLK + 32u + el / 4u]
                         let q = ((u >> (8u * (el % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (el % 4u) + js)) & 1u) << 4u)
-                        twb[j * 32u + el] = float16(dsc * float(q) - dmn)
+                        twb[j * 64u + (sub >> 1u) * 32u + el] = float16(dsc * float(q) - dmn)
                     } else {
                         let q = (kqu[blk * BLK + (js / 2u) * 8u + el / 4u] >> (8u * (el % 4u) + (js & 1u) * 4u)) & 15u
-                        twb[j * 32u + el] = float16(dsc * float(q) - dmn)
+                        twb[j * 64u + (sub >> 1u) * 32u + el] = float16(dsc * float(q) - dmn)
                     }
                 }
                 work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, MT, 64u, 32u)
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, MT, 64u, 64u)
             barrier()
-            kb++
+            kb += 2u
         }
         tmm2d_tg_store(acc, cp, MT, 64u, ka.ndim)
     }
@@ -1126,7 +1134,7 @@ class template MetalMoeMulMmK6TensorT {
     @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 6 cnt : array<uint>
     @ssbo @binding = 7 basep : array<uint>
-    @workgroup twb : float16[2048]
+    @workgroup twb : float16[4096]
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_k6_t {
@@ -1144,19 +1152,23 @@ class template MetalMoeMulMmK6TensorT {
         let lid = gl_LocalInvocationID.x
         var acc : float[8192]
         var cp = unsafe(addr(y[(rbase + mBase) * ka.ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 32u)
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
         var kb = 0u
         while (kb < nkb) {
-            let sb = kb / 8u
-            let js = kb % 8u
-            let half6 = js / 4u
-            let gg = js % 4u
-            let nsh = (gg / 2u) * 4u
-            let hsh = gg * 2u
+            // one work item = one (wrow, 16-element half) of the 64-deep chunk — jsl names
+            // its 32-block; dall/sub-scale decode once per item
             var work = lid
-            while (work < 128u) {
-                let j = work >> 1u
-                let kh = (work & 1u) * 16u
+            while (work < 256u) {
+                let j = work >> 2u
+                let sub = work & 3u
+                let jsl = kb + (sub >> 1u)
+                let sb = jsl / 8u
+                let js = jsl % 8u
+                let half6 = js / 4u
+                let gg = js % 4u
+                let nsh = (gg / 2u) * 4u
+                let hsh = gg * 2u
+                let kh = (sub & 1u) * 16u
                 let ile = kh / 16u
                 let blk = e * ka.eplane + (nBase + j) * nsb + sb
                 let dall = float(kdh[blk])
@@ -1171,14 +1183,14 @@ class template MetalMoeMulMmK6TensorT {
                     let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
                     let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
                     let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                    twb[j * 32u + kh + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
+                    twb[j * 64u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
                 }
                 work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, MT, 64u, 32u)
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, MT, 64u, 64u)
             barrier()
-            kb++
+            kb += 2u
         }
         tmm2d_tg_store(acc, cp, MT, 64u, ka.ndim)
     }
