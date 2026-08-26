@@ -239,7 +239,7 @@ def emit_bitops_section(var writer; spec : TypeSpec) {
 
 // lane-matched converts + saturating narrows — mirrors the das_sv_cvt/das_sv_cvt_sat
 // registration matrix (module_builtin_vector_ctor.cpp)
-def emit_convert_section(var writer; spec : TypeSpec) {
+def emit_convert_section(var writer; spec : TypeSpec) {  // nolint:STYLE037 — one emit arm per lane family, an irreducible dispatch in a codegen emitter
     let n = spec.arity
     assume fam = spec.family
     let isIntNarrow = (fam == "short" || fam == "byte" || fam == "ushort" || fam == "ubyte") && n <= 4
