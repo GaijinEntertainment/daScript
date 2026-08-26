@@ -245,8 +245,11 @@ namespace das {
     struct BitfieldAny {
         ST value;
         __forceinline BitfieldAny() {}
-        // one candidate cannot be ambiguous, and explicit keeps narrowing at the call site
-        __forceinline explicit BitfieldAny(ST v) : value(v) {}
+        // exact width converts implicitly (bitfield math decays to ST through operator ST&,
+        // and every cast/call boundary must convert back); any other width converts only
+        // through an explicit cast, so implicit narrowing still dies at the call site
+        __forceinline BitfieldAny(ST v) : value(v) {}
+        template <typename QQ> __forceinline explicit BitfieldAny(QQ v) : value(ST(v)) {}
         __forceinline operator ST &() { return value; }
         __forceinline operator float() const { return float(value); }
         __forceinline operator double() const { return double(value); }
