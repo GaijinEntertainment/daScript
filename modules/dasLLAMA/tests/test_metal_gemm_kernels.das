@@ -1373,7 +1373,7 @@ def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : i
     var wb : array<float>
     wb |> resize(ne * ndim)
     for (i in range(ne * ndim)) {
-        wb[i] = float((i * 11) % 9 - 4) * 0.25
+        wb[i] = float((i * 11) % 9 - 4) * 25.0   // bias >> the envelope band, or a dropped fold hides under it
     }
     let nk = 2
     let nx = 24
@@ -1681,6 +1681,8 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 4, false, 32, 256, 128)   // second shape: 2 col tiles
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64)
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64, halfx = true)
+                q8_mulmm_t_gate(t, dev, queue, 64, 160, 64)               // kdim % 64 == 32: the bk=64 helper's 32-tail chunk
+                q8_mulmm_t_gate(t, dev, queue, 64, 160, 64, halfx = true)
                 q8_mulmm_t_gate(t, dev, queue, 128, 256, 64, mt = 128)   // tall M-tile stamps
                 q8_mulmm_t_gate(t, dev, queue, 256, 256, 64, halfx = true, mt = 128)
                 q8_devw_gate(t, dev, queue, 64, 256, 64)

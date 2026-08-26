@@ -2097,7 +2097,9 @@ def public metal_tensor_crowned(family : string) : bool {
 }
 
 // ===== Metal prefill raced constants (sidecar "runtime" knobs; prefill caches at its init) =====
-// Defaults are the M5 race winners; another box's sidecar overrides without a rebuild.
+//! Defaults are the M5 race winners; another box's sidecar overrides without a rebuild.
+//! CACHED at metal_prefill_init (like the tensor crowns) - a setter call after the first
+//! prefill is inert until a full metal_prefill_shutdown()/re-init.
 var private g_metal_tall_floor = 64l           // tall M-tile occupancy floor, in 128x64 tgs
 var private g_metal_devw_small_panel_mb = 32l  // dev-W dequant-panel engage knee
 var private g_metal_cvt_min_rows = 256l        // half-X panel conversion row floor

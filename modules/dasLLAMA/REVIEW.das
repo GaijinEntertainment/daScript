@@ -197,7 +197,7 @@ var private GPU_ROLES_VULKAN <- {
     "classes", "common", "decode", "prefill", "seams", "dispatch"
 }
 
-// REVIEW_GPU.md's fastmath default, mechanically: a [metal_kernel] declaring fastmath=false
+// the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false
 // reds unless its file is listed here (the failing test ships with the kernel per the
 // checklist; adding to this set is a gate edit the master's weakening rule reviews).
 // Empty by design — no engine kernel has earned the opt-out.

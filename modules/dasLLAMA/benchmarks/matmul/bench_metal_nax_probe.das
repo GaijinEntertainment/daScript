@@ -16,7 +16,7 @@ require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_prefill
 require dasllama/dasllama_metal_lens
 
-// the reference lane map (vllm-metal pagedattention_nax / MLX steel BaseNAXFrag::get_coord):
+// the M5 tensor-unit lane map (probe-derived; matches the published NAX kernel families):
 // lane owns rows {fm, fm+8} x cols {fn..fn+3} of a 16x16 fragment, element i*4+j
 let NAX_COMMON = ("#include <metal_stdlib>\n#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\nusing namespace metal;\n" +
     "static inline short2 nax_coord() \{\n" +
@@ -1078,7 +1078,8 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
                 }
             }
             // ===== BK K-chunk depth race: 64/128-deep W tiles vs the 32 baseline — the
-            // staging barriers halve/quarter per tile (MLX's NAX kernels run BK 64-512) =====
+            // staging barriers halve/quarter per tile (deep staged chunks are the norm on
+            // this hardware's fastest published kernels) =====
             var t32bk_pso = pipeline_from_source(dev, tile_q8uh_msl(32), "tile32_q8uh", true, err)
             var t32b64_pso = pipeline_from_source(dev, tile_q8uh_msl(32, bk = 64), "tile32b64_q8uh", true, err)
             var t128b64_pso = pipeline_from_source(dev, tile_q8uh_msl(128, bk = 64), "tile128b64_q8uh", true, err)

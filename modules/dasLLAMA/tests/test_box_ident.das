@@ -23,6 +23,11 @@ def test_box_ident(t : T?) {
         t |> equal("apple-m6-ultra", box_tag_for_cpu("Apple M6 Ultra"))
         t |> equal("intel-r-xeon-r-w9-3495x", box_tag_for_cpu("Intel(R) Xeon(R) w9-3495X"))
         t |> equal("unknown-box", box_tag_for_cpu(""))
+        // the M3 row is EXACT (the Air's base-chip brand): every bigger M3 slugs, or it
+        // would inherit the Air's crowns and poison the Air's store
+        t |> equal("apple-m3-pro", box_tag_for_cpu("Apple M3 Pro"))
+        t |> equal("apple-m3-max", box_tag_for_cpu("Apple M3 Max"))
+        t |> equal("apple-m3-ultra", box_tag_for_cpu("Apple M3 Ultra"))
     }
     t |> run("the DASLLAMA_BOX override wins over any probe") @(t : T?) {
         t |> equal("zen4", derive_box_name("zen4"))

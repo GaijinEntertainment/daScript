@@ -52,7 +52,12 @@ around transcoded Unicode data tables (the RANGES/WS tables - regenerate by re-t
   (sec.1.5) - both left, and the seam each left behind is a registered hook, so neither comes back.
   It remains the module's debt sink; what sits here that is family-specific or platform-specific is
   debt, **not precedent**. Nothing platform-specific may be added; new shared concerns get their own
-  file rather than another thousand lines here.
+  file rather than another thousand lines here. Ledgered exceptions the sidecar-apply seam forces
+  (the knob rail lives here, and the backends require this module, so their sidecar knobs cannot):
+  the metal tensor crowns, and the three metal prefill raced-constant knobs beside them - both are
+  applied by `apply_box_profile_runtime` and CONSUMED by the Metal backends at their own init.
+  `REVIEW.das`'s `check_fastmath_default` licensed set is empty by design: no engine kernel opts
+  out of fastmath, and an entrant ships its failing-under-fastmath test with the kernel.
 - **`dasllama_transformer.das`** - the block-composition seam, and the require umbrella: the
   `[init]`-only side-effect requires (arch registrations, GPU tiers, and any module that
   requires the engine back, which the umbrella therefore hosts to break the cycle).
@@ -213,7 +218,7 @@ that a question answered for one backend has an obvious address in the other. Th
   posadd, the gemma4v clamp / rope2d / GEGLU-quick, the head restride - gemma3v's and, offset-bound, the qwen3v/prefill slicers) live in the kernel home, so `metal_decode_init` compiles and `metal_kernels_release`
   releases them like every other registry PSO; the borrowed prefill builders (`pf_enc_bf16_mm`,
   `enc_add_bias_rows`, `enc_rope` - the qwen3v vision NEOX apply - and the attention trio
-  `enc_qk_mm`/`enc_softmax`/`enc_av_mm`; this list is the closed borrowed set REVIEW_GPU.md's
+  `enc_qk_mm`/`enc_rowstat`/`enc_av_mm`; this list is the closed borrowed set REVIEW_GPU.md's
   tower rules key on) come up through
   `metal_prefill_pso_init`, prefill's public bring-up seat, and `plane_buffer` in common is
   public for the same wrap-a-plane reason. The tower's own objects (the ones buffer, its
@@ -505,6 +510,11 @@ and the shipped bf16 mmproj rounds activations to bf16; its own four arms spread
   pinned companion, and `serve_asr_tower` is the one standalone pinned artifact the file
   carries - the serving ASR tower (parakeet v3), consumed by `asr_catalog`'s v3 row in
   `profile_common.das` (the pin's single source lives here, not there).
+- **`performance/box_ident.das`** - the hardware-keyed box tag: the fleet table maps every
+  recorded box's CPU brand to its store tag (the M3 row is an EXACT match so bigger M3s slug),
+  the `DASLLAMA_BOX` override wins, and unknown hardware slugs from the brand - never another
+  box's store. `profile_common.das`'s `box_name()` and `tests/run.das`'s manifest pick both
+  resolve through it; the old per-file `"m1"` literals are gone.
 - **`performance/fetch_models.das`** - the fetch/verify driver over the provenance view.
   Verify by default, `--fetch` downloads; it never converts on `--fetch`, never benches, and
   it touches no tune state (`tune_policy(missing="fallback")`). BRINGUP.md sec.2 is the runbook.
@@ -614,9 +624,16 @@ on some paths and not others; a duplicate that binds NO kargs is invisible to it
 ### 2.2b Tensor-GEMM shapes that measured out (M5, interleaved-race evidence)
 
 The forms below were built, raced against the crowned tg-staged q8u GEMM at real model
-shapes, and LOST; the probe that holds the numbers is
-`benchmarks/matmul/bench_metal_nax_probe.das`. Re-attempting one without new structure is
+shapes, and LOST; the probe that holds the GEMM numbers is
+`benchmarks/matmul/bench_metal_nax_probe.das`, and the fused-attention numbers live in
+`benchmarks/attn/bench_metal_pf_fused_attn.das`. Re-attempting one without new structure is
 re-buying a measured loss.
+
+The probe also RETAINS the decided-and-shipped arms (the half-A stream, the dev-W all-device
+form, the tall M-tile twin, the bk staging depths, the no-zero-init form) as hand-written MSL
+reference implementations beside the refuted ones - they are the arc's bisect ledger, and the
+sync duty is REVIEW_GPU.md's hand-binding-lab rule: a diff changing what a lab arm mirrors
+fixes or deletes that arm in the same change.
 
 - **Per-simdgroup register-fragment matmul2d (16x32x16, device -> `vec<T,8>` fragments):**
   1.7-2.0x slower for weight GEMMs, vectorized loads and deep n-blocking included. The
@@ -625,9 +642,15 @@ re-buying a measured loss.
 - **Mixed-integer matmul2d operands (float x int8, and the i8 x i8 per-block-fold form):**
   3.5x slower - the mixed-int combinations exist in MPP's type lists but lower off the NAX
   fast path. W8A8 claims from other stacks do not transfer through MPP.
+
+**Sanctioned float-A stamps** (the REVIEW_GPU half-operand rule's licensed set, each carrying
+`[metal_kernel(float_a_ok=true)]`): every tensor template's `XT = float` stamp - the live
+fallback wherever the half panel is absent (below the convert row floor, panel does not fit,
+half-X pinned off) - and the batch-decode/classifier `MetalQ8GemmTensorT` family, whose half-X
+extension is an open ledger item. A float A operand anywhere else is the defect the rule names.
 - **Fused single-kernel attention (scores in threadgroup, online softmax):** loses 10-80% to
-  the pipelined three-pass at real shapes - Metal's cross-kernel pipelining plus full-width
-  softmax beat tg-scope fusion.
+  the pipelined three-pass at real shapes (`benchmarks/attn/bench_metal_pf_fused_attn.das`) -
+  Metal's cross-kernel pipelining plus full-width softmax beat tg-scope fusion.
 
 The positive laws these races established - half operands, stage-only-to-transform,
 consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules and the

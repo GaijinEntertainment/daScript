@@ -287,6 +287,13 @@ that both emitters read class members. Current entries:
   rejects an unannotated member and lowers method calls as calls. If a joined or
   state-carrying class ever crosses backends, the same design ports - deliberate asymmetry
   until then.
+- **The tmm2d tensor-GEMM builtin family is Metal-only (pending, not deliberate).** The
+  whole-GEMM helpers (`tmm2d_f32_bf16_f32`/`_f16w_f32`/`_q8*_f32` with the bk staging
+  depths) and the staged tg protocol (`begin/step` in `deva`/`nt`/`devant` flavors,
+  `tile_tg`, `rowscale`, the `store`/`store_half`/`store_bias` tails, `sgmat_to_half`)
+  lower MPP `matmul2d` cooperative tensors; the Vulkan analogue would sit on the coopmat2
+  classes when a consumer needs it. Until then the CPU-replay bodies are the only
+  cross-checked twin.
 - **Inheritance in the kernel corpus: Vulkan leans on it, Metal does not yet.** The vulkan
   classes are base+leaf families (kq GEMV/batch, flash attention, deltanet); the metal
   classes are flat, with at least one base duplicated inline (MetalMoeMulMmK6). Dedup

@@ -350,6 +350,11 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         t |> success(find(tmm_devah_msl, "tensor<device half") >= 0, "deva half witness types a half A operand")
         t |> success(find(tmm_devah_msl, "(device half *)") >= 0, "deva half step casts the stream to half")
         t |> success(find(tmm_q8u_msl, "multiply_accumulate") >= 0, "q8u holds an accumulate-mode C")
+        // the RP law in the EMITTED words (the REVIEW.das cell greps the emitter's das source;
+        // this pins the descriptor text itself): transpose flags + relaxed_precision=true
+        t |> success(find(tmm_q8u_msl, ", false, true, true, matmul2d_descriptor::mode::multiply_accumulate") >= 0, "q8u descriptor carries relaxed_precision=true")
+        t |> success(find(tmm_bf16_msl, ", false, true, true)") >= 0, "bf descriptor carries relaxed_precision=true")
+        t |> success(find(tmm_hw_msl, ", false, true, true)") >= 0, "hw descriptor carries relaxed_precision=true")
         t |> success(find(tmm_tg_msl, "__tgop_acc.run(") >= 0, "tg protocol op emitted")
         t |> success(find(tmm_tg_msl, "multiply_accumulate") >= 0, "tg protocol runs in accumulate mode")
         t |> success(find(tmm_tg_msl, "__tgf_acc[__i] += ") < 0, "tg protocol per-element fold removed")

@@ -81,7 +81,10 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
             setup_dasllama_jobque()
             for (kdt in kdts) {
                 var s = make_run_state(tr.config, kdt, kdt)
-                let p <- encode(tr, counting_prompt(1, 40), true, false)
+                // >= 256 rows: the half-X convert (CVT_MIN_ROWS), the tall M-tile stamps and
+                // the MoE gather engage only past their row floors — a short prompt leaves
+                // every one of those kernels undispatched and the census blind to them
+                let p <- encode(tr, counting_prompt(1, 140), true, false)
                 eval_(tr, s, p)
                 var cur = greedy_top(s.logits, vocab)
                 for (_i in range(2)) {

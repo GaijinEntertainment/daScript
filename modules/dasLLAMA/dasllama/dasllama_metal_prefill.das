@@ -671,7 +671,7 @@ struct MoeGxArgs {
 
 // gather-X materialization: the bucket's token rows copied into a CONTIGUOUS f16 panel, pad
 // rows zeroed — up/gate sites then ride the contiguous tensor twin instead of the in-kernel
-// gather form (bkt pad entries are unwritten, so validity derives from basep/cnt)
+// gather form (validity = one bkt read against ka.total; the bucket stamps its pad tails)
 [metal_dispatch(name = "enc_moe_gather_x", pso = "g_pf_pso_moe_gx", tg = 256, grid = "rows", params = "rows : int64")]
 class MetalMoeGatherX {
     @ssbo @binding = 0 @role = "read" bkt : array<uint>
