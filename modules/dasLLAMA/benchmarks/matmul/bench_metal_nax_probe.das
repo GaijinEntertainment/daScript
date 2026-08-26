@@ -8,6 +8,7 @@ options _dasllama_internal = true
 // the emitter grows a nax rail — measurement only, nothing here ships.
 
 require math
+require strings
 require metal/msl_shader
 require metal/das_metal_boost
 require ?das_metal das_metal
@@ -230,6 +231,83 @@ let DEVW_Q8_GEMM = (NAX_COMMON +
     "    uint nBase = wg.y * 64u;\n" +
     "    tmm_devw(xh + mBase * kdim, kdim, wh + nBase * kdim, kdim, y + mBase * ndim + nBase, ndim, kdim);\n" +
     "\}\n")
+
+// tall-M-tile twin of the production q8uh helper: IDENTICAL staging/accumulate protocol,
+// only the descriptor M and the per-threadgroup A slice grow (upstream's mul_mm runs 128
+// act-rows x 64 wcols — M/128 W re-streams vs our M/32; the old 128-tile loss predates
+// accumulate mode)
+def private tile_q8uh_msl(mt : int) : string {
+    return build_string() $(var w) {
+        w |> write("#include <metal_stdlib>\n#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\n")
+        w |> write("using namespace metal;\nusing namespace mpp::tensor_ops;\n")
+        w |> write("kernel void tile{mt}_q8uh(\n")
+        w |> write("    device const half* wsh [[buffer(0)]], device const char* wqb [[buffer(1)]],\n")
+        w |> write("    device const half* xh [[buffer(2)]], device float* y [[buffer(3)]],\n")
+        w |> write("    constant uint& kdim [[buffer(4)]], constant uint& ndim [[buffer(5)]],\n")
+        w |> write("    uint3 tgp [[threadgroup_position_in_grid]], ushort tid [[thread_index_in_threadgroup]])\n")
+        w |> write("\{\n")
+        w |> write("  threadgroup half wt[2048];\n")
+        w |> write("  const uint ldwb = kdim / 32u;\n")
+        w |> write("  const uint blk0 = tgp.y * 64u * ldwb;\n")
+        w |> write("  device const half* ws = wsh + blk0 * 17u;\n")
+        w |> write("  device const char* wq = wqb + blk0 * 34u + 2u;\n")
+        w |> write("  device const half* a = xh + tgp.x * {mt}u * kdim;\n")
+        w |> write("  device float* c = y + tgp.x * {mt}u * ndim + tgp.y * 64u;\n")
+        w |> write("  constexpr auto d = matmul2d_descriptor({mt}, 64, static_cast<int>(dynamic_extent), false, true, true, matmul2d_descriptor::mode::multiply_accumulate);\n")
+        w |> write("  matmul2d<d, execution_simdgroups<4>> op;\n")
+        w |> write("  using AT = tensor<device half, dextents<int32_t, 2>, tensor_inline>;\n")
+        w |> write("  using WT = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;\n")
+        w |> write("  auto cT = op.get_destination_cooperative_tensor<AT, WT, float>();\n")
+        w |> write("  for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
+        w |> write("  const uint nb = kdim / 32u;\n")
+        w |> write("  for (uint b = 0; b < nb; ++b) \{\n")
+        w |> write("    for (uint work = tid; work < 128u; work += 128u) \{\n")
+        w |> write("      const uint col = work >> 1; const uint kh = (work & 1u) * 16u;\n")
+        w |> write("      const uint blk = col * ldwb + b;\n")
+        w |> write("      const float sc = float(ws[blk * 17u]);\n")
+        w |> write("      device const char * q = wq + blk * 34u + kh;\n")
+        w |> write("      threadgroup half * dstp = wt + col * 32u + kh;\n")
+        w |> write("      _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+        w |> write("    \}\n")
+        w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+        w |> write("    auto A = AT((device half *)(a + b * 32u), dextents<int32_t, 2>(32, {mt}), metal::array<int32_t, 2>\{1, int(kdim)\});\n")
+        w |> write("    auto W = WT((threadgroup half *)wt, dextents<int32_t, 2>(32, 64));\n")
+        w |> write("    op.run(A, W, cT);\n")
+        w |> write("    threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+        w |> write("  \}\n")
+        w |> write("  auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>(64, {mt}), metal::array<int32_t, 2>\{1, int(ndim)\});\n")
+        w |> write("  cT.store(C);\n")
+        w |> write("\}\n")
+    }
+}
+
+// tall twin of the all-device dev-W GEMM (arm D's devw_q8_gemm at M-tile mt): panel
+// re-reads drop from M/32 to M/mt — probes whether the cache knee moves with tile height
+def private tile_hw_msl(mt : int) : string {
+    return build_string() $(var w) {
+        w |> write("#include <metal_stdlib>\n#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>\n")
+        w |> write("using namespace metal;\nusing namespace mpp::tensor_ops;\n")
+        w |> write("kernel void tile{mt}_hw(device const half* wh [[buffer(0)]],\n")
+        w |> write("        device const half* xh [[buffer(1)]],\n")
+        w |> write("        device float* y [[buffer(2)]],\n")
+        w |> write("        constant uint& kdim [[buffer(3)]],\n")
+        w |> write("        constant uint& ndim [[buffer(4)]],\n")
+        w |> write("        uint3 wg [[threadgroup_position_in_grid]]) \{\n")
+        w |> write("    device const half* a = xh + wg.x * {mt}u * kdim;\n")
+        w |> write("    device const half* wv = wh + wg.y * 64u * kdim;\n")
+        w |> write("    device float* c = y + wg.x * {mt}u * ndim + wg.y * 64u;\n")
+        w |> write("    auto A = tensor<device half, dextents<int32_t, 2>, tensor_inline>((device half *)a, dextents<int32_t, 2>(int(kdim), {mt}), metal::array<int32_t, 2>\{1, int(kdim)\});\n")
+        w |> write("    auto W = tensor<device half, dextents<int32_t, 2>, tensor_inline>((device half *)wv, dextents<int32_t, 2>(int(kdim), 64), metal::array<int32_t, 2>\{1, int(kdim)\});\n")
+        w |> write("    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>(64, {mt}), metal::array<int32_t, 2>\{1, int(ndim)\});\n")
+        w |> write("    constexpr auto d = matmul2d_descriptor({mt}, 64, static_cast<int>(dynamic_extent), false, true, true);\n")
+        w |> write("    matmul2d<d, execution_simdgroups<4>> op;\n")
+        w |> write("    auto cT = op.get_destination_cooperative_tensor<decltype(A), decltype(W), float>();\n")
+        w |> write("    for (uint16_t i = 0; i < cT.get_capacity(); ++i) \{ if (cT.is_valid_element(i)) cT[i] = 0.0f; \}\n")
+        w |> write("    op.run(A, W, cT);\n")
+        w |> write("    cT.store(C);\n")
+        w |> write("\}\n")
+    }
+}
 
 def private cpu_ref(blob : array<int8>; xf : array<float>; var want : array<float>; m, kdim, ndim : int) {
     let nb = kdim / 32
@@ -602,6 +680,142 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             metal_release(bnb_t)
             delete blob
             delete xh
+        }
+        // ===== tile-height race: the production 32x64 q8uh vs 64/128-tall twins (same
+        // protocol, W re-streamed M/mt times instead of M/32) =====
+        var t64_pso = pipeline_from_source(dev, tile_q8uh_msl(64), "tile64_q8uh", true, err)
+        var t128_pso = pipeline_from_source(dev, tile_q8uh_msl(128), "tile128_q8uh", true, err)
+        if (t64_pso == null || t128_pso == null) {
+            print("tile pso: {err}\n")
+        } else {
+            print("tile-height race (ratio = tall/q8uh32; <1 = tall wins):\n")
+            for (g in [(k = 2560, n = 9728, m = 512), (k = 9728, n = 2560, m = 512),
+                       (k = 2560, n = 9728, m = 2048), (k = 9728, n = 2560, m = 2048),
+                       (k = 4096, n = 14336, m = 512), (k = 2048, n = 8192, m = 2048),
+                       (k = 2560, n = 9728, m = 128)]) {
+                let kdim = g.k
+                let ndim = g.n
+                let m = g.m
+                var blob <- race_q8_blob(ndim * (kdim / 32))
+                var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                var xh <- race_x_f16(m * kdim)
+                var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+                var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                var bk = race_uniform_u32(dev, uint(kdim))
+                var bn = race_uniform_u32(dev, uint(ndim))
+                for (leg in [(pso = t64_pso, mt = 64, name = "t64"), (pso = t128_pso, mt = 128, name = "t128")]) {
+                    if (m % leg.mt != 0) {
+                        continue
+                    }
+                    var t_th = -1.0lf
+                    var t_tall = -1.0lf
+                    race_pair_ms(queue, 5, t_th, t_tall, $(enc) {
+                        kn_pipeline(enc, th_pso)
+                        kn_tgmem(enc, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem, 0)
+                        kn_buffer(enc, bw, 0ul, 0)
+                        kn_buffer(enc, bw, 0ul, 1)
+                        kn_buffer(enc, bxh, 0ul, 2)
+                        kn_buffer(enc, by_a, 0ul, 3)
+                        kn_buffer(enc, bk, 0ul, 4)
+                        kn_buffer(enc, bn, 0ul, 5)
+                        kn_dispatch(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                    }, $(enc) {
+                        kn_pipeline(enc, leg.pso)
+                        kn_buffer(enc, bw, 0ul, 0)
+                        kn_buffer(enc, bw, 0ul, 1)
+                        kn_buffer(enc, bxh, 0ul, 2)
+                        kn_buffer(enc, by_b, 0ul, 3)
+                        kn_buffer(enc, bk, 0ul, 4)
+                        kn_buffer(enc, bn, 0ul, 5)
+                        kn_dispatch(enc, uint3(uint(m / leg.mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                    })
+                    var hnote = ""
+                    let hok = race_envelope_ok(by_a, by_b, m * ndim, hnote)
+                    print("  K={kdim} N={ndim} M={m} {leg.name}: ratio={t_tall / t_th} (q8uh32={t_th}ms tall={t_tall}ms) {hok ? "ok" : hnote}\n")
+                }
+                metal_release(bw)
+                metal_release(bxh)
+                metal_release(by_a)
+                metal_release(by_b)
+                metal_release(bk)
+                metal_release(bn)
+                delete blob
+                delete xh
+            }
+        }
+        // ===== tall dev-W GEMM: the all-device form at M-tile 128 vs 32 (GEMM-only over a
+        // pre-dequanted panel — does the cache knee move with 4x fewer panel re-reads?) =====
+        var h128_pso = pipeline_from_source(dev, tile_hw_msl(128), "tile128_hw", true, err)
+        if (h128_pso == null) {
+            print("tile hw pso: {err}\n")
+        } else {
+            print("tall dev-W GEMM race (ratio = hw128/hw32, GEMM-only):\n")
+            for (g in [(k = 2560, n = 9728, m = 512), (k = 4096, n = 14336, m = 512),
+                       (k = 2560, n = 9728, m = 2048), (k = 4096, n = 14336, m = 2048)]) {
+                let kdim = g.k
+                let ndim = g.n
+                let m = g.m
+                let nblk = ndim * (kdim / 32)
+                var blob <- race_q8_blob(nblk)
+                var bw = race_buf(dev, uint64(long_length(blob)), unsafe(addr<void?>(blob[0])))
+                var bwh = race_buf(dev, uint64(ndim * kdim * 2), null)
+                var bnb = race_uniform_u32(dev, uint(nblk))
+                var xh <- race_x_f16(m * kdim)
+                var bxh = race_buf(dev, uint64(m * kdim * 2), unsafe(addr<void?>(xh[0])))
+                var by_a = race_buf(dev, uint64(m * ndim * 4), null)
+                var by_b = race_buf(dev, uint64(m * ndim * 4), null)
+                var bk = race_uniform_u32(dev, uint(kdim))
+                var bn = race_uniform_u32(dev, uint(ndim))
+                let warm = race_time_ms(queue, 1) $(enc) {   // populate the panel once, untimed
+                    kn_pipeline(enc, dq_pso)
+                    kn_buffer(enc, bw, 0ul, 0)
+                    kn_buffer(enc, bw, 0ul, 1)
+                    kn_buffer(enc, bwh, 0ul, 2)
+                    kn_buffer(enc, bnb, 0ul, 3)
+                    kn_dispatch(enc, uint3(uint((nblk + 127) / 128), 1u, 1u), uint3(128u, 1u, 1u))
+                }
+                var t_h32 = -1.0lf
+                var t_h128 = -1.0lf
+                race_pair_ms(queue, 5, t_h32, t_h128, $(enc) {
+                    kn_pipeline(enc, dw_pso)
+                    kn_buffer(enc, bwh, 0ul, 0)
+                    kn_buffer(enc, bxh, 0ul, 1)
+                    kn_buffer(enc, by_a, 0ul, 2)
+                    kn_buffer(enc, bk, 0ul, 3)
+                    kn_buffer(enc, bn, 0ul, 4)
+                    kn_dispatch(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                }, $(enc) {
+                    kn_pipeline(enc, h128_pso)
+                    kn_buffer(enc, bwh, 0ul, 0)
+                    kn_buffer(enc, bxh, 0ul, 1)
+                    kn_buffer(enc, by_b, 0ul, 2)
+                    kn_buffer(enc, bk, 0ul, 3)
+                    kn_buffer(enc, bn, 0ul, 4)
+                    kn_dispatch(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+                })
+                var wnote = ""
+                let wok = race_envelope_ok(by_a, by_b, m * ndim, wnote)
+                let pmb = ndim * kdim * 2 / (1024 * 1024)
+                print("  K={kdim} N={ndim} M={m} panel={pmb}MB: ratio={t_h128 / t_h32} (hw32={t_h32}ms hw128={t_h128}ms warm={warm}ms) {wok ? "ok" : wnote}\n")
+                metal_release(bw)
+                metal_release(bwh)
+                metal_release(bnb)
+                metal_release(bxh)
+                metal_release(by_a)
+                metal_release(by_b)
+                metal_release(bk)
+                metal_release(bn)
+                delete blob
+                delete xh
+            }
+            metal_release(h128_pso)
+        }
+        if (t64_pso != null) {
+            metal_release(t64_pso)
+        }
+        if (t128_pso != null) {
+            metal_release(t128_pso)
         }
         metal_release(nax_pso)
         metal_release(i8_pso)
