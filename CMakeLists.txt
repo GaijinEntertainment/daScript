@@ -1854,6 +1854,8 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/
     # skills/daslang_live.md (prefix match on the full path)
     REGEX "/skills/internal$" EXCLUDE
     REGEX "/skills/daslang$" EXCLUDE
+    # ruling provenance for this repo's rule documents, not a skill
+    REGEX "/LAWS\\.md$" EXCLUDE
     PATTERN "*.md"
 )
 # its README is editing rules for this repo's maintainers, meaningless in the SDK
@@ -1861,6 +1863,7 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/daslang/
     DESTINATION ${DAS_INSTALL_DOCDIR}/skills/daslang
     FILES_MATCHING
     REGEX "/daslang/README\\.md$" EXCLUDE
+    REGEX "/LAWS\\.md$" EXCLUDE
     PATTERN "*.md"
 )
 # The review constitution ships with the review skills that route to it.
@@ -1959,6 +1962,7 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/daslang/
     DESTINATION .claude/skills/daslang
     FILES_MATCHING
     REGEX "/daslang/README\\.md$" EXCLUDE
+    REGEX "/LAWS\\.md$" EXCLUDE
     PATTERN "*.md"
 )
 install(FILES ${PROJECT_SOURCE_DIR}/.claude/agents/dragon.md DESTINATION .claude/agents)

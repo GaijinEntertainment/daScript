@@ -2,7 +2,8 @@
 """Gate the skills shipped into an SDK bundle.
 
 The FOLDER is the shipping decision: everything under skills/ ships except
-skills/internal/, and skills/daslang/ is the standalone language skill. So
+skills/internal/ and the NOT_A_SKILL names below, and skills/daslang/ is the
+standalone language skill. So
 anything a shipped skill says has to be true *from inside the bundle*. A skill
 that points at src/, links a file that is not there, or tells the reader to run
 bin/Release/daslang.exe is a dead end for an SDK user -- and for Claude running
@@ -62,6 +63,10 @@ EXE_CMD = re.compile(
 # path is a leak.
 MACHINE_PATH = re.compile(
     r"(?:[A-Za-z]:[\\/](?:Users|Work|DASPKG)\b|/home/[A-Za-z0-9_.]+|[\\/]AppData\b)", re.I)
+
+# A .md under skills/ that is not a skill: ruling provenance for the repo's own rule
+# documents. The install rules exclude it, so the set compare below must not demand it.
+NOT_A_SKILL = {"LAWS.md"}
 
 # nested paths too -- a skills/internal/x.md reference must not sit unmarked in
 # a shipped file
@@ -220,6 +225,12 @@ def check(bundle, repo_root=None):
                 continue
             path = os.path.join(dirpath, name)
             rel = name if rel_dir == "." else rel_dir.replace(os.sep, "/") + "/" + name
+            # not a skill at any depth -- the install rules drop it, so a bundle
+            # carrying one means an install regex stopped matching
+            if name in NOT_A_SKILL:
+                problems.append(("skills/" + rel, "not a skill",
+                                 "provenance for the repo's rule documents; it must not ship"))
+                continue
             if rel_dir == ".":
                 root_skills.append(name)
             scan_file(path, rel, problems,
@@ -247,8 +258,8 @@ def check(bundle, repo_root=None):
     repo_skills = os.path.join(repo_root, "skills")
     if os.path.isdir(repo_skills):
         for name in sorted(os.listdir(repo_skills)):
-            if name.endswith(".md") and not os.path.exists(
-                    os.path.join(skills_dir, name)):
+            if (name.endswith(".md") and name not in NOT_A_SKILL
+                    and not os.path.exists(os.path.join(skills_dir, name))):
                 problems.append(("repo skills/" + name, "missing from bundle",
                                  "the install rules did not ship it"))
 
