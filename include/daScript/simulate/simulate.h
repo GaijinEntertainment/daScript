@@ -860,7 +860,7 @@ namespace das
         mutex                           forkContextPoolMutex;
     public:
         string                          name;
-        Bitfield                        category = 0;
+        Bitfield                        category = Bitfield(0u);
     public:
         vec4f *         abiThisBlockArg;
         vec4f *         abiArg;

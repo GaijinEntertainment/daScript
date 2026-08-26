@@ -158,19 +158,21 @@ make.
 
 ## Ledgered cases
 
-**nano is not freestanding yet.** It builds where the full runtime builds, on the same
-toolchains, and drops the compiler. Cross-compiling it for a bare-metal target does not work
-today. What stands in the way, measured against arm-none-eabi with newlib: it has no
-`posix_memalign`, `malloc_usable_size` or `madvise`; its libstdc++ is built without threads, so
-`<mutex>` declares nothing and neither `smart_ptr.h`'s ref-count lock nor this folder's
-`contextMutex` compiles; its `uint32_t` is `unsigned long`, which makes every `BitfieldAny`
-conversion and every `vec4<uint32_t>` load ambiguous; and `alloca` needs its own include. Those
-sit in `platform.h`, `smart_ptr.h`, `arraytype.h`, `vectypes.h` and `interop.h` - shared headers
-every platform compiles - so the port is its own change, not a corner of nano.
+**Freestanding costs three shims, all of them in nano's own `das_config.h`.** A toolchain
+built without threads ships `<mutex>` empty, so nano supplies no-op `mutex`, `recursive_mutex`
+and `lock_guard`; `DAS_THREAD_LOCAL` becomes a plain static, because thread-local storage needs
+a runtime the target has none of; and the smart-pointer leak ledger opts out through the
+`DAS_*_SMART_PTR_*` macros, because its counter is a 64-bit atomic that a Cortex-M cannot do and
+arm-none-eabi ships no libatomic for. Each is chosen only when libstdc++ was built without
+gthreads, so a hosted build is untouched.
 
-**`<mutex>` and `<functional>` are still included.** `smart_ptr.h` declares a `static mutex` for
-its ref-count tracking list and `memory_model.h` types its custom-grow hook as `das::function`.
-Shadowing those two headers is part of the freestanding port above.
+**Size is mostly not nano.** On cortex-m4 with `-Os` and `--gc-sections`, the tier-A example
+links to 89,664 bytes of `.text`: about 29 KB is the nano runtime, 10 KB the compiled script,
+and 54 KB the C library. Of that C library the largest single item is the printf machinery
+(`_svfprintf_r`, `_dtoa_r`, `_vfiprintf_r`, ~11.5 KB), reached because the panic path formats
+its message with `vsnprintf`. An integer-only formatter, dropping the heap's `report()`
+virtuals, and resolving libstdc++'s `__throw_*` helpers locally are each worth kilobytes and
+none of them has been done.
 
 **Floats print differently.** The full runtime formats through fmt, which prints the shortest
 round-tripping form; nano prints `%g`. Same value, shorter text. This shows only in log output.

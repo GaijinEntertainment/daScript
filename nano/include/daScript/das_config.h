@@ -30,7 +30,52 @@
 #include <setjmp.h>
 
 #include <functional>
+
+// libstdc++ without gthreads - every bare-metal cross-compiler - ships <mutex>
+// empty, and nano is single-threaded there, so its locks are the no-ops they
+// would have been anyway. Any other toolchain gets the real header.
+#if defined(__GLIBCXX__) && !defined(_GLIBCXX_HAS_GTHREADS)
+namespace das {
+    struct mutex {
+        void lock() {}
+        void unlock() {}
+        bool try_lock() { return true; }
+    };
+    struct recursive_mutex {
+        void lock() {}
+        void unlock() {}
+        bool try_lock() { return true; }
+    };
+    template <typename TT> struct lock_guard {
+        explicit lock_guard(TT &) {}
+        lock_guard(const lock_guard &) = delete;
+        lock_guard & operator = (const lock_guard &) = delete;
+    };
+}
+#else
 #include <mutex>
+#endif
+
+#if defined(__GLIBCXX__) && !defined(_GLIBCXX_HAS_GTHREADS)
+// Single-threaded: thread-local storage needs a runtime the target has none of,
+// and the smart-pointer leak ledger needs a 64-bit atomic it cannot do either.
+// Nothing here reads either one - nano reports no leaks.
+// TAG is what gives each declaration its own storage, exactly as the hosted
+// DasThreadLocal uses it - without it every DAS_THREAD_LOCAL of the same type
+// in a translation unit would share one function-local static.
+template <typename TT, unsigned long long TAG> class DasSingleThreaded final {
+public:
+    inline TT & operator * () { static TT value_{}; return value_; }
+    inline TT * operator -> () { return &(**this); }
+};
+#define DAS_THREAD_LOCAL(X)             DasSingleThreaded<X, das::hash_tag_file_name(DAS_FILE_LINE)>
+#define DAS_NEW_SMART_PTR_ID
+#define DAS_DELETE_SMART_PTR_ID
+#define DAS_TRACK_SMART_PTR_ID
+#define DAS_TRACK_SMART_PTR_ID_DTOR
+#define DAS_SMART_PTR_NEW
+#define DAS_SMART_PTR_DELETE
+#endif
 
 namespace das {using namespace std;}
 
