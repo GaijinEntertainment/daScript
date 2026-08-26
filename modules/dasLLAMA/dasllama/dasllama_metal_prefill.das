@@ -3087,7 +3087,7 @@ def private pf_enc_hmm(enc : MetalComputeEncoder?; bwh, bxh, by : MetalBuffer?; 
                        bk, bn : MetalBuffer?; rows, td, dfull, kdim : int64) {
     var r0 = 0l
     if (g_pf_env_tall && g_pf_pso_hmm_th128 != null && rows >= 128l
-            && rows / 128l * (td / 64l) >= 128l) {
+            && rows / 128l * (td / 64l) >= TALL_OCC_FLOOR) {
         r0 = rows / 128l * 128l
         enc_gemm_hmm_th128(enc, bwh, bxh, 0ul, by, yoff, bk, bn, r0, td)
     }
@@ -3168,9 +3168,9 @@ def private enc_gemm_mm_tensor(enc : MetalComputeEncoder?; bwblob : MetalBuffer?
     }
     let half_form = bxh != null && g_pf_pso_mm_th != null
     var r0 = 0l
-    // occupancy floor: a tall grid under 128 threadgroups starves the GPU (1B pp128 -15%)
+    // occupancy floor: an under-occupied tall grid starves the GPU (1B pp128 -15% unfloored)
     if (g_pf_env_tall && rows >= 128l && (kdim > 0l || rows % 128l == 0l)
-            && rows / 128l * (d / 64l) >= 128l) {
+            && rows / 128l * (d / 64l) >= TALL_OCC_FLOOR) {
         let tall = half_form ? g_pf_pso_mm_th128 : g_pf_pso_mm_t128
         if (tall != null) {
             r0 = rows / 128l * 128l
@@ -3226,9 +3226,9 @@ def pf_enc_bf16_mm(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64
     if (g_pf_bf16_mm_tensor) {
         let half_form = bxh != null && g_pf_pso_bf16_mm_th != null
         var r0 = 0l
-        // same 128-threadgroup occupancy floor as the mul_mm/dev-W picks
+        // same occupancy floor as the mul_mm/dev-W picks
         if (g_pf_env_tall && mp >= 128l && (kdim > 0l || mp % 128l == 0l)
-                && mp / 128l * (nd / 64l) >= 128l) {
+                && mp / 128l * (nd / 64l) >= TALL_OCC_FLOOR) {
             let tall = half_form ? g_pf_pso_bf16_mm_th128 : g_pf_pso_bf16_mm_t128
             if (tall != null) {
                 r0 = mp / 128l * 128l
@@ -4843,6 +4843,10 @@ var private g_pf_env_tall = true
 // dev-W engage rules = the probe's M5 shape map (bench_metal_nax_probe grid): PANEL SIZE
 // dominates (<=32MB wins at every M, 47MB only at >=2048 rows, 112MB loses everywhere —
 // the f16 panel's 2-vs-1.06 B/w W stream past cache); wide-N panels' dequant tax needs rows.
+// tall M-tile occupancy floor, in 128-row-x-64-col threadgroups (raced 32/64/128 at pp512:
+// 64 wins +0.6..2% over 128 across 4B/E2B/Q4KM, 32 adds nothing; pp128 guard green — at
+// rows=128 the d>=4096 demand keeps small-d sites short). Sidecar tune knob at arc end.
+let TALL_OCC_FLOOR = 64l
 let DEVW_SMALL_PANEL = 32ul * 1024ul * 1024ul
 let DEVW_BIG_PANEL = 48ul * 1024ul * 1024ul
 let DEVW_WIDE_N = 4096l
