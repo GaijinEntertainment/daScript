@@ -378,6 +378,14 @@ namespace das {
                 return true;
             }
         }
+        for ( auto & tme : decl->typeMacroExpr ) {
+            if ( tme && tme->rtti_isTypeDecl() ) {
+                auto te = static_cast<ExprTypeDecl *>(tme);
+                if ( te->typeexpr && isLoop(visited, te->typeexpr) ) {
+                    return true;
+                }
+            }
+        }
         if ( decl->baseType == Type::alias ) {
             visited.pop_back();
         }

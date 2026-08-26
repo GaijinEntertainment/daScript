@@ -307,6 +307,16 @@ namespace das {
         if ( fatalAliasLoop ) return false;
         return !st->isTemplate; // we don't do a thing with templates
     }
+    void InferTypes::preVisitStructureAlias(Structure *var, const string &name, TypeDecl *at) {
+        Visitor::preVisitStructureAlias(var, name, at);
+        vector<string> visited;
+        visited.push_back(name);
+        if ( isLoop(visited, at) ) {
+            fatalAliasLoop = true;
+            error("alias loop detected: '" + describeType(at) + "'", "", "",
+                  at->at, CompilationError::recursion_type_alias);
+        }
+    }
     void InferTypes::preVisit(Structure *that) {
         Visitor::preVisit(that);
         checkEmptyName(that->name, "structure declaration", that->at);
