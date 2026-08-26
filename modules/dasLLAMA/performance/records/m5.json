@@ -8,7 +8,7 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-25",
+        "date":"2026-08-26",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -23,24 +23,23 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":6651.7248495806152,
-            "stddev":36.664257049560547
+            "tok_s":8685.2702307866621,
+            "stddev":50.686046600341797
           },
           "tg128":{
-            "tok_s":161.66388330319734,
-            "stddev":0.18058642745018005
+            "tok_s":161.32768851495152,
+            "stddev":0.27229812741279602
           }
         },
         "source":"official",
-        "sha":"4906b6283",
+        "sha":"80b968f7f",
         "version":"0.6.4",
         "dasllama_version":9,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6d17d42ad4f42e674e2b655ed31e7c9dd0a90715922abf31878ae2acb6f3fbb6",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4_nrsplit2 (manifest)",
+        "tune_sha":"e794889694abd9948e42df56273f0ee87bfb2f4dd842e9cf7363185f97398e1b",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",
@@ -56,7 +55,7 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-25",
+        "date":"2026-08-26",
         "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-3737e41/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf -ngl 99 -t 6 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -71,12 +70,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":7558.608921,
-            "stddev":17.064112999999999
+            "tok_s":7408.8736330000002,
+            "stddev":18.522511000000002
           },
           "tg128":{
-            "tok_s":137.45493300000001,
-            "stddev":0.13824900000000001
+            "tok_s":136.51642000000001,
+            "stddev":0.44064799999999998
           }
         },
         "source":"official",
@@ -275,7 +274,7 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-08-25",
+        "date":"2026-08-26",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --image-mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --image /Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg -r 3 -t 6 -o json --json-path modules/dasLLAMA/performance/records/_cell_m5.json --ngl 99",
         "hardware":{
           "cpu":"Apple M5 Max",
@@ -290,27 +289,26 @@
         },
         "tests":{
           "img:enc":{
-            "ms":40.576000000000001
+            "ms":37.381
           },
           "img:pp":{
-            "tok_s":3272.1552176192972
+            "tok_s":3558.3129946853401
           },
           "img:tg":{
-            "tok_s":155.19917227108121,
+            "tok_s":154.46560051076625,
             "text":": This is an image of two tabby cats lying on a pink surface."
           }
         },
         "workload":"image-chat",
         "source":"official",
-        "sha":"0213a5618",
+        "sha":"80b968f7f",
         "version":"0.6.4",
         "dasllama_version":9,
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4 (manifest)",
-        "tune_sha":"6d17d42ad4f42e674e2b655ed31e7c9dd0a90715922abf31878ae2acb6f3fbb6",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr4 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr4_nrsplit2 (manifest)",
+        "tune_sha":"e794889694abd9948e42df56273f0ee87bfb2f4dd842e9cf7363185f97398e1b",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"tower gemma4v f32; weights q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m5",
         "files":[
           {
             "role":"weights",

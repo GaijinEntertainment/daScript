@@ -2271,8 +2271,9 @@ def private emit_sgmat_multiply(var ctx : MslCtx; ec : ExprCall?; indent : strin
 // the tensor_inline views + matmul2d op, and a plain call at the site. m/n/sgs must be
 // call-site constants (the simdgroup-lane precedent). Layout contract in metal_builtins.das.
 // Every descriptor sets relaxed_precision=true: false keeps the op off the tensor-unit fast
-// path (measured 2-3x on M5), and the int8 forms are exact either way. A future false needs
-// a stated reason at the site.
+// path (measured 2-3x on M5); the int8 W sides are exact either way, the float-A bf/q8b
+// sides ride the same measured-green flip. A future false reds REVIEW.das's descriptor
+// cell - flip it only with that gate updated in the same change.
 
 def private tmm2d_const_uint(var ctx : MslCtx; e : Expression?; what : string) : uint {
     var v = e
@@ -2613,7 +2614,7 @@ def private emit_tmm2d_tg_step_nt(var ctx : MslCtx; ec : ExprCall?; indent : str
 // the AV-shape step (P streamed, V rows coalesced)
 def private emit_tmm2d_tg_begin_devant(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (!ctx.float_a_ok) {
-        err(ctx, ec.at, "tmm2d_tg_begin_devant: FLOAT A operand keeps matmul2d off the native half path (measured 8-11% per GEMM) - stamp a float16 twin, or license the deliberate f32 form with [metal_kernel(float_a_ok=true)]")
+        err(ctx, ec.at, "tmm2d_tg_begin_devant: this flavor streams a FLOAT A operand by construction (off the native half path, measured 8-11% per GEMM) - license the deliberate f32 form with [metal_kernel(float_a_ok=true)], or use the deva flavor with an f16 stream")
     }
     if (length(ec.arguments) != 5) {
         err(ctx, ec.at, "tmm2d_tg_begin_devant takes exactly 5 arguments")
@@ -2702,7 +2703,7 @@ def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : 
         a0 = (a0 as ExprRef2Value).subexpr
     }
     if (a0 is ExprVar) {
-        ctx.tg_accs[string((a0 as ExprVar).name)] = "{int(m)}|{int(n)}|{int(sgs)}|{int(kk)}"
+        ctx.tg_accs[string((a0 as ExprVar).name)] = "{int(m)}|{int(n)}|{int(sgs)}|{int(kk)}|{at}"
     }
     note(ctx, "call.tmm2d_tg_begin_deva")
     lines |> push("{indent}constexpr auto __tgd_{acc} = matmul2d_descriptor({int(m)}, {int(n)}, {int(kk)}, false, true, true, matmul2d_descriptor::mode::multiply_accumulate);")
@@ -2727,6 +2728,12 @@ def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : s
     let kk = tmm2d_const_uint(ctx, ec.arguments[6], "kk (chunk K width)")
     if (m == 0u || n == 0u || kk == 0u) {
         return
+    }
+    let witness = ctx.tg_accs?[acc] ?? ""
+    if (!empty(witness) && !(witness |> ends_with("|{at}"))) {
+        // begin typed the destination's A operand from ITS pointer; a step streaming the other
+        // element type emits an MSL template error at PSO compile with no das-level trace
+        err(ctx, ec.at, "tmm2d_tg_step_deva: A stream is {at} but tmm2d_tg_begin_deva's witness typed {witness} - begin and steps must stream the same element type")
     }
     note(ctx, "call.tmm2d_tg_step_deva")
     lines |> push("{indent}\{")
@@ -2841,8 +2848,9 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     if ((kind == "bf" || kind == "hw") && length(ec.arguments) == 10 && tmm2d_a_elem(ec.arguments[3]) == "half") {
         kind = kind == "bf" ? "bfh" : "hwh"
     }
-    if ((kind == "q8u" || kind == "bf" || kind == "hw") && !ctx.float_a_ok) {
-        err(ctx, ec.at, "{cname}: FLOAT A operand keeps matmul2d off the native half path (measured 8-11% per GEMM) - pass the f16 activation panel (the overload picks the half helper by pointee), or license the deliberate f32 fallback with [metal_kernel(float_a_ok=true)]")
+    if ((kind == "q8u" || kind == "bf" || kind == "hw" || kind == "q8b") && !ctx.float_a_ok) {
+        let fix = kind == "q8b" ? "this form has no half-A twin - license it with [metal_kernel(float_a_ok=true)] or move to tmm2d_q8u_f32" : "pass the f16 activation panel (the overload picks the half helper by pointee), or license the deliberate f32 fallback with [metal_kernel(float_a_ok=true)]"
+        err(ctx, ec.at, "{cname}: FLOAT A operand keeps matmul2d off the native half path (measured 8-11% per GEMM) - {fix}")
     }
     let want_args = kind == "bf" || kind == "bfh" || kind == "hw" || kind == "hwh" ? 10 : (kind == "q8b" ? 11 : 14)
     if (length(ec.arguments) != want_args) {

@@ -18,7 +18,7 @@ def private box_from_cpu(cpu : string) : string {
     if (cpu |> find("Apple M1 Max") >= 0) {
         return "m1"
     }
-    if (cpu |> find("Apple M3") >= 0) {
+    if (cpu == "Apple M3") {   // EXACT: the Air's base chip — "Apple M3 Pro/Max/Ultra" must slug, not inherit the Air's crowns and store
         return "m3air"
     }
     if (cpu |> find("Apple M4 Pro") >= 0) {

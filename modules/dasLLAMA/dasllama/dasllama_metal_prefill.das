@@ -303,7 +303,7 @@ class template MetalHalfMulMmTensorT {
     @template_constant MT : uint = 32u      // M-tile rows: the panel re-reads M/MT times
     @ssbo @binding = 0 @role = "read" wh : array<float16>   // pre-dequantized W panel, d x kdim
     @ssbo @binding = 1 @role = "read" @off = "xoff" xf : array<float16>   // the f16 activation panel (half-X)
-    @ssbo @binding = 2 @off = "yoff" @span = "mp*d*4" y : array<float>
+    @ssbo @binding = 2 @off = "yoff" y : array<float>   // no @span: the dev-W N-tiled callers pass td as d while rows stride the FULL ndim — an exact span would under-cover the hazard range
     @uniform @binding = 3 kdim : uint
     @uniform @binding = 4 ndim : uint
 
@@ -663,8 +663,10 @@ struct MoeGxArgs {
     dim : uint
     nk : uint
     ne : uint
-    total : uint    // npos*nk — any bkt word >= it (the sentinel, or stale pool bytes past the
-                    // last expert's stamped tail) reads as a pad row; equality would OOB there
+    total : uint    // npos*nk — a bkt word >= it (the sentinel, or stale bytes past the last
+                    // expert's stamped tail) zeroes the row; a stale word BELOW it copies a live
+                    // row into a tail slot no mm tile ever reads. Either way in bounds — the old
+                    // sentinel-equality test could send a stale word's token index OOB
 }
 
 // gather-X materialization: the bucket's token rows copied into a CONTIGUOUS f16 panel, pad
@@ -2462,6 +2464,7 @@ def public set_metal_prefill_mm_tail(v : bool) {
 //! npos-gated form swap is the same class of fused-vs-splice spread.
 def public set_metal_prefill_half_x(v : bool) {
     g_pf_env_half_x = v
+    to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_half_x({v}) - GEMM form override\n")
 }
 
 //! A/B seat: the dev-W all-device GEMM form (q8 W dequantized to a device f16 panel per
@@ -2469,12 +2472,14 @@ def public set_metal_prefill_half_x(v : bool) {
 //! half-X — the same row-gated form-swap class.
 def public set_metal_prefill_dev_w(v : bool) {
     g_pf_env_dev_w = v
+    to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_dev_w({v}) - GEMM form override\n")
 }
 
 //! A/B seat: the tall 128-row M-tile mul_mm stamps (W streamed M/128 times) vs 32-row-only.
 //! Default on; identity witnesses pin it off with half-X — the same row-gated form-swap class.
 def public set_metal_prefill_tall(v : bool) {
     g_pf_env_tall = v
+    to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_tall({v}) - GEMM form override\n")
 }
 
 //! The prefill knockout rail as an in-process setter (timing attribution — served output is
@@ -2680,6 +2685,7 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     }
     if (g_pf_pso_bf16_mm_th != null) {
         metal_release(g_pf_pso_bf16_mm_th)
+        g_pf_pso_bf16_mm_th = null
     }
     if (g_pf_pso_bf16_mm_t128 != null) {
         metal_release(g_pf_pso_bf16_mm_t128)
@@ -2688,7 +2694,6 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     if (g_pf_pso_bf16_mm_th128 != null) {
         metal_release(g_pf_pso_bf16_mm_th128)
         g_pf_pso_bf16_mm_th128 = null
-        g_pf_pso_bf16_mm_th = null
     }
     if (g_pf_pso_ple_gather != null) {
         metal_release(g_pf_pso_ple_gather)
@@ -3190,7 +3195,7 @@ def private enc_gemm_mm_tensor(enc : MetalComputeEncoder?; bwblob : MetalBuffer?
     }
     let half_form = bxh != null && g_pf_pso_mm_th != null
     var r0 = 0l
-    // occupancy floor: an under-occupied tall grid starves the GPU (1B pp128 -15% unfloored)
+    // occupancy floor: an under-occupied tall grid starves the GPU (small prompts regress hard unfloored — race data in the sidecar archive)
     if (g_pf_env_tall && rows >= 128l && (kdim > 0l || rows % 128l == 0l)
             && rows / 128l * (d / 64l) >= TALL_OCC_FLOOR) {
         let tall = half_form ? g_pf_pso_mm_th128 : g_pf_pso_mm_t128
@@ -3683,7 +3688,11 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bmg = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mg) : null
     var bmg2 = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mg) : null
     var bmdn = moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mdn) : null
-    let want_mxg = moe && g_pf_pso_moe_gx != null && npos >= 256l
+    // acquire only when a contiguous twin can consume it — the gather sites' own th_ok
+    // predicate; without a crowned _th twin the panel would sit wired and untouched
+    let mxg_th = (g_pf_pso_moe_mm_mx4_th != null || g_pf_pso_moe_mm_q8_th != null
+        || g_pf_pso_moe_mm_k4_th != null || g_pf_pso_moe_mm_k5_th != null || g_pf_pso_moe_mm_k6_th != null)
+    let want_mxg = moe && g_pf_pso_moe_gx != null && npos >= 256l && mxg_th
     let bytes_mxg = uint64(mpad * dim * 2l)
     var bmxg = want_mxg ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mxg) : null
     var bmg4rt = g4moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_x) : null
@@ -3704,6 +3713,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bdnqg = c.q_gated ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_dn_qg) : null
     var bdngate = c.q_gated ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_q) : null
     var batt = pool_acquire_pinned(g_pf_pool, g_dev, bytes_att)
+    // rowstat writes [0, npos) only; rows [npos, mp) stay recycled-pool bytes, and AV pad C
+    // rows computed from them are read ONLY as row-confined A operands downstream — no pad AV
+    // row may ever become a matmul B operand (V pad rows stage as 0 for the same reason)
     var bstats = pool_acquire_pinned(g_pf_pool, g_dev, bytes_stat)
     // deepstack (qwen3vl dense): the wide quantum's tail slices upload as PER-SLICE contiguous
     // planes so the per-layer add is the existing enc_add at a slice offset — a repack, no kernel
@@ -3792,7 +3804,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let bytes_xh = max(max(max(bytes_xb, bytes_h), uint64(mp * 2l * dim * 4l)),
         max(max(bytes_dn_di, bytes_ple_g), moe ? bytes_mg : 0ul)) / 2ul
     let any_th = (g_pf_pso_mm_th != null || g_pf_pso_kq_mm4_th != null || g_pf_pso_kq_mm5_th != null
-        || g_pf_pso_kq_mm6_th != null || g_pf_pso_bf16_mm_th != null)
+        || g_pf_pso_kq_mm6_th != null || g_pf_pso_bf16_mm_th != null
+        || g_pf_pso_moe_mm_q8_th != null || g_pf_pso_moe_mm_mx4_th != null)   // the MoE down-site cvt consumes the panel too
     let want_xh = any_th
     g_pf_bxh = want_xh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_xh) : null
     g_pf_bxh2 = want_xh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_xh) : null
@@ -4310,7 +4323,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         pf_enc_rms(enc, bxb2, 0ul, bw_pa, bxb2, u_dim, u_eps, npos)
                     }
                     enc_add(enc, bx, 0ul, bxb2, 0ul, u_total_dim, npos * dim)
-                    bxh_ffn = g_pso_rms_hx != null ? pf_twin_panel(mp, dim) : null
+                    // dual-store only where a dense FFN will read the twin — the routed-MoE arm
+                    // rides bmxg/bmg, so its layers would pay the f16 write for nothing
+                    bxh_ffn = (!moe || g4moe) && g_pso_rms_hx != null ? pf_twin_panel(mp, dim) : null
                     if (bxh_ffn != null) {
                         pf_enc_rms_hx(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, bxh_ffn, npos)
                     } else {
@@ -4870,9 +4885,9 @@ var private g_pf_env_tall = true
 // dominates (<=32MB wins at every M, 47MB only at >=2048 rows, 112MB loses everywhere —
 // the f16 panel's 2-vs-1.06 B/w W stream past cache); wide-N panels' dequant tax needs rows.
 
-// tall M-tile occupancy floor, in 128-row-x-64-col threadgroups (raced 32/64/128 at pp512:
-// 64 wins +0.6..2% over 128 across 4B/E2B/Q4KM, 32 adds nothing; pp128 guard green — at
-// rows=128 the d>=4096 demand keeps small-d sites short). Sidecar tune knob at arc end.
+// tall M-tile occupancy floor, in 128-row-x-64-col threadgroups: raced 32/64/128 at mid-M
+// across three dense families — 64 wins, 32 adds nothing, the small-prompt guard held (at
+// rows=128 the d>=4096 demand keeps small-d sites short). Race data: the sidecar archive.
 var private CVT_MIN_ROWS = 256l          // sidecar knob "metal_cvt_min_rows" — cached at init
 var private TALL_OCC_FLOOR = 64l         // sidecar knob "metal_tall_floor" — cached at init
 var private DEVW_SMALL_PANEL = 32ul * 1024ul * 1024ul   // sidecar knob "metal_devw_small_panel_mb"
@@ -4882,7 +4897,7 @@ let DEVW_WIDE_N_ROWS = 512l
 let DEVW_BIG_ROWS = 2048l
 // e2e-only clause the isolated grid cannot see (it races one site; production overlaps):
 // a long-K (down) dequant serializes on the panel pair behind the up/gate GEMM chain at
-// small M — 1B pp512 measured −2.5% with it engaged despite the site's 0.88 isolated win
+// small M — engaged there it LOSES e2e despite winning its isolated site race
 let DEVW_LONG_K = 4096l
 let DEVW_LONG_K_ROWS = 1024l
 var private g_pf_env_span = true

@@ -2240,7 +2240,7 @@ class MetalSkReduce {
 }
 
 // Metal-4 tensor twins of the batch GEMMs, one template: same binds/grids as their simdgroup
-// parents, bodies lowered to one tmm2d_q8b_f32 (raced via runtime.metal_tensor — crowns
+// parents, bodies lowered to one tmm2d_q8u_f32 (raced via runtime.metal_tensor — crowns
 // "gemmb_q8" / "gemmb_sk_q8" / "gemm64b_q8"). Axes: TILE_N width, IS_SK k-slice, LDC_ND stride.
 [ |> template_struct_instance]
 class template MetalQ8GemmTensorT {
@@ -2254,7 +2254,7 @@ class template MetalQ8GemmTensorT {
     @template_constant LDC_ND : bool = false   // C stride = ka.ndim (SK planes, 64-wide) vs ka.ys
     @workgroup twb : float16[2048]          // W chunk: TILE_N wcols x 32 k, dequant-staged by the helper
 
-    [metal_kernel(float_a_ok=true)]   // batch-decode/classifier family: f32 X rows by design (no half-X extension yet)
+    [metal_kernel(float_a_ok=true)]   // batch-decode/classifier family streams f32 X rows - the half-X extension is an open ledger item, this license covers the interim
     def metal_q8_gemm_b_t {
         let ntileN = ka.ndim / TILE_N
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u

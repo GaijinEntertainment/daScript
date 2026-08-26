@@ -66,7 +66,7 @@ class TmmKernels {
     @workgroup tga : float16[256]    // tg protocol: 8 x 32 flat A chunk
     @workgroup tgb : float16[512]    // 16 x 32 flat B chunk
 
-    [metal_kernel(name="tmm_tg_msl", float_a_ok=true), marker(no_coverage)]
+    [metal_kernel(name="tmm_tg_msl"), marker(no_coverage)]
     def tmm_tg_k {
         var acc : float[128]
         var ap = unsafe(addr(xa[0]))
@@ -93,7 +93,7 @@ class TmmKernels {
         tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
     }
 
-    [metal_kernel(name="tmm_q8b_msl"), marker(no_coverage)]
+    [metal_kernel(name="tmm_q8b_msl", float_a_ok=true), marker(no_coverage)]   // q8b has no half-A twin - the license is the only form
     def tmm_q8b_k {
         var sp = unsafe(addr(bsh[0]))
         var wp = unsafe(addr(bqb[2]))
@@ -106,7 +106,7 @@ class TmmKernels {
 
     @workgroup tgc : float16[512]    // nt protocol: 32 x 16 flat B chunk, NATURAL [kk][n]
 
-    [metal_kernel(name="tmm_nt_msl", float_a_ok=true), marker(no_coverage)]
+    [metal_kernel(name="tmm_nt_msl"), marker(no_coverage)]
     def tmm_nt_k {
         var acc : float[128]
         var ap = unsafe(addr(xa[0]))

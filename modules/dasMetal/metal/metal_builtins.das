@@ -443,7 +443,7 @@ def public tmm2d_q8b_f32(m, n, sgs : uint; wsh : float16 const?; wqb : int8 cons
 }
 
 //! Interleaved-q8_0 W x RAW f32 activations, upstream-geometry walk: the emitter dequantizes
-//! the W tile into `wt` (an n*32 @workgroup float16 scratch, scale folded AT STAGING) per 32-K
+//! the W tile into `wt` (an n*bk @workgroup float16 scratch, scale folded AT STAGING) per staged-K
 //! chunk, streams activations straight from device memory, and holds ONE multiply_accumulate
 //! cooperative C across the whole K loop. Same blob views and arg meanings as tmm2d_q8b_f32;
 //! `tid` is the caller's gl_LocalInvocationIndex (the staging stride). The CPU replay mirrors
@@ -483,17 +483,20 @@ def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 
         return
     }
     unsafe {
+        let nb = int(kk) / 32
         for (r in range(int(m))) {
             for (j in range(int(n))) {
-                var ch = 0.0
-                for (b in range(int(kk) / 32)) {
-                    let blk = j * (int(kk) / 32) + b
+                var facc = 0.0
+                for (b in range(nb)) {
+                    let blk = j * int(ldwb) + b
                     let ws = float(wsh[blk * 17])
+                    var ch = 0.0
                     for (k in range(32)) {
                         ch += float(a[r * int(lda) + b * 32 + k]) * float(float16(float(wqb[blk * 34 + k]) * ws))
                     }
+                    facc += ch
                 }
-                c[r * int(ldc) + j] = ch
+                c[r * int(ldc) + j] = facc
             }
         }
     }

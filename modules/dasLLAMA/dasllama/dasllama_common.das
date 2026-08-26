@@ -2103,18 +2103,30 @@ var private g_metal_devw_small_panel_mb = 32l  // dev-W dequant-panel engage kne
 var private g_metal_cvt_min_rows = 256l        // half-X panel conversion row floor
 
 def public set_metal_tall_floor(v : int64) {
+    if (v < 1l) {   // 0 is the measured-bad unfloored config — refuse, keep the default
+        to_log(LOG_WARNING, "dasLLAMA: set_metal_tall_floor({v}) out of range - keeping {g_metal_tall_floor}\n")
+        return
+    }
     g_metal_tall_floor = v
 }
 
 def public metal_tall_floor : int64 => g_metal_tall_floor
 
 def public set_metal_devw_small_panel_mb(v : int64) {
+    if (v < 1l) {
+        to_log(LOG_WARNING, "dasLLAMA: set_metal_devw_small_panel_mb({v}) out of range - keeping {g_metal_devw_small_panel_mb}\n")
+        return
+    }
     g_metal_devw_small_panel_mb = v
 }
 
 def public metal_devw_small_panel_mb : int64 => g_metal_devw_small_panel_mb
 
 def public set_metal_cvt_min_rows(v : int64) {
+    if (v < 1l) {   // 0 would flip every site onto the f16 convert — a numerics form change from JSON
+        to_log(LOG_WARNING, "dasLLAMA: set_metal_cvt_min_rows({v}) out of range - keeping {g_metal_cvt_min_rows}\n")
+        return
+    }
     g_metal_cvt_min_rows = v
 }
 
