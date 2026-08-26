@@ -2838,11 +2838,14 @@ class public CppAot : AstVisitor {
         }
         return c;
     }
+    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool {
+        return false;
+    }
     def override preVisitExprAssume(expr : ExprAssume?) {
-        write(*ss, "\n#if 0 // with, note optimizations are off\n");
+        write(*ss, "\n#if 0 // assume {expr.alias} = {describe(expr.subexpr) |> replace("\n", " ")}\n");
     }
     def override visitExprAssume(var expr : ExprAssume?) : ExpressionPtr {
-        write(*ss, "\n#endif\n");
+        write(*ss, "\n#endif // assume {expr.alias}\n");
         return expr;
     }
     def override preVisitExprWith(expr : ExprWith?) {

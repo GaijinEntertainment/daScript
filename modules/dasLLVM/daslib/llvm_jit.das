@@ -7687,6 +7687,10 @@ class public ResolveExternVisitor : AstVisitor {
     @do_not_delete thisBlock : array<ExprBlock?>
     uid : UidNodes?
 
+    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool {
+        return false
+    }
+
     def override preVisitFunction(var fun : FunctionPtr) : void {
         uid.reset(fun)
         thisFunc = fun
@@ -8225,6 +8229,10 @@ class public DisableJitVisitor : AstVisitor {
     uids : table<uint64, uint64>
     def TypeInfoVisitor {
         disable = false
+    }
+
+    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool {
+        return false
     }
     // Default-argument inits are inlined into call sites at infer, so the copy left on the
     // argument is a dead husk LlvmJitVisitor declines too - and ClearUnusedSymbols nulls refs
