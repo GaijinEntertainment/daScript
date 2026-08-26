@@ -31,6 +31,9 @@ require math
 
 struct public MslEmitConfig {
     kernel_name : string    // "" -> the method name (class-prefix stripped)
+    float_a_ok : bool       // licenses a FLOAT A operand in tmm2d forms (the deliberate f32-X
+                            // fallback stamps) — unlicensed float A is a compile error: the half
+                            // twin is measured 8-11% faster per GEMM (matmul2d native half path)
 }
 
 struct private MslMember {
@@ -69,6 +72,7 @@ struct private UserFn {
 
 struct private MslCtx {
     errors : array<string>
+    float_a_ok : bool       // MslEmitConfig.float_a_ok, threaded for the tmm2d emit sites
     census : table<string>
     members : table<string; MslMember>          // das field name -> lowering
     builtins_used : table<string>               // referenced builtin globals (gl_*)
@@ -2565,6 +2569,9 @@ def private emit_tmm2d_tg_step_nt(var ctx : MslCtx; ec : ExprCall?; indent : str
 // deva+nt: A streams from device f32 (row stride lda), B staged NATURAL [kk][n] tg f16 —
 // the AV-shape step (P streamed, V rows coalesced)
 def private emit_tmm2d_tg_begin_devant(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (!ctx.float_a_ok) {
+        err(ctx, ec.at, "tmm2d_tg_begin_devant: FLOAT A operand keeps matmul2d off the native half path (measured 8-11% per GEMM) - stamp a float16 twin, or license the deliberate f32 form with [metal_kernel(float_a_ok=true)]")
+    }
     if (length(ec.arguments) != 5) {
         err(ctx, ec.at, "tmm2d_tg_begin_devant takes exactly 5 arguments")
         return
@@ -2632,6 +2639,9 @@ def private tmm2d_a_elem(e : Expression?) : string {
 // TYPE WITNESS: the destination cooperative tensor's layout is parameterized by the A element
 // type, so the begin must type the operand the steps will stream.
 def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
+    if (tmm2d_a_elem(ec.arguments[1]) == "float" && !ctx.float_a_ok) {
+        err(ctx, ec.at, "tmm2d_tg_begin_deva: FLOAT A operand keeps matmul2d off the native half path (measured 8-11% per GEMM) - stamp a float16 XT twin, or license the deliberate f32 fallback with [metal_kernel(float_a_ok=true)]")
+    }
     if (length(ec.arguments) != 6) {
         err(ctx, ec.at, "tmm2d_tg_begin_deva takes exactly 6 arguments")
         return
@@ -2789,6 +2799,9 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     }
     if ((kind == "bf" || kind == "hw") && length(ec.arguments) == 10 && tmm2d_a_elem(ec.arguments[3]) == "half") {
         kind = kind == "bf" ? "bfh" : "hwh"
+    }
+    if ((kind == "q8u" || kind == "bf" || kind == "hw") && !ctx.float_a_ok) {
+        err(ctx, ec.at, "{cname}: FLOAT A operand keeps matmul2d off the native half path (measured 8-11% per GEMM) - pass the f16 activation panel (the overload picks the half helper by pointee), or license the deliberate f32 fallback with [metal_kernel(float_a_ok=true)]")
     }
     let want_args = kind == "bf" || kind == "bfh" || kind == "hw" || kind == "hwh" ? 10 : (kind == "q8b" ? 11 : (kind == "q8u" || kind == "q8uh" ? 13 : 14))
     if (length(ec.arguments) != want_args) {
@@ -3393,6 +3406,7 @@ def public kernel_entry_name(fn : FunctionPtr; cfg : MslEmitConfig) : string {
 [macro_function]
 def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslEmitConfig; var census : table<string>; var tgmem : uint64&) : string {
     var ctx = MslCtx()
+    ctx.float_a_ok = cfg.float_a_ok
     if (fn == null) {
         errors |> push("generate_msl: null function")
         return ""

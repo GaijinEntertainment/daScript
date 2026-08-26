@@ -1458,12 +1458,15 @@ def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : i
 // without writing, which the sentinel whole-slab compare asserts. QK arms keep npos == np32:
 // the tensor twin stages K pad rows RAW (no zero guard — the base has one), so pads must not
 // exist for the pair to agree.
-def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, qoff, window : int; uend : int = 0) {
-    let tag = "attn_qk_mm{tensor ? "t" : ""} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window} u={uend}"
+def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, qoff, window : int; uend : int = 0; halfq : bool = false) {
+    let hq = halfq ? " halfq" : ""
+    let tag = "attn_qk_mm{tensor ? "t" : ""}{hq} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window} u={uend}"
     var err : string
-    var pso = (tensor
-        ? pipeline_from_source(dev, metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err))
+    var pso = (halfq
+        ? pipeline_from_source(dev, MetalAttnQKMmTH_metal_attn_qk_mm_t_msl, MetalAttnQKMmTH_metal_attn_qk_mm_t_msl_entry, MetalAttnQKMmTH_metal_attn_qk_mm_t_msl_fastmath, err)
+        : (tensor
+            ? pipeline_from_source(dev, MetalAttnQKMmT_metal_attn_qk_mm_t_msl, MetalAttnQKMmT_metal_attn_qk_mm_t_msl_entry, MetalAttnQKMmT_metal_attn_qk_mm_t_msl_fastmath, err)
+            : pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
         return
@@ -1475,6 +1478,11 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     let scale = 0.125
     var qv : array<float>
     q8_x_fill(mp * qd, qv)
+    if (halfq) {
+        for (i in range(mp * qd)) {
+            qv[i] = float(float16(qv[i]))   // f16-exact fixture: the oracle dot stays the reference
+        }
+    }
     var kv : array<float>
     kv |> resize(np32 * kvd)
     for (i in range(np32 * kvd)) {
@@ -1516,12 +1524,15 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
         npos = uint(np32), np32 = uint(np32), scale = scale, qoff = uint(qoff), qrows = uint(mp),
         window = uint(window), uend = uint(uend))
-    var bq = buf_upload(dev, qv)
+    var qh <- [for (v in qv); float16(v)]
+    var bq = halfq ? buf_upload(dev, qh) : buf_upload(dev, qv)
     var bk = buf_upload(dev, kv)
     var batt = buf_fill(dev, heads * mp * np32, float16(-1000.0))   // f16 slab; the sentinel is f16-exact
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tensor ? metal_attn_qk_mm_t_msl_tgmem : metal_attn_qk_mm_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, halfq
+            ? MetalAttnQKMmTH_metal_attn_qk_mm_t_msl_tgmem
+            : (tensor ? MetalAttnQKMmT_metal_attn_qk_mm_t_msl_tgmem : metal_attn_qk_mm_msl_tgmem), 0)
         metal_set_buffer(enc, bq, 0ul, 0)
         metal_set_buffer(enc, bk, 0ul, 1)
         metal_set_buffer(enc, batt, 0ul, 2)
@@ -1536,6 +1547,7 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     metal_release(bk)
     metal_release(batt)
     metal_release(pso)
+    delete qh
     delete qv
     delete kv
     delete want
@@ -1724,8 +1736,10 @@ def test_metal_gemm_kernels(t : T?) {
                 // and the AV pad-guard arm (npos < np32, garbage V pads)
                 attn_qk_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 0, 0)
                 attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 0, 0)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 0, 0, halfq = true)   // half-Q stamp
                 attn_qk_mm_gate(t, dev, queue, false, 4, 64, 2, 32, 256, 224, 128)
                 attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 128)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 128, halfq = true)
                 attn_qk_mm_gate(t, dev, queue, false, 2, 128, 1, 32, 64, 32, 0)   // two K-slabs
                 attn_qk_mm_gate(t, dev, queue, true, 2, 128, 1, 32, 64, 32, 0)
                 attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 128, 64)

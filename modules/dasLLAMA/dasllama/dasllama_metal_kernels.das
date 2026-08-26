@@ -2254,7 +2254,7 @@ class template MetalQ8GemmTensorT {
     @template_constant LDC_ND : bool = false   // C stride = ka.ndim (SK planes, 64-wide) vs ka.ys
     @workgroup twb : float16[2048]          // W chunk: TILE_N wcols x 32 k, dequant-staged by the helper
 
-    [metal_kernel]
+    [metal_kernel(float_a_ok=true)]   // batch-decode/classifier family: f32 X rows by design (no half-X extension yet)
     def metal_q8_gemm_b_t {
         let ntileN = ka.ndim / TILE_N
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u

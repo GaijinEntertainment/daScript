@@ -35,7 +35,7 @@ class TmmKernels {
     @ssbo @binding = 11 xah : array<float16> // A half twin (the q8uh half-stream arm)
     @ssbo @binding = 12 wh : array<float16>  // W: N x KK device-half panel (the hw/hwh arms)
 
-    [metal_kernel(name="tmm_bf16_msl"), marker(no_coverage)]
+    [metal_kernel(name="tmm_bf16_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_bf16_k {
         var ap = unsafe(addr(xa[0]))
         var wp = unsafe(addr(wb[0]))
@@ -66,7 +66,7 @@ class TmmKernels {
     @workgroup tga : float16[256]    // tg protocol: 8 x 32 flat A chunk
     @workgroup tgb : float16[512]    // 16 x 32 flat B chunk
 
-    [metal_kernel(name="tmm_tg_msl"), marker(no_coverage)]
+    [metal_kernel(name="tmm_tg_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_tg_k {
         var acc : float[128]
         var ap = unsafe(addr(xa[0]))
@@ -106,7 +106,7 @@ class TmmKernels {
 
     @workgroup tgc : float16[512]    // nt protocol: 32 x 16 flat B chunk, NATURAL [kk][n]
 
-    [metal_kernel(name="tmm_nt_msl"), marker(no_coverage)]
+    [metal_kernel(name="tmm_nt_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_nt_k {
         var acc : float[128]
         var ap = unsafe(addr(xa[0]))
@@ -165,7 +165,7 @@ class TmmKernels {
         tmm2d_tg_store_half(acc, cp, 8u, 16u, 16u)
     }
 
-    [metal_kernel(name="tmm_devant_msl"), marker(no_coverage)]
+    [metal_kernel(name="tmm_devant_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_devant_k {
         var acc : float[128]
         var wp = unsafe(addr(wb[0]))
@@ -188,7 +188,7 @@ class TmmKernels {
         tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
     }
 
-    [metal_kernel(name="tmm_deva_msl"), marker(no_coverage)]
+    [metal_kernel(name="tmm_deva_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_deva_k {
         var acc : float[128]
         var wp = unsafe(addr(wb[0]))
@@ -238,7 +238,7 @@ class TmmKernels {
         tmm2d_f32_bf16_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
     }
 
-    [metal_kernel(name="tmm_hw_msl"), marker(no_coverage)]
+    [metal_kernel(name="tmm_hw_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_hw_k {
         var ap = unsafe(addr(xa[0]))
         var wp = unsafe(addr(wh[0]))
@@ -254,7 +254,7 @@ class TmmKernels {
         tmm2d_f16w_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
     }
 
-    [metal_kernel(name="tmm_q8u_msl"), marker(no_coverage)]
+    [metal_kernel(name="tmm_q8u_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_q8u_k {
         var sp = unsafe(addr(bsh[0]))
         var wp = unsafe(addr(bqb[2]))
