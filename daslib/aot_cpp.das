@@ -3216,7 +3216,7 @@ class public CppAot : AstVisitor {
         let info : TypeInfo?  = (expr.ascendFlags.needTypeInfo
                                 ? helper.helper |> make_type_info(null, expr.subexpr._type)
                                 : null);
-        if (expr._type.firstType.baseType == Type.tHandle) {
+        if (expr._type.baseType == Type.tPointer && expr._type.firstType.baseType == Type.tHandle) {
             write(*ss, "das_ascend_handle<{expr._type.flags.smartPtr},{describeCppType(expr._type,DescribeConfig(skip_ref=true,skip_const=true,cross_platform=cross_platform))}>::make(__context__,");
         } else {
             let type_str = describeCppType(expr._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
