@@ -1,89 +1,59 @@
 # vecmath - SIMD Math Library
 
-## Overview
-Platform-abstracted SIMD vector math library. Wraps SSE2/SSSE3/SSE4.1 (x86) and NEON (ARM)
-behind a unified C API. Used pervasively throughout the Dagor Engine for all performance-critical
-math: transforms, physics, BVH traversal, culling, animation, etc.
+Platform-abstracted SIMD math for transforms, physics, BVH traversal, culling and animation:
+one `v_`-prefixed C API over whichever backend the target selects, plus a `vd_`-prefixed double
+layer. The backend ladder is the `#if` chain in `dag_vecMathDecl.h`.
 
-## Key Types (dag_vecMathDecl.h)
-- `vec4f` / `vec3f` -- 128-bit float vector (__m128 on SSE, float32x4_t on NEON)
-- `vec4i` -- 128-bit integer vector (__m128i / int32x4_t)
-- `mat33f` -- 3x3 column-major matrix (3 x vec3f)
-- `mat44f` -- 4x4 column-major matrix (4 x vec4f)
-- `mat43f` -- 4x3 row-major matrix (3 x vec4f, each row is xyzw where w = translation component)
-- `bbox3f` -- AABB {bmin, bmax} as two vec4f
-- `bsph3f` -- bounding sphere {center.xyz, radius.w}
-- `quat4f` -- quaternion as vec4f
-- `plane3f` -- plane {normal.xyz, D.w}
-
-## File Layout
 | File | Contents |
 |------|----------|
-| `dag_vecMathDecl.h` | Type declarations, platform detection, alignment macros |
-| `dag_vecMath.h` | Full API declarations (~900 functions), platform-independent |
-| `dag_vecMath_const.h` | Constants: V_C_HALF, V_C_ONE, V_C_PI, V_C_UNIT_1000, V_CI_MASK*, etc. |
-| `dag_vecMath_pc_sse.h` | SSE implementation of all functions |
-| `dag_vecMath_neon.h` | NEON (ARM) implementation of all functions |
-| `dag_vecMath_common.h` | Shared implementations (bbox, frustum, quat, matrix ops built on core intrinsics) |
-| `dag_vecMath_trig.h` | Polynomial approximations for sin/cos/tan/atan/asin/acos |
+| `dag_vecMathDecl.h` | Types, backend `#if` ladder, alignment macros |
+| `dag_vecMath.h` | The API reference - every `v_` function declared with a comment; grep it by prefix (`v_mat44_`, `v_bbox3_`, `v_quat_`, `v_frustum_`) before hand-rolling |
+| `dag_vecMath_const.h` | Constants (`V_C_*`, `V_CI_MASK*`) |
+| `dag_vecMath_pc_sse.h` / `dag_vecMath_neon.h` / `dag_vecMath_scalar.h` | The three backends |
+| `dag_vecMath_common.h` | Implementations written once on top of the primitives (bbox, frustum, quat, matrix) |
+| `dag_vecMath_trig.h` | Polynomial sin/cos/tan/atan/asin/acos |
+| `dag_vecMath_double.h` | The `vec4d` / `vd_` layer, per-backend arms in one file |
+| `usage.md` | Which call to write, and the correctness traps (mask canonicality, mirrored matrices, FMA contraction, `.w` discipline) |
+| `microarch.md` | Per-instruction cost and target hardware, for when no usage rule answers |
+| `vec4d.md` | Anything `vec4d` / `vd_` |
+| `README.md` / `LICENSE` | Upstream's own; the README is stale in places (says 7 headers, SSE+NEON only) - this file wins |
 
-## Naming Conventions
-- `v_` prefix for all functions
-- `v_splats(float)` -- broadcast scalar to all lanes
-- `v_splatsi(int)` -- broadcast int scalar
-- `v_splat_x/y/z/w(v)` -- broadcast one lane
-- `v_perm_XYZW(v)` -- swizzle/permute (e.g. `v_perm_yzxw`)
-- `v_dot3_x(a,b)` -- dot product result in .x only (faster)
-- `v_dot3(a,b)` -- dot product broadcast to all lanes
-- `v_cross3(a,b)` -- 3D cross product
-- `v_length3/v_length3_x` -- length (broadcast vs .x-only)
-- `v_norm3(v)` -- normalize
-- `v_madd(a,b,c)` -- fused multiply-add: a*b+c
-- `v_rcp(v)` / `v_rcp_est(v)` -- reciprocal (precise / estimate)
-- `v_rsqrt(v)` / `v_rsqrt_est(v)` -- reciprocal sqrt
-- `v_cmp_gt/ge/lt/le/eq(a,b)` -- compare, returns mask (0xFFFFFFFF or 0)
-- `v_and/v_or/v_xor/v_andnot/v_sel/v_btsel` -- bitwise ops and select
-- `v_cast_vec4i/v_cast_vec4f` -- reinterpret cast (no conversion)
-- `v_cvt_vec4i/v_cvt_vec4f` -- convert int<->float
-- `v_half_to_float(v)` / `v_float_to_half_rtne(v)` -- FP16 conversion
-- `v_float_to_half_up/down` -- directional rounding for conservative bounds
-- `v_check_xyz_all_true(v)` -- test mask results
-- `v_signmask(v)` -- extract sign bits as int (1|2|4|8)
+**Read the vendored doc that answers the question before adding or porting a function.** They
+describe the upstream engine, not this repo: their build flags and library references
+(`Point3_vec4`, physJolt, rendInst) are Dagor's, and all three predate the scalar backend, so
+`vec4d.md` still calls `dag_vecMath_double.h` an SSE/AVX-and-NEON file.
 
-## Matrix Operations
-- `v_mat44_mul(dest, m1, m2)` -- 4x4 multiply
-- `v_mat44_inverse(dest, m)` / `v_mat44_inverse43(dest, m)` -- inverse
-- `v_mat44_transpose(dest, src)` -- transpose
-- `v_mat43_transpose_to_mat44(dest, src)` -- row-major 4x3 -> column-major 4x4
-- `v_mat44_mul_vec3p(m, v)` -- transform point (w=1)
-- `v_mat44_mul_vec3v(m, v)` -- transform direction (w=0)
-- `v_mat33_mul_vec3(m, v)` -- 3x3 transform
-- `v_mat43_mul_vec3p(m, v)` -- row-major 4x3 point transform
+**This folder vendors DagorEngine `prog/1stPartyLibs/vecmath/`** - not
+`prog/engine/publicInclude/vecmath/`, a second, non-canonical copy upstream. `CLAUDE.md` is this
+repo's own. Record the synced revision here on every sync; without it "matches upstream" has no
+second operand. Synced: `75723669` (2026-08-25).
 
-## AABB Operations (bbox3f)
-- `v_bbox3_init_empty(b)` / `v_bbox3_init(b, p)` -- create
-- `v_bbox3_add_pt(b, p)` / `v_bbox3_add_box(b, b2)` -- extend
-- `v_bbox3_center(b)` / `v_bbox3_size(b)` -- queries
-- `v_bbox3_test_pt_inside(b, p)` -- containment
-- `v_bbox3_test_box_intersect(b1, b2)` -- overlap
-- `v_bbox3_rotate_init(b, col0, col1, col2, bb)` -- oriented AABB
+**A file that mentions `_TARGET_SIMD_SCALAR`, plus `dag_vecMath_scalar.h`, is fork-local; every
+other file here stays byte-identical to upstream.** A sync replaces the byte-identical set
+wholesale from upstream and re-applies the fork-local hooks on top, so a local edit to a
+byte-identical file is lost without warning - land the change upstream first, or route it through
+a fork-local hook.
 
-## Performance Notes
-- Functions marked VECMATH_FINLINE are always force-inlined
-- VECTORCALL convention used on MSVC/Clang for SSE targets (passes vec4f in registers)
-- `_x` suffix variants (e.g. v_dot3_x) are faster -- result only in .x, no broadcast
-- `_est` variants use hardware estimate + optional Newton-Raphson (faster, less precise)
-- `_unprecise` variants use raw hardware estimate only (fastest, least precise)
-- Avoid v_extract_x/y/z/w in hot loops -- moves data from SIMD to scalar registers
-- .w component of vec3f can be anything (even NaN) for 3D operations
-- v_ldu_p3 loads 4 floats for a 3-component vector (fast but reads 1 extra float)
-- v_ldu_p3_safe only reads exactly 3 floats (slower, use at page boundaries)
+**A sync that brings in new or changed `v_`/`vd_` functions gives each one its scalar arm in the
+same change** - in `dag_vecMath_scalar.h`, or in `dag_vecMath_common.h` if it is written once on
+top of the primitives. Upstream maintains SSE and NEON; nobody but this repo maintains scalar, and
+a missing arm compiles everywhere except the target that selects it.
 
-## Include Path
-```cpp
-#include <vecmath/dag_vecMath.h>        // full API
-#include <vecmath/dag_vecMathDecl.h>    // types only (forward declarations)
-```
+**The scalar backend is auto-selected on targets with no SIMD ISA (Cortex-M, RISC-V without V)
+and forced elsewhere by the CMake option `DAS_VECMATH_SCALAR`, which defines
+`_TARGET_SIMD_SCALAR=1`.** No header tests `DAS_VECMATH_SCALAR` - it exists so the x64 suite can
+validate the backend.
 
-IMPORTANT: This is `prog/1stPartyLibs/vecmath/`, NOT `prog/engine/publicInclude/vecmath/`.
-The 1stPartyLibs version is the correct one used by most engine code.
+**`vec4d` stays a local compute type: never a struct field crossing a TU boundary, never
+serialized.** Its layout is backend- and flag-dependent - one `__m256d` under `__AVX__`, two
+128-bit halves (`.xy`, `.zw`) on SSE without AVX (the default no-`/arch:AVX` x64 build) and on
+NEON, a `double d[4]` on the scalar backend - so it can differ between translation units of one
+binary; `VECMATH_VEC4D_256` reports which one a TU got.
+
+**`vec4f_scalar_t` / `vec4i_scalar_t` are defined identically in `dag_vecMathDecl.h` and in
+`include/daScript/daScriptC.h` (repo root), guarded by `VECMATH_SCALAR_TYPES_DEFINED`.** Whichever
+header is included first defines the pair for both, so a change to tag name, members or alignment
+lands in both files in the same change - otherwise the C API and the C++ API disagree on layout
+with no diagnostic.
+
+Include `<vecmath/dag_vecMath.h>` for the full API, `<vecmath/dag_vecMathDecl.h>` for types only.
