@@ -57,7 +57,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/internal/documentation_rst.md` | Editing RST in `doc/source/`, `//!` doc-comments in `daslib/*.das`, tutorial RST pages |
 | `skills/internal/tutorials.md` | Anything that looks like a tutorial - they live under `/tutorials/<area>/`, NEVER `modules/<X>/tutorial/` |
 | `skills/internal/tutorial_prose.md` | WRITING or revising general-reader doc/tutorial prose (`documentation_rst.md` is mechanics, this is the words) |
-| `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums |
+| `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums; shipping without the compiler (`libDaScriptNano`) |
 | `skills/internal/cpp_codebase_notes.md` | Working on daslang's own C++ - where inference/builtins/errors/parser live, AST function flags |
 | `skills/internal/clang_bind_build.md` | Enabling `dasClangBind` / bumping the libclang SDK / running any `bind_*.das` self-binder |
 | `skills/daslib_modules.md` | Working with `daslib/` modules or extending the stdlib |
@@ -258,6 +258,7 @@ Most layout is obvious from `ls`. The non-obvious ones:
 
 - `skills/daslang/` - the **distributable, SDK-free daslang language skill** for third-party AI agents (`SKILL.md` + `references/`), NOT a repo task skill. Every example is probe-verified; its `README.md` carries the editing rules. Grammar/stdlib/default changes update it in the same arc
 - `daslib/aot_cpp.das` - the AOT C++ emitter lives here, NOT in C++
+- `nano/` - `libDaScriptNano`, the runtime with no compiler in it: a shadow include root whose four headers win over `include/`, so thirteen `src/` sources compile against a minimal `Context` unmodified. A source that needs an edit to build there is CARVED upstream, never forked (`nano/ARCHITECTURE.md`); every directory linking it must clear its inherited include dirs, which `nano/REVIEW.das` checks
 - `tests/aot/CMakeLists.txt` - register new test directories here for AOT compilation. Two AOT binaries: `test_aot_subset` (tests/language only, in ALL - the per-PR CI compile gate) and full `test_aot` (`EXCLUDE_FROM_ALL`, ~1080 AOT TUs - nightly CI + `preflight --full` only, via `--target test_aot`/`run_tests_aot`)
 - `dastest/` - test framework (used by both `tests/` and external repos)
 - `utils/detect-dupe/` (in-repo dupe finder) and `utils/find-dupe/` (Claude judge; needs `daspkg install --root utils/find-dupe` + `ANTHROPIC_API_KEY`) - both also MCP tools

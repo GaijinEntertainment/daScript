@@ -53,7 +53,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/comment_style_hygiene.md` | Writing or reviewing comments, names, or local code shape in ANY language |
-| `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums |
+| `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums; shipping without the compiler (`libDaScriptNano`) |
 | `skills/daslib_modules.md` | Using `daslib/` modules (linq, json, regex, etc.) |
 | `skills/das_macros.md` | Compile-time macros, AST manipulation, qmacro/quote, gc_node patterns |
 | `skills/daspkg.md` | Creating `.das_package` manifests, daspkg commands |

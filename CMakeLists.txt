@@ -934,8 +934,10 @@ include/vecmath/dag_vecMath.h
 include/vecmath/dag_vecMathDecl.h
 include/vecmath/dag_vecMath_common.h
 include/vecmath/dag_vecMath_const.h
+include/vecmath/dag_vecMath_double.h
 include/vecmath/dag_vecMath_neon.h
 include/vecmath/dag_vecMath_pc_sse.h
+include/vecmath/dag_vecMath_scalar.h
 include/vecmath/dag_vecMath_trig.h
 )
 list(SORT VECMATH_SRC)
@@ -1038,6 +1040,7 @@ src/misc/env_cfg.cpp
 src/misc/das_common.cpp
 src/misc/gc_node.cpp
 src/misc/globals.cpp
+src/misc/hal.cpp
 src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
@@ -1107,6 +1110,7 @@ src/misc/network.cpp
 src/simulate/hash.cpp
 src/simulate/debug_info.cpp
 src/simulate/runtime_string.cpp
+src/simulate/escape_string.cpp
 src/simulate/runtime_iterator.cpp
 src/simulate/runtime_array.cpp
 src/simulate/runtime_table.cpp
@@ -1116,6 +1120,8 @@ src/simulate/simulate.cpp
 src/simulate/simulate_exceptions.cpp
 src/simulate/simulate_gc.cpp
 src/simulate/simulate_gc_pod.cpp
+src/simulate/builtin_array_ops.cpp
+src/simulate/builtin_runtime_ops.cpp
 src/simulate/aot_library.cpp
 src/simulate/simulate_tracking.cpp
 src/simulate/simulate_visit.cpp
@@ -1124,6 +1130,7 @@ src/simulate/simulate_fn_hash.cpp
 src/simulate/simulate_instrument.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/annotation_arguments.h
+src/simulate/annotation_arguments.cpp
 include/daScript/simulate/code_of_policies.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/heap.h
@@ -1228,6 +1235,11 @@ file(GLOB DAS_LIB_SRC
 list(SORT DAS_LIB_SRC)
 SOURCE_GROUP_FILES("daslib" DSA_LIB_SRC)
 list(SORT DAS_LIB_SRC)
+
+# libDaScriptNano - the minimal runtime. Added BEFORE the include_directories
+# below on purpose: nano picks its own header search order, and inheriting this
+# directory's would put the full include/ ahead of the headers nano shadows.
+add_subdirectory(nano)
 
 include_directories(include)
 include_directories(3rdparty/fmt/include)
@@ -1615,6 +1627,10 @@ if (NOT ${DAS_TOOLS_DISABLED})
     # Build daslang utilities as standalone executables (-exe mode)
     add_subdirectory(utils)
 
+    # Standalone-AOT examples on libDaScriptNano. They need daslang to generate
+    # their C++, which is why they live here and not beside the nano library.
+    add_subdirectory(examples/standalone)
+
 endif()
 
 # This list should be significantly reduced, most of the files, except aot related should be private.
@@ -1794,6 +1810,46 @@ install(FILES include/dag_noise/dag_uint_noise.h
 file(GLOB DAS_BUILTIN_HEADERS ${PROJECT_SOURCE_DIR}/src/builtin/*.h)
 install(FILES ${DAS_BUILTIN_HEADERS}
     DESTINATION include/daScript/builtin
+)
+
+# libDaScriptNano ships as sources, not as a built library: an embedder cross-
+# compiles it for their own target with their own flags, which is the whole
+# point of it. Its CMakeLists is self-contained given DASLANG_NANO_ROOT.
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/nano/
+    DESTINATION nano
+    FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.cpp"
+        PATTERN "*.md"
+        PATTERN "CMakeLists.txt"
+        # REVIEW.md reviews a change to this repo's copy of nano; an SDK carries
+        # the library, not the process of changing it. (REVIEW.das is not matched
+        # by any pattern above, so it never ships either.)
+        REGEX "/REVIEW\\.md$" EXCLUDE
+)
+# The shared runtime sources nano compiles. They live under src/, which the SDK
+# otherwise does not carry; nano/CMakeLists.txt names them one by one, and
+# nano/REVIEW.das checks that this list still covers that one.
+install(FILES
+    ${PROJECT_SOURCE_DIR}/src/misc/hal.cpp
+    ${PROJECT_SOURCE_DIR}/src/misc/memory_model.cpp
+    DESTINATION src/misc
+)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/src/simulate/annotation_arguments.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/aot_library.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/builtin_array_ops.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/builtin_runtime_ops.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/data_walker.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/debug_info.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/escape_string.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/heap.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/runtime_array.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/runtime_iterator.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/runtime_table.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/simulate_gc_pod.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/standalone_ctx_utils.cpp
+    DESTINATION src/simulate
 )
 
 # Install all modules and main library.
@@ -2094,6 +2150,11 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}
     PATTERN "fatman" EXCLUDE
     PATTERN "modules" EXCLUDE
+    # standalone/ builds against a daslang TARGET in-tree and against an
+    # installed SDK from a bundle; the SDK copy is the .standalone.cmake below,
+    # renamed into place after this excludes the in-tree one.
+    PATTERN "standalone/CMakeLists.txt" EXCLUDE
+    PATTERN "CMakeLists.standalone.cmake" EXCLUDE
     PATTERN "_build" EXCLUDE
     PATTERN ".daspkg_cache" EXCLUDE
     PATTERN ".daspkg_tmp" EXCLUDE
@@ -2107,6 +2168,13 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/
     # soundfonts are fetched locally and carry unclear redistribution terms —
     # they must never ride into a release bundle
     PATTERN "*.sf2" EXCLUDE
+)
+
+# The SDK's copy of the standalone examples' build: same four targets, driven by
+# find_package(DAS) instead of in-tree targets.
+install(FILES ${PROJECT_SOURCE_DIR}/examples/standalone/CMakeLists.standalone.cmake
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/standalone
+    RENAME CMakeLists.txt
 )
 
 # The Fox rig/animation is CC-BY 4.0, so its attribution must also ship at the

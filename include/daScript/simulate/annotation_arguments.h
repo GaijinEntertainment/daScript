@@ -46,9 +46,9 @@ namespace das {
     struct DAS_API AnnotationArgumentList : AnnotationArguments {
         const AnnotationArgument * find ( const string & name, Type type ) const;
         bool getBoolOption(const string & name, bool def = false) const;
-        int32_t getIntOption(const string & name, int32_t def = false) const;
-        uint64_t getUInt64Option(const string & name, uint64_t def = false) const;
-        uint64_t getUInt64OptionEx (const string & name, const string & name2, uint64_t def = false) const;
+        int32_t getIntOption(const string & name, int32_t def = 0) const;
+        uint64_t getUInt64Option(const string & name, uint64_t def = 0) const;
+        uint64_t getUInt64OptionEx (const string & name, const string & name2, uint64_t def = 0) const;
         void serialize ( AstSerializer & ser );
     };
 }
