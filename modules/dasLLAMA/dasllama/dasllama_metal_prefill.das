@@ -298,23 +298,32 @@ class MetalDequantK6H {
 
 // The all-device half x half mul_mm form: A = the half-X activation panel, W = the dequant
 // panel above — no threadgroup staging, no barriers (the staged-operand tax is out).
-[metal_dispatch(name = "enc_gemm_hmm_th", pso = "g_pf_pso_hmm_th", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
-class MetalHalfMulMmTH {
+[ |> template_struct_instance]
+class template MetalHalfMulMmTensorT {
+    @template_constant MT : uint = 32u      // M-tile rows: the panel re-reads M/MT times
     @ssbo @binding = 0 @role = "read" wh : array<float16>   // pre-dequantized W panel, d x kdim
-    @ssbo @binding = 1 @role = "read" xf : array<float16>   // the f16 activation panel (half-X)
+    @ssbo @binding = 1 @role = "read" @off = "xoff" xf : array<float16>   // the f16 activation panel (half-X)
     @ssbo @binding = 2 @off = "yoff" @span = "mp*d*4" y : array<float>
     @uniform @binding = 3 kdim : uint
     @uniform @binding = 4 ndim : uint
 
-    [metal_kernel(name="metal_half_mulmm_th_msl")]
+    [metal_kernel]
     def metal_half_mulmm_th {
-        let mBase = gl_WorkGroupID.x * 32u
+        let mBase = gl_WorkGroupID.x * MT
         let nBase = gl_WorkGroupID.y * 64u
         var wp = unsafe(addr(wh[nBase * kdim]))
         var ap = unsafe(addr(xf[mBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_f16w_f32(32u, 64u, 4u, ap, kdim, wp, kdim, cp, ndim, kdim)
+        tmm2d_f16w_f32(MT, 64u, 4u, ap, kdim, wp, kdim, cp, ndim, kdim)
     }
+}
+
+[metal_dispatch(name = "enc_gemm_hmm_th", pso = "g_pf_pso_hmm_th", tg = 128, grid = "mp/32, d/64", params = "mp : int64, d : int64")]
+class MetalHalfMulMmTH : MetalHalfMulMmTensorT {}
+
+[metal_dispatch(name = "enc_gemm_hmm_th128", pso = "g_pf_pso_hmm_th128", tg = 128, grid = "mp/128, d/64", params = "mp : int64, d : int64")]
+class MetalHalfMulMmTH128 : MetalHalfMulMmTensorT {
+    override MT = 128u
 }
 
 // Metal-4 tensor twin of MetalBf16MulMm: the SAME 32x64 tile per threadgroup off the same
@@ -1995,6 +2004,7 @@ var private g_pf_pso_dq_k4 : MetalComputePipeline?   // the K-quant dequant pass
 var private g_pf_pso_dq_k5 : MetalComputePipeline?
 var private g_pf_pso_dq_k6 : MetalComputePipeline?
 var private g_pf_pso_hmm_th : MetalComputePipeline?  // all-device half x half mul_mm reading that panel
+var private g_pf_pso_hmm_th128 : MetalComputePipeline?   // its tall 128-row M-tile stamp
 var private g_pf_bwh : MetalBuffer?     // per-forward f16 W panels (dev-W form), double-buffered like bxh
 var private g_pf_bwh2 : MetalBuffer?
 var private g_pf_bwh_flip : bool
@@ -2272,6 +2282,10 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_hmm_th)
         g_pf_pso_hmm_th = null
     }
+    if (g_pf_pso_hmm_th128 != null) {
+        metal_release(g_pf_pso_hmm_th128)
+        g_pf_pso_hmm_th128 = null
+    }
     if (g_pf_pso_bf16_mm != null) {
         metal_release(g_pf_pso_bf16_mm)
         g_pf_pso_bf16_mm = null
@@ -2393,7 +2407,8 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     }
     // dev-W: ONE all-device GEMM for every crowned family; dequant passes compile per family
     if (g_pf_mm_tensor || g_pf_kq_mm4_tensor || g_pf_kq_mm5_tensor || g_pf_kq_mm6_tensor) {
-        g_pf_pso_hmm_th = compile_pso(metal_half_mulmm_th_msl, metal_half_mulmm_th_msl_entry, metal_half_mulmm_th_msl_fastmath, ok)
+        g_pf_pso_hmm_th = compile_pso(MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, ok)
+        g_pf_pso_hmm_th128 = compile_pso(MetalHalfMulMmTH128_metal_half_mulmm_th_msl, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_fastmath, ok)
     }
     if (g_pf_kq_mm4_tensor) {
         g_pf_pso_dq_k4 = compile_pso(MetalDequantK4H_metal_dequant_k45_msl, MetalDequantK4H_metal_dequant_k45_msl_entry, MetalDequantK4H_metal_dequant_k45_msl_fastmath, ok)
@@ -2649,16 +2664,31 @@ def private pf_devw_flip : MetalBuffer ? {
     return bwh
 }
 
+// the dev-W GEMM dispatch: tall 128-row M-tiles on the rows' 128-floor (panel re-read
+// M/128 times), the 32-tile stamp on the remainder — same occupancy floor as the mul_mm pick
+def private pf_enc_hmm(enc : MetalComputeEncoder?; bwh, bxh, by : MetalBuffer?; yoff : uint64;
+                       bk, bn : MetalBuffer?; rows, td, dfull, kdim : int64) {
+    var r0 = 0l
+    if (g_pf_env_tall && g_pf_pso_hmm_th128 != null && rows >= 128l
+            && rows / 128l * (td / 64l) >= 128l) {
+        r0 = rows / 128l * 128l
+        enc_gemm_hmm_th128(enc, bwh, bxh, 0ul, by, yoff, bk, bn, r0, td)
+    }
+    if (rows - r0 > 0l) {
+        enc_gemm_hmm_th(enc, bwh, bxh, uint64(r0 * kdim * 2l), by, yoff + uint64(r0 * dfull * 4l), bk, bn, rows - r0, td)
+    }
+}
+
 // one q8 dev-W tile: dequant the [tbase, tbase+td) W columns into the flip panel, GEMM into
 // y's column slice (bn stays the FULL row stride; the y base pointer carries the column base)
 def private pf_enc_devw_q8_tile(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
-                                bxh, by, bk, bn : MetalBuffer?; rows, tbase, td, kdim : int64; yoff : uint64) {
+                                bxh, by, bk, bn : MetalBuffer?; rows, tbase, td, dfull, kdim : int64; yoff : uint64) {
     var bwh = pf_devw_flip()
     let nb = kdim / 32l
     let nblk = td * nb
     var dka = CvtArgs(total = uint(nblk))
     enc_dequant_q8h(enc, bwblob, wboff + uint64(tbase * nb * 34l), bwblob, bwh, dka, (nblk + 255l) / 256l * 256l)
-    enc_gemm_hmm_th(enc, bwh, bxh, by, yoff + uint64(tbase * 4l), bk, bn, rows, td)
+    pf_enc_hmm(enc, bwh, bxh, by, yoff + uint64(tbase * 4l), bk, bn, rows, td, dfull, kdim)
 }
 
 def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
@@ -2669,7 +2699,7 @@ def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wbo
     }
     let td = d / tiles
     for (ti in range64(tiles)) {
-        pf_enc_devw_q8_tile(enc, bwblob, wboff, bxh, by, bk, bn, rows, ti * td, td, kdim, yoff)
+        pf_enc_devw_q8_tile(enc, bwblob, wboff, bxh, by, bk, bn, rows, ti * td, td, d, kdim, yoff)
     }
     return true
 }
@@ -2705,7 +2735,7 @@ def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt;
         } else {
             enc_dequant_k5h(enc, bs.buf, bs.soff + so, bs.buf, bs.soff + so, bq.buf, bq.qoff + uint64(tbase * nsb * 160l), bwh, dka, gt)
         }
-        enc_gemm_hmm_th(enc, bwh, bxh, by, yoff + uint64(tbase * 4l), bk, bn, rows, td)
+        pf_enc_hmm(enc, bwh, bxh, by, yoff + uint64(tbase * 4l), bk, bn, rows, td, d, kdim)
     }
     return true
 }

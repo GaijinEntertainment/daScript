@@ -239,11 +239,13 @@ def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int; halfx : boo
 // the dev-W pair: the q8 blob dequantized to a device f16 panel (one thread per 34B block),
 // then the all-device half x half mul_mm reading it - the production >= 256-row prefill
 // form. Both dispatches chain in ONE encoder (hazard tracking orders the panel write/read).
-def private q8_devw_gate(t : T?; dev, queue; m, kdim, ndim : int) {
-    let tag = "q8_devw m={m} k={kdim} n={ndim}"
+def private q8_devw_gate(t : T?; dev, queue; m, kdim, ndim : int; mt : int = 32) {
+    let tag = "q8_devw mt{mt} m={m} k={kdim} n={ndim}"
     var err : string
     var dq_pso = pipeline_from_source(dev, metal_dequant_q8h_msl, metal_dequant_q8h_msl_entry, metal_dequant_q8h_msl_fastmath, err)
-    var mm_pso = pipeline_from_source(dev, metal_half_mulmm_th_msl, metal_half_mulmm_th_msl_entry, metal_half_mulmm_th_msl_fastmath, err)
+    var mm_pso = (mt == 128
+        ? pipeline_from_source(dev, MetalHalfMulMmTH128_metal_half_mulmm_th_msl, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, err))
     if (mm_pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
         return
@@ -299,7 +301,7 @@ def private q8_devw_gate(t : T?; dev, queue; m, kdim, ndim : int) {
         metal_set_buffer(enc, by, 0ul, 2)
         metal_set_buffer(enc, bk, 0ul, 3)
         metal_set_buffer(enc, bn, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
@@ -307,7 +309,7 @@ def private q8_devw_gate(t : T?; dev, queue; m, kdim, ndim : int) {
     }
     // the N-TILED chain (the production over-knee form): two half-N tiles, each dequant at
     // the blob column offset + GEMM into y's column slice - same offset math as pf_devw_panel
-    if (ndim % 128 == 0) {
+    if (ndim % 128 == 0 && mt == 32) {
         let td = ndim / 2
         let nbr = kdim / 32
         var by_t = buf_fill(dev, m * ndim, -500.0)
@@ -352,7 +354,7 @@ def private q8_devw_gate(t : T?; dev, queue; m, kdim, ndim : int) {
         metal_set_buffer(enc, by_p, 0ul, 2)
         metal_set_buffer(enc, bk, 0ul, 3)
         metal_set_buffer(enc, bn, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ranp, "{tag}: control encode: {err}")
     if (ranp) {
@@ -394,7 +396,7 @@ def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     let dentry = fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl_entry : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl_entry : metal_dequant_k6h_msl_entry)
     let dfm = fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl_fastmath : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl_fastmath : metal_dequant_k6h_msl_fastmath)
     var dq_pso = pipeline_from_source(dev, dsrc, dentry, dfm, err)
-    var mm_pso = pipeline_from_source(dev, metal_half_mulmm_th_msl, metal_half_mulmm_th_msl_entry, metal_half_mulmm_th_msl_fastmath, err)
+    var mm_pso = pipeline_from_source(dev, MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, err)
     if (mm_pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
         return
@@ -1567,6 +1569,7 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_mulmm_t_gate(t, dev, queue, 256, 256, 64, halfx = true, mt = 128)
                 q8_devw_gate(t, dev, queue, 64, 256, 64)
                 q8_devw_gate(t, dev, queue, 32, 288, 128)   // non-256-multiple block count arms the dequant tail guard
+                q8_devw_gate(t, dev, queue, 128, 256, 128, mt = 128)   // tall dev-W GEMM stamp
                 for (fmt in [4, 5, 6]) {
                     kq_devw_gate(t, dev, queue, fmt, 64, 512, 64)
                     kq_devw_gate(t, dev, queue, fmt, 32, 512, 128)   // ndim%128: the tiled leg runs
