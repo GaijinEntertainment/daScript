@@ -10,7 +10,7 @@ options indenting = 4
 require dastest/testing_boost public
 require metal/msl_shader
 require _metal_common  // nolint:STYLE030,LINT019 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
-require daslib/fio
+require daslib/fio   // nolint:STYLE030,LINT019 — the use sites sit in the das_metal static_if half; the linux lint flavor sees the require as unused
 require daslib/strings_boost
 
 let N = 64
