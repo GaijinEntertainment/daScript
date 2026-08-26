@@ -663,6 +663,8 @@ struct MoeGxArgs {
     dim : uint
     nk : uint
     ne : uint
+    total : uint    // npos*nk — any bkt word >= it (the sentinel, or stale pool bytes past the
+                    // last expert's stamped tail) reads as a pad row; equality would OOB there
 }
 
 // gather-X materialization: the bucket's token rows copied into a CONTIGUOUS f16 panel, pad
@@ -679,7 +681,7 @@ class MetalMoeGatherX {
     def metal_moe_gather_x {
         let r = gl_WorkGroupID.x
         let v = bkt[r]
-        let isreal = v != 0xFFFFFFFF   // the bucket kernel's pad-tail sentinel
+        let isreal = v < ka.total   // sentinel AND the unstamped tail past the last expert both fail this
         let token = isreal ? v / ka.nk : 0u
         var i = gl_LocalInvocationID.x
         while (i < ka.dim) {
@@ -3456,11 +3458,11 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
 // mint the contiguous gather-X panel once per layer (shared by the up AND gate sites);
 // null = the caller keeps the in-kernel gather form
 def private pf_moe_gather_panel(enc : MetalComputeEncoder?; bbkt, bx : MetalBuffer?; var bmxg : MetalBuffer?;
-                                th_ok : bool; dim, nk, ne, mpad : int64) : MetalBuffer? {
+                                th_ok : bool; dim, nk, ne, mpad, npos : int64) : MetalBuffer? {
     if (!th_ok || bmxg == null || g_pf_pso_moe_gx == null) {
         return null
     }
-    var gxka = MoeGxArgs(dim = uint(dim), nk = uint(nk), ne = uint(ne))
+    var gxka = MoeGxArgs(dim = uint(dim), nk = uint(nk), ne = uint(ne), total = uint(npos * nk))
     if (g_pf_skip != "moe_gather") {   // attribution: stale panel, twin path unchanged
         enc_moe_gather_x(enc, bbkt, bx, bmxg, gxka, mpad)
     }
@@ -4353,7 +4355,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             var bwb3 = upload_region(unsafe(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp])), uint64(c.n_expert * c.n_ff_exp * 4l))
                             var kaup = moe_mm_mx4_ka(dim, c.n_ff_exp, c.n_expert_used, true, hasb)
                             let bxg1 = pf_moe_gather_panel(enc, bmbkt, g4moe ? bxb2 : bxb, bmxg,
-                                g_pf_pso_moe_mm_mx4_th != null, dim, c.n_expert_used, c.n_expert, mpad)
+                                g_pf_pso_moe_mm_mx4_th != null, dim, c.n_expert_used, c.n_expert, mpad, npos)
                             pf_enc_moe_mm_mx4(enc, t, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
                                 bmcnt, bmbase, bmbkt, bwb1, kaup, contiguous = bxg1 != null, bxh = bxg1)
                             pf_enc_moe_mm_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg2,
@@ -4363,7 +4365,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             let gx_th3 = fe3 == KqFmt.q8 ? g_pf_pso_moe_mm_q8_th : (fe3 == KqFmt.k4 ? g_pf_pso_moe_mm_k4_th : (fe3 == KqFmt.k5 ? g_pf_pso_moe_mm_k5_th : (fe3 == KqFmt.k6 ? g_pf_pso_moe_mm_k6_th : null)))
                             let gx_q8 = gx_th1 != null && gx_th3 != null
                             let bxg1 = pf_moe_gather_panel(enc, bmbkt, g4moe ? bxb2 : bxb, bmxg,
-                                gx_q8, dim, c.n_expert_used, c.n_expert, mpad)
+                                gx_q8, dim, c.n_expert_used, c.n_expert, mpad, npos)
                             pf_enc_moe_mm(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
                                 bmcnt, bmbase, bmbkt, moe_mm_ka(fe1, dim, c.n_ff_exp, c.n_expert_used, true),
                                 contiguous = bxg1 != null, bxh = bxg1)
