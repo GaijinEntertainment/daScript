@@ -6,7 +6,7 @@ shared encoder-tower home serves both), `dasllama/dasllama_audio.das`,
 `dasllama/dasllama_audio_io.das`, `dasllama/dasllama_audio_embedder.das`,
 `dasllama/dasllama_vad.das`, or an ASR family file - one `dasllama/dasllama_<family>.das`
 holding a single speech model family - applies this list with `REVIEW.md`'s.**
-`REVIEW_COMMON.md` (repo root) binds this file too. Architecture doc: `ARCHITECTURE.md`.
+`REVIEW_COMMON.md` (repo root) binds this file too. Architecture doc: `ARCHITECTURE_MEDIA.md`.
 
 **In `dasllama/dasllama_asr.das` and `dasllama/dasllama_audio_embedder.das` - the union
 carriers that route each facade function to one family - a family arm that does anything but

@@ -8,7 +8,7 @@ module linq_fold_decs shared public
 //! linq_fold decs (ECS) source adapters: DecsAdapter / DecsJoinAdapter, the decs-bridge tuple
 //! scanners/rewriters, and the decs-specific emit hooks (count_shortcut, reverse-skip-into-tail,
 //! join, min_by/max_by). Terminators ride the generic lanes in linq_fold_common via DecsAdapter.
-//! Requires linq_fold_common. See daslib/ARCHITECTURE.md sec. 37.
+//! Requires linq_fold_common. See daslib/ARCHITECTURE_LINQ.md sec. 37.
 
 require daslib/linq public
 require daslib/ast_boost

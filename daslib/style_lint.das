@@ -2516,7 +2516,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
-        //! The frame is the subtree's unsafe-requirement summary; mechanics in daslib/ARCHITECTURE.md.
+        //! The frame is the subtree's unsafe-requirement summary; mechanics in daslib/ARCHITECTURE_LINT.md.
         let n = length(unsafe_stack)
         let frame = unsafe_stack[n - 1]
         unsafe_stack |> pop

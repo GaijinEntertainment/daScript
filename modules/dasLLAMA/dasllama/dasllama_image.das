@@ -55,7 +55,7 @@ struct ImgSection {
     bytes : uint64
 }
 
-[arch(at = "../ARCHITECTURE.md#image-identity-backend-order")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def image_identity(tag : string = ""; quant : string = "q8") : string {
     return dlim_identity(dlim_config_current(quant), IMAGE_VERSION, tag)
 }
@@ -76,7 +76,7 @@ struct DlimPeek {
     config_json : string
 }
 
-[arch(at = "../ARCHITECTURE.md#dlim-meta-head")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head")]
 def image_peek(path : string) : DlimPeek {
     var p = DlimPeek()
     var msize = 0ul
@@ -322,7 +322,7 @@ def dlim_wipe(gguf_path : string) : tuple<removed : int; freed : int64> {
     return r
 }
 
-[arch(at = "../ARCHITECTURE.md#image-page-alignment")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-page-alignment")]
 def pad_to_page(cur : uint64) : uint64 {
     let page = uint64(IMAGE_PAGE)
     return (cur + page - 1ul) / page * page
@@ -347,7 +347,7 @@ def private w_open(path : string; total : uint64) : ImgWriter {
     return ImgWriter(dwrite_h = h, ok = h != null)
 }
 
-[arch(at = "../ARCHITECTURE.md#image-sizing-exactness")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
 def private w_open_mem(total : uint64) : ImgWriter {
     let base = image_chunk_alloc(total, uint64(IMAGE_PAGE))
     if (base == null) {
@@ -431,7 +431,7 @@ def private plane_end(cur : uint64; field : array<auto(TT)>) : uint64 {
     return pad_to_page(cur) + uint64(long_length(field)) * uint64(typeinfo sizeof(field[0]))
 }
 
-[arch(at = "../ARCHITECTURE.md#image-sizing-exactness")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
 def private image_total_bytes(var t; meta_bytes : uint64) : uint64 {
     var cur = uint64(IMAGE_PAGE)
     apply(t) $ [unused_argument(name)] (name : string; var field) {
@@ -489,7 +489,7 @@ def private read_u64(p : uint8 const?; at : int64) : uint64 {
 
 
 
-[arch(at = "../ARCHITECTURE.md#image-bulk-serialize")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-bulk-serialize")]
 def private serialize_pod_array(var arch : Archive; var a : array<auto(TT)>) {
     var n = length(a)
     arch |> serialize_raw(n)
@@ -512,7 +512,7 @@ def private serialize_pod_array(var arch : Archive; var a : array<auto(TT)>) {
 //! String arrays as [lengths][one blob] — two bulk payloads instead of per-string dispatch.
 //! Public because string-array fields cannot be raw planes (they hold pointers) — a type's
 //! serialize_image_meta must route them through this instead.
-[arch(at = "../ARCHITECTURE.md#image-bulk-serialize")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-bulk-serialize")]
 def serialize_strings(var arch : Archive; var a : array<string>) {
     var lens : array<int>
     var blob : array<uint8>
@@ -759,8 +759,8 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
 //! THE image build — every prepared image in the process comes out of this walk, whichever sink it
 //! lands in: planes page-aligned raw (borrowed back at load), everything else archived. `plane`
 //! gets first refusal on each plane by name; `consume` frees each owned plane as it lands.
-[arch(at = "../ARCHITECTURE.md#image-page-alignment"), arch(at = "../ARCHITECTURE.md#dlim-meta-head"),
-    arch(at = "../ARCHITECTURE.md#image-sizing-exactness")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-page-alignment"), arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head"),
+    arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
 def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                         tag : string; quant : string; consume : bool; layout : uint64;
                         plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
@@ -882,7 +882,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
     return w
 }
 
-[arch(at = "../ARCHITECTURE.md#image-publish")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-publish")]
 def private promote_tmp(tmp_path : string; path : string; built : bool; want_bytes : uint64) : bool {
     var ok = built
     if (ok) {
@@ -914,7 +914,7 @@ def private promote_tmp(tmp_path : string; path : string; built : bool; want_byt
 }
 
 // per-writer name: concurrent savers must not clobber each other; last rename wins, same content
-[arch(at = "../ARCHITECTURE.md#image-publish")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-publish")]
 def private tmp_name_for(path : string) : string {
     return "{path}.{ref_time_ticks()}.tmp"   // clock: control — unique temp-name suffix, not timing
 }
@@ -1005,7 +1005,7 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
     return ok
 }
 
-[arch(at = "../ARCHITECTURE.md#image-page-alignment")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-page-alignment")]
 def private borrow_plane(bp : uint8 const?; msize : uint64; path : string;
                          by_name : table<string; ImgSection>; var ok : bool&;
                          name : string; var field : array<auto(TT)>) {
@@ -1045,8 +1045,8 @@ def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
 //! THE image parse — the only way a prepared image becomes a struct, mapped .dlim or chunk this
 //! process just built alike: plane fields borrow `base` in place, the archive blob restores
 //! everything else. false = decline (the caller owns `base` and releases it either way).
-[arch(at = "../ARCHITECTURE.md#dlim-meta-head"), arch(at = "../ARCHITECTURE.md#weights-epoch-on-load"),
-    arch(at = "../ARCHITECTURE.md#image-identity-backend-order")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head"), arch(at = "../ARCHITECTURE_RUNTIME.md#weights-epoch-on-load"),
+    arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def private parse_image(base : void?; msize : uint64; path : string; var t; tag : string; quant : string) : bool {
     select_matmul_backend_for_load_()
     var bp = unsafe(reinterpret<uint8 const?>(base))
@@ -1211,7 +1211,7 @@ def private adopt_image(base : void?; msize : uint64; src : string; var t; tag :
     return false
 }
 
-[arch(at = "../ARCHITECTURE.md#image-sizing-exactness")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
 def private chunk_rail(var t; var out; save_to : string; extra : uint64; tag : string; quant : string;
                        plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     let ts = ref_time_ticks()
@@ -1408,7 +1408,7 @@ def private cache_via_image_(var m; var out; img : string; tag : string; quant :
     return true
 }
 
-[arch(at = "../ARCHITECTURE.md#image-interp-load")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-interp-load")]
 def private guard_interp_gguf_load(path : string) {
     if (jit_enabled() || is_standalone_exe()) {
         return
@@ -1438,7 +1438,7 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
 //! The image-cached model load — ``load_model``'s engine half, public for callers bypassing the facade. ``.dlim`` maps directly (wrong identity panics); q8-mode gguf maps/saves a prepared image (``DASLLAMA_IMAGE=0`` disables); an fp32-mode gguf joins the rail only with ``image_fp32`` (planar flavor — the parity-pinned decoders, e.g. canary's).
 //! Under an active Metal mode the image is the BLOB-ONLY metal flavor (CPU inference against it panics) when servable, the planar CPU flavor otherwise; ``planar_only`` pins the planar CPU flavor regardless of armed GPU tiers (the ASR surface — its decode path reads CPU planes).
 //! Call inside ``with_job_que()``.
-[arch(at = "../ARCHITECTURE.md#image-interp-load"), arch(at = "../ARCHITECTURE.md#image-identity-backend-order")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-interp-load"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                       planar_only : bool = false; image_fp32 : bool = false) : Model {
     // under Metal the GPU serves through the override registries, so "no backend registered" would be a false alarm

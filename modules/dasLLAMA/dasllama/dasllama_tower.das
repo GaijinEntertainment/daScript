@@ -13,7 +13,7 @@ require dasllama/dasllama_gguf   // read_clamp reads sidecar scalar tensors
 
 // The family-neutral encoder-tower home: the row math, activations, GEMM wrappers, clamp
 // sidecars, patch geometry, blocked bidirectional attention, and the encode-stage prof rail
-// that every audio AND vision tower composes (ARCHITECTURE.md §1.7). One home: a family
+// that every audio AND vision tower composes (ARCHITECTURE_MEDIA.md §1.7). One home: a family
 // file that re-implements a shape found here is a defect; nothing here names a family type.
 
 // erfc rational approximation (Numerical Recipes 6.2), |fractional error| < 1.2e-7 —

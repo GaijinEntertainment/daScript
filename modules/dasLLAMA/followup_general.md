@@ -543,7 +543,7 @@
 44. **The qwen25v (Qwen2.5-Omni/VL window ViT) CPU encode stays ~4.6x behind mtmd's clip
     (released `lcpp_bench --image` vs patched llama-mtmd-cli, CPU, --image-think, r=3, t=8,
     M1 Max) -
-    the tower is ruled exact-only (ARCHITECTURE.md 1.7b: per-32-block activation requant
+    the tower is ruled exact-only (ARCHITECTURE_MEDIA.md 1.7b: per-32-block activation requant
     cannot represent its outlier rows; a q8q8 lane measured 2.0 x rms where a deleted layer
     measures less).** Two honest paths if that encode ever matters: the Metal tower for the
     qwen ViT families (the same slice the qwen3v towers await), or outlier-aware activation

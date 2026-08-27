@@ -2,7 +2,7 @@
 
 **A diff touching the linq family - `linq*.das`, `sql_*.das` - applies this checklist
 together with `REVIEW.md`.** `REVIEW_COMMON.md` (repo root) binds this file too.
-Architecture doc: `ARCHITECTURE.md`.
+Architecture doc: `ARCHITECTURE_LINQ.md`.
 
 **A fused emit that binds a terminator's default or compare argument lazily, more than once, or
 below the top of the generated invoke, every `*_or_default` decs lane included, is a defect** -
@@ -128,7 +128,7 @@ clause keyword that legitimately follows a generic bracket or a comparison.
 
 **A diff that changes the token model in one substituting linq_das scanner - `substitute_idents`,
 `mentions_ident`, `rewrite_group_var` - changes it in the others, in the same change** (the
-shared model: `ARCHITECTURE.md` sec. 13). A model change in one scanner desyncs
+shared model: `ARCHITECTURE_LINQ.md` sec. 13). A model change in one scanner desyncs
 `mentions_ident` from the rewrite it gates, and the emitter then renames a parameter the
 spliced projection still references.
 
@@ -180,3 +180,7 @@ take it from the typer-resolved call type, and prove that type non-null before u
 **`emit_loop_or_count_lane_decs` that lets a `to_table` terminator reach the implicit-to_array
 arm is a defect - decline `to_table` ahead of that arm.** decs has no to_table lane, so the
 implicit arm emits an array for a table-typed expression.
+
+**A diff that adds a post-join `_.<alias>` consumer to sql_linq resolves the alias through
+`find_projection_alias` + `render_projection_alias_sql`.** Base-table fallback leaks the
+unqualified base-table namespace into post-join predicates.

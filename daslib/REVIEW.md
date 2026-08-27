@@ -1,7 +1,8 @@
 # daslib Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`daslib/ARCHITECTURE.md`. Planned work: `plans/daslib_comment_sweep.md` (repo root).
+`daslib/ARCHITECTURE.md` and its companions `ARCHITECTURE_LINT.md`, `ARCHITECTURE_EMIT.md`,
+`ARCHITECTURE_LINQ.md`. Planned work: `plans/daslib_comment_sweep.md` (repo root).
 A diff touching the linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too.
 
 **A diff that adds or changes a lint report path (`perf_warning` / `style_warning` /
@@ -17,7 +18,7 @@ the actionable line is an intermediate call site.
 
 **A diff that moves an `in_closure` / `in_deferred` guard to a different statement position
 inside a lint visitor method is a defect.** The guard's position decides which rules apply
-inside a lambda; the per-rule policy is in `ARCHITECTURE.md` sec. 1.
+inside a lambda; the per-rule policy is in `ARCHITECTURE_LINT.md` sec. 1.
 
 **Never move `add_ptr_ref`'s depth tracking behind the `in_closure` gate.** The rules block
 is itself a closure, so a gated tracker never sees the splice.
@@ -34,14 +35,14 @@ construct's visit.
 survives into the sibling loop's exit path and unbalances its counter.
 
 **A diff that makes a daslib predicate or emitted identifier depend on a C++-side
-definition records the pair in `ARCHITECTURE.md`, in its module's section, naming both
+definition records the pair in `ARCHITECTURE*.md`, in its module's section, naming both
 sides.** Nothing catches it when one side later moves alone.
 
 **When a diff changes one side of a recorded daslib/C++ pair so the two no longer match,
-it changes the other side and updates the pair's `ARCHITECTURE.md` entry in the same
+it changes the other side and updates the pair's `ARCHITECTURE*.md` entry in the same
 diff.**
 
-**A comment-sweep diff adds an `ARCHITECTURE.md` entry only where no name, shape, or test
+**A comment-sweep diff adds an `ARCHITECTURE*.md` entry only where no name, shape, or test
 can carry the fact.**
 
 **Weakening `tests/lint/test_nolint_suppression.das` is a defect** - it pins that a string
@@ -251,3 +252,7 @@ the first appearance moves it, and skipping the clone gives one node two parents
 every place `rst.das` computes it - the stub pass (`generate_module_stubs`) and the
 documenting pass (`documents`) - keeping them byte-for-byte equal.** When the two diverge, the page
 prints a bare signature and the symbol re-stubs.
+
+**A diff that adds a numeric value form to the toml lexer routes it through `rewind_to_bare`
+on a bare-key character.** Without the rewind, a bare key that starts like a number lexes as
+a value.

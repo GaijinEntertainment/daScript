@@ -45,6 +45,9 @@ section's heading carries the matching `{#anchor}`. LINT026 keeps every citation
 whose `.lint_config` sets `[docs] enforce_arch = true`, every anchor cited. **Before editing an
 annotated function, read its section** - MCP `arch_of` returns a file's citations with their
 section text, `arch_sites` a document's census (dead anchors and dangling citations included).
+A rule document past 300 lines in a tagged folder is a LINT027 finding - it splits into
+companions (`ARCHITECTURE_<CONCERN>.md`; routed `REVIEW_<KIND>.md`), the `archivist` agent's
+job for architecture docs.
 
 ## GitHub Operations
 

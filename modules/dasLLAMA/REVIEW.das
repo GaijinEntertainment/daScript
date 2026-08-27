@@ -100,7 +100,8 @@ def private check_tutorial_floor(tut_texts, rst_texts : array<string>) {
 let private AUDIO_CARRIER = "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das"
 let private VISION_CARRIER = "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das"
 
-// The licensed family namers per modality - ARCHITECTURE.md §1 ledgers each with its reason.
+// The licensed family namers per modality - the ARCHITECTURE_MEDIA.md carrier charters (§1.7,
+// §1.7b) ledger each with its reason.
 var private AUDIO_SEAM_EXEMPT <- {
     "modules/dasLLAMA/dasllama/dasllama_asr.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
@@ -188,7 +189,7 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
 }
 
 // The backend-role partition, mechanically: every dasllama_<gpu>_*.das file's suffix is a role
-// ARCHITECTURE.md sec.1.5's role table carries — a new role file adds its role to BOTH.
+// ARCHITECTURE_GPU.md sec.1.5's role table carries — a new role file adds its role to BOTH.
 var private GPU_ROLES_METAL <- {
     "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "lens"
 }
@@ -233,7 +234,7 @@ def private check_gpu_role_partition {
             let known = backend == "metal" ? key_exists(GPU_ROLES_METAL, role) : key_exists(GPU_ROLES_VULKAN, role)
             if (!known) {
                 gate_finding("modules/dasLLAMA/dasllama/{name}",
-                    "backend file with role '{role}' that the partition does not carry - add the role to ARCHITECTURE.md sec.1.5's role table and this gate's set in the same change")
+                    "backend file with role '{role}' that the partition does not carry - add the role to ARCHITECTURE_GPU.md sec.1.5's role table and this gate's set in the same change")
             }
         }
     }

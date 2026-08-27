@@ -1249,7 +1249,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf022_push_sentinel(expr : ExprFor?) : void {
-        //! The warning fires at the for-loop's `at`, not the push site — the three-function protocol is in daslib/ARCHITECTURE.md.
+        //! The warning fires at the for-loop's `at`, not the push site — the three-function protocol is in daslib/ARCHITECTURE_LINT.md.
         var state : Perf022State
         perf022_stack |> push(state)
         unsafe {
