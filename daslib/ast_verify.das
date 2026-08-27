@@ -982,7 +982,7 @@ class private AstPostInferVerifyVisitor : AstVisitor {
         if (st.flags.isTemplate) {
             return false
         }
-        in_field_init = true   // the walker calls this immediately before the init subtree
+        in_field_init = true
         return true
     }
 
