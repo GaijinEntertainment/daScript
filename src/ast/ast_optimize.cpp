@@ -1,5 +1,5 @@
 #include "daScript/misc/platform.h"
-#include "daScript/ast/ast_post_infer.h"
+#include "daScript/ast/ast_pass_macros.h"
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_expressions.h"
@@ -54,6 +54,10 @@ namespace das {
                         if ( program->failed() ) {                       // if macro failed, we report it, and we are done
                             program->error("optimization macro " + mod->name + "::" + pm->name + " failed", "","",LineInfo(), CompilationError::runtime_macro);
                             return false;
+                        }
+                        if ( last ) {
+                            applyPostRewriteMacros(program);
+                            if ( program->failed() ) return false;
                         }
                     }
                 }

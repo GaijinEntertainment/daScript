@@ -51,9 +51,7 @@ jobs:
           set -eux
           # dasImgui and dasVulkan are in-tree — only the imgui dependents are external
           git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiImplot.git    modules/dasImguiImplot
-          # TEMPORARY, revert before merge: the fork branch of borisbat/dasImguiNodeEditor#44,
-          # which stops the glue calling the TypeDecl(Type) constructor this PR removes
-          git clone --depth 1 --recurse-submodules -b aleksisch/typedecl-binding-location https://github.com/aleksisch/dasImguiNodeEditor.git modules/dasImguiNodeEditor
+          git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiNodeEditor.git modules/dasImguiNodeEditor
 
       - name: "Configure (externals absorbed by the modules glob)"
         run: |
