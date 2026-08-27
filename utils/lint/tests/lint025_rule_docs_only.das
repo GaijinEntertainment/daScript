@@ -130,6 +130,26 @@ def test_rule_docs_only_folder(t : T?) {
             t |> success(find(out, "/{doc}: LINT025") < 0, "{doc} is a rule document\n{out}")
         }
     }
+    t |> run("a file positional arms its folder - the PR lint shape") @(t : T?) {
+        let root = build_tree()
+        var out : string
+        let rc = run_lint(path_join(path_join(root, "tagged"), "ok.das"), out)
+        t |> equal(count_of(out, "LINT025"), 1, "linting one file still checks its folder\n{out}")
+        t |> success(find(out, "tagged/notes.md: LINT025") >= 0, "the finding names the stray\n{out}")
+        t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
+    }
+    t |> run("a tagged folder with no .das still gets its verdict") @(t : T?) {
+        let root = build_tree()
+        let dir = path_join(root, "mdonly")
+        mkdir_rec(dir)
+        plant(dir, ".lint_config", "[docs]\nrule_docs_only = true\n")
+        plant(dir, "stray.md", "# stray\n")
+        var out : string
+        let rc = run_lint(dir, out)
+        t |> success(find(out, "no .das files found") < 0, "an armed folder is not an empty input\n{out}")
+        t |> success(find(out, "mdonly/stray.md: LINT025") >= 0, "the finding names the stray\n{out}")
+        t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
+    }
     t |> run("--disable LINT025 silences the pass") @(t : T?) {
         let root = build_tree()
         var out : string

@@ -625,8 +625,9 @@ def resolve_rule_filters(cfg : Config; var disabled_codes : table<string>&; var 
     return true
 }
 
-// Driver-mode positionals → sorted .das file list, plus the directory roots among them
-// (`dirs`, the folder-docs pass's scan roots). Returns a process exit code, or -1 to proceed.
+// Driver-mode positionals → sorted .das file list, plus the folder-docs pass's scan roots
+// (`dirs`: directory positionals, and each file positional's folder). Returns a process
+// exit code, or -1 to proceed.
 def collect_input_files(var files : array<string>&; var dirs : array<string>&) : int {
     let cli_args <- get_user_args()
     let paths <- [for (arg in cli_args); arg; where !starts_with(arg, "-")]
@@ -645,13 +646,18 @@ def collect_input_files(var files : array<string>&; var dirs : array<string>&) :
         let st = stat(target)
         if (st.is_valid && st.is_dir) {
             dirs |> push(target)
+        } elif (st.is_valid) {
+            // a file positional arms its folder too - the PR lint shape passes changed
+            // files one by one, and LINT025 must not go silent there
+            dirs |> push(dir_name(target))
         }
         scan_das_files(target, files, cache, skipped)
     }
-    if (empty(files)) {
+    if (empty(files) && empty(dirs)) {
         // All inputs were intentionally skipped (e.g. builtin.das) -- success.
         // Distinguishes a clean "nothing to lint" from a genuine "no .das at the
-        // given path", which still errors.
+        // given path", which still errors. A directory root proceeds even with no
+        // .das under it: the folder-docs pass still owes its verdict.
         return 0 if (skipped > 0)
         print("Error: no .das files found\n")
         return 1
