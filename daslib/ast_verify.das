@@ -979,11 +979,21 @@ class private AstPostInferVerifyVisitor : AstVisitor {
     }
 
     def override canVisitStructureFieldInit(st : StructurePtr) : bool {
-        return !st.flags.isTemplate
+        if (st.flags.isTemplate) {
+            return false
+        }
+        in_field_init = true
+        return true
     }
 
     def override canVisitStructure(st : Structure?) : bool {
         return !st.flags.isTemplate
+    }
+
+    in_field_init : bool
+
+    def override visitStructureField(var _str : StructurePtr; var _decl : FieldDeclaration; _last : bool) : void {
+        in_field_init = false
     }
 
     def need_typed(var slot : ExpressionPtr; what : string; at : LineInfo) : void {
@@ -996,7 +1006,7 @@ class private AstPostInferVerifyVisitor : AstVisitor {
     }
 
     def need_func(fn : Function?; what : string; at : LineInfo) : void {
-        if (fn != null) {
+        if (fn != null || in_field_init) {
             return
         }
         report(at, "{what} has an unresolved func after inference")

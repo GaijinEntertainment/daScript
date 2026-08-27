@@ -364,6 +364,14 @@ an entry lands here only when no name, shape, or test can carry it.
 - **The two passes' skip sets are complementary**: pre-infer skips `generated` (filled in
   across passes); post-infer skips only `[template]` bodies and dasbind `[extern]` stubs -
   so generated bodies ARE checked post-infer, by nothing else.
+- **A structure's field-default init tree is a declaration, not code**: it never simulates -
+  the generated ctor carries its own inferred clone, which stays fully checked. Infer types
+  the decl init in place but binds its calls only when construction generates the ctor, so a
+  struct nothing constructs legitimately keeps a typed-but-unbound cross-module ctor call
+  there. The post-infer func invariant therefore tolerates calls inside field inits
+  (`in_field_init`, set/cleared around the field walk); every other invariant (types, ats)
+  still applies to them. The same-module shape resolves eagerly and never had the hole -
+  the selftest fixture is cross-module for exactly that reason.
 - **Each check's licensing C++ site** (the checklist requires one per check; record new ones
   here): `ExprOp1.subexpr` - `SimulateVisitor::visit(ExprOp1*)` dereferences;
   `TypeDecl.dim` entries - `TypeDecl::dimConst` sentinel (`ast_typedecl.h`); `ExprFor`
