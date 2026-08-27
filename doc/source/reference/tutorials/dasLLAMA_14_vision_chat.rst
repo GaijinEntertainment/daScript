@@ -115,7 +115,7 @@ the spliced turn. That is the path for a scheduler that owns its own embedder:
 
 .. code-block:: das
 
-   var chat2 = create_chat(m, "", N_GEN)
+   var chat2 = create_chat(m, "", 96l)
    add_user_image_rows(m, chat2, img_rows, n_img, grid)
    add_user(chat2, prompt)
 
