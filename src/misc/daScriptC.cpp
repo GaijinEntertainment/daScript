@@ -374,6 +374,20 @@ int das_fileaccess_introduce_native_module_n ( das_file_access * access, const c
     return ((FsFileAccess *) access)->introduceNativeModule(req_string) ? 1 : 0;
 }
 
+void das_fileaccess_add_extra_module ( das_file_access * access, const char * module_name, const char * module_file ) {
+    das_fileaccess_add_extra_module_n(access,
+        module_name, c_string_length(module_name, "module_name"),
+        module_file, c_string_length(module_file, "module_file"));
+}
+
+void das_fileaccess_add_extra_module_n ( das_file_access * access,
+                                         const char * module_name, size_t module_name_length,
+                                         const char * module_file, size_t module_file_length ) {
+    auto module_name_string = string_from_range(module_name, module_name_length, "module_name");
+    auto module_file_string = string_from_range(module_file, module_file_length, "module_file");
+    ((FileAccess *) access)->addExtraModule(module_name_string, module_file_string);
+}
+
 void das_fileaccess_lock ( das_file_access * access ) {
     ((FileAccess *) access)->lock();
 }
@@ -402,6 +416,14 @@ void das_get_root_n ( char * root, size_t maxbuf ) {
     auto copy_length = das::min<size_t>(size_t(maxbuf - 1), r.size());
     if ( copy_length ) memcpy(root, r.data(), copy_length);
     root[copy_length] = 0;
+}
+
+void das_set_root ( const char * root ) {
+    das_set_root_n(root, c_string_length(root, "root"));
+}
+
+void das_set_root_n ( const char * root, size_t root_length ) {
+    setDasRoot(string_from_range(root, root_length, "root"));
 }
 
 das_program * das_program_compile ( char * program_file, das_file_access * access, das_text_writer * tout, das_module_group * libgroup ) {
@@ -925,6 +947,8 @@ int das_policies_set_bool ( das_policies * policies, das_bool_policy flag, int v
         case DAS_POLICY_LOG_OPTIMIZATION_PASSES: p->log_optimization_passes = v; break;
         case DAS_POLICY_FUSION:                 p->fusion = v; break;
         case DAS_POLICY_AUTO_INLINE_FUNCTIONS:  p->auto_inline_functions = v; break;
+        case DAS_POLICY_JIT_ENABLED:            p->jit_enabled = v; break;
+        case DAS_POLICY_JIT_DLL_MODE:           p->jit_dll_mode = v; break;
         default: return 0;
     }
     return 1;

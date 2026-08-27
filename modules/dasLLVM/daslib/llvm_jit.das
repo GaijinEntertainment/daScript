@@ -7583,7 +7583,7 @@ def private get_llvm_function_type(func : FunctionPtr; types : PrimitiveTypes?) 
 }
 
 [macro_function]
-def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>; types : PrimitiveTypes?) {
+def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>; types : PrimitiveTypes?; skip_dtors : bool) {
     let priority = 0 |> uint64()
     let dataPointerType = LLVMPointerType(types.t_int8, 0u)
     let funcType = LLVMPointerType(LLVMFunctionType(types.t_void, null, 0u, 0), 0u)
@@ -7635,7 +7635,7 @@ def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLV
         LLVMSetLinkage(ctorArray, LLVMLinkage.LLVMAppendingLinkage)
         LLVMSetInitializer(ctorArray, LLVMConstArray(ctorStructType, array_data_ptr(ctor_entries), ctor_sz))
     }
-    if (dtor_sz != 0u) {
+    if (dtor_sz != 0u && !skip_dtors) {
         let dtorArray = LLVMAddGlobal(g_mod, LLVMArrayType(dtorStructType, dtor_sz), "llvm.global_dtors")
         LLVMSetLinkage(dtorArray, LLVMLinkage.LLVMAppendingLinkage)
         LLVMSetInitializer(dtorArray, LLVMConstArray(dtorStructType, array_data_ptr(dtor_entries), dtor_sz))
@@ -8113,6 +8113,16 @@ def public generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled 
 // optional pre-built pair (the LLVM-AOT self-registration ctor, built by llvm_aot). aot_ctor==null skips it.
 [macro_function]
 def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool; aot_ctor : LLVMOpaqueValue? = null; aot_dtor : LLVMOpaqueValue? = null) {
+    // nolint:STYLE014 - the failure is silent at both ends; both halves of the WHY must survive
+    // Mach-O codegen lowers llvm.global_dtors into __cxa_atexit(.., extern_weak @__dso_handle)
+    // registrations, and an in-memory image can satisfy neither end: RuntimeDyld's failed
+    // __dso_handle lookup silently aborts external resolution for the WHOLE module (every
+    // extern's GOT slot stays null; the first ctor jumps to 0), while a successful
+    // registration would fire at process exit() into the by-then-disposed engine's memory.
+    // So the darwin in-memory arm emits no dtor list at all - dll/exe arms are real images
+    // and keep it. (If another lowering ever references __dso_handle, a defined hidden
+    // dummy global by that name keeps resolution self-contained.)
+    let in_memory_darwin = jit_mode && get_platform_name() == "darwin"
     var ctor_dtor <- [
         // FileInfo
         generate_fileinfo_ctor_dtor(*types, active_filenames, jit_mode)
@@ -8120,7 +8130,7 @@ def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool;
     if (aot_ctor != null) {
         ctor_dtor |> push((aot_ctor, aot_dtor))
     }
-    ctor_dtor |> add_ctor_dtor_function(types)
+    ctor_dtor |> add_ctor_dtor_function(types, in_memory_darwin)
     reset_codegen_accumulators()
 }
 
