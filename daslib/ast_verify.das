@@ -986,6 +986,12 @@ class private AstPostInferVerifyVisitor : AstVisitor {
         return !st.flags.isTemplate
     }
 
+    in_field_init : bool
+
+    def override visitStructureField(var _str : StructurePtr; var _decl : FieldDeclaration; _last : bool) : void {
+        in_field_init = false
+    }
+
     def need_typed(var slot : ExpressionPtr; what : string; at : LineInfo) : void {
         if (slot == null || slot._type != null || slot.genFlags.generated || is_stmt_node(slot)) {
             return
@@ -996,7 +1002,7 @@ class private AstPostInferVerifyVisitor : AstVisitor {
     }
 
     def need_func(fn : Function?; what : string; at : LineInfo) : void {
-        if (fn != null) {
+        if (fn != null || in_field_init) {
             return
         }
         report(at, "{what} has an unresolved func after inference")
@@ -1105,6 +1111,7 @@ class private AstPostInferVerifyVisitor : AstVisitor {
     def override preVisitStructureField(var str : StructurePtr; var decl : FieldDeclaration; _last : bool) : void {
         need_at(decl.at, "field '{str.name}.{decl.name}'")
         need_slot(decl._type, "field '{str.name}.{decl.name}' type", decl.at)
+        in_field_init = true
     }
 
     def override preVisitEnumeration(var enu : EnumerationPtr) : void {
