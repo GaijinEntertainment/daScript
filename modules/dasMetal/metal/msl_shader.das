@@ -100,6 +100,7 @@ class MetalKernel : AstFunctionAnnotation {
         var err : array<string>
         var census : table<string>
         var cfg = MslEmitConfig()
+        cfg.float_a_ok = args |> find_arg("float_a_ok") ?as tBool ?? false
         if (empty(args |> find_arg("name") ?as tString ?? "")) {
             cfg.kernel_name = msl_derived_name(func) // derived globals pair with a qualified entry point
         }

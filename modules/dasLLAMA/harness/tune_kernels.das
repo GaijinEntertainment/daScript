@@ -2477,7 +2477,9 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         act_par_threshold = get_act_par_threshold(), q8_chunks_per_job = get_q8_chunks_per_job(),
         q4_chunks_per_job = get_q4_chunks_per_job(), q8_batch_chunks_per_job = get_q8_batch_chunks_per_job(),
         jobque_spin_us = get_jobque_spin_us(), jobque_join_poll = get_jobque_join_poll(),
-        threads = get_total_hw_jobs() + 1, metal_tensor = metal_crowns))   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
+        threads = get_total_hw_jobs() + 1, metal_tensor = metal_crowns,
+    metal_tall_floor = metal_tall_floor(), metal_devw_small_panel_mb = metal_devw_small_panel_mb(),
+    metal_cvt_min_rows = metal_cvt_min_rows()))   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
     // winners come from the results table (validation may have demoted one); the [tuned]
     // kernels this harness doesn't sweep yet keep their SHIPPED fallback as an explicit entry -
     // the scope completeness check demands every non-pinned [tuned] kernel

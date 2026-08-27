@@ -108,11 +108,23 @@ A gemma pair reports a zero grid — the plain ``eval_embd_span`` shape serves
 it, and the tutorial's third section falls back exactly that way. The same
 section then runs the one-call form: ``generate_embd`` takes the spliced rows,
 the span bounds and the grid, prefills and streams the reply — what
-``respond`` runs under the hood for a media turn. One boundary worth knowing:
+``respond`` runs under the hood for a media turn. The section closes with the
+pre-encoded-rows seam: ``add_user_image_rows`` moves the same soft tokens and
+the grid onto a *plain* chat — no embedder attached — and ``respond`` then runs
+the spliced turn. That is the path for a scheduler that owns its own embedder:
+
+.. code-block:: das
+
+   var chat2 = create_chat(m, "", N_GEN)
+   add_user_image_rows(m, chat2, img_rows, n_img, grid)
+   add_user(chat2, prompt)
+
+One boundary worth knowing:
 a deepstack pair (dense Qwen3-VL) encodes wider rows —
 ``(1 + n_deepstack) × dim`` floats each; the narrow by-hand splice still
 captions (the extra slices are additive refinement), and
-``create_chat(model, embedder)`` is the path that carries them in full.
+``create_chat(model, embedder)`` or the ``add_user_image_rows`` seam are the
+paths that carry them in full — the seam length-checks the wide quantum.
 
 .. seealso::
 

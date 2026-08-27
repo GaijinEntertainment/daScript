@@ -1914,7 +1914,9 @@ def test_qwen3a_metal_tower(tst : T?) {
             t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
             t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
             t |> success(conv_delta >= 1l, "the conv2d frontend served on the GPU ({conv_delta} convs)")
-            t |> success(enc_rel_rms < 1.0e-3, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
+            // 5e-3, not 1e-3: the tower's attention score slab is f16 (written half once,
+            // read half twice) - measured 2.5e-3 on the jfk fixture; transcripts stay exact
+            t |> success(enc_rel_rms < 5.0e-3, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
             to_log(LOG_INFO, "qwen3a mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "qwen3a mtower GPU eyeball: {gpu_text}\n")
             t |> success(!empty(gpu_text), "non-empty transcript")

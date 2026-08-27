@@ -901,7 +901,7 @@ def private gelu_form_delta(t : T?) {
 def private rms_weightless_gate(t : T?; dev, queue; dim, nrows : int; eps : float) {
     let tag = "rms_weightless dim={dim} nrows={nrows}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_rmsnorm_msl, metal_rmsnorm_msl_entry, metal_rmsnorm_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalRmsNorm_metal_rmsnorm_msl, MetalRmsNorm_metal_rmsnorm_msl_entry, MetalRmsNorm_metal_rmsnorm_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var x : array<float>
@@ -934,7 +934,7 @@ def private rms_weightless_gate(t : T?; dev, queue; dim, nrows : int; eps : floa
     var beps = buf_f32(dev, eps)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_rmsnorm_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, MetalRmsNorm_metal_rmsnorm_msl_tgmem, 0)
         metal_set_buffer(enc, bx, 0ul, 0)
         metal_set_buffer(enc, bw, 0ul, 1)
         metal_set_buffer(enc, by, 0ul, 2)
@@ -954,6 +954,142 @@ def private rms_weightless_gate(t : T?; dev, queue; dim, nrows : int; eps : floa
     metal_release(pso)
     delete x
     delete ones
+    delete want
+}
+
+// The dual-store rms stamp (MetalRmsNormHX): y must match the base math and the f16 twin
+// must be the RNE narrow of exactly the value the same thread wrote to the f32 panel.
+def private rms_hx_gate(t : T?; dev, queue; dim, nrows : int; eps : float) {
+    let tag = "rms_hx dim={dim} nrows={nrows}"
+    var err : string
+    var pso = pipeline_from_source(dev, MetalRmsNormHX_metal_rmsnorm_msl, MetalRmsNormHX_metal_rmsnorm_msl_entry, MetalRmsNormHX_metal_rmsnorm_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var x : array<float>
+    var w : array<float>
+    x |> resize(nrows * dim)
+    w |> resize(dim)
+    for (i in range(nrows * dim)) {
+        x[i] = 0.19 * float(i % 37) - 2.9
+    }
+    for (i in range(dim)) {
+        w[i] = 0.5 + 0.01 * float(i % 7)
+    }
+    var want : array<float>
+    want |> resize(nrows * dim)
+    for (r in range(nrows)) {
+        var ss = 0.0
+        for (i in range(dim)) {
+            let vv = x[r * dim + i]
+            ss += vv * vv
+        }
+        let inv = 1.0 / sqrt(ss / float(dim) + eps)
+        for (i in range(dim)) {
+            want[r * dim + i] = w[i] * (x[r * dim + i] * inv)
+        }
+    }
+    var bx = buf_upload(dev, x)
+    var bw = buf_upload(dev, w)
+    var by = buf_fill(dev, nrows * dim, 0.0)
+    var byh = buf_fill(dev, nrows * dim, float16(-1000.0))
+    var bdim = buf_u32(dev, uint(dim))
+    var beps = buf_f32(dev, eps)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, MetalRmsNormHX_metal_rmsnorm_msl_tgmem, 0)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, bw, 0ul, 1)
+        metal_set_buffer(enc, by, 0ul, 2)
+        metal_set_buffer(enc, bdim, 0ul, 3)
+        metal_set_buffer(enc, beps, 0ul, 4)
+        metal_set_buffer(enc, byh, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint(nrows), 1u, 1u), uint3(256u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(by, want, tag), 0)
+        let ygpu <- buf_download(by, nrows * dim, type<float>)
+        var wanth : array<float16>
+        wanth |> resize(nrows * dim)
+        for (v, h in ygpu, wanth) {
+            h = float16(v)
+        }
+        t |> equal(buf_mismatch_exact(byh, wanth, tag), 0)
+        delete wanth
+    }
+    metal_release(bx)
+    metal_release(bw)
+    metal_release(by)
+    metal_release(byh)
+    metal_release(bdim)
+    metal_release(beps)
+    metal_release(pso)
+    delete x
+    delete w
+    delete want
+}
+
+// The dual-store ew2 stamps (swiglu/geglu HX): g must match the base combine and gh must be
+// the RNE narrow of the value the same thread stored.
+def private ew2_hx_gate(t : T?; dev, queue; geglu : bool; total : int) {
+    let tag = "{geglu ? "geglu" : "swiglu"}_hx total={total}"
+    var err : string
+    var pso = (geglu
+        ? pipeline_from_source(dev, MetalGegluHX_metal_ew2_msl, MetalGegluHX_metal_ew2_msl_entry, MetalGegluHX_metal_ew2_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalSwigluHX_metal_ew2_msl, MetalSwigluHX_metal_ew2_msl_entry, MetalSwigluHX_metal_ew2_msl_fastmath, err))
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var sg : array<float>
+    var su : array<float>
+    var want : array<float>
+    sg |> resize(total)
+    su |> resize(total)
+    want |> resize(total)
+    for (k in range(total)) {
+        sg[k] = 0.21 * float(k % 43) - 4.3
+        su[k] = 0.31 * float(k % 17) - 2.5
+    }
+    for (k in range(total)) {
+        let a = sg[k]
+        if (geglu) {
+            want[k] = 0.5 * a * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.7978845608028654 * (a + 0.044715 * a * a * a))))) * su[k]
+        } else {
+            want[k] = (a / (1.0 + exp(-a))) * su[k]
+        }
+    }
+    var bsg = buf_upload(dev, sg)
+    var bsu = buf_upload(dev, su)
+    var btot = buf_u32(dev, uint(total))
+    var bgh = buf_fill(dev, total, float16(-1000.0))
+    // explicit slots: gh binds at 4 (slot 3 is the gated-out ascale — sequential binding
+    // would land the twin one slot short, silently)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bsg, 0ul, 0)
+        metal_set_buffer(enc, bsu, 0ul, 1)
+        metal_set_buffer(enc, btot, 0ul, 2)
+        metal_set_buffer(enc, bgh, 0ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: dispatch: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bsg, want, tag), 0)
+        let ggpu <- buf_download(bsg, total, type<float>)
+        var wanth : array<float16>
+        wanth |> resize(total)
+        for (v, h in ggpu, wanth) {
+            h = float16(v)
+        }
+        t |> equal(buf_mismatch_exact(bgh, wanth, tag), 0)
+        delete wanth
+    }
+    metal_release(bsg)
+    metal_release(bsu)
+    metal_release(btot)
+    metal_release(bgh)
+    metal_release(pso)
+    delete sg
+    delete su
     delete want
 }
 
@@ -1733,6 +1869,9 @@ def test_metal_misc_kernels(t : T?) {
                 gelu_flavor_gate(t, dev, queue, 5120, false)
                 gelu_form_delta(t)
                 rms_weightless_gate(t, dev, queue, 3840, 3, 1.0e-6)
+                rms_hx_gate(t, dev, queue, 2048, 3, 1.0e-6)
+                ew2_hx_gate(t, dev, queue, false, 2048 * 3)
+                ew2_hx_gate(t, dev, queue, true, 2048 * 3)
                 pos_add_gate(t, dev, queue, 98, 64, 14, 1120)   // 672x336 grid: NON-square, axis order visible
                 pos_add_gate(t, dev, queue, 49, 64, 7, 1120)    // square control
                 clamp_gate(t, dev, queue, 1000, CLAMP_IN, false)    // separate dst, %64 tail

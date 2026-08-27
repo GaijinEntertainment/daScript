@@ -159,11 +159,14 @@ var @scratch g_arena_free : array<tuple<off : uint64; size : uint64>>   // sorte
 var g_pso_gemv : MetalComputePipeline?
 var g_gemv_rows = 4l                       // rows (simdgroups) per MoE router/expert GEMV threadgroup (the dense GEMV geometry is fixed)
 var g_pso_rms : MetalComputePipeline?
+var g_pso_rms_hx : MetalComputePipeline?   // dual-store stamp: + the f16 twin panel
 var g_pso_add : MetalComputePipeline?
 var g_pso_addrms : MetalComputePipeline?
 var g_pso_preaddrms : MetalComputePipeline?
 var g_pso_swiglu : MetalComputePipeline?
+var g_pso_swiglu_hx : MetalComputePipeline?   // dual-store stamp
 var g_pso_geglu : MetalComputePipeline?
+var g_pso_geglu_hx : MetalComputePipeline?    // dual-store stamp
 // ===== tower primitives (compiled in the tower driver's init) =====
 var g_pso_ln : MetalComputePipeline?
 var g_pso_gelu_erf : MetalComputePipeline?
@@ -2088,6 +2091,35 @@ def race_x_f32(count : int) : array<float> {
         xa[i] = 0.25 * float(i % 17 - 8)
     }
     return <- xa
+}
+
+// deterministic f16 panel — the f16-slab races (attention scores) feed and compare in half
+def race_x_f16(count : int) : array<float16> {
+    var xa : array<float16>
+    xa |> resize(count)
+    for (i in range(count)) {
+        xa[i] = float16(0.25 * float(i % 17 - 8))
+    }
+    return <- xa
+}
+
+// the half-payload envelope twin: same bands over float16 buffers
+def race_envelope_ok_h(ba, bb : MetalBuffer?; count : int; var note : string&) : bool {
+    var maxref = 0.0lf
+    var maxdiff = 0.0lf
+    unsafe {
+        let pb = reinterpret<float16?>(metal_buffer_contents(ba))
+        let pt = reinterpret<float16?>(metal_buffer_contents(bb))
+        for (i in range(count)) {
+            maxref = max(maxref, abs(double(float(pb[i]))))
+            maxdiff = max(maxdiff, abs(double(float(pt[i])) - double(float(pb[i]))))
+        }
+    }
+    if (maxdiff > 0.05lf * maxref + 1e-6lf) {
+        note = "twin OUTPUT MISMATCH maxdiff={maxdiff} maxref={maxref}"
+        return false
+    }
+    return true
 }
 
 // eligibility envelope: f16-staging noise passes, a garbage twin lands at O(max)

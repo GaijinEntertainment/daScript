@@ -27,7 +27,7 @@ require strings
 require _model_tier
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
-// The KERNEL COVERAGE census (REVIEW: "A GPU kernel whose MSL entry symbol the census in test_kernel_coverage.das has not seen before ships with a small model in that file's coverage suite"): drive the small-model zoo across the
+// The KERNEL COVERAGE census (REVIEW: "A diff that adds a [metal_kernel] under ../dasllama/ either has that kernel dispatched by a census row in test_kernel_coverage.das ... or names its kernel class in that file's CENSUS_NEVER_DISPATCHED"): drive the small-model zoo across the
 // format / graph / batch-shape / KV-codec axes and report which compiled kernels were never
 // dispatched — LOUD WARNINGS, never an auto-dead verdict. A zero means "nothing this zoo runs
 // dispatched it", never "unreachable" — deleting a kernel additionally needs a reachability
@@ -38,6 +38,24 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites si
 // DASLLAMA_PARITY_FULL=1); the report stays honest about what THIS run covered. The vulkan
 // half: arm `coverage` = the device-free rail unit (spec parse + zero table); arm `coverage-vk`
 // = the SERVING census (needs a vulkan device + DASLLAMA_GPU=1 + the local model zoo).
+
+// The census's DECLARED blind spots: kernel classes no zoo row below can dispatch, each with
+// the reason. A new [metal_kernel] belongs in a census row, not here; a class lands here only
+// when no stocked carrier can reach it, and it leaves the moment a row can. Reconcile the list
+// against the report's NEVER DISPATCHED warnings — a name here that the report shows dispatched
+// is stale, and a warning with no entry here is a coverage gap to close with a row.
+let private CENSUS_NEVER_DISPATCHED <- [
+    // the MoE expert mul_mm tall M-tile pairs (128-row floor + remainder), ALL formats: the
+    // tall stamps engage at npos * n_expert_used >= 128 * n_expert, and the stocked MoE
+    // carriers (128/8, 60/4, 32/4 experts) put that floor at 1024-2048 rows - past the
+    // ~590-token census prompt under the 1024-row session cap. Their coverage is the
+    // tall-pair kernel-unit gate in test_metal_gemm_kernels.das
+    "MetalMoeMulMmK4TH128", "MetalMoeMulMmK4THR",
+    "MetalMoeMulMmK5TH128", "MetalMoeMulMmK5THR",
+    "MetalMoeMulMmK6TH128", "MetalMoeMulMmK6THR",
+    "MetalMoeMulMmQ8TH128", "MetalMoeMulMmQ8THR",
+    "MetalMoeMulMmMx4TH128", "MetalMoeMulMmMx4THR"
+]
 
 def private counting_prompt(start, last : int) : string {
     return build_string() $(var w) {
@@ -73,7 +91,9 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
             delete tr
             return
         }
-        tr.config.seq_len = min(tr.config.seq_len, 512l)
+        // 1024, not 512: the digit-splitting tokenizers (gemma, qwen) encode the 140-number
+        // counting prompt to ~590 tokens, and the eval capacity tripwire panics past seq_len
+        tr.config.seq_len = min(tr.config.seq_len, 1024l)
         let vocab = tr.config.vocab_size
         select_prefill_override("metal")
         select_decode_override("metal")
@@ -81,7 +101,10 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
             setup_dasllama_jobque()
             for (kdt in kdts) {
                 var s = make_run_state(tr.config, kdt, kdt)
-                let p <- encode(tr, counting_prompt(1, 40), true, false)
+                // >= 256 rows: the half-X convert (CVT_MIN_ROWS), the tall M-tile stamps and
+                // the MoE gather engage only past their row floors — a short prompt leaves
+                // every one of those kernels undispatched and the census blind to them
+                let p <- encode(tr, counting_prompt(1, 140), true, false)
                 eval_(tr, s, p)
                 var cur = greedy_top(s.logits, vocab)
                 for (_i in range(2)) {
@@ -354,6 +377,18 @@ def test_metal_kernel_coverage(tst : T?) {
             // the assert pins only that the RAIL counts — coverage gaps are human calls
             metal_kernel_coverage_report()
             var cov <- metal_kernel_coverage()
+            // the blind-spot list self-drains: census keys are class-qualified MSL entry
+            // names, so a declared class whose entry counted dispatches is a STALE entry
+            for (blind in CENSUS_NEVER_DISPATCHED) {
+                var hits = 0l
+                for (k, n in keys(cov), values(cov)) {
+                    if (starts_with(k, blind)) {
+                        hits += n
+                    }
+                }
+                t |> success(hits == 0l,
+                    "{blind} is a DECLARED blind spot - a stocked carrier now dispatches it ({hits}): drop the entry, add its census row")
+            }
             var served = 0
             for (n in values(cov)) {
                 if (n > 0l) {

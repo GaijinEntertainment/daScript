@@ -53,7 +53,7 @@ def test_grid_micro_grammar(t : T?) {
 }
 
 [test]
-def test_role_whole_buffer_rule(t : T?) {
+def test_role_whole_buffer_rule(t : T?) {   // nolint:STYLE038 — parallel per-shape cells of one rule; a split would scatter the rule's coverage
     t |> run("a buffer passed whole to a helper takes the callee parameter's direction") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let good = compile_issues(fixture("_rf_read_through"))
@@ -81,6 +81,24 @@ def test_role_whole_buffer_rule(t : T?) {
                 "the refusal names the contradiction")
             if (bad.ok) {
                 to_log(LOG_ERROR, "ROLE-INFER: pointer write-through fixture compiled clean\n")
+            }
+        } else {
+            feint("das_metal is not built on this platform; the lens does not load\n")
+        }
+    }
+    t |> run("the staged-GEMM deva step derives its inline-addr A pointer as a read") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            // the production spelling: tmm2d_tg_step_deva(acc, unsafe(addr(src[...])), ...) -
+            // the step's special case claims only pointer LOCALS; the inline addr read must
+            // still arrive through the generic conservative pass
+            let good = compile_issues(fixture("_rf_deva_read"))
+            t |> success(good.ok, "declared 'read' matches the derived deva read: {good.issues}")
+            let bad = compile_issues(fixture("_rf_deva_wrong"))
+            t |> success(!bad.ok, "a 'write' declaration on the deva A buffer must be refused")
+            t |> success(find(bad.issues, "declares @role='write' but the body derives 'read'") >= 0,
+                "the refusal names the contradiction")
+            if (bad.ok) {
+                to_log(LOG_ERROR, "ROLE-INFER: deva wrong-role fixture compiled clean\n")
             }
         } else {
             feint("das_metal is not built on this platform; the lens does not load\n")

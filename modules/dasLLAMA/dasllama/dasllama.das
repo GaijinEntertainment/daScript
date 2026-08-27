@@ -289,6 +289,13 @@ def add_user_image(var chat : ChatSession; img : VisionImage) {
     add_user_image_(chat, img)
 }
 
+def add_user_image_rows(model : Model; var chat : ChatSession; var rows : array<float>; n_rows : int64; grid : int2) {
+    //! Queue PRE-ENCODED image soft-token rows (what ``encode_image`` emits — deepstack models:
+    //! ``(1+n)·dim``-wide, length-checked) with the family's mrope ``grid`` ((0,0) = sequential)
+    //! for the next ``respond``. MOVES ``rows``; works on a plain chat — no embedder needed.
+    add_user_image_rows_(model, chat, rows, n_rows, grid)
+}
+
 def encode_image(embedder : VisionEmbedder; var scratch : VisionState; img : VisionImage;
                  tag : string; var out : array<float>) : int64 {
     //! The whole image path in one call — geometry, letterbox, normalize, encode — into ``out`` =

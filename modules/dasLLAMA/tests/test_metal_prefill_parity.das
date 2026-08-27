@@ -757,14 +757,27 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     // tail is pinned OFF for both legs: a splice chunk whose npos % 32 lands in
                     // the tail window would serve its remainder rows on the f32-dot GEMVs while
                     // the fused eval stays f16-tile mul_mm — a GEMM-form spread the f16 bar
-                    // cannot absorb, and the tail has its own arm (mm-tail)
+                    // cannot absorb, and the tail has its own arm (mm-tail). Half-X is pinned
+                    // off for the same reason: its 256-row gate puts the fused eval on the
+                    // f16-stream form while the shorter splice chunks stay f32 (the half-X
+                    // form's own coverage is the kernels-suite halfx arms + the kq parity arm).
+                    // Dev-W is the same row-gated form-swap class (all-device GEMM >= 256 rows)
+                    // - pinned off with them; its coverage is the kernels-suite devw arm.
+                    // Tall M-tiles split at 128-row floors - fused vs splice rows land on
+                    // different tile mixes, the same form-swap class - pinned off with them.
                     set_metal_prefill_mm_tail(false)
+                    set_metal_prefill_half_x(false)
+                    set_metal_prefill_dev_w(false)
+                    set_metal_prefill_tall(false)
                     var lg_fused <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
                     set_span_fuse(false)
                     set_metal_prefill_min_npos(1l)   // the splice's short head/tail ride the GPU too
                     let pfsp0 = metal_prefill_stats().prefills
                     var lg_splice <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
                     set_metal_prefill_mm_tail(true)
+                    set_metal_prefill_half_x(true)
+                    set_metal_prefill_dev_w(true)
+                    set_metal_prefill_tall(true)
                     // the reference must actually BE the splice: three GPU prefills, or the
                     // witness collapses onto its own subject (an always-fused mutant passes)
                     t |> success(metal_prefill_stats().prefills - pfsp0 == 3l,

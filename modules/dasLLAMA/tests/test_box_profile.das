@@ -143,6 +143,32 @@ def test_partial_and_missing_are_no_ops(t : T?) {
 }
 
 [test]
+def test_metal_prefill_knobs_apply(t : T?) {
+    var terr = ""
+    let dir = temp_directory(terr)
+    let path = path_join(dir, "dasllama_test_box_profile_metal.json")
+    t |> success(fwrite(path, ("\{\"runtime\":\{\"metal_tall_floor\":96,"
+        + "\"metal_devw_small_panel_mb\":24,\"metal_cvt_min_rows\":320\}\}")), "metal-knob profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(metal_tall_floor(), 96l, "metal_tall_floor applied")
+    t |> equal(metal_devw_small_panel_mb(), 24l, "metal_devw_small_panel_mb applied")
+    t |> equal(metal_cvt_min_rows(), 320l, "metal_cvt_min_rows applied")
+
+    // out-of-range values are refused with a warning — the stored value stands
+    t |> success(fwrite(path, ("\{\"runtime\":\{\"metal_tall_floor\":0,"
+        + "\"metal_devw_small_panel_mb\":0,\"metal_cvt_min_rows\":0\}\}")), "zero-knob profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(metal_tall_floor(), 96l, "tall_floor 0 refused (the measured-bad unfloored config)")
+    t |> equal(metal_devw_small_panel_mb(), 24l, "devw panel 0 refused")
+    t |> equal(metal_cvt_min_rows(), 320l, "cvt_min_rows 0 refused (a numerics form flip from JSON)")
+
+    set_metal_tall_floor(64l)
+    set_metal_devw_small_panel_mb(32l)
+    set_metal_cvt_min_rows(256l)
+    remove(path)
+}
+
+[test]
 def test_backend_pin_applies(t : T?) {
     var terr = ""
     let dir = temp_directory(terr)

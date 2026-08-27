@@ -1322,6 +1322,9 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us(v) }
     apply_i64_knob(rt, "jobque_join_poll") $(v) { set_jobque_join_poll(v) }
     apply_i64_knob(rt, "team_rank_gate") $(v) { set_team_rank_gate(int(min(v, 1l))) }
+    apply_i64_knob(rt, "metal_tall_floor") $(v) { set_metal_tall_floor(v) }
+    apply_i64_knob(rt, "metal_devw_small_panel_mb") $(v) { set_metal_devw_small_panel_mb(v) }
+    apply_i64_knob(rt, "metal_cvt_min_rows") $(v) { set_metal_cvt_min_rows(v) }
     let mtc = read_json_field(rt, "metal_tensor", "")
     if (mtc != "") {
         set_metal_tensor_crowns(mtc)
@@ -2093,6 +2096,45 @@ def public metal_tensor_crowned(family : string) : bool {
     return key_exists(g_tensor_crowns, family)
 }
 
+// ===== Metal prefill raced constants (sidecar "runtime" knobs; prefill caches at its init) =====
+
+//! Defaults are the M5 race winners; another box's sidecar overrides without a rebuild.
+//! CACHED at metal_prefill_init (like the tensor crowns) - a setter call after the first
+//! prefill is inert until a full metal_prefill_shutdown()/re-init.
+var private g_metal_tall_floor = 64l           // tall M-tile occupancy floor, in 128x64 tgs
+var private g_metal_devw_small_panel_mb = 32l  // dev-W dequant-panel engage knee
+var private g_metal_cvt_min_rows = 256l        // half-X panel conversion row floor
+
+def public set_metal_tall_floor(v : int64) {
+    if (v < 1l) {   // 0 is the measured-bad unfloored config — refuse, keep the default
+        to_log(LOG_WARNING, "dasLLAMA: set_metal_tall_floor({v}) out of range - keeping {g_metal_tall_floor}\n")
+        return
+    }
+    g_metal_tall_floor = v
+}
+
+def public metal_tall_floor : int64 => g_metal_tall_floor
+
+def public set_metal_devw_small_panel_mb(v : int64) {
+    if (v < 1l) {
+        to_log(LOG_WARNING, "dasLLAMA: set_metal_devw_small_panel_mb({v}) out of range - keeping {g_metal_devw_small_panel_mb}\n")
+        return
+    }
+    g_metal_devw_small_panel_mb = v
+}
+
+def public metal_devw_small_panel_mb : int64 => g_metal_devw_small_panel_mb
+
+def public set_metal_cvt_min_rows(v : int64) {
+    if (v < 1l) {   // 0 would flip every site onto the f16 convert — a numerics form change from JSON
+        to_log(LOG_WARNING, "dasLLAMA: set_metal_cvt_min_rows({v}) out of range - keeping {g_metal_cvt_min_rows}\n")
+        return
+    }
+    g_metal_cvt_min_rows = v
+}
+
+def public metal_cvt_min_rows : int64 => g_metal_cvt_min_rows
+
 //! Encode text to token ids using the model's tokenizer.
 def encode_(m : Model; text : string; add_special = true; parse_special = false) : array<int64> {
     return <- encode(m.tok, text, add_special, parse_special)
@@ -2453,6 +2495,15 @@ def release_kv_pages_(var s : Session) {
 def private kv_grow_block_table(var s : Session; np : int64) {
     while (long_length(s.block_table) < np) {
         s.block_table |> push(kv_pool_alloc_group(*s.kv_pool))
+    }
+}
+
+// The eval capacity tripwire: every session buffer (KV planes, att scratch, run tables) is sized
+// by config seq_len and the store paths write through unsafe pointers, so an eval crossing
+// seq_len corrupts the das heap silently - every eval entry calls this before its first store
+def kv_capacity_check(t : Model; npos, start_pos : int64) {
+    if (start_pos + npos > t.config.seq_len) {
+        panic("dasLLAMA: eval of {npos} positions at {start_pos} exceeds the session's seq_len {t.config.seq_len} - raise config seq_len before make_run_state, or trim the prompt")
     }
 }
 
@@ -4750,6 +4801,7 @@ def zeroed_resize(@scratch var a : array<auto(numT)>; need : int64) {
 //! forward() (decode); npos>1 to forward_prefill. Leaves s.logits at the last token, extends KV by npos.
 [no_alloc, no_env, no_io]
 def forward_batch(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
+    kv_capacity_check(t, npos, start_pos)
     if (npos == 1l) {
         forward(t, s, tokens[0], start_pos)
     } else {

@@ -14,7 +14,7 @@ require daslib/json_boost
 require daslib/fio
 require strings
 
-let TEST_PORT = 18135   // 18097/18099/18101/18120/18121/18131 belong to the sibling suites
+let TEST_PORT = 18135   // 18097/18098/18099/18101/18102/18120/18121/18131 belong to the sibling suites
 
 // the test_openai_server harness minus the model: setup mode is exactly a slotless boot
 var private g_picker_dir = ""   // planted per run, removed by with_setup_server's teardown

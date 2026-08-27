@@ -1,6 +1,6 @@
 options gen2
 options _comment_hygiene = true
-options _metal_manual_dispatch = true   // PERMANENT opt-out: single-dispatch synchronous donor BELOW the engine-graph layer (kn_*/hz live in dasllama_metal_common, which requires dasllama_common -> this module — a cycle). No graph, no intra-encoder hazard surface. Moving kn_* into das_metal_boost would lift this.
+options _metal_manual_dispatch = true   // PERMANENT opt-out: single-dispatch synchronous donor BELOW the engine-graph layer (kn_*/hz live in dasllama_metal_common, which requires dasllama_common -> this module — a cycle). No graph, no intra-encoder hazard surface; the same cycle forces this module's OWN device/queue (the one-device-per-family rule's licensed exception). Moving kn_* into das_metal_boost would lift this.
 options _dasllama_internal = true
 
 module dasllama_metal_gemm shared public

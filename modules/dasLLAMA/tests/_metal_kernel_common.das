@@ -111,6 +111,23 @@ def buf_mismatch_f16(buf; want : array<float>; rel, absf : float; tag : string) 
 
 // envelope-aware compare for float-accumulating GEMV/GEMM kernels: |gpu-cpu| <= max(rel * env,
 // 1e-3) where env is the output's dot envelope (sum |w·x|); sentinel positions carry env 0
+// the float16-payload twin: reads the buffer as halfs (f16 slabs), same bands
+def buf_mismatch_env_h(buf; want, env : array<float>; rel : float; tag : string) : int {
+    let p = unsafe(reinterpret<float16 const?>(metal_buffer_contents(buf)))
+    var bad = 0
+    for (k in range(length(want))) {
+        let g = float(unsafe(p[k]))
+        let w = want[k]
+        if (!(abs(g - w) <= max(rel * env[k], 1e-3))) {
+            if (bad < DUMP_CAP) {
+                to_log(LOG_ERROR, "  {tag} mismatch [{k}] gpu {g} cpu {w} env {env[k]}\n")
+            }
+            bad++
+        }
+    }
+    return bad
+}
+
 def buf_mismatch_env(buf; want, env : array<float>; rel : float; tag : string) : int {
     let p = unsafe(reinterpret<float const?>(metal_buffer_contents(buf)))
     var bad = 0

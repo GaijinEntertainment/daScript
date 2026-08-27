@@ -205,6 +205,18 @@ def section_mrope(m : Model; decoder_mmproj : string; image_path : string; promp
         return true
     }
     print("\n\n")
+    // the pre-encoded-rows seam: the SAME soft tokens land on a plain chat (no embedder
+    // attached) via add_user_image_rows - it moves the rows in with the grid, and respond()
+    // runs the spliced turn. The path for a scheduler that owns its own embedder.
+    var chat2 = create_chat(m, "", N_GEN)
+    add_user_image_rows(m, chat2, img_rows, n_img, grid)
+    add_user(chat2, prompt)
+    respond(m, chat2, SamplingParams()) $(piece_text) {
+        print("{piece_text}")
+        return true
+    }
+    print("\n\n")
+    delete chat2
     delete s
     delete s2
     delete chat
@@ -212,7 +224,8 @@ def section_mrope(m : Model; decoder_mmproj : string; image_path : string; promp
 }
 // A deepstack pair (dense Qwen3-VL) encodes WIDER rows - (1 + n_deepstack) x dim floats each;
 // the narrow splice above still captions (the extra slices are additive refinement the decoder
-// then runs without), and create_chat(model, embedder) is the path that carries them in full.
+// then runs without), and create_chat(model, embedder) or the add_user_image_rows seam are the
+// paths that carry them in full.
 
 def is_image_path(p : string) : bool {
     let low = to_lower(p)

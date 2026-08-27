@@ -102,8 +102,11 @@ def private is_setop1(op : das_string) : bool => op == "++" || op == "--" || op 
 // Returns the C-argument index, or -1 for any other call. Suffix match, like the tg-protocol
 // arms: resolved call names may carry a module/instance prefix.
 def private tmm2d_c_arg(cname : string) : int {
-    if (cname |> ends_with("tmm2d_f32_bf16_f32") || cname |> ends_with("tmm2d_q8b_f32")) {
+    if (cname |> ends_with("tmm2d_f32_bf16_f32") || cname |> ends_with("tmm2d_f16w_f32") || cname |> ends_with("tmm2d_q8b_f32")) {
         return 7
+    }
+    if (cname |> ends_with("tmm2d_q8u_f32")) {
+        return 8
     }
     return cname |> ends_with("tmm2d_q8_f32") || cname |> ends_with("tmm2d_q8_f16s") ? 11 : -1
 }
@@ -286,7 +289,7 @@ class private AccessVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprCall(expr : ExprCall?) : void {   // nolint:STYLE037 — an intrinsic-name dispatch table; one arm per GPU builtin
+    def override preVisitExprCall(expr : ExprCall?) : void {   // nolint:STYLE037,STYLE038 — an intrinsic-name dispatch table; one arm per GPU builtin
         // POST-infer a resolved call carries its mangled name (`__::<module>`<name>`<hash>`), so
         // the intrinsic table below must match the base name or every entry misses on that pass
         let cname = callee_base_name("{expr.name}")
@@ -305,17 +308,10 @@ class private AccessVisitor : AstVisitor {
             }
             return
         }
-        if (cname == "coopmatLoad" || cname == "simdgroup_load"
-                || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode"
-                || cname |> ends_with("tmm2d_tg_begin") || cname |> ends_with("tmm2d_tg_step")
-                || cname |> ends_with("i_das_ptr_add")) {
-            // plain reads (the generic pass records them) — or, for the staged-GEMM protocol
-            // begin/step, only untracked locals/@workgroup tiles. Pointer arithmetic is neither:
-            // the RESULT's use decides, and write_root_name peels back through it
-            return
-        }
-        if (cname |> ends_with("tmm2d_tg_store")) {
-            if (length(expr.arguments) == 5) {
+        if (cname |> ends_with("tmm2d_tg_step_deva") || cname |> ends_with("tmm2d_tg_step_devant")) {
+            // deva step: the device activation pointer (arg 1) is a tracked read; acc/tb stay
+            // untracked locals/@workgroup like the plain step
+            if (length(expr.arguments) == 7) {
                 var cur = expr.arguments[1]
                 if (cur is ExprRef2Value) {
                     cur = (cur as ExprRef2Value).subexpr
@@ -325,7 +321,43 @@ class private AccessVisitor : AstVisitor {
                     let bn = ptrs?[pn] ?? (key_exists(tracked, pn) ? pn : "")
                     if (!empty(bn)) {
                         claimed |> insert("{pn}:{cur.at.line}:{cur.at.column}")
+                        reads |> insert(bn)
+                    }
+                }
+            }
+            return
+        }
+        if (cname == "coopmatLoad" || cname == "simdgroup_load"
+                || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode"
+                || cname |> ends_with("tmm2d_tg_begin") || cname |> ends_with("tmm2d_tg_step")
+                || cname |> ends_with("tmm2d_tg_begin_deva")
+                || cname |> ends_with("tmm2d_tg_begin_nt") || cname |> ends_with("tmm2d_tg_step_nt")
+                || cname |> ends_with("tmm2d_tile_tg") || cname |> ends_with("tmm2d_tg_rowscale")
+                || cname |> ends_with("i_das_ptr_add")) {
+            // plain reads (the generic pass records them) — or, for the staged-GEMM protocol
+            // begin/step, only untracked locals/@workgroup tiles. Pointer arithmetic is neither:
+            // the RESULT's use decides, and write_root_name peels back through it
+            return
+        }
+        if (cname |> ends_with("tmm2d_tg_store") || cname |> ends_with("tmm2d_tg_store_half")
+                || cname |> ends_with("tmm2d_tg_store_bias")) {
+            // arg 1 = C (write); store_bias arg 2 = the bias pointer (read)
+            let nargs = cname |> ends_with("tmm2d_tg_store_bias") ? 6 : 5
+            if (length(expr.arguments) == nargs) {
+                for (ai in range(1, nargs == 6 ? 3 : 2)) {
+                    var cur = expr.arguments[ai]
+                    if (cur is ExprRef2Value) {
+                        cur = (cur as ExprRef2Value).subexpr
+                    }
+                    continue if (!(cur is ExprVar))
+                    let pn = string((cur as ExprVar).name)
+                    let bn = ptrs?[pn] ?? (key_exists(tracked, pn) ? pn : "")
+                    continue if (empty(bn))
+                    claimed |> insert("{pn}:{cur.at.line}:{cur.at.column}")
+                    if (ai == 1) {
                         writes |> insert(bn)
+                    } else {
+                        reads |> insert(bn)
                     }
                 }
             }

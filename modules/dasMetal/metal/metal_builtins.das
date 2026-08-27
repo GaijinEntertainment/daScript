@@ -152,6 +152,14 @@ def public simdgroup_store(m : simdgroup_half8x8; var dst; offset : uint; stride
     }
 }
 
+// sgmat_to_half(d, s): per-element f32 -> f16 narrowing of a simdgroup accumulator (RNE both
+// tiers). simdgroup_store is same-type-only, so half stores of float accumulators route here.
+def public sgmat_to_half(var d : simdgroup_half8x8; s : simdgroup_float8x8) {
+    for (k in range(64)) {
+        d.data[k] = float16(s.data[k])
+    }
+}
+
 // simdgroup_multiply_accumulate(d, a, b, c): d = a*b + c. d may alias c (each element is read
 // before its slot is written). The mixed overload is the GEMM workhorse: f16 operand tiles into
 // f32 accumulators — an f16 product is exact in f32, matching the hardware's widened MAC.
@@ -251,7 +259,9 @@ def public simdgroup_multiply(var d : simdgroup_half8x8; a, b : simdgroup_half8x
 // W = weights, n output cols x kk, row stride ldw; C = m x n, row stride ldc, OVERWRITTEN.
 // m/n/sgs (tile rows, tile cols, cooperating simdgroups) must be call-site constants.
 
-//! f32 activations x bf16 weights -> f32 tile (raw bf16 halfwords in `w`).
+//! f32 activations x bf16 weights -> f32 tile (raw bf16 halfwords in `w`). The float16-A
+//! overload streams a converted half panel — the emitter picks the operand type by the
+//! activation pointer's pointee, same contract as tmm2d_q8u_f32.
 [unused_argument(sgs), sideeffects]
 def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float const?; lda : uint; w : uint16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
     if (gl_LocalInvocationID.x != 0u) {
@@ -263,6 +273,64 @@ def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float const?; lda : uint; w 
                 var acc = 0.0
                 for (k in range(int(kk))) {
                     acc += a[r * int(lda) + k] * uint_bits_to_float(uint(w[j * int(ldw) + k]) << 16u)
+                }
+                c[r * int(ldc) + j] = acc
+            }
+        }
+    }
+}
+
+[unused_argument(sgs), sideeffects]
+def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float16 const?; lda : uint; w : uint16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var acc = 0.0
+                for (k in range(int(kk))) {
+                    acc += float(a[r * int(lda) + k]) * uint_bits_to_float(uint(w[j * int(ldw) + k]) << 16u)
+                }
+                c[r * int(ldc) + j] = acc
+            }
+        }
+    }
+}
+
+//! f32/f16 activations x DEVICE f16 weights -> f32 tile: the all-device form (no threadgroup
+//! staging, no barriers — the tg-staged operand tax does not apply). W is a pre-dequantized
+//! half panel (n cols x kk, row stride ldw). The float16-A overload streams a half panel;
+//! the emitter picks the operand type by the activation pointer's pointee.
+[unused_argument(sgs), sideeffects]
+def public tmm2d_f16w_f32(m, n, sgs : uint; a : float const?; lda : uint; w : float16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var acc = 0.0
+                for (k in range(int(kk))) {
+                    acc += a[r * int(lda) + k] * float(w[j * int(ldw) + k])
+                }
+                c[r * int(ldc) + j] = acc
+            }
+        }
+    }
+}
+
+[unused_argument(sgs), sideeffects]
+def public tmm2d_f16w_f32(m, n, sgs : uint; a : float16 const?; lda : uint; w : float16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var acc = 0.0
+                for (k in range(int(kk))) {
+                    acc += float(a[r * int(lda) + k]) * float(w[j * int(ldw) + k])
                 }
                 c[r * int(ldc) + j] = acc
             }
@@ -374,12 +442,73 @@ def public tmm2d_q8b_f32(m, n, sgs : uint; wsh : float16 const?; wqb : int8 cons
     }
 }
 
+//! Interleaved-q8_0 W x RAW f32 activations, upstream-geometry walk: the emitter dequantizes
+//! the W tile into `wt` (an n*bk @workgroup float16 scratch, scale folded AT STAGING) per staged-K
+//! chunk, streams activations straight from device memory, and holds ONE multiply_accumulate
+//! cooperative C across the whole K loop. Same blob views and arg meanings as tmm2d_q8b_f32;
+//! `tid` is the caller's gl_LocalInvocationIndex (the staging stride). The CPU replay mirrors
+//! the f16 rounding of the staged dequant so conformance stays exact on f16-exact fixtures.
+//! `bk` (call-site constant 32/64) is the staged K-chunk depth: 64 halves the staging barriers
+//! (raced 5-11% per GEMM on M5) and needs an n*64 `wt`; a kk % 64 == 32 tail runs one 32-chunk.
+[unused_argument(sgs, wt, tid, bk), sideeffects]
+def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 const?; a : float const?; lda : uint; var c : float?; ldc : uint; kk : uint; ldwb : uint; tid : uint; bk : uint = 32u) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        let nb = int(kk) / 32
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (b in range(nb)) {
+                    let blk = j * int(ldwb) + b
+                    let ws = float(wsh[blk * 17])
+                    var ch = 0.0
+                    for (k in range(32)) {
+                        ch += a[r * int(lda) + b * 32 + k] * float(float16(float(wqb[blk * 34 + k]) * ws))
+                    }
+                    facc += ch
+                }
+                c[r * int(ldc) + j] = facc
+            }
+        }
+    }
+}
+
+//! the half-A overload: identical walk, activations stream as device f16 (the emitter picks
+//! the q8uh helper by this pointer's pointee — a float A operand is off the native half path)
+[unused_argument(sgs, wt, tid, bk), sideeffects]
+def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 const?; a : float16 const?; lda : uint; var c : float?; ldc : uint; kk : uint; ldwb : uint; tid : uint; bk : uint = 32u) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        let nb = int(kk) / 32
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (b in range(nb)) {
+                    let blk = j * int(ldwb) + b
+                    let ws = float(wsh[blk * 17])
+                    var ch = 0.0
+                    for (k in range(32)) {
+                        ch += float(a[r * int(lda) + b * 32 + k]) * float(float16(float(wqb[blk * 34 + k]) * ws))
+                    }
+                    facc += ch
+                }
+                c[r * int(ldc) + j] = facc
+            }
+        }
+    }
+}
+
 // ===== staged-tile cooperative GEMM protocol (begin / step / store) =====
 // For kernels that DEQUANT-stage weight/activation tiles into @workgroup float16 (mx4 LUT,
 // k-quant sub-scales): stage a FLAT row-major [rows][kk] tile pair per K-chunk, then step.
 // `acc` is an m*n float @workgroup (or local) scratch — the CPU-replay accumulator; on GPU the
 // emitter keys a persistent cooperative tensor to the acc VARIABLE and never touches the array.
-// run() OVERWRITES a cooperative destination (probe-proven), so step folds explicitly.
+// The op is built in multiply_accumulate mode, so each step's run() accumulates into that
+// persistent tensor directly (default-mode run() overwrites — that mode is not used here).
 
 //! begin: zero the accumulator. m/n/sgs/kk must be call-site constants (kk = chunk K width).
 [unused_argument(sgs, kk), sideeffects]
@@ -410,6 +539,176 @@ def public tmm2d_tg_step(var acc; ta; tb; m, n, kk : uint) {
     }
 }
 
+//! One whole tile matmul into THREADGROUP float scratch (fused attention's score tile):
+//! so[r][j] = sum_k ta[r*kk+k] * tb[j*kk+k], overwrite — ta flat [m][kk] f16, tb [n][kk] f16.
+[unused_argument(sgs), sideeffects]
+def public tmm2d_tile_tg(ta; tb; var so; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (r in range(int(m))) {
+        for (j in range(int(n))) {
+            var facc = 0.0
+            for (k in range(int(kk))) {
+                facc += float(ta[r * int(kk) + k]) * float(tb[j * int(kk) + k])
+            }
+            so[r * int(n) + j] = facc
+        }
+    }
+}
+
+//! Per-row scale of the held accumulator: acc[r][j] *= f[r] — the online-softmax rescale and
+//! the final 1/sum share this primitive.
+[sideeffects]
+def public tmm2d_tg_rowscale(var acc; f; m, n : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (r in range(int(m))) {
+        for (j in range(int(n))) {
+            acc[r * int(n) + j] *= float(f[r])
+        }
+    }
+}
+
+//! begin, deva flavor: the accumulator's LEFT operand is a device stream (activations read
+//! straight from device memory), only the right tile is threadgroup-staged f16. `a` is a TYPE
+//! WITNESS: the GPU destination tensor's layout is parameterized by the A element type, so the
+//! begin must see the same pointer the steps will stream — float or float16 picks the operand
+//! type (a float A operand keeps matmul2d off the native half x half path).
+[unused_argument(a, sgs, kk), sideeffects]
+def public tmm2d_tg_begin_deva(var acc; a : float const?; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (i in range(int(m * n))) {
+        acc[i] = 0.0
+    }
+}
+
+[unused_argument(a, sgs, kk), sideeffects]
+def public tmm2d_tg_begin_deva(var acc; a : float16 const?; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (i in range(int(m * n))) {
+        acc[i] = 0.0
+    }
+}
+
+//! step, deva flavor: acc[r][j] += a[r*lda + k] * tb[j][k] over one K-chunk — `a` points at
+//! the chunk's first activation (device f32 or f16, row stride lda), tb flat [n][kk] f16 staged.
+[sideeffects]
+def public tmm2d_tg_step_deva(var acc; a : float const?; lda : uint; tb; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (k in range(int(kk))) {
+                    facc += a[r * int(lda) + k] * float(tb[j * int(kk) + k])
+                }
+                acc[r * int(n) + j] += facc
+            }
+        }
+    }
+}
+
+[sideeffects]
+def public tmm2d_tg_step_deva(var acc; a : float16 const?; lda : uint; tb; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (k in range(int(kk))) {
+                    facc += float(a[r * int(lda) + k]) * float(tb[j * int(kk) + k])
+                }
+                acc[r * int(n) + j] += facc
+            }
+        }
+    }
+}
+
+//! begin, nt flavor: the step's B tile is staged NATURAL [kk][n] (transpose_right=false on
+//! the GPU op) — V-style operands land with coalesced row copies, no transpose gather.
+[unused_argument(sgs, kk), sideeffects]
+def public tmm2d_tg_begin_nt(var acc; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (i in range(int(m * n))) {
+        acc[i] = 0.0
+    }
+}
+
+//! step, nt flavor: acc[r][j] += ta[r][k] * tb[k][j] — ta flat [m][kk] f16, tb flat [kk][n] f16.
+[sideeffects]
+def public tmm2d_tg_step_nt(var acc; ta; tb; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (r in range(int(m))) {
+        for (j in range(int(n))) {
+            var facc = 0.0
+            for (k in range(int(kk))) {
+                facc += float(ta[r * int(kk) + k]) * float(tb[k * int(n) + j])
+            }
+            acc[r * int(n) + j] += facc
+        }
+    }
+}
+
+//! begin, deva+nt flavor: A streams from device f32, the step's B tile staged NATURAL [kk][n].
+[unused_argument(sgs, kk), sideeffects]
+def public tmm2d_tg_begin_devant(var acc; m, n, sgs, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    for (i in range(int(m * n))) {
+        acc[i] = 0.0
+    }
+}
+
+//! step, deva+nt flavor: acc[r][j] += a[r*lda + k] * tb[k][n] — a device f32 at the chunk's
+//! first element (row stride lda), tb flat [kk][n] f16.
+[sideeffects]
+def public tmm2d_tg_step_devant(var acc; a : float const?; lda : uint; tb; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (k in range(int(kk))) {
+                    facc += a[r * int(lda) + k] * float(tb[k * int(n) + j])
+                }
+                acc[r * int(n) + j] += facc
+            }
+        }
+    }
+}
+
+//! store with per-output-column bias: C[r][j] = acc[r][j] + bias[j] (overwrite, row stride ldc).
+[sideeffects]
+def public tmm2d_tg_store_bias(acc; var c : float?; bias : float const?; m, n, ldc : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                c[r * int(ldc) + j] = acc[r * int(n) + j] + bias[j]
+            }
+        }
+    }
+}
+
 //! store: C[r][j] = acc[r][j] (overwrite, row stride ldc).
 [sideeffects]
 def public tmm2d_tg_store(acc; var c : float?; m, n, ldc : uint) {
@@ -420,6 +719,21 @@ def public tmm2d_tg_store(acc; var c : float?; m, n, ldc : uint) {
         for (r in range(int(m))) {
             for (j in range(int(n))) {
                 c[r * int(ldc) + j] = acc[r * int(n) + j]
+            }
+        }
+    }
+}
+
+//! store, half destination: C[r][j] = float16(acc[r][j]) (overwrite, row stride ldc).
+[sideeffects]
+def public tmm2d_tg_store_half(acc; var c : float16?; m, n, ldc : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                c[r * int(ldc) + j] = float16(acc[r * int(n) + j])
             }
         }
     }

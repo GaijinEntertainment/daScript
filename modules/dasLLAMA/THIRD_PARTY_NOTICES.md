@@ -19,6 +19,13 @@ Whisper-family audio front-end derive from the whisper.cpp project
 (https://github.com/ggml-org/whisper.cpp), Copyright (c) 2023-2026 The ggml authors, MIT
 License - see `LICENSE.PARAKEET`. Its `ggml-*.bin` model container is read by this module.
 
+## vLLM (Apache-2.0)
+
+The MoE prefill's expert-bucketing design and the per-expert tile-selection ladders were
+informed by the vLLM project's fused-MoE kernels and tuned-configuration tables
+(https://github.com/vllm-project/vllm), Apache License 2.0 - see `LICENSE.VLLM`. No vLLM
+source code is included in this repository.
+
 ## Silero VAD (MIT)
 
 The voice-activity-detection implementation and the shipped `models/silero_vad.bin` weights
