@@ -1641,7 +1641,7 @@ def render_bridges() {
         let pylon_h = BRIDGE_SPAN_Z + 0.5
         for (px in fixed_array(br.left_x, br.right_x)) {
             draw_prop(float3(px, br.pos.y, pylon_h * 0.5), float3(0.4, 0.3, pylon_h),
-                pylon_color, float4(0.0, 0.0, 0.0, 1.0), MAT_STONE)
+                pylon_color, float4(0.0, 0.0, 0.0, 1.0), MAT_STONE, REFLECT_PAINT)
             geo_cube |> draw_geometry_fragment()
         }
 
@@ -1693,14 +1693,16 @@ def render_fuel_depots(game_time : float) {
         let beacon_pulse = 0.55 + 0.45 * abs(sin(game_time * 3.5))
 
         draw_prop(d.pos, float3(FUEL_DEPOT_SIZE, FUEL_DEPOT_SIZE * 1.8, FUEL_DEPOT_SIZE * 0.25),
-            float3(0.30, 0.31, 0.33), float4(0.0, 0.0, 0.0, 1.0), MAT_METAL)
+            float3(0.30, 0.31, 0.33), float4(0.0, 0.0, 0.0, 1.0), MAT_METAL, REFLECT_PAINT)
         geo_cube |> draw_geometry_fragment()
 
         // Storage tank lying on the deck; the cylinder gives the depot a
-        // silhouette you can pick out of the bank clutter at range.
+        // silhouette you can pick out of the bank clutter at range, and the
+        // chrome reflection is what makes it read as a pressure vessel rather
+        // than a painted drum.
         draw_prop(d.pos + float3(0.0, 0.0, FUEL_DEPOT_SIZE * 0.45),
             float3(FUEL_DEPOT_SIZE * 0.42, FUEL_DEPOT_SIZE * 0.42, FUEL_DEPOT_SIZE * 0.95),
-            float3(0.62, 0.58, 0.20), quat_x_rot(PI * 0.5), MAT_METAL)
+            float3(0.70, 0.66, 0.30), quat_x_rot(PI * 0.5), MAT_METAL, REFLECT_CHROME)
         geo_cylinder |> draw_geometry_fragment()
 
         let beacon_color = (
@@ -1708,7 +1710,7 @@ def render_fuel_depots(game_time : float) {
         ) * beacon_pulse
         draw_prop(d.pos + float3(0.0, FUEL_DEPOT_SIZE * 0.9, FUEL_DEPOT_SIZE * 0.9),
             float3(0.09, 0.09, FUEL_DEPOT_SIZE * 0.55), float3(0.22, 0.22, 0.24),
-            float4(0.0, 0.0, 0.0, 1.0), MAT_METAL)
+            float4(0.0, 0.0, 0.0, 1.0), MAT_METAL, REFLECT_METAL)
         geo_cube |> draw_geometry_fragment()
         draw_prop(d.pos + float3(0.0, FUEL_DEPOT_SIZE * 0.9, FUEL_DEPOT_SIZE * 1.5),
             float3(0.16), beacon_color, float4(0.0, 0.0, 0.0, 1.0), MAT_GLOW)
@@ -1780,7 +1782,7 @@ def render_bonuses(game_time : float) {
         let color = bonus_color(b.bonus_type)
         let spin = quat_z_rot(game_time * BONUS_SPIN_SPEED + b.bob_phase)
         let rot = quat_mul(spin, q_tilt)
-        draw_prop(p, float3(0.24, 0.24, 0.52), color, rot, MAT_GLOW)
+        draw_prop(p, float3(0.24, 0.24, 0.52), color, rot, MAT_GLOW, REFLECT_METAL)
         geo_cylinder |> draw_geometry_fragment()
         draw_prop(p, float3(0.30), color * 1.4, rot, MAT_GLOW)
         geo_sphere |> draw_geometry_fragment()

@@ -290,6 +290,62 @@ def private island_profile(d : float) : float {
     return smoothstep(0.0, 1.4, d) * 0.55 + smoothstep(0.6, 3.2, d) * 0.7
 }
 
+// Distance along y to the nearest END of the split run containing world_y.
+//
+// The banks only ever have to blend sideways -- they run the whole length of
+// the river. The centre island does not: it starts and stops, and if its height
+// only tapers laterally it meets open water at full crown height, which is the
+// seam that runs down the river. Feeding min(lateral, longitudinal) into the
+// same profile rounds the ends off too, so the island blends in every
+// direction.
+//
+// A run that continues past the generated river returns a large distance rather
+// than tapering, otherwise the island would grow a moving wall at the far end
+// as new segments scroll in.
+let ISLAND_OPEN_END = 1.0e6
+
+def island_end_distance(world_y : float) : float {
+    let n = length(river_segments)
+    if (n < 2) {
+        return 0.0
+    }
+    var here = -1
+    for (i in range(n - 1)) {
+        if (river_segments[i].world_y <= world_y && world_y < river_segments[i + 1].world_y) {
+            here = i
+            break
+        }
+    }
+    if (here < 0) {
+        return ISLAND_OPEN_END
+    }
+
+    var ahead = ISLAND_OPEN_END
+    for (step in range(n)) {
+        let i = here + 1 + step
+        if (i >= n) {
+            break
+        }
+        if (!river_segments[i].split) {
+            ahead = max(river_segments[i].world_y - world_y, 0.0)
+            break
+        }
+    }
+
+    var behind = ISLAND_OPEN_END
+    for (step in range(n)) {
+        let i = here - step
+        if (i < 0) {
+            break
+        }
+        if (!river_segments[i].split) {
+            behind = max(world_y - river_segments[i].world_y, 0.0)
+            break
+        }
+    }
+    return min(ahead, behind)
+}
+
 // Ground height at any world position: 0 on open water, the bank profile
 // outside the channel, a low crown on the centre island of a split.
 def terrain_height(wx, wy : float) : float {
@@ -302,7 +358,7 @@ def terrain_height(wx, wy : float) : float {
     }
     if (s.split && wx >= s.split_left_x && wx <= s.split_right_x) {
         let d = min(wx - s.split_left_x, s.split_right_x - wx)
-        return island_profile(d)
+        return island_profile(min(d, island_end_distance(wy)))
     }
     return 0.0
 }
@@ -390,6 +446,9 @@ def private emit_island(var frag : GeometryFragment; y0, y1, l0, r0, l1, r1 : fl
     let half1 = (r1 - l1) * 0.5
     let c0 = (l0 + r0) * 0.5
     let c1 = (l1 + r1) * 0.5
+    // Longitudinal distance to the run's ends, so the crown rounds off there.
+    let end0 = island_end_distance(y0)
+    let end1 = island_end_distance(y1)
     for (i in range(ISLAND_SPANS)) {
         let t0 = float(i) / float(ISLAND_SPANS)
         let t1 = float(i + 1) / float(ISLAND_SPANS)
@@ -403,10 +462,10 @@ def private emit_island(var frag : GeometryFragment; y0, y1, l0, r0, l1, r1 : fl
             // Using the near slice's width for the far edge left neighbouring
             // slices disagreeing about the height of the edge they share, which
             // stepped the island along y while it stayed smooth across x.
-            let d00 = half0 * t0
-            let d01 = half0 * t1
-            let d10 = half1 * t0
-            let d11 = half1 * t1
+            let d00 = min(half0 * t0, end0)
+            let d01 = min(half0 * t1, end0)
+            let d10 = min(half1 * t0, end1)
+            let d11 = min(half1 * t1, end1)
             let p00 = float3(x00, y0, island_profile(d00))
             let p01 = float3(x01, y0, island_profile(d01))
             let p10 = float3(x10, y1, island_profile(d10))

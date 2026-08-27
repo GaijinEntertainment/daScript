@@ -186,35 +186,38 @@ def gen_cylinder(plt : GenDirection; sectorCount : int) {
         }
     }
     apply_gen_direction_tm(plt, frag)
-    // indices
+    // Indices, wound counter-clockwise seen from OUTSIDE, to agree with the
+    // per-vertex normals set above. The side quads and BOTH caps were inverted,
+    // so under the usual CCW-front / cull-back setup a cylinder rendered as its
+    // own interior.
     for (i in range(sectorCount)) {
         let k1 = i
         let k2 = i + sectorCount + 2
         // triangle 1
         frag.indices |> push(k1)  // nolint:STYLE012 — appends two triangles per sector to the running index buffer
-        frag.indices |> push(k2)
         frag.indices |> push(k1 + 1)
+        frag.indices |> push(k2)
         // triangle 2
         frag.indices |> push(k2)
-        frag.indices |> push(k2 + 1)
         frag.indices |> push(k1 + 1)
+        frag.indices |> push(k2 + 1)
     }
-    // top
+    // cap at h = -1 (normal -z)
     let tbOfs = (sectorCount + 2) * 2
     let kc1 = sectorCount + 1 + tbOfs
     for (i in range(sectorCount)) {
         let k = i + tbOfs
         frag.indices |> push(kc1)  // nolint:STYLE012 — appends one cap triangle per sector to the running index buffer
-        frag.indices |> push(k)
         frag.indices |> push(k + 1)
+        frag.indices |> push(k)
     }
-    // bottom
+    // cap at h = +1 (normal +z)
     let kc2 = ((sectorCount + 2) + sectorCount + 1) + tbOfs
     for (i in range(sectorCount)) {
         let k = (sectorCount + 2) + i + tbOfs
         frag.indices |> push(kc2)  // nolint:STYLE012 — appends one cap triangle per sector to the running index buffer
-        frag.indices |> push(k + 1)
         frag.indices |> push(k)
+        frag.indices |> push(k + 1)
     }
     delete unitVertices
     frag.prim = GeometryFragmentType.triangles

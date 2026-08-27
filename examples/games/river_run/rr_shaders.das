@@ -66,6 +66,10 @@ var @uniform f_CamScale : float2        // (tan(fov/2) * aspect, tan(fov/2))
 
 var @uniform f_Color : float4
 var @uniform f_Material : float4        // x roughness, y spec strength, z emissive, w rim
+// x reflectivity, y head-on bias. Reflectivity mixes in a sampled environment
+// colour, which is what makes a surface read as metal rather than as painted
+// plastic with a highlight on it.
+var @uniform f_Material2 : float4
 
 // Composite models (helicopter, gunboat, jet) bake a part index into uv.x and a
 // gloss modifier into uv.y, so a whole multi-coloured hull is one draw call
@@ -201,6 +205,25 @@ def private encode_normal_depth(nrm : float3) : float4 {
     return float4(view_nrm * 0.5 + float3(0.5), saturate(-f_view_pos.z / f_ZFar))
 }
 
+// A cheap environment probe for reflective surfaces: the sky gradient and the
+// sun, without the cloud fbm or the star field sky_color pays for. On a small
+// curved prop the clouds would not read anyway, and this runs per pixel on
+// every metal surface in the frame.
+def private sky_env(dir : float3) : float3 {
+    let up = dir.z
+    if (up < 0.0) {
+        // Reflecting downward: water and ground bounce, brightening toward the
+        // horizon. Without this a metal cylinder mirrors sky out of its
+        // underside.
+        return lerp(f_HorizonColor * 0.5, f_BounceColor * 2.2, saturate(-up * 1.6))
+    }
+    let horizon_t = pow(1.0 - up, 6.0)
+    var col = lerp(f_SkyColor, f_HorizonColor, horizon_t)
+    let sun_dot = saturate(dot(dir, f_SunDir))
+    col += f_SunColor * (pow(sun_dot, 12.0) * 0.45 + pow(sun_dot, 300.0) * 2.2)
+    return col
+}
+
 // Procedural sky: zenith-to-horizon ramp, a haze band pinned at the horizon, a
 // sun disc with a wide forward-scatter glow, drifting cloud fbm, and stars that
 // fade in with f_NightAmount.
@@ -297,7 +320,25 @@ def fs_prop {
     let shadow = sun_shadow(f_world, nrm)
     // uv.y is the part's gloss modifier; 0 reads matte, 1 reads lacquered.
     let gloss = (f_PaletteOn > 0.5 ? 0.30 + f_uv.y * 1.6 : 1.0)
-    let lit = shade_surface(albedo, nrm, f_world, shadow, gloss)
+    var lit = shade_surface(albedo, nrm, f_world, shadow, gloss)
+
+    // Anything in the model palette's metal slot reflects by default, so a whole
+    // fleet reads as metal without every call site opting in.
+    var reflectivity = f_Material2.x
+    if (f_PaletteOn > 0.5) {
+        let is_metal = step(1.5, f_uv.x) * (1.0 - step(2.5, f_uv.x))
+        reflectivity = max(reflectivity, is_metal * 0.5)
+    }
+    if (reflectivity > 0.002) {
+        let view_dir = normalize(f_CameraPos - f_world)
+        let env = sky_env(normalize(reflect(-view_dir, nrm)))
+        let fres = pow(1.0 - saturate(dot(nrm, view_dir)), 4.0)
+        // Metal tints what it reflects; the grazing term keeps flat-on faces
+        // from turning into mirrors.
+        let mixed = env * lerp(float3(1.0), albedo, 0.65)
+        lit = lerp(lit, mixed, saturate(reflectivity * (f_Material2.y + (1.0 - f_Material2.y) * fres)))
+    }
+
     f_FragColor = float4(apply_fog(lit, f_world, length(f_view_pos)), f_Color.w)
     f_FragNormalDepth = encode_normal_depth(nrm)
 }
@@ -607,11 +648,21 @@ let MAT_FOLIAGE = float4(0.92, 0.03, 0.0, 0.22)
 let MAT_STONE = float4(0.78, 0.10, 0.0, 0.15)
 let MAT_GLOW = float4(0.5, 0.4, 0.85, 0.6)
 
+// Reflectivity presets for the draw_prop `reflect_amt` argument.
+let REFLECT_NONE = float2(0.0, 0.25)
+let REFLECT_PAINT = float2(0.22, 0.10)
+let REFLECT_METAL = float2(0.62, 0.30)
+let REFLECT_CHROME = float2(0.90, 0.55)
+
+// `reflect_amt` is (reflectivity, head-on bias): x is how much environment the
+// surface mixes in at all, y how much of that survives when looking straight at
+// it. Chrome wants a high bias, painted metal a low one.
 def draw_prop(pos, scale, color : float3; rot_quat : float4 = float4(0.0, 0.0, 0.0, 1.0);
-              material : float4 = MAT_MATTE) {
+              material : float4 = MAT_MATTE; reflect_amt : float2 = float2(0.0, 0.25)) {
     v_model = compose(pos, rot_quat, scale)
     f_Color = float4(color, 1.0)
     f_Material = material
+    f_Material2 = float4(reflect_amt.x, reflect_amt.y, 0.0, 0.0)
     vs_prop_bind_uniform(active_program)
     fs_prop_bind_uniform(active_program)
 }
