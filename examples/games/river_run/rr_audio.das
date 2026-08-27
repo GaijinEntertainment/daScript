@@ -259,6 +259,7 @@ def stop_all_tracks(fade : float) {
     strudel_command("stop:bass:{fade}")
     strudel_command("stop:lead:{fade}")
     strudel_command("stop:arp:{fade}")
+    strudel_command("stop:pad:{fade}")
 }
 
 def start_menu_music() {
@@ -282,53 +283,86 @@ def start_win_music() {
 }
 
 // ─── Per-voice rich builders ─────────────────────────────────────────
-// Same effect chain across every music mode:
-//   lead  — chunk(4, fast(2)) rotates a stuttered quarter per cycle so
-//           the 16-note loop never repeats identically; sometimesby
-//           sprinkles octave jumps; jux(rev) gives stereo motion;
-//           phaser adds slow phase shimmer; perlin gain breathes.
-//   bass  — sub-octave layer for low end; ply(2) double-taps occasionally.
-//   arp   — jux(rev) + occasional double-time bursts.
-//   drums — half-bar gain swell.
-// Run on the strudel thread (called from music_cmd "rich:..."). BPM is
-// set separately by the main-thread caller.
+//
+// The first pass leaned on a raw sawtooth lead through jux(rev) + phaser, which
+// is the classic arcade-chiptune signature: bright, swirly and harsh. Cleaner
+// here means filtering the oscillator rather than replacing it -- a low-passed
+// saw keeps the bite without the fizz -- plus a room to sit the voices in a
+// space instead of hard against the ear, and chorus for width in place of the
+// hard stereo flip.
+//
+// Variety comes from two places. The pattern strings below are eight cycles
+// long with mixed subdivisions and rests, so a melody takes eight bars to come
+// round rather than four. On top of that each voice carries structural
+// variation -- off() for a delayed answering voice, iter() to rotate the arp,
+// sometimesby() for ornaments -- so no two passes through the loop land
+// identically.
 
 def rich_drums(pattern : string; g : float) {
     replace_named_track("drums",
-        s(pattern) |> gain(saw() |> range(0.7, 1.0) |> fast(2.0lf)),
+        s(pattern)
+        |> gain(saw() |> range(0.74, 1.0) |> fast(2.0lf))
+        |> room(0.16),
         g)
 }
 
 def rich_bass(pattern, osc : string; g : float) {
     replace_named_track("bass",
         note_pattern(pattern, osc)
-        |> superimpose(@(var x : Pattern) => x |> add(-12.0) |> gain(0.6))
-        |> sometimesby(0.15, @(var x : Pattern) => x |> ply(2))
-        |> attack(0.005)
-        |> release(0.18),
+        |> superimpose(@(var x : Pattern) => x |> add(-12.0) |> gain(0.55))
+        // A fixed low pass is what turns a square bass from buzzy into round.
+        // Modulating it costs an extra signal pattern per event for no audible
+        // gain down here.
+        |> lpf(680.0)
+        |> attack(0.006)
+        |> release(0.20)
+        |> room(0.10),
         g)
 }
 
 def rich_lead(pattern, osc : string; g : float) {
     replace_named_track("lead",
         note_pattern(pattern, osc)
-        |> chunk(4, @(var x : Pattern) => x |> fast(2.0lf))
-        |> sometimesby(0.18, @(var x : Pattern) => x |> add(12.0))
-        |> jux(@(var x : Pattern) => rev(x))
-        |> phaser(0.25)
-        |> attack(0.006)
-        |> release(0.16)
-        |> gain(perlin() |> range(0.75, 1.0) |> slow(3.0lf)),
+        // Cleanliness is the filter, not the oscillator: a low-passed saw keeps
+        // the bite without the fizz that made the first pass read as arcade.
+        // Depth here is deliberately shallow -- the strudel evaluator recurses
+        // per event, and a deeper chain (off + two sometimesby + modulated
+        // filters, across five tracks) overflows its stack.
+        |> sometimesby(0.14, @(var x : Pattern) => x |> add(12.0))
+        |> lpf(2600.0)
+        |> chorus(0.30)
+        |> attack(0.010)
+        |> release(0.26)
+        |> room(0.26)
+        |> gain(perlin() |> range(0.80, 1.0) |> slow(3.0lf)),
         g)
 }
 
 def rich_arp(pattern : string; g : float) {
     replace_named_track("arp",
         note_pattern(pattern, "triangle")
-        |> jux(@(var x : Pattern) => rev(x))
-        |> sometimesby(0.20, @(var x : Pattern) => x |> fast(2.0lf))
-        |> attack(0.005)
-        |> release(0.12),
+        // iter rotates the figure by one step each cycle, so the arp walks
+        // through its own inversions instead of repeating. It is the cheapest
+        // variety in the mix: pure re-indexing, no extra events.
+        |> iter(4)
+        |> lpf(3200.0)
+        |> attack(0.006)
+        |> release(0.22)
+        |> room(0.34),
+        g)
+}
+
+// A sustained chord bed under everything, mixed low on purpose -- it carries no
+// melody and exists to give the other voices a floor to stand on, which is most
+// of what separated the first pass from sounding like a soundtrack.
+def rich_pad(pattern : string; g : float) {
+    replace_named_track("pad",
+        note_pattern(pattern, "triangle")
+        |> lpf(900.0)
+        |> attack(0.35)
+        |> release(0.9)
+        |> sustain(0.8)
+        |> room(0.55),
         g)
 }
 
@@ -338,41 +372,52 @@ def fade_arp(fade : float) {
     }
 }
 
+def fade_pad(fade : float) {
+    if (key_exists(g_music_tracks, "pad")) {
+        strudel_fade_track(g_music_tracks["pad"], 0.0, fade)
+    }
+}
+
 // ─── Section builders (gameplay loop, square+saw+triangle stack) ─────
 
 def build_section0_rich() {
-    rich_drums("<bd [~ hh] sd [hh ~]> <bd [~ hh] ~ [hh cp?0.3]> <bd [hh ~] sd [~ hh]> <bd [hh hh] sd [hh ~]>", 0.48)
-    rich_bass("<[e2 e2] ~ [b1 b1] ~> <[g2 g2] ~ [d2 d2] ~> <[c2 c2] ~ [g1 g1] ~> <[a1 a1] [b1 b1] [c2 c2] [d2 d2]>", "square", 0.30)
-    rich_lead("<e4 g4 b4 e5> <d4 f4 a4 d5> <c4 e4 g4 c5> <b3 d4 f4 b4>", "sawtooth", 0.20)
-    rich_arp("<[e5 b4 g4 e4]> <[d5 a4 f4 d4]> <[c5 g4 e4 c4]> <[b4 fs4 d4 b3]>", 0.10)
+    rich_drums("<bd [~ hh] sd [hh ~]> <bd [~ hh] ~ [hh cp?0.3]> <bd [hh ~] sd [~ hh]> <bd [hh hh] sd [hh ~]>", 0.42)
+    rich_bass("<e2 ~ [e2 e2] ~> <g2 ~ [g2 d2] ~> <c2 ~ [c2 g1] ~> <b1 ~ [b1 fs2] ~> <e2 [e2 ~] b1 ~> <a1 ~ [a1 e2] ~> <c2 ~ [g1 c2] ~> <b1 [d2 ~] e2 ~>", "square", 0.28)
+    rich_lead("<[e4 ~] g4 [b4 a4] ~> <[g4 b4] e5 ~ d5> <b4 ~ [a4 g4] e4> <[e4 fs4] g4 [b4 d5] ~> <e5 ~ [d5 b4] g4> <[a4 b4] ~ e4 ~> <g4 [b4 e5] ~ [d5 b4]> <[e4 g4] [b4 g4] e4 ~>", "sawtooth", 0.19)
+    rich_arp("<[e5 b4 g4 e4]> <[d5 a4 f4 d4]> <[c5 g4 e4 c4]> <[b4 fs4 d4 b3]>", 0.09)
+    rich_pad("<e3 ~ ~ ~> <g3 ~ ~ ~> <c3 ~ ~ ~> <b2 ~ ~ ~>", 0.13)
 }
 
 def build_section1_rich() {
-    rich_drums("<bd [hh hh] sd hh> <bd [hh cp] sd [hh hh]> <bd [hh ~] [sd sd] hh> <bd hh sd [hh cp]>", 0.52)
-    rich_bass("<[a1 a1] ~ [e2 e2] ~> <[c2 c2] ~ [g1 g1] ~> <[d2 d2] ~ [a1 a1] ~> <[f2 f2] [e2 e2] [d2 d2] [c2 c2]>", "square", 0.32)
-    rich_lead("<a4 c5 e5 a5> <g4 b4 d5 g5> <f4 a4 c5 f5> <e4 g4 b4 e5>", "sawtooth", 0.22)
-    rich_arp("<[a5 e5 c5 a4]> <[g5 d5 b4 g4]> <[f5 c5 a4 f4]> <[e5 b4 g4 e4]>", 0.10)
+    rich_drums("<bd [hh hh] sd hh> <bd [hh cp] sd [hh hh]> <bd [hh ~] [sd sd] hh> <bd hh sd [hh cp]>", 0.46)
+    rich_bass("<a1 ~ [a1 a1] ~> <c2 ~ [c2 g1] ~> <d2 ~ [d2 a1] ~> <f2 [e2 ~] d2 ~> <a1 [a1 ~] e2 ~> <c2 ~ [g1 c2] ~> <d2 ~ [a1 d2] ~> <e2 [d2 ~] c2 ~>", "square", 0.30)
+    rich_lead("<a4 [c5 e5] ~ a5> <[g4 b4] d5 ~ [b4 g4]> <f4 ~ [a4 c5] f5> <[e4 g4] b4 [e5 ~] d5> <[a4 ~] c5 [e5 d5] ~> <g4 [d5 b4] ~ e5> <[f4 a4] ~ c5 [a4 f4]> <e4 [g4 b4] [e5 ~] ~>", "sawtooth", 0.21)
+    rich_arp("<[a5 e5 c5 a4]> <[g5 d5 b4 g4]> <[f5 c5 a4 f4]> <[e5 b4 g4 e4]>", 0.09)
+    rich_pad("<a2 ~ ~ ~> <c3 ~ ~ ~> <d3 ~ ~ ~> <e3 ~ ~ ~>", 0.14)
 }
 
 def build_section2_rich() {
-    rich_drums("<[bd bd] [hh hh] [sd sd] [hh hh]> <[bd bd] [hh cp] [sd sd] [cp hh]> <bd [hh hh] [sd cp] [hh hh]> <[bd bd] hh sd [hh hh]>", 0.56)
-    rich_bass("<[d2 d2] ~ [a1 a1] ~> <[f2 f2] ~ [c2 c2] ~> <[g2 g2] ~ [d2 d2] ~> <[a2 a2] [g2 g2] [f2 f2] [e2 e2]>", "square", 0.34)
-    rich_lead("<d4 f4 a4 d5> <c4 e4 g4 c5> <bf3 d4 f4 bf4> <a3 c4 e4 a4>", "sawtooth", 0.24)
-    rich_arp("<[d5 a4 f4 d4]> <[c5 g4 e4 c4]> <[bf4 f4 d4 bf3]> <[a4 e4 c4 a3]>", 0.11)
+    rich_drums("<[bd bd] [hh hh] [sd sd] [hh hh]> <[bd bd] [hh cp] [sd sd] [cp hh]> <bd [hh hh] [sd cp] [hh hh]> <[bd bd] hh sd [hh hh]>", 0.50)
+    rich_bass("<d2 ~ [d2 d2] ~> <f2 ~ [f2 c2] ~> <g2 ~ [g2 d2] ~> <a2 [g2 ~] f2 ~> <d2 [d2 ~] a1 ~> <f2 ~ [c2 f2] ~> <g2 ~ [d2 g2] ~> <a2 [g2 ~] f2 ~>", "square", 0.32)
+    rich_lead("<[d4 f4] a4 ~ [d5 a4]> <c5 ~ [e5 c5] g4> <[bf3 d4] f4 [bf4 ~] a4> <[a3 c4] e4 ~ a4> <d5 [a4 f4] ~ d4> <[c4 e4] g4 [c5 ~] e5> <bf4 ~ [f4 d4] bf3> <[a3 e4] [a4 c5] ~ ~>", "sawtooth", 0.23)
+    rich_arp("<[d5 a4 f4 d4]> <[c5 g4 e4 c4]> <[bf4 f4 d4 bf3]> <[a4 e4 c4 a3]>", 0.10)
+    rich_pad("<d3 ~ ~ ~> <f3 ~ ~ ~> <bf2 ~ ~ ~> <a2 ~ ~ ~>", 0.15)
 }
 
 def build_section3_rich() {
-    rich_drums("<[bd bd] [hh hh] [sd cp] [hh hh]> <[bd bd] [hh hh] [sd sd] [cp cp]> <bd [hh cp] [sd sd] [hh cp]> <[bd bd] [hh hh] [sd cp] [hh hh]>", 0.60)
-    rich_bass("<[b1 b1] ~ [fs2 fs2] ~> <[d2 d2] ~ [a1 a1] ~> <[e2 e2] ~ [b1 b1] ~> <[g2 g2] [fs2 fs2] [e2 e2] [d2 d2]>", "square", 0.36)
-    rich_lead("<b4 d5 fs5 b5> <a4 c5 e5 a5> <g4 b4 d5 g5> <fs4 a4 c5 fs5>", "sawtooth", 0.26)
-    rich_arp("<[b5 fs5 d5 b4]> <[a5 e5 c5 a4]> <[g5 d5 b4 g4]> <[fs5 c5 a4 fs4]>", 0.13)
+    rich_drums("<[bd bd] [hh hh] [sd cp] [hh hh]> <[bd bd] [hh hh] [sd sd] [cp cp]> <bd [hh cp] [sd sd] [hh cp]> <[bd bd] [hh hh] [sd cp] [hh hh]>", 0.54)
+    rich_bass("<b1 ~ [b1 b1] ~> <d2 ~ [d2 a1] ~> <e2 ~ [e2 b1] ~> <g2 [fs2 ~] e2 ~> <b1 [b1 ~] fs2 ~> <d2 ~ [a1 d2] ~> <e2 ~ [b1 e2] ~> <fs2 [e2 ~] d2 ~>", "square", 0.34)
+    rich_lead("<[b4 d5] fs5 ~ b5> <[a4 c5] e5 ~ [c5 a4]> <g4 ~ [b4 d5] g5> <[fs4 a4] c5 [fs5 ~] e5> <[b4 ~] d5 [fs5 e5] ~> <a4 [e5 c5] ~ b5> <[g4 b4] ~ d5 [b4 g4]> <fs4 [a4 c5] [fs5 ~] ~>", "sawtooth", 0.25)
+    rich_arp("<[b5 fs5 d5 b4]> <[a5 e5 c5 a4]> <[g5 d5 b4 g4]> <[fs5 c5 a4 fs4]>", 0.12)
+    rich_pad("<b2 ~ ~ ~> <d3 ~ ~ ~> <e3 ~ ~ ~> <fs3 ~ ~ ~>", 0.16)
 }
 
 def build_section4_rich() {
-    rich_drums("<[bd bd] [hh hh] [sd cp] [hh cp]> <[bd cp] [hh hh] [sd sd] [hh cp]> <[bd bd] [hh cp] [sd cp] [cp hh]> <[bd bd] [hh hh] [sd cp] [hh hh]>", 0.64)
-    rich_bass("<[g1 g1] ~ [d2 d2] ~> <[bf1 bf1] ~ [f2 f2] ~> <[c2 c2] ~ [g1 g1] ~> <[d2 d2] [c2 c2] [bf1 bf1] [a1 a1]>", "square", 0.38)
-    rich_lead("<g4 bf4 d5 g5> <f4 a4 c5 f5> <ef4 g4 bf4 ef5> <d4 f4 a4 d5>", "sawtooth", 0.28)
-    rich_arp("<[g5 d5 bf4 g4]> <[f5 c5 a4 f4]> <[ef5 bf4 g4 ef4]> <[d5 a4 f4 d4]>", 0.14)
+    rich_drums("<[bd bd] [hh hh] [sd cp] [hh cp]> <[bd cp] [hh hh] [sd sd] [hh cp]> <[bd bd] [hh cp] [sd cp] [cp hh]> <[bd bd] [hh hh] [sd cp] [hh hh]>", 0.58)
+    rich_bass("<g1 ~ [g1 g1] ~> <bf1 ~ [bf1 f2] ~> <c2 ~ [c2 g1] ~> <d2 [c2 ~] bf1 ~> <g1 [g1 ~] d2 ~> <bf1 ~ [f2 bf1] ~> <c2 ~ [g1 c2] ~> <d2 [c2 ~] a1 ~>", "square", 0.36)
+    rich_lead("<[g4 bf4] d5 ~ [g5 d5]> <f5 ~ [c5 a4] f4> <[ef4 g4] bf4 [ef5 ~] d5> <[d4 f4] a4 ~ d5> <g5 [d5 bf4] ~ g4> <[f4 a4] c5 [f5 ~] a5> <ef5 ~ [bf4 g4] ef4> <[d4 a4] [d5 f5] ~ ~>", "sawtooth", 0.27)
+    rich_arp("<[g5 d5 bf4 g4]> <[f5 c5 a4 f4]> <[ef5 bf4 g4 ef4]> <[d5 a4 f4 d4]>", 0.13)
+    rich_pad("<g2 ~ ~ ~> <bf2 ~ ~ ~> <ef3 ~ ~ ~> <d3 ~ ~ ~>", 0.17)
 }
 
 // ─── Transition builders (menu / tension / game-over / win) ──────────
@@ -383,7 +428,8 @@ def build_section4_rich() {
 def build_menu_rich() {
     rich_drums("<bd ~ ~ ~> <~ ~ hh ~>", 0.18)
     rich_bass("<e2 ~ ~ ~> <d2 ~ ~ ~> <c2 ~ ~ ~> <b1 ~ ~ ~>", "sine", 0.20)
-    rich_lead("<e4 ~ g4 ~> <d4 ~ f4 ~> <c4 ~ e4 ~> <b3 ~ d4 ~>", "triangle", 0.10)
+    rich_lead("<e4 ~ g4 ~> <b4 ~ ~ ~> <d4 ~ f4 ~> <a4 ~ ~ ~> <c4 ~ e4 ~> <g4 ~ ~ ~> <b3 ~ d4 ~> <e4 ~ ~ ~>", "triangle", 0.10)
+    rich_pad("<e3 ~ ~ ~> <d3 ~ ~ ~> <c3 ~ ~ ~> <b2 ~ ~ ~>", 0.16)
     fade_arp(0.4)
 }
 
@@ -391,6 +437,7 @@ def build_tension_rich() {
     rich_drums("<bd ~ ~ ~> <bd ~ hh ~> <bd ~ ~ hh> <bd ~ hh ~>", 0.22)
     rich_bass("<e2 ~ d2 ~> <c2 ~ b1 ~> <a1 ~ g1 ~> <e2 ~ ~ ~>", "sine", 0.26)
     rich_lead("<e4 ~ d4 ~> <c4 ~ b3 ~> <a3 ~ g3 ~> <e4 ~ ~ ~>", "triangle", 0.14)
+    rich_pad("<e3 ~ ~ ~> <c3 ~ ~ ~> <a2 ~ ~ ~> <e3 ~ ~ ~>", 0.18)
     fade_arp(0.4)
 }
 
@@ -398,6 +445,7 @@ def build_game_over_rich() {
     rich_drums("<bd ~ ~ ~> <bd ~ ~ ~> <bd ~ ~ ~> <bd ~ ~ ~>", 0.18)
     rich_bass("<e2 d2 c2 b1> <a1 ~ g1 ~> <e2 d2 c2 b1> <a1 ~ ~ ~>", "sine", 0.26)
     rich_lead("<g4 ~ e4 ~> <d4 ~ c4 ~> <b3 ~ a3 ~> <g3 ~ ~ ~>", "triangle", 0.16)
+    rich_pad("<e3 ~ ~ ~> <c3 ~ ~ ~> <a2 ~ ~ ~> <g2 ~ ~ ~>", 0.20)
     fade_arp(0.3)
 }
 
@@ -406,6 +454,7 @@ def build_win_rich() {
     rich_bass("<[e2 e2] [g2 g2] [b2 b2] [e3 e3]> <[d3 d3] [b2 b2] [a2 a2] [g2 g2]> <[c3 c3] [a2 a2] [g2 g2] [b2 b2]> <[e2 e2] [g2 g2] [b2 b2] [e3 e3]>", "square", 0.28)
     rich_lead("<e5 g5 b5 e6> <g5 b5 d6 g6> <a5 c6 e6 a6> <b5 d6 fs6 b6>", "sawtooth", 0.22)
     rich_arp("<[e6 b5 g5 e5]> <[g6 d6 b5 g5]> <[a6 e6 c6 a5]> <[b6 fs6 d6 b5]>", 0.12)
+    rich_pad("<e3 ~ ~ ~> <g3 ~ ~ ~> <a3 ~ ~ ~> <b3 ~ ~ ~>", 0.16)
 }
 
 // 5 distinct gameplay music variants (cycles through sections 0..4).

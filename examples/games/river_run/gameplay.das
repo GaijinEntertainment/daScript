@@ -282,6 +282,49 @@ def spawn_island(pos : float3) {
     }
 }
 
+// Pick what grows here. Reeds only make sense at the waterline, boulders and
+// bushes fill the near bank, and the taller silhouettes go further back -- which
+// is also how a real bank stacks up from the water.
+def flora_kind_for(shore_dist : float) : int {
+    let r = random_f()
+    if (shore_dist < 2.6) {
+        return (r < 0.62 ? FLORA_REEDS : (r < 0.85 ? FLORA_BUSH : FLORA_ROCK))
+    }
+    if (shore_dist < 7.0) {
+        if (r < 0.30) { return FLORA_BUSH; }
+        if (r < 0.46) { return FLORA_ROCK; }
+        if (r < 0.72) { return FLORA_BROADLEAF; }
+        if (r < 0.86) { return FLORA_CONIFER; }
+        return FLORA_DEAD
+    }
+    if (r < 0.42) { return FLORA_CONIFER; }
+    if (r < 0.70) { return FLORA_BROADLEAF; }
+    if (r < 0.82) { return FLORA_BUSH; }
+    if (r < 0.92) { return FLORA_ROCK; }
+    return FLORA_DEAD
+}
+
+def spawn_flora(pos : float3; kind : int; size : float) {
+    var ground = terrain_height(pos.x, pos.y)
+    for (dx in fixed_array(-size * 0.4, size * 0.4)) {
+        ground = max(ground, terrain_height(pos.x + dx, pos.y))
+    }
+    let grounded = float3(pos.x, pos.y, ground)
+    create_entity() @(eid, cmp) {
+        apply_decs_template(cmp, RiverTree(
+            pos = grounded,
+            size = size,
+            tiers = 3,
+            green_tint = random_f(),
+            green_shift = random_range(-0.12, 0.12),
+            trunk_ratio = 0.35,
+            kind = kind,
+            seed = int(random_f() * 1000.0),
+            yaw = random_f() * 2.0 * PI
+        ))
+    }
+}
+
 def spawn_river_tree(pos : float3; size : float; tiers : int; green_tint, green_shift, trunk_ratio : float) {
     let grounded = float3(pos.x, pos.y, terrain_height(pos.x, pos.y))
     create_entity() @(eid, cmp) {
@@ -291,7 +334,10 @@ def spawn_river_tree(pos : float3; size : float; tiers : int; green_tint, green_
             tiers = tiers,
             green_tint = green_tint,
             green_shift = green_shift,
-            trunk_ratio = trunk_ratio
+            trunk_ratio = trunk_ratio,
+            kind = FLORA_CONIFER,
+            seed = int(random_f() * 1000.0),
+            yaw = random_f() * 2.0 * PI
         ))
     }
 }
@@ -399,24 +445,33 @@ def spawn_section_islands(base_y, section_mult : float) {
 }
 
 // River-side trees — denser and varied.
+// Bank dressing. The old pass scattered ~12 conifers over a 240m section, which
+// is why the banks read as empty fields with the occasional lollipop. This one
+// plants roughly six times as much and draws from the whole flora vocabulary,
+// clustered rather than evenly sprinkled -- real banks come in thickets with
+// gaps between them, not in a uniform scatter.
 def spawn_section_trees(base_y : float) {
-    let tree_attempts = int(18.0 + random_f() * 9.0)
-    for (_i in range(tree_attempts)) {
-        if (random_f() > 0.52) {
-            continue
-        }
-        let ty = base_y + random_range(8.0, SECTION_LENGTH - 8.0)
-        let seg = sample_river_segment(ty)
+    let clumps = int(26.0 + random_f() * 12.0)
+    for (_c in range(clumps)) {
+        let cy = base_y + random_range(6.0, SECTION_LENGTH - 6.0)
         let left_side = random_f() < 0.5
-        let bank_x = (left_side ? seg.left_bank_x : seg.right_bank_x)
-        let away = (random_f() < 0.32 ? random_range(5.2, 10.0) : random_range(1.4, 5.2))
-        let tx = bank_x + (left_side ? -away : away)
-        let tsize = random_range(0.9, 2.1)
-        let tiers = (random_f() < 0.48 ? 2 : 3)
-        let tint = random_range(0.25, 1.0)
-        let shift = random_range(-0.08, 0.08)
-        let trunk = random_range(0.35, 0.55)
-        spawn_river_tree(float3(tx, ty, 0.0), tsize, tiers, tint, shift, trunk)
+        let members = 1 + int(random_f() * 4.0)
+        for (_m in range(members)) {
+            let ty = cy + random_range(-4.5, 4.5)
+            let seg = sample_river_segment(ty)
+            let bank_x = (left_side ? seg.left_bank_x : seg.right_bank_x)
+            // Distance inland, biased toward the waterline where the eye is.
+            let r = random_f()
+            let away = (r < 0.30 ? random_range(0.2, 2.6)
+                : (r < 0.72 ? random_range(2.6, 7.0) : random_range(7.0, 16.0)))
+            let tx = bank_x + (left_side ? -away : away)
+            let kind = flora_kind_for(away)
+            let base_size = (kind == FLORA_REEDS ? random_range(0.8, 1.4)
+                : (kind == FLORA_BUSH ? random_range(0.7, 1.2)
+                : (kind == FLORA_ROCK ? random_range(0.35, 0.95)
+                : random_range(0.95, 2.2))))
+            spawn_flora(float3(tx, ty, 0.0), kind, base_size)
+        }
     }
     commit()
 }
@@ -1500,19 +1555,12 @@ def private shadow_cast_craft() {
 // Bank scenery: trees and houses, which throw the long streaks across the
 // ground that give the low sun its scale.
 def private shadow_cast_scenery() {
+    let per_kind = max(length(geo_flora) / FLORA_VARIANTS, 1)
     query() $(t : RiverTree) {
-        let trunk_h = t.size * t.trunk_ratio
-        draw_shadow_caster(t.pos + float3(0.0, 0.0, trunk_h * 0.5),
-            float3(0.11 * t.size, 0.11 * t.size, trunk_h))
-        geo_cylinder |> draw_geometry_fragment()
-        for (ti in range(t.tiers)) {
-            let tf = float(ti) / float(max(1, t.tiers - 1))
-            let cone_h = t.size * (1.2 - tf * 0.28)
-            let cone_r = t.size * (0.72 - tf * 0.18)
-            let cone_z = trunk_h * 0.72 + tf * (t.size * 0.58) + cone_h * 0.5
-            draw_shadow_caster(t.pos + float3(0.0, 0.0, cone_z), float3(cone_r, cone_r, cone_h))
-            geo_cone |> draw_geometry_fragment()
-        }
+        if (empty(geo_flora)) { return ; }
+        draw_shadow_caster(t.pos, float3(t.size), quat_z_rot(t.yaw))
+        let idx = clamp(t.kind, 0, FLORA_VARIANTS - 1) * per_kind + (t.seed % per_kind)
+        geo_flora[clamp(idx, 0, length(geo_flora) - 1)] |> draw_geometry_fragment()
     }
 
     query() $(h : RiverHouse) {
@@ -1718,33 +1766,50 @@ def render_fuel_depots(game_time : float) {
     }
 }
 
-// Pine trees: trunk + stacked cones, tinted by the section's foliage colour.
-def render_trees() {
-    let tint = env_now.foliage_tint
-    query() $(t : RiverTree) {
-        let trunk_h = t.size * t.trunk_ratio
-        let trunk_pos = t.pos + float3(0.0, 0.0, trunk_h * 0.5)
-        let trunk_col = float3(0.22 + t.green_shift * 0.18, 0.15, 0.09) * tint
-        draw_prop(trunk_pos, float3(0.11 * t.size, 0.11 * t.size, trunk_h), trunk_col,
-            float4(0.0, 0.0, 0.0, 1.0), MAT_MATTE)
-        geo_cylinder |> draw_geometry_fragment()
-
-        let tier_den = max(1, t.tiers - 1)
-        let pine_dark = float3(0.05, 0.22, 0.07)
-        let pine_light = float3(0.13, 0.42, 0.14)
-        for (ti in range(t.tiers)) {
-            let tf = float(ti) / float(tier_den)
-            let cone_h = t.size * (1.2 - tf * 0.28)
-            let cone_r = t.size * (0.72 - tf * 0.18)
-            let cone_z = trunk_h * 0.72 + tf * (t.size * 0.58) + cone_h * 0.5
-            let base_green = lerp(pine_dark, pine_light, t.green_tint)
-            let cone_color = (base_green + float3(t.green_shift * 0.28,
-                t.green_shift * 0.08 - tf * 0.02, -t.green_shift * 0.14)) * tint
-            draw_prop(t.pos + float3(0.0, 0.0, cone_z), float3(cone_r, cone_r, cone_h),
-                cone_color, float4(0.0, 0.0, 0.0, 1.0), MAT_FOLIAGE)
-            geo_cone |> draw_geometry_fragment()
-        }
+// Bank flora. One welded mesh per prop, tinted through the model palette, so a
+// dressed bank costs one draw call per plant instead of one per cone.
+// Takes fields, not the template: a DECS query variable can only be accessed
+// by field, never passed whole.
+def private flora_palette(kind : int; green_tint, green_shift : float; tint : float3) {
+    if (kind == FLORA_ROCK) {
+        let stone = lerp(float3(0.34, 0.33, 0.31), get_bank_color() * 1.4, 0.35)
+        set_model_palette(stone, stone * 1.12, stone, stone * (0.86 + green_shift))
+        return
     }
+    if (kind == FLORA_DEAD) {
+        let wood = float3(0.26 + green_shift * 0.4, 0.20, 0.14) * tint
+        set_model_palette(wood, wood * 1.15, wood, wood * 0.8)
+        return
+    }
+    let dark = float3(0.05, 0.20, 0.07)
+    let light = float3(0.15, 0.42, 0.15)
+    var green = lerp(dark, light, green_tint)
+    if (kind == FLORA_REEDS) {
+        green = lerp(green, float3(0.42, 0.44, 0.20), 0.55)
+    } elif (kind == FLORA_BUSH) {
+        green = lerp(green, float3(0.12, 0.30, 0.10), 0.35)
+    }
+    green = (green + float3(green_shift * 0.22, green_shift * 0.06, -green_shift * 0.12)) * tint
+    let bark = float3(0.22 + green_shift * 0.18, 0.15, 0.09) * tint
+    // Two foliage tones plus bark: the accent tone is what gives a crown depth
+    // instead of reading as one flat silhouette.
+    set_model_palette(green, green * 1.28 + float3(0.02, 0.05, 0.01), green, bark)
+}
+
+def render_trees() {
+    if (empty(geo_flora)) {
+        return
+    }
+    let tint = env_now.foliage_tint
+    let per_kind = length(geo_flora) / FLORA_VARIANTS
+    query() $(t : RiverTree) {
+        flora_palette(t.kind, t.green_tint, t.green_shift, tint)
+        let mat = (t.kind == FLORA_ROCK ? MAT_STONE : MAT_FOLIAGE)
+        draw_prop(t.pos, float3(t.size), float3(1.0), quat_z_rot(t.yaw), mat)
+        let idx = clamp(t.kind, 0, FLORA_VARIANTS - 1) * per_kind + (t.seed % max(per_kind, 1))
+        geo_flora[clamp(idx, 0, length(geo_flora) - 1)] |> draw_geometry_fragment()
+    }
+    clear_model_palette()
 }
 
 // Houses: body + prism roof + a chimney, so the roofline is not a bare wedge.
@@ -1772,21 +1837,111 @@ def render_houses() {
     }
 }
 
-// Bonuses: a spinning canister with a bright core, so a pickup is visible over
-// dark water without relying on the HUD.
+// Bonuses.
+//
+// A pickup has to look worth flying across the channel for, so it is built in
+// layers like the explosions are: a machined metal canister that takes the
+// environment reflection, a hot emissive core, and -- in the effects pass -- a
+// halo ring and a pool of light on the water under it. Each type also gets its
+// own silhouette, so what you are collecting is readable before the colour is.
+
+def private bonus_pulse(game_time : float; phase : float) : float {
+    return 0.88 + 0.12 * sin(game_time * 4.0 + phase)
+}
+
+def private bonus_body_rot(game_time : float; phase : float) : float4 {
+    return quat_mul(quat_z_rot(game_time * BONUS_SPIN_SPEED + phase), quat_y_rot(PI * 0.5))
+}
+
 def render_bonuses(game_time : float) {
-    let q_tilt = quat_y_rot(PI * 0.5)
     query() $(b : BonusPickup) {
         let bob = sin(game_time * BONUS_BOB_SPEED + b.bob_phase) * BONUS_BOB_AMPLITUDE
         let p = b.pos + float3(0.0, 0.0, 0.72 + bob)
         let color = bonus_color(b.bonus_type)
-        let spin = quat_z_rot(game_time * BONUS_SPIN_SPEED + b.bob_phase)
-        let rot = quat_mul(spin, q_tilt)
-        draw_prop(p, float3(0.24, 0.24, 0.52), color, rot, MAT_GLOW, REFLECT_METAL)
+        let rot = bonus_body_rot(game_time, b.bob_phase)
+        let pulse = bonus_pulse(game_time, b.bob_phase)
+
+        // Machined shell: chrome, so it picks up the sky and the sun rather than
+        // sitting flat the way the old painted cylinder did.
+        let shell = float3(0.72, 0.76, 0.80)
+        draw_prop(p, float3(0.36, 0.36, 0.60) * pulse, shell, rot, MAT_METAL, REFLECT_CHROME)
         geo_cylinder |> draw_geometry_fragment()
-        draw_prop(p, float3(0.30), color * 1.4, rot, MAT_GLOW)
+
+        // End caps in the pickup's own colour: the type reads off the ends even
+        // when the shell is busy reflecting.
+        for (side in fixed_array(-1.0, 1.0)) {
+            let cap = p + quat_mul_vec(rot, float3(0.0, 0.0, side * 0.60)) * pulse
+            draw_prop(cap, float3(0.40, 0.40, 0.09) * pulse, color * 1.4, rot, MAT_GLOW)
+            geo_cylinder |> draw_geometry_fragment()
+        }
+
+        // Type badge: a distinct shape bolted to the middle of the shell.
+        if (b.bonus_type == BonusType.multishot) {
+            // Three barrels.
+            for (i in range(3)) {
+                let a = game_time * BONUS_SPIN_SPEED + b.bob_phase + float(i) * (2.0 * PI / 3.0)
+                let off = float3(cos(a), sin(a), 0.0) * 0.27
+                draw_prop(p + off, float3(0.10, 0.10, 0.42) * pulse, color, rot, MAT_METAL, REFLECT_METAL)
+                geo_cylinder |> draw_geometry_fragment()
+            }
+        } elif (b.bonus_type == BonusType.fastshot) {
+            // A forward chevron.
+            draw_prop(p + float3(0.0, 0.40, 0.0), float3(0.27, 0.27, 0.33) * pulse,
+                color, quat_x_rot(-PI * 0.5), MAT_GLOW)
+            geo_cone |> draw_geometry_fragment()
+        } elif (b.bonus_type == BonusType.life) {
+            // A cross.
+            draw_prop(p, float3(0.46, 0.13, 0.13) * pulse, color, rot, MAT_GLOW)
+            geo_cube |> draw_geometry_fragment()
+            draw_prop(p, float3(0.13, 0.13, 0.46) * pulse, color, rot, MAT_GLOW)
+            geo_cube |> draw_geometry_fragment()
+        } else {
+            // Fuel: a banded collar.
+            draw_prop(p, float3(0.41, 0.41, 0.16) * pulse, color, rot, MAT_GLOW)
+            geo_cylinder |> draw_geometry_fragment()
+        }
+
+        // The core, always hot.
+        draw_prop(p, float3(0.22) * pulse, color * 2.2, rot, MAT_GLOW)
         geo_sphere |> draw_geometry_fragment()
     }
+}
+
+// Additive layers for the pickups: a halo ring that spins on its own axis, and a
+// pool of light where the pickup is reflected on the water. Drawn with the
+// effects, after the opaque scene.
+def render_bonus_fx(game_time : float) {
+    // Light pool on the water first -- a soft billboard laid flat.
+    use_puff_program()
+    query() $(b : BonusPickup) {
+        let color = bonus_color(b.bonus_type)
+        let pulse = bonus_pulse(game_time, b.bob_phase)
+        draw_puff(float3(b.pos.x, b.pos.y, 0.05), 1.7 * pulse, color, 0.38, 1.8,
+            game_time * 0.3 + b.bob_phase, b.bob_phase)
+        geo_disc |> draw_geometry_fragment()
+    }
+
+    glUseProgram(ring_program)
+    active_program = ring_program
+    query() $(b : BonusPickup) {
+        let bob = sin(game_time * BONUS_BOB_SPEED + b.bob_phase) * BONUS_BOB_AMPLITUDE
+        let p = b.pos + float3(0.0, 0.0, 0.72 + bob)
+        let color = bonus_color(b.bonus_type)
+        let pulse = bonus_pulse(game_time, b.bob_phase)
+        // Two rings on different axes, counter-rotating: reads as a containment
+        // field rather than as a decal.
+        let tilt_a = quat_mul(quat_z_rot(game_time * 1.6 + b.bob_phase), quat_x_rot(PI * 0.42))
+        let tilt_b = quat_mul(quat_z_rot(-game_time * 1.1 - b.bob_phase), quat_y_rot(PI * 0.5))
+        for (rot, radius in fixed_array(tilt_a, tilt_b), fixed_array(0.92, 0.74)) {
+            v_model = compose(p, rot, float3(radius * pulse, radius * pulse, 1.0))
+            f_Color = float4(color * 1.7, 0.80)
+            f_Material = float4(0.13, 0.0, 1.9, 0.0)
+            vs_ring_bind_uniform(active_program)
+            fs_ring_bind_uniform(active_program)
+            geo_disc |> draw_geometry_fragment()
+        }
+    }
+    use_unlit_program()
 }
 
 // --- Transparent scene ---
@@ -1809,19 +1964,6 @@ def private draw_smoke(game_time : float) {
         geo_disc |> draw_geometry_fragment()
     }
     use_unlit_program()
-}
-
-def private draw_debris() {
-    query() $(p : Particle) {
-        if (p.kind != ParticleKind.debris) { return ; }
-        let life = p.lifetime / p.max_life
-        let rot = quat_y_rot(p.spin_phase + p.spin_speed * (1.0 - life))
-        // Chunks glow briefly then go cold and dark.
-        let heat = saturate((life - 0.82) * 5.5)
-        let tint = lerp(p.color * 0.5, float3(1.0, 0.62, 0.24), heat)
-        draw_unlit(p.pos, float3(p.size), tint, saturate(life * 3.0), rot, heat * 1.6)
-        geo_cube |> draw_geometry_fragment()
-    }
 }
 
 def private draw_hot_layers() {
@@ -1896,7 +2038,6 @@ def private draw_shockwaves() {
 def render_projectiles(game_time : float) {
     use_unlit_program()
     draw_smoke(game_time)
-    draw_debris()
 
     // Player tracers: a bright core with a longer, dimmer streak behind it.
     query() $(b : PlayerBullet) {
@@ -1932,6 +2073,7 @@ def render_projectiles(game_time : float) {
     use_unlit_program()
     draw_hot_layers()
     draw_shockwaves()
+    render_bonus_fx(game_time)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 }
 
@@ -1975,10 +2117,36 @@ def render_rotors(game_time : float) {
     glEnable(GL_CULL_FACE)
 }
 
+// Explosion debris draws with the scene, not with the effects: it is solid
+// torn plating, so it wants the lit prop program, real shading and the metal
+// reflection -- as an unlit alpha quad it read as flying paper.
+def render_debris() {
+    if (empty(geo_shards)) {
+        return
+    }
+    use_prop_program()
+    query() $(p : Particle) {
+        if (p.kind != ParticleKind.debris) { return ; }
+        let life = p.lifetime / p.max_life
+        let tumble = quat_mul(quat_y_rot(p.spin_phase + p.spin_speed * (1.0 - life)),
+            quat_x_rot(p.spin_phase * 1.7 + p.spin_speed * 0.6 * (1.0 - life)))
+        // Chunks glow briefly at the flash, then go cold. Shrinking over the
+        // last of their life hides the pop when they are culled.
+        let heat = saturate((life - 0.82) * 5.5)
+        let tint = lerp(p.color * 0.7, float3(1.0, 0.62, 0.24), heat)
+        let fade = saturate(life * 4.0)
+        draw_prop(p.pos, float3(p.size * fade), tint, tumble,
+            float4(0.45, 0.55, heat * 1.4, 0.30), REFLECT_METAL)
+        let shard_idx = int(p.spin_phase * 1.9) % length(geo_shards)
+        geo_shards[shard_idx] |> draw_geometry_fragment()
+    }
+}
+
 def render_all(game_time : float) {
     render_player(game_time)
     render_enemies(game_time)
     render_obstacles(game_time)
+    render_debris()
 }
 
 def render_effects(game_time : float) {

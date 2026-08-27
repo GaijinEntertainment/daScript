@@ -217,6 +217,11 @@ struct Island {
     size : float
 }
 
+// One template covers everything growing on the bank -- conifers, broadleaf,
+// dead trees, bushes, boulders and reeds -- because they differ only in which
+// mesh they draw and how they are tinted. `kind` selects the mesh; `seed`
+// selects which pre-generated instance of that mesh, so no two neighbours are
+// the same object.
 [decs_template]
 struct RiverTree {
     pos : float3
@@ -225,6 +230,9 @@ struct RiverTree {
     green_tint : float
     green_shift : float
     trunk_ratio : float
+    kind : int
+    seed : int
+    yaw : float
 }
 
 [decs_template]
@@ -569,6 +577,8 @@ var geo_heli : OpenGLGeometryFragment
 var geo_heli_tail : OpenGLGeometryFragment
 var geo_gunboat : OpenGLGeometryFragment
 var geo_jet : OpenGLGeometryFragment
+var geo_shards : array<OpenGLGeometryFragment>
+var geo_flora : array<OpenGLGeometryFragment>
 var hud_font : Font?
 var river_bank_geo : OpenGLGeometryFragment
 var river_surface_geo : OpenGLGeometryFragment

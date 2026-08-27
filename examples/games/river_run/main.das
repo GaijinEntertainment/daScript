@@ -27,6 +27,27 @@ def create_gl_objects() {
     geo_heli <- create_geometry_fragment <| gen_helicopter()
     geo_gunboat <- create_geometry_fragment <| gen_gunboat()
     geo_jet <- create_geometry_fragment <| gen_jet()
+    for (frag in geo_shards) {
+        finalize(frag)
+    }
+    geo_shards |> clear()
+    geo_shards |> reserve(SHARD_VARIANTS)
+    for (i in range(SHARD_VARIANTS)) {
+        geo_shards |> emplace(create_geometry_fragment(gen_shard_variant(i)))
+    }
+
+    // Several pre-generated instances of each flora kind, so a crowded bank is
+    // not the same tree stamped forty times.
+    for (frag in geo_flora) {
+        finalize(frag)
+    }
+    geo_flora |> clear()
+    geo_flora |> reserve(FLORA_VARIANTS * FLORA_INSTANCES)
+    for (kind in range(FLORA_VARIANTS)) {
+        for (i in range(FLORA_INSTANCES)) {
+            geo_flora |> emplace(create_geometry_fragment(gen_flora(kind, kind * 31 + i * 7 + 1)))
+        }
+    }
 
     cache_ttf_objects()
     hud_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
