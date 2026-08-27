@@ -4,8 +4,7 @@
 `README.md`.
 
 **A diff that removes `lint` from `DAS_UTILS_SHIPPED_EXES` in `utils/CMakeLists.txt` is a
-defect.** The removal drops the prebuilt lint exe from the release bundle, and the gate
-cannot see a removed entry.
+defect.**
 
 **A diff that shrinks the set of rule ids `REVIEW.das` (beside this file) scans is a
 defect** - whether by editing the gate or by deleting an id's last scannable spelling. The
@@ -13,4 +12,5 @@ gate checks that every emitted rule id has a fixture and a `doc/source/reference
 (repo root) section, so a shrunk set retires those checks with no warning.
 
 **A diff that makes a file emit a rule id the gate `REVIEW.das` (beside this file) does not
-scan adds that file to the gate's module set, in the same change.**
+scan adds that file to `RULE_MODULES` in the gate, in the same change.** A file emits an id
+when its own code prints it; a fixture asserting on that text does not emit.

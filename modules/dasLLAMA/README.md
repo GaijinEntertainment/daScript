@@ -97,6 +97,13 @@ modules/dasLLAMA/
   .das_module                 # registers the dasllama/ namespace — both binaries (static rows derive from it)
   CMakeLists.txt              # ADD_MODULE_DAS_FROM_DESCRIPTOR + install rules
   ARCHITECTURE.md             # what-goes-where ledger — which module owns which concern
+  ARCHITECTURE_ENGINE.md      # companion: the engine, format, load, CPU-tier, support and serving charters
+  ARCHITECTURE_GPU.md         # companion: the GPU backend role table, the backend asymmetries, the refuted kernel shapes
+  ARCHITECTURE_MEDIA.md       # companion: the encoder-tower, audio, ASR and vision charters
+  ARCHITECTURE_IMAGE.md       # companion: the prepared-image (.dlim) rail
+  ARCHITECTURE_RUNTIME.md     # companion: kernel shape, caches, knobs, coverage, the GPU ramp
+  ARCHITECTURE_MEASUREMENT.md # companion: the benchmark rig, the tune gate, the instrumentation rails
+  ARCHITECTURE_INVARIANTS.md  # companion: the inherited invariants
   REVIEW.md                   # the per-change review checklist
   METHODOLOGY.md              # how every published number is measured (the site's method page)
   PROFILE.md                  # the three profiling rigs — the routine in-process check, the oracle cell, the rig that publishes

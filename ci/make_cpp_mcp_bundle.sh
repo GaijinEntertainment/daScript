@@ -32,7 +32,9 @@ mkdir -p "$OUT/bin" "$OUT/utils/mcp/tools" "$OUT/utils/common"
 cp "$BIN"                              "$OUT/bin/"
 cp utils/mcp/*.das                     "$OUT/utils/mcp/"
 cp utils/mcp/tools/*.das               "$OUT/utils/mcp/tools/"
-cp utils/common/git_signature.das      "$OUT/utils/common/"
+# every shared module, not just the ones cpp_main reaches: the whole tools/ directory is copied
+# above, and a tool whose require target is missing from the bundle is a trap for the next reader
+cp utils/common/*.das                  "$OUT/utils/common/"
 cp -r daslib                           "$OUT/daslib"
 # ast-grep rule files: the outline / cpp_* tools load these at runtime via
 # get_das_root() (tools/outline.das, tools/cpp_common.das), so the bundle needs

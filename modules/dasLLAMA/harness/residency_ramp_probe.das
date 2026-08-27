@@ -2,7 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true
 
-// ATTRIBUTION SWEEP - the post-CPU-window residency-ramp ladder (ARCHITECTURE.md 2.12): its
+// ATTRIBUTION SWEEP - the post-CPU-window residency-ramp ladder (ARCHITECTURE_RUNTIME.md 2.12): its
 // arms attribute the first-submission cost across the drv/queue/gpu split (das_metal_boost's
 // metal_submit_trace) and across CPU-window lengths; it selects between no implementations.
 // A/B rail: DASLLAMA_METAL_HEARTBEAT_S=0 reproduces the ramp, the default heartbeat holds it.

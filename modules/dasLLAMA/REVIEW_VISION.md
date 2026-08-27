@@ -1,7 +1,7 @@
 # dasLLAMA Vision Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE.md`.
+doc: `ARCHITECTURE_MEDIA.md`.
 
 **This checklist governs `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, `dasllama/dasllama_tower.das` (the shared

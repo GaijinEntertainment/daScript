@@ -5,7 +5,7 @@ require daslib/fio
 require dasllama/dasllama_image
 
 // dlim_wipe is verdict- and lane-blind BY DESIGN (the batch-lifecycle owner carve-out,
-// ARCHITECTURE.md 2.1) — but its reach must be exact: a model path wipes only that model's
+// ARCHITECTURE_IMAGE.md 2.1) — but its reach must be exact: a model path wipes only that model's
 // images, a directory path wipes every image in it, and non-.dlim files are never touched.
 
 def private plant(root, name : string) {

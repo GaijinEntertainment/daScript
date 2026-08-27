@@ -1,7 +1,7 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE.md`.
+doc: `ARCHITECTURE_GPU.md`.
 
 **Routed from `REVIEW.md`: a diff touching a GPU kernel, driver, dispatch class, or the K/V
 mirrors applies this list together with `REVIEW.md`.**
@@ -26,7 +26,7 @@ buffer, or in the staging loop that reads it.** A float operand keeps the op off
 fast path.
 
 **A diff that stamps a kernel class `[metal_kernel(float_a_ok=true)]` lands its
-`ARCHITECTURE.md` sec.2.2b ledger line in the same change.**
+`ARCHITECTURE_GPU.md` sec.2.2b ledger line in the same change.**
 
 **Never threadgroup-stage a `matmul2d` operand whose staged form matches its stored form -
 stream it from device instead.** A dequant, a transpose, or a layout or element-type change
@@ -109,8 +109,8 @@ builder instead.** Binding it separately adds a second place to get it wrong.
 layout the upload produces, in the key too.** A hit must cover the request.
 
 **Never put a backend-only capability outside its backend's file for the matching role - a
-capability with no matching role gets its own role file.** `ARCHITECTURE.md` sec.1.5 carries
-the role table.
+capability with no matching role gets its own role file.** `ARCHITECTURE_GPU.md` sec.1.5
+carries the role table.
 
 **Never add a role's file to a backend that does not have the capability.**
 
@@ -133,7 +133,7 @@ times both kernels on one queue and compares their outputs.
 
 **A diff that adds or removes a Metal-only or Vulkan-only hook, role, served path, or
 backend-only capability - anything that changes what one backend can serve and the other
-cannot - lands its `ARCHITECTURE.md` sec.1.5 edit in the same change - including when
+cannot - lands its `ARCHITECTURE_GPU.md` sec.1.5 edit in the same change - including when
 sec.1.5 already carries that class of asymmetry, and including sec.1.5's per-driver lists of
 registered hooks and borrowed kernels.** sec.1.5 is the closed list; an asymmetry it does not
 carry does not exist.

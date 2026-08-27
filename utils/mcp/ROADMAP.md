@@ -6,6 +6,8 @@ Future tools for the daslang MCP server, organized by priority and difficulty.
 
 | Tool | Description |
 |---|---|
+| `arch_of` | A .das file's [arch] citations, each with the cited section's text |
+| `arch_sites` | An architecture document's citation census - every citing symbol, dead anchors and dangling citations included |
 | `compile_check` | Compile file(s), return errors or success. Supports single file, comma-separated list, or glob pattern |
 | `list_functions` | List all functions after macro expansion |
 | `list_types` | List structs, classes, enums, type aliases |

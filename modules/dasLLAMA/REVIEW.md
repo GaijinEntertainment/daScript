@@ -24,6 +24,11 @@ winners back.
 
 **A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
 
+**A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it,
+a `.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a
+flavor (the backend-and-layout variant an image is baked for, one part of its identity) -
+applies `REVIEW_IMAGE.md`.**
+
 **A change to `dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_io.das`,
 `dasllama/dasllama_audio_embedder.das`, `dasllama/dasllama_asr.das`,
 `dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR family file - one
@@ -49,14 +54,15 @@ change, and a bump with no kernel work is the same defect.** Kernel work is what
 the generated kernel source, or the set of compiled pipeline variants (PSOs) built from it -
 a kernel body, a variant set, or a `[tune]` / `[tune_perm]` / `[tune_companion]` grid. A
 host-side bind or dispatch-argument change (an `@off` binding, a uniform value) is not, and
-neither is `[tune_scope]` metadata (`covers=`, `tuner=`, `version_of=`). Equal versions mean
-an equal kernel set and an interchangeable sidecar set - the exchange keys validity on
-version and box.
+neither is `[tune_scope]` metadata (`covers=`, `tuner=`, `version_of=`).
 
 **A value that cannot change between dispatches of one compiled kernel never reaches that
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value
 that can change between dispatches goes in a uniform, a kargs field, or an `@off` bind offset.
 
+**Never reorder or merge the float multiplies in a function that builds a RoPE angle table
+(`dasllama/dasllama_rope.das`) - keep the multiply order the code already has.** A regrouping
+moves the angles in the last bits and flips token-exact fixtures.
 **A diff that changes a kernel-selection predicate in `dasllama/` is based on timing that ran
 both variants interleaved in one process, under one instrument.** The same holds for a
 constant in `dasllama/` whose value was chosen by timing two candidates against each other. A
@@ -71,7 +77,8 @@ wall-clock - and a stated decision.**
 mm) outside a parity or oracle rail, where a faster-format twin already serves the same weights
 and shape, is a defect - call that twin instead.** Weights with no faster twin (unquantized
 planes) are out of scope; a site that must stay f32 for another reason is ledgered on its own
-file's charter line in `ARCHITECTURE.md` sec.1, not commented into compliance.
+file's sec.1 charter line in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, or
+`ARCHITECTURE_MEDIA.md`, not commented into compliance.
 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
 file.**
@@ -82,7 +89,7 @@ more of `dasllama/dasllama_common.das`.**
 **A NEW clock read paired with a print or log of the elapsed interval is a defect in an engine
 file (`dasllama/`) outside a cold one-shot load, bake, map, or tokenizer-build progress log** -
 instrumentation goes through the sanctioned rails, listed with their reasons in
-`ARCHITECTURE.md` sec.2.10.
+`ARCHITECTURE_MEASUREMENT.md` sec.2.10.
 
 **A clock value that changes what the program DOES - control flow, eviction, a generated
 name; not a reported wall or a best-of reduction over reported walls - is marked
@@ -166,45 +173,6 @@ stage, and are not stage figures. The naming sits in the figure's own sentence, 
 heading that covers the table's rows, or in a section-level provenance line that covers the
 paragraphs under it.
 
-**A transform on the go-live path - repacking, quantizing, folding, permuting - is a defect;
-it belongs to the mint.** Going live is `parse_image` pointing a live carrier's planes into the
-mapped `.dlim`.
-
-**A missing `.dlim` is minted first, and the model is served from what was minted.**
-
-**A weight carrier becomes live only through `build_image` and `parse_image` in
-`dasllama/dasllama_image.das`: reading weights into a live carrier, or releasing an image
-backing, anywhere else is a defect - and a second mint path, per family, per format, or per
-backend, is a defect even where its output is identical.**
-
-**A decoder mint never holds the whole model.** A decoder mint is the mint of an LLM decoder
-model, not of a tower or embedder carrier. It sizes the image before writing the first byte and
-writes each plane as it is produced. A mint that is slower in exchange for a lower peak is
-correct.
-
-**A staged carrier mint (`cache_via_image_staged`) meeting a source file at or past 1 GiB
-either refuses it or streams it the way a decoder mint does.** A refusal names that file. The
-staged form holds source and image at once, and this rule caps that doubled peak.
-
-**A path that reinterprets a mismatched image, or widens an identity so that more files match,
-is a defect.** `image_identity` names the box profile, the knobs, and the flavor a file was
-baked for, and a mismatch declines loudly.
-
-**An image save drops AT MOST its own lane's dead siblings plus BROKEN/version-stale images in
-any lane.** A lane is an identity's (quant, tag) pair.
-
-**Reaping an image whose identity the code cannot recompute - another flavor's, another
-family's - is a defect.**
-
-**A plane split that follows the source FILE rather than a runtime knob takes ONE image tag**,
-with the meta flags describing the layout - a per-tensor type split is not a second flavor.
-
-**A plane the target platform or config never reads is not written into the image - the mint
-decides that, not the load.**
-
-**A flavor takes its image file through `image_path_for` and its tag through
-`register_image_family_tag`.**
-
 **A change to user-facing API updates every place it is shown: a tutorial source, `.rst` page,
 docstring, help string, `README.md`, or checked-in document still showing the old call, flag, or
 default is a defect of the change, not of the docs.** User-facing means anything a consumer
@@ -219,21 +187,26 @@ path under `modules/dasLLAMA/` - is a defect:** a module added to its allowed se
 match dropped or narrowed, or an error text that no longer names the facade to require
 instead. The allowed set is the table in the lint.
 
+**A `// nolint:STYLE037` or `// nolint:STYLE038` on a function a follow-up ledger entry calls
+reducible is a defect - land the ledgered split instead.** The warning is what keeps the ledger
+entry visible.
+
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
-owns, or a consumer `ARCHITECTURE.md` sec.1 names as ruled** - a symbol the facade lacks is
-added to `dasllama/dasllama.das`, not escaped around. A `require ... public` that re-exports an
-engine module OUT of an escaped file, beyond what that consumer's ruled charter
-(`ARCHITECTURE.md` sec.1) grants, breaks this rule too.
+owns, or a consumer `ARCHITECTURE_ENGINE.md` sec.1.8 names as ruled** - a symbol the facade
+lacks is added to `dasllama/dasllama.das`, not escaped around. A `require ... public` that
+re-exports an engine module OUT of an escaped file, beyond what that consumer's ruled charter
+(`ARCHITECTURE_ENGINE.md` sec.1.8) grants, breaks this rule too.
 
 **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, adding a name to
 a check's licensed set - the names that check does not flag - or a finding text that no
 longer names what failed. What the gate enforces is read from the gate itself; each check's
 finding text states its own rule.
 
-**A new `REVIEW.das` check ships its `ARCHITECTURE.md` sec.1 line in the same change.** The
-line names the check and the names it licenses. A licensed name is one that check does not
-flag. When the check licenses no names, the line says so.
+**A new `REVIEW.das` check ships its sec.1 charter line in the same change, on the charter of
+the file it checks - in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`, or
+`ARCHITECTURE_GPU.md`.** The line names the check and the names it licenses. A licensed name
+is one that check does not flag. When the check licenses no names, the line says so.
 
 **An upstream mechanism is described in our own terms, not attributed** - no
 "lifted/ported verbatim from" and no upstream symbol, header, or constant names in a `.md`
@@ -260,13 +233,14 @@ a struct the renderer emits but the registry does not is caught by
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
 **A diff that adds a file under `dasllama/`, moves code between files, or changes what a file
-owns lands the sec.1 edit that keeps the charters true, in the same change.** A diff that adds
+owns lands the sec.1 edit that keeps the charters true - in `ARCHITECTURE_ENGINE.md`,
+`ARCHITECTURE_GPU.md`, or `ARCHITECTURE_MEDIA.md` - in the same change.** A diff that adds
 a file beside one that has its own sec.1 charter line lands that edit too. A module-root doc
 file - a ledger, a plan, `LAWS.md` - has no charter line and lands free.
 
-**A per-file inventory restated in this checklist is a defect of the checklist.**
-`ARCHITECTURE.md` sec.1 owns the per-file list. A rule naming what KIND of code lands in which
-file is the checklist's own.
+**A per-file inventory restated in this checklist is a defect of the checklist.** The sec.1
+charters - `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md` - own the
+per-file list. A rule naming what KIND of code lands in which file is the checklist's own.
 
 **A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
@@ -298,21 +272,8 @@ kind - `create_chat_` panics at create, not at render.
 files. A doc comment naming the family a helper was built for is fine.
 
 **A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's
-file** - a single-caller helper sanctioned as tower-worthy is ledgered on `ARCHITECTURE.md`
-sec.1's tower charter line, not argued in review.
-
-**On the lane that serves the file's own planes, a weight plane's element type follows its
-SOURCE tensors, per weight region - the set of source tensors a carrier stores in one plane
-(a block stack, a merger/projector).**
-
-**A weight region - the set of source tensors a carrier stores in one plane - whose source
-tensors disagree on element type is refused in a message naming the offending tensor and
-both element types.**
-
-**A lane that PERSISTS a converted form of the file's planes is a separate flavor under its
-own image identity.** A persisted form is one an image could carry. The load that picks such a
-lane prints which lane it picked. A conversion made and dropped inside one forward pass
-persists nothing and is not such a lane.
+file** - a single-caller helper sanctioned as tower-worthy is ledgered on
+`ARCHITECTURE_MEDIA.md` sec.1.7's tower charter line, not argued in review.
 
 **A harness that prints output for another tool to compare exits non-zero when its run ends
 without those comparison lines - wrong flags, failed load.**

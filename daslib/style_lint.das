@@ -21,7 +21,7 @@ module style_lint shared private
 //!   STYLE012 — array<T> var initialized via push/emplace; use an array literal
 //!   STYLE013 — struct (or `new`-allocated struct pointer) var with default/empty init followed by a run of field assignments
 //!   STYLE014 — comment block exceeds 3 lines at module/public scope (on by default under daslib/, opt-in elsewhere via ``options _comment_hygiene = true``; suppress with '//!@nolint' or '// nolint:STYLE014')
-//!   STYLE015 — comment block exceeds 1 line inside a 'def private' (on by default under daslib/, opt-in elsewhere via ``options _comment_hygiene = true``; suppress with '// nolint:STYLE015')
+//!   STYLE015 — comment block inside a 'def private' over its cap: 3 lines for a '//!' contract doc, 1 line for a plain '//' block (on by default under daslib/, opt-in elsewhere via ``options _comment_hygiene = true``; suppress with '// nolint:STYLE015')
 //!   STYLE016 — adjacent guards leading to identical early-exit can be combined with '||'
 //!   STYLE017 — 'if (cond) return true; else return false' — use 'return cond' (or 'return !cond')
 //!   STYLE018 — redundant boolean comparison ('b == true' / 'b != false') — use 'b' / '!b'
@@ -2450,7 +2450,9 @@ class StyleLintVisitor : AstVisitor {
             }
         }
         let private_ctx = inside_function && enclosing_priv
-        let threshold = private_ctx ? 1 : 3
+        // a '//!' block is a contract doc wherever it sits, so a private one gets the public cap
+        let contract_doc = starts_with(first_line_text, "//!")
+        let threshold = (private_ctx && !contract_doc) ? 1 : 3
         if (line_count <= threshold) return
         var at = sample_at
         at.line = block_start
@@ -2459,7 +2461,7 @@ class StyleLintVisitor : AstVisitor {
         at.last_column = 1u
         var msg = ""
         if (private_ctx) {
-            msg = "STYLE015: {line_count}-line comment inside 'def private' exceeds 1-line cap; private symbols don't get public docs - keep at most one WHY line, or suppress on the first line with '// nolint:STYLE015'"
+            msg = "STYLE015: {line_count}-line comment inside 'def private' exceeds {threshold}-line cap; a '//!' contract doc there caps at 3 lines, a plain '//' block at one WHY line - or suppress on the first line with '//!@nolint' (//! blocks) or '// nolint:STYLE015' (// blocks)"
         } else {
             msg = "STYLE014: comment block of {line_count} lines exceeds 3-line cap; trim multi-paragraph prose to a 1-line WHY (move design notes to .md), or suppress on the first line with '//!@nolint' (//! blocks) or '// nolint:STYLE014' (// blocks)"
         }
@@ -2514,7 +2516,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
-        //! The frame is the subtree's unsafe-requirement summary; mechanics in daslib/ARCHITECTURE.md.
+        //! The frame is the subtree's unsafe-requirement summary; mechanics in daslib/ARCHITECTURE_LINT.md.
         let n = length(unsafe_stack)
         let frame = unsafe_stack[n - 1]
         unsafe_stack |> pop

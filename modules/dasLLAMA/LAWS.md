@@ -30,3 +30,12 @@
   threads of every row threadgroup cost 24% of the qwen3moe pp512 forward) - per-row
   validity/ownership in a bucketed dispatch is answered by a table the bucket builder
   stamps, never by a per-row search over the bucket directory.
+
+- **2026-08-27** (`REVIEW.md`, `ARCHITECTURE.md`): Boris ruled the harvester's ledger for
+  `dasllama/dasllama_image.das` lands as harvested - all six renames approved (`ImgWriter.h`
+  -> `dwrite_h`, `.mem` -> `chunk_base`, `.cap` -> `chunk_cap`, `IMAGE_WRITE_BAND` ->
+  `DWRITE_STAGING_BAND`, `vk_cfg` -> `vk_tag` with the alias dissolved), the four rules
+  appended to `REVIEW.md` in the harvester's own words, the eight facts landed as anchored
+  `ARCHITECTURE.md` subsections cited from the owning functions via `[arch(at=...)]`, and
+  the `cache_via_image` return contract promoted to a `//!` doc matching its sibling's
+  wording. The module arms `[docs] enforce_arch = true` so every minted anchor stays cited.

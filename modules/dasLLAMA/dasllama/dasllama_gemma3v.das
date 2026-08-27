@@ -462,7 +462,7 @@ def stage_gemma3v_tower(path : string) : Gemma3vStaging {
         let swapped = !empty(m.tensors[dn].dims) && m.tensors[dn].dims[0] == d
         let names <- g3v_gemm_names(swapped)
         // this carrier serves ONE f32 plane (the widen is exact for these types, and ledgered in
-        // ARCHITECTURE.md); any other on-disk type is refused by name, never dequantized silently
+        // ARCHITECTURE_MEDIA.md sec.1.7b); any other on-disk type is refused by name, never dequantized silently
         for (l in range64(st.t.n_layer)) {
             for (g in range64(GEMMA3V_GEMMS)) {
                 let name = "v.blk.{l}.{names[g]}.weight"

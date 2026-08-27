@@ -561,7 +561,7 @@ def mirror_release(var mr : KVMirror) {
 //! re-initializes on the next served step; all mirrors rebuild from the CPU caches on demand.
 
 
-// ===== the residency pin (the mechanism + figures: ARCHITECTURE.md 2.12) =====
+// ===== the residency pin (the mechanism + figures: ARCHITECTURE_RUNTIME.md 2.12) =====
 // The first submission after a CPU-only window repays the per-commit residency pass over the
 // resident bytes; a committed+requested MTLResidencySet keeps it a no-op.
 var private g_rset : MetalResidencySet?
@@ -609,7 +609,7 @@ def residency_flush {
     if (g_env_metal.heartbeat_s > 0) {
         // keep-alive kick: a requested set still un-wires over a long CPU-only window, and the
         // next submission repays the whole tracked-set pass — the background re-request keeps
-        // the pages wired for heartbeat_s after the last served step (ARCHITECTURE.md 2.12)
+        // the pages wired for heartbeat_s after the last served step (ARCHITECTURE_RUNTIME.md 2.12)
         metal_residency_set_heartbeat(g_rset, g_env_metal.heartbeat_s)
     }
 }

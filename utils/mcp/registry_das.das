@@ -27,6 +27,8 @@ require tools/export_corpus public
 require tools/judge_duplicates public
 require tools/find_dupe public
 require tools/live public
+require tools/arch_of public
+require tools/arch_sites public
 
 def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool-registration table, one emplace per tool
     reg |> emplace(ToolDef(
@@ -74,7 +76,7 @@ def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "format_file",
-            "Format .das file(s) using the daslang code formatter. Comment policy comes from the file's folder: each `.lint_config` `[format]` key is taken from the nearest file that declares it (`force_clean_comments = true` strips comments outside the kept set — leading header block, `//!` documentation, `//fmt:` directives, `nolint:` suppressions — fail-closed: a strip must pass compile_check or the original is restored; `format_enabled = false` exempts the tree). No per-call override. Supports single file, comma-separated list, or glob pattern (e.g. 'daslib/*.das'). Returns JSON array with file, status ('formatted' | 'already_formatted' | 'reverted' | 'skipped' | 'error' | 'rescue_advisory'), message, and comments_stripped; when any file in the batch had comments stripped, a final 'rescue_advisory' entry (no file) says to run the rescue-bot agent over the strip diff of the comments_stripped entries before committing.",
+            "Format .das file(s) using the daslang code formatter. Comment policy comes from the file's folder: each `.lint_config` `[format]` key is taken from the nearest file that declares it (`force_clean_comments = true` strips comments outside the kept set — leading header block, `//!` documentation, `//fmt:` directives, `nolint:` suppressions — fail-closed: a strip must pass compile_check or the original is restored; `format_enabled = false` exempts the tree). No per-call override. Supports single file, comma-separated list, or glob pattern (e.g. 'daslib/*.das'). Returns JSON array with file, status ('formatted' | 'already_formatted' | 'reverted' | 'skipped' | 'error' | 'rescue_advisory'), message, and comments_stripped; when any file in the batch had comments stripped, a final 'rescue_advisory' entry (no file) says to run the harvester agent over the strip diff of the comments_stripped entries before committing.",
             {
                 "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern (e.g. 'dir/*.das')"),
                 "project" => PROJECT_PROP,
@@ -384,6 +386,29 @@ def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool
         required <- ["paths"],
         arg_names <- ["paths", "out", "model", "threshold", "max_clusters", "dry_run"],
         handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_find_dupe(arg1, arg2, arg3, arg4, arg5, arg6)))
+    reg |> emplace(ToolDef(
+        tool <- make_tool(
+            "arch_of",
+            "Read direction of the [arch] annotation: the architecture-document citations a .das file makes, each resolved to its document and the SECTION TEXT under the cited anchor heading (heading line through the last line before the next heading of the same or a higher level). A citation that does not resolve reports LINT026's own reason ('no such file', 'no such anchor', 'anchor appears N times', 'malformed citation'). Reads source, not the AST — works on a file that does not compile.",
+            {
+                "file" => PropertySchema(_type = "string", description = "Path to the .das file (repo-relative or absolute)"),
+                "symbol" => PropertySchema(_type = "string", description = "Optional function/struct/class name — show only the citations annotating it")
+            },
+            ["file"]),
+        required <- ["file"],
+        arg_names <- ["file", "symbol"],
+        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_arch_of(arg1, arg2)))
+    reg |> emplace(ToolDef(
+        tool <- make_tool(
+            "arch_sites",
+            "Write direction of the [arch] annotation: the census of an architecture document — every .das citing it, with file, line, and the annotated symbol. Searched from the folder that OWNS the document (its own subtree), the scope LINT026's reverse pass walks. Without an anchor, the census is grouped under the document's own headings in document order, uncited anchors included; with one, only that section's citations are listed.",
+            {
+                "doc" => PropertySchema(_type = "string", description = "Path to the .md document, optionally with an anchor: 'utils/lint/ARCHITECTURE.md' or 'utils/lint/ARCHITECTURE.md#citations'")
+            },
+            ["doc"]),
+        required <- ["doc"],
+        arg_names <- ["doc"],
+        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_arch_sites(arg1)))
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "live_status",

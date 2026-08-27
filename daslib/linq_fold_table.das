@@ -15,7 +15,7 @@ module linq_fold_table shared public
 //! field-pruning); bare ``count()`` folds to O(1) ``length(tab)``; a plain ``distinct`` over raw keys/kv
 //! elements is dropped (keys are unique by construction). In-tree companion to ``daslib/linq_fold``
 //! (required unconditionally; the matcher returns null for non-table chains). Emits ``keys`` / ``values``
-//! / the kv zip BY NAME at the user's splice site. See daslib/ARCHITECTURE.md sec. 37.
+//! / the kv zip BY NAME at the user's splice site. See daslib/ARCHITECTURE_LINQ.md sec. 37.
 
 require daslib/ast_boost
 require daslib/ast_match

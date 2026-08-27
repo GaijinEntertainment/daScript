@@ -2,7 +2,7 @@
 
 Archived 2026-08-27 from `daslib/linq_fold.md`. The operative half - the module layout, the
 `SourceAdapter` contract, and the pattern-table walker contract - was distilled into
-`daslib/ARCHITECTURE.md` sec. 37, which the `linq_fold_*` module headers now cite.
+`daslib/ARCHITECTURE_LINQ.md` sec. 37, which the `linq_fold_*` module headers now cite.
 Everything below is that document's plan material, phase logs, PR sketches and decision log,
 verbatim; the projected alias/predicate tables it carries were snapshots of a planned state
 and the shipped code has since diverged from them.

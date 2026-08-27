@@ -543,7 +543,7 @@
 44. **The qwen25v (Qwen2.5-Omni/VL window ViT) CPU encode stays ~4.6x behind mtmd's clip
     (released `lcpp_bench --image` vs patched llama-mtmd-cli, CPU, --image-think, r=3, t=8,
     M1 Max) -
-    the tower is ruled exact-only (ARCHITECTURE.md 1.7b: per-32-block activation requant
+    the tower is ruled exact-only (ARCHITECTURE_MEDIA.md 1.7b: per-32-block activation requant
     cannot represent its outlier rows; a q8q8 lane measured 2.0 x rms where a deleted layer
     measures less).** Two honest paths if that encode ever matters: the Metal tower for the
     qwen ViT families (the same slice the qwen3v towers await), or outlier-aware activation
@@ -612,3 +612,11 @@
     caller (the LINT023 class). Done = the signature becomes `var buf : MetalBuffer?&` and
     the body nulls after the push, with every call site audited for lvalue-ness in the same
     change - an API pass over das_metal_boost, not a babysit patch.
+
+52. **`build_image`'s staging plane-group arm deletes nested fields unguarded** - the
+    `image_planes` arm frees with `if (consume)` alone while its top-level and `image_map`
+    siblings guard on `lock_count(field) == 0`. Unreachable today: `AudioTowerPlanes` embeds
+    only in the mint-side staging structs (`Qwen3aStaging.core`, `WhisperStaging.enc`),
+    which are always fresh-built and never parse targets, so no borrowed view can reach the
+    arm. Done = the arm carries the same `lock_count` guard as its siblings, added when that
+    arm is next touched for real work.

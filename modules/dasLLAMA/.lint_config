@@ -1,0 +1,3 @@
+# Every {#anchor} in this module's .md files is owed an [arch] citation from module code (LINT026).
+[docs]
+enforce_arch = true

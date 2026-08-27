@@ -29,6 +29,8 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that e
 | `grep_usage` | Parse-aware symbol search across `.das` files using ast-grep + tree-sitter. Finds identifier occurrences excluding comments and strings. Conditional on `sg` CLI |
 | `outline` | List all declarations (functions, structs, classes, enums, bitfields, variants, globals, typedefs) in a file or set of files using tree-sitter. Works on broken/incomplete code - no compilation needed. Conditional on `sg` CLI |
 | `aot` | Generate AOT (ahead-of-time) C++ code for a `.das` file or a single function. Without `function`, returns full AOT output. With `function`, extracts that function's C++ only. Overloaded names return a disambiguation list with mangled names for exact selection |
+| `arch_of` | The `[arch]` citations a `.das` file makes, each resolved to its document plus the section text under the cited anchor heading. Optional `symbol` to keep only one declaration's citations. Unresolved citations report LINT026's own reason. Reads source, so a file that does not compile still answers |
+| `arch_sites` | The census of an architecture document: every `.das` under the folder that owns it citing it, with file, line and annotated symbol. Grouped under the document's own headings (uncited anchors included) unless the query names an anchor |
 
 ### C++ Source & Build Tools
 

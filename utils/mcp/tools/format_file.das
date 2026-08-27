@@ -107,7 +107,7 @@ def do_format_file(file : string; project : string = ""; project_root : string =
     }
     if (stripped_count > 0) {
         results |> push(FormatResult(status = "rescue_advisory",
-            message = "comments were deleted from {stripped_count} file(s) — before committing, run the rescue-bot agent over the strip diff of the entries with comments_stripped = true"))
+            message = "comments were deleted from {stripped_count} file(s) — before committing, run the harvester agent over the strip diff of the entries with comments_stripped = true"))
     }
     return make_tool_result(sprint_json(results, false), any_errors)
 }

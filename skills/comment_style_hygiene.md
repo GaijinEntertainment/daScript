@@ -66,8 +66,10 @@ cannot tell the two apart, so this boundary is the reviewer's to hold.
 
 **C and C++: no NEW comments.** Comments go stale, code does not - new C-family code says
 it in a name, a shape, or a test, or documents itself in the module's `.md`. Kept when one
-is earned: `//!` and `/** */` docs on public API, `NOLINT` / `clang-format` suppressions,
-the leading header block. Existing comments answer to the deletion test.
+is earned: `//!` and `/** */` docs on a contract a CALLER must know - public API always, a
+non-public helper when callers inside the module need the contract - `NOLINT` /
+`clang-format` suppressions, the leading header block. Existing comments answer to the
+deletion test.
 
 **The deletion test settles any comment no kept set covers: remove it and re-read.** If
 the WHY goes dark it was load-bearing - restore it, rewritten in present tense; otherwise
