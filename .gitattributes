@@ -19,3 +19,9 @@ daslib/_aot_generated/*.cpp binary
 modules/dasClangBind/src/*.cpp text eol=lf
 modules/dasClangBind/src/*.h text eol=lf
 modules/dasClangBind/src/*.inc text eol=lf
+
+# The v1 -> gen2 converter preserves whatever line endings its input had, and
+# its suite proves that by converting an LF fixture and a CRLF twin it builds
+# from that same fixture. Under autocrlf=true the fixtures check out as CRLF,
+# which fails the LF expectations and gives the twin doubled carriage returns.
+utils/gen1-to-gen2/tests/_fixture_*.das text eol=lf
