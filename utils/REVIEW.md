@@ -3,29 +3,26 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md` (repo root).
 
-**A tool's own files answer to that tool's `REVIEW.md` where one exists, keyed by what the file
-IS, not where it sits: a file belonging to a tool is reviewed with that tool's checklist as well
-as this one.**
+**A file that belongs to a tool is reviewed with that tool's own `REVIEW.md`, where one exists,
+as well as with this checklist - the tool it belongs to decides, not the directory it is in.**
 
-**Weakening `REVIEW.das` (beside this file) is a defect.** The gate machine-checks this
-folder's mechanical rules - what it enforces is read from it, each check's finding text
-stating its rule.
+**Weakening `REVIEW.das` (beside this file) is a defect.** What the gate checks is read from the
+script itself, and each check's finding text states its rule.
 
-**A tool REMOVED from `DAS_UTILS_SHIPPED_EXES` (`CMakeLists.txt`, beside this file) records
-the decision in that tool's own `REVIEW.md`, wherever the tool's directory sits, in the same
-change** - a removed entry's decision record is the one thing the gate cannot see. A tool
-deleted outright records it beside the list in `CMakeLists.txt` instead.
+**A tool removed from `DAS_UTILS_SHIPPED_EXES` (`CMakeLists.txt`, beside this file) records
+the decision in that tool's own `REVIEW.md`, wherever that tool's directory is, in the same
+change** - the gate cannot see a removed entry. A tool deleted outright records the decision
+beside the list in `CMakeLists.txt` instead.
 
 **A new or changed test for a `utils/` tool whose load-bearing assertions a CI lane can run -
-the assertions that prove the change, not a skip-path assertion - is covered, wherever the
-diff puts it, by a CI row that executes them, added in the same change if none already
-covers it.** A row that only compile-checks the test (`dastest --compile-only`) does not
-execute them, and a test whose assertions no row runs passes review once and never runs
-again.
+the assertions that prove the change, not a skip-path assertion - ships with a CI row that
+executes those assertions, wherever the diff puts the test, added in the same change if no
+row already covers it.** A row that only compile-checks the test (`dastest --compile-only`)
+does not execute them. A test whose assertions no row executes never runs again.
 
 **A test for a `utils/` tool whose load-bearing assertions no CI lane can run - they need
 something no CI machine has - ships with a CI row that compile-checks it.**
 
-**A new or changed test for a `utils/` tool that takes a compile-only row ships with its
-executed run recorded in the PR description**: the machine the assertions ran on, what that
-machine had that CI lacks, and the pass count.
+**A new or changed test for a `utils/` tool that gets a compile-only row records its executed
+run in the PR description**: the machine the assertions ran on, what that machine had that CI
+lacks, and the pass count.

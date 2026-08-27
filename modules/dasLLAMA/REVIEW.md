@@ -53,44 +53,41 @@ neither is `[tune_scope]` metadata (`covers=`, `tuner=`, `version_of=`). Equal v
 an equal kernel set and an interchangeable sidecar set - the exchange keys validity on
 version and box.
 
-**A kernel's shape is compile-time; only its data is runtime.** For a given compiled kernel,
-can this value change between dispatches? If yes it is data and belongs in a uniform, a kargs
-field, or an `@off` bind offset; if no it is shape and must not reach the kernel as a uniform,
-a kargs field, an `@off` bind offset, or a helper parameter.
+**A value that cannot change between dispatches of one compiled kernel never reaches that
+kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value
+that can change between dispatches goes in a uniform, a kargs field, or an `@off` bind offset.
 
-**A diff that changes a kernel-selection predicate in `dasllama/` rests on timing that ran
+**A diff that changes a kernel-selection predicate in `dasllama/` is based on timing that ran
 both variants interleaved in one process, under one instrument.** The same holds for a
 constant in `dasllama/` whose value was chosen by timing two candidates against each other. A
 reading taken across two processes, or across two commits, says which way the wall moved, not
 which implementation to adopt.
 
-**Peak memory wins ties against load cost.** A change to an allocation reached from a load,
-bake, or convert path (judge a shared helper at each call site) that trades footprint for speed
-ships the measured pair - peak footprint and wall-clock - and an explicit stated decision.
+**A change to an allocation reached from a load, bake, or convert path (judge a shared helper
+at each call site) that trades footprint for speed ships the measured pair - peak footprint and
+wall-clock - and a stated decision.**
 
-**A new GEMM/GEMV call site takes the fastest serving lane that exists for its weights; the
-f32 fallback is for correctness rails only.** A new call to an f32 matmul (`matmul_batch`,
-`mm_blob_b`, per-head `gemm_f32`, or an f32 GPU mm) outside a parity or oracle rail, where a
-faster-format twin already serves the same weights and shape, is a defect. Weights with no
-faster twin (unquantized planes) are out of scope; a site that must stay f32 for another
-reason is ledgered on its own file's charter line in `ARCHITECTURE.md` sec.1, not commented
-into compliance.
+**A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, per-head `gemm_f32`, or an f32 GPU
+mm) outside a parity or oracle rail, where a faster-format twin already serves the same weights
+and shape, is a defect - call that twin instead.** Weights with no faster twin (unquantized
+planes) are out of scope; a site that must stay f32 for another reason is ledgered on its own
+file's charter line in `ARCHITECTURE.md` sec.1, not commented into compliance.
 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
-file.** A platform-neutral engine file carrying it is a defect.
+file.**
 
 **A new engine concern that is not `Model`/`Session`/`Config` state gets its own file, not
 more of `dasllama/dasllama_common.das`.**
 
-**No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
-a defect in an engine file (`dasllama/`) outside a cold one-shot load, bake, map, or
-tokenizer-build progress log - instrumentation goes through the sanctioned rails, listed with
-their reasons in `ARCHITECTURE.md` sec.2.10.
+**A NEW clock read paired with a print or log of the elapsed interval is a defect in an engine
+file (`dasllama/`) outside a cold one-shot load, bake, map, or tokenizer-build progress log** -
+instrumentation goes through the sanctioned rails, listed with their reasons in
+`ARCHITECTURE.md` sec.2.10.
 
 **A clock value that changes what the program DOES - control flow, eviction, a generated
 name; not a reported wall or a best-of reduction over reported walls - is marked
-`// clock: control`, in an engine file (`dasllama/`)** - unmarked it reads as free-hand
-timing to the ad-hoc-profiling sweep, which runs over the same tree.
+`// clock: control`, in an engine file (`dasllama/`)** - unmarked, it looks like ad-hoc
+profiling to the sweep that runs over the same tree.
 
 **Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
 quantum is COVERED by an annotated region entry** - `[hot_path]`, any of the `[no_alloc]` /
@@ -115,15 +112,15 @@ instrument is the scaling ratio across the size ladder, and superlinear is a def
 template strings any of them look up, records a `tests/test_tokenizer.das` run with its cases
 EXECUTED, not skipped.**
 
-**An override announces itself where it changes the outcome.** An override is an environment
-knob or an exported runtime setter that moves a gate, policy, or threshold off its default
-and thereby changes what the run writes, reads, mints, or computes - including a knob or
-setter whose purpose is timing when it moves computed numerics, since two GEMM forms of
-the same math differ in float terms. A knob or setter that changes only WHEN work happens
-is not an override, and a CLI flag is never one. A run that engages one prints a line naming
-the override by the spelling a user would set - the environment variable name, the sidecar
-key, or the setter's function name. Per-site repeats are fine. A set-but-inert override
-stays silent. Adding one, or giving one a new effect, without the announce is a defect.
+**A diff that adds an override, or gives one a new effect, without the announce is a defect.**
+An override is an environment knob or an exported runtime setter that moves a gate, policy, or
+threshold off its default and thereby changes what the run writes, reads, mints, or computes -
+including a knob or setter whose purpose is timing when it moves computed numerics, since two
+GEMM forms of the same math differ in float terms. A knob or setter that changes only WHEN work
+happens is not an override, and a CLI flag is never one. The announce is a line the run prints
+where the override changes the outcome, naming it by the spelling a user would set - the
+environment variable name, the sidecar key, or the setter's function name. Per-site repeats are
+fine. A set-but-inert override stays silent.
 
 **A self-measured served-turn time entering `PERF_LEDGER.md` comes from the released
 `lcpp_bench` exe, never from the `-jit` script.** A served-turn time is a tok/s figure or a
@@ -165,59 +162,56 @@ produced it.** A stage figure is a stage wall, a stage share, a stage speedup, o
 cross-engine comparison of one stage. The rule holds wherever the figure is written down: a
 checked-in doc, a ledger, a code comment, or a PR description. A board cell's `pp`/`tg` rate
 and the whole wall of a `benchmarks/lcpp_bench.das` `-p`/`-n` cell measure the turn, not a
-stage, and are not stage figures. The naming rides the figure's own sentence, a table heading
-that covers the table's rows, or a section-level provenance line that covers the paragraphs
-under it.
+stage, and are not stage figures. The naming sits in the figure's own sentence, in a table
+heading that covers the table's rows, or in a section-level provenance line that covers the
+paragraphs under it.
 
-**Runtime serves weights out of a mapped `.dlim`.** A live carrier's planes point into
-`parse_image`'s mapping, and going live does no real work - repacking, quantizing, folding,
-permuting belong to the mint. A transform on the go-live path is a defect.
+**A transform on the go-live path - repacking, quantizing, folding, permuting - is a defect;
+it belongs to the mint.** Going live is `parse_image` pointing a live carrier's planes into the
+mapped `.dlim`.
 
 **A missing `.dlim` is minted first, and the model is served from what was minted.**
 
-**There is one way to mint, and one way to load.** A weight carrier becomes live through
-`build_image` and `parse_image` in `dasllama/dasllama_image.das`. Reading weights into a live carrier,
-or releasing an image backing, anywhere else is a defect - and a second mint path, per family,
-per format, or per backend, is a defect even where its output is identical.
+**A weight carrier becomes live only through `build_image` and `parse_image` in
+`dasllama/dasllama_image.das`: reading weights into a live carrier, or releasing an image
+backing, anywhere else is a defect - and a second mint path, per family, per format, or per
+backend, is a defect even where its output is identical.**
 
 **A decoder mint never holds the whole model.** A decoder mint is the mint of an LLM decoder
-model, not of a tower or embedder carrier. It sizes the image before the first byte goes out
-and writes each plane as it is produced. Keeping the source model resident to write from is a
-defect. A mint that is slower in exchange for a lower peak is correct.
+model, not of a tower or embedder carrier. It sizes the image before writing the first byte and
+writes each plane as it is produced. A mint that is slower in exchange for a lower peak is
+correct.
 
 **A staged carrier mint (`cache_via_image_staged`) meeting a source file at or past 1 GiB
 either refuses it or streams it the way a decoder mint does.** A refusal names that file. The
-staged form holds source and image at once, and that doubled peak is what the line caps.
+staged form holds source and image at once, and this rule caps that doubled peak.
 
-**A `.dlim` is box- and config-specific, not a portable format.** `image_identity` names the
-box profile, the knobs, and the flavor a file was baked for, and a mismatch declines loudly. A
-path that reinterprets a mismatched image, or widens an identity so that more files match, is a
-defect.
+**A path that reinterprets a mismatched image, or widens an identity so that more files match,
+is a defect.** `image_identity` names the box profile, the knobs, and the flavor a file was
+baked for, and a mismatch declines loudly.
 
-**An image save reaps only its own lane.** A lane is an identity's (quant, tag) pair. A save
-drops AT MOST that lane's dead siblings plus BROKEN/version-stale images in any lane, nothing
-else.
+**An image save drops AT MOST its own lane's dead siblings plus BROKEN/version-stale images in
+any lane.** A lane is an identity's (quant, tag) pair.
 
-**Only a process that can recompute an image's identity may judge it dead.** Reaping an image
-whose identity the code cannot recompute - another flavor's, another family's - is a defect.
+**Reaping an image whose identity the code cannot recompute - another flavor's, another
+family's - is a defect.**
 
 **A plane split that follows the source FILE rather than a runtime knob takes ONE image tag**,
 with the meta flags describing the layout - a per-tensor type split is not a second flavor.
 
-**An image carries only what its flavor uses.** A plane the target platform or config never
-reads is not written - the mint decides, not the load. Carrying another flavor's planes is a
-defect.
+**A plane the target platform or config never reads is not written into the image - the mint
+decides that, not the load.**
 
 **A flavor takes its image file through `image_path_for` and its tag through
-`register_image_family_tag`.** A path or tag formed any other way is a defect.
+`register_image_family_tag`.**
 
-**A change to user-facing API updates every place it is shown.** User-facing means anything a
-consumer outside this repo can depend on - what it calls, types, requires, or parses
-(facade functions, CLI flags, environment knobs, file formats, defaults, what the installed
-SDK lets a program `require`) - plus the in-repo rig and tool surface: any output another tool
-parses, a console-only diagnostic not being one. A tutorial source, `.rst` page, docstring,
-help string, `README.md`, or checked-in document still showing the old call, flag, or default
-is a defect of the change, not of the docs.
+**A change to user-facing API updates every place it is shown: a tutorial source, `.rst` page,
+docstring, help string, `README.md`, or checked-in document still showing the old call, flag, or
+default is a defect of the change, not of the docs.** User-facing means anything a consumer
+outside this repo can depend on - what it calls, types, requires, or parses (facade functions,
+CLI flags, environment knobs, file formats, defaults, what the installed SDK lets a program
+`require`) - plus the in-repo rig and tool surface: any output another tool parses, a
+console-only diagnostic not being one.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's
@@ -227,11 +221,10 @@ instead. The allowed set is the table in the lint.
 
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
-owns, or a consumer `ARCHITECTURE.md` sec.1 names as ruled.** Any other file carrying it is a
-defect - a symbol the facade lacks is added to `dasllama/dasllama.das`, not escaped around.
-A `require ... public` that re-exports an engine module OUT of an escaped file, beyond what
-that consumer's ruled charter (`ARCHITECTURE.md` sec.1) grants, is the same defect wearing a
-different line.
+owns, or a consumer `ARCHITECTURE.md` sec.1 names as ruled** - a symbol the facade lacks is
+added to `dasllama/dasllama.das`, not escaped around. A `require ... public` that re-exports an
+engine module OUT of an escaped file, beyond what that consumer's ruled charter
+(`ARCHITECTURE.md` sec.1) grants, breaks this rule too.
 
 **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, adding a name to
 a check's licensed set - the names that check does not flag - or a finding text that no
@@ -263,8 +256,8 @@ struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to
 a struct the renderer emits but the registry does not is caught by
 `tests/test_env_registry.das`.
 
-**`dasllama/dasllama_unicode.das`'s RANGES/WS tables are generated - retranscoded from
-`$LCPP/src/unicode-data.cpp` (the reference checkout); hand-editing them is a defect.**
+**Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
+by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
 **A diff that adds a file under `dasllama/`, moves code between files, or changes what a file
 owns lands the sec.1 edit that keeps the charters true, in the same change.** A diff that adds
@@ -304,8 +297,7 @@ kind - `create_chat_` panics at create, not at render.
 **No signature in `dasllama/dasllama_tower.das` takes a type that
 `dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file declares.**
 `dasllama/dasllama_tower.das` is the shared encoder-tower home, and it requires none of those
-files. A doc comment naming the family a helper was built for is fine. The code stays
-family-blind.
+files. A doc comment naming the family a helper was built for is fine.
 
 **A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's
 file** - a single-caller helper sanctioned as tower-worthy is ledgered on `ARCHITECTURE.md`
@@ -324,9 +316,8 @@ own image identity.** A persisted form is one an image could carry. The load tha
 lane prints which lane it picked. A conversion made and dropped inside one forward pass
 persists nothing and is not such a lane.
 
-**A harness that prints output for another tool to compare fails loudly when it has nothing to
-print.** A run that ends without its comparison lines - wrong flags, failed load - exits
-non-zero.
+**A harness that prints output for another tool to compare exits non-zero when its run ends
+without those comparison lines - wrong flags, failed load.**
 
 **Tool wire text - building or parsing - is produced only in `dasllama/dasllama_tools.das`.**
 
@@ -345,5 +336,5 @@ the engine back; it sits in `dasllama/dasllama_common.das` only if engine code n
 program root (test, harness, benchmark, tool) requires the registration module it needs
 directly.
 
-**An architecture file (`dasllama/dasllama_arch_*.das`) is declarative registration only.** An
-architecture that changes a forward loop, or tests a family name on a shared path, is a defect.
+**An architecture file (`dasllama/dasllama_arch_*.das`) that changes a forward loop, or tests a
+family name on a shared path, is a defect - it carries declarative registration only.**

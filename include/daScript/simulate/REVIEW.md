@@ -8,24 +8,21 @@ into generated code, a flag or field a daslib predicate reads - applies `daslib/
 too; checklist discovery walks changed paths only, so the C++ half never opens the daslib
 checklist on its own.
 
-- **The hot path must not become more expensive per evaluated expression - new work is a
-  defect, and so is degrading existing work: a direct call becoming indirect, a static
-  dispatch becoming virtual, or an unboxed value becoming a boxed round-trip counts the
-  same as an added load, branch, call, copy, or counter.** The hot path is a
-  `SimNode::eval*` method, any helper such a method calls on every evaluation, the
-  dispatchers `Context::callOrFastcall` / `callWithCopyOnReturn` / `invoke` / `invokeEx`
-  (`simulate.h`), or an AOT-side function or template under this folder that generated
-  code executes per evaluated expression. A diff that adds or amplifies such a construct -
-  including one an optimized build flattens to nothing - lands its entry under
-  `ARCHITECTURE.md`'s sanctioned hot-path additions in the same diff; the entry's required
-  fields are that ledger's to define. Work on this path taxes every program on every
-  evaluated expression.
+- **A diff that makes the hot path more expensive per evaluated expression is a defect - an
+  added load, branch, call, copy, or counter, a direct call becoming indirect, a static
+  dispatch becoming virtual, and an unboxed value becoming a boxed round-trip all count.**
+  The hot path is a `SimNode::eval*` method, any helper such a method calls on every
+  evaluation, the dispatchers `Context::callOrFastcall` / `callWithCopyOnReturn` /
+  `invoke` / `invokeEx` (`simulate.h`), or an AOT-side function or template under this
+  folder that generated code executes per evaluated expression. Such a diff - including one
+  an optimized build flattens to nothing - lands its entry under `ARCHITECTURE.md`'s
+  sanctioned hot-path additions in the same diff; that ledger defines what the entry says.
 
-- **A change to the layout of a `debug_info.h` struct - a field added, removed, reordered,
-  or retyped, or a base changed - carries a per-consumer verdict (updated / no change
-  needed / rebuild required) in the PR description: for the rtti binding
+- **A diff that changes the layout of a `debug_info.h` struct - a field added, removed,
+  reordered, or retyped, or a base changed - states a per-consumer verdict (updated / no
+  change needed / rebuild required) in its own PR description: for the rtti binding
   (`src/builtin/module_builtin_rtti.cpp`), for the das-side readers of the struct, and for
-  external-module rebuilds.** Such a diff with no verdict statement is a defect.
+  external-module rebuilds.**
 
 - **A `debug_info.h` layout change that deletes or loosens an assertion in
   `tests-cpp/small/test_debug_info_layout_pin.cpp` instead of re-pinning it to the new

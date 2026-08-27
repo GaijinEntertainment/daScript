@@ -3,44 +3,40 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasllama_io_site.md`.
 
-**Every shell command shown on a page runs verbatim and produces the result the page shows.**
-A command, flag, or output line invented for illustration is a defect; if the implementation
-does not exist yet, the page does not show the command.
+**A shell command, flag, or output line shown on a page is a defect unless the command runs
+verbatim and produces the result the page shows.** Never show a command for an
+implementation that does not exist yet.
 
-**Every code sample shown on a page compiles and runs with the current toolchain.** Same
-standard as shell commands: no pseudo-code presented as code.
+**A code sample shown on a page that does not compile and run with the current toolchain is
+a defect.**
 
-**Every number shown is either rendered from live data or copied from a checked-in
-measurement record; anything else is a placeholder and carries an HTML comment naming it as
-one.** A placeholder that could be mistaken for a fact is a defect.
+**A number shown on a page is a defect unless it is rendered from live data, copied from a
+checked-in measurement record, or carries an HTML comment naming it a placeholder.**
 
-**No engine ranking on index.html - a claim in words that one engine beats another
-("beats", "Nx faster than", "fastest") is a defect, the generated news region included.**
-Figures copied from a checked-in record stand side by side, ours and another engine's; the
-arithmetic a reader does is not the page's claim, and ranking in words is
-daslang.io/dasllama.html's job.
+**A claim in words on index.html that one engine beats another ("beats", "Nx faster than",
+"fastest") is a defect, the generated news region included.** Figures copied from a
+checked-in record may stand side by side, ours and another engine's - the arithmetic a
+reader does is not the page's claim.
 
-**An empty ratio cell always reads "not raced".** Copy or rendering that lets a das-only row
-imply parity with a reference is a defect.
+**Copy or rendering that lets a row with no reference engine's figure imply parity with a
+reference engine is a defect - an empty ratio cell reads "not raced".**
 
-**The `dl-*` measurement-table language lives only in `site/files/dasllama-table.css`.**
-New `dl-*` rules in any file under this directory are a defect; site chrome uses the `dio-`
-prefix in `files/dasllama-io.css`.
+**A new `dl-*` CSS rule in any file under this directory is a defect** - the `dl-*`
+measurement-table styles live only in `site/files/dasllama-table.css`, and site chrome here
+uses the `dio-` prefix in `files/dasllama-io.css`.
 
-**Every claim in a news entry is true at publish time - including a claim about what a
-page here renders, checked against that page's markup and `files/dasllama-io.js`.** An
-entry for something not yet shipped is a defect; entries live in `_news/*.md`.
+**A claim in a `_news/*.md` entry that is not true at publish time is a defect, including a
+claim about what a page here renders - check that one against the page's markup and
+`files/dasllama-io.js`.** An entry for something not yet shipped is a defect.
 
-**The region between the `news:begin`/`news:end` markers in index.html is `build_news.py`
-output.** A hand-edit inside the markers is a defect - edit `_news/` and re-run the
-generator; the regenerated index.html, feed.xml and sitemap.xml land in the same change.
+**A hand-edit between the `news:begin` and `news:end` markers in index.html is a defect -
+edit `_news/` and re-run `build_news.py` instead.** A diff that changes `_news/` also lands
+the regenerated index.html, feed.xml and sitemap.xml, in the same change.
 
-**Every value `files/dasllama-io.js` takes from `/api/*` reaches markup only through the
-context-correct escape: `esc()` (which escapes `< > & " '`) for text AND for quoted-attribute
-values, `Number(...)` for anything numeric, and `safeApiHref()` (an `^/api/...` allow-list) for
-anything landing in `href`/`src` or fed to `fetch`.** A submission-derived value concatenated
-into markup with the wrong escape - a bare `esc()`-less number, an unfiltered URL, or a
-value inside `"..."` - is a defect.
+**A value `files/dasllama-io.js` takes from `/api/*` and puts into markup without the
+context-correct escape is a defect: `esc()` (which escapes `< > & " '`) for text and for
+quoted-attribute values, `Number(...)` for anything numeric, and `safeApiHref()` (an
+`^/api/...` allow-list) for anything landing in `href`/`src` or fed to `fetch`.**
 
-**Every page keeps `<title>`, meta description, OpenGraph tags, and the Atom `<link>`.**
-A new or renamed page without them is a defect.
+**A page that lacks `<title>`, a meta description, OpenGraph tags, or the Atom `<link>` is a
+defect - a new or renamed page included.**

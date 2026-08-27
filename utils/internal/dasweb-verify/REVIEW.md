@@ -4,30 +4,29 @@
 `README.md`. A `.mjs` file or `expectations.json`, wherever the diff puts it, answers to
 `browser/REVIEW.md`.
 
-**Every core behavior has a dastest test in this directory** - `main.das` stays thin argv/exit
-glue over tested pieces, so it needs none of its own.
+**A diff that adds or changes a core behavior also adds a dastest test for it in this
+directory, in the same change.** `main.das` is thin argv and exit-code glue over tested
+pieces, so it needs no test of its own.
 
-**`[test]` files live in this directory and require siblings by bare name** - never under the
-global `tests/` tree, and never registered in any `CMakeLists.txt`.
+**Never put a `[test]` file outside this directory, and never register one in any
+`CMakeLists.txt` - keep it here and require its siblings by bare name.**
 
-**A test that touches the filesystem uses `temp_directory`-rooted paths and deletes what it
-creates.** A test writing into the repo tree is a defect.
+**Never add a test that touches the filesystem outside a `temp_directory`-rooted path, or
+that leaves behind what it creates.**
 
-**Which samples exist comes only from the manifest the playground ships
-(`web/examples/ui/samples/data.json`, repo root), never a hand-maintained copy.** A file
-under this tool that lists, adds, or omits samples is a defect; a file carrying per-sample
-data keyed by manifest name is not one.
+**A file under this tool that lists, adds, or omits samples is a defect - take the sample list
+only from the manifest the playground ships (`web/examples/ui/samples/data.json`, repo
+root).** A file carrying per-sample data keyed by manifest name is not such a list.
 
-**The generated-sample mapping in `verify_core.das` mirrors
-`web/stage_playground_imgui_samples.cmake`:** a change to either lands with the other in the
-same change.
+**A diff that changes either the generated-sample mapping in `verify_core.das` or
+`web/stage_playground_imgui_samples.cmake` also updates the other, in the same change.**
 
 **Weakening the fail-closed cases in `test_verify_core.das` is a defect** - a missing,
-unparseable, or degenerate manifest or sample entry stays a named error returning no
+unparseable, or degenerate manifest or sample entry still raises a named error and returns no
 entries, and `main.das` still maps that to a non-zero exit.
 
-**Every failure line names the sample and carries the underlying message.** A failure a reader
-cannot act on from the log alone is a defect.
+**A diff that adds or changes a failure line puts the sample name and the underlying message
+in that line.** A failure a reader cannot act on from the log alone is a defect.
 
 **Placement - one file, one line: a diff keeps each file inside its line, and a new file adds
 its line here, with its tests, in the same change.**

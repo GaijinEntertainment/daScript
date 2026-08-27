@@ -3,40 +3,44 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**Run the unit suite on every change to a `.das` file in this folder:** `bin/daslang
-dastest/dastest.das -- --test utils/daspkg/test_daspkg.das` - fast, no network, interpreted.
-Such a change without a green unit run is a defect.
+**A change to a `.das` file in this folder without a green unit run is a defect.** The unit
+suite is `bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das` - fast, no
+network, interpreted.
 
-**The integration suite - `bin/daslang dastest/dastest.das -- --test
-utils/daspkg/test_daspkg_git.das` - runs on any edit to `commands.das`, `index.das`, or
-`utils.das` whose hunks reach a function that runs a git command** - a behavior-preserving
-refactor still counts. Needs network (the `borisbat/daspkg-test-*` fixture repos).
+**A diff whose hunks in `commands.das`, `index.das`, or `utils.das` reach a function that runs
+a git command also runs the integration suite, in the same change** - a behavior-preserving
+refactor still counts. The integration suite is `bin/daslang dastest/dastest.das -- --test
+utils/daspkg/test_daspkg_git.das`, and it needs network (the `borisbat/daspkg-test-*` fixture
+repos).
 
 **A change to `cmd_release`, `cmd_release_wasm`, or a `release_*` helper is verified on macOS,
-or the review says it was not.** The release layout forks per platform (`.app` bundle vs flat
-directory), and no per-PR CI runs these suites.
+or the review says it was not.** The release layout differs per platform (`.app` bundle vs flat
+directory), and no per-PR CI runs the daspkg test suites.
 
-**A new command or flag lands with its test cell, its `print_usage` line, and its README table
-row in the same change.**
+**A diff that adds a command or a flag also adds its test, its `print_usage` line, and its
+`README.md` table row, in the same change.**
 
-**daspkg ships as a prebuilt exe: it stays in `DAS_UTILS` and `DAS_UTILS_SHIPPED_EXES`
-(`utils/CMakeLists.txt`)** - dropping either entry breaks the release bundle.
+**A diff that drops `daspkg` from `DAS_UTILS` or `DAS_UTILS_SHIPPED_EXES` in
+`utils/CMakeLists.txt` (repo root) is a defect** - daspkg ships as a prebuilt exe, and dropping
+either entry breaks the release bundle.
 
-**A `cmd_release` bundle always mints the tune sidecar.** A `cmd_release` bundle that ships an
-exe without a sidecar beside it is a defect.
+**A `cmd_release` bundle that ships an exe without a tune sidecar beside it is a defect** - the
+tune sidecar is the `<bundle>.tune.json` file of measured kernel choices the exe reads at run
+time.
 
-**`--quick` is the only path that inherits a prior sidecar, and it refuses an incomplete one**
- - incomplete meaning missing any scope key the exe's deps JSON reports, the same completeness
-the release build itself checks.
+**A diff that lets a release path other than `--quick` inherit a prior sidecar, or lets
+`--quick` accept an incomplete one, is a defect** - incomplete meaning missing any scope key the
+exe's deps JSON reports, the same completeness the release build itself checks.
 
-**`release_include_if_missing` files are user-owned after initialization.** A release path that
-overwrites or deletes one, on any platform, is a defect.
+**A release path that overwrites or deletes a `release_include_if_missing` file, on any
+platform, is a defect.**
 
-**`.daspkg_release.manifest` is written on every platform.**
+**A release path that finishes a bundle without writing `.daspkg_release.manifest`, on any
+platform, is a defect.**
 
-**Unit cells touch only local fixtures.** A `test_daspkg.das` cell that reaches the network is
-a defect - network coverage belongs in `test_daspkg_git.das`.
+**A test in `test_daspkg.das` that reaches the network is a defect** - network coverage belongs
+in `test_daspkg_git.das`.
 
-**A package, bundle, or app name that reaches a shell command is validated by
-`is_safe_pkg_name` first, and only `commands.das` may build such a command** (the validator is
-private to it); an interpolation site without the check, or outside `commands.das`, is a defect.
+**A shell command built from a package, bundle, or app name outside `commands.das`, or without
+an `is_safe_pkg_name` check on that name first, is a defect** - `is_safe_pkg_name` is private to
+`commands.das`.

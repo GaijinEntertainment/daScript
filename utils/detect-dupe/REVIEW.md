@@ -3,6 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**Decision record: detect-dupe's `DAS_UTILS_SHIPPED_EXES` membership is deliberate** - it
-ships as a prebuilt exe. `utils/REVIEW.das` machine-checks the membership itself; a diff
-removing the entry records the removal decision here, per `utils/REVIEW.md`.
+**A diff removing detect-dupe from `DAS_UTILS_SHIPPED_EXES` records the removal decision in
+this file, per `utils/REVIEW.md`.** detect-dupe ships as a prebuilt exe, and `utils/REVIEW.das`
+machine-checks the membership itself.

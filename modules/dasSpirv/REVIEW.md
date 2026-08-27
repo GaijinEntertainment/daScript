@@ -4,15 +4,19 @@
 emitter rules: `modules/REVIEW_SHADER_EMITTERS.md` - apply that list with this one.**
 Architecture doc: `MASTERPLAN.md`.
 
-- **A new emitter capability ships its word-level tests in `tests/spirv/` (repo root):** a
-  `_golden/` disassembly or equivalence fixture, and presence in the opcode census.
+- **A diff that adds an emitter capability also adds its tests under `tests/spirv/` (repo
+  root), in the same change:** a `_golden/` disassembly or equivalence fixture, and presence
+  in the opcode census.
 
-- **A new rejection path ships its `_fail_closed/` fixture,** with its error needle asserted
-  in `tests/spirv/test_fail_closed.das`.
+- **A diff that adds a rejection path also adds its fixture under `tests/spirv/_fail_closed/`
+  (repo root) and asserts that fixture's error text in `tests/spirv/test_fail_closed.das`, in
+  the same change.** A rejection path is emitter code that refuses a construct with a compile
+  error.
 
-- **A capability that serves a downstream consumer lands with a behavioral arm there** -
-  dasVulkan `tests/integration` or the dasLLAMA vulkan kernel suite - where the kernel runs
-  on a device against its CPU oracle.
+- **A diff that adds a capability a downstream consumer uses also adds a test there, in the
+  same change** - in dasVulkan `tests/integration` or the dasLLAMA vulkan kernel suite - that
+  runs the kernel on a device and compares the result against the same computation run on the
+  CPU.
 
-- **The opcode census is two-directional:** every opcode a fixture emits is declared, and
-  every declared opcode is emitted by some fixture.
+- **A diff that leaves a fixture emitting an opcode the opcode census does not declare, or
+  leaves the census declaring an opcode no fixture emits, is a defect.**

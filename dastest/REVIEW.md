@@ -6,5 +6,5 @@
 dastest ships as a prebuilt exe - the `DAS_UTILS_SHIPPED_EXES` entry (`utils/CMakeLists.txt`,
 repo root) records this decision; the rules for changing it live in `utils/REVIEW.md`.
 
-**A helper added to, renamed in, or removed from `review_gate.das` updates its section in
-`README.md` in the same change.**
+**A diff that adds, renames, or removes a helper in `review_gate.das` also updates the
+`review_gate.das` section of `README.md`, in the same change.**

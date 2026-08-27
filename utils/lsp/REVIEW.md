@@ -3,6 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**lsp never enters `DAS_UTILS` or `DAS_UTILS_SHIPPED_EXES` (`utils/CMakeLists.txt`) - adding it
-to either is a defect.** Development runs it through the python keep-alive supervisor, so an
-exe form would never be dogfooded before shipping.
+**Never add `lsp` to `DAS_UTILS` or `DAS_UTILS_SHIPPED_EXES` in `utils/CMakeLists.txt` - clients
+start the server through `lsp_supervisor.py` instead.** Development always starts it through that
+python script, so an exe form would ship without anyone having used it.

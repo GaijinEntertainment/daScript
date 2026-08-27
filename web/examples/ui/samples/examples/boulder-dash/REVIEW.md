@@ -3,32 +3,33 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-**Everything that reads a tick's outgoing state sits between `cave_tick` and the next tick**
- - scoring from `collected`, `play_tick_sfx`, and `cave_consume_input` run immediately after
-the tick, in that order. The per-tick event fields are cleared at the top of every tick, and
-consuming input before the tick applies the input one tick late.
+**Never read the state a tick produced anywhere but between that `cave_tick` call and the
+next tick - scoring from `collected`, `play_tick_sfx`, and `cave_consume_input` run
+immediately after the tick, in that order.** The per-tick event fields are cleared at the top
+of every tick, and consuming input before the tick applies the input one tick late.
 
-**`skip_draw` is sized and filled only in `mark_movers`, and `mark_movers` runs before
-`draw_static_tiles` on every frame** - `draw_static_tiles` indexes the mask without a
-length check.
+**Never size or fill `skip_draw` anywhere but in `mark_movers`, and never call
+`draw_static_tiles` in a frame that has not already called `mark_movers`** -
+`draw_static_tiles` indexes the mask without a length check.
 
-**A `Tile` member added or reordered updates the `tile_color` and `mat_for` arms in
-`main.das` in the same change** - a tile without those arms renders floor-colored, i.e.
-invisibly.
+**A diff that adds or reorders a `Tile` member also updates the `tile_color` and `mat_for`
+arms in `main.das`, in the same change** - a tile with no arm renders floor-colored, so it
+is invisible.
 
-**`tile_color` and `mat_for` classify every tile identically** - a tile matched by one
-family test and not the other draws with one family's color and another's material.
+**A diff that changes a tile family test in `tile_color` or `mat_for` makes the matching
+change to the other, in the same change** - a tile matched by one family test and not the
+other draws with one family's color and another's material.
 
 **Weakening or deleting a check in `test_cave_rules.das` or `test_sfx_gen.das` is a
-defect** - those two suites are the only enforcement of the couplings this checklist
-names, and relaxing one silently un-enforces a rule above.
+defect** - those two suites are the only enforcement of the couplings this checklist names.
 
-**When one tick moves two objects through a shared cell, the move whose SOURCE is the
-shared cell runs first** - `move_tile` clears source before writing destination, so the
-reversed order erases the object written there (`try_push`: boulder first, then player).
+**A diff that adds or reorders two moves that share a cell in one tick puts the move whose
+SOURCE is the shared cell first** - `move_tile` clears the source cell before writing the
+destination, so the reversed order erases the object written there (`try_push`: boulder
+first, then player).
 
-**A new `Cave` field that records something that happened during a tick gains an
-assignment in `reset_tick_events` and an arm in `play_tick_sfx` in the same change** -
+**A diff that adds a `Cave` field recording something that happened during a tick also adds
+an assignment in `reset_tick_events` and an arm in `play_tick_sfx`, in the same change** -
 missing the first latches the event across ticks; missing the second makes it silent.
 
 **A diff that adds, removes, or reorders a random draw on `generate_cave`'s path -
