@@ -138,6 +138,15 @@ def test_rule_docs_only_folder(t : T?) {
         t |> success(find(out, "tagged/notes.md: LINT025") >= 0, "the finding names the stray\n{out}")
         t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
     }
+    t |> run("the tag is a folder property - a subfolder does not inherit it") @(t : T?) {
+        let root = build_tree()
+        let nested = path_join(path_join(root, "tagged"), "nested")
+        mkdir_rec(nested)
+        plant(nested, "stray.md", "# stray\n")
+        var out : string
+        run_lint(root, out)
+        t |> success(find(out, "nested/stray.md") < 0, "no cascade into an untagged subfolder\n{out}")
+    }
     t |> run("a tagged folder with no .das still gets its verdict") @(t : T?) {
         let root = build_tree()
         let dir = path_join(root, "mdonly")

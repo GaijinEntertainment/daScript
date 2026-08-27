@@ -241,7 +241,7 @@ if [[ -z "$REVIEW_LEAKS" ]]; then
     echo "OK"
     PASS=$((PASS + 1))
 else
-    echo "FAIL (internal review files in bundle):"
+    echo "FAIL (internal rule/record docs in bundle):"
     echo "$REVIEW_LEAKS" | sed 's/^/    /'
     FAIL=$((FAIL + 1))
 fi

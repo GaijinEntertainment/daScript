@@ -11,7 +11,7 @@ require dastest/review_gate
 // Run from the repo root: bin/daslang utils/lint/REVIEW.das - exit 0 clean, 1 with findings.
 // Every rule id a lint module emits has a fixture and a lint.rst section.
 
-let RULE_MODULES <- [ "daslib/lint.das", "daslib/perf_lint.das", "daslib/style_lint.das", "daslib/dupe_detect.das" ]
+let RULE_MODULES <- [ "daslib/lint.das", "daslib/perf_lint.das", "daslib/style_lint.das", "daslib/dupe_detect.das", "utils/lint/main.das" ]
 let RST = "doc/source/reference/language/lint.rst"
 let FIXTURE_DIRS <- [ "utils/lint/tests", "tests/lint" ]
 // fixtures whose file name does not carry the id (README.md lists them)

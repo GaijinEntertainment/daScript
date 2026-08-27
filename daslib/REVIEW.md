@@ -70,6 +70,11 @@ the formatter's kept set.
 in the same change.** An unlisted module's ids are never scanned, so its fixture-and-rst
 check never runs.
 
+**A diff that deletes a rule id's last emitting spelling from a rule module also removes that
+id's fixture and its `doc/source/reference/language/lint.rst` (repo root) section, in the same
+change** - the gate checks only ids it can still find, so a dead id's residue outlives it
+silently.
+
 **Never record a LINT010 store in `preVisitExprVar` - record it in the POST-visit of
 `ExprCopy`/`ExprClone`/`ExprMove`.** The LHS's variable fires before the RHS is walked, so
 an early record lets the RHS's own read clear the store it just recorded.

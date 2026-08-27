@@ -757,6 +757,24 @@ its signal by staying silent there — widen those by hand where they are byte
 counts. ``int64(a + b)`` has no product and is not this rule's shape; an
 operand that is already 64-bit is silent.
 
+LINT025 — stray ``.md`` beside shipped code
+===========================================
+
+A folder rule, not a code rule: a folder whose ``.lint_config`` carries
+``[docs] rule_docs_only = true`` may hold only rule documents —
+``REVIEW*.md``, ``ARCHITECTURE*.md``, ``LAWS.md``. Any other ``.md`` there
+fires. Ledgers, plans, and notes live at the module root or in ``plans/``
+(repo root), where they cannot ride an install glob into the SDK or bury the
+documents a reviewer must read. The pass runs once per lint invocation over
+the directories being linted and the folders of the files being linted; it
+never fires in an untagged folder.
+
+.. code-block:: toml
+
+    # .lint_config beside the shipped sources
+    [docs]
+    rule_docs_only = true
+
 LINT018 — narrowed size argument of a call with a 64-bit overload
 ==================================================================
 

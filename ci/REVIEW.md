@@ -3,6 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md` (repo root).
 
-**A diff that weakens `smoke_test_bundle.sh` - the script that checks a built release bundle -
-is a defect.** Weakening means dropping a check, loosening an assertion, or shortening a list
-the script walks.
+**A diff that shrinks what `smoke_test_bundle.sh` - the script that checks a built release
+bundle - rejects is a defect**: every bundle it failed before the diff still fails. A new
+exemption may name only a file no existing check matched.
