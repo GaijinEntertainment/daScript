@@ -80,6 +80,10 @@ class public CollectExternVisitor : AstVisitor {
     c_get_jit_delete : LLVMOpaqueValue?
     c_get_jit_clone_type : LLVMOpaqueType?
     c_get_jit_clone : LLVMOpaqueValue?
+    c_get_jit_each_type : LLVMOpaqueType?
+    c_get_jit_each : LLVMOpaqueValue?
+    c_get_jit_at_type : LLVMOpaqueType?
+    c_get_jit_at : LLVMOpaqueValue?
 
     standalone_ctx : LLVMOpaqueValue?
 
@@ -199,6 +203,21 @@ class public CollectExternVisitor : AstVisitor {
             )
         )
         c_get_jit_clone = LLVMAddFunctionWithType(g_mod, "das_get_jit_clone", c_get_jit_clone_type)
+
+        c_get_jit_each_type = LLVMFunctionType(types.LLVMVoidPtrType(),
+            fixed_array<LLVMTypeRef>(
+                types.LLVMVoidPtrType(),  // TypeAnnotation*
+            )
+        )
+        c_get_jit_each = LLVMAddFunctionWithType(g_mod, "das_get_jit_each", c_get_jit_each_type)
+
+        c_get_jit_at_type = LLVMFunctionType(types.LLVMVoidPtrType(),
+            fixed_array<LLVMTypeRef>(
+                types.LLVMVoidPtrType(),  // TypeAnnotation*
+                types.t_int32,            // Type of the index
+            )
+        )
+        c_get_jit_at = LLVMAddFunctionWithType(g_mod, "das_get_jit_at", c_get_jit_at_type)
 
     // For each JIT function, register it in the context and point any ExprAddr global to it.
         reg_standalone_fn_type = LLVMFunctionType(types.LLVMVoidPtrType(),
@@ -356,6 +375,24 @@ class public CollectExternVisitor : AstVisitor {
         LLVMBuildStore(builder, fn_ptr, global_var)
     }
 
+    def register_each_from_annotation(name : DllName; ann : TypeAnnotation?) {
+        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
+        if (global_var == null) return
+        let ann_ptr = get_annotation(ann)
+        var call_args = array<LLVMValueRef>(ann_ptr)
+        let fn_ptr = LLVMBuildCall2(builder, c_get_jit_each_type, c_get_jit_each, call_args, "")
+        LLVMBuildStore(builder, fn_ptr, global_var)
+    }
+
+    def register_at_from_annotation(name : DllName; ann : TypeAnnotation?; index_base_type : int) {
+        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
+        if (global_var == null) return
+        let ann_ptr = get_annotation(ann)
+        var call_args = array<LLVMValueRef>(ann_ptr, types.ConstI32(uint64(index_base_type)))
+        let fn_ptr = LLVMBuildCall2(builder, c_get_jit_at_type, c_get_jit_at, call_args, "")
+        LLVMBuildStore(builder, fn_ptr, global_var)
+    }
+
     def override preVisitExprCall(expr : ExprCall?) {
         make_call(expr)
     }
@@ -509,6 +546,21 @@ class public CollectExternVisitor : AstVisitor {
         assume subExprT = expr.subexpr._type
         if (subExprT.isGoodTableType) {
             add_table_at_call(subExprT)
+        } elif (handle_at_is_jitable(expr)) {
+            assume ixT = expr.index._type
+            let name = uid.get_at_type(subExprT, ixT)
+            if (initialize(name)) {
+                register_at_from_annotation(name, subExprT.annotation, jit_index_base_type(ixT))
+            }
+        }
+    }
+
+    def override preVisitExprForSource(var expr : ExprFor?, var source : ExpressionPtr, last : bool) : void {
+        if (handle_each_is_jitable(source)) {
+            let name = uid.get_each_type(source._type)
+            if (initialize(name)) {
+                register_each_from_annotation(name, source._type.annotation)
+            }
         }
     }
 

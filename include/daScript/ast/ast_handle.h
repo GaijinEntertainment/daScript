@@ -393,6 +393,18 @@ namespace das
         virtual void * jitGetDelete() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_delete; }
     };
 
+    template <typename TT, typename = void>
+    struct hasJitIntIndex : std::false_type {};
+    template <typename TT>
+    struct hasJitIntIndex<TT, std::void_t<decltype(&(std::declval<TT&>()[int32_t(0)])),
+                                          decltype(std::declval<TT&>().size())>> : std::true_type {};
+
+    template <typename TT, typename = void>
+    struct hasJitVectorEach : std::false_type {};
+    template <typename TT>
+    struct hasJitVectorEach<TT, std::void_t<decltype(std::declval<TT&>().data()),
+                                            decltype(std::declval<TT&>().size())>> : std::true_type {};
+
     template <typename VectorType>
     struct ManagedVectorAnnotation : TypeAnnotation {
         using OT = typename VectorType::value_type;
@@ -501,6 +513,46 @@ namespace das
             auto rv = simulateExpression(context, src);
             return context.code->makeNode<SimNode_AnyIterator<VectorType,StdVectorIterator<VectorType>>>(at, rv);
         }
+        virtual void * jitGetEach () const override {
+            if constexpr ( hasJitVectorEach<VectorType>::value ) {
+                return (void *) +[] ( Sequence * out, void * pVec, Context * context, LineInfoArg * at ) {
+                    using VectorIterator = StdVectorIterator<VectorType>;
+                    char * iter = context->allocateIterator(sizeof(VectorIterator), "vector<> iterator", at);
+                    new (iter) VectorIterator((VectorType *)pVec, at);
+                    out->iter = (Iterator *) iter;
+                };
+            } else {
+                return nullptr;
+            }
+        }
+        virtual void * jitGetAt ( Type indexType ) const override {
+            if constexpr ( hasJitIntIndex<VectorType>::value ) {
+                switch ( indexType ) {
+                case Type::tInt:
+                    return (void *) +[] ( void * pVec, int32_t index, Context * context, LineInfoArg * at ) -> char * {
+                        auto & vec = *(VectorType *)pVec;
+                        uint32_t size = uint32_t(vec.size());
+                        if ( uint32_t(index)>=size ) {
+                            context->throw_error_at(at, "vector index out of range, %d of %u", index, size);
+                        }
+                        return (char *) &vec[uint32_t(index)];
+                    };
+                case Type::tUInt:
+                    return (void *) +[] ( void * pVec, uint32_t index, Context * context, LineInfoArg * at ) -> char * {
+                        auto & vec = *(VectorType *)pVec;
+                        uint32_t size = uint32_t(vec.size());
+                        if ( index>=size ) {
+                            context->throw_error_at(at, "vector index out of range, %u of %u", index, size);
+                        }
+                        return (char *) &vec[index];
+                    };
+                default:
+                    return nullptr;
+                }
+            } else {
+                return nullptr;
+            }
+        }
         virtual void walk ( DataWalker & walker, void * vec ) override {
             if ( !ati.load() ) {
                 lock_guard<recursive_mutex> guard(g_handleTypeInfoMutex);
@@ -552,63 +604,6 @@ namespace das
 
     template <typename TT, bool byValue = has_cast<typename TT::value_type>::value >
     struct registerVectorFunctions;
-
-    template <typename TT>
-    struct registerVectorJitFunctions {
-        // This should be done before insertion to module
-        // because it changes mangled name.
-        struct vectorIndexArgFn : defaultTempFn {
-            vectorIndexArgFn() : defaultTempFn() {}
-            ___noinline bool operator () ( Function * fn ) {
-                defaultTempFn::operator()(fn);
-                if ( !fn->arguments.empty() ) {
-                    fn->arguments[0]->type->explicitConst = true;
-                }
-                fn->builtIn = true;
-                fn->generated = true;
-                fn->jitOnly = true;
-                return true;
-            }
-        };
-        static void init ( Module * mod, const ModuleLibrary & lib ) {
-            // index
-            using OT = typename TT::value_type;
-            auto TTN = describeCppType(makeType<TT>(lib));
-            auto OTN = describeCppType(makeType<OT>(lib));
-            auto atin = "das_ati<"+TTN+","+OTN+">";
-            addExtern<DAS_BIND_FUN((das_ati<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
-                SideEffects::modifyArgument, atin.c_str())
-                    ->args({"vec","index","context","at"});
-            auto atun = "das_atu<"+TTN+","+OTN+">";
-            addExtern<DAS_BIND_FUN((das_atu<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
-                SideEffects::modifyArgument, atun.c_str())
-                    ->args({"vec","index","context","at"});
-            auto atcin = "das_atci<"+TTN+","+OTN+">";
-            addExtern<DAS_BIND_FUN((das_atci<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
-                SideEffects::none, atcin.c_str())
-                    ->args({"vec","index","context","at"});
-            auto atcun = "das_atcu<"+TTN+","+OTN+">";
-            addExtern<DAS_BIND_FUN((das_atcu<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
-                SideEffects::none, atcun.c_str())
-                    ->args({"vec","index","context","at"});
-            auto atin64 = "das_ati_i64<"+TTN+","+OTN+">";
-            addExtern<DAS_BIND_FUN((das_ati_i64<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
-                SideEffects::modifyArgument, atin64.c_str())
-                    ->args({"vec","index","context","at"});
-            auto atun64 = "das_atu_u64<"+TTN+","+OTN+">";
-            addExtern<DAS_BIND_FUN((das_atu_u64<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
-                SideEffects::modifyArgument, atun64.c_str())
-                    ->args({"vec","index","context","at"});
-            auto atcin64 = "das_atci_i64<"+TTN+","+OTN+">";
-            addExtern<DAS_BIND_FUN((das_atci_i64<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
-                SideEffects::none, atcin64.c_str())
-                    ->args({"vec","index","context","at"});
-            auto atcun64 = "das_atcu_u64<"+TTN+","+OTN+">";
-            addExtern<DAS_BIND_FUN((das_atcu_u64<TT,OT>)),SimNode_ExtFuncCallRef,vectorIndexArgFn>(*mod, lib, ".[]",
-                SideEffects::none, atcun64.c_str())
-                    ->args({"vec","index","context","at"});
-        }
-    };
 
     template<typename T, typename = void, typename... Args>
     struct has_emplace_method : std::false_type {};
@@ -680,7 +675,6 @@ namespace das
                 SideEffects::none, "das_vector_empty")->generated = true;
             addExternInline<DAS_BIND_FUN(das_vector_capacity<TT>)>(*mod, lib, "capacity",
                 SideEffects::none, "das_vector_capacity")->generated = true;
-            registerVectorJitFunctions<TT>::init(mod,lib);
         }
     };
 
@@ -751,7 +745,6 @@ namespace das
                 SideEffects::none, "das_vector_empty")->generated = true;
             addExternInline<DAS_BIND_FUN(das_vector_capacity<TT>)>(*mod, lib, "capacity",
                 SideEffects::none, "das_vector_capacity")->generated = true;
-            registerVectorJitFunctions<TT>::init(mod,lib);
         }
     };
 
