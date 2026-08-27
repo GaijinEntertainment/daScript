@@ -54,11 +54,6 @@
             controls: 'arrows / A D steer · W S throttle · space fire · esc pause',
             poster: 'files/examples/river_run-poster.jpg',
             aspect: 1280 / 720,
-            // The deferred-lit pass plus the screen-space chain (SSAO, bloom,
-            // sun shafts, FXAA) needs the compiled build to hold frame rate, so
-            // this one is memory64-only like the other heavy cards and ships no
-            // interpreted fallback.
-            wasm64Only: true,
         },
         {
             id: 'furier', name: 'Fourier Series', kind: 'imgui showcase',

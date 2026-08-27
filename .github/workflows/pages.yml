@@ -488,7 +488,7 @@ jobs:
         # cp -r site/files.
         mkdir -p _site/examples
         cp site/examples/_interp.html _site/examples/_interp.html
-        for g in arcanoid pacman boulder-dash; do
+        for g in arcanoid pacman boulder-dash river_run; do
             mkdir -p "_site/examples/$g"
             if [ -f "web/output64/examples/$g/$g.wasm" ]; then
                 cp "web/output64/examples/$g/$g.html" "_site/examples/$g/"
@@ -503,23 +503,6 @@ jobs:
             rm -f "_site/examples/$g"/test_*.das   # dastest suites are repo-side, not deploy payload
             cp modules/dasStbImage/fonts/droidsansmono.ttf "_site/examples/$g/"
         done
-
-        # river_run — the shadow-mapped river shooter. wasm64-only: its render path
-        # (deferred-lit pass + SSAO/bloom/sun-shaft chain) needs the compiled build
-        # to hold frame rate, so there is no interpreted fallback and no .das
-        # sources to stage. Same placeholder rule as the showcases below: the card
-        # is always listed, so an incomplete build must not 404 the iframe.
-        mkdir -p _site/examples/river_run
-        if [ -f web/output64/examples/river_run/river_run.html ] \
-           && [ -f web/output64/examples/river_run/river_run.js ] \
-           && [ -f web/output64/examples/river_run/river_run.wasm ]; then
-            cp web/output64/examples/river_run/river_run.html _site/examples/river_run/
-            cp web/output64/examples/river_run/river_run.js   _site/examples/river_run/
-            cp web/output64/examples/river_run/river_run.wasm _site/examples/river_run/
-        else
-            echo "WARNING: river_run wasm build incomplete — staging a placeholder so the always-listed card doesn't 404."
-            printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>River Run — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/river_run/river_run.html
-        fi
 
         # furier — the ImGui-in-wasm showcase. wasm64-only: it bundles the compiled
         # dasImgui module, which the universal interpreter can't bind, so there is NO
