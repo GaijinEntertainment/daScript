@@ -24,8 +24,10 @@ winners back.
 
 **A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
 
-**A change to the image rail - `dasllama/dasllama_image.das`, or a `.dlim` mint, load,
-identity, or flavor concern wherever the diff puts it - applies `REVIEW_IMAGE.md`.**
+**A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it,
+a `.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a
+flavor (the backend-and-layout variant an image is baked for, one part of its identity) -
+applies `REVIEW_IMAGE.md`.**
 
 **A change to `dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_io.das`,
 `dasllama/dasllama_audio_embedder.das`, `dasllama/dasllama_asr.das`,
@@ -58,10 +60,9 @@ neither is `[tune_scope]` metadata (`covers=`, `tuner=`, `version_of=`).
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value
 that can change between dispatches goes in a uniform, a kargs field, or an `@off` bind offset.
 
-**Never reorder or merge the float multiplies in a table builder in
-`dasllama/dasllama_rope.das` - keep the order the builder already has.** That order is
-parity-pinned, so a regrouping moves the angles in the last bits and flips token-exact fixtures.
-
+**Never reorder or merge the float multiplies in a function that builds a RoPE angle table
+(`dasllama/dasllama_rope.das`) - keep the multiply order the code already has.** A regrouping
+moves the angles in the last bits and flips token-exact fixtures.
 **A diff that changes a kernel-selection predicate in `dasllama/` is based on timing that ran
 both variants interleaved in one process, under one instrument.** The same holds for a
 constant in `dasllama/` whose value was chosen by timing two candidates against each other. A
@@ -76,8 +77,8 @@ wall-clock - and a stated decision.**
 mm) outside a parity or oracle rail, where a faster-format twin already serves the same weights
 and shape, is a defect - call that twin instead.** Weights with no faster twin (unquantized
 planes) are out of scope; a site that must stay f32 for another reason is ledgered on its own
-file's sec.1 charter line in `ARCHITECTURE_ENGINE.md` or `ARCHITECTURE_MEDIA.md`, not
-commented into compliance.
+file's sec.1 charter line in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, or
+`ARCHITECTURE_MEDIA.md`, not commented into compliance.
 
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
 file.**
@@ -232,7 +233,8 @@ a struct the renderer emits but the registry does not is caught by
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
 **A diff that adds a file under `dasllama/`, moves code between files, or changes what a file
-owns lands the sec.1 edit that keeps the charters true, in the same change.** A diff that adds
+owns lands the sec.1 edit that keeps the charters true - in `ARCHITECTURE_ENGINE.md`,
+`ARCHITECTURE_GPU.md`, or `ARCHITECTURE_MEDIA.md` - in the same change.** A diff that adds
 a file beside one that has its own sec.1 charter line lands that edit too. A module-root doc
 file - a ledger, a plan, `LAWS.md` - has no charter line and lands free.
 

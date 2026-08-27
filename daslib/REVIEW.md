@@ -35,14 +35,14 @@ construct's visit.
 survives into the sibling loop's exit path and unbalances its counter.
 
 **A diff that makes a daslib predicate or emitted identifier depend on a C++-side
-definition records the pair in `ARCHITECTURE*.md`, in its module's section, naming both
+definition records the pair in the architecture doc, in its module's section, naming both
 sides.** Nothing catches it when one side later moves alone.
 
 **When a diff changes one side of a recorded daslib/C++ pair so the two no longer match,
-it changes the other side and updates the pair's `ARCHITECTURE*.md` entry in the same
+it changes the other side and updates the pair's architecture-doc entry in the same
 diff.**
 
-**A comment-sweep diff adds an `ARCHITECTURE*.md` entry only where no name, shape, or test
+**A comment-sweep diff adds an architecture-doc entry only where no name, shape, or test
 can carry the fact.**
 
 **Weakening `tests/lint/test_nolint_suppression.das` is a defect** - it pins that a string

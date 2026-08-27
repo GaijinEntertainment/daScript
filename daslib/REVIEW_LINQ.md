@@ -104,6 +104,12 @@ array - `selectCols`, `selectColAliases`, `selectColSqlFragments`, `selectColTyp
 cover only part of the set and leave the rest to their caller; a partial push desyncs the SELECT
 list from the row builder, with no error.
 
+**A diff that adds a post-join `_.<alias>` consumer to sql_linq resolves the alias through
+`find_projection_alias` + `render_projection_alias_sql`, and rejects a miss rather than
+falling back to resolving the name against the base table.** After a join the alias lives in
+the join projection snapshot, so base-table resolution answers with an unqualified
+base-table column - a wrong column, with no error.
+
 **Never pick a projection slot's SQL by `q.seenJoin` - pick it by which of that slot's own
 entries is non-empty: SQL fragment first, then aliased column, then unqualified column.**
 
@@ -122,9 +128,9 @@ helper it returns, so a swapped pair attaches index DDL to the wrong overload.
 
 **Never narrow or widen the linq_das clause-keyword test - a clause keyword is a whole word at
 bracket nesting depth zero, not preceded by `.` and not preceded by a `>` that tails `|>`, `=>`
-or `->`.** Narrowing
-lets an in-body aggregate parse as a `select` clause; widening the exclusion to any `>` hides a
-clause keyword that legitimately follows a generic bracket or a comparison.
+or `->`.** Narrowing lets an in-body aggregate parse as a `select` clause; widening the
+exclusion to any `>` hides a clause keyword that legitimately follows a generic bracket or a
+comparison.
 
 **A diff that changes the token model in one substituting linq_das scanner - `substitute_idents`,
 `mentions_ident`, `rewrite_group_var` - changes it in the others, in the same change** (the
@@ -180,7 +186,3 @@ take it from the typer-resolved call type, and prove that type non-null before u
 **`emit_loop_or_count_lane_decs` that lets a `to_table` terminator reach the implicit-to_array
 arm is a defect - decline `to_table` ahead of that arm.** decs has no to_table lane, so the
 implicit arm emits an array for a table-typed expression.
-
-**A diff that adds a post-join `_.<alias>` consumer to sql_linq resolves the alias through
-`find_projection_alias` + `render_projection_alias_sql`.** Base-table fallback leaks the
-unqualified base-table namespace into post-join predicates.

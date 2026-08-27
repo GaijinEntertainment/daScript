@@ -31,7 +31,7 @@ Three document types split one grammar, each with a repo-root contract:
 - **`/history`** - past tense: what happened. Nothing current cites it.
 
 An implementation folder - `daslib/`, a module's `daslib/` or engine folder - holds no `.md`
-besides `REVIEW*.md`, `ARCHITECTURE.md`, and `LAWS.md` (lint-enforced: `.lint_config`
+besides `REVIEW*.md`, `ARCHITECTURE*.md`, and `LAWS.md` (lint-enforced: `.lint_config`
 `rule_docs_only`). Ledgers and plans live at the module root or in `plans/` (repo root). None
 of these documents installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` and
 `ARCHITECTURE_COMMON.md` at the install root are the two vendoring exceptions.
@@ -39,15 +39,20 @@ of these documents installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` 
 The mood test routes misplaced text: must/never binding a diff -> REVIEW.md; present-tense
 fact -> ARCHITECTURE.md; dated or past-tense -> /history.
 
-Code binds to an architecture-doc section with `[arch(at="<doc>.md#<anchor>")]`, the path
-resolving against the CITING file's own folder (`../ARCHITECTURE.md` from an engine file); the
-section's heading carries the matching `{#anchor}`. LINT026 keeps every citation resolving, and in a folder
-whose `.lint_config` sets `[docs] enforce_arch = true`, every anchor cited. **Before editing an
-annotated function, read its section** - MCP `arch_of` returns a file's citations with their
-section text, `arch_sites` a document's census (dead anchors and dangling citations included).
-A rule document past 300 lines in a tagged folder is a LINT027 finding - it splits into
-companions (`ARCHITECTURE_<CONCERN>.md`; routed `REVIEW_<KIND>.md`), the `archivist` agent's
-job for architecture docs.
+**Before editing a function annotated `[arch(at="<doc>.md#<anchor>")]`, read the section it
+cites.** MCP `arch_of` returns each of a file's citations with its section text; `arch_sites`
+returns a document's anchors with the code citing them, dead anchors and dangling citations
+included. Citation spelling, path resolution, and failure reasons: `skills/mcp_tools.md`.
+
+**An architecture-doc heading that code cites carries the `{#anchor}` its citation names.**
+LINT026 fails a citation naming no such file or anchor, and in a folder whose `.lint_config`
+sets `[docs] enforce_arch = true`, an anchor no `[arch]` cites.
+
+**A `REVIEW*.md` or `ARCHITECTURE*.md` past 300 lines, in a folder whose `.lint_config` sets
+`[docs] rule_docs_only = true` or `[docs] enforce_arch = true`, splits into companions** -
+`ARCHITECTURE_<CONCERN>.md` for an architecture doc, a `REVIEW_<KIND>.md` the parent
+checklist's opening routes to for a checklist. LINT027 is the gate; the `archivist` agent
+does the architecture-doc splits.
 
 ## GitHub Operations
 
@@ -79,7 +84,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 |---|---|
 | `skills/project_overview.md` | First significant task - design philosophy, three execution tiers, macros-as-design-lens |
 | `skills/internal/build_and_debug.md` | Build flags, AOT build commands, exit-code/crash diagnosis, `options log_infer_passes` |
-| `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
+| `skills/mcp_tools.md` | Full MCP tool table + live-API reference; writing or following an `[arch(at=...)]` citation |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/comment_style_hygiene.md` | Writing or reviewing comments, names, or local code shape in ANY language |
 | `skills/writing_tests.md` | Writing or editing any dastest test |
@@ -281,7 +286,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 
 **Complexity/length lint (STYLE037/STYLE038): new code meets both limits from the start.** On a hit in existing code, the suppress-vs-split resolution policy is `skills/style_lint.md` - never force a split on an honest shape.
 
-**Comment hygiene, all languages: `skills/comment_style_hygiene.md` is the rulebook.** For `.das` in a folder whose `.lint_config` arms `force_clean_comments` the headline is that no comment outside the skill's kept set survives to a commit - scaffolding is welcome while you work, and the PR gate drains it (`skills/internal/make_pr.md`, the Comment drain row); elsewhere the kept set still holds and every other `.das` comment answers to the skill's deletion test. For C/C++ it is no NEW comments. The kept sets, teaching-code boundary, naming and code-shape rules all live in the skill; the `style-hygiene-auditor` agent applies them to every PR's new code (mandatory run in `skills/internal/make_pr.md`, findings persuade rather than block).
+**Comment hygiene, all languages: `skills/comment_style_hygiene.md` is the rulebook.** No folder arms formatter stripping any more: scaffolding is welcome while you work, and the PR gate HARVESTS the diff's added comments (`skills/internal/make_pr.md`, the Comment harvest row) - renames first, rules and facts into the folder's documents, site-local keepers as `//!` contract one-liners; every surviving `.das` comment answers to the skill's deletion test. For C/C++ it is no NEW comments. The kept sets, teaching-code boundary, naming and code-shape rules all live in the skill; the `style-hygiene-auditor` agent applies them to every PR's new code (mandatory run in `skills/internal/make_pr.md`, findings persuade rather than block).
 
 ## Key Directories
 
