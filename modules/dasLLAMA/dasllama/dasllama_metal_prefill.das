@@ -3088,7 +3088,7 @@ def private pf_devw_tiles(rows, d, kdim : int64; slow_fb : bool = false) : int64
     let tile_floor = slow_fb ? DEVW_WIDE_N_ROWS : DEVW_LONG_K_ROWS
     let tile_over = slow_fb ? DEVW_SMALL_PANEL : DEVW_BIG_PANEL
     if (pb > tile_over && rows >= tile_floor) {
-        for (tc in range64(2l, 9l)) {
+        for (tc in range64(2l, DEVW_MAX_TILES + 1l)) {
             if (d % (tc * 64l) == 0l && pb / uint64(tc) <= DEVW_SMALL_PANEL
                     && uint64(d / tc * kdim * 2l) <= g_pf_bwh_bytes) {
                 return tc
@@ -4900,6 +4900,10 @@ let DEVW_BIG_ROWS = 2048l
 // small M — engaged there it LOSES e2e despite winning its isolated site race
 let DEVW_LONG_K = 4096l
 let DEVW_LONG_K_ROWS = 1024l
+// deep-dense panels (24B+: 300MB+ up/gate/down) need tile counts far past the 8 the first
+// knee map raced; narrow tiles measured fine (a 20-tg tile dispatch still beat the kq-tg
+// fallback at 512 rows), so the only tile bars are divisibility, the knee, and the pool
+let DEVW_MAX_TILES = 32l
 var private g_pf_env_span = true
 var private g_pf_env_logits = true
 var private g_pf_env_attn = true
