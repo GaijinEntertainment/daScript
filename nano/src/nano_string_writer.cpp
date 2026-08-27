@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 #include "daScript/misc/string_writer.h"
 #include "daScript/nano_print.h"
+#include "nano_format.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -22,7 +23,7 @@ namespace das {
         char buf[128];
         va_list args;
         va_start(args, fmt);
-        int n = vsnprintf(buf, sizeof(buf), fmt, args);
+        int n = nano_vformat(buf, sizeof(buf), fmt, args);
         va_end(args);
         if ( n < 0 ) return w;
         size_t len = size_t(n) < sizeof(buf) ? size_t(n) : sizeof(buf) - 1;
@@ -67,8 +68,22 @@ namespace das {
     StringWriter & StringWriter::operator << (char * v)               { return write(v ? (const char*)v : ""); }
     StringWriter & StringWriter::operator << (const char * v)         { return write(v ? v : ""); }
     StringWriter & StringWriter::operator << (const string & v)       { return v.length() ? writeStr(v.c_str(), v.length()) : *this; }
-    StringWriter & StringWriter::operator << (float v)                { return writeFormatted(*this, fixed ? "%.9g" : "%g", double(v)); }
-    StringWriter & StringWriter::operator << (double v)               { return writeFormatted(*this, fixed ? "%.17g" : "%g", v); }
+    // floats stay on snprintf: nano_vformat is integer-only, and --gc-sections
+    // keeps the printf machinery out of any image that never prints a float
+    // snprintf returns what it WOULD have written; a truncated result must be
+    // clamped to the buffer or writeStr reads past it
+    StringWriter & StringWriter::operator << (float v) {
+        char fb[48];
+        int n = snprintf(fb, sizeof(fb), fixed ? "%.9g" : "%g", double(v));
+        if ( n >= int(sizeof(fb)) ) n = int(sizeof(fb)) - 1;
+        return n > 0 ? writeStr(fb, uint32_t(n)) : *this;
+    }
+    StringWriter & StringWriter::operator << (double v) {
+        char fb[48];
+        int n = snprintf(fb, sizeof(fb), fixed ? "%.17g" : "%g", v);
+        if ( n >= int(sizeof(fb)) ) n = int(sizeof(fb)) - 1;
+        return n > 0 ? writeStr(fb, uint32_t(n)) : *this;
+    }
 
     string FixedBufferTextWriter::str() const {
         DAS_VERIFY(size <= DAS_SMALL_BUFFER_SIZE);
@@ -227,7 +242,7 @@ void das_fatal_log ( const char * format, ... ) {
     char buf[512];
     va_list args;
     va_start(args, format);
-    vsnprintf(buf, sizeof(buf), format, args);
+    das::nano_vformat(buf, sizeof(buf), format, args);
     va_end(args);
     buf[sizeof(buf) - 1] = 0;
     das::das_nano_write(das::LogLevel::error, "", buf);

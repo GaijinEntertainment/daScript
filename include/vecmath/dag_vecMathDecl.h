@@ -10,7 +10,7 @@ typedef const struct mat33f& mat33f_cref;
 typedef const struct bbox3f& bbox3f_cref;
 typedef const struct bsph3f& bsph3f_cref;
 
-//either _TARGET_SIMD_SSE = 2,3,4 (SSE2, SSSE3, SSE4.1) or _TARGET_SIMD_NEON should be defined
+//either _TARGET_SIMD_SSE = 2,3,4 (SSE2, SSSE3, SSE4.1), _TARGET_SIMD_NEON or _TARGET_SIMD_SCALAR should be defined
 //however, header will try to auto-detect target
 
 #ifndef DECL_ALIGN16
@@ -47,8 +47,33 @@ typedef const struct bsph3f& bsph3f_cref;
 # endif
 #endif
 
+//if target is not defined, try to auto-detect target
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_SCALAR)
+  #if __SSE4_1__ || defined(__AVX__) || defined(__AVX2__)
+    #define _TARGET_SIMD_SSE 4
+  #elif __SSSE3__
+    #define _TARGET_SIMD_SSE 3
+  #elif defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP>=1)
+    #define _TARGET_SIMD_SSE 2
+  #endif
+#endif
+
+#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR)
+  #if defined(__ARM_NEON) || defined(__ARM_NEON__)
+    #define _TARGET_SIMD_NEON 1
+  #else
+    #define _TARGET_SIMD_SCALAR 1
+  #endif
+#endif
+
 #ifndef VECMATH_FINLINE
-  #define VECMATH_FINLINE __forceinline
+  #if defined(_TARGET_SIMD_SCALAR) && defined(_MSC_VER) && !defined(__clang__)
+    // forceinline through the file-wide float_control(precise) region is very
+    // expensive to compile on MSVC; the scalar backend has no speed contract
+    #define VECMATH_FINLINE inline
+  #else
+    #define VECMATH_FINLINE __forceinline
+  #endif
 #endif
 
 #ifndef VECMATH_INLINE
@@ -75,28 +100,9 @@ typedef const struct bsph3f& bsph3f_cref;
 # define NO_ASAN_INLINE VECMATH_FINLINE
 #endif
 
-//if target is not defined, try to auto-detect target
-#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_SCALAR)
-  #if __SSE4_1__ || defined(__AVX__) || defined(__AVX2__)
-    #define _TARGET_SIMD_SSE 4
-  #elif __SSSE3__
-    #define _TARGET_SIMD_SSE 3
-  #elif defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP>=1)
-    #define _TARGET_SIMD_SSE 2
-  #endif
-#endif
-
 #ifndef _TARGET_64BIT
   #if defined(_M_AMD64) || defined(_M_X64) || defined(_M_ARM64) || INTPTR_MAX != INT32_MAX
     #define _TARGET_64BIT 1
-  #endif
-#endif
-
-#if !defined(_TARGET_SIMD_SSE) && !defined(_TARGET_SIMD_NEON) && !defined(_TARGET_SIMD_SCALAR)
-  #if defined(__ARM_NEON) || defined(__ARM_NEON__)
-    #define _TARGET_SIMD_NEON 1
-  #else
-    #define _TARGET_SIMD_SCALAR 1
   #endif
 #endif
 

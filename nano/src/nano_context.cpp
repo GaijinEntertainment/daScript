@@ -3,8 +3,9 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/aot.h"
 
+#include "nano_format.h"
+
 #include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 // The nano Context. Everything here has a counterpart in src/runtime/context.cpp
@@ -31,15 +32,18 @@ namespace das {
         }
     }
 
-    void Context::setup(int totalVars, uint32_t globalStringHeapSize, CodeOfPolicies policies, AnnotationArgumentList options) {
+    // The options list is always empty here - the standalone emitter resolved
+    // every script option at compile time and wrote it into policies - so this
+    // reads policies directly where upstream merges the two.
+    void Context::setup(int totalVars, uint32_t globalStringHeapSize, CodeOfPolicies policies, AnnotationArgumentList) {
         if ( policies.abi_stamp != CodeOfPolicies::expected_abi_stamp() ) {
             DAS_FATAL_ERROR("CodeOfPolicies ABI stamp mismatch at Context::setup: host wrote 0x%llx, this libDaScriptNano expects 0x%llx - the generated code and these headers came from different daslang builds",
                 (unsigned long long) policies.abi_stamp,
                 (unsigned long long) CodeOfPolicies::expected_abi_stamp());
         }
-        verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
-        maxUnreservedSize = options.getUInt64Option("max_unreserved_size", policies.max_unreserved_size);
-        persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
+        verySafeContext = policies.very_safe_context;
+        maxUnreservedSize = policies.max_unreserved_size;
+        persistent = policies.persistent_heap;
         if ( persistent ) {
             heap = make_unique<PersistentHeapAllocator>();
             stringHeap = make_unique<PersistentStringAllocator>();
@@ -47,10 +51,10 @@ namespace das {
             heap = make_unique<LinearHeapAllocator>();
             stringHeap = make_unique<LinearStringAllocator>();
         }
-        heap->setInitialSize ( options.getIntOption("heap_size_hint", policies.heap_size_hint) );
-        heap->setLimit ( options.getUInt64OptionEx("heap_size_limit", "max_heap_allocated", policies.max_heap_allocated) );
-        stringHeap->setInitialSize ( options.getIntOption("string_heap_size_hint", policies.string_heap_size_hint) );
-        stringHeap->setLimit ( options.getUInt64OptionEx("string_heap_size_limit", "max_string_heap_allocated", policies.max_string_heap_allocated) );
+        heap->setInitialSize ( policies.heap_size_hint );
+        heap->setLimit ( policies.max_heap_allocated );
+        stringHeap->setInitialSize ( policies.string_heap_size_hint );
+        stringHeap->setLimit ( policies.max_string_heap_allocated );
         constStringHeap = make_shared<ConstStringAllocator>();
         totalVariables = totalVars;
         if ( globalStringHeapSize ) {
@@ -168,7 +172,7 @@ namespace das {
         char buffer[EXCEPTION_MESSAGE_SIZE];
         va_list args;
         va_start (args, message);
-        vsnprintf (buffer,EXCEPTION_MESSAGE_SIZE,message, args);
+        nano_vformat(buffer, EXCEPTION_MESSAGE_SIZE, message, args);
         va_end (args);
         throw_fatal_error(buffer, LineInfo());
     }
@@ -177,7 +181,7 @@ namespace das {
         char buffer[EXCEPTION_MESSAGE_SIZE];
         va_list args;
         va_start (args, message);
-        vsnprintf (buffer,EXCEPTION_MESSAGE_SIZE,message, args);
+        nano_vformat(buffer, EXCEPTION_MESSAGE_SIZE, message, args);
         va_end (args);
         throw_fatal_error(buffer, at ? *at : LineInfo());
     }
@@ -186,7 +190,7 @@ namespace das {
         char buffer[EXCEPTION_MESSAGE_SIZE];
         va_list args;
         va_start (args, message);
-        vsnprintf (buffer,EXCEPTION_MESSAGE_SIZE,message, args);
+        nano_vformat(buffer, EXCEPTION_MESSAGE_SIZE, message, args);
         va_end (args);
         throw_fatal_error(buffer, at);
     }

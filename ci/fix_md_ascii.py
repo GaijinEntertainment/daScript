@@ -7,6 +7,11 @@ whose non-ASCII cannot be transliterated (untranslatable script, new symbol)
 fails both modes and must either gain a mapping here or an exemption below.
 Files that are not valid UTF-8 are repaired first (CP-1252 reads and
 double-encoded runs — the mojibake this gate exists to prevent).
+
+Files named README.md or CHANGELIST.md ship to readers and keep their
+typography: they are prose, not rules or action items, so they are exempt
+from transliteration but still held to valid UTF-8 — mojibake in them is
+repaired (default) or flagged (--check).
 """
 import argparse
 import re
@@ -21,6 +26,9 @@ REPO = Path(__file__).resolve().parent.parent
 EXEMPT_PREFIXES = (
     "3rdparty/",
 )
+# shipped, human-facing: typography stays, only mojibake is policed
+SHIPPED_BASENAMES = {"README.md", "CHANGELIST.md"}
+
 EXEMPT_FILES = {
     "utils/internal/das-herd/LANGUAGE_SUPPORT_PLAN.md",  # non-English samples are the subject
     "history/examples/dictation/CADMUS_PLAN.md",         # archived non-English content
@@ -146,6 +154,12 @@ def main():
     for rel in list_targets():
         path = REPO / rel
         text, was_broken = read_repaired(path)
+        if rel.rsplit("/", 1)[-1] in SHIPPED_BASENAMES:
+            if was_broken:
+                dirty.append(rel)
+                if not args.check:
+                    path.write_bytes(text.encode("utf-8"))
+            continue
         if all(ord(c) < 128 for c in text) and not was_broken:
             continue
         fixed, residual = transliterate(text)

@@ -16,6 +16,18 @@
 #include <string.h>
 #include <math.h>
 
+// MSVC /fp:fast turns a per-lane float division into rcpps plus one Newton step (not IEEE, and it
+// overflows at the range ends) and may reassociate or contract; precise keeps this backend per-lane
+// IEEE like the SSE one. clang honors the same pragma and gcc turns fast-math off over the
+// header: the engine clang/gcc builds pass -ffast-math, which would also break the NaN and
+// second-operand rules of the plain-operator compares and min/max below. -mrecip=none too.
+#if defined(_MSC_VER) || defined(__clang__)
+#pragma float_control(precise, on, push)
+#elif defined(__GNUC__)
+#pragma GCC push_options
+#pragma GCC optimize("no-fast-math")
+#endif
+
 VECMATH_FINLINE float scalar_u2f(uint32_t u) { float r; memcpy(&r, &u, 4); return r; }
 VECMATH_FINLINE uint32_t scalar_f2u(float f) { uint32_t r; memcpy(&r, &f, 4); return r; }
 VECMATH_FINLINE float scalar_fmask(bool c) { return scalar_u2f(c ? 0xFFFFFFFFu : 0u); }
@@ -64,8 +76,8 @@ VECMATH_FINLINE vec4i v_ldui_half(const void *m) { vec4i r = {0, 0, 0, 0}; memcp
 VECMATH_FINLINE vec4f v_ldu_half(const void *m) { return v_cast_vec4f(v_ldui_half(m)); }
 VECMATH_FINLINE void v_prefetch(const void *m) { (void)m; }
 
-NO_ASAN_INLINE vec3f v_ldu_p3_safe(const float *m) { vec4f r = {m[0], m[1], m[2], 0.f}; return r; }
-NO_ASAN_INLINE vec4i v_ldui_p3_safe(const int *m) { vec4i r = {m[0], m[1], m[2], 0}; return r; }
+VECMATH_FINLINE vec3f v_ldu_p3_safe(const float *m) { vec4f r = {m[0], m[1], m[2], 0.f}; return r; }
+VECMATH_FINLINE vec4i v_ldui_p3_safe(const int *m) { vec4i r = {m[0], m[1], m[2], 0}; return r; }
 
 VECMATH_FINLINE vec4i v_ldush(const signed short *m)
 {
@@ -165,13 +177,22 @@ VECMATH_FINLINE bool v_check_xyz_any_true(vec4f a) { return (v_signmask(a) & 0b1
 
 VECMATH_FINLINE vec4f is_neg_special(vec4f a) { return v_cast_vec4f(v_srai(v_cast_vec4i(a), 31)); }
 
+// IEEE equality from the bits: clang/gcc -ffinite-math-only may compile a float == as ordered, and
+// v_is_nan relies on NaN != NaN. A NaN equals nothing, +0 equals -0.
+VECMATH_FINLINE bool scalar_eq(float a, float b)
+{
+  const uint32_t absMask = 0x7FFFFFFFu, infBits = 0x7F800000u;
+  uint32_t ua = scalar_f2u(a), ub = scalar_f2u(b);
+  bool nan = (ua & absMask) > infBits || (ub & absMask) > infBits;
+  return !nan && (ua == ub || ((ua | ub) & absMask) == 0);
+}
 VECMATH_FINLINE vec4f v_cmp_eq(vec4f a, vec4f b)
 {
-  vec4f r; for (int k = 0; k < 4; k++) r.f[k] = scalar_fmask(a.f[k] == b.f[k]); return r;
+  vec4f r; for (int k = 0; k < 4; k++) r.f[k] = scalar_fmask(scalar_eq(a.f[k], b.f[k])); return r;
 }
 VECMATH_FINLINE vec4f v_cmp_neq(vec4f a, vec4f b)
 {
-  vec4f r; for (int k = 0; k < 4; k++) r.f[k] = scalar_fmask(!(a.f[k] == b.f[k])); return r;
+  vec4f r; for (int k = 0; k < 4; k++) r.f[k] = scalar_fmask(!scalar_eq(a.f[k], b.f[k])); return r;
 }
 VECMATH_FINLINE vec4i v_cmp_eqi(vec4i a, vec4i b)
 {
@@ -237,32 +258,23 @@ VECMATH_FINLINE vec4i v_cvti_vec4i(vec4f a)
 {
   vec4i r; for (int k = 0; k < 4; k++) r.i[k] = scalar_trunc_to_int(a.f[k]); return r;
 }
-VECMATH_FINLINE vec4i v_cvtu_vec4i(vec4f a)
+VECMATH_FINLINE vec4i v_cvtu_vec4i_ieee(vec4f a)
 {
   vec4i r;
   for (int k = 0; k < 4; k++)
     r.i[k] = (int32_t)(uint32_t)(a.f[k] >= -0x1p63f && a.f[k] < 0x1p63f ? (int64_t)a.f[k] : 0); //cvttss: truncate; out of int64 range / NaN -> indefinite -> 0
   return r;
 }
-VECMATH_FINLINE vec4i v_cvtu_vec4i_ieee(vec4f a)
-{
-  vec4i r;
-  for (int k = 0; k < 4; k++)
-    r.i[k] = (int32_t)(uint32_t)(a.f[k] >= -0x1p63f && a.f[k] < 0x1p63f ? (int64_t)a.f[k] : 0);
-  return r;
-}
+VECMATH_FINLINE vec4i v_cvtu_vec4i(vec4f a) { return v_cvtu_vec4i_ieee(a); }
 VECMATH_FINLINE vec4f v_cvti_vec4f(vec4i a)
 {
   vec4f r; for (int k = 0; k < 4; k++) r.f[k] = (float)a.i[k]; return r;
-}
-VECMATH_FINLINE vec4f v_cvtu_vec4f(vec4i v)
-{
-  vec4f r; for (int k = 0; k < 4; k++) r.f[k] = (float)(uint32_t)v.i[k]; return r;
 }
 VECMATH_FINLINE vec4f v_cvtu_vec4f_ieee(vec4i v)
 {
   vec4f r; for (int k = 0; k < 4; k++) r.f[k] = (float)(uint32_t)v.i[k]; return r;
 }
+VECMATH_FINLINE vec4f v_cvtu_vec4f(vec4i v) { return v_cvtu_vec4f_ieee(v); }
 VECMATH_FINLINE vec4i v_cvt_roundi_ieee(vec4f a)
 {
   vec4i r; for (int k = 0; k < 4; k++) r.i[k] = scalar_round_to_int(a.f[k]); return r;
@@ -554,13 +566,11 @@ VECMATH_FINLINE vec4f v_abs(vec4f a)
   vec4f r; for (int k = 0; k < 4; k++) r.f[k] = scalar_u2f(scalar_f2u(a.f[k]) & 0x7FFFFFFFu); return r;
 }
 
-VECMATH_FINLINE vec4f v_sqrt4_fast(vec4f a)
+VECMATH_FINLINE vec4f v_sqrt(vec4f a)
 {
   vec4f r; for (int k = 0; k < 4; k++) r.f[k] = sqrtf(a.f[k]); return r;
 }
-VECMATH_FINLINE vec4f v_sqrt(vec4f a) { return v_sqrt4_fast(a); }
-VECMATH_FINLINE vec4f v_sqrt_fast_x(vec4f a) { vec4f r = a; r.f[0] = sqrtf(a.f[0]); return r; }
-VECMATH_FINLINE vec4f v_sqrt_x(vec4f a) { return v_sqrt_fast_x(a); }
+VECMATH_FINLINE vec4f v_sqrt_x(vec4f a) { vec4f r = a; r.f[0] = sqrtf(a.f[0]); return r; }
 
 VECMATH_FINLINE vec4f v_rot_1(vec4f a) { return scalar_perm(a, 1, 2, 3, 0); }
 VECMATH_FINLINE vec4f v_rot_2(vec4f a) { return scalar_perm(a, 2, 3, 0, 1); }
@@ -856,12 +866,20 @@ VECMATH_FINLINE vec4f v_round(vec4f a)
 }
 VECMATH_FINLINE vec4i v_cvt_roundi(vec4f a) { return v_cvt_trunci(v_round(a)); }
 
+// both products must stay rounded so a x a is exactly 0: volatile blocks the FMA contraction that
+// clang/gcc fast-math apply to each lane's mul and sub (the MSVC-only pragma above cannot)
+VECMATH_FINLINE float scalar_cross_lane(float a0, float b0, float a1, float b1)
+{
+  volatile float p = a0 * b0, q = a1 * b1;
+  return p - q;
+}
 VECMATH_FINLINE vec3f v_cross3(vec3f a, vec3f b)
 {
+  // (a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x)
   vec4f r;
-  r.f[0] = a.f[1] * b.f[2] - a.f[2] * b.f[1];
-  r.f[1] = a.f[2] * b.f[0] - a.f[0] * b.f[2];
-  r.f[2] = a.f[0] * b.f[1] - a.f[1] * b.f[0];
+  r.f[0] = scalar_cross_lane(a.f[1], b.f[2], a.f[2], b.f[1]);
+  r.f[1] = scalar_cross_lane(a.f[2], b.f[0], a.f[0], b.f[2]);
+  r.f[2] = scalar_cross_lane(a.f[0], b.f[1], a.f[1], b.f[0]);
   r.f[3] = 0.f;
   return r;
 }
@@ -969,3 +987,9 @@ VECMATH_FINLINE void v_mat43_make_from_43cu_unsafe(mat43f &tmV, const float *con
   vec4f r2 = {m43[2], m43[5], m43[8], m43[8]};
   tmV.row0 = r0; tmV.row1 = r1; tmV.row2 = r2;
 }
+
+#if defined(_MSC_VER) || defined(__clang__)
+#pragma float_control(pop)
+#elif defined(__GNUC__)
+#pragma GCC pop_options
+#endif

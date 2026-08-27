@@ -15,7 +15,13 @@
 namespace das {
 
     static void nano_default_print ( const char * text ) {
+#if defined(__GLIBCXX__) && !defined(_GLIBCXX_HAS_GTHREADS)
+        // No stdout to write to, and reaching for one pulls all of stdio in.
+        // An embedder on such a target sets the sink before anything can print.
+        (void) text;
+#else
         fputs(text, stdout);
+#endif
     }
 
     static das_nano_print_sink g_nano_sink = &nano_default_print;

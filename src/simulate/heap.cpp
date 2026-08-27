@@ -73,6 +73,7 @@ namespace das {
     }
 
     void PersistentHeapAllocator::report() {
+#if DAS_HEAP_REPORT
         LOG tout(LogLevel::debug);
         for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {
             if ( model.shoe.chunks[si] ) tout << "decks of size " << int((si+1)<<4) << "\n";
@@ -131,6 +132,7 @@ namespace das {
             }
 #endif
         }
+#endif
     }
 
     char * PersistentHeapAllocator::impl_allocate ( uint64_t size ) {
@@ -205,11 +207,13 @@ namespace das {
     void LinearHeapAllocator::shrink() { model.shrink(); }
 
     void LinearHeapAllocator::report() {
+#if DAS_HEAP_REPORT
         LOG tout(LogLevel::debug);
         for ( auto ch=model.chunk; ch; ch=ch->next ) {
             tout << HEX << intptr_t(ch->data) << DEC << "\t"
                 << ch->offset << " of " << ch->size << "\n";
         }
+#endif
     }
 
     bool LinearHeapAllocator::isOwnPtr ( char * ptr, uint64_t ) { return model.isOwnPtr(ptr); }
@@ -324,6 +328,10 @@ namespace das {
         impl_free ( text, length + 1 );
     }
 
+#if DAS_HEAP_REPORT
+    // Only the report() bodies below call this, plus simulate_gc.cpp, which is
+    // never built with reporting off. It is guarded because escapeString builds
+    // a std::string, and that is the whole reason escape_string.cpp gets linked.
     char * presentStr ( char * buf, char * ch, int size ) {
         auto str = escapeString(ch);
         strncpy(buf,str.c_str(),size);
@@ -333,6 +341,7 @@ namespace das {
         buf[size-1] = 0;
         return buf;
     }
+#endif
 
     char * PersistentStringAllocator::impl_allocate ( uint64_t size ) {
         if ( limit==0 || model.bytesAllocated()+size<=limit ) {
@@ -401,6 +410,7 @@ namespace das {
     }
 
     void PersistentStringAllocator::report() {
+#if DAS_HEAP_REPORT
         LOG tout(LogLevel::debug);
         char buf[33];
         for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {
@@ -436,6 +446,7 @@ namespace das {
             }
             tout << " big stuff total size:" << (totalBigStuff + 1023) / 1024 << " kb\n";
         }
+#endif
     }
 
     LinearStringAllocator::LinearStringAllocator() { model.alignMask = 3; }
@@ -475,6 +486,7 @@ namespace das {
     void LinearStringAllocator::setGrowFunction( CustomGrowFunction && fun ) { model.customGrow = fun; }
 
     void LinearStringAllocator::report() {
+#if DAS_HEAP_REPORT
         LOG tout(LogLevel::debug);
         char buf[33];
         for ( auto ch=model.chunk; ch; ch=ch->next ) {
@@ -490,6 +502,7 @@ namespace das {
                 txt += sz;
             }
         }
+#endif
     }
 
     void LinearStringAllocator::forEachString ( const callable<void (const char *)> & fn ) {
@@ -504,6 +517,7 @@ namespace das {
         }
     }
 
+#if DAS_DEBUG_INFO_NAME_CACHE
     char * DebugInfoAllocator::allocateCachedName ( const string & name ) {
         auto it = stringLookup.find(name);
         if ( it!=stringLookup.end() )  return it->second;
@@ -514,4 +528,5 @@ namespace das {
         stringBytes += bytes;
         return nname;
     }
+#endif
 }

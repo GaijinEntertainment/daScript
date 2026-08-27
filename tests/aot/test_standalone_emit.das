@@ -187,6 +187,16 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> equal(brace_balance(files.source), 0, "unbalanced braces in the generated C++")
     }
 
+    t |> run("a compile-time macro stays out of the standalone context") @(t : T?) {
+        // AOT mode used to force-export every generated struct ctor, macro classes
+        // included; that rooted the whole macro into the simulated context and the
+        // [no_aot] check below then reported its visit() as an unemittable function.
+        let source = generate_standalone_source(t, "_standalone_macro_fixture", out_dir)
+        t |> success(find(source, "5050") >= 0, "the macro's compile-time sum is baked into the source")
+        t |> success(find(source, "BakeSum") < 0, "the macro class does not reach the generated source")
+        t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
+    }
+
     t |> run("a used [no_aot] function is a collected error, not a runtime crash") @(t : T?) {
         expect_emit_failure(t, "_standalone_no_aot_fixture", out_dir)
     }

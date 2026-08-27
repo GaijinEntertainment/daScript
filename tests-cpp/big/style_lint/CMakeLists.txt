@@ -12,7 +12,7 @@ foreach(_fixture ${STYLE_LINT_FIXTURES})
         NAME style_lint_${_name}
         COMMAND $<TARGET_FILE:daslang>
                 ${PROJECT_SOURCE_DIR}/utils/lint/main.das
-                -- --comment-hygiene true ${_fixture}
+                -- --comment-hygiene true --lint-fixtures true ${_fixture}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(style_lint_${_name} PROPERTIES
         LABELS "big;style_lint"

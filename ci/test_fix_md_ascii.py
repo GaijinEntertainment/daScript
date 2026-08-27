@@ -32,5 +32,22 @@ class MarkdownAsciiTest(unittest.TestCase):
         )
 
 
+    def test_shipped_basenames_keep_typography_but_not_mojibake(self):
+        import fix_md_ascii as m
+        self.assertIn("README.md", m.SHIPPED_BASENAMES)
+        self.assertIn("CHANGELIST.md", m.SHIPPED_BASENAMES)
+        # clean unicode typography survives untouched...
+        clean = "a — b -> °C"
+        self.assertTrue(any(ord(c) >= 128 for c in clean))
+        # ...while a CP-1252 read is still repaired to the intended character
+        import tempfile, pathlib
+        with tempfile.TemporaryDirectory() as td:
+            f = pathlib.Path(td) / "README.md"
+            f.write_bytes("café".encode("cp1252"))
+            text, was_broken = m.read_repaired(f)
+            self.assertTrue(was_broken)
+            self.assertEqual(text, "café")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,18 @@
 #include "daScript/misc/callable.h"
 #include "daScript/misc/anyhash.h"
 
+// Heap reporting is a host diagnostic: it walks every deck and formats it.
+// A build with nothing to report to compiles the bodies away.
+#ifndef DAS_HEAP_REPORT
+#define DAS_HEAP_REPORT 1
+#endif
+
+// The debug-info name cache is compiler-side: it interns names on the way into
+// debug info. A build that only runs already-generated code never fills it.
+#ifndef DAS_DEBUG_INFO_NAME_CACHE
+#define DAS_DEBUG_INFO_NAME_CACHE 1
+#endif
+
 namespace das {
 
     class StackAllocator {
@@ -744,10 +756,15 @@ namespace das {
         virtual uint64_t grow ( uint64_t size ) override {
             return size;
         }
-        char * allocateCachedName ( const string & name );
         das_hash_map<uint64_t,TypeInfo *>    lookup;
+#if DAS_DEBUG_INFO_NAME_CACHE
+        // Every caller of this lives in src/ast - it is how the compiler interns
+        // the names it bakes into debug info. A runtime with no compiler in it
+        // has none, and the two maps keyed by string are not free to carry.
+        char * allocateCachedName ( const string & name );
         das_hash_map<string, char *>         stringLookup;
         das_hash_map<string, wchar_t *>      stringWideLookup;
+#endif
         uint64_t                             stringBytes = 0;
     };
 }

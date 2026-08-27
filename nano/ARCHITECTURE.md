@@ -91,12 +91,13 @@ The three `require $` headers above.
 `src/misc/globals.cpp` owns upstream (that file also carries the job-queue globals, and
 `job_que.h` is threads).
 
-`src/nano_string_writer.cpp` - `daScript/misc/string_writer.h` implemented over `snprintf`. The
-header is upstream and unmodified; only fmt had to go, and it was reached through one template.
+`src/nano_string_writer.cpp` - `daScript/misc/string_writer.h` implemented over `nano_format`
+for integers and `snprintf` for floats, so an image that never prints a float never links printf.
+The header is upstream and unmodified; only fmt had to go, and it was reached through one template.
 
 ## What nano reuses verbatim
 
-Thirteen sources compile straight out of `src/`, listed in `nano/CMakeLists.txt`. Adding one is a
+Fourteen sources compile straight out of `src/`, listed in `nano/CMakeLists.txt`. Adding one is a
 decision: it must compile with no edit to the shared tree. When it needs an edit, the fix goes
 upstream as a **carve** - splitting the runtime half of a file away from its compiler half - not
 into a fork here. `src/simulate/simulate_gc_pod.cpp`, `src/simulate/annotation_arguments.cpp`,
@@ -138,7 +139,7 @@ of the things that panics, and a longer message is truncated rather than allocat
 
 A tier is what a script uses, not a build option: linking simply fails when a script reaches past
 what nano carries. `examples/standalone/` has one example per tier, and this repo additionally
-links all four into one program as the `nano_ctx` test.
+links all five into one program as the `nano_ctx` test.
 
 | tier | what it uses | example |
 |---|---|---|
@@ -146,6 +147,7 @@ links all four into one program as the `nano_ctx` test.
 | B | arrays, tables, `new`/`delete` through the scope-free path | `02_heap` |
 | C | lambdas, function pointers, generators - the runtime function tables | `03_closures` |
 | output | `print` reaching the embedder's sink | `04_c_binding` |
+| A + build time | a macro reads a data file while the script compiles and bakes a table | `05_compile_time_table` |
 
 Above these sits everything `src/simulate/runtime_string.cpp` provides - string interpolation and
 the string builders - which nano leaves out because it is where fmt comes back. A script that
@@ -166,13 +168,34 @@ a runtime the target has none of; and the smart-pointer leak ledger opts out thr
 arm-none-eabi ships no libatomic for. Each is chosen only when libstdc++ was built without
 gthreads, so a hosted build is untouched.
 
-**Size is mostly not nano.** On cortex-m4 with `-Os` and `--gc-sections`, the tier-A example
-links to 89,664 bytes of `.text`: about 29 KB is the nano runtime, 10 KB the compiled script,
-and 54 KB the C library. Of that C library the largest single item is the printf machinery
-(`_svfprintf_r`, `_dtoa_r`, `_vfiprintf_r`, ~11.5 KB), reached because the panic path formats
-its message with `vsnprintf`. An integer-only formatter, dropping the heap's `report()`
-virtuals, and resolving libstdc++'s `__throw_*` helpers locally are each worth kilobytes and
-none of them has been done.
+**Size is mostly not nano, and the trimmable part has been trimmed.** On cortex-m4 with `-Os`
+and `--gc-sections`, the tier-A example links to 75,540 bytes of `.text` (down from 89,664):
+the panic path formats through `nano_format.cpp`, an integer-only formatter, so newlib's printf
+machinery enters only an image that actually prints floats; the heap's `report()` bodies compile
+out under `DAS_HEAP_REPORT=0`; `nano_nothrow.cpp` resolves libstdc++'s `__throw_*` helpers
+locally. What remains is decided by the program, not the runtime: `var x : double` links double
+soft-float, `is Foo` needs RTTI, and mutating `std::string` keeps the unwinder in - the string
+cluster (~9 KB) is the one left worth an arc of its own.
+
+**Standalone prunes the module list; regular AOT does not.** A program that requires a macro
+module carries that module's dependencies - `ast`, `ast_core`, `rtti_core` - in its module list,
+and the emitter writes an `aot_require` header for each. A regular AOT build links the whole
+runtime and does not care; nano shadows `ast.h` with a minimal version, so the full
+`ast_expressions.h` fails against it. `getRequiredModulesFor` and `dumpDependencies` therefore
+take a `prune_to_used` flag that only `aot_standalone.das` sets, keeping modules that own a
+function, struct or enum the runtime still reaches.
+
+Two things that pass for obvious and are not. The dependency edge is NOT followed transitively:
+a program requires its macro module, so walking require edges from the main module drags the whole
+macro chain straight back and prunes nothing. And the forward-declaration sweep needs the same
+filter as the include list - a struct in a dropped module has no C++ to declare, and a das module
+named `option` emits `namespace option`, which collides with the real `das::option`.
+
+**`code_of_policies.h` includes a header it does not use.** Line 4 pulls in
+`annotation_arguments.h` - a `vector` of a struct holding two `std::string`s - and names nothing
+from it. Every embedder's TU pays for that, not just nano's. Nano sidesteps it with its own empty
+shadow of the header; dropping the include upstream would be the real fix, but it is transitive,
+so somebody has to find out who leans on it first.
 
 **Floats print differently.** The full runtime formats through fmt, which prints the shortest
 round-tripping form; nano prints `%g`. Same value, shorter text. This shows only in log output.

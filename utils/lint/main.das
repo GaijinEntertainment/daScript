@@ -223,9 +223,10 @@ def set_skip_reason(file : string; lint_fixtures : bool; var result : LintResult
     }
     // the lint tool's own rule fixtures violate rules BY DESIGN (warning-expectation
     // files carry no `expect` directive, so the content skip above misses them).
-    // normalize() emits the platform's preferred separator - fold to forward slashes
-    if (normalize(file) |> replace("\\", "/") |> find("utils/lint/tests/") >= 0
-            || (!lint_fixtures && is_lint_fixture_name(base_name(file)))) {
+    // --lint-fixtures is how this tool's OWN tests ask to see those findings, so it
+    // lifts both arms; normalize() emits the platform's preferred separator.
+    if (!lint_fixtures && (normalize(file) |> replace("\\", "/") |> find("utils/lint/tests/") >= 0
+            || is_lint_fixture_name(base_name(file)))) {
         result.skip_reason = "(lint rule fixture)"
         return true
     }

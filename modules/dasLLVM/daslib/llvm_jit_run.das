@@ -294,8 +294,15 @@ def private reopen_and_gc_dll(var dll : DLLHandle?&; output_path : string; funcs
                               keep_objs : array<string>) {
     dll.reset()
     dll = get_dll_by_path(output_path)
+    // linked ok but unloadable = eaten between the two; the panic text carries the diagnosis
+    if (dll.handle == null) {
+        panic("LLVM JIT: {output_path}.dll linked but cannot be loaded back - the file is missing or unreadable. On Windows check antivirus quarantine and exclude the .jitted_scripts directory from real-time scanning.\n")
+    }
     let (missing, disabling) = get_dll_missing(funcs, disabled, dll, uids)
-    assert(missing |> empty() && disabling |> empty())
+    if (!(missing |> empty()) || !(disabling |> empty())) {
+        let names = join([for (mf in missing); "{mf.name}"], ", ")
+        panic("LLVM JIT: reopened {output_path}.dll disagrees with what was just written - {length(missing)} function(s) missing or hash-mismatched ({names}), {length(disabling)} disabled-but-present\n")
+    }
     if (!(dll_hash_basename |> empty())) {
         var keep_names : table<string>
         for (obj in keep_objs) {

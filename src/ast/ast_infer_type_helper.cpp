@@ -815,7 +815,9 @@ namespace das {
             if (fromGeneric) {
                 ctor->fromGeneric = getOrCreateDummy(var->module);
             }
-            bool export_for_aot = !var->cppLayout && (daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_isInAot);
+            // AOT never emits a macro class, so exporting its ctor claims a caller that
+            // cannot exist - and that claim roots the whole macro into the simulated context
+            bool export_for_aot = !var->cppLayout && !var->macroInterface && (daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_isInAot);
             ctor->exports = alwaysExportInitializer || export_for_aot;
             extraFunctions.push_back(ctor);
             reportAstChanged();

@@ -28,25 +28,42 @@ context is an object with a lifetime.
 
 ## What it costs
 
-The four examples under `examples/standalone/`, built for x64 with MSVC, next to
-the equivalent program on the full runtime:
+The examples under `examples/standalone/`, next to the equivalent program on the
+full runtime. `.exe` is x64 MSVC; `.text` is arm-none-eabi-gcc 13.2 for a
+cortex-m4 with `-Os --gc-sections` and newlib.
 
-| program | tier | size |
-|---|---|---|
-| `01_pure` | POD compute, no heap | 120 KB |
-| `02_heap` | arrays, tables, `new`/`delete` | 129 KB |
-| `03_closures` | lambdas, function pointers, generators | 139 KB |
-| `04_c_binding` | C drives the loop, das decides, `print` | 151 KB |
-| full-runtime standalone context, for scale | | 463 KB |
+| program | tier | x64 `.exe` | cortex-m4 `.text` |
+|---|---|---|---|
+| `01_pure` | POD compute, no heap | 136 KB | 75,540 |
+| `02_heap` | arrays, tables, `new`/`delete` | 148 KB | 80,612 |
+| `03_closures` | lambdas, function pointers, generators | 154 KB | 84,420 |
+| `04_c_binding` | C drives the loop, das decides, `print` | 166 KB | 91,520 |
+| `05_compile_time_table` | a CSV baked into a table by the compiler | 144 KB | 78,028 |
+| full-runtime standalone context, for scale | | 472 KB | - |
 
-Those numbers include the platform's C runtime, so what they measure is the
-difference nano makes on a host - not an embedded footprint.
+The x64 column includes the platform's C runtime, so what it measures is the
+difference nano makes on a host, not an embedded footprint. The cortex-m4 column
+is the real one: of `01_pure`'s 75,540 bytes, roughly 29 KB is the nano runtime,
+10 KB the compiled script, and the rest the C library. `ARCHITECTURE.md` says
+where the C library goes and what is worth trimming.
 
-On bare metal it is smaller than any of that suggests. The same `01_pure`
-cross-compiled for a cortex-m4 (`-Os`, `--gc-sections`, arm-none-eabi-gcc 13.2,
-newlib) links to **89,664 bytes** of `.text` - of which the nano runtime is about
-**29 KB**, the compiled script 10 KB, and the C library the remaining 54 KB.
-`ARCHITECTURE.md` says where the C library goes and what is worth trimming.
+Most of what is left is decided by the program, not by nano. A script that says
+`var x : double` links double soft-float; one that says `is Foo` needs RTTI. The
+runtime is the floor, and the floor is not where the interesting savings are -
+which is what `05_compile_time_table` is about.
+
+## Doing the work at compile time
+
+`05_compile_time_table` reads a thermistor calibration CSV **while the script
+compiles**, inverts the curve and bakes an evenly spaced lookup table into the
+generated C++. The file, the parser, the search and the interpolation stay on the
+workstation; the device gets a table, an index and a lerp. Nothing in the linked
+image can parse anything - `strtol`, `strtod`, `sscanf`, `atoi`, `fopen` and
+`fread` are all absent from it.
+
+That is the argument for this tier. The runtime being small is worth something,
+but a macro that moves a whole computation to build time is worth more, and
+daslang macros are ordinary daslang.
 
 ## What it leaves out
 
@@ -55,6 +72,13 @@ announces itself at build time rather than becoming a program that quietly grew.
 Absent: string interpolation and the string builders (this is where fmt comes
 back), every builtin module including `math`, the GC, the debugger, the JIT, the
 serializer, the profiler, threads, and the file system.
+
+Panic and fatal messages format through nano's own integer-only formatter: `%s`,
+`%d`/`%i`, `%u`, `%x`, `%p` and `%%`, with `l`/`ll` widths - no floats, no field
+width or precision. Scripts printing floats still work (that path uses the C
+library's `snprintf`, and only links it when a float is actually printed); it is
+the embedder-facing `das_fatal_log`/panic formatting that is deliberately this
+narrow.
 
 `ARCHITECTURE.md` beside this file explains what nano is made of and lists the
 trades it makes.
