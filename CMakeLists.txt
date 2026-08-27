@@ -2072,8 +2072,10 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/find-dupe/tests/
     FILES_MATCHING PATTERN "*.das"
 )
 
-# Install utils/common (git-aware staleness signature used by
-# utils/mcp/tools/cpp_common for source-search staleness tracking).
+# Install utils/common. The GLOB covers every shared module, which is what keeps the shipped MCP
+# server startable: it runs interpreted with no -project, and its require graph reaches
+# utils/common/arch_citations.das (via utils/mcp/tools/arch_common) and
+# utils/common/git_signature.das (via utils/mcp/tools/cpp_common).
 file(GLOB DAS_UTILS_COMMON_FILES ${PROJECT_SOURCE_DIR}/utils/common/*.das)
 install(FILES ${DAS_UTILS_COMMON_FILES} DESTINATION utils/common)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/common/tests/

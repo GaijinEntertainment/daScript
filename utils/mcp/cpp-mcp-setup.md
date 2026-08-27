@@ -15,7 +15,7 @@ cpp-mcp/
   bin/cpp-mcp[.exe]            # the server (statically linked; AOT-compiled hot paths)
   utils/mcp/*.das              # server sources (compiled at startup)
   utils/mcp/tools/*.das
-  utils/common/git_signature.das
+  utils/common/*.das           # shared modules the tools require
   utils/mcp/daslang-mcp-msvc.cmd   # Windows vcvars launcher
   tree-sitter-daslang/*.yml    # ast-grep rule files (loaded at runtime)
   daslib/                      # daslang standard library (sources)

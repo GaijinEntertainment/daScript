@@ -15,9 +15,8 @@ require math
 require strings
 require daslib/strings_boost
 require daslib/rtti
-require daslib/regex
-require daslib/regex_boost
 require ../common/parallel_workers.das
+require ../common/arch_citations.das
 
 let JSON_PREFIX = "##lint##\n"
 
@@ -257,157 +256,10 @@ def run_rule_docs_pass(folders : array<string>) : int {
     return found
 }
 
-// An `arch(at=...)` citation as written in a .das source. LINT026 reads the SOURCE rather than
-// the AST: the annotation is an inert builtin marker (src/builtin/module_builtin_runtime.cpp) so
-// that citing a document costs a build nothing, and a citation must be checked even in a file
-// this environment cannot compile. A match with `//` earlier on its line is prose or a
-// commented-out annotation and is skipped; one inside a string literal or a block comment is
-// not, so a fixture that plants citation text assembles it rather than spelling it out.
-var private ARCH_CITE <- %regex~arch\s*\(\s*at\s*=\s*"([^"]*)"%%
-
-// One `[arch]` citation, split at the first '#'. `doc` is normalized against the CITING file's
-// folder, so it compares equal to the same document reached from anywhere else in the tree;
-// `anchor` is empty when the citation carries no '#' at all.
-struct private ArchCitation {
-    line : int
-    doc : string
-    anchor : string
-    raw : string
-}
-
-// One `{#anchor}` a heading declares, with the line that declares it.
-struct private MdAnchor {
-    name : string
-    line : int
-}
-
-// The anchors of every document a run has resolved so far. `counts` is keyed "<doc>#<anchor>"
-// so it answers the duplicate question in one lookup; `known` records existence separately,
-// because a citation naming a missing file must not read as a missing anchor.
-struct private ArchDocs {
-    counts : table<string; int>
-    known : table<string; bool>
-}
-
-// The one spelling a path is compared under: lexical, so it works on a document that is not
-// there, and '/'-folded, so a Windows walk and a citation agree.
-def private arch_path(path : string) : string {
-    return normalize(path) |> replace("\\", "/")
-}
-
-// Where a match sits: its 1-based line, and the offset that line starts at - which is what lets
-// the scan tell an annotation from the same text inside a `//` comment.
-struct private SrcPos {
-    line : int
-    line_start : int
-}
-
-// Byte offsets (ascending) to source positions in one pass over the bytes. Counting newlines
-// with find() per citation would re-walk the source from the top each time.
-def private positions_of_offsets(text : string; offsets : array<int>) : array<SrcPos> {
-    var out : array<SrcPos>
-    out |> reserve(length(offsets))
-    peek_data(text) $(d) {
-        var line = 1
-        var start = 0
-        var at = 0
-        for (off in offsets) {
-            while (at < off) {
-                if (int(d[at]) == '\n') {
-                    line ++
-                    start = at + 1
-                }
-                at ++
-            }
-            out |> push(SrcPos(line = line, line_start = start))
-        }
-    }
-    return <- out
-}
-
-def private collect_arch_citations(file, text : string) : array<ArchCitation> {
-    var out : array<ArchCitation>
-    var raws : array<string>
-    var offsets : array<int>
-    regex_foreach(ARCH_CITE, text) $(at) {
-        offsets |> push(at.x)
-        raws |> push(regex_group(ARCH_CITE, 1, text))
-        return true
-    }
-    return <- out if (empty(raws))
-    let positions <- positions_of_offsets(text, offsets)
-    let folder = dir_name(file)
-    for (raw, off, pos in raws, offsets, positions) {
-        let slashes = find(text, "//", pos.line_start)
-        continue if (slashes >= 0 && slashes < off)
-        let hash = find(raw, "#")
-        if (hash <= 0 || hash == length(raw) - 1) {
-            // shape, not resolution: the compiler rejects this on a function, but a structure
-            // takes the marker unvalidated (one annotation per name), so lint owns it there
-            out |> push(ArchCitation(line = pos.line, raw = raw))
-            continue
-        }
-        out |> push(ArchCitation(line = pos.line, raw = raw, anchor = slice(raw, hash + 1),
-            doc = arch_path(path_join(folder, slice(raw, 0, hash)))))
-    }
-    return <- out
-}
-
-// Every `{#anchor}` a heading in `path` declares, in file order. Only a heading SUFFIX counts -
-// `## <title> {#anchor}` at any level, the brace group last on the line. A `{#...}` elsewhere is
-// prose about anchors, not a section identity.
-def private collect_md_anchors(path : string) : array<MdAnchor> {
-    var out : array<MdAnchor>
-    let text = fread(path)
-    if (!empty(text)) {
-        var lineno = 0
-        for (line in split(text, "\n")) {
-            lineno ++
-            let t = line |> strip
-            continue if (!(t |> starts_with("#")) || !(t |> ends_with("}")))
-            let open = rfind(t, "\{#")
-            continue if (open < 0)
-            let name = slice(t, open + 2, length(t) - 1)
-            continue if (empty(name))
-            out |> push(MdAnchor(name = name, line = lineno))
-        }
-    }
-    return <- out
-}
-
-// True when `doc` exists, indexing its anchors on first sight.
-def private arch_doc_exists(var docs : ArchDocs; doc : string) : bool {
-    if (!key_exists(docs.known, doc)) {
-        let st = stat(doc)
-        let ok = st.is_valid && st.is_reg
-        docs.known[doc] = ok
-        if (ok) {
-            for (a in collect_md_anchors(doc)) {
-                let key = "{doc}#{a.name}"
-                docs.counts[key] = (docs.counts ?[key] ?? 0) + 1
-            }
-        }
-    }
-    return docs.known[doc]
-}
-
-// Forward direction: a citation names a document section that must be there, exactly once.
-// An anchor declared twice is worse than a missing one - the citation reads as precise and
-// points at whichever section the reader finds first.
+// Forward direction: one finding per citation the shared scanner
+// (`utils/common/arch_citations.das`) cannot resolve, in that scanner's words.
 def private report_arch_citation(file : string; c : ArchCitation; var docs : ArchDocs) : int {
-    var reason = ""
-    if (empty(c.anchor)) {
-        reason = "malformed citation (expected <doc>.md#<anchor>)"
-    } elif (!arch_doc_exists(docs, c.doc)) {
-        reason = "no such file"
-    } else {
-        let n = docs.counts ?["{c.doc}#{c.anchor}"] ?? 0
-        if (n == 0) {
-            reason = "no such anchor"
-        } elif (n > 1) {
-            reason = "anchor appears {n} times"
-        }
-    }
+    let reason = citation_failure_reason(docs, c)
     return 0 if (empty(reason))
     print("{file}:{c.line}: LINT026: [arch] citation does not resolve - {reason} (\"{c.raw}\")\n")
     return 1

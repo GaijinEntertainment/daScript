@@ -40,6 +40,8 @@ require tools/program_log public
 require tools/live public
 require tools/detect_duplicates public
 require tools/export_corpus public
+require tools/arch_of public
+require tools/arch_sites public
 
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
     var err : string
@@ -3319,5 +3321,149 @@ def test_project_root_invalid_dir(t : T?) {
         t |> success(is_error, "should be error -- text={text}")
         t |> success(find(text, PROOT_MISSING) >= 0,
                      "should still report missing prereq -- text={text}")
+    }
+}
+
+// Every citation these fixtures plant is assembled from ARCH_ANN rather than spelled out: the
+// LINT026 forward pass reads source and skips only `//` comments, so a citation spelled out in
+// one of the string literals below would be a citation made by THIS file, against a document
+// utils/mcp does not carry.
+let ARCH_ANN = "arch"
+
+// A temp folder holding a document and the code citing it. Both sides have to live under one
+// root because arch_sites walks the subtree the DOCUMENT owns. `code.das` cites twice: once
+// into a section the document declares, once into an anchor it does not.
+def private plant_arch_fixture(name : string; var err : string&) : string {
+    let dir = create_temp_directory(name, err)
+    return "" if (empty(dir))
+    fwrite(path_join(dir, "ARCHITECTURE.md"), build_string() $(var w) {
+        w |> write("# Doc\n\n## Tokenizer \{#tokenizer\}\n\nThe tokenizer section body.\n\n")
+        w |> write("### Details \{#details\}\n\nA subsection stays inside its parent.\n\n")
+        w |> write("## Buffers \{#buffers\}\n\nThe buffers section body.\n")
+    })
+    fwrite(path_join(dir, "code.das"), build_string() $(var w) {
+        w |> write("options gen2\n\n")
+        w |> write("[{ARCH_ANN}(at=\"ARCHITECTURE.md#tokenizer\")]\ndef scan_tokens \{\n\}\n\n")
+        w |> write("[{ARCH_ANN}(at=\"ARCHITECTURE.md#gone\")]\ndef dangling \{\n\}\n")
+    })
+    return dir
+}
+
+[test]
+def test_arch_of(t : T?) {
+    t |> run("a resolving citation carries the cited section text") <| @(t : T?) {
+        var terr : string
+        let dir = plant_arch_fixture("mcp_arch_of_test", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_arch_of(path_join(dir, "code.das")), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "a readable file is not a tool failure -- text={text}")
+        t |> success(find(text, "code.das:3:") >= 0, "the citation is reported at its own line -- text={text}")
+        t |> success(find(text, "symbol: scan_tokens") >= 0, "the annotated function is named -- text={text}")
+        t |> success(find(text, "## Tokenizer \{#tokenizer\}") >= 0, "the section opens at its heading -- text={text}")
+        t |> success(find(text, "The tokenizer section body.") >= 0, "the section body is returned -- text={text}")
+        t |> success(find(text, "A subsection stays inside its parent.") >= 0,
+            "a deeper heading does not end the section -- text={text}")
+        t |> success(find(text, "The buffers section body.") < 0,
+            "the next same-level heading ends it -- text={text}")
+        rmdir_rec(dir)
+    }
+    t |> run("a dangling citation reports LINT026's reason") <| @(t : T?) {
+        var terr : string
+        let dir = plant_arch_fixture("mcp_arch_dangling_test", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        var text : string
+        var is_error = false
+        parse_result(do_arch_of(path_join(dir, "code.das")), text, is_error)
+        t |> success(find(text, "does not resolve - no such anchor") >= 0,
+            "lint's own wording, so one tool's answer reads as the other's -- text={text}")
+        t |> success(find(text, "symbol: dangling") >= 0, "the dangling citation still names its symbol -- text={text}")
+        rmdir_rec(dir)
+    }
+    t |> run("the symbol filter keeps one citation") <| @(t : T?) {
+        var terr : string
+        let dir = plant_arch_fixture("mcp_arch_symbol_test", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        var text : string
+        var is_error = false
+        parse_result(do_arch_of(path_join(dir, "code.das"), "scan_tokens"), text, is_error)
+        t |> success(find(text, "symbol: scan_tokens") >= 0, "the named symbol's citation is kept -- text={text}")
+        t |> success(find(text, "symbol: dangling") < 0, "the other symbol's citation is dropped -- text={text}")
+        rmdir_rec(dir)
+    }
+    t |> run("a missing file is a tool failure") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_arch_of("nonexistent_arch_file_12345.das"), text, is_error)
+        t |> success(is_error, "should be error -- text={text}")
+        t |> success(find(text, "not found") >= 0, "should mention file not found -- text={text}")
+    }
+    t |> run("a file citing nothing says so") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_arch_of(fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(!is_error, "no citations is not a failure -- text={text}")
+        t |> success(find(text, "No [arch] citations") >= 0, "should report an empty scan -- text={text}")
+    }
+}
+
+[test]
+def test_arch_sites(t : T?) {
+    t |> run("the census finds the citations planted in the document's subtree") <| @(t : T?) {
+        var terr : string
+        let dir = plant_arch_fixture("mcp_arch_sites_test", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_arch_sites(path_join(dir, "ARCHITECTURE.md")), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "an existing document is not a tool failure -- text={text}")
+        t |> success(find(text, "\{#tokenizer\} (line 3) - 1 citation(s)") >= 0,
+            "the cited anchor is grouped at its heading line -- text={text}")
+        t |> success(find(text, "code.das:3  scan_tokens") >= 0,
+            "the site names file, line and symbol -- text={text}")
+        t |> success(find(text, "\{#buffers\} (line 11) - no citations") >= 0,
+            "an uncited anchor is part of the census -- text={text}")
+        t |> success(find(text, "\{#gone\}") >= 0,
+            "a citation naming an undeclared anchor is surfaced, not dropped -- text={text}")
+        t |> success(find(text, "2 citation(s) in 1 file(s).") >= 0, "the tally counts both -- text={text}")
+        rmdir_rec(dir)
+    }
+    t |> run("an anchor query narrows the census to that section") <| @(t : T?) {
+        var terr : string
+        let dir = plant_arch_fixture("mcp_arch_anchor_test", terr)
+        if (empty(dir)) {
+            t |> failure("temp dir: {terr}")
+            return
+        }
+        var text : string
+        var is_error = false
+        let doc = path_join(dir, "ARCHITECTURE.md")
+        parse_result(do_arch_sites("{doc}#tokenizer"), text, is_error)
+        t |> success(find(text, "code.das:3  scan_tokens") >= 0, "the section's own site is listed -- text={text}")
+        t |> success(find(text, "1 citation(s) in 1 file(s).") >= 0, "and only it -- text={text}")
+        t |> success(find(text, "\{#buffers\}") < 0, "other anchors stay out -- text={text}")
+        rmdir_rec(dir)
+    }
+    t |> run("a missing document is a tool failure") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_arch_sites("nonexistent_arch_doc_12345.md"), text, is_error)
+        t |> success(is_error, "should be error -- text={text}")
+        t |> success(find(text, "Document not found") >= 0, "should mention the missing document -- text={text}")
     }
 }
