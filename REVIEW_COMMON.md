@@ -56,12 +56,13 @@ never fire and is deleted - better absent than dead.
 - **One rule is one short paragraph - bold criterion first, blank line between rules.** A
   rule that needs more than that is describing how to write code, not how to review it.
   Split it or move it. Procedure - a files-to-touch how-to - is not a rule.
-- **A rule names the diff that fires it and what the reviewer checks.** A property the
-  reviewer can check against the changed code alone says both already ("per-loop visitor
-  state is a stack") and needs no rewrite. A property that ties the changed code to a place
-  the diff does not touch names the trigger and the duty ("a diff that changes X keeps Y
-  agreeing"); reported flat ("X and Y agree"), it is a statement, not a rule -
-  architecture-doc material.
+- **A rule tells the diff what it must or must not do - it never describes the system.**
+  Two forms exist. A ban: "never X - do Y instead", or "a diff that adds X ... is a
+  defect". A duty: "a diff that changes X also does Y, in the same change". A sentence
+  that describes how the code is ("state is a stack", "X and Y agree") is a statement, not
+  a rule: the reader has to work out the check, and the first violating diff turns the
+  sentence false. Rewrite it as the ban or duty of the diff that could break it, or move
+  it to the architecture doc.
 - **A rule is written in plain English - short sentences, common words, no idioms.** A
   rule that needs a second read is a defect of the rule.
 - **No sections.** A section header is a bucket asking to be filled: a grouping either
