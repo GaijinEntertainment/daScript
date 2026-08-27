@@ -79,7 +79,7 @@ comment on the unsafe operation's own line.**
 admin endpoint to the public route set.**
 
 **Never put a secret - a token or a credential - in a log line, a response body, or an error
-message.** The config banner logs key names and provenance, never values marked secret.
+message.**
 
 **A route that does not emit one structured line - method, path, status, duration, client ip,
 bytes - is a defect; `GET /healthz` emits none.** The watchdog polls `/healthz` every few

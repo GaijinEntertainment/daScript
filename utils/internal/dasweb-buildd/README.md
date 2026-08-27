@@ -165,3 +165,7 @@ the symlinked-artifact refusal, toolchain derivation), client (claim/announce/re
 the stub playground on reserved port 19014, including the multipart round trip verified
 byte-exact on the receiving side). CI runs the suites in `extended_checks.yml`
 ("Test dasweb-buildd").
+
+The end-to-end checkpoint covers what no in-dir suite reaches: one job announced, claimed,
+built in the sandbox and uploaded, run against the real playground on the deployed boxes. It
+is what proves the whole poll -> build -> upload loop.

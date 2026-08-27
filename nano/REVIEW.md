@@ -8,17 +8,15 @@ runtime's tree instead, moving its runtime half into a file of its own.** An edi
 fork that drifts silently.
 
 **Never use a name from `daScript/ast/ast.h` beyond `Annotation`, `TypeAnnotation` and
-`Module::name` in a source under `src/` that nano compiles.** Any other name compiles here and
-means something different than it does in the full runtime.
+`Module::name` in a source nano compiles - its own under `src/` here and the reused ones under
+`src/` (repo root).** Any other name compiles here and means something different than it does
+in the full runtime.
 
 **Never add a stub to `src/nano_stubs.cpp` that returns a default and continues - implement
 the behaviour or stop the program instead.** On a target with no debugger attached, a default
 return turns a missing feature into a wrong answer.
 
-**Never link `libDaScriptNano` from a directory whose `CMakeLists.txt` lacks
-`set_property(DIRECTORY PROPERTY INCLUDE_DIRECTORIES "")` - add that line there instead.**
-CMake searches a directory's `include_directories()` before any target's own, so without the
-line the target compiles against the full runtime's headers while linking nano's library.
+**Weakening the include-clear check in `REVIEW.das` (beside this file) is a defect.**
 
 **Never add a name to `include/daScript/simulate/simulate.h` unless a source nano compiles
 unchanged from the full runtime, or generated code, already refers to it.** This header is a

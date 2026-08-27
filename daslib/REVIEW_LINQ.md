@@ -74,11 +74,10 @@ a projected adapter is a defect - skip the row instead.** The row's emit assumes
 element, so running it on the un-projected adapter orders or dedups raw rows - a wrong result,
 not a missed splice.
 
-**The call order in `register_all_linq_fold_rows` IS pattern priority.** Rows land in
-`splice_patterns` in call order and the walker takes the first match, so reordering the
-`build_*_rows()` calls changes which arm claims a chain. Separate modules run their
-`[_macro]`s in separate macro contexts that cannot coordinate - that single registrar is the
-only place the order exists.
+**A diff that reorders the `build_*_rows()` calls in `register_all_linq_fold_rows` changes
+which arm claims a chain - review it as a pattern-priority change, never as a cleanup.** Rows
+land in `splice_patterns` in call order, the walker takes the first match, and that registrar
+is the only place the order exists.
 
 **A sql_linq column-ref arm that accepts a `$e(recv).$f(field)` qmatch without first proving
 `recv is ExprVar` is a defect.** A nested receiver otherwise matches under a foreign name and

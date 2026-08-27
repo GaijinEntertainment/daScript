@@ -31,6 +31,8 @@ thing live instead. Files with no contested edge get one short line.
 
 ## 1. File charters
 
+When placement charters disagree on one function, the sec.1 charter line decides.
+
 Every file under `dasllama/` appears here. Two carry generated CONTENT rather than being
 generated themselves: `dasllama_env.das` holds the `[EnvConfig]` knob declarations (`ENVIRONMENT.md` is
 generated FROM it by `harness/gen_env_doc.das`), and `dasllama_unicode.das` is hand-written

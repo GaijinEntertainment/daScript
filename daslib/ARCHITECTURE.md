@@ -444,6 +444,9 @@ an entry lands here only when no name, shape, or test can carry it.
   (`from x in [c.id]`, a function result) is safe because daslang heap-allocates arrays and
   does not finalize them at scope exit - the backing storage outlives the borrow and is
   reclaimed by GC.
+- **A `FromInMacro` reject returns null so infer can stabilize.** Errors clear on every pass,
+  so the not-yet-inferred-source arm's error survives only when the source never infers at
+  all - that is what makes that arm a deferral rather than a final verdict.
 - **`from_in` identifies typed sources by matching module + type NAME as strings**, not by
   requiring the provider modules: `sqlite_boost::SqlRunner` -> `select_from`, pugixml
   `xml_node` -> `from_xml_node`, `json::JsonValue?` -> `from_json` - linq_das stays
@@ -463,6 +466,10 @@ an entry lands here only when no name, shape, or test can carry it.
 - **`hoist_prelude` hand-builds a flat block on purpose.** The materializer prelude - the
   hoisted default-row declaration on the field-prune path - must be a SIBLING of the walk; a
   `$b(prelude)` splice nests it in its own scope, where the per-element reads cannot see it.
+- **One `at` can reach two materializers.** A `group_by` chain closed by
+  `first`/`order`/`distinct`/`take` emits through both the array-walk materializer and the
+  handle materializer at the same source location, so `qn` - which keys on (prefix, at) -
+  keeps the two sites' binds apart only while each site carries its own prefix.
 - **An `ExprFor` the typer has not re-inferred carries an EMPTY `iteratorVariables`.** A
   decs bridge feeding a no-chain terminator (`from_decs_template(...).count()`) has no chain
   op to force the second inference pass, so the iterator names are recovered from the push

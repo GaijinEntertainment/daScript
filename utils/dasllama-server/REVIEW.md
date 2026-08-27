@@ -4,7 +4,8 @@
 doc: `README.md`.
 
 **A diff to a file that requires a `dasllama/*` module applies `modules/dasLLAMA/REVIEW.md`
-(repo root) too** - its gate polices the family seams here.
+(repo root) too** - the server reaches only public dasLLAMA facade verbs, and a diff here can
+break that facade.
 
 **Never write or edit a fixture under `tests/fixtures/` by hand - capture the bytes of a real
 server run and normalize the machine-local paths instead.** `tests/fixtures/README.md` gives

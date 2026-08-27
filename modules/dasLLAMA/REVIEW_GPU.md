@@ -56,8 +56,8 @@ One shared scratch serializes the whole chain through its write-after-read hazar
 work size, in the same change.** The gate's threshold is measured at both ends of the size
 ladder. The small-work regression hides behind the big-work win.
 
-**A shape claim is settled at the one site that is authoritative for that kind of constant,
-never by tracing the das that computes the value.** An in-body tile constant is confirmed
+**A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at that
+constant's authoritative site, in the same change.** An in-body tile constant is confirmed
 literal in the generated `*_msl` global or the SPIR-V dump. A grid or threadgroup constant is
 read off the class's `[metal_dispatch]` / `[vk_dispatch]` `grid=`/`tg=` spec, whose `"n/c"`
 form is a CEIL-divide; the spec alone decides, and no builder read is needed. A uniform's
@@ -161,9 +161,9 @@ class one of them dispatches, that class's builder, the servability gates
 is `harness/parity.das`, or the in-suite instruments `tests/test_metal_decode_parity.das` /
 `tests/test_metal_prefill_parity.das` through `tests/run.das`.
 
-**A `harness/parity.das` run arms its backend: the Metal arm is `--ngl`; the Vulkan arm is
-`DASLLAMA_GPU=1`, never `--ngl`, and its log shows `resident driver armed`.** The Vulkan
-driver declines codec-mismatched sessions silently.
+**Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
+Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows `resident driver
+armed`.** The Vulkan driver declines codec-mismatched sessions silently.
 
 **A change to `dasllama/dasllama_metal_tower.das`, to the `AttnArgs` kargs struct, to any
 kernel class the tower dispatches or builder the tower borrows, or to state the whole

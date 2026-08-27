@@ -30,10 +30,13 @@ that module applies this file together with the module's own list.
   cannot have one, the same diff records that in the module's `MASTERPLAN.md`.
 
 - **Never check a claim about emitted shape against the das source - check it in the emitted
-  words or text.**
+  words or text.** Emitted shape is the structure of the emitted kernel: its signature, its
+  parameter attributes, and its statement forms.
 
 - **A diff that adds a kernel-model capability to one emitter adds it to the other, or records
-  the asymmetry in the shared ledger (`modules/dasMetal/MASTERPLAN.md`).**
+  the asymmetry in the shared ledger (`modules/dasMetal/MASTERPLAN.md`).** A kernel-model
+  capability is a way of authoring or lowering kernels: class members, multiple kernels per
+  class, method flattening, tensor-GEMM builtins.
 
 - **An emitter diff that uses a `daslib/shader_lingua_franca` declaration this emitter does not
   handle ships that emitter's lowering of the declaration, in the same change.** The diff may

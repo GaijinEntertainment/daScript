@@ -6,8 +6,7 @@
 **A diff that adds or changes behavior in `buildd_config.das`, `buildd_core.das`, or
 `buildd_client.das` ships a dastest test in this directory, in the same change.** A diff that
 puts behavior beyond glue and orchestration over those modules into `main.das` or
-`buildd_service.das` is a defect. The whole loop is proven by the end-to-end checkpoint on the
-real boxes.
+`buildd_service.das` is a defect.
 
 **Never put a `[test]` file under the global `tests/` tree, and never register one in a
 `CMakeLists.txt` - a `[test]` file for this directory lives here and requires its siblings by
@@ -32,8 +31,8 @@ is loopback.** No header can carry that proof.
 banner reports set or unset and the provenance instead.**
 
 **A diff that assembles a filesystem path from a request- or build-derived name - a bundle
-source or a build output alike - without passing that name through this directory's name
-validation first is a defect.**
+source or a build output alike - without passing that name through `is_valid_source_filename`,
+`is_valid_asset_path`, or `validate_asset_paths` (`buildd_core.das`) first is a defect.**
 
 **A diff that lets a build publish a file its mode does not declare by name - through a suffix
 filter, a glob, or any rule that widens the build's own output set - is a defect.** The build
@@ -72,15 +71,16 @@ is a defect.** Leaving the claim for the stale-requeue sweep is not a resolution
 `.das_package`, `watchdog.json`, `dasweb-buildd.toml` - also updates the matching `README.md`
 section (The sandbox / The toolchain-bump protocol / Run), in the same change.**
 
-**Never let a toolchain roll move the worktree without rebuilding both the cross-compile host
-and the runtime archive.**
+**Never let a toolchain roll (`roll_toolchain.sh`) move the worktree without rebuilding both
+the cross-compile host and the runtime archive.**
 
 **A diff that changes `Containerfile` also bumps the image tag in `run_build.sh` (`IMAGE=`), in
 the same change.**
 
-**A diff that changes the wasm-archive step's build command or archive list, or
-`modules/dasImgui/.das_package`, also changes the other to match, in the same change - the two
-differ only in `liblibDasModuleClipboard.a`, which the wasm-archive list leaves out.**
+**A diff that changes the wasm-archive step's build command or archive list in
+`roll_toolchain.sh`, or `modules/dasImgui/.das_package`, also changes the other to match, in
+the same change - the two differ only in `liblibDasModuleClipboard.a`, which the wasm-archive
+list leaves out.**
 
 **Never ship a file an operator edits on the box with plain `release_include` - use
 `release_include_if_missing`, so an upgrade keeps the operator's edits.**

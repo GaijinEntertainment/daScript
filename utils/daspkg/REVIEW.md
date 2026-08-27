@@ -29,8 +29,9 @@ tune sidecar is the `<bundle>.tune.json` file of measured kernel choices the exe
 time.
 
 **A diff that lets a release path other than `--quick` inherit a prior sidecar, or lets
-`--quick` accept an incomplete one, is a defect** - incomplete meaning missing any scope key the
-exe's deps JSON reports, the same completeness the release build itself checks.
+`--quick` accept an incomplete one, is a defect** - incomplete means missing any scope key - a
+`tune_scopes` entry the exe's deps JSON reports - the same completeness the release build
+itself checks.
 
 **A release path that overwrites or deletes a `release_include_if_missing` file, on any
 platform, is a defect.**

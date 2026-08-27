@@ -4,5 +4,5 @@
 `README.md`.
 
 **A diff removing detect-dupe from `DAS_UTILS_SHIPPED_EXES` records the removal decision in
-this file, per `utils/REVIEW.md`.** detect-dupe ships as a prebuilt exe, and `utils/REVIEW.das`
-machine-checks the membership itself.
+this file.** detect-dupe ships as a prebuilt exe, and `utils/REVIEW.das` machine-checks the
+membership itself.

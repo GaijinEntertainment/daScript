@@ -12,8 +12,7 @@ corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 defect, when its cells still assert what they claim under `DASLLAMA_CPU_PREFILL=1`.** The model
 suites are every suite but `model-free`, and that variable is what the runner arms for
 `model-free`. The listing lands in the same change that adds the file, and the file skips
-honestly when its models are absent. The per-PR gate then runs it wherever the models are
-stocked.
+honestly when its models are absent.
 
 **Listing a test file that `DASLLAMA_CPU_PREFILL=1` disarms in any `run.das` suite is a defect,
 and so is leaving that fact out of the file's header.** `DASLLAMA_CPU_PREFILL=1` is what the

@@ -36,8 +36,11 @@ is a defect.**
 
 **A family file that holds a second copy of code two tower families both need - compute,
 stage/read, or load-orchestration code that names no family type - is a defect; that code
-lives in `dasllama/dasllama_tower.das`, the encoder-tower home.** Per-family serving state - a
-family's exported runtime setter and the module global it writes - stays in the family file.
+lives in `dasllama/dasllama_tower.das`, the encoder-tower home.**
+
+**A diff that puts a family's exported runtime setter, or the module global it writes, into
+`dasllama/dasllama_tower.das` is a defect** - per-family serving state stays in the family
+file.
 
 **Splitting a media splice's rows across more than one `forward_prefill_embd` call, or letting
 a driver chunk them by row, is a defect** - the span bounds are counted from the start of the

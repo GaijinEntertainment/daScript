@@ -8,8 +8,8 @@ validate through `../dasllama/dasllama_exchange_schema.das` instead.** The engin
 `dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
 that gate is a defect.
 
-**A diff that adds a row to `records/` whose `hardware.remote_desktop` is `parsec`, or a
-sidecar whose `provenance.noise` is not `ok`, is a defect - re-mint on a box with no
+**A diff that adds a row to `records/` whose `hardware.remote_desktop` is anything but `off`,
+or a sidecar whose `provenance.noise` is not `ok`, is a defect - re-mint on a box with no
 remote-desktop session.**
 
 **A diff that adds a commit stamp to `records/` naming a commit the branch under review cannot

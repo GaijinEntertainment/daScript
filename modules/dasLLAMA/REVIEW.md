@@ -273,8 +273,6 @@ file is the checklist's own.
 **A disk-order -> compute-order transform lands per scope: kernel-layout in
 `dasllama/dasllama_repack.das`, load-scope in `dasllama/dasllama_layout.das`.**
 
-**When placement rules disagree on one function, `ARCHITECTURE.md` sec.1's charter decides.**
-
 **A CPU KV-cache store, read, score dot, or V-accumulate lands in `dasllama/dasllama_kv_codec.das`,
 its format family kept whole.** GPU twins land in their backend kernel file.
 
