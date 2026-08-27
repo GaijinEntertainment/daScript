@@ -42,11 +42,38 @@ arrays - read the one per-row entry instead.** The bucket-building kernel writes
 entry. The scan repeats on every thread of every row's threadgroup, and it grows with the
 bucket count.
 
+**Never test a bucket row's validity by comparing it with the pad sentinel - compare it with
+the live entry count instead.** Stale bytes past the last expert's stamped tail are not the
+sentinel, and an equality test sends their token index out of bounds.
+
+**An early `return` in a kernel body that runs a cooperative op is threadgroup-uniform - never
+gate it on a per-thread value.** A per-thread exit leaves the threadgroup unable to complete
+the cooperative op.
+
 **An encoder that picks a kernel's guard-free instance shows that every address the instance
 touches stays inside rows holding real data.** The guard-free instance is the one stamped
 without the loop's bounds or tail guard. One extent dividing evenly is not that showing. A
 padded chunk's walk can run past the live extent, and one poisoned read in a shared tile
 corrupts real rows.
+
+**Never let a prefill pad output row reach a matmul as a B operand - stage it as zero, or
+bound the walk at the live row count.** Pad rows hold recycled pool bytes, so a pad row used
+as B multiplies stale values (NaN included) into every real row of the tile. Pad rows read as
+row-confined A operands are safe.
+
+**A prefill K/V panel is sized from the padded write extent, never from the live key count.**
+The K/V GEMMs write full M-tile rows at the chunk's row offset, so a panel sized to the live
+count is overrun silently into whatever the pool put next to it.
+
+**Never route a GEMM site through the GEMV tail peel when its output row stride differs from
+the dispatch width it passes - dispatch the padded tile instead.** The peel writes y rows at
+that width, so a fused-row site whose rows are wider lands its tail rows on top of the row
+beside them.
+
+**A diff that changes the mask, window, live-length or softcap math of `pf_p_weight`
+(`dasllama/dasllama_metal_prefill.das`) changes `metal_attn_rowstat`'s copy in the same
+change, and the reverse.** Rowstat mints each row's max and reciprocal sum; the AV kernels
+apply the weight. Rows renormalize against the wrong max when the two disagree.
 
 **Never leave a pipeline of dispatches with fewer scratch buffers than it has dispatches in
 flight - give each dispatch site its own instead.** One shared scratch serializes the whole
@@ -92,6 +119,11 @@ defect; a per-encode field either omits `@role` or names the access its body per
 generated builder reads - per-field `@binding` / `@role` / `@off` / `@span` / `@default`,
 `@workgroup` state with its `tgmem=` dispatch key.**
 
+**Never give a `@span` to a kernel field whose callers bind a COLUMN TILE of a wider output
+row - omit the span instead.** A column-tile caller passes the tile width as the kernel's n
+while its rows stride the full output width, so a span computed from the tile width leaves
+the rest of every row outside the tracked hazard range.
+
 **A NEW hand-written `enc_*` body is a defect unless it is a wrapper - a format or twin pick, a
 default-filling wrapper, or a composite over generated builders.**
 
@@ -124,6 +156,10 @@ that owns its kernel class** - it goes through that file's own init/release pair
 (`race_buf`, `race_envelope_ok`, `race_pair_ms`) belongs to
 `dasllama/dasllama_<gpu>_common.das`.** Race code is the in-engine base-vs-twin check that
 times both kernels on one queue and compares their outputs.
+
+**A kernel A/B race sizes its operands at a real model shape - never at a small square slab.**
+A slab small enough to sit in cache ranks the kernels by an effect production never sees, and
+crowns the loser.
 
 **A string-typed Metal decline reason is a defect - a Metal decline reason is an enum value in
 `dasllama/dasllama_metal_shapes.das`, one enum per driver.**
@@ -192,6 +228,10 @@ serves both codecs, so a codec no kernel covers silently drops that codec's GPU 
 
 **An f16 store into any GPU-resident K/V that does not clamp to the f16 finite range
 (+/-65504) is a defect.**
+
+**A per-layer K/V panel that aliases another layer's is gathered, stored and released only
+through its source layer.** An aliasing layer that gathers, stores or releases a second time
+double-frees the panel or overwrites the source's rows.
 
 **A resident override that touches the mirror before gating the session on the armed mirror
 codec and on the flat (non-paged) cache is a defect** - a resident override is a

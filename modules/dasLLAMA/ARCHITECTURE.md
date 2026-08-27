@@ -38,6 +38,8 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 
 - `ARCHITECTURE_IMAGE.md` - sec.2.1-2.1g: the prepared-image rail.
 - `ARCHITECTURE_GPU.md` - sec.2.2b: the tensor-GEMM and fused-attention shapes that measured out.
+- `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2i: the Metal prefill driver's GEMM form ladder,
+  dev-W knee map, attention slab, MoE bucket rail, and chunked submission.
 - `ARCHITECTURE_RUNTIME.md` - sec.2.2-2.4, 2.6-2.9, 2.11, 2.12: kernel shape, caches, lint
   policy, knobs, coverage, the GPU ramp.
 - `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10: the benchmark rig, the tune gate, and the

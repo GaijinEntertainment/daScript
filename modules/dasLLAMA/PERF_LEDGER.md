@@ -1066,3 +1066,10 @@ group; wording kept.
   paste funnel; the server replaces that funnel.
 - **OPEN - v2: select-two compare widget (maybe)** on the leaderboard, and publishing the
   depth/batch test variants (`pp512@d4096`, `tg128@b4`, ...) that stay internal-only under v1.
+
+### From the prefill-driver harvest (2026-08-27)
+
+- **OPEN - MoE k-quant twin tune families.** The moe k4/k5/k6/q51 tensor twins are gated by
+  the DENSE k-quant crowns rather than raced on their own; give each its own
+  `metal_tensor_race` family and crown so the gate stops proxying. Instrument:
+  `metal_tensor_race` on an M5 box, one q8 and one k-quant MoE model.

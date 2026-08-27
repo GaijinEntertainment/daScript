@@ -189,4 +189,3 @@ The positive laws these races established - half operands, stage-only-to-transfo
 consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules and the
 `modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
 and why they lose.
-
