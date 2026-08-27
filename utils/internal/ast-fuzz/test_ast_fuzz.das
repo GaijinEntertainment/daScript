@@ -174,3 +174,15 @@ def test_generator_runs_and_classifies(t : T?) {
     t |> success(!died(ec, out), "driver itself crashed or hung (exit {ec})\n{out}")
     t |> success(find(out, "run(s) —") >= 0, "driver produced no summary\n{out}")
 }
+
+[test]
+def test_verifier_tolerates_uninstantiated_field_default(t : T?) {
+    // a cross-module ctor in a field default of a struct nothing constructs: infer types the
+    // decl init but never binds the func - the post-infer walk must not report it
+    var out : string
+    let ec = run([BIN, "utils/internal/ast-fuzz/selftest/uninstantiated_default.das"], out, 60.0)
+    t |> success(!died(ec, out), "compile crashed (exit {ec})\n{out}")
+    t |> success(ec == 0, "the fixture must compile and run (exit {ec})\n{out}")
+    t |> success(find(out, "AST verify") < 0, "no verify report on the dead decl init\n{out}")
+    t |> success(find(out, "uninstantiated-default-ok") >= 0, "the fixture ran to its marker\n{out}")
+}
