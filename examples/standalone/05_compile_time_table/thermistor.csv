@@ -1,0 +1,16 @@
+# NTC 10k thermistor, B=3950, 10k pull-up, 12-bit ADC.
+# Bench calibration: raw ADC reading -> temperature in hundredths of a degree C.
+adc,centi_celsius
+267,10000
+350,9000
+462,8000
+613,7000
+815,6000
+1081,5000
+1419,4000
+1825,3000
+2278,2000
+2738,1000
+3156,0
+3495,-1000
+3740,-2000

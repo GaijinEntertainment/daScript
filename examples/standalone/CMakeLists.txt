@@ -19,6 +19,8 @@ set(NANO_EXAMPLE_GEN "${CMAKE_CURRENT_BINARY_DIR}/_standalone_ctx_generated")
 file(MAKE_DIRECTORY "${NANO_EXAMPLE_GEN}")
 
 function(das_nano_example name dir das_file)
+    # extra args are data files the .das reads AT COMPILE TIME - listing them here
+    # is what makes editing calibration data rebuild the generated C++
     set(_gen_cpp "${NANO_EXAMPLE_GEN}/${das_file}.cpp")
     add_custom_command(
         OUTPUT "${_gen_cpp}" "${NANO_EXAMPLE_GEN}/${das_file}.h"
@@ -28,6 +30,7 @@ function(das_nano_example name dir das_file)
             "${NANO_EXAMPLE_GEN}/"
         DEPENDS daslang
             "${CMAKE_CURRENT_SOURCE_DIR}/${dir}/${das_file}"
+            ${ARGN}
             "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
@@ -45,3 +48,6 @@ das_nano_example(standalone_01_pure       01_pure       pure_math.das)
 das_nano_example(standalone_02_heap       02_heap       heap_demo.das)
 das_nano_example(standalone_03_closures   03_closures   closures.das)
 das_nano_example(standalone_04_c_binding  04_c_binding  blinker.das)
+das_nano_example(standalone_05_table      05_compile_time_table  thermometer.das
+    "${CMAKE_CURRENT_SOURCE_DIR}/05_compile_time_table/thermistor.csv"
+    "${CMAKE_CURRENT_SOURCE_DIR}/05_compile_time_table/csv_bake.das")

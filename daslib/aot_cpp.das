@@ -4026,7 +4026,7 @@ def private aotEmitStruct(ps : Structure?;
     program |> visit_structure(ps, adapter);
 }
 
-def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
+def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?; prune_to_used : bool = false) {
     //! Writes forward declarations and dependent type/function definitions for AOT output.
     buildStructEnumCollisions(program);
     var utm = new UseTypeMarker();
@@ -4034,8 +4034,10 @@ def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
         visit(program, adapter);
     }
     let remUS = program._options  |> find_arg("remove_unused_symbols") ?as tBool ?? true;
+    let kept <- prune_to_used ? collectUsedModules(program) : table<Module?>()
     program.get_ptr() |> for_each_module_no_order($(pm) {
-        if (pm.moduleFlags.fromExtraDependency) return ;
+        if (pm.moduleFlags.fromExtraDependency ||
+            (prune_to_used && pm.name != "" && !(kept |> key_exists(pm)))) return ;
         pm |> for_each_structure($(ps) {
             write(*aotVisitor.ss, "namespace {aotModuleName(ps._module)} \{ struct {aotStructName(ps)}; \};\n");
         });
@@ -4230,13 +4232,47 @@ def public dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; 
     write(*tw, "static AotListBase impl(registerAotFunctions);\n");
 }
 
-def public getRequiredModulesFor(program : ProgramPtr) {
+def private collectUsedModules(program : ProgramPtr) : table<Module?> {
+    //! Modules owning a function, struct or enum the runtime program still reaches.
+    var used : table<Module?>
+    program.get_ptr() |> for_each_module_no_order($(pm) {
+        pm |> for_each_module_function($(pfun) {
+            if (pfun.index >= 0 && pfun.flags.used && !pfun.flags.builtIn && pfun._module != null) {
+                used |> insert(pfun._module)
+            }
+        })
+    })
+    var utm = new UseTypeMarker()
+    make_visitor(*utm) $(adapter) {
+        visit(program, adapter)
+    }
+    for (st in keys(utm.useStructs)) {
+        if (st._module != null) {
+            used |> insert(st._module)
+        }
+    }
+    for (en in keys(utm.useEnums)) {
+        if (en._module != null) {
+            used |> insert(en._module)
+        }
+    }
+    unsafe {
+        delete utm
+    }
+    return <- used
+}
+
+def public getRequiredModulesFor(program : ProgramPtr; prune_to_used : bool = false) {
     //! Collects required module declarations and checks for no-AOT modules in the program.
+    //! `prune_to_used` drops modules the runtime program never reaches - standalone only.
     var modules_str : array<string>
     var noAotModule = false
+    let used <- prune_to_used ? collectUsedModules(program) : table<Module?>()
     program.get_ptr() |> for_each_module($(mod) {
         if (mod.name == "") {
         } elif (mod.moduleFlags.fromExtraDependency && mod.name != "builtin") {
+        } elif (prune_to_used && mod.name != "$" && mod.name != "builtin" && !(used |> key_exists(mod))) {
+            modules_str |> push(" // require {mod.name} - compile time only, not linked\n")
         } else {
             modules_str |> push(build_string() $(wr) {
                 write(wr, " // require {mod.name}\n")

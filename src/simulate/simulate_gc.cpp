@@ -12,7 +12,13 @@ namespace das
     static TypeInfo lambda_type_info (Type::tLambda, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr,
         TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC, sizeof(Lambda), 0 );
 
+#if DAS_HEAP_REPORT
     char * presentStr ( char * buf, char * ch, int size );
+#else
+    // heap.cpp compiles its escaped-preview helper away with reporting off;
+    // the GC dump keeps its shape and drops only the preview
+    static char * presentStr ( char * buf, char *, int ) { buf[0] = 0; return buf; }
+#endif
 
     using loop_point = pair<void *,uint64_t>;
 

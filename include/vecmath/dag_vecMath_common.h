@@ -3358,9 +3358,11 @@ VECTORCALL VECMATH_INLINE void v_get_bilinear_wrap_addr(vec4i &uv_idx, vec4f &uv
   vec4i uvIdx = v_cvt_vec4i(uv_wrap);
   uv_frac = v_sub(uv_wrap, v_cvt_vec4f(uvIdx));
 
-  uvIdx = v_seli(uvIdx, v_zeroi(), v_cmp_lti(uvIdx, dmapi)); // It is actually needed due to floating point imprecision
+  // v_seli returns the second operand where the mask is set: keep the in-range index,
+  // wrap idx == size (float imprecision) and the +1 texel to 0
+  uvIdx = v_seli(v_zeroi(), uvIdx, v_cmp_lti(uvIdx, dmapi));
   vec4i uvIdx1 = v_addi(uvIdx, V_CI_1);
-  vec4i uvNext = v_seli(uvIdx1, v_zeroi(), v_cmp_lti(uvIdx1, dmapi));
+  vec4i uvNext = v_seli(v_zeroi(), uvIdx1, v_cmp_lti(uvIdx1, dmapi));
   uvIdx = v_permi_xyab(uvIdx, uvNext);
 
   uv_idx = v_addi(v_permi_xzxz(uvIdx), v_permi_yyww(v_muli(uvIdx, dmapi)));

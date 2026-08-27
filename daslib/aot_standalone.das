@@ -327,7 +327,7 @@ def genStandaloneSrc(var program : ProgramPtr;
             var cpp_aot = new CppAot(program := program, collector = coll, ss = unsafe(addr(tmp_writer)), cross_platform = cfg.cross_platform);
             make_visitor(*cpp_aot) $(aot_adapter) {
                 cpp_aot.adapter := aot_adapter
-                dumpDependencies(program, cpp_aot);
+                dumpDependencies(program, cpp_aot, true);
             }
             unsafe {
                 delete cpp_aot
@@ -500,7 +500,7 @@ def public standalone_aot(input : string; output_dir : string; cross_platform : 
     using() $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")
         compile_and_simulate(input, access, unsafe(addr(mg)), cop) $(var program : ProgramPtr; var pctx : smart_ptr<Context>) {
-            let (modules_str, noAotModule) = getRequiredModulesFor(program)
+            let (modules_str, noAotModule) = getRequiredModulesFor(program, true)
             if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
                 panic("Standalone context called on non aot module {input}")
             } elif (noAotModule) {

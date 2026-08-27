@@ -15,6 +15,8 @@ C functions).  It is organized from simple to advanced:
   source tree, ``.das_module`` descriptors, ``find_package(DAS)``
 * **Project Files** — ``.das_project`` files for custom module resolution and sandboxing
 * **Advanced Topics** — AOT compilation, standalone contexts, class adapters
+* **daslang-nano** — the runtime with no compiler in it, for embedded targets
+  that link already-compiled daslang and never compile any
 
 For step-by-step walk-throughs with complete, compilable source code, see the
 :ref:`C++ integration tutorials <tutorials_integration_cpp>` and
@@ -28,4 +30,5 @@ For step-by-step walk-throughs with complete, compilable source code, see the
    embedding/external_modules.rst
    embedding/project_files.rst
    embedding/advanced.rst
+   embedding/nano.rst
 

@@ -75,6 +75,14 @@ public:
 #define DAS_TRACK_SMART_PTR_ID_DTOR
 #define DAS_SMART_PTR_NEW
 #define DAS_SMART_PTR_DELETE
+// Nothing reports a heap on a target with nowhere to report to, and the bodies
+// walk every deck and format it.
+#define DAS_HEAP_REPORT 0
+#define DAS_DEBUG_INFO_NAME_CACHE 0
+// Integer modulo via double division is a win where FP division is fast and a
+// rout where there is no hardware double at all - it pulls the whole soft-float
+// library in for one operator.
+#define DAS_FAST_INTEGER_MOD 0
 #endif
 
 namespace das {using namespace std;}

@@ -5,7 +5,7 @@
 #pragma once
 
 #if !defined(_TARGET_PC_LINUX) && !defined(_TARGET_PC_MACOSX) && !defined(_TARGET_PC_WIN)\
- && !defined(_TARGET_C1) && !defined(_TARGET_C2)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC) && !defined(_TARGET_ANDROID)
+ && !defined(_TARGET_PS4) && !defined(_TARGET_PS5)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC) && !defined(_TARGET_ANDROID)
   #if __linux__ || __unix__
     #define _TARGET_PC_LINUX 1
   #elif __APPLE__
@@ -482,7 +482,15 @@ VECTORCALL VECMATH_FINLINE vec4f sse2_ceil(vec4f a)
   return _mm_add_ps(fi, _mm_and_ps(_mm_cmplt_ps(fi, a), V_C_ONE));
 }
 
-VECTORCALL VECMATH_FINLINE vec4f sse2_round_ieee(vec4f a) { return _mm_cvtepi32_ps(_mm_cvtps_epi32(a)); }
+VECTORCALL VECMATH_FINLINE vec4f sse2_round_ieee(vec4f a)
+{
+  // cvtps2dq returns INT_MIN outside the int32 range; from 2^23 on every float is integral
+  // already, so those lanes (and inf, NaN) pass through unchanged
+  vec4f fits = _mm_cmplt_ps(_mm_and_ps(a, V_CI_INV_SIGN_MASK), _mm_set1_ps(8388608.f)); // not 'small': rpcndr.h macro
+  // the input sign bit is or-ed back in: cvt turns -0.0 and downward ties like -0.5 into +0.0
+  vec4f r = _mm_or_ps(_mm_cvtepi32_ps(_mm_cvtps_epi32(a)), _mm_and_ps(a, (const vec4f &)V_CI_SIGN_MASK));
+  return v_btsel(a, r, fits);
+}
 
 #if _TARGET_SIMD_SSE >= 4 || defined(_DAGOR_PROJECT_OPTIONAL_SSE4) || defined(__SSE4_1__)
 VECTORCALL VECMATH_FINLINE vec4f sse4_floor(vec4f a) { return _mm_round_ps(a, _MM_FROUND_TO_NEG_INF|_MM_FROUND_NO_EXC); }

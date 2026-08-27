@@ -19,6 +19,8 @@ endif()
 
 set(NANO_OWN_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/nano_context.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/nano_format.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/nano_nothrow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/nano_stubs.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/nano_string_writer.cpp
 )
@@ -26,7 +28,6 @@ set(NANO_OWN_SRC
 set(NANO_SHARED_SRC
     ${DASLANG_NANO_ROOT}/src/misc/hal.cpp
     ${DASLANG_NANO_ROOT}/src/misc/memory_model.cpp
-    ${DASLANG_NANO_ROOT}/src/simulate/annotation_arguments.cpp
     ${DASLANG_NANO_ROOT}/src/simulate/aot_library.cpp
     ${DASLANG_NANO_ROOT}/src/simulate/builtin_array_ops.cpp
     ${DASLANG_NANO_ROOT}/src/simulate/builtin_runtime_ops.cpp
