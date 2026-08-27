@@ -280,6 +280,18 @@ def register_ple_gpu_gate(fn : PleGpuGateFn) {
     g_ple_gpu_gate_set = true
 }
 
+//! The GPU-embed pre-step gate: a prefill override that gathers the token embeddings on its
+//! device registers a probe here. On true, forward_prefill stashes the token ids and skips the
+//! CPU embed loop; the override consumes the stash, and a late decline backfills on the CPU.
+typedef EmbedGpuGateFn = function<(t : Model; s : Session; npos : int64; start_pos : int64) : bool>
+var private g_embed_gpu_gate : EmbedGpuGateFn
+var private g_embed_gpu_gate_set = false
+
+def register_embed_gpu_gate(fn : EmbedGpuGateFn) {
+    g_embed_gpu_gate = fn
+    g_embed_gpu_gate_set = true
+}
+
 // ===== gemma-4 PLE pre-step hooks (registered by dasllama_ple at [init]) =====
 // PLE needs Model/Session, so it requires this module back and cannot be required from here — the
 // forward path reaches its per-pass pre-step through these hooks, and the umbrella breaks the cycle.
@@ -1803,6 +1815,8 @@ struct Session {
     @scratch ple_gate : array<float>     // per-(position) gate vector for the layer block (npos x ple)
     @scratch ple_gpu_tokens : array<int64>  // stashed token rows for a driver-owned pre-step (see register_ple_gpu_gate)
     ple_gpu_pending : bool      // forward_prefill skipped the CPU pre-step — the engaged driver builds it
+    @scratch embed_gpu_tokens : array<int64>  // stashed token ids for a driver-owned embed gather (see register_embed_gpu_gate)
+    embed_gpu_pending : bool    // forward_prefill skipped the CPU embed — the engaged driver gathers it, a decline backfills
     // qwen35 deltanet recurrent state (persists across tokens; zeroed at position 0) + scratch.
     // Empty unless config.recr_mask != 0. State is forward-only — dn_pos guards against rewind.
     dn_pos : int64                 // the next position the deltanet stack expects
@@ -4731,14 +4745,23 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     forward_prefill_alloc(t, s, npos, start_pos)
     prof_add("alloc", ts_alloc)
 
-    // token embeddings -> residual stream x_b [npos x dim]
+    // token embeddings -> residual stream x_b [npos x dim]; an armed GPU-embed gate stashes the
+    // ids instead and the override gathers them on-device (late decline backfills in the body)
     let dim = c.dim
     let ts_embed = prof_ticks()
-    for (p in range64(npos)) {
-        embed_row(t, tokens[p], unsafe(addr(s.x_b[p * dim])))
-    }
-    if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
-        scale_inplace(unsafe(addr(s.x_b[0])), c.embed_scale, npos * dim)
+    if (g_embed_gpu_gate_set && invoke(g_embed_gpu_gate, t, s, npos, start_pos)) {
+        s.embed_gpu_tokens |> resize(npos)
+        for (p in range64(npos)) {
+            s.embed_gpu_tokens[p] = tokens[p]
+        }
+        s.embed_gpu_pending = true
+    } else {
+        for (p in range64(npos)) {
+            embed_row(t, tokens[p], unsafe(addr(s.x_b[p * dim])))
+        }
+        if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
+            scale_inplace(unsafe(addr(s.x_b[0])), c.embed_scale, npos * dim)
+        }
     }
     prof_add("embed", ts_embed)
     if (has_ple(c)) {  // gemma-4 E-series: build each position's per-(layer) side input before the stack
@@ -4959,6 +4982,20 @@ def private prefill_rope_tables(t : Model; var s : Session; npos, start_pos : in
 
 // the shared prefill core: rope table + layer stack + final norm/classifier, over a pre-filled
 // s.x_b residual stream (token or embedding sourced)
+// the late-decline half of the GPU-embed gate: the stashed ids embed on the CPU after all
+def private embed_backfill_cpu(t : Model; var s : Session; npos : int64) {
+    let ts_bf = prof_ticks()
+    let dim = t.config.dim
+    for (p in range64(npos)) {
+        embed_row(t, s.embed_gpu_tokens[p], unsafe(addr(s.x_b[p * dim])))
+    }
+    if (t.config.embed_scale != 1.0) {
+        scale_inplace(unsafe(addr(s.x_b[0])), t.config.embed_scale, npos * dim)
+    }
+    s.embed_gpu_pending = false
+    prof_add("embed", ts_bf)
+}
+
 def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; skip_logits : bool = false) {
     let c = t.config
     let dim = c.dim
@@ -4977,6 +5014,9 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
         stack_done = invoke(g_prefill_override, t, s, npos, start_pos)
     }
     if (!stack_done) {
+        if (s.embed_gpu_pending) {   // the gated embed never ran on-device — backfill on the CPU
+            embed_backfill_cpu(t, s, npos)
+        }
         if (s.ds_active && s.wide_src != null) {   // the wide borrow was for an override that declined
             let ts_split = prof_ticks()
             ds_split_quantum(t, s, npos)

@@ -1915,6 +1915,13 @@ struct RDec {
     pf_sets : array<VkDescriptorSet>
     @scratch pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*8 + router variant (lazy insert, steady-state hit)
     pf_cmd : VkCommandBuffer
+    pf_cmds : array<VkCommandBuffer>   // overlap ring: chunk N records here while chunk N-1 executes
+    emb_blk : int64 = -1l              // the embd plane's arena block (>= 0 arms the ids-form prefill)
+    emb_f32 : uint64                   // untied f32 embd table on device (0 = absent; the other arm)
+    emb_f32_bytes : int64
+    pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
+    pf_emb_set : VkDescriptorSet
+    pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq per layer: [2l] = the ffn site, [2l+1] = addr_next
 }
 
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
@@ -2477,10 +2484,9 @@ def alloc_cmd : VkCommandBuffer {
     return raw
 }
 
-def submit_nowait(var raw : VkCommandBuffer) {
+def private submit_core(var raw : VkCommandBuffer; fence : VkFence) {
     var submit = VkSubmitInfo()
     submit.commandBufferCount = 1u
-    let fence = g_gpu.fence
     // a pending transfer-queue handoff attaches here — later in-order submits inherit the ordering
     var tss = VkTimelineSemaphoreSubmitInfo()
     var wval = g_gpu.pend_wait
@@ -2501,6 +2507,17 @@ def submit_nowait(var raw : VkCommandBuffer) {
         }
         vk_check(vkQueueSubmit(g_gpu.queue, 1u, addr(submit), fence), null)
     }
+}
+
+def submit_nowait(var raw : VkCommandBuffer) {
+    submit_core(raw, g_gpu.fence)
+}
+
+// overlap submit: NO fence — the in-order queue carries the ordering, and the window's LAST
+// submit (submit_wait) signals the one fence the caller waits on
+def submit_chunk(var raw : VkCommandBuffer) {
+    var nofence : VkFence
+    submit_core(raw, nofence)
 }
 
 def wait_fence {

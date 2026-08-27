@@ -118,6 +118,9 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_TRIM` | flag | off | Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity). |
 | `DASLLAMA_VK_MEMPRIO` | flag | on | Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours. |
 | `DASLLAMA_VK_FA` | flag | on | Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths. |
+| `DASLLAMA_VK_KVM` | flag | on | Merged k|v prefill GEMM - one dispatch over the adjacent k+v arena planes; 0 pins the split k + v dispatches for a same-build A/B. |
+| `DASLLAMA_VK_OVERLAP` | flag | on | Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit. |
+| `DASLLAMA_VK_GPU_EMBED` | flag | on | Device-side token-embedding gather for the resident prefill (the embd plane joins the arena; tied models reuse the cls plane); 0 keeps the CPU embed loop. |
 | `DASLLAMA_VK_REBAR` | flag | on | Use a ReBAR device-local host-visible heap when one larger than 1GB is present. |
 | `DASLLAMA_VK_KV32` | number | 0 | Arm the resident driver with f32 KV mirrors instead of the f16 default (A/B instrument; only sessions of the armed codec are served). |
 | `DASLLAMA_CM2_TILE` | number | 0 | cm2 prefill tile pick: 0 = occupancy heuristic, 128 = force the m tile, 256 = force the l tile (A/B instrument). |

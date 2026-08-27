@@ -180,6 +180,42 @@ class ArAddRmsRq : ArBase {
     }
 }
 
+// the batch twin: one workgroup per row — add+rms, then the row's Q8_0 blocks quantize out of
+// the row stash (the split pair's xb write+reread vanishes). Verbatim reduce/amax/rounding, so
+// bit-identical to cls_ar followed by cls_dn_rq.
+[vk_dispatch(name = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
+class ClsArAddRmsRqB : ArBase {
+    @ssbo @binding = 3 outq : array<uint>    // the quantized words, row-major blocks
+    @ssbo @binding = 4 outs : array<float>   // per-32-block scales
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv")]
+    def run {
+        let tid = gl_LocalInvocationID.x
+        let rbase = gl_WorkGroupID.x * pa.dim
+        let ss = accum_row(rbase)
+        let inv = rms_inv(ss)
+        let nblk = pa.dim / 32u
+        let qb0 = gl_WorkGroupID.x * nblk
+        let lane8 = tid % 8u
+        var b = tid / 8u
+        while (b < nblk) {
+            let base = b * 32u + lane8 * 4u
+            let v0 = wn[pa.woff + base] * (row[base] * inv)
+            let v1 = wn[pa.woff + base + 1u] * (row[base + 1u] * inv)
+            let v2 = wn[pa.woff + base + 2u] * (row[base + 2u] * inv)
+            let v3 = wn[pa.woff + base + 3u] * (row[base + 3u] * inv)
+            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
+            let d = m / 127.0
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            if (lane8 == 0u) {
+                outs[qb0 + b] = d
+            }
+            outq[(qb0 + b) * 8u + lane8] = q8_pack4(v0, v1, v2, v3, id)
+            b += 32u
+        }
+    }
+}
+
 struct RqArgs {
     inbase : uint   // element base of the source rows
     nblk : uint     // block / superblock count
@@ -399,6 +435,64 @@ class F16Cvt {
             outh[e + 1u] = float16(src[e + 1u])
             outh[e + 2u] = float16(src[e + 2u])
             outh[e + 3u] = float16(src[e + 3u])
+        }
+    }
+}
+
+struct EmbArgs {
+    npos : uint
+    dim : uint
+    nbb : uint     // 32-blocks per row (dim / 32)
+    wblk0 : uint   // the embd plane's slab-local block base
+    scale : float  // config embed_scale (1.0 for the llama family)
+}
+
+// device-side token-embedding gather: row ids[r] of the q8 embd plane dequants into x[r] — the
+// CPU embed loop and its x upload both vanish (the ids ride a 4-byte-per-row upload instead)
+[vk_dispatch(name = "emb_gather_cls", grid = "wgs", params = "wgs : int64")]
+class EmbGather {
+    @ssbo @binding = 0 wq : array<uint>        // weight quant words
+    @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
+    @ssbo @binding = 2 ids : array<uint>       // one token id per row
+    @ssbo @binding = 3 xout : array<float>
+    @push_constant pa : EmbArgs
+
+    [spirv_kernel(local_size_x = 256, name = "emb_gather_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.npos * pa.dim) {
+            let row = e / pa.dim
+            let col = e % pa.dim
+            let ib = pa.wblk0 + ids[row] * pa.nbb + col / 32u
+            let lw = (col % 32u) / 4u
+            let v = float4(int4(unpack8(int(wq[ib * 8u + lw])))) * (float(wsh[ib]) * pa.scale)
+            xout[e] = v.x
+            xout[e + 1u] = v.y
+            xout[e + 2u] = v.z
+            xout[e + 3u] = v.w
+        }
+    }
+}
+
+// the f32-table twin (untied models whose embd lives raw in fblob): a pure indexed row copy
+[vk_dispatch(name = "emb_gather_f32_cls", grid = "wgs", params = "wgs : int64")]
+class EmbGatherF32 {
+    @ssbo @binding = 0 wf : array<float>       // the f32 embd table, vocab x dim rows
+    @ssbo @binding = 1 ids : array<uint>       // one token id per row
+    @ssbo @binding = 2 xout : array<float>
+    @push_constant pa : EmbArgs
+
+    [spirv_kernel(local_size_x = 256, name = "emb_gather_f32_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.npos * pa.dim) {
+            let row = e / pa.dim
+            let col = e % pa.dim
+            let src = ids[row] * pa.dim + col
+            xout[e] = wf[src] * pa.scale
+            xout[e + 1u] = wf[src + 1u] * pa.scale
+            xout[e + 2u] = wf[src + 2u] * pa.scale
+            xout[e + 3u] = wf[src + 3u] * pa.scale
         }
     }
 }
@@ -3770,7 +3864,8 @@ struct RopeKvBArgs {
     layerbase : uint // this layer's K/V mirror base
     npos : uint
     pos0 : uint      // the window's first absolute position
-    voff : uint      // v rows' base inside the kv projection buffer
+    voff : uint      // v base inside the kv projection buffer (block layout: npos * kvd; merged rows: kvd)
+    kstride : uint   // projection-row stride (block layout: kvd; the merged k|v GEMM row: 2 * kvd)
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
@@ -3802,11 +3897,11 @@ class template RopeKvStoreBT {
             let e1 = pa.neox != 0u ? j + pa.half : j * 2u + 1u
             let apos = pa.pos0 + p
             if (is_k) {
-                let kb = p * pa.kvd + h * pa.hs
+                let kb = p * pa.kstride + h * pa.hs
                 let a0 = kvrows[kb + e0]
                 let a1 = kvrows[kb + e1]
                 let mo = pa.layerbase + apos * pa.kvd + h * pa.hs
-                let vb = pa.voff + p * pa.kvd + h * pa.hs
+                let vb = pa.voff + p * pa.kstride + h * pa.hs
                 static_if (CLAMP16) {
                     kmir[mo + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
                     kmir[mo + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))

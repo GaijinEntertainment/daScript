@@ -439,6 +439,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
 // ===== the resident whole-stack decode driver (dense models that fully fit) =====
 
 var private g_rdec_active = false       // this loaded model runs the resident decode driver
+var private g_rdec_emb_gpu = false      // the embd plane sits in the arena — the ids-form prefill gate
 var private g_rdec_cnt = 0l             // cached positions in the device KV mirror (built as we decode)
 var private g_rdec_cap = 0l             // mirror context the driver armed at (<= model ctx when VRAM-capped)
 var private g_rdec_gen = 0l             // mirror ownership generation (bumped per resident prefill)
@@ -514,6 +515,7 @@ def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : K
 //! leaves the driver unarmed) if the model is not a servable dense shape or does not fit at seq_cap.
 def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // nolint:STYLE037,STYLE038 — all-or-nothing arm: one reject per unsupported family feature, no seam
     g_rdec_active = false
+    g_rdec_emb_gpu = false
     vulkan_bake_role(VkBakeRole.arena)
     if (!moe_gpu_resident_installed() || t.quant != QuantMode.q8 || t.config.n_expert > 0l) {
         return false
@@ -555,8 +557,15 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
     }
     // tally arena blocks per format
     var need : table<int; int64>
+    // device-side embed gather: tied models reuse the cls plane; untied q8 models place the
+    // embd plane too (reserved below), other shapes keep the CPU embed (fail-closed gate)
+    let emb_gpu_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
+        && (c.shared_weights ? cls_fmt == KqFmt.q8 : (t.cls_q8 && !t.planes_trimmed)))
+    // the fblob else-arm of embed_row: neither a q8 nor a kq plane pair serves the table
+    let emb_f32_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
+        && !emb_gpu_want && !t.cls_q8 && !cls_kq(t) && !t.planes_trimmed)
     var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
-    planes |> reserve(c.n_layers * 7l + 1l)
+    planes |> reserve(c.n_layers * 7l + 2l)
     for (l in range64(c.n_layers)) {
         let lf = resident_layer_fmts(t, l)
         planes |> push((n = dim, rows = qd, f = lf.fq))
@@ -568,6 +577,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
         planes |> push((n = hid0, rows = dim, f = lf.f2))
     }
     planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
+    if (emb_gpu_want && !c.shared_weights) {
+        planes |> push((n = dim, rows = c.vocab_size, f = KqFmt.q8))
+    }
     for (pl in planes) {
         if (!rdec_rows_ok(pl.n, pl.f)) {   // unplaceable row: the whole driver declines (all-or-nothing)
             to_log(LOG_WARNING, "dasLLAMA: resident driver declined - a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple\n")
@@ -630,6 +642,22 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
         return false
     }
     rdec_set_cls(bcls, int(cls_fmt))
+    var bemb = -1l
+    var embf = false
+    if (emb_gpu_want) {
+        bemb = c.shared_weights ? bcls : resident_place(t, KqFmt.q8, t.emb_q8_off, dim, c.vocab_size, mr, kg, wb)
+        if (bemb >= 0l) {
+            rdec_set_emb(bemb)
+            to_log(LOG_INFO, "dasLLAMA: resident driver - embed gather on device ({c.shared_weights ? "tied cls plane" : "own q8 plane"})\n")
+        }
+    } elif (emb_f32_want) {
+        // the untied-f32 ladder arm (embed_row's fblob else): the raw table uploads whole
+        embf = rdec_upload_emb_f32(t.fblob, t.tok_emb_off, c.vocab_size, dim)
+        if (embf) {
+            to_log(LOG_INFO, "dasLLAMA: resident driver - embed gather on device (f32 plane)\n")
+        }
+    }
+    g_rdec_emb_gpu = bemb >= 0l || embf
     // upload the norm rows: [rms_att[l], rms_ffn[l]] x L, then rms_final; qk_norm appends the
     // per-head [rms_q[l], rms_k[l]] x L rows (hs floats each) past the fixed layout
     var norms : array<float>
@@ -749,7 +777,12 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     for (p in range64(npos)) {
         rdec_rope_row(t, p + s.rope_pos_delta, hs, half, cb, p * hs)
     }
-    rdec_prefill(s.x_b, cb, npos, s.logits)
+    if (s.embed_gpu_pending) {
+        rdec_prefill_ids(s.embed_gpu_tokens, c.embed_scale, cb, npos, s.logits)
+        s.embed_gpu_pending = false
+    } else {
+        rdec_prefill(s.x_b, cb, npos, s.logits)
+    }
     g_rdec_cnt = npos   // the mirror now holds [0, npos) — the decode's continuity witness
     g_rdec_gen ++
     s.rdec_gen = g_rdec_gen
@@ -811,8 +844,19 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
     return true
 }
 
+// the GPU-embed pre-step probe: true only when the ids-form prefill WILL be accepted, so the
+// engine's skipped CPU embed can never strand an unfilled x_b past the backfill
+[unused_argument(t)]
+def private vulkan_embed_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
+    return (g_rdec_active && g_resident_prefill_allowed && g_rdec_emb_gpu
+        && start_pos == 0l && npos <= g_rdec_cap
+        && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null
+        && s.attn_uniform_end == 0l && empty(s.mrope_pos) && !s.ds_active)
+}
+
 [init]
 def resident_driver_register() {
+    register_embed_gpu_gate(@@vulkan_embed_gpu_gate)
     register_decode_override("vulkan", @@vulkan_resident_decode)
     register_batch_decode_override("vulkan", @@vulkan_resident_batch_decode)
     register_prefill_override("vulkan", @@vulkan_resident_prefill)
@@ -834,6 +878,7 @@ struct GpuModelMarks {
     rdec_cnt : int64
     rdec_cap : int64
     rdec_kvdt : KVDtype
+    rdec_emb_gpu : bool
 }
 
 //! A fresh no-model GpuModelMarks — the facade's ctor-shaped re-export delegates here
@@ -849,9 +894,11 @@ def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     st.rdec_cnt = g_rdec_cnt
     st.rdec_cap = g_rdec_cap
     st.rdec_kvdt = g_rdec_kvdt
+    st.rdec_emb_gpu = g_rdec_emb_gpu
     g_rdec_active = false
     g_rdec_cnt = 0l
     g_rdec_cap = 0l
+    g_rdec_emb_gpu = false
 }
 
 //! Install `st` as the per-model tier state (the save's inverse; `st` reads as no-model after).
@@ -861,9 +908,11 @@ def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
     g_rdec_cnt = st.rdec_cnt
     g_rdec_cap = st.rdec_cap
     g_rdec_kvdt = st.rdec_kvdt
+    g_rdec_emb_gpu = st.rdec_emb_gpu
     st.rdec_active = false
     st.rdec_cnt = 0l
     st.rdec_cap = 0l
+    st.rdec_emb_gpu = false
 }
 
 //! Is the resident whole-stack decode driver active for the INSTALLED model? (The arm-outcome

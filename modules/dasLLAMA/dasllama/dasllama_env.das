@@ -293,7 +293,7 @@ struct public VulkanEnv {
     @clarg_doc = "Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument."
     mm_smalld : int64 = 64l
 
-    @clarg_doc = "Fused decode tail (add+rms+requant, qk-norm+rope); 0 pins the split dispatches for a same-build A/B."
+    @clarg_doc = "Fused add+rms+requant: the decode tail (plus qk-norm+rope) AND the prefill batch ar+rq pairs; 0 pins the split dispatches for a same-build A/B."
     vk_fuse : bool = true
 
     @clarg_doc = "Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail."
@@ -310,6 +310,15 @@ struct public VulkanEnv {
 
     @clarg_doc = "Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths."
     vk_fa : bool = true
+
+    @clarg_doc = "Merged k|v prefill GEMM - one dispatch over the adjacent k+v arena planes; 0 pins the split k + v dispatches for a same-build A/B."
+    vk_kvm : bool = true
+
+    @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit."
+    vk_overlap : bool = true
+
+    @clarg_doc = "Device-side token-embedding gather for the resident prefill (the embd plane joins the arena; tied models reuse the cls plane); 0 keeps the CPU embed loop."
+    vk_gpu_embed : bool = true
 
     @clarg_doc = "Use a ReBAR device-local host-visible heap when one larger than 1GB is present."
     vk_rebar : bool = true

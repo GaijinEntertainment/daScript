@@ -11,6 +11,7 @@ require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard 
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
 require dasllama/dasllama_vulkan_decode   // vk_moe_dn_step — the dn chain's npos==1 arm routes through the decode step
 require dasllama/dasllama_kqformat   // KqFmt — the arena fmt slots are its ordinals
+require dasllama/dasllama_env   // g_env_vulkan.vk_kvm — the merged-k|v A/B hatch
 require dasllama/dasllama_gpu_tier   // moe_gpu_stream_need — the stream-slot carve's source of truth
 require vulkan
 require vulkan/vulkan_boost
@@ -35,9 +36,22 @@ require math
 
 let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
 
+var private @scratch g_pf_idsw : array<uint>   // per-window token-id staging for the gather upload
+
 // mode 4 feeds the dense q8 prefill GEMMs f16 rows through the cm2 tiles (the decode GEMV
 // keeps its q8 chain — the format pick is decoupled)
 def private pf_f16_feed(f : int) : bool => f == int(KqFmt.q8) && g_gpu.coopmat_mode == 4
+
+// the k|v GEMMs merge into ONE dispatch when the two q8 planes sit adjacent in the arena
+// (the bump allocator places them back-to-back unless a slab boundary intervenes): d = 2*kvd
+// doubles the starved k/v grid and deletes the v copy. The cm2 feed keeps the split pair.
+def private pf_kv_merged(l, dim, kvd : int64) : bool {
+    if (!g_env_vulkan.vk_kvm || g_gpu.coopmat_mode == 4
+            || g_rd.layers[l].fk != int(KqFmt.q8) || g_rd.layers[l].fv != int(KqFmt.q8)) {
+        return false
+    }
+    return g_rd.layers[l].bv == g_rd.layers[l].bk + kvd * (dim / 32l)
+}
 
 // one prefill GEMM role on the class rail: schedule fill + a per-(role, variant) cached set +
 // BatchArgs push. fmt picks the class: fmt-0 in mode 4 = the cm2 l/m tiles, kq = the kq tile
@@ -146,7 +160,7 @@ def private pf_setup {
     g_rd.pf_xs = make_device_buf(np * (wide / 32l) * 4l)
     g_rd.pf_q = make_device_buf(np * qd * 4l)
     g_rd.pf_kv = make_device_buf(np * 2l * kvd * 4l)
-    g_rd.pf_v = make_device_buf(np * kvd * 4l)   // v GEMM output (copied into pf_kv's v half; the batch GEMM can't offset its output independently of its input row)
+    g_rd.pf_v = make_device_buf(np * kvd * 4l)   // split-path v GEMM output (copied into pf_kv's v half); idle when the merged k|v GEMM serves the layer
     g_rd.pf_attn = make_device_buf(np * qd * 4l)
     g_rd.pf_aq = make_device_buf(np * qd)
     g_rd.pf_as = make_device_buf(np * (qd / 32l) * 4l)
@@ -157,6 +171,28 @@ def private pf_setup {
     g_rd.pf_cos = make_device_buf(np * g_rd.head_size * 4l)
     g_rd.pf_logits_host = make_host_buf(g_rd.vocab * 4l, false, [cached = true])
     g_rd.pf_cmd = alloc_cmd()
+    // overlap ring, sized for the 1,2,4,8-layer chunk ramp over this model's depth
+    let nring = 3l + (g_rd.n_layers + 7l) / 8l
+    g_rd.pf_cmds |> reserve(nring)
+    for (_i in range64(nring)) {
+        g_rd.pf_cmds |> push(alloc_cmd())
+    }
+    if (g_rd.emb_blk >= 0l) {
+        g_rd.pf_ids = make_device_buf(np * 4l)
+        verify(ensure_emb_gather_cls(), "vk prefill: the embed-gather class rail must engage")
+        let pe = arena_planes(int(KqFmt.q8), g_rd.emb_blk)
+        g_rd.pf_emb_set = set_emb_gather_cls(
+            fixed_array(pe.wq, pe.ws, g_rd.pf_ids, g_rd.pf_x),
+            fixed_array(pe.wqb, pe.wsb, np * 4l, np * dim * 4l),
+            fixed_array(0u, 0u, 0u, VHZ_X))
+    } elif (g_rd.emb_f32 != 0ul) {
+        g_rd.pf_ids = make_device_buf(np * 4l)
+        verify(ensure_emb_gather_f32_cls(), "vk prefill: the f32 embed-gather class rail must engage")
+        g_rd.pf_emb_set = set_emb_gather_f32_cls(
+            fixed_array(g_rd.emb_f32, g_rd.pf_ids, g_rd.pf_x),
+            fixed_array(g_rd.emb_f32_bytes, np * 4l, np * dim * 4l),
+            fixed_array(0u, 0u, VHZ_X))
+    }
     ensure_batch_state()   // hq_dev/hs_dev for the FFN act
     // f16-fed groups (pf_f16_feed) take f16 convert roles; kq consumers the Q8_K quant/act forms
     var any6 = false
@@ -185,6 +221,7 @@ def private pf_setup {
     }
     let nsets = int(g_rd.n_layers * PF_ROLES + 2l)   // + prologue, final quantize of the last row
     g_rd.pf_sets |> resize(nsets)
+    g_rd.pf_arq_sets |> resize(g_rd.n_layers * 2l)
     g_rd.pf_meta |> resize(nsets)
     for (mi in range(nsets)) {
         g_rd.pf_meta[mi] = make_host_buf(BATCH_META_BYTES, true)
@@ -196,7 +233,7 @@ def private pf_setup {
     g_rd.pf_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
         && (g_rd.head_size == 64l || g_rd.head_size == 128l))
     let fa128s = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
-    verify(ensure_cls_dn_rq() && ensure_cls_ar()
+    verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b()
         && (kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls())
         && (fa128s ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
             : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
@@ -208,6 +245,15 @@ def private pf_setup {
         "vk prefill: the class rails must engage on a live device")
     if (g_rd.pf_facm2) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed (hs {g_rd.head_size}, native f16 mirrors)\n")
+    }
+    var nkvm = 0l
+    for (l in range64(g_rd.n_layers)) {
+        if (pf_kv_merged(l, dim, kvd)) {
+            nkvm++
+        }
+    }
+    if (nkvm > 0l) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: merged k|v prefill GEMM armed ({nkvm} of {g_rd.n_layers} layers)\n")
     }
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
@@ -276,6 +322,15 @@ def private pf_setup {
         g_rd.pf_sets[b + 14] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb),
             fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
             fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
+        // fused ar+rq twins (q8 chains under vk_fuse): [2l] the ffn site, [2l+1] addr_next
+        g_rd.pf_arq_sets[int(l * 2l)] = set_cls_ar_rq_b(
+            fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xq, g_rd.pf_xs),
+            fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim, np * (dim / 32l) * 4l),
+            fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XQ, VHZ_XQ))
+        g_rd.pf_arq_sets[int(l * 2l + 1l)] = set_cls_ar_rq_b(
+            fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xq, g_rd.pf_xs),
+            fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim, np * (dim / 32l) * 4l),
+            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_XQ))
         // 15 qk rmsnorm (qk_norm models; class: q, k rows, norm rows)
         if (g_rd.qk_norm) {
             g_rd.pf_sets[b + 15] = set_qk_rms_cls(fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.norms_dev),
@@ -299,6 +354,47 @@ def private pf_setup {
 //! (cos_batch, [npos x hs]) -> the last row's logits, filling the KV mirror at positions [0, npos).
 [hot_path]   // the per-window resident prefill — encode + one submit per window
 def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) {
+    let noids : array<int64>
+    pf_run(x_batch, noids, false, 1.0, cos_batch, npos, logits)
+}
+
+//! The ids-form twin: token ids in, the embd rows gather ON DEVICE from the arena's embd plane
+//! (emb_blk >= 0), so the CPU embed loop and the x upload both vanish from the window wall.
+[hot_path]   // the per-window resident prefill — encode + one submit per window
+def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) {
+    assert(g_rd != null && (g_rd.emb_blk >= 0l || g_rd.emb_f32 != 0ul), "vk_rdec_prefill_ids without a placed embd plane")
+    let nox : array<float>
+    pf_run(nox, tokens, true, emb_scale, cos_batch, npos, logits)
+}
+
+//! The embd plane's arena block, from the upload walk (rdec_set_emb) — arms the ids-form prefill.
+def vk_rdec_set_emb(emb_block : int64) {
+    assert(g_rd != null, "vk_rdec_set_emb before prepare")
+    g_rd.emb_blk = emb_block
+}
+
+let private EMB_F32_CAP = 536_870_912l   // an untied f32 table rides the plan's headroom — cap it
+
+//! The untied-f32 arm: upload the raw fblob embd table to a device plane (budget-guarded,
+//! fail-closed false = the caller keeps the CPU embed).
+def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool {
+    assert(g_rd != null, "vk_rdec_upload_emb_f32 before prepare")
+    let bytes = vocab * dim * 4l
+    if (bytes > EMB_F32_CAP || g_gpu.resident_bytes + bytes > g_gpu.weight_budget) {
+        return false
+    }
+    g_rd.emb_f32 = make_device_buf(bytes)
+    g_rd.emb_f32_bytes = bytes
+    g_gpu.resident_bytes += bytes
+    unsafe {
+        upload_region_at(g_rd.emb_f32, 0l, addr<uint8 const?>(fblob[int(off)]), bytes)
+    }
+    return true
+}
+
+[hot_path]   // the shared window walk of both prefill forms
+def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; emb_scale : float;
+                   cos_batch : array<float>; npos : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_prefill before prepare/set_cls")
     pf_setup()
     let dim = g_rd.dim
@@ -308,15 +404,21 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
     let nlfin = g_rd.n_layers * 2l * dim
     let pairs = int(qd / 2l + kvd / 2l)
     unsafe {
-        // prompts over the PF_WINDOW activation buffers run as sequential windows: each window's
-        // rope/attention address the mirror at absolute positions, so window w attends everything
-        // [0, w0 + row] the earlier windows stored. Only the last window runs fin_rq + cls.
+        // sequential windows address the mirror at absolute positions (window w attends [0, w0 + row]); only the last runs fin_rq + cls
         var w0 = 0l
         while (w0 < npos) {
             let tp0 = ref_time_ticks()
             let wlen = min(g_rd.pf_np, npos - w0)
             let last = w0 + wlen >= npos
-            upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
+            if (use_ids) {
+                g_pf_idsw |> resize(wlen)
+                for (i in range64(wlen)) {
+                    g_pf_idsw[int(i)] = uint(ids[w0 + i])
+                }
+                upload_region_at(g_rd.pf_ids, 0l, addr<uint8 const?>(g_pf_idsw[0]), wlen * 4l)
+            } else {
+                upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
+            }
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * g_rd.head_size)]), wlen * g_rd.head_size * 4l)
             let bp = int(g_rd.n_layers * PF_ROLES)
             let t_prep = get_time_usec(tp0)
@@ -334,13 +436,40 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             let fa128 = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
             let attnwg = fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l)
             let hs = g_rd.head_size
+            if (use_ids) {
+                // the gather lands in pf_x before the prologue reads it; no extra pfq_ts — its cost folds into the prologue stamp
+                var pce = EmbArgs(npos = uint(wlen), dim = uint(dim), nbb = uint(dim / 32l),
+                    wblk0 = g_rd.emb_blk >= 0l ? uint(arena_local_blk(g_rd.emb_blk)) : 0u, scale = emb_scale)
+                if (g_rd.emb_blk >= 0l) {
+                    enc_emb_gather_cls(raw, h, g_rd.pf_emb_set, pce, (wlen * dim / 4l + 255l) / 256l)
+                } else {
+                    enc_emb_gather_f32_cls(raw, h, g_rd.pf_emb_set, pce, (wlen * dim / 4l + 255l) / 256l)
+                }
+            }
             var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
             enc_cls_ar(raw, h, g_rd.pf_sets[bp + 0], pc_pro, wlen)   // prologue norm
             pfq_ts(raw)
+            // record/execute overlap: 1,2,4,8-layer ramped chunk submits — the GPU starts while the CPU records on
+            let overlap = g_env_vulkan.vk_overlap
+            var nextb = 1l
+            var cstep = 1l
+            var nchunk = 0
             for (l in range64(g_rd.n_layers)) {
+                if (overlap && l == nextb) {
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_chunk(raw)
+                    assert(nchunk < length(g_rd.pf_cmds), "vk prefill: overlap ring exhausted")
+                    raw = g_rd.pf_cmds[nchunk]
+                    nchunk++
+                    let rfc : VkCommandBufferResetFlags
+                    vk_check(vkResetCommandBuffer(raw, rfc), null)
+                    let beginc = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, beginc), null)
+                    cstep = min(cstep * 2l, 8l)
+                    nextb += cstep
+                }
                 let b = int(l * PF_ROLES)
-                // f16-fed roles (fmt-6, and fmt-0 under mode 4's l-tile): f32->f16 convert feeds
-                // the decode-in-load GEMM; the fill's tile rule keys off the same group flag
+                // f16-fed roles (mode 4's cm2 tiles): the f32->f16 convert feeds decode-in-load; the fill's tile rule keys off the same flag
                 let fq6 = pf_f16_feed(g_rd.layers[l].fq)
                 let fo6 = pf_f16_feed(g_rd.layers[l].fo)
                 let gu6 = pf_f16_feed(g_rd.layers[l].f1)
@@ -351,7 +480,11 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 let guk = kq_sb(g_rd.layers[l].f1)
                 let dnk = kq_sb(g_rd.layers[l].f2)
                 let mirb = l * g_rd.seq_cap * kvd   // nolint:LINT021 — the mirror offset multiply must run 64-bit before the push-field narrow
-                if (fq6) {
+                // a fused previous addr_next already produced this layer's quants — b+0 only stamps
+                let arqf = g_env_vulkan.vk_fuse
+                if (l > 0l && arqf && !fq6 && !fqk) {
+                    // the shared trailing stamp below keeps the role shape; nothing encodes here
+                } elif (fq6) {
                     var pc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
                     enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
                 } elif (fqk) {
@@ -372,15 +505,23 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 let xsn = fq6 ? 256l : np * (dim / 32l) * 4l
                 pf_gemm_enc(raw, h, b + 1, g_rd.layers[l].fq, pq.wq, pq.ws, xqb, xsb, g_rd.pf_q,
                     pq.wqb, pq.wsb, xqn, xsn, np * qd * 4l, VHZ_XQ, VHZ_Q, dim, qd, g_rd.layers[l].bq, wlen)
-                pf_gemm_enc(raw, h, b + 2, g_rd.layers[l].fk, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
-                    pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK, dim, kvd, g_rd.layers[l].bk, wlen)
-                pf_gemm_enc(raw, h, b + 3, g_rd.layers[l].fv, pv.wq, pv.ws, xqb, xsb, g_rd.pf_v,
-                    pv.wqb, pv.wsb, xqn, xsn, np * kvd * 4l, VHZ_XQ, VHZ_VST, dim, kvd, g_rd.layers[l].bv, wlen)
-                vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
-                cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
+                let kvm = pf_kv_merged(l, dim, kvd)
+                if (kvm) {
+                    // merged k|v over the adjacent planes: pf_kv fills row-interleaved and consumers read by kstride
+                    pf_gemm_enc(raw, h, b + 2, g_rd.layers[l].fk, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
+                        pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK | VHZ_KVV, dim, 2l * kvd, g_rd.layers[l].bk, wlen)
+                    pfq_ts(raw)   // the v stamp: the merged GEMM's cost lands on k's delta
+                } else {
+                    pf_gemm_enc(raw, h, b + 2, g_rd.layers[l].fk, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
+                        pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK, dim, kvd, g_rd.layers[l].bk, wlen)
+                    pf_gemm_enc(raw, h, b + 3, g_rd.layers[l].fv, pv.wq, pv.ws, xqb, xsb, g_rd.pf_v,
+                        pv.wqb, pv.wsb, xqn, xsn, np * kvd * 4l, VHZ_XQ, VHZ_VST, dim, kvd, g_rd.layers[l].bv, wlen)
+                    vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
+                    cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
+                }
                 if (g_rd.qk_norm) {
                     var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(kvd / hs),
-                        qstride = uint(qd), kstride = uint(kvd), kbase = 0u,
+                        qstride = uint(qd), kstride = uint(kvm ? 2l * kvd : kvd), kbase = 0u,
                         qwoff = uint(nlfin + dim + l * 2l * hs), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hs),
                         eps = g_rd.eps)
                     enc_qk_rms_cls(raw, h, g_rd.pf_sets[b + 15], pcn, wlen * (g_rd.n_heads + kvd / hs))
@@ -388,7 +529,8 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 }
                 var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
                     neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
-                    layerbase = uint(mirb), npos = uint(wlen), pos0 = uint(w0), voff = uint(wlen * kvd))
+                    layerbase = uint(mirb), npos = uint(wlen), pos0 = uint(w0),
+                    voff = uint(kvm ? kvd : wlen * kvd), kstride = uint(kvm ? 2l * kvd : kvd))
                 if (g_rd.kv16) {
                     enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
                 } else {
@@ -444,17 +586,23 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 pf_gemm_enc(raw, h, b + 7, g_rd.layers[l].fo, po.wq, po.ws, aqb, asb, g_rd.pf_xb2,
                     po.wqb, po.wsb, aqn, asn, np * dim * 4l, VHZ_AQ, VHZ_XB2, qd, dim, g_rd.layers[l].bo, wlen)
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
-                enc_cls_ar(raw, h, g_rd.pf_sets[b + 8], pc8, wlen)
-                pfq_ts(raw)
-                if (gu6) {
-                    var pc9 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
-                    enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
-                } elif (guk) {
-                    var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
-                    enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 8l + 255l) / 256l)
+                if (arqf && !gu6 && !guk) {
+                    // fused addr_ffn: quants land out of the row stash; the b+9 slot only stamps
+                    enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int(l * 2l)], pc8, wlen)
+                    pfq_ts(raw)
                 } else {
-                    var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-                    enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
+                    enc_cls_ar(raw, h, g_rd.pf_sets[b + 8], pc8, wlen)
+                    pfq_ts(raw)
+                    if (gu6) {
+                        var pc9 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+                        enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
+                    } elif (guk) {
+                        var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
+                        enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 8l + 255l) / 256l)
+                    } else {
+                        var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
+                        enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
+                    }
                 }
                 pfq_ts(raw)
                 let p1 = arena_planes(g_rd.layers[l].f1, g_rd.layers[l].b1)
@@ -487,7 +635,13 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                     p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, wlen)
                 let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — composed from int64 layout offsets
                 var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
-                enc_cls_ar(raw, h, g_rd.pf_sets[b + 14], pc14, wlen)
+                // fused addr_next = the next layer's qkv quants; the last layer keeps split ar (fin_rq reads its xb)
+                let fqn = l + 1l < g_rd.n_layers ? g_rd.layers[l + 1l].fq : -1
+                if (arqf && l + 1l < g_rd.n_layers && !pf_f16_feed(fqn) && !kq_sb(fqn)) {
+                    enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int(l * 2l + 1l)], pc14, wlen)
+                } else {
+                    enc_cls_ar(raw, h, g_rd.pf_sets[b + 14], pc14, wlen)
+                }
                 pfq_ts(raw)
             }
             if (last) {
@@ -519,9 +673,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             w0 += wlen
         }
         memcpy(addr<void?>(logits[0]), g_rd.pf_logits_host.mapped, g_rd.vocab * 4l)
-        // per-role GPU aggregation (q0 start, q1 meta, q2 prologue, rpl/layer, final rq, cls), only when
-        // every stamp landed (deep graphs overflow PFQ_CAP). Multi-window prompts: LAST window only.
-        // Overlapped levels (q|k|v, gate|up) put the whole level's cost on the LAST member's delta.
+        // per-role GPU aggregation, LAST window, only when every stamp landed; overlapped levels (q|k|v, gate|up) bill the level on the last member's delta
         let rpl = g_rd.qk_norm ? 16l : 15l
         if (vk_prof() && g_pfq_n == 5u + uint(g_rd.n_layers * rpl)) {
             var role : double[16]
