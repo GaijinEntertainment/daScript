@@ -1654,9 +1654,15 @@ class GlslExport : AstVisitor {
         }
         return source
     }
+    // A real `for ( ; cond ; i++ )`, NOT a while() with the increment appended to
+    // the body. Under the while() shape a `continue` in the body jumps straight
+    // to the condition and skips the increment, so the loop never advances --
+    // which compiles clean and then hangs the GPU with no diagnostic. The
+    // increments therefore belong in the loop header, where `continue` reaches
+    // them; a multi-source for puts all of them there, comma-separated.
     def override preVisitExprForBody(expr : ExprFor?) {
         newLine(1)
-        *writer |> write("{repeat("\t",tab)}while ( ")
+        *writer |> write("{repeat("\t",tab)}for ( ; ")
         for (source, svar, iter in expr.sources, expr.iteratorVariables, expr.iterators) {
             if (iter != expr.iterators[0]) {
                 *writer |> write(" && ")
@@ -1671,6 +1677,13 @@ class GlslExport : AstVisitor {
                 *writer |> write("{svar.name}!=_for_range_v{svar.name}.y")
             }
         }
+        *writer |> write("; ")
+        for (svar, iter in expr.iteratorVariables, expr.iterators) {
+            if (iter != expr.iterators[0]) {
+                *writer |> write(", ")
+            }
+            *writer |> write("{svar.name}++")
+        }
         *writer |> write(" )")
         newLine(1)
         *writer |> write("{repeat("\t",tab)}\{")
@@ -1678,16 +1691,12 @@ class GlslExport : AstVisitor {
         *writer |> write("{repeat("\t",tab-1)}")
     }
     def override visitExprFor(expr : ExprFor?) : ExpressionPtr {
-        for (svar, source in expr.iteratorVariables, expr.sources) {
-            *writer |> write("{repeat("\t",tab)}")
+        for (source in expr.sources) {
             if (isDimFor(source)) {
                 renames |> pop()
-                *writer |> write("{svar.name}++;")
-            } elif (isRangeFor(source)) {
-                *writer |> write("{svar.name}++;")
             }
-            newLine(1)
         }
+        newLine(1)
         *writer |> write("{repeat("\t",tab)}\}\}")
         return expr
     }

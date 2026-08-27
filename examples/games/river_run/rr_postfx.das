@@ -171,17 +171,14 @@ def fs_ssao {
         let clip = p_params2.w
         let su = float2(sample_pos.x / (p_params2.x * -sample_pos.z), sample_pos.y / (p_params2.y * -sample_pos.z))
         let suv = su * 0.5 + float2(0.5)
-        // Guarded rather than `continue`d on purpose: the GLSL emitter lowers a
-        // range for-loop to a while() whose increment is the last statement of
-        // the body, so a `continue` skips the increment and spins forever.
-        let inside = (suv.x >= 0.0 && suv.x <= 1.0 && suv.y >= 0.0 && suv.y <= 1.0)
-        if (inside) {
-            let sample_depth = texture(p_tex0, suv).w * p_params2.z
-            let delta = -sample_pos.z - sample_depth
-            let range_check = saturate(radius / max(abs(-origin.z - sample_depth), 0.0001))
-            if (delta > 0.02 * clip) {
-                occlusion += range_check
-            }
+        if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) {
+            continue
+        }
+        let sample_depth = texture(p_tex0, suv).w * p_params2.z
+        let delta = -sample_pos.z - sample_depth
+        let range_check = saturate(radius / max(abs(-origin.z - sample_depth), 0.0001))
+        if (delta > 0.02 * clip) {
+            occlusion += range_check
         }
     }
     let ao = saturate(1.0 - occlusion / float(taps) * p_params.y)
