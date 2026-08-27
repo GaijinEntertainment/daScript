@@ -4,7 +4,7 @@ require daslib/daspkg
 
 [export]
 def package() {
-    package_name("river-run")
+    package_name("river_run")
     package_description("River Run: shadow-mapped river shooter on dasGlfw + dasOpenGL + dasAudio")
 }
 
