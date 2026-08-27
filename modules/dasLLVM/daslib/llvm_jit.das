@@ -8062,7 +8062,7 @@ class public DisableJitVisitor : AstVisitor {
         if (expr.trait == "ast_typedecl" || expr.trait == "rtti_classinfo" || expr.trait == "rtti_typeinfo") {
             pass
         } else {
-            to_log(LOG_WARNING, "LLVM JIT: unsupported typeinfo trait `{expr.trait}` at {expr.at}, falling back to interpreter. Please report at https://github.com/GaijinEntertainment/daScript/issues\n")
+            to_log(LOG_WARNING, "LLVM JIT: unsupported typeinfo trait `{expr.trait}` at {describe(expr.at)}, falling back to interpreter\n")
             disable = true
         }
     }
@@ -8071,7 +8071,7 @@ class public DisableJitVisitor : AstVisitor {
         // jit_enabled programs get quotes lowered by daslib/quote's QuotePass before we
         // ever run; a raw one means lowering didn't fire for the defining module (macro
         // modules stay raw by design) — skip the function instead of failing the file
-        to_log(LOG_WARNING, "LLVM JIT: raw quote( ) - daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module at {expr.at}, falling back to interpreter.\n")
+        to_log(LOG_WARNING, "LLVM JIT: raw quote( ) - daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module at {describe(expr.at)}, falling back to interpreter.\n")
         disable = true
     }
 
@@ -8093,11 +8093,11 @@ class public DisableJitVisitor : AstVisitor {
         assume leftT = expr.left._type
         if (leftT.isHandle) {
             if (get_jit_clone(leftT.annotation) == null) {
-                to_log(LOG_WARNING, "LLVM JIT: clone of handled type `{describe(leftT)}` is not supported at {expr.at}, falling back to interpreter. Please report at https://github.com/GaijinEntertainment/daScript/issues\n")
+                to_log(LOG_WARNING, "LLVM JIT: clone of handled type `{describe(leftT)}` is not supported at {describe(expr.at)}, falling back to interpreter\n")
                 disable = true
             }
         } elif (!leftT.canCopy) {
-            to_log(LOG_WARNING, "LLVM JIT: clone of `{describe(leftT)}` is not supported at {expr.at}, falling back to interpreter\n")
+            to_log(LOG_WARNING, "LLVM JIT: clone of `{describe(leftT)}` is not supported at {describe(expr.at)}, falling back to interpreter\n")
             disable = true
         }
     }
@@ -8107,17 +8107,17 @@ class public DisableJitVisitor : AstVisitor {
             let type_str = describe(expr.subexpr._type)
             to_log(LOG_WARNING,
                 "LLVM JIT: native operator `.[]` should be implemented for " +
-                "type {type_str} to be used in JIT, keeping interpreter mode.\n")
+                "type {type_str} at {describe(expr.at)} to be used in JIT, keeping interpreter mode.\n")
             disable = true
         }
     }
 
     def override preVisitExprForSource(var expr : ExprFor?, var source : ExpressionPtr, last : bool) {
         if (source._type.isHandle) {
-            let type_str = describe(source)
+            let type_str = describe(source._type)
             to_log(LOG_WARNING,
                 "LLVM JIT: `each` should be implemented for " +
-                "type {type_str} to be used in JIT, keeping interpreter mode.\n")
+                "type {type_str} at {describe(expr.at)} to be used in JIT, keeping interpreter mode.\n")
             disable = true
         }
     }
@@ -8129,7 +8129,7 @@ class public DisableJitVisitor : AstVisitor {
         }
         if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
             if (!has_intrinsic(expr) && !is_dasbind_late(expr.func)) {
-                to_log(LOG_WARNING, "LLVM JIT: unsupported builtin `{expr.func._module.name}::{expr.func.name}` at {expr.at}, falling back to interpreter.\n")
+                to_log(LOG_WARNING, "LLVM JIT: unsupported builtin `{expr.func._module.name}::{expr.func.name}` at {describe(expr.at)}, falling back to interpreter.\n")
                 disable = true
             }
         }
@@ -8147,7 +8147,7 @@ class public DisableJitVisitor : AstVisitor {
                 }
             }
             if (lattice) {
-                to_log(LOG_WARNING, "LLVM JIT: 16/8-bit lattice type crosses `{expr.func._module.name}::{expr.func.name}` at {expr.at}, falling back to interpreter.\n")
+                to_log(LOG_WARNING, "LLVM JIT: 16/8-bit lattice type crosses `{expr.func._module.name}::{expr.func.name}` at {describe(expr.at)}, falling back to interpreter.\n")
                 disable = true
             }
         }
