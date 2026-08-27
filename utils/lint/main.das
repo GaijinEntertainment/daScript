@@ -15,6 +15,8 @@ require math
 require strings
 require daslib/strings_boost
 require daslib/rtti
+require daslib/regex
+require daslib/regex_boost
 require ../common/parallel_workers.das
 
 let JSON_PREFIX = "##lint##\n"
@@ -183,24 +185,47 @@ def is_rule_doc_name(name : string) : bool {
         || name |> starts_with("REVIEW_") || name |> starts_with("ARCHITECTURE_"))
 }
 
-// Directories under `path` whose OWN .lint_config sets [docs] rule_docs_only = true.
-// Folder property, no cascade - each directory answers for itself. Skip rules mirror
-// scan_das_files so both passes see the same tree.
-def scan_docs_folders(path : string; var folders : array<string>; var seen : table<string; void?>) {
+// A rule runs unless --disable names it, or --enable put the run in whitelist mode without it.
+def rule_is_on(code : string; disabled_codes, enabled_codes : table<string>) : bool {
+    return !key_exists(disabled_codes, code) && (empty(enabled_codes) || key_exists(enabled_codes, code))
+}
+
+// Directories under `path` whose OWN .lint_config arms a [docs] flag: rule_docs_only feeds
+// LINT025, enforce_arch feeds LINT026's reverse direction. Folder property, no cascade - each
+// directory answers for itself. Skip rules mirror scan_das_files so all passes see one tree.
+def scan_docs_folders(path : string; want_rule_docs, want_arch : bool;
+                      var folders, arch_folders : array<string>; var seen : table<string; void?>) {
     let st = stat(path)
     return if (!st.is_valid || !st.is_dir || seen |> key_exists(path))
     seen |> insert(path, null)
-    if (rule_docs_only_at("{path}/.lint_config")) {
+    let cfg = "{path}/.lint_config"
+    if (want_rule_docs && rule_docs_only_at(cfg)) {
         folders |> push(path)
+    }
+    if (want_arch && enforce_arch_at(cfg)) {
+        arch_folders |> push(path)
     }
     fio::dir(path) $(name) {
         return if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name))
         let full = "{path}/{name}"
         let fst = stat(full)
         if (fst.is_valid && fst.is_dir) {
-            scan_docs_folders(full, folders, seen)
+            scan_docs_folders(full, want_rule_docs, want_arch, folders, arch_folders, seen)
         }
     }
+}
+
+// One walk of the run's scan roots for both folder rules - the tree is walked once even when
+// only one of them is on, and not at all when neither is.
+def collect_docs_folders(roots : array<string>; want_rule_docs, want_arch : bool;
+                         var folders, arch_folders : array<string>&) {
+    return if (!want_rule_docs && !want_arch)
+    var seen : table<string; void?>
+    for (root in roots) {
+        scan_docs_folders(root, want_rule_docs, want_arch, folders, arch_folders, seen)
+    }
+    folders |> sort
+    arch_folders |> sort
 }
 
 // The .md files in `folder` (non-recursive) that are not rule documents.
@@ -215,18 +240,10 @@ def collect_stray_rule_docs(folder : string; var out : array<string>) {
     }
 }
 
-// Folder-docs pass: one sweep per invocation over the directory roots the run was given.
+// Folder-docs pass: one sweep per invocation over the folders the walk found armed.
 // A ledger or plan parked beside shipped code is read by nobody and goes stale unnoticed,
 // so a tagged folder admits rule documents only. Returns the finding count.
-def run_rule_docs_pass(roots : array<string>; disabled_codes, enabled_codes : table<string>) : int {
-    return 0 if (key_exists(disabled_codes, "LINT025")
-                    || (!empty(enabled_codes) && !key_exists(enabled_codes, "LINT025")))
-    var folders : array<string>
-    var seen : table<string; void?>
-    for (root in roots) {
-        scan_docs_folders(root, folders, seen)
-    }
-    folders |> sort
+def run_rule_docs_pass(folders : array<string>) : int {
     var found = 0
     for (folder in folders) {
         var strays : array<string>
@@ -236,6 +253,235 @@ def run_rule_docs_pass(roots : array<string>; disabled_codes, enabled_codes : ta
             print("{md}: LINT025: stray .md beside shipped code - rule documents only (REVIEW*.md, ARCHITECTURE*.md, LAWS.md); ledgers and plans live at the module root or plans/ (repo root)\n")
             found ++
         }
+    }
+    return found
+}
+
+// An `arch(at=...)` citation as written in a .das source. LINT026 reads the SOURCE rather than
+// the AST: the annotation is an inert builtin marker (src/builtin/module_builtin_runtime.cpp) so
+// that citing a document costs a build nothing, and a citation must be checked even in a file
+// this environment cannot compile. A match with `//` earlier on its line is prose or a
+// commented-out annotation and is skipped; one inside a string literal or a block comment is
+// not, so a fixture that plants citation text assembles it rather than spelling it out.
+var private ARCH_CITE <- %regex~arch\s*\(\s*at\s*=\s*"([^"]*)"%%
+
+// One `[arch]` citation, split at the first '#'. `doc` is normalized against the CITING file's
+// folder, so it compares equal to the same document reached from anywhere else in the tree;
+// `anchor` is empty when the citation carries no '#' at all.
+struct private ArchCitation {
+    line : int
+    doc : string
+    anchor : string
+    raw : string
+}
+
+// One `{#anchor}` a heading declares, with the line that declares it.
+struct private MdAnchor {
+    name : string
+    line : int
+}
+
+// The anchors of every document a run has resolved so far. `counts` is keyed "<doc>#<anchor>"
+// so it answers the duplicate question in one lookup; `known` records existence separately,
+// because a citation naming a missing file must not read as a missing anchor.
+struct private ArchDocs {
+    counts : table<string; int>
+    known : table<string; bool>
+}
+
+// The one spelling a path is compared under: lexical, so it works on a document that is not
+// there, and '/'-folded, so a Windows walk and a citation agree.
+def private arch_path(path : string) : string {
+    return normalize(path) |> replace("\\", "/")
+}
+
+// Where a match sits: its 1-based line, and the offset that line starts at - which is what lets
+// the scan tell an annotation from the same text inside a `//` comment.
+struct private SrcPos {
+    line : int
+    line_start : int
+}
+
+// Byte offsets (ascending) to source positions in one pass over the bytes. Counting newlines
+// with find() per citation would re-walk the source from the top each time.
+def private positions_of_offsets(text : string; offsets : array<int>) : array<SrcPos> {
+    var out : array<SrcPos>
+    out |> reserve(length(offsets))
+    peek_data(text) $(d) {
+        var line = 1
+        var start = 0
+        var at = 0
+        for (off in offsets) {
+            while (at < off) {
+                if (int(d[at]) == '\n') {
+                    line ++
+                    start = at + 1
+                }
+                at ++
+            }
+            out |> push(SrcPos(line = line, line_start = start))
+        }
+    }
+    return <- out
+}
+
+def private collect_arch_citations(file, text : string) : array<ArchCitation> {
+    var out : array<ArchCitation>
+    var raws : array<string>
+    var offsets : array<int>
+    regex_foreach(ARCH_CITE, text) $(at) {
+        offsets |> push(at.x)
+        raws |> push(regex_group(ARCH_CITE, 1, text))
+        return true
+    }
+    return <- out if (empty(raws))
+    let positions <- positions_of_offsets(text, offsets)
+    let folder = dir_name(file)
+    for (raw, off, pos in raws, offsets, positions) {
+        let slashes = find(text, "//", pos.line_start)
+        continue if (slashes >= 0 && slashes < off)
+        let hash = find(raw, "#")
+        if (hash <= 0 || hash == length(raw) - 1) {
+            // shape, not resolution: the compiler rejects this on a function, but a structure
+            // takes the marker unvalidated (one annotation per name), so lint owns it there
+            out |> push(ArchCitation(line = pos.line, raw = raw))
+            continue
+        }
+        out |> push(ArchCitation(line = pos.line, raw = raw, anchor = slice(raw, hash + 1),
+            doc = arch_path(path_join(folder, slice(raw, 0, hash)))))
+    }
+    return <- out
+}
+
+// Every `{#anchor}` a heading in `path` declares, in file order. Only a heading SUFFIX counts -
+// `## <title> {#anchor}` at any level, the brace group last on the line. A `{#...}` elsewhere is
+// prose about anchors, not a section identity.
+def private collect_md_anchors(path : string) : array<MdAnchor> {
+    var out : array<MdAnchor>
+    let text = fread(path)
+    if (!empty(text)) {
+        var lineno = 0
+        for (line in split(text, "\n")) {
+            lineno ++
+            let t = line |> strip
+            continue if (!(t |> starts_with("#")) || !(t |> ends_with("}")))
+            let open = rfind(t, "\{#")
+            continue if (open < 0)
+            let name = slice(t, open + 2, length(t) - 1)
+            continue if (empty(name))
+            out |> push(MdAnchor(name = name, line = lineno))
+        }
+    }
+    return <- out
+}
+
+// True when `doc` exists, indexing its anchors on first sight.
+def private arch_doc_exists(var docs : ArchDocs; doc : string) : bool {
+    if (!key_exists(docs.known, doc)) {
+        let st = stat(doc)
+        let ok = st.is_valid && st.is_reg
+        docs.known[doc] = ok
+        if (ok) {
+            for (a in collect_md_anchors(doc)) {
+                let key = "{doc}#{a.name}"
+                docs.counts[key] = (docs.counts ?[key] ?? 0) + 1
+            }
+        }
+    }
+    return docs.known[doc]
+}
+
+// Forward direction: a citation names a document section that must be there, exactly once.
+// An anchor declared twice is worse than a missing one - the citation reads as precise and
+// points at whichever section the reader finds first.
+def private report_arch_citation(file : string; c : ArchCitation; var docs : ArchDocs) : int {
+    var reason = ""
+    if (empty(c.anchor)) {
+        reason = "malformed citation (expected <doc>.md#<anchor>)"
+    } elif (!arch_doc_exists(docs, c.doc)) {
+        reason = "no such file"
+    } else {
+        let n = docs.counts ?["{c.doc}#{c.anchor}"] ?? 0
+        if (n == 0) {
+            reason = "no such anchor"
+        } elif (n > 1) {
+            reason = "anchor appears {n} times"
+        }
+    }
+    return 0 if (empty(reason))
+    print("{file}:{c.line}: LINT026: [arch] citation does not resolve - {reason} (\"{c.raw}\")\n")
+    return 1
+}
+
+// Both halves of the reverse check in one walk of an armed folder: the .md files that declare
+// anchors and the .das files that may cite them. Same pruning as scan_das_files.
+def private scan_arch_folder(path : string; var mds, dases : array<string>) {
+    fio::dir(path) $(name) {
+        return if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name))
+        let full = "{path}/{name}"
+        let fst = stat(full)
+        return if (!fst.is_valid)
+        if (fst.is_dir) {
+            scan_arch_folder(full, mds, dases)
+        } elif (fst.is_reg && name |> ends_with(".md")) {
+            mds |> push(full)
+        } elif (fst.is_reg && name |> ends_with(".das") && !is_skip_file(name)) {
+            dases |> push(full)
+        }
+    }
+}
+
+// Reverse direction, for a folder whose .lint_config sets [docs] enforce_arch = true: an anchor
+// is a promise that some code answers for the section, so an uncited one is either code that
+// forgot to say so or a section that was never anyone's contract.
+def private run_arch_reverse(folder : string) : int {
+    var mds : array<string>
+    var dases : array<string>
+    scan_arch_folder(folder, mds, dases)
+    mds |> sort
+    dases |> sort
+    var cited : table<string>
+    for (f in dases) {
+        let text = fread(f)
+        continue if (empty(text))
+        for (c in collect_arch_citations(f, text)) {
+            continue if (empty(c.anchor))
+            cited |> insert("{c.doc}#{c.anchor}")
+        }
+    }
+    var found = 0
+    for (md in mds) {
+        let doc = arch_path(md)
+        for (a in collect_md_anchors(md)) {
+            continue if (cited |> key_exists("{doc}#{a.name}"))
+            print("{md}:{a.line}: LINT026: anchor \{#{a.name}\} has no [arch] citation - cite it from the owning code, or strip the anchor to demote the section to narrative\n")
+            found ++
+        }
+    }
+    return found
+}
+
+// [arch] citation pass: forward over every .das under the run's scan roots, reverse over the
+// folders that armed it. A folder pass like LINT025 - once per invocation, not once per file.
+def run_arch_pass(roots, arch_folders : array<string>) : int {
+    var files : array<string>
+    var cache : table<string; void?>
+    var skipped = 0
+    for (root in roots) {
+        scan_das_files(root, files, cache, skipped)
+    }
+    files |> sort
+    var found = 0
+    var docs : ArchDocs
+    for (f in files) {
+        let text = fread(f)
+        continue if (empty(text))
+        for (c in collect_arch_citations(f, text)) {
+            found += report_arch_citation(f, c, docs)
+        }
+    }
+    for (folder in arch_folders) {
+        found += run_arch_reverse(folder)
     }
     return found
 }
@@ -707,6 +953,25 @@ def tally_result(result : LintResult; var issues : int&; var errors : int&; var 
     }
 }
 
+// Folder policy, not file policy: the two folder rules answer for the run's scan ROOTS rather
+// than its file list, so they run once per invocation, in both driver modes. Returns the
+// combined finding count.
+def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes : table<string>) : int {
+    let want_rule_docs = rule_is_on("LINT025", disabled_codes, enabled_codes)
+    let want_arch = rule_is_on("LINT026", disabled_codes, enabled_codes)
+    var rule_docs_folders : array<string>
+    var arch_folders : array<string>
+    collect_docs_folders(docs_roots, want_rule_docs, want_arch, rule_docs_folders, arch_folders)
+    var found = 0
+    if (want_rule_docs) {
+        found += run_rule_docs_pass(rule_docs_folders)
+    }
+    if (want_arch) {
+        found += run_arch_pass(docs_roots, arch_folders)
+    }
+    return found
+}
+
 // Prints the summary block; returns the process exit code (0 clean, 1 errors, 2 issues).
 def print_summary(files_count, total_issues, total_errors, total_skipped, total_excluded : int) : int {
     print("\n--- Summary ---\n")
@@ -810,8 +1075,7 @@ def main() : int {
         }
     }
 
-    // Folder policy, not file policy: runs once per invocation, in both driver modes.
-    total_issues += run_rule_docs_pass(docs_roots, disabled_codes, enabled_codes)
+    total_issues += run_folder_passes(docs_roots, disabled_codes, enabled_codes)
 
     return print_summary(length(files), total_issues, total_errors, total_skipped, total_excluded)
 }

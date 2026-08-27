@@ -775,6 +775,54 @@ never fires in an untagged folder.
     [docs]
     rule_docs_only = true
 
+LINT026 — ``[arch]`` citation does not resolve
+==============================================
+
+``[arch(at="<doc>.md#<anchor>")]`` binds a function, structure or class to a
+section of an architecture document. The annotation itself is an inert marker
+in the builtin module, so citing a document needs no ``require`` and costs a
+build nothing; the compiler checks only the citation's *shape* — exactly one
+``at=`` string, a document path and an anchor, both non-empty, separated by
+``#``. Repeat the annotation to cite more than one section.
+
+Whether a citation *resolves* is this rule's question, and the runner answers
+it with its own tree walk over the folders being linted:
+
+.. code-block:: das
+
+    [arch(at="ARCHITECTURE.md#residency")]
+    def upload_weights(var ctx : Ctx) {
+        // ...
+    }
+
+The path resolves **relative to the citing file's folder**, the document must
+exist, and the anchor must appear in it exactly once as a heading suffix —
+``## Residency ramp {#residency}``, at any heading level. An anchor declared
+twice is reported like a missing one: the citation reads as precise while
+pointing at whichever section the reader reaches first.
+
+The rule also runs in reverse, for folders that ask for it:
+
+.. code-block:: toml
+
+    # .lint_config beside the code the document describes
+    [docs]
+    enforce_arch = true
+
+In an armed folder every ``{#anchor}`` in every ``.md`` beneath it must be
+cited by at least one ``[arch]`` in the ``.das`` beneath it — an anchor is a
+promise that some code answers for the section, so an uncited one is either
+code that forgot to say so or a section that was never anyone's contract.
+Strip the anchor to demote such a section to narrative. Like ``[docs]
+rule_docs_only``, ``enforce_arch`` is a folder property with no cascade: each
+directory answers for itself.
+
+Both directions read source text rather than the AST, so a citation is checked
+even in a file the linting environment cannot compile — and so a structure's
+citation, which the compiler accepts unvalidated, is shape-checked here. A
+match with ``//`` earlier on its line is prose and is skipped; one inside a
+string literal is not.
+
 LINT018 — narrowed size argument of a call with a 64-bit overload
 ==================================================================
 

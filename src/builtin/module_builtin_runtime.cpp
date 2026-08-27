@@ -161,6 +161,38 @@ namespace das
         };
     };
 
+    // [arch(at="<doc>.md#<anchor>")] — binds this function to a section of an architecture
+    // document; the LINT026 pass in utils/lint/main.das resolves the citation against the tree.
+    // Same doctrine as the hot_path family above: a citation must not drag its checker into every
+    // build of the cited code, so the marker is registered here and costs nothing. Compile owns
+    // the citation's SHAPE only — whether it RESOLVES is the lint driver's question. Repeat the
+    // annotation to cite more than one section.
+    //
+    // A das structure or class takes the same spelling: a module holds one annotation per NAME
+    // (Module::addAnnotation is keyed by it), so "arch" cannot also be a StructureAnnotation, and
+    // the structure path — which silently ignores an annotation that is not a StructureAnnotation —
+    // accepts the citation unvalidated. LINT026 shape-checks structure citations in its stead.
+    static bool verifyArchCitation ( const AnnotationArgumentList & args, string & err ) {
+        if ( args.size()!=1 || args[0].name!="at" || args[0].type!=Type::tString ) {
+            err = "expecting exactly one argument, at=\"<doc>.md#<anchor>\"";
+            return false;
+        }
+        const string & at = args[0].sValue;
+        auto hash = at.find('#');
+        if ( hash==string::npos || hash==0 || hash==at.length()-1 ) {
+            err = "citation \"" + at + "\" is not \"<doc>.md#<anchor>\" — a document path and an anchor, both non-empty, separated by #";
+            return false;
+        }
+        return true;
+    }
+
+    struct ArchFunctionAnnotation : MarkFunctionAnnotation {
+        ArchFunctionAnnotation() : MarkFunctionAnnotation("arch") { }
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList & args, string & err) override {
+            return verifyArchCitation(args, err);
+        };
+    };
+
     struct RequestJitFunctionAnnotation : MarkFunctionAnnotation {
         RequestJitFunctionAnnotation() : MarkFunctionAnnotation("jit") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -2172,6 +2204,7 @@ namespace das
         addAnnotation(new HotPathFunctionAnnotation("no_env"));
         addAnnotation(new HotPathFunctionAnnotation("no_io"));
         addAnnotation(new HotPathFunctionAnnotation("cold_path"));
+        addAnnotation(new ArchFunctionAnnotation());
         addAnnotation(new HintFunctionAnnotation());
         addAnnotation(new RequestJitFunctionAnnotation());
         addAnnotation(new RequestNoJitFunctionAnnotation());

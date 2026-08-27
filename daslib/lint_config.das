@@ -36,6 +36,9 @@ module lint_config shared private
 //! ``rule_docs_only = true`` marks a folder that carries rule documents only;
 //! ``rule_docs_only_at`` reads that one file, and the LINT025 pass in
 //! ``utils/lint/main.das`` reports any other ``.md`` sitting beside the code.
+//! ``enforce_arch = true`` marks a folder whose ``.md`` anchors are all owed an
+//! ``[arch]`` citation; ``enforce_arch_at`` reads it, and the LINT026 pass in
+//! the same runner reports every anchor no code cites.
 
 require daslib/fio
 require daslib/json
@@ -284,19 +287,32 @@ def private with_config_table(path, table_name : string; blk : block<(var tbl : 
     }
 }
 
-//! True when the ``.lint_config`` at `config_path` sets ``[docs] rule_docs_only = true`` — the folder
-//! carries rule documents only (``REVIEW*.md`` / ``ARCHITECTURE*.md`` / ``LAWS.md``). A folder property,
-//! NOT the ``[format]`` cascade: only that one file is read, and anything missing reads as false.
-def public rule_docs_only_at(config_path : string) : bool {
+// One bool key of the [docs] table of exactly `config_path` - a folder property, so no cascade
+// and no inheritance. A missing file, missing table, missing key or non-bool value reads as false.
+def private docs_flag_at(config_path, key : string) : bool {
     var result = false
     with_config_table(config_path, "docs") $(var docs_jv) {
         var docs & = unsafe(docs_jv.value as _object)
-        return if (!key_exists(docs, "rule_docs_only"))
-        var val_jv : JsonValue? = docs["rule_docs_only"]
+        return if (!key_exists(docs, key))
+        var val_jv : JsonValue? = docs[key]
         return if (val_jv == null || !(val_jv.value is _bool))
         result = val_jv.value as _bool
     }
     return result
+}
+
+//! True when the ``.lint_config`` at `config_path` sets ``[docs] rule_docs_only = true`` — the folder
+//! carries rule documents only (``REVIEW*.md`` / ``ARCHITECTURE*.md`` / ``LAWS.md``). A folder property,
+//! NOT the ``[format]`` cascade: only that one file is read, and anything missing reads as false.
+def public rule_docs_only_at(config_path : string) : bool {
+    return docs_flag_at(config_path, "rule_docs_only")
+}
+
+//! True when the ``.lint_config`` at `config_path` sets ``[docs] enforce_arch = true`` — every
+//! ``{#anchor}`` in the folder's ``.md`` owes an ``[arch]`` citation from the ``.das`` beside it,
+//! which LINT026 reports in reverse. A folder property like ``rule_docs_only_at``.
+def public enforce_arch_at(config_path : string) : bool {
+    return docs_flag_at(config_path, "enforce_arch")
 }
 
 def private config_dir_of(file : string) : string {
