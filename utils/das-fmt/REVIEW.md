@@ -3,6 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**A diff that drops `das-fmt` from `DAS_UTILS` or `DAS_UTILS_SHIPPED_EXES` in
-`utils/CMakeLists.txt` (repo root) is a defect** - das-fmt ships as a prebuilt exe, and dropping
-either entry breaks the release bundle.
+**A diff that removes `das-fmt` from `DAS_UTILS_SHIPPED_EXES` in `utils/CMakeLists.txt` is a
+defect.** The removal drops the prebuilt das-fmt exe from the release bundle, and the gate
+cannot see a removed entry.

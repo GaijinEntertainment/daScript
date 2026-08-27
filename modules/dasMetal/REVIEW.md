@@ -16,8 +16,9 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
   kind lets either one go untested.
 
 - **A new or changed `[metal_kernel]` annotation argument ships a `tests/msl/` (repo root)
-  fixture in the same change.** The fixture asserts what the argument changes: the published
-  global it names, or the difference it makes to the emitted text.
+  fixture in the same change.** The fixture asserts what the argument changes: the global the
+  macro declares for it - a module-level global holding the kernel's MSL text or a compile
+  option - or the difference it makes to the emitted text.
 
 - **A new construct the MSL emitter rejects at compile time ships a `tests/msl/_fail_closed/`
   (repo root) fixture in the same change.** The same change asserts that construct's error
@@ -25,11 +26,13 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
   compile error that names the rejected construct.
 
 - **A kernel behavioral change ships a CPU-oracle test under `tests/metal/` (repo root).** A
-  CPU-oracle test compares the GPU result against a CPU-computed expectation. A regression in
-  dasMetal alone must fail this module's own tests.
+  CPU-oracle test compares the GPU result against a CPU-computed expectation.
 
 - **A change visible only in the emitted text ships a `tests/msl/` (repo root) fixture.** The
   fixture asserts the emitted text that the change alters.
+
+- **Never commit a `.msl` file and never hand-write MSL - emit it from a `[metal_kernel]` body
+  instead.**
 
 - **A new or changed host extern under `modules/dasMetal/src/` ships a host-side test under
   `tests/metal/` (repo root) in the same change.** A changed public function in
@@ -43,5 +46,5 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
 
 - **Never zero a cooperative tensor element by element before a `matmul2d` `run` accumulates
   into it - `get_destination_cooperative_tensor` already hands it back zeroed.** That walk
-  forces every element into real storage before the K loop, and that costs the op its fast
-  path for the whole loop.
+  forces every element into real storage before the accumulation loop, and that costs the op
+  its fast path for the whole loop.

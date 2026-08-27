@@ -4,5 +4,5 @@
 `README.md`.
 
 **Never add `lsp` to `DAS_UTILS` or `DAS_UTILS_SHIPPED_EXES` in `utils/CMakeLists.txt` - clients
-start the server through `lsp_supervisor.py` instead.** Development always starts it through that
-python script, so an exe form would ship without anyone having used it.
+start the server through `lsp_supervisor.py` instead.** An exe form would ship without anyone
+having used it.

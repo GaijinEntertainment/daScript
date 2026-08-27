@@ -3,22 +3,19 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasllama_io_site.md`.
 
-**A diff that adds or changes a route, a store operation, or a config or limit behavior also
-adds a dastest test for it in this directory, in the same change.** `main.das` and `admin.das`
-stay argv/dispatch glue over tested modules, so they need no test of their own.
-
 **Never put a `[test]` file for this folder under the repo-root `tests/` tree, and never
 register one in any `CMakeLists.txt` - a `[test]` file lives in this directory and requires its
 siblings by bare name.**
 
-**Never reach the service from a test except through the local `with_ladder_server` harness
-(`test_ladder_server.das`) on this directory's reserved test port 19015, and never start a
-server in a store test - a store test calls `ladder_store` directly.** A store behavior proven
-only through HTTP, or an HTTP behavior proven only against the store, is a defect.
+**A test reaches the service only through the local `with_ladder_server` harness
+(`test_ladder_server.das`) on this directory's reserved test port 19015, and a store test
+starts no server - it calls `ladder_store` directly.**
 
-**Never let a test write into the repo tree or anywhere outside `temp_directory` - root every
-path the test creates under `temp_directory` and delete it before the test ends; a store test
-opens `:memory:`, never a file.**
+**A store behavior proven only through HTTP, or an HTTP behavior proven only against the store,
+is a defect.**
+
+**Never let a test write outside `temp_directory` - root every path the test creates there and
+delete it before the test ends; a store test opens `:memory:`, never a file.**
 
 **Operator routes (`/admin/*`, `/shutdown`) never appear in `caddy.snippet`, or in any
 Caddyfile route that reaches this service, a catch-all included - operators reach them on the
@@ -26,29 +23,27 @@ service port itself, over the ssh tunnel.** Caddy proxies from the same box, so
 `is_loopback_peer` sees `127.0.0.1` for every proxied request, which leaves the Caddyfile as
 the only real boundary.
 
-**Never drop one of the three checks in `is_operator_caller` - a loopback transport peer, a
-loopback `Host` authority, and same-origin-or-headerless (the request carries no `Origin`
-header, or its `Origin` names the same authority as its `Host`) - and never gate an operator
-route on the peer alone: every operator route gates through `is_operator_caller`.** The `Host`
-and `Origin` checks together are the CSRF guard for the `/admin/` page over an ssh tunnel -
-same-origin refuses a cross-origin fetch, and the loopback `Host` refuses DNS rebinding.
+**Never drop a check from `is_operator_caller` - a loopback transport peer, a loopback `Host`
+authority, and same-origin-or-headerless (the request carries no `Origin` header, or its
+`Origin` names the same authority as its `Host`).** The `Host` and `Origin` checks together are
+the CSRF guard for the `/admin/` page over an ssh tunnel - same-origin refuses a cross-origin
+fetch, and the loopback `Host` refuses DNS rebinding.
+
+**Every operator route gates through `is_operator_caller`.**
 
 **A diff that adds a route a public caller needs also adds it to `caddy.snippet`, in the same
 change as its handler; never edit `caddy.snippet` to match the deployed Caddyfile - edit the
 deployed Caddyfile to match `caddy.snippet` instead.**
 
 **On a route that serves board data, mutates the store, or refuses a caller, a response path
-that does not log one `ladder.req` line through `log_request` is a defect - refusals log too.**
-The bare liveness probe `GET /healthz` is none of these and logs nothing.
+that does not log one `ladder.req` line through `log_request` is a defect.**
 
 **A handler that reads a request body without first checking `body_is_byte_faithful` is a
 defect.**
 
-**A store-backed handler that does anything beyond four things - check transport shape, gate
-the request (operator gate, submit-open, attempt-limit), make one store call, format the
-response - is a defect.** SQL, hashing, and store policy go in `ladder_store.das`, which never
-requires `dashv`. The `/admin/` page and `/healthz` reach no store and are not store-backed
-handlers.
+**A handler that calls `ladder_store` and does anything beyond these - check transport shape,
+gate the request (operator gate, submit-open, attempt-limit), make one store call, format the
+response - is a defect.**
 
 **A diff that defaults `submit_open` to true in `LadderArgs` or `LadderPolicy`, lets
 `/api/submit/sidecar` or `/api/submit/records` answer anything but 403 while `submit_open` is
@@ -56,32 +51,29 @@ false, or adds an opener reachable from a non-loopback path, is a defect** - onl
 `/admin/submit` route flips the gate.
 
 **In `caddy.snippet` every proxied route other than the `/api/submit/records` and
-`/api/submit/sidecar` matcher carries the small read cap; a large-body allowance on any other
-route, or a read cap on either submit matcher, is a defect.**
+`/api/submit/sidecar` matcher carries the `request_body { max_size 64KB }` cap, and that
+matcher carries `max_size 8MB` and no smaller cap.**
 
-**Never require the dasLLAMA engine, dasLLVM, or any model machinery from a file in this
-directory - the one dasLLAMA module allowed is the engine-free
-`dasllama/dasllama_exchange_schema` (a public entry of that module's facade lint), required
-from `ladder_store.das` and nowhere else** (`README.md` sec.3). Its `dasllama_lint` carrier is
-a compile-time macro, not engine code.
+**A file in this directory requires no dasLLAMA, dasLLVM, or model machinery other than the
+engine-free `dasllama/dasllama_exchange_schema`, and only `ladder_store.das` requires that**
+(`README.md` sec.3).
 
 **A write path that stores a document without validating it first is a defect: every sidecar -
 community or planted - passes `validate_sidecar_submission`, every community record store
 passes `validate_record_submission`, and `import_official_store` passes `validate_record_store`
-(shape only - official record history predates the release counter).** A sidecar without the
-version stamp can never be served, so storing one is always an error.
+(shape only - official records predate the `DASLLAMA_VERSION` stamp).**
 
-**Never write `Source` or `Verified` outside store code, and never let a value from a public
-(proxied) request reach either column - the loopback operator surface sets `Verified` through
-store calls, never through SQL in a handler.**
+**Never write `Source` or `Verified` outside `ladder_store.das`, and never let a value from a
+public (proxied) request reach either column - the loopback operator surface sets `Verified`
+through a `ladder_store` call.**
 
 **Never validate, hash, or store sidecar text - community or planted - that has not been
 through `exchange_strip_private`, and never store a community record store that has not been
 through `redact_record_paths`.** Hashing the cleaned text on both sidecar paths is what makes
-re-plant promote instead of duplicate. `import_official_store` stores its document as-is.
+re-plant promote instead of duplicate.
 
-**Never update a document after its insert - derived columns may be recomputed, and a document
-leaves only by deleting its submission.**
+**Never change a submission's stored `Doc` after its insert - a document leaves only by
+deleting its submission.**
 
 **Never edit a shipped `[sql_migration]` body - a schema change adds a new, higher version in
 the same stream.**
@@ -98,9 +90,11 @@ a shell.
 
 **A diff that changes where the service or watchdog writes at runtime - log path, working
 directory, database location - also adds a matching `ReadWritePaths` entry to the systemd unit
-`provision` writes, in the same change.** Relaxing that unit's sandbox is a defect:
-`ProtectSystem=strict`, an emptied `CapabilityBoundingSet`, and `ReadWritePaths` no wider than
-the data dir and the release tree.
+`provision` writes, in the same change.**
+
+**The systemd unit `provision` writes keeps `ProtectSystem=strict`, an empty
+`CapabilityBoundingSet`, and `ReadWritePaths` no wider than the data dir and the release tree;
+a diff that widens any of the three is a defect.**
 
 **Placement - one file, one line: a diff keeps each file inside its line, and a new file adds
 its line here, with its tests, in the same change.**

@@ -13,20 +13,20 @@ committed, and loaded at runtime - two languages, an external SDK, committed bin
 code-sharing with the host. dasVulkan carries none of that: no GLSL, no committed `.spv`, and
 no glslang or SDK dependency.
 
-dasGlsl already eliminated exactly this for OpenGL: shaders written in daslang, annotated
+dasGlsl does this for OpenGL: shaders written in daslang, annotated
 `[..._program]`, an `AstVisitor` (`GlslExport`) emits GLSL at compile time into a global
 captured by `@@fn`, fed to `glShaderSource`. dasSpirv does the same for Vulkan, but emits
 **SPIR-V binary directly from the daslang AST** - no GLSL/glslang intermediary, no LLVM.
 
 SPIR-V is an SSA IR (typed results, basic blocks, structured control flow, a logical
-builder) - the same shape `llvm_jit` already lowers daslang to. So dasSpirv is
+builder) - the same shape `llvm_jit` lowers daslang to. So dasSpirv is
 **dasGlsl's frontend pattern + llvm_jit's SSA-backend pattern, fused into a SPIR-V emitter**.
 Just as `[jit]` lowers daslang->LLVM->native, `[compute_shader]` lowers daslang->SPIR-V->GPU.
 
 What makes it cheap: drivers do all GPU optimization (we emit naive *valid* SPIR-V - so does
 glslang); SPIR-V binary is a self-delimiting word stream (trivial to emit and disassemble);
 the backend-agnostic AST tooling (`collect_dependencies`, `collect_used_types`,
-`make_visitor`) is reusable verbatim; and dasVulkan already has a GPU-verified `out[i]==i*i`
+`make_visitor`) is reusable verbatim; and dasVulkan has a GPU-verified `out[i]==i*i`
 compute test as a ready-made end-to-end gate.
 
 ## 2. Settled decisions
@@ -35,11 +35,11 @@ compute test as a ready-made end-to-end gate.
    PR-protected GaijinEntertainment/daScript, sharing main-tree CI + `daslib/coverage` +
    `tests/`. SPIR-V is a general daslang capability (also useful for GL4.6/WebGPU), not
    Vulkan-specific.
-2. **Fresh frontend** - its own shader annotations (sec.3); dasGlsl is the *design map*, not
-   a code dependency. Reuse only the generic AST tooling (none of which lives in dasGlsl).
-   **Zero edits to the shipped dasGlsl/dasOpenGL.**
-3. **Test-per-instruction is a hard requirement**, enforced by the opcode census; LCOV covers
-   the runtime-reached files beside it (sec.4).
+2. **Fresh frontend** - its own shader annotations (sec.3). dasSpirv has no code dependency on
+   dasGlsl or dasOpenGL; it reuses only the generic AST tooling, none of which lives in
+   dasGlsl.
+3. The opcode census declares the supported opcode set and is checked against the fixtures in
+   both directions; LCOV covers the runtime-reached files beside it (sec.4).
 4. **SPIR-V 1.3 is the default header version; a feature that needs more raises it.** 1.3
    gives StorageBuffer storage class + `Block` (not the deprecated 1.0 BufferBlock+Uniform
    path), lavapipe advertises >= 1.2, and at `<= 1.3` the entry-point interface lists only
@@ -52,7 +52,8 @@ compute test as a ready-made end-to-end gate.
 
 `modules/dasSpirv` is **pure daslang** (mirrors dasGlsl: a `spirv/` subdir of `.das` files +
 CMake resolver rows derived from `.das_module`; no `.shared_module`, no C++). dasVulkan
-consumes it via `require spirv/...` and feeds the emitted `array<uint>` (SPIR-V words) to `create_shader_module`.
+consumes it via `require spirv/...` and feeds the emitted `array<uint>` (SPIR-V words) to
+`create_shader_module`.
 
 | File | Gen/Hand | Purpose |
 |---|---|---|
@@ -66,7 +67,7 @@ consumes it via `require spirv/...` and feeds the emitted `array<uint>` (SPIR-V 
 | `spirv/spirv_dis.das` | hand | Minimal disassembler + opcode-census helper (self-delimiting walk: word0 = `(wordCount<<16)\|opcode`). Symbolic via `spirv_grammar`'s opcode->name table. |
 | `generator/gen_spirv_grammar.das` | hand | The mini-generator: reads vendored grammar JSON -> emits `spirv/spirv_grammar.das`. |
 | `spirv_headers/*.json` | vendored | Pinned `spirv.core.grammar.json` + `extinst.glsl.std.450.grammar.json`; license in `SPIRV_HEADERS.LICENSE`, provenance in `history/dasSpirv/MASTERPLAN_LOG.md`. |
-| `CMakeLists.txt` | hand | `ADD_MODULE_DAS_FROM_DESCRIPTOR(spirv spirv)` (rows derived from `.das_module`) + install rule, modeled on `modules/dasGlsl/CMakeLists.txt`. |
+| `CMakeLists.txt` | hand | `ADD_MODULE_DAS_FROM_DESCRIPTOR(spirv spirv)` + install rule, modeled on `modules/dasGlsl/CMakeLists.txt`. |
 
 **SSA backend (llvm_jit template).** `SpirvEmit` carries `e2v : table<Expression?;uint>`
 (Expression->result-id), `v2v : table<Variable?;uint>` (Variable->pointer-id),
@@ -85,9 +86,14 @@ companion holding the encoded reflection. `generate_spirv` is a standalone `[mac
 called by **both** `fixup` and the unit tests - so opcode assertions hit the real codegen path
 without macro plumbing.
 
+**`[spirv_decode]` method form.** The decode callback's SPIR-V signature is a rigid three
+parameters. The method form erases the das-level `self` from it, so the decode body still reads
+its class members - a separate scale plane, push constants, `@workgroup` staging.
+
 ## 4. Test architecture - "every emitted instruction has a test"
 
-Three behavioral layers + two enforcement gates (all in main-tree `tests/spirv/` except GPU):
+The behavioral layers, then the enforcement gates (all in main-tree `tests/spirv/` except the
+real-driver layer, which lives in dasVulkan):
 
 1. **Opcode-assertion units.** Each test compiles a tiny shader fixture, calls
    `generate_spirv`, runs `spirv_dis` to a structured instruction list, and asserts the
@@ -99,8 +105,8 @@ Three behavioral layers + two enforcement gates (all in main-tree `tests/spirv/`
    `spirv-val` resolved through `VULKAN_SDK`. Soft-skip if absent locally, hard-required in
    CI - the real correctness oracle for structured-CFG and define-before-use bugs.
 3. **Real-driver behavioral regression.** A one-call framework in dasVulkan,
-   `run_compute_spirv(words, n) : array<uint>` over `compute_boost`, runs any emitted blob in
-   ~2 lines; `compute_image_rgba8` + `assert_pixels_exact` are its image-readback twin. The
+   `run_compute_spirv(words, n) : array<uint>` over `compute_boost`, runs any emitted blob;
+   `compute_image_rgba8` + `assert_pixels_exact` are its image-readback twin. The
    content is procedural, so the expected pixel is CPU-computable and the gate asserts exact
    pixels rather than inequalities. Primary gate = local real GPU; CI = lavapipe software
    (GitHub-hosted runners have no GPU, so there is no real-GPU CI lane).
@@ -120,9 +126,9 @@ Three behavioral layers + two enforcement gates (all in main-tree `tests/spirv/`
 
 ## 5. Cross-backend parity - the kernel-model asymmetry ledger
 
-The mirror rule (REVIEW.md, both emitters) keeps the kernel model symmetric with the MSL
-emitter. The ledger of deliberate/pending asymmetries is shared - ONE list, not two - and
-lives in `modules/dasMetal/ARCHITECTURE.md` under the same heading.
+`modules/REVIEW_SHADER_EMITTERS.md` requires a kernel-model capability added to one emitter to
+be added to the other or recorded as an asymmetry. That ledger is shared - one list for both
+backends, not one per backend - and lives in `modules/dasMetal/ARCHITECTURE.md` sec.5.
 
 ## 6. Verification
 
@@ -134,4 +140,3 @@ lives in `modules/dasMetal/ARCHITECTURE.md` under the same heading.
   against external `spirv-dis` as ground truth.
 - **Real-driver gate (dasVulkan):** the integration suite under lavapipe and the local real
   GPU.
-- **Lint/format:** MCP `format_file` on every new `.das`; `lint` clean. Both repos PR-mode.

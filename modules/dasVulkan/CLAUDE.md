@@ -87,7 +87,7 @@ Run from the repo root so the cwd-relative shader paths resolve. Test bodies mus
 
 Each tutorial is a self-contained unit under `tutorials/<NN_name>/`: the offscreen module + its `[compute_shader]`/`[shader]` blob + a pixel-oracle `[test]` (the CI gate) + a `recording/` driver.
 
-**Every rendering tutorial MUST also ship a windowed mode** at `tutorials/<NN_name>/window/show_<name>.das` - a real GLFW window presenting the live animation (compute->blit->present, or a swapchain render pass). The offscreen `[test]` proves correctness; the windowed driver is how a human actually *sees* it. The windowed driver:
+The windowed driver at `tutorials/<NN_name>/window/show_<name>.das`:
 
 - calls `glfwInitVulkanLoader(vk_get_instance_proc_addr())` **before** `glfwInit` so GLFW finds the same loader on every platform (see the macOS gotcha below);
 - lives in `window/` so the tutorials `.das_test` skips it in CI (the lavapipe CI daslang build is `-DDAS_GLFW_DISABLED=ON` - no display, no GLFW).

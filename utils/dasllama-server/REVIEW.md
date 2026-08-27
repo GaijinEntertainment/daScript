@@ -4,8 +4,7 @@
 doc: `README.md`.
 
 **A diff to a file that requires a `dasllama/*` module applies `modules/dasLLAMA/REVIEW.md`
-(repo root) too** - the server reaches only public dasLLAMA facade verbs, and a diff here can
-break that facade.
+(repo root) too.**
 
 **Never write or edit a fixture under `tests/fixtures/` by hand - capture the bytes of a real
 server run and normalize the machine-local paths instead.** `tests/fixtures/README.md` gives
@@ -22,7 +21,8 @@ the `README.md` route row, the endpoint table in
 `doc/source/reference/utils/dasllama_server.rst` (repo root), and `control.html` where the
 page uses it.
 
-**A diff that adds, removes, or renames a key in a response body re-captures its fixtures
-under `tests/fixtures/` and mentions the key in its `README.md` route row, in the same
+**A diff that adds, removes, or renames a key in a response body re-captures that route's
+fixtures under `tests/fixtures/` and updates that route's row in `README.md` (beside this
+file) - a new or renamed key is listed there, a removed key is struck from it - in the same
 change** - the fixtures are the recorded response shape, and the row is where a consumer learns
 the key exists.

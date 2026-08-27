@@ -20,3 +20,6 @@ Architecture doc: `ARCHITECTURE.md`.
 
 - **A diff that leaves a fixture emitting an opcode the opcode census does not declare, or
   leaves the census declaring an opcode no fixture emits, is a defect.**
+
+- **A diff under `modules/dasSpirv` that edits a file under `modules/dasGlsl` or
+  `modules/dasOpenGL` is a defect** - dasSpirv copies dasGlsl's design, not its code.

@@ -7,5 +7,5 @@ it, or the shared `recording/` harness - is reviewed with `skills/internal/vulka
 
 **A diff that adds a tutorial folder also adds its `<NN_name>/window/show_<name>.das` viewer, in
 the same change** (`<name>` is the folder name without the numeric prefix) - a GLFW window that
-shows the animation as it runs. The offscreen test proves correctness; only the window lets a
-human see the result.
+presents the tutorial's rendered output live. The offscreen test proves correctness; only the
+window lets a human see the result.

@@ -1,20 +1,18 @@
 # daslib linq family Code Review Checklist
 
-**A diff touching the linq family - `linq*.das`, `sql_*.das` (the SQL lowering and its
-bind-side helpers, `sql_boost.das` and `sql_provider.das` included) - applies this checklist
+**A diff touching the linq family - `linq*.das`, `sql_*.das` - applies this checklist
 together with `REVIEW.md`.** `REVIEW_COMMON.md` (repo root) binds this file too.
 Architecture doc: `ARCHITECTURE.md`.
 
 **A fused emit that binds a terminator's default or compare argument lazily, more than once, or
-below the top of the generated invoke, is a defect** - bind it once at the top, even on paths
-that never use it, because the tier-2 `linq.das` overload evaluates it that way. This covers
-every `*_or_default` decs lane, including an empty-tail fast path that would evaluate the
-default lazily.
+below the top of the generated invoke, every `*_or_default` decs lane included, is a defect** -
+bind it once at the top, even on paths that never use it, because the unfused `linq.das`
+overload evaluates it that way.
 
-**A fused emit whose empty-source behavior differs from the tier-2 `linq.das` overload's -
-panicking where tier-2 yields the default, or yielding a default where tier-2 panics - is a
-defect.** A fused `first` over a prefilter buffer panics before it reaches `min`/`max`, which
-return an uninitialized reference on an empty array.
+**A fused emit whose empty-source behavior differs from the unfused `linq.das` overload's -
+panicking where the unfused overload yields the default, or yielding a default where it
+panics - is a defect.** A fused `first` over a prefilter buffer panics before it reaches
+`min`/`max`, which return an uninitialized reference on an empty array.
 
 **Never add `count` or `first` to the 2-arg reducer set (`is_bucket_reducer_call`) - it admits
 only a reducer whose second argument is a selector.** `sum` / `min` / `max` / `average` take a
@@ -50,11 +48,11 @@ in the same change** - `key_less` / `less_masked` (`linq.das`), which sort eager
 `try_make_inline_cmp_keys` (`linq_fold_common.das`), which emits an inline `_::less` if-chain for
 the same chain. All spell bit `i` of `mask` as "key `i` descending" (LSB = first key), flip
 operand order for descending, and break ties in key order; one side changed alone makes a
-spliced chain and its tier-2 fallback sort differently, with no error.
+spliced chain and its unfused fallback sort differently, with no error.
 
 **A diff that changes the inline `_::less` if-chain's key cap or `less_masked`'s tuple overloads
 changes both, in the same change.** A key tuple longer than the cap declines the splice and sorts
-eagerly, so a cap raised without the matching overload leaves a spliced chain with no tier-2 twin
+eagerly, so a cap raised without the matching overload leaves a spliced chain with no unfused twin
 to agree with.
 
 **Never reserve `n` in a `top_n*` lane over an iterator - let the bounded-heap fill phase grow
@@ -65,19 +63,18 @@ the whole `n` upfront for no win.
 is a defect.** Chains nest, and the inner `_` has to shadow the outer one.
 
 **Never move the `_sql` hand-off below `normalize_order_reverse` / `collapse_chained_*` or below
-`if (empty(calls))` - it runs ahead of chain normalization and ahead of the empty-chain bail.**
-`_sql` re-expands the pristine expression on the next infer pass, and a `[sql_table]` source with
-no chain ops at all is still SQL.
+`if (empty(calls))`.** `_sql` re-expands the pristine expression on the next infer pass, and a
+`[sql_table]` source with no chain ops at all is still SQL.
 
 **A pattern row that emits when its captured `select` (the `srcsel` slot) cannot be wrapped into
 a projected adapter is a defect - skip the row instead.** The row's emit assumes the projected
 element, so running it on the un-projected adapter orders or dedups raw rows - a wrong result,
 not a missed splice.
 
-**A diff that reorders the `build_*_rows()` calls in `register_all_linq_fold_rows` changes
-which arm claims a chain - review it as a pattern-priority change, never as a cleanup.** Rows
-land in `splice_patterns` in call order, the walker takes the first match, and that registrar
-is the only place the order exists.
+**A diff that reorders the `build_*_rows()` calls in `register_all_linq_fold_rows` without
+naming the chains whose matching arm changes is a defect.** Rows land in `splice_patterns` in
+call order, the walker takes the first match, and that registrar is the only place the order
+exists.
 
 **A sql_linq column-ref arm that accepts a `$e(recv).$f(field)` qmatch without first proving
 `recv is ExprVar` is a defect.** A nested receiver otherwise matches under a foreign name and
@@ -88,9 +85,9 @@ of it is a defect.** That type gate routes a whole-row carry var to the clean ro
 instead of to a macro-time crash in `pred_to_sql`.
 
 **A call to a SQL-returning helper that checks only one of `q.hadError` and `empty(frag)` is a
-defect - check both.** Operator arms wrap an empty child into non-empty junk and several helpers
-return `""` without setting `hadError`, so one check alone emits malformed SQL in place of a
-diagnostic.
+defect - check both.** Operator arms wrap an empty child into a non-empty fragment and several
+helpers return `""` without setting `hadError`, so one check alone emits malformed SQL in place
+of a diagnostic.
 
 **A path from `analyze_chain` to `build_sql_string` / `collect_query_binds` that skips
 `maybe_finalize_distinct_by_passthrough` or `maybe_wrap_take_before_aggregate` is a defect.**
@@ -101,8 +98,8 @@ LIMIT/OFFSET on the aggregate.
 exactly one producer per query.** The wrap drops the earlier subquery and orphans its binds - a
 bind/placeholder mismatch, with no error.
 
-**A diff that adds a projection slot pushes one entry into each of the five index-parallel
-projection arrays - `selectCols`, `selectColAliases`, `selectColSqlFragments`, `selectColTypes`,
+**A diff that adds a projection slot pushes one entry into every index-parallel projection
+array - `selectCols`, `selectColAliases`, `selectColSqlFragments`, `selectColTypes`,
 `projRecordNames` - in the same change.** `push_source_column` and `push_computed_proj_slot`
 cover only part of the set and leave the rest to their caller; a partial push desyncs the SELECT
 list from the row builder, with no error.
@@ -115,19 +112,25 @@ position in `collect_query_binds`, in the same change.** `sql_to_frags_ex` re-sc
 SQL text and pairs markers with that list in occurrence order, so a clause added to the emitter
 alone binds every later placeholder to the wrong value, with no error.
 
-**Never narrow or widen the linq_das clause-keyword test - a clause keyword is a depth-0 whole
-word not preceded by `.` and not preceded by a `>` that tails `|>`, `=>` or `->`.** Narrowing
+**A generated SQL statement's column list and its bind function change in one edit.** Bind
+indices are placeholder positions over bindable columns, never struct field positions; drift is
+silently wrong data, not an error.
+
+**A diff that adds or changes a `[sql_table]` helper pair registers its 2-arg form BEFORE the
+1-arg form.** `find_struct_helper_fn` keeps the LAST match and the finish pass rewrites the
+helper it returns, so a swapped pair attaches index DDL to the wrong overload.
+
+**Never narrow or widen the linq_das clause-keyword test - a clause keyword is a whole word at
+bracket nesting depth zero, not preceded by `.` and not preceded by a `>` that tails `|>`, `=>`
+or `->`.** Narrowing
 lets an in-body aggregate parse as a `select` clause; widening the exclusion to any `>` hides a
 clause keyword that legitimately follows a generic bracket or a comparison.
 
 **A diff that changes the token model in one substituting linq_das scanner - `substitute_idents`,
-`mentions_ident`, `rewrite_group_var` - changes it in the others, in the same change.** The
-shared model: plain `"..."` content is verbatim, a `{...}` interpolation body is code that is
-scanned and substituted, one level of nested string literal inside an interpolation is verbatim
-again, and identifier position classifies the same way everywhere - after-`.` field access and
-before-single-`=` labels are not references, with `is_label_position` the shared judge. A model
-change in one scanner desyncs `mentions_ident` from the rewrite it gates, and the emitter then
-renames a parameter the spliced projection still references.
+`mentions_ident`, `rewrite_group_var` - changes it in the others, in the same change** (the
+shared model: `ARCHITECTURE.md` sec. 13). A model change in one scanner desyncs
+`mentions_ident` from the rewrite it gates, and the emitter then renames a parameter the
+spliced projection still references.
 
 **Giving `find_kw_depth0` the substituting scanners' interp-as-code model is a defect - it skips
 a whole string literal, interpolation bodies included.** A clause keyword inside `"{...}"` must
@@ -136,7 +139,7 @@ never claim a stage terminal.
 **A `parse_one_stage` that reads a `where` or `orderby` position before it resolves the stage
 terminal - the earliest `select`/`group` at or after `start` - is a defect.** The terminal bounds
 the stage, so scanning clauses first lets a later stage's `where`, past this stage's `into`,
-hijack this stage's terminal lookup.
+be taken as this stage's terminal.
 
 **Never widen the `group ... into g` rewrite past its two spellings - bare `g` -> `g._1` and
 `g.key` -> `g._0` - leave every other `g.<member>` verbatim.** Raw tuple access then keeps working
@@ -151,8 +154,8 @@ take, all after any `where_` - is a defect.**
 
 **Emitting the decs range guards in any order other than take-cap -> skip counter -> skip_while
 flag -> take_while break -> take bump is a defect** - that order mirrors the array side's
-`wrap_with_ranges`. The bump is last so an element the while-guards rejected does not eat the
-`take(N)` budget.
+`wrap_with_ranges`. The bump is last so an element the while-guards rejected does not count
+against `take(N)`.
 
 **A predicate-driven decs range accepted with a select in its prefix is a defect** - its
 predicate peels against the source tuple, so a select ahead of it changes the element the

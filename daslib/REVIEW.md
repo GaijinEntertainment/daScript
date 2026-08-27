@@ -15,22 +15,23 @@ collides across rules.
 `// nolint` at any frame of the reported chain.** The sink often bottoms out in daslib while
 the actionable line is an intermediate call site.
 
-**A diff that moves an `in_closure` / `in_deferred` guard inside a lint visitor method as
-cleanup is a defect.** The guard's position decides which rules apply inside a lambda; the
-per-rule policy is in `ARCHITECTURE.md` sec. perf_lint.
+**A diff that moves an `in_closure` / `in_deferred` guard to a different statement position
+inside a lint visitor method is a defect.** The guard's position decides which rules apply
+inside a lambda; the per-rule policy is in `ARCHITECTURE.md` sec. 1.
+
+**Never move `add_ptr_ref`'s depth tracking behind the `in_closure` gate.** The rules block
+is itself a closure, so a gated tracker never sees the splice.
 
 **A lint warning that anchors anywhere but the code its fix rewrites is a defect.** A remedy
 that deletes a statement reports the statement; a remedy that edits one variable's
 initializer reports the variable.
 
 **Never exit a construct's visitor on a path that skips resetting or restoring the visitor
-state scoped to that construct.**
+state scoped to that construct.** State an early return leaves set poisons the next
+construct's visit.
 
 **Never keep per-loop visitor state in a bare scalar - keep it in a stack.** A scalar
 survives into the sibling loop's exit path and unbalances its counter.
-
-**Never let `preVisitFunction` return before it resets the per-function visitor state.**
-State an early return leaves set poisons the next function.
 
 **A diff that makes a daslib predicate or emitted identifier depend on a C++-side
 definition records the pair in `ARCHITECTURE.md`, in its module's section, naming both
@@ -40,10 +41,15 @@ sides.** Nothing catches it when one side later moves alone.
 it changes the other side and updates the pair's `ARCHITECTURE.md` entry in the same
 diff.**
 
-**Weakening the nolint-window tests is a defect** - `tests/lint/test_nolint_suppression.das`
-pins that a string literal, a URL, and a mid-comment `nolint:` do not suppress while a
-first-token directive after `//` or `//!` does, and `tests/lint/test_stale_nolint.das` pins
-that a `lint-skip-file` past the header window is prose.
+**A comment-sweep diff adds an `ARCHITECTURE.md` entry only where no name, shape, or test
+can carry the fact.**
+
+**Weakening `tests/lint/test_nolint_suppression.das` is a defect** - it pins that a string
+literal, a URL, and a mid-comment `nolint:` do not suppress while a first-token directive
+after `//` or `//!` does.
+
+**Weakening `tests/lint/test_stale_nolint.das` is a defect** - it pins that a
+`lint-skip-file` past the header window is prose.
 
 **A diff that changes `build_lint_macro_disabled` keeps its four sources layered in this
 order: defaults, repo `off`, repo `on`, environment.** Env last lets a one-run
@@ -71,14 +77,15 @@ an early record lets the RHS's own read clear the store it just recorded.
 **Never match a lint rule's callee name against the instance - match the root generic.**
 Instantiation mangles names and strips witness arguments.
 
-**A lint rule that fires inside the module whose idiom it advertises is a defect.**
+**A lint rule that fires on the source of the module that implements the idiom it suggests
+is a defect.**
 
 **A diff that adds or changes a collapse suggestion gates it on receiver type, arity,
 cloneability, and duplicate constant keys, so the suggestion compiles and keeps the reported
 shape's semantics.**
 
-**A diff that makes two sibling collapse rules fire on one shape is a defect.** Overlaps
-stay partitioned: STYLE021 owns the const-key run over STYLE031, STYLE032 owns fresh-empty
+**A diff that makes two collapse checks fire on one shape is a defect.** Overlaps stay
+partitioned: STYLE021 owns the const-key run over STYLE031, STYLE032 owns fresh-empty
 declarations over STYLE033, and STYLE033's chain-receiver check leaves a plain-variable
 receiver to STYLE033's variable-form check.
 
@@ -86,10 +93,14 @@ receiver to STYLE033's variable-form check.
 colon.** Suppression, disable lists, and dedup all parse the code from the message, so a
 message that leads with anything else makes the rule unsuppressable and self-colliding.
 
-**A diff that adds or changes a `canVisit*` override in style_lint teaches the unsafe-frame
-push/pop about the subtree the override skips.** The walk pushes one frame per expression
-and pops it, so a skipped subtree unbalances the count; the balance panic in each entry
-point is the tripwire.
+**A diff that adds or changes a `canVisit*` override in style_lint keeps the unsafe-frame
+count balanced across the subtree the override skips.** The walk pushes one frame per
+expression and pops it, so a skipped subtree unbalances the count; the balance panic in each
+entry point is the tripwire.
+
+**Never cache `blk.list` index state across style_lint visitor callbacks.** The
+per-statement callback carries no index and a shared stack would have to push/pop with
+nested blocks; block statement lists are short, so the rescan is the cheap form.
 
 **A diff that changes an arity cap or the overload set it mirrors - `MAX_CONCAT_ARITY` <->
 linq's `concat` variadics, `MAX_VARIADIC_PUSH_ARITY` <-> builtin
@@ -128,7 +139,7 @@ that skips the seeding spells structs differently from the run that seeded it.
 node's location.** `match_error` stores the `LineInfo` pointer BORROWED, and access nodes
 are cloned per field inside a bare scope and die with it.
 
-**Never report from a macro that lowers lambdas through `macro_error` - report through
+**Never report an error with `macro_error` from a macro that lowers lambdas - report with
 `macro_sticky_error`.** A later pass lowers the lambda to a plain function and clears
 non-sticky errors.
 
@@ -137,10 +148,10 @@ non-sticky errors.
 every byte >= 0x80.
 
 **A diff that adds or changes a parser result that borrows a view into a tree the parser
-allocated names the owning field and ships the scope-ender that frees it.** The tree must
-outlive the caller's read, and daslang finalizes neither a raw pointer field nor a local
-container at scope exit, so a borrowed view with no named owner leaks the whole document per
-call.
+allocated names the field that owns the tree and ships the function the caller runs to free
+it.** The tree must outlive the caller's read, and daslang finalizes neither a raw pointer
+field nor a local container at scope exit, so a borrowed view with no named owner leaks the
+whole document per call.
 
 **Never convert a string with `int64` / `uint64` / `double` in a lexer or decoder reachable
 from a file, a socket, or a model - use the non-throwing `to_*` twin and report through the
@@ -154,20 +165,22 @@ input-controlled branch.
 **A diff that adds or changes a flatten_opt rewrite arm ships a read-only residual predicate
 with that arm** - the oracle the residual visitors call to prove the pass complete.
 
-**Never let a residual oracle's gate differ from its arm's gate, and never call the
-transform from an oracle.** A gate the transform takes as a parameter is threaded into the
-oracle too, and the tests that call the oracle pass the same value. A narrower oracle is a
-false pass, a wider one a false miss, a re-spelled parameter default a false pass on every
-non-default run; calling the transform aliases the live tree.
+**Never let a residual oracle's gate differ from its arm's gate.** A gate the transform
+takes as a parameter is threaded into the oracle too, and the tests that call the oracle
+pass the same value; a narrower oracle is a false pass, a wider one a false miss, a
+re-spelled parameter default a false pass on every non-default run.
 
-**A diff that adds a fold/fuse arm declares that arm's float class.**
-Inf/NaN/rounding/association changes are fast-math-only; bit-exact per-lane rewrites are
-never gated. An arm added without that decision silently changes output under
-`_flatten_no_fast_math`.
+**Never call the transform from an oracle** - calling it aliases the live tree.
+
+**A diff that adds a fold/fuse arm gates it on `no_fast_math` when the rewrite changes
+Inf/NaN, rounding, or association, and leaves it ungated when the rewrite is bit-exact per
+lane.** An ungated value-changing arm silently changes output under `_flatten_no_fast_math`.
 
 **Never emit a fused call before proving the target module can resolve it - fall back to the
 unfused shape on a miss.** Otherwise the pass turns a shader that compiled into an
 unresolvable call on a narrower backend.
+
+**Never materialize a `string` per `ExprVar` in a flatten visitor callback.**
 
 **A new store spelling joins `MutCollect` in the same change.** CSE reads a name outside the
 mutable set as constant for the whole block, so an uncollected store is a silently shared
@@ -189,31 +202,30 @@ visitor machinery.
 and splice that.** Re-splicing re-evaluates a call once per splice, so a lock/unlock pair
 releases a different temporary than it took.
 
-**A diff that adds or changes a `[sql_table]` helper pair registers its 2-arg form BEFORE
-the 1-arg form.** `find_struct_helper_fn` keeps the LAST match and the finish pass rewrites
-the helper it returns, so a swapped pair attaches index DDL to the wrong overload.
+**A diff that adds a `delete` for a `Template`'s substitution tables reads the declaration
+first.** An `inscope` local already finalizes, so the added delete is a silent
+double-finalize.
 
-**A generated SQL statement's column list and its bind function change in one edit.** Bind
-indices are placeholder positions over bindable columns, never struct field positions;
-drift is silently wrong data, not an error.
+**A call to `apply_template` assigns the result back into the expression it passed.** A
+root-node substitution is visible only through the return value, so a discarded result
+silently keeps the unsubstituted node.
 
 **A new daslib spelling that reads the environment joins the env_registry marker lists in
 the same change.** The scanners match daslang source text; a missing spelling makes every
 enforcement test pass vacuously.
 
-**A diff that adds or changes an `ast_verify` check names, in `ARCHITECTURE.md` sec.
-ast_verify, the C++ `::visit` site that dereferences the slot unguarded.** A check with no
-such site invents an invariant the compiler does not hold, and the two passes disagree - a
-slot infer fills in is checkable only post-infer.
+**A diff that adds or changes an `ast_verify` check names, in `ARCHITECTURE.md` sec. 8, the
+C++ `::visit` site that dereferences the slot unguarded.** A check with no such site invents
+an invariant the compiler does not hold, and the two passes disagree - a slot infer fills in
+is checkable only post-infer.
 
 **A diff that adds or changes an `ast_verify` check repairs the slot it reports, not only
 reports it.** A broken slot left in place trips every later pass that walks the same node.
 
-**Never sum a 64-bit range as `uint64` before proving both operands non-negative**
-(`erase(at, count)`): a signed sum wraps, the bounds test passes, and the walk leaves the
-array silently.
+**Never sum a range's start and count as `uint64` before proving both non-negative** - a
+signed sum wraps, the bounds test passes, and the walk leaves the array silently.
 
-**Never emit a branch a macro-time value can decide from macro-built AST - branch in daslang
+**Never put a branch a macro-time value can decide into macro-built AST - branch in daslang
 and emit only the taken arm.** Nothing folds at macro-application time, so a generated
 `if ($v(flag))` keeps its dead arm and type-checks it.
 

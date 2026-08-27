@@ -8,3 +8,6 @@ test, not of the kernel - build a fresh instance for every thread id.** A CPU-or
 produces its expected values by running the kernel method on the CPU, in a driver loop that
 sets `gl_GlobalInvocationID` once per thread id. Kernel members are per-thread state, so a
 reused instance carries the previous thread's values into the next.
+
+**A file in this folder that creates any Metal object asserts `metal_live_object_count() == 0`
+before it returns.**

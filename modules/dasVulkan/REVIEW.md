@@ -3,7 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `CLAUDE.md`. Planned work: `ROADMAP.md`. A tutorial - a `tutorials/<NN_name>/` unit, and any
 `record_*.das` recording driver wherever the diff puts it - answers to the `tutorials/` subfolder's
-checklist. A generator change - any `generator/*.das` emitter or `generator/skip_report.txt` -
+checklist. A generator change - any `generator/*.das` file or `generator/skip_report.txt` -
 answers to the `generator/` subfolder's checklist.
 
 **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, adding a name to

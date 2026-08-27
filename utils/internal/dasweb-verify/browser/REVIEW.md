@@ -5,15 +5,15 @@ doc: `../README.md`.
 
 **A diff that leaves a pure helper in this folder - data in, data out, no playwright, no DOM,
 no network - without a `node:test` case in `protocol.test.mjs` is a defect, wherever the diff
-puts the helper.** `runner.mjs` and `probe.mjs` hold only browser- and playwright-bound code,
-which the nightly CI run proves.
+puts the helper.**
 
-**Never put a budget or a pattern in a sample source - put it in `expectations.json`
-instead.** A `// verify:` line in a sample changes the sample's content hash and throws away
-the build-cache entry the nightly depends on.
+**Never make the verifier take a time budget or an expected-output pattern from a sample
+source - read both from `expectations.json`.** A `// verify:` line in a sample changes the
+sample's content hash and throws away the build-cache entry the nightly depends on.
 
-**Weakening the fail-closed checks in `protocol.test.mjs` is a defect** - an unknown sample
-stays a FAIL, manifest drift stays a WARN, and the manifest-coverage case keeps reading the
+**Weakening the fail-closed checks in `protocol.test.mjs` is a defect** - a deployed sample
+with no `expectations.json` row stays a FAIL, a name in the deployed manifest but not the repo
+manifest (or the reverse) stays a WARN, and the manifest-coverage case keeps reading the
 shipped manifest `web/examples/ui/samples/data.json` (repo root).
 
 **Never make the verifier change a build's hash to force a rebuild - report the cached result
@@ -24,8 +24,8 @@ a fresh hash only hides the bug.
 returns - through the frame the playground embeds it in; open the artifact URL as a top-level
 page instead.** That frame is cross-origin by design, so nothing inside it can be read.
 
-**Never make `probe.mjs` poll `glGetError` on a page that has its own GL-error watcher - poll
-only where the page has none (artifact pages, `pollGl: true`), never on the playground, where
+**`probe.mjs` polls `glGetError` only on pages with no GL-error watcher of their own - artifact
+pages, installed with `pollGl: true` - and never on the playground, where
 `site/playground/run-frame.html` (repo root) already polls.** `getError` clears the flag, so
 only one poller per context can see an error.
 

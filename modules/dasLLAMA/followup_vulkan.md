@@ -213,3 +213,31 @@ module) is independent and can land any time - it is pure structure.
     `ensure_*` runs dry). The live path declines residency in `vk_rdec_prepare`; the plan
     side needs `max_wg_bytes` in the probed config + the dlim identity, mirroring
     `max_storage_range`.
+
+20. **A coopmat2-class analogue for the tmm2d family.** dasMetal exposes a tensor-op family
+    the kernel classes call directly - `tmm2d_tg_begin` / `tmm2d_tg_step` / `tmm2d_tg_store`
+    plus the per-format decode arms (`tmm2d_q8_f32`, `tmm2d_q8u_f32`, `tmm2d_f16w_f32`,
+    `tmm2d_f32_bf16_f32`, ...), all access-classified in `dasllama_kernel_access.das`. Vulkan
+    has no twin: the cm2 work (item 11) is a prefill GEMM arm on
+    `VK_NV_cooperative_matrix2`, not a builtin family a kernel class composes. Decide whether
+    the tmm2d shape maps onto coopmat2 tiles, and if it does, expose it as the same builtin
+    family on the SPIR-V side so one class body serves both backends - rather than a second,
+    Vulkan-only GEMM dialect beside cm2.
+
+21. **Metal-side grid-literal validation.** `[vk_dispatch]` rejects a divide-form `grid`
+    whose referenced name is not a declared `int64` param, and says why in the message (the
+    generated ceil-div math is int64, and daslang has no promotion). `[metal_dispatch]`
+    checks only that a grid dim carries at most one `/`, so the same mistake on Metal
+    surfaces as an infer error inside generated code instead of a lens diagnostic. Both
+    lenses already call the shared `mk_grid_dim` in `dasllama_kernel_access.das` - move the
+    check there too, so it fires once for both.
+
+22. **Metal kernel-corpus inheritance dedup.** The Vulkan classes factor their families into
+    base + leaves - `KqGemvBase` with `KqGemvK4/Q40/K5/K6`, `KqBatchBase` with its batch
+    leaves, `MoeCmBase` with the cm/mm leaves, `DnScanBase` with `DnScanP1/P2`. Metal does
+    this in places (`MetalMoeMulMmK6` and its siblings sit on `MetalMoeMulMmBase`), but its
+    GEMV families do not: `MetalKqGemvK4/K5/K5C/K6` and
+    `MetalMoeGemvQ8/K4/K5/K6/Mx4/Q51` are flat classes repeating the identical
+    `x`/`y`/`ndim`/`ddim` binding block, differing only in the weight-plane views and the
+    decode. Give those two families a base the way `MetalMoeMulMmBase` already does, so a
+    binding or epilogue fix lands once per family instead of once per variant.

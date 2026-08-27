@@ -1,28 +1,22 @@
 # dasweb-buildd Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md`. Planned work: `plans/dasweb_wasm_pipeline.md`.
-
-**A diff that adds or changes behavior in `buildd_config.das`, `buildd_core.das`, or
-`buildd_client.das` ships a dastest test in this directory, in the same change.** A diff that
-puts behavior beyond glue and orchestration over those modules into `main.das` or
-`buildd_service.das` is a defect.
+`README.md`. Planned work: `plans/dasweb_wasm_pipeline.md` (repo root).
 
 **Never put a `[test]` file under the global `tests/` tree, and never register one in a
 `CMakeLists.txt` - a `[test]` file for this directory lives here and requires its siblings by
 bare name.**
 
 **A test that reaches any host or port other than the stub playground in
-`test_buildd_client.das` on this directory's reserved test port 19014 is a defect, and so is a
-test of `buildd_core.das` that reaches the network at all.** The playground's real endpoints are
-proven in its own directory.
+`test_buildd_client.das`, on this directory's reserved test port 19014, is a defect.**
 
-**A diff that adds or changes a test that touches the filesystem roots that test's paths in
-`temp_directory` and deletes what the test creates.**
+**A test of `buildd_core.das` that reaches the network at all is a defect.**
 
-**Never let the health server bind an address other than loopback - it calls
-`set_bind_host("127.0.0.1")` between `init` and `start`.** A diff that removes that call, moves
-it past `start`, or makes it conditional is a defect.
+**A test that touches the filesystem creates its paths under the directory `temp_directory()`
+returns and deletes what it creates before it ends.**
+
+**Never let the health server bind an address other than loopback - it must call
+`set_bind_host("127.0.0.1")` unconditionally, between `init` and `start`.**
 
 **Never let `POST /shutdown` act on a request without checking that the transport peer address
 is loopback.** No header can carry that proof.
@@ -34,14 +28,21 @@ banner reports set or unset and the provenance instead.**
 source or a build output alike - without passing that name through `is_valid_source_filename`,
 `is_valid_asset_path`, or `validate_asset_paths` (`buildd_core.das`) first is a defect.**
 
-**A diff that lets a build publish a file its mode does not declare by name - through a suffix
-filter, a glob, or any rule that widens the build's own output set - is a defect.** The build
-runs the user's own compile-time code and can write anything into the output directory.
+**A diff that lets a build publish a file the job's build mode - the build kind, which lists
+its output files by name - does not declare by name, through a suffix filter, a glob, or any
+rule that widens the build's own output set, is a defect.** The build runs the user's own
+compile-time code and can write anything into the output directory.
 
-**A diff that adds a mount to `run_build.sh` without a stated reason, that gives a build a host
-path which is not an explicit mount in that script, or that adds a way to run a build outside
-the container sandbox defined by `Containerfile` and `run_build.sh`, is a defect.** Mounting
-anything that holds a secret, a key, or another service's data is a defect.
+**A diff that adds a mount to `run_build.sh` also gives that mount's reason in `README.md`'s
+The sandbox section, in the same change.**
+
+**A diff that gives a build a host path which is not an explicit mount in `run_build.sh` is a
+defect.**
+
+**A diff that adds a way to run a build outside the container sandbox defined by
+`Containerfile` and `run_build.sh` is a defect.**
+
+**Never mount anything that holds a secret, a key, or another service's data.**
 
 **A change justified by `no_unsafe`, `no_init`, or any compile-time policy flag standing in for
 the sandbox's isolation is a defect.** Compile-time code reads files with no `unsafe` at all.
@@ -54,14 +55,17 @@ the sandbox's isolation is a defect.** Compile-time code reads files with no `un
 **A diff that leaves a claimed job able to end without structured log lines for its start and
 its outcome (done or failed, duration, exit code) is a defect.**
 
-**A diff that leaves a config key out of the startup log, drops that key's provenance, or moves
-that log after the first poll is a defect.**
+**A diff that leaves a config key out of the startup banner, drops that key's provenance, or
+moves that banner after the first poll is a defect.**
 
-**Never put lifecycle-owned state anywhere but a module-global, and never hold a collectable
-value - one the GC can free - in a `main`-loop local across a call to `maybe_collect_gc()`.**
+**Never put state that outlives one `update` call anywhere but a module-global.**
+
+**Never hold a collectable value - one the GC can free - in a `main`-loop local across a call
+to `maybe_collect_gc()`.**
 
 **A diff that adds a code path where a claimed job ends without an upload - success or failure -
-is a defect.** Leaving the claim for the stale-requeue sweep is not a resolution.
+is a defect.** Leaving the claim for the stale-requeue sweep - the server-side sweep that
+re-queues jobs from builders that died - is not a resolution.
 
 **Never let a job resolve without removing its per-job scratch directory.**
 
@@ -79,8 +83,9 @@ the same change.**
 
 **A diff that changes the wasm-archive step's build command or archive list in
 `roll_toolchain.sh`, or `modules/dasImgui/.das_package`, also changes the other to match, in
-the same change - the two differ only in `liblibDasModuleClipboard.a`, which the wasm-archive
-list leaves out.**
+the same change.**
+
+**The wasm-archive list in `roll_toolchain.sh` never carries `liblibDasModuleClipboard.a`.**
 
 **Never ship a file an operator edits on the box with plain `release_include` - use
 `release_include_if_missing`, so an upgrade keeps the operator's edits.**
