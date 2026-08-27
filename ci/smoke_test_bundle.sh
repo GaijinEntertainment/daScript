@@ -138,7 +138,15 @@ if [[ -z "$CPP_SUFFIX" && -d "$BUILD_LIB" ]]; then
 fi
 restore_and_clean() {
     rm -f "$LOG" "$LOG.suite" "$LOG.lint"
-    if [[ -n "$HIDDEN_LIB" && -d "$HIDDEN_LIB" ]]; then mv "$HIDDEN_LIB" "$BUILD_LIB"; fi
+    if [[ -n "$HIDDEN_LIB" && -d "$HIDDEN_LIB" ]]; then
+        # A concurrent build may have recreated lib/ meanwhile; mv into an existing
+        # dir would NEST the hidden copy instead of restoring it - merge then.
+        if [[ -e "$BUILD_LIB" ]]; then
+            cp -a "$HIDDEN_LIB"/. "$BUILD_LIB"/ && rm -rf "$HIDDEN_LIB"
+        else
+            mv "$HIDDEN_LIB" "$BUILD_LIB"
+        fi
+    fi
 }
 trap restore_and_clean EXIT
 
