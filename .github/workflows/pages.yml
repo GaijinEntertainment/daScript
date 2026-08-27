@@ -268,7 +268,7 @@ jobs:
         #    Non-fatal per game: a game's wasm build must never red the whole deploy
         #    (which would take the playground + the other example cards down with it).
         #    The staging step degrades a missing game wasm to its interpreted fallback.
-        for g in arcanoid pacman boulder-dash; do
+        for g in arcanoid pacman boulder-dash river_run; do
             if ./bin/daslang utils/daspkg/main.das -- \
                  release wasm --root "examples/games/$g" --out "$REPO/web/output64/examples"; then
                 echo "$g wasm build OK"
@@ -355,6 +355,7 @@ jobs:
             web/output64/examples/arcanoid/arcanoid.wasm \
             web/output64/examples/pacman/pacman.wasm \
             web/output64/examples/boulder-dash/boulder-dash.wasm \
+            web/output64/examples/river_run/river_run.wasm \
             web/output64/examples/furier/furier.wasm \
             web/output64/examples/path_tracer_lab/path_tracer_lab.wasm \
             web/output64/examples/physarum_lab/physarum_lab.wasm; do
@@ -487,7 +488,7 @@ jobs:
         # cp -r site/files.
         mkdir -p _site/examples
         cp site/examples/_interp.html _site/examples/_interp.html
-        for g in arcanoid pacman boulder-dash; do
+        for g in arcanoid pacman boulder-dash river_run; do
             mkdir -p "_site/examples/$g"
             if [ -f "web/output64/examples/$g/$g.wasm" ]; then
                 cp "web/output64/examples/$g/$g.html" "_site/examples/$g/"

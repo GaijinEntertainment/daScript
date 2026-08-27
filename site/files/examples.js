@@ -45,6 +45,17 @@
             aspect: 1280 / 720,
         },
         {
+            id: 'river_run', name: 'River Run', kind: 'river shooter',
+            description: 'Fly a gunship down a canyon river — gunboats, jets, bridges ' +
+                'and fuel depots, across ten sections that each carry their own weather. ' +
+                'Shadow-mapped, with ambient occlusion, bloom and sun shafts, all rendered ' +
+                'through the WebGL2 backend.',
+            tags: ['game', 'opengl', 'decs', 'audio', 'wasm'],
+            controls: 'arrows / A D steer · W S throttle · space fire · esc pause',
+            poster: 'files/examples/river_run-poster.jpg',
+            aspect: 1280 / 720,
+        },
+        {
             id: 'furier', name: 'Fourier Series', kind: 'imgui showcase',
             description: 'Epicycle vectors tracing a Fourier curve — a live OpenGL ' +
                 'visualization driven by Dear ImGui controls. The whole ImGui surface ' +

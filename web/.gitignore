@@ -1,7 +1,9 @@
-# Build output
+# Build output — wasm32 playground, then the wasm64 example cards
 output/
+output64/
 
 # CMake build trees (in-source or cmake_temp/)
+build64/
 CMakeFiles/
 CMakeCache.txt
 CopyOfCMakeCache.txt

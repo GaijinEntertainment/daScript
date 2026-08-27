@@ -4,11 +4,13 @@ require daslib/daspkg
 
 [export]
 def package() {
-    package_name("river-run")
-    package_description("River Run example with audio + HUD; ships on dasGlfw + dasOpenGL + dasAudio")
+    package_name("river_run")
+    package_description("River Run: shadow-mapped river shooter on dasGlfw + dasOpenGL + dasAudio")
 }
 
 [export]
 def release() {
-    release_main("main.das")
+    release_main("main.das")            // one source for desktop live-reload AND wasm64:
+                                        // live_api is `require ?dashv` (skipped on wasm) and
+                                        // music gates itself off on a single-threaded backend
 }

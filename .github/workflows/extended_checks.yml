@@ -282,6 +282,16 @@ jobs:
     - name: "Run tutorial dry-runs"
       run: cmake --build ./build --config Release --target dry_run_tutorials
 
+    - name: "Check the example games stay wired to the site"
+      # examples/games/REVIEW.das cross-checks the card id every place it is written
+      # down - the game directory, its package_name, the deploy loops and the verify
+      # step, the examples-page card and its poster, the playground sample and the
+      # interpreted fallback's file bundle. All of that is hand-maintained, and the
+      # deploy that consumes it only runs on master, so a mismatch is invisible until
+      # the site is already broken. Linux only: it reads files, nothing platform-bound.
+      if: matrix.target == 'linux'
+      run: $BIN/daslang examples/games/REVIEW.das
+
     - name: "Verify authored-doc code blocks (nightly only)"
       # doc-verify compiles every das code block of the authored RST corpus
       # (skills/internal/doc_sweep.md). Nightly-only per policy: doc rot is not a

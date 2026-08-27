@@ -115,7 +115,7 @@ enum GenDirection {
     yz
 }
 
-def private apply_gen_direction_tm(plt : GenDirection; var frag : GeometryFragment) {
+def private gen_direction_tm(plt : GenDirection) : float3x3 {
     var tm : float3x3
     identity(tm)
     if (plt == GenDirection.xy) {
@@ -126,9 +126,30 @@ def private apply_gen_direction_tm(plt : GenDirection; var frag : GeometryFragme
         swap(tm[0], tm[2])      // todo: verify
         tm[2][0] = -1.
     }
+    return tm
+}
+
+def private apply_gen_direction_tm(plt : GenDirection; var frag : GeometryFragment) {
+    let tm = gen_direction_tm(plt)
     for (vtx in frag.vertices) {
         vtx.xyz = tm * vtx.xyz
         vtx.normal = normalize(tm * vtx.normal)
+    }
+}
+
+// xz maps the generated xy shape onto xz by swapping two axes, which is a mirror:
+// its determinant is negative, so it reverses the orientation of every triangle it
+// moves. Reversing the index order back leaves all three directions wound the same
+// way - counter-clockwise seen from outside, agreeing with the per-vertex normals -
+// without moving a vertex or a UV. Call it once indices are complete.
+def private unmirror_winding(plt : GenDirection; var frag : GeometryFragment) {
+    let tm = gen_direction_tm(plt)
+    return if (dot(tm[0], cross(tm[1], tm[2])) > 0.0)
+    for (t in range(length(frag.indices) / 3)) {
+        let i = t * 3 + 1
+        let swapped = frag.indices[i]
+        frag.indices[i] = frag.indices[i + 1]
+        frag.indices[i + 1] = swapped
     }
 }
 
@@ -143,6 +164,7 @@ def gen_plane(plt : GenDirection) {
     apply_gen_direction_tm(plt, frag)
     frag.indices <- array<int>(0, 1, 2, 2, 3, 0)
     frag.prim = GeometryFragmentType.triangles
+    unmirror_winding(plt, frag)
     gen_bbox(frag)
     return <- frag
 }
@@ -186,38 +208,42 @@ def gen_cylinder(plt : GenDirection; sectorCount : int) {
         }
     }
     apply_gen_direction_tm(plt, frag)
-    // indices
+    // Indices, wound counter-clockwise seen from OUTSIDE, to agree with the
+    // per-vertex normals set above. The side quads and BOTH caps were inverted,
+    // so under the usual CCW-front / cull-back setup a cylinder rendered as its
+    // own interior.
     for (i in range(sectorCount)) {
         let k1 = i
         let k2 = i + sectorCount + 2
         // triangle 1
         frag.indices |> push(k1)  // nolint:STYLE012 — appends two triangles per sector to the running index buffer
-        frag.indices |> push(k2)
         frag.indices |> push(k1 + 1)
+        frag.indices |> push(k2)
         // triangle 2
         frag.indices |> push(k2)
-        frag.indices |> push(k2 + 1)
         frag.indices |> push(k1 + 1)
+        frag.indices |> push(k2 + 1)
     }
-    // top
+    // cap at h = -1 (normal -z)
     let tbOfs = (sectorCount + 2) * 2
     let kc1 = sectorCount + 1 + tbOfs
     for (i in range(sectorCount)) {
         let k = i + tbOfs
         frag.indices |> push(kc1)  // nolint:STYLE012 — appends one cap triangle per sector to the running index buffer
-        frag.indices |> push(k)
         frag.indices |> push(k + 1)
+        frag.indices |> push(k)
     }
-    // bottom
+    // cap at h = +1 (normal +z)
     let kc2 = ((sectorCount + 2) + sectorCount + 1) + tbOfs
     for (i in range(sectorCount)) {
         let k = (sectorCount + 2) + i + tbOfs
         frag.indices |> push(kc2)  // nolint:STYLE012 — appends one cap triangle per sector to the running index buffer
-        frag.indices |> push(k + 1)
         frag.indices |> push(k)
+        frag.indices |> push(k + 1)
     }
     delete unitVertices
     frag.prim = GeometryFragmentType.triangles
+    unmirror_winding(plt, frag)
     gen_bbox(frag)
     return <- frag
 }
@@ -264,11 +290,15 @@ def gen_cone(plt : GenDirection; sectorCount : int) {
         uv = float2(0.5, 0.5)
     ))
 
-    // side triangles
+    // Side triangles, wound counter-clockwise seen from OUTSIDE the cone, which
+    // is what the per-vertex normals above already claim and what the base cap
+    // below already does. The (i, tip, i+1) order was inverted, so under the
+    // usual CCW-front / cull-back setup the lit outer surface was culled and the
+    // unlit interior showed through.
     for (i in range(sectorCount)) {
         frag.indices |> push(i)  // nolint:STYLE012 — appends one side triangle per sector to the running index buffer
-        frag.indices |> push(tip)
         frag.indices |> push(i + 1)
+        frag.indices |> push(tip)
     }
 
     // base triangles
@@ -282,6 +312,7 @@ def gen_cone(plt : GenDirection; sectorCount : int) {
     apply_gen_direction_tm(plt, frag)
     delete unitVertices
     frag.prim = GeometryFragmentType.triangles
+    unmirror_winding(plt, frag)
     gen_bbox(frag)
     return <- frag
 }
@@ -334,6 +365,7 @@ def gen_prism(plt : GenDirection) {
 
     apply_gen_direction_tm(plt, frag)
     frag.prim = GeometryFragmentType.triangles
+    unmirror_winding(plt, frag)
     gen_bbox(frag)
     return <- frag
 }

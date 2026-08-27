@@ -541,7 +541,11 @@ def init_audio() {
     if (!audio_initialized) {
         return
     }
-    music_enabled = !audio_is_single_threaded()
+    // The playground interpreter shares the renderer's runtime and cannot host
+    // the threaded strudel worker safely, and it does not report a
+    // single-threaded audio backend, so the threading check alone would not
+    // catch it. Only a standalone build may turn music on. SFX stay on here.
+    music_enabled = is_standalone_exe() && !audio_is_single_threaded()
     if (music_enabled && !music_initialized) {
         strudel_init(@@strudel_music_main)
         strudel_set_volume(0.35, 0.0)
