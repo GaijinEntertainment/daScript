@@ -570,7 +570,6 @@ def begin_env_transition(idx : int) {
 
 var geo_sphere : OpenGLGeometryFragment
 var geo_cube : OpenGLGeometryFragment
-var geo_plane_xz : OpenGLGeometryFragment
 var geo_cylinder : OpenGLGeometryFragment
 var geo_cone : OpenGLGeometryFragment
 var geo_prism : OpenGLGeometryFragment

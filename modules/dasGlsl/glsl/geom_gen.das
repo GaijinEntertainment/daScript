@@ -115,7 +115,7 @@ enum GenDirection {
     yz
 }
 
-def private apply_gen_direction_tm(plt : GenDirection; var frag : GeometryFragment) {
+def private gen_direction_tm(plt : GenDirection) : float3x3 {
     var tm : float3x3
     identity(tm)
     if (plt == GenDirection.xy) {
@@ -126,9 +126,30 @@ def private apply_gen_direction_tm(plt : GenDirection; var frag : GeometryFragme
         swap(tm[0], tm[2])      // todo: verify
         tm[2][0] = -1.
     }
+    return tm
+}
+
+def private apply_gen_direction_tm(plt : GenDirection; var frag : GeometryFragment) {
+    let tm = gen_direction_tm(plt)
     for (vtx in frag.vertices) {
         vtx.xyz = tm * vtx.xyz
         vtx.normal = normalize(tm * vtx.normal)
+    }
+}
+
+// xz maps the generated xy shape onto xz by swapping two axes, which is a mirror:
+// its determinant is negative, so it reverses the orientation of every triangle it
+// moves. Reversing the index order back leaves all three directions wound the same
+// way - counter-clockwise seen from outside, agreeing with the per-vertex normals -
+// without moving a vertex or a UV. Call it once indices are complete.
+def private unmirror_winding(plt : GenDirection; var frag : GeometryFragment) {
+    let tm = gen_direction_tm(plt)
+    return if (dot(tm[0], cross(tm[1], tm[2])) > 0.0)
+    for (t in range(length(frag.indices) / 3)) {
+        let i = t * 3 + 1
+        let swapped = frag.indices[i]
+        frag.indices[i] = frag.indices[i + 1]
+        frag.indices[i + 1] = swapped
     }
 }
 
@@ -143,6 +164,7 @@ def gen_plane(plt : GenDirection) {
     apply_gen_direction_tm(plt, frag)
     frag.indices <- array<int>(0, 1, 2, 2, 3, 0)
     frag.prim = GeometryFragmentType.triangles
+    unmirror_winding(plt, frag)
     gen_bbox(frag)
     return <- frag
 }
@@ -221,6 +243,7 @@ def gen_cylinder(plt : GenDirection; sectorCount : int) {
     }
     delete unitVertices
     frag.prim = GeometryFragmentType.triangles
+    unmirror_winding(plt, frag)
     gen_bbox(frag)
     return <- frag
 }
@@ -289,6 +312,7 @@ def gen_cone(plt : GenDirection; sectorCount : int) {
     apply_gen_direction_tm(plt, frag)
     delete unitVertices
     frag.prim = GeometryFragmentType.triangles
+    unmirror_winding(plt, frag)
     gen_bbox(frag)
     return <- frag
 }
@@ -341,6 +365,7 @@ def gen_prism(plt : GenDirection) {
 
     apply_gen_direction_tm(plt, frag)
     frag.prim = GeometryFragmentType.triangles
+    unmirror_winding(plt, frag)
     gen_bbox(frag)
     return <- frag
 }

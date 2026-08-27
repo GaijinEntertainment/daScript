@@ -19,7 +19,6 @@ def create_gl_objects() {
 
     geo_sphere <- create_geometry_fragment <| gen_sphere(14, 10, false)
     geo_cube <- create_geometry_fragment <| gen_cube()
-    geo_plane_xz <- create_geometry_fragment <| gen_plane(GenDirection.xz)
     geo_cylinder <- create_geometry_fragment <| gen_cylinder(GenDirection.xy, 12)
     geo_cone <- create_geometry_fragment <| gen_cone(GenDirection.xy, 12)
     geo_prism <- create_geometry_fragment <| gen_prism(GenDirection.xy)
