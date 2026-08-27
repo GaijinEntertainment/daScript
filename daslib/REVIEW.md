@@ -1,7 +1,7 @@
 # daslib Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`daslib/ARCHITECTURE.md`. Planned work: `daslib/followup_comment_sweep.md`.
+`daslib/ARCHITECTURE.md`. Planned work: `plans/daslib_comment_sweep.md` (repo root).
 A diff touching the linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too.
 
 **A diff that adds or changes a lint report path (`perf_warning` / `style_warning` /

@@ -30,6 +30,12 @@ Three document types split one grammar, each with a repo-root contract:
   exception ledger says what is already ruled. Facts formerly carried by comments live here.
 - **`/history`** - past tense: what happened. Nothing current cites it.
 
+An implementation folder - `daslib/`, a module's `daslib/` or engine folder - holds no `.md`
+besides `REVIEW*.md`, `ARCHITECTURE.md`, and `LAWS.md` (lint-enforced: `.lint_config`
+`rule_docs_only`). Ledgers and plans live at the module root or in `plans/` (repo root). None
+of these documents installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` and
+`ARCHITECTURE_COMMON.md` at the install root are the two vendoring exceptions.
+
 The mood test routes misplaced text: must/never binding a diff -> REVIEW.md; present-tense
 fact -> ARCHITECTURE.md; dated or past-tense -> /history.
 

@@ -1,0 +1,4 @@
+# Rule documents only beside the shipped module code (LINT025): ledgers, plans and
+# notes live at the module root or in plans/ (repo root).
+[docs]
+rule_docs_only = true

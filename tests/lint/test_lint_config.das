@@ -315,10 +315,10 @@ def test_partition_by_format_policy(t : T?) {
 }
 
 [test]
-def test_daslib_policy_is_comment_clean(t : T?) {
-    t |> run("daslib ships with force_clean_comments on") @@(t : T?) {
+def test_daslib_policy_comments_harvested(t : T?) {
+    t |> run("daslib ships with force_clean_comments off") @@(t : T?) {
         let pol = format_policy_for(path_join(get_das_root(), "daslib/lint.das"))
         t |> success(pol.format_enabled)
-        t |> success(pol.force_clean_comments, "daslib/.lint_config arms the strip; turning it off un-ratchets the comment sweep")
+        t |> success(!pol.force_clean_comments, "daslib comments are harvested, not formatter-stripped; re-arming the strip is a decision, not drift")
     }
 }

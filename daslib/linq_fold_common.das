@@ -8,7 +8,7 @@ module linq_fold_common shared public
 
 //! linq_fold source-independent kernel: pattern-table types, walker, predicate library,
 //! chain transforms, generic emit lanes, and the abstract ``SourceAdapter`` base. Carries
-//! the shared ``splice_patterns`` registry. See daslib/linq_fold.md "Module layout & adapter contract".
+//! the shared ``splice_patterns`` registry. See daslib/ARCHITECTURE.md sec. 37.
 
 require daslib/linq public
 require daslib/ast_boost

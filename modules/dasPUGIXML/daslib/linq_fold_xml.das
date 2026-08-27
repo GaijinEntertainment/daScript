@@ -10,7 +10,7 @@ module linq_fold_xml shared public
 //! ``from_xml_node(node[, name], type<Row>)`` chain emit an inlined DOM child-element walk (mirroring
 //! ``PUGIXML_boost``'s generator body) instead of driving the generator + an intermediate array.
 //! Optional companion to ``daslib/linq_fold`` — pulled in via ``require ?pugixml`` and gated by
-//! ``static_if (typeinfo builtin_module_exists(pugixml))``. See daslib/linq_fold.md.
+//! ``static_if (typeinfo builtin_module_exists(pugixml))``. See daslib/ARCHITECTURE.md sec. 37.
 
 require pugixml public
 require pugixml/PUGIXML_boost   // nolint:STYLE030 — build_xml_row / read_xml_field / peek_xml_field are emitted via qmacro, invisible to the require-usage scan
@@ -64,7 +64,7 @@ def private try_xml_under_guard_materialize(var body : Expression?; bindName : s
 
 // Fills `prelude` (the hoisted default-row decl, flatten path only) + `inner` (per-element, ends with
 // `body`): allUsed -> full build_xml_row; no field refs -> body only; pruned -> one `let xf_<f>` read
-// per referenced field with body's `it.<f>` rewritten to it (struct dropped). See linq_fold.md.
+// per referenced field with body's `it.<f>` rewritten to it (struct dropped). See daslib/ARCHITECTURE.md sec. 37.
 [macro_function]
 def private build_xml_materializer(var body : Expression?; bindName : string; declT : TypeDeclPtr;
                                    defName, chName : string; at : LineInfo;

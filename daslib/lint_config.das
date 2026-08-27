@@ -31,6 +31,11 @@ module lint_config shared private
 //! directory may hold its own ``.lint_config``; ``format_policy_for`` walks
 //! from the file's directory to the repository root and the nearest file
 //! that defines a key wins that key (``[rules]`` stays repo-root-only).
+//!
+//! The ``[docs]`` table is a FOLDER property — no cascade, no inheritance.
+//! ``rule_docs_only = true`` marks a folder that carries rule documents only;
+//! ``rule_docs_only_at`` reads that one file, and the LINT025 pass in
+//! ``utils/lint/main.das`` reports any other ``.md`` sitting beside the code.
 
 require daslib/fio
 require daslib/json
@@ -257,17 +262,38 @@ struct public FormatPolicy {
     force_clean_comments : bool = false
 }
 
-def private read_format_table(path : string) : JsonValue? {
+def private read_config_table(path, table_name : string) : JsonValue? {
     let body = fread(path)
     if (empty(body)) return null
     var error : string
     var root : JsonValue? = read_toml(body, error)
     if (root == null || !(root.value is _object)) return null
     var root_obj & = unsafe(root.value as _object)
-    if (!key_exists(root_obj, "format")) return null
-    var fmt_jv : JsonValue? = root_obj["format"]
-    if (fmt_jv == null || !(fmt_jv.value is _object)) return null
-    return fmt_jv
+    if (!key_exists(root_obj, table_name)) return null
+    var tbl_jv : JsonValue? = root_obj[table_name]
+    if (tbl_jv == null || !(tbl_jv.value is _object)) return null
+    return tbl_jv
+}
+
+def private read_format_table(path : string) : JsonValue? {
+    return read_config_table(path, "format")
+}
+
+def private read_docs_table(path : string) : JsonValue? {
+    return read_config_table(path, "docs")
+}
+
+//! True when the ``.lint_config`` at `config_path` sets ``[docs] rule_docs_only = true`` — the folder
+//! carries rule documents only (``REVIEW*.md`` / ``ARCHITECTURE*.md`` / ``LAWS.md``). A folder property,
+//! NOT the ``[format]`` cascade: only that one file is read, and anything missing reads as false.
+def public rule_docs_only_at(config_path : string) : bool {
+    var docs_jv = read_docs_table(config_path)
+    return false if (docs_jv == null)
+    var docs & = unsafe(docs_jv.value as _object)
+    return false if (!key_exists(docs, "rule_docs_only"))
+    var val_jv : JsonValue? = docs["rule_docs_only"]
+    return false if (val_jv == null || !(val_jv.value is _bool))
+    return val_jv.value as _bool
 }
 
 def private config_dir_of(file : string) : string {

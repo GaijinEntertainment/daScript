@@ -698,3 +698,82 @@ module; entries are anchored to symbols.
 
 - **`_table_index_and_init` exists for infer's `default_init_containers` rewrite of
   non-store `tab[key]`** - it has no daslib call site and is not dead.
+
+## 37. linq_fold module layout and the SourceAdapter contract
+
+- **Charters.** `linq_fold` is dispatch only: source recognition (`try_splice_patterns`),
+  adapter construction, the tier-2 `fold_linq_default` cascade, the `LinqFold` call macro,
+  and the single registrar `register_all_linq_fold_rows`. `linq_fold_common` holds what no
+  source can influence - the pattern-table types, the walker, the predicate library, the
+  chain pre-passes, the generic emit lanes, the `splice_patterns` registry, and the abstract
+  `SourceAdapter`. Each remaining file owns one source: `linq_fold_array` (array, zip,
+  array-join), `linq_fold_decs`, `linq_fold_json`, `linq_fold_table`, and pugixml's
+  `linq_fold_xml`. `linq_fold_sql` is the exception - it recognizes a `[sql_table]` source
+  and hands the whole chain to the `_sql` macro, so it has no adapter and no emit. A source
+  file requires `linq_fold_common` and never a sibling source.
+- **`try_splice_patterns` tries recognizers in a fixed order** - sql, decs, xml (behind the
+  pugixml `static_if`), json, table - and the array arm runs last with no recognizer of its
+  own: it is what claims a chain nobody else claimed.
+- **The adapter contract is four abstract methods; everything else on the base has a
+  default.** `bind_name`, `element_type`, `wrap_source_loop` and `wrap_invoke` are abstract,
+  so every source answers them. The per-operation hooks (`emit_loop_or_count`,
+  `emit_reverse_skip_into_tail`, `emit_reverse_last_backward`, `emit_distinct_take_loop`,
+  `build_group_by_adapter`, `emit_join_hook`) return null on the base, and a null sends the
+  caller down its generic path. The capability methods (`can_group_by`, `can_join`,
+  `can_reserve_by_length`, `has_own_loop_or_count_lane`, `supports_direct_return`,
+  `effective_dispatch`, `defers_materialization`, `count_shortcut`, `invoke_param_type`,
+  `name_prefix`) are the source answering questions about itself. daslang classes have no
+  `is`/`as` downcast, so an emit fn holding a `SourceAdapter?` reaches source-specific
+  behavior only through these methods - there is no place to write a per-source branch, and
+  adding a source needs no edit to a central enum or switch.
+- **The capability defaults are fail-closed, and `supports_direct_return` is the one that
+  matters.** A wrong `true` emits a mid-loop `return` that escapes a nested-callback walk
+  (decs's `for_each_archetype`); a wrong `false` only costs the slower state-var +
+  find-stop + tail path.
+- **`loop_source_expr` / `loop_source_name` is what lights up the array-shaped lanes.** The
+  shared lanes spell their loop and their `length(...)` reads with the name, and read the
+  expr for compile-time facts - the `type_has_length` reserve gate and the join's srcA
+  element-type check. Array and table override both, xml and json override the name only,
+  decs overrides neither.
+- **`ProjectedSourceAdapter` absorbs a leading source projection.** When a row captures the
+  optional `srcsel` slot (`source |> _select(f) |> order/distinct/take`), the dispatcher
+  wraps the real adapter in this decorator: it binds `projName = f(rawElem)` on top of the
+  per-element body and delegates loop and invoke to the inner adapter, so every emit sees the
+  projected element unchanged. It leaves `loop_source_expr` / `loop_source_name` /
+  `can_reserve_by_length` at the base defaults, which disables the source-direct fast paths -
+  those would bypass the projection.
+- **Rows are per operator family, not per source.** The seven `build_*_rows` fns
+  (order_family, loop_or_count, reverse, distinct, group_by, join, zip) emplace 17 rows into
+  the one `splice_patterns` table; only zip's builder lives outside `linq_fold_common`.
+  Source gating happens inside a row - through a `RequiresPredicate` that asks the adapter
+  (`can_group_by_source`, `can_join_source`, `array_source`, `non_array_source`) or through
+  a hook that returns null. Registration order is match priority: the dispatcher walks the
+  table top to bottom and the first row whose chain matches and whose emit returns non-null
+  wins, so more specific chains are declared first. A row whose slot chain is a strict prefix
+  of a later row's shadows that row (`chain_prefix_of`).
+- **The walker consumes the whole call list or fails.** `match_pattern` walks the flattened
+  calls left to right against the row's slots: `c_one` must match and advances both cursors,
+  `c_opt` advances both on a match and skips the slot otherwise, `c_chain` matches greedily
+  while the call is in the slot's name set and always succeeds - including with zero matches,
+  which still creates the (empty) `captures.many` entry, so an emit fn can rely on the key
+  existing. Any call left unconsumed after the last slot is a no-match. The `requires`
+  predicates run last, against the populated captures.
+- **`Captures.single_name` exists because a pre-pass renames the op without touching the
+  AST.** `normalize_order_reverse` folds a trailing `reverse` into the order op by swapping
+  the tuple's `LinqCall` record, leaving the `ExprCall` alone; deriving the name back from
+  the `ExprCall` (`call_norm_name`) would silently undo the swap. The walker therefore
+  records the `LinqCall.name` at match time, and any emit fn that cares about the
+  post-normalize name reads `single_name`.
+- **`alias_table` names the op-name groups a `m_alias` slot admits, and a missing name fails
+  silently.** A terminator the lanes handle but `loop_terminator_family` omits never matches
+  the terminator slot, so the chain leaves the splice and lands on the tier-2 cascade with no
+  diagnostic - the symptom is a slow chain, not an error.
+- **Predicates and emit fns are named module-level functions, referenced as
+  `@@<RequiresPredicate> name` / `@@<EmitFn> name`.** An anonymous `@@(...)` lambda compiles
+  to a `_localfunction_*` symbol the LLVM JIT pass cannot resolve; a named function has a
+  stable address.
+- **The table lane's key and value binds are asymmetric on purpose.** `keys(tab)` yields
+  non-const elements (writable temp copies), so the key lanes rebind the loop var through a
+  `let` before the body sees it; `values(tab)` over the const table param already yields
+  `V& const` and binds directly. Keys are workhorse types, so the copy is free, and
+  downstream `==const` composition (a `push_clone` of a bare projected key) needs the const.

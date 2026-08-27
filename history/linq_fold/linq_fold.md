@@ -1,6 +1,13 @@
-# linq_fold.das refactor - masterplan
+# linq_fold.das refactor - archived masterplan
 
-Living document. Update **Status** + **Decision log** as phases ship.
+Archived 2026-08-27 from `daslib/linq_fold.md`. The operative half - the module layout, the
+`SourceAdapter` contract, and the pattern-table walker contract - was distilled into
+`daslib/ARCHITECTURE.md` sec. 37, which the `linq_fold_*` module headers now cite.
+Everything below is that document's plan material, phase logs, PR sketches and decision log,
+verbatim; the projected alias/predicate tables it carries were snapshots of a planned state
+and the shipped code has since diverged from them.
+
+---
 
 ## Status
 
@@ -57,23 +64,6 @@ Match-side (Phase E) and emit-side (Phase F) are uniform. Phase G makes the **so
     4. **Bundled dead `long_count` cleanup:** with all sources on the counter lane, `emit_accumulator_lane`'s `long_count` side-effect bind + `build_accumulator_spec`/`build_accumulator_perelement_stmts`'s count/long_count arms were dead; removed.
     Behavior-preserving (not byte-identical for decs): full `tests/` green on INTERP+JIT+AOT; `benchmarks/sql` decs/array/zip/xml cells within thermal noise with identical alloc profiles. The array/zip/xml seam commits (`LoopDispatch` threading) are AST byte-identical.
 - [ ] **PR G4** (separate) - `linq_fold_xml.das` validates the interface (dasPUGIXML source; field access via `operator .` overloads).
-
-### Module layout & adapter contract
-
-The adapter is an abstract `class SourceAdapter` (`[macro_interface]`, so every method is macro-callable - no per-method `[macro_function]`). One subclass per data source carries that source's data as fields. The contract is four virtual methods:
-
-- `bind_name(at) : string` - per-element bind name.
-- `element_type() : TypeDeclPtr` - source element type.
-- `wrap_source_loop(loopShape : LoopDispatch; var body; at) : Expression?` - emit the per-element iteration (array `for`, decs `for_each_archetype{,_find}`, zip lockstep, joins hash+probe). `loopShape` is the loop-framing knob consumed only by nested-callback sources (decs); direct-return sources frame an unconditional loop and ignore it.
-- `wrap_invoke(var stmts; retType; wrapIter; at) : Expression?` - outer invoke binding sources as params.
-
-Emit fns hold a `SourceAdapter?` (via `EmitCtx.src` or an `adapter` local) and call these virtually. **daslang classes have no `is`/`as` downcast** (variant-only), so source-specific data is never pulled off a base pointer by downcasting - it goes through virtual methods. Beyond the 4 dispatch methods the base also declares 6 default-null **per-operation hook methods** (`emit_loop_or_count` / `emit_reverse_skip_into_tail` / `emit_reverse_last_backward` / `emit_distinct_take_loop` / `build_group_by_adapter` / `emit_join_hook`) that the owning source overrides; the generic lane falls back to its inline (array) body when the hook returns null. (`XmlAdapter` overrides the two reverse hooks with a **backward DOM walk** - `last_child`/`previous_sibling`, both O(1) in pugixml: `emit_reverse_skip_into_tail` collects only the last N children for `reverse |> take(N)` (m5f `reverse_take` 88.9 -> 0.0 ns/op), and `emit_reverse_last_backward` returns the last element in one step for a no-predicate `last()` / `reverse |> first`. Predicated `[where] |> last` stays on the forward walk - reverse DOM traversal is ~2x cache-hostile per node, profiled - and the named 3-arg `from_xml_node` form falls back to the buffer path since pugixml has no last-named-child primitive.) (`emit_join_hook` is the standalone-join dispatch: the single `join_general` pattern's thin `emit_join` routes to it, so each source supplies its own join body - array `for`+2-param invoke, decs `for_each_archetype`, XML field-pruned DOM walk - with no parallel per-source join pattern.) It also declares **capability methods** the source answers about itself - `can_group_by` / `can_join` / `can_reserve_by_length` / `has_own_loop_or_count_lane` (bool, default false) and `name_prefix` (string) - which replaced the old `kind() : AdapterKind` enum + per-site switches, so a new source only implements the methods (no central enum to extend). The `can_group_by` / `can_join` capabilities are queried from the `can_group_by_source` / `can_join_source` `RequiresPredicate`s (which thread the adapter), so the single `group_by` / `join_general` pattern admits any capable source and the adapter's `build_group_by_adapter` / `emit_join_hook` does the source/srcb-shape gating (null -> tier-2). The **generic-lane source feed** is the getter pair `loop_source_expr()`/`loop_source_name()` (default null/"" on base; array/table override both, xml/json name-only): the shared array-shaped lanes (counter / early-exit / dedup / order family / hashed join) emit their loops and `length()` reads against the name and read the expr for compile-time facts (reserve hints, srcB element validation), so overriding the pair is what lights those lanes up for a source; the decs-specific getters were removed in G2a so the base (and thus `linq_fold_common`) is free of `DecsAdapter`/ECS coupling. One decorator subclass lives in `linq_fold_common`: `ProjectedSourceAdapter` wraps any inner adapter to absorb a leading `_select(f)` source projection (the `srcsel` slot) - it binds `projName = f(rawElem)` atop the per-element body and delegates `wrap_source_loop`/`wrap_invoke`/`name_prefix` to the inner adapter, leaving the base no-op `loop_source_expr`/`loop_source_name`/`can_reserve_by_length` so source-direct fast paths (which would bypass the projection) stay disabled. This lets order/distinct splices fuse over `source |> _select(f) |> ...` for any source.
-
-**The capability defaults are fail-closed, and `supports_direct_return` is the one that matters.** A wrong `true` mis-emits a `return` that escapes a nested-callback walk; a wrong `false` only costs the slower state-var + find-stop + tail path. A new source leaves it at the default until its loop really is a plain `for`.
-
-**Table lane binds are asymmetric on purpose.** `keys(tab)` yields NON-const elements (writable temp copies), so the key lanes rebind the loop var through a `let` before the body sees it; `values(tab)` over the const table param already yields `V& const` and binds directly. The rebind is not redundant boilerplate - keys are workhorse types so the copy is free, and downstream `==const` composition (`push_clone` of a bare projected key) needs the const.
-
-**Realized module layout (post-G3d):** `linq_fold_common` (kernel + abstract base + adapter-pure generic lanes - terminator/fold-array plus the source-generic loop_or_count / counter / accumulator / early-exit lanes, with `LoopDispatch` + the per-op `!supports_direct_return` state path that lets nested-callback sources ride the early-exit lane - + `splice_patterns` + `DecsBridgeShape`/`extract_decs_bridge`) <- `linq_fold_array` (Array/Zip/ArrayJoin adapters + the zip/join emit `emit_zip`/`emit_array_join` + array row-builders) and `linq_fold_decs` (Decs/DecsJoin adapters + decs-bridge visitors + the decs dispatcher `emit_loop_or_count_lane_decs` + the decs-specific hooks `emit_decs_count_archsize`/`emit_decs_reverse_skip_into_tail`/`emit_decs_join_impl`/`emit_decs_min_max_by` - the parallel terminator scaffold is gone, decs rides the generic lanes via `DecsAdapter`); the engine `linq_fold` requires all three and holds only the dispatcher + the `LinqFold` macro + the single `register_all_linq_fold_rows`. Adding a source = a new `linq_fold_<src>.das` subclass module + one `require` + one `build_<src>_rows()` call in the engine registrar. Later sources follow that recipe: `linq_fold_json` (`JsonAdapter`/`JsonJoinAdapter`), `pugixml/linq_fold_xml` (`XmlAdapter`, optional), `daslib/linq_fold_sql` (pass-through detector, provider-neutral), and `linq_fold_table` (`TableAdapter` over `each_kv`/`keys`/`values` heads - kv usage-pruned slot walks, no new rows; arc plan in `history/linq_fold/LINQ_TO_TABLE.md`).
 
 ## Goal
 
@@ -181,29 +171,9 @@ var splice_patterns : array<SplicePattern>     // PR D: collapsed from per-plan 
 
 Predicates and emit archetypes are NAMED module-level `def` functions wrapped at use sites with `@@<RequiresPredicate>` / `@@<EmitFn>` (anonymous `@@(...)` lambdas produce `_localfunction_*` symbols that the LLVM JIT pass can't resolve - named functions take a stable address).
 
-### Walker contract
-
-```das
-def match_pattern(p : SplicePattern;
-                  var calls : array<tuple<ExprCall?; LinqCall?>>;
-                  var top : Expression?) : MatchResult
-```
-
-Walks `calls` left-to-right. For each slot:
-
-- `one` - current call must match (name + arity if specified); both cursors advance.
-- `optional` - if current call matches, both cursors advance; otherwise the slot is skipped without consuming.
-- `chain` (PR B1) - greedy match-while-in-set. Captured as `array<ExprCall?>` into `captures.many[capture_name]`. Always succeeds (0+); empty match still creates the `many` entry so emit fns can rely on `c.many |> key_exists("...")`. Pairs with `m_one_of` via the `slot_chain_of(names, cap)` convenience constructor.
-
-After all slots, no unconsumed calls remain. If any of the above fails -> `MatchResult(no_match = null)`.
-
-Then each `RequiresPredicate` in `p.requires` is evaluated against the populated `Captures` and the peeled `top`. All must return true. If any fails -> `MatchResult(no_match = null)`.
-
-Returns `MatchResult(matched <- captures)` on full success (move semantics - `Captures` is a table). Caller binds `var r <- match_pattern(...)` and reads via `if (r is matched) { let c & = r as matched; ... }`.
-
 ### Alias table (named op-name groups)
 
-The snippet below is the projected end-state at PR D. The authoritative live list is the `alias_table` literal in [daslib/linq_fold.das](linq_fold.das). Status reflects what's populated through PR B1.
+The snippet below is the projected end-state at PR D. The authoritative live list is the `alias_table` literal in [daslib/linq_fold.das](../../daslib/linq_fold.das). Status reflects what's populated through PR B1.
 
 ```das
 // projected end-state at PR D
@@ -224,7 +194,7 @@ var alias_table : table<string; array<string>> <- {
 
 ### Predicate library
 
-Module-level named `RequiresPredicate` constants for reuse across patterns. As with `alias_table`, this table shows the projected end-state - see [daslib/linq_fold.das](linq_fold.das) for what's actually defined today (PR A: `array_source`, `take_arg_is_int`, `no_terminator`).
+Module-level named `RequiresPredicate` constants for reuse across patterns. As with `alias_table`, this table shows the projected end-state - see [daslib/linq_fold.das](../../daslib/linq_fold.das) for what's actually defined today (PR A: `array_source`, `take_arg_is_int`, `no_terminator`).
 
 | Name | Status | Meaning |
 |---|---|---|
@@ -416,7 +386,7 @@ Both planner bodies (~165 LOC across array + decs) hard-deleted; new code (rows 
 
 **Branch:** `bbatkin/linq-fold-pattern-table-pre`
 
-**Scope (delivered):** Final collapse promised at [linq_fold.md:212](daslib/linq_fold.md#L212). 7 per-plan tables -> 1 `splice_patterns`; 12 stub fns + 12-line `LinqFold.visit` cascade -> 1 `try_splice_patterns` dispatcher.
+**Scope (delivered):** Final collapse promised at [linq_fold.md:212](linq_fold.md#L212). 7 per-plan tables -> 1 `splice_patterns`; 12 stub fns + 12-line `LinqFold.visit` cascade -> 1 `try_splice_patterns` dispatcher.
 
 **Commit 1 - table consolidation:**
 - Delete the 7 `var private plan_<X>_patterns : array<SplicePattern>` declarations; keep `splice_patterns` (previously declared empty since PR A).

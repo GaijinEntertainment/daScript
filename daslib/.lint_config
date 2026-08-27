@@ -2,3 +2,8 @@
 # REVIEW.md / ARCHITECTURE.md, site-local one-liners stay - not formatter-deleted.
 [format]
 force_clean_comments = false
+
+# Rule documents only beside the stdlib sources (LINT025): ledgers, plans and notes
+# live in plans/ (repo root).
+[docs]
+rule_docs_only = true

@@ -175,6 +175,72 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
     }
 }
 
+// The .md basenames a `[docs] rule_docs_only = true` folder may carry: the folder's
+// checklists (REVIEW.md and its routed companions), its architecture doc (and companion
+// splits), and the rulings sidecar. Everything else is a ledger, a plan or a note.
+def is_rule_doc_name(name : string) : bool {
+    return false if (!(name |> ends_with(".md")))
+    return (name == "REVIEW.md" || name == "ARCHITECTURE.md" || name == "LAWS.md"
+        || name |> starts_with("REVIEW_") || name |> starts_with("ARCHITECTURE_"))
+}
+
+// Directories under `path` whose OWN .lint_config sets [docs] rule_docs_only = true.
+// Folder property, no cascade - each directory answers for itself. Skip rules mirror
+// scan_das_files so both passes see the same tree.
+def scan_docs_folders(path : string; var folders : array<string>; var seen : table<string; void?>) {
+    let st = stat(path)
+    return if (!st.is_valid || !st.is_dir || seen |> key_exists(path))
+    seen |> insert(path, null)
+    if (rule_docs_only_at("{path}/.lint_config")) {
+        folders |> push(path)
+    }
+    fio::dir(path) $(name) {
+        return if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name))
+        let full = "{path}/{name}"
+        let fst = stat(full)
+        if (fst.is_valid && fst.is_dir) {
+            scan_docs_folders(full, folders, seen)
+        }
+    }
+}
+
+// The .md files in `folder` (non-recursive) that are not rule documents.
+def collect_stray_rule_docs(folder : string; var out : array<string>) {
+    fio::dir(folder) $(name) {
+        return if (name == "." || name == ".." || !(name |> ends_with(".md")) || is_rule_doc_name(name))
+        let full = "{folder}/{name}"
+        let fst = stat(full)
+        if (fst.is_valid && fst.is_reg) {
+            out |> push(full)
+        }
+    }
+}
+
+// Folder-docs pass: one sweep per invocation over the directory roots the run was given.
+// A ledger or plan parked beside shipped code is read by nobody and goes stale unnoticed,
+// so a tagged folder admits rule documents only. Returns the finding count.
+def run_rule_docs_pass(roots : array<string>; disabled_codes, enabled_codes : table<string>) : int {
+    return 0 if (key_exists(disabled_codes, "LINT025")
+                    || (!empty(enabled_codes) && !key_exists(enabled_codes, "LINT025")))
+    var folders : array<string>
+    var seen : table<string; void?>
+    for (root in roots) {
+        scan_docs_folders(root, folders, seen)
+    }
+    folders |> sort
+    var found = 0
+    for (folder in folders) {
+        var strays : array<string>
+        collect_stray_rule_docs(folder, strays)
+        strays |> sort
+        for (md in strays) {
+            print("{md}: LINT025: stray .md beside shipped code - rule documents only (REVIEW*.md, ARCHITECTURE*.md, LAWS.md); ledgers and plans live at the module root or plans/ (repo root)\n")
+            found ++
+        }
+    }
+    return found
+}
+
 // Validates a rule code: ^(LINT|PERF|STYLE)\d{3}$. Returns true if shape matches.
 def is_valid_rule_code(code : string) : bool {
     let n = length(code)
@@ -559,14 +625,14 @@ def resolve_rule_filters(cfg : Config; var disabled_codes : table<string>&; var 
     return true
 }
 
-// Driver-mode positionals → sorted .das file list. Returns a process exit code, or -1 to proceed.
-def collect_input_files(var files : array<string>&) : int {
+// Driver-mode positionals → sorted .das file list, plus the directory roots among them
+// (`dirs`, the folder-docs pass's scan roots). Returns a process exit code, or -1 to proceed.
+def collect_input_files(var files : array<string>&; var dirs : array<string>&) : int {
     let cli_args <- get_user_args()
     let paths <- [for (arg in cli_args); arg; where !starts_with(arg, "-")]
     if (empty(paths)) {
         print("Error: no files or directories specified\n\n")
-        print_help(get_command_info(type<Config>), "utils/lint/main.das")
-        return 1
+        return print_lint_help(1)
     }
     var cache : table<string; void?>
     var skipped = 0
@@ -575,7 +641,12 @@ def collect_input_files(var files : array<string>&) : int {
         // same-dir requires under a relative key while module-mount-routed requires register
         // absolute, tripping error 20605 "several modules with the same name" (e.g. dasPEG)
         let full = get_full_file_name(p)
-        scan_das_files(empty(full) ? p : replace(full, "\\", "/"), files, cache, skipped)
+        let target = empty(full) ? p : replace(full, "\\", "/")
+        let st = stat(target)
+        if (st.is_valid && st.is_dir) {
+            dirs |> push(target)
+        }
+        scan_das_files(target, files, cache, skipped)
     }
     if (empty(files)) {
         // All inputs were intentionally skipped (e.g. builtin.das) -- success.
@@ -646,21 +717,29 @@ def print_summary(files_count, total_issues, total_errors, total_skipped, total_
     }
 }
 
+// --help / bad-argv banner. Returns the process exit code so main stays a dispatcher.
+def print_lint_help(rc : int) : int {
+    if (rc == 0) {
+        print("Unified lint checker for daslang files.\n")
+        print("Runs paranoid, performance, and style lint passes with recursive directory scanning.\n\n")
+    }
+    print_help(get_command_info(type<Config>), "utils/lint/main.das")
+    if (rc == 0) {
+        print("\nPositional arguments: one or more files or directories to lint.\n")
+    }
+    return rc
+}
+
 [export]
 def main() : int {
     var r <- parse_args(type<Config>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
-        print_help(get_command_info(type<Config>), "utils/lint/main.das")
-        return 1
+        return print_lint_help(1)
     }
     let cfg <- r |> move_unwrap
     if (cfg.help) {
-        print("Unified lint checker for daslang files.\n")
-        print("Runs paranoid, performance, and style lint passes with recursive directory scanning.\n\n")
-        print_help(get_command_info(type<Config>), "utils/lint/main.das")
-        print("\nPositional arguments: one or more files or directories to lint.\n")
-        return 0
+        return print_lint_help(0)
     }
     let any_only = cfg.paranoid_only || cfg.perf_only || cfg.style_only
     let run_paranoid = !any_only || cfg.paranoid_only
@@ -685,7 +764,8 @@ def main() : int {
 
     // Driver mode: scan positional paths, collect file list.
     var files : array<string>
-    let collect_rc = collect_input_files(files)
+    var docs_roots : array<string>
+    let collect_rc = collect_input_files(files, docs_roots)
     if (collect_rc >= 0) return collect_rc
 
     var total_issues = 0
@@ -724,6 +804,9 @@ def main() : int {
                 total_issues, total_errors, total_skipped, total_excluded)
         }
     }
+
+    // Folder policy, not file policy: runs once per invocation, in both driver modes.
+    total_issues += run_rule_docs_pass(docs_roots, disabled_codes, enabled_codes)
 
     return print_summary(length(files), total_issues, total_errors, total_skipped, total_excluded)
 }

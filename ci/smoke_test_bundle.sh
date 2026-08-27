@@ -219,17 +219,24 @@ echo "Shipped skills:"
 printf '  %-30s ' "bundle layout"
 if [[ -f "$BUNDLE/skills/daslang/SKILL.md" && -d "$BUNDLE/skills/daslang/references" \
       && ! -d "$BUNDLE/skills/internal" && -f "$BUNDLE/.claude/skills/daslang/SKILL.md" \
-      && -f "$BUNDLE/REVIEW_COMMON.md" && -f "$BUNDLE/.claude/agents/dragon.md" ]]; then
+      && -f "$BUNDLE/REVIEW_COMMON.md" && -f "$BUNDLE/ARCHITECTURE_COMMON.md" \
+      && -f "$BUNDLE/.claude/agents/dragon.md" ]]; then
     echo "OK"
     PASS=$((PASS + 1))
 else
-    echo "FAIL (need skills/daslang/{SKILL.md,references/}, .claude/skills/daslang, .claude/agents/dragon.md, REVIEW_COMMON.md, and no skills/internal/)"
+    echo "FAIL (need skills/daslang/{SKILL.md,references/}, .claude/skills/daslang, .claude/agents/dragon.md, REVIEW_COMMON.md, ARCHITECTURE_COMMON.md, and no skills/internal/)"
     FAIL=$((FAIL + 1))
 fi
-# REVIEW.md / REVIEW.das are 100% internal -- per-folder review machinery never
-# ships. REVIEW_COMMON.md is the one exception: adopting repos vendor from it.
-printf '  %-30s ' "no REVIEW.md/REVIEW.das"
-REVIEW_LEAKS=$(find "$BUNDLE" \( -name "REVIEW*.md" -o -name "REVIEW*.das" \) ! -path "$BUNDLE/REVIEW_COMMON.md" 2>/dev/null)
+# Repo-internal rule/record documents never ship: REVIEW.md / REVIEW.das,
+# ARCHITECTURE.md, LAWS.md, MASTERPLAN logs, followup/perf/profile ledgers.
+# REVIEW_COMMON.md and ARCHITECTURE_COMMON.md at the bundle root are the two
+# exceptions: adopting repos vendor from them.
+printf '  %-30s ' "no internal rule/record docs"
+REVIEW_LEAKS=$(find "$BUNDLE" \( -name "REVIEW*.md" -o -name "REVIEW*.das" \
+    -o -name "ARCHITECTURE*.md" -o -name "LAWS.md" -o -name "MASTERPLAN*.md" \
+    -o -name "PERF_LEDGER.md" -o -name "PROFILE.md" -o -name "THINKING.md" \
+    -o -name "followup_*.md" \) \
+    ! -path "$BUNDLE/REVIEW_COMMON.md" ! -path "$BUNDLE/ARCHITECTURE_COMMON.md" 2>/dev/null)
 if [[ -z "$REVIEW_LEAKS" ]]; then
     echo "OK"
     PASS=$((PASS + 1))
