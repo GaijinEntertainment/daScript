@@ -38,7 +38,8 @@ module lint_config shared private
 //! ``utils/lint/main.das`` reports any other ``.md`` sitting beside the code.
 //! ``enforce_arch = true`` marks a folder whose ``.md`` anchors are all owed an
 //! ``[arch]`` citation; ``enforce_arch_at`` reads it, and the LINT026 pass in
-//! the same runner reports every anchor no code cites.
+//! the same runner reports every anchor no code cites. Either tag also arms that
+//! runner's LINT027 line gate over the folder's rule documents.
 
 require daslib/fio
 require daslib/json

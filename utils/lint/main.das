@@ -176,6 +176,9 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
     }
 }
 
+// LINT027's cap on one rule document, in lines.
+let RULE_DOC_MAX_LINES = 300
+
 // The .md basenames a `[docs] rule_docs_only = true` folder may carry: the folder's
 // checklists (REVIEW.md and its routed companions), its architecture doc (and companion
 // splits), and the rulings sidecar. Everything else is a ledger, a plan or a note.
@@ -190,47 +193,58 @@ def rule_is_on(code : string; disabled_codes, enabled_codes : table<string>) : b
 }
 
 // Directories under `path` whose OWN .lint_config arms a [docs] flag: rule_docs_only feeds
-// LINT025, enforce_arch feeds LINT026's reverse direction. Folder property, no cascade - each
-// directory answers for itself. Skip rules mirror scan_das_files so all passes see one tree.
-def scan_docs_folders(path : string; want_rule_docs, want_arch : bool;
-                      var folders, arch_folders : array<string>; var seen : table<string; void?>) {
+// LINT025, enforce_arch feeds LINT026's reverse direction, and either one feeds LINT027's
+// line gate. Folder property, no cascade - each directory answers for itself. Skip rules
+// mirror scan_das_files so all passes see one tree.
+def scan_docs_folders(path : string; want_rule_docs, want_arch, want_doc_lines : bool;
+                      var folders, arch_folders, line_folders : array<string>; var seen : table<string; void?>) {
     let st = stat(path)
     return if (!st.is_valid || !st.is_dir || seen |> key_exists(path))
     seen |> insert(path, null)
     let cfg = "{path}/.lint_config"
-    if (want_rule_docs && rule_docs_only_at(cfg)) {
+    let armed_rule_docs = (want_rule_docs || want_doc_lines) && rule_docs_only_at(cfg)
+    let armed_arch = (want_arch || want_doc_lines) && enforce_arch_at(cfg)
+    if (want_rule_docs && armed_rule_docs) {
         folders |> push(path)
     }
-    if (want_arch && enforce_arch_at(cfg)) {
+    if (want_arch && armed_arch) {
         arch_folders |> push(path)
+    }
+    if (want_doc_lines && (armed_rule_docs || armed_arch)) {
+        line_folders |> push(path)
     }
     fio::dir(path) $(name) {
         return if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name))
         let full = "{path}/{name}"
         let fst = stat(full)
         if (fst.is_valid && fst.is_dir) {
-            scan_docs_folders(full, want_rule_docs, want_arch, folders, arch_folders, seen)
+            scan_docs_folders(full, want_rule_docs, want_arch, want_doc_lines, folders, arch_folders, line_folders, seen)
         }
     }
 }
 
-// One walk of the run's scan roots for both folder rules - the tree is walked once even when
-// only one of them is on, and not at all when neither is.
-def collect_docs_folders(roots : array<string>; want_rule_docs, want_arch : bool;
-                         var folders, arch_folders : array<string>&) {
-    return if (!want_rule_docs && !want_arch)
+// One walk of the run's scan roots for all three folder rules - the tree is walked once
+// however many of them are on, and not at all when none is.
+def collect_docs_folders(roots : array<string>; want_rule_docs, want_arch, want_doc_lines : bool;
+                         var folders, arch_folders, line_folders : array<string>&) {
+    return if (!want_rule_docs && !want_arch && !want_doc_lines)
     var seen : table<string; void?>
     for (root in roots) {
-        scan_docs_folders(root, want_rule_docs, want_arch, folders, arch_folders, seen)
+        scan_docs_folders(root, want_rule_docs, want_arch, want_doc_lines, folders, arch_folders, line_folders, seen)
     }
     folders |> sort
     arch_folders |> sort
+    line_folders |> sort
 }
 
-// The .md files in `folder` (non-recursive) that are not rule documents.
-def collect_stray_rule_docs(folder : string; var out : array<string>) {
+// The .md files in `folder` (non-recursive) on one side of `is_rule_doc_name`: the strays
+// LINT025 reports, or the rule documents LINT027 sizes. LAWS.md is append-only ruling
+// provenance, never read end to end, so it stays out of the rule-document side.
+def collect_folder_mds(folder : string; rule_docs : bool; var out : array<string>) {
     fio::dir(folder) $(name) {
-        return if (name == "." || name == ".." || !(name |> ends_with(".md")) || is_rule_doc_name(name))
+        return if (name == "." || name == ".." || !(name |> ends_with(".md"))
+                   || is_rule_doc_name(name) != rule_docs
+                   || (rule_docs && name == "LAWS.md"))
         let full = "{folder}/{name}"
         let fst = stat(full)
         if (fst.is_valid && fst.is_reg) {
@@ -246,10 +260,43 @@ def run_rule_docs_pass(folders : array<string>) : int {
     var found = 0
     for (folder in folders) {
         var strays : array<string>
-        collect_stray_rule_docs(folder, strays)
+        collect_folder_mds(folder, false, strays)
         strays |> sort
         for (md in strays) {
             print("{md}: LINT025: stray .md beside shipped code - rule documents only (REVIEW*.md, ARCHITECTURE*.md, LAWS.md); ledgers and plans live at the module root or plans/ (repo root)\n")
+            found ++
+        }
+    }
+    return found
+}
+
+// Newline count, plus the last line when the file does not end in one.
+def count_text_lines(text : string) : int {
+    return 0 if (empty(text))
+    var lines = 0
+    var from = 0
+    while (true) {
+        let at = find(text, "\n", from)
+        break if (at < 0)
+        lines ++
+        from = at + 1
+    }
+    return from < length(text) ? lines + 1 : lines
+}
+
+// Folder-docs pass: a rule document nobody reads end to end has stopped being a contract, so a
+// tagged folder's checklists and architecture docs are capped. The fix is always a companion
+// split, never a trim - every criterion survives. Returns the finding count.
+def run_doc_lines_pass(folders : array<string>) : int {
+    var found = 0
+    for (folder in folders) {
+        var docs : array<string>
+        collect_folder_mds(folder, true, docs)
+        docs |> sort
+        for (md in docs) {
+            let lines = count_text_lines(fread(md))
+            continue if (lines <= RULE_DOC_MAX_LINES)
+            print("{md}: LINT027: rule document exceeds {RULE_DOC_MAX_LINES} lines ({lines}) - split it: ARCHITECTURE_<CONCERN>.md companions for architecture docs, routed REVIEW_<KIND>.md companions for checklists\n")
             found ++
         }
     }
@@ -805,21 +852,27 @@ def tally_result(result : LintResult; var issues : int&; var errors : int&; var 
     }
 }
 
-// Folder policy, not file policy: the two folder rules answer for the run's scan ROOTS rather
+// Folder policy, not file policy: the three folder rules answer for the run's scan ROOTS rather
 // than its file list, so they run once per invocation, in both driver modes. Returns the
 // combined finding count.
 def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes : table<string>) : int {
     let want_rule_docs = rule_is_on("LINT025", disabled_codes, enabled_codes)
     let want_arch = rule_is_on("LINT026", disabled_codes, enabled_codes)
+    let want_doc_lines = rule_is_on("LINT027", disabled_codes, enabled_codes)
     var rule_docs_folders : array<string>
     var arch_folders : array<string>
-    collect_docs_folders(docs_roots, want_rule_docs, want_arch, rule_docs_folders, arch_folders)
+    var line_folders : array<string>
+    collect_docs_folders(docs_roots, want_rule_docs, want_arch, want_doc_lines,
+        rule_docs_folders, arch_folders, line_folders)
     var found = 0
     if (want_rule_docs) {
         found += run_rule_docs_pass(rule_docs_folders)
     }
     if (want_arch) {
         found += run_arch_pass(docs_roots, arch_folders)
+    }
+    if (want_doc_lines) {
+        found += run_doc_lines_pass(line_folders)
     }
     return found
 }
