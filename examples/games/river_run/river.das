@@ -513,11 +513,38 @@ def gen_river_banks() : GeometryFragment {
     return <- frag
 }
 
-// Water is subdivided laterally so uv.x can carry distance-to-nearest-bank; the
-// shader turns that into the shallow-water tint and the foam band.
+// Water is subdivided laterally so uv.x can carry distance-to-shore; the shader
+// turns that into the shallow-water tint and the foam band.
 let WATER_SPANS = 10
 
-def private emit_water_channel(var frag : GeometryFragment; y0, y1, l0, r0, l1, r1, z : float) {
+// How far this point is from shore, for shading purposes.
+//
+// Measuring against the CHANNEL edges inside a split -- which is what the
+// geometry is built from -- made the entire narrow channel read as shallow, and
+// then flip to deep in a single slice the moment `split` went false. That is a
+// hard line straight across the river.
+//
+// The centre island only shallows the water in proportion to how much island is
+// actually there. Its crown tapers to nothing at the ends of a split run, so the
+// water stops pretending there is a shore mid-channel exactly as the island
+// stops being one, and the transition is smooth in both directions.
+def private water_shore_dist(wx, wy : float; s : RiverSegment) : float {
+    let nearest_bank = min(wx - s.left_bank_x, s.right_bank_x - wx)
+    let d_bank = clamp(nearest_bank, 0.0, RIVER_HALF_WIDTH_MAX + TERRAIN_EXTEND)
+    if (!s.split) {
+        return d_bank
+    }
+    let half = (s.split_right_x - s.split_left_x) * 0.5
+    let crown = island_profile(min(half, island_end_distance(wy)))
+    let presence = saturate(crown / 0.45)
+    let d_isl = min(abs(wx - s.split_left_x), abs(wx - s.split_right_x))
+    return max(lerp(d_bank, min(d_bank, d_isl), presence), 0.0)
+}
+
+def private emit_water_channel(var frag : GeometryFragment; s0, s1 : RiverSegment;
+                               l0, r0, l1, r1, z : float) {
+    let y0 = s0.world_y
+    let y1 = s1.world_y
     let w0 = r0 - l0
     let w1 = r1 - l1
     if (w0 <= 0.01 && w1 <= 0.01) {
@@ -530,10 +557,10 @@ def private emit_water_channel(var frag : GeometryFragment; y0, y1, l0, r0, l1, 
         let x01 = l0 + w0 * t1
         let x10 = l1 + w1 * t0
         let x11 = l1 + w1 * t1
-        let d00 = min(x00 - l0, r0 - x00)
-        let d01 = min(x01 - l0, r0 - x01)
-        let d10 = min(x10 - l1, r1 - x10)
-        let d11 = min(x11 - l1, r1 - x11)
+        let d00 = water_shore_dist(x00, y0, s0)
+        let d01 = water_shore_dist(x01, y0, s0)
+        let d10 = water_shore_dist(x10, y1, s1)
+        let d11 = water_shore_dist(x11, y1, s1)
         let up = float3(0.0, 0.0, 1.0)
         push_strip_quad(frag,
             float3(x00, y0, z), float3(x01, y0, z),
@@ -560,12 +587,12 @@ def gen_river_surface() : GeometryFragment {
         let s0 = river_segments[i]
         let s1 = river_segments[i + 1]
         if (s0.split || s1.split) {
-            emit_water_channel(frag, s0.world_y, s1.world_y,
+            emit_water_channel(frag, s0, s1,
                 s0.left_bank_x, s0.split_left_x, s1.left_bank_x, s1.split_left_x, z)
-            emit_water_channel(frag, s0.world_y, s1.world_y,
+            emit_water_channel(frag, s0, s1,
                 s0.split_right_x, s0.right_bank_x, s1.split_right_x, s1.right_bank_x, z)
         } else {
-            emit_water_channel(frag, s0.world_y, s1.world_y,
+            emit_water_channel(frag, s0, s1,
                 s0.left_bank_x, s0.right_bank_x, s1.left_bank_x, s1.right_bank_x, z)
         }
     }

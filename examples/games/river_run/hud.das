@@ -147,6 +147,19 @@ def private draw_overlay_card(title : string; title_color : float3; sub, hint : 
     draw_text_centered(hint, cx, cy + 62.0, TEXT_BODY, float3(0.80, 0.86, 0.92) * blink)
 }
 
+// Pause deliberately does NOT dim the scene. Pausing is how you stop and look
+// at something -- a dimming scrim over the whole frame hides the very thing you
+// paused to inspect. Game over and the win screen keep their scrim, because
+// there the message IS what you are meant to be reading.
+def private draw_pause_banner() {
+    let cx = design_w() * 0.5
+    let blink = 0.6 + 0.4 * abs(sin(get_uptime() * 2.6))
+    draw_text_centered("PAUSED", cx, design_h() * 0.5 - 18.0, TEXT_HEAD,
+        float3(1.0, 0.88, 0.35) * blink)
+    draw_text_centered("ESC to resume", cx, design_h() * 0.5 + 14.0, TEXT_SMALL,
+        float3(0.72, 0.78, 0.86))
+}
+
 def draw_hud() {
     if (hud_font == null) {
         return
@@ -165,7 +178,7 @@ def draw_hud() {
     draw_section_banner()
 
     if (game_state == GameState.paused) {
-        draw_overlay_card("PAUSED", float3(1.0, 0.88, 0.35), "", "PRESS ESC TO RESUME")
+        draw_pause_banner()
     } elif (game_state == GameState.game_over_state) {
         draw_overlay_card("GAME OVER", float3(1.0, 0.32, 0.28), "SCORE  {score}",
             "PRESS SPACE TO RESTART")
