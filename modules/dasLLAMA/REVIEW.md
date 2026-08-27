@@ -205,6 +205,22 @@ decides that, not the load.**
 **A flavor takes its image file through `image_path_for` and its tag through
 `register_image_family_tag`.**
 
+**A diff that changes the `.dlim` layout or serialization, or changes which tensors the gguf
+loader puts into an image, bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) in the same
+change.**
+Without the bump a stale image stays structurally valid and silently serves a different model.
+
+**Weakening the `serialize_image_meta` field-count tripwire (`IMAGE_META_FIELDS`,
+`dasllama/dasllama_image.das`) is a defect** - raising the constant without adding the field to
+`serialize_image_meta` leaves that field out of every image.
+
+**A filesystem or chunk-allocation decline while saving an image
+(`dasllama/dasllama_image.das`) never fails the load - warn, and serve what is still whole:
+the image already built in memory, or the carrier as loaded.**
+
+**A bounds check on an image section or the meta blob in `dasllama/dasllama_image.das` is
+written `bytes > msize || off > msize - bytes`, never `off + bytes > msize`, which wraps.**
+
 **A change to user-facing API updates every place it is shown: a tutorial source, `.rst` page,
 docstring, help string, `README.md`, or checked-in document still showing the old call, flag, or
 default is a defect of the change, not of the docs.** User-facing means anything a consumer

@@ -30,8 +30,10 @@ other filing unnecessary. Only a comment no name can carry goes on to the rest.
   architecture doc, as a present-tense statement per `ARCHITECTURE_COMMON.md`, naming the
   section it joins. Delete the comment.
 - **KEEP** - a constraint true only at this code site, which filing to the architecture doc
-  would bury. Compress to one line in place. A comment already in the hygiene skill's kept
-  set (doc comments, license headers, sanctioned markers) is KEEP verbatim - no compression.
+  would bury. Compress to one line in place, spelled `//!` - a contract comment, legal on
+  any visibility (a private `//!` caps at 3 lines under STYLE015). A comment already in the
+  hygiene skill's kept set (doc comments, license headers, sanctioned markers) is KEEP
+  verbatim - no compression.
 - **DROP** - it narrates, restates the code, or records history. Delete it.
 - **TODO** - unfinished work. Propose the follow-up ledger line; delete the comment.
 

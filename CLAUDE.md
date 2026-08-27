@@ -39,6 +39,13 @@ of these documents installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` 
 The mood test routes misplaced text: must/never binding a diff -> REVIEW.md; present-tense
 fact -> ARCHITECTURE.md; dated or past-tense -> /history.
 
+Code binds to an architecture-doc section with `[arch(at="<doc>.md#<anchor>")]`, the path
+resolving against the CITING file's own folder (`../ARCHITECTURE.md` from an engine file); the
+section's heading carries the matching `{#anchor}`. LINT026 keeps every citation resolving, and in a folder
+whose `.lint_config` sets `[docs] enforce_arch = true`, every anchor cited. **Before editing an
+annotated function, read its section** - MCP `arch_of` returns a file's citations with their
+section text, `arch_sites` a document's census (dead anchors and dangling citations included).
+
 ## GitHub Operations
 
 Use GitHub MCP tools (`mcp__github__*`) for all GitHub operations (PRs, issues, reads) - they avoid shell escaping entirely. Fallback when unavailable: `gh` CLI with `--body-file` for any text containing backticks (shell escape characters in every supported shell).

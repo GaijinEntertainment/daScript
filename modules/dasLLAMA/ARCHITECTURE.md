@@ -585,6 +585,62 @@ clears them behind the exe gate at batch start and after each model's last cell,
 re-baked from its gguf on demand. Judging stays forbidden; owning the directory for the batch is
 what licenses deletion without judgment.
 
+### 2.1a Page alignment is the no-copy contract {#image-page-alignment}
+
+Every plane section starts on a 16 KiB boundary (`IMAGE_PAGE`, the Apple-Silicon page) and the
+image's total length is a page multiple. The alignment is what lets a mapped plane be wrapped for
+the GPU with no copy - Metal's `bytesNoCopy` requires it - and what lets a load borrow a plane in
+place instead of reading it.
+
+### 2.1b The meta blob leads with two strings {#dlim-meta-head}
+
+The meta blob sits at the image tail and leads with two strings - the identity the image was baked
+for and its config JSON - then the section table and the walk's scalar stream. The strings lead so
+a peek, or a load that is about to decline, can print what the image was baked for without parsing
+anything else.
+
+### 2.1c Array payloads reach the archive in bulk {#image-bulk-serialize}
+
+Array payloads reach the archive in bulk - one stream call per array (`serialize_pod_array`),
+string arrays as a length vector plus one byte blob (`serialize_strings`). `daslib/archive`'s
+per-element generic dispatch costs on the order of 340 us per element, which puts a 128k-entry
+vocabulary near 238 seconds; the bulk forms make the same work milliseconds.
+
+### 2.1d An interpreted gguf load pays; an image load does not {#image-interp-load}
+
+A gguf load's O(model) transform loops run about ten times slower interpreted - a tinyllama load
+takes 53 s against 5.5 s jitted, and a 69 GB hybrid extrapolates to an hour (the repack itself is
+native tune kernels and costs the same either way). A prepared image costs nothing interpreted,
+because mapping and borrowing planes runs no such loop. That asymmetry is why the guard fires on
+the gguf path and never on the image path.
+
+### 2.1e Publishing an image {#image-publish}
+
+An image is published by writing a temp file beside its destination and renaming over it. POSIX
+makes that replace atomic. Windows has no rename-over, so the publish removes the destination
+first and a concurrent reader can see a brief absence - which costs that reader a regenerate,
+never a corrupt map.
+
+### 2.1f The image's size is known before the first byte {#image-sizing-exactness}
+
+The image's final size is known before a byte goes out: the meta blob is serialized first, so its
+length is in hand, and every plane contributes its own bytes (`image_total_bytes`). The sink
+preallocates from that number, so the file lands as one contiguous run and the memory chunk is
+exact. The walk advances the writer by exactly the bytes it accepted, so the section table can
+never drift from the file. An append past the chunk is therefore a disagreement between the sizing
+pass and the walk - a bug, not a disk condition - and the chunk rail panics rather than limping on.
+The one decline it survives is failing to get the chunk at all: that happens before the walk
+starts, so the carrier is still whole and its caller keeps serving it.
+
+### 2.1g Identity names the backend, so the backend is selected first {#image-identity-backend-order}
+
+An image's identity names the active matmul backend, so the backend is selected before any
+identity is computed or compared. `image_identity` is a pure formatter over `DlimConfiguration`;
+the backend select happens inside the config's CPU source, so a caller needs no ordering ritual of
+its own. A load pins the box profile first because that pin can change the backend, and the parse
+runs the same load select the gguf loader runs, before any kernel touches planes packed for that
+backend.
+
 ### 2.2 Kernel SHAPE is compile-time; only DATA is runtime
 
 The test is one question: *for a given compiled kernel, can this value change between dispatches?*
@@ -667,6 +723,13 @@ must never serve a wider later one. Different upload FORMS (plain span vs concat
 tables so they can never alias; the metal `RegionEntry` rail is the model. Buffers grown out of an
 entry retire to a list released only at quiesce boundaries, because unretained command buffers may
 still bind them.
+
+### 2.3a Making weights live bumps the weights epoch {#weights-epoch-on-load}
+
+Every path that makes weights live bumps the weights epoch, the image rail included. A fresh
+mapping or chunk can land on a deleted model's recycled addresses, and an address-keyed region
+cache would otherwise serve the previous model's bytes out of an entry that still looks like a
+hit.
 
 ### 2.4 Complexity and length lint
 
