@@ -660,11 +660,22 @@ jobs:
           -DCMAKE_C_COMPILER_LAUNCHER=sccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
           -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} \
+          -DDAS_TEST_TIMEOUT=3600 \
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
         cmake --build ./build --config RelWithDebInfo --parallel
 
+    # No isolated retry on this lane, and a doubled watchdog on the one pass it
+    # does run. This is the DAS_TRACK_ALLOC build with the free list off, so its
+    # sweep costs about twice a plain Release one, and the hosted Windows runner
+    # swings another ~1.4x night to night: the same ~12.9k tests came in at 1092s
+    # in July and were still only 9472 deep when the 1800s watchdog fired in
+    # August. Isolated mode fares far worse — 1339 worker subprocesses over 6
+    # threads got ~44% through in 6453s, so a retry there cannot finish inside any
+    # budget worth granting it; every firing so far burned ~1.8h and still went
+    # red. One pass with room to finish is the signal; a flake here is re-run by
+    # hand.
     - name: "Test: interpreter"
-      run: cmake --build ./build --config RelWithDebInfo --target run_tests_interpreter || cmake --build ./build --config RelWithDebInfo --target run_tests_interpreter_isolated
+      run: cmake --build ./build --config RelWithDebInfo --target run_tests_interpreter
 
     - name: "Small C++ Tests"
       run: ctest --test-dir build --build-config RelWithDebInfo -L small --output-on-failure

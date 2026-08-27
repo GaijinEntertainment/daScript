@@ -7,21 +7,31 @@
 # retry: `ninja run_tests_X || ninja run_tests_X_isolated`.
 # cmake has no OR/retry primitive inside a single target, so the `||` lives in CI.
 # NOTE: --timeout is dastest's GLOBAL suite watchdog (wall clock for the whole
-# run), not per test. The interpreter pair is sized for the slowest lane,
-# windows-32 Debug on the 4-core hosted runner (~16 min as of 2026-07).
+# run), not per test. The defaults below fit every lane whose interpreter sweep
+# lands well inside them; a lane that needs more says so at configure time via
+# -DDAS_TEST_TIMEOUT / -DDAS_TEST_TIMEOUT_ISOLATED rather than inflating the
+# budget everywhere - a watchdog only catches a hang while it is still tight.
+# The RelWithDebInfo Windows nightly is the lane that needs it: DAS_TRACK_ALLOC
+# with the free list off roughly doubles the sweep, and the hosted runner adds
+# another ~1.4x of its own variance on top.
 if(NOT DAS_TOOLS_DISABLED)
+    set(DAS_TEST_TIMEOUT 1800 CACHE STRING
+        "dastest global suite watchdog, seconds, for run_tests_interpreter")
+    set(DAS_TEST_TIMEOUT_ISOLATED 5400 CACHE STRING
+        "dastest global suite watchdog, seconds, for run_tests_interpreter_isolated")
+
     set(_DAS_DASTEST  ${PROJECT_SOURCE_DIR}/dastest/dastest.das)
     set(_DAS_TEST_DIR ${PROJECT_SOURCE_DIR}/tests)
     set(_DAS_TEST_COMMON --color --failures-only --test ${_DAS_TEST_DIR})
 
     add_custom_target(run_tests_interpreter
-        COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --timeout 1800
+        COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --timeout ${DAS_TEST_TIMEOUT}
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter)"
     )
     add_custom_target(run_tests_interpreter_isolated
-        COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --isolated-mode --timeout 5400
+        COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_TEST_COMMON} --isolated-mode --timeout ${DAS_TEST_TIMEOUT_ISOLATED}
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (interpreter, isolated retry)"
