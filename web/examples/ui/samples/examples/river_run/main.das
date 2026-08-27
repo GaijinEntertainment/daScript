@@ -374,18 +374,21 @@ def parse_args() {
     }
 }
 
+// Entry point for the standalone cross-compiled build (daslang -exe -> .wasm).
+// eval_main_loop drives the block once per frame: a blocking while-loop natively,
+// emscripten_set_main_loop (rAF) on the web -- so the same main runs in the browser
+// without blocking. Returns false to end the loop. update() ends its frame through
+// live_end_frame, which collects, so the loop body must not collect again.
 [export]
 def main() {
     parse_args()
     init()
     var frame_count = 0
-    while (!exit_requested()) {
+    eval_main_loop() {
         update()
-        maybe_collect_gc()
         frame_count++
-        if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
-            break
-        }
+        return false if (max_frame_limit > 0 && frame_count >= max_frame_limit)
+        return !exit_requested()
     }
     shutdown()
 }
