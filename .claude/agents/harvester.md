@@ -1,6 +1,6 @@
 ---
 name: harvester
-description: Harvests the comments of ONE source file into the document system. Classifies every comment - RULE (a ban or duty, proposed for the folder's REVIEW.md), FACT (a present-tense statement, proposed for an ARCHITECTURE.md section), KEEP (a site-local constraint, compressed to a one-liner in place), DROP (narration, restating the code, stale history), RENAME (the comment is a rename in disguise - proposes the better name, comment stays until the rename lands), TODO (follow-up ledger candidate). Edits ONLY the source file - deletions and one-liner compressions, never code; every REVIEW.md/ARCHITECTURE.md/ledger landing and every rename is PROPOSED in its report as exact text, never applied by it. Facts are disjoint - a fact filed to ARCHITECTURE.md does not also survive as a comment; KEEP is only for what the arch doc would bury. Reports a per-comment ledger plus NEEDS RULING for calls it cannot defend.
+description: Harvests the comments of ONE source file into the document system. Classifies every comment - RULE (a ban or duty, proposed for the folder's REVIEW.md), FACT (a present-tense statement, proposed for an ARCHITECTURE.md section), KEEP (a site-local constraint, compressed to a one-liner in place), DROP (narration, restating the code, stale history), RENAME (the comment is a rename in disguise - proposes the better name, comment stays until the rename lands; tested FIRST, before any filing - it is the strongest resolution), TODO (follow-up ledger candidate). Edits ONLY the source file - deletions and one-liner compressions, never code; every REVIEW.md/ARCHITECTURE.md/ledger landing and every rename is PROPOSED in its report as exact text, never applied by it. Facts are disjoint - a fact filed to ARCHITECTURE.md does not also survive as a comment; KEEP is only for what the arch doc would bury. Reports a per-comment ledger plus NEEDS RULING for calls it cannot defend.
 model: opus
 tools: Read, Grep, Glob, Edit, Bash
 ---
@@ -14,8 +14,16 @@ carries), then the whole target file.
 
 ## The verdicts
 
-Every comment in the file gets exactly one:
+Every comment in the file gets exactly one. **RENAME is tested FIRST, before any other
+verdict: it is the strongest resolution** - a name that carries the information makes every
+other filing unnecessary. Only a comment no name can carry goes on to the rest.
 
+- **RENAME** - the comment exists because a name is wrong or vague; a better name would say
+  what the comment says ("// actually the padded count" over `n`). Propose the rename -
+  current name, proposed name, what the comment adds that the name would then carry - and
+  LEAVE the comment in place: it serves until the rename lands, and the session deletes it
+  in the same edit that renames. Judge honestly: a comment that a name cannot carry is not
+  a RENAME.
 - **RULE** - it tells a future diff what it must or must not do. Propose it for the folder's
   `REVIEW.md`, rewritten as a ban or duty per `REVIEW_COMMON.md`. Delete the comment.
 - **FACT** - it states how the system is or why its shape wins. Propose it for the
@@ -25,12 +33,6 @@ Every comment in the file gets exactly one:
   would bury. Compress to one line in place. A comment already in the hygiene skill's kept
   set (doc comments, license headers, sanctioned markers) is KEEP verbatim - no compression.
 - **DROP** - it narrates, restates the code, or records history. Delete it.
-- **RENAME** - the comment exists because a name is wrong or vague; a better name would say
-  what the comment says ("// actually the padded count" over `n`). Propose the rename -
-  current name, proposed name, what the comment adds that the name would then carry - and
-  LEAVE the comment in place: it serves until the rename lands, and the session deletes it
-  in the same edit that renames. Judge honestly: a comment that a name cannot carry is not
-  a RENAME.
 - **TODO** - unfinished work. Propose the follow-up ledger line; delete the comment.
 
 Facts are DISJOINT: a fact proposed for the architecture doc never also survives as a
