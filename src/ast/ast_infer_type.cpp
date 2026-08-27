@@ -5346,6 +5346,8 @@ namespace das {
                 return Visitor::visit(expr);
             } else if (expr->iteratorVariables.size() != expr->sources.size()) {
                 return Visitor::visit(expr);
+            } else if (!expr->body) {
+                return Visitor::visit(expr);
             }
             // only topmost
             //  which in case of generator is 2, due to
