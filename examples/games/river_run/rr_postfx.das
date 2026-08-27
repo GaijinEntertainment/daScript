@@ -117,6 +117,9 @@ def fs_down {
 
 // --- Tent upsample, additively blended onto the next larger level
 
+// p_params.x is the filter RADIUS, p_params.y the output intensity. They have to
+// stay separate: folding intensity into the radius makes a strength of zero a
+// zero-width tap that still contributes at full brightness.
 [fragment_program]
 def fs_up {
     let t = p_texel * p_params.x
@@ -129,7 +132,7 @@ def fs_up {
     sum += texture(p_tex0, p_uv + float2(t.x, -t.y)).xyz
     sum += texture(p_tex0, p_uv + float2(-t.x, t.y)).xyz
     sum += texture(p_tex0, p_uv + float2(t.x, t.y)).xyz
-    p_FragColor = float4(sum * (1.0 / 16.0), 1.0)
+    p_FragColor = float4(sum * (1.0 / 16.0) * p_params.y, 1.0)
 }
 
 // --- Ambient occlusion
@@ -650,7 +653,7 @@ def private run_bloom(cfg : PostSettings) {
         bind_target(bloom_fbo[i - 1], bloom_w[i - 1], bloom_h[i - 1])
         p_tex0 := bloom_tex[i]
         p_texel = float2(1.0 / float(bloom_w[i]), 1.0 / float(bloom_h[i]))
-        p_params = float4(1.35, 0.0, 0.0, 0.0)
+        p_params = float4(1.35, 1.0, 0.0, 0.0)
         vs_post_bind_uniform(up_program)
         fs_up_bind_uniform(up_program)
         fullscreen_pass()
@@ -689,7 +692,7 @@ def private add_shafts_to_bloom(cfg : PostSettings) {
     bind_target(bloom_fbo[0], bloom_w[0], bloom_h[0])
     p_tex0 := shaft_tex
     p_texel = float2(4.0 / float(fx_width), 4.0 / float(fx_height))
-    p_params = float4(cfg.shaft_strength * 1.6, 0.0, 0.0, 0.0)
+    p_params = float4(1.2, cfg.shaft_strength * 1.6, 0.0, 0.0)
     vs_post_bind_uniform(up_program)
     fs_up_bind_uniform(up_program)
     fullscreen_pass()
