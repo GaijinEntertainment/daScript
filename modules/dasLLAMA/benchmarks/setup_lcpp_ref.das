@@ -17,7 +17,7 @@ require daslib/strings_boost
 // Point lcpp_bench --ref (or LLAMA_BENCH) at the reported binaries.
 
 // bump deliberately; the sha a record carries is what pins its ref, this is just the default
-let DEFAULT_REF_SHA = "3737e41370da1830a44c663f9929a0f27591ffa6"
+let DEFAULT_REF_SHA = "6fdd0ac8907fd973a42b876357823ad2124cd8ed"   // b10659
 
 [CommandLineArgs]
 struct Args {
