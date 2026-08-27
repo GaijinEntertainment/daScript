@@ -30,8 +30,9 @@ that module applies this file together with the module's own list.
   cannot have one, the same diff records that in the module's `MASTERPLAN.md`.
 
 - **Never check a claim about emitted shape against the das source - check it in the emitted
-  words or text.** Emitted shape is the structure of the emitted kernel: its signature, its
-  parameter attributes, and its statement forms.
+  words or text.** Emitted shape is the structure of the emitted kernel - its signature, its
+  parameter attributes, its statement forms - and its stamped shape values (tile, grid,
+  threadgroup sizes).
 
 - **A diff that adds a kernel-model capability to one emitter adds it to the other, or records
   the asymmetry in the shared ledger (`modules/dasMetal/MASTERPLAN.md`).** A kernel-model

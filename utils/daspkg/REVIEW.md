@@ -7,9 +7,9 @@
 suite is `bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das` - fast, no
 network, interpreted.
 
-**A diff whose hunks in `commands.das`, `index.das`, or `utils.das` reach a function that runs
-a git command also runs the integration suite, in the same change** - a behavior-preserving
-refactor still counts. The integration suite is `bin/daslang dastest/dastest.das -- --test
+**A diff whose changed lines sit inside a function that runs a git command - in
+`commands.das`, `index.das`, or `utils.das` - also runs the integration suite, in the same
+change** - a behavior-preserving refactor still counts. The integration suite is `bin/daslang dastest/dastest.das -- --test
 utils/daspkg/test_daspkg_git.das`, and it needs network (the `borisbat/daspkg-test-*` fixture
 repos).
 
