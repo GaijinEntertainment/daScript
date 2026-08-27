@@ -1,7 +1,7 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_GPU.md`.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_PREFILL.md`.
 
 **Routed from `REVIEW.md`: a diff touching a GPU kernel, driver, dispatch class, or the K/V
 mirrors applies this list together with `REVIEW.md`.**
@@ -10,15 +10,15 @@ mirrors applies this list together with `REVIEW.md`.**
 the choice at compile time instead.** A `class template` / `def abstract` / `def override`
 splice is compile-time and conforms - check the emission, not the das spelling.
 
-**Never give a `*_decline_caps` predicate a parameter beyond the model and the call shape - its
-row count and its span shape - however that parameter is derived; window-setup state is asked
-by `prefill_decline` / `decode_decline` instead.**
+**Never give a `*_decline_caps` predicate a parameter beyond the model, the row count, and
+whether the call carries a uniform attention span - however that parameter is derived;
+window-setup state is asked by `prefill_decline` / `decode_decline` instead.**
 
 **A bounds or tail guard that branches per iteration in a kernel's main loop, where the host
 already knows its answer as it picks the pipeline, is a defect - stamp the guard instead.**
 Stamped means the guard is carried by a `@template_constant` - a `static_if` block, or a value
-select on the constant. The guard-free instance is the one stamped without the guard, and the
-guard is absent from that instance's generated `*_msl` global.
+select on the constant. The instance stamped without the guard shows no guard in its generated
+`*_msl` global.
 
 **Never let a `matmul2d` left or right operand reach the op as `float` outside a kernel class
 stamped `[metal_kernel(float_a_ok=true)]` - convert it in the pass that writes the operand's
@@ -42,13 +42,15 @@ arrays - read the one per-row entry instead.** The bucket-building kernel writes
 entry. The scan repeats on every thread of every row's threadgroup, and it grows with the
 bucket count.
 
-**Never test a bucket row's validity by comparing it with the pad sentinel - compare it with
-the live entry count instead.** Stale bytes past the last expert's stamped tail are not the
-sentinel, and an equality test sends their token index out of bounds.
+**Never test a bucket row's validity against the pad sentinel `0xFFFFFFFF` - compare the row's
+bucket word with the live entry count (`npos * nk`) instead.** Rows past the last expert's
+stamped tail hold stale pool bytes, not the sentinel, and an equality test sends their token
+index out of bounds.
 
-**An early `return` in a kernel body that runs a cooperative op is threadgroup-uniform - never
-gate it on a per-thread value.** A per-thread exit leaves the threadgroup unable to complete
-the cooperative op.
+**Never gate an early `return` in a kernel body that runs a cooperative op - a `barrier()`, a
+simdgroup matrix op, or a cross-lane reduction - on a per-thread value; gate it on a
+threadgroup-uniform value instead.** A per-thread exit leaves the threadgroup unable to
+complete the op.
 
 **An encoder that picks a kernel's guard-free instance shows that every address the instance
 touches stays inside rows holding real data.** The guard-free instance is the one stamped
@@ -56,24 +58,20 @@ without the loop's bounds or tail guard. One extent dividing evenly is not that 
 padded chunk's walk can run past the live extent, and one poisoned read in a shared tile
 corrupts real rows.
 
-**Never let a prefill pad output row reach a matmul as a B operand - stage it as zero, or
-bound the walk at the live row count.** Pad rows hold recycled pool bytes, so a pad row used
-as B multiplies stale values (NaN included) into every real row of the tile. Pad rows read as
-row-confined A operands are safe.
+**Never let a prefill pad output row reach a `matmul2d` or a staged cooperative tile as its B
+operand - stage it as zero, or bound the walk at the live row count.** Pad rows hold recycled
+pool bytes, so a pad row used as B multiplies stale values (NaN included) into every real row
+of the tile.
 
 **A prefill K/V panel is sized from the padded write extent, never from the live key count.**
 The K/V GEMMs write full M-tile rows at the chunk's row offset, so a panel sized to the live
 count is overrun silently into whatever the pool put next to it.
 
-**Never route a GEMM site through the GEMV tail peel when its output row stride differs from
-the dispatch width it passes - dispatch the padded tile instead.** The peel writes y rows at
-that width, so a fused-row site whose rows are wider lands its tail rows on top of the row
-beside them.
-
-**A diff that changes the mask, window, live-length or softcap math of `pf_p_weight`
-(`dasllama/dasllama_metal_prefill.das`) changes `metal_attn_rowstat`'s copy in the same
-change, and the reverse.** Rowstat mints each row's max and reciprocal sum; the AV kernels
-apply the weight. Rows renormalize against the wrong max when the two disagree.
+**Never pass `npos` to `enc_gemm_mm` (`dasllama/dasllama_metal_prefill.das`) from a GEMM site
+whose output rows are wider than the `d` it passes - leave `npos` at zero and dispatch the
+padded tile instead.** The tail peel - the up-to-8 remainder rows `enc_gemm_mm` sends to the
+mv family - writes its y rows at that `d`, so a wider-row site lands its tail rows on top of
+the row beside them.
 
 **Never leave a pipeline of dispatches with fewer scratch buffers than it has dispatches in
 flight - give each dispatch site its own instead.** One shared scratch serializes the whole
@@ -97,8 +95,8 @@ axis - one compile-time choice, such as single/batch, format, or single-pass/chu
 
 **A copy-pasted kernel twin, or a kernel split into hand instances where a `static_if` on a
 `@template_constant` serves, is a defect - kernel twins stamp one `class template`, whatever
-the stamp axis is (single/batch, format, single-pass/chunked).** Body divergence is carried by
-a `@template_constant`, or by an overridden method spliced flat at emission.
+the stamp axis is.** Body divergence is carried by a `@template_constant`, or by an
+overridden method spliced flat at emission.
 
 **A dummy-bound field where a gate serves is a defect - a stamp-varying binding is carried by
 `@template_gate` instead.**
@@ -116,8 +114,9 @@ defect; a per-encode field either omits `@role` or names the access its body per
 `weight` drops the hazard staging.
 
 **A new kernel class carries `[metal_dispatch]` / `[vk_dispatch]` with every annotation the
-generated builder reads - per-field `@binding` / `@role` / `@off` / `@span` / `@default`,
-`@workgroup` state with its `tgmem=` dispatch key.**
+generated builder reads - per-field `@binding` / `@role` / `@off` / `@default`, `@span` on a
+field whose callers bind whole output rows, `@workgroup` state with its `tgmem=` dispatch
+key.**
 
 **Never give a `@span` to a kernel field whose callers bind a COLUMN TILE of a wider output
 row - omit the span instead.** A column-tile caller passes the tile width as the kernel's n
@@ -144,22 +143,21 @@ layout the upload produces, in the key too.** A hit must cover the request.
 capability with no matching role gets its own role file.** `ARCHITECTURE_GPU.md` sec.1.5
 carries the role table.
 
-**Never add a role's file to a backend that does not have the capability.**
-
 **A module that creates its own GPU device or queue is a defect - a GPU family shares the one
 device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
 
-**Never compile or release a Metal PSO from an engine file (`dasllama/`) other than the one
-that owns its kernel class** - it goes through that file's own init/release pair.
+**Never compile or release a Metal PSO (pipeline state object) from an engine file
+(`dasllama/`) other than the one that owns its kernel class** - it goes through that file's
+own init/release pair.
 
 **Never put race code outside the file that owns the kernel family - the shared scaffolding
 (`race_buf`, `race_envelope_ok`, `race_pair_ms`) belongs to
 `dasllama/dasllama_<gpu>_common.das`.** Race code is the in-engine base-vs-twin check that
 times both kernels on one queue and compares their outputs.
 
-**A kernel A/B race sizes its operands at a real model shape - never at a small square slab.**
-A slab small enough to sit in cache ranks the kernels by an effect production never sees, and
-crowns the loser.
+**Race code sizes its operands at a real model shape - never at a small square slab.** A slab
+small enough to sit in cache ranks the kernels by an effect production never sees, and the
+race then picks the slower kernel.
 
 **A string-typed Metal decline reason is a defect - a Metal decline reason is an enum value in
 `dasllama/dasllama_metal_shapes.das`, one enum per driver.**
@@ -178,9 +176,9 @@ carry does not exist.
 is created only by a `[vk_dispatch]`-generated `ensure_*` and torn down by
 `vk_drop_model_state`.**
 
-**Never size a buffer bound as one SSBO range above `vk_max_storage_range()` - check the size
-where it is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was
-sized wrong.
+**Never size a buffer bound as one SSBO (shader storage buffer) range above
+`vk_max_storage_range()` - check the size where it is NEGOTIATED, not where it binds.** The
+bind site cannot shrink a buffer that was sized wrong.
 
 **A change to code that a served GPU decode or prefill path executes ships GPU-vs-CPU parity
 on one q8 and one kq (K-quant) model with the armed mirror codec.** That code is a driver
@@ -229,9 +227,9 @@ serves both codecs, so a codec no kernel covers silently drops that codec's GPU 
 **An f16 store into any GPU-resident K/V that does not clamp to the f16 finite range
 (+/-65504) is a defect.**
 
-**A per-layer K/V panel that aliases another layer's is gathered, stored and released only
-through its source layer.** An aliasing layer that gathers, stores or releases a second time
-double-frees the panel or overwrites the source's rows.
+**A per-layer K/V panel or mirror slab that aliases another layer's is gathered, stored and
+released only through its source layer.** An aliasing layer that gathers, stores or releases
+a second time double-frees the panel or overwrites the source's rows.
 
 **A resident override that touches the mirror before gating the session on the armed mirror
 codec and on the flat (non-paged) cache is a defect** - a resident override is a

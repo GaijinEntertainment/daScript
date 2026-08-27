@@ -54,6 +54,11 @@ defect.**
 **Weakening `test_model_specs.das` is a defect.** It is the gate on the model-set table
 (`../performance/model_specs.das`).
 
+**Weakening the attention-trio softcap, sink and span cells of
+`test_metal_prefill_kernels.das` is a defect** - they are the only cells that fail when
+`pf_p_weight` and `metal_attn_rowstat` drift apart; rows renormalize against the wrong max
+when the two disagree.
+
 **Weakening `test_exchange_schema.das` or `test_bench_records_schema.das` - loosening an
 assert, dropping one, or narrowing the corpus either one sweeps - is a defect** - they gate
 the real `write_bench_records` output.

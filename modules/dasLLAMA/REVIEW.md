@@ -63,6 +63,7 @@ that can change between dispatches goes in a uniform, a kargs field, or an `@off
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`) - keep the multiply order the code already has.** A regrouping
 moves the angles in the last bits and flips token-exact fixtures.
+
 **A diff that changes a kernel-selection predicate in `dasllama/` is based on timing that ran
 both variants interleaved in one process, under one instrument.** The same holds for a
 constant in `dasllama/` whose value was chosen by timing two candidates against each other. A

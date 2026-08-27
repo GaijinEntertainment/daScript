@@ -4,34 +4,31 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
 
 ### 2.2c The prefill GEMM form ladder {#prefill-gemm-ladder}
 
-Every weight GEMM in `dasllama_metal_prefill.das` picks one of four forms, in this order, per site
-per forward:
+Every weight GEMM in `dasllama/dasllama_metal_prefill.das` splits its rows across two decisions.
+First the GEMV tail peel (sec.2.2e) takes up to `MM_TAIL_MAX` remainder rows off the padded tile.
+The rows that remain pick one of three forms, in this order, per site per forward:
 
 1. **dev-W all-device** - the weight plane is dequantized into a device f16 panel and multiplied
    half x half. No threadgroup staging and no barriers, so the staged-operand tax is gone; the
-   dequant pass is paid once per site per forward against a GEMM that re-reads the operand `d/64`
-   times. sec.2.2d carries the panel size rules.
+   dequant pass is paid once per site per forward against a GEMM that re-reads the f16 W panel
+   once per M row tile (`mp/128` on the tall stamp, `mp/32` on the 32-row stamp). sec.2.2d
+   carries the panel size rules.
 2. **tall 128-row M-tile** - the stamp streams W `M/128` times over a 128-row tile, taken on the
    row count's 128-floor with the 32-row stamp on the remainder. The remainder arm strides X by
-   `kdim`, so a caller that passes no `kdim` stays whole-dispatch 32-tile.
+   `kdim`, so a caller that passes no `kdim` takes the tall stamp only when its row count is
+   already a multiple of 128, and otherwise stays whole-dispatch 32-tile.
 3. **32-row tile** - the default stamp.
-4. **GEMV tail peel** - sec.2.2e.
 
 **Half operands ride an f16 activation panel.** One pass converts the f32 panel; the GEMM then
 re-reads it at half the bytes `d/64` times, so the convert amortizes above a row floor
-(`CVT_MIN_ROWS`, default 256) and loses under it. The panel is double-buffered so a consumer's
-GEMM overlaps the next twin's producer, and a producer that dual-stores the f16 form takes a panel
-ungated by rows because its twin is free.
+(`CVT_MIN_ROWS`, default 256) and loses under it. Two panels alternate, so one site's GEMM reads
+panel A while the next site's convert writes panel B. A site whose producer kernel writes the
+f16 copy alongside its f32 output takes its panel from `pf_twin_panel` directly instead of
+`pf_cvt_panel`, skipping the row floor entirely, because there is no convert pass to amortize.
 
 **The bf16-A stamp widens without dequantizing** - a bf16 row widens by an exact bit shift and
 rounds to the f16 tile - so the E-series `per_layer_model_proj` GEMM serves straight off the
 kept-bf16 blob with no resident f32 copy.
-
-**The staging form that wins is per format, not universal.** The gathered q8 mul_mm carries its
-scale and quant pointers across k-blocks; the stateless index form measured 3.4-3.6% slower in the
-gmm8 lab. The gathered Q6_K goes the other way: the superblock-scalar cache the standalone kernel
-carried measured 2.4% slower per mm than reloading per k-block in the gmm6 lab, so its stage is
-stateless.
 
 **The occupancy floor guards the tall stamp.** A tall grid is taken only when
 `rows/128 * (d/64) >= TALL_OCC_FLOOR` (default 64, a sidecar knob). An under-occupied tall grid
@@ -40,24 +37,31 @@ at mid-M across three dense families.
 
 ### 2.2d The dev-W panel knee map {#devw-panel-knees}
 
-Panel SIZE dominates the dev-W decision, not shape: a panel at or under 32 MiB wins at every row
-count, 47 MiB wins only from 2048 rows, and 112 MiB loses everywhere - the f16 panel's W stream is
-2 bytes an element against the q8 blob's 1.06 once it leaves cache. Wide-N panels pay a dequant
-tax that only deep M repays. The grid these rules come from is
-`benchmarks/matmul/bench_metal_nax_probe.das`.
+Panel SIZE dominates the dev-W decision, not shape - each threshold is a knee, the panel size at
+which the dev-W win flips sign. A panel at or under `DEVW_SMALL_PANEL` (32 MiB) engages at every
+row count while its output width is at or under `DEVW_WIDE_N` (4096), and from
+`DEVW_WIDE_N_ROWS` (512 rows) when wider; a panel up to `DEVW_BIG_PANEL` (48 MiB) engages from
+`DEVW_BIG_ROWS` (2048 rows); above that the panel either splits into N-column tiles or the site
+declines. The mechanism: the f16 panel's W stream is 2 bytes an element against the q8 blob's
+1.06 once it leaves cache, and a wide-N panel costs more dequant work, which only a large row
+count repays. The raced evidence
+(32 MiB wins everywhere, 47 MiB only from 2048 rows, 112 MiB loses everywhere) is
+`benchmarks/matmul/bench_metal_nax_probe.das`'s grid.
 
 Three clauses the isolated grid cannot see, because it races one site while production overlaps
 sites:
 
 - **A long-K (down-projection) dequant serializes** on the panel pair behind the up/gate GEMM
   chain at small M, so it loses end to end there despite winning its isolated site race. The
-  long-K floor is 1024 rows; the isolated tiled win at 512 rows read flat-negative end to end.
+  long-K floor is 1024 rows on q8; the same tiling that wins its isolated site race at 512
+  rows measures zero to negative end to end.
 - **An over-knee panel runs as N-column TILES**, each under the small-panel knee, with the tile
-  count bounded only by divisibility, the knee and the pool. Deep-dense models (300 MB+
-  up/gate/down planes) need far more tiles than the first knee map raced, and narrow tiles measure
-  fine - a 20-threadgroup tile dispatch still beat the tg-staged fallback at 512 rows.
-- **A k-quant tg fallback is about 1.28x the q8 half-panel form**, so a k-quant site lowers both
-  the over-knee bar and the tiled-rows floor: a tiled read still beats THAT fallback.
+  count bounded by `DEVW_MAX_TILES` (32), divisibility, the small-panel knee and the pool.
+  Deep-dense models (300 MB+ up/gate/down planes) need up to that many tiles, and narrow tiles
+  measure fine - a 20-threadgroup tile dispatch still beat the tg-staged fallback at 512 rows.
+- **A k-quant tg fallback is about 1.28x the q8 half-panel form**, so a k-quant site lowers the
+  over-knee bar, the tiled-rows floor, and the long-K floor (1024 rows to 512): a tiled read
+  still beats THAT fallback.
 
 The knee constants are box-raced and cached at init from the sidecar (`metal_cvt_min_rows`,
 `metal_tall_floor`, `metal_devw_small_panel_mb`).
@@ -68,7 +72,8 @@ A prefill panel pads to `mp = ceil32(npos)`, so `npos % 32` rows of every GEMM a
 `MM_TAIL_MAX` (8) remainder rows peel off the padded tile onto the fixed-B mv family instead;
 above that the padded tile is cheaper than three or more weight streams. One peeled row rides the
 reduction-split GEMV, two or more ride the b4 form only - the reduction-split GEMV walks per
-block and needs `kdim % 32`, while the b4 stripe reads whole 128-quant rounds.
+block and needs `kdim % 32`, while the b4 form - the batched fixed-B mv stamp, up to four rows a
+dispatch (`enc_mv_b4_c`) - reads whole 128-quant rounds and needs `kdim % 128`.
 
 ### 2.2f The prefill attention slab {#prefill-attn-slab}
 
@@ -81,12 +86,11 @@ serve it: the tiled QK/AV GEMM pair (the default, needing `head_size % 64` on BO
 classes) and the scalar 32x32 trio, which serves when that gate fails or `DASLLAMA_METAL_ATTN=0`
 pins it.
 
-- **A pad row of K or V stages as 0.** Pad rows carry recycled pool bytes and may hold NaN, and
-  `0 * NaN` poisons a whole cooperative tile. `pf_p_weight` zeroes P columns past each row's live
+- **A pad row of K or V stages as 0.** `pf_p_weight` zeroes P columns past each row's live
   length exactly, so the P side needs no guard; the K and V sides do.
-- **The PADFREE stamps drop that guard**, and an encoder may pick one only when the whole WALK
-  stays inside live rows - `qoff + qrows == npos` as well as the divisibility. A padded query
-  chunk walks pad-query tiles past `npos`, where a real row's read poisons the tile.
+- **The PADFREE stamps drop that guard**; an encoder picks one only where the whole WALK stays
+  inside live rows - `qoff + qrows == npos` as well as the divisibility. A padded query chunk
+  walks pad-query tiles past `npos`, where a real row's read poisons the tile.
 - **A block skip lifts to `uend` only where the tile holds span rows.** A causal-only tile above
   the uniform span keeps its short causal walk, and a tile below every row's sliding window is
   skipped whole because `pf_p_weight` zeroes P over the skipped region.
@@ -100,24 +104,34 @@ base set everywhere.
 
 ### 2.2g The prefill MoE bucket rail {#prefill-moe-buckets}
 
-Routing is atomics-free: count (one threadgroup per expert) -> in-threadgroup prefix -> bucket
-fill. Each expert's bucket PADS to a whole 32-row tile, every threadgroup computes the same padded
-prefix, and threadgroup `e` publishes `basep[e]` for the mm and activation consumers. The bucket
-fill splits the entry range into contiguous ascending per-lane chunks and scans the chunk counts,
-which reproduces the serial entry order exactly, so the ordered weighted reduce is bit-stable
-against the CPU park-and-accumulate. The selection is read GPU-side by the kernels; nothing reads
-back to the CPU, so encode-ahead and speculation stay compatible.
+Routing is atomics-free: a router GEMV and a select pass, then a per-expert count kernel, then
+one bucket kernel that computes the padded prefix and fills the buckets. Each expert's bucket
+PADS to a whole 32-row tile, every threadgroup computes the same padded prefix, and threadgroup
+`e` publishes `basep[e]` for the mm and activation consumers. The bucket fill splits the entry
+range into contiguous ascending per-lane chunks and scans the chunk counts, which reproduces the
+serial entry order exactly, so the ordered weighted reduce is bit-stable against the CPU path
+that parks each routed expert's rows and reduces them in entry order. The selection is read
+GPU-side by the kernels; nothing reads back to the CPU, so encode-ahead and speculation stay
+compatible.
 
 Pad bucket rows carry a stamped sentinel and the reduce never references them. The gather-X pass
 copies the bucket's token rows into a CONTIGUOUS f16 panel with pad rows zeroed, which lets the up
 and gate sites ride the contiguous tensor twins instead of the in-kernel gather form; the panel is
-minted once per layer and shared by both sites. A bkt-indirect X can never form a tensor view,
-which is why every tensor twin of the MoE family serves contiguous rows only.
+minted once per layer and shared by both sites. An X read through the bucket index can never
+form a tensor view, which is why every tensor twin of the MoE family serves contiguous rows
+only.
+
+**The staging form that wins inside the gathered mul_mm kernels is per format, not universal.**
+The gathered q8 form carries its scale and quant pointers across k-blocks; the stateless index
+form measures 3.4-3.6% slower (`benchmarks/matmul/bench_metal_moe_lab.das`, gmm8 section). The
+gathered Q6_K is the opposite: a superblock-scalar cache measures 2.4% slower per mm than
+reloading per k-block (same lab, gmm6 section), so its stage is stateless.
 
 ### 2.2h Pad rows and cooperative-op constraints {#prefill-pad-rows-and-coop}
 
-Activation panels size to `mp = ceil32(npos)` rows because every kernel's M grid is `mp/32`; a
-64-row pad would bill a dead 32-row GEMM block on every short prefill. The GEMM has no edge
+Activation panels size to `mp = ceil32(npos)` rows because every kernel's M grid divides `mp` by
+its tile height - 32 for the default stamp, 128 for the tall stamps; a 64-row pad would bill a
+dead 32-row GEMM block on every short prefill. The GEMM has no edge
 masking, so pad rows are written with whatever the tile computes. That is safe because C-block
 rows are independent and no pad row is read back: the norm, rope, attention and elementwise
 kernels all bound at `npos`, and rowstat writes `[0, npos)` only.
@@ -126,10 +140,9 @@ A continuation chunk (`start_pos > 0`) attends the session's existing rows: the 
 `[0, start_pos)` gathered rows plus the chunk at the `start_pos` offset, keys pad to the QK key
 grid's 64-tile, and the score slabs widen to `nk64` columns while the rows stay the `mp` queries.
 
-Cooperative matmul ops constrain the kernel bodies two ways. The accumulate loop is spelled ROLLED
-over matrix arrays with pointer tile bumps: the hand-unrolled spelling hoists sixteen tile
+Cooperative matmul ops shape the kernel bodies: the accumulate loop is spelled ROLLED over
+matrix arrays with pointer tile bumps, because the hand-unrolled spelling hoists sixteen tile
 addresses into loop-lifetime registers and costs an occupancy tier (measured `max_threads` 704).
-And an early exit inside such a body must be threadgroup-uniform.
 
 ### 2.2i Chunked submission and interleaved readback {#prefill-chunked-submit}
 
