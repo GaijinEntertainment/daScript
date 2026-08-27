@@ -7,8 +7,8 @@ work when the das binary is down.
 There is deliberately no write-time comment hook: comments are working
 scaffolding - write them freely during a PR. The gate is `make_pr`'s comment
 drain: the formatter strips them per the folder's `.lint_config` policy, and a
-non-empty strip goes through the `rescue-bot` agent (report-only ledger; the
-session rules on every rescue). Policy: `skills/comment_style_hygiene.md`;
+non-empty strip goes through the `harvester` agent (proposal ledger; the
+session rules on every entry). Policy: `skills/comment_style_hygiene.md`;
 mechanics: `skills/internal/make_pr.md`.
 
 ## monitor_guard.jq - PreToolUse, `Monitor|Bash`

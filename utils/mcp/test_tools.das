@@ -738,7 +738,7 @@ def test_format_file_comment_policy(t : T?) {
         t |> success(ok, "parse result JSON")
         t |> success(find(text, "comments stripped") >= 0, "opted-in folder stripped -- text={text}")
         t |> success(find(text, "rescue_advisory") >= 0, "strip batch appends the rescue advisory -- text={text}")
-        t |> success(find(text, "rescue-bot") >= 0, "advisory names the rescue-bot agent")
+        t |> success(find(text, "harvester") >= 0, "advisory names the harvester agent")
         let after = fread(dst)
         t |> success(find(after, "narration") < 0, "comments removed on disk")
         t |> success(find(after, "//! doc comment survives") >= 0, "docs kept on disk")

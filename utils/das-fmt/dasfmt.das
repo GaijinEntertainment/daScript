@@ -360,7 +360,7 @@ def main() {
     run_format_jobs(jobs, threadsNum, verify, verbose, args, verified, strip_failures, stripped_count)
 
     if (stripped_count > 0) {
-        log::info("comments were deleted from {stripped_count} file(s) — before committing, run the rescue-bot agent over their strip diff (the '(comments stripped)' files above)")
+        log::info("comments were deleted from {stripped_count} file(s) — before committing, run the harvester agent over their strip diff (the '(comments stripped)' files above)")
     }
 
     if (strip_failures > 0) {

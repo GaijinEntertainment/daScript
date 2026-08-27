@@ -15,13 +15,17 @@ failing test slice, a scratch probe - minutes, not tens of minutes), say so in y
 and let CI validate the tip. Later fix commits - its own findings, Copilot/CI rounds
 (`skills/internal/babysit.md`) - do NOT re-trigger it.
 
+**The tree is FROZEN while the chain runs** - no commits, no reconfigure, no `cmake
+--install`, and never `ci/smoke_test_bundle.sh` (it hides `lib/` for its whole run, which
+kills the chain's JIT loads, AOT links, and spawned tools mid-suite).
+
 ## The checklist
 
 | Step | Gate / tool | Fix policy |
 |---|---|---|
 | 0 Sync | make-pr `sync` | Red = behind origin/master: rebase (never onto local `master`), re-run. A listed PR-set file you did not edit = the rebase went wrong; a conflict on a file also changed upstream keeps origin/master's. Squash only AFTER the rebase - `git reset --soft master` on a stale `master` bakes other PRs in; already pushed: rebase + `git push --force-with-lease`. Re-read any `skills/*.md` / `REVIEW*.md` the rebase changed |
 | 0 Untracked | preflight `untracked` gate | Empty at PR time - commit, delete, or ignore each (`.gitignore`; `.git/info/exclude` for box-local) |
-| 0a0 Comment drain | MCP `format_file` on all changed `.das` in ONE batched call (same engine and `.lint_config` policy as step 5) | Working comments are welcome while building the PR; this row is where they settle. A `rescue_advisory` in the result = comments were deleted: spawn ONE `rescue-bot` per module root the strip touched, over that root's strip diff (report-only rescue ledger). YOU rule on every entry - apply accepted renames / REVIEW.md / ARCHITECTURE.md entries, treat TODO signals as possibly unfinished PR work, surface lint candidates per CLAUDE.md's lint-opportunities rule, drop the rest. Sits before the audits because rescues re-enter the diff |
+| 0a0 Comment harvest | the diff's ADDED comments, per touched module root | Working comments are welcome while building the PR; this row is where they settle. When the diff adds comments beyond the hygiene skill's kept set, spawn ONE `harvester` per touched module root, scoped to the comments the diff adds (a full-file harvest is the on-first-touch sweep, not a PR gate). YOU rule on its ledger - RENAME first (the strongest resolution), RULE/FACT proposals land in the folder's REVIEW.md / ARCHITECTURE*.md, KEEP one-liners are `//!` contract comments, TODO signals are possibly unfinished PR work, lint candidates surface per CLAUDE.md's lint-opportunities rule. Sits before the audits because landings re-enter the diff |
 | 0a REVIEW audit | make-pr `review-md` | Red = a discovered `REVIEW.das` gate failed - fail-fix, no agents until green. Then one `review-md-auditor` per checklist. Discovered rules bind on top of this file; checklist defects fixed in the same batch |
 | 0a TDD audit | one `tdd-auditor` over the whole diff, REVIEW.md folders or not (`skills/tdd_audit.md`) | UNTESTED branch -> test in the same change, never a follow-up promise. UNPROVEN -> run its named settling gate or state the claim in the PR body. RETUNED/WEAKENED test edit -> restore the expectation/instrument or state the reason |
 | 0a2 Style hygiene | `style-hygiene-auditor` (`skills/comment_style_hygiene.md`) | Mandatory run, non-blocking findings: fix each or consciously decline it |
@@ -37,7 +41,7 @@ and let CI validate the tip. Later fix commits - its own findings, Copilot/CI ro
 | 3 AOT build | kill by path first (below), then `cmake --build build --config Release --target test_aot -j 64 -- /nodeReuse:false` with `timeout: 0` (2-25 min) | Doesn't build: register new test directories in `tests/aot/CMakeLists.txt` (`skills/internal/aot_testing.md`); `error[50101]` is a hash desync (`skills/internal/aot_hash_desync_debugging.md`) |
 | 3 AOT tests | `bin/Release/test_aot.exe -use-aot dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test tests` (the `-use-aot` / `--use-aot` doubling matches CI) | Same triage as step 2. PR CI builds only `test_aot_subset` - this run and the nightly cron are the only full-AOT checks |
 | 4 Docs | see below | Skip when the PR only changes examples, tests, or non-public code |
-| 5 Format | MCP `format_file` on all changed `.das` in ONE batched call | Only files in the PR, every era - it handles gen1 and `.das_project`, and CI fails on unformatted gen1; comment stripping follows the folder's `.lint_config` `[format]` policy (teaching folders opt out, swept trees opt in - no per-call flag). Verify they still compile. A `rescue_advisory` here means scaffolding was written after 0a0 - re-run the drain (rescue-bot over the new strip diff) before continuing. CI's `utils/das-fmt/dasfmt.das -- --path ./ --verify` wraps the same engine and the same policy |
+| 5 Format | MCP `format_file` on all changed `.das` in ONE batched call | Only files in the PR, every era - it handles gen1 and `.das_project`, and CI fails on unformatted gen1; no folder arms comment stripping any more - comments are harvested (row 0a0), never formatter-deleted. Verify the files still compile. New comments written after 0a0 re-run that row before continuing. CI's `utils/das-fmt/dasfmt.das -- --path ./ --verify` wraps the same engine and the same policy |
 | 5 `.md` stop | `git diff --name-only origin/master..HEAD \| grep '\.md$'` | Any match: STOP, list the changes, ask the user to review BEFORE push |
 | 6 PR | GitHub MCP `create_pull_request` or `gh pr create` | Body follows the two-layer template below. On a squashed branch every later fix is `git commit --amend --no-edit` + force-push, never a new commit |
 | 6a Babysit | continue into `skills/internal/babysit.md`; triage every comment per `skills/internal/review_triage.md` | Creating the PR does not end the workflow; the stop rule and merge gate are babysit sec.0's |
@@ -45,7 +49,7 @@ and let CI validate the tip. Later fix commits - its own findings, Copilot/CI ro
 
 ## 0a0-0a3. Agent topology
 
-**0a0** - ONE `rescue-bot` (`.claude/agents/rescue-bot.md`) per module root the strip touched, over that root's strip diff; report-only, the session rules on every ledger entry. Same registry caveat as 0a.
+**0a0** - ONE `harvester` (`.claude/agents/harvester.md`) per touched module root, scoped to the comments the diff adds; it edits only the source files (deletions, `//!` compressions) and PROPOSES every document landing - the session rules on the ledger and lands what it accepts. Same registry caveat as 0a.
 
 **0a** - ONE `review-md-auditor` (`.claude/agents/review-md-auditor.md`) per discovered checklist, each auditing only its own under the self-review rule, plus ONE `tdd-auditor` (`.claude/agents/tdd-auditor.md`) for the whole diff; merge the reports. **Registry caveat: agent definitions snapshot at session start - a just-pulled or just-edited definition only exists in the NEXT session.** A non-trivial change runs the full round (`skills/internal/review_round.md`) on top; these instances are its surfacing phase, not a repeat.
 
