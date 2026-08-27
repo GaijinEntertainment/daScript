@@ -1822,10 +1822,11 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/nano/
         PATTERN "*.cpp"
         PATTERN "*.md"
         PATTERN "CMakeLists.txt"
-        # REVIEW.md reviews a change to this repo's copy of nano; an SDK carries
-        # the library, not the process of changing it. (REVIEW.das is not matched
-        # by any pattern above, so it never ships either.)
+        # REVIEW.md and ARCHITECTURE.md review and describe changes to this repo's
+        # copy of nano; an SDK carries the library, not the process of changing it.
+        # (REVIEW.das is not matched by any pattern above, so it never ships either.)
         REGEX "/REVIEW\\.md$" EXCLUDE
+        REGEX "/ARCHITECTURE\\.md$" EXCLUDE
 )
 # The shared runtime sources nano compiles. They live under src/, which the SDK
 # otherwise does not carry; nano/CMakeLists.txt names them one by one, and

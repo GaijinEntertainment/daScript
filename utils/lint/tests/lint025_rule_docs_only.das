@@ -159,6 +159,55 @@ def test_rule_docs_only_folder(t : T?) {
         t |> success(find(out, "mdonly/stray.md: LINT025") >= 0, "the finding names the stray\n{out}")
         t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
     }
+}
+
+
+[test]
+def test_rule_docs_only_modes(t : T?) {
+    t |> run("overlapping scan roots report each stray once") @(t : T?) {
+        let root = build_tree()
+        var out : string
+        let argv <- [das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/lint/main.das",
+                     "--", "-q", root, path_join(root, "tagged")]
+        unsafe(popen_argv(argv, 0.0, $(f) {
+            if (f != null) {
+                out = fread(f)
+            }
+        }))
+        t |> equal(count_of(out, "tagged/notes.md"), 1, "the seen set dedups overlapping roots\n{out}")
+    }
+    t |> run("a tagged folder under a skipped directory is not scanned") @(t : T?) {
+        let root = build_tree()
+        let hidden = path_join(path_join(root, "_gen"), "inner")
+        mkdir_rec(hidden)
+        plant(hidden, ".lint_config", "[docs]\nrule_docs_only = true\n")
+        plant(hidden, "stray.md", "# stray\n")
+        var out : string
+        run_lint(root, out)
+        t |> success(find(out, "inner/stray.md") < 0, "the walk prunes _-prefixed dirs like the das scan\n{out}")
+    }
+    t |> run("a non-bool rule_docs_only value reads as false") @(t : T?) {
+        let root = build_tree()
+        let dir = path_join(root, "strval")
+        mkdir_rec(dir)
+        plant(dir, ".lint_config", "[docs]\nrule_docs_only = \"true\"\n")
+        plant(dir, "stray.md", "# stray\n")
+        var out : string
+        run_lint(root, out)
+        t |> success(find(out, "strval/stray.md") < 0, "only a bool true arms the folder\n{out}")
+    }
+    t |> run("--enable whitelist mode silences an unlisted LINT025") @(t : T?) {
+        let root = build_tree()
+        var out : string
+        let argv <- [das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/lint/main.das",
+                     "--", "-q", "--enable", "LINT001", root]
+        unsafe(popen_argv(argv, 0.0, $(f) {
+            if (f != null) {
+                out = fread(f)
+            }
+        }))
+        t |> equal(count_of(out, "LINT025"), 0, "whitelist mode without LINT025 reports nothing\n{out}")
+    }
     t |> run("--disable LINT025 silences the pass") @(t : T?) {
         let root = build_tree()
         var out : string

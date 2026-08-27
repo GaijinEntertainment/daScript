@@ -179,7 +179,6 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
 // checklists (REVIEW.md and its routed companions), its architecture doc (and companion
 // splits), and the rulings sidecar. Everything else is a ledger, a plan or a note.
 def is_rule_doc_name(name : string) : bool {
-    return false if (!(name |> ends_with(".md")))
     return (name == "REVIEW.md" || name == "ARCHITECTURE.md" || name == "LAWS.md"
         || name |> starts_with("REVIEW_") || name |> starts_with("ARCHITECTURE_"))
 }
