@@ -309,15 +309,17 @@ def terrain_height(wx, wy : float) : float {
 
 // --- Geometry Rebuild ---
 
-def private push_strip_quad(var frag : GeometryFragment; p0, p1, p2, p3 : float3; uv0, uv1, uv2, uv3 : float2) {
+// Corners are given with their own normals. Each surface knows which height
+// field it belongs to, so normals are computed at emit time rather than by a
+// single after-the-fact pass -- that pass could only guess, and it guessed
+// bank_profile for the centre-island vertices too.
+def private push_strip_quad(var frag : GeometryFragment; p0, p1, p2, p3 : float3;
+                            n0, n1, n2, n3 : float3; uv0, uv1, uv2, uv3 : float2) {
     let base = length(frag.vertices)
-    // Normals are filled in by recompute_normals once the whole strip exists;
-    // a per-quad face normal would facet the rolling hills.
-    let zero = float3(0.0)
-    frag.vertices |> push(GeometryPreviewVertex(xyz = p0, normal = zero, uv = uv0))  // nolint:STYLE012 - appends to the accumulating fragment
-    frag.vertices |> push(GeometryPreviewVertex(xyz = p1, normal = zero, uv = uv1))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = p2, normal = zero, uv = uv2))
-    frag.vertices |> push(GeometryPreviewVertex(xyz = p3, normal = zero, uv = uv3))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = p0, normal = n0, uv = uv0))  // nolint:STYLE012 - appends to the accumulating fragment
+    frag.vertices |> push(GeometryPreviewVertex(xyz = p1, normal = n1, uv = uv1))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = p2, normal = n2, uv = uv2))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = p3, normal = n3, uv = uv3))
     frag.indices |> push(base + 0)  // nolint:STYLE012 - appends to the accumulating fragment
     frag.indices |> push(base + 1)
     frag.indices |> push(base + 2)
@@ -357,15 +359,30 @@ def private emit_bank(var frag : GeometryFragment; y0, y1, edge0, edge1, side : 
         let p01 = float3(x01, y0, bank_profile(d1, x01, y0))
         let p10 = float3(x10, y1, bank_profile(d0, x10, y1))
         let p11 = float3(x11, y1, bank_profile(d1, x11, y1))
+        let n00 = profile_normal(d0, x00, y0, side)
+        let n01 = profile_normal(d1, x01, y0, side)
+        let n10 = profile_normal(d0, x10, y1, side)
+        let n11 = profile_normal(d1, x11, y1, side)
         // Winding depends on which side we are on, so both banks face up.
         if (side > 0.0) {
-            push_strip_quad(frag, p00, p01, p10, p11,
+            push_strip_quad(frag, p00, p01, p10, p11, n00, n01, n10, n11,
                 float2(d0, y0), float2(d1, y0), float2(d0, y1), float2(d1, y1))
         } else {
-            push_strip_quad(frag, p01, p00, p11, p10,
+            push_strip_quad(frag, p01, p00, p11, p10, n01, n00, n11, n10,
                 float2(d1, y0), float2(d0, y0), float2(d1, y1), float2(d0, y1))
         }
     }
+}
+
+// Central-difference normal of the island crown, taken through terrain_height so
+// it follows the same field the geometry and the gameplay both use.
+def private island_normal(wx, wy : float) : float3 {
+    let e = 0.35
+    let hx1 = terrain_height(wx + e, wy)
+    let hx0 = terrain_height(wx - e, wy)
+    let hy1 = terrain_height(wx, wy + e)
+    let hy0 = terrain_height(wx, wy - e)
+    return normalize(float3(-(hx1 - hx0) / (2.0 * e), -(hy1 - hy0) / (2.0 * e), 1.0))
 }
 
 def private emit_island(var frag : GeometryFragment; y0, y1, l0, r0, l1, r1 : float) {
@@ -382,18 +399,28 @@ def private emit_island(var frag : GeometryFragment; y0, y1, l0, r0, l1, r1 : fl
             let x01 = c0 + s * half0 * (1.0 - t1)
             let x10 = c1 + s * half1 * (1.0 - t0)
             let x11 = c1 + s * half1 * (1.0 - t1)
-            let d0 = half0 * t0
-            let d1 = half0 * t1
-            let p00 = float3(x00, y0, island_profile(d0))
-            let p01 = float3(x01, y0, island_profile(d1))
-            let p10 = float3(x10, y1, island_profile(d0))
-            let p11 = float3(x11, y1, island_profile(d1))
+            // Each slice measures distance-from-edge against ITS OWN half width.
+            // Using the near slice's width for the far edge left neighbouring
+            // slices disagreeing about the height of the edge they share, which
+            // stepped the island along y while it stayed smooth across x.
+            let d00 = half0 * t0
+            let d01 = half0 * t1
+            let d10 = half1 * t0
+            let d11 = half1 * t1
+            let p00 = float3(x00, y0, island_profile(d00))
+            let p01 = float3(x01, y0, island_profile(d01))
+            let p10 = float3(x10, y1, island_profile(d10))
+            let p11 = float3(x11, y1, island_profile(d11))
+            let n00 = island_normal(x00, y0)
+            let n01 = island_normal(x01, y0)
+            let n10 = island_normal(x10, y1)
+            let n11 = island_normal(x11, y1)
             if (s > 0.0) {
-                push_strip_quad(frag, p01, p00, p11, p10,
-                    float2(d1, y0), float2(d0, y0), float2(d1, y1), float2(d0, y1))
+                push_strip_quad(frag, p01, p00, p11, p10, n01, n00, n11, n10,
+                    float2(d01, y0), float2(d00, y0), float2(d11, y1), float2(d10, y1))
             } else {
-                push_strip_quad(frag, p00, p01, p10, p11,
-                    float2(d0, y0), float2(d1, y0), float2(d0, y1), float2(d1, y1))
+                push_strip_quad(frag, p00, p01, p10, p11, n00, n01, n10, n11,
+                    float2(d00, y0), float2(d01, y0), float2(d10, y1), float2(d11, y1))
             }
         }
     }
@@ -423,15 +450,6 @@ def gen_river_banks() : GeometryFragment {
         }
     }
 
-    // Fill in the smooth normals now that every vertex position is final.
-    for (v in frag.vertices) {
-        let d = v.uv.x
-        let side = (v.xyz.x >= 0.0 ? 1.0 : -1.0)
-        v.normal = (v.xyz.z <= 0.0001 && d <= 0.0001
-            ? float3(0.0, 0.0, 1.0)
-            : profile_normal(d, v.xyz.x, v.xyz.y, side))
-    }
-
     gen_bbox(frag)
     return <- frag
 }
@@ -457,9 +475,11 @@ def private emit_water_channel(var frag : GeometryFragment; y0, y1, l0, r0, l1, 
         let d01 = min(x01 - l0, r0 - x01)
         let d10 = min(x10 - l1, r1 - x10)
         let d11 = min(x11 - l1, r1 - x11)
+        let up = float3(0.0, 0.0, 1.0)
         push_strip_quad(frag,
             float3(x00, y0, z), float3(x01, y0, z),
             float3(x10, y1, z), float3(x11, y1, z),
+            up, up, up, up,
             float2(d00, y0), float2(d01, y0), float2(d10, y1), float2(d11, y1))
     }
 }
@@ -489,10 +509,6 @@ def gen_river_surface() : GeometryFragment {
             emit_water_channel(frag, s0.world_y, s1.world_y,
                 s0.left_bank_x, s0.right_bank_x, s1.left_bank_x, s1.right_bank_x, z)
         }
-    }
-
-    for (v in frag.vertices) {
-        v.normal = float3(0.0, 0.0, 1.0)
     }
 
     gen_bbox(frag)

@@ -242,6 +242,19 @@ struct BonusPickup {
     bob_phase : float
 }
 
+// Explosions are layered, and each layer moves and draws differently, so the
+// particle carries its kind rather than having the renderer infer one from a
+// lifetime threshold.
+enum ParticleKind {
+    trail       // bullet tracer dots
+    debris      // spinning solid chunks, gravity
+    ember       // small bright sparks, gravity, additive
+    smoke       // dark puff, rises and expands, outlives everything else
+    fire        // expanding fireball, cools white -> orange -> red
+    flash       // one very short white blowout at the instant of the hit
+    shock       // flat ring racing outward across the water
+}
+
 [decs_template]
 struct Particle {
     pos : float3
@@ -252,6 +265,9 @@ struct Particle {
     size : float
     spin_speed : float
     spin_phase : float
+    kind : ParticleKind
+    drag : float
+    gravity : float
 }
 
 // --- River Segment ---
@@ -316,6 +332,11 @@ var @live river_first_split_pending = true
 var @live river_first_split_start_y = 0.0
 
 var tick_dt = 0.0
+// Effect-inspection rig: with fx_freeze set, the world and its particles both
+// stop, so a blast can be held still and stepped by hand (cmd_fx_freeze /
+// cmd_fx_step). A screenshot round-trip is far longer than a 100ms flash, so
+// there is no other way to actually look at one.
+var fx_freeze = false
 var global_rng_seed = 12345u
 var display_w = 0
 var display_h = 0

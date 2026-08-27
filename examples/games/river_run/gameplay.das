@@ -17,7 +17,10 @@ def spawn_trail(origin, color : float3) {
             max_life = TRAIL_LIFETIME,
             size = BULLET_SIZE * 1.1,
             spin_speed = 0.0,
-            spin_phase = 0.0
+            spin_phase = 0.0,
+            kind = ParticleKind.trail,
+            drag = 0.0,
+            gravity = 0.0
         ))
     }
 }
@@ -43,29 +46,147 @@ def spawn_pickup_burst(origin, color : float3) {
         p.size = random_range(0.06, 0.14)
         p.spin_speed = random_range(-15.0, 15.0)
         p.spin_phase = random_f() * 2.0 * PI
+        p.kind = ParticleKind.ember
+        p.drag = 2.2
+        p.gravity = 5.0
     }
 }
 
-def spawn_particles(origin, color : float3; object_radius : float; count : int) {
+// --- Explosions -------------------------------------------------------------
+//
+// One blast is six layers, each with its own lifetime, motion and blend mode:
+// a single white flash at the instant of the hit, a handful of fireballs that
+// expand and cool, embers that arc under gravity, smoke that rises and outlives
+// everything, solid debris, and a flat shockwave ring across the water. The
+// layering is what turns "boxes flying" into an explosion; no single layer
+// carries it alone.
+
+def private spawn_flash(origin : float3; radius : float) {
+    create_entities`Particle(1) $(_eid : EntityId; _i : int; var p : Particle) {
+        p.pos = origin
+        p.vel = float3(0.0)
+        p.color = float3(1.0, 0.96, 0.86)
+        p.lifetime = 0.075
+        p.max_life = p.lifetime
+        p.size = radius * 0.75
+        p.spin_speed = 0.0
+        p.spin_phase = 0.0
+        p.kind = ParticleKind.flash
+        p.drag = 0.0
+        p.gravity = 0.0
+    }
+}
+
+def private spawn_fireballs(origin, color : float3; radius : float; count : int) {
     create_entities`Particle(count) $(_eid : EntityId; _i : int; var p : Particle) {
         let angle = random_f() * 2.0 * PI
-        let r = max(object_radius, 0.18)
-        let local = float3(
-            random_range(-r, r),
-            random_range(-r, r),
-            random_range(-r * 0.35, r * 0.35)
-        )
-        let away = normalize(local + float3(cos(angle) * 0.35, sin(angle) * 0.35, random_range(-0.25, 0.25)))
-        let speed = random_range(2.0, 6.5) * (0.7 + r * 0.5)
-        p.pos = origin + local
-        p.vel = away * speed + float3(0.0, 0.0, random_range(0.8, 2.8))
+        let elev = random_range(-0.2, 0.9)
+        let dir = normalize(float3(cos(angle), sin(angle), elev))
+        p.pos = origin + dir * random_range(0.0, radius * 0.55)
+        p.vel = dir * random_range(0.6, 2.6) + float3(0.0, 0.0, random_range(0.4, 1.6))
         p.color = color
-        p.lifetime = random_range(PARTICLE_LIFETIME * 0.65, PARTICLE_LIFETIME * 1.25)
+        p.lifetime = random_range(0.26, 0.46)
         p.max_life = p.lifetime
-        p.size = random_range(0.07, 0.26) * (0.7 + r * 0.55)
+        p.size = radius * random_range(0.22, 0.46)
+        p.spin_speed = 0.0
+        p.spin_phase = random_f() * 2.0 * PI
+        p.kind = ParticleKind.fire
+        p.drag = 3.4
+        p.gravity = -1.2   // hot gas rises
+    }
+}
+
+def private spawn_embers(origin, color : float3; radius : float; count : int) {
+    create_entities`Particle(count) $(_eid : EntityId; _i : int; var p : Particle) {
+        let angle = random_f() * 2.0 * PI
+        let elev = random_range(0.1, 1.5)
+        let dir = normalize(float3(cos(angle), sin(angle), elev))
+        p.pos = origin + dir * radius * 0.3
+        p.vel = dir * random_range(5.0, 15.0) * (0.6 + radius * 0.4)
+        p.color = color
+        p.lifetime = random_range(0.45, 1.15)
+        p.max_life = p.lifetime
+        p.size = random_range(0.035, 0.085)
+        p.spin_speed = 0.0
+        p.spin_phase = 0.0
+        p.kind = ParticleKind.ember
+        p.drag = 1.1
+        p.gravity = 9.5
+    }
+}
+
+def private spawn_smoke(origin : float3; radius : float; count : int) {
+    create_entities`Particle(count) $(_eid : EntityId; _i : int; var p : Particle) {
+        let angle = random_f() * 2.0 * PI
+        let dir = float3(cos(angle), sin(angle), 0.0)
+        p.pos = origin + dir * random_range(0.0, radius * 0.7) + float3(0.0, 0.0, random_range(0.0, radius * 0.4))
+        p.vel = dir * random_range(0.4, 1.6) + float3(0.0, 0.0, random_range(1.1, 2.6))
+        // Smoke takes the section's fog colour so it sits in the same air as
+        // the rest of the scene instead of reading as a grey decal.
+        p.color = lerp(float3(0.10, 0.09, 0.09), env_now.fog_color, 0.35)
+        p.lifetime = random_range(1.3, 2.4)
+        p.max_life = p.lifetime
+        p.size = radius * random_range(0.24, 0.46)
+        p.spin_speed = random_range(-1.2, 1.2)
+        p.spin_phase = random_f() * 2.0 * PI
+        p.kind = ParticleKind.smoke
+        p.drag = 1.5
+        p.gravity = -0.7
+    }
+}
+
+def private spawn_debris(origin, color : float3; radius : float; count : int) {
+    create_entities`Particle(count) $(_eid : EntityId; _i : int; var p : Particle) {
+        let angle = random_f() * 2.0 * PI
+        let elev = random_range(0.05, 1.1)
+        let dir = normalize(float3(cos(angle), sin(angle), elev))
+        p.pos = origin + dir * radius * 0.4
+        p.vel = dir * random_range(3.0, 9.0) * (0.7 + radius * 0.4)
+        p.color = color
+        p.lifetime = random_range(0.6, 1.25)
+        p.max_life = p.lifetime
+        p.size = random_range(0.035, 0.10) * (0.7 + radius * 0.4)
         p.spin_speed = random_range(-13.0, 13.0)
         p.spin_phase = random_f() * 2.0 * PI
+        p.kind = ParticleKind.debris
+        p.drag = 0.55
+        p.gravity = 11.0
     }
+}
+
+def private spawn_shockwave(origin : float3; radius : float) {
+    create_entities`Particle(1) $(_eid : EntityId; _i : int; var p : Particle) {
+        // Pinned just above the water so the ring reads as a surface wave
+        // rather than a sphere seen edge-on.
+        p.pos = float3(origin.x, origin.y, 0.06)
+        p.vel = float3(0.0)
+        p.color = float3(1.0, 0.92, 0.75)
+        p.lifetime = 0.5
+        p.max_life = p.lifetime
+        p.size = radius * 3.0
+        p.spin_speed = 0.0
+        p.spin_phase = 0.0
+        p.kind = ParticleKind.shock
+        p.drag = 0.0
+        p.gravity = 0.0
+    }
+}
+
+// `scale` drives the whole blast: 1.0 is a boat, ~1.8 a fuel depot, and the
+// player's own death runs at 2.2 so losing a life lands as an event.
+def spawn_explosion(origin, color : float3; object_radius, scale : float) {
+    let r = max(object_radius, 0.35) * scale
+    spawn_flash(origin, r)
+    spawn_fireballs(origin, color, r, int(3.0 + 3.0 * scale))
+    spawn_embers(origin, lerp(color, float3(1.0, 0.85, 0.45), 0.5), r, int(10.0 + 12.0 * scale))
+    spawn_smoke(origin, r, int(3.0 + 4.0 * scale))
+    spawn_debris(origin, color * 0.55, r, int(4.0 + 5.0 * scale))
+    spawn_shockwave(origin, r)
+}
+
+// Small sparks with no fireball -- bullet impacts and ricochets.
+def spawn_particles(origin, color : float3; object_radius : float; count : int) {
+    spawn_embers(origin, color, max(object_radius, 0.18), count)
 }
 
 def spawn_enemy_boat(pos : float3) {
@@ -598,7 +719,7 @@ def on_player_killed() {
         return
     }
     player_lives--
-    spawn_particles(player_pos, float3(1.0, 0.5, 0.2), PLAYER_SIZE * 2.6, 34)
+    spawn_explosion(player_pos, float3(1.0, 0.55, 0.18), PLAYER_SIZE * 2.6, 2.2)
     play_sfx(snd_player_hit)
     add_screen_shake(SHAKE_MED)
     if (player_lives > 0) {
@@ -837,15 +958,36 @@ def update_bullets() {
 }
 
 // Age out particles
-def age_out_particles() {
+def step_particles(dt : float) {
     query() $(eid : EntityId; var p : Particle) {
-        p.lifetime -= tick_dt
-        p.pos += p.vel * tick_dt
+        p.lifetime -= dt
+        // Drag and gravity ride on the particle, so one integrator covers
+        // rising smoke, arcing embers and tumbling debris. A negative gravity
+        // is buoyancy: that is how the hot layers climb.
+        if (p.drag > 0.0) {
+            p.vel *= max(1.0 - p.drag * dt, 0.0)
+        }
+        if (p.gravity != 0.0) {
+            p.vel.z -= p.gravity * dt
+        }
+        p.pos += p.vel * dt
+        // Debris that reaches the water stops there and skids out.
+        if (p.kind == ParticleKind.debris && p.pos.z < 0.05) {
+            p.pos.z = 0.05
+            p.vel = float3(p.vel.x * 0.4, p.vel.y * 0.4, 0.0)
+        }
         if (p.lifetime <= 0.0) {
             delete_entity(eid)
         }
     }
     commit()
+}
+
+def age_out_particles() {
+    if (fx_freeze) {
+        return
+    }
+    step_particles(tick_dt)
 }
 
 // --- Culling: remove entities far behind player ---
@@ -1105,13 +1247,12 @@ def on_enemy_destroyed(h : EnemyHitInfo; is_depot : bool) {
         return false
     }
     if (is_depot) {
-        let c1 = int(24.0 + h.blast_radius * 15.0)
-        let c2 = int(14.0 + h.blast_radius * 10.0)
-        spawn_particles(h.pos, float3(1.0, 0.5, 0.05), h.blast_radius * 1.2, c1)
-        spawn_particles(h.pos + float3(0.0, 0.0, 1.0), float3(0.9, 0.2, 0.0), h.blast_radius * 0.8, c2)
+        // A depot goes up twice: the tank at deck level, then a second bloom
+        // above it a beat later.
+        spawn_explosion(h.pos, float3(1.0, 0.52, 0.06), h.blast_radius * 1.2, 1.8)
+        spawn_explosion(h.pos + float3(0.0, 0.0, 1.1), float3(0.95, 0.28, 0.02), h.blast_radius * 0.8, 1.2)
     } else {
-        let c = int(10.0 + h.blast_radius * 12.0)
-        spawn_particles(h.pos, float3(1.0, 0.65, 0.1), h.blast_radius, c)
+        spawn_explosion(h.pos, float3(1.0, 0.66, 0.12), h.blast_radius, (is_bridge ? 1.6 : 1.0))
     }
     play_sfx(is_bridge ? snd_bridge_destroy : snd_enemy_explode)
     if (is_bridge) {
@@ -1648,33 +1789,112 @@ def render_bonuses(game_time : float) {
 
 // --- Transparent scene ---
 
-def render_projectiles(game_time : float) {
-    use_unlit_program()
+// Explosion layers draw in three passes so they composite correctly: smoke and
+// debris alpha-blended first (they occlude), then everything hot additively on
+// top, which is also what feeds the bloom.
 
-    // Explosion chunks: transparent, spinning, fading to embers.
+def private draw_smoke(game_time : float) {
+    use_puff_program()
     query() $(p : Particle) {
-        let is_trail = p.max_life <= TRAIL_LIFETIME + 0.01
-        if (is_trail) { return ; }
-        let heat = p.lifetime / p.max_life
-        let spin_t = 1.0 - heat
-        // Debris shrinks and cools as it flies: white-hot at the flash, then
-        // the pickup/explosion tint, fading out. Without the cooling ramp the
-        // chunks read as flat orange cardboard.
-        let s = max(p.size * (0.20 + heat * 0.42), 0.02)
-        let rot = quat_y_rot(p.spin_phase + p.spin_speed * spin_t)
-        let hot = lerp(p.color, float3(1.0, 0.94, 0.78), heat * heat)
-        draw_unlit(p.pos, float3(s), hot, heat * heat * 0.85, rot, heat * heat * 3.2)
+        if (p.kind != ParticleKind.smoke) { return ; }
+        let life = p.lifetime / p.max_life
+        // Smoke expands as it ages and fades from the far end of its life, so a
+        // puff thins out instead of blinking off.
+        let grow = 1.0 + (1.0 - life) * 2.2
+        let alpha = saturate(life * 1.5) * 0.5
+        let spin = p.spin_phase + p.spin_speed * (1.0 - life) + game_time * 0.08
+        draw_puff(p.pos, p.size * grow, p.color, alpha, 0.0, spin, p.spin_phase)
+        geo_disc |> draw_geometry_fragment()
+    }
+    use_unlit_program()
+}
+
+def private draw_debris() {
+    query() $(p : Particle) {
+        if (p.kind != ParticleKind.debris) { return ; }
+        let life = p.lifetime / p.max_life
+        let rot = quat_y_rot(p.spin_phase + p.spin_speed * (1.0 - life))
+        // Chunks glow briefly then go cold and dark.
+        let heat = saturate((life - 0.82) * 5.5)
+        let tint = lerp(p.color * 0.5, float3(1.0, 0.62, 0.24), heat)
+        draw_unlit(p.pos, float3(p.size), tint, saturate(life * 3.0), rot, heat * 1.6)
         geo_cube |> draw_geometry_fragment()
     }
+}
 
+def private draw_hot_layers() {
+    // Flash and fireballs are soft billboards; only the streaking embers below
+    // want real geometry.
+    use_puff_program()
+
+    // Flash: one frame-and-a-bit of blowout at the instant of the hit.
     query() $(p : Particle) {
-        let is_trail = p.max_life <= TRAIL_LIFETIME + 0.01
-        if (!is_trail) { return ; }
-        let alpha = p.lifetime / p.max_life
-        let s = max(p.size, BULLET_SIZE)
-        draw_unlit(p.pos, float3(s), p.color, alpha * 0.6, float4(0.0, 0.0, 0.0, 1.0), 0.4)
-        geo_sphere |> draw_geometry_fragment()
+        if (p.kind != ParticleKind.flash) { return ; }
+        let life = p.lifetime / p.max_life
+        let grow = 0.5 + (1.0 - life) * 0.9
+        draw_puff(p.pos, p.size * grow, p.color, life * life * 0.9, 4.5 * life, 0.0, 0.0)
+        geo_disc |> draw_geometry_fragment()
     }
+
+    // Fireballs: expand and cool white -> orange -> deep red.
+    query() $(p : Particle) {
+        if (p.kind != ParticleKind.fire) { return ; }
+        let life = p.lifetime / p.max_life
+        let age = 1.0 - life
+        let grow = 0.6 + age * 1.05
+        var tint = lerp(float3(1.0, 0.48, 0.09), float3(1.0, 0.97, 0.86), saturate(life * 2.6 - 1.6))
+        tint = lerp(float3(0.34, 0.045, 0.015), tint, saturate(life * 1.9))
+        draw_puff(p.pos, p.size * grow, tint, saturate(life * 1.4), 4.2 * life * life,
+            p.spin_phase, p.spin_phase * 0.7)
+        geo_disc |> draw_geometry_fragment()
+    }
+
+    use_unlit_program()
+
+    // Embers: small, bright, and they streak along their own velocity.
+    query() $(p : Particle) {
+        if (p.kind != ParticleKind.ember && p.kind != ParticleKind.trail) { return ; }
+        let life = p.lifetime / p.max_life
+        let speed = length(p.vel)
+        let tint = lerp(float3(0.9, 0.18, 0.04), p.color, saturate(life * 1.4))
+        if (p.kind == ParticleKind.ember && speed > 0.5) {
+            let dir = p.vel / speed
+            let stretch = clamp(speed * 0.035, 1.0, 4.5)
+            draw_unlit(p.pos, float3(p.size, p.size, p.size * stretch), tint,
+                saturate(life * 2.0), quat_align_z(dir), 3.4 * life)
+            geo_cylinder |> draw_geometry_fragment()
+        } else {
+            draw_unlit(p.pos, float3(max(p.size, BULLET_SIZE * 0.8)), tint,
+                saturate(life * 2.0), float4(0.0, 0.0, 0.0, 1.0), 2.2 * life)
+            geo_sphere |> draw_geometry_fragment()
+        }
+    }
+}
+
+def private draw_shockwaves() {
+    glUseProgram(ring_program)
+    active_program = ring_program
+    query() $(p : Particle) {
+        if (p.kind != ParticleKind.shock) { return ; }
+        let life = p.lifetime / p.max_life
+        let age = 1.0 - life
+        // The front races out fast and early, then eases; the band narrows as
+        // it goes, which is what makes it read as travelling rather than growing.
+        let radius = p.size * (0.10 + sqrt(age) * 0.90)
+        let width = lerp(0.20, 0.045, age)
+        v_model = compose(p.pos, float4(0.0, 0.0, 0.0, 1.0), float3(radius, radius, 1.0))
+        f_Color = float4(p.color, life * life * 0.55)
+        f_Material = float4(width, 0.0, 1.1 * life, 0.0)
+        vs_ring_bind_uniform(active_program)
+        fs_ring_bind_uniform(active_program)
+        geo_disc |> draw_geometry_fragment()
+    }
+}
+
+def render_projectiles(game_time : float) {
+    use_unlit_program()
+    draw_smoke(game_time)
+    draw_debris()
 
     // Player tracers: a bright core with a longer, dimmer streak behind it.
     query() $(b : PlayerBullet) {
@@ -1704,6 +1924,13 @@ def render_projectiles(game_time : float) {
             geo_cylinder |> draw_geometry_fragment()
         }
     }
+
+    // Additive from here on: fire adds light, it does not occlude.
+    glBlendFunc(GL_SRC_ALPHA, uint(GL_ONE))
+    use_unlit_program()
+    draw_hot_layers()
+    draw_shockwaves()
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 }
 
 def private draw_disc(center : float3; radius : float; rot : float4; color : float3; alpha, phase : float) {

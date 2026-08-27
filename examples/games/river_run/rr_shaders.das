@@ -460,6 +460,76 @@ def fs_rotor {
 }
 
 // ============================================================================
+// Soft puff -- a camera-facing billboard with a radial falloff
+//
+// Smoke and fireballs were low-poly spheres, which gave every puff a hard
+// faceted silhouette. A billboard with a soft edge is both cheaper and reads as
+// a volume rather than a solid. The quad is built in VIEW space so it always
+// faces the camera without the host computing a basis; f_Material carries the
+// radius, the emissive and the spin angle.
+// ============================================================================
+
+[vertex_program]
+def vs_puff {
+    let center = v_view * (v_model * float4(0.0, 0.0, 0.0, 1.0))
+    let r = f_Material.y
+    let view_pos = center.xyz + float3(v_position.x * r, v_position.y * r, 0.0)
+    f_view_pos = view_pos
+    f_uv = v_texture
+    f_world = (v_model * float4(0.0, 0.0, 0.0, 1.0)).xyz
+    gl_Position = v_projection * float4(view_pos, 1.0)
+}
+
+[fragment_program]
+def fs_puff {
+    var c = f_uv * 2.0 - float2(1.0)
+    // Spin the sampling frame so repeated puffs do not read as clones.
+    let a = f_Material.w
+    let ca = cos(a)
+    let sa = sin(a)
+    c = float2(c.x * ca - c.y * sa, c.x * sa + c.y * ca)
+    let r2 = dot(c, c)
+    if (r2 > 1.0) {
+        discard()
+    }
+    // A lumpy edge, so the billboard does not read as a perfect circle.
+    let lump = 0.82 + 0.18 * vnoise(c * 2.4 + float2(f_Material.x * 7.3))
+    let falloff = pow(saturate(1.0 - r2 / (lump * lump)), 1.7)
+    let alpha = f_Color.w * falloff
+    let col = f_Color.xyz * (1.0 + f_Material.z * falloff)
+    f_FragColor = float4(apply_fog(col, f_world, length(f_view_pos)), alpha)
+}
+
+// ============================================================================
+// Shockwave ring -- a flat annulus on the water, drawn additively
+// ============================================================================
+
+[vertex_program]
+def vs_ring {
+    let world = v_model * float4(v_position, 1.0)
+    f_world = world.xyz
+    f_uv = v_texture
+    let view = v_view * world
+    f_view_pos = view.xyz
+    gl_Position = v_projection * view
+}
+
+[fragment_program]
+def fs_ring {
+    let c = f_uv * 2.0 - float2(1.0)
+    let r = length(c)
+    if (r > 1.0) {
+        discard()
+    }
+    // f_Material.x is the ring's normalised thickness; the band tightens and
+    // dims as the wave expands, which is what sells it as a travelling front.
+    let width = max(f_Material.x, 0.01)
+    let band = 1.0 - saturate(abs(1.0 - r) / width)
+    let alpha = f_Color.w * band * band
+    f_FragColor = float4(f_Color.xyz * (1.0 + f_Material.z), alpha)
+}
+
+// ============================================================================
 // Unlit / emissive — bullets, particles, trails, HUD geometry
 // ============================================================================
 
@@ -488,6 +558,8 @@ var prop_program : uint
 var terrain_program : uint
 var water_program : uint
 var rotor_program : uint
+var puff_program : uint
+var ring_program : uint
 var unlit_program : uint
 var active_program : uint
 
@@ -498,6 +570,8 @@ def create_scene_programs() {
     terrain_program = cache_shader_program(vs_terrain`shader_text, fs_terrain`shader_text)
     water_program = cache_shader_program(vs_water`shader_text, fs_water`shader_text)
     rotor_program = cache_shader_program(vs_rotor`shader_text, fs_rotor`shader_text)
+    puff_program = cache_shader_program(vs_puff`shader_text, fs_puff`shader_text)
+    ring_program = cache_shader_program(vs_ring`shader_text, fs_ring`shader_text)
     unlit_program = cache_shader_program(vs_unlit`shader_text, fs_unlit`shader_text)
 }
 
@@ -509,6 +583,20 @@ def use_prop_program() {
 def use_unlit_program() {
     glUseProgram(unlit_program)
     active_program = unlit_program
+}
+
+def use_puff_program() {
+    glUseProgram(puff_program)
+    active_program = puff_program
+}
+
+// `seed` only varies the edge lumpiness and spin between puffs.
+def draw_puff(pos : float3; radius : float; color : float3; alpha, emissive, spin, seed : float) {
+    v_model = compose(pos, float4(0.0, 0.0, 0.0, 1.0), float3(1.0))
+    f_Color = float4(color, alpha)
+    f_Material = float4(seed, radius, emissive, spin)
+    vs_puff_bind_uniform(active_program)
+    fs_puff_bind_uniform(active_program)
 }
 
 // Material presets, so call sites name a surface instead of tuning four floats.

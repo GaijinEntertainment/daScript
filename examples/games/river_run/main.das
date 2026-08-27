@@ -206,17 +206,27 @@ def init() {
         score = 0
         current_section = 0
         cam_x = 0.0
-        set_env_immediate(0)
         init_river()
-        rebuild_river_geometry()
-        river_dirty = false
-    } else {
-        refresh_env()
+    } elif (empty(river_segments)) {
+        // A FULL reload resets every @live variable, so the river is gone even
+        // though is_reload() is true. Rebuild rather than run on an empty world.
+        init_river()
     }
+
+    // Neither of these survives a reload: the section environment lives in
+    // plain (non-@live) globals, and the geometry handles name GL objects in a
+    // context that has just been destroyed. Rebuilding both unconditionally is
+    // what keeps a reload from coming back to a black screen.
+    set_env_immediate(section_idx())
+    rebuild_river_geometry()
+    river_dirty = false
 }
 
 def simulate() {
-    if (game_state != GameState.playing) {
+    // fx_freeze is the effect-inspection rig: it holds the whole world, not just
+    // the particles, because otherwise the player flies out of the blast's
+    // postcode between one inspection command and the next.
+    if (game_state != GameState.playing || fx_freeze) {
         return
     }
     update_section()

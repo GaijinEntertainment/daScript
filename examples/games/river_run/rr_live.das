@@ -141,6 +141,45 @@ def cmd_set_section(input : JsonValue?) : JsonValue? {
     return JV(args)
 }
 
+struct CmdBoomArgs {
+    ahead : float = 14.0
+    offset : float = 0.0
+    height : float = 1.0
+    scale : float = 1.0
+}
+
+[live_command(description = "Detonate an explosion ahead of the player, for tuning. Args: ahead, offset, height, scale")]
+def cmd_boom(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdBoomArgs>)
+    let at = float3(player_pos.x + args.offset, player_pos.y + args.ahead, args.height)
+    spawn_explosion(at, float3(1.0, 0.62, 0.12), 1.0, args.scale)
+    add_screen_shake(SHAKE_MED)
+    commit()
+    return JV(args)
+}
+
+struct CmdFxFreezeArgs {
+    enabled : bool = true
+}
+
+[live_command(description = "Halt particle ageing so a blast can be inspected frame by frame. Args: enabled")]
+def cmd_fx_freeze(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdFxFreezeArgs>)
+    fx_freeze = args.enabled
+    return JV(args)
+}
+
+struct CmdFxStepArgs {
+    dt : float = 0.05
+}
+
+[live_command(description = "Advance frozen particles by dt seconds. Args: dt")]
+def cmd_fx_step(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdFxStepArgs>)
+    step_particles(args.dt)
+    return JV(args)
+}
+
 enum SpawnKind {
     boat
     plane

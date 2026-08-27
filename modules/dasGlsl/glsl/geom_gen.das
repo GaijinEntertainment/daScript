@@ -264,11 +264,15 @@ def gen_cone(plt : GenDirection; sectorCount : int) {
         uv = float2(0.5, 0.5)
     ))
 
-    // side triangles
+    // Side triangles, wound counter-clockwise seen from OUTSIDE the cone, which
+    // is what the per-vertex normals above already claim and what the base cap
+    // below already does. The (i, tip, i+1) order was inverted, so under the
+    // usual CCW-front / cull-back setup the lit outer surface was culled and the
+    // unlit interior showed through.
     for (i in range(sectorCount)) {
         frag.indices |> push(i)  // nolint:STYLE012 — appends one side triangle per sector to the running index buffer
-        frag.indices |> push(tip)
         frag.indices |> push(i + 1)
+        frag.indices |> push(tip)
     }
 
     // base triangles
