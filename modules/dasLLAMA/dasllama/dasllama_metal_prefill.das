@@ -3218,7 +3218,7 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
     //! materializing and re-streaming a 2B/element f16 panel
     let tall128 = fmt == KqFmt.k6 ? g_pf_pso_kq_mm6_th128 : (fmt == KqFmt.k4 ? g_pf_pso_kq_mm4_th128 : g_pf_pso_kq_mm5_th128)
     if (fmt_tensor && bxh != null && tall128 != null && kdim > 0l && mp >= 128l
-            && pf_devw_tiles(mp, rows, kdim, slow_fb = true) > 8l) {
+            && uint64(rows * kdim * 2l) >= TALLKQ_MIN_PANEL) {
         let r0 = mp / 128l * 128l
         if (fmt == KqFmt.k6) {
             enc_kq_mm_k6_th128_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bxh, 0ul, by, yoff, bk, bn, r0, rows)
@@ -4736,6 +4736,10 @@ let DEVW_BIG_ROWS = 2048l
 let DEVW_LONG_K = 4096l
 let DEVW_LONG_K_ROWS = 1024l
 let DEVW_MAX_TILES = 32l
+// a kq site whose f16 panel would exceed this is DRAM-resident - the tall in-kernel-dequant
+// stamp beats both dev-W tiling and the short tg twin there (raced: 118MiB+ wins 15-25%,
+// 84MiB washes negative - the knee sits between)
+var private TALLKQ_MIN_PANEL = 96ul * 1024ul * 1024ul
 var private g_pf_env_span = true
 var private g_pf_env_logits = true
 var private g_pf_env_attn = true
