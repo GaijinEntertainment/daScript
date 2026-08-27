@@ -5,6 +5,6 @@
 parses a pinned set of constructs (`test_grammar_canary.das`) - applies
 `tree-sitter-daslang/REVIEW.md` (repo root) too.
 
-**Tests are kept multiplatform** - no hardcoded platform-specific paths, path separators, or
-OS-only assumptions; locations resolve via `get_das_root()`, never absolute or machine-local
-paths.
+**Never hardcode a platform-specific path, a path separator, or an OS-only assumption in a
+test** - resolve every location through `get_das_root()`, never an absolute or machine-local
+path.

@@ -1,88 +1,98 @@
 # dasweb-buildd Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md`. Planned work: `plans/dasweb_wasm_pipeline.md`.
+`README.md`. Planned work: `plans/dasweb_wasm_pipeline.md` (repo root).
 
-**Every config, core, and client behavior has a dastest test in this directory** - `main.das`
-and `buildd_service.das` stay glue and orchestration over tested modules; the whole loop is
-proven by the end-to-end checkpoint on the real boxes.
+**Never put a `[test]` file under the global `tests/` tree, and never register one in a
+`CMakeLists.txt` - a `[test]` file for this directory lives here and requires its siblings by
+bare name.**
 
-**`[test]` files live in this directory and require siblings by bare name** - never under the
-global `tests/` tree, and never registered in any `CMakeLists.txt`.
+**A test that reaches any host or port other than the stub playground in
+`test_buildd_client.das`, on this directory's reserved test port 19014, is a defect.**
 
-**HTTP tests run against the stub playground in `test_buildd_client.das` on this directory's
-reserved test port 19014; core tests touch no network.** The playground's real endpoints are
-proven in its own directory.
+**A test of `buildd_core.das` that reaches the network at all is a defect.**
 
-**A test that touches the filesystem uses `temp_directory`-rooted paths and deletes what it
-creates.** A test writing into the repo tree is a defect.
+**A test that touches the filesystem creates its paths under the directory `temp_directory()`
+returns and deletes what it creates before it ends.**
 
-**The health server binds loopback only** - `set_bind_host("127.0.0.1")` between `init` and
-`start`. A diff that removes, reorders past `start`, or conditionalizes the bind is a defect.
+**Never let the health server bind an address other than loopback - it must call
+`set_bind_host("127.0.0.1")` unconditionally, between `init` and `start`.**
 
-**`POST /shutdown` verifies the transport peer is loopback.** No header can carry that proof.
+**Never let `POST /shutdown` act on a request without checking that the transport peer address
+is loopback.** No header can carry that proof.
 
-**The bearer token never appears in a log line, an error message, or the startup banner.** The
-banner logs set/unset and provenance only.
+**Never write the bearer token into a log line, an error message, or the startup banner - the
+banner reports set or unset and the provenance instead.**
 
-**Every file name that reaches the filesystem - bundle sources and build outputs alike - passes
-this directory's name validation first.** A path assembled from an unvalidated request- or
-build-derived name is a defect.
+**A diff that assembles a filesystem path from a request- or build-derived name - a bundle
+source or a build output alike - without passing that name through `is_valid_source_filename`,
+`is_valid_asset_path`, or `validate_asset_paths` (`buildd_core.das`) first is a defect.**
 
-**A build publishes exactly the file set its mode declares, by name.** The build executes the
-user's own compile-time code and can write anything into the output directory, so a
-suffix filter, a glob, or any rule that lets the build widen its own output set is a defect.
+**A diff that lets a build publish a file the job's build mode - the build kind, which lists
+its output files by name - does not declare by name, through a suffix filter, a glob, or any
+rule that widens the build's own output set, is a defect.** The build runs the user's own
+compile-time code and can write anything into the output directory.
 
-**Builds run in the container sandbox defined by `Containerfile` and `run_build.sh`, and there
-is no unsandboxed path.** Every host path the build may touch is an explicit mount in that
-script; a change that adds a mount without a stated reason, or that reintroduces a
-run-outside-the-sandbox fallback, is a defect. Mounting anything that holds a secret, a key, or
-another service's data is a defect.
+**A diff that adds a mount to `run_build.sh` also gives that mount's reason in `README.md`'s
+The sandbox section, in the same change.**
 
-**The sandbox is the boundary, and daslang's own policies are not.** A change justified by
-`no_unsafe`, `no_init`, or any compile-time policy flag standing in for isolation is a defect:
-compile-time code reads files with no `unsafe` at all.
+**A diff that gives a build a host path which is not an explicit mount in `run_build.sh` is a
+defect.**
 
-**Processes are spawned via `popen_argv` (no shell).** A build or git invocation through a
-shell-interpreted string is a defect.
+**A diff that adds a way to run a build outside the container sandbox defined by
+`Containerfile` and `run_build.sh` is a defect.**
 
-**An empty configured token refuses startup, never starts an unauthenticated poller.**
+**Never mount anything that holds a secret, a key, or another service's data.**
 
-**Every claimed job logs its start and its outcome (done/failed, duration, exit code) as
-structured lines.** A job path that can end without a log line is a defect.
+**A change justified by `no_unsafe`, `no_init`, or any compile-time policy flag standing in for
+the sandbox's isolation is a defect.** Compile-time code reads files with no `unsafe` at all.
 
-**Startup logs the full effective config with per-key provenance before the first poll.**
+**A diff that spawns a process through a shell-interpreted string is a defect - spawn it with
+`popen_argv` instead.**
 
-**Lifecycle-owned state is module-global; no collectable value lives in a `main`-loop local
-across `maybe_collect_gc()`.**
+**Never let the service start with an empty configured token - refuse startup instead.**
 
-**Every claimed job is resolved by an upload - success or failure - on every code path.** A
-path that drops a claim for the stale-requeue sweep to mop up is a defect.
+**A diff that leaves a claimed job able to end without structured log lines for its start and
+its outcome (done or failed, duration, exit code) is a defect.**
 
-**Per-job scratch directories are removed when the job resolves.**
+**A diff that leaves a config key out of the startup banner, drops that key's provenance, or
+moves that banner after the first poll is a defect.**
 
-**Route callbacks are retained with `push`, never `emplace`.**
+**Never put state that outlives one `update` call anywhere but a module-global.**
 
-**A behavior change in a box-side file - `run_build.sh`, `roll_toolchain.sh`, `.das_package`,
-`watchdog.json`, `dasweb-buildd.toml` - lands with its note in the matching `README.md`
-section** (The sandbox / The toolchain-bump protocol / Run).
+**Never hold a collectable value - one the GC can free - in a `main`-loop local across a call
+to `maybe_collect_gc()`.**
 
-**A toolchain roll that moves the worktree rebuilds both the cross-compile host and the
-runtime archive.**
+**A diff that adds a code path where a claimed job ends without an upload - success or failure -
+is a defect.** Leaving the claim for the stale-requeue sweep - the server-side sweep that
+re-queues jobs from builders that died - is not a resolution.
 
-**A `Containerfile` change lands with an image-tag bump in `run_build.sh` (`IMAGE=`), same
-commit.**
+**Never let a job resolve without removing its per-job scratch directory.**
 
-**The wasm-archive step's build command and archive list mirror
-`modules/dasImgui/.das_package`, minus `liblibDasModuleClipboard.a`:** a change to either side
-lands with the other.
+**Never retain a route callback with `emplace` - use `push` instead.**
 
-**A file an operator edits on the box is preserved across upgrades:** shipped
-`release_include_if_missing`, never plain `release_include`.
+**A diff that changes the behavior of a box-side file - `run_build.sh`, `roll_toolchain.sh`,
+`.das_package`, `watchdog.json`, `dasweb-buildd.toml` - also updates the matching `README.md`
+section (The sandbox / The toolchain-bump protocol / Run), in the same change.**
 
-**Checked-in config holds development values.** The config file is discovered automatically
-beside the module, so a production token or URL in it would make an in-repo run claim
-production jobs.
+**Never let a toolchain roll (`roll_toolchain.sh`) move the worktree without rebuilding both
+the cross-compile host and the runtime archive.**
+
+**A diff that changes `Containerfile` also bumps the image tag in `run_build.sh` (`IMAGE=`), in
+the same change.**
+
+**A diff that changes the wasm-archive step's build command or archive list in
+`roll_toolchain.sh`, or `modules/dasImgui/.das_package`, also changes the other to match, in
+the same change.**
+
+**The wasm-archive list in `roll_toolchain.sh` never carries `liblibDasModuleClipboard.a`.**
+
+**Never ship a file an operator edits on the box with plain `release_include` - use
+`release_include_if_missing`, so an upgrade keeps the operator's edits.**
+
+**Never commit a production value to `dasweb-buildd.toml` - the checked-in file holds
+development values.** The config file is discovered automatically beside the module, so a
+production token or URL there would make an in-repo run claim production jobs.
 
 **Placement - one file, one line: a diff keeps each file inside its line, and a new file adds
 its line here, with its tests, in the same change.**

@@ -1,75 +1,85 @@
 # site (daslang.io) Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md`.
+`README.md`. **A Playwright spec (`*.spec.js`), wherever the diff puts it, answers to the
+`tests/playground/` checklist.**
 
-**Every hand-written shell command shown on a page runs verbatim and produces the result
-the page shows.** A command, flag, or output line invented for illustration is a defect; if
-the implementation does not exist yet, the page does not show the command.
+**Never show on a page a hand-written shell command, flag, or output line invented for
+illustration - show only a command that runs verbatim and produces the result the page
+shows.**
 
-**The `cmd` field of any run in `files/dasllama/bench_records.json` is the exact argv
-`modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it spawns)
-ran.** A receipt is per run - one `cmd` + `date` run object - never per rendered row.
+**A diff that writes a `cmd` field in `files/dasllama/bench_records.json` that is not the
+exact argv `modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it
+spawns) ran is a defect.**
 
-**`files/dasllama.js` shows a run's receipt line on every row that run produced.** One run's
-`cmd` + `date` covers several rendered rows; a row rendered without its run's receipt line is
-a defect.
+**A row `files/dasllama.js` renders without its run's `cmd` + `date` line is a defect - render
+that line on every row the run produced.** One run's `cmd` + `date` covers several rendered
+rows.
 
-**`files/dasllama/bench_records.json` is generator output: `modules/dasLLAMA/performance/gen_site_records.das`
-merges every `modules/dasLLAMA/performance/records/<box>.json` and applies
-`modules/dasLLAMA/performance/records/annotations.json`, so re-running the generator leaves
-the file byte-identical.** A diff where it does not is a hand edit and a defect.
+**A `cmd` + `date` pair on a rendered row in `files/dasllama/bench_records.json` is a defect -
+put the pair on the run object that produced the rows.**
 
-**`files/performance_bench.json` is generator output: `benchmarks/sql/_update_results.das --site-json`
-writes it from the same sweep output that regenerates the tables in `benchmarks/sql/results.md`.**
-A diff that changes `files/performance_bench.json` without changing `benchmarks/sql/results.md` in
-the same change, or that leaves any cell in the record differing from the same family-and-lane cell
-in the results.md tables, is a defect.
+**A diff that leaves `files/dasllama/bench_records.json` differing from what re-running
+`modules/dasLLAMA/performance/gen_site_records.das` writes is a hand edit and a defect -
+change the generator inputs and re-run it instead.** The generator merges every
+`modules/dasLLAMA/performance/records/<box>.json` and applies
+`modules/dasLLAMA/performance/records/annotations.json`.
 
-**`files/performance_engines.json` is generator output: `examples/benchmarks/sql/_update_results.das
---site-json` writes it from the same sweep output that regenerates the tables in
-`examples/benchmarks/sql/results.md`.** A diff that changes `files/performance_engines.json` without
-changing `examples/benchmarks/sql/results.md` in the same change, or that leaves any cell in the
-record differing from the same family-and-lane cell in those results.md tables, is a defect.
+**A diff that changes `files/performance_bench.json` also changes `benchmarks/sql/results.md`,
+in the same change.** `benchmarks/sql/_update_results.das --site-json` writes the record from
+the same sweep output that regenerates those tables.
 
-**`benchmarks.html` renders only the vendored dasProfile records - the same
-`files/profile_results_<platform>.json` files pages.yml fetches from borisbat/dasProfile at
-deploy time and `files/forge.js`'s front-page cycler reads.** A benchmark number hand-carried into the page
-or a second record file for the same data is a defect; provenance (the `das_capture` /
-`ext_capture` stamps) travels in the dasProfile files themselves.
+**A cell in `files/performance_bench.json` differing from the same family-and-lane cell in the
+`benchmarks/sql/results.md` tables is a defect.**
 
-**Every code sample shown on a page is a full program - it compiles and runs with the
-current toolchain, and the page links it to "try it on playground".** daslang samples are
-gen2; a partial snippet shown as a code card, a sample without its playground link, or
-pseudo-code presented as code is a defect.
+**A diff that changes `files/performance_engines.json` also changes
+`examples/benchmarks/sql/results.md` (repo root), in the same change.**
+`examples/benchmarks/sql/_update_results.das --site-json` writes the record from the same sweep
+output that regenerates those tables.
 
-**A test under `tests/playground/` (this folder) that needs the daslang runtime carries `@wasm` in its
-title.** The per-PR lane stages the site without WASM artifacts and runs the suite with
-`--grep-invert '@wasm'` (`playground-e2e.yml`), so an untagged runtime-dependent test fails
-every PR.
+**A cell in `files/performance_engines.json` differing from the same family-and-lane cell in
+the `examples/benchmarks/sql/results.md` (repo root) tables is a defect.**
 
-**A change to the deployed playground sources - `playground/` (this folder), `web/examples/ui/src/`, or
-`web/examples/ui/samples/` - ships with a stated run of the WASM-staged Playwright suite**
-(`tests/playground/`, this folder), naming the result - passes and any failures - in the PR body or
-commit message. The run also names its runtime artifacts: built from this change when the
-change feeds `web/output/daslang_static.*`, the deployed ones otherwise. The no-WASM lane
-cannot see a broken runtime path, and every sample on the page runs through that path.
+**A benchmark number hand-carried into `benchmarks.html` is a defect - render the page only
+from the vendored dasProfile records, the `files/profile_results_<platform>.json` files
+`.github/workflows/pages.yml` (repo root) fetches from borisbat/dasProfile at deploy time.**
 
-**Every number on a page that reports a measurement - a rate, a duration, a size, a score
-some run produced - is rendered from live data, copied from a checked-in measurement record,
-or carries a source comment naming it a placeholder.** A placeholder that could be mistaken
-for a fact is a defect. A number stating a fixture or a run parameter (an image's dimensions,
-a token budget) reports no measurement and is outside this rule.
+**A second record file for data a dasProfile record already holds is a defect - read the
+dasProfile record.** Provenance - the `das_capture` and `ext_capture` stamps - travels in the
+dasProfile files themselves.
 
-**A `dl-*` selector defined in BOTH `files/dasllama-table.css` (the file dasllama.io loads)
-and `dasllama.html`'s inline `<style>` copy keeps identical bodies.** Changing one copy and
-not the other is a defect.
+**A code sample shown as a partial snippet or as pseudo-code is a defect - show every sample as
+a full program that compiles and runs with the current toolchain.**
 
-**A `dl-*` selector is defined where its markup lives - the markup a page renders, including
-what `files/dasllama.js` injects: a selector `dasllama.html` renders is defined in
-`dasllama.html`, and in `files/dasllama-table.css` too when `site-dasllama/`'s pages (repo
-root - the dasllama.io site) render it as well; a selector only `site-dasllama/`'s pages
-render is defined in `files/dasllama-table.css` alone.**
+**A code sample without a "try it on playground" link is a defect - link every sample.**
 
-**News entries state real, shipped events.** An entry in `_news/*.md` for something not yet
-true at publish time is a defect.
+**A daslang sample not written in gen2 is a defect.**
+
+**A diff that changes the deployed playground sources - `playground/` (this folder),
+`web/examples/ui/src/`, or `web/examples/ui/samples/` - states a run of the WASM-staged
+Playwright suite (`tests/playground/`, this folder) in its PR body or commit message, naming
+the passes and any failures, in the same change.** The no-WASM lane cannot see a broken runtime
+path, and every sample on the page runs through that path.
+
+**A stated Playwright run names the runtime artifacts it used: built from this change when the
+change feeds `web/output/daslang_static.*`, the deployed ones otherwise.**
+
+**A diff that puts a measurement number - a rate, a duration, a size, a score some run
+produced, never a fixture or run parameter such as an image's dimensions or a token budget - on
+a page without rendering it from live data, copying it from a checked-in measurement record, or
+marking it a placeholder in a source comment is a defect.**
+
+**A placeholder number a page reader could take for a fact is a defect - mark it as a
+placeholder on the page itself.**
+
+**A diff that changes one copy of a `dl-*` selector defined in BOTH
+`files/dasllama-table.css` (the file dasllama.io loads) and `dasllama.html`'s inline `<style>`
+copy, and not the other, is a defect - give both copies the same body.**
+
+**A diff that adds or moves a `dl-*` selector defines it in `dasllama.html` when
+`dasllama.html`'s markup uses it, and in `files/dasllama-table.css` when a page under
+`site-dasllama/` (repo root - the dasllama.io site) uses it.** Markup counts what
+`files/dasllama.js` injects.
+
+**An entry in `_news/*.md` for something not yet true at publish time is a defect - a news
+entry states a real, shipped event.**

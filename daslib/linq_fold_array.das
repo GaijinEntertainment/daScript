@@ -8,7 +8,7 @@ module linq_fold_array shared public
 
 //! linq_fold array source adapters: ArrayAdapter / ZipAdapter / ArrayJoinAdapter plus the
 //! array-shaped emit lanes (counter / accumulator / early-exit / loop-or-count / zip) and
-//! their row-builders. Requires linq_fold_common. See daslib/linq_fold.md.
+//! their row-builders. Requires linq_fold_common. See daslib/ARCHITECTURE.md sec. 37.
 
 require daslib/linq public
 require daslib/ast_boost

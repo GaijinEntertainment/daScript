@@ -1822,10 +1822,11 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/nano/
         PATTERN "*.cpp"
         PATTERN "*.md"
         PATTERN "CMakeLists.txt"
-        # REVIEW.md reviews a change to this repo's copy of nano; an SDK carries
-        # the library, not the process of changing it. (REVIEW.das is not matched
-        # by any pattern above, so it never ships either.)
+        # REVIEW.md and ARCHITECTURE.md review and describe changes to this repo's
+        # copy of nano; an SDK carries the library, not the process of changing it.
+        # (REVIEW.das is not matched by any pattern above, so it never ships either.)
         REGEX "/REVIEW\\.md$" EXCLUDE
+        REGEX "/ARCHITECTURE\\.md$" EXCLUDE
 )
 # The shared runtime sources nano compiles. They live under src/, which the SDK
 # otherwise does not carry; nano/CMakeLists.txt names them one by one, and
@@ -1922,8 +1923,10 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/daslang/
     REGEX "/LAWS\\.md$" EXCLUDE
     PATTERN "*.md"
 )
-# The review constitution ships with the review skills that route to it.
+# The review constitution ships with the review skills that route to it, and the
+# architecture-doc contract it names ships beside it so the pointer resolves.
 install(FILES ${PROJECT_SOURCE_DIR}/REVIEW_COMMON.md DESTINATION ${DAS_INSTALL_DOCDIR})
+install(FILES ${PROJECT_SOURCE_DIR}/ARCHITECTURE_COMMON.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS_INSTALL_DOCDIR} RENAME URIPARSER.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DAG_NOISE.LICENSE)
@@ -2301,28 +2304,34 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
     )
 endif()
 
-# REVIEW.md / REVIEW.das are repo-internal review machinery and never install;
-# the one exception is REVIEW_COMMON.md at the install root (adopting repos vendor
-# from it). This must stay the LAST install rule in the root CMakeLists so the
-# manifest it checks is complete.
+# Repo-internal rule-and-record documents never install: REVIEW.md / REVIEW.das,
+# ARCHITECTURE.md, LAWS.md, MASTERPLAN logs, followup/perf/profile ledgers. The two
+# exceptions are REVIEW_COMMON.md and ARCHITECTURE_COMMON.md at the install root
+# (adopting repos vendor from them). This must stay the LAST install rule in the
+# root CMakeLists so the manifest it checks is complete.
 install(CODE "set(_das_docdir \"${DAS_INSTALL_DOCDIR}\")")
 install(CODE [[
     set(_review_leaks "")
     if(IS_ABSOLUTE "${_das_docdir}")
-        set(_root_common "$ENV{DESTDIR}${_das_docdir}/REVIEW_COMMON.md")
+        set(_root_docdir "$ENV{DESTDIR}${_das_docdir}")
     else()
-        set(_root_common "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/${_das_docdir}/REVIEW_COMMON.md")
+        set(_root_docdir "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/${_das_docdir}")
     endif()
-    get_filename_component(_root_common "${_root_common}" ABSOLUTE)
+    get_filename_component(_root_common "${_root_docdir}/REVIEW_COMMON.md" ABSOLUTE)
+    get_filename_component(_root_arch_common "${_root_docdir}/ARCHITECTURE_COMMON.md" ABSOLUTE)
     foreach(_f IN LISTS CMAKE_INSTALL_MANIFEST_FILES)
         get_filename_component(_name "${_f}" NAME)
         get_filename_component(_f_abs "${_f}" ABSOLUTE)
-        if(_name MATCHES "^REVIEW.*\.(md|das)$" AND NOT _f_abs STREQUAL _root_common)
+        if((_name MATCHES "^REVIEW.*\.(md|das)$"
+                OR _name MATCHES "^(ARCHITECTURE[A-Za-z_]*|LAWS|MASTERPLAN[A-Za-z_]*|PERF_LEDGER|PROFILE|THINKING)\.md$"
+                OR _name MATCHES "^followup_.*\.md$")
+            AND NOT _f_abs STREQUAL _root_common
+            AND NOT _f_abs STREQUAL _root_arch_common)
             list(APPEND _review_leaks "${_f}")
         endif()
     endforeach()
     if(_review_leaks)
         list(JOIN _review_leaks "\n  " _review_leaks_text)
-        message(FATAL_ERROR "install carries repo-internal review files:\n  ${_review_leaks_text}")
+        message(FATAL_ERROR "install carries repo-internal rule/record documents:\n  ${_review_leaks_text}")
     endif()
 ]])

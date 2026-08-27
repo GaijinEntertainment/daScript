@@ -3,115 +3,115 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasweb_backend.md`.
 
-**Every route, every store operation, and every config or limit behavior has a dastest test in
-this directory** - `main.das` and `admin.das` stay argv/dispatch glue over tested modules, so
-they need none of their own.
+**A diff that adds or changes a route, a store operation, or a config or limit behavior covers
+it with a dastest test in this directory, in the same change.** `main.das` and `admin.das` stay
+argv/dispatch glue over tested modules, so they need no test of their own.
 
-**`[test]` files live in this directory and require siblings by bare name** - never under the
-global `tests/` tree, and never registered in any `CMakeLists.txt`.
+**Never register a `[test]` file in a `CMakeLists.txt`, and never put one under the repo-root
+`tests/` tree - `[test]` files live in this directory and require their siblings by bare name.**
 
-**HTTP tests go through a local `with_*_server` harness (`test_playground_server.das`,
-`test_build_endpoints.das`) on this directory's reserved test ports 19011, 19012, and 19013;
-store tests call `samples_store` or `build_queue` directly with no server.** A store behavior
-proven only through HTTP, or an HTTP behavior proven only against the store, is a defect.
+**A diff that adds an HTTP test drives it through a local `with_*_server` harness
+(`test_playground_server.das`, `test_build_endpoints.das`) on this directory's reserved test
+ports 19011, 19012, and 19013; a store test calls `samples_store` or `build_queue` directly,
+with no server.** A store behavior proven only through HTTP, or an HTTP behavior proven only
+against the store, is a defect.
 
 **A test that touches the filesystem uses `temp_directory`-rooted paths and deletes what it
-creates.** A test writing into the repo tree is a defect.
+creates.**
 
-**The server binds loopback only** - `set_bind_host("127.0.0.1")` between `init` and `start`.
-A diff that removes, reorders past `start`, or conditionalizes the bind is a defect.
+**Never remove `set_bind_host("127.0.0.1")`, move it past `start`, or make it conditional - it
+stays between `init` and `start`, so the server binds loopback only.**
 
-**Every SQL statement goes through the `daslib/sql_linq` rail (`_sql` / `insert` /
-`_sql_update`) or bound parameters.** A query assembled by string interpolation or `format`
-from any request-derived value is a defect.
+**A diff that adds a SQL statement puts it through the `daslib/sql_linq` rail (`_sql` /
+`insert` / `_sql_update`) or bound parameters.** A query assembled by string interpolation or
+`format` from any request-derived value is a defect.
 
-**Every request body is bounds-checked against the configured cap before it is hashed or
-stored, and the transport cap that precedes it lives in `caddy.snippet`.** The service can only
-check a body already buffered in full, so a route accepting a body without a `request_body`
-limit in front of it is a defect, as is a hash or insert reachable without the size check.
+**A route that accepts a body without a `request_body` limit in `caddy.snippet` in front of it
+is a defect, as is a hash or insert reachable without the size check against the configured
+cap.** The service can only check a body already buffered in full.
 
-**A request body is read as bytes, and a byte count that disagrees with its string length is
-rejected.** A das string ends at the first NUL, so a body used without that guard can be stored
-truncated under a hash that does not describe it.
+**Never use a request body whose byte count disagrees with its string length - read the body as
+bytes and reject the mismatch.** A das string ends at the first NUL, so a body used without that
+guard can be stored truncated under a hash that does not describe it.
 
-**Client identity comes from the LAST `X-Forwarded-For` hop and is treated as data, never
-parsed into behavior beyond the rate ceiling.** A proxy appends the peer it accepted; every
-earlier hop is client-authored, so keying anything on one is a defect. Logging it is required.
+**Never derive client identity from any `X-Forwarded-For` hop but the last, and never parse
+that hop into behavior beyond the rate ceiling - log it, and otherwise treat it as data.** A
+proxy appends the peer it accepted, so every earlier hop is client-authored.
 
-**Operator routes (`POST /shutdown`, `/admin/*`) verify the transport peer is loopback.** No
-header can carry that proof - a browser on any page can drive a cross-origin POST to a proxied
-route. A new operator route without the check is a defect.
+**An operator route (`POST /shutdown`, `/admin/*`) that does not verify the transport peer is
+loopback is a defect.** No header can carry that proof - a browser on any page can drive a
+cross-origin POST to a proxied route.
 
-**Remote-builder routes (`/api/build/toolchain`, `/api/build/next`, `/api/build/result`)
-authenticate by the bearer token from config, compared with `constant_time_equal`.** A route
-that logs, echoes, or short-circuit-compares the token is a defect; an empty configured token
-must disable the surface, never open it.
+**A remote-builder route (`/api/build/toolchain`, `/api/build/next`, `/api/build/result`) that
+does not authenticate by the config bearer token compared with `constant_time_equal` is a
+defect, as is one that logs, echoes, or short-circuit-compares the token.** An empty configured
+token disables the surface, never opens it.
 
-**Every artifact-cache path is assembled only from components validated in
-`build_artifacts`, and an upload reaches the served tree only through a stage directory
-renamed into place after every file's sha256 verifies.** A served path built from request
-data anywhere else, or a write landing directly in the served tree, is a defect.
+**Never assemble an artifact-cache path from anything but components validated in
+`build_artifacts`, and never land an upload in the served tree other than by renaming a stage
+directory into place after every file's sha256 verifies.**
 
-**An upload publishes exactly the file set its job's mode declares, checked here and not
-taken on the builder's word.** A build runs the user's own compile-time code, so accepting
-whatever set the builder sends would let a build put an extra file on this origin.
+**A diff that publishes an upload checks its file set against the set its job's mode declares,
+instead of taking the builder's word.** A build runs the user's own compile-time code, so
+accepting whatever set the builder sends would let a build put an extra file on this origin.
 
-**A handler does exactly three things - validate transport shape, make one store call, format
-the response.** SQL, hashing, and policy (size, rate, listing) live in `samples_store.das`,
-and HTTP never does - no `dashv` require there.
+**Never put SQL, hashing, or policy (size, rate, listing) in a route handler, and never require
+`dashv` in `samples_store.das` - a handler validates transport shape, makes one store call, and
+formats the response, and those three live in `samples_store.das`.**
 
-**No route enables CORS.** The middleware reflects the caller's `Origin` on every route at once,
-which would make stored samples and the operator surface cross-origin readable.
+**Never enable CORS on any route.** The middleware reflects the caller's `Origin` on every route
+at once, which would make stored samples and the operator surface cross-origin readable.
 
-**Responses that echo stored user input carry `X-Content-Type-Options: nosniff`.**
+**Never send a response that echoes stored user input without `X-Content-Type-Options:
+nosniff`.**
 
-**No shell-out anywhere in the service.**
+**Never shell out anywhere in the service.**
 
-**No filesystem path derived from request data, and a manifest-supplied path is checked to stay
-under its configured directory before it is read.** `path_join` discards the base when the right
-side is absolute, so an unchecked manifest path reads any file the service user can - and the
-importer publishes what it reads.
+**Never derive a filesystem path from request data, and never read a manifest-supplied path
+without checking that it stays under its configured directory.** `path_join` discards the base
+when the right side is absolute, so an unchecked manifest path reads any file the service user
+can - and the importer publishes what it reads.
 
-**No `unsafe` in any route handler.** An `unsafe` elsewhere carries a reason comment on the
-unsafe operation's own line; one without it is a defect.
+**Never write `unsafe` in a route handler, and never write one elsewhere without a reason
+comment on the unsafe operation's own line.**
 
-**`POST /shutdown` and every admin operation stay unrouted in `caddy.snippet`.** Forwarding one
-there, or adding an admin endpoint to the public route set, is a defect.
+**Never forward `POST /shutdown` or any admin operation in `caddy.snippet`, and never add an
+admin endpoint to the public route set.**
 
-**Secrets (tokens, credentials) never appear in a log line, a response body, or an error
-message.** The config banner logs key names and provenance, never values marked secret.
+**Never put a secret - a token or a credential - in a log line, a response body, or an error
+message.**
 
-**Every request but `GET /healthz` emits one structured line: method, path, status, duration,
-client ip, bytes.** A route without it is a defect; the watchdog polls `/healthz` every few
+**A route that does not emit one structured line - method, path, status, duration, client ip,
+bytes - is a defect; `GET /healthz` emits none.** The watchdog polls `/healthz` every few
 seconds, and logging it would bury the signal.
 
-**Every store mutation and every job/state transition emits a structured line.** A failure path
-that can trigger without leaving a log line is a defect.
+**A diff that adds a store mutation or a job/state transition also emits a structured line for
+it.** A failure path that can trigger without leaving a log line is a defect.
 
-**Startup logs the full effective config with per-key provenance before the first request is
-served.**
+**Never serve the first request before the startup banner has logged the full effective config
+with per-key provenance.**
 
-**Lifecycle-owned state is module-global; no collectable value lives in a `main`-loop local
-across `maybe_collect_gc()`.**
+**Never keep state the `init`/`update`/`shutdown` lifecycle owns anywhere but a module global,
+and never leave a collectable value in a `main`-loop local across `maybe_collect_gc()`.**
 
-**The store opens inside the thread that serves it.** A `SqlRunner` created on one thread and
-used on another is a defect.
+**Never create a `SqlRunner` on one thread and use it on another - the store opens inside the
+thread that serves it.**
 
-**Route callbacks are retained with `push`, never `emplace`.**
+**Never retain a route callback with `emplace` - use `push`.**
 
 **A behavior change in a box-side file - `.das_package`, `watchdog.json`,
 `dasweb-playground.toml`, `deploy.sh`, `caddy.snippet` - lands with its note in the
 `README.md` Run section.**
 
-**A file an operator edits on the box is preserved across upgrades**: shipped
-`release_include_if_missing` and carried forward by `deploy.sh`. Shipping one with plain
-`release_include`, or adding one `deploy.sh` does not carry, is a defect.
+**Never ship a file an operator edits on the box with plain `release_include` - ship it with
+`release_include_if_missing` and have `deploy.sh` carry it forward across upgrades.**
 
-**Checked-in config holds development values.** The config file is discovered automatically
-beside the module, so a production path in it makes an in-repo run open the live database.
+**Never put a production value in the checked-in `dasweb-playground.toml` - it holds
+development values.** The config file is discovered automatically beside the module, so a
+production path in it makes an in-repo run open the live database.
 
-**Migrations are append-only.** A diff that edits a shipped `[sql_migration]` body is a defect;
-schema change means a new version.
+**A diff that edits a shipped `[sql_migration]` body is a defect - a schema change adds a new
+version instead.**
 
 **Placement - one file, one line: a diff keeps each file inside its line, and a new file adds
 its line here, with its tests, in the same change.**

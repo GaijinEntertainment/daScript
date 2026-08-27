@@ -18,7 +18,7 @@ module linq_fold_json shared public
 //! ``for_each_archetype``), so this module pulls in no json dependency. The field-pruning
 //! row-usage scanners (``RowUsageScanner`` / ``collect_row_usage`` / ``RowFieldFlattener`` /
 //! ``flatten_row_to_locals`` / ``hoist_prelude``) are shared with the XML and table adapters and
-//! live in ``daslib/linq_fold_common.das``. See daslib/linq_fold.md.
+//! live in ``daslib/linq_fold_common.das``. See daslib/ARCHITECTURE.md sec. 37.
 
 require daslib/ast_boost
 require daslib/ast_match

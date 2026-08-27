@@ -10,7 +10,7 @@ module linq_fold_sql shared public
 //! materialized full-table ``array<Row>`` in memory. There is no emitting adapter — ``_sql`` is a
 //! complete parallel lowering; this module only recognizes the source. Companion to
 //! ``daslib/linq_fold``; provider-neutral (matches the ``[sql_table]`` annotation, not a runner
-//! type), so it loads unconditionally. See daslib/linq_fold.md.
+//! type), so it loads unconditionally. See daslib/ARCHITECTURE.md sec. 37.
 
 require daslib/linq_fold_common public
 require daslib/ast_boost

@@ -187,8 +187,8 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
     }
 }
 
-// REVIEW_GPU.md's backend-role partition, mechanically: every dasllama_<gpu>_*.das file's
-// suffix is a role the checklist's list carries — a new role file adds its role to BOTH.
+// The backend-role partition, mechanically: every dasllama_<gpu>_*.das file's suffix is a role
+// ARCHITECTURE.md sec.1.5's role table carries — a new role file adds its role to BOTH.
 var private GPU_ROLES_METAL <- {
     "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "lens"
 }
@@ -233,7 +233,7 @@ def private check_gpu_role_partition {
             let known = backend == "metal" ? key_exists(GPU_ROLES_METAL, role) : key_exists(GPU_ROLES_VULKAN, role)
             if (!known) {
                 gate_finding("modules/dasLLAMA/dasllama/{name}",
-                    "backend file with role '{role}' that REVIEW_GPU.md's partition does not carry - add the role to the checklist's list and to this gate's set in the same change")
+                    "backend file with role '{role}' that the partition does not carry - add the role to ARCHITECTURE.md sec.1.5's role table and this gate's set in the same change")
             }
         }
     }

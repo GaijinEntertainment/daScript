@@ -18,6 +18,27 @@ Per-platform generator commands, build flags, AOT debugging, exit-code meanings,
 
 Delete files created for diagnostics, staging, and one-off tests before handing work back - temporary release trees, formatter backups, extracted audio, generated `__pycache__`, ad-hoc stdout/stderr logs. Keep intentional application logs, databases, configs, rollback bundles, and user-owned artifacts. In deployed application directories, do not leave unrelated diagnostic files beside the program.
 
+## The document system
+
+Three document types split one grammar, each with a repo-root contract:
+
+- **`REVIEW.md`** (per folder) - bans and duties binding a diff, applied at REVIEW time via
+  the folder walk. Contract: `REVIEW_COMMON.md`.
+- **`ARCHITECTURE.md`** (per folder) - present-tense statements: how the system is and why.
+  Contract: `ARCHITECTURE_COMMON.md`. **Read the folder's architecture doc BEFORE writing
+  code there** - charters say which file owns what, mechanisms say why shapes win, and the
+  exception ledger says what is already ruled. Facts formerly carried by comments live here.
+- **`/history`** - past tense: what happened. Nothing current cites it.
+
+An implementation folder - `daslib/`, a module's `daslib/` or engine folder - holds no `.md`
+besides `REVIEW*.md`, `ARCHITECTURE.md`, and `LAWS.md` (lint-enforced: `.lint_config`
+`rule_docs_only`). Ledgers and plans live at the module root or in `plans/` (repo root). None
+of these documents installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` and
+`ARCHITECTURE_COMMON.md` at the install root are the two vendoring exceptions.
+
+The mood test routes misplaced text: must/never binding a diff -> REVIEW.md; present-tense
+fact -> ARCHITECTURE.md; dated or past-tense -> /history.
+
 ## GitHub Operations
 
 Use GitHub MCP tools (`mcp__github__*`) for all GitHub operations (PRs, issues, reads) - they avoid shell escaping entirely. Fallback when unavailable: `gh` CLI with `--body-file` for any text containing backticks (shell escape characters in every supported shell).

@@ -220,7 +220,7 @@ def parity_order_by_take(t : T?) {
     }
 }
 
-// ===== Deferred-materialization (handle-buffering) bounded-heap variants — see linq_fold.md =====
+// ===== Deferred-materialization (handle-buffering) bounded-heap variants — see daslib/ARCHITECTURE.md sec. 37 =====
 
 [test]
 def parity_order_by_descending_take(t : T?) {

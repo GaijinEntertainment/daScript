@@ -3,8 +3,9 @@
 Design docs, plans, audits, findings, and session notes from **completed arcs** - kept for
 the record, no longer load-bearing. A doc belongs here when its remaining value is the
 record ("why is it built this way"), not operation. Living contracts and durable records
-stay next to their code (e.g. `modules/dasSQLITE/PROVIDER_CONTRACT.md`, the `MASTERPLAN.md`
-files, `modules/dasLLAMA/*_plan.md` specs still cited from code, `results.md` ledgers).
+stay next to their code (e.g. `modules/dasSQLITE/PROVIDER_CONTRACT.md`, the per-module
+`ARCHITECTURE.md` files, `modules/dasLLAMA/*_plan.md` specs still cited from code,
+`results.md` ledgers).
 Process and criteria: `skills/internal/doc_archiving.md`.
 
 - `compiler/` - shipped compiler-rework docs (fixed-array structural types, annotation-info
@@ -22,11 +23,11 @@ Process and criteria: `skills/internal/doc_archiving.md`.
   `tutorial-mockup/` design artifacts); the living contract stays at
   `modules/dasSQLITE/PROVIDER_CONTRACT.md`
 - `dasSpirv/` - the completed PHASE6-9 working plans (content captured in
-  `modules/dasSpirv/MASTERPLAN.md`)
+  `modules/dasSpirv/ARCHITECTURE.md` and `history/dasSpirv/MASTERPLAN_LOG.md`)
 - `dasVulkan/` - the original boost-layer design plan, carried over when the module moved
   in-tree; the living docs are `modules/dasVulkan/CLAUDE.md` and its `ROADMAP.md`
-- `linq_fold/` - the linq_fold arc's plans and audits; the living masterplan is
-  `daslib/linq_fold.md`, results stay at `benchmarks/sql/results.md`
+- `linq_fold/` - the linq_fold arc's plans, audits and the archived masterplan; the living
+  reference is `daslib/ARCHITECTURE.md` sec. 37, results stay at `benchmarks/sql/results.md`
 - `examples/` - plans, findings, and research notes behind shipped examples
 - `tests/` - one-off test-migration audits
 
@@ -139,3 +140,6 @@ listed in the log below - search it first when hunting for a doc.
 - 2026-08-24 `modules/dasLLAMA/eseries_bringup_plan.md` -> `history/dasLLAMA/eseries_bringup_plan.md` - the E-series (MatFormer) bringup plan (shipped via `#3791`/`#3796`)
 - 2026-08-24 `modules/dasLLAMA/tool_formats_plan.md` -> `history/dasLLAMA/tool_formats_plan.md` - the tool-call wire-format plan (shipped via `#3691`)
 - 2026-08-24 `modules/dasLLAMA/quant_lane_audit_plan.md` -> `history/dasLLAMA/quant_lane_audit_plan.md` - the format x kernel-lane x platform coverage audit (holes plugged; the kq-native and fused-arm work it drove shipped)
+- 2026-08-27 `modules/dasSpirv/MASTERPLAN.md` (plan sections + implementation log) -> `history/dasSpirv/MASTERPLAN_LOG.md` - the Phase 0-11 SPIR-V emitter build-out, its phase plans, and the tutorial-prerequisite backlog (the doc's present-tense half stayed as `modules/dasSpirv/ARCHITECTURE.md`)
+- 2026-08-27 `modules/dasMetal/MASTERPLAN.md` (plan sections + implementation log) -> `history/dasMetal/MASTERPLAN_LOG.md` - the Phase 0-8 MSL emitter build-out and the dasLLAMA GPU-resident prefill/decode chase (the doc's present-tense half, including the shared cross-backend ledger, stayed as `modules/dasMetal/ARCHITECTURE.md`)
+- 2026-08-27 `daslib/linq_fold.md` -> `history/linq_fold/linq_fold.md` - the PR A-G splice-pattern refactor masterplan, its phase logs and decision log (the module layout, `SourceAdapter` contract and walker contract were distilled into `daslib/ARCHITECTURE.md` sec. 37, which the `linq_fold_*` headers cite)

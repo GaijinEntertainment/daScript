@@ -5,7 +5,7 @@ doc: `../CLAUDE.md`. A recording-pipeline change - a `record_*.das` driver, wher
 it, or the shared `recording/` harness - is reviewed with `skills/internal/vulkan_recording.md`
 (repo root).
 
-**A change that adds a tutorial folder ships its `<NN_name>/window/show_<name>.das` viewer in the
-same change** (`<name>` = the folder name without the numeric prefix) - a real GLFW window
-presenting the live animation. The offscreen pixel-oracle test proves correctness; nothing else
-lets a human see the result.
+**A diff that adds a tutorial folder also adds its `<NN_name>/window/show_<name>.das` viewer, in
+the same change** (`<name>` is the folder name without the numeric prefix) - a GLFW window that
+presents the tutorial's rendered output live. The offscreen test proves correctness; only the
+window lets a human see the result.

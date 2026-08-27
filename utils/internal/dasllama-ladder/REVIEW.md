@@ -3,103 +3,98 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasllama_io_site.md`.
 
-**Every route, every store operation, and every config or limit behavior has a dastest test in
-this directory** - `main.das` and `admin.das` stay argv/dispatch glue over tested modules, so
-they need none of their own.
+**Never put a `[test]` file for this folder under the repo-root `tests/` tree, and never
+register one in any `CMakeLists.txt` - a `[test]` file lives in this directory and requires its
+siblings by bare name.**
 
-**`[test]` files live in this directory and require siblings by bare name** - never under the
-global `tests/` tree, and never registered in any `CMakeLists.txt`.
+**A test reaches the service only through the local `with_ladder_server` harness
+(`test_ladder_server.das`) on this directory's reserved test port 19015, and a store test
+starts no server - it calls `ladder_store` directly.**
 
-**HTTP tests go through the local `with_ladder_server` harness (`test_ladder_server.das`) on
-this directory's reserved test port 19015; store tests call `ladder_store` directly with no
-server.** A store behavior proven only through HTTP, or an HTTP behavior proven only against
-the store, is a defect.
+**A store behavior proven only through HTTP, or an HTTP behavior proven only against the store,
+is a defect.**
 
-**A test that touches the filesystem uses `temp_directory`-rooted paths and deletes what it
-creates; store tests run against `:memory:`.** A test writing into the repo tree is a defect.
+**Never let a test write outside `temp_directory` - root every path the test creates there and
+delete it before the test ends; a store test opens `:memory:`, never a file.**
 
-**Operator routes (`/admin/*`, `/shutdown`) never appear in `caddy.snippet` - or in any
-Caddyfile route reaching this service, a catch-all included.** Caddy proxies from the same box,
-so `is_loopback_peer` sees `127.0.0.1` for every proxied request - the Caddyfile is the only
-real boundary. Operators reach these routes on the service port itself, over the ssh tunnel;
-no Caddyfile entry exists for them.
+**Operator routes (`/admin/*`, `/shutdown`) never appear in `caddy.snippet`, or in any
+Caddyfile route that reaches this service, a catch-all included - operators reach them on the
+service port itself, over the ssh tunnel.** Caddy proxies from the same box, so
+`is_loopback_peer` sees `127.0.0.1` for every proxied request, which leaves the Caddyfile as
+the only real boundary.
 
-**`is_operator_caller` requires ALL THREE of a loopback transport peer, a loopback `Host`
+**Never drop a check from `is_operator_caller` - a loopback transport peer, a loopback `Host`
 authority, and same-origin-or-headerless (the request carries no `Origin` header, or its
-`Origin` names the same authority as its `Host`), and every operator route gates through it.**
-Dropping any of the three, or gating an operator route on the peer alone, is a defect. The
-`Host` and `Origin` halves together are the CSRF guard for the `/admin/` page over an ssh
-tunnel: same-origin refuses a plain cross-origin fetch, and the loopback-`Host` requirement
-refuses DNS rebinding (comparing `Origin` to `Host` alone does not - a rebound name owns both).
+`Origin` names the same authority as its `Host`).** The `Host` and `Origin` checks together are
+the CSRF guard for the `/admin/` page over an ssh tunnel - same-origin refuses a cross-origin
+fetch, and the loopback `Host` refuses DNS rebinding.
 
-**`caddy.snippet` is the authoritative copy of the public route boundary: the deployed
-Caddyfile is edited to match it, never the reverse, and a route a public caller needs lands in
-it in the same change as its handler.**
+**Every operator route gates through `is_operator_caller`.**
 
-**Every route that serves board data, mutates the store, or refuses a caller logs one
-`ladder.req` line through `log_request`, including the refusals.** A response path on such a
-route that skips the log is a defect. (The bare liveness probe `GET /healthz` serves no data
-and is silent by design.)
+**A diff that adds a route a public caller needs also adds it to `caddy.snippet`, in the same
+change as its handler; never edit `caddy.snippet` to match the deployed Caddyfile - edit the
+deployed Caddyfile to match `caddy.snippet` instead.**
 
-**Every handler that consumes a request body checks `body_is_byte_faithful` before using the
-string view.** A body used without the NUL guard is a defect.
+**On a route that serves board data, mutates the store, or refuses a caller, a response path
+that does not log one `ladder.req` line through `log_request` is a defect.**
 
-**A store-backed handler does exactly four things - validate transport shape, gate the request
-(operator gate, submit-open, attempt-limit), make one store call, format the response.** SQL,
-hashing, and store policy live in `ladder_store.das`, and HTTP never does - no `dashv` require
-there. (The `/admin/` page and `/healthz` reach no store and are not store-backed handlers.)
+**A handler that reads a request body without first checking `body_is_byte_faithful` is a
+defect.**
 
-**Public submissions default closed: `submit_open` is false in both `LadderArgs` and
-`LadderPolicy`, the `/api/submit/sidecar` and `/api/submit/records` handlers return 403 while it
-is false, and only the loopback `/admin/submit` route flips it.** A default of true, or an opener
-reachable from any non-loopback path, is a defect.
+**A handler that calls `ladder_store` and does anything beyond these - check transport shape,
+gate the request (operator gate, submit-open, attempt-limit), make one store call, format the
+response - is a defect.**
 
-**In `caddy.snippet` the large-body allowance appears on the `/api/submit/records` and
-`/api/submit/sidecar` matcher only; every other proxied route carries the small read cap.** A
-large cap on any other route, or a read cap on a submit route, is a defect.
+**A diff that defaults `submit_open` to true in `LadderArgs` or `LadderPolicy`, lets
+`/api/submit/sidecar` or `/api/submit/records` answer anything but 403 while `submit_open` is
+false, or adds an opener reachable from a non-loopback path, is a defect** - only the loopback
+`/admin/submit` route flips the gate.
 
-**Nothing in this directory requires the dasLLAMA engine, dasLLVM, or any model machinery; the
-only dasLLAMA module required is the engine-free `dasllama/dasllama_exchange_schema` (a public
-entry of that module's facade lint), and only `ladder_store.das` requires it** (`README.md`
-sec.3). Its `dasllama_lint` carrier is a compile-time macro, not engine code.
+**In `caddy.snippet` every proxied route other than the `/api/submit/records` and
+`/api/submit/sidecar` matcher carries the `request_body { max_size 64KB }` cap, and that
+matcher carries `max_size 8MB` and no smaller cap.**
 
-**Every sidecar document - community or planted - passes `validate_sidecar_submission` before
-any row is written (a sidecar without the version stamp can never be served, so storing one is
-always an error); every community record store passes `validate_record_submission`;
-`import_official_store` validates with `validate_record_store` (shape only - official record
-history predates the release counter).** A write path that skips validation is a defect.
+**A file in this directory requires no dasLLAMA, dasLLVM, or model machinery other than the
+engine-free `dasllama/dasllama_exchange_schema`, and only `ladder_store.das` requires that**
+(`README.md` sec.3).
 
-**`Source` and `Verified` are written only from store code, and no value from a public
-(proxied) request reaches either column.** The loopback operator surface chooses `Verified`
-by design - through store calls, never through SQL in a handler.
+**A write path that stores a document without validating it first is a defect: every sidecar -
+community or planted - passes `validate_sidecar_submission`, every community record store
+passes `validate_record_submission`, and `import_official_store` passes `validate_record_store`
+(shape only - official records predate the `DASLLAMA_VERSION` stamp).**
 
-**Every sidecar - community or planted - is privacy-cleaned through `exchange_strip_private`
-before validation, hashing, and storage, and a community record store through
-`redact_record_paths`; the cleaned text IS the document.** Hashing the cleaned text on both
-sidecar paths is what makes re-plant promote instead of duplicate. `import_official_store`
-alone stores its document as-is.
+**Never write `Source` or `Verified` outside `ladder_store.das`, and never let a value from a
+public (proxied) request reach either column - the loopback operator surface sets `Verified`
+through a `ladder_store` call.**
 
-**After insert a document is never mutated.** Derived columns may be recomputed; the document
-itself may only be inserted, or deleted with its submission.
+**Never validate, hash, or store sidecar text - community or planted - that has not been
+through `exchange_strip_private`, and never store a community record store that has not been
+through `redact_record_paths`.** Hashing the cleaned text on both sidecar paths is what makes
+re-plant promote instead of duplicate.
 
-**A shipped `[sql_migration]` body is never edited.** Schema change means a new, higher
-version in the same stream.
+**Never change a submission's stored `Doc` after its insert - a document leaves only by
+deleting its submission.**
 
-**Sidecars are content-addressed: the row key is the sha256 of the stored document.** A
-sidecar row whose `Sha` is not the hash of its `Doc` is a defect.
+**Never edit a shipped `[sql_migration]` body - a schema change adds a new, higher version in
+the same stream.**
 
-**A new operator-edited file the box runs from is added to `.das_package`'s `release()` in the
-same change.**
+**A sidecar row whose `Sha` is not the sha256 of its stored `Doc` is a defect.**
 
-**Every privileged (root) deploy action goes through `dasllama-deploy.sh`, and
-`dasllama-deploy.sudoers` grants NOPASSWD for exactly `/usr/local/sbin/dasllama-deploy.sh` and
-nothing else** - a second command, a wildcard target, a bare `ALL`, or a shell is a defect.
+**A diff that adds an operator-edited file the box runs from also adds it to `.das_package`'s
+`release()`, in the same change.**
 
-**The systemd unit that `provision` writes runs the service sandboxed** (`ProtectSystem=strict`, emptied
-`CapabilityBoundingSet`, `ReadWritePaths` limited to the data dir and the release tree). A diff
-that changes where the service or watchdog writes at runtime - log path, working directory,
-database location - without a matching `ReadWritePaths` entry is a defect; so is relaxing
-`ProtectSystem` or restoring a capability.
+**A privileged (root) deploy action that does not go through `dasllama-deploy.sh` is a defect,
+and so is any `dasllama-deploy.sudoers` grant beyond NOPASSWD for exactly
+`/usr/local/sbin/dasllama-deploy.sh`** - a second command, a wildcard target, a bare `ALL`, or
+a shell.
+
+**A diff that changes where the service or watchdog writes at runtime - log path, working
+directory, database location - also adds a matching `ReadWritePaths` entry to the systemd unit
+`provision` writes, in the same change.**
+
+**The systemd unit `provision` writes keeps `ProtectSystem=strict`, an empty
+`CapabilityBoundingSet`, and `ReadWritePaths` no wider than the data dir and the release tree;
+a diff that widens any of the three is a defect.**
 
 **Placement - one file, one line: a diff keeps each file inside its line, and a new file adds
 its line here, with its tests, in the same change.**

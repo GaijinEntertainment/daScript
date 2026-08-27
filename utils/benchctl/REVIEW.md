@@ -3,6 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**benchctl ships as a prebuilt exe when sqlite is enabled: it stays in `DAS_UTILS` and
-`DAS_UTILS_SHIPPED_EXES` (`utils/CMakeLists.txt`)** - dropping either entry breaks the release
-bundle.
+**A diff that drops `benchctl` from `DAS_UTILS` or from `DAS_UTILS_SHIPPED_EXES`
+(`utils/CMakeLists.txt`) is a defect** - those two entries are what puts the prebuilt
+`benchctl` exe in the release bundle when sqlite is enabled.
