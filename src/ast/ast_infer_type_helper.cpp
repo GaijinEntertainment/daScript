@@ -489,6 +489,8 @@ namespace das {
                 resT->firstType = inferAlias(decl->firstType, fptr, aliases, options, autoToAlias);
                 if (!resT->firstType)
                     return nullptr;
+                if (!resT->firstType->isAutoOrAlias() && !resT->firstType->isTableKeyType())
+                    return nullptr;
             }
             if (decl->secondType) {
                 resT->secondType = inferAlias(decl->secondType, fptr, aliases, options, autoToAlias);
