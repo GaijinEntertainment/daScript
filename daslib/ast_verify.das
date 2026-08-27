@@ -979,7 +979,11 @@ class private AstPostInferVerifyVisitor : AstVisitor {
     }
 
     def override canVisitStructureFieldInit(st : StructurePtr) : bool {
-        return !st.flags.isTemplate
+        if (st.flags.isTemplate) {
+            return false
+        }
+        in_field_init = true   // the walker calls this immediately before the init subtree
+        return true
     }
 
     def override canVisitStructure(st : Structure?) : bool {
@@ -1111,7 +1115,6 @@ class private AstPostInferVerifyVisitor : AstVisitor {
     def override preVisitStructureField(var str : StructurePtr; var decl : FieldDeclaration; _last : bool) : void {
         need_at(decl.at, "field '{str.name}.{decl.name}'")
         need_slot(decl._type, "field '{str.name}.{decl.name}' type", decl.at)
-        in_field_init = true
     }
 
     def override preVisitEnumeration(var enu : EnumerationPtr) : void {
