@@ -20,6 +20,15 @@ struct GameStatusResult {
     player_y : float
     fwd_speed : float
     god_mode : bool
+    // Input diagnostics: `focused` is the GLFW window attribute, the rest are
+    // live glfwGetKey states. If focused is false the app is not receiving key
+    // events at all, which is an activation problem, not a game-logic one.
+    focused : bool
+    key_left : bool
+    key_right : bool
+    key_up : bool
+    key_down : bool
+    key_space : bool
     boats : int
     planes : int
     helis : int
@@ -44,7 +53,13 @@ def cmd_game_status(_input : JsonValue?) : JsonValue? {
         player_x = player_pos.x,
         player_y = player_pos.y,
         fwd_speed = player_fwd_speed,
-        god_mode = god_mode
+        god_mode = god_mode,
+        focused = glfwGetWindowAttrib(live_window, int(GLFW_FOCUSED)) != 0,
+        key_left = glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS,
+        key_right = glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS,
+        key_up = glfwGetKey(live_window, GLFW_KEY_UP) == GLFW_PRESS,
+        key_down = glfwGetKey(live_window, GLFW_KEY_DOWN) == GLFW_PRESS,
+        key_space = glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS
     )
     query() $(_b : EnemyBoat) { result.boats++; }
     query() $(_p : EnemyPlane) { result.planes++; }
