@@ -8,11 +8,13 @@ Every weight GEMM in `dasllama/dasllama_metal_prefill.das` splits its rows acros
 First the GEMV tail peel (sec.2.2e) takes up to `MM_TAIL_MAX` remainder rows off the padded tile.
 The rows that remain pick one of four forms, in this order, per site per forward:
 
-1. **tall in-kernel-dequant (K-quant deep class)** - a K-quant site whose panel dev-W would
-   split past 8 tiles is DRAM-resident, and there the `KqMulMm*TH128` stamp wins: it dequants
-   its own W tile in threadgroup memory and reads the quant plane (~0.56 B/element) once per
-   128-row tile, where a materialized f16 panel writes 2 B/element and re-streams them per
-   tile. The 32-row TH stamp covers the row remainder at its X/y offsets.
+1. **tall in-kernel-dequant (K-quant deep class)** - a K-quant site whose f16 panel would
+   reach `TALLKQ_MIN_PANEL` (96 MiB) is DRAM-resident, and there the `KqMulMm*TH128` stamp
+   wins: it dequants its own W tile in threadgroup memory and reads the quant plane
+   (~0.56 B/element) once per 128-row tile, where a materialized f16 panel writes
+   2 B/element and re-streams them per tile. The knee is panel SIZE, not tile count - a
+   118 MiB panel wins 15-25% on the tall stamp while an 84 MiB one measures a small loss.
+   The 32-row TH stamp covers the row remainder at its X/y offsets.
 2. **dev-W all-device** - the weight plane is dequantized into a device f16 panel and multiplied
    half x half. No threadgroup staging and no barriers, so the staged-operand tax is gone; the
    dequant pass is paid once per site per forward against a GEMM that re-reads the f16 W panel
@@ -63,9 +65,10 @@ sites:
 - **An over-knee panel runs as N-column TILES**, each under the small-panel knee, with the tile
   count bounded by `DEVW_MAX_TILES` (32), divisibility, the small-panel knee and the pool.
   Narrow tiles measure fine - a 20-threadgroup tile dispatch still beat the tg-staged fallback
-  at 512 rows. A K-quant site needing more than 8 tiles leaves dev-W entirely for the tall
-  in-kernel-dequant stamp (sec.2.2c form 1): at that size the panel is DRAM-resident and the
-  f16 materialization plus re-stream loses to reading the quant plane in-kernel.
+  at 512 rows. A K-quant site whose panel reaches `TALLKQ_MIN_PANEL` (96 MiB) leaves dev-W
+  entirely for the tall in-kernel-dequant stamp (sec.2.2c form 1): at that size the panel is
+  DRAM-resident and the f16 materialization plus re-stream loses to reading the quant plane
+  in-kernel.
 - **A k-quant tg fallback is about 1.28x the q8 half-panel form**, so a k-quant site lowers the
   over-knee bar, the tiled-rows floor, and the long-K floor (1024 rows to 512): a tiled read
   still beats THAT fallback.
