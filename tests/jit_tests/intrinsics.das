@@ -59,6 +59,23 @@ def test_intrin_floor(t : T?) {
     }
 }
 
+def jit_fract(x) {
+    return fract(x)
+}
+
+def test_fract(t : T?; a : auto(TT)) {
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_fract))
+    t |> strictEqual(fract(a), jit_fract(a), "fract(a)")
+}
+
+[test]
+def test_intrin_fract(t : T?) {
+    var fake <- Faker()
+    fuzz() {
+        fuzz_float_double_or_float_vec_op1(t, fake, "test_fract")
+    }
+}
+
 [sideeffects]
 def jit_ceil(x) {
     return ceil(x)

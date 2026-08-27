@@ -244,6 +244,51 @@ struct TableWalkState {
     stride  : int                // value stride in bytes (values lane; keys GEP by element type)
 }
 
+def private loop_source_is_jitable(src : ExpressionPtr) : bool {
+    assume srcT = src._type
+    if (srcT == null) {
+        return false
+    }
+    return (srcT.isRange || srcT.baseType == Type.tFixedArray || srcT.isGoodArrayType
+        || srcT.isIterator || srcT.isString || handle_each_is_jitable(src))
+}
+
+def public handle_each_is_jitable(src : ExpressionPtr) : bool {
+    assume srcT = src._type
+    if (srcT == null || !srcT.isHandle || srcT.annotation == null) {
+        return false
+    }
+    return get_jit_each(srcT.annotation) != null
+}
+
+//! The jit passes a handled index in its own C ABI, so the index has to be a primitive the
+//! emitter can put in a register. Anything else (a typed id, a struct key) gets no address and
+//! keeps the interpreter, whatever the annotation offers. Returns -1 when not passable.
+def public jit_index_base_type(ixT : TypeDeclPtr) : int {
+    if (ixT == null || ixT.isRef) {
+        return -1
+    }
+    let bt = ixT.baseType
+    if (bt == Type.tInt || bt == Type.tUInt || bt == Type.tInt64 || bt == Type.tUInt64 ||
+        bt == Type.tInt8 || bt == Type.tUInt8 || bt == Type.tInt16 || bt == Type.tUInt16 ||
+        bt == Type.tFloat || bt == Type.tString) {
+        return int(bt)
+    }
+    return -1
+}
+
+def public handle_at_is_jitable(expr : ExprAt?) : bool {
+    assume subExprT = expr.subexpr._type
+    if (!subExprT.isHandle || subExprT.annotation == null) {
+        return false
+    }
+    let ibt = jit_index_base_type(expr.index._type)
+    if (ibt < 0) {
+        return false
+    }
+    return get_jit_at(subExprT.annotation, ibt) != null
+}
+
 [macro]
 class public LlvmJitVisitor : AstVisitor {
     adapter : VisitorAdapter?
@@ -2716,6 +2761,29 @@ class public LlvmJitVisitor : AstVisitor {
                 var ptr_idx = build_vector_index(tsrc, tidx, subExprT, "vector_at")
                 setE(expr, ptr_idx)
             }
+        } elif (subExprT.isHandle && handle_at_is_jitable(expr)) {
+            assume ixT = expr.index._type
+            var at_fn = get_at_handle_function(subExprT, ixT)
+            assert(at_fn != null, "handle_at_is_jitable said the annotation hands over an at`handle address")
+            let fn_type = g_fn_types[uid.get_at_type(subExprT, ixT).publ()]
+            var params <- fixed_array(
+                LLVMBuildPointerCast(g_builder, tsrc, types.LLVMVoidPtrType(), ""),
+                tidx,
+                get_context_param(),
+                get_line_info_ptr(expr.at)
+            )
+            var ptr_idx = LLVMBuildCall2(g_builder, fn_type, at_fn, params, "handle_at")
+            let maybe_ext = need_z_or_s_ext(ixT)
+            if (maybe_ext != null) {
+                LLVMAddCallSiteAttribute(ptr_idx, 2u, maybe_ext)
+            }
+            if (expr.atFlags.r2v) {
+                var at_r2v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_abi_type(expr._type),
+                    ptr_idx, expr._type.alignOf, "at_r2v")
+                setE(expr, at_r2v)
+            } else {
+                setE(expr, ptr_idx)
+            }
         } else {
             failed("unsupported visitExprAt type {describe(subExprT)} {describe(expr.at)}")
         }
@@ -3993,7 +4061,24 @@ class public LlvmJitVisitor : AstVisitor {
                 var tail = LLVMBuildSub(g_builder, size, i64_one, "")
                 // See dim case above — store end-element ptr directly, compare-by-ptr.
                 range2[ssrc] = build_array_index(data, tail, ssrc._type.firstType, "last_element")
-            } elif (ssrc._type.isIterator) {
+            } elif (ssrc._type.isIterator || handle_each_is_jitable(ssrc)) {
+                if (handle_each_is_jitable(ssrc)) {
+                    var each_fn = get_each_handle_function(ssrc._type)
+                    assert(each_fn != null, "handle_each_is_jitable said the annotation hands over an each`handle address")
+                    var seq_slot : LLVMOpaqueValue?
+                    at_function_entry() {
+                        seq_slot = LLVMBuildAlloca(g_builder, g_t_sequence, "handle_seq_{svar.name}")
+                    }
+                    let fn_type = g_fn_types[uid.get_each_type(ssrc._type).publ()]
+                    var params <- fixed_array(
+                        LLVMBuildPointerCast(g_builder, seq_slot, types.LLVMVoidPtrType(), ""),
+                        LLVMBuildPointerCast(g_builder, getE(ssrc), types.LLVMVoidPtrType(), ""),
+                        get_context_param(),
+                        get_line_info_ptr(ssrc.at)
+                    )
+                    LLVMBuildCall2(g_builder, fn_type, each_fn, params, "")
+                    setE(ssrc, seq_slot)
+                }
                 if (is_count_or_ucount(ssrc)) {
                     var ccount = ssrc as ExprCall
                     visit(ccount.arguments[0], adapter)
@@ -4045,7 +4130,10 @@ class public LlvmJitVisitor : AstVisitor {
                     build_table_walk_scan(state)
                     build_table_walk_store_var(state, svar, true)
                 } else {
-                    var seq = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(ssrc._type), getE(ssrc), ssrc._type.alignOf, "")
+                    let handle_seq = handle_each_is_jitable(ssrc)
+                    var seq_t = handle_seq ? g_t_sequence : type_to_llvm_type(ssrc._type)
+                    let seq_align = handle_seq ? typeinfo sizeof(type<void?>) : ssrc._type.alignOf
+                    var seq = LLVMBuildLoadData2Aligned(g_builder, seq_t, getE(ssrc), seq_align, "")
                     var piter = LLVMBuildExtractValue(g_builder, seq, uint(JIT_SEQUENCE.ITERATOR), "")
                     var cmp_iter = LLVMBuildIsNull(g_builder, piter, "")
                     var okay = append_basic_block("for_{svar.name}_not_empty")
@@ -4151,7 +4239,7 @@ class public LlvmJitVisitor : AstVisitor {
                 var nextOk = append_basic_block("for_{svar.name}_next_ok")
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, nextOk)
                 LLVMPositionBuilderAtEnd(g_builder, nextOk)
-            } elif (ssrc._type.isIterator) {// iterator->next()
+            } elif (ssrc._type.isIterator || handle_each_is_jitable(ssrc)) {
                 if (is_count_or_ucount(ssrc)) {
                     var ccount = ssrc as ExprCall
                     var vvar = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(svar._type), getV(svar), svar._type.alignOf, "")
@@ -4218,7 +4306,7 @@ class public LlvmJitVisitor : AstVisitor {
             let ssrc = inline_each_source(expr.sources[ri])
             if (ssrc._type.isGoodArrayType) {
                 build_array_unlock(getE(ssrc), ssrc.at)
-            } elif (ssrc._type.isIterator) {
+            } elif (ssrc._type.isIterator || handle_each_is_jitable(ssrc)) {
                 if (is_count_or_ucount(ssrc)) {
                     // we do nothing for count
                     pass
@@ -5679,6 +5767,46 @@ class public LlvmJitVisitor : AstVisitor {
             clone_handle = get_address_global(func_name, LLVMPointerType(fn_type, 0u))
         }
         return clone_handle
+    }
+
+    def get_each_handle_function(t : TypeDeclPtr) : LLVMOpaqueValue? {
+        let func_name = uid.get_each_type(t)
+        var each_handle = LLVMGetNamedGlobal(g_mod, func_name.glob())
+        let fn_type = LLVMFunctionType(types.t_void,
+                fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), types.LLVMVoidPtrType(),
+                    types.LLVMVoidPtrType(), types.LLVMVoidPtrType()))
+        if (each_handle == null) {
+            var each_handle_ptr = get_jit_each(t.annotation)
+            if (each_handle_ptr == null) {
+                failed_T(t, "missing each`handle function pointer for {describe(t)}")
+                return null
+            }
+            each_handle = save_address_global(func_name, each_handle_ptr, LLVMPointerType(fn_type, 0u))
+        } else {
+            each_handle = get_address_global(func_name, LLVMPointerType(fn_type, 0u))
+        }
+        g_fn_types[func_name.publ()] = fn_type
+        return each_handle
+    }
+
+    def get_at_handle_function(t : TypeDeclPtr; ixT : TypeDeclPtr) : LLVMOpaqueValue? {
+        let func_name = uid.get_at_type(t, ixT)
+        var at_handle = LLVMGetNamedGlobal(g_mod, func_name.glob())
+        let fn_type = LLVMFunctionType(types.LLVMVoidPtrType(),
+                fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), type_to_llvm_abi_type(ixT),
+                    types.LLVMVoidPtrType(), types.LLVMVoidPtrType()))
+        if (at_handle == null) {
+            var at_handle_ptr = get_jit_at(t.annotation, jit_index_base_type(ixT))
+            if (at_handle_ptr == null) {
+                failed_T(t, "missing at`handle function pointer for {describe(t)}")
+                return null
+            }
+            at_handle = save_address_global(func_name, at_handle_ptr, LLVMPointerType(fn_type, 0u))
+        } else {
+            at_handle = get_address_global(func_name, LLVMPointerType(fn_type, 0u))
+        }
+        g_fn_types[func_name.publ()] = fn_type
+        return at_handle
     }
 
     def override visitExprClone(expr : ExprClone?) : ExpressionPtr {
@@ -7713,6 +7841,16 @@ class public ResolveExternVisitor : AstVisitor {
         if (subExprT.isGoodTableType) {
             let t = get_table_t(subExprT)
             bind_jit_table_at_glob(t)
+        } elif (handle_at_is_jitable(expr)) {
+            assume ixT = expr.index._type
+            dll.set_glob_address(uid.get_at_type(subExprT, ixT),
+                get_jit_at(subExprT.annotation, jit_index_base_type(ixT)))
+        }
+    }
+
+    def override preVisitExprForSource(var expr : ExprFor?, var source : ExpressionPtr, last : bool) : void {
+        if (handle_each_is_jitable(source)) {
+            dll.set_glob_address(uid.get_each_type(source._type), get_jit_each(source._type.annotation))
         }
     }
 
@@ -8062,7 +8200,7 @@ class public DisableJitVisitor : AstVisitor {
         if (expr.trait == "ast_typedecl" || expr.trait == "rtti_classinfo" || expr.trait == "rtti_typeinfo") {
             pass
         } else {
-            to_log(LOG_WARNING, "LLVM JIT: unsupported typeinfo trait `{expr.trait}` at {expr.at}, falling back to interpreter. Please report at https://github.com/GaijinEntertainment/daScript/issues\n")
+            to_log(LOG_WARNING, "LLVM JIT: unsupported typeinfo trait `{expr.trait}` at {describe(expr.at)}, falling back to interpreter\n")
             disable = true
         }
     }
@@ -8071,17 +8209,13 @@ class public DisableJitVisitor : AstVisitor {
         // jit_enabled programs get quotes lowered by daslib/quote's QuotePass before we
         // ever run; a raw one means lowering didn't fire for the defining module (macro
         // modules stay raw by design) — skip the function instead of failing the file
-        to_log(LOG_WARNING, "LLVM JIT: raw quote( ) - daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module at {expr.at}, falling back to interpreter.\n")
+        to_log(LOG_WARNING, "LLVM JIT: raw quote( ) - daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module at {describe(expr.at)}, falling back to interpreter.\n")
         disable = true
     }
 
     def override preVisitExprForBody(expr : ExprFor?) : void {
         for (_, ssrc in expr.iteratorVariables, expr.sources) {
-            assume ssrc_t = ssrc._type
-            if (ssrc_t.isRange || ssrc_t.baseType == Type.tFixedArray ||
-                ssrc_t.isGoodArrayType || ssrc_t.isIterator ||
-                ssrc_t.isString) {
-            } elif (!disable) {
+            if (!loop_source_is_jitable(ssrc) && !disable) {
                 assert(false,
                     "We shouldn't be here, all loop sources expected to be supported"
                 )
@@ -8093,31 +8227,31 @@ class public DisableJitVisitor : AstVisitor {
         assume leftT = expr.left._type
         if (leftT.isHandle) {
             if (get_jit_clone(leftT.annotation) == null) {
-                to_log(LOG_WARNING, "LLVM JIT: clone of handled type `{describe(leftT)}` is not supported at {expr.at}, falling back to interpreter. Please report at https://github.com/GaijinEntertainment/daScript/issues\n")
+                to_log(LOG_WARNING, "LLVM JIT: clone of handled type `{describe(leftT)}` is not supported at {describe(expr.at)}, falling back to interpreter\n")
                 disable = true
             }
         } elif (!leftT.canCopy) {
-            to_log(LOG_WARNING, "LLVM JIT: clone of `{describe(leftT)}` is not supported at {expr.at}, falling back to interpreter\n")
+            to_log(LOG_WARNING, "LLVM JIT: clone of `{describe(leftT)}` is not supported at {describe(expr.at)}, falling back to interpreter\n")
             disable = true
         }
     }
 
     def override preVisitExprAt(expr : ExprAt?) : void {
-        if (expr.subexpr._type.isHandle) {
+        if (expr.subexpr._type.isHandle && !handle_at_is_jitable(expr)) {
             let type_str = describe(expr.subexpr._type)
             to_log(LOG_WARNING,
-                "LLVM JIT: native operator `.[]` should be implemented for " +
-                "type {type_str} to be used in JIT, keeping interpreter mode.\n")
+                "LLVM JIT: annotation for type {type_str} at {describe(expr.at)} " +
+                "implements no jitGetAt, keeping interpreter mode.\n")
             disable = true
         }
     }
 
     def override preVisitExprForSource(var expr : ExprFor?, var source : ExpressionPtr, last : bool) {
-        if (source._type.isHandle) {
-            let type_str = describe(source)
+        if (source._type.isHandle && !handle_each_is_jitable(source)) {
+            let type_str = describe(source._type)
             to_log(LOG_WARNING,
-                "LLVM JIT: `each` should be implemented for " +
-                "type {type_str} to be used in JIT, keeping interpreter mode.\n")
+                "LLVM JIT: annotation for type {type_str} at {describe(expr.at)} " +
+                "implements no jitGetEach, keeping interpreter mode.\n")
             disable = true
         }
     }
@@ -8129,7 +8263,7 @@ class public DisableJitVisitor : AstVisitor {
         }
         if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
             if (!has_intrinsic(expr) && !is_dasbind_late(expr.func)) {
-                to_log(LOG_WARNING, "LLVM JIT: unsupported builtin `{expr.func._module.name}::{expr.func.name}` at {expr.at}, falling back to interpreter.\n")
+                to_log(LOG_WARNING, "LLVM JIT: unsupported builtin `{expr.func._module.name}::{expr.func.name}` at {describe(expr.at)}, falling back to interpreter.\n")
                 disable = true
             }
         }
@@ -8147,7 +8281,7 @@ class public DisableJitVisitor : AstVisitor {
                 }
             }
             if (lattice) {
-                to_log(LOG_WARNING, "LLVM JIT: 16/8-bit lattice type crosses `{expr.func._module.name}::{expr.func.name}` at {expr.at}, falling back to interpreter.\n")
+                to_log(LOG_WARNING, "LLVM JIT: 16/8-bit lattice type crosses `{expr.func._module.name}::{expr.func.name}` at {describe(expr.at)}, falling back to interpreter.\n")
                 disable = true
             }
         }

@@ -1003,6 +1003,12 @@ extern "C" {
         DAS_API void * das_get_jit_clone ( TypeAnnotation *annotation ) {
             return annotation->jitGetClone();
         }
+        DAS_API void * das_get_jit_each ( TypeAnnotation *annotation ) {
+            return annotation->jitGetEach();
+        }
+        DAS_API void * das_get_jit_at ( TypeAnnotation *annotation, int32_t indexType ) {
+            return annotation->jitGetAt(Type(indexType));
+        }
     }
 
 
@@ -1636,6 +1642,10 @@ extern "C" {
                 SideEffects::none, "das_get_jit_delete")->args({"ann"});
             addExternInline<DAS_BIND_FUN(das_get_jit_clone)>(*this, lib, "get_jit_clone",
                 SideEffects::none, "das_get_jit_clone")->args({"ann"});
+            addExternInline<DAS_BIND_FUN(das_get_jit_each)>(*this, lib, "get_jit_each",
+                SideEffects::none, "das_get_jit_each")->args({"ann"});
+            addExternInline<DAS_BIND_FUN(das_get_jit_at)>(*this, lib, "get_jit_at",
+                SideEffects::none, "das_get_jit_at")->args({"ann","indexType"});
             addExternInline<DAS_BIND_FUN(das_get_jit_debug_enter)>(*this, lib,  "get_jit_debug_enter",
                 SideEffects::none, "das_get_jit_debug_enter");
             addExternInline<DAS_BIND_FUN(das_get_jit_debug_exit)>(*this, lib,  "get_jit_debug_exit",

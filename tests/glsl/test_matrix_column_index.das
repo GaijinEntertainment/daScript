@@ -2,15 +2,12 @@ options gen2
 options indenting = 4
 
 // Regression gate for the runtime matrix-/vector-/array-column index emitter gap. Indexing a matrix
-// (or vector / fixed array) by a NON-constant value lowers, under the JIT tier, to a
-// `.[](base, index, __context__, __lineinfo__)` operator call -- the bounds-check carries the context +
-// line for an out-of-range panic. GLSL has its own (non-trapping) out-of-bounds behavior, so the emitter
-// drops the check and writes `base[index]`; before the fix this errored with `__context__ is not
-// supported` (error[50501]) under JIT, even though an optimized compile folded it away. A const index
-// stays a plain ExprAt and was never affected.
-//
-// The asserts check the emitted GLSL has plain `[...]` indexing and that NONE of the bounds-check
-// machinery (`.[]`, `__context__`, `__lineinfo__`) leaks through. Uniform-free, so no opengl_boost.
+// (or vector / fixed array) by a NON-constant value must emit plain `base[index]`: GLSL has its own
+// (non-trapping) out-of-bounds behavior, so no bounds-check machinery belongs in the output. It once
+// errored with `__context__ is not supported` (error[50501]) under JIT, where the index lowered to a
+// `.[](base, index, __context__, __lineinfo__)` operator call; that rewrite is gone -- a runtime index
+// is a plain ExprAt in every tier -- and the negative asserts stay as the guard that neither the call
+// shape nor a context/lineinfo argument comes back. Uniform-free, so no opengl_boost.
 
 require dastest/testing_boost public
 require glsl/glsl_opengl

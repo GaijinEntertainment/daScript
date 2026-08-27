@@ -53,6 +53,24 @@ def handle_index(var m : float4x4) {
     return m.y
 }
 
+def handle_vector_each(arr : Point3Array) {
+    var n = 0
+    var sum = 0.0
+    for (p in arr) {
+        n++
+        sum += p.x + p.y + p.z
+    }
+    return int(sum) * 100 + n
+}
+
+def handle_vector_at(arr : Point3Array) {
+    var sum = 0.0
+    for (i in range(arr |> length)) {
+        sum += arr[i].y * float(i + 1)
+    }
+    return int(sum)
+}
+
 [test]
 def test_handle_type(t : T?) {
     t |> run("handle val") @(t : T?) {
@@ -129,5 +147,21 @@ def test_handle_type(t : T?) {
         t |> equal(float4(0, 0, 3, 0), m.z)
         t |> equal(float4(0, 0, 0, 4), m.w)
         t |> equal(float4(0, 2, 0, 0), my)
+    }
+}
+
+[test]
+def test_handle_vector(t : T?) {
+    t |> run("handle vector each") @(t : T?) {
+        t |> success(!jit_enabled() || is_jit_function(@@handle_vector_each))
+        testPoint3Array() $(arr) {
+            t |> equal(6010, handle_vector_each(arr))
+        }
+    }
+    t |> run("handle vector at") @(t : T?) {
+        t |> success(!jit_enabled() || is_jit_function(@@handle_vector_at))
+        testPoint3Array() $(arr) {
+            t |> equal(110, handle_vector_at(arr))
+        }
     }
 }

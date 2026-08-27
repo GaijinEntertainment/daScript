@@ -3399,18 +3399,6 @@ namespace das {
                 return opE;
             }
         }
-        if (jitEnabled() && expr->subexpr->type->isHandle()) {
-            // If `[]` not found try looking for native `.[]`.
-            // In JIT we have `.[]` similar to `das_index` in aot.
-            auto candidates = findMatchingFunctions("*", thisModule, ".[]", {expr->subexpr->type, expr->index->type});
-            if (!candidates.empty()) {
-                reportAstChanged();
-                auto eachFn = new ExprCall(expr->at, ".[]");
-                eachFn->arguments.push_back(expr->subexpr->clone());
-                eachFn->arguments.push_back(expr->index->clone());
-                return eachFn;
-            }
-        }
         expr->index = Expression::autoDereference(expr->index);
         auto seT = expr->subexpr->type;
         auto ixT = expr->index->type;
@@ -5301,17 +5289,6 @@ namespace das {
         markNoDiscard(that);
     }
     ExpressionPtr InferTypes::visitForSource(ExprFor *expr, Expression *that, bool last) {
-        if (jitEnabled() && that->type && that->type->isHandle() && that->type->annotation->isIterable()) {
-            auto fnc = findMatchingFunctions("*", thisModule, "each", {that->type});
-            // If there's any `each` for handle type use it, otherwise
-            // stay in interpreter.
-            if (!fnc.empty()) {
-                reportAstChanged();
-                auto eachFn = new ExprCall(expr->at, "each");
-                eachFn->arguments.push_back(that->clone());
-                return eachFn;
-            }
-        }
         // now, for the one where we did not find anything
         if (that->type) {
             if (that->type->baseType != Type::tFixedArray &&

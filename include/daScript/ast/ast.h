@@ -547,6 +547,8 @@ namespace das
         virtual void * jitGetNew () const { return nullptr; }
         virtual void * jitGetDelete () const { return nullptr; }
         virtual void * jitGetClone () const { return nullptr; }
+        virtual void * jitGetEach () const { return nullptr; }
+        virtual void * jitGetAt ( Type /*indexType*/ ) const { return nullptr; }
         uint64_t ownSemanticHash = 0;
     };
 

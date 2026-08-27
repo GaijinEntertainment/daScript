@@ -2,7 +2,7 @@ options gen2
 
 module clargs shared private
 
-require fio
+require daslib/fio
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/strings_boost

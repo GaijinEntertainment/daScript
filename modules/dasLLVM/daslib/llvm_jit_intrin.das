@@ -161,6 +161,7 @@ let g_intrin_lookup <- {
     "math::cosh" => @@intrinsic_math_sinh_cosh_tanh,
     "math::tanh" => @@intrinsic_math_sinh_cosh_tanh,
     "math::round" => @@intrinsic_math_float_op1,
+    "math::fract" => @@intrinsic_math_fract,
     "math::floor" => @@intrinsic_math_float_op1,
     "math::ceil" => @@intrinsic_math_float_op1,
     "math::floori" => @@intrinsic_math_float_op1_to_int,
@@ -1063,6 +1064,11 @@ def intrinsic_math_float_op1_to_int(var ctx : JitCtx; expr : ExprCallFunc?; argu
     }
     var res = intrinsic_math_any_float_op1(op_name, ctx.builder, expr, arguments)
     return LLVMBuildFPToSI(ctx.builder, res, type_to_llvm_abi_type(expr._type), "")
+}
+
+def intrinsic_math_fract(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    var fl = intrinsic_math_any_float_op1("floor", ctx.builder, expr, arguments)
+    return LLVMBuildFSub(ctx.builder, arguments[0], fl, "fract")
 }
 
 def intrinsic_math_tan(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

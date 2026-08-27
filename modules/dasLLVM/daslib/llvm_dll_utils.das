@@ -71,6 +71,18 @@ class UidGen : AstVisitor {
         add(expr.left._type)
     }
 
+    def override preVisitExprAt(expr : ExprAt?) {
+        if (expr.subexpr._type.isHandle) {
+            add(expr.subexpr._type)
+        }
+    }
+
+    def override preVisitExprForSource(var expr : ExprFor?, var source : ExpressionPtr, last : bool) {
+        if (source._type.isHandle) {
+            add(source._type)
+        }
+    }
+
     def override preVisitExprTypeInfo(expr : ExprTypeInfo?) {
         add(expr)
     }
@@ -157,6 +169,14 @@ class public UidNodes {
 
     def get_clone_type(t : TypeDeclPtr) : DllName {
         return get_base(t, "clone`handle`{get_mangled_name(t)}")
+    }
+
+    def get_each_type(t : TypeDeclPtr) : DllName {
+        return get_base(t, "each`handle`{get_mangled_name(t)}")
+    }
+
+    def get_at_type(t : TypeDeclPtr; ixT : TypeDeclPtr) : DllName {
+        return get_base(t, "at`handle`{get_mangled_name(t)}`{get_mangled_name(ixT)}")
     }
 
     def get_tinfo(expr : ExprTypeInfo?) {

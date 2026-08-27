@@ -735,6 +735,36 @@ namespace das {
             auto rv = simulateExpression(context, src);
             return context.code->makeNode<SimNode_AnyIterator<ST,DebugInfoIterator<VT,ST>>>(at, rv);
         }
+        virtual void * jitGetEach () const override {
+            return (void *) +[] ( Sequence * out, void * pInfo, Context * context, LineInfoArg * at ) {
+                using Iter = DebugInfoIterator<VT,ST>;
+                char * iter = context->allocateIterator(sizeof(Iter), "DebugInfo field iterator", at);
+                new (iter) Iter((ST *)pInfo, at);
+                out->iter = (Iterator *) iter;
+            };
+        }
+        virtual void * jitGetAt ( Type indexType ) const override {
+            switch ( indexType ) {
+            case Type::tInt:
+                return (void *) +[] ( void * pInfo, int32_t index, Context * context, LineInfoArg * at ) -> char * {
+                    auto * pValue = (ST *) pInfo;
+                    if ( uint32_t(index) >= pValue->count ) {
+                        context->throw_error_at(at, "field index out of range, %d of %u", index, pValue->count);
+                    }
+                    return (char *) pValue->fields[uint32_t(index)];
+                };
+            case Type::tUInt:
+                return (void *) +[] ( void * pInfo, uint32_t index, Context * context, LineInfoArg * at ) -> char * {
+                    auto * pValue = (ST *) pInfo;
+                    if ( index >= pValue->count ) {
+                        context->throw_error_at(at, "field index out of range, %u of %u", index, pValue->count);
+                    }
+                    return (char *) pValue->fields[index];
+                };
+            default:
+                return nullptr;
+            }
+        }
         virtual void gc_collect ( gc_root * target, gc_root * from ) override {
             ManagedStructureAnnotation<ST,false>::gc_collect(target, from);
             if ( fieldType ) fieldType->gc_collect(target, from);
