@@ -8,23 +8,25 @@ require river
 require gameplay
 require hud
 require hud3d
+require rr_live
 require daslib/strings_convert
 
 // --- GL Setup ---
 
 def create_gl_objects() {
-    flat_program = cache_shader_program(vs_flat`shader_text, fs_flat`shader_text)
-    phong_program = cache_shader_program(vs_phong`shader_text, fs_phong`shader_text)
-    river_program = cache_shader_program(vs_river`shader_text, fs_river`shader_text)
-    rotor_program = cache_shader_program(vs_rotor`shader_text, fs_rotor`shader_text)
-    grass_program = cache_shader_program(vs_grass`shader_text, fs_grass`shader_text)
+    create_scene_programs()
+    create_postfx_programs()
 
-    geo_sphere <- create_geometry_fragment <| gen_sphere(10, 7, false)
+    geo_sphere <- create_geometry_fragment <| gen_sphere(14, 10, false)
     geo_cube <- create_geometry_fragment <| gen_cube()
     geo_plane_xz <- create_geometry_fragment <| gen_plane(GenDirection.xz)
-    geo_cylinder <- create_geometry_fragment <| gen_cylinder(GenDirection.xy, 8)
-    geo_cone <- create_geometry_fragment <| gen_cone(GenDirection.xy, 10)
+    geo_cylinder <- create_geometry_fragment <| gen_cylinder(GenDirection.xy, 12)
+    geo_cone <- create_geometry_fragment <| gen_cone(GenDirection.xy, 12)
     geo_prism <- create_geometry_fragment <| gen_prism(GenDirection.xy)
+    geo_disc <- create_geometry_fragment <| gen_disc(24)
+    geo_heli <- create_geometry_fragment <| gen_helicopter()
+    geo_gunboat <- create_geometry_fragment <| gen_gunboat()
+    geo_jet <- create_geometry_fragment <| gen_jet()
 
     cache_ttf_objects()
     hud_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
@@ -32,7 +34,17 @@ def create_gl_objects() {
 
 // --- Camera ---
 
-def update_camera() {
+var cam_eye = float3(0.0, 0.0, 10.0)
+var cam_right = float3(1.0, 0.0, 0.0)
+var cam_up = float3(0.0, 0.0, 1.0)
+var cam_fwd = float3(0.0, 1.0, 0.0)
+var cam_scale = float2(1.0, 1.0)
+
+let CAM_FOV_DEG = 50.0
+let Z_NEAR = 0.1
+let Z_FAR = 420.0
+
+def update_camera(aspect : float) {
     // Camera lags behind player X
     cam_x += (player_pos.x - cam_x) * CAM_X_LAG
 
@@ -46,10 +58,99 @@ def update_camera() {
     let t = get_uptime()
     let shake = float3(sin(t * 47.0), sin(t * 53.0), sin(t * 61.0)) * screen_shake_amount
 
-    let eye = float3(cam_x, player_pos.y - CAM_BACK, cam_height) + shake
+    cam_eye = float3(cam_x, player_pos.y - CAM_BACK, cam_height) + shake
     let center = float3(player_pos.x, player_pos.y + CAM_LOOK_AHEAD, 0.0)
+    let world_up = float3(0.0, 0.0, 1.0)
+    v_view = look_at_rh(cam_eye, center, world_up)
+
+    // The sky pass is attributeless, so it rebuilds view rays from this basis
+    // rather than from an inverse view-projection.
+    cam_fwd = normalize(center - cam_eye)
+    cam_right = normalize(cross(cam_fwd, world_up))
+    cam_up = cross(cam_right, cam_fwd)
+    let tan_half = tan(CAM_FOV_DEG * 0.5 * PI / 180.0)
+    cam_scale = float2(tan_half * aspect, tan_half)
+}
+
+// --- Lighting environment ---
+//
+// One ortho cascade tracking the play area ahead of the player. The box is wide
+// enough to hold both banks and long enough to cover everything the camera can
+// see, which is all a game this shallow needs.
+
+let SHADOW_HALF_WIDTH = 34.0
+let SHADOW_AHEAD = 58.0
+let SHADOW_BEHIND = 22.0
+let SHADOW_DEPTH = 120.0
+
+def build_light_matrix() {
+    let focus = float3(cam_x, player_pos.y + (SHADOW_AHEAD - SHADOW_BEHIND) * 0.5, 1.5)
+    let eye = focus + env_now.sun_dir * (SHADOW_DEPTH * 0.5)
     let up = float3(0.0, 0.0, 1.0)
-    v_view = look_at_rh(eye, center, up)
+    let half_len = (SHADOW_AHEAD + SHADOW_BEHIND) * 0.5
+    let view = look_at_rh(eye, focus, up)
+    let proj = ortho_rh(-SHADOW_HALF_WIDTH, SHADOW_HALF_WIDTH,
+        -half_len, half_len, 0.1, SHADOW_DEPTH)
+    v_light_vp = proj * view
+}
+
+def apply_environment(game_time : float) {
+    f_SunDir = env_now.sun_dir
+    f_SunColor = env_now.sun_color
+    f_SkyColor = env_now.sky_color
+    f_HorizonColor = env_now.horizon_color
+    f_BounceColor = env_now.bounce_color
+    f_FogColor = env_now.fog_color
+    f_FogParams = float3(env_now.fog_density, 0.018, 38.0)
+    f_NightAmount = env_now.night
+    f_CameraPos = cam_eye
+    f_GameTime = game_time
+    f_ZFar = Z_FAR
+    f_CamRight = cam_right
+    f_CamUp = cam_up
+    f_CamFwd = cam_fwd
+    f_CamScale = cam_scale
+    f_ShadowMap := shadow_tex
+    f_ShadowTexel = float2(1.0 / float(SHADOW_SIZE))
+    f_PaletteOn = 0.0
+}
+
+// Where the sun lands on screen, for the shaft pass. Returns w <= 0 behind the
+// camera, in which case the caller skips the whole scattering chain.
+def sun_screen_uv() : float3 {
+    let sun_world = cam_eye + env_now.sun_dir * 900.0
+    let clip = v_projection * (v_view * float4(sun_world, 1.0))
+    if (clip.w <= 0.0) {
+        return float3(0.5, 0.5, 0.0)
+    }
+    let ndc = clip.xyz / clip.w
+    let uv = ndc.xy * 0.5 + float2(0.5)
+    // Let the shafts persist a little past the frame edge so the effect fades
+    // out as the sun leaves the view instead of popping off.
+    let on_screen = (uv.x > -0.45 && uv.x < 1.45 && uv.y > -0.45 && uv.y < 1.45 ? 1.0 : 0.0)
+    return float3(uv, on_screen)
+}
+
+def build_post_settings(game_time : float) : PostSettings {
+    var cfg = PostSettings()
+    let sun_uv = sun_screen_uv()
+    cfg.exposure = env_now.exposure
+    cfg.bloom_strength = env_now.bloom
+    cfg.shaft_uv = sun_uv.xy
+    cfg.shaft_on_screen = sun_uv.z
+    cfg.shaft_strength = env_now.shafts
+    cfg.grade_tint = env_now.grade_tint
+    cfg.grade_amount = env_now.grade_amount
+    cfg.tan_half_fov = cam_scale
+    cfg.z_far = Z_FAR
+    cfg.time = game_time
+    // A hit briefly hot-grades the frame: more bloom, more grain, harder
+    // vignette. Cheap, and it sells the impact better than the shake alone.
+    let stress = saturate(screen_shake_amount * 0.9)
+    cfg.bloom_strength += stress * 0.5
+    cfg.grain += stress * 0.05
+    cfg.vignette_strength += stress * 0.25
+    return cfg
 }
 
 // --- State Transitions ---
@@ -105,10 +206,83 @@ def init() {
         score = 0
         current_section = 0
         cam_x = 0.0
+        set_env_immediate(0)
         init_river()
         rebuild_river_geometry()
         river_dirty = false
+    } else {
+        refresh_env()
     }
+}
+
+def simulate() {
+    if (game_state != GameState.playing) {
+        return
+    }
+    update_section()
+    update_player(false)
+    commit()
+    if (game_state == GameState.playing) {
+        update_enemies()
+        process_collisions()
+        commit()
+    }
+    if (game_state == GameState.playing) {
+        cull_far_entities()
+        advance_river()
+        if (river_dirty) {
+            rebuild_river_geometry()
+            river_dirty = false
+        }
+    }
+}
+
+def render_frame(game_time : float) {
+    ensure_render_targets(display_w, display_h)
+
+    build_light_matrix()
+    apply_environment(game_time)
+
+    begin_shadow_pass()
+    render_shadow_casters()
+    end_shadow_pass()
+
+    begin_scene_pass(env_now.horizon_color)
+
+    // Sky first, depth-writes off: it is a background, and every later surface
+    // must be able to draw over it.
+    glDepthMask(false)
+    glDisable(GL_DEPTH_TEST)
+    glDisable(GL_CULL_FACE)
+    glUseProgram(sky_program)
+    active_program = sky_program
+    vs_sky_bind_uniform(sky_program)
+    fs_sky_bind_uniform(sky_program)
+    fullscreen_pass()
+    glEnable(GL_DEPTH_TEST)
+    glDepthMask(true)
+    glEnable(GL_CULL_FACE)
+    glCullFace(GL_BACK)
+    glFrontFace(GL_CCW)
+
+    render_river(game_time)
+    render_all(game_time)
+
+    begin_transparent_span()
+    render_effects(game_time)
+    end_transparent_span()
+
+    run_postfx(build_post_settings(game_time))
+
+    // HUD lands on the back buffer after tone mapping, so it keeps its designed
+    // colours instead of being graded with the scene. Culling stays off for the
+    // whole overlay -- glyph quads have no reliable winding.
+    glDisable(GL_CULL_FACE)
+    let saved_fog = begin_hud_overlay()
+    draw_hud_3d(game_time)
+    draw_hud()
+    end_hud_overlay(saved_fog)
+    glEnable(GL_CULL_FACE)
 }
 
 [export]
@@ -118,20 +292,8 @@ def update() {
     }
 
     live_get_framebuffer_size(display_w, display_h)
-    glViewport(0, 0, display_w, display_h)
-
-    // Sky color: blend from section sky color to dark at horizon
-    let sky = get_river_color() * 0.15 + float3(0.03, 0.05, 0.12)
-    glClearColor(sky.x, sky.y, sky.z, 1.0)
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-    glEnable(GL_DEPTH_TEST)
-    glEnable(GL_CULL_FACE)
-    glCullFace(GL_BACK)
-    glFrontFace(GL_CCW)
-
     let aspect = (display_h != 0 ? float(display_w) / float(display_h) : 1.0)
-    v_projection = perspective_rh_minus1_to_1(50.0 * PI / 180.0, aspect, 0.1, 500.0)
-    update_camera()
+    v_projection = perspective_rh_minus1_to_1(CAM_FOV_DEG * PI / 180.0, aspect, Z_NEAR, Z_FAR)
 
     let real_dt = get_dt()
     tick_dt = min(real_dt, 1.0 / 30.0)
@@ -151,41 +313,14 @@ def update() {
 
     handle_menu_input()
     handle_pause_input()
-
-    if (game_state == GameState.playing) {
-        update_section()
-        update_player(false)
-        commit()
-        if (game_state == GameState.playing) {
-            update_enemies()
-            process_collisions()
-            commit()
-        }
-        if (game_state == GameState.playing) {
-            cull_far_entities()
-            advance_river()
-            if (river_dirty) {
-                rebuild_river_geometry()
-                river_dirty = false
-            }
-        }
-    }
+    simulate()
 
     update_music_state()
-    update_engine_sound(game_state == GameState.playing, player_fwd_speed, PLAYER_FWD_SPEED_MAX * section_speed_mult())
+    update_engine_sound(game_state == GameState.playing, player_fwd_speed,
+        PLAYER_FWD_SPEED_MAX * section_speed_mult())
 
-    // Fog uniforms — set once per frame before any render
-    f_FogColor = get_fog_color()
-    f_FogParams = float2(player_pos.y + 3.0, player_pos.y + 30.0)
-
-    // Render
-    render_river(game_time)
-    render_all(game_time)
-
-    glDisable(GL_CULL_FACE)
-    draw_hud_3d(game_time)
-    draw_hud()
-    glEnable(GL_CULL_FACE)
+    update_camera(aspect)
+    render_frame(game_time)
 
     live_end_frame()
 }

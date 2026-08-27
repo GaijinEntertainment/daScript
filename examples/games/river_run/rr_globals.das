@@ -7,10 +7,18 @@ require opengl/opengl_boost public
 require opengl/opengl_gen public
 require opengl/opengl_cache public
 require live/opengl_live public
+require rr_shaders public
+require rr_models public
+require rr_postfx public
 require live/live_commands public
 require live/live_api public
 require live/live_watch_boost public
 require live/live_vars public
+// Without decs_live every reload emptied the world -- the player kept flying
+// down a river with no enemies, bridges or scenery, because init() correctly
+// skips re-spawning under is_reload(). The templates are all POD, so they
+// serialize cleanly.
+require live/decs_live public
 require live/audio_live public
 require audio/audio_boost public
 require strudel/strudel public
@@ -104,10 +112,13 @@ let PARTICLE_LIFETIME = 0.7
 let TRAIL_LIFETIME = 0.12
 
 let CAM_BACK = 14.0
-let CAM_LOOK_AHEAD = 8.2
+let CAM_LOOK_AHEAD = 11.0
 let CAM_X_LAG = 0.08
-let CAM_PITCH_SLOW_DEG = 42.0   // pitch at PLAYER_FWD_SPEED_MIN
-let CAM_PITCH_FAST_DEG = 36.0   // pitch at top speed (PLAYER_FWD_SPEED_MAX * section_speed_mult)
+// Pitch is the camera's angle below horizontal. It has to stay under half the
+// vertical FOV or the horizon never enters the frame -- which is why the old
+// 42-degree framing showed nothing but ground.
+let CAM_PITCH_SLOW_DEG = 19.0   // pitch at PLAYER_FWD_SPEED_MIN
+let CAM_PITCH_FAST_DEG = 15.0   // pitch at top speed (PLAYER_FWD_SPEED_MAX * section_speed_mult)
 
 let SHAKE_SMALL = 0.20
 let SHAKE_MED   = 0.55
@@ -286,6 +297,7 @@ var @live section_dist = 0.0
 var @live section_banner_timer = 0.0
 var @live section_score_bonus_pending = false
 var @live restart_input_lock = 0.0
+var @live god_mode = false
 var @live screen_shake_amount = 0.0
 var @live slow_mo_timer = 0.0
 
@@ -311,189 +323,219 @@ var display_h = 0
 var @live low_fuel_beep_timer = 0.0
 var @live refuel_sound_timer = 0.0
 
+// --- Section environments ---
+//
+// Each section is a whole lighting setup, not just a river tint: sun colour and
+// elevation, sky and horizon, fog, exposure and grade. The look of the game
+// therefore changes with progress without a single authored texture, and the
+// post chain reads the same values, so bloom and shafts stay in key with the
+// biome.
+
+struct SectionEnv {
+    sun_dir : float3
+    sun_color : float3
+    sky_color : float3
+    horizon_color : float3
+    bounce_color : float3
+    fog_color : float3
+    fog_density : float
+    river_color : float3
+    bank_color : float3
+    shore_color : float3
+    rock_color : float3
+    foliage_tint : float3
+    night : float
+    exposure : float
+    bloom : float
+    shafts : float
+    grade_tint : float3
+    grade_amount : float
+    name : string
+}
+
+def private env_dawn() : SectionEnv {
+    return <- SectionEnv(
+        sun_dir = normalize(float3(0.26, 0.95, 0.125)),
+        sun_color = float3(1.45, 1.16, 0.82),
+        sky_color = float3(0.22, 0.40, 0.78),
+        horizon_color = float3(0.92, 0.68, 0.46),
+        bounce_color = float3(0.10, 0.17, 0.26),
+        fog_color = float3(0.78, 0.72, 0.70),
+        fog_density = 0.0062,
+        river_color = float3(0.06, 0.24, 0.52),
+        bank_color = float3(0.26, 0.44, 0.20),
+        shore_color = float3(0.62, 0.55, 0.42),
+        rock_color = float3(0.34, 0.33, 0.32),
+        foliage_tint = float3(1.0, 0.97, 0.86),
+        night = 0.0,
+        exposure = 1.05,
+        bloom = 0.40,
+        shafts = 0.80,
+        grade_tint = float3(1.06, 0.98, 0.92),
+        grade_amount = 0.10,
+        name = "DELTA DAWN"
+    )
+}
+
+def private env_desert() : SectionEnv {
+    return <- SectionEnv(
+        sun_dir = normalize(float3(0.20, 0.93, 0.30)),
+        sun_color = float3(1.72, 1.52, 1.18),
+        sky_color = float3(0.30, 0.50, 0.85),
+        horizon_color = float3(0.95, 0.83, 0.60),
+        bounce_color = float3(0.30, 0.24, 0.15),
+        fog_color = float3(0.88, 0.80, 0.62),
+        fog_density = 0.0080,
+        river_color = float3(0.10, 0.30, 0.44),
+        bank_color = float3(0.62, 0.50, 0.26),
+        shore_color = float3(0.80, 0.70, 0.46),
+        rock_color = float3(0.52, 0.42, 0.30),
+        foliage_tint = float3(1.0, 0.94, 0.72),
+        night = 0.0,
+        exposure = 0.92,
+        bloom = 0.34,
+        shafts = 0.55,
+        grade_tint = float3(1.10, 1.02, 0.84),
+        grade_amount = 0.16,
+        name = "SUN FLATS"
+    )
+}
+
+def private env_forest() : SectionEnv {
+    return <- SectionEnv(
+        sun_dir = normalize(float3(-0.30, 0.92, 0.25)),
+        sun_color = float3(1.10, 1.16, 0.96),
+        sky_color = float3(0.42, 0.52, 0.58),
+        horizon_color = float3(0.66, 0.72, 0.64),
+        bounce_color = float3(0.12, 0.20, 0.13),
+        fog_color = float3(0.62, 0.70, 0.63),
+        fog_density = 0.0105,
+        river_color = float3(0.05, 0.22, 0.26),
+        bank_color = float3(0.16, 0.36, 0.14),
+        shore_color = float3(0.44, 0.42, 0.34),
+        rock_color = float3(0.28, 0.30, 0.28),
+        foliage_tint = float3(0.90, 1.0, 0.88),
+        night = 0.0,
+        exposure = 1.18,
+        bloom = 0.30,
+        shafts = 1.10,
+        grade_tint = float3(0.92, 1.02, 0.94),
+        grade_amount = 0.18,
+        name = "GREEN NARROWS"
+    )
+}
+
+def private env_night() : SectionEnv {
+    return <- SectionEnv(
+        sun_dir = normalize(float3(-0.26, 0.94, 0.21)),
+        sun_color = float3(0.52, 0.64, 1.00),
+        sky_color = float3(0.026, 0.040, 0.090),
+        horizon_color = float3(0.12, 0.16, 0.30),
+        bounce_color = float3(0.055, 0.075, 0.130),
+        fog_color = float3(0.10, 0.13, 0.23),
+        fog_density = 0.0095,
+        river_color = float3(0.020, 0.055, 0.135),
+        // Moonlit ground still has to read as ground: at the first pass's values
+        // the banks went black and the player could not see the channel edge.
+        bank_color = float3(0.19, 0.24, 0.28),
+        shore_color = float3(0.30, 0.33, 0.38),
+        rock_color = float3(0.24, 0.26, 0.30),
+        foliage_tint = float3(0.60, 0.72, 0.92),
+        night = 1.0,
+        exposure = 1.40,
+        bloom = 0.72,
+        shafts = 0.35,
+        grade_tint = float3(0.80, 0.90, 1.18),
+        grade_amount = 0.26,
+        name = "MIDNIGHT RUN"
+    )
+}
+
+def private env_volcanic() : SectionEnv {
+    return <- SectionEnv(
+        sun_dir = normalize(float3(0.32, 0.94, 0.115)),
+        sun_color = float3(1.95, 0.92, 0.44),
+        sky_color = float3(0.16, 0.09, 0.13),
+        horizon_color = float3(0.88, 0.34, 0.14),
+        bounce_color = float3(0.26, 0.09, 0.04),
+        fog_color = float3(0.55, 0.28, 0.19),
+        fog_density = 0.0120,
+        river_color = float3(0.16, 0.13, 0.16),
+        bank_color = float3(0.30, 0.15, 0.11),
+        shore_color = float3(0.24, 0.17, 0.15),
+        rock_color = float3(0.18, 0.14, 0.14),
+        foliage_tint = float3(1.0, 0.78, 0.62),
+        night = 0.35,
+        exposure = 1.10,
+        bloom = 0.66,
+        shafts = 1.35,
+        grade_tint = float3(1.18, 0.88, 0.76),
+        grade_amount = 0.28,
+        name = "ASH CHANNEL"
+    )
+}
+
+def section_env(idx : int) : SectionEnv {
+    let biome = clamp(idx, 0, MAX_SECTIONS - 1) % 5
+    if (biome == 0) {
+        return <- env_dawn()
+    } elif (biome == 1) {
+        return <- env_desert()
+    } elif (biome == 2) {
+        return <- env_forest()
+    } elif (biome == 3) {
+        return <- env_night()
+    }
+    return <- env_volcanic()
+}
+
+def lerp_env(a, b : SectionEnv; t : float) : SectionEnv {
+    return <- SectionEnv(
+        sun_dir = normalize(lerp(a.sun_dir, b.sun_dir, t)),
+        sun_color = lerp(a.sun_color, b.sun_color, t),
+        sky_color = lerp(a.sky_color, b.sky_color, t),
+        horizon_color = lerp(a.horizon_color, b.horizon_color, t),
+        bounce_color = lerp(a.bounce_color, b.bounce_color, t),
+        fog_color = lerp(a.fog_color, b.fog_color, t),
+        fog_density = lerp(a.fog_density, b.fog_density, t),
+        river_color = lerp(a.river_color, b.river_color, t),
+        bank_color = lerp(a.bank_color, b.bank_color, t),
+        shore_color = lerp(a.shore_color, b.shore_color, t),
+        rock_color = lerp(a.rock_color, b.rock_color, t),
+        foliage_tint = lerp(a.foliage_tint, b.foliage_tint, t),
+        night = lerp(a.night, b.night, t),
+        exposure = lerp(a.exposure, b.exposure, t),
+        bloom = lerp(a.bloom, b.bloom, t),
+        shafts = lerp(a.shafts, b.shafts, t),
+        grade_tint = lerp(a.grade_tint, b.grade_tint, t),
+        grade_amount = lerp(a.grade_amount, b.grade_amount, t),
+        name = (t < 0.5 ? a.name : b.name)
+    )
+}
+
 var @live section_color_blend_t = 1.0
-var @live river_color_from = float3(0.1, 0.4, 0.7)
-var @live river_color_to   = float3(0.1, 0.4, 0.7)
-var @live bank_color_from  = float3(0.25, 0.55, 0.2)
-var @live bank_color_to    = float3(0.25, 0.55, 0.2)
+var env_from : SectionEnv
+var env_to : SectionEnv
+var env_now : SectionEnv
 
-var section_colors = fixed_array(
-    float3(0.1, 0.4, 0.7),
-    float3(0.7, 0.55, 0.2),
-    float3(0.1, 0.35, 0.1),
-    float3(0.2, 0.2, 0.3),
-    float3(0.6, 0.15, 0.05),
-    float3(0.1, 0.4, 0.7),
-    float3(0.7, 0.55, 0.2),
-    float3(0.1, 0.35, 0.1),
-    float3(0.2, 0.2, 0.3),
-    float3(0.6, 0.15, 0.05)
-)
-
-var bank_colors = fixed_array(
-    float3(0.25, 0.55, 0.2),
-    float3(0.65, 0.5, 0.15),
-    float3(0.15, 0.4, 0.1),
-    float3(0.3, 0.3, 0.4),
-    float3(0.4, 0.1, 0.05),
-    float3(0.25, 0.55, 0.2),
-    float3(0.65, 0.5, 0.15),
-    float3(0.15, 0.4, 0.1),
-    float3(0.3, 0.3, 0.4),
-    float3(0.4, 0.1, 0.05)
-)
-
-var fog_colors = fixed_array(
-    float3(0.52, 0.68, 0.88),  // blue water: pale blue haze
-    float3(0.82, 0.72, 0.48),  // desert: warm sandy haze
-    float3(0.48, 0.68, 0.48),  // forest: pale green mist
-    float3(0.16, 0.20, 0.36),  // night: dark blue mist
-    float3(0.68, 0.40, 0.24),  // volcanic: reddish haze
-    float3(0.52, 0.68, 0.88),
-    float3(0.82, 0.72, 0.48),
-    float3(0.48, 0.68, 0.48),
-    float3(0.16, 0.20, 0.36),
-    float3(0.68, 0.40, 0.24)
-)
-
-var @live fog_color_from = float3(0.52, 0.68, 0.88)
-var @live fog_color_to   = float3(0.52, 0.68, 0.88)
-
-// --- Shader Interface ---
-
-var @in @location = 0 v_position : float3
-var @in @location = 1 v_normal : float3
-var @in @location = 2 v_texture : float2
-var @uniform v_model : float4x4
-var @uniform v_view : float4x4
-var @uniform v_projection : float4x4
-var @inout f_normal : float3
-var @inout f_tex_pos : float3
-var @inout f_fog_t : float
-var @inout f_grass_world : float2
-var @uniform f_Color : float4
-var @uniform f_RiverColor : float4
-var @uniform f_GameTime : float
-var @uniform f_FogColor : float3
-var @uniform f_FogParams : float2
-var @out f_FragColor : float4
-
-// flat shader — bullets, particles, terrain quads
-
-[vertex_program]
-def vs_flat {
-    let world_pos = v_model * float4(v_position, 1.0)
-    f_fog_t = world_pos.y
-    gl_Position = v_projection * v_view * world_pos
+def refresh_env() {
+    env_now <- lerp_env(env_from, env_to, saturate(section_color_blend_t))
 }
 
-[fragment_program]
-def fs_flat {
-    let fog_t = saturate((f_fog_t - f_FogParams.x) / (f_FogParams.y - f_FogParams.x))
-    let fog_alpha = fog_t * fog_t * 0.5
-    let col = f_Color.xyz * (1.0 - fog_alpha) + f_FogColor * fog_alpha
-    f_FragColor = float4(col, f_Color.w)
+def set_env_immediate(idx : int) {
+    env_from <- section_env(idx)
+    env_to <- section_env(idx)
+    section_color_blend_t = 1.0
+    refresh_env()
 }
 
-// grass shader — river banks with subtle world-space noise tint
-
-[vertex_program]
-def vs_grass {
-    let world_pos = v_model * float4(v_position, 1.0)
-    f_grass_world = world_pos.xy
-    f_fog_t = world_pos.y
-    gl_Position = v_projection * v_view * world_pos
-}
-
-[fragment_program]
-def fs_grass {
-    let p = f_grass_world * 0.35
-    let h = sin(dot(floor(p), float2(12.9898, 78.233))) * 43758.5
-    let n = h - floor(h)
-    let tint = 1.0 + (n - 0.5) * 0.18
-    let base = f_Color.xyz * tint
-    let fog_t = saturate((f_fog_t - f_FogParams.x) / (f_FogParams.y - f_FogParams.x))
-    let fog_alpha = fog_t * fog_t * 0.5
-    let col = base * (1.0 - fog_alpha) + f_FogColor * fog_alpha
-    f_FragColor = float4(col, f_Color.w)
-}
-
-// phong shader — player, enemies, bridges, islands
-
-let LIGHT_DIR = normalize(float3(0.4, -0.6, -1.0))
-
-[vertex_program]
-def vs_phong {
-    let world_pos = v_model * float4(v_position, 1.0)
-    f_normal = normalize(float3x3(v_model) * v_normal)
-    f_fog_t = world_pos.y
-    gl_Position = v_projection * v_view * world_pos
-}
-
-[fragment_program]
-def fs_phong {
-    let n = normalize(f_normal)
-    let k = saturate(-dot(LIGHT_DIR, n))
-    let lit = f_Color.xyz * (k * 0.75 + 0.25)
-    let fog_t = saturate((f_fog_t - f_FogParams.x) / (f_FogParams.y - f_FogParams.x))
-    let fog_alpha = fog_t * fog_t * 0.5
-    let col = lit * (1.0 - fog_alpha) + f_FogColor * fog_alpha
-    f_FragColor = float4(col, f_Color.w)
-}
-
-// river surface shader — animated water
-
-[vertex_program]
-def vs_river {
-    let world_pos = v_model * float4(v_position, 1.0)
-    f_tex_pos = world_pos.xyz
-    f_fog_t = world_pos.y
-    gl_Position = v_projection * v_view * world_pos
-}
-
-[fragment_program]
-def fs_river {
-    let shimmer = 0.07 * sin(f_GameTime * 2.3 + f_tex_pos.x * 0.8 + f_tex_pos.y * 0.5)
-    let c = f_RiverColor.xyz + float3(shimmer)
-    let fog_t = saturate((f_fog_t - f_FogParams.x) / (f_FogParams.y - f_FogParams.x))
-    let fog_alpha = fog_t * fog_t * 0.5
-    let col = c * (1.0 - fog_alpha) + f_FogColor * fog_alpha
-    f_FragColor = float4(col, 1.0)
-}
-
-// rotor shader — alpha-blended propeller cross
-
-[vertex_program]
-def vs_rotor {
-    let world_pos = v_model * float4(v_position, 1.0)
-    f_tex_pos = float3(v_texture.x, 0.0, v_texture.y)
-    f_fog_t = world_pos.y
-    gl_Position = v_projection * v_view * world_pos
-}
-
-[fragment_program]
-def fs_rotor {
-    let u = f_tex_pos.x
-    let v = f_tex_pos.z
-    let d1 = abs(u - v)
-    let d2 = abs(u + v - 1.0)
-    let min_dist = min(d1, d2)
-    let t = saturate(1.0 - min_dist * 3.5)
-    let alpha = f_Color.w * (t * t * t * t)
-    let fog_t = saturate((f_fog_t - f_FogParams.x) / (f_FogParams.y - f_FogParams.x))
-    let fog_alpha = fog_t * fog_t * 0.5
-    let col = f_Color.xyz * (1.0 - fog_alpha) + f_FogColor * fog_alpha
-    f_FragColor = float4(col, alpha)
+def begin_env_transition(idx : int) {
+    env_from <- env_now
+    env_to <- section_env(idx)
+    section_color_blend_t = 0.0
 }
 
 // --- GL Object Handles ---
-
-var flat_program : uint
-var phong_program : uint
-var river_program : uint
-var rotor_program : uint
-var grass_program : uint
-var active_program : uint
 
 var geo_sphere : OpenGLGeometryFragment
 var geo_cube : OpenGLGeometryFragment
@@ -501,6 +543,11 @@ var geo_plane_xz : OpenGLGeometryFragment
 var geo_cylinder : OpenGLGeometryFragment
 var geo_cone : OpenGLGeometryFragment
 var geo_prism : OpenGLGeometryFragment
+var geo_disc : OpenGLGeometryFragment
+var geo_heli : OpenGLGeometryFragment
+var geo_heli_tail : OpenGLGeometryFragment
+var geo_gunboat : OpenGLGeometryFragment
+var geo_jet : OpenGLGeometryFragment
 var hud_font : Font?
 var river_bank_geo : OpenGLGeometryFragment
 var river_surface_geo : OpenGLGeometryFragment
@@ -521,27 +568,19 @@ def random_sign() : float {
 }
 
 def section_idx() : int {
-    return min(current_section, 9)
+    return min(current_section, MAX_SECTIONS - 1)
 }
 
 def get_river_color() : float3 {
-    // River transitions are intentionally slower than shore transitions.
-    let t = saturate(section_color_blend_t * 0.42)
-    let c = river_color_from * (1.0 - t) + river_color_to * t
-    // Keep a persistent blue bias regardless of section palette.
-    let blue_base = float3(0.08, 0.36, 0.74)
-    let blended = c * 0.78 + blue_base * 0.22
-    return float3(blended.x * 0.92, blended.y * 0.95, min(blended.z + 0.08, 1.0))
+    return env_now.river_color
 }
 
 def get_bank_color() : float3 {
-    let t = saturate(section_color_blend_t)
-    return bank_color_from * (1.0 - t) + bank_color_to * t
+    return env_now.bank_color
 }
 
 def get_fog_color() : float3 {
-    let t = saturate(section_color_blend_t)
-    return fog_color_from * (1.0 - t) + fog_color_to * t
+    return env_now.fog_color
 }
 
 def section_speed_mult() : float {
@@ -556,20 +595,14 @@ def fuel_bar_color() : float3 {
     let low = player_fuel < LOW_FUEL_THRESHOLD
     let blink = low && int(get_uptime() * 6.0) % 2 == 0
     return (
-        low ? (blink ? float3(1.0, 0.2, 0.2) : float3(1.0, 0.5, 0.1)) : float3(0.2, 0.9, 0.3)
+        low ? (blink ? float3(1.0, 0.2, 0.2) : float3(1.0, 0.5, 0.1)) : float3(0.25, 0.95, 0.42)
     )
 }
 
-def draw_with_flat(pos, scale, color : float3; rot_quat : float4 = float4(0.0, 0.0, 0.0, 1.0)) {
-    v_model = compose(pos, rot_quat, scale)
-    f_Color = float4(color, 1.0)
-    vs_flat_bind_uniform(active_program)
-    fs_flat_bind_uniform(active_program)
-}
-
-def draw_with_phong(pos, scale, color : float3; rot_quat : float4 = float4(0.0, 0.0, 0.0, 1.0)) {
-    v_model = compose(pos, rot_quat, scale)
-    f_Color = float4(color, 1.0)
-    vs_phong_bind_uniform(active_program)
-    fs_phong_bind_uniform(active_program)
+// Screen-space scale so the HUD keeps its designed proportions on a HiDPI
+// framebuffer. display_w/display_h are framebuffer pixels, not window points --
+// on a retina display that is 2x, which is why the old fixed-pixel HUD came out
+// half size.
+def hud_scale() : float {
+    return max(float(display_h) / 720.0, 0.5)
 }

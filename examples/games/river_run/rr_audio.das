@@ -19,12 +19,18 @@ var @live snd_bonus_life : array<float>
 var @live snd_bonus_fastshot : array<float>
 var @live snd_engine_loop : array<float>
 
-var @live engine_sid : SID = INVALID_SID
+// These three describe LIVE PROCESS state, not game state, so they must NOT
+// persist across a reload. shutdown_audio() runs before the reload tears the
+// context down; if the flags came back true, init_audio() would skip re-init and
+// the new context would drive a destroyed audio system and a strudel Stream
+// owned by the freed old heap -- which aborts in Stream::push on a dead mutex.
+// `asch` is deliberately non-@live for the same reason; the flags must match it.
+var engine_sid : SID = INVALID_SID
 
-var @live audio_initialized = false
+var audio_initialized = false
 var asch : AudioSystemChannels
 
-var @live music_initialized = false
+var music_initialized = false
 var g_music_tracks : table<string; int>
 var prev_music_state = GameState.menu
 var low_fuel_music_active = false
