@@ -26,26 +26,34 @@ require math
 // fails to compile is a RED, and the simdgroup bases always assert. Off-Apple (or with no
 // Metal device) every check feints.
 
-def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim, ndim : int; halfx : bool = false) {
-    let tag = "kq_mulmm_k{fmt}{tensor ? "t" : ""}{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim}"
+def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim, ndim : int; halfx : bool = false; tall : bool = false) {
+    let tag = "kq_mulmm_k{fmt}{tensor ? "t" : ""}{tall ? " tall" : ""}{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim}"
     var err : string
     let src = (tensor
-        ? (halfx
+        ? (tall
+            ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl))
+        : halfx
             ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl))
             : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl)))
         : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl : MetalKqMulMmK6_metal_kq_mulmm_msl)))
     let entry = (tensor
-        ? (halfx
+        ? (tall
+            ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_entry))
+        : halfx
             ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry))
             : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_entry)))
         : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_entry : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_entry : MetalKqMulMmK6_metal_kq_mulmm_msl_entry)))
     let fm = (tensor
-        ? (halfx
+        ? (tall
+            ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_fastmath))
+        : halfx
             ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath))
             : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_fastmath)))
         : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath : MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath)))
     let tgm = (tensor
-        ? (halfx
+        ? (tall
+            ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_tgmem))
+        : halfx
             ? (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem))
             : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_tgmem)))
         : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem : MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem)))
@@ -110,7 +118,7 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
         metal_set_buffer(enc, by, 0ul, 4)
         metal_set_buffer(enc, bk, 0ul, 5)
         metal_set_buffer(enc, bn, 0ul, 6)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(m / (tall ? 128 : 32)), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
@@ -1680,6 +1688,8 @@ def test_metal_gemm_kernels(t : T?) {
                     kq_mulmm_gate(t, dev, queue, fmt, false, 64, 512, 64)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64, halfx = true)
+                    // tall 128-row stamp: the deep-class in-kernel-dequant form (m = two tall tiles)
+                    kq_mulmm_gate(t, dev, queue, fmt, true, 256, 512, 64, halfx = true, tall = true)
                 }
                 kq_mulmm_gate(t, dev, queue, 4, false, 32, 256, 128)   // second shape: 2 col tiles
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64)

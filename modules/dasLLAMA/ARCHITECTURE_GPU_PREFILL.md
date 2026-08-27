@@ -6,18 +6,23 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
 
 Every weight GEMM in `dasllama/dasllama_metal_prefill.das` splits its rows across two decisions.
 First the GEMV tail peel (sec.2.2e) takes up to `MM_TAIL_MAX` remainder rows off the padded tile.
-The rows that remain pick one of three forms, in this order, per site per forward:
+The rows that remain pick one of four forms, in this order, per site per forward:
 
-1. **dev-W all-device** - the weight plane is dequantized into a device f16 panel and multiplied
+1. **tall in-kernel-dequant (K-quant deep class)** - a K-quant site whose panel dev-W would
+   split past 8 tiles is DRAM-resident, and there the `KqMulMm*TH128` stamp wins: it dequants
+   its own W tile in threadgroup memory and reads the quant plane (~0.56 B/element) once per
+   128-row tile, where a materialized f16 panel writes 2 B/element and re-streams them per
+   tile. The 32-row TH stamp covers the row remainder at its X/y offsets.
+2. **dev-W all-device** - the weight plane is dequantized into a device f16 panel and multiplied
    half x half. No threadgroup staging and no barriers, so the staged-operand tax is gone; the
    dequant pass is paid once per site per forward against a GEMM that re-reads the f16 W panel
    once per M row tile (`mp/128` on the tall stamp, `mp/32` on the 32-row stamp). sec.2.2d
    carries the panel size rules.
-2. **tall 128-row M-tile** - the stamp streams W `M/128` times over a 128-row tile, taken on the
+3. **tall 128-row M-tile** - the stamp streams W `M/128` times over a 128-row tile, taken on the
    row count's 128-floor with the 32-row stamp on the remainder. The remainder arm strides X by
    `kdim`, so a caller that passes no `kdim` takes the tall stamp only when its row count is
    already a multiple of 128, and otherwise stays whole-dispatch 32-tile.
-3. **32-row tile** - the default stamp.
+4. **32-row tile** - the default stamp.
 
 **Half operands ride an f16 activation panel.** One pass converts the f32 panel; the GEMM then
 re-reads it at half the bytes `d/64` times, so the convert amortizes above a row floor
@@ -57,8 +62,10 @@ sites:
   rows measures zero to negative end to end.
 - **An over-knee panel runs as N-column TILES**, each under the small-panel knee, with the tile
   count bounded by `DEVW_MAX_TILES` (32), divisibility, the small-panel knee and the pool.
-  Deep-dense models (300 MB+ up/gate/down planes) need up to that many tiles, and narrow tiles
-  measure fine - a 20-threadgroup tile dispatch still beat the tg-staged fallback at 512 rows.
+  Narrow tiles measure fine - a 20-threadgroup tile dispatch still beat the tg-staged fallback
+  at 512 rows. A K-quant site needing more than 8 tiles leaves dev-W entirely for the tall
+  in-kernel-dequant stamp (sec.2.2c form 1): at that size the panel is DRAM-resident and the
+  f16 materialization plus re-stream loses to reading the quant plane in-kernel.
 - **A k-quant tg fallback is about 1.28x the q8 half-panel form**, so a k-quant site lowers the
   over-knee bar, the tiled-rows floor, and the long-K floor (1024 rows to 512): a tiled read
   still beats THAT fallback.
