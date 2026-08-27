@@ -397,7 +397,7 @@ namespace das {
         if (decl->baseType == Type::typeDecl || decl->baseType == Type::typeMacro) {
             return nullptr;
         }
-        if (decl->baseType == Type::autoinfer && !autoToAlias) { // until alias is fully resolved, can't infer
+        if (decl->baseType == Type::autoinfer && (!autoToAlias || decl->alias.empty())) {
             return nullptr;
         }
         if (decl->baseType == Type::alias || (decl->baseType == Type::autoinfer && autoToAlias)) {

@@ -5356,6 +5356,11 @@ namespace das {
             uint32_t tf = expr->body->getEvalFlags();
             if (tf & EvalFlags::yield) { // only unwrap if it has "yield"
                 auto blk = replaceGeneratorFor(expr, func);
+                if (!blk) {
+                    error("generator for is not fully inferred yet", "", "",
+                          expr->at, CompilationError::not_resolved_yet_block);
+                    return Visitor::visit(expr);
+                }
                 scopes.back()->needCollapse = true;
                 reportAstChanged();
                 return blk;
