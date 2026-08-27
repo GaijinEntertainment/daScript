@@ -14,7 +14,6 @@ options indenting = 4
 
 require dastest/testing_boost public
 require glsl/glsl_opengl
-require math
 require strings
 
 var @in @location a_uv : float2
