@@ -11,7 +11,9 @@ require rr_shaders public
 require rr_models public
 require rr_postfx public
 require live/live_commands public
-require live/live_api public
+// Optional: the REST API needs dashv/libhv, which the wasm build has no use for
+// and cannot link. `?` skips it there and keeps it on the desktop.
+require ?dashv live/live_api public
 require live/live_watch_boost public
 require live/live_vars public
 // Without decs_live every reload emptied the world -- the player kept flying

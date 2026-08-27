@@ -31,6 +31,12 @@ var audio_initialized = false
 var asch : AudioSystemChannels
 
 var music_initialized = false
+// The strudel player runs on its own worker. Under a single-threaded audio
+// backend -- which is what the wasm build gets -- there is no worker to host it,
+// so music is gated off there and the generated SFX carry the whole soundtrack.
+// Set from audio_is_single_threaded() at init, so ONE source serves native and
+// wasm alike.
+var music_enabled = false
 var g_music_tracks : table<string; int>
 var prev_music_state = GameState.menu
 var low_fuel_music_active = false
@@ -486,7 +492,7 @@ def strudel_music_main() {
 }
 
 def update_music_state() {
-    if (!music_initialized) {
+    if (!music_enabled || !music_initialized) {
         return
     }
     let low_fuel = (game_state == GameState.playing && player_fuel < LOW_FUEL_THRESHOLD)
@@ -532,7 +538,11 @@ def init_audio() {
         set_volume(engine_sid, 0.0)
         set_pause(engine_sid, true)
     }
-    if (!music_initialized) {
+    if (!audio_initialized) {
+        return
+    }
+    music_enabled = !audio_is_single_threaded()
+    if (music_enabled && !music_initialized) {
         strudel_init(@@strudel_music_main)
         strudel_set_volume(0.35, 0.0)
         music_initialized = true
