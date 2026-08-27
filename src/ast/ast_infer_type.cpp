@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_infer_type.h"
+#include "daScript/ast/ast_pass_macros.h"
 #include "daScript/ast/ast_visitor.h"
 
 #define DAS_XSTR(s) #s
@@ -6381,25 +6382,6 @@ namespace das {
         return evalAndFoldStringBuilder(expr);
     }
 
-    // called once per inferTypesDirty pass, right after errors.clear(); each macro decides its
-    // own per-pass firings through canVisitPass. A report that must survive the per-pass
-    // errors.clear() is the macro's job (macro_sticky_error) - the loop never stops for one,
-    // stopping it would skip the infer-macro rounds and relocate/POD, and the pass would still
-    // clear the plain error
-    static void applyPreInferMacros ( Program * program, int pass ) {
-        auto thisModule = program->thisModule.get();
-        // program->library, not Module::foreach: the latter walks every module in the
-        // process, so a nested compile would run macros from an unrelated program
-        program->library.foreach([&](Module * mod) -> bool {
-            for ( const auto & pm : mod->preInferMacros ) {
-                if ( pm->canVisitPass(program, thisModule, pass) ) {
-                    pm->apply(program, thisModule);
-                }
-            }
-            return true;
-        }, "*");
-    }
-
     void inferTypes(Program * program, TextWriter &logs, ModuleGroup &libGroup) {
         program->newLambdaIndex = 1;
         // inferPassesUsed is NOT reset here — parseDaScript resets it once per module
@@ -6425,6 +6407,8 @@ namespace das {
                             return false;
                         }
                         if (anyWork) { // if macro did anything, we done
+                            applyPostRewriteMacros(program);
+                            if (program->failed()) return false;
                             program->reportingInferErrors = true;
                             inferTypesDirty(program, logs, true);
                             program->reportingInferErrors = false;
@@ -6531,7 +6515,6 @@ namespace das {
             program->inferPassesUsed++;   // count each body invocation; avoids undercount when loop breaks early (pass is 0-based)
             program->failToCompile = false;
             program->errors.clear();
-            applyPreInferMacros(program, pass);
             InferTypes context(program, &logs);
             context.verbose = verbose || logInferPasses;
             program->visit(context);
@@ -6556,7 +6539,10 @@ namespace das {
             auto modMacro = [&](Module *mod) -> bool {
                 if (program->thisModule->isVisibleDirectly(mod) && mod != program->thisModule.get()) {
                     for (const auto &pm : mod->inferMacros) {
-                        anyMacrosDidWork |= pm->apply(program, program->thisModule.get());
+                        if ( pm->apply(program, program->thisModule.get()) ) {
+                            anyMacrosDidWork = true;
+                            applyPostRewriteMacros(program);
+                        }
                     }
                 }
                 return true;

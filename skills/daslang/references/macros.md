@@ -10,12 +10,14 @@ Modules compile in `require` order; per module, errors in any phase stop the com
 
 1. **Parse** - reader macros, on raw characters.
 2. **Apply** - `apply` on every function / structure / enumeration annotation.
-3. **Infer** - repeats until stable: `[pre_infer_macro]`, type inference (firing `transform`,
-   call, variant, for-loop and type macros), `[dirty_infer_macro]`. Once the passes settle with no
-   errors `[infer_macro]` runs; returning `true` restarts them, numbered from 0 again.
+3. **Infer** - repeats until stable: type inference (firing `transform`, call, variant, for-loop
+   and type macros), `[dirty_infer_macro]`. Once the passes settle with no errors `[infer_macro]`
+   runs; returning `true` restarts them, numbered from 0 again. Any of these returning `true`
+   fires every `[post_rewrite_macro]`.
 4. **Finish** - `finish` hooks. Fully typed; no more edits.
 5. **Lint** - `lint` / `verifyCall`, `[lint_macro]` / `[global_lint_macro]`. Read-only.
-6. **Optimize** - repeats: built-in optimization plus `[optimization_macro]`.
+6. **Optimize** - repeats: built-in optimization plus `[optimization_macro]`, each rewrite
+   followed by every `[post_rewrite_macro]`.
 7. **Simulate** - the module's own context is created; `[_macro]` functions run.
 
 ## Registering a macro
@@ -76,12 +78,10 @@ is an error.
 
 **Pass macros** see the whole program and derive from `AstPassMacro` (there is no `AstLintMacro` /
 `AstInferMacro`), with `apply(prog : ProgramPtr; mod : Module?) : bool` - plus, for
-`[pre_infer_macro]` only, an optional `canVisitPass(prog, mod, index) : bool` (`false` skips that
-pass; `index` is the pass number within the current inference run, 0 after every restart).
-The annotation picks the phase: `[pre_infer_macro]`, `[infer_macro]`,
-`[dirty_infer_macro]`, `[post_infer_macro]`, `[optimization_macro]`, `[lint_macro]` (per module),
-`[global_lint_macro]` (once, after all modules), `[pre_simulate_macro]`, `[post_compile_macro]`
-(after gc-root collection).
+and no other method. The annotation picks the phase: `[infer_macro]`, `[dirty_infer_macro]`,
+`[optimization_macro]`, `[post_rewrite_macro]` (after every one of those three that returned
+`true`), `[lint_macro]` (per module), `[global_lint_macro]` (once, after all modules),
+`[pre_simulate_macro]`, `[post_compile_macro]` (after gc-root collection).
 
 Inside a macro `compiling_module()` is the module being compiled (`mod` is the module owning the
 macro). Walk it with `compiling_module() |> for_each_function("") $(var func : FunctionPtr) { ... }`;

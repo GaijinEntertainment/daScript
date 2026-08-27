@@ -1216,9 +1216,8 @@ namespace das
         vector<unique_ptr<PassMacro>>               macros;             // infer macros (clean infer, assume no errors)
         vector<unique_ptr<PassMacro>>               inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
         vector<unique_ptr<PassMacro>>               optimizationMacros; // optimization macros
-        vector<unique_ptr<PassMacro>>               preInferMacros;     // run before (re-)inference, on a possibly dirty tree
-        vector<unique_ptr<PassMacro>>               postInferMacros;    // run once inference is done, before lint / folding / codegen
         vector<unique_ptr<PassMacro>>               lintMacros;         // lint macros (assume read-only)
+        vector<unique_ptr<PassMacro>>               postRewriteMacros;
         vector<unique_ptr<PassMacro>>               postCompileMacros;  // run once the module is compiled and its gc root collected
         vector<unique_ptr<PassMacro>>               globalLintMacros;   // lint macros which work everywhere
         vector<unique_ptr<VariantMacro>>            variantMacros;      //  X is Y, X as Y expression handler
@@ -1395,9 +1394,6 @@ namespace das
         PassMacro ( const string na = "" ) : name(na) {}
         virtual ~PassMacro() = default;
         virtual bool apply( Program *, Module * ) { return false; }
-        // pre-infer macros only: gate before pass `pass` - the pass number within the current
-        // inferTypesDirty run, 0 after every (re)start
-        virtual bool canVisitPass ( Program *, Module *, int /*pass*/ ) { return true; }
         string name;
     };
 

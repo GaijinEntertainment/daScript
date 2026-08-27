@@ -59,9 +59,9 @@ DAS_CC_API das::smart_ptr<das::FileAccess> get_file_access( char * pak ) {
 
 namespace das {
 
-    void applyPostInferMacros ( Program * program ) {
+    void applyPostRewriteMacros ( Program * program ) {
         program->library.foreach([&](Module * mod) -> bool {
-            for ( const auto & pm : mod->postInferMacros ) {
+            for ( const auto & pm : mod->postRewriteMacros ) {
                 pm->apply(program, program->thisModule.get());
             }
             return true;
@@ -1084,10 +1084,6 @@ namespace das {
                 *totInfer += inferLegT;
             }
             if ( !program->failed() ) {
-                // the only post-infer firing: inference just finished, and buildAccessFlags -
-                // the first pass to read the tree - dereferences expr->type unguarded.
-                // What later passes and user macros rewrite belongs to a [simulate_macro]
-                applyPostInferMacros(program.get());
                 program->buildAccessFlags(logs);    // this is used by the lint pass
                 if ( program->patchAnnotations() ) {
                     // A patchAnnotations() pass can both mutate the AST (astChanged) AND record a
@@ -1405,7 +1401,7 @@ namespace das {
         }
     }
 
-    void addRttiRequireVariable ( ProgramPtr res, string fileName ) {
+    void addRttiRequireVariable ( ProgramPtr res, string fileName, const LineInfo & at ) {
         TextWriter ss;
         for ( const auto & arq : res->allRequireDecl ) {
             ss << get<1>(arq) << " ";
@@ -1413,9 +1409,10 @@ namespace das {
         ss << fileName;
         auto rtti_require = new Variable();
         rtti_require->name = "__rtti_require";
-        rtti_require->type = new TypeDecl(Type::tString, rtti_require->at);
-        rtti_require->init = new ExprConstString(ss.str());
-        rtti_require->init->type = new TypeDecl(Type::tString, rtti_require->init->at);
+        rtti_require->at = at;
+        rtti_require->type = new TypeDecl(Type::tString, at);
+        rtti_require->init = new ExprConstString(at, ss.str());
+        rtti_require->init->type = new TypeDecl(Type::tString, at);
         rtti_require->used = true;
         rtti_require->private_variable = true;
         res->thisModule->addVariable(rtti_require);
@@ -1811,7 +1808,7 @@ namespace das {
                 if (!res->failed())
                     res->markExecutableSymbolUse();
                 if (res->getDebugger())
-                    addRttiRequireVariable(res, fileName);
+                    addRttiRequireVariable(res, fileName, LineInfo(access->getFileInfo(fileName), 1, 1, 1, 1));
                 if (!res->failed() && !exportAll)
                     res->removeUnusedSymbols();
                 if (!res->failed())

@@ -10,7 +10,7 @@ module ast_boost shared public
 //! macro authors: ``[macro]``, ``[reader_macro]``, ``[call_macro]``,
 //! ``[function_macro]``, ``[block_macro]``, ``[variant_macro]``,
 //! ``[tag_function]``, ``[tag_structure]``, ``[infer_macro]``,
-//! ``[optimization_macro]``, ``[pre_infer_macro]``, ``[post_infer_macro]``,
+//! ``[optimization_macro]``, ``[post_rewrite_macro]``,
 //! ``[lint_macro]``, ``[global_lint_macro]`` and ``[macro_function]``.
 
 require daslib/rtti
@@ -479,17 +479,8 @@ class SetupDirtyInferMacro : SetupAnyAnnotation {
     override annotation_function_call : string = "add_new_dirty_infer_macro"
 }
 
-class SetupPreInferMacro : SetupAnyAnnotation {
-    //! Registers annotated structure as a pre-infer macro: runs before every
-    //! (re-)inference pass, on a tree a macro may have just made invalid. Override
-    //! ``canVisitPass`` to skip passes.
-    override annotation_function_call : string = "add_new_pre_infer_macro"
-}
-
-class SetupPostInferMacro : SetupAnyAnnotation {
-    //! Registers annotated structure as a post-inference macro: runs once inference is
-    //! done, before lint / folding / codegen, where every expression type is final.
-    override annotation_function_call : string = "add_new_post_infer_macro"
+class SetupPostRewriteMacro : SetupAnyAnnotation {
+    override annotation_function_call : string = "add_new_post_rewrite_macro"
 }
 
 class SetupPostCompileMacro : SetupAnyAnnotation {
@@ -1152,8 +1143,7 @@ def private setup {
         add_new_structure_annotation("infer_macro", new SetupInferMacro())
         add_new_structure_annotation("dirty_infer_macro", new SetupDirtyInferMacro())
         add_new_structure_annotation("optimization_macro", new SetupOptimizationMacro())
-        add_new_structure_annotation("pre_infer_macro", new SetupPreInferMacro())
-        add_new_structure_annotation("post_infer_macro", new SetupPostInferMacro())
+        add_new_structure_annotation("post_rewrite_macro", new SetupPostRewriteMacro())
         add_new_structure_annotation("post_compile_macro", new SetupPostCompileMacro())
         add_new_structure_annotation("lint_macro", new SetupLintMacro())
         add_new_structure_annotation("global_lint_macro", new SetupGlobalLintMacro())

@@ -1,0 +1,1 @@
+The ``[post_rewrite_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked right after any user macro reports that it rewrote the tree: the inference macro loops and the optimizer's macro loop. This is where a check that must see what a macro just built belongs, and it is what ``daslib/ast_verify`` uses.

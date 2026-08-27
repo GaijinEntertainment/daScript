@@ -1524,17 +1524,6 @@ namespace das {
                 return false;
             }
         }
-        virtual bool canVisitPass ( Program * prog, Module * mod, int pass ) override {
-            if ( auto fnCanVisitPass = get_canVisitPass(classPtr) ) {
-                bool result = true;
-                runMacroFunction(context, "canVisitPass", [&]() {
-                    result = invoke_canVisitPass(context,fnCanVisitPass,classPtr,prog,mod,pass);
-                });
-                return result;
-            } else {
-                return true;
-            }
-        }
     protected:
         void *      classPtr;
         Context *   context;
@@ -2360,12 +2349,8 @@ namespace das {
         module->inferMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
-    void addModulePreInferMacro ( Module * module, PassMacroPtr newM, Context * ) {
-        module->preInferMacros.push_back(unique_ptr<PassMacro>(newM));
-    }
-
-    void addModulePostInferMacro ( Module * module, PassMacroPtr newM, Context * ) {
-        module->postInferMacros.push_back(unique_ptr<PassMacro>(newM));
+    void addModulePostRewriteMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->postRewriteMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
     void addModulePostCompileMacro ( Module * module, PassMacroPtr newM, Context * ) {
@@ -2708,11 +2693,8 @@ namespace das {
             SideEffects::modifyExternal, "addModuleInferDirtyMacro")
                 ->args({"module","annotation","context"});
         // lint macro
-        addExtern<DAS_BIND_FUN(addModulePreInferMacro)>(*this, lib,  "add_pre_infer_macro",
-            SideEffects::modifyExternal, "addModulePreInferMacro")
-                ->args({"module","annotation","context"});
-        addExtern<DAS_BIND_FUN(addModulePostInferMacro)>(*this, lib,  "add_post_infer_macro",
-            SideEffects::modifyExternal, "addModulePostInferMacro")
+        addExtern<DAS_BIND_FUN(addModulePostRewriteMacro)>(*this, lib,  "add_post_rewrite_macro",
+            SideEffects::modifyExternal, "addModulePostRewriteMacro")
                 ->args({"module","annotation","context"});
         addExtern<DAS_BIND_FUN(addModulePostCompileMacro)>(*this, lib,  "add_post_compile_macro",
             SideEffects::modifyExternal, "addModulePostCompileMacro")

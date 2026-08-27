@@ -530,12 +530,9 @@ All accept an optional ``name`` argument. If omitted, the class name is used.
    * - ``[optimization_macro]``
      - ``AstPassMacro``
      - Runs during optimization
-   * - ``[pre_infer_macro]``
+   * - ``[post_rewrite_macro]``
      - ``AstPassMacro``
-     - Runs before every (re-)inference pass; ``canVisitPass`` gates it per pass
-   * - ``[post_infer_macro]``
-     - ``AstPassMacro``
-     - Runs once inference is done, before lint, folding, and codegen
+     - Runs after every user macro that reported it rewrote the tree
    * - ``[lint_macro]``
      - ``AstPassMacro``
      - Runs during linting
@@ -550,13 +547,10 @@ All accept an optional ``name`` argument. If omitted, the class name is used.
      - Attaches the macro to every function tagged with ``[tag_function]``
 
 Every pass macro — ``[infer_macro]``, ``[dirty_infer_macro]``, ``[optimization_macro]``,
-``[pre_infer_macro]``, ``[post_infer_macro]``, ``[lint_macro]``, ``[global_lint_macro]``,
+``[post_rewrite_macro]``, ``[lint_macro]``, ``[global_lint_macro]``,
 ``[post_compile_macro]`` —
 derives from the single ``AstPassMacro`` base class and overrides
 ``apply(prog : ProgramPtr; mod : Module?) : bool``. There is no per-pass base class.
-A ``[pre_infer_macro]`` may also override ``canVisitPass(prog, mod, index) : bool``
-and return ``false`` to skip a pass (``index`` is the pass number within the current
-inference run, 0 after every restart); the other kinds never consult it.
 
 ``[tag_function_macro]`` additionally requires a ``tag`` argument; unlike the other
 annotations here, that one is not optional.
