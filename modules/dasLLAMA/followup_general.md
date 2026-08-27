@@ -603,3 +603,12 @@
     license a property of the call (a call-site argument the emitter reads beside m/n/sgs, or
     a distinct builtin spelling for deliberate f32 forms) and exempt q8b by construction;
     test_metal_float_a_gate's arms then split per-stamp.
+
+51. **`pool_release` cannot enforce its own postcondition - the handle survives the release.**
+    The reviewer's point stands: after a release the caller still holds the pointer, and a
+    double-release pushes a live buffer into the free list twice (two later frees of one
+    buffer; the new null-guard cannot see it). The suggested in-place fix is a das no-op -
+    `var buf : MetalBuffer?` is a by-value pointer copy, so nulling it never reaches the
+    caller (the LINT023 class). Done = the signature becomes `var buf : MetalBuffer?&` and
+    the body nulls after the push, with every call site audited for lvalue-ness in the same
+    change - an API pass over das_metal_boost, not a babysit patch.
