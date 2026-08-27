@@ -1,2 +1,4 @@
+# Comment stripping retired: comments are harvested - RULE/FACT comments file into
+# REVIEW.md / ARCHITECTURE.md, site-local one-liners stay - not formatter-deleted.
 [format]
-force_clean_comments = true
+force_clean_comments = false
