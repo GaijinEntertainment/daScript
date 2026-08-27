@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist. Shared
 emitter rules: `modules/REVIEW_SHADER_EMITTERS.md` - apply that list with this one.**
-Architecture doc: `MASTERPLAN.md`.
+Architecture doc: `ARCHITECTURE.md`.
 
 - **A diff that adds an emitter capability also adds its tests under `tests/spirv/` (repo
   root), in the same change:** a `_golden/` disassembly or equivalence fixture, and presence

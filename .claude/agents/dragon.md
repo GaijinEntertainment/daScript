@@ -40,10 +40,12 @@ You audit the document, not the code it governs. Document types and their contra
 - `skills/*.md` - bound by `skills/internal/writing_skills.md` (audience decision, shipping gate).
 - `CLAUDE.md` and per-module rule files - bound by the rules-carry-rules-not-history clause:
   current contract only, no incident anecdotes, no PR numbers, no dated entries.
-- Ledger and architecture documents (`ARCHITECTURE.md`, `PROFILE.md`, `followup_*.md`,
-  `THINKING.md`, `PERF_LEDGER.md`, `MASTERPLAN.md`) are ALLOWED to accrete - growth there is
-  the document doing its job. If handed one, say it is a ledger and audit only factual-claim
-  staleness, not size or history.
+- `ARCHITECTURE.md` (any folder) - bound by `ARCHITECTURE_COMMON.md` (repo root): present
+  tense, the mood test (a must/never sentence binding a diff belongs in the folder's
+  REVIEW.md; a dated or past-tense passage belongs in /history), numbered citable sections.
+- Ledger documents (`PROFILE.md`, `followup_*.md`, `THINKING.md`, `PERF_LEDGER.md`) are
+  ALLOWED to accrete - growth there is the document doing its job. If handed one, say it is
+  a ledger and audit only factual-claim staleness, not size or history.
 
 ## Verdicts
 

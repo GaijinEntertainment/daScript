@@ -1,7 +1,7 @@
 # dasMetal Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`MASTERPLAN.md`.
+`ARCHITECTURE.md`.
 
 **Every change under this folder applies `modules/REVIEW_SHADER_EMITTERS.md` too.**
 

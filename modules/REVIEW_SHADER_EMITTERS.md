@@ -1,7 +1,7 @@
 # Shared emitter rules - dasSpirv and dasMetal
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `modules/dasMetal/MASTERPLAN.md` and `modules/dasSpirv/MASTERPLAN.md`.
+docs: `modules/dasMetal/ARCHITECTURE.md` and `modules/dasSpirv/ARCHITECTURE.md`.
 
 **These rules bind both emitters.** Each module's `REVIEW.md` routes here, and a change under
 that module applies this file together with the module's own list.
@@ -27,7 +27,7 @@ that module applies this file together with the module's own list.
 
 - **A diff that adds a kernel capability needing a runtime shape value ships a specialization
   path.** A specialization path is one compiled variant per constant shape. When the capability
-  cannot have one, the same diff records that in the module's `MASTERPLAN.md`.
+  cannot have one, the same diff records that in the module's `ARCHITECTURE.md`.
 
 - **Never check a claim about emitted shape against the das source - check it in the emitted
   words or text.** Emitted shape is the structure of the emitted kernel - its signature, its
@@ -35,7 +35,7 @@ that module applies this file together with the module's own list.
   threadgroup sizes).
 
 - **A diff that adds a kernel-model capability to one emitter adds it to the other, or records
-  the asymmetry in the shared ledger (`modules/dasMetal/MASTERPLAN.md`).** A kernel-model
+  the asymmetry in the shared ledger (`modules/dasMetal/ARCHITECTURE.md`).** A kernel-model
   capability is a way of authoring or lowering kernels: class members, multiple kernels per
   class, method flattening, tensor-GEMM builtins.
 

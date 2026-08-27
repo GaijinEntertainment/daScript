@@ -29,10 +29,9 @@ or a checklist that restates contract text instead of pointing - is a self-revie
 fixed like any other. An external repo that adopts `REVIEW.md` vendors a copy of
 `REVIEW_COMMON.md` at its root, so the pointer resolves there too.
 
-`<ARCH-DOC>` is the module's own design document - `ARCHITECTURE.md` (dasLLAMA),
-`MASTERPLAN.md` (dasMetal), or the module's `CLAUDE.md` when no separate design doc exists.
-Name it concretely; a module whose rules keep wanting a rationale home probably needs to
-grow one.
+`<ARCH-DOC>` is the module's own design document - `ARCHITECTURE.md` (dasLLAMA, dasMetal,
+dasSpirv), or the module's `CLAUDE.md` when no separate design doc exists. Name it
+concretely; a module whose rules keep wanting a rationale home probably needs to grow one.
 
 ## The executable half - REVIEW.das
 
@@ -61,8 +60,10 @@ whatever sits there today.
 
 ## Writing the entries
 
-- Lead each entry with the **bold testable claim**, tail with the consequence ("... is a
-  defect") where it sharpens the check.
+- Lead each entry with the **bold ban or duty binding the diff** ("never X - do Y instead";
+  "a diff that changes X also does Y, in the same change"; "a diff that adds X ... is a
+  defect"). A sentence describing how the system is belongs in the architecture doc, not
+  here. No spare words: a tail that restates what the head already binds is cut.
 - The list is flat - no section headers, blank line between entries. A grouping that keeps
   wanting a header is a separable concern: give it its own file and route to it from the
   opening (`modules/REVIEW_SHADER_EMITTERS.md` and `modules/dasLLAMA/REVIEW_GPU.md` are the

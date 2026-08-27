@@ -241,7 +241,7 @@ are exotic extensions; revisit case-by-case if a consumer needs one.
 `cmake/DasVulkanCompileShader.cmake` (+ its `include` at `CMakeLists.txt:21`) is
 the last GLSL-era artifact: a consumer-facing glslangValidator/spirv-opt macro,
 unused by the repo itself since the dasSpirv migration ("ZERO GLSL, ZERO
-committed .spv" - dasSpirv MASTERPLAN). Decision (2026-07-16): shaders are
+committed .spv" - `modules/dasSpirv/ARCHITECTURE.md`). Decision (2026-07-16): shaders are
 always das-authored, the helper goes; deletion deferred ~2 weeks in case a
 consumer objects. Delete the file + the include line; nothing else references
 it.

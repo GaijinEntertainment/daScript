@@ -1,80 +1,12 @@
-# dasSpirv - pure-daslang daslang->SPIR-V shader backend
+# dasSpirv MASTERPLAN - archived plan material and implementation log
 
-> **This file is the durable masterplan and implementation history for dasSpirv.**
-> It is the canonical, reviewable record - not Claude memory, not a scratch plan.
-> Each phase appends a dated entry to the **Implementation log** at the bottom as it lands.
+Archived 2026-08-27 from `modules/dasSpirv/MASTERPLAN.md`, which became
+`modules/dasSpirv/ARCHITECTURE.md` and kept only present-tense reference content.
+Everything below is that document's plan sections and its implementation log, verbatim.
 
-## Why
+---
 
-dasVulkan's shaders are authored as hand-written GLSL `.vert`/`.frag`/`.comp`, compiled
-offline with glslangValidator into `.spv` blobs, *both* committed, and loaded at runtime.
-Two languages, an external SDK, committed binaries, no code-sharing with the host.
-
-dasGlsl already eliminated exactly this for OpenGL: shaders written in daslang, annotated
-`[..._program]`, an `AstVisitor` (`GlslExport`) emits GLSL at compile time into a global
-captured by `@@fn`, fed to `glShaderSource`. dasSpirv does the same for Vulkan, but emits
-**SPIR-V binary directly from the daslang AST** - no GLSL/glslang intermediary, no LLVM.
-
-SPIR-V is an SSA IR (typed results, basic blocks, structured control flow, a logical
-builder) - the same shape `llvm_jit` already lowers daslang to. So dasSpirv is
-**dasGlsl's frontend pattern + llvm_jit's SSA-backend pattern, fused into a SPIR-V emitter**.
-Just as `[jit]` lowers daslang->LLVM->native, `[compute_shader]` lowers daslang->SPIR-V->GPU.
-
-What makes it cheap: drivers do all GPU optimization (we emit naive *valid* SPIR-V - so does
-glslang); SPIR-V binary is a self-delimiting word stream (trivial to emit and disassemble);
-the backend-agnostic AST tooling (`collect_dependencies`, `collect_used_types`,
-`make_visitor`) is reusable verbatim; and dasVulkan already has a GPU-verified `out[i]==i*i`
-compute test as a ready-made end-to-end gate.
-
-## Settled decisions
-
-1. **Lives in the main tree as `modules/dasSpirv`** - sibling to dasGlsl/dasLLVM, in
-   PR-protected GaijinEntertainment/daScript, sharing main-tree CI + `daslib/coverage` +
-   `tests/`. SPIR-V is a general daslang capability (also useful for GL4.6/WebGPU), not
-   Vulkan-specific.
-2. **Fresh frontend** - new `[compute_shader]`/`[vertex_shader]`/`[fragment_shader]`
-   annotations; dasGlsl is the *design map*, not a code dependency. Reuse only the generic
-   AST tooling (none of which lives in dasGlsl). **Zero edits to the shipped dasGlsl/dasOpenGL.**
-3. **Test-per-instruction is a hard requirement**, enforced by both an opcode census and the
-   LCOV coverage gate.
-4. **SPIR-V target 1.3 / Vulkan 1.1** - StorageBuffer storage class + `Block` (not the
-   deprecated 1.0 BufferBlock+Uniform path). lavapipe advertises >=1.2; 1.3 also dodges the
-   1.4 rule that the entry-point interface must list *all* globals (<=1.3 lists only
-   Input/Output). An annotation arg `spirv_version` leaves 1.0/1.4 selectable later; the
-   interface builder must be made version-aware before any bump.
-
-## Architecture
-
-`modules/dasSpirv` is **pure daslang** (mirrors dasGlsl: a `spirv/` subdir of `.das` files +
-CMake resolver rows derived from `.das_module`; no `.shared_module`, no C++). dasVulkan
-consumes it via `require spirv/...` and feeds the emitted `array<uint>` (SPIR-V words) to `create_shader_module`.
-
-| File | Gen/Hand | Purpose |
-|---|---|---|
-| `spirv/spirv_grammar.das` | **generated** | Opcode + GLSL.std.450 enums + StorageClass/Decoration/BuiltIn/ExecutionMode/Capability token constants, generated from the vendored, pinned SPIRV-Headers grammar JSON. Single source of numeric truth (+ opcode->name table for the disassembler). |
-| `spirv/spirv_builder.das` | hand | `SpirvModule` (per-section append buffers), monotonic id allocator, type/constant dedup pools, `emit(section, opcode, ...)`, `get_type_id`, `get_const_id`, `finalize() : array<uint>`. AST-agnostic. |
-| `spirv/spirv_types.das` | hand | daslang `TypeDecl` -> SPIR-V type-id (scalars, vec/mat, fixed + runtime arrays, structs, pointers) with layout decorations. Highest-detail correctness file. |
-| `spirv/spirv_emit.das` | hand | `SpirvEmit : AstVisitor` codegen visitor + `[macro_function] generate_spirv(fn, var errors) : array<uint>`. Override set mirrors `GlslExport`; rejection list mirrors its error list. |
-| `spirv/spirv_shader.das` | hand | `[compute_shader]`/`[vertex_shader]`/`[fragment_shader]` function-macros (subclass `SpirvShader : AstFunctionAnnotation`, modeled on dasGlsl's `GlslShader`). `apply` reserves an `array<uint>` global; `fixup` runs dependency collection, calls `generate_spirv`, sets `glob.init`. |
-| `spirv/spirv_dis.das` | hand | Minimal disassembler + opcode-census helper (self-delimiting walk: word0 = `(wordCount<<16)\|opcode`). Symbolic via `spirv_grammar`'s opcode->name table. |
-| `generator/gen_spirv_grammar.das` | hand | The mini-generator: reads vendored grammar JSON -> emits `spirv/spirv_grammar.das`. |
-| `spirv_headers/*.json` | vendored | Pinned `spirv.core.grammar.json` + `extinst.glsl.std.450.grammar.json` (provenance + commit recorded below). |
-| `CMakeLists.txt` | hand | `ADD_MODULE_DAS_FROM_DESCRIPTOR(spirv spirv)` (rows derived from `.das_module`) + install rule, modeled on `modules/dasGlsl/CMakeLists.txt`. |
-
-**SSA backend (llvm_jit template).** `SpirvEmit` carries `e2v : table<Expression?;uint>`
-(Expression->result-id), `v2v : table<Variable?;uint>` (Variable->pointer-id),
-`ite2blocks`/`loop_stack` for control flow, and a hand-maintained `cur_block_terminated`
-(SPIR-V has no builder to query - set on every terminator, cleared on `OpLabel`; guards
-mirror llvm_jit's `current_block_terminates()`). Section buffers concatenate at `finalize`
-in SPIR-V's mandated order: header(5) -> capabilities -> extensions -> ext-imports ->
-memory-model -> entry-points -> exec-modes -> debug -> decorations -> types+constants+global-vars
-(interleaved, define-before-use, deduplicated) -> functions.
-
-**Capture mechanism (dasGlsl analog).** dasGlsl's `fixup` sets
-`glob.init = new ExprConstString(value := text)`; ours builds an `ExprMakeArray` of
-`ExprConstUInt` (one per SPIR-V word) for an `array<uint>` global named `"{func.name}`spirv"`.
-`generate_spirv` is a standalone `[macro_function]` called by **both** `fixup` and the unit
-tests - so opcode assertions hit the real codegen path without macro plumbing.
+## Cache (planned; lifted from the Architecture section - no such constant was ever built)
 
 **Cache.** Mirror llvm_jit's content-addressed pattern: a `SPIRV_CODEGEN_VERSION` constant
 FNV-folded with `get_function_aot_hash(fn)` (and the pinned SPIRV-Headers version), so
@@ -95,31 +27,6 @@ Replace dasVulkan's `examples/shaders/square.comp` (+committed `.spv`) with a da
   `OpTypeRuntimeArray`; `OpTypeStruct`; global `OpVariable`s.
 - **Body:** `OpFunction`/`OpLabel`; `OpAccessChain`; `OpLoad`; `OpIMul`; `OpStore`;
   `OpReturn`; `OpFunctionEnd`.
-
-## Test architecture - "every emitted instruction has a test"
-
-Three behavioral layers + two enforcement gates (all in main-tree `tests/spirv/` except GPU):
-
-1. **Opcode-assertion units.** Each test compiles a tiny `[compute_shader]` fixture, calls
-   `generate_spirv`, runs `spirv_dis` to a structured instruction list, and asserts the
-   expected numeric opcode present/absent/operand-at-offset/decoration present. One test per
-   emittable instruction kind.
-2. **`spirv-val` gate.** Every blob the suite produces is validated via SPIRV-Tools
-   `spirv-val` (`C:\VulkanSDK\1.4.350.0\Bin`). Soft-skip if absent locally, hard-required in
-   CI - the real correctness oracle for structured-CFG and define-before-use bugs.
-3. **Real-driver behavioral regression - as early as Phase 1.** A one-call framework in
-   dasVulkan, `run_compute_spirv(words, n) : array<uint>` over the existing `compute_boost`,
-   runs any emitted blob in ~2 lines. Primary gate = **local real GPU** (SDK 1.4.350),
-   `out[i]==i*i`, every iteration. CI = lavapipe software (dasVulkan CI is lavapipe-only on
-   `ubuntu-latest`; GitHub-hosted runners have no GPU, so no real-GPU CI lane - covered
-   locally; a self-hosted GPU runner would wire straight in). Triangle pixels at Phase 3.
-
-- **Gate A - LCOV coverage.** Run layer 1 under `dastest --cov-path spirv.lcov`
-  (`daslib/coverage.das`); require ~100% of emission-dispatch lines in `spirv_emit.das` +
-  `spirv_builder.das`.
-- **Gate B - opcode census (stronger).** `spirv_dis` aggregates the opcode set across *all*
-  fixtures; a meta-test asserts it equals the declared "supported opcodes" set. Catches the
-  gap LCOV can't - an opcode whose emit line ran but was never *asserted*.
 
 ## Phasing (independently verifiable; no sizing)
 
@@ -149,12 +56,6 @@ Three behavioral layers + two enforcement gates (all in main-tree `tests/spirv/`
 - Phase 1: port `square.comp` -> a daslang `[compute_shader]`, delete the committed `.spv`,
   point `test_compute` at the emitted blob.
 - Phase 3: port `triangle.vert`/`.frag`, delete their `.spv`.
-
-## Cross-backend parity - the kernel-model asymmetry ledger
-
-The mirror rule (REVIEW.md, both emitters) keeps the kernel model symmetric with the MSL
-emitter. The ledger of deliberate/pending asymmetries is shared - ONE list, not two - and
-lives in `modules/dasMetal/MASTERPLAN.md` under the same heading.
 
 ## Top risks
 

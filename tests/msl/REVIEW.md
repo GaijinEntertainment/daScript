@@ -1,7 +1,7 @@
 # MSL emitter fixtures Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`modules/dasMetal/MASTERPLAN.md`.
+`modules/dasMetal/ARCHITECTURE.md`.
 
 **Weakening the census check is a defect.** The check runs both directions: every kind in
 `declared_msl_census` is emitted by some fixture, and every kind any fixture emits is declared

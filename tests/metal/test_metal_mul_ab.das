@@ -1,7 +1,7 @@
 options gen2
 options indenting = 4
 
-// Real-GPU behavioral gate vs the CPU-reference oracle (MASTERPLAN test architecture, layer 3).
+// Real-GPU behavioral gate vs the CPU-reference oracle (ARCHITECTURE.md sec.4, layer 3).
 // The kernel body is ordinary daslang, so the same method runs on the CPU: a driver loop sets
 // gl_GlobalInvocationID and calls the method on an instance whose members are plain arrays —
 // that run IS the expected output. The GPU result must match exactly (integer-valued floats).

@@ -1,7 +1,7 @@
 # dasMetal kernel tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`modules/dasMetal/MASTERPLAN.md`.
+`modules/dasMetal/ARCHITECTURE.md`.
 
 **A CPU-oracle test that reuses one kernel-class instance across thread ids is a defect of the
 test, not of the kernel - build a fresh instance for every thread id.** A CPU-oracle test

@@ -12,7 +12,7 @@ sweep turns up stale plan docs.
 - **STAY:** docs cited as *current* spec / recipe / contract by shipped code, tests,
   tutorials, skills, or docs - living contracts (e.g.
   `modules/dasSQLITE/PROVIDER_CONTRACT.md`), durable records that self-describe as
-  canonical (`MASTERPLAN.md`), README-indexed operative runbooks
+  canonical, README-indexed operative runbooks
   (`tune_for_this_box.md`), active-arc plans, and results ledgers (`results.md`).
 - **The test, per inbound reference:** is it *operative* (a reader needs the doc to act
   now) or *historical context* (a comment narrating provenance)? Only docs whose
@@ -33,7 +33,7 @@ sweep turns up stale plan docs.
    search plus the ledger.
 5. Fix the moved docs' own relative links that point back at staying files (e.g. a moved
    doc's `results.md` link becomes `../../benchmarks/sql/results.md`).
-6. If the area keeps a living index doc (`MASTERPLAN.md`, a module `README.md`, a staying
+6. If the area keeps a living index doc (`ARCHITECTURE.md`, a module `README.md`, a staying
    contract doc), add a short note **in that doc**: what was archived and where.
 7. Append one line per doc to the **Archive log** at the bottom of `history/README.md`:
    `- YYYY-MM-DD \`old/path\` -> \`history/new/path\` - one-line hook`. The ledger is how

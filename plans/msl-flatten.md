@@ -99,6 +99,6 @@ member types keep the hard error (the old field gate, now scoped to what state c
       production arms on MoeGemvArgs kargs (lab twins keep historical layouts per arm), dead
       tail duplicates dropped, main end-to-end to the leak assert, 19/19 checks rel 0
 - [ ] spirv_emit parity: dasSpirv lowers class kernels (devirtualized method CALLS) but not
-      the flatten/scope-splice or state-member forms - ledgered in dasMetal/MASTERPLAN.md
-      sec.Cross-backend parity; if a joined class ever crosses backends, the same flatten design
+      the flatten/scope-splice or state-member forms - ledgered in modules/dasMetal/ARCHITECTURE.md
+      sec.5 Cross-backend parity; if a joined class ever crosses backends, the same flatten design
       applies there (not in this arc's scope)

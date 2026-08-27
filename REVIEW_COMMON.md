@@ -4,7 +4,8 @@ Every folder-scoped `REVIEW.md` is a binding per-change review checklist for the
 its folder: run it on every such change before it ships, including a change to the checklist
 itself. This file is the part all checklists share; a checklist's own text carries only its
 folder's criteria, and its opening block points here. An external repo that adopts `REVIEW.md`
-vendors a copy of this file at its root.
+vendors a copy of this file at its root. A statement's home is the folder's architecture doc -
+`ARCHITECTURE_COMMON.md` (repo root) is that document type's contract.
 
 **What stays in a checklist: rules that can be checked against a diff. Nothing else.**
 A reader must be able to apply every rule **without reading the code and without prior

@@ -76,7 +76,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    `ffn_vs_ref` red bisected per-kernel via the model-less kernel-unit suite, portability_subset
    enabled at device create (landed dasVulkan-side); correctness only, Metal stays the fast
    path on that box. (b) Close the kernel-model asymmetry ledger
-   (`modules/dasMetal/MASTERPLAN.md` sec.Cross-backend parity): relax `[metal_dispatch]` to
+   (`modules/dasMetal/ARCHITECTURE.md` sec.5 Cross-backend parity): relax `[metal_dispatch]` to
    multi-kernel + `family=` like `[vk_dispatch]`, adopt inheritance in the metal kernel
    corpus where families exist, fix the metal lens's grid-literal infer trap. (c) Hoist the
    ~80 lines of dispatch-lens micro-grammar/validation the `[vk_dispatch]` and
