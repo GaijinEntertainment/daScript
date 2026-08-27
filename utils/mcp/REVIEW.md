@@ -1,7 +1,7 @@
 # mcp Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md`.
+`README.md`. Planned work: `ROADMAP.md`.
 
 **Never add `mcp` to `DAS_UTILS` or `DAS_UTILS_SHIPPED_EXES` (`utils/CMakeLists.txt`) - run it
 interpreted through `.mcp.json` instead.**

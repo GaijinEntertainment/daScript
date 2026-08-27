@@ -46,4 +46,24 @@ def test_arch_citation_shape_errors(t : T?) {
         t |> expect_issue("_arch_no_hash.das",
             "citation \"ARCHITECTURE.md\" is not \"<doc>.md#<anchor>\"")
     }
+    t |> run("[arch] with a named argument that is not at") @(t : T?) {
+        t |> expect_issue("_arch_wrong_name.das",
+            "expecting exactly one argument, at=\"<doc>.md#<anchor>\"")
+    }
+    t |> run("[arch] with a non-string argument") @(t : T?) {
+        t |> expect_issue("_arch_wrong_type.das",
+            "expecting exactly one argument, at=\"<doc>.md#<anchor>\"")
+    }
+    t |> run("[arch] with a second argument") @(t : T?) {
+        t |> expect_issue("_arch_two_args.das",
+            "expecting exactly one argument, at=\"<doc>.md#<anchor>\"")
+    }
+    t |> run("[arch] citing an anchor with no document half") @(t : T?) {
+        t |> expect_issue("_arch_no_doc_half.das",
+            "citation \"#x\" is not \"<doc>.md#<anchor>\"")
+    }
+    t |> run("[arch] citing a document with an empty anchor half") @(t : T?) {
+        t |> expect_issue("_arch_no_anchor_half.das",
+            "citation \"ARCHITECTURE.md#\" is not \"<doc>.md#<anchor>\"")
+    }
 }

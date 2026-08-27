@@ -110,7 +110,7 @@ def private run_lint_argv(extra : array<string>; root : string; var output : str
 
 
 def private run_lint(root : string; var output : string&) : int {
-    var none : array<string>
+    let none : array<string>
     return run_lint_argv(none, root, output)
 }
 
@@ -139,6 +139,13 @@ def test_rule_doc_line_gate(t : T?) {
             "the finding names the document and its size\n{out}")
         t |> success(find(out, "arch/REVIEW_GPU.md: LINT027") >= 0,
             "enforce_arch arms the gate too\n{out}")
+        t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
+    }
+    t |> run("--enable LINT027 alone still arms the folder walk") @(t : T?) {
+        let root = build_tree()
+        var out : string
+        let rc = run_lint_argv(["--enable", "LINT027"], root, out)
+        t |> equal(count_of(out, "LINT027"), 2, "the line gate runs with LINT025/026 whitelisted off\n{out}")
         t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
     }
     t |> run("the cap itself is silent, and so is LAWS.md at any length") @(t : T?) {

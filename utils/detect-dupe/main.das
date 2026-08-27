@@ -435,15 +435,23 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
         var compile_files : array<string>
         compile_files |> reserve(length(files))
         var n_skipped = 0
+        var n_agent = 0
         for (f in files) {
             if (has_expect_directive(f)) {
                 n_skipped++
+                continue
+            }
+            if (installs_debug_agent(f)) {
+                n_agent++
                 continue
             }
             compile_files |> push(f)
         }
         if (n_skipped > 0) {
             to_log(LOG_INFO, "{n_skipped} file(s) skipped (expect-directive)\n")
+        }
+        if (n_agent > 0) {
+            to_log(LOG_INFO, "{n_agent} file(s) skipped (debug-agent installer - two in one scan process panic at the second install)\n")
         }
         files_scanned = length(files)
 

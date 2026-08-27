@@ -70,6 +70,25 @@ def public has_expect_directive(file : string) : bool {
 }
 
 
+//! True for a file whose COMPILATION installs a thread-local debug agent (`options debugger`
+//! / `options profiler`, or a direct installer call). The agent outlives compile_file, so a
+//! scan process that compiles two such files panics at the second install
+//! (`debugger.das: thread local debug agent already installed`) - they never enter a corpus.
+def public installs_debug_agent(file : string) : bool {
+    let text = fread(file)
+    if (empty(text)) return false
+    let lines <- text |> split("\n")
+    for (line in lines) {
+        let trimmed = line |> strip
+        if (trimmed |> starts_with("options debugger") || trimmed |> starts_with("options profiler")
+                || (find(trimmed, "install_new_thread_local_debug_agent") >= 0 && !(trimmed |> starts_with("//")))) {
+            return true
+        }
+    }
+    return false
+}
+
+
 def public scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>) {
     let st = stat(path)
     if (!st.is_valid) return
