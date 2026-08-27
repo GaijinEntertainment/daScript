@@ -56,15 +56,19 @@ never fire and is deleted - better absent than dead.
 - **One rule is one short paragraph - bold criterion first, blank line between rules.** A
   rule that needs more than that is describing how to write code, not how to review it.
   Split it or move it. Procedure - a files-to-touch how-to - is not a rule.
-- **A rule tells the diff what it must or must not do - it never describes the system.**
-  Two forms exist. A ban: "never X - do Y instead", or "a diff that adds X ... is a
-  defect". A duty: "a diff that changes X also does Y, in the same change". A sentence
-  that describes how the code is ("state is a stack", "X and Y agree") is a statement, not
-  a rule: the reader has to work out the check, and the first violating diff turns the
-  sentence false. Rewrite it as the ban or duty of the diff that could break it, or move
-  it to the architecture doc.
+- **A rule tells the diff what it must or must not do - it never describes what the system
+  is.** Two forms exist. A ban says what the system must not be: "never X - do Y instead",
+  or "a diff that adds X ... is a defect" - the defect spelling binds the reviewer's
+  verdict, so it is a ban, not a statement. A duty says what a change must also do: "a
+  diff that changes X also does Y, in the same change". A sentence that describes how the
+  code is ("state is a stack", "X and Y agree") is a statement, not a rule: the reader has
+  to work out the check, and the first violating diff turns the sentence false. Rewrite it
+  as the ban or duty of the diff that could break it, or move it to the architecture doc.
 - **A rule is written in plain English - short sentences, common words, no idioms.** A
   rule that needs a second read is a defect of the rule.
+- **A rule spends no spare words.** A clause that restates what the head already binds - a
+  defect verdict repeating its own duty, a doubled negation, a filler phrase - is cut. The
+  shortest wording that keeps the meaning wins.
 - **No sections.** A section header is a bucket asking to be filled: a grouping either
   decouples into the flat list or is a separable concern that earns its own routed file.
 - **Rules are unnumbered and unnicknamed** - numbering invites citation. Anything that needs

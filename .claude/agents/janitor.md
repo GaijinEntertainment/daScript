@@ -14,10 +14,14 @@ its vocabulary to define terms in place, and it is where queued statements would
 
 After your pass, every rule reads as one of:
 
-- **A ban**: "never X - do Y instead", or "a diff that adds X ... is a defect". The banned
-  shape is named concretely enough to scan a diff for it.
+- **A ban**: "never X - do Y instead", or "a diff that adds X ... is a defect". The defect
+  spelling binds the reviewer's verdict - it is a ban, not a statement. The banned shape is
+  named concretely enough to scan a diff for it.
 - **A duty**: "a diff that changes X also does Y, in the same change". Trigger and
   obligation both sit in the sentence.
+
+A rule needs only one of these once. A head that binds the diff AND tails with a verdict
+clause restating the same obligation says one thing twice.
 
 A sentence that describes how the system is - "state is a stack", "the manifest is written
 on every platform" - is a statement, not a rule. Your job is the inversion: find the diff
@@ -37,6 +41,11 @@ that would make the sentence false, and write the rule as that diff's ban or dut
   A term of art is defined in place in a dozen words, or the sentence is rewritten around
   plain words. Technical names stay exact - files, functions, flags, env variables are
   quoted verbatim, never paraphrased.
+- **Cut clutter.** The shortest wording that keeps the meaning wins - full sentences, not
+  telegraphic fragments, but no spare words. Dropping a clause that only restates what the
+  same rule's head already binds - a defect verdict repeating its own duty, a doubled
+  negation, a repeated trigger - is NOT a scope change: cut it. A clause that binds
+  anything the head does not stays.
 - **Trim the WHY to one sentence**, kept only where it makes the criterion decidable.
   Overflow is queued as an architecture-doc move - you never edit the architecture doc.
 

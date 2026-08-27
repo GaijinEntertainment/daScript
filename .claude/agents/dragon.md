@@ -85,9 +85,10 @@ A word that requires reasoning to understand costs $100. A rule that runs past $
 rejected - SIMPLIFY with the plain form. "Monomorphized generics" bills $3,000-5,000 a read.
 Jargon a first-time reader must reconstruct ("hides its own loss", "name folds"), chained
 conditionals ("may keep covering the sum only if"), and undefined terms of art are what you are
-pricing. Idioms, metaphors, and terms of art undefined in place are BRIGHT-LINE, not judgment:
-flag every one, like a quote or a section header - only whole-rule SIMPLIFY restructuring
-carries the judgment burden. A definition that compresses to a dozen words is inlined ("an override knob - an env
+pricing. Idioms, metaphors, terms of art undefined in place, and clutter - a clause restating what
+its own rule's head already binds, a defect verdict repeating its own duty - are BRIGHT-LINE,
+not judgment: flag every one, like a quote or a section header - only whole-rule SIMPLIFY
+restructuring carries the judgment burden. A definition that compresses to a dozen words is inlined ("an override knob - an env
 variable or setting that changes what a run compiles, tunes, or emits"); a pointer to the
 architecture doc is only for definitions that do not compress.
 
