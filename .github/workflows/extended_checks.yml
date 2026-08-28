@@ -534,10 +534,10 @@ jobs:
       if: matrix.target == 'linux'
       run: |
         set -eux
-        for t in test_cave test_generate test_cave_rules test_sfx_gen; do
-          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./examples/games/boulder-dash/$t.das
-          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./web/examples/ui/samples/examples/boulder-dash/$t.das
-        done
+        # dastest walks the folder: every test_*.das runs, files without [test]
+        # annotations just compile - a new suite cannot be silently left out.
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./examples/games/boulder-dash
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./web/examples/ui/samples/examples/boulder-dash
 
     - name: "Test review-md discovery"
       if: matrix.target == 'linux'

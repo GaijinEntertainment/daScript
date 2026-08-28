@@ -1,8 +1,9 @@
 # Port convergence: one source for desktop games and playground samples
 
 Goal (ruled 2026-08-28): the game sources under `examples/games/<g>/` and the playground
-bundles under `web/examples/ui/samples/examples/<g>/` become byte-identical, then the copy
-disappears entirely - the deploy stages game files straight from `examples/games/`.
+bundles under `web/examples/ui/samples/examples/<g>/` become byte-identical, with the
+`examples/games/REVIEW.das` identity gate keeping them that way (ratified as the endgame -
+the copies stay in git; deploy-time staging was considered and rejected, see phase 3).
 
 ## Why this is nearly free (probed, deployed runtime)
 
@@ -48,9 +49,10 @@ Two real deltas remain, both fixable in shared source:
 3. **Ban the fork re-forming** (amended from "kill the copy"): the copies stay in git
    but `examples/games/REVIEW.das` gains `check_port_identity` - every `.das` under a
    samples dir with a desktop twin must be byte-identical to it, in both directions.
-   True stage-from-examples (deleting the git copies, staging at deploy time) stays an
-   OPEN OPTION, not taken because it rewires pages.yml, which runs only on master
-   pushes - a mistake there breaks the live site with no PR-time signal.
+   True stage-from-examples (deleting the git copies, staging at deploy time) was
+   REJECTED (ruled 2026-08-29): it rewires pages.yml, which runs only on master pushes -
+   a mistake there breaks the live site with no PR-time signal - and the copy step the
+   gate polices is trivial.
 
 ## Traps and notes for the doer
 
