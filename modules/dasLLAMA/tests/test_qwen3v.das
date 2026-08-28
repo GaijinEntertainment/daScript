@@ -138,6 +138,9 @@ def test_qwen3v_tier1(t : T?) {
             for (i in range64(pst.t.layer_w_stride)) {
                 pst.blob[base + i] = 0.0
             }
+            for (i in range64(long_length(pst.wblob) > 0l ? pst.t.layer_w_stride : 0l)) {
+                pst.wblob[base + i] = uint16(0)   // the baked twin serves the GPU route - a blob-only poison is laundered
+            }
             var ptw = Qwen3vTower()
             mint_qwen3v_tower(pst, ptw)
             let planes <- make_planes("gray", 448, 448)
@@ -160,7 +163,7 @@ def test_qwen3v_tier1(t : T?) {
 // The Metal tower arm: the SAME fixtures and bars, tower pinned ON — the GPU chain's parity
 // gate, with engage evidence (encode/block counter deltas), never "the model ran".
 [test]
-def test_qwen3v_tier1_metal(t : T?) {
+def test_qwen3v_tier1_metal(t : T?) {   // nolint:STYLE038 — one flat gate ladder + its poison leg, honest shape
     t |> run("tier-1 on the Metal tower (Omni-30B narrow + 4B deepstack)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
@@ -215,6 +218,9 @@ def test_qwen3v_tier1_metal(t : T?) {
                 for (i in range64(pst.t.layer_w_stride)) {
                     pst.blob[base + i] = 0.0
                 }
+                for (i in range64(long_length(pst.wblob) > 0l ? pst.t.layer_w_stride : 0l)) {
+                    pst.wblob[base + i] = uint16(0)   // the baked twin serves the GPU route - a blob-only poison is laundered
+                }
                 var ptw = Qwen3vTower()
                 mint_qwen3v_tower(pst, ptw)
                 let planes <- make_planes("gray", 448, 448)
@@ -239,12 +245,13 @@ def test_qwen3v_tier1_metal(t : T?) {
     }
 }
 
-// The f16-W GEMM route: under a tensor crown the tower serves block/merger GEMMs from the
-// f16 weight shadow on the crowned half twins. Same oracle, same GPU bars - the shadow holds
-// the file's own f16 values, so only the tensor op's accumulation order separates the routes.
+// The twin-W GEMM route: under a tensor crown the tower serves block/merger GEMMs from the
+// image's baked halfword twin on the crowned twins - f16 files ride the half family, bf16
+// files (Omni) the bf16 family. Same oracle, same GPU bars - the twin holds the file's own
+// values, so only the tensor op's accumulation order separates the routes.
 [test]
 def test_qwen3v_tier1_metal_f16(t : T?) {
-    t |> run("tier-1 on the Metal tower's f16-W route (crowned twins, 4B deepstack)") @(tt : T?) {
+    t |> run("tier-1 on the Metal tower's twin-W route (crowned twins, 4B f16 + Omni bf16)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let mm4 = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
             if (!model_available(tt, mm4)) {
@@ -275,6 +282,21 @@ def test_qwen3v_tier1_metal_f16(t : T?) {
                 set_metal_tower_f16(false)
                 tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)
                 tt |> equal(metal_tower_f16_encodes() - f1, 0l, "the knob-off leg keeps the f32 GEMM route")
+                set_metal_tower_f16(true)
+            }
+            // the bf16 leg: the Omni twin rides the crowned bf16 family (its half-X tensor stamp)
+            let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
+            if (model_available(tt, mm)) {
+                set_qwen3v_q8(false)
+                var tw <- load_qwen3v_tower(mm)
+                reset_qwen3v_q8()
+                var st = Qwen3vState()
+                let b0 = metal_tower_f16_encodes()
+                if (tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_GPU)) {
+                    tt |> success(metal_tower_f16_encodes() - b0 >= 1l, "the bf16-sourced tower rode the twin route")
+                }
+                delete st
+                delete tw
             }
             set_metal_tower_f16(true)
             set_metal_tensor_crowns("")

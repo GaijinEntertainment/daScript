@@ -548,28 +548,37 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
         st.qscales |> reserve_resize(qo / 32l)
         q3v_read_planes(m, bytes, st, serve_sizes)
         q3v_repack_all(st, serve_sizes)
-        if (!st.t.q8 && !st.t.blk_bf16 && !st.t.mm_bf16
-                && gguf_tensor_type(m, "v.blk.0.attn_qkv.weight") == GGML_TYPE_F16
-                && gguf_tensor_type(m, "mm.0.weight") == GGML_TYPE_F16) {
-            q3v_bake_half_twin(st)
+        if (!st.t.q8 && st.t.blk_bf16 == st.t.mm_bf16
+                && (st.t.blk_bf16
+                    || (gguf_tensor_type(m, "v.blk.0.attn_qkv.weight") == GGML_TYPE_F16
+                        && gguf_tensor_type(m, "mm.0.weight") == GGML_TYPE_F16))) {
+            q3v_bake_half_twin(st, st.t.blk_bf16)
         }
     }
     fclose(f)
     return <- st
 }
 
-//! The exact lane's f16 GEMM twin (f16-SOURCED files only, so the GEMM regions are the file's
-//! own bits): the whole blob at the same element offsets, halfword. The Metal tower's f16-W
-//! route reads it zero-copy; absence of the plane IS the ineligibility flag (bf16/f32/q8).
-def private q3v_bake_half_twin(var st : Qwen3vStaging) {
+//! The exact lane's halfword GEMM twin: the whole blob at the same element offsets, the file's
+//! own bits (bf16 = the f32 blob's top halfword). The Metal twin-W route reads it zero-copy;
+//! plane absence IS the ineligibility flag (mixed/f32/q8), and `blk_bf16` names the format.
+def private q3v_bake_half_twin(var st : Qwen3vStaging; bf16 : bool) {
     let n = long_length(st.blob)
     st.wblob |> reserve_resize(n)
     unsafe {
         let sp = addr<float const?>(st.blob[0])
-        var dp = addr<float16?>(st.wblob[0])
-        for (i in range64(n)) {
-            // the clamp guards the ride-along f32 regions (conv fold, pos) the route never reads
-            dp[i] = float16(clamp(sp[i], -65504.0, 65504.0))
+        if (bf16) {
+            let up = addr<uint const?>(st.blob[0])
+            var dp = addr(st.wblob[0])
+            for (i in range64(n)) {
+                dp[i] = uint16(up[i] >> 16u)
+            }
+        } else {
+            var dp = addr<float16?>(st.wblob[0])
+            for (i in range64(n)) {
+                // the clamp guards the ride-along f32 regions (conv fold, pos) the route never reads
+                dp[i] = float16(clamp(sp[i], -65504.0, 65504.0))
+            }
         }
     }
 }

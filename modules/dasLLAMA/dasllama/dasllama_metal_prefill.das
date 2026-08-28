@@ -3411,6 +3411,10 @@ def private pf_dbuf(pso : MetalComputePipeline?) : bool => g_pf_env_dbuf && pso 
 //! box without one (every pre-M5 Apple GPU) answers false and callers keep their f32 route.
 def pf_hmm_ready() : bool => g_pf_pso_hmm_th != null && g_pf_pso_cvt_half != null
 
+//! Whether [[pf_enc_bf16_mm]] would take a converted half-X panel (its tensor half-X stamp
+//! compiled) - callers skip the conversion dispatch when the base form would ignore it.
+def pf_bf16_half_ready() : bool => g_pf_pso_bf16_mm_th != null && g_pf_pso_cvt_half != null
+
 def private pf_devw_flip : MetalBuffer ? {
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh
     g_pf_bwh_flip = !g_pf_bwh_flip

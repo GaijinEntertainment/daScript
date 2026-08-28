@@ -624,18 +624,20 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     return true
 }
 
-//! One block/merger GEMM on either route: f16 = X converts into the shared xh panel and the
-//! crowned half twins read W from the baked f16 twin plane at the f32 route's element offset
-//! (bytes x2); f32 = enc_f32_mm. `cvt` false reuses the panel a previous site converted.
-def private tw_mm(enc : MetalComputeEncoder?; f16w : bool; bwh, bblob : MetalBuffer?; welem : int64;
+//! One block/merger GEMM on the routes: f16/bf16 read W from the baked twin plane at the f32
+//! route's element offset (bytes x2), X converting into the shared xh panel where the form
+//! takes it; f32 = enc_f32_mm. `cvt` false reuses the panel a previous site converted.
+def private tw_mm(enc : MetalComputeEncoder?; f16w, bf16w : bool; bwh, bblob : MetalBuffer?; welem : int64;
                   bx, bxh, by : MetalBuffer?; yoff : uint64; bk, bn : MetalBuffer?;
                   rows, nd, kdim : int64; cvt : bool) {
+    if ((f16w || (bf16w && bxh != null)) && cvt) {
+        var cka = CvtArgs(total = uint(rows * kdim))
+        enc_cvt_half(enc, bx, bxh, cka, rows * kdim)
+    }
     if (f16w) {
-        if (cvt) {
-            var cka = CvtArgs(total = uint(rows * kdim))
-            enc_cvt_half(enc, bx, bxh, cka, rows * kdim)
-        }
         pf_enc_hmm(enc, bwh, bxh, by, yoff, bk, bn, rows, nd, nd, kdim, uint64(welem * 2l))
+    } elif (bf16w && yoff == 0ul) {   // the bf16 builder has no y-offset seat; only the deepstack tap offsets, and no bf16 deepstack file exists
+        pf_enc_bf16_mm(enc, bwh, uint64(welem * 2l), bx, by, bk, bn, rows, nd, bxh, kdim)
     } else {
         enc_f32_mm(enc, bblob, uint64(welem * 4l), bx, by, yoff, bk, bn, rows, nd)
     }
@@ -701,11 +703,13 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var bm4b = pool_acquire_pinned(g_tw_pool, g_dev, bytes_m4)    // fc1/mm0 out, GELU'd in place
     var btail = pool_acquire_pinned(g_tw_pool, g_dev, bytes_pr)
     var btap = nds > 0l ? pool_acquire_pinned(g_tw_pool, g_dev, uint64(nds) * bytes_pr) : null
-    // an empty wblob IS the ineligibility flag: the mint bakes the f16 twin only for f16-sourced GEMMs
-    let f16_route = g_tw_env_tower_f16 && length(t.wblob) > 0l && pf_hmm_ready()
+    // an empty wblob IS the ineligibility flag: the mint bakes the twin only for f16/bf16-sourced GEMMs
+    let twin = g_tw_env_tower_f16 && length(t.wblob) > 0l
+    let f16_route = twin && !t.blk_bf16 && pf_hmm_ready()
+    let bf16_route = twin && t.blk_bf16
     let bytes_xh = uint64(max(mp * ff, mp4 * 4l * d) * 2l)
-    var bxh = f16_route ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null   // the shared f16 X panel
-    var bwh = f16_route ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
+    var bxh = (f16_route || (bf16_route && pf_bf16_half_ready())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null   // the shared f16 X panel
+    var bwh = (f16_route || bf16_route) ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
     let bytes_x0 = uint64(mp * t.patch_dim * 4l)
     var bx0 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x0)   // im2col rows - the GPU stem's input
     let pos_resized = qwen3v_pos_resized(t, s)
@@ -747,7 +751,8 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
     residency_flush()   // commit THIS encode's own notes before its first submission
     var err = ""
-    let f16w = bwh != null && bxh != null
+    let f16w = f16_route && bwh != null && bxh != null
+    let bf16w = bf16_route && bwh != null
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         // the stem GEMM stays f32: the conv fold is a computed plane, never the f16 twin
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, braw, 0ul, u_pd, u_d, mp, d)
@@ -760,29 +765,29 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
             let o = qwen3v_block_offs(t, l)
             enc_ln(enc, bx, bblob, uint64(o.ln1_w * 4l), bblob, uint64(o.ln1_b * 4l), bxb, u_d, u_eps, npos)
             let wqe = o.w[QWEN3V_GEMM_QKV]   // the fused qkv rows: q, then k at d·d, v at 2d·d
-            tw_mm(enc, f16w, bwh, bblob, wqe, bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, true)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, wqe, bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.qkv_b * 4l), u_d, u_totd, npos * d)
             enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, null, npos * d / 2l)
             enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
-            tw_mm(enc, f16w, bwh, bblob, wqe + d * d, bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, false)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, wqe + d * d, bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + d) * 4l), u_d, u_totd, npos * d)
             enc_rope(enc, braw, 0ul, bcos, bsin, u_d, u_hs, u_np_rope, u_neox, null, npos * d / 2l)
             enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
-            tw_mm(enc, f16w, bwh, bblob, wqe + 2l * d * d, bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, false)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, wqe + 2l * d * d, bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64((o.qkv_b + 2l * d) * 4l), u_d, u_totd, npos * d)
             enc_head_restride(enc, braw, 0ul, bv, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
             enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
             enc_av_mm(enc, batt, bv, bo_p, ka, bstat, mp, t.n_head, hs_pad)
             enc_head_restride(enc, bo_p, 0ul, bxb2, 0ul, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
-            tw_mm(enc, f16w, bwh, bblob, o.w[QWEN3V_GEMM_O], bxb2, bxh, bxb, 0ul, u_d, u_d, mp, d, d, true)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_O], bxb2, bxh, bxb, 0ul, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(o.out_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
             enc_ln(enc, bx, bblob, uint64(o.ln2_w * 4l), bblob, uint64(o.ln2_b * 4l), bxb, u_d, u_eps, npos)
-            tw_mm(enc, f16w, bwh, bblob, o.w[QWEN3V_GEMM_UP], bxb, bxh, bh, 0ul, u_d, u_ff, mp, ff, d, true)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_UP], bxb, bxh, bh, 0ul, u_d, u_ff, mp, ff, d, true)
             enc_add_bias_rows(enc, bh, 0ul, bblob, uint64(o.up_b * 4l), u_ff, u_totff, npos * ff)
             enc_gelu_lut(enc, bh, 0ul, u_totff, npos * ff)
-            tw_mm(enc, f16w, bwh, bblob, o.w[QWEN3V_GEMM_DOWN], bh, bxh, bxb2, 0ul, u_ff, u_d, mp, d, ff, true)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_DOWN], bh, bxh, bxb2, 0ul, u_ff, u_d, mp, d, ff, true)
             enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(o.down_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
             let k = l == t.ds_l0 ? 0l : l == t.ds_l1 ? 1l : l == t.ds_l2 ? 2l : -1l
@@ -790,19 +795,19 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
                 let fo = t.ds_f + k * t.ds_f_stride
                 let wo = t.ds_w + k * t.ds_w_stride
                 enc_ln(enc, bx, bblob, uint64(fo * 4l), bblob, uint64((fo + 4l * d) * 4l), bm4, u_d4, u_eps, nout)
-                tw_mm(enc, f16w, bwh, bblob, wo, bm4, bxh, bm4b, 0ul, u_d4, u_d4, mp4, 4l * d, 4l * d, true)
+                tw_mm(enc, f16w, bf16w, bwh, bblob, wo, bm4, bxh, bm4b, 0ul, u_d4, u_d4, mp4, 4l * d, 4l * d, true)
                 enc_add_bias_rows(enc, bm4b, 0ul, bblob, uint64((fo + 8l * d) * 4l), u_d4, u_tot4, nout * 4l * d)
                 enc_gelu_lut(enc, bm4b, 0ul, u_tot4, nout * 4l * d)
-                tw_mm(enc, f16w, bwh, bblob, wo + 16l * d * d, bm4b, bxh, btap, uint64(k * mp4 * proj * 4l), u_d4, u_pr, mp4, proj, 4l * d, true)
+                tw_mm(enc, f16w, bf16w, bwh, bblob, wo + 16l * d * d, bm4b, bxh, btap, uint64(k * mp4 * proj * 4l), u_d4, u_pr, mp4, proj, 4l * d, true)
                 enc_add_bias_rows(enc, btap, uint64(k * mp4 * proj * 4l), bblob, uint64((fo + 12l * d) * 4l), u_pr, u_totpr, nout * proj)
             }
         }
         // the tail: post-LN over [npos x d], then the merger MLP over the [nout x 4d] view
         enc_ln(enc, bx, bblob, uint64(t.post_ln_w * 4l), bblob, uint64(t.post_ln_b * 4l), bxb, u_d, u_eps, npos)
-        tw_mm(enc, f16w, bwh, bblob, t.mm0_w, bxb, bxh, bm4b, 0ul, u_d4, u_d4, mp4, 4l * d, 4l * d, true)
+        tw_mm(enc, f16w, bf16w, bwh, bblob, t.mm0_w, bxb, bxh, bm4b, 0ul, u_d4, u_d4, mp4, 4l * d, 4l * d, true)
         enc_add_bias_rows(enc, bm4b, 0ul, bblob, uint64(t.mm0_b * 4l), u_d4, u_tot4, nout * 4l * d)
         enc_gelu_lut(enc, bm4b, 0ul, u_tot4, nout * 4l * d)
-        tw_mm(enc, f16w, bwh, bblob, t.mm2_w, bm4b, bxh, btail, 0ul, u_d4, u_pr, mp4, proj, 4l * d, true)
+        tw_mm(enc, f16w, bf16w, bwh, bblob, t.mm2_w, bm4b, bxh, btail, 0ul, u_d4, u_pr, mp4, proj, 4l * d, true)
         enc_add_bias_rows(enc, btail, 0ul, bblob, uint64(t.mm2_b * 4l), u_pr, u_totpr, nout * proj)
     }
     var served = false
@@ -817,7 +822,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
         g_tower_encodes++
         g_tower_rows += npos
         g_tower_blocks += t.n_layer
-        if (f16w) {
+        if (f16w || bf16w) {
             g_tower_f16_encodes++
         }
         served = true
