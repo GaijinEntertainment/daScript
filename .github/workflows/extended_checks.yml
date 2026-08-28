@@ -528,10 +528,10 @@ jobs:
       if: matrix.target == 'linux'
       run: |
         set -eux
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./examples/games/boulder-dash/test_cave.das
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./examples/games/boulder-dash/test_generate.das
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./web/examples/ui/samples/examples/boulder-dash/test_cave_rules.das
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./web/examples/ui/samples/examples/boulder-dash/test_sfx_gen.das
+        for t in test_cave test_generate test_cave_rules test_sfx_gen; do
+          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./examples/games/boulder-dash/$t.das
+          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./web/examples/ui/samples/examples/boulder-dash/$t.das
+        done
 
     - name: "Test review-md discovery"
       if: matrix.target == 'linux'

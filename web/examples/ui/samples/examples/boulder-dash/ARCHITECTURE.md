@@ -1,10 +1,13 @@
 # Boulder Dash - architecture
 
-A web-playground Boulder Dash: `cave.das` is the pure simulation, `cave_gen.das` the
-procedural builder, `sfx_gen.das` the pure sound synthesis, `live_stub.das` the playground
-shim standing in for the `live/*` host, and `main.das` the orchestration - rendering,
-input, audio, music, and the `[live_command]` surface (dead code under the stub). The two
-test suites run with `bin/daslang dastest/dastest.das -- --test <file>` from the repo root.
+Boulder Dash, one source for desktop and the web playground: `cave.das` is the pure
+simulation, `cave_gen.das` the procedural builder, `sfx_gen.das` the pure sound synthesis,
+and `main.das` the orchestration - rendering, input, audio, music, and the
+`[live_command]` surface (dead registry entries when no REST host is attached). This
+folder is the staged twin of `examples/games/boulder-dash` (repo root) - the files are
+byte-identical; the wasm playground runtime resolves the same `live/*` requires the
+desktop uses. The four test suites run with
+`bin/daslang dastest/dastest.das -- --test <file>` from the repo root.
 
 ## The tick and its scan order
 

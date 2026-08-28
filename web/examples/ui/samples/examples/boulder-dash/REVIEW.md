@@ -45,9 +45,10 @@ adds its line here, with its tests, in the same change.**
 - `cave_gen.das` - procedural builder and its sanity/repair passes; finishes every
   returned cave with `finish_cave`.
 - `sfx_gen.das` - pure PCM synthesis; owns `AUDIO_RATE`/`AUDIO_CHANNELS`. Zero playback.
-- `live_stub.das` - playground shim for the `live/*` host. Zero game logic.
 - `main.das` - orchestration: rendering, input polling, audio playback, music, live commands.
-- `test_cave_rules.das` - the cave-simulation dastest suite.
+- `test_cave.das` - the cave movement/interaction dastest suite.
+- `test_generate.das` - the procedural-generation dastest suite.
+- `test_cave_rules.das` - the cave-simulation coupling dastest suite.
 - `test_sfx_gen.das` - the sound-synthesis dastest suite.
 - `ARCHITECTURE.md` - design rationale for this folder.
 - `REVIEW.md` - this file.
