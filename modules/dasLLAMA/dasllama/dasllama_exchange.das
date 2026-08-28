@@ -383,6 +383,12 @@ def private consent_prompt_console() : bool {
     print("\n{EXCHANGE_CONSENT_NOTICE}\n\n")
     print("Use the exchange? [Accept]/decline: ")
     let line = fgets(fstdin())
+    if (empty(line)) {
+        // EOF (Ctrl+D / closed stdin) is a walkaway, not an answer - record nothing, ask
+        // again next boot. A bare Enter arrives as "\n", so it never lands here.
+        print("exchange: no answer - tuning locally; the question returns next boot\n")
+        return false
+    }
     let word = to_lower(strip(line))
     let accepted = !(word |> starts_with("d") || word |> starts_with("n"))
     if (!exchange_record_consent(accepted)) {

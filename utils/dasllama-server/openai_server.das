@@ -3526,6 +3526,9 @@ def private handle_exchange_consent(var req : HttpRequest?; var resp : HttpRespo
             delete js
         }
     }
+    if (js == null) {
+        return resp |> JSON(error_body("invalid JSON: {jerr}", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
     let av = js?["accept"]
     if (av == null || !(av.value is _bool)) {
         return resp |> JSON(error_body("body must carry accept:true|false", "invalid_request_error"), http_status.BAD_REQUEST)
