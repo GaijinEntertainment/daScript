@@ -1909,6 +1909,7 @@ def test_vkd_fa_cm2(t0 : T?) {
                 return
             }
             verify(ensure_fa_cm2_h64_cls() && ensure_fa_cm2_h128_cls(), "fa class rails must engage on an fa-capable device")
+            verify(ensure_fa_cm2_h64_f16_cls() && ensure_fa_cm2_h128_f16_cls(), "fa f16-out twins must engage on an fa-capable device")
             let nheads = 4
             let kv_mul = 2
             let rows = 77    // partial 64-tile: q0=64 has 13 valid rows — clamp loads + store discard run
@@ -1934,15 +1935,23 @@ def test_vkd_fa_cm2(t0 : T?) {
                 let q_bytes = int64(rows * qd) * 4l
                 let m_bytes = int64(kpos * kvd) * 4l
                 let sh_bytes = int64(kpos * kvd) * 2l
+                let h16_bytes = int64(rows * qd) * 2l
                 let qdev = make_device_buf(q_bytes)
                 let kdev = make_device_buf(m_bytes)
                 let vdev = make_device_buf(m_bytes)
                 let khdev = make_device_buf(sh_bytes)
                 let vhdev = make_device_buf(sh_bytes)
                 let yd = make_device_buf(q_bytes)
+                let yh16 = make_device_buf(h16_bytes)
+                let yh16b = make_device_buf(h16_bytes)
                 var host = make_host_buf(q_bytes, true, [cached = true])
+                var host16 = make_host_buf(h16_bytes * 2l, true, [cached = true])
                 var y_cls : array<float>
+                var y16 : array<float16>
+                var y16b : array<float16>
                 y_cls |> resize(rows * qd)
+                y16 |> resize(rows * qd)
+                y16b |> resize(rows * qd)
                 unsafe {
                     upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
                     upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
@@ -1954,6 +1963,11 @@ def test_vkd_fa_cm2(t0 : T?) {
                     var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd),
                         fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes),
                         fixed_array(1u, 16u, 32u, 4u))
+                    var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16),
+                        fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes),
+                        fixed_array(1u, 16u, 32u, 64u))
+                    var scy = set_f16cvt_cls(fixed_array(yd, yh16b),
+                        fixed_array(q_bytes, h16_bytes), fixed_array(4u, 128u))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -1967,14 +1981,23 @@ def test_vkd_fa_cm2(t0 : T?) {
                     let fawgs = int64(nheads * ((rows + 63) / 64))
                     if (hs == 64) {
                         enc_fa_cm2_h64_cls(raw2, h2, sfa, pcf, fawgs)
+                        enc_fa_cm2_h64_f16_cls(raw2, h2, sfa16, pcf, fawgs)
                     } else {
                         enc_fa_cm2_h128_cls(raw2, h2, sfa, pcf, fawgs)
+                        enc_fa_cm2_h128_f16_cls(raw2, h2, sfa16, pcf, fawgs)
                     }
-                    vhz_dep(raw2, h2, 4u, 0u, true)
+                    // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
+                    var pcy = ActArgs(nelem = uint(rows * qd), gelu = 0u, nblk = 0u)
+                    enc_f16cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
+                    vhz_dep(raw2, h2, 4u | 64u | 128u, 0u, true)
                     cmd_copy_whole(raw2, yd, host.buf, q_bytes)
+                    cmd_copy_range(raw2, yh16, 0l, host16.buf, 0l, h16_bytes)
+                    cmd_copy_range(raw2, yh16b, 0l, host16.buf, h16_bytes, h16_bytes)
                     vk_check(vkEndCommandBuffer(raw2), null)
                     submit_wait(raw2)
                     memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+                    memcpy(addr<void?>(y16[0]), host16.mapped, h16_bytes)
+                    memcpy(addr<void?>(y16b[0]), reinterpret<void?>(intptr(host16.mapped) + uint64(h16_bytes)), h16_bytes)
                 }
                 // oracle mirrors the kernel's f16 grid: q pre-scales then rounds (the kernel's
                 // MatrixTimesScalar-then-convert), K/V round through the shadow; softmax stays f32
@@ -2001,6 +2024,13 @@ def test_vkd_fa_cm2(t0 : T?) {
                 }
                 let bad = mismatch_approx(y_cls, y_ref)
                 t |> success(bad == 0, "fa_cm2 hs {hs} matches the CPU oracle ({bad} of {rows * qd} off)")
+                var bad16 = 0
+                for (i in range(rows * qd)) {
+                    if (float(y16[i]) != float(y16b[i])) {
+                        bad16++
+                    }
+                }
+                t |> success(bad16 == 0, "fa_cm2 hs {hs} f16-out twin == the split pair's f16cvt ({bad16} of {rows * qd} off)")
                 delete qh
                 delete kh
                 delete vh
@@ -2009,6 +2039,8 @@ def test_vkd_fa_cm2(t0 : T?) {
                 delete vh2
                 delete y_ref
                 delete y_cls
+                delete y16
+                delete y16b
             }
         } else {
             feint("dasVulkan not present - skipping\n")

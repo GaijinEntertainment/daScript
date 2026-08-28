@@ -444,6 +444,7 @@ struct coopmatWgB_f16_32x32 {}
 struct coopmatWgB_f16_32x128 {}
 struct coopmatWgB_f16_64x64 {}
 struct coopmatWgB_f16_128x32 {}
+struct coopmatWgAcc_f16_64x128 {}
 struct coopmatWgAcc_f32_64x128 {}
 // the int8 twins (q8 x q8 -> s32 at workgroup scope; K-tile 32)
 struct coopmatWgA_s8_64x32 {}

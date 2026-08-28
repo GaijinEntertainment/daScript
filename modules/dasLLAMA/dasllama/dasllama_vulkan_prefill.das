@@ -239,6 +239,8 @@ def private pf_setup {
             : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
         && (!g_rd.pf_facm2
             || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_cls() : ensure_fa_cm2_h128_cls()))
+        && (!g_rd.pf_facm2 || !any6
+            || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_f16_cls() : ensure_fa_cm2_h128_f16_cls()))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any6 || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
@@ -280,10 +282,14 @@ def private pf_setup {
         }
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve
         if (g_rd.pf_facm2) {
-            g_rd.pf_sets[b + 5] = set_fa_cm2_cls(
-                fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn),
-                fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 4l),
-                fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT))
+            // wo6: the fa tile lands the f16 wo feed directly - the b+6 convert never encodes
+            g_rd.pf_sets[b + 5] = (wo6
+                ? set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_af),
+                    fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 2l),
+                    fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_AQ))
+                : set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn),
+                    fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 4l),
+                    fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)))
         } else {
             let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
             let asizes5 = fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 4l)
@@ -553,9 +559,17 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                         scale = g_rd.scale)
                     let fawgs = g_rd.n_heads * ((wlen + 63l) / 64l)
                     if (hs == 64l) {
-                        enc_fa_cm2_h64_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        if (fo6) {
+                            enc_fa_cm2_h64_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_cm2_h64_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
                     } else {
-                        enc_fa_cm2_h128_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        if (fo6) {
+                            enc_fa_cm2_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_cm2_h128_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
                     }
                 } else {
                     var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
@@ -576,7 +590,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                if (fo6) {
+                if (fo6 && g_rd.pf_facm2) {
+                    // the fa tile already landed f16 - b+6 only stamps
+                } elif (fo6) {
                     var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)
                     enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
                 } elif (fok) {

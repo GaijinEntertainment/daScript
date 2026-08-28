@@ -1542,16 +1542,18 @@ struct FaCm2Args {
 }
 
 // hs=64 (tinyllama-class). The h128 twin below differs only in the head-size-shaped tiles —
-// duplication tolerated until the kernel-reification arc.
-[vk_dispatch(name = "fa_cm2_h64_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class FaCm2H64 {
+// duplication tolerated until the kernel-reification arc. OUT16 lands the out plane f16
+// (mode 4's wo feed — the b+6 convert dispatch vanishes; the f32 stamp is bit-identical split)
+[ |> template_struct_instance]
+class template FaCm2H64T {
     @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
     @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
     @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
-    @ssbo @binding = 3 outp : array<float>       // attention out plane (rows x qd)
+    @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
     @push_constant pa : FaCm2Args
+    @template_constant OUT16 : bool = false
 
-    [spirv_kernel(local_size_x = 128, name = "fa_cm2_h64_cls_spv")]
+    [spirv_kernel(local_size_x = 128)]
     def run {
         let qtiles = (pa.rows + 63u) / 64u
         let h = gl_WorkGroupID.x / qtiles
@@ -1619,23 +1621,42 @@ class FaCm2H64 {
         coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
         coopmatPerElement(ld, ld, @@facm2_recip)
         coopmatMulElem(o, ld, o)                                        // O /= L (padding rows discard at store)
-        coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 64u, 64u)
+        static_if (OUT16) {
+            var of : coopmatWgAcc_f16_64x64
+            coopmatConvert(of, o)
+            coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * 64u, 64u)
+        } else {
+            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 64u, 64u)
+        }
     }
+}
+
+[vk_dispatch(name = "fa_cm2_h64_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64 : FaCm2H64T {
+    typedef OT = float
+}
+
+// mode-4 twin — the out plane lands f16
+[vk_dispatch(name = "fa_cm2_h64_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64F16 : FaCm2H64T {
+    typedef OT = float16
+    override OUT16 = true
 }
 
 // hs=128 (llama-3.2-3B-class): same algorithm at Bc=32 (the head-size cut — K^T/V/softmax
 // state at 32 columns, KV loop steps 32). Fast standalone (24.7 TFLOP/s, right beside the h64) and
 // WINS end-to-end when the shadows fit (3B 4287 vs 3955 no-fa) — serving is gated only on the
 // resident plan learning the f16 shadow cost (see the pf_facm2 gate)
-[vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class FaCm2H128 {
+[ |> template_struct_instance]
+class template FaCm2H128T {
     @ssbo @binding = 0 qpanel : array<float>
     @ssbo @binding = 1 kh : array<float16>
     @ssbo @binding = 2 vh : array<float16>
-    @ssbo @binding = 3 outp : array<float>
+    @ssbo @binding = 3 outp : array<OT>
     @push_constant pa : FaCm2Args
+    @template_constant OUT16 : bool = false
 
-    [spirv_kernel(local_size_x = 128, name = "fa_cm2_h128_cls_spv")]
+    [spirv_kernel(local_size_x = 128)]
     def run {
         let qtiles = (pa.rows + 63u) / 64u
         let h = gl_WorkGroupID.x / qtiles
@@ -1703,8 +1724,26 @@ class FaCm2H128 {
         coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
         coopmatPerElement(ld, ld, @@facm2_recip)
         coopmatMulElem(o, ld, o)
-        coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 128u, 128u)
+        static_if (OUT16) {
+            var of : coopmatWgAcc_f16_64x128
+            coopmatConvert(of, o)
+            coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * 128u, 128u)
+        } else {
+            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 128u, 128u)
+        }
     }
+}
+
+[vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128 : FaCm2H128T {
+    typedef OT = float
+}
+
+// mode-4 twin — the out plane lands f16
+[vk_dispatch(name = "fa_cm2_h128_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128F16 : FaCm2H128T {
+    typedef OT = float16
+    override OUT16 = true
 }
 
 struct DaAttnBArgs {
