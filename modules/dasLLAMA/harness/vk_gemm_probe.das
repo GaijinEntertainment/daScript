@@ -210,6 +210,78 @@ class Cm2ProbeFlat : MoeCmBase {
     }
 }
 
+// push = full decode with the scale base off a PUSH CONSTANT (pa.ksplit, 0 here) instead of
+// the wg_blk0 shared read - prices the dense-dispatch candidate against lit's literal base
+[vk_dispatch(name = "cm2px_push", grid = "wgs", params = "wgs : int64")]
+class Cm2ProbePush : MoeCmBase {
+    @ssbo @binding = 0 @readonly wq : array<VkQ8Blk>
+    @ssbo @binding = 1 @role = "alias" @readonly wsh : array<float16>
+    @ssbo @binding = 3 @readonly xf16 : array<float16>
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint
+
+    [spirv_decode]
+    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
+        return wsh[pa.ksplit + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "cm2px_push_spv")]
+    def run {
+        let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u
+        let wblk0 = sched[rb]
+        let row0 = sched[rb + 1u]
+        let cnt = sched[rb + 2u]
+        let ttiles = (cnt + 255u) / 256u
+        let tix = gl_WorkGroupID.x - sched[rb + 3u]
+        let xt = tix % ttiles
+        let wt = tix / ttiles
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x256
+        var acc : coopmatWgAcc_f16_128x256
+        let t0 = row0 + xt * 256u
+        let m0 = wt * 128u
+        var fla : tensorLayout2D
+        tensorLayoutCreate(fla)
+        tensorLayoutSetBlockSize(fla, 1u, 32u)
+        tensorLayoutSetDimension(fla, pa.d, pa.n)
+        tensorLayoutSetStride(fla, pa.n >> 5u, 1u)
+        var flb : tensorLayout2D
+        tensorLayoutCreate(flb)
+        tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+        var flo : tensorLayout2D
+        tensorLayoutCreate(flo)
+        tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+        var k = 0u
+        for (_i in range(int(pa.n / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < pa.n) {
+            coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+            coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x256
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
+    }
+}
+
 [vk_dispatch(name = "cm2px_lit", grid = "wgs", params = "wgs : int64")]
 class Cm2ProbeLit : MoeCmBase {
     @ssbo @binding = 0 @readonly wq : array<VkQ8Blk>
@@ -291,7 +363,7 @@ def private time_submits(var raw : VkCommandBuffer) : double {
     return double(get_time_usec(t0)) / double(SUBMITS * DISPATCHES)
 }
 
-def private run_shape(name : string; d, n, cnt : int) {
+def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
     let rows = cnt
     let wtiles = (d + TILE - 1) / TILE
@@ -382,7 +454,7 @@ def private run_shape(name : string; d, n, cnt : int) {
 }
 
 // the decode-cost bisect: the shipped cm2l against the three probe variants, one shape
-def private run_cm2x_shape(name : string; d, n, cnt : int) {
+def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
     let rows = cnt
     let totblk = d * nbb
@@ -417,7 +489,7 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {
         let fbufs = fixed_array(wfd, scd, xfd, yd)
         let fsizes = fixed_array(wq_bytes * 2l, sc_bytes, xf_bytes, y_bytes)
         let fgbits = fixed_array(1u, 0u, 4u, 16u)
-        let vnames = fixed_array("cm2l", "lit ", "flat", "nil ", "f16a", "nobar", "mmnb ")
+        let vnames = fixed_array("cm2l", "lit ", "flat", "nil ", "f16a", "nobar", "mmnb ", "push")
         let mm_wgs = ((cnt + 127) / 128) * ((d + 127) / 128)
         var mmsched : array<uint>
         mmsched |> resize(4 + mm_wgs)
@@ -432,7 +504,7 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {
         upload_region_at(xqd, 0l, addr<uint8 const?>(b.xq[0]), xq_bytes)
         upload_region_at(xsd, 0l, addr<uint8 const?>(b.xs[0]), xs_bytes)
         delete mmsched
-        for (v in range(7)) {
+        for (v in range(8)) {
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -470,7 +542,7 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {
                     var hz2 : VkHaz
                     enc_q8_batch_cm2l_cls(raw, hz2, s, pc, int64(lwgs))
                 }
-            } else {
+            } elif (v == 6) {
                 // the serving mm kernel, same no-barrier treatment - the fair kernel-rate twin
                 var s = set_q8_batch_mm_a_cls(
                     fixed_array(wqd, wsd, mscd, xqd, xsd, yd),
@@ -479,6 +551,11 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {
                 for (_k in range(DISPATCHES)) {
                     var hz2 : VkHaz
                     enc_q8_batch_mm_a_cls(raw, hz2, s, pc, int64(mm_wgs))
+                }
+            } else {
+                var s = set_cm2px_push(cbufs, csizes, cgbits)
+                for (_k in range(DISPATCHES)) {
+                    enc_cm2px_push(raw, hz, s, pc, int64(lwgs))
                 }
             }
             vk_check(vkEndCommandBuffer(raw), null)
@@ -666,7 +743,7 @@ class Cm2ProbeMin {
 
 // gate shape at cnt = 256 (their grid is 2-D; one BN=256 column tile keeps it 1-D):
 // interleaved block_q8_0 A plane, drain-free timing, our cm2l + mm rows alongside
-def private run_their(d, n, cnt : int) {
+def private run_their(d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
     let totblk = d * nbb
     var aw : array<uint16>
@@ -803,7 +880,8 @@ def private run_probe {
             print("no coopmat2 on this device\n")
             return
         }
-        verify(ensure_cm2px_nil() && ensure_cm2px_flat() && ensure_cm2px_lit() && ensure_cm2px_f16a(), "cm2 probe pipelines must engage")
+        verify(ensure_cm2px_nil() && ensure_cm2px_flat() && ensure_cm2px_lit() && ensure_cm2px_f16a()
+            && ensure_cm2px_push(), "cm2 probe pipelines must engage")
         run_cm2x_shape("gate/up", 8192, 3072, 512)
         run_cm2x_shape("down   ", 3072, 8192, 512)
         return

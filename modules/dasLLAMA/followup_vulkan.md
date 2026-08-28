@@ -192,6 +192,15 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    20188.1 +/- 185 / 294.4 = 99.6% pp (inside their row noise), tg ahead. Mode-4 headroom
    still unported: the ar+rq fusion (the fq6 gate skips it), the kvm merge (mode-4
    excluded), the wg_blk0 push-constant base (~9% of the decode callback).
+   ar fusion PORTED (2026-08-27, commit 4b690e77e): cls_ar_f16_b - the fused add+rms twin's
+   f16 form, bit-identical to the split cls_ar + f16cvt pair (gated). vk_fuse A/B: 3B pp
+   7463 -> 7584 (+1.6%), tg +2.6%; tinyllama pp 19978 -> 20374 (+2.0%), tg +4.0% - both
+   models' new bests, tinyllama pp now ~100.5% of their row.
+   wg_blk0 lever DEAD (same day): the cm2x probe grew a `push` variant (base off pa.ksplit)
+   - push is the SLOWEST spelling (gate/up 49.6 vs full 52.5 vs lit 51.4 TF/s; down 41.7 /
+   43.9 / 42.8), and lit no longer beats the shipped form either. The old lit-51.6-vs-47.3
+   delta predates the 16-bit decode respelling; with the cheap decode the shared wg_blk0
+   read is free. Item closed as measured-no.
    (ngfx GPU Trace, our gate loop vs their MUL_MAT loop; counters now read UNELEVATED):
    ours tensor 44.6 / L2 54.2 / l1tex 44.9 / dram 15.3, theirs tensor 56.1 / L2 23.8 /
    l1tex 27.6 / dram 29.7 - their cm2 keeps the MMA pipe ~26% busier and streams weights
