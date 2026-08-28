@@ -38,9 +38,44 @@ let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn qu
 
 var private @scratch g_pf_idsw : array<uint>   // per-window token-id staging for the gather upload
 
-// mode 4 feeds the dense q8 prefill GEMMs f16 rows through the cm2 tiles (the decode GEMV
-// keeps its q8 chain — the format pick is decoupled)
-def private pf_f16_feed(f : int) : bool => f == int(KqFmt.q8) && g_gpu.coopmat_mode == 4
+// mode 4 feeds the dense q8/k4 prefill GEMMs f16 rows through the cm2 tiles (the decode GEMV
+// keeps its quant chains — the format pick is decoupled)
+def private pf_f16_feed(f : int) : bool => (f == int(KqFmt.q8) || f == int(KqFmt.k4)) && g_gpu.coopmat_mode == 4
+
+// group feeds: one activation buffer serves every GEMM of a group, so the f16 form engages
+// only when EVERY member is cm2-servable (a k6 sibling pins the whole group to its quant feed)
+def private pf_qkv6(l : int64) : bool => (pf_f16_feed(g_rd.layers[l].fq)
+    && pf_f16_feed(g_rd.layers[l].fk) && pf_f16_feed(g_rd.layers[l].fv))
+def private pf_gu6(l : int64) : bool => pf_f16_feed(g_rd.layers[l].f1) && pf_f16_feed(g_rd.layers[l].f3)
+
+// the cm2 tile class picks per weight format (q8 = fmt-0 planes, k4 = Q4_K superblock planes)
+def private cm2_cls_ensure(fmt : int; ml : bool) : bool {
+    if (fmt == int(KqFmt.k4)) {
+        return ml ? ensure_kq_batch_k4_cm2l_cls() : ensure_kq_batch_k4_cm2m_cls()
+    }
+    return ml ? ensure_q8_batch_cm2l_cls() : ensure_q8_batch_cm2m_cls()
+}
+
+def private cm2_cls_set(fmt : int; ml : bool; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    if (fmt == int(KqFmt.k4)) {
+        return ml ? set_kq_batch_k4_cm2l_cls(bufs, sizes, gbits) : set_kq_batch_k4_cm2m_cls(bufs, sizes, gbits)
+    }
+    return ml ? set_q8_batch_cm2l_cls(bufs, sizes, gbits) : set_q8_batch_cm2m_cls(bufs, sizes, gbits)
+}
+
+def private cm2_cls_enc(fmt : int; ml : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    if (fmt == int(KqFmt.k4)) {
+        if (ml) {
+            enc_kq_batch_k4_cm2l_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_k4_cm2m_cls(raw, h, s, pc, groups)
+        }
+    } elif (ml) {
+        enc_q8_batch_cm2l_cls(raw, h, s, pc, groups)
+    } else {
+        enc_q8_batch_cm2m_cls(raw, h, s, pc, groups)
+    }
+}
 
 // the k|v GEMMs merge into ONE dispatch when the two q8 planes sit adjacent in the arena
 // (the bump allocator places them back-to-back unless a slab boundary intervenes): d = 2*kvd
@@ -58,8 +93,8 @@ def private pf_kv_merged(l, dim, kvd : int64) : bool {
 // family, else the q8 router (whose variant moves with wlen — the last window is shorter).
 def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : int;
                         wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
-                        abit, ybit : uint; n, d, blk, wlen : int64) {
-    let cm2l = fmt == int(KqFmt.q8) && g_gpu.coopmat_mode == 4
+                        abit, ybit : uint; n, d, blk, wlen : int64; f16feed : bool) {
+    let cm2l = f16feed   // the caller's GROUP feed flag - a pinned group routes its k4 members to the kq tile
     // cm2 tile + split picks (pure in d/wlen/n/sm_count) — computed once, fed to fill AND enc
     var nsplit = 1l
     var ksplit = 0l
@@ -84,25 +119,13 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         let ml = cm2_tc == 256l
         let key = idx * 16 + (ml ? (split ? 9 : 8) : (split ? 11 : 10))
         if (!key_exists(g_rd.pf_cls_gemm, key)) {
-            if (ml) {
-                verify(ensure_q8_batch_cm2l_cls(), "vk prefill: the cm2 l-tile class rail must engage")
-                g_rd.pf_cls_gemm[key] = set_q8_batch_cm2l_cls(
-                    fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, yob),
-                    fixed_array(wqn, wsn, BATCH_META_BYTES, an, yon),
-                    fixed_array(0u, 0u, 0u, abit, yog))
-            } else {
-                verify(ensure_q8_batch_cm2m_cls(), "vk prefill: the cm2 m-tile class rail must engage")
-                g_rd.pf_cls_gemm[key] = set_q8_batch_cm2m_cls(
-                    fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, yob),
-                    fixed_array(wqn, wsn, BATCH_META_BYTES, an, yon),
-                    fixed_array(0u, 0u, 0u, abit, yog))
-            }
+            verify(cm2_cls_ensure(fmt, ml), "vk prefill: the cm2 tile class rail must engage")
+            g_rd.pf_cls_gemm[key] = cm2_cls_set(fmt, ml,
+                fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, yob),
+                fixed_array(wqn, wsn, BATCH_META_BYTES, an, yon),
+                fixed_array(0u, 0u, 0u, abit, yog))
         }
-        if (ml) {
-            enc_q8_batch_cm2l_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
-        } else {
-            enc_q8_batch_cm2m_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
-        }
+        cm2_cls_enc(fmt, ml, raw, h, g_rd.pf_cls_gemm[key], pc, groups)
         if (split) {
             let rkey = idx * 16 + 12
             if (!key_exists(g_rd.pf_cls_gemm, rkey)) {
@@ -260,9 +283,9 @@ def private pf_setup {
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
         let b = int(l * PF_ROLES)
-        let qkv6 = pf_f16_feed(L.fq)
+        let qkv6 = pf_qkv6(l)
         let wo6 = pf_f16_feed(L.fo)
-        let gu6 = pf_f16_feed(L.f1)
+        let gu6 = pf_gu6(l)
         let dn6 = pf_f16_feed(L.f2)
         // 0 quant_xb: pf_xb -> pf_xq/pf_xs (f16-fed: f16 convert -> pf_xf)
         g_rd.pf_sets[b + 0] = (qkv6
@@ -337,7 +360,7 @@ def private pf_setup {
                 fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xq, g_rd.pf_xs),
                 fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim, np * (dim / 32l) * 4l),
                 fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XQ, VHZ_XQ)))
-        let nq6 = l + 1l < g_rd.n_layers && pf_f16_feed(g_rd.layers[l + 1l].fq)
+        let nq6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
         g_rd.pf_arq_sets[int(l * 2l + 1l)] = (nq6
             ? set_cls_ar_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf),
                 fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 2l),
@@ -485,15 +508,15 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 let b = int(l * PF_ROLES)
                 // f16-fed roles (mode 4's cm2 tiles): the f32->f16 convert feeds decode-in-load; the fill's tile rule keys off the same flag
-                let fq6 = pf_f16_feed(g_rd.layers[l].fq)
+                let fq6 = pf_qkv6(l)
                 let fo6 = pf_f16_feed(g_rd.layers[l].fo)
-                let gu6 = pf_f16_feed(g_rd.layers[l].f1)
+                let gu6 = pf_gu6(l)
                 let dn6 = pf_f16_feed(g_rd.layers[l].f2)
-                // kq consumers take the Q8_K quant/act forms (the arm declines mixed groups)
-                let fqk = kq_sb(g_rd.layers[l].fq)
-                let fok = kq_sb(g_rd.layers[l].fo)
-                let guk = kq_sb(g_rd.layers[l].f1)
-                let dnk = kq_sb(g_rd.layers[l].f2)
+                // kq consumers take the Q8_K quant/act forms — unless the f16 feed serves them (k4 cm2)
+                let fqk = kq_sb(g_rd.layers[l].fq) && !fq6
+                let fok = kq_sb(g_rd.layers[l].fo) && !fo6
+                let guk = kq_sb(g_rd.layers[l].f1) && !gu6
+                let dnk = kq_sb(g_rd.layers[l].f2) && !dn6
                 let mirb = l * g_rd.seq_cap * kvd   // nolint:LINT021 — the mirror offset multiply must run 64-bit before the push-field narrow
                 // a fused previous addr_next already produced this layer's feed — b+0 only stamps
                 let arqf = g_env_vulkan.vk_fuse
@@ -519,18 +542,18 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let xqn = fq6 ? np * dim * 2l : np * dim
                 let xsn = fq6 ? 256l : np * (dim / 32l) * 4l
                 pf_gemm_enc(raw, h, b + 1, g_rd.layers[l].fq, pq.wq, pq.ws, xqb, xsb, g_rd.pf_q,
-                    pq.wqb, pq.wsb, xqn, xsn, np * qd * 4l, VHZ_XQ, VHZ_Q, dim, qd, g_rd.layers[l].bq, wlen)
+                    pq.wqb, pq.wsb, xqn, xsn, np * qd * 4l, VHZ_XQ, VHZ_Q, dim, qd, g_rd.layers[l].bq, wlen, fq6)
                 let kvm = pf_kv_merged(l, dim, kvd)
                 if (kvm) {
                     // merged k|v over the adjacent planes: pf_kv fills row-interleaved and consumers read by kstride
                     pf_gemm_enc(raw, h, b + 2, g_rd.layers[l].fk, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
-                        pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK | VHZ_KVV, dim, 2l * kvd, g_rd.layers[l].bk, wlen)
+                        pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK | VHZ_KVV, dim, 2l * kvd, g_rd.layers[l].bk, wlen, fq6)
                     pfq_ts(raw)   // the v stamp: the merged GEMM's cost lands on k's delta
                 } else {
                     pf_gemm_enc(raw, h, b + 2, g_rd.layers[l].fk, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
-                        pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK, dim, kvd, g_rd.layers[l].bk, wlen)
+                        pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK, dim, kvd, g_rd.layers[l].bk, wlen, fq6)
                     pf_gemm_enc(raw, h, b + 3, g_rd.layers[l].fv, pv.wq, pv.ws, xqb, xsb, g_rd.pf_v,
-                        pv.wqb, pv.wsb, xqn, xsn, np * kvd * 4l, VHZ_XQ, VHZ_VST, dim, kvd, g_rd.layers[l].bv, wlen)
+                        pv.wqb, pv.wsb, xqn, xsn, np * kvd * 4l, VHZ_XQ, VHZ_VST, dim, kvd, g_rd.layers[l].bv, wlen, fq6)
                     vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
                     cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
                 }
@@ -609,7 +632,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let aqn = fo6 ? np * qd * 2l : np * qd
                 let asn = fo6 ? 256l : np * (qd / 32l) * 4l
                 pf_gemm_enc(raw, h, b + 7, g_rd.layers[l].fo, po.wq, po.ws, aqb, asb, g_rd.pf_xb2,
-                    po.wqb, po.wsb, aqn, asn, np * dim * 4l, VHZ_AQ, VHZ_XB2, qd, dim, g_rd.layers[l].bo, wlen)
+                    po.wqb, po.wsb, aqn, asn, np * dim * 4l, VHZ_AQ, VHZ_XB2, qd, dim, g_rd.layers[l].bo, wlen, fo6)
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
                 if (arqf && !guk) {
                     // fused addr_ffn: the feed lands out of the row stash; the b+9 slot only stamps
@@ -641,9 +664,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let gqn = gu6 ? np * dim * 2l : np * dim
                 let gsn = gu6 ? 256l : np * (dim / 32l) * 4l
                 pf_gemm_enc(raw, h, b + 10, g_rd.layers[l].f1, p1.wq, p1.ws, gqb, gsb, g_rd.pf_gate,
-                    p1.wqb, p1.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_GATE, dim, hid, g_rd.layers[l].b1, wlen)
+                    p1.wqb, p1.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_GATE, dim, hid, g_rd.layers[l].b1, wlen, gu6)
                 pf_gemm_enc(raw, h, b + 11, g_rd.layers[l].f3, p3.wq, p3.ws, gqb, gsb, g_rd.pf_up,
-                    p3.wqb, p3.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_UP, dim, hid, g_rd.layers[l].b3, wlen)
+                    p3.wqb, p3.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_UP, dim, hid, g_rd.layers[l].b3, wlen, gu6)
                 if (dn6) {
                     var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 32l))
                     enc_actf16_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
@@ -661,13 +684,14 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let hqn = dn6 ? np * hid * 2l : np * hid
                 let hsn = dn6 ? 256l : np * (hid / 32l) * 4l
                 pf_gemm_enc(raw, h, b + 13, g_rd.layers[l].f2, p2.wq, p2.ws, hqb, hsb, g_rd.pf_ffnout,
-                    p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, wlen)
+                    p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, wlen, dn6)
                 let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — composed from int64 layout offsets
                 var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
                 // fused addr_next = the next layer's qkv feed; the last layer keeps split ar (fin_rq reads its xb)
                 let fqn = l + 1l < g_rd.n_layers ? g_rd.layers[l + 1l].fq : -1
-                if (arqf && l + 1l < g_rd.n_layers && !kq_sb(fqn)) {
-                    if (pf_f16_feed(fqn)) {
+                let nxt6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
+                if (arqf && l + 1l < g_rd.n_layers && (nxt6 || !kq_sb(fqn))) {
+                    if (nxt6) {
                         enc_cls_ar_f16_b(raw, h, g_rd.pf_arq_sets[int(l * 2l + 1l)], pc14, wlen)
                     } else {
                         enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int(l * 2l + 1l)], pc14, wlen)

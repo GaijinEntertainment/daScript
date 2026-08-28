@@ -16,6 +16,7 @@ require spirv/spirv_shader
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_vulkan_classes
+require dasllama/dasllama_kqformat
 
 let private TILE = 128
 let private DISPATCHES = 16
@@ -350,6 +351,115 @@ class Cm2ProbeLit : MoeCmBase {
         coopmatConvert(accw, acc)
         coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
     }
+}
+
+// k4 (Q4_K) cm2 decode-in-load vs the serving kq tile - per-shape rate on the qwen role shapes
+def private run_k4_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
+    let nsb = n / 256
+    let totsb = d * nsb
+    var wqh : array<uint>
+    var wsuh : array<uint>
+    var xfh : array<uint>
+    var xqh : array<uint>
+    var axsh : array<float>
+    wqh |> resize(totsb * 32)
+    wsuh |> resize(totsb * 5)
+    xfh |> resize(cnt * n / 2)
+    xqh |> resize(cnt * nsb * 64)
+    axsh |> resize(cnt * nsb)
+    for (i in range(totsb * 32)) {
+        wqh[i] = hash_word(uint(i) + 29u)
+    }
+    for (sb in range(totsb)) {
+        wsuh[sb * 5] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
+        for (wi in range(4)) {
+            wsuh[sb * 5 + 1 + wi] = hash_word(uint(sb * 4 + wi) + 613u)
+        }
+    }
+    for (i in range(cnt * n / 2)) {
+        xfh[i] = ws_word(uint(i) * 3u + 5u)
+    }
+    for (i in range(cnt * nsb * 64)) {
+        xqh[i] = hash_word(uint(i) * 13u + 1u)
+    }
+    for (i in range(cnt * nsb)) {
+        axsh[i] = 0.0625
+    }
+    let wq_bytes = int64(totsb) * 128l
+    let ws_bytes = long_length(wsuh) * 4l
+    let xf_bytes = int64(cnt * n) * 2l
+    let xq_bytes = long_length(xqh) * 4l
+    let axs_bytes = int64(cnt * nsb) * 4l
+    let y_bytes = int64(cnt * d) * 4l
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let xfd = make_device_buf(xf_bytes)
+    let xqd = make_device_buf(xq_bytes)
+    let axsd = make_device_buf(axs_bytes)
+    let yd = make_device_buf(y_bytes)
+    let flop = 2.0lf * double(cnt) * double(d) * double(n)
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
+        upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
+        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+        upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
+        let vnames = fixed_array("k4l ", "k4m ", "k4lnb", "kqtile")
+        for (v in range(4)) {
+            let ttile = v == 1 ? 128 : (v == 3 ? 32 : 256)
+            let wtile = v == 3 ? 32 : 128
+            let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
+            var sched : array<uint>
+            sched |> resize(4 + wgs)
+            sched[2] = uint(cnt)
+            let sc_bytes = int64(4 + wgs) * 4l
+            let scd = make_device_buf(sc_bytes)
+            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+            delete sched
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var hz : VkHaz
+            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+            if (v == 3) {
+                var s = kq_batch_cls_set_for(int(KqFmt.k4), false,
+                    fixed_array(wqd, wsd, scd, xqd, axsd, yd),
+                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
+                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                for (_k in range(DISPATCHES)) {
+                    var hz2 : VkHaz
+                    enc_kq_batch_k4_cls(raw, hz2, s, pc, int64(wgs))
+                }
+            } else {
+                var s = (v == 1
+                    ? set_kq_batch_k4_cm2m_cls(fixed_array(wqd, wsd, scd, xfd, yd),
+                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
+                        fixed_array(1u, 2u, 0u, 4u, 16u))
+                    : set_kq_batch_k4_cm2l_cls(fixed_array(wqd, wsd, scd, xfd, yd),
+                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
+                        fixed_array(1u, 2u, 0u, 4u, 16u)))
+                for (_k in range(DISPATCHES)) {
+                    if (v == 2) {
+                        var hz2 : VkHaz
+                        enc_kq_batch_k4_cm2l_cls(raw, hz2, s, pc, int64(wgs))
+                    } elif (v == 1) {
+                        enc_kq_batch_k4_cm2m_cls(raw, hz, s, pc, int64(wgs))
+                    } else {
+                        enc_kq_batch_k4_cm2l_cls(raw, hz, s, pc, int64(wgs))
+                    }
+                }
+            }
+            vk_check(vkEndCommandBuffer(raw), null)
+            let us = time_submits(raw)
+            let tf = flop / (us * 1000000.0lf)
+            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s\n")
+        }
+    }
+    delete wqh
+    delete wsuh
+    delete xfh
+    delete xqh
+    delete axsh
 }
 
 // two warmup submits (pipeline compile + clocks settle), then the timed window
@@ -833,7 +943,7 @@ def private run_their(d, n, cnt : int) {   // nolint:STYLE038 — one linear mea
     delete xf
 }
 
-def private run_probe {
+def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape dispatcher
     if (!ensure_q8_batch_cls()) {
         print("no Vulkan device\n")
         return
@@ -854,9 +964,23 @@ def private run_probe {
     }
     var only = ""
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "their" || a == "tl") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "their" || a == "tl" || a == "k4") {
             only = a
         }
+    }
+    if (only == "k4") {
+        // Qwen3-4B role shapes (dim 2560, hidden 9728, qd 4096, kvd 1024) - k4 cm2 vs the kq tile
+        if (!g_gpu.has_coopmat2) {
+            print("no coopmat2 on this device\n")
+            return
+        }
+        verify(ensure_kq_batch_k4_cm2l_cls() && ensure_kq_batch_k4_cm2m_cls()
+            && kq_batch_cls_ensure(int(KqFmt.k4), false), "k4 probe pipelines must engage")
+        run_k4_shape("q4k gate", 9728, 2560, 512)
+        run_k4_shape("q4k down", 2560, 9728, 512)
+        run_k4_shape("q4k q/wo", 4096, 2560, 512)
+        run_k4_shape("q4k kv  ", 2048, 2560, 512)
+        return
     }
     if (only == "their") {
         if (!g_gpu.has_coopmat2) {
