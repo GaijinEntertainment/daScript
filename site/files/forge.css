@@ -944,7 +944,7 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
 }
 .forge-footer__grid {
     display: grid;
-    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr;
     gap: 32px;
 }
 .forge-footer__about {

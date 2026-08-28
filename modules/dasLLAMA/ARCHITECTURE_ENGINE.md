@@ -190,7 +190,7 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   (record stores + tune sidecars); the dasllama.io ladder service builds on it.
 - **`dasllama/dasllama_exchange.das`** - the sidecar-exchange client (a sanctioned public entry point): the boot-time
   lookup/apply (llvm_tune's scope resolver - a verified per-box match downloads instead of a
-  ~20-minute tune), the privacy-stripped submit rails, and the control-page surface
+  ~12-minute tune), the privacy-stripped submit rails, and the control-page surface
   dasllama-server serves at `/exchange`.
 - **`benchmarks/asr/mem_census.sh`** - the peak-memory census (`/usr/bin/time -l` around one
   asr_bench process per cell; macOS only) - the interim footprint instrument until a footprint

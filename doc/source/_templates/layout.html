@@ -47,3 +47,14 @@
   <div id="docsearch"></div>
 
 {%- endblock %}
+
+{# LEGAL links block — GDPR/EU distributor requirement: Terms, Privacy, license
+   reachable from every docs page. Rendered under the theme footer. #}
+{%- block footer %}
+  {{ super() }}
+  <div class="forge-legal-links">
+    <a href="https://legal.gaijin.net/termsofservice" rel="nofollow">Terms of Service</a> ·
+    <a href="https://legal.gaijin.net/privacypolicy" rel="nofollow">Privacy Policy</a> ·
+    <a href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">BSD 3-Clause License</a>
+  </div>
+{%- endblock %}

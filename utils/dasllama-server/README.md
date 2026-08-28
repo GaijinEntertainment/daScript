@@ -199,7 +199,7 @@ Windows locks the DLLs.
 | `GET`  | `/exchange/matches` | Live lookup of this box against the exchange (a network call - seconds; the control page requests it explicitly) |
 | `POST` | `/exchange/apply` | `{"sha": ...}`: download + validate (content sha, schema, `DASLLAMA_VERSION`) + adopt that sidecar, then drain and exit **4** so the relaunch stamps its winners |
 | `POST` | `/exchange/submit` | Privacy-strip and submit this box's own tune to the exchange (refuses exchange-sourced or foreign-box sidecars) |
-| `POST` | `/exchange/retune` | Arm a local re-tune: removes the sidecar, skips the exchange once, restarts - the next boot races this box (~20 min, quiet machine) |
+| `POST` | `/exchange/retune` | Arm a local re-tune: removes the sidecar, skips the exchange once, restarts - the next boot races this box (~12 min, quiet machine) |
 | `POST` | `/gc` | Schedule a validated collection at the next lifecycle safe point; concurrent requests coalesce |
 | `POST` | `/shutdown` | Stop admitting new LLM/ASR work, drain accepted work, then exit |
 
@@ -209,7 +209,7 @@ authoritative TOML`.
 
 The sidecar exchange rides three config-only keys (no CLI flags - one code path):
 `exchange_accept = verified | any | off` (default `verified` - at an untuned boot a verified
-match downloads and applies instead of racing ~20 minutes; unverified NEVER auto-applies),
+match downloads and applies instead of racing ~12 minutes; unverified NEVER auto-applies),
 `exchange_submit = ask | always | never` (default `ask` - a fresh local tune surfaces as an
 offer on the control page and the watchdog balloon; `always` shares it automatically), and
 `exchange_url` (baked default `https://dasllama.io`). `DASLLAMA_EXCHANGE_URL` /
