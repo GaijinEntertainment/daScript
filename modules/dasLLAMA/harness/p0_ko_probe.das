@@ -60,7 +60,10 @@ def main {
             setup_dasllama_jobque_()
             measure_one(tr, 512l, 1)   // warm: JIT + blob upload + first graphs
             let npos = 512l
-            for (fam in ["gemm", "attn", "ew", "act_cvt", "devw_cvt", "nongemm"]) {
+            //! "nofuse" matches no skip family: every kernel encodes with full math, so this arm
+            //! is the null control (base-as-candidate) - and any empty-skip-gated fused route's
+            //! on/off A/B, output VALID either way
+            for (fam in ["nofuse", "gemm", "attn", "ew", "act_cvt", "devw_cvt", "nongemm"]) {
                 let base = measure_one(tr, npos, 3)
                 set_metal_prefill_skip(fam)
                 let ms = measure_one(tr, npos, 3)

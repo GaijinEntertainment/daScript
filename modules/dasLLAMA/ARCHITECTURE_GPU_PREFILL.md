@@ -28,6 +28,15 @@ The rows that remain pick one of four forms, in this order, per site per forward
    already a multiple of 128, and otherwise stays whole-dispatch 32-tile.
 4. **32-row tile** - the default stamp.
 
+**A swiglu epilogue folded into the gate GEMM's store is REFUTED on M5.** Any per-element
+access of the cooperative C after `op.run` - the scattered-store walk, a modify-in-place
+before the optimized `cT.store`, even a cooperative-load register combine of the up panel -
+costs ~+340µs on the 512x12288 gate GEMM (940µs plain), 2.2x the standalone swiglu pass the
+fold deletes (~154µs, 8B end-to-end +11.9ms fused vs unfused). The stall is structural to the
+tensor-op pipeline, not addressing: MPP tolerates elementwise epilogues only at that price,
+which is consistent with MLX shipping its epilogue slot unused. Elementwise fusion pays only
+kernel-to-kernel (rms_hx, swiglu_hx, add+rms), never inside a tensor-op store.
+
 **Half operands ride an f16 activation panel.** One pass converts the f32 panel; the GEMM then
 re-reads it at half the bytes `d/64` times, so the convert amortizes above a row floor
 (`CVT_MIN_ROWS`, default 256) and loses under it. Two panels alternate, so one site's GEMM reads
