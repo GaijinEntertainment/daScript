@@ -4398,3 +4398,99 @@ def test_vkd_ar_rq_fused(t0 : T?) {
         }
     }
 }
+
+[test]
+def test_vkd_ar_f16_fused(t0 : T?) {
+    t0 |> run("fused batch ar+f16 == the split cls_ar + f16cvt_cls pair, bit-exact") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_cls_ar() || !ensure_f16cvt_cls() || !ensure_cls_ar_f16_b()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            let dim = 128
+            let nrows = 6
+            let woff = 64
+            var xh : array<float>
+            var aah : array<float>
+            var wnh : array<float>
+            xh |> resize(nrows * dim)
+            aah |> resize(nrows * dim)
+            wnh |> resize(woff + dim)
+            for (i in range(nrows * dim)) {
+                xh[i] = 0.375 + float(i % 13) * 0.0625 - float(i % 5) * 0.125
+                aah[i] = float(i % 7) * 0.25 - 0.5
+            }
+            for (i in range(woff + dim)) {
+                wnh[i] = 0.75 + float(i % 9) * 0.03125
+            }
+            let row_bytes = int64(nrows * dim) * 4l
+            let wn_bytes = int64(woff + dim) * 4l
+            let h_bytes = int64(nrows * dim) * 2l
+            let x1 = make_device_buf(row_bytes)
+            let x2 = make_device_buf(row_bytes)
+            let aad = make_device_buf(row_bytes)
+            let wnd = make_device_buf(wn_bytes)
+            let yod = make_device_buf(row_bytes)
+            let h1 = make_device_buf(h_bytes)
+            let h2 = make_device_buf(h_bytes)
+            var host = make_host_buf(h_bytes * 2l + row_bytes * 2l, true, [cached = true])
+            unsafe {
+                upload_region_at(x1, 0l, addr<uint8 const?>(xh[0]), row_bytes)
+                upload_region_at(x2, 0l, addr<uint8 const?>(xh[0]), row_bytes)
+                upload_region_at(aad, 0l, addr<uint8 const?>(aah[0]), row_bytes)
+                upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
+                var sca = set_cls_ar(fixed_array(x1, aad, wnd, yod),
+                    fixed_array(row_bytes, row_bytes, wn_bytes, row_bytes),
+                    fixed_array(1u, 2u, 0u, 4u))
+                var scc = set_f16cvt_cls(fixed_array(yod, h1),
+                    fixed_array(row_bytes, h_bytes), fixed_array(4u, 8u))
+                var scf = set_cls_ar_f16_b(fixed_array(x2, aad, wnd, h2),
+                    fixed_array(row_bytes, row_bytes, wn_bytes, h_bytes),
+                    fixed_array(16u, 2u, 0u, 32u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(woff), eps = 1e-5, ascale = 1.0)
+                enc_cls_ar(raw, h, sca, pca, int64(nrows))
+                var pcc = ActArgs(nelem = uint(nrows * dim), gelu = 0u, nblk = 0u)
+                enc_f16cvt_cls(raw, h, scc, pcc, int64((nrows * dim / 4 + 255) / 256))
+                enc_cls_ar_f16_b(raw, h, scf, pca, int64(nrows))
+                vhz_dep(raw, h, 8u | 32u | 16u | 1u, 0u, true)
+                cmd_copy_range(raw, h1, 0l, host.buf, 0l, h_bytes)
+                cmd_copy_range(raw, h2, 0l, host.buf, h_bytes, h_bytes)
+                cmd_copy_range(raw, x1, 0l, host.buf, h_bytes * 2l, row_bytes)
+                cmd_copy_range(raw, x2, 0l, host.buf, h_bytes * 2l + row_bytes, row_bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                submit_wait(raw)
+                let nw = nrows * dim / 2
+                var h1h : array<uint>
+                var h2h : array<uint>
+                var x1h : array<float>
+                var x2h : array<float>
+                h1h |> resize(nw)
+                h2h |> resize(nw)
+                x1h |> resize(nrows * dim)
+                x2h |> resize(nrows * dim)
+                let hp = intptr(host.mapped)
+                memcpy(addr<void?>(h1h[0]), host.mapped, h_bytes)
+                memcpy(addr<void?>(h2h[0]), reinterpret<void?>(hp + uint64(h_bytes)), h_bytes)
+                memcpy(addr<void?>(x1h[0]), reinterpret<void?>(hp + uint64(h_bytes * 2l)), row_bytes)
+                memcpy(addr<void?>(x2h[0]), reinterpret<void?>(hp + uint64(h_bytes * 2l + row_bytes)), row_bytes)
+                let badh = mismatch_qbytes(h1h, h2h, 0)
+                t |> success(badh == 0, "fused f16 rows == split ({badh} of {nw} words off)")
+                let badx = mismatch_exact(x1h, x2h)
+                t |> success(badx == 0, "fused residual update == split ({badx} of {nrows * dim} off)")
+                delete h1h
+                delete h2h
+                delete x1h
+                delete x2h
+            }
+            delete xh
+            delete aah
+            delete wnh
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}

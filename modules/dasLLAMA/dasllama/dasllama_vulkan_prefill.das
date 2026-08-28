@@ -240,7 +240,7 @@ def private pf_setup {
         && (!g_rd.pf_facm2
             || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_cls() : ensure_fa_cm2_h128_cls()))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
-        && (!any6 || (ensure_f16cvt_cls() && ensure_actf16_cls()))
+        && (!any6 || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
         "vk prefill: the class rails must engage on a live device")
     if (g_rd.pf_facm2) {
@@ -322,15 +322,24 @@ def private pf_setup {
         g_rd.pf_sets[b + 14] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb),
             fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
             fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
-        // fused ar+rq twins (q8 chains under vk_fuse): [2l] the ffn site, [2l+1] addr_next
-        g_rd.pf_arq_sets[int(l * 2l)] = set_cls_ar_rq_b(
-            fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xq, g_rd.pf_xs),
-            fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim, np * (dim / 32l) * 4l),
-            fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XQ, VHZ_XQ))
-        g_rd.pf_arq_sets[int(l * 2l + 1l)] = set_cls_ar_rq_b(
-            fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xq, g_rd.pf_xs),
-            fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim, np * (dim / 32l) * 4l),
-            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_XQ))
+        // fused ar twins under vk_fuse: [2l] ffn site, [2l+1] addr_next; the consumer's feed picks q8 or f16
+        g_rd.pf_arq_sets[int(l * 2l)] = (gu6
+            ? set_cls_ar_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xf),
+                fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 2l),
+                fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XQ))
+            : set_cls_ar_rq_b(
+                fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xq, g_rd.pf_xs),
+                fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim, np * (dim / 32l) * 4l),
+                fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XQ, VHZ_XQ)))
+        let nq6 = l + 1l < g_rd.n_layers && pf_f16_feed(g_rd.layers[l + 1l].fq)
+        g_rd.pf_arq_sets[int(l * 2l + 1l)] = (nq6
+            ? set_cls_ar_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf),
+                fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 2l),
+                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ))
+            : set_cls_ar_rq_b(
+                fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xq, g_rd.pf_xs),
+                fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim, np * (dim / 32l) * 4l),
+                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_XQ)))
         // 15 qk rmsnorm (qk_norm models; class: q, k rows, norm rows)
         if (g_rd.qk_norm) {
             g_rd.pf_sets[b + 15] = set_qk_rms_cls(fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.norms_dev),
@@ -480,9 +489,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let guk = kq_sb(g_rd.layers[l].f1)
                 let dnk = kq_sb(g_rd.layers[l].f2)
                 let mirb = l * g_rd.seq_cap * kvd   // nolint:LINT021 — the mirror offset multiply must run 64-bit before the push-field narrow
-                // a fused previous addr_next already produced this layer's quants — b+0 only stamps
+                // a fused previous addr_next already produced this layer's feed — b+0 only stamps
                 let arqf = g_env_vulkan.vk_fuse
-                if (l > 0l && arqf && !fq6 && !fqk) {
+                if (l > 0l && arqf && !fqk) {
                     // the shared trailing stamp below keeps the role shape; nothing encodes here
                 } elif (fq6) {
                     var pc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
@@ -586,9 +595,13 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pf_gemm_enc(raw, h, b + 7, g_rd.layers[l].fo, po.wq, po.ws, aqb, asb, g_rd.pf_xb2,
                     po.wqb, po.wsb, aqn, asn, np * dim * 4l, VHZ_AQ, VHZ_XB2, qd, dim, g_rd.layers[l].bo, wlen)
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
-                if (arqf && !gu6 && !guk) {
-                    // fused addr_ffn: quants land out of the row stash; the b+9 slot only stamps
-                    enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int(l * 2l)], pc8, wlen)
+                if (arqf && !guk) {
+                    // fused addr_ffn: the feed lands out of the row stash; the b+9 slot only stamps
+                    if (gu6) {
+                        enc_cls_ar_f16_b(raw, h, g_rd.pf_arq_sets[int(l * 2l)], pc8, wlen)
+                    } else {
+                        enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int(l * 2l)], pc8, wlen)
+                    }
                     pfq_ts(raw)
                 } else {
                     enc_cls_ar(raw, h, g_rd.pf_sets[b + 8], pc8, wlen)
@@ -635,10 +648,14 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, wlen)
                 let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — composed from int64 layout offsets
                 var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
-                // fused addr_next = the next layer's qkv quants; the last layer keeps split ar (fin_rq reads its xb)
+                // fused addr_next = the next layer's qkv feed; the last layer keeps split ar (fin_rq reads its xb)
                 let fqn = l + 1l < g_rd.n_layers ? g_rd.layers[l + 1l].fq : -1
-                if (arqf && l + 1l < g_rd.n_layers && !pf_f16_feed(fqn) && !kq_sb(fqn)) {
-                    enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int(l * 2l + 1l)], pc14, wlen)
+                if (arqf && l + 1l < g_rd.n_layers && !kq_sb(fqn)) {
+                    if (pf_f16_feed(fqn)) {
+                        enc_cls_ar_f16_b(raw, h, g_rd.pf_arq_sets[int(l * 2l + 1l)], pc14, wlen)
+                    } else {
+                        enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int(l * 2l + 1l)], pc14, wlen)
+                    }
                 } else {
                     enc_cls_ar(raw, h, g_rd.pf_sets[b + 14], pc14, wlen)
                 }
@@ -1540,11 +1557,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     stack_batch_enc(raw, h, s_o, nwg_o, qd, dim)
     vhz_dep(raw, h, VHB_Y1, 0u, true)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, rows * dim * 4l)
-    // K/V host DMA at the END of the chain, not beside the preps: an in-cmd compute->transfer
-    // barrier was observed UNHONORED on driver 610.74 (~1-in-12, the roped-k readback captured a
-    // ~70-wg partial prefix of at_prep's output while a later identical copy read it correct).
-    // The intervening attention/rq/wo work closes the race window; attention itself was never
-    // affected (its reads always came back right)
+    // K/V host DMA at the END of the chain: beside the preps, driver 610.74 drops the in-cmd compute->transfer barrier ~1-in-12 (partial-prefix readback); the intervening work closes the race
     vhz_dep(raw, h, VHB_ATK, 0u, true)
     cmd_copy_range(raw, g_gpu.at_k_dev, w0 * kv_dim * 4l, g_gpu.at_kv_host.buf, 0l, rows * kv_dim * 4l)
     vhz_dep(raw, h, VHB_VRAW, 0u, true)

@@ -216,6 +216,26 @@ class ClsArAddRmsRqB : ArBase {
     }
 }
 
+// the f16 twin (mode 4's cm2 feed): add+rms, then the normed row lands f16 out of the row
+// stash — the split pair's xb write+reread vanishes. Same reduce and the same f32 product
+// before the convert, so bit-identical to cls_ar followed by f16cvt_cls.
+[vk_dispatch(name = "cls_ar_f16_b", grid = "nrows", params = "nrows : int64")]
+class ClsArAddRmsF16B : ArBase {
+    @ssbo @binding = 3 outh : array<float16>   // the normed rows, f16
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_f16_b_spv")]
+    def run {
+        let base = gl_WorkGroupID.x * pa.dim
+        let ss = accum_row(base)
+        let inv = rms_inv(ss)
+        var k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            outh[base + k] = float16(wn[pa.woff + k] * (row[k] * inv))
+            k += 256u
+        }
+    }
+}
+
 struct RqArgs {
     inbase : uint   // element base of the source rows
     nblk : uint     // block / superblock count

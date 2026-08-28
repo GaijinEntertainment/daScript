@@ -1928,7 +1928,7 @@ struct RDec {
     emb_f32_bytes : int64
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
     pf_emb_set : VkDescriptorSet
-    pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq per layer: [2l] = the ffn site, [2l+1] = addr_next
+    pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [2l] = the ffn site, [2l+1] = addr_next
 }
 
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
