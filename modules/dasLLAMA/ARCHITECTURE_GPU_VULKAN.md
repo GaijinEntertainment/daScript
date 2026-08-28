@@ -1,0 +1,159 @@
+# dasLLAMA Architecture - the Vulkan resident driver
+
+Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
+carries sections 2.2j-2.2p, the mechanisms of the Vulkan resident driver: the prefill window
+chain, how a cm2 tile decodes its quant bytes and how one is picked, the class-pipeline build
+seat both shader instruments hang on, the residency plan, the marks swap that lets one GPU slot
+serve many models, and the Q8 requant byte store. The GPU backend role table these sections
+build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
+
+### 2.2j The Vulkan resident prefill window chain {#vk-prefill-window-chain}
+
+Companion to `ARCHITECTURE_GPU.md` sec.1.5; the Metal prefill driver's own ladder is
+`ARCHITECTURE_GPU_PREFILL.md`.
+
+**A prompt longer than `PF_WINDOW` rows runs as SEQUENTIAL windows over the same activation
+buffers.** Every window's rope and attention address the KV mirror at ABSOLUTE positions, so
+window w attends everything the earlier windows stored; only the last window runs the final
+requant and the classifier.
+
+**The k and v GEMMs merge into ONE dispatch when the layer's q, k and v weight planes are all
+q8 and the k and v planes sit adjacent in the arena.** The bump allocator places them
+back-to-back unless a slab boundary intervenes, so the merged form asks only those two
+questions and dispatches at `d = 2 * kvd`: one dispatch instead of two plus a copy, which
+doubles the otherwise starved k/v grid and deletes the v copy. Consumers read the merged output
+through a `kstride` field - the projection-row stride, `2 * kvd` merged against the split
+path's `kvd` - on `RopeKvBArgs` and on `QkRmsArgs`, and through `RopeKvBArgs.voff`, the v
+rows' base inside that buffer - `kvd` merged against the split path's `npos * kvd`. It is a
+record-cost win, not a GPU one.
+
+**A window chain submits in chunks so recording overlaps execution.** The chain splits on a
+1, 2, 4, 8-layer ramp, so the GPU starts on an early small chunk while the CPU is still
+recording, and the doubling stops at 8 layers. Chunks go out through `submit_nofence`; the
+window's last submit is the `submit_wait` that signals the one fence the caller waits on.
+Ordering between chunks is the hazard rail's: a barrier recorded in chunk N+1 covers the
+writes of chunk N because submission order on one queue spans submits, and the terminal
+fence covers every earlier submit the same way. The command-buffer ring holds
+`3 + ceil(depth/8)` buffers, so chunk N records into a free buffer while chunk N-1 executes;
+the per-role GPU profile pins the single submit, so a chunk gap never bills to a role.
+
+A `VkHaz` is private to one RECORDING SESSION, not to one command buffer: the chunked chain
+carries the same `h` across every buffer in the window, so a barrier it records in chunk N+1
+still knows what chunk N wrote. That is also why the batch/hybrid region bits (`VHB_*`) reuse
+the same rail under their own namespace - two recorders never share a pending set.
+
+**The attention chain's K/V host readbacks are recorded at the END of the chain, after the
+`wo` GEMM, not beside the preps that produce them.** Driver 610.74 on the RTX 5060 Ti drops
+the in-command compute-to-transfer barrier about one run in twelve: a copy recorded right
+after the producing dispatch, behind a spec-valid global memory barrier, reads a partial
+prefix of the output while a second identical copy at the end of the same command buffer
+reads it whole. The intervening attention, requant and `wo` work is what closes that window;
+the copies carry a `//!` naming this section, and the placement is a driver-defect mitigation,
+not a chain-shape preference.
+
+**A layer's qkv feed comes out of the previous layer's FUSED add+rms twin when the fuse knob is
+on and the feed is not the Q8_K quant form.** The producer is layer l-1's addr_next site, the
+consumer is layer l's b+0 slot, and both key on one predicate (`pf_qkv_feed_fused`): where it
+holds, addr_next encodes `cls_ar_f16_b` (an f16 feed) or `cls_ar_rq_b` (a Q8_0 feed) straight
+out of the row stash and b+0 only stamps; where it does not, the split `cls_ar` writes the
+residual row and b+0 converts or requantizes it. The fused twins never write the `xb` plane, so
+the last layer always takes the split arm - the final requant reads `xb`. The addr_ffn site
+fuses the same way for the gate/up feed. Bit-identity with the split pair is a suite gate.
+
+**The cm2 flash-attention tile lands its output f16 when the `wo` feed is f16.** The tile
+template carries an `OUT16` stamp: the f16 instance converts the O accumulator in-kernel and
+writes the `wo` feed plane directly, so the per-layer attn-to-f16 convert never encodes; the
+f32 instance serves the quant route. The two device converts agree bit for bit; the CPU's
+`float16()` rounds ties differently, so the twin's gate compares device against device.
+
+### 2.2k The cm2 decode callbacks read their quant bytes as 16-bit lanes {#cm2-decode-16bit-lanes}
+
+A cm2 tile's decode callback runs inside the driver's block load, and the vendor driver's shader
+compiler pattern-matches only one spelling into that path: a 16-bit load (`int16[N]` block
+members) followed by `unpack8(w)[i & 1u]` - a byte2 lane select - with sub-fields pulled out by
+shift and mask. A 32-bit word with a variable shift runs slower; an `unpack8` of a 32-bit word
+indexed by a runtime value (a byte4 dynamic select) drops the whole kernel off the block-load
+path, to about a third of the rate. Every cm2 decode - q8, Q4_K, Q6_K - is spelled the 16-bit
+way, which is why the block structs are `int16` arrays over the same bytes.
+
+### 2.2l The cm2 tile pick and the coopmat default ladder {#cm2-tile-pick-and-default}
+
+**The l/m tile pick is a wave-efficiency comparison.** For a GEMM of width `d` over `cnt` rows
+the l tile (256-row columns) and the m tile (128-row columns) each need some number of
+workgroups; each grid runs in whole waves over the device's SM count, and the pick compares
+occupied slots over allocated slots, cross-multiplied. The m tile wins only on a strict win; a
+tie goes to l, whose bigger tile carries twice the arithmetic intensity. Two rules sit ahead of
+the comparison: a window of 128 rows or fewer takes m (the l column would run half empty), and
+a device that reports no SM count takes l and never splits k. The pick is PURE in
+`(d, cnt, sm_count)`, so the class the pipeline binds and the tile rule the meta fill writes
+can never disagree. There is no third tile: the narrow-n end is GEMV's.
+
+**The f16 feed admits exactly three weight formats - q8, Q4_K and Q6_K** - the same set the cm2
+decode callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE generated class. The
+prefill driver reaches them through one dispatcher per stage (`cm2_cls_ensure`, `cm2_cls_set`,
+`cm2_cls_enc`), all three keyed on the same `(fmt, ml)` pair, so the pipeline a role ensures,
+the set it binds and the kernel it encodes can never be three different classes. The decode
+GEMV keeps its quant chains: the feed format pick is decoupled from the weight format.
+
+**The served GEMM mode resolves once, at init, through one ladder.** cm2 where the device has
+NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4;
+`DASLLAMA_COOPMAT` overrides the ladder by name, and a cm2 request or force on a device without
+the extension lands on mm. The same resolver stamps the mode into the `.dlim` flavor
+configuration, so the recorded mode and the running mode cannot drift.
+
+### 2.2m Class-pipeline creation is the Vulkan tier's one shader A/B seat {#vk-class-pipeline-build}
+
+`vkd_class_pipe` is the single place a class kernel's SPIR-V becomes a pipeline, so both shader
+instruments hang there and nothing else has to know about them.
+
+**The dump runs before the override.** `DASLLAMA_VK_SPV_DUMP=<dir>` writes the EMITTED words as
+`<dir>/<kernel>.spv`; `DASLLAMA_VK_SPV_OVERRIDE=<dir>` then replaces them with that directory's
+file. The order is what makes the pair a round trip: dump a kernel, edit or spirv-opt the file,
+serve it back. A dump taken after the override would capture the served words, not the emitted
+ones.
+
+**Full subgroups are a whole-run arm, never a per-pipeline one.** `DASLLAMA_VK_FULLSG` plus a
+device that reports the feature sets `g_gpu.full_sg_on` once at device init, and every class
+pipeline is then built with `REQUIRE_FULL_SUBGROUPS`. A run never mixes pinned and plain
+pipelines, so an A/B compares two whole runs. Plain is the default: pinned measured slower on
+the mm_a gate shape.
+
+### 2.2n The residency plan sizes a whole model before a byte uploads {#resident-plan}
+
+The resident driver is all-or-nothing, so the plan IS the decision, and it is computed from
+`Model` metadata alone. It sizes four numbers against the tier's weight budget: the dense weight
+planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the headroom the auto
+arm leaves unfilled (zero when the user pins VRAM). KV is reserved BEFORE weights and never
+grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
+re-uploading gigabytes. A decline carries a reason, and where the numbers allow one it carries
+the remedy that works - a shorter context, because the weights are fixed and the KV is not.
+
+An OPTIONAL plane rides only the room left under the budget at THIS context - what remains of
+`budget_bytes - headroom_bytes` after weights, KV and scratch; the reserved headroom itself
+stays unfilled. It never shrinks any of the three, and it reports zero bytes when it does not
+fit - so the same model plans the plane in at a short context and out at a long one. The raw f32 embed
+table is the one optional plane today.
+
+### 2.2o One GPU slot, many models: the marks swap {#gpu-slot-marks}
+
+A multi-model host runs one device tier under several loaded models, and the tier's per-model
+state is offset-keyed - two models' marks installed together route one model's dispatches at
+the other's planes. `GpuModelMarks` is that state WHOLE: the loader-contract marks plus every
+resident-driver per-model global (the activation, the mirror count, the mirror cap, the mirror
+codec, and the device-embed arm). The save moves the installed state out and leaves the globals
+reading as no-model; the restore is its exact inverse. The whole-model drop clears the same set
+and deselects the `"vulkan"` overrides, so a dropped model's prefill and decode take the plain
+CPU path and a later re-arm passes `resident_upload`'s no-active-override gate. The three carry
+the same set, which is why a model's device state never survives into the next.
+
+### 2.2p The Q8 requant writers store one quant per byte {#q8-requant-byte-store}
+
+Every requant writer on the class rail - the prefill and decode-tail kernels that write Q8_0 or
+Q8_K quants - declares its output plane `array<int8>` and stores one quant per element, over
+SPIR-V's 8-bit storage path; the fused decode step `DnStepFused` keeps its packed-word head
+requant, the one writer outside this rule. Packing four quants into a `uint`
+instead costs a shift-and-or chain per word, and in a Q8_K writer - where four co-active lanes
+each hold one byte of the word - two subgroup shuffles per element on top. The stored bytes are
+the same under either form: the amax fold, the scale and the rounding decide them, and all
+three sit above the store. The path needs the device's 8/16-bit storage feature set, which the
+family's device creator enables.

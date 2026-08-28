@@ -44,12 +44,12 @@ cites.** MCP `arch_of` returns each of a file's citations with its section text;
 returns a document's anchors with the code citing them, dead anchors and dangling citations
 included. Citation spelling, path resolution, and failure reasons: `skills/mcp_tools.md`.
 
-**An architecture-doc heading that code cites carries the `{#anchor}` its citation names.**
-LINT026 fails a citation naming no such file or anchor, and in a folder whose `.lint_config`
-sets `[docs] enforce_arch = true`, an anchor no `[arch]` cites.
+**An architecture-doc heading that code cites carries the `{#anchor}` its citation names, and
+every anchor is cited.** LINT026 fails a citation naming no such file or anchor, and - in every
+folder, no tag arms it - an anchor no `[arch]` cites. An `[arch]` citation replaces the comment
+that would have restated the section: the mechanism lives in the document, the code names it.
 
-**A `REVIEW*.md` or `ARCHITECTURE*.md` past 300 lines, in a folder whose `.lint_config` sets
-`[docs] rule_docs_only = true` or `[docs] enforce_arch = true`, splits into companions** -
+**A `REVIEW*.md` or `ARCHITECTURE*.md` past 300 lines, wherever it sits, splits into companions** -
 `ARCHITECTURE_<CONCERN>.md` for an architecture doc, a `REVIEW_<KIND>.md` the parent
 checklist's opening routes to for a checklist. LINT027 is the gate; the `archivist` agent
 does the architecture-doc splits.

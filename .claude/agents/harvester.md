@@ -28,7 +28,9 @@ other filing unnecessary. Only a comment no name can carry goes on to the rest.
   `REVIEW.md`, rewritten as a ban or duty per `REVIEW_COMMON.md`. Delete the comment.
 - **FACT** - it states how the system is or why its shape wins. Propose it for the
   architecture doc, as a present-tense statement per `ARCHITECTURE_COMMON.md`, naming the
-  section it joins. Delete the comment.
+  section it joins, the `{#anchor}` that section carries (or the one to mint), and the CITER -
+  the function the comment sat on, which gets `[arch(at="<doc>#<anchor>")]` when the fact
+  lands. A FACT without a citer is not filed: it is KEEP or DROP. Delete the comment.
 - **KEEP** - a constraint true only at this code site, which filing to the architecture doc
   would bury. Compress to one line in place, spelled `//!` - a contract comment, legal on
   any visibility (a private `//!` caps at 3 lines under STYLE015). A comment already in the
@@ -59,7 +61,8 @@ Your final message is the ledger, nothing else:
 
 1. Counts first: N comments -> R RULE / F FACT / K KEEP / D DROP / RN RENAME / T TODO.
 2. Every RULE, FACT, and TODO: the original comment (condensed to its point), the exact
-   proposed destination text, and the destination (REVIEW.md; arch doc + section; ledger).
+   proposed destination text, and the destination (REVIEW.md; arch doc + section + anchor +
+   citer, as `file:def name`; ledger). A FACT line missing its citer is an incomplete ledger.
    Every RENAME: the comment, current name -> proposed name, one line on what the new name
    carries.
 3. KEEP entries only where you compressed: before -> after, one line each.

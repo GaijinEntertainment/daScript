@@ -11,7 +11,7 @@ require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard 
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
 require dasllama/dasllama_vulkan_decode   // vk_moe_dn_step — the dn chain's npos==1 arm routes through the decode step
 require dasllama/dasllama_kqformat   // KqFmt — the arena fmt slots are its ordinals
-require dasllama/dasllama_env   // g_env_vulkan.vk_kvm — the merged-k|v A/B hatch
+require dasllama/dasllama_env   // g_env_vulkan — the vk_kv_merge / vk_overlap / vk_fuse A/B hatches
 require dasllama/dasllama_gpu_tier   // moe_gpu_stream_need — the stream-slot carve's source of truth
 require vulkan
 require vulkan/vulkan_boost
@@ -36,22 +36,27 @@ require math
 
 let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
 
-var private @scratch g_pf_idsw : array<uint>   // per-window token-id staging for the gather upload
+var private @scratch g_pf_ids_stage : array<uint>
 
-// mode 4 feeds the dense q8/k4/k6 prefill GEMMs f16 rows through the cm2 tiles (the decode
-// GEMV keeps its quant chains — the format pick is decoupled)
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_f16_feed(f : int) : bool {
     return (f == int(KqFmt.q8) || f == int(KqFmt.k4) || f == int(KqFmt.k6)) && g_gpu.coopmat_mode == 4
 }
 
-// group feeds: one activation buffer serves every GEMM of a group, so the f16 form engages
-// only when EVERY member is cm2-servable (a k6 sibling pins the whole group to its quant feed)
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_qkv6(l : int64) : bool => (pf_f16_feed(g_rd.layers[l].fq)
     && pf_f16_feed(g_rd.layers[l].fk) && pf_f16_feed(g_rd.layers[l].fv))
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_gu6(l : int64) : bool => pf_f16_feed(g_rd.layers[l].f1) && pf_f16_feed(g_rd.layers[l].f3)
 
-// the cm2 tile class picks per weight format (q8 = fmt-0 planes, k4/k6 = superblock planes)
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def private pf_qkv_feed_fused(l : int64) : bool => g_env_vulkan.vk_fuse && (pf_qkv6(l) || !kq_sb(g_rd.layers[l].fq))
+
+let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds here; the cmd ring is sized from it
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def private cm2_cls_ensure(fmt : int; ml : bool) : bool {
+    verify(fmt == int(KqFmt.q8) || fmt == int(KqFmt.k4) || fmt == int(KqFmt.k6), "vk prefill: a cm2 tile for a format the f16 feed never admits")
     if (fmt == int(KqFmt.k4)) {
         return ml ? ensure_kq_batch_k4_cm2l_cls() : ensure_kq_batch_k4_cm2m_cls()
     }
@@ -61,6 +66,7 @@ def private cm2_cls_ensure(fmt : int; ml : bool) : bool {
     return ml ? ensure_q8_batch_cm2l_cls() : ensure_q8_batch_cm2m_cls()
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def private cm2_cls_set(fmt : int; ml : bool; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     if (fmt == int(KqFmt.k4)) {
         return ml ? set_kq_batch_k4_cm2l_cls(bufs, sizes, gbits) : set_kq_batch_k4_cm2m_cls(bufs, sizes, gbits)
@@ -71,6 +77,7 @@ def private cm2_cls_set(fmt : int; ml : bool; bufs : uint64 const[5]; sizes : in
     return ml ? set_q8_batch_cm2l_cls(bufs, sizes, gbits) : set_q8_batch_cm2m_cls(bufs, sizes, gbits)
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def private cm2_cls_enc(fmt : int; ml : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     if (fmt == int(KqFmt.k4)) {
         if (ml) {
@@ -91,11 +98,9 @@ def private cm2_cls_enc(fmt : int; ml : bool; raw : VkCommandBuffer; var h : VkH
     }
 }
 
-// the k|v GEMMs merge into ONE dispatch when the two q8 planes sit adjacent in the arena
-// (the bump allocator places them back-to-back unless a slab boundary intervenes): d = 2*kvd
-// doubles the starved k/v grid and deletes the v copy.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_kv_merged(l, dim, kvd : int64) : bool {
-    if (!g_env_vulkan.vk_kvm
+    if (!g_env_vulkan.vk_kv_merge || g_rd.layers[l].fq != int(KqFmt.q8)
             || g_rd.layers[l].fk != int(KqFmt.q8) || g_rd.layers[l].fv != int(KqFmt.q8)) {
         return false
     }
@@ -103,25 +108,25 @@ def private pf_kv_merged(l, dim, kvd : int64) : bool {
 }
 
 // one prefill GEMM role on the class rail: schedule fill + a per-(role, variant) cached set +
-// BatchArgs push. fmt picks the class: fmt-0 in mode 4 = the cm2 l/m tiles, kq = the kq tile
-// family, else the q8 router (whose variant moves with wlen — the last window is shorter).
+// BatchArgs push. kq formats take the kq tile family, else the q8 router (whose variant moves
+// with wlen — the last window is shorter).
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : int;
                         wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
                         abit, ybit : uint; n, d, blk, wlen : int64; f16feed : bool) {
-    let cm2l = f16feed   // the caller's GROUP feed flag - a pinned group routes its k4 members to the kq tile
     // cm2 tile + split picks (pure in d/wlen/n/sm_count) — computed once, fed to fill AND enc
     var nsplit = 1l
     var ksplit = 0l
     var cm2_tc = 0l
-    if (cm2l) {
+    if (f16feed) {
         cm2_tc = batch_tile_edges(fmt, d, wlen, true).tc
         let sp = cm2_split_k(d, wlen, n, cm2_tc)
         nsplit = sp.nsplit
         ksplit = sp.ksplit
     }
-    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt, cm2l, nsplit))
+    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt, f16feed, nsplit))
     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = nsplit > 1l ? uint(ksplit) : 0u)
-    if (cm2l) {
+    if (f16feed) {
         // native fmt-0 decode-in-load; a split pick reroutes the GEMM into the scratch planes
         let split = nsplit > 1l
         if (split) {
@@ -179,7 +184,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
     pfq_ts(raw)
 }
 
-[cold_path]   // once per residency — buffers, sets, fa arming
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]   // once per residency — buffers, sets, fa arming
 def private pf_setup {
     if (g_rd.pf_ready) {
         return
@@ -208,11 +213,12 @@ def private pf_setup {
     g_rd.pf_cos = make_device_buf(np * g_rd.head_size * 4l)
     g_rd.pf_logits_host = make_host_buf(g_rd.vocab * 4l, false, [cached = true])
     g_rd.pf_cmd = alloc_cmd()
-    // overlap ring, sized for the 1,2,4,8-layer chunk ramp over this model's depth
-    let nring = 3l + (g_rd.n_layers + 7l) / 8l
-    g_rd.pf_cmds |> reserve(nring)
-    for (_i in range64(nring)) {
-        g_rd.pf_cmds |> push(alloc_cmd())
+    if (g_env_vulkan.vk_overlap) {
+        let nring = 3l + (g_rd.n_layers + PF_CHUNK_MAX - 1l) / PF_CHUNK_MAX
+        g_rd.pf_cmd_ring |> reserve(nring)
+        for (_i in range64(nring)) {
+            g_rd.pf_cmd_ring |> push(alloc_cmd())
+        }
     }
     if (g_rd.emb_blk >= 0l) {
         g_rd.pf_ids = make_device_buf(np * 4l)
@@ -292,7 +298,7 @@ def private pf_setup {
         }
     }
     if (nkvm > 0l) {
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: merged k|v prefill GEMM armed ({nkvm} of {g_rd.n_layers} layers)\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: merged k/v prefill GEMM armed ({nkvm} of {g_rd.n_layers} layers; DASLLAMA_VK_KV_MERGE=0 pins the split pair)\n")
     }
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
@@ -319,7 +325,6 @@ def private pf_setup {
         }
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve
         if (g_rd.pf_facm2) {
-            // wo6: the fa tile lands the f16 wo feed directly - the b+6 convert never encodes
             g_rd.pf_sets[b + 5] = (wo6
                 ? set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_af),
                     fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 2l),
@@ -365,7 +370,6 @@ def private pf_setup {
         g_rd.pf_sets[b + 14] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb),
             fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
             fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
-        // fused ar twins under vk_fuse: [2l] ffn site, [2l+1] addr_next; the consumer's feed picks q8 or f16
         g_rd.pf_arq_sets[int(l * 2l)] = (gu6
             ? set_cls_ar_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xf),
                 fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 2l),
@@ -374,8 +378,8 @@ def private pf_setup {
                 fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xq, g_rd.pf_xs),
                 fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim, np * (dim / 32l) * 4l),
                 fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XQ, VHZ_XQ)))
-        let nq6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
-        g_rd.pf_arq_sets[int(l * 2l + 1l)] = (nq6
+        let next_qkv6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
+        g_rd.pf_arq_sets[int(l * 2l + 1l)] = (next_qkv6
             ? set_cls_ar_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf),
                 fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 2l),
                 fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ))
@@ -410,29 +414,38 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
     pf_run(x_batch, noids, false, 1.0, cos_batch, npos, logits)
 }
 
-//! The ids-form twin: token ids in, the embd rows gather ON DEVICE from the arena's embd plane
-//! (emb_blk >= 0), so the CPU embed loop and the x upload both vanish from the window wall.
-[hot_path]   // the per-window resident prefill — encode + one submit per window
+[hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) {
     assert(g_rd != null && (g_rd.emb_blk >= 0l || g_rd.emb_f32 != 0ul), "vk_rdec_prefill_ids without a placed embd plane")
     let nox : array<float>
     pf_run(nox, tokens, true, emb_scale, cos_batch, npos, logits)
 }
 
-//! The embd plane's arena block, from the upload walk (rdec_set_emb) — arms the ids-form prefill.
-def vk_rdec_set_emb(emb_block : int64) {
+//! False when the gather rail cannot build on this device (the caller keeps the CPU embed)
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def vk_rdec_set_emb(emb_block : int64) : bool {
+    if (g_gpu != null && g_gpu.dry) {
+        return true
+    }
     assert(g_rd != null, "vk_rdec_set_emb before prepare")
+    if (!ensure_emb_gather_cls()) {
+        return false
+    }
     g_rd.emb_blk = emb_block
+    return true
 }
 
-let private EMB_F32_CAP = 536_870_912l   // an untied f32 table rides the plan's headroom — cap it
-
-//! The untied-f32 arm: upload the raw fblob embd table to a device plane (budget-guarded,
-//! fail-closed false = the caller keeps the CPU embed).
+//! False past RDEC_EMB_F32_CAP, the device's SSBO range, or the weight budget, or when the gather
+//! rail cannot build (the caller keeps the CPU embed)
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool {
+    if (g_gpu != null && g_gpu.dry) {
+        return false
+    }
     assert(g_rd != null, "vk_rdec_upload_emb_f32 before prepare")
     let bytes = vocab * dim * 4l
-    if (bytes > EMB_F32_CAP || g_gpu.resident_bytes + bytes > g_gpu.weight_budget) {
+    if (bytes > min(RDEC_EMB_F32_CAP, vk_max_storage_range()) || g_gpu.resident_bytes + bytes > g_gpu.weight_budget
+            || !ensure_emb_gather_f32_cls()) {
         return false
     }
     g_rd.emb_f32 = make_device_buf(bytes)
@@ -444,10 +457,10 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool
     return true
 }
 
-[hot_path]   // the shared window walk of both prefill forms
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; emb_scale : float;
                    cos_batch : array<float>; npos : int64; var logits : array<float>) {
-    assert(g_rd != null && g_rd.ready, "vk_rdec_prefill before prepare/set_cls")
+    assert(g_rd != null && g_rd.ready, "vk prefill before prepare/set_cls")
     pf_setup()
     let dim = g_rd.dim
     let qd = g_rd.qd
@@ -456,18 +469,21 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let nlfin = g_rd.n_layers * 2l * dim
     let pairs = int(qd / 2l + kvd / 2l)
     unsafe {
-        // sequential windows address the mirror at absolute positions (window w attends [0, w0 + row]); only the last runs fin_rq + cls
         var w0 = 0l
         while (w0 < npos) {
             let tp0 = ref_time_ticks()
             let wlen = min(g_rd.pf_np, npos - w0)
             let last = w0 + wlen >= npos
             if (use_ids) {
-                g_pf_idsw |> resize(wlen)
+                g_pf_ids_stage |> resize(wlen)
                 for (i in range64(wlen)) {
-                    g_pf_idsw[int(i)] = uint(ids[w0 + i])
+                    let id = ids[w0 + i]
+                    if (id < 0l || id >= g_rd.vocab) {   // fail closed loudly, as the CPU's dequant_q8_row does on the same input
+                        panic("vk prefill: token id {id} outside the vocab ({g_rd.vocab}) at row {w0 + i}")
+                    }
+                    g_pf_ids_stage[int(i)] = uint(id)
                 }
-                upload_region_at(g_rd.pf_ids, 0l, addr<uint8 const?>(g_pf_idsw[0]), wlen * 4l)
+                upload_region_at(g_rd.pf_ids, 0l, addr<uint8 const?>(g_pf_ids_stage[0]), wlen * 4l)
             } else {
                 upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
             }
@@ -489,9 +505,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             let attnwg = fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l)
             let hs = g_rd.head_size
             if (use_ids) {
-                // the gather lands in pf_x before the prologue reads it; no extra pfq_ts — its cost folds into the prologue stamp
-                var pce = EmbArgs(npos = uint(wlen), dim = uint(dim), nbb = uint(dim / 32l),
-                    wblk0 = g_rd.emb_blk >= 0l ? uint(arena_local_blk(g_rd.emb_blk)) : 0u, scale = emb_scale)
+                // no extra pfq_ts - the gather cost folds into the prologue stamp
+                var pce = EmbArgs(npos = uint(wlen), dim = uint(dim),
+                    wblk0 = g_rd.emb_blk >= 0l ? uint(arena_local_blk(g_rd.emb_blk)) : 0u, embed_scale = emb_scale)
                 if (g_rd.emb_blk >= 0l) {
                     enc_emb_gather_cls(raw, h, g_rd.pf_emb_set, pce, (wlen * dim / 4l + 255l) / 256l)
                 } else {
@@ -501,23 +517,23 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
             enc_cls_ar(raw, h, g_rd.pf_sets[bp + 0], pc_pro, wlen)   // prologue norm
             pfq_ts(raw)
-            // record/execute overlap: 1,2,4,8-layer ramped chunk submits — the GPU starts while the CPU records on
-            let overlap = g_env_vulkan.vk_overlap
+            let overlap = g_env_vulkan.vk_overlap && !vk_prof()
+            let fuse_arq = g_env_vulkan.vk_fuse
             var nextb = 1l
             var cstep = 1l
             var nchunk = 0
             for (l in range64(g_rd.n_layers)) {
                 if (overlap && l == nextb) {
                     vk_check(vkEndCommandBuffer(raw), null)
-                    submit_chunk(raw)
-                    assert(nchunk < length(g_rd.pf_cmds), "vk prefill: overlap ring exhausted")
-                    raw = g_rd.pf_cmds[nchunk]
+                    submit_nofence(raw)
+                    assert(nchunk < length(g_rd.pf_cmd_ring), "vk prefill: overlap ring exhausted")
+                    raw = g_rd.pf_cmd_ring[nchunk]
                     nchunk++
                     let rfc : VkCommandBufferResetFlags
                     vk_check(vkResetCommandBuffer(raw, rfc), null)
                     let beginc = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw, beginc), null)
-                    cstep = min(cstep * 2l, 8l)
+                    cstep = min(cstep * 2l, PF_CHUNK_MAX)
                     nextb += cstep
                 }
                 let b = int(l * PF_ROLES)
@@ -532,19 +548,18 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let guk = kq_sb(g_rd.layers[l].f1) && !gu6
                 let dnk = kq_sb(g_rd.layers[l].f2) && !dn6
                 let mirb = l * g_rd.seq_cap * kvd   // nolint:LINT021 — the mirror offset multiply must run 64-bit before the push-field narrow
-                // a fused previous addr_next already produced this layer's feed — b+0 only stamps
-                let arqf = g_env_vulkan.vk_fuse
-                if (l > 0l && arqf && !fqk) {
-                    // the shared trailing stamp below keeps the role shape; nothing encodes here
-                } elif (fq6) {
-                    var pc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
-                    enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
-                } elif (fqk) {
-                    var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
-                    enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 8l + 255l) / 256l)
-                } else {
-                    var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-                    enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
+                let feed_already_fused = l > 0l && pf_qkv_feed_fused(l)
+                if (!feed_already_fused) {
+                    if (fq6) {
+                        var pc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+                        enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
+                    } elif (fqk) {
+                        var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
+                        enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 8l + 255l) / 256l)
+                    } else {
+                        var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
+                        enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
+                    }
                 }
                 pfq_ts(raw)
                 let pq = arena_planes(g_rd.layers[l].fq, g_rd.layers[l].bq)
@@ -557,9 +572,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let xsn = fq6 ? 256l : np * (dim / 32l) * 4l
                 pf_gemm_enc(raw, h, b + 1, g_rd.layers[l].fq, pq.wq, pq.ws, xqb, xsb, g_rd.pf_q,
                     pq.wqb, pq.wsb, xqn, xsn, np * qd * 4l, VHZ_XQ, VHZ_Q, dim, qd, g_rd.layers[l].bq, wlen, fq6)
-                let kvm = pf_kv_merged(l, dim, kvd)
-                if (kvm) {
-                    // merged k|v over the adjacent planes: pf_kv fills row-interleaved and consumers read by kstride
+                let kv_merged = pf_kv_merged(l, dim, kvd)
+                if (kv_merged) {
                     pf_gemm_enc(raw, h, b + 2, g_rd.layers[l].fk, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
                         pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK | VHZ_KVV, dim, 2l * kvd, g_rd.layers[l].bk, wlen, fq6)
                     pfq_ts(raw)   // the v stamp: the merged GEMM's cost lands on k's delta
@@ -573,7 +587,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 if (g_rd.qk_norm) {
                     var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(kvd / hs),
-                        qstride = uint(qd), kstride = uint(kvm ? 2l * kvd : kvd), kbase = 0u,
+                        qstride = uint(qd), kstride = uint(kv_merged ? 2l * kvd : kvd), kbase = 0u,
                         qwoff = uint(nlfin + dim + l * 2l * hs), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hs),
                         eps = g_rd.eps)
                     enc_qk_rms_cls(raw, h, g_rd.pf_sets[b + 15], pcn, wlen * (g_rd.n_heads + kvd / hs))
@@ -582,7 +596,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
                     neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
                     layerbase = uint(mirb), npos = uint(wlen), pos0 = uint(w0),
-                    voff = uint(kvm ? kvd : wlen * kvd), kstride = uint(kvm ? 2l * kvd : kvd))
+                    voff = uint(kv_merged ? kvd : wlen * kvd), kstride = uint(kv_merged ? 2l * kvd : kvd))
                 if (g_rd.kv16) {
                     enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
                 } else {
@@ -627,8 +641,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                if (fo6 && g_rd.pf_facm2) {
-                    // the fa tile already landed f16 - b+6 only stamps
+                let attn_landed_f16 = fo6 && g_rd.pf_facm2
+                if (attn_landed_f16) {
                 } elif (fo6) {
                     var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)
                     enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
@@ -648,8 +662,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pf_gemm_enc(raw, h, b + 7, g_rd.layers[l].fo, po.wq, po.ws, aqb, asb, g_rd.pf_xb2,
                     po.wqb, po.wsb, aqn, asn, np * dim * 4l, VHZ_AQ, VHZ_XB2, qd, dim, g_rd.layers[l].bo, wlen, fo6)
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
-                if (arqf && !guk) {
-                    // fused addr_ffn: the feed lands out of the row stash; the b+9 slot only stamps
+                if (fuse_arq && !guk) {
                     if (gu6) {
                         enc_cls_ar_f16_b(raw, h, g_rd.pf_arq_sets[int(l * 2l)], pc8, wlen)
                     } else {
@@ -701,11 +714,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, wlen, dn6)
                 let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — composed from int64 layout offsets
                 var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
-                // fused addr_next = the next layer's qkv feed; the last layer keeps split ar (fin_rq reads its xb)
-                let fqn = l + 1l < g_rd.n_layers ? g_rd.layers[l + 1l].fq : -1
-                let nxt6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
-                if (arqf && l + 1l < g_rd.n_layers && (nxt6 || !kq_sb(fqn))) {
-                    if (nxt6) {
+                let next_qkv6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
+                if (l + 1l < g_rd.n_layers && pf_qkv_feed_fused(l + 1l)) {
+                    if (next_qkv6) {
                         enc_cls_ar_f16_b(raw, h, g_rd.pf_arq_sets[int(l * 2l + 1l)], pc14, wlen)
                     } else {
                         enc_cls_ar_rq_b(raw, h, g_rd.pf_arq_sets[int(l * 2l + 1l)], pc14, wlen)
@@ -1562,8 +1573,9 @@ def private ensure_at_state {
 }
 
 // one attention window: acts/meta/smalls staging copies, q|gate + k + v tiles, the prep pair
-// (deinterleave/qk-rms/rope; k lands at absolute positions), v append + k/v host DMA in the
-// transfer window, the flash attention pass, o requant, wo tile, y DMA
+// (deinterleave/qk-rms/rope; k lands at absolute positions), v append, the flash attention pass,
+// o requant, wo tile, y DMA
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o : uint;
                           rows, w0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul, o_nblk : int64;
                           axq_bytes, axs_bytes, sm_bytes : int64; o_kq, gated, qknorm : bool;
@@ -1595,7 +1607,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
         flags = pflags, rms_off = uint(AT_SM_RMSK), cos_off = uint(AT_SM_COS),
         sin_off = uint(AT_SM_COS + rows * half), obase = uint(w0), qsrc = 0u, eps = eps)
     enc_at_prep_cls(raw, h, g_gpu.at_prep_k_set, pck, rows)
-    // transfer window: append raw v at absolute positions, DMA roped k/raw v to host
+    // append raw v at absolute positions
     vhz_dep(raw, h, VHB_VRAW, VHB_ATV, true)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_v_dev, w0 * kv_dim * 4l, rows * kv_dim * 4l)
     var pca = AtAttnArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kv_dim),
@@ -1611,7 +1623,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     stack_batch_enc(raw, h, s_o, nwg_o, qd, dim)
     vhz_dep(raw, h, VHB_Y1, 0u, true)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, rows * dim * 4l)
-    // K/V host DMA at the END of the chain: beside the preps, driver 610.74 drops the in-cmd compute->transfer barrier ~1-in-12 (partial-prefix readback); the intervening work closes the race
+    //! the K/V host DMAs stay at the END of the chain (ARCHITECTURE_GPU_VULKAN.md sec.2.2j: a driver drops the in-cmd barrier)
     vhz_dep(raw, h, VHB_ATK, 0u, true)
     cmd_copy_range(raw, g_gpu.at_k_dev, w0 * kv_dim * 4l, g_gpu.at_kv_host.buf, 0l, rows * kv_dim * 4l)
     vhz_dep(raw, h, VHB_VRAW, 0u, true)

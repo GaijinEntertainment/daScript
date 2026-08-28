@@ -351,6 +351,7 @@ struct ResidentPlan {
     scratch_bytes : int64   //!< the driver's own device scratch (prefill window + decode smalls)
     headroom_bytes : int64  //!< desktop slack the auto arm leaves unfilled (0 when VRAM is pinned)
     budget_bytes : int64
+    emb_f32_bytes : int64   //!< the raw f32 embd table the gather would upload - counted only when it rides the headroom left after weights + KV (0 = the CPU embed serves)
     fits : bool
     reason : string       //!< "" when it fits; otherwise why, with a remedy where one exists
 }
@@ -363,6 +364,7 @@ let private RDEC_MISC_BYTES = 67_108_864l          // decode smalls + batch act 
 
 // the driver's device allocations past weights + KV — the prefill window buffers dominate.
 // An estimate, deliberately a touch high; the flat term carries the decode/batch smalls.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#resident-plan")]
 def private rdec_scratch_bytes(t : Model) : int64 {
     let c = t.config
     let qd = layer_qd(c, 0l)
@@ -372,8 +374,7 @@ def private rdec_scratch_bytes(t : Model) : int64 {
         + 8l * hid + 4l * layer_head_size(c, 0l)) + c.vocab_size * 4l + RDEC_MISC_BYTES
 }
 
-//! Size `t` for the resident driver at `seq_cap` context. Declines (fits = false) carry a reason:
-//! the commonest support question on this tier is "why did it decline", so the answer is the API.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#resident-plan")]
 def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan {
     let c = t.config
     var p = ResidentPlan(budget_bytes = moe_gpu_weight_budget_())
@@ -385,8 +386,6 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         p.reason = "MoE - the per-op offload tier serves routed experts, not the resident driver"
         return p
     }
-    // KV is reserved BEFORE weights and never grows: on a discrete card it competes directly with
-    // them, and evicting weights to grow it would mean re-uploading gigabytes.
     var krow = 0l
     var vrow = 0l
     for (l in range64(c.n_layers)) {
@@ -424,6 +423,10 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
     p.weight_bytes += moe_gpu_plane_bytes(c.dim, c.vocab_size, int(cls_fmt))
     let total = p.weight_bytes + p.kv_bytes + p.scratch_bytes
     let usable = p.budget_bytes - p.headroom_bytes
+    let emb_want = g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && !t.cls_q8 && !cls_kq(t) && !t.planes_trimmed
+    let emb_bytes = emb_want ? rdec_emb_f32_bytes(c.vocab_size, c.dim) : 0l
+    p.emb_f32_bytes = total + emb_bytes <= usable ? emb_bytes : 0l
+    p.weight_bytes += p.emb_f32_bytes
     p.fits = total <= usable
     if (!p.fits) {
         // a shorter context is the remedy that actually works — weights are fixed, KV is not
@@ -439,7 +442,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
 // ===== the resident whole-stack decode driver (dense models that fully fit) =====
 
 var private g_rdec_active = false       // this loaded model runs the resident decode driver
-var private g_rdec_emb_gpu = false      // the embd plane sits in the arena — the ids-form prefill gate
+var private g_rdec_emb_gpu = false
 var private g_rdec_cnt = 0l             // cached positions in the device KV mirror (built as we decode)
 var private g_rdec_cap = 0l             // mirror context the driver armed at (<= model ctx when VRAM-capped)
 var private g_rdec_gen = 0l             // mirror ownership generation (bumped per resident prefill)
@@ -513,6 +516,7 @@ def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : K
 
 //! Reserve arenas + place every dense plane + wire the resident decode driver. Returns false (and
 //! leaves the driver unarmed) if the model is not a servable dense shape or does not fit at seq_cap.
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // nolint:STYLE037,STYLE038 — all-or-nothing arm: one reject per unsupported family feature, no seam
     g_rdec_active = false
     g_rdec_emb_gpu = false
@@ -557,15 +561,13 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
     }
     // tally arena blocks per format
     var need : table<int; int64>
-    // device-side embed gather: tied models reuse the cls plane; untied q8 models place the
-    // embd plane too (reserved below), other shapes keep the CPU embed (fail-closed gate)
-    let emb_gpu_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
-        && (c.shared_weights ? cls_fmt == KqFmt.q8 : (t.cls_q8 && !t.planes_trimmed)))
-    // the fblob else-arm of embed_row: neither a q8 nor a kq plane pair serves the table
+    let emb_q8_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
+        && c.shared_weights && t.cls_q8 && cls_fmt == KqFmt.q8)
     let emb_f32_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
-        && !emb_gpu_want && !t.cls_q8 && !cls_kq(t) && !t.planes_trimmed)
+        && !t.cls_q8 && !cls_kq(t) && !t.planes_trimmed
+        && resident_plan(t, seq_cap, rkdt, rkdt).emb_f32_bytes > 0l)   // the plan counted it at this context
     var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
-    planes |> reserve(c.n_layers * 7l + 2l)
+    planes |> reserve(c.n_layers * 7l + 1l)
     for (l in range64(c.n_layers)) {
         let lf = resident_layer_fmts(t, l)
         planes |> push((n = dim, rows = qd, f = lf.fq))
@@ -577,9 +579,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
         planes |> push((n = hid0, rows = dim, f = lf.f2))
     }
     planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
-    if (emb_gpu_want && !c.shared_weights) {
-        planes |> push((n = dim, rows = c.vocab_size, f = KqFmt.q8))
-    }
     for (pl in planes) {
         if (!rdec_rows_ok(pl.n, pl.f)) {   // unplaceable row: the whole driver declines (all-or-nothing)
             to_log(LOG_WARNING, "dasLLAMA: resident driver declined - a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple\n")
@@ -642,22 +641,24 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
         return false
     }
     rdec_set_cls(bcls, int(cls_fmt))
-    var bemb = -1l
-    var embf = false
-    if (emb_gpu_want) {
-        bemb = c.shared_weights ? bcls : resident_place(t, KqFmt.q8, t.emb_q8_off, dim, c.vocab_size, mr, kg, wb)
-        if (bemb >= 0l) {
-            rdec_set_emb(bemb)
-            to_log(LOG_INFO, "dasLLAMA: resident driver - embed gather on device ({c.shared_weights ? "tied cls plane" : "own q8 plane"})\n")
+    var emb_q8_placed = false
+    var emb_f32_placed = false
+    if (emb_q8_want) {
+        emb_q8_placed = rdec_set_emb(bcls)
+        if (emb_q8_placed) {
+            to_log(LOG_INFO, "dasLLAMA: resident driver - embed gather on device (tied cls plane; DASLLAMA_VK_GPU_EMBED=0 keeps the CPU embed)\n")
+        } else {
+            to_log(LOG_WARNING, "dasLLAMA: resident driver - the embed-gather rail declined, the CPU embed serves\n")
         }
     } elif (emb_f32_want) {
-        // the untied-f32 ladder arm (embed_row's fblob else): the raw table uploads whole
-        embf = rdec_upload_emb_f32(t.fblob, t.tok_emb_off, c.vocab_size, dim)
-        if (embf) {
-            to_log(LOG_INFO, "dasLLAMA: resident driver - embed gather on device (f32 plane)\n")
+        emb_f32_placed = rdec_upload_emb_f32(t.fblob, t.tok_emb_off, c.vocab_size, dim)
+        if (emb_f32_placed) {
+            to_log(LOG_INFO, "dasLLAMA: resident driver - embed gather on device (f32 plane; DASLLAMA_VK_GPU_EMBED=0 keeps the CPU embed)\n")
+        } else {
+            to_log(LOG_WARNING, "dasLLAMA: resident driver - the f32 embed table stays on the CPU (over the cap, the budget, or the device range)\n")
         }
     }
-    g_rdec_emb_gpu = bemb >= 0l || embf
+    g_rdec_emb_gpu = emb_q8_placed || emb_f32_placed
     // upload the norm rows: [rms_att[l], rms_ffn[l]] x L, then rms_final; qk_norm appends the
     // per-head [rms_q[l], rms_k[l]] x L rows (hs floats each) past the fixed layout
     var norms : array<float>
@@ -750,7 +751,7 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
 }
 
 // the "vulkan" whole-prefill override — host KV hydrates back on demand, so the CPU rails always take over from a valid authority
-[hot_path]   // per prefill call
+[hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill call
 def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos : int64) : bool {
     // armed + embedder-allowed + flat cache in the ARMED mirror codec + causal (this path encodes the causal mask)
     if (!g_rdec_active || !g_resident_prefill_allowed
@@ -844,24 +845,20 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
     return true
 }
 
-// the GPU-embed pre-step probe: true only when the ids-form prefill WILL be accepted, so the
-// engine's skipped CPU embed can never strand an unfilled x_b past the backfill
-[unused_argument(t)]
+[hot_path, unused_argument(t), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
 def private vulkan_embed_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
-    return (g_rdec_active && g_resident_prefill_allowed && g_rdec_emb_gpu
+    return (active_prefill_override() == "vulkan" && g_rdec_active && g_resident_prefill_allowed && g_rdec_emb_gpu
         && start_pos == 0l && npos <= g_rdec_cap
         && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null
         && s.attn_uniform_end == 0l && empty(s.mrope_pos) && !s.ds_active)
 }
 
-[init]
+[init, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def resident_driver_register() {
     register_embed_gpu_gate(@@vulkan_embed_gpu_gate)
     register_decode_override("vulkan", @@vulkan_resident_decode)
     register_batch_decode_override("vulkan", @@vulkan_resident_batch_decode)
     register_prefill_override("vulkan", @@vulkan_resident_prefill)
-    // the resident chain encodes the causal mask device-side — a fused mid-turn span cannot
-    // serve on it, so eval_embd_span_ keeps the three-eval splice while vulkan is active
     register_prefill_override_split_span("vulkan")
     register_gpu_upload_resident(@@moe_gpu_upload_resident)
     set_moe_gpu_slice_window_fn(@@vk_slice_window_provider)
@@ -887,7 +884,7 @@ def gpu_model_marks_init_() : GpuModelMarks {
     return <- GpuModelMarks()
 }
 
-//! Move the INSTALLED per-model tier state out into `st`; the globals read as no-model after.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
 def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     moe_gpu_marks_save(st.marks)
     st.rdec_active = g_rdec_active
@@ -901,7 +898,7 @@ def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     g_rdec_emb_gpu = false
 }
 
-//! Install `st` as the per-model tier state (the save's inverse; `st` reads as no-model after).
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
 def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
     moe_gpu_marks_restore(st.marks)
     g_rdec_active = st.rdec_active
@@ -922,6 +919,7 @@ def moe_gpu_resident_active() : bool => g_rdec_active
 //! Capture the INSTALLED model's tier state into `st` (see ``moe_gpu_model_marks_save_``) and
 //! classify what it had: "gpu:resident" | "gpu:rails" | "cpu". The load-time half of a
 //! multi-model host's slot bookkeeping.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
 def gpu_slot_capture_(var st : GpuModelMarks) : string {
     let was_resident = g_rdec_active
     moe_gpu_model_marks_save_(st)
@@ -931,6 +929,7 @@ def gpu_slot_capture_(var st : GpuModelMarks) : string {
 //! Re-arm the INSTALLED model onto the GPU tier (marks already restored): want, arm, resident
 //! upload — through the bake-slice path when `t` is a mapped vulkan-flavor image (a live
 //! re-gather on a planes-trimmed image panics). Returns "gpu:resident" | "gpu:rails" | "cpu".
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
 def gpu_slot_rearm_(want : GpuTierWant; t : Model) : string {
     set_gpu_tier_want_(want)
     moe_gpu_tier_arm_()
@@ -959,6 +958,7 @@ def moe_gpu_hydrate_session_(t : Model; var s : Session) {
 //! Drop the INSTALLED model's whole GPU state (every model-owned device object + the routing
 //! marks); the model keeps serving on the CPU rails, and re-arm = the same three calls a load
 //! runs. Caller guarantees quiescence: no step in flight, sessions hydrated first.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#gpu-slot-marks")]
 def moe_gpu_drop_model_() {
     if (!moe_gpu_tier_installed()) {
         return
@@ -967,6 +967,7 @@ def moe_gpu_drop_model_() {
     g_rdec_active = false
     g_rdec_cnt = 0l
     g_rdec_cap = 0l
+    g_rdec_emb_gpu = false
     // resident_upload selected the "vulkan" overrides; deselect so (a) a later re-arm's
     // resident_upload passes its no-active-override gate (the warm re-arm decline), and (b) a
     // dropped model's prefill/decode take the plain CPU path without consulting dead state

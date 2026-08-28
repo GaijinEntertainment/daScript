@@ -4,7 +4,9 @@
 doc: `CLAUDE.md` (repo root).
 
 **A file that belongs to a tool is reviewed with that tool's own `REVIEW.md`, where one exists,
-as well as with this checklist - not the checklist of the directory the file sits in.**
+as well as with this checklist - not the checklist of the directory the file sits in. A file in
+a `utils/` library directory (`common/`) is reviewed with this checklist and with the checklist
+of every tool that requires it.**
 
 **Weakening `REVIEW.das` (beside this file) is a defect.** What the gate checks is read from the
 script itself, and each check's finding text states its rule.

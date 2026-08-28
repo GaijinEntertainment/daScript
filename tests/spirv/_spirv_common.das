@@ -801,7 +801,7 @@ def tern {
     let i = gl_GlobalInvocationID.x
     let a = fdata[i]
     let b = fdata[i + 1u]
-    let s = a > b ? a : b                                        // scalar OpSelect // nolint:PERF015
+    let s = a > b ? a : b                                        // nolint:PERF015 -- the scalar OpSelect fixture: the ternary IS the shape under test
     let v = a > b ? float4(a, a, a, a) : float4(b, b, b, b)      // vector OpSelect (splatted condition)
     fdata[i] = s + v.x
 }
@@ -2080,6 +2080,24 @@ def public q8store_words : array<uint> {
     return clone_to_move(q8store_spv)
 }
 
+// ===== unpack8 on 16-bit lanes: an int16/uint16 SSBO element bitcast to byte2/ubyte2 and a runtime
+// lane select (the cm2 decode callbacks' 16-bit quant read). Zero NEW opcodes. =====
+var @ssbo @binding = 0 up16_i16 : array<int16>
+var @ssbo @binding = 1 up16_u16 : array<uint16>
+var @ssbo @binding = 2 up16_i8 : array<int8>
+var @ssbo @binding = 3 up16_u8 : array<uint8>
+
+[compute_shader(local_size_x=64, name="unpack16_spv"), marker(no_coverage)]
+def unpack16_kernel {
+    let gi = gl_GlobalInvocationID.x
+    up16_i8[gi] = unpack8(up16_i16[gi >> 1u])[int(gi & 1u)]
+    up16_u8[gi] = unpack8(up16_u16[gi >> 1u])[int(gi & 1u)]
+}
+
+def public unpack16_words : array<uint> {
+    return clone_to_move(unpack16_spv)
+}
+
 // ===== cooperative matrix (SPV_KHR_cooperative_matrix): an f16 x f16 -> f32 GEMM tile. Loads a 16x16 A
 // (row-major) and B (column-major) from f16 SSBOs into subgroup tiles, one MulAdd into a zero-initialized
 // (OpConstantNull) f32 accumulator, stores the 16x16 result column-major. Exercises
@@ -2429,7 +2447,8 @@ def public coopmat2fa_emitter_opcodes : table<uint> {
     for (op in [
         SpvOp.CooperativeMatrixReduceNV,
         SpvOp.CooperativeMatrixPerElementOpNV,
-        SpvOp.MatrixTimesScalar
+        SpvOp.MatrixTimesScalar,
+        SpvOp.VectorExtractDynamic       // a runtime lane select on unpack8's byte vector (the cm2 decode callbacks' quant read)
     ]) {
         s |> insert(uint(op))
     }

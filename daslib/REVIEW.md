@@ -42,8 +42,8 @@ sides.** Nothing catches it when one side later moves alone.
 it changes the other side and updates the pair's architecture-doc entry in the same
 diff.**
 
-**A comment-sweep diff adds an architecture-doc entry only where no name, shape, or test
-can carry the fact.**
+**A diff that adds an architecture-doc entry adds it only where no name, shape, or test can
+carry the fact.**
 
 **Weakening `tests/lint/test_nolint_suppression.das` is a defect** - it pins that a string
 literal, a URL, and a mid-comment `nolint:` do not suppress while a first-token directive

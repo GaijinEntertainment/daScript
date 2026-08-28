@@ -799,23 +799,24 @@ The path resolves **relative to the citing file's folder**, the document must
 exist, and the anchor must appear in it exactly once as a heading suffix —
 ``## Residency ramp {#residency}``, at any heading level. An anchor declared
 twice is reported like a missing one: the citation reads as precise while
-pointing at whichever section the reader reaches first.
+pointing at whichever section the reader reaches first. The document must
+also sit in the citing file's **own folder tree** — its folder is the file's
+folder or an ancestor of it. A mechanism that another folder's document states
+is restated in prose, in a document of the citer's own tree, and that is what
+the code cites; a resolved cross-tree link would be invisible to the folder's
+own review walk and to ``arch_sites``.
 
-The rule also runs in reverse, for folders that ask for it:
-
-.. code-block:: toml
-
-    # .lint_config beside the code the document describes
-    [docs]
-    enforce_arch = true
-
-In an armed folder every ``{#anchor}`` in every ``.md`` beneath it must be
-cited by at least one ``[arch]`` in the ``.das`` beneath it — an anchor is a
-promise that some code answers for the section, so an uncited one is either
-code that forgot to say so or a section that was never anyone's contract.
-Strip the anchor to demote such a section to narrative. Like ``[docs]
-rule_docs_only``, ``enforce_arch`` is a folder property with no cascade: each
-directory answers for itself.
+The rule also runs in reverse, everywhere: every ``{#anchor}`` in every ``.md``
+under the run's roots must be cited by at least one ``[arch]`` in a ``.das``
+under those roots — an anchor is a promise that some code answers for the
+section, so an uncited one is either code that forgot to say so or a section
+that was never anyone's contract. Strip the anchor to demote such a section to
+narrative. The roots are read as one set, so a citer in ``daslib/`` satisfies
+an anchor in a module's document. No ``.lint_config`` key arms or disarms the
+reverse direction. The rule is a source-tree rule: the installed SDK ships no
+architecture documents, so the bundle's own lint run passes ``--disable
+LINT026`` and the citations in shipped ``daslib/`` files are verified only
+in the tree they came from.
 
 Both directions read source text rather than the AST, so a citation is checked
 even in a file the linting environment cannot compile — and so a structure's
@@ -826,17 +827,10 @@ string literal is not.
 LINT027 — rule document exceeds 300 lines
 ==========================================
 
-The third folder rule: in a folder whose ``.lint_config`` carries ``[docs]
-rule_docs_only = true`` or ``[docs] enforce_arch = true``, every
-``REVIEW*.md`` and ``ARCHITECTURE*.md`` sitting there is capped at 300 lines.
-Past that a checklist stops being read end to end, and a rule nobody reaches
-is not a rule.
-
-.. code-block:: toml
-
-    # either tag arms the line gate
-    [docs]
-    rule_docs_only = true
+The third folder rule: in every folder that holds one, each ``REVIEW*.md``
+and ``ARCHITECTURE*.md`` is capped at 300 lines. Past that a checklist stops
+being read end to end, and a rule nobody reaches is not a rule. No
+``.lint_config`` key arms the gate.
 
 The fix is a split, never a trim — every criterion survives, moved into a
 companion the reader can hold: ``ARCHITECTURE_<CONCERN>.md`` for an

@@ -28,6 +28,15 @@ and the exception ledger. Nothing else.**
 **Sections are numbered, and rules cite them by section.** A section number is never reused
 for different content: append new sections, never renumber.
 
+**A section that code implements carries a `{#anchor}` on its heading, and every anchor is
+cited by an `[arch(at="<doc>#<anchor>")]` on a function in the document's own folder tree.**
+One anchor per heading; the anchor name is stable across rewording, like the section number.
+An anchor no function cites, a citation naming no anchor, and a citation reaching a document
+outside the citer's folder tree are all lint findings (LINT026), in every folder. A mechanism
+another folder's document states is restated here in prose - a paragraph, not a resolved link -
+and the code cites this document. A section no function implements is narrative and carries no
+anchor.
+
 **A fact that a rule or a code comment cites is load-bearing: it must stay true.** The
 same-change duty that keeps it true belongs in the folder's `REVIEW.md`, not here.
 

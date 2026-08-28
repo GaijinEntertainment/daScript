@@ -3,8 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**A diff that removes `lint` from `DAS_UTILS_SHIPPED_EXES` in `utils/CMakeLists.txt` is a
-defect.**
+**A diff that removes `lint` from `DAS_UTILS_SHIPPED_EXES` in `utils/CMakeLists.txt` (repo
+root) is a defect.**
 
 **A diff that shrinks the set of rule ids `REVIEW.das` (beside this file) scans is a
 defect** - whether by editing the gate or by deleting an id's last scannable spelling. The

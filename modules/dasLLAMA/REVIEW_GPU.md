@@ -1,7 +1,7 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_PREFILL.md`.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_PREFILL.md`, `ARCHITECTURE_GPU_VULKAN.md`.
 
 **Routed from `REVIEW.md`: a diff touching a GPU kernel, driver, dispatch class, or the K/V
 mirrors applies this list together with `REVIEW.md`.**
@@ -85,10 +85,12 @@ ladder. The small-work regression hides behind the big-work win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at that
 constant's authoritative site, in the same change.** An in-body tile constant is confirmed
-literal in the generated `*_msl` global or the SPIR-V dump. A grid or threadgroup constant is
-read off the class's `[metal_dispatch]` / `[vk_dispatch]` `grid=`/`tg=` spec, whose `"n/c"`
-form is a CEIL-divide; the spec alone decides. A uniform's value is read at the single writer
-that fills its buffer.
+literal in the generated `*_msl` global or the SPIR-V dump (`DASLLAMA_VK_SPV_DUMP=<dir>`
+writes every class kernel's words). A grid constant is read off the
+class's `[metal_dispatch]` / `[vk_dispatch]` `grid=` spec, whose `"n/c"` form is a
+CEIL-divide; a threadgroup constant off Metal's `tg=` spec or Vulkan's
+`[spirv_kernel(local_size_x=)]`; the spec alone decides. A uniform's value is read at the
+single writer that fills its buffer.
 
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling
 twin, or shifts a shared field to a different binding number, is a defect - even where one
@@ -115,9 +117,10 @@ an `upload_region` upload never written after arming - is a defect unless it car
 defect; a per-encode field either omits `@role` or names the access its body performs.**
 `weight` drops the hazard staging.
 
-**A new kernel class carries `[metal_dispatch]` / `[vk_dispatch]` with every annotation the
-generated builder reads - per-field `@binding` / `@role` / `@off` / `@default`, `@workgroup`
-state with its `tgmem=` dispatch key.**
+**A new kernel class carries `[metal_dispatch]` / `[vk_dispatch]` with every annotation that
+backend's generated builder reads - per-field `@binding` / `@role` / `@off` / `@default`, and
+`@workgroup` state with its `tgmem=` dispatch key.** A field carrying none of them is dropped
+from the bind list with no error.
 
 **A kernel field carries `@span` only when every caller binds whole output rows.** A caller
 binding a column tile of a wider row passes the tile width as the kernel's n while its rows
@@ -182,15 +185,13 @@ is created only by a `[vk_dispatch]`-generated `ensure_*` and torn down by
 bind site cannot shrink a buffer that was sized wrong.
 
 **A change to code that a served GPU decode or prefill path executes ships GPU-vs-CPU parity
-on one q8 and one kq (K-quant) model with the armed mirror codec.** That code is a driver
-(`dasllama/dasllama_metal_decode.das`, `dasllama/dasllama_metal_prefill.das`,
-`dasllama/dasllama_vulkan_decode.das`, `dasllama/dasllama_vulkan_prefill.das`), a kernel
-class one of them dispatches, that class's builder, the servability gates
-(`dasllama/dasllama_metal_shapes.das`), the weight-region cache and residency paths
-(`dasllama/dasllama_metal_common.das`), or the residency rail's serving paths
-(`dasllama/dasllama_gpu_resident.das`); never the bake paths, never a comment. The parity run
-is `harness/parity.das`, or the in-suite instruments `tests/test_metal_decode_parity.das` /
-`tests/test_metal_prefill_parity.das` through `tests/run.das`.
+on one q8 and one kq (K-quant) model with the armed mirror codec.** That code is anything a
+served GPU decode or prefill call executes - a driver, a kernel class it dispatches, that
+class's builder, a servability gate, a weight-region or residency path, the tier forwarders
+and engine seams the call routes through; never the bake paths, never a comment. The parity
+run is `harness/parity.das` on either backend, or - on Metal only - the in-suite instruments
+`tests/test_metal_decode_parity.das` / `tests/test_metal_prefill_parity.das` through
+`tests/run.das`.
 
 **Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
 Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows `resident driver
@@ -242,8 +243,8 @@ same-codec session rows and mirror rows.** A cross-codec copy corrupts the host'
 cache.
 
 **Never cache a descriptor set across dispatches in state that `vk_drop_model_state` does not
-clear** - put it in a `*_ready` latch, or in a field inside `g_gpu` or the weight arena in
-`dasllama/dasllama_vulkan_common.das`.
+clear** - put it in a `*_ready` latch, or in a holder that function already clears in
+`dasllama/dasllama_vulkan_common.das`: `g_rd`, `g_gpu`, the weight arena.
 
 **A diff that changes anything a hand-binding arm must mirror to dispatch a kernel - binding
 numbers, kargs layout, threadgroup memory, grid or threadgroup geometry - fixes or deletes,
@@ -258,3 +259,22 @@ the lab exists only for that decision, its driver and remaining arm go too.** An
 timing script whose output SELECTS between implementations of the same compute, wherever it
 lives (`benchmarks/`, `harness/`); a decided arm that outlives its decision degrades into an
 unmaintained duplicate of the kernel it seeded.
+
+**Never read a `[spirv_decode]` callback's quant bytes by indexing `unpack8` of a 32-bit word
+with a runtime value - read them as 16-bit lanes instead: an `int16[N]` block member selected
+with `unpack8(w)[i & 1u]`, sub-fields pulled out by shift and mask.** The vendor driver's shader
+compiler pattern-matches only the 16-bit spelling into its block-load path, and a runtime byte
+select drops the whole kernel off it.
+
+**A diff that changes when the resident prefill that takes token ids rather than embeddings
+(`vk_rdec_prefill_ids` and the resident prefill override that routes to it) accepts a call
+changes the engine's GPU-embed probe - the gate registered through `register_embed_gpu_gate`,
+`vulkan_embed_gpu_gate` in `dasllama/dasllama_gpu_resident.das` - in the same change.** The
+engine skips the CPU embed on a true probe, so a probe that is true where that path declines
+hands the next consumer an unfilled residual stream.
+
+**A diff that adds a module-level variable to `dasllama/dasllama_gpu_resident.das` whose value
+depends on the installed model also adds it to `moe_gpu_model_marks_save_`,
+`moe_gpu_model_marks_restore_` and `moe_gpu_drop_model_`, in the same change.** A global
+missing from one of the three survives a model swap and routes the next model's dispatches at
+the old model's planes.

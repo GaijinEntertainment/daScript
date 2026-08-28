@@ -280,10 +280,10 @@ struct public MetalEnv {
 
 // ===== Vulkan backend =====
 
-[EnvConfig(env_prefix = "DASLLAMA")]
+[EnvConfig(env_prefix = "DASLLAMA"), arch(at="../ARCHITECTURE_RUNTIME.md#env-knobs")]
 struct public VulkanEnv {
     @clarg_default_doc = "auto"
-    @clarg_doc = "Cooperative-matrix mode; the flash-attention twin needs it even when the GEMM runs sdot4."
+    @clarg_doc = "Cooperative-matrix mode (auto = cm2 where the device has NV_cooperative_matrix2, else mm, else sdot4); the flash-attention twin needs it even when the GEMM runs sdot4."
     coopmat : string = ""
 
     @clarg_default_doc = "32"
@@ -312,15 +312,15 @@ struct public VulkanEnv {
     vk_fa : bool = true
 
     @clarg_doc = "Merged k|v prefill GEMM - one dispatch over the adjacent k+v arena planes; 0 pins the split k + v dispatches for a same-build A/B."
-    vk_kvm : bool = true
+    vk_kv_merge : bool = true
 
-    @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit."
+    @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role)."
     vk_overlap : bool = true
 
-    @clarg_doc = "Device-side token-embedding gather for the resident prefill (the embd plane joins the arena; tied models reuse the cls plane); 0 keeps the CPU embed loop."
+    @clarg_doc = "Device-side token-embedding gather for the resident prefill (a tied q8 table gathers from the resident cls plane; a raw f32 table uploads whole under a 512 MB cap); 0 keeps the CPU embed loop."
     vk_gpu_embed : bool = true
 
-    @clarg_doc = "Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured -9% on the mm_a gate shape on the 5060 Ti, so plain pipelines are the default)."
+    @clarg_doc = "Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured slower than plain pipelines on the mm_a gate shape, so those are the default)."
     vk_fullsg : bool = false
 
     @clarg_doc = "Use a ReBAR device-local host-visible heap when one larger than 1GB is present."

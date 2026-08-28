@@ -75,7 +75,7 @@ that runs before the window is staged must ask the capability half only, or it g
 forever and its feature silently never runs. Split such predicates rather than reordering the
 caller; an optimistic capability answer is safe when the late path has a fallback, and here it does.
 
-### 2.7 A quantized activation carries its scale lattice (Vulkan)
+### 2.7 A quantized activation carries its scale lattice (Vulkan) {#activation-scale-lattice}
 
 Two activation quant forms ride the vulkan rail, and they differ in the SCALE LATTICE, not the
 int8 payload: the Q8_0 form scales per 32 values, the superblock form per 256 (with per-32
@@ -97,7 +97,10 @@ Three consequences the code is shaped around:
   shape must ride the SAME gate, or profiles desync from what actually dispatched.
 - **A GEMV group sharing one activation buffer must be lattice-homogeneous.** q/k/v share one
   quantized x; gate/up share another. Resident arming classifies each member's consumer form
-  and DECLINES a mixed group rather than serving one member wrong scales.
+  and DECLINES a mixed group rather than serving one member wrong scales. The prefill f16 feed
+  answers the same question one step further: one activation buffer serves every GEMM of a
+  group, so the f16 (cm2 decode-in-load) form engages only when EVERY member of the group is
+  cm2-servable - one member on the quant route pins its whole group to the quant feed.
 
 ### 2.8 Every program root declares its stack budget and its prefill intent
 
@@ -121,7 +124,7 @@ ended on. The guard panics, and a panic takes every live stream down, so an unde
 a serving outage waiting on its first long prompt. Both halves of root discipline are enforced
 by `tests/test_program_roots.das`.
 
-### 2.9 Environment knobs
+### 2.9 Environment knobs {#env-knobs}
 
 A knob is an `[EnvConfig]` field in `dasllama_env.das`, read as `g_env_*.<field>`; the field is
 also what generates its `ENVIRONMENT.md` row, so a knob declared anywhere else is invisible to

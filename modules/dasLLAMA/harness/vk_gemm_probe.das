@@ -2,11 +2,12 @@ options gen2
 options stack = 524288
 options _dasllama_internal = true
 
-// ATTRIBUTION SWEEP - isolated per-shape rate of the serving mm_a batch GEMM kernel; the
-// rows attribute prefill GEMM cost across the dense role shapes (gate/up, down, q/wo, k/v).
-// Direction-grade instrument, never record-grade: the kernel is the shipped, oracle-gated
-// one (test_vulkan_kernels.das), dispatched record-once and timed over repeated submits.
-// One arg (gate|down|q|kv) pins a single shape - the long-window ngfx GPU Trace vehicle.
+// ATTRIBUTION SWEEP - isolated per-shape rates of the prefill GEMM tiles.
+// RefGemmArgs mirrors that blob's push block byte for byte - its constant fields are dead by design.
+// Every arm records once, then times over repeated submits; the serving kernels' oracle gate
+// is tests/test_vulkan_kernels.das.
+// Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle);
+// k4|k6 the K-quant tiles; cm2x|k6x|ref the bisect and reference arms.
 // Shapes default to Llama-3.2-3B Q8 geometry (dim 3072, hidden 8192, kv_dim 1024).
 
 require math
@@ -18,7 +19,7 @@ require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_kqformat
 
-let private TILE = 128
+let private MM_TILE = 128
 let private DISPATCHES = 16
 let private SUBMITS = 100
 
@@ -30,7 +31,7 @@ def private hash_word(i : uint) : uint {
     return x
 }
 
-def private ws_word(i : uint) : uint {
+def private cool_f16_pair(i : uint) : uint {
     // two packed f16 scales per word, small positive values (the kernel-suite fixture shape)
     let h = 0x2c00u + (i % 64u)
     return h | (h << 16u)
@@ -54,7 +55,7 @@ def private fill_fixture(var b : ShapeBufs; totblk, rows, nbb : int) {
         b.wq[i] = hash_word(uint(i) + 3u)
     }
     for (i in range(totblk / 2 + 1)) {
-        b.ws[i] = ws_word(uint(i) + 7u)
+        b.ws[i] = cool_f16_pair(uint(i) + 7u)
     }
     for (i in range(rows * nbb * 8)) {
         b.xq[i] = hash_word(uint(i) * 13u + 1u)
@@ -64,7 +65,7 @@ def private fill_fixture(var b : ShapeBufs; totblk, rows, nbb : int) {
         b.xs[i] = (0.375 + float(i % 9) * 0.0625) * 0.0625
     }
     for (i in range(rows * nbb * 16)) {
-        b.xf[i] = ws_word(uint(i) * 5u + 11u)   // the cm2 feed: two packed cool f16 rows/word
+        b.xf[i] = cool_f16_pair(uint(i) * 5u + 11u)
     }
 }
 
@@ -73,7 +74,7 @@ def private fill_fixture(var b : ShapeBufs; totblk, rows, nbb : int) {
 // lit = full decode minus the wg_blk0 shared-memory read. Fast-path no-split arm only =====
 
 [vk_dispatch(name = "cm2px_nil", grid = "wgs", params = "wgs : int64")]
-class Cm2ProbeNil : MoeCmBase {
+class Cm2PxNil : MoeCmBase {
     @ssbo @binding = 0 @readonly wq : array<VkQ8Blk>
     @ssbo @binding = 1 @role = "alias" @readonly wsh : array<float16>
     @ssbo @binding = 3 @readonly xf16 : array<float16>
@@ -142,7 +143,7 @@ class Cm2ProbeNil : MoeCmBase {
 }
 
 [vk_dispatch(name = "cm2px_flat", grid = "wgs", params = "wgs : int64")]
-class Cm2ProbeFlat : MoeCmBase {
+class Cm2PxFlat : MoeCmBase {
     @ssbo @binding = 0 @readonly wq : array<VkQ8Blk>
     @ssbo @binding = 1 @role = "alias" @readonly wsh : array<float16>
     @ssbo @binding = 3 @readonly xf16 : array<float16>
@@ -214,7 +215,7 @@ class Cm2ProbeFlat : MoeCmBase {
 // push = full decode with the scale base off a PUSH CONSTANT (pa.ksplit, 0 here) instead of
 // the wg_blk0 shared read - prices the dense-dispatch candidate against lit's literal base
 [vk_dispatch(name = "cm2px_push", grid = "wgs", params = "wgs : int64")]
-class Cm2ProbePush : MoeCmBase {
+class Cm2PxPush : MoeCmBase {
     @ssbo @binding = 0 @readonly wq : array<VkQ8Blk>
     @ssbo @binding = 1 @role = "alias" @readonly wsh : array<float16>
     @ssbo @binding = 3 @readonly xf16 : array<float16>
@@ -284,7 +285,7 @@ class Cm2ProbePush : MoeCmBase {
 }
 
 [vk_dispatch(name = "cm2px_lit", grid = "wgs", params = "wgs : int64")]
-class Cm2ProbeLit : MoeCmBase {
+class Cm2PxLit : MoeCmBase {
     @ssbo @binding = 0 @readonly wq : array<VkQ8Blk>
     @ssbo @binding = 1 @role = "alias" @readonly wsh : array<float16>
     @ssbo @binding = 3 @readonly xf16 : array<float16>
@@ -377,7 +378,7 @@ def private run_k4_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 
         }
     }
     for (i in range(cnt * n / 2)) {
-        xfh[i] = ws_word(uint(i) * 3u + 5u)
+        xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
     }
     for (i in range(cnt * nsb * 64)) {
         xqh[i] = hash_word(uint(i) * 13u + 1u)
@@ -404,7 +405,7 @@ def private run_k4_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 
         upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
         upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
         upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        let vnames = fixed_array("k4l ", "k4m ", "k4lnb", "kqtile")
+        let vnames = fixed_array("k4l ", "k4m ", "k4lnb", "kqnb ")   // kqnb: the kq tile dispatches un-barriered, like k4lnb
         for (v in range(4)) {
             let ttile = v == 1 ? 128 : (v == 3 ? 32 : 256)
             let wtile = v == 3 ? 32 : 128
@@ -450,9 +451,9 @@ def private run_k4_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 
                 }
             }
             vk_check(vkEndCommandBuffer(raw), null)
-            let us = time_submits(raw)
+            let us = usec_per_dispatch(raw)
             let tf = flop / (us * 1000000.0lf)
-            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s\n")
+            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         }
     }
     delete wqh
@@ -464,7 +465,7 @@ def private run_k4_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 
 
 // ===== k6 decode-spelling bisect (arg "k6x") - the shipped k6 l-tile body with the decode
 // varied: nil = constant (ceiling), flat = current compose w/o scale reads, ql = nibble only
-// (no qh stream), pair = llama.cpp's 16-bit-pair compose + ONE unpack8 select (v4 form),
+// (no qh stream), pair = upstream's 16-bit-pair compose + ONE unpack8 select (v4 form),
 // pair16 = the same compose selected through a 2-lane byte2 (the Q8-winning select width) =====
 
 // the shared probe base: members + the single-region fast-path l-tile body; leaves override
@@ -607,31 +608,6 @@ class K6PxPair : K6PxBase {
     }
 }
 
-[vk_dispatch(name = "k6px_sfix", grid = "wgs", params = "wgs : int64")]
-class K6PxSfix : K6PxBase {
-    [spirv_decode]
-    def override decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
-        let e = cib.y
-        let bu = e >> 5u
-        let hh = (e >> 4u) & 1u
-        let j = e & 15u
-        let lo = uint(int(unpack8(blk.ql[int((bu * 16u + j) >> 1u)])[int(j & 1u)])) & 0xFFu
-        let hby = uint(int(unpack8(blk.qh[int(((bu >> 2u) * 32u + hh * 16u + j) >> 1u)])[int(j & 1u)])) & 0xFFu
-        let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let sidx = e >> 4u
-        // signed sub-scale via shift+mask - NOT a byte4 dynamic select (the Q8-chase death shape)
-        let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
-        let d = unpackHalf2x16(wsu[srow + 4u]).x
-        return float16(d * float(sc) * float(q6))
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "k6px_sfix_spv")]
-    def run {
-        body()
-    }
-}
-
 [vk_dispatch(name = "k6px_pair16", grid = "wgs", params = "wgs : int64")]
 class K6PxPair16 : K6PxBase {
     [spirv_decode]
@@ -658,6 +634,7 @@ class K6PxPair16 : K6PxBase {
 
 // k6 (Q6_K) cm2 decode-in-load vs the serving kq tile - same instrument as run_k4_shape;
 // bisect adds the k6px decode-spelling variants
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) {   // nolint:STYLE037,STYLE038 — one linear measurement sweep
     let nsb = n / 256
     let totsb = d * nsb
@@ -681,7 +658,7 @@ def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) 
         wsuh[sb * 5 + 4] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0))
     }
     for (i in range(cnt * n / 2)) {
-        xfh[i] = ws_word(uint(i) * 3u + 5u)
+        xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
     }
     for (i in range(cnt * nsb * 64)) {
         xqh[i] = hash_word(uint(i) * 13u + 1u)
@@ -708,8 +685,8 @@ def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) 
         upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
         upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
         upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        let vnames = fixed_array("k6l ", "k6m ", "k6lnb", "kqtile", "xnil ", "xflat", "xql  ", "xpair", "xpr16", "xsfix")
-        for (v in range(bisect ? 10 : 4)) {
+        let vnames = fixed_array("k6l ", "k6m ", "k6lnb", "kqnb ", "xnil ", "xflat", "xql  ", "xpair", "xpr16")   // the shipped k6 decode IS the sfix spelling the bisect ended on
+        for (v in range(bisect ? 9 : 4)) {
             let ttile = v == 1 ? 128 : (v == 3 ? 32 : 256)
             let wtile = v == 3 ? 32 : 128
             let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
@@ -742,12 +719,9 @@ def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) 
                     } elif (v == 7) {
                         var s = set_k6px_pair(bufs, sizes, gbits)
                         enc_k6px_pair(raw, hz, s, pc, int64(wgs))
-                    } elif (v == 8) {
+                    } else {
                         var s = set_k6px_pair16(bufs, sizes, gbits)
                         enc_k6px_pair16(raw, hz, s, pc, int64(wgs))
-                    } else {
-                        var s = set_k6px_sfix(bufs, sizes, gbits)
-                        enc_k6px_sfix(raw, hz, s, pc, int64(wgs))
                     }
                 }
             } elif (v == 3) {
@@ -779,9 +753,9 @@ def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) 
                 }
             }
             vk_check(vkEndCommandBuffer(raw), null)
-            let us = time_submits(raw)
+            let us = usec_per_dispatch(raw)
             let tf = flop / (us * 1000000.0lf)
-            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s\n")
+            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         }
     }
     delete wqh
@@ -792,7 +766,7 @@ def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) 
 }
 
 // two warmup submits (pipeline compile + clocks settle), then the timed window
-def private time_submits(var raw : VkCommandBuffer) : double {
+def private usec_per_dispatch(var raw : VkCommandBuffer) : double {
     submit_wait(raw)
     submit_wait(raw)
     let t0 = ref_time_ticks()
@@ -805,8 +779,8 @@ def private time_submits(var raw : VkCommandBuffer) : double {
 def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
     let rows = cnt
-    let wtiles = (d + TILE - 1) / TILE
-    let wgs = ((cnt + TILE - 1) / TILE) * wtiles
+    let wtiles = (d + MM_TILE - 1) / MM_TILE
+    let wgs = ((cnt + MM_TILE - 1) / MM_TILE) * wtiles
     let totblk = d * nbb
     var b : ShapeBufs
     fill_fixture(b, totblk, rows, nbb)
@@ -852,7 +826,7 @@ def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 —
             enc_q8_batch_mm_a_cls(raw, hz, sc, pc, int64(wgs))
         }
         vk_check(vkEndCommandBuffer(raw), null)
-        per_us = time_submits(raw)
+        per_us = usec_per_dispatch(raw)
         if (g_gpu.has_coopmat2) {
             // the cm2 tiles at the serving no-split config (f16-fed, decode-in-load)
             let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
@@ -866,7 +840,7 @@ def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 —
                 enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
             }
             vk_check(vkEndCommandBuffer(rawl), null)
-            cm2l_us = time_submits(rawl)
+            cm2l_us = usec_per_dispatch(rawl)
             var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
             var rawm = alloc_cmd()
             vk_check(vkBeginCommandBuffer(rawm, begin), null)
@@ -875,24 +849,25 @@ def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 —
                 enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
             }
             vk_check(vkEndCommandBuffer(rawm), null)
-            cm2m_us = time_submits(rawm)
+            cm2m_us = usec_per_dispatch(rawm)
         }
     }
     let flop = 2.0lf * double(rows) * double(d) * double(n)
     let tflops = flop / (per_us * 1000000.0lf)
     let ms = per_us / 1000.0lf
-    print("{name}: d={d} K={n} cnt={cnt} wgs={wgs}  {ms} ms/dispatch  {tflops} TFLOP/s\n")
+    print("{name}: d={d} K={n} cnt={cnt} wgs={wgs}  {ms} ms/dispatch  {tflops} TFLOP/s  timing-only\n")
     if (cm2l_us > 0.0lf) {
         let ltf = flop / (cm2l_us * 1000000.0lf)
         let mtf = flop / (cm2m_us * 1000000.0lf)
-        print("{name}: cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {ltf} TFLOP/s\n")
-        print("{name}: cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {mtf} TFLOP/s\n")
+        print("{name}: cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {ltf} TFLOP/s  timing-only\n")
+        print("{name}: cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {mtf} TFLOP/s  timing-only\n")
     }
     delete sched
     delete b
 }
 
 // the decode-cost bisect: the shipped cm2l against the three probe variants, one shape
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
     let rows = cnt
@@ -998,9 +973,9 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE03
                 }
             }
             vk_check(vkEndCommandBuffer(raw), null)
-            let us = time_submits(raw)
+            let us = usec_per_dispatch(raw)
             let tf = flop / (us * 1000000.0lf)
-            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s\n")
+            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         }
     }
     delete sched
@@ -1008,7 +983,7 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE03
 }
 
 [vk_dispatch(name = "cm2px_f16a", grid = "wgs", params = "wgs : int64")]
-class Cm2ProbeF16A : MoeCmBase {
+class Cm2PxF16A : MoeCmBase {
     @ssbo @binding = 0 @readonly wf : array<float16>
     @ssbo @binding = 3 @readonly xf16 : array<float16>
     @ssbo @binding = 5 y : array<float>
@@ -1063,11 +1038,11 @@ class Cm2ProbeF16A : MoeCmBase {
     }
 }
 
-// ===== their mul_mm_cm2 blob in our harness (arg "their") - the probe class only shapes the
-// pipeline layout (3 SSBOs + their 17-word push block); DASLLAMA_VK_SPV_OVERRIDE serves the
-// glslc-built, spec-const-patched llama.cpp shader in place of the dummy body =====
+// ===== the reference coopmat2 GEMM blob in our harness (arg "ref") - the probe class only
+// shapes the pipeline layout (3 SSBOs + its 17-word push block); DASLLAMA_VK_SPV_OVERRIDE serves
+// the glslc-built, spec-const-patched reference shader in place of the dummy body =====
 
-struct TheirArgs {
+struct RefGemmArgs {
     m : uint
     n : uint
     k : uint
@@ -1087,14 +1062,14 @@ struct TheirArgs {
     pn : uint
 }
 
-[vk_dispatch(name = "cm2px_their", grid = "wgs", params = "wgs : int64")]
-class Cm2ProbeTheir {
+[vk_dispatch(name = "cm2px_ref", grid = "wgs", params = "wgs : int64")]
+class Cm2PxRef {
     @ssbo @binding = 0 @readonly aq : array<uint>
     @ssbo @binding = 1 @readonly bx : array<float16>
     @ssbo @binding = 2 dy : array<float>
-    @push_constant pa : TheirArgs
+    @push_constant pa : RefGemmArgs
 
-    [spirv_kernel(local_size_x = 256, name = "cm2px_their_spv")]
+    [spirv_kernel(local_size_x = 256, name = "cm2px_ref_spv")]
     def run {
         let i = gl_GlobalInvocationID.x
         if (i < pa.m) {
@@ -1103,15 +1078,15 @@ class Cm2ProbeTheir {
     }
 }
 
-[vk_dispatch(name = "cm2px_their2", grid = "wgs", params = "wgs : int64")]
-class Cm2ProbeTheir2 {
+[vk_dispatch(name = "cm2px_ref2", grid = "wgs", params = "wgs : int64")]
+class Cm2PxRef2 {
     @ssbo @binding = 0 @readonly aq : array<uint>
     @ssbo @binding = 1 @readonly bx : array<float16>
     @ssbo @binding = 2 dy : array<float>
     @ssbo @binding = 3 @readonly sc : array<float16>
-    @push_constant pa : TheirArgs
+    @push_constant pa : RefGemmArgs
 
-    [spirv_kernel(local_size_x = 256, name = "cm2px_their2_spv")]
+    [spirv_kernel(local_size_x = 256, name = "cm2px_ref2_spv")]
     def run {
         let i = gl_GlobalInvocationID.x
         if (i < pa.m) {
@@ -1121,10 +1096,10 @@ class Cm2ProbeTheir2 {
 }
 
 // the minimal our-emitter kernel: fast-path loop only, 256 rows literal, wg.x = weight tile,
-// two-plane decode without the workgroup base (the T2-proven form). Recovery here pins the
+// two-plane decode without the workgroup base (the two-plane reference form). Recovery here pins the
 // cm2l deficit to the preamble/branch structure; no recovery pins it to per-op emission
 [vk_dispatch(name = "cm2px_min", grid = "wgs", params = "wgs : int64")]
-class Cm2ProbeMin {
+class Cm2PxMin {
     @ssbo @binding = 0 @readonly wq : array<VkQ8Blk>
     @ssbo @binding = 1 @readonly wsh : array<float16>
     @ssbo @binding = 3 @readonly xf16 : array<float16>
@@ -1180,9 +1155,10 @@ class Cm2ProbeMin {
     }
 }
 
-// gate shape at cnt = 256 (their grid is 2-D; one BN=256 column tile keeps it 1-D):
-// interleaved block_q8_0 A plane, drain-free timing, our cm2l + mm rows alongside
-def private run_their(d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
+// gate shape at cnt = 256 (the reference grid is 2-D; one BN=256 column tile keeps it 1-D):
+// the reference interleaved q8 A plane, drain-free timing, our cm2l + mm rows alongside
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+def private run_ref_gemm(d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
     let totblk = d * nbb
     var aw : array<uint16>
@@ -1197,7 +1173,7 @@ def private run_their(d, n, cnt : int) {   // nolint:STYLE038 — one linear mea
     var xf : array<uint>
     xf |> resize(cnt * nbb * 16)
     for (i in range(cnt * nbb * 16)) {
-        xf[i] = ws_word(uint(i) * 5u + 11u)
+        xf[i] = cool_f16_pair(uint(i) * 5u + 11u)
     }
     let a_bytes = int64(totblk) * 34l
     let b_bytes = int64(cnt * nbb) * 64l
@@ -1210,20 +1186,20 @@ def private run_their(d, n, cnt : int) {   // nolint:STYLE038 — one linear mea
     unsafe {
         upload_region_at(ad, 0l, addr<uint8 const?>(aw[0]), a_bytes)
         upload_region_at(bd, 0l, addr<uint8 const?>(xf[0]), b_bytes)
-        var pc = TheirArgs(m = uint(d), n = uint(cnt), k = uint(n),
+        var pc = RefGemmArgs(m = uint(d), n = uint(cnt), k = uint(n),
             sa = uint(n), sb = uint(n), sd = uint(d),
             bsa = uint(d) * uint(n), bsb = uint(cnt) * uint(n), bsd = uint(cnt) * uint(d),
             bz = 0u, nb = 1u, ks = uint(n), ne02 = 1u, ne12 = 1u, b2 = 1u, b3 = 1u, pn = uint(cnt))
         var scw : array<uint>
         scw |> resize(totblk / 2 + 1)
         for (i in range(totblk / 2 + 1)) {
-            scw[i] = ws_word(uint(i) + 7u)
+            scw[i] = cool_f16_pair(uint(i) + 7u)
         }
         let sc_bytes = int64(totblk) * 2l
         let scd = make_device_buf(sc_bytes)
         upload_region_at(scd, 0l, addr<uint8 const?>(scw[0]), sc_bytes)
         delete scw
-        var s = set_cm2px_their(
+        var s = set_cm2px_ref(
             fixed_array(ad, bd, yd),
             fixed_array(a_bytes, b_bytes, y_bytes),
             fixed_array(1u, 2u, 4u))
@@ -1232,13 +1208,13 @@ def private run_their(d, n, cnt : int) {   // nolint:STYLE038 — one linear mea
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         for (_k in range(DISPATCHES)) {
             var hz : VkHaz
-            enc_cm2px_their(raw, hz, s, pc, int64(wgs))
+            enc_cm2px_ref(raw, hz, s, pc, int64(wgs))
         }
         vk_check(vkEndCommandBuffer(raw), null)
-        let us = time_submits(raw)
+        let us = usec_per_dispatch(raw)
         let tf = flop / (us * 1000000.0lf)
-        print("their cm2 (d={d} K={n} cnt={cnt} wgs={wgs}): {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s\n")
-        var s2 = set_cm2px_their2(
+        print("ref cm2 (d={d} K={n} cnt={cnt} wgs={wgs}): {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
+        var s2 = set_cm2px_ref2(
             fixed_array(ad, bd, yd, scd),
             fixed_array(a_bytes, b_bytes, y_bytes, sc_bytes),
             fixed_array(1u, 2u, 4u, 8u))
@@ -1246,12 +1222,12 @@ def private run_their(d, n, cnt : int) {   // nolint:STYLE038 — one linear mea
         vk_check(vkBeginCommandBuffer(raw2, begin), null)
         for (_k in range(DISPATCHES)) {
             var hz : VkHaz
-            enc_cm2px_their2(raw2, hz, s2, pc, int64(wgs))
+            enc_cm2px_ref2(raw2, hz, s2, pc, int64(wgs))
         }
         vk_check(vkEndCommandBuffer(raw2), null)
-        let us2 = time_submits(raw2)
+        let us2 = usec_per_dispatch(raw2)
         let tf2 = flop / (us2 * 1000000.0lf)
-        print("their+2plane (T2): {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s\n")
+        print("ref+2plane: {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
         var s3 = set_cm2px_min(
             fixed_array(ad, scd, bd, yd),
             fixed_array(a_bytes, sc_bytes, b_bytes, y_bytes),
@@ -1264,14 +1240,15 @@ def private run_their(d, n, cnt : int) {   // nolint:STYLE038 — one linear mea
             enc_cm2px_min(raw3, hz, s3, pcm, int64(wgs))
         }
         vk_check(vkEndCommandBuffer(raw3), null)
-        let us3 = time_submits(raw3)
+        let us3 = usec_per_dispatch(raw3)
         let tf3 = flop / (us3 * 1000000.0lf)
-        print("our minimal (min): {us3 / 1000.0lf} ms/dispatch  {tf3} TFLOP/s\n")
+        print("our minimal (min): {us3 / 1000.0lf} ms/dispatch  {tf3} TFLOP/s  timing-only\n")
     }
     delete aw
     delete xf
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape dispatcher
     if (!ensure_q8_batch_cls()) {
         print("no Vulkan device\n")
@@ -1293,7 +1270,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     }
     var only = ""
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "their" || a == "tl" || a == "k4" || a == "k6" || a == "k6x") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "k4" || a == "k6" || a == "k6x") {
             only = a
         }
     }
@@ -1305,7 +1282,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         verify(ensure_kq_batch_k6_cm2l_cls() && ensure_kq_batch_k6_cm2m_cls()
             && kq_batch_cls_ensure(int(KqFmt.k6), false)
             && ensure_k6px_nil() && ensure_k6px_flat() && ensure_k6px_ql()
-            && ensure_k6px_pair() && ensure_k6px_pair16() && ensure_k6px_sfix(), "k6x probe pipelines must engage")
+            && ensure_k6px_pair() && ensure_k6px_pair16(), "k6x probe pipelines must engage")
         run_k6_shape("q6k gate", 9728, 2560, 512, true)
         run_k6_shape("q6k down", 2560, 9728, 512, true)
         return
@@ -1336,13 +1313,13 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         run_k4_shape("q4k kv  ", 2048, 2560, 512)
         return
     }
-    if (only == "their") {
+    if (only == "ref") {
         if (!g_gpu.has_coopmat2) {
             print("no coopmat2 on this device\n")
             return
         }
-        verify(ensure_cm2px_their() && ensure_cm2px_their2() && ensure_cm2px_min(), "their-blob pipelines must engage")
-        run_their(8192, 3072, 256)
+        verify(ensure_cm2px_ref() && ensure_cm2px_ref2() && ensure_cm2px_min(), "ref-blob pipelines must engage")
+        run_ref_gemm(8192, 3072, 256)
         return
     }
     if (only == "tl") {

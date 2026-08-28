@@ -65,6 +65,7 @@ def cmt_kernel {
     coopmatStore(acc, cmt_c, 0, 16, 1)
 }
 
+//! packs to 34 bytes: f16 ``d`` at +0, 32 int8 ``qs`` at +2
 struct GBlockQ8 {
     d  : float16
     qs : int8[32]
@@ -85,16 +86,18 @@ def gq8_kernel {
     gq8_y[b] = acc * float(gq8_blocks[b].d)
 }
 
-// the STORE half: narrowing casts + 8/16-bit stores land exact bytes (a requant writer's shape)
+// the store counterpart to gq8_*: narrowing casts and 8/16-bit stores
 var @ssbo @binding = 0 gst_blocks : array<GBlockQ8>
 var @ssbo @binding = 1 gst_i16 : array<int16>
 var @ssbo @binding = 2 gst_u16 : array<uint16>
 var @ssbo @binding = 3 gst_src : array<int>
+var @ssbo @binding = 4 gst_i8 : array<int8>   // one byte per invocation: four adjacent lanes share each dword
 
 [compute_shader(local_size_x=64, name="gst_spv")]
 def gst_kernel {
     let gi = gl_GlobalInvocationID.x
     let v = gst_src[gi]
+    gst_i8[gi] = int8(v)
     gst_i16[gi] = int16(v)
     gst_u16[gi] = uint16(uint(v) * 3u)
     if (gi < 16u) {
@@ -421,10 +424,12 @@ def test_storage_8_16_store_gpu(t : T?) {
         srcb[i * 4 + 3] = uint8((v >> 24u) & 0xFFu)
     }
     bufs |> emplace(srcb)
+    var i8b : array<uint8>
+    i8b |> resize(n)
+    bufs |> emplace(i8b)
     var words <- clone_to_move(gst_spv)
     let no_spec : array<SpecConstantValue>
     run_multi(words, bufs, 1u, no_spec, true)
-    // int16/uint16 element stores: exact little-endian bytes of the narrowed values
     var bad16 = 0
     for (i in range(n)) {
         let v = uint(i * 517 + 3)
@@ -437,7 +442,6 @@ def test_storage_8_16_store_gpu(t : T?) {
         }
     }
     t |> success(bad16 == 0, "int16/uint16 element stores land exact bytes ({bad16} of {n} wrong)")
-    // struct-member stores: f16 d at +0, int8 qs at +2 - every byte of every block placed
     var badblk = 0
     for (b in range(16)) {
         let dbits = packHalf2x16(float2(0.25 * float(1 + b % 3), 0.0)) & 0xFFFFu
@@ -451,6 +455,13 @@ def test_storage_8_16_store_gpu(t : T?) {
         }
     }
     t |> success(badblk == 0, "int8/f16 struct-member stores land exact bytes ({badblk} wrong)")
+    var bad8 = 0
+    for (i in range(n)) {
+        if (int(bufs[4][i]) != ((i * 517 + 3) & 0xFF)) {
+            bad8++
+        }
+    }
+    t |> success(bad8 == 0, "int8 element stores from adjacent invocations land exact bytes ({bad8} of {n} wrong)")
     delete words
     delete bufs
 }

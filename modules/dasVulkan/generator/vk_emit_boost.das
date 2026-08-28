@@ -154,7 +154,7 @@ def public derive_owners(reg : VkRegistry; em : EmitModel) : array<OwnerInfo> {
     return <- owners
 }
 
-[unused_argument(reg, em)]
+[unused_argument(reg, em), arch(at="../ARCHITECTURE.md#handles-uint64")]
 def private emit_handles_boost(reg : VkRegistry; em : EmitModel; out_dir : string; owners : array<OwnerInfo>) {
     fopen("{out_dir}/vulkan_handles.das", "wb") $(f) {
         panic("can't write vulkan_handles.das") if (f == null)
@@ -162,7 +162,6 @@ def private emit_handles_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
         fprint(f, "options gen2\noptions _comment_hygiene = true\noptions indenting = 4\n\nmodule vulkan_handles shared\n\n")
         fprint(f, "require vulkan public\nrequire vulkan/vulkan_runtime public\n\n")
         for (oi in owners) {
-            // handles stored as uint64 (their ABI form) so wrapper copies are friction-free
             fprint(f, "struct {oi.boost} \{\n")
             fprint(f, "    _vk : uint64\n")
             fprint(f, "    _needs_delete : bool\n")

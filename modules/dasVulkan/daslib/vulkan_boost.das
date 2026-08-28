@@ -144,6 +144,7 @@ def public mesh_shader_supported(phys : VkPhysicalDevice) : bool {
     return mf.meshShader != 0u && mf.taskShader != 0u
 }
 
+[arch(at="../ARCHITECTURE.md#portability-subset")]
 def public create_instance(application_name : string; api_version : uint; extensions : array<string>) : Instance {
     var ai = VkApplicationInfo()
     ai.apiVersion = api_version
@@ -154,9 +155,6 @@ def public create_instance(application_name : string; api_version : uint; extens
     unsafe {
         ci.pApplicationInfo = addr(ai)
     }
-    // Portability drivers (MoltenVK on macOS) reject vkCreateInstance with ERROR_INCOMPATIBLE_DRIVER
-    // unless VK_KHR_portability_enumeration is enabled and the matching create flag is set. Added
-    // transparently when the loader advertises it, so the same user code runs unchanged everywhere.
     var exts <- [for (e in extensions); e]
     if (instance_extension_available("VK_KHR_portability_enumeration")) {
         if (find_index(exts, "VK_KHR_portability_enumeration") < 0) {
@@ -184,9 +182,7 @@ def public create_instance(application_name : string = ""; api_version : uint = 
     return <- create_instance(application_name, api_version, no_ext)
 }
 
-// Portability devices (MoltenVK) advertise VK_KHR_portability_subset and the spec REQUIRES
-// enabling it whenever advertised — vkCreateDevice fails otherwise. Appended transparently at
-// every raw vkCreateDevice site (create_instance's portability_enumeration twin).
+[arch(at="../ARCHITECTURE.md#portability-subset")]
 def private append_portability_subset(phys : VkPhysicalDevice; var exts : array<string>) {
     if (device_extension_available(phys, "VK_KHR_portability_subset") &&
             find_index(exts, "VK_KHR_portability_subset") < 0) {
@@ -385,10 +381,7 @@ def public create_device(phys : VkPhysicalDevice; queue_families : array<uint>; 
     return <- b
 }
 
-//! True iff ``phys`` supports the 8/16-bit SSBO storage set the dasSpirv storage wave emits:
-//! ``storageBuffer16BitAccess`` (Vulkan11Features) + ``storageBuffer8BitAccess`` + ``shaderFloat16`` +
-//! ``shaderInt8`` (Vulkan12Features) + core ``shaderInt16``. Gate 8/16-bit kernels — old/software
-//! drivers can miss any bit.
+[arch(at="../ARCHITECTURE.md#storage-8-16")]
 def public storage_8_16_supported(phys : VkPhysicalDevice) : bool {
     var f11 = VkPhysicalDeviceVulkan11Features()
     var f12 = VkPhysicalDeviceVulkan12Features()
@@ -410,6 +403,7 @@ def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : ui
     return <- create_device_storage_8_16(phys, queue_family, no_ext)
 }
 
+[arch(at="../ARCHITECTURE.md#storage-8-16")]
 def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>) : Device {
     var f11 = VkPhysicalDeviceVulkan11Features()
     var f12 = VkPhysicalDeviceVulkan12Features()
@@ -418,7 +412,7 @@ def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : ui
     f12.shaderFloat16 = 1u
     f12.shaderInt8 = 1u
     var f2 = VkPhysicalDeviceFeatures2()
-    f2.features.shaderInt16 = 1u   // core bit: the Int16 SPIR-V capability (int16 SSBO members widen through it)
+    f2.features.shaderInt16 = 1u
     unsafe {
         f2.pNext = addr<void?>(f11)
         f11.pNext = addr<void?>(f12)
@@ -478,6 +472,7 @@ def public pipeline_exec_props_supported(phys : VkPhysicalDevice) : bool {
 //! create_device_cooperative_matrix PLUS the Vulkan 1.3 subgroup-size-control pair so pipelines can pin
 //! ``requiredSubgroupSize``; each bit is enabled only when the device reports it (degrades to the plain
 //! coopmat device). Instance must be api 1.3; opportunistically enables VK_KHR_pipeline_executable_properties.
+[arch(at="../ARCHITECTURE.md#subgroup-pair")]
 def public create_device_coopmat_full_subgroups(phys : VkPhysicalDevice; queue_family : uint) : Device {
     var q13 = VkPhysicalDeviceVulkan13Features()
     var q2 = VkPhysicalDeviceFeatures2()
@@ -493,7 +488,6 @@ def public create_device_coopmat_full_subgroups(phys : VkPhysicalDevice; queue_f
     f11.storageBuffer16BitAccess = 1u
     f12.shaderFloat16 = 1u
     f12.vulkanMemoryModel = 1u
-    // optional 1.3 bits: request only what the queried features report
     f13.subgroupSizeControl = q13.subgroupSizeControl
     f13.computeFullSubgroups = q13.computeFullSubgroups
     fcm.cooperativeMatrix = 1u
@@ -555,6 +549,7 @@ def public integer_dot_product_supported(phys : VkPhysicalDevice) : bool {
 //! Create a device with the 8/16-bit SSBO storage set AND ``shaderIntegerDotProduct`` (a Vulkan11 ->
 //! Vulkan12 -> ShaderIntegerDotProduct chain through features2); pre-1.3 devices get the
 //! VK_KHR_shader_integer_dot_product string automatically. Pairs with ``sdot4``; gate with both probes.
+[arch(at="../ARCHITECTURE.md#storage-8-16"), arch(at="../ARCHITECTURE.md#subgroup-pair")]
 def public create_device_storage_8_16_int_dot(phys : VkPhysicalDevice; queue_family : uint) : Device {
     var f11 = VkPhysicalDeviceVulkan11Features()
     var f12 = VkPhysicalDeviceVulkan12Features()
@@ -564,12 +559,19 @@ def public create_device_storage_8_16_int_dot(phys : VkPhysicalDevice; queue_fam
     f12.shaderFloat16 = 1u
     f12.shaderInt8 = 1u
     fdot.shaderIntegerDotProduct = 1u
+    let with_fullsg = compute_full_subgroups_supported(phys)
+    var f13 = VkPhysicalDeviceVulkan13Features()
+    f13.subgroupSizeControl = 1u
+    f13.computeFullSubgroups = 1u
     var f2 = VkPhysicalDeviceFeatures2()
-    f2.features.shaderInt16 = 1u   // core bit: the Int16 SPIR-V capability (int16 SSBO members widen through it)
+    f2.features.shaderInt16 = 1u
     unsafe {
         f2.pNext = addr<void?>(f11)
         f11.pNext = addr<void?>(f12)
         f12.pNext = addr<void?>(fdot)
+        if (with_fullsg) {
+            fdot.pNext = addr<void?>(f13)
+        }
     }
     var props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(phys, props)
@@ -600,6 +602,7 @@ def private push_memory_management_extensions(var ext : array<string>; with_memp
     }
 }
 
+[arch(at="../ARCHITECTURE.md#storage-8-16"), arch(at="../ARCHITECTURE.md#subgroup-pair")]
 def public create_device_storage_8_16_int_dot_coopmat(phys : VkPhysicalDevice; queue_family : uint; transfer_family : int = -1) : Device {
     var q12 = VkPhysicalDeviceVulkan12Features()
     var qmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
@@ -631,14 +634,12 @@ def public create_device_storage_8_16_int_dot_coopmat(phys : VkPhysicalDevice; q
     fcm.cooperativeMatrix = 1u
     fmp.memoryPriority = 1u
     fpg.pageableDeviceLocalMemory = 1u
-    // the Vulkan 1.3 subgroup pair, when reported: full-subgroup pipelines may then drop
-    // partial-subgroup guards (create_compute_pipeline_full_subgroups)
     let with_fullsg = compute_full_subgroups_supported(phys)
     var f13 = VkPhysicalDeviceVulkan13Features()
     f13.subgroupSizeControl = 1u
     f13.computeFullSubgroups = 1u
     var f2 = VkPhysicalDeviceFeatures2()
-    f2.features.shaderInt16 = 1u   // core bit: the Int16 SPIR-V capability
+    f2.features.shaderInt16 = 1u
     unsafe {
         f2.pNext = addr<void?>(f11)
         f11.pNext = addr<void?>(f12)
@@ -695,7 +696,8 @@ def public memory_priority_supported(phys : VkPhysicalDevice) : bool {
 
 //! True iff ``phys`` can create the cm2 device: VK_NV_cooperative_matrix2 (+ its VK_KHR_cooperative_matrix
 //! dependency), the cm2 feature set the dasSpirv rails emit (wg scope, flexible dims, tensor addressing, block
-//! loads), and every bit create_device_storage_8_16_int_dot_coopmat2 enables (``cooperativeMatrix``, ``bufferDeviceAddress``).
+//! loads), and the bits create_device_storage_8_16_int_dot_coopmat2 enables (``cooperativeMatrix``, ``bufferDeviceAddress``, ``shaderInt16``).
+[arch(at="../ARCHITECTURE.md#storage-8-16")]
 def public cooperative_matrix2_supported(phys : VkPhysicalDevice) : bool {
     if (!device_extension_available(phys, "VK_NV_cooperative_matrix2")
             || !device_extension_available(phys, "VK_KHR_cooperative_matrix")) {
@@ -711,7 +713,7 @@ def public cooperative_matrix2_supported(phys : VkPhysicalDevice) : bool {
         fcm.pNext = addr<void?>(fcm2)
     }
     vkGetPhysicalDeviceFeatures2(phys, f2)
-    if (fcm.cooperativeMatrix == 0u || f12.bufferDeviceAddress == 0u) return false
+    if (fcm.cooperativeMatrix == 0u || f12.bufferDeviceAddress == 0u || f2.features.shaderInt16 == 0u) return false
     return (fcm2.cooperativeMatrixWorkgroupScope != 0u && fcm2.cooperativeMatrixFlexibleDimensions != 0u
         && fcm2.cooperativeMatrixTensorAddressing != 0u && fcm2.cooperativeMatrixBlockLoads != 0u)
 }
@@ -782,9 +784,8 @@ def public select_transfer_queue_family(phys : VkPhysicalDevice) : int {
 //! Superset of create_device_storage_8_16_int_dot_coopmat that ALSO enables VK_NV_cooperative_matrix2 +
 //! ``bufferDeviceAddress`` (gate with ``cooperative_matrix2_supported``), plus the same opportunistic set
 //! (coopvec, residency levers, timelineSemaphore, external_memory_host) and ``transfer_family`` second queue.
+[arch(at="../ARCHITECTURE.md#storage-8-16"), arch(at="../ARCHITECTURE.md#subgroup-pair")]
 def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; queue_family : uint; transfer_family : int = -1) : Device {   // nolint:STYLE038 — linear feature/extension pNext-chain assembly, one hop per capability
-    // query the optional feature bits first — a pNext struct may only join the chain when its
-    // extension is actually enabled, so each optional block is gated on ext + reported bit
     var q12q = VkPhysicalDeviceVulkan12Features()
     var qcv = VkPhysicalDeviceCooperativeVectorFeaturesNV()
     var qmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
@@ -833,8 +834,12 @@ def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; 
     fcv.cooperativeVector = 1u
     fmp.memoryPriority = 1u
     fpg.pageableDeviceLocalMemory = 1u
+    let with_fullsg = compute_full_subgroups_supported(phys)
+    var f13 = VkPhysicalDeviceVulkan13Features()
+    f13.subgroupSizeControl = 1u
+    f13.computeFullSubgroups = 1u
     var f2 = VkPhysicalDeviceFeatures2()
-    f2.features.shaderInt16 = 1u   // core bit: the Int16 SPIR-V capability
+    f2.features.shaderInt16 = 1u
     unsafe {
         f2.pNext = addr<void?>(f11)
         f11.pNext = addr<void?>(f12)
@@ -853,6 +858,17 @@ def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; 
         }
         if (with_pageable) {
             fmp.pNext = addr<void?>(fpg)
+        }
+        if (with_fullsg) {
+            if (with_pageable) {
+                fpg.pNext = addr<void?>(f13)
+            } elif (with_memprio) {
+                fmp.pNext = addr<void?>(f13)
+            } elif (with_coopvec) {
+                fcv.pNext = addr<void?>(f13)
+            } else {
+                fcm2.pNext = addr<void?>(f13)
+            }
         }
     }
     var props : VkPhysicalDeviceProperties
@@ -1727,8 +1743,7 @@ def public create_compute_pipeline(device : Device; layout : PipelineLayout; sha
     return <- b
 }
 
-//! True when the device reports the Vulkan 1.3 subgroup pair (``subgroupSizeControl`` +
-//! ``computeFullSubgroups``) — the gate for create_compute_pipeline_full_subgroups.
+[arch(at="../ARCHITECTURE.md#subgroup-pair")]
 def public compute_full_subgroups_supported(phys : VkPhysicalDevice) : bool {
     var props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(phys, props)
@@ -1744,9 +1759,7 @@ def public compute_full_subgroups_supported(phys : VkPhysicalDevice) : bool {
     return q13.subgroupSizeControl != 0u && q13.computeFullSubgroups != 0u
 }
 
-//! ``create_compute_pipeline`` with REQUIRE_FULL_SUBGROUPS set on the stage: the compiler may
-//! drop partial-subgroup guards. Valid only on a device created with ``computeFullSubgroups``
-//! enabled and a workgroup width that is a subgroup multiple.
+[arch(at="../ARCHITECTURE.md#subgroup-pair")]
 def public create_compute_pipeline_full_subgroups(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string = "main") : Pipeline {
     var stage = VkPipelineShaderStageCreateInfo()
     stage.stage.compute = true
@@ -2005,6 +2018,7 @@ struct public OffscreenTarget {
     view : ImageView
 }
 
+[arch(at="../ARCHITECTURE.md#ownership")]
 def public finalize(var t : OffscreenTarget) {
     delete t.view
     delete t.image
@@ -2063,6 +2077,7 @@ struct public OffscreenDepth {
     view : ImageView
 }
 
+[arch(at="../ARCHITECTURE.md#ownership")]
 def public finalize(var d : OffscreenDepth) {
     delete d.view
     delete d.image
@@ -2131,6 +2146,7 @@ struct public HostBuffer {
     size : uint64
 }
 
+[arch(at="../ARCHITECTURE.md#ownership")]
 def public finalize(var hb : HostBuffer) {
     delete hb.buffer
     delete hb.memory
@@ -2574,6 +2590,7 @@ struct public AddressBuffer {
     address : uint64
 }
 
+[arch(at="../ARCHITECTURE.md#ownership")]
 def public finalize(var ab : AddressBuffer) {
     delete ab.buffer
     delete ab.memory
@@ -2725,6 +2742,7 @@ struct public ShaderBindingTable {
     callable : StridedDeviceAddressRegionKHR
 }
 
+[arch(at="../ARCHITECTURE.md#ownership")]
 def public finalize(var sbt : ShaderBindingTable) {
     delete sbt.buffer
 }
@@ -2816,6 +2834,7 @@ struct public AccelStructure {
     address : uint64
 }
 
+[arch(at="../ARCHITECTURE.md#ownership")]
 def public finalize(var a : AccelStructure) {
     delete a.handle
     delete a.buffer

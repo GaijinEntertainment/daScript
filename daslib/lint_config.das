@@ -36,10 +36,8 @@ module lint_config shared private
 //! ``rule_docs_only = true`` marks a folder that carries rule documents only;
 //! ``rule_docs_only_at`` reads that one file, and the LINT025 pass in
 //! ``utils/lint/main.das`` reports any other ``.md`` sitting beside the code.
-//! ``enforce_arch = true`` marks a folder whose ``.md`` anchors are all owed an
-//! ``[arch]`` citation; ``enforce_arch_at`` reads it, and the LINT026 pass in
-//! the same runner reports every anchor no code cites. Either tag also arms that
-//! runner's LINT027 line gate over the folder's rule documents.
+//! The ``[arch]`` reverse pass (LINT026: an anchor no code cites) and the LINT027
+//! line gate over rule documents need no tag - they run in every folder.
 
 require daslib/fio
 require daslib/json
@@ -307,13 +305,6 @@ def private docs_flag_at(config_path, key : string) : bool {
 //! NOT the ``[format]`` cascade: only that one file is read, and anything missing reads as false.
 def public rule_docs_only_at(config_path : string) : bool {
     return docs_flag_at(config_path, "rule_docs_only")
-}
-
-//! True when the ``.lint_config`` at `config_path` sets ``[docs] enforce_arch = true`` — every
-//! ``{#anchor}`` in the folder's ``.md`` owes an ``[arch]`` citation from the ``.das`` beside it,
-//! which LINT026 reports in reverse. A folder property like ``rule_docs_only_at``.
-def public enforce_arch_at(config_path : string) : bool {
-    return docs_flag_at(config_path, "enforce_arch")
 }
 
 def private config_dir_of(file : string) : string {

@@ -277,10 +277,12 @@ def public unpack8(x : uint) : ubyte4 {
     return unsafe(reinterpret<ubyte4>(x))
 }
 
+[arch(at="ARCHITECTURE_EMIT.md#shader-lingua-franca")]
 def public unpack8(x : int16) : byte2 {
     return unsafe(reinterpret<byte2>(x))
 }
 
+[arch(at="ARCHITECTURE_EMIT.md#shader-lingua-franca")]
 def public unpack8(x : uint16) : ubyte2 {
     return unsafe(reinterpret<ubyte2>(x))
 }

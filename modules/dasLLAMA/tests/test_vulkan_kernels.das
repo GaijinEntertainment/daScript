@@ -11,6 +11,7 @@ require ?vulkan _vkd_oracles
 require ?vulkan vulkan
 require ?vulkan vulkan/vulkan_boost
 require ?vulkan dasllama/dasllama_vulkan_common
+require ?vulkan dasllama/dasllama_env   // g_env_vulkan.coopmat - the resolved-default ladder cell pins and restores it
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan dasllama/dasllama_vulkan_seams
 require ?vulkan dasllama/dasllama_kqformat
@@ -1506,11 +1507,11 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
     t0 |> run("cm2 Q4_K l/m tiles == the CPU oracle (decode-in-load over the repacked planes)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device")
                 return
             }
             if (!(g_gpu.coopmat_mode == 4 && g_gpu.has_coopmat2)) {
-                feint("the cm2 k4 tiles serve only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2) - skipping\n")
+                t |> skip("the cm2 k4 tiles serve only in mode 4 on an NV_coopmat2 device")
                 return
             }
             verify(ensure_kq_batch_k4_cm2l_cls() && ensure_kq_batch_k4_cm2m_cls(), "k4 cm2 class rails must engage in cm2 mode")
@@ -1607,6 +1608,10 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 k4 {ml == 0 ? "l" : "m"}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 k4 {ml == 0 ? "l" : "m"}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the k4 bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -1615,7 +1620,7 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
             delete xfh
             delete y_cls
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -1625,17 +1630,17 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
     t0 |> run("cm2 Q6_K l/m tiles == the CPU oracle (6-bit compose decode-in-load)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device")
                 return
             }
             if (!(g_gpu.coopmat_mode == 4 && g_gpu.has_coopmat2)) {
-                feint("the cm2 k6 tiles serve only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2) - skipping\n")
+                t |> skip("the cm2 k6 tiles serve only in mode 4 on an NV_coopmat2 device")
                 return
             }
             verify(ensure_kq_batch_k6_cm2l_cls() && ensure_kq_batch_k6_cm2m_cls(), "k6 cm2 class rails must engage in cm2 mode")
-            let n = 768
+            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
             let nsb = n / 256
-            let d = 160
+            let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
             let cnt1 = 260
             let rows = cnt0 + cnt1
@@ -1653,7 +1658,7 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
                 for (wi in range(4)) {
                     wsuh[sb * 5 + wi] = hash_word(uint(sb * 4 + wi) + 811u)   // signed sub-scale bytes
                 }
-                wsuh[sb * 5 + 4] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0))
+                wsuh[sb * 5 + 4] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0))   // cool d: the f16 acc must stay far from 65504
             }
             for (i in range(rows * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)
@@ -1724,6 +1729,10 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
                 let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
                 to_log(LOG_INFO, "cm2 k6 {ml == 0 ? "l" : "m"}-tile batch: {bad} of {rows * d} off the oracle\n")
                 t |> success(bad == 0, "cm2 k6 {ml == 0 ? "l" : "m"}-tile matches the CPU oracle ({bad} of {rows * d} off)")
+                var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+                y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+                t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the k6 bar reds a poisoned element")
+                delete y_poison
                 delete sched
             }
             delete y_ref
@@ -1732,7 +1741,7 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
             delete xfh
             delete y_cls
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -2178,20 +2187,27 @@ def test_vkd_fa_cm2(t0 : T?) {
                 let khdev = make_device_buf(sh_bytes)
                 let vhdev = make_device_buf(sh_bytes)
                 let yd = make_device_buf(q_bytes)
-                let yh16 = make_device_buf(h16_bytes)
-                let yh16b = make_device_buf(h16_bytes)
+                let yh16_fused = make_device_buf(h16_bytes)   // the f16-out twin's plane
+                let yh16_split = make_device_buf(h16_bytes)   // the split pair's: f32 out -> f16cvt
                 var host = make_host_buf(q_bytes, true, [cached = true])
                 var host16 = make_host_buf(h16_bytes * 2l, true, [cached = true])
                 var y_cls : array<float>
-                var y16 : array<float16>
-                var y16b : array<float16>
+                var y16_fused : array<float16>
+                var y16_split : array<float16>
                 y_cls |> resize(rows * qd)
-                y16 |> resize(rows * qd)
-                y16b |> resize(rows * qd)
+                y16_fused |> resize(rows * qd)
+                y16_split |> resize(rows * qd)
+                // two DIFFERENT sentinels on the compared f16 planes: a dead leg on either side reads as a mismatch
+                for (i in range(rows * qd)) {
+                    y16_fused[i] = float16(-777.5)
+                    y16_split[i] = float16(-999.25)
+                }
                 unsafe {
                     upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
                     upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
                     upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
+                    upload_region_at(yh16_fused, 0l, addr<uint8 const?>(y16_fused[0]), h16_bytes)
+                    upload_region_at(yh16_split, 0l, addr<uint8 const?>(y16_split[0]), h16_bytes)
                     var sck = set_f16cvt_cls(fixed_array(kdev, khdev),
                         fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
                     var scv = set_f16cvt_cls(fixed_array(vdev, vhdev),
@@ -2199,10 +2215,10 @@ def test_vkd_fa_cm2(t0 : T?) {
                     var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd),
                         fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes),
                         fixed_array(1u, 16u, 32u, 4u))
-                    var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16),
+                    var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16_fused),
                         fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes),
                         fixed_array(1u, 16u, 32u, 64u))
-                    var scy = set_f16cvt_cls(fixed_array(yd, yh16b),
+                    var scy = set_f16cvt_cls(fixed_array(yd, yh16_split),
                         fixed_array(q_bytes, h16_bytes), fixed_array(4u, 128u))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
@@ -2227,13 +2243,13 @@ def test_vkd_fa_cm2(t0 : T?) {
                     enc_f16cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
                     vhz_dep(raw2, h2, 4u | 64u | 128u, 0u, true)
                     cmd_copy_whole(raw2, yd, host.buf, q_bytes)
-                    cmd_copy_range(raw2, yh16, 0l, host16.buf, 0l, h16_bytes)
-                    cmd_copy_range(raw2, yh16b, 0l, host16.buf, h16_bytes, h16_bytes)
+                    cmd_copy_range(raw2, yh16_fused, 0l, host16.buf, 0l, h16_bytes)
+                    cmd_copy_range(raw2, yh16_split, 0l, host16.buf, h16_bytes, h16_bytes)
                     vk_check(vkEndCommandBuffer(raw2), null)
                     submit_wait(raw2)
                     memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
-                    memcpy(addr<void?>(y16[0]), host16.mapped, h16_bytes)
-                    memcpy(addr<void?>(y16b[0]), reinterpret<void?>(intptr(host16.mapped) + uint64(h16_bytes)), h16_bytes)
+                    memcpy(addr<void?>(y16_fused[0]), host16.mapped, h16_bytes)
+                    memcpy(addr<void?>(y16_split[0]), reinterpret<void?>(intptr(host16.mapped) + uint64(h16_bytes)), h16_bytes)
                 }
                 // oracle mirrors the kernel's f16 grid: q pre-scales then rounds (the kernel's
                 // MatrixTimesScalar-then-convert), K/V round through the shadow; softmax stays f32
@@ -2262,7 +2278,7 @@ def test_vkd_fa_cm2(t0 : T?) {
                 t |> success(bad == 0, "fa_cm2 hs {hs} matches the CPU oracle ({bad} of {rows * qd} off)")
                 var bad16 = 0
                 for (i in range(rows * qd)) {
-                    if (float(y16[i]) != float(y16b[i])) {
+                    if (float(y16_fused[i]) != float(y16_split[i])) {
                         bad16++
                     }
                 }
@@ -2275,8 +2291,8 @@ def test_vkd_fa_cm2(t0 : T?) {
                 delete vh2
                 delete y_ref
                 delete y_cls
-                delete y16
-                delete y16b
+                delete y16_fused
+                delete y16_split
             }
         } else {
             feint("dasVulkan not present - skipping\n")
@@ -3015,6 +3031,59 @@ def test_vkd_rope_b_pair(t0 : T?) {
                     }
                 }
                 t |> success(bad == 0, "rope_kv_store_b matches the CPU oracle ({bad} off)")
+                // the merged k|v projection layout (the DASLLAMA_VK_KV_MERGE default): [k | v] per position at
+                // stride 2*kvd, v at +kvd - the same oracle rows must land; the mirrors take a sentinel first
+                var kvm_h : array<float>
+                kvm_h |> resize(npos * 2 * kvd)
+                for (p in range(npos)) {
+                    for (c in range(kvd)) {
+                        kvm_h[p * 2 * kvd + c] = kvh[p * kvd + c]
+                        kvm_h[p * 2 * kvd + kvd + c] = kvh[voff + p * kvd + c]
+                    }
+                }
+                var msent : array<float>
+                msent |> resize(mirn)
+                for (i in range(mirn)) {
+                    msent[i] = -999.25
+                }
+                unsafe {
+                    upload_region_at(qd2, 0l, addr<uint8 const?>(q0h[0]), q_bytes)
+                    upload_region_at(kvdv, 0l, addr<uint8 const?>(kvm_h[0]), kv_bytes)
+                    upload_region_at(km2, 0l, addr<uint8 const?>(msent[0]), m_bytes)
+                    upload_region_at(vm2, 0l, addr<uint8 const?>(msent[0]), m_bytes)
+                    var scm = set_rope_kv_b_cls(fixed_array(qd2, kvdv, km2, vm2, csd),
+                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes),
+                        fixed_array(1u, 16u, 2u, 4u, 8u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    var pc = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
+                        half = uint(half), neox = uint(neox), kpair0 = uint(kpair0),
+                        ppp = uint(ppp), layerbase = uint(layerbase), npos = uint(npos),
+                        pos0 = uint(pos0), voff = uint(kvd), kstride = uint(2 * kvd))
+                    enc_rope_kv_b_cls(raw, h, scm, pc, int64(wgs))
+                    vhz_dep(raw, h, 8u, 0u, true)
+                    cmd_copy_whole(raw, qd2, host.buf, q_bytes)
+                    cmd_copy_range(raw, km2, 0l, host.buf, q_bytes, m_bytes)
+                    cmd_copy_range(raw, vm2, 0l, host.buf, q_bytes + m_bytes, m_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
+                    memcpy(addr<void?>(m_cls[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), 2l * m_bytes)
+                }
+                var badm = mismatch_approx(q_cls, q_ref)
+                for (i in range(npos * kvd)) {
+                    if (!approx(m_cls[w0 + i], mk_ref[w0 + i])) {
+                        badm++
+                    }
+                    if (!approx(m_cls[mirn + w0 + i], mv_ref[w0 + i])) {
+                        badm++
+                    }
+                }
+                t |> success(badm == 0, "rope_kv_store_b over merged k|v rows (kstride 2*kvd, voff kvd) matches the CPU oracle ({badm} off)")
+                delete kvm_h
+                delete msent
                 delete q0h
                 delete kvh
                 delete csh
@@ -4046,6 +4115,58 @@ def test_vkd_kv16_writers(t0 : T?) {
                     }
                 }
                 t |> success(bad == 0, "rope_kv_b_f16 matches the CPU oracle ({bad} off)")
+                // the merged k|v projection layout (the DASLLAMA_VK_KV_MERGE default): [k | v] per position at
+                // stride 2*kvd, v at +kvd - the same oracle rows must land; the mirrors take a sentinel first
+                var kvm_h : array<float>
+                kvm_h |> resize(npos * 2 * kvd)
+                for (p in range(npos)) {
+                    for (c in range(kvd)) {
+                        kvm_h[p * 2 * kvd + c] = kvh[p * kvd + c]
+                        kvm_h[p * 2 * kvd + kvd + c] = kvh[voff + p * kvd + c]
+                    }
+                }
+                var msent : array<float16>
+                msent |> resize(mirn)
+                for (i in range(mirn)) {
+                    msent[i] = float16(-999.25)
+                }
+                unsafe {
+                    upload_region_at(qd2, 0l, addr<uint8 const?>(q0h[0]), q_bytes)
+                    upload_region_at(kvdv, 0l, addr<uint8 const?>(kvm_h[0]), kv_bytes)
+                    upload_region_at(km2, 0l, addr<uint8 const?>(msent[0]), m_bytes)
+                    upload_region_at(vm2, 0l, addr<uint8 const?>(msent[0]), m_bytes)
+                    var scm = set_rope_kv_b_f16_cls(fixed_array(qd2, kvdv, km2, vm2, csd),
+                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes),
+                        fixed_array(1u, 16u, 2u, 4u, 8u))
+                    var raw = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    var pc = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
+                        half = uint(half), neox = uint(neox), kpair0 = uint(kpair0),
+                        ppp = uint(ppp), layerbase = uint(layerbase), npos = uint(npos),
+                        pos0 = uint(pos0), voff = uint(kvd), kstride = uint(2 * kvd))
+                    enc_rope_kv_b_f16_cls(raw, h, scm, pc, int64(wgs))
+                    vhz_dep(raw, h, 8u, 0u, true)
+                    cmd_copy_range(raw, km2, 0l, host.buf, 0l, m_bytes)
+                    cmd_copy_range(raw, vm2, 0l, host.buf, m_bytes, m_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(m16[0]), host.mapped, 2l * m_bytes)
+                }
+                var m_clsm <- unpack_f16(m16)
+                var badm = 0
+                for (i in range(npos * kvd)) {
+                    if (!approx(m_clsm[wb0 + i], mk_ref[wb0 + i])) {
+                        badm++
+                    }
+                    if (!approx(m_clsm[mirn + wb0 + i], mv_ref[wb0 + i])) {
+                        badm++
+                    }
+                }
+                t |> success(badm == 0, "rope_kv_b_f16 over merged k|v rows (kstride 2*kvd, voff kvd) matches the CPU oracle ({badm} off)")
+                delete kvm_h
+                delete msent
+                delete m_clsm
                 delete q0h
                 delete kvh
                 delete csh
@@ -4439,7 +4560,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 feint("no coopmat on this device - h128 f16 arm skipped\n")
             }
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -4449,7 +4570,7 @@ def test_vkd_emb_gather_pair(t0 : T?) {
     t0 |> run("embed-gather class kernels (q8 + f32) == the CPU dequant/copy") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_emb_gather_cls() || !ensure_emb_gather_f32_cls()) {
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device")
                 return
             }
             let dim = 64
@@ -4457,7 +4578,8 @@ def test_vkd_emb_gather_pair(t0 : T?) {
             let vocab = 16
             let npos = 8
             let scale = 1.25
-            let totblk = vocab * nbb
+            let wblk0 = 3              // the plane sits 3 blocks into its slab - the serving shape, never block 0
+            let totblk = wblk0 + vocab * nbb
             var wqh : array<uint>
             var wsh16 : array<float16>
             var idsh : array<uint>
@@ -4471,7 +4593,7 @@ def test_vkd_emb_gather_pair(t0 : T?) {
                 wsh16[i] = float16(0.0625 + float(i % 7) * 0.03125)
             }
             for (i in range(npos)) {
-                idsh[i] = uint((i * 5 + 3) % vocab)   // repeats included past one wrap
+                idsh[i] = uint((i * 5 + 3) % 6)   // a 6-cycle over 8 rows: tokens 3 and 2 gather twice
             }
             // f32 twin's table: a distinct pattern so a crossed binding cannot pass
             var wfh : array<float>
@@ -4509,8 +4631,7 @@ def test_vkd_emb_gather_pair(t0 : T?) {
                 let begin = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw, begin), null)
                 var h : VkHaz
-                var pc = EmbArgs(npos = uint(npos), dim = uint(dim), nbb = uint(nbb),
-                    wblk0 = 0u, scale = scale)
+                var pc = EmbArgs(npos = uint(npos), dim = uint(dim), wblk0 = uint(wblk0), embed_scale = scale)
                 enc_emb_gather_cls(raw, h, scq, pc, int64((npos * dim / 4 + 255) / 256))
                 vhz_dep(raw, h, 8u, 0u, true)
                 cmd_copy_range(raw, xd, 0l, host.buf, 0l, x_bytes)
@@ -4529,7 +4650,7 @@ def test_vkd_emb_gather_pair(t0 : T?) {
             for (r in range(npos)) {
                 let tok = int(idsh[r])
                 for (col in range(dim)) {
-                    let ib = tok * nbb + col / 32
+                    let ib = wblk0 + tok * nbb + col / 32
                     let by = col % 32
                     let w = wqh[ib * 8 + by / 4]
                     let q = int8(w >> uint(8 * (by % 4)))
@@ -4550,7 +4671,7 @@ def test_vkd_emb_gather_pair(t0 : T?) {
             delete y_ref
             delete yf_ref
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -4584,28 +4705,41 @@ def test_vkd_ar_rq_fused(t0 : T?) {
             let wn_bytes = int64(woff + dim) * 4l
             let q_bytes = int64(nblk) * 32l
             let s_bytes = int64(nblk) * 4l
-            let x1 = make_device_buf(row_bytes)
-            let x2 = make_device_buf(row_bytes)
+            let x_split = make_device_buf(row_bytes)
+            let x_fused = make_device_buf(row_bytes)
             let aad = make_device_buf(row_bytes)
             let wnd = make_device_buf(wn_bytes)
             let yod = make_device_buf(row_bytes)
-            let q1 = make_device_buf(q_bytes)
-            let s1 = make_device_buf(s_bytes)
-            let q2 = make_device_buf(q_bytes)
-            let s2 = make_device_buf(s_bytes)
+            let q_split = make_device_buf(q_bytes)
+            let s_split = make_device_buf(s_bytes)
+            let q_fused = make_device_buf(q_bytes)
+            let s_fused = make_device_buf(s_bytes)
+            // two DIFFERENT sentinels on the compared planes: a dead leg on either side reads as a mismatch
+            var sent_split : array<float>
+            var sent_fused : array<float>
+            sent_split |> resize(nrows * dim)
+            sent_fused |> resize(nrows * dim)
+            for (i in range(nrows * dim)) {
+                sent_split[i] = -999.25
+                sent_fused[i] = -777.5
+            }
             var host = make_host_buf((q_bytes + s_bytes) * 2l + row_bytes * 2l, true, [cached = true])
             unsafe {
-                upload_region_at(x1, 0l, addr<uint8 const?>(xh[0]), row_bytes)
-                upload_region_at(x2, 0l, addr<uint8 const?>(xh[0]), row_bytes)
+                upload_region_at(x_split, 0l, addr<uint8 const?>(xh[0]), row_bytes)
+                upload_region_at(x_fused, 0l, addr<uint8 const?>(xh[0]), row_bytes)
                 upload_region_at(aad, 0l, addr<uint8 const?>(aah[0]), row_bytes)
                 upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
-                var sca = set_cls_ar(fixed_array(x1, aad, wnd, yod),
+                upload_region_at(q_split, 0l, addr<uint8 const?>(sent_split[0]), q_bytes)
+                upload_region_at(s_split, 0l, addr<uint8 const?>(sent_split[0]), s_bytes)
+                upload_region_at(q_fused, 0l, addr<uint8 const?>(sent_fused[0]), q_bytes)
+                upload_region_at(s_fused, 0l, addr<uint8 const?>(sent_fused[0]), s_bytes)
+                var sca = set_cls_ar(fixed_array(x_split, aad, wnd, yod),
                     fixed_array(row_bytes, row_bytes, wn_bytes, row_bytes),
                     fixed_array(1u, 2u, 0u, 4u))
-                var scr = set_rq_cls(fixed_array(yod, q1, s1),
+                var scr = set_rq_cls(fixed_array(yod, q_split, s_split),
                     fixed_array(row_bytes, q_bytes, s_bytes),
                     fixed_array(4u, 8u, 8u))
-                var scf = set_cls_ar_rq_b(fixed_array(x2, aad, wnd, q2, s2),
+                var scf = set_cls_ar_rq_b(fixed_array(x_fused, aad, wnd, q_fused, s_fused),
                     fixed_array(row_bytes, row_bytes, wn_bytes, q_bytes, s_bytes),
                     fixed_array(16u, 2u, 0u, 32u, 32u))
                 var raw = alloc_cmd()
@@ -4618,51 +4752,90 @@ def test_vkd_ar_rq_fused(t0 : T?) {
                 enc_cls_dn_rq(raw, h, scr, pcr, int64((nrows * dim / 4 + 255) / 256))
                 enc_cls_ar_rq_b(raw, h, scf, pca, int64(nrows))
                 vhz_dep(raw, h, 8u | 32u | 16u | 1u, 0u, true)
-                cmd_copy_range(raw, q1, 0l, host.buf, 0l, q_bytes)
-                cmd_copy_range(raw, s1, 0l, host.buf, q_bytes, s_bytes)
-                cmd_copy_range(raw, q2, 0l, host.buf, q_bytes + s_bytes, q_bytes)
-                cmd_copy_range(raw, s2, 0l, host.buf, q_bytes * 2l + s_bytes, s_bytes)
-                cmd_copy_range(raw, x1, 0l, host.buf, (q_bytes + s_bytes) * 2l, row_bytes)
-                cmd_copy_range(raw, x2, 0l, host.buf, (q_bytes + s_bytes) * 2l + row_bytes, row_bytes)
+                cmd_copy_range(raw, q_split, 0l, host.buf, 0l, q_bytes)
+                cmd_copy_range(raw, s_split, 0l, host.buf, q_bytes, s_bytes)
+                cmd_copy_range(raw, q_fused, 0l, host.buf, q_bytes + s_bytes, q_bytes)
+                cmd_copy_range(raw, s_fused, 0l, host.buf, q_bytes * 2l + s_bytes, s_bytes)
+                cmd_copy_range(raw, x_split, 0l, host.buf, (q_bytes + s_bytes) * 2l, row_bytes)
+                cmd_copy_range(raw, x_fused, 0l, host.buf, (q_bytes + s_bytes) * 2l + row_bytes, row_bytes)
                 vk_check(vkEndCommandBuffer(raw), null)
                 submit_wait(raw)
-                var q1h : array<uint>
-                var q2h : array<uint>
-                var s1h : array<float>
-                var s2h : array<float>
-                var x1h : array<float>
-                var x2h : array<float>
-                q1h |> resize(nblk * 8)
-                q2h |> resize(nblk * 8)
-                s1h |> resize(nblk)
-                s2h |> resize(nblk)
-                x1h |> resize(nrows * dim)
-                x2h |> resize(nrows * dim)
+                var q_split_h : array<uint>
+                var q_fused_h : array<uint>
+                var s_split_h : array<float>
+                var s_fused_h : array<float>
+                var x_split_h : array<float>
+                var x_fused_h : array<float>
+                q_split_h |> resize(nblk * 8)
+                q_fused_h |> resize(nblk * 8)
+                s_split_h |> resize(nblk)
+                s_fused_h |> resize(nblk)
+                x_split_h |> resize(nrows * dim)
+                x_fused_h |> resize(nrows * dim)
                 let hp = intptr(host.mapped)
-                memcpy(addr<void?>(q1h[0]), host.mapped, q_bytes)
-                memcpy(addr<void?>(s1h[0]), reinterpret<void?>(hp + uint64(q_bytes)), s_bytes)
-                memcpy(addr<void?>(q2h[0]), reinterpret<void?>(hp + uint64(q_bytes + s_bytes)), q_bytes)
-                memcpy(addr<void?>(s2h[0]), reinterpret<void?>(hp + uint64(q_bytes * 2l + s_bytes)), s_bytes)
-                memcpy(addr<void?>(x1h[0]), reinterpret<void?>(hp + uint64((q_bytes + s_bytes) * 2l)), row_bytes)
-                memcpy(addr<void?>(x2h[0]), reinterpret<void?>(hp + uint64((q_bytes + s_bytes) * 2l + row_bytes)), row_bytes)
-                let badq = mismatch_qbytes(q1h, q2h, 0)
+                memcpy(addr<void?>(q_split_h[0]), host.mapped, q_bytes)
+                memcpy(addr<void?>(s_split_h[0]), reinterpret<void?>(hp + uint64(q_bytes)), s_bytes)
+                memcpy(addr<void?>(q_fused_h[0]), reinterpret<void?>(hp + uint64(q_bytes + s_bytes)), q_bytes)
+                memcpy(addr<void?>(s_fused_h[0]), reinterpret<void?>(hp + uint64(q_bytes * 2l + s_bytes)), s_bytes)
+                memcpy(addr<void?>(x_split_h[0]), reinterpret<void?>(hp + uint64((q_bytes + s_bytes) * 2l)), row_bytes)
+                memcpy(addr<void?>(x_fused_h[0]), reinterpret<void?>(hp + uint64((q_bytes + s_bytes) * 2l + row_bytes)), row_bytes)
+                let badq = mismatch_qbytes(q_split_h, q_fused_h, 0)
                 t |> success(badq == 0, "fused quant words == split ({badq} of {nblk * 8} off)")
-                let bads = mismatch_exact(s1h, s2h)
+                let bads = mismatch_exact(s_split_h, s_fused_h)
                 t |> success(bads == 0, "fused scales == split ({bads} of {nblk} off)")
-                let badx = mismatch_exact(x1h, x2h)
+                // the residual plane is IN-PLACE, so it cannot hold a sentinel - the liveness pair is its witness
+                t |> success(x_split_h[0] != xh[0], "the split ar wrote the residual stream")
+                t |> success(x_fused_h[0] != xh[0], "the fused ar wrote the residual stream")
+                let badx = mismatch_exact(x_split_h, x_fused_h)
                 t |> success(badx == 0, "fused residual update == split ({badx} of {nrows * dim} off)")
-                delete q1h
-                delete q2h
-                delete s1h
-                delete s2h
-                delete x1h
-                delete x2h
+                delete q_split_h
+                delete q_fused_h
+                delete s_split_h
+                delete s_fused_h
+                delete x_split_h
+                delete x_fused_h
             }
+            delete sent_split
+            delete sent_fused
             delete xh
             delete aah
             delete wnh
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
+    t0 |> run("the resolved coopmat default ladder and the cm2 tile pick (pure functions)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!empty(g_env_vulkan.coopmat) && g_env_vulkan.coopmat != "auto") {
+                t |> skip("DASLLAMA_COOPMAT is set - the resolved default ladder is not what this box runs")
+                return
+            }
+            let saved_force = g_coopmat_mode_force
+            g_coopmat_mode_force = -1
+            t |> equal(resolve_coopmat_mode(true, true), 4)    // cm2 where the device has it
+            t |> equal(resolve_coopmat_mode(true, false), 3)   // else mm
+            t |> equal(resolve_coopmat_mode(false, false), 0)  // else sdot4
+            g_coopmat_mode_force = saved_force
+            if (!ensure_q8_batch_cls()) {
+                t |> skip("no Vulkan device for the tile pick (it reads the device's SM count)")
+                return
+            }
+            let saved_sm = g_gpu.sm_count
+            g_gpu.sm_count = 36
+            t |> equal(cm2_tile_cols(3072l, 128l), 128l)    // a short window never takes the half-empty l column
+            t |> equal(cm2_tile_cols(3072l, 512l), 128l)    // the 3B q/down shape: m on a strict wave win (96 tiles in 3 waves vs 48 in 2)
+            t |> equal(cm2_tile_cols(8192l, 512l), 256l)    // the 3B gate/up shape: a wave tie goes to l
+            t |> equal(cm2_tile_cols(5632l, 512l), 128l)    // the tinyllama gate shape: m on a strict win
+            g_gpu.sm_count = 0
+            t |> equal(cm2_tile_cols(3072l, 64l), 128l)     // unknown SM count: the short-window rule still fires
+            t |> equal(cm2_tile_cols(3072l, 512l), 256l)    // unknown SM count: l, never a split
+            g_gpu.sm_count = saved_sm
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -4672,7 +4845,7 @@ def test_vkd_ar_f16_fused(t0 : T?) {
     t0 |> run("fused batch ar+f16 == the split cls_ar + f16cvt_cls pair, bit-exact") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_cls_ar() || !ensure_f16cvt_cls() || !ensure_cls_ar_f16_b()) {
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device")
                 return
             }
             let dim = 128
@@ -4694,25 +4867,36 @@ def test_vkd_ar_f16_fused(t0 : T?) {
             let row_bytes = int64(nrows * dim) * 4l
             let wn_bytes = int64(woff + dim) * 4l
             let h_bytes = int64(nrows * dim) * 2l
-            let x1 = make_device_buf(row_bytes)
-            let x2 = make_device_buf(row_bytes)
+            let x_split = make_device_buf(row_bytes)
+            let x_fused = make_device_buf(row_bytes)
             let aad = make_device_buf(row_bytes)
             let wnd = make_device_buf(wn_bytes)
             let yod = make_device_buf(row_bytes)
-            let h1 = make_device_buf(h_bytes)
-            let h2 = make_device_buf(h_bytes)
+            let f16_split = make_device_buf(h_bytes)
+            let f16_fused = make_device_buf(h_bytes)
+            // two DIFFERENT sentinels on the compared planes: a dead leg on either side reads as a mismatch
+            var sent_split : array<float16>
+            var sent_fused : array<float16>
+            sent_split |> resize(nrows * dim)
+            sent_fused |> resize(nrows * dim)
+            for (i in range(nrows * dim)) {
+                sent_split[i] = float16(-999.25)
+                sent_fused[i] = float16(-777.5)
+            }
             var host = make_host_buf(h_bytes * 2l + row_bytes * 2l, true, [cached = true])
             unsafe {
-                upload_region_at(x1, 0l, addr<uint8 const?>(xh[0]), row_bytes)
-                upload_region_at(x2, 0l, addr<uint8 const?>(xh[0]), row_bytes)
+                upload_region_at(x_split, 0l, addr<uint8 const?>(xh[0]), row_bytes)
+                upload_region_at(x_fused, 0l, addr<uint8 const?>(xh[0]), row_bytes)
                 upload_region_at(aad, 0l, addr<uint8 const?>(aah[0]), row_bytes)
                 upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
-                var sca = set_cls_ar(fixed_array(x1, aad, wnd, yod),
+                upload_region_at(f16_split, 0l, addr<uint8 const?>(sent_split[0]), h_bytes)
+                upload_region_at(f16_fused, 0l, addr<uint8 const?>(sent_fused[0]), h_bytes)
+                var sca = set_cls_ar(fixed_array(x_split, aad, wnd, yod),
                     fixed_array(row_bytes, row_bytes, wn_bytes, row_bytes),
                     fixed_array(1u, 2u, 0u, 4u))
-                var scc = set_f16cvt_cls(fixed_array(yod, h1),
+                var scc = set_f16cvt_cls(fixed_array(yod, f16_split),
                     fixed_array(row_bytes, h_bytes), fixed_array(4u, 8u))
-                var scf = set_cls_ar_f16_b(fixed_array(x2, aad, wnd, h2),
+                var scf = set_cls_ar_f16_b(fixed_array(x_fused, aad, wnd, f16_fused),
                     fixed_array(row_bytes, row_bytes, wn_bytes, h_bytes),
                     fixed_array(16u, 2u, 0u, 32u))
                 var raw = alloc_cmd()
@@ -4725,40 +4909,45 @@ def test_vkd_ar_f16_fused(t0 : T?) {
                 enc_f16cvt_cls(raw, h, scc, pcc, int64((nrows * dim / 4 + 255) / 256))
                 enc_cls_ar_f16_b(raw, h, scf, pca, int64(nrows))
                 vhz_dep(raw, h, 8u | 32u | 16u | 1u, 0u, true)
-                cmd_copy_range(raw, h1, 0l, host.buf, 0l, h_bytes)
-                cmd_copy_range(raw, h2, 0l, host.buf, h_bytes, h_bytes)
-                cmd_copy_range(raw, x1, 0l, host.buf, h_bytes * 2l, row_bytes)
-                cmd_copy_range(raw, x2, 0l, host.buf, h_bytes * 2l + row_bytes, row_bytes)
+                cmd_copy_range(raw, f16_split, 0l, host.buf, 0l, h_bytes)
+                cmd_copy_range(raw, f16_fused, 0l, host.buf, h_bytes, h_bytes)
+                cmd_copy_range(raw, x_split, 0l, host.buf, h_bytes * 2l, row_bytes)
+                cmd_copy_range(raw, x_fused, 0l, host.buf, h_bytes * 2l + row_bytes, row_bytes)
                 vk_check(vkEndCommandBuffer(raw), null)
                 submit_wait(raw)
                 let nw = nrows * dim / 2
-                var h1h : array<uint>
-                var h2h : array<uint>
-                var x1h : array<float>
-                var x2h : array<float>
-                h1h |> resize(nw)
-                h2h |> resize(nw)
-                x1h |> resize(nrows * dim)
-                x2h |> resize(nrows * dim)
+                var f16_split_h : array<uint>
+                var f16_fused_h : array<uint>
+                var x_split_h : array<float>
+                var x_fused_h : array<float>
+                f16_split_h |> resize(nw)
+                f16_fused_h |> resize(nw)
+                x_split_h |> resize(nrows * dim)
+                x_fused_h |> resize(nrows * dim)
                 let hp = intptr(host.mapped)
-                memcpy(addr<void?>(h1h[0]), host.mapped, h_bytes)
-                memcpy(addr<void?>(h2h[0]), reinterpret<void?>(hp + uint64(h_bytes)), h_bytes)
-                memcpy(addr<void?>(x1h[0]), reinterpret<void?>(hp + uint64(h_bytes * 2l)), row_bytes)
-                memcpy(addr<void?>(x2h[0]), reinterpret<void?>(hp + uint64(h_bytes * 2l + row_bytes)), row_bytes)
-                let badh = mismatch_qbytes(h1h, h2h, 0)
+                memcpy(addr<void?>(f16_split_h[0]), host.mapped, h_bytes)
+                memcpy(addr<void?>(f16_fused_h[0]), reinterpret<void?>(hp + uint64(h_bytes)), h_bytes)
+                memcpy(addr<void?>(x_split_h[0]), reinterpret<void?>(hp + uint64(h_bytes * 2l)), row_bytes)
+                memcpy(addr<void?>(x_fused_h[0]), reinterpret<void?>(hp + uint64(h_bytes * 2l + row_bytes)), row_bytes)
+                let badh = mismatch_qbytes(f16_split_h, f16_fused_h, 0)
                 t |> success(badh == 0, "fused f16 rows == split ({badh} of {nw} words off)")
-                let badx = mismatch_exact(x1h, x2h)
+                // the residual plane is IN-PLACE, so it cannot hold a sentinel - the liveness pair is its witness
+                t |> success(x_split_h[0] != xh[0], "the split ar wrote the residual stream")
+                t |> success(x_fused_h[0] != xh[0], "the fused ar wrote the residual stream")
+                let badx = mismatch_exact(x_split_h, x_fused_h)
                 t |> success(badx == 0, "fused residual update == split ({badx} of {nrows * dim} off)")
-                delete h1h
-                delete h2h
-                delete x1h
-                delete x2h
+                delete f16_split_h
+                delete f16_fused_h
+                delete x_split_h
+                delete x_fused_h
             }
+            delete sent_split
+            delete sent_fused
             delete xh
             delete aah
             delete wnh
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }

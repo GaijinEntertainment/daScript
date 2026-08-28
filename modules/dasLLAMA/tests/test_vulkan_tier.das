@@ -27,7 +27,7 @@ require math
 // Without dasVulkan (or with no Vulkan device) every check feints cleanly.
 
 // The CPU-reference arms' tolerances were derived against the sdot4 reference kernels — pin
-// that mode ahead of the router's fastest-path default (mm) so the oracles stay deterministic.
+// that mode ahead of the router's resolved default (cm2 or mm) so the oracles stay deterministic.
 // The coopmat kernels' numeric envelope is validated by the drift-class model gates, not here.
 [init]
 def private pin_reference_gemm_mode {
@@ -2272,7 +2272,7 @@ def test_vulkan_attention(t : T?) {
                     "{tag}: out rows within tolerance (maxdiff {cy.maxdiff} vs {AT_REL_TOL * cy.maxref} bar, maxref {cy.maxref})")
                 let ck = compare_gout(kout, kp)
                 if (ck.maxdiff > AT_REL_TOL * ck.maxref) {
-                    // flake forensics: which ROWS diverge (window-boundary alignment names the racer)
+                    // a run of bad rows at a window boundary names the racing dispatch
                     var frow = -1l
                     var lrow = -1l
                     var nbad = 0l
@@ -2293,8 +2293,10 @@ def test_vulkan_attention(t : T?) {
                         }
                     }
                     to_log(LOG_ERROR, "roped-k forensics: bad rows {nbad} first {frow} last {lrow} (npos {npos})\n")
-                    let sr = frow * ATKVD
-                    to_log(LOG_ERROR, "roped-k row {frow} gpu [{kout[int(sr)]}, {kout[int(sr + 1l)]}] ref [{kp[int(sr)]}, {kp[int(sr + 1l)]}]\n")
+                    if (frow >= 0l) {
+                        let first_bad_off = frow * ATKVD
+                        to_log(LOG_ERROR, "roped-k row {frow} gpu [{kout[int(first_bad_off)]}, {kout[int(first_bad_off + 1l)]}] ref [{kp[int(first_bad_off)]}, {kp[int(first_bad_off + 1l)]}]\n")
+                    }
                 }
                 t |> success(ck.maxdiff <= AT_REL_TOL * ck.maxref,
                     "{tag}: roped k rows within tolerance (maxdiff {ck.maxdiff} vs {AT_REL_TOL * ck.maxref} bar)")

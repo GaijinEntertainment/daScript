@@ -14,11 +14,11 @@ Three rules are the runner's own, because they are about folders rather than cod
 once per invocation, over a walk of the directory roots the run was given. A directory whose
 `.lint_config` carries `[docs] rule_docs_only = true` may hold only rule documents
 (`REVIEW*.md`, `ARCHITECTURE*.md`, `LAWS.md`); any other `.md` beside the sources is
-**LINT025**. `[docs] enforce_arch = true` adds **LINT026**'s reverse direction: every
-`{#anchor}` in the folder's `.md` must be cited by an `[arch]` in its `.das`. Either tag arms
-**LINT027**, which caps each `REVIEW*.md` / `ARCHITECTURE*.md` there at 300 lines. The keys
-are folder properties - they never cascade, unlike `[format]`. Fixtures: `tests/lint025_*`,
-`tests/lint026_*` and `tests/lint027_*`, each driving the CLI over a planted tree.
+**LINT025**. **LINT026**'s reverse direction needs no tag: every `{#anchor}` in any `.md` under
+the run's roots must be cited by an `[arch]` in a `.das` there. **LINT027** caps each
+`REVIEW*.md` / `ARCHITECTURE*.md` at 300 lines in every folder that holds one. The
+`rule_docs_only` key is a folder property - it never cascades, unlike `[format]`. Fixtures:
+`tests/lint025_*`, `tests/lint026_*` and `tests/lint027_*`, each driving the CLI over a planted tree.
 
 Design: the runner stays thin - rules live in the daslib modules (authoring rails:
 `skills/internal/perf_lint_authoring.md`, `skills/internal/style_lint_authoring.md`);

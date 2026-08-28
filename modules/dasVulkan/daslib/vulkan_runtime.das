@@ -32,9 +32,7 @@ def public array_addr(var a : array<auto(TT)>) : TT? {
     return unsafe(addr(a[0]))
 }
 
-//! Intentional non-owning copy of an ownership wrapper: copy the struct, then
-//! clear its `_needs_delete` so only the original frees the handle. Wrapper
-//! structs store handles as uint64, so the copy is friction-free.
+[arch(at="../ARCHITECTURE.md#ownership")]
 def public weak_copy(b : auto(TT)) : TT {
     var c = b
     static_if (typeinfo has_field<_needs_delete>(c)) {

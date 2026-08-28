@@ -11,7 +11,9 @@ such step enforces its rule automatically, with no reviewer involved -
 
 **A diff that adds or changes a per-PR gate step - a workflow step that runs on
 `pull_request` and fails the lane when it finds a defect - makes that step fail on every
-defect in what it checks, and on nothing else.**
+defect in what it checks, and on nothing else.** A step that derives its input from the diff
+checks the files it was given and the folder rules those files arm; a wider blast radius is
+stated in the step's own comment.
 
 **A diff that adds or changes a step in `pages.yml` that names the deployed games writes
 that list as a `for g in <ids>; do` loop.** `examples/games/REVIEW.das` (repo root) reads

@@ -39,8 +39,7 @@ struct ArArgs {
     ascale : float
 }
 
-// the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide; each quant lands as
-// its own BYTE through the 8-bit store path, which replaced the hand-rolled word packing)
+// the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
 def private q8_amax3(m0 : float) : float {
     var m = m0
     m = max(m, subgroupShuffleXor(m, 1u))
@@ -49,7 +48,8 @@ def private q8_amax3(m0 : float) : float {
     return m
 }
 
-def private q8_store1(v, id : float) : int8 {
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+def private q8_quant1(v, id : float) : int8 {
     return int8(int(round(v * id)))
 }
 
@@ -141,7 +141,7 @@ class ArAddRmsRq : ArBase {
     @ssbo @binding = 3 outq : array<int8>    // the quantized bytes
     @ssbo @binding = 4 outs : array<float>   // per-32-block scales
 
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_spv")]
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let tid = gl_LocalInvocationID.x
         let ss = accum_row(0u)
@@ -162,24 +162,21 @@ class ArAddRmsRq : ArBase {
             if (lane8 == 0u) {
                 outs[b] = d
             }
-            outq[base] = q8_store1(v0, id)
-            outq[base + 1u] = q8_store1(v1, id)
-            outq[base + 2u] = q8_store1(v2, id)
-            outq[base + 3u] = q8_store1(v3, id)
+            outq[base] = q8_quant1(v0, id)
+            outq[base + 1u] = q8_quant1(v1, id)
+            outq[base + 2u] = q8_quant1(v2, id)
+            outq[base + 3u] = q8_quant1(v3, id)
             b += 32u
         }
     }
 }
 
-// the batch twin: one workgroup per row — add+rms, then the row's Q8_0 blocks quantize out of
-// the row stash (the split pair's xb write+reread vanishes). Verbatim reduce/amax/rounding, so
-// bit-identical to cls_ar followed by cls_dn_rq.
 [vk_dispatch(name = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRmsRqB : ArBase {
     @ssbo @binding = 3 outq : array<int8>    // the quantized bytes, row-major blocks
     @ssbo @binding = 4 outs : array<float>   // per-32-block scales
 
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv")]
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let tid = gl_LocalInvocationID.x
         let rbase = gl_WorkGroupID.x * pa.dim
@@ -202,30 +199,27 @@ class ClsArAddRmsRqB : ArBase {
                 outs[qb0 + b] = d
             }
             let qb = qb0 * 32u + base
-            outq[qb] = q8_store1(v0, id)
-            outq[qb + 1u] = q8_store1(v1, id)
-            outq[qb + 2u] = q8_store1(v2, id)
-            outq[qb + 3u] = q8_store1(v3, id)
+            outq[qb] = q8_quant1(v0, id)
+            outq[qb + 1u] = q8_quant1(v1, id)
+            outq[qb + 2u] = q8_quant1(v2, id)
+            outq[qb + 3u] = q8_quant1(v3, id)
             b += 32u
         }
     }
 }
 
-// the f16 twin (mode 4's cm2 feed): add+rms, then the normed row lands f16 out of the row
-// stash — the split pair's xb write+reread vanishes. Same reduce and the same f32 product
-// before the convert, so bit-identical to cls_ar followed by f16cvt_cls.
 [vk_dispatch(name = "cls_ar_f16_b", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRmsF16B : ArBase {
     @ssbo @binding = 3 outh : array<float16>   // the normed rows, f16
 
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_f16_b_spv")]
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
-        let base = gl_WorkGroupID.x * pa.dim
-        let ss = accum_row(base)
+        let rbase = gl_WorkGroupID.x * pa.dim
+        let ss = accum_row(rbase)
         let inv = rms_inv(ss)
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            outh[base + k] = float16(wn[pa.woff + k] * (row[k] * inv))
+            outh[rbase + k] = float16(wn[pa.woff + k] * (row[k] * inv))
             k += 256u
         }
     }
@@ -244,7 +238,7 @@ class DnRequant {
     @ssbo @binding = 2 outs : array<float>
     @push_constant pa : RqArgs
 
-    [spirv_kernel(local_size_x = 256, name = "cls_dn_rq_spv")]
+    [spirv_kernel(local_size_x = 256, name = "cls_dn_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let gid = gl_GlobalInvocationID.x
         let sg = gid / 32u
@@ -264,10 +258,10 @@ class DnRequant {
                 outs[b] = d
             }
             let qb = b * 32u + lane8 * 4u
-            outq[qb] = q8_store1(v0, id)
-            outq[qb + 1u] = q8_store1(v1, id)
-            outq[qb + 2u] = q8_store1(v2, id)
-            outq[qb + 3u] = q8_store1(v3, id)
+            outq[qb] = q8_quant1(v0, id)
+            outq[qb + 1u] = q8_quant1(v1, id)
+            outq[qb + 2u] = q8_quant1(v2, id)
+            outq[qb + 3u] = q8_quant1(v3, id)
         }
     }
 }
@@ -288,7 +282,7 @@ class Q8kRequant {
         return d != 0.0 ? 1.0 / d : 0.0
     }
 
-    [spirv_kernel(local_size_x = 256, name = "cls_q8k_rq_spv")]
+    [spirv_kernel(local_size_x = 256, name = "cls_q8k_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let gid = gl_GlobalInvocationID.x
         let b = gid / 32u
@@ -304,7 +298,7 @@ class Q8kRequant {
             }
             let id = blk_scale(b, lane, m)
             for [unroll] (r in range(8)) {
-                outq[b * 256u + uint(r) * 32u + lane] = q8_store1(vals[r], id)
+                outq[b * 256u + uint(r) * 32u + lane] = q8_quant1(vals[r], id)
             }
         }
     }
@@ -339,8 +333,8 @@ class ActRqMembers {
 // fused act + Q8_0 requant: subgroup per 4 blocks, 4 quants per lane, 8-lane shuffle amax (xor 1/2/4)
 [vk_dispatch(name = "q8_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8ActRq : ActRqMembers {
-    // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b],
-    // this lane's 4 quants land as bytes
+    // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b]
+    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def blk_store(b, lane8 : uint; v0, v1, v2, v3 : float) {
         let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
         let d = m / 127.0
@@ -349,10 +343,10 @@ class Q8ActRq : ActRqMembers {
             outs[b] = d
         }
         let qb = b * 32u + lane8 * 4u
-        outq[qb] = q8_store1(v0, id)
-        outq[qb + 1u] = q8_store1(v1, id)
-        outq[qb + 2u] = q8_store1(v2, id)
-        outq[qb + 3u] = q8_store1(v3, id)
+        outq[qb] = q8_quant1(v0, id)
+        outq[qb + 1u] = q8_quant1(v1, id)
+        outq[qb + 2u] = q8_quant1(v2, id)
+        outq[qb + 3u] = q8_quant1(v3, id)
     }
 
     [spirv_kernel(local_size_x = 256, name = "q8_actrq_cls_spv")]
@@ -383,7 +377,7 @@ class Q8kActRq : ActRqMembers {
         return d != 0.0 ? 1.0 / d : 0.0
     }
 
-    [spirv_kernel(local_size_x = 256, name = "q8k_actrq_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "q8k_actrq_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let gid = gl_GlobalInvocationID.x
         let b = gid / 32u
@@ -400,7 +394,7 @@ class Q8kActRq : ActRqMembers {
             }
             let id = blk_scale(b, lane, m)
             for [unroll] (r in range(8)) {
-                outq[base + uint(r) * 32u + lane] = q8_store1(vals[r], id)
+                outq[base + uint(r) * 32u + lane] = q8_quant1(vals[r], id)
             }
         }
     }
@@ -450,30 +444,27 @@ class F16Cvt {
 struct EmbArgs {
     npos : uint
     dim : uint
-    nbb : uint     // 32-blocks per row (dim / 32)
     wblk0 : uint   // the embd plane's slab-local block base
-    scale : float  // config embed_scale (1.0 for the llama family)
+    embed_scale : float
 }
 
-// device-side token-embedding gather: row ids[r] of the q8 embd plane dequants into x[r] — the
-// CPU embed loop and its x upload both vanish (the ids ride a 4-byte-per-row upload instead)
 [vk_dispatch(name = "emb_gather_cls", grid = "wgs", params = "wgs : int64")]
 class EmbGather {
-    @ssbo @binding = 0 wq : array<uint>        // weight quant words
-    @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
+    @ssbo @binding = 0 @role = "weight" wq : array<uint>        // weight quant words
+    @ssbo @binding = 1 @role = "weight" wsh : array<float16>    // per-block weight scales
     @ssbo @binding = 2 ids : array<uint>       // one token id per row
     @ssbo @binding = 3 xout : array<float>
     @push_constant pa : EmbArgs
 
-    [spirv_kernel(local_size_x = 256, name = "emb_gather_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "emb_gather_cls_spv"), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
     def run {
         let e = gl_GlobalInvocationID.x * 4u
         if (e < pa.npos * pa.dim) {
             let row = e / pa.dim
             let col = e % pa.dim
-            let ib = pa.wblk0 + ids[row] * pa.nbb + col / 32u
+            let ib = pa.wblk0 + ids[row] * (pa.dim / 32u) + col / 32u
             let lw = (col % 32u) / 4u
-            let v = float4(int4(unpack8(int(wq[ib * 8u + lw])))) * (float(wsh[ib]) * pa.scale)
+            let v = (float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])) * pa.embed_scale   // dequant then scale - the CPU's order
             xout[e] = v.x
             xout[e + 1u] = v.y
             xout[e + 2u] = v.z
@@ -482,25 +473,24 @@ class EmbGather {
     }
 }
 
-// the f32-table twin (untied models whose embd lives raw in fblob): a pure indexed row copy
 [vk_dispatch(name = "emb_gather_f32_cls", grid = "wgs", params = "wgs : int64")]
 class EmbGatherF32 {
-    @ssbo @binding = 0 wf : array<float>       // the f32 embd table, vocab x dim rows
-    @ssbo @binding = 1 ids : array<uint>       // one token id per row
-    @ssbo @binding = 2 xout : array<float>
+    @ssbo @binding = 0 @role = "weight" wf : array<float>       // the f32 embd table, vocab x dim rows
+    @ssbo @binding = 2 ids : array<uint>       // one token id per row (binding 1 unused: ids/xout sit where the q8 twin binds them)
+    @ssbo @binding = 3 xout : array<float>
     @push_constant pa : EmbArgs
 
-    [spirv_kernel(local_size_x = 256, name = "emb_gather_f32_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "emb_gather_f32_cls_spv"), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
     def run {
         let e = gl_GlobalInvocationID.x * 4u
         if (e < pa.npos * pa.dim) {
             let row = e / pa.dim
             let col = e % pa.dim
             let src = ids[row] * pa.dim + col
-            xout[e] = wf[src] * pa.scale
-            xout[e + 1u] = wf[src + 1u] * pa.scale
-            xout[e + 2u] = wf[src + 2u] * pa.scale
-            xout[e + 3u] = wf[src + 3u] * pa.scale
+            xout[e] = wf[src] * pa.embed_scale
+            xout[e + 1u] = wf[src + 1u] * pa.embed_scale
+            xout[e + 2u] = wf[src + 2u] * pa.embed_scale
+            xout[e + 3u] = wf[src + 3u] * pa.embed_scale
         }
     }
 }
@@ -1530,8 +1520,7 @@ struct FaCm2Args {
 }
 
 // hs=64 (tinyllama-class). The h128 twin below differs only in the head-size-shaped tiles —
-// duplication tolerated until the kernel-reification arc. OUT16 lands the out plane f16
-// (mode 4's wo feed — the b+6 convert dispatch vanishes; the f32 stamp is bit-identical split)
+// duplication tolerated until the kernel-reification arc.
 [ |> template_struct_instance]
 class template FaCm2H64T {
     @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
@@ -1541,7 +1530,7 @@ class template FaCm2H64T {
     @push_constant pa : FaCm2Args
     @template_constant OUT16 : bool = false
 
-    [spirv_kernel(local_size_x = 128)]
+    [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
         let qtiles = (pa.rows + 63u) / 64u
         let h = gl_WorkGroupID.x / qtiles
@@ -1624,7 +1613,6 @@ class FaCm2H64 : FaCm2H64T {
     typedef OT = float
 }
 
-// mode-4 twin — the out plane lands f16
 [vk_dispatch(name = "fa_cm2_h64_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H64F16 : FaCm2H64T {
     typedef OT = float16
@@ -1644,7 +1632,7 @@ class template FaCm2H128T {
     @push_constant pa : FaCm2Args
     @template_constant OUT16 : bool = false
 
-    [spirv_kernel(local_size_x = 128)]
+    [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
         let qtiles = (pa.rows + 63u) / 64u
         let h = gl_WorkGroupID.x / qtiles
@@ -1727,7 +1715,6 @@ class FaCm2H128 : FaCm2H128T {
     typedef OT = float
 }
 
-// mode-4 twin — the out plane lands f16
 [vk_dispatch(name = "fa_cm2_h128_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H128F16 : FaCm2H128T {
     typedef OT = float16
@@ -3377,11 +3364,8 @@ class KqQ40CmF16 : MoeCmBase {
 // ===== the cm2 (NV_cooperative_matrix2) prefill tiles: native fmt-0 planes, decode-in-load =====
 
 struct VkQ8Blk {
-    qs : int16[16]   // one fmt-0 q8 block: 32 packed int8 quants viewed as 16-bit lanes; the scale
-}                    // lives in wsh. The 16-bit width is LOAD-BEARING: the driver's cm2 block-load
-                     // decode pattern-matches the 16-bit load + unpack8 lane select (62.7 TFLOP/s
-                     // on the 5060 Ti) where a 32-bit word + shift extraction runs 55.4 and a
-                     // 32-bit unpack8 + dynamic 4-lane select collapses to 20.3
+    qs : int16[16]   // one fmt-0 q8 block: 32 packed int8 quants as 16-bit lanes; the scale lives in wsh
+}
 
 // the cm2 quant "l" geometry on the NATIVE fmt-0 two-plane layout: 256 threads, one
 // 128-weight x 256-token tile per wg, BK=64 (2 blocks) per step, 8x-unrolled k loop. The decode
@@ -3389,19 +3373,19 @@ struct VkQ8Blk {
 // exists. Binding 4 unused (sparse)
 [vk_dispatch(name = "q8_batch_cm2l_cls", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2LBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (8 words each)
+    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (32 bytes each, read as 16-bit lanes)
     @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
     @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
 
-    [spirv_decode]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
         let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
         return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
     }
 
-    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2l_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2l_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
@@ -3566,23 +3550,23 @@ class Q8Cm2LBatch : MoeCmBase {
     }
 }
 
-// the m-tile sibling (cm2 quant "m": BN=128, same A / BK / thread count) — picked by
-// cm2_tile_cols when the l grid underfills the SMs; body mirrors Q8Cm2LBatch at 128-token width
+// the m-tile sibling (cm2 quant "m": BN=128, same A / BK / thread count); the body mirrors
+// Q8Cm2LBatch at 128-token width
 [vk_dispatch(name = "q8_batch_cm2m_cls", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2MBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (8 words each)
+    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (32 bytes each, read as 16-bit lanes)
     @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
     @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
 
-    [spirv_decode]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
         let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
         return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
     }
 
-    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2m_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2m_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
@@ -3737,20 +3721,19 @@ class Q8Cm2MBatch : MoeCmBase {
 // ===== the cm2 K-quant tiles: Q4_K decode-in-load over the repacked superblock planes =====
 
 struct VkK4Blk {
-    qs : int16[64]   // one Q4_K superblock's 128 nibble bytes as 16-bit lanes (the fast decode width);
-}                    // the scale row (d|dmin + 8 sc + 8 mn bytes, decoded at repack) lives in wsu
+    qs : int16[64]   // one Q4_K superblock's 128 nibble bytes as 16-bit lanes; its scale row (d|dmin + 8 sc + 8 mn bytes) lives in wsu
+}
 
-// the l-tile Q4_K twin of Q8Cm2LBatch: same geometry, superblock (1, 256) layout blocks, the
-// decode extracts nibble + per-32-group scale/min - value = d*sc*q - dmin*mn
+// the l-tile Q4_K twin of Q8Cm2LBatch: same geometry, superblock (1, 256) blocks, nibble + per-32-group scale/min decode
 [vk_dispatch(name = "kq_batch_k4_cm2l_cls", grid = "wgs", params = "wgs : int64")]
 class K4Cm2LBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkK4Blk>       // Q4_K quant plane (128-byte superblocks)
-    @ssbo @binding = 1 wsu : array<uint>         // scale plane: 5 words per superblock
+    @ssbo @binding = 0 @role = "weight" wq : array<VkK4Blk>       // Q4_K quant plane (128-byte superblocks)
+    @ssbo @binding = 1 @role = "weight" wsu : array<uint>         // scale plane: 5 words per superblock
     @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                    // the region's SUPERBLOCK base, staged for the decode
 
-    [spirv_decode]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode_k4(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -3764,7 +3747,7 @@ class K4Cm2LBatch : MoeCmBase {
         return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
     }
 
-    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cm2l_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cm2l_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
@@ -3915,13 +3898,13 @@ class K4Cm2LBatch : MoeCmBase {
 // the m-tile Q4_K sibling (BN=128) — the k4 decode on the m geometry
 [vk_dispatch(name = "kq_batch_k4_cm2m_cls", grid = "wgs", params = "wgs : int64")]
 class K4Cm2MBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkK4Blk>
-    @ssbo @binding = 1 wsu : array<uint>
+    @ssbo @binding = 0 @role = "weight" wq : array<VkK4Blk>
+    @ssbo @binding = 1 @role = "weight" wsu : array<uint>
     @ssbo @binding = 3 xf16 : array<float16>
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint
 
-    [spirv_decode]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode_k4(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -3935,7 +3918,7 @@ class K4Cm2MBatch : MoeCmBase {
         return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
     }
 
-    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cm2m_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cm2m_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
@@ -4089,13 +4072,13 @@ struct VkK6Blk {
 // the l-tile Q6_K twin: 6-bit compose (nibble | qh 2 bits) - 32, per-16 signed sub-scale
 [vk_dispatch(name = "kq_batch_k6_cm2l_cls", grid = "wgs", params = "wgs : int64")]
 class K6Cm2LBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkK6Blk>       // Q6_K quant plane (192-byte superblocks)
-    @ssbo @binding = 1 wsu : array<uint>         // scale plane: 5 words per superblock
+    @ssbo @binding = 0 @role = "weight" wq : array<VkK6Blk>       // Q6_K quant plane (192-byte superblocks)
+    @ssbo @binding = 1 @role = "weight" wsu : array<uint>         // scale plane: 5 words per superblock
     @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                    // the region's SUPERBLOCK base, staged for the decode
 
-    [spirv_decode]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
         let e = cib.y
         let bu = e >> 5u
@@ -4108,13 +4091,12 @@ class K6Cm2LBatch : MoeCmBase {
         let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let sidx = e >> 4u
-        // signed sub-scale via shift+mask: a byte4 DYNAMIC select here measured 12.8 TF/s vs 32.9
         let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
         let d = unpackHalf2x16(wsu[srow + 4u]).x
         return float16(d * float(sc) * float(q6))
     }
 
-    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2l_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2l_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
@@ -4264,13 +4246,13 @@ class K6Cm2LBatch : MoeCmBase {
 // the m-tile Q6_K sibling (BN=128)
 [vk_dispatch(name = "kq_batch_k6_cm2m_cls", grid = "wgs", params = "wgs : int64")]
 class K6Cm2MBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkK6Blk>
-    @ssbo @binding = 1 wsu : array<uint>
+    @ssbo @binding = 0 @role = "weight" wq : array<VkK6Blk>
+    @ssbo @binding = 1 @role = "weight" wsu : array<uint>
     @ssbo @binding = 3 xf16 : array<float16>
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint
 
-    [spirv_decode]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
         let e = cib.y
         let bu = e >> 5u
@@ -4283,13 +4265,12 @@ class K6Cm2MBatch : MoeCmBase {
         let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let sidx = e >> 4u
-        // signed sub-scale via shift+mask: a byte4 DYNAMIC select here measured 12.8 TF/s vs 32.9
         let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
         let d = unpackHalf2x16(wsu[srow + 4u]).x
         return float16(d * float(sc) * float(q6))
     }
 
-    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2m_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2m_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
@@ -4613,8 +4594,8 @@ struct RopeKvBArgs {
     layerbase : uint // this layer's K/V mirror base
     npos : uint
     pos0 : uint      // the window's first absolute position
-    voff : uint      // v base inside the kv projection buffer (block layout: npos * kvd; merged rows: kvd)
-    kstride : uint   // projection-row stride (block layout: kvd; the merged k|v GEMM row: 2 * kvd)
+    voff : uint
+    kstride : uint
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
@@ -4629,7 +4610,7 @@ class template RopeKvStoreBT {
     @push_constant pa : RopeKvBArgs
     @template_constant CLAMP16 : bool = true
 
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.npos * pa.ppp) {

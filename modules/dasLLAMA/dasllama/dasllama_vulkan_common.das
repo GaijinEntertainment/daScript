@@ -126,26 +126,22 @@ def cm2_splitk_env : int64 {
 }
 
 
-// the cm2 tile pick over our two tiles (no s tile — GEMV owns the
-// narrow-n end): l unless the m grid fills the SMs better. Pure in (d, cnt, sm_count), so the
-// pipe pick and the meta fill can never disagree
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def cm2_tile_cols(d, cnt : int64) : int64 {
     let forced = cm2_tile_env()
     if (forced == 128l || forced == 256l) {
         return forced
     }
+    if (cnt <= 128l) {
+        return 128l
+    }
     let cores = int64(g_gpu.sm_count)
     if (cores == 0l) {
         return 256l
     }
-    if (cnt <= 128l) {
-        return 128l   // the l tile's 256-token column would run half-empty
-    }
     let wtiles = (d + 127l) / 128l
     let tiles_l = wtiles * ((cnt + 255l) / 256l)
     let tiles_m = wtiles * ((cnt + 127l) / 128l)
-    // wave efficiency, cross-multiplied; m only on a STRICT win — a tie goes to l, whose
-    // bigger tile carries twice the arithmetic intensity (probe-fit on the 3B + tinyllama roles)
     let waves_l = (tiles_l + cores - 1l) / cores
     let waves_m = (tiles_m + cores - 1l) / cores
     return tiles_m * waves_l > tiles_l * waves_m ? 128l : 256l
@@ -197,9 +193,10 @@ let COMB_WI_BYTES = 2_097_152l     // combine w / inv plane cap (npos*k grid ent
 let CLS_META_BYTES = 64l           // classifier GEMV params (one region, filled once)
 var g_coopmat_mode_force = -1
 
-//! Test hook: pin the GEMM mode (0 sdot4 / 1 f16 / 2 int8 / 3 mm) ahead of the mm default and
+//! Test hook: pin the GEMM mode (0 sdot4 / 1 f16 / 2 int8 / 3 mm / 4 cm2) ahead of the resolved default and
 //! DASLLAMA_COOPMAT — must run before the tier's lazy device init. The CPU-reference tier tests
 //! pin 0 so their oracles stay reference-kernel-deterministic under any router default.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def vk_force_coopmat_mode(m : int) {
     g_coopmat_mode_force = m
 }
@@ -418,8 +415,8 @@ struct GpuState {
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops)
-    full_sg : bool           // computeFullSubgroups enabled — every class pipeline pins REQUIRE_FULL_SUBGROUPS
-    coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile (default), 4 = cm2 decode-in-load
+    full_sg_on : bool        // DASLLAMA_VK_FULLSG asked and the device has the feature: every class pipeline pins REQUIRE_FULL_SUBGROUPS
+    coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile, 4 = cm2 decode-in-load (the default where the device has it, else 3)
     sm_count : int           // shaderSMCount (VK_NV_shader_sm_builtins; 0 = unknown -> l-tile always, no split-k)
     weight_budget : int64    // resident-weight cap — queried heap budget minus reserve, or VRAM_BUDGET
     dry : bool               // OFFLINE BAKE: accept/refuse arithmetic runs, every device call is gated off
@@ -727,12 +724,8 @@ def nonowning_buf(h : uint64) : Buffer {
     return b
 }
 
-// The coopmat-mode ladder, shared by vk_moe_init and the DlimConfiguration source — one
-// resolver, so the config's recorded mode can never drift from the mode the device runs.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def resolve_coopmat_mode(has_cm, has_cm2 : bool) : int {
-    // fastest MEASURED default: cm2 where the hardware has it (beats mm back-to-back on both
-    // serving llama models since the 16-bit decode + wave-efficiency tile picks), else mm;
-    // DASLLAMA_COOPMAT overrides
     var cmode = has_cm2 ? 4 : (has_cm ? 3 : 0)
     if (has_cm) {
         let mode = g_env_vulkan.coopmat
@@ -864,7 +857,7 @@ def private query_sm_count(phys : VkPhysicalDevice) : int {
     return int(sp.shaderSMCount)
 }
 
-[cold_path]   // one-time device bring-up; steady-state cost is the two guard checks
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-class-pipeline-build")]
 def vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
         return false
@@ -902,7 +895,7 @@ def vk_moe_init : bool {
     g_gpu.phys = select_physical_device(g_gpu.instance)
     if (!storage_8_16_supported(g_gpu.phys) || !subgroup_compute_ops_supported(g_gpu.phys)
             || !integer_dot_product_supported(g_gpu.phys)) {
-        to_log(LOG_ERROR, "dasLLAMA vulkan tier: device lacks 8/16-bit SSBO storage, compute subgroup ops, or shaderIntegerDotProduct - tier disabled\n")
+        to_log(LOG_ERROR, "dasLLAMA vulkan tier: device lacks the 8/16-bit SSBO storage set (incl. shaderInt16), compute subgroup ops, or shaderIntegerDotProduct - tier disabled\n")
         return false
     }
     g_gpu.fam = select_graphics_queue_family(g_gpu.phys)
@@ -921,12 +914,12 @@ def vk_moe_init : bool {
     if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == 4) {
         // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load, {g_gpu.sm_count} SMs)\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load, {g_gpu.sm_count} SMs; DASLLAMA_COOPMAT=mm restores the mul_mm tiles)\n")
     } elif (g_gpu.has_coopmat) {
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam, xfam)
         if (g_gpu.coopmat_mode != 0) {
             let cm_name = g_gpu.coopmat_mode == 1 ? "f16" : (g_gpu.coopmat_mode == 2 ? "int8" : "mul_mm L-tile")
-            to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on {cm_name} cooperative-matrix tiles\n")
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on {cm_name} cooperative-matrix tiles (DASLLAMA_COOPMAT picks the family)\n")
         }
     } else {
         g_gpu.device <- create_device_storage_8_16_int_dot(g_gpu.phys, g_gpu.fam)
@@ -1026,8 +1019,8 @@ def vk_moe_init : bool {
     g_gpu.staging = make_host_buf(STAGING_BYTES, false)
     g_gpu.host_mem |> erase(g_gpu.staging.buf)   // process-lifetime — exempt from the model-drop sweep
     g_init_failed = false
-    g_gpu.full_sg = g_env_vulkan.vk_fullsg && compute_full_subgroups_supported(g_gpu.phys)
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg ? ", full subgroups" : ""})\n")
+    g_gpu.full_sg_on = g_env_vulkan.vk_fullsg && compute_full_subgroups_supported(g_gpu.phys)
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""})\n")
     if (dasllama_noisy()) {
         // storage-range is the limit that actually binds the arena; allocs/descriptors do not
         var lp : VkPhysicalDeviceProperties
@@ -1920,15 +1913,15 @@ struct RDec {
     pf_logits_host : HostBuf
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
-    @scratch pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*8 + router variant (lazy insert, steady-state hit)
+    @scratch pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*16 + variant (lazy insert, steady-state hit)
     pf_cmd : VkCommandBuffer
-    pf_cmds : array<VkCommandBuffer>   // overlap ring: chunk N records here while chunk N-1 executes
-    emb_blk : int64 = -1l              // the embd plane's arena block (>= 0 arms the ids-form prefill)
-    emb_f32 : uint64                   // untied f32 embd table on device (0 = absent; the other arm)
+    pf_cmd_ring : array<VkCommandBuffer>
+    emb_blk : int64 = -1l
+    emb_f32 : uint64
     emb_f32_bytes : int64
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
     pf_emb_set : VkDescriptorSet
-    pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [2l] = the ffn site, [2l+1] = addr_next
+    pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [l*2] = the ffn site, [l*2+1] = addr_next
 }
 
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
@@ -2070,8 +2063,7 @@ let VHZ_FFO = 0x4000u     // ffn down out
 let VHZ_LOG = 0x10000u    // logits
 let VHZ_COS = 0x20000u    // rope cos/sin rows
 
-// batch/hybrid-tier region bits — a separate namespace over the same rail (each recorder's VkHaz
-// is private to its cmd buffer, so the two families never meet in one pending set)
+// batch/hybrid-tier region bits — a separate namespace over the same rail
 let VHB_ACT = 0x1u        // batch_xq/batch_xs activation staging
 let VHB_META = 0x2u       // stack batch metas + the chain's params (ffn/dn/at meta)
 let VHB_Y1 = 0x4u         // batch_y1 (gate / qkv / q|gate / down / wo out)
@@ -2278,27 +2270,32 @@ def private spv_override_load(kernel : string; var spv : array<uint>) {
     }
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-class-pipeline-build")]
 def private spv_dump_save(kernel : string; spv : array<uint>) {
     let dir = g_env_vulkan.vk_spv_dump
     if (empty(dir)) {
         return
     }
-    fopen("{dir}/{kernel}.spv", "wb") $(f) {
+    let path = path_join(dir, "{kernel}.spv")
+    fopen(path, "wb") $(f) {
         if (f != null) {
             f |> fwrite(spv)
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_SPV_DUMP wrote {path}\n")
+        } else {
+            to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_VK_SPV_DUMP could not write {path}\n")
         }
     }
 }
 
-[cold_path]   // pipeline creation — once per kernel
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-class-pipeline-build")]
 def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
     if (length(c.pipes) <= ord) {
         c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
     }
+    spv_dump_save(kernel, spv)   // the EMITTED words, before an override replaces them
     spv_override_load(kernel, spv)
-    spv_dump_save(kernel, spv)
     var shader <- create_shader_module(g_gpu.device, spv)
-    c.pipes[ord] <- (g_gpu.full_sg
+    c.pipes[ord] <- (g_gpu.full_sg_on
         ? create_compute_pipeline_full_subgroups(g_gpu.device, c.pipe_layout, shader)
         : create_compute_pipeline(g_gpu.device, c.pipe_layout, shader))
     let pk = intptr(boost_value_to_vk(c.pipes[ord]))
@@ -2506,6 +2503,7 @@ def alloc_cmd : VkCommandBuffer {
     return raw
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private submit_core(var raw : VkCommandBuffer; fence : VkFence) {
     var submit = VkSubmitInfo()
     submit.commandBufferCount = 1u
@@ -2535,9 +2533,8 @@ def submit_nowait(var raw : VkCommandBuffer) {
     submit_core(raw, g_gpu.fence)
 }
 
-// overlap submit: NO fence — the in-order queue carries the ordering, and the window's LAST
-// submit (submit_wait) signals the one fence the caller waits on
-def submit_chunk(var raw : VkCommandBuffer) {
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def submit_nofence(var raw : VkCommandBuffer) {
     var nofence : VkFence
     submit_core(raw, nofence)
 }

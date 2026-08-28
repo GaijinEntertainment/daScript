@@ -9,7 +9,7 @@ two followup ledgers.
 `tests/REVIEW.md`.**
 
 **A timing rig - a script whose output is a measured wall or rate - wherever the diff puts
-it, answers to `benchmarks/REVIEW.md`.**
+it, answers to this folder's `benchmarks/REVIEW.md`.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
 code comment, or a PR body - or adds a servable capability applies `REVIEW_MEASUREMENT.md`.**
@@ -23,7 +23,7 @@ fixture. A test or tool merely opening a stocked model file by name does not rou
 sidecar exchange is the code that downloads tune winners to a box and submits that box's
 winners back.
 
-**Every `dasllama/` change applies `tests/REVIEW.md`.**
+**Every `dasllama/` change applies this folder's `tests/REVIEW.md`.**
 
 **A GPU kernel, driver, dispatch-class, or K/V-mirror change applies `REVIEW_GPU.md`.**
 
@@ -115,12 +115,12 @@ the name in the same change).
 
 **A change to code or data of `encode`/`bpe_encode` or anything they reach in
 `dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`
-ships before/after `--tok` rows (`benchmarks/lcpp_bench.das`) for the affected backend** - the
+ships before/after `--tok` rows (this folder's `benchmarks/lcpp_bench.das`) for the affected backend** - the
 instrument is the scaling ratio across the size ladder, and superlinear is a defect.
 
 **A change to code or data in `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
-template strings any of them look up, records a `tests/test_tokenizer.das` run with its cases
+template strings any of them look up, records a run of this folder's `tests/test_tokenizer.das` with its cases
 EXECUTED, not skipped.**
 
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.**
@@ -128,7 +128,9 @@ An override is an environment knob or an exported runtime setter that moves a ga
 threshold off its default and thereby changes what the run writes, reads, mints, or computes -
 including a knob or setter whose purpose is timing when it moves computed numerics, since two
 GEMM forms of the same math differ in float terms. A knob or setter that changes only WHEN work
-happens is not an override, and a CLI flag is never one. The announce is a line the run prints
+happens is not an override, and a CLI flag is never one. A default-ON knob announces on the
+default path, naming the spelling that turns it off; a default-OFF knob announces when it is
+set. The announce is a line the run prints
 where the override changes the outcome, naming it by the spelling a user would set - the
 environment variable name, the sidecar key, or the setter's function name. Per-site repeats are
 fine. A set-but-inert override stays silent.
@@ -147,9 +149,10 @@ path under `modules/dasLLAMA/` - is a defect:** a module added to its allowed se
 match dropped or narrowed, or an error text that no longer names the facade to require
 instead. The allowed set is the table in the lint.
 
-**A `// nolint:STYLE037` or `// nolint:STYLE038` on a function a follow-up ledger entry calls
-reducible is a defect - land the ledgered split instead.** The warning is what keeps the ledger
-entry visible.
+**A `// nolint:STYLE037` or `// nolint:STYLE038` on a function a follow-up ledger entry says
+can be shortened or split is a defect - land the ledgered split instead.** The warning is what
+keeps the ledger entry visible. A ledger entry asking for a dedup across bodies - one template
+for several twins - does not fire this rule: the one body left still carries its length.
 
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
@@ -173,7 +176,8 @@ is one that check does not flag. When the check licenses no names, the line says
 file or a `.das` comment; state what the code does and why its shape wins. Provenance is
 not attribution: a path naming where checked-in data is regenerated FROM, an env-knob row
 in `ENVIRONMENT.md` whose value locates the reference binary, and a command line or flag
-list in `METHODOLOGY.md`, `PROFILE.md`, or `BRINGUP.md`, all name the binary outright;
+list in `METHODOLOGY.md`, `PROFILE.md`, or `BRINGUP.md`, and a follow-up ledger's board row
+naming the build it compares against, all name the binary outright;
 every other `.md` line and `.das` comment writes "the reference exe" or "upstream". Legal
 attribution lives in `THIRD_PARTY_NOTICES.md` and the `LICENSE.*` files, so prose never
 carries it.
@@ -235,8 +239,8 @@ files. A doc comment naming the family a helper was built for is fine.
 file** - a single-caller helper sanctioned as tower-worthy is ledgered on
 `ARCHITECTURE_MEDIA.md` sec.1.7's tower charter line, not argued in review.
 
-**A harness that prints output for another tool to compare exits non-zero when its run ends
-without those comparison lines - wrong flags, failed load.**
+**A harness whose run can end with zero result rows exits non-zero when it does - wrong
+flags, failed load, a device that declines.**
 
 **Tool wire text - building or parsing - is produced only in `dasllama/dasllama_tools.das`.**
 
