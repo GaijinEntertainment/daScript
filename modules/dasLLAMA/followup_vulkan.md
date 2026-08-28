@@ -210,9 +210,14 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    A/B: 3B 7669 -> 7737/7708 (+0.7-0.9%), tinyllama 20796 -> 20986 (+0.9%).
    END-OF-DAY BOARD vs b10659: 3B pp 7737.2 +/- 67 = 100.6% - AHEAD of llama.cpp for the
    first time; tinyllama pp 20986 +/- 357 = ~103.5%, tg ahead. 3B tg 105.1 = ~95.5% (decode
-   chain untouched today). Remaining mode-4 tail: small-int SSBO STORE fixture (unblocks
-   deleting hand-rolled word-packing in requant writers), item (a) K-quant generalization,
-   (d) decode_vector driver-blocked.
+   chain untouched today).
+   Small-int STORE ledger CLOSED (2026-08-28, commit a59d095d9): the 8/16-bit store half got
+   its coverage - a golden fixture (narrowing converts + 8/16-bit access-chain stores,
+   spirv-val clean) and a live-device exact-bytes cell (test_storage_8_16_store_gpu) - and on
+   that foundation every Q8 requant writer stores quants as bytes: q8_pack4 and the q8k
+   butterfly (2 subgroup shuffles per element) deleted, outq members array<int8>. Bit-exact
+   by the gates; perf-neutral where the writers run hot (mm-mode 3B pair 7077 vs 7061, tg
+   equal). Remaining tail: item (a) K-quant generalization, (d) decode_vector driver-blocked.
    (ngfx GPU Trace, our gate loop vs their MUL_MAT loop; counters now read UNELEVATED):
    ours tensor 44.6 / L2 54.2 / l1tex 44.9 / dram 15.3, theirs tensor 56.1 / L2 23.8 /
    l1tex 27.6 / dram 29.7 - their cm2 keeps the MMA pipe ~26% busier and streams weights
