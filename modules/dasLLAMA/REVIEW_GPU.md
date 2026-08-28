@@ -25,8 +25,9 @@ stamped `[metal_kernel(float_a_ok=true)]` - convert it in the pass that writes t
 buffer, or in the staging loop that reads it.** A float operand keeps the op off its native
 fast path.
 
-**A diff that stamps a kernel class `[metal_kernel(float_a_ok=true)]` lands its
-`ARCHITECTURE_GPU.md` sec.2.2b ledger line in the same change.**
+**A diff that stamps a kernel class `[metal_kernel(float_a_ok=true)]` outside the set
+`ARCHITECTURE_GPU.md` sec.2.2b sanctions extends that section in the same change.** A class
+the section already covers as a property needs no new line.
 
 **Never threadgroup-stage a `matmul2d` operand whose staged form matches its stored form -
 stream it from device instead.** A dequant, a transpose, or a layout or element-type change
@@ -43,9 +44,10 @@ entry. The scan repeats on every thread of every row's threadgroup, and it grows
 bucket count.
 
 **Never test a bucket row's validity against the pad sentinel `0xFFFFFFFF` - compare the row's
-bucket word with the live entry count (`npos * nk`) instead.** Rows past the last expert's
-stamped tail hold stale pool bytes, not the sentinel, and an equality test sends their token
-index out of bounds.
+per-row bucket entry, the one the bucket-building kernel writes, with the live entry count
+(positions x experts per token, `npos * nk`) instead.** Rows past the last expert's stamped
+tail hold stale pool bytes, not the sentinel, and an equality test sends their token index
+out of bounds.
 
 **Never gate an early `return` in a kernel body that runs a cooperative op - a `barrier()`, a
 simdgroup matrix op, or a cross-lane reduction - on a per-thread value; gate it on a
@@ -69,9 +71,8 @@ count is overrun silently into whatever the pool put next to it.
 
 **Never pass `npos` to `enc_gemm_mm` (`dasllama/dasllama_metal_prefill.das`) from a GEMM site
 whose output rows are wider than the `d` it passes - leave `npos` at zero and dispatch the
-padded tile instead.** The tail peel - the up-to-8 remainder rows `enc_gemm_mm` sends to the
-mv family - writes its y rows at that `d`, so a wider-row site lands its tail rows on top of
-the row beside them.
+padded tile instead.** The tail rows `enc_gemm_mm` peels off write their y rows at that `d`,
+so a wider-row site lands its tail rows on top of the row beside them.
 
 **Never leave a pipeline of dispatches with fewer scratch buffers than it has dispatches in
 flight - give each dispatch site its own instead.** One shared scratch serializes the whole
@@ -114,14 +115,13 @@ defect; a per-encode field either omits `@role` or names the access its body per
 `weight` drops the hazard staging.
 
 **A new kernel class carries `[metal_dispatch]` / `[vk_dispatch]` with every annotation the
-generated builder reads - per-field `@binding` / `@role` / `@off` / `@default`, `@span` on a
-field whose callers bind whole output rows, `@workgroup` state with its `tgmem=` dispatch
-key.**
+generated builder reads - per-field `@binding` / `@role` / `@off` / `@default`, `@workgroup`
+state with its `tgmem=` dispatch key.**
 
-**Never give a `@span` to a kernel field whose callers bind a COLUMN TILE of a wider output
-row - omit the span instead.** A column-tile caller passes the tile width as the kernel's n
-while its rows stride the full output width, so a span computed from the tile width leaves
-the rest of every row outside the tracked hazard range.
+**A kernel field carries `@span` only when every caller binds whole output rows.** A caller
+binding a column tile of a wider row passes the tile width as the kernel's n while its rows
+stride the full output width, so a span computed from the tile width leaves the rest of
+every row outside the tracked hazard range.
 
 **A NEW hand-written `enc_*` body is a defect unless it is a wrapper - a format or twin pick, a
 default-filling wrapper, or a composite over generated builders.**
@@ -195,12 +195,12 @@ is `harness/parity.das`, or the in-suite instruments `tests/test_metal_decode_pa
 Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows `resident driver
 armed`.** The Vulkan driver declines codec-mismatched sessions silently.
 
-**A change to `dasllama/dasllama_metal_tower.das`, to the `AttnArgs` kargs struct, to any
-kernel class the tower dispatches or builder the tower borrows, or to state the whole
-driver shares (a module-level `g_tw_*` variable, `metal_tower_init`,
-`dasllama_metal_tower_register` - reachable from every hook) runs the gate of every
-registered tower hook the changed code is reachable from.** The gates are the family gates
-`tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, `tests/test_gemma3v.das`, and
+**A change other than a comment-only one to `dasllama/dasllama_metal_tower.das`, to the
+`AttnArgs` kargs struct, to any kernel class the tower dispatches or builder the tower
+borrows, or to state the whole driver shares (a module-level `g_tw_*` variable,
+`metal_tower_init`, `dasllama_metal_tower_register` - reachable from every hook) runs the
+gate of every registered tower hook the changed code is reachable from.** The gates are the
+family gates `tests/test_gemma4uv.das`, `tests/test_gemma4v.das`, `tests/test_gemma3v.das`, and
 `test_qwen3v_tier1_metal` in `tests/test_qwen3v.das`; the encoder-blocks leg's
 `tests/test_whisper.das`; the conv legs' `tests/test_audio.das` and
 `tests/test_audio_embedder.das`; plus a `tests/test_model_image.das` run with the `mtower`

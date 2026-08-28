@@ -620,3 +620,13 @@
     which are always fresh-built and never parse targets, so no borrowed view can reach the
     arm. Done = the arm carries the same `lock_count` guard as its siblings, added when that
     arm is next touched for real work.
+
+53. **The MoE tensor-twin templates are five hand-split copies of one scaffold** -
+    `MetalMoeMulMmQ8/K45/K6/Mx4/Q51TensorT` share the expert prologue, the `while (work < 256u)`
+    staging shell, the barrier pair, and the `tmm2d_tg_begin/step/store` epilogue verbatim,
+    diverging only on the weight-format decode block and its buffer views (`REVIEW_GPU.md`:
+    "kernel twins stamp one `class template`, whatever the stamp axis is"; the q5_1 twin made
+    the count five). Done = one base class template
+    carrying the scaffold with the decode behind an abstract method spliced flat at emission -
+    the `MetalMoeMulMmBase` pattern - with every format's bit-exact gate green and the MSL of
+    the pre-existing four stamps unchanged.

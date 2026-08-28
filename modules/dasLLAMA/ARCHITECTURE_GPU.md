@@ -175,12 +175,11 @@ sync duty is `REVIEW_GPU.md`'s.
   3.5x slower - the mixed-int combinations exist in MPP's type lists but lower off the NAX
   fast path. W8A8 claims from other stacks do not transfer through MPP.
 
-**Sanctioned float-A stamps** (the licensed set of the rule that a `matmul2d` operand reaches
-the op as `float` only in a class stamped `[metal_kernel(float_a_ok=true)]`, each carrying
-that stamp): every tensor template's `XT = float` stamp - the live fallback wherever the half
-panel is absent (below the convert row floor, panel does not fit, half-X pinned off) - and the
+**Sanctioned float-A stamps** - the kernel classes stamped `[metal_kernel(float_a_ok=true)]`:
+every tensor template's `XT = float` stamp - the live fallback wherever the half panel is absent
+(below the convert row floor, panel does not fit, half-X pinned off) - and the
 batch-decode/classifier `MetalQ8GemmTensorT` family, whose half-X extension is an open ledger
-item. A float A operand anywhere else is the defect the rule names.
+item.
 - **Fused single-kernel attention (scores in threadgroup, online softmax):** loses 10-80% to
   the pipelined three-pass at real shapes (`benchmarks/attn/bench_metal_pf_fused_attn.das`) -
   Metal's cross-kernel pipelining plus full-width softmax beat tg-scope fusion.

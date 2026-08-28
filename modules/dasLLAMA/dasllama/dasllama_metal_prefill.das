@@ -2419,6 +2419,9 @@ def public set_metal_prefill_tall(v : bool) {
 //! full math. Switchable between measurement windows, same contract as `set_metal_decode_skip`.
 def public set_metal_prefill_skip(v : string) {
     g_pf_skip = v
+    if (!empty(v)) {
+        to_log(LOG_WARNING, "dasLLAMA: set_metal_prefill_skip(\"{v}\") - prefill knockout, served output is GARBAGE\n")
+    }
 }
 
 var private g_pf_stage_prefills = 0l
@@ -3006,15 +3009,17 @@ def private pf_cvt_panel(enc : MetalComputeEncoder?; bx : MetalBuffer?; rows, kd
     return bxh
 }
 
+//! the pure knee arithmetic behind pf_devw_tiles - cap_bytes is the staging panel capacity
+//! (g_pf_bwh_bytes in production; the kernel-unit test pins its own)
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees")]
-def private pf_devw_tiles(rows, d, kdim : int64; slow_fb : bool = false) : int64 {
-    if (!g_pf_env_dev_w || g_pf_bwh == null || kdim <= 0l || kdim % 32l != 0l
+def devw_tile_pick(rows, d, kdim : int64; slow_fb : bool; cap_bytes : uint64) : int64 {
+    if (kdim <= 0l || kdim % 32l != 0l
             || (kdim > DEVW_LONG_K && rows < (slow_fb ? DEVW_WIDE_N_ROWS : DEVW_LONG_K_ROWS))) {
         return 0l
     }
     let pb = uint64(d * kdim * 2l)
     if (pb <= DEVW_SMALL_PANEL && (d <= DEVW_WIDE_N || rows >= DEVW_WIDE_N_ROWS)
-            && pb <= g_pf_bwh_bytes) {
+            && pb <= cap_bytes) {
         return 1l
     }
     let tile_floor = slow_fb ? DEVW_WIDE_N_ROWS : DEVW_LONG_K_ROWS
@@ -3022,15 +3027,22 @@ def private pf_devw_tiles(rows, d, kdim : int64; slow_fb : bool = false) : int64
     if (pb > tile_over && rows >= tile_floor) {
         for (tc in range64(2l, DEVW_MAX_TILES + 1l)) {
             if (d % (tc * 64l) == 0l && pb / uint64(tc) <= DEVW_SMALL_PANEL
-                    && uint64(d / tc * kdim * 2l) <= g_pf_bwh_bytes) {
+                    && uint64(d / tc * kdim * 2l) <= cap_bytes) {
                 return tc
             }
         }
     }
-    if (pb <= DEVW_BIG_PANEL && rows >= DEVW_BIG_ROWS && pb <= g_pf_bwh_bytes) {
+    if (pb <= DEVW_BIG_PANEL && rows >= DEVW_BIG_ROWS && pb <= cap_bytes) {
         return 1l
     }
     return 0l
+}
+
+def private pf_devw_tiles(rows, d, kdim : int64; slow_fb : bool = false) : int64 {
+    if (!g_pf_env_dev_w || g_pf_bwh == null) {
+        return 0l
+    }
+    return devw_tile_pick(rows, d, kdim, slow_fb, g_pf_bwh_bytes)
 }
 
 def private pf_devw_flip : MetalBuffer ? {
@@ -3316,6 +3328,12 @@ def private kn_moe_mm_family_tail(enc : MetalComputeEncoder?; bx, by, bcnt, bbas
     kn_buffer(enc, bbkt, 0ul, 9)
 }
 
+//! the q5_1 twin walks 64-deep K chunks (2 blocks/step) - an odd 32-block count stays legacy;
+//! the kernel-unit gate keys its twin legs on this same predicate
+def moe_q51_twin_fits(kdim : uint) : bool {
+    return (kdim & 63u) == 0u
+}
+
 def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, rows, npos : int64;   // nolint:STYLE037,STYLE038 — flat per-format twin-pick ladder, one arm per weight format
                           bx, by, bcnt, bbase, bbkt : MetalBuffer?; var ka : MoeMmArgs;
                           contiguous : bool = false; bxh : MetalBuffer? = null) {
@@ -3339,8 +3357,7 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         }
     } elif (fmt == KqFmt.q51) {
         let qp = q51_planes_of(g_dev, t, stack_off)
-        //! the twin walks 64-deep K chunks (2 blocks/step) — an odd 32-block count stays legacy
-        if (contiguous && (ka.kdim & 63u) == 0u && g_pf_pso_moe_mm_q51_t != null) {
+        if (contiguous && moe_q51_twin_fits(ka.kdim) && g_pf_pso_moe_mm_q51_t != null) {
             if (bxh != null && g_pf_pso_moe_mm_q51_th != null) {
                 if (g_pf_env_tall && npos * int64(ka.nk) >= 128l * ne && g_pf_pso_moe_mm_q51_th128 != null && g_pf_pso_moe_mm_q51_thr != null) {
                     pf_enc_moe_mm_q51_th128_c(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, bxh, by, ka, bcnt, bbase, rows, npos, ne)
@@ -4736,10 +4753,7 @@ let DEVW_BIG_ROWS = 2048l
 let DEVW_LONG_K = 4096l
 let DEVW_LONG_K_ROWS = 1024l
 let DEVW_MAX_TILES = 32l
-// a kq site whose f16 panel would exceed this is DRAM-resident - the tall in-kernel-dequant
-// stamp beats both dev-W tiling and the short tg twin there (raced: 118MiB+ wins 15-25%,
-// 84MiB washes negative - the knee sits between)
-var private TALLKQ_MIN_PANEL = 96ul * 1024ul * 1024ul
+var private TALLKQ_MIN_PANEL = 96ul * 1024ul * 1024ul //! DRAM-residency knee, raced on panel BYTES (ARCHITECTURE_GPU_PREFILL.md sec.2.2c/2.2d)
 var private g_pf_env_span = true
 var private g_pf_env_logits = true
 var private g_pf_env_attn = true
@@ -4768,7 +4782,7 @@ def dasllama_metal_prefill_register() {
     g_pf_env_ncb = g_env_metal.ncb
     if (!empty(g_env_metal.prefill_skip)) {
         g_pf_skip = g_env_metal.prefill_skip
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: SKIP={g_pf_skip} - timing-attribution mode, output is GARBAGE\n")
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_PREFILL_SKIP={g_pf_skip} - timing-attribution mode, output is GARBAGE\n")
     }
 }
 

@@ -13,13 +13,15 @@ The rows that remain pick one of four forms, in this order, per site per forward
    wins: it dequants its own W tile in threadgroup memory and reads the quant plane
    (~0.56 B/element) once per 128-row tile, where a materialized f16 panel writes
    2 B/element and re-streams them per tile. The knee is panel SIZE, not tile count - a
-   118 MiB panel wins 15-25% on the tall stamp while an 84 MiB one measures a small loss.
+   118 MiB panel wins 15-25% on the tall stamp while an 84 MiB one measures a small loss
+   (`benchmarks/lcpp_bench.das -p 512 -n 0 -r 5 --ngl 99` A/B with the gate forced per run,
+   gemma-4-12B ffn and Qwen3.8-27B qkv carriers, m5).
    The 32-row TH stamp covers the row remainder at its X/y offsets.
 2. **dev-W all-device** - the weight plane is dequantized into a device f16 panel and multiplied
    half x half. No threadgroup staging and no barriers, so the staged-operand tax is gone; the
    dequant pass is paid once per site per forward against a GEMM that re-reads the f16 W panel
-   once per M row tile (`mp/128` on the tall stamp, `mp/32` on the 32-row stamp). sec.2.2d
-   carries the panel size rules.
+   once per M row tile (`mp/128` on the tall stamp, `mp/32` on the 32-row stamp, where `mp =
+   ceil32(npos)` is the padded row count). sec.2.2d carries the panel size rules.
 3. **tall 128-row M-tile** - the stamp streams W `M/128` times over a 128-row tile, taken on the
    row count's 128-floor with the 32-row stamp on the remainder. The remainder arm strides X by
    `kdim`, so a caller that passes no `kdim` takes the tall stamp only when its row count is
@@ -39,8 +41,7 @@ kept-bf16 blob with no resident f32 copy.
 
 **The occupancy floor guards the tall stamp.** A tall grid is taken only when
 `rows/128 * (d/64) >= TALL_OCC_FLOOR` (default 64, a sidecar knob). An under-occupied tall grid
-starves the GPU and small prompts regress hard without the floor; 32 adds nothing over 64, raced
-at mid-M across three dense families.
+starves the GPU and small prompts regress hard without the floor.
 
 ### 2.2d The dev-W panel knee map {#devw-panel-knees}
 
@@ -55,30 +56,30 @@ count repays. The raced evidence
 (32 MiB wins everywhere, 47 MiB only from 2048 rows, 112 MiB loses everywhere) is
 `benchmarks/matmul/bench_metal_nax_probe.das`'s grid.
 
-Three clauses the isolated grid cannot see, because it races one site while production overlaps
+Clauses the isolated grid cannot see, because it races one site while production overlaps
 sites:
 
 - **A long-K (down-projection) dequant serializes** on the panel pair behind the up/gate GEMM
   chain at small M, so it loses end to end there despite winning its isolated site race. The
   long-K floor is 1024 rows on q8; the same tiling that wins its isolated site race at 512
-  rows measures zero to negative end to end.
+  rows measures zero to negative end to end (`../benchmarks/lcpp_bench.das -p 512 -n 0` A/B
+  with the form forced per run).
 - **An over-knee panel runs as N-column TILES**, each under the small-panel knee, with the tile
   count bounded by `DEVW_MAX_TILES` (32), divisibility, the small-panel knee and the pool.
-  Narrow tiles measure fine - a 20-threadgroup tile dispatch still beat the tg-staged fallback
-  at 512 rows. A K-quant site whose panel reaches `TALLKQ_MIN_PANEL` (96 MiB) leaves dev-W
-  entirely for the tall in-kernel-dequant stamp (sec.2.2c form 1): at that size the panel is
-  DRAM-resident and the f16 materialization plus re-stream loses to reading the quant plane
-  in-kernel.
-- **A k-quant tg fallback is about 1.28x the q8 half-panel form**, so a k-quant site lowers the
+  Narrow tiles measure fine in the same A/B. A K-quant site whose panel reaches
+  `TALLKQ_MIN_PANEL` leaves dev-W entirely for the tall in-kernel-dequant stamp (sec.2.2c
+  form 1).
+- **A k-quant tg fallback is slower than the q8 half-panel form**, so a k-quant site lowers the
   over-knee bar, the tiled-rows floor, and the long-K floor (1024 rows to 512): a tiled read
   still beats THAT fallback.
 
-The knee constants are box-raced and cached at init from the sidecar (`metal_cvt_min_rows`,
-`metal_tall_floor`, `metal_devw_small_panel_mb`).
+`CVT_MIN_ROWS`, `TALL_OCC_FLOOR` and `DEVW_SMALL_PANEL` are box-raced and cached at init from
+the sidecar (`metal_cvt_min_rows`, `metal_tall_floor`, `metal_devw_small_panel_mb`); the other
+knees are fixed.
 
 ### 2.2e The GEMV tail peel {#gemv-tail-peel}
 
-A prefill panel pads to `mp = ceil32(npos)`, so `npos % 32` rows of every GEMM are padding. Up to
+A prefill panel pads to `mp` rows, so `npos % 32` rows of every GEMM are padding. Up to
 `MM_TAIL_MAX` (8) remainder rows peel off the padded tile onto the fixed-B mv family instead;
 above that the padded tile is cheaper than three or more weight streams. One peeled row rides the
 reduction-split GEMV, two or more ride the b4 form only - the reduction-split GEMV walks per
@@ -124,7 +125,9 @@ that parks each routed expert's rows and reduces them in entry order. The select
 GPU-side by the kernels; nothing reads back to the CPU, so encode-ahead and speculation stay
 compatible.
 
-Pad bucket rows carry a stamped sentinel and the reduce never references them. The gather-X pass
+Pad rows inside each expert's padded bucket carry a stamped sentinel and the reduce never
+references them; rows past the last expert's stamped tail are unstamped stale pool bytes, which
+is why validity tests compare the per-row entry against the live count, never the sentinel. The gather-X pass
 copies the bucket's token rows into a CONTIGUOUS f16 panel with pad rows zeroed, which lets the up
 and gate sites ride the contiguous tensor twins instead of the in-kernel gather form; the panel is
 minted once per layer and shared by both sites. An X read through the bucket index can never
@@ -139,7 +142,7 @@ reloading per k-block (same lab, gmm6 section), so its stage is stateless.
 
 ### 2.2h Pad rows and cooperative-op constraints {#prefill-pad-rows-and-coop}
 
-Activation panels size to `mp = ceil32(npos)` rows because every kernel's M grid divides `mp` by
+Activation panels size to `mp` rows because every kernel's M grid divides `mp` by
 its tile height - 32 for the default stamp, 128 for the tall stamps; a 64-row pad would bill a
 dead 32-row GEMM block on every short prefill. The GEMM has no edge
 masking, so pad rows are written with whatever the tile computes. That is safe because C-block
@@ -148,7 +151,8 @@ kernels all bound at `npos`, and rowstat writes `[0, npos)` only.
 
 A continuation chunk (`start_pos > 0`) attends the session's existing rows: the K/V panels hold
 `[0, start_pos)` gathered rows plus the chunk at the `start_pos` offset, keys pad to the QK key
-grid's 64-tile, and the score slabs widen to `nk64` columns while the rows stay the `mp` queries.
+grid's 64-tile, and the score slabs widen to `nk64` columns - the key rows padded to that
+64-tile - while the rows stay the `mp` queries.
 
 Cooperative matmul ops shape the kernel bodies: the accumulate loop is spelled ROLLED over
 matrix arrays with pointer tile bumps, because the hand-unrolled spelling hoists sixteen tile

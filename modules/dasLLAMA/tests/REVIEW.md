@@ -54,10 +54,13 @@ defect.**
 **Weakening `test_model_specs.das` is a defect.** It is the gate on the model-set table
 (`../performance/model_specs.das`).
 
-**Weakening the attention-trio softcap, sink and span cells of
-`test_metal_prefill_kernels.das` is a defect** - they are the only cells that fail when
-`pf_p_weight` and `metal_attn_rowstat` drift apart; rows renormalize against the wrong max
-when the two disagree.
+**Weakening the softcap, sink and span cells of `test_metal_prefill_kernels.das` - dropping
+or loosening a softcap, sink (`hass`) or span arm, or dropping a span shape - is a defect** -
+they are what fails when `pf_p_weight` and `metal_attn_rowstat` drift apart.
+
+**Weakening `test_site_records.das` - the gate that byte-compares
+`site/files/dasllama/bench_records.json` (repo root) against a fresh `merge_site_records`
+run - is a defect.**
 
 **Weakening `test_exchange_schema.das` or `test_bench_records_schema.das` - loosening an
 assert, dropping one, or narrowing the corpus either one sweeps - is a defect** - they gate
@@ -127,11 +130,12 @@ a defect.** A resize cap is not evidence.
 **A freeform token-parity cell is a defect.** Freeform coverage uses the forced-feed
 logits-tolerance form. Counting cells stay token-exact.
 
-**A diff that adds a `[metal_kernel]` under `../dasllama/` covers that kernel in
-`test_kernel_coverage.das`, one of two ways.** Either a census row there dispatches the
-kernel, or the diff names its kernel class in that file's `CENSUS_NEVER_DISPATCHED`, with the
-reason no row can reach it. A dispatching row runs on a small model - one the suite runs
-without `DASLLAMA_PARITY_FULL=1`. Naming a kernel a census row could dispatch is a defect.
+**A diff that adds a metal kernel class under `../dasllama/` - a `[metal_kernel]` def or a
+new instance of a template carrying one - covers that class in `test_kernel_coverage.das`,
+one of two ways.** Either a census row there dispatches the class, or the diff names it in
+that file's `CENSUS_NEVER_DISPATCHED`, with the reason no row can reach it. A dispatching
+row runs on a small model - one the suite runs without `DASLLAMA_PARITY_FULL=1`. Naming a
+class a census row could dispatch is a defect.
 
 **A kernel-unit cell missing a compare against a CPU oracle that can witness the cell's
 property is a defect.**
@@ -223,4 +227,3 @@ change** - the wire-shape pins, the render pins, and a live server leg gated on 
 smallest GGUF that runs on the small tier (the file homes are `CLAUDE.md`'s "Model-free /
 no-arm tests" and "Out-of-folder test files" notes). A family whose vocab lacks the markers
 has no format to test.
-

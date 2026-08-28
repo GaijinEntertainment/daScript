@@ -108,6 +108,17 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     var by = buf_fill(dev, m * ndim, -1000.0)
     var bk = buf_u32(dev, uint(kdim))
     var bn = buf_u32(dev, uint(ndim))
+    // a tall m off the 128 floor mirrors the encoder's pair: the 128 stamp covers r0 rows and
+    // the 32-row TH covers the rest at its x/y byte offsets - the nonzero-offset arm's binding
+    let r0 = tall ? m / 128 * 128 : m
+    var rem_pso = (tall && r0 != m) ? pipeline_from_source(dev,
+            fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl),
+            fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry),
+            fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath),
+            err) : null
+    if (tall && r0 != m) {
+        t |> success(rem_pso != null, "{tag}: remainder pipeline: {err}")
+    }
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_threadgroup_memory_length(enc, tgm, 0)
@@ -119,6 +130,18 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
         metal_set_buffer(enc, bk, 0ul, 5)
         metal_set_buffer(enc, bn, 0ul, 6)
         metal_dispatch_threadgroups(enc, uint3(uint(m / (tall ? 128 : 32)), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        if (rem_pso != null) {
+            metal_set_pipeline(enc, rem_pso)
+            metal_set_threadgroup_memory_length(enc, fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem), 0)
+            metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)
+            metal_set_buffer(enc, bks, 0ul, 1)
+            metal_set_buffer(enc, bkq, 0ul, 2)
+            metal_set_buffer(enc, bx, uint64(r0 * kdim * 2), 3)
+            metal_set_buffer(enc, by, uint64(r0 * ndim * 4), 4)
+            metal_set_buffer(enc, bk, 0ul, 5)
+            metal_set_buffer(enc, bn, 0ul, 6)
+            metal_dispatch_threadgroups(enc, uint3(uint((m - r0) / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        }
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
@@ -131,6 +154,9 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     metal_release(bk)
     metal_release(bn)
     metal_release(pso)
+    if (rem_pso != null) {
+        metal_release(rem_pso)
+    }
     delete kq
     delete ks
     delete xf
@@ -1690,6 +1716,7 @@ def test_metal_gemm_kernels(t : T?) {
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64, halfx = true)
                     // tall 128-row stamp: the deep-class in-kernel-dequant form (m = two tall tiles)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 256, 512, 64, halfx = true, tall = true)
+                    kq_mulmm_gate(t, dev, queue, fmt, true, 320, 512, 64, halfx = true, tall = true)   // off the 128 floor: the remainder pair at nonzero x/y offsets
                 }
                 kq_mulmm_gate(t, dev, queue, 4, false, 32, 256, 128)   // second shape: 2 col tiles
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64)

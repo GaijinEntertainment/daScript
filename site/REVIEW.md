@@ -5,7 +5,7 @@
 `tests/playground/` checklist.**
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
-illustration - show only a command that runs verbatim and produces the result the page
+illustration - show only a command a run actually executed, producing the result the page
 shows.**
 
 **A diff that writes a `cmd` field in `files/dasllama/bench_records.json` that is not the
@@ -16,17 +16,11 @@ spawns) ran is a defect.**
 that line on every row the run produced.** One run's `cmd` + `date` covers several rendered
 rows.
 
-**A `cmd` + `date` pair on a rendered row in `files/dasllama/bench_records.json` is a defect -
-put the pair on the run object that produced the rows.**
+**A `cmd` or `date` inside a run's `tests` entry in `files/dasllama/bench_records.json` is a
+defect - the pair belongs on the run object that produced the rows.**
 
-**A diff that leaves `files/dasllama/bench_records.json` differing from what re-running
-`modules/dasLLAMA/performance/gen_site_records.das` writes is a hand edit and a defect -
-change the generator inputs and re-run it instead.** The generator merges every
-`modules/dasLLAMA/performance/records/<box>.json` and applies
-`modules/dasLLAMA/performance/records/annotations.json`.
-
-**A diff that changes `files/performance_bench.json` also changes `benchmarks/sql/results.md`,
-in the same change.** `benchmarks/sql/_update_results.das --site-json` writes the record from
+**A diff that changes `files/performance_bench.json` also changes `benchmarks/sql/results.md`
+(repo root), in the same change.** `benchmarks/sql/_update_results.das --site-json` writes the record from
 the same sweep output that regenerates those tables.
 
 **A cell in `files/performance_bench.json` differing from the same family-and-lane cell in the
