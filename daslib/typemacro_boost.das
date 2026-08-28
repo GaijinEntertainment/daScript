@@ -698,9 +698,8 @@ def private tsi_apply_gates(var st : StructurePtr; consts : table<string; bool>;
 }
 
 [macro_function]
-def private tsi_stamp_methods(var st : StructurePtr; tem : StructurePtr; temMethods : array<FunctionPtr>; ownMethods : table<string>; var rules : Template; var errors : das_string) : bool {
+def private tsi_stamp_methods(var st : StructurePtr; temMethods : array<FunctionPtr>; ownMethods : table<string>; var rules : Template; var errors : das_string) : bool {
     if (empty(temMethods)) return true
-    let temName = string(tem.name)
     let instName = string(st.name)
     var mod = compiling_module()
     for (func in temMethods) {
@@ -711,7 +710,9 @@ def private tsi_stamp_methods(var st : StructurePtr; tem : StructurePtr; temMeth
     }
     for (func in temMethods) {
         let mname = tsi_method_name(func)
-        if (mname == temName || func.name == "{temName}'__finalize" || key_exists(ownMethods, mname)) {
+        // ctors, finalizers and bodiless abstracts stamp nothing
+        let owner = string(func.classParent.name)
+        if (mname == owner || func.name == "{owner}'__finalize" || func.body == null || key_exists(ownMethods, mname)) {
             continue
         }
         var fc <- clone_function(func)
@@ -755,24 +756,50 @@ def private tsi_normalize_fields(var st : StructurePtr; var rules : Template) {
     }
 }
 
+[structure_macro(name = "tsi_reified")]
+class TsiReified : AstStructureAnnotation {
+    //! Marker the reifier appends to a finished instance: a template CHAIN pipes one
+    //! reifier copy per ancestor, and the surplus copies no-op on sight of this.
+}
+
 [structure_macro(name = "template_struct_instance")]
 class TemplateStructInstance : AstStructureAnnotation {
     //! Reifies a ``struct template`` / ``class template`` parent into the annotated instance at parse time: instance ``typedef``s bind the template's type parameters, ``override`` inits bind its ``@template_constant`` fields (erased from the result), ``@template_gate`` fields exist only in stamps where the named bool ``@template_constant`` is true (``@template_gate = AXIS``, or the string form ``"!AXIS"`` to invert; a gated-off field is erased as if never written, and the argument stays inert on kept fields — reference a gated field only from ``static_if`` arms on its axis: a dead ``static_if`` arm may name it, a dead ternary arm may not, since infer sees both ternary arms), ``@template_call`` fields rebind free-function callees by name (``override sdot = @@ssdot`` — bare-spelled calls AND ``@@`` addresses; erased too, while ``_::sdot`` / ``__::sdot`` keep their normal resolution rules — the pinned escape to the real function), template methods are cloned onto the instance (instance-authored methods win), and the template parent is cut — every later structure annotation sees a finished concrete struct or class.
-    //! Put ``[|> template_struct_instance]`` on the template itself so every instance inherits the reifier ahead of its own annotations. Names the instance leaves unbound are left to the compiler: module types resolve on their own, a later macro (e.g. a ``[dirty_infer_macro]``) may still supply a ``typedef``, and a genuinely missing one surfaces as an undefined-type error in the stamped code.
+    //! A template may itself derive from a template: the instance reifies the whole CHAIN in one pass - constants, typedefs, gates and calls bind at any level from the instance's materialized fields, methods stamp nearest-ancestor-first (an instance-authored method beats every level), and the parent cut lands past the last template ancestor.
+    //! Put ``[|> template_struct_instance]`` on the template itself so every instance inherits the reifier ahead of its own annotations; under a chain the instance inherits one copy per ancestor, and the surplus copies no-op against the ``tsi_reified`` marker the first application appends. Names the instance leaves unbound are left to the compiler: module types resolve on their own, a later macro (e.g. a ``[dirty_infer_macro]``) may still supply a ``typedef``, and a genuinely missing one surfaces as an undefined-type error in the stamped code.
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (st.flags.isTemplate) {
             return true
+        }
+        // a chain pipes one annotation copy per ancestor - the surplus copies no-op here
+        for (ann in st.annotations) {
+            if (ann.annotation.name == "tsi_reified") {
+                return true
+            }
         }
         if (st.parent == null || !st.parent.flags.isTemplate) {
             errors := "[template_struct_instance] {st.name} must derive from a struct template or a class template"
             return false
         }
-        var tem = st.parent
+        // nearest ancestor first; st.fields already materializes every level's fields
+        var chain : array<StructurePtr>
+        var above = st.parent
+        while (above != null && above.flags.isTemplate) {
+            chain |> push(above)
+            above = above.parent
+        }
         var mod = compiling_module()
         var temMethods, instMethods : array<FunctionPtr>
-        for_each_function(tem._module, "") $(func) {
-            if (func.flags.isClassMethod && func.classParent == tem) {
-                temMethods |> push(func)
+        var temNames : table<string>
+        for (tem in chain) {
+            for_each_function(tem._module, "") $(func) {
+                if (func.flags.isClassMethod && func.classParent == tem) {
+                    let mname = tsi_method_name(func)
+                    if (!key_exists(temNames, mname)) {   // nearest override wins
+                        temNames |> insert(mname)
+                        temMethods |> push(func)
+                    }
+                }
             }
         }
         for_each_function(mod, "") $(func) {
@@ -786,21 +813,24 @@ class TemplateStructInstance : AstStructureAnnotation {
         }
         var rules : Template
         var instType = new TypeDecl(at = st.at, baseType = Type.tStructure, structType = st)
-        rules |> replaceStructWithTypeDecl(tem) <| clone_type(instType)
-        rules |> replaceTypeWithTypeDecl(string(tem.name)) <| clone_type(instType)
+        for (tem in chain) {
+            rules |> replaceStructWithTypeDecl(tem) <| clone_type(instType)
+            rules |> replaceTypeWithTypeDecl(string(tem.name)) <| clone_type(instType)
+        }
         tsi_bind_aliases(st, rules)
         var consts : table<string; bool>
         if (!tsi_bind_constants(st, rules, consts, errors)
                 || !tsi_apply_gates(st, consts, errors)
                 || !tsi_bind_calls(st, temMethods, rules, errors)
-                || !tsi_stamp_methods(st, tem, temMethods, ownMethods, rules, errors)) {
+                || !tsi_stamp_methods(st, temMethods, ownMethods, rules, errors)) {
             return false
         }
         for (func in instMethods) {
             func.body = apply_template(rules, func.at, func.body, false)
         }
         tsi_normalize_fields(st, rules)
-        st.parent = tem.parent
+        st.parent = above
+        st |> append_annotation("typemacro_boost", "tsi_reified", [])
         return true
     }
 }

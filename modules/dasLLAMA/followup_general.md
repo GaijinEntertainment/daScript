@@ -621,7 +621,14 @@
     arm. Done = the arm carries the same `lock_count` guard as its siblings, added when that
     arm is next touched for real work.
 
-53. **The MoE tensor-twin templates are five hand-split copies of one scaffold** -
+53. **RESOLVED (2026-08-28) - the MoE tensor twins ride one scaffold template.**
+    `template_struct_instance` learned template CHAINS (a template deriving a template; the
+    instance reifies the whole chain in one pass), and `MetalMoeMulMmKqTensorBase` now
+    carries the shared shell with k45/k6/q51/mx4 deriving - kernel, PSO and global names all
+    unchanged, the MSL audit read statement-identical (scoping, a folded pointer alias, and
+    mx4's x/y renumber to the scaffold's 3/4). q8 stays its own template: its body IS the
+    tuned `tmm2d_q8u_f32` helper, a different mechanism, not a copy. Original entry:
+    five hand-split copies of one scaffold -
     `MetalMoeMulMmQ8/K45/K6/Mx4/Q51TensorT` share the expert prologue, the `while (work < 256u)`
     staging shell, the barrier pair, and the `tmm2d_tg_begin/step/store` epilogue verbatim,
     diverging only on the weight-format decode block and its buffer views (`REVIEW_GPU.md`:

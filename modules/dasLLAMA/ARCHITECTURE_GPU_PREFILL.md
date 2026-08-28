@@ -127,7 +127,14 @@ compatible.
 
 Pad rows inside each expert's padded bucket carry a stamped sentinel and the reduce never
 references them; rows past the last expert's stamped tail are unstamped stale pool bytes, which
-is why validity tests compare the per-row entry against the live count, never the sentinel. The gather-X pass
+is why validity tests compare the per-row entry against the live count, never the sentinel.
+
+The MoE tensor twins ride one scaffold: `MetalMoeMulMmKqTensorBase` carries the expert
+prologue, the staged K walk with its barrier pair, and the store; a weight format derives,
+owns its weight-view bindings, and overrides the staged decode (`stage_block`) - mx4 also the
+store (its per-expert bias) and the chunk shape (32-deep, 128-item quota). The q8 twin is not
+a copy of this scaffold: its whole body is the tuned `tmm2d_q8u_f32` staged helper, a
+different staging mechanism, so it stays its own template. The gather-X pass
 copies the bucket's token rows into a CONTIGUOUS f16 panel with pad rows zeroed, which lets the up
 and gate sites ride the contiguous tensor twins instead of the in-kernel gather form; the panel is
 minted once per layer and shared by both sites. An X read through the bucket index can never

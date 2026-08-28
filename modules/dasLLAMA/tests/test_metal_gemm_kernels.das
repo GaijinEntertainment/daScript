@@ -1446,9 +1446,9 @@ def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : i
         metal_set_buffer(enc, bnq, 0ul, 0)
         metal_set_buffer(enc, bee, 0ul, 1)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        if (tensor) {   // the tensor twin keeps its compact layout (contiguous-only, no bkt)
-            metal_set_buffer(enc, bx, 0ul, 2)
-            metal_set_buffer(enc, by, 0ul, 3)
+        if (tensor) {   // the tensor twin rides the shared scaffold's numbers (x@3, y@4)
+            metal_set_buffer(enc, bx, 0ul, 3)
+            metal_set_buffer(enc, by, 0ul, 4)
             metal_set_buffer(enc, bcnt, 0ul, 6)
             metal_set_buffer(enc, bbase, 0ul, 7)
         } else {        // the joined family rider binds at the MetalMoeMulMmBase numbers
