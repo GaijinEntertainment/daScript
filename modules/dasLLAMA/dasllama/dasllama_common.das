@@ -1695,6 +1695,10 @@ struct Session {
     // grown on demand by kv_ensure. Flat sessions: kv_pool == null, block_table empty.
     @do_not_delete kv_pool : KVPool?   // borrowed — the pool outlives its sessions
     block_table : array<int>
+    // A GPU prefill narrows the LAST layer's FFN tail to the final row (only s.logits and
+    // mtp_h read past it); a caller that consumes the full x_b plane afterwards (embedding
+    // pooling, plane-compare probes) sets this and the prefill keeps every row. Zero-init = off.
+    keep_hidden : bool
     // batched prefill scratch — empty until forward_prefill sizes them to npos × ... (see forward_prefill)
     x_b : array<float>        // residual stream (npos x dim)
     xb_b : array<float>       // rmsnorm / attention out (npos x dim)

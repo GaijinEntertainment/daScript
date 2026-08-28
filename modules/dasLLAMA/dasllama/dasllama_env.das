@@ -199,6 +199,9 @@ struct public MetalEnv {
     @clarg_doc = "1-D-grid tall hmm GEMM twin: the threadgroup launch order is forced linear (M-fastest) instead of the driver's 2-D walk; experiment rail, off by default."
     grid1d : bool = false
 
+    @clarg_doc = "Last-layer FFN tail narrowing: the final dense layer's FFN runs the last row alone (only the classifier reads past the final attention); 0 pins the full-panel tail (the A/B rail). Session keep_hidden opts a forward out."
+    lastrow : bool = true
+
     @clarg_default_doc = "~4 layers/chunk"
     @clarg_doc = "Command-buffer split: each chunk commits as encoded so the scheduler overlaps chunk k with k-1."
     ncb : int = 0

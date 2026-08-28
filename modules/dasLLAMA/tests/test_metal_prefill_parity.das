@@ -537,6 +537,9 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     var trsg <- blob_twin(t, spath, 2048l)
                     let sprompt <- encode(trs, counting_prompt(), true, false)
                     t |> success(select_prefill_override("metal"), "override registered (mm-tail smol)")
+                    //! the per-layer peel-count arithmetic below assumes every layer's FFN rides
+                    //! the mm path - pin the last-layer tail narrowing off for this instrument
+                    set_metal_prefill_lastrow(false)
                     var ssites : int64[2]
                     var sserved_all = true
                     for (li in range(2)) {
@@ -563,6 +566,64 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         t |> equal(ssites[1] * 7l, ssites[0], "smol npos=66: exactly the one hidden-kdim site per layer peeled")
                     } else {
                         feint("metal prefill declined on smol; the alignment-guard leg skipped\n")
+                    }
+                    set_metal_prefill_lastrow(true)
+                    //! the last-row tail-narrowing witnesses, same model same prompt: the final
+                    //! logits stay inside the form-change envelope, the plane VISIBLY narrows
+                    //! (anti-vacuous), and keep_hidden restores the full plane bit-exactly
+                    {
+                        let nlr = 48l
+                        var tlr : array<int64>
+                        tlr |> reserve(nlr)
+                        for (i in range64(nlr)) {
+                            tlr |> push(sprompt[i])
+                        }
+                        let dim_s = trsg.config.dim
+                        let served0 = metal_prefill_stats().prefills
+                        set_metal_prefill_lastrow(false)
+                        var s_off <- make_run_state(trsg.config)
+                        forward_prefill(trsg, s_off, tlr, nlr, 0l)
+                        set_metal_prefill_lastrow(true)
+                        var s_on <- make_run_state(trsg.config)
+                        forward_prefill(trsg, s_on, tlr, nlr, 0l)
+                        var s_keep <- make_run_state(trsg.config)
+                        s_keep.keep_hidden = true
+                        forward_prefill(trsg, s_keep, tlr, nlr, 0l)
+                        if (metal_prefill_stats().prefills - served0 == 3l) {
+                            var lmax = 0.0
+                            var amax_on = 0l
+                            var amax_off = 0l
+                            for (i in range64(trsg.config.vocab_size)) {
+                                lmax = max(lmax, abs(s_on.logits[i] - s_off.logits[i]))
+                                if (s_on.logits[i] > s_on.logits[amax_on]) {
+                                    amax_on = i
+                                }
+                                if (s_off.logits[i] > s_off.logits[amax_off]) {
+                                    amax_off = i
+                                }
+                            }
+                            //! the narrowed row rides the same gemv the mm-tail peel serves; the full
+                            //! form stages X to f16 - measured ~7e-3 on this fixture, bar 2e-2
+                            to_log(LOG_INFO, "smol lastrow: narrowed-vs-full logits maxdiff {lmax}\n")
+                            t |> success(lmax <= 2e-2, "smol lastrow: narrowed logits inside the form-change envelope ({lmax})")
+                            t |> equal(amax_on, amax_off, "smol lastrow: argmax unchanged")
+                            var row0 = 0.0
+                            var plane = 0.0
+                            for (i in range64(dim_s)) {
+                                row0 = max(row0, abs(s_on.x_b[i] - s_off.x_b[i]))
+                            }
+                            for (i in range64(nlr * dim_s)) {
+                                plane = max(plane, abs(s_keep.x_b[i] - s_off.x_b[i]))
+                            }
+                            t |> success(row0 > 1e-4, "smol lastrow: row 0 visibly narrowed ({row0}) - the arm engaged")
+                            t |> equal(plane, 0.0, "smol lastrow: keep_hidden restores the full plane bit-exactly")
+                        } else {
+                            feint("metal prefill declined on the smol lastrow legs; witnesses skipped\n")
+                        }
+                        delete s_off
+                        delete s_on
+                        delete s_keep
+                        delete tlr
                     }
                     select_prefill_override("")
                     delete trs

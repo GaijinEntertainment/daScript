@@ -1742,6 +1742,8 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
     if (t.quant != QuantMode.q4_0 && npos > 1l) {
         // batched prefill fills s.x_b (npos × dim residual) and leaves it intact; the body norms only
         // the last position, so re-apply the final RMSNorm to EVERY position and accumulate.
+        // keep_hidden pins the full plane - a GPU prefill otherwise narrows the last layer's tail
+        s.keep_hidden = true
         forward_prefill(t, s, tokens, npos, 0l)
         for (p in range64(npos)) {
             rms_at(s.xb, t, t.rms_final_off, s.x_b, p * dim, dim)

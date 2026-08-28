@@ -2488,6 +2488,14 @@ def public set_metal_prefill_grid1d(v : bool) {
     to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_grid1d({v}) - GEMM launch-order override\n")
 }
 
+//! A/B seat: last-layer FFN tail narrowing (the final row alone feeds the classifier) vs the
+//! full-panel tail. Default on; `DASLLAMA_METAL_LASTROW=0` pins the full tail. Session
+//! keep_hidden opts a single forward out regardless.
+def public set_metal_prefill_lastrow(v : bool) {
+    g_pf_env_lastrow = v
+    to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_lastrow({v}) - prefill tail override\n")
+}
+
 //! The prefill knockout rail as an in-process setter (timing attribution — served output is
 //! GARBAGE while non-empty): the `DASLLAMA_METAL_PREFILL_SKIP` families above; `""` restores
 //! full math. Switchable between measurement windows, same contract as `set_metal_decode_skip`.
@@ -4446,8 +4454,54 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         enc_add_bias_rows(enc, bxb2, 0ul, bwo_b, 0ul, u_dim, u_total_dim, npos * dim)
                     }
                 }
+                let hid_l = layer_hidden(t, l)   //! per-layer (MatFormer E-series)
+                let u_hid_l = (u_hidden2 == null || hid_l == hidden) ? u_hidden : u_hidden2
+                let u_th_l = (u_total_h2 == null || hid_l == hidden) ? u_total_h : u_total_h2
+                //! LAST-LAYER TAIL NARROWING: past the final attention only s.logits and mtp_h are
+                //! read, so the last dense layer's FFN runs the FINAL ROW alone (the GEMV-tail
+                //! forms carry mp=1). keep_hidden restores the full x_b plane for its consumers.
+                let narrow_last = (g_pf_env_lastrow && !s.keep_hidden && !warm
+                    && l == c.n_layers - 1l && npos > 1l && !recr && !moe && !plef
+                    && !c.pre_post_norm && l >= nds && !c.q_gated
+                    && c.n_layer_nextn == 0l   //! MTP verify/warm read every x_b row post-prefill
+                    && dim % 32l == 0l && hid_l % 32l == 0l
+                    && fmt_at(t.w1_fmt, l) == KqFmt.q8 && fmt_at(t.w3_fmt, l) == KqFmt.q8
+                    && fmt_at(t.w2_fmt, l) == KqFmt.q8)
+                if (narrow_last) {
+                    //! straight GEMVs, not enc_gemm_mm: the 1-row form is known, and the
+                    //! mm-tail peel counters stay an uncontaminated instrument
+                    let nro = uint64((npos - 1l) * dim * 4l)
+                    if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                        enc_add(enc, bx, nro, bxb2, nro, u_dim, dim)
+                        pf_enc_rms(enc, bx, nro, bw_ffn, bxb, u_dim, u_eps, 1l)
+                    }
+                    if (g_pf_skip != "gemm") {
+                        let bw1b = blob_of(g_dev, t, t.w1_offs[l])
+                        enc_gemv(enc, bw1b.buf, bw1b.boff, bxb, bhb, u_dim, u_hid_l, hid_l, 0ul, 0ul)
+                        let bw3b = blob_of(g_dev, t, t.w3_offs[l])
+                        enc_gemv(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hid_l, hid_l, 0ul, 0ul)
+                    }
+                    if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                        if (c.ffn_act != FfnAct.silu) {
+                            enc_geglu(enc, bhb, 0ul, bhb2, 0ul, u_hid_l, hid_l)
+                        } else {
+                            enc_swiglu(enc, bhb, 0ul, bhb2, 0ul, u_hid_l, hid_l)
+                        }
+                    }
+                    if (g_pf_skip != "gemm") {
+                        let bw2b = blob_of(g_dev, t, t.w2_offs[l])
+                        enc_gemv(enc, bw2b.buf, bw2b.boff, bhb, bxb, u_hid_l, u_dim, dim, 0ul, 0ul)
+                    }
+                    if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                        var bosc : MetalBuffer?
+                        if (c.layer_out_scale) {
+                            bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
+                        }
+                        enc_add(enc, bx, nro, bxb, 0ul, u_dim, dim, bosc)
+                    }
+                }
                 var bxh_ffn : MetalBuffer?
-                if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                if (!narrow_last && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     if (c.pre_post_norm) {
                         //! gemma sandwich: norm the attention branch IN PLACE before the residual add
                         var bw_pa = upload_region(addr < void? >(t.fblob[t.rms_post_att_off + l * dim]), uint64(dim * 4l))
@@ -4592,10 +4646,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         pf_enc_rms(enc, bmg4rt, 0ul, bw_pf2, bmg4rt, u_dim, u_eps, npos)
                     }
                 }
-                let hid_l = layer_hidden(t, l)   //! per-layer (MatFormer E-series)
-                let u_hid_l = (u_hidden2 == null || hid_l == hidden) ? u_hidden : u_hidden2
-                let u_th_l = (u_total_h2 == null || hid_l == hidden) ? u_total_h : u_total_h2
-                if ((!moe || g4moe) && g_pf_skip != "gemm") {   //! g4: the dense parallel shared branch
+                if (!narrow_last && (!moe || g4moe) && g_pf_skip != "gemm") {   //! g4: the dense parallel shared branch
                     if (bxh_ffn == null) {
                         bxh_ffn = pf_cvt_panel(enc, bxb, mp, dim, g_pf_skip == "act_cvt")
                     }
@@ -4622,7 +4673,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                 }
                 var bxh_h : MetalBuffer?
-                if ((!moe || g4moe) && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                if (!narrow_last && (!moe || g4moe) && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     if (c.ffn_act != FfnAct.silu) {
                         bxh_h = g_pso_geglu_hx != null ? pf_twin_panel(mp, hid_l) : null
                         if (bxh_h != null) {
@@ -4639,7 +4690,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         }
                     }
                 }
-                if ((!moe || g4moe) && g_pf_skip != "gemm") {
+                if (!narrow_last && (!moe || g4moe) && g_pf_skip != "gemm") {
                     if (bxh_h == null) {
                         bxh_h = pf_cvt_panel(enc, bhb, mp, hid_l, g_pf_skip == "act_cvt")
                     }
@@ -4685,7 +4736,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         pf_enc_rms(enc, bxb, 0ul, bw_pn, bxb, u_dim, u_eps, npos)
                     }
                 }
-                if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                if (!narrow_last && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! layer_out_scale multiplies the WHOLE layer output: (x + branch) * s folds into the
                     //! residual add's ascale slot (a 4-byte view into the weights blob)
                     var bosc : MetalBuffer?
@@ -5016,6 +5067,7 @@ var private g_pf_env_devw_res_bytes = 0ul   //!< DASLLAMA_METAL_DEVW_RESIDENT bu
 var private g_pf_env_tall = true
 var private g_pf_env_qkr = true
 var private g_pf_env_grid1d = false
+var private g_pf_env_lastrow = true
 
 var private CVT_MIN_ROWS = 256l          //!< sidecar knob "metal_cvt_min_rows" — cached at init
 var private TALL_OCC_FLOOR = 64l         //!< sidecar knob "metal_tall_floor" — cached at init
@@ -5050,6 +5102,7 @@ def dasllama_metal_prefill_register() {
     }
     g_pf_env_qkr = g_env_metal.qk_rope
     g_pf_env_grid1d = g_env_metal.grid1d
+    g_pf_env_lastrow = g_env_metal.lastrow
     g_pf_env_span = g_env_metal.span
     g_pf_env_logits = g_env_metal.logits
     g_pf_env_attn = g_env_metal.attn
