@@ -68,7 +68,7 @@ generated and gitignored - see [`site/.gitignore`](.gitignore).
 |---|---|---|
 | **Landing hero** | CodeMirror editor with sample picker, -> run, up playground handoff | Static `<pre><code class="language-daslang">` block, no CM init. Hero buttons + sample tabs hidden via CSS. |
 | **/playground/** | Full multi-file IDE - tabs, splitter, share via `#z=` hash, -> run via WASM | "Open this on a laptop" notice (CSS overlay); the IDE and the runtime still initialize underneath it. |
-| **/blog/<slug>** | Full post + Disqus comments at the bottom (shortname `https-borisbat-github-io-dascf-blog`, identifier = slug, Auto theme picks dark via `:root { color-scheme: dark }`) | Same. Disqus is responsive. |
+| **/blog/<slug>** | Full post (no comment widget — removed for GDPR: Disqus set cookies) | Same. |
 | **Nav** | Inline links: docs * benchmarks * downloads * blog * community + `v0.6.4`, github up, install | == hamburger toggles a dropdown panel with the same links. `v0.6.4` chip is hidden at <480 px. |
 
 The mobile fallbacks are pure CSS + a tiny synchronous gate script - no UA

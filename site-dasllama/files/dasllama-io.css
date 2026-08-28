@@ -167,7 +167,7 @@
 
 /* ── footer ──────────────────────────────────────────────────── */
 .dio-footer{padding:52px 0 60px;border-top:1px solid var(--rule);font-family:var(--font-mono);font-size:12.5px;margin-top:40px}
-.dio-footer__grid{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:32px}
+.dio-footer__grid{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr;gap:32px}
 .dio-footer__about{margin-top:14px;color:var(--fg-faint);line-height:1.65;max-width:290px}
 .dio-footer__head{color:var(--fg-faint);margin-bottom:12px;text-transform:uppercase;letter-spacing:.1em;font-size:10.5px}
 .dio-footer a.dio-footer__link{color:var(--fg);display:block;margin-bottom:8px}

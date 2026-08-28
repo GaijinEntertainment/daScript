@@ -571,7 +571,8 @@ jobs:
         cp site-dasllama/robots.txt _site_dasllama/
         cp site-dasllama/sitemap.xml _site_dasllama/
         cp site-dasllama/feed.xml _site_dasllama/
-        cp site-dasllama/files/* _site_dasllama/files/
+        # -R: files/ now carries subdirectories (files/fonts/); a bare * would fail on them
+        cp -R site-dasllama/files/. _site_dasllama/files/
 
         # Shared visual language, staged from the daslang.io tree — single source
         # in the repo, mirrored by site-dasllama/serve.py for local preview.

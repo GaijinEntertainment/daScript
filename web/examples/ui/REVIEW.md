@@ -11,6 +11,11 @@ puts it.**
 deploy copies these files into the site (`.github/workflows/pages.yml`, repo root), so
 `site/playground/` never shows the change.
 
+**A diff that changes `src/` or `samples/` states a run of the WASM-staged Playwright suite
+(`site/tests/playground/`, repo root) in its PR body or commit message, naming the passes and
+any failures, in the same change.** The no-WASM lane cannot see a broken runtime path, and
+every sample on the page runs through that path.
+
 **A `.das` file under `samples/` not written in gen2, or not a full program that compiles and
 runs with the current toolchain, is a defect.**
 

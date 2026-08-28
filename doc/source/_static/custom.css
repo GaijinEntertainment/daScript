@@ -8,7 +8,7 @@
 /* `@import` must precede all other rules (CSS 2.1 §6.3) — keeping this
  * at the top of the file so browsers actually fetch the web fonts. A
  * later `@import` after `:root` would be silently dropped. */
-@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('fonts/fonts.css');
 
 :root {
     --bg:        #0d0c0a;
@@ -433,3 +433,13 @@ footer a { color: var(--fg-dim) !important; }
 .highlight .n                                     { color: var(--fg); }
 .highlight .o, .highlight .p                      { color: var(--fg-dim); }
 .highlight .err                                   { color: var(--red); background: transparent; border: none; }
+
+/* LEGAL footer links (layout.html footer block) */
+.forge-legal-links {
+    margin-top: 8px;
+    font-size: 90%;
+    color: var(--fg-faint);
+}
+.forge-legal-links a {
+    color: inherit;
+}

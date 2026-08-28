@@ -190,6 +190,9 @@ Endpoints
      - ``/exchange/retune``
      - Arm a local re-tune and restart — the next boot races this box
    * - ``POST``
+     - ``/exchange/consent``
+     - ``{"accept": true|false}`` — record the first-contact choice about contacting the exchange; accept on an untuned box drains and restarts to run the lookup
+   * - ``POST``
      - ``/gc``
      - Schedule a validated collection at the next lifecycle safe point; concurrent requests coalesce
    * - ``POST``

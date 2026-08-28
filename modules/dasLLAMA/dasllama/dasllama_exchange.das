@@ -17,10 +17,11 @@ require daslib/sha_256
 require daslib/toml
 require daslib/strings_boost
 require daslib/fio
+require daslib/tty
 require strings
 
 // The dasllama.io exchange client: at an untuned boot, download a matching per-box tune
-// sidecar instead of paying ~20 quiet-box minutes; after a local tune, offer/submit it back.
+// sidecar instead of paying ~12 quiet-box minutes; after a local tune, offer/submit it back.
 // Registered as llvm_tune's scope resolver by dasllama-server ([init] — before the guard);
 // lcpp_bench uses only the submit half. The service contract lives in the repo's
 // dasllama-ladder README §1.1; validation is dasllama_exchange_schema, shared with the service.
@@ -48,7 +49,15 @@ struct ExchangePolicy {
     url : string = EXCHANGE_URL_DEFAULT
     accept : string = "verified"    // verified | any | off
     submit : string = "ask"         // ask | always | never
+    configured : bool = false       // any exchange_* key came from the config file or env — an explicit choice
+    configured_via : string = ""    // the knob spelling that expressed it, for the waiver announce
 }
+
+//! The first-contact notice, shown before ANY request leaves for the exchange (GDPR: the
+//! lookup transmits the box identity, and the server sees the connection's IP like any web
+//! server). PLACEHOLDER wording — Gaijin legal owns the final text; the watchdog dialog
+//! (utils/watchdog/watchdog.py CONSENT_*) carries the same wording, keep the two in sync.
+let public EXCHANGE_CONSENT_NOTICE = "dasLLAMA can download a ready performance-tuning preset (a \"sidecar\") for this machine from dasllama.io, instead of spending ~12 minutes tuning locally.\nThe request sends only your hardware class - platform, CPU model and OS build. No serial numbers, user names or other personal data; no cookies. Sharing your own tuning results back is always confirmed separately.\nDetails: https://legal.gaijin.net/privacypolicy"
 
 // structured events for the watchdog (same contract as @tune): folded into supervisor STATE
 def private sc_event(kind : string; kv : string) {
@@ -278,17 +287,33 @@ def exchange_policy_from_config(config_path : string) : ExchangePolicy {
             var terr = ""
             var root = read_toml(body, terr)
             if (root != null) {
+                // an AUTHORITATIVE toml is what the control page saves, and its gatherConfig
+                // persists the exchange defaults on EVERY save - so its exchange keys are not
+                // evidence of a choice; only a hand-written config's are (env overrides too)
+                let hand_written = !(root?["authoritative"] ?? false)
                 let u : string = root?["exchange_url"] ?? ""
                 if (!empty(u)) {
                     p.url = u
+                    if (hand_written) {
+                        p.configured = true
+                        p.configured_via = "exchange_url (config)"
+                    }
                 }
                 let a : string = root?["exchange_accept"] ?? ""
                 if (!empty(a)) {
                     p.accept = a
+                    if (hand_written) {
+                        p.configured = true
+                        p.configured_via = "exchange_accept (config)"
+                    }
                 }
                 let s : string = root?["exchange_submit"] ?? ""
                 if (!empty(s)) {
                     p.submit = s
+                    if (hand_written) {
+                        p.configured = true
+                        p.configured_via = "exchange_submit (config)"
+                    }
                 }
                 unsafe {
                     delete root
@@ -298,9 +323,13 @@ def exchange_policy_from_config(config_path : string) : ExchangePolicy {
     }
     if (!empty(g_env_exchange.exchange_url)) {
         p.url = g_env_exchange.exchange_url
+        p.configured = true
+        p.configured_via = "DASLLAMA_EXCHANGE_URL (env)"
     }
     if (!empty(g_env_exchange.exchange_accept)) {
         p.accept = g_env_exchange.exchange_accept
+        p.configured = true
+        p.configured_via = "DASLLAMA_EXCHANGE_ACCEPT (env)"
     }
     if (p.accept != "verified" && p.accept != "any" && p.accept != "off") {
         print("exchange: unknown exchange_accept '{p.accept}' - using verified (valid: verified | any | off)\n")
@@ -311,6 +340,84 @@ def exchange_policy_from_config(config_path : string) : ExchangePolicy {
         p.submit = "ask"
     }
     return p
+}
+
+// ===== consent (GDPR first-contact gate) =====
+
+// the sidecar-sibling naming rule: foo.tune.json and foo.tune both yield foo.tune.<ext>
+def private sidecar_sibling_path(manifest : string; ext : string) : string {
+    return (ends_with(manifest, ".json")
+        ? "{slice(manifest, 0, length(manifest) - 5)}.{ext}"
+        : "{manifest}.{ext}")
+}
+
+// the sidecar-sibling consent file: "accepted" / "declined", one word. An explicit exchange
+// config (any exchange_* key, TOML or env) is itself consent, so the file only governs the
+// zero-config default path.
+def private exchange_consent_path() : string {
+    return sidecar_sibling_path(tune_manifest_path(), "consent")
+}
+
+//! The recorded first-contact choice: "accepted" | "declined" | "" (never asked).
+def exchange_consent_status() : string {
+    let text = fread(exchange_consent_path())
+    let word = strip(text)
+    return (word == "accepted" || word == "declined") ? word : ""
+}
+
+//! Record the first-contact choice (console prompt, watchdog dialog, control page — every
+//! surface lands here). Emits the `@sidecar consent` event so the supervisor state follows.
+def exchange_record_consent(accept : bool) : bool {
+    let word = accept ? "accepted" : "declined"
+    if (!fwrite(exchange_consent_path(), "{word}\n")) {
+        return false
+    }
+    sc_event("consent", "state={word}")
+    return true
+}
+
+// The interactive arm: notice + Accept/Decline on the console. Enter defaults to Accept
+// (the dialog's default button); anything starting d/D/n/N declines. Only reached on a real
+// terminal — a supervised or piped boot must never block on stdin.
+def private consent_prompt_console() : bool {
+    print("\n{EXCHANGE_CONSENT_NOTICE}\n\n")
+    print("Use the exchange? [Accept]/decline: ")
+    let line = fgets(fstdin())
+    if (empty(line)) {
+        // EOF (Ctrl+D / closed stdin) is a walkaway, not an answer - record nothing, ask
+        // again next boot. A bare Enter arrives as "\n", so it never lands here.
+        print("exchange: no answer - tuning locally; the question returns next boot\n")
+        return false
+    }
+    let word = to_lower(strip(line))
+    let accepted = !(word |> starts_with("d") || word |> starts_with("n"))
+    if (!exchange_record_consent(accepted)) {
+        print("exchange: could not record the choice at {exchange_consent_path()} - not contacting the exchange\n")
+        return false
+    }
+    print(accepted ? "exchange: enabled - this choice is remembered\n" : "exchange: declined - this box tunes locally; the control page can enable it later\n")
+    return accepted
+}
+
+// The gate the resolver runs before the first request leaves. True = a request may be made.
+// No recorded choice: a real terminal asks inline; anything else stays offline this boot and
+// surfaces the question where a human is (watchdog dialog, control page) via the event.
+def private exchange_consent_gate() : bool {
+    let status = exchange_consent_status()
+    if (status == "accepted") {
+        print("exchange: consent on record at {exchange_consent_path()} (exchange_record_consent) - proceeding\n")
+        return true
+    }
+    if (status == "declined") {
+        print("exchange: disabled by the recorded choice - tuning locally (the control page can enable it)\n")
+        return false
+    }
+    if (is_stdin_terminal() && is_stdout_terminal()) {
+        return consent_prompt_console()
+    }
+    sc_event("consent", "state=needed path={url_encode(exchange_consent_path())}")
+    print("exchange: no recorded choice about contacting dasllama.io - tuning locally; answer the tray dialog or use the control page to enable the exchange\n")
+    return false
 }
 
 // ===== the boot resolver (llvm_tune scope-resolver seam) =====
@@ -327,6 +434,22 @@ def exchange_register_resolver(app_config_name : string) {
     tune_set_scope_resolver(@@exchange_scope_resolver)
 }
 
+//! The pre-request decision the boot resolver enforces: nothing leaves for the exchange
+//! without an expressed choice. `accept = off` never contacts; an explicit exchange config
+//! IS the choice (announced by the knob that expressed it); otherwise the recorded consent
+//! file governs - unset asks on a real terminal or emits the `@sidecar consent` event.
+def exchange_may_contact(policy : ExchangePolicy) : bool {
+    if (policy.accept == "off") {
+        return false
+    }
+    if (policy.configured) {
+        // the override announce: name the knob that expressed the choice and waived the question
+        print("exchange: consent expressed via {policy.configured_via} - not asking\n")
+        return true
+    }
+    return exchange_consent_gate()
+}
+
 def private exchange_scope_resolver(scope_name : string; manifest_path : string; _fnames : string) : bool {
     // one lookup per process — a second scope re-checks completeness off the same applied file
     if (g_resolve_attempted) {
@@ -341,7 +464,8 @@ def private exchange_scope_resolver(scope_name : string; manifest_path : string;
         return false
     }
     let policy = exchange_policy_from_config(exchange_discover_config(g_resolver_config))
-    if (policy.accept == "off") {
+    // GDPR first-contact gate: nothing leaves for the exchange without an expressed choice
+    if (!exchange_may_contact(policy)) {
         return false
     }
     let box = tune_box_identity()
@@ -388,9 +512,7 @@ def private exchange_scope_resolver(scope_name : string; manifest_path : string;
 
 // the sidecar-sibling state file remembering what this box already shared
 def private exchange_state_path(manifest : string) : string {
-    return (ends_with(manifest, ".json")
-        ? "{slice(manifest, 0, length(manifest) - 5)}.exchange.json"
-        : "{manifest}.exchange.json")
+    return sidecar_sibling_path(manifest, "exchange.json")
 }
 
 def private state_submitted_for(manifest : string) : string {
@@ -519,7 +641,7 @@ def exchange_submit_current(policy : ExchangePolicy) : string {
     return ""
 }
 
-//! Arm a local re-tune: the next boot skips the exchange once and races this box (~20 min,
+//! Arm a local re-tune: the next boot skips the exchange once and races this box (~12 min,
 //! quiet machine). The marker is written FIRST and only then is the sidecar removed — a failed
 //! marker write leaves the sidecar intact and returns the error, so the box is never left with
 //! no sidecar AND no re-tune armed (which would silently fall back to the exchange). "" on success.
@@ -567,7 +689,10 @@ def exchange_status_json(policy : ExchangePolicy) : string {
         cur_tab |> insert("version_ok", JV(info.dasllama_version == DASLLAMA_VERSION))
     }
     var top <- {
-        "policy" => JV((url = policy.url, accept = policy.accept, submit = policy.submit)),
+        "policy" => JV((url = policy.url, accept = policy.accept, submit = policy.submit,
+            configured = policy.configured)),
+        "consent" => JV(exchange_consent_status()),
+        "consent_notice" => JV(EXCHANGE_CONSENT_NOTICE),
         "engine_version" => JV(int64(DASLLAMA_VERSION)),
         "box" => JV(tune_box_identity()),
         "manifest" => JV(manifest),
@@ -623,7 +748,9 @@ def exchange_boot_submit_check(policy : ExchangePolicy) {
     if (state_submitted_for(manifest) == raw_sha) {
         return
     }
-    if (policy.submit == "always") {
+    // submit=always out of an authoritative toml is not consent either (the page persists it
+    // on every save) - without a recorded choice the auto-share degrades to the ask offer
+    if (policy.submit == "always" && (policy.configured || exchange_consent_status() == "accepted")) {
         let err = exchange_submit_current(policy)
         if (empty(err)) {
             print("exchange: shared this box's tune (exchange_submit=always)\n")

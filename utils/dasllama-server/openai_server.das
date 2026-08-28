@@ -3495,6 +3495,8 @@ def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpRespons
     if (!empty(err)) {
         return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
     }
+    // explicitly fetching a sidecar IS engaging the exchange - record the consent it expresses
+    exchange_record_consent(true)
     to_log(LOG_INFO, "dasllama-server: exchange sidecar {sha} applied via the control page; draining for restart\n")
     g_shutdown_requested = true
     g_restart_requested = true
@@ -3511,6 +3513,41 @@ def private handle_exchange_submit(var req : HttpRequest?; var resp : HttpRespon
     }
     to_log(LOG_INFO, "dasllama-server: this box's tune submitted to the exchange\n")
     return resp |> JSON("\{\"ok\":true}", http_status.OK)
+}
+
+def private handle_exchange_consent(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (!is_loopback_req(req)) {
+        return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
+    }
+    var jerr = ""
+    var js = read_json(string(req.body), jerr)
+    defer() {
+        unsafe {
+            delete js
+        }
+    }
+    if (js == null) {
+        return resp |> JSON(error_body("invalid JSON: {jerr}", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    let av = js?["accept"]
+    if (av == null || !(av.value is _bool)) {
+        return resp |> JSON(error_body("body must carry accept:true|false", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    let accepted = av.value as _bool
+    if (!exchange_record_consent(accepted)) {
+        return resp |> JSON(error_body("could not write the consent file", "server_error"), http_status.INTERNAL_SERVER_ERROR)
+    }
+    let manifest = tune_manifest_path()
+    if (accepted && (!stat(manifest).is_valid || tune_sidecar_stale(manifest))) {
+        // untuned (or stale) box just enabled the exchange — restart so the boot resolver
+        // runs the lookup; a tuned box records the choice and keeps serving
+        to_log(LOG_INFO, "dasllama-server: exchange enabled via the control page; draining for restart to run the lookup\n")
+        g_shutdown_requested = true
+        g_restart_requested = true
+        return resp |> JSON("\{\"ok\":true,\"accepted\":true,\"restarting\":true}", http_status.OK)
+    }
+    to_log(LOG_INFO, "dasllama-server: exchange consent recorded ({accepted ? "accepted" : "declined"}) via the control page\n")
+    return resp |> JSON("\{\"ok\":true,\"accepted\":{accepted}}", http_status.OK)
 }
 
 def private handle_exchange_retune(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -4170,6 +4207,9 @@ class OpenAiServer : HvWebServer {
         }
         POST("/exchange/retune") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_exchange_retune(req, resp)
+        }
+        POST("/exchange/consent") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_exchange_consent(req, resp)
         }
         POST("/bench") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (!is_loopback_req(req)) return deny_operator(resp)

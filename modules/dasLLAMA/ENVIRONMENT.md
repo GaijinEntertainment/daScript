@@ -246,8 +246,8 @@ Overrides for the dasllama.io exchange client.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `DASLLAMA_EXCHANGE_URL` | text | unset | Sidecar exchange base URL override (tests, mirrors); unset = the baked-in dasllama.io. |
-| `DASLLAMA_EXCHANGE_ACCEPT` | text | unset | One-shot exchange accept-policy override: verified | any | off; unset = the app config's exchange_accept. The watchdog arms 'any' on a relaunch when the user adopts an unverified sidecar over finishing a tune. |
+| `DASLLAMA_EXCHANGE_URL` | text | unset | Sidecar exchange base URL override (tests, mirrors); unset = the baked-in dasllama.io. Setting it is an expressed choice to use the exchange - the first-contact consent question is skipped (announced at boot). |
+| `DASLLAMA_EXCHANGE_ACCEPT` | text | unset | One-shot exchange accept-policy override: verified | any | off; unset = the app config's exchange_accept. The watchdog arms 'any' on a relaunch when the user adopts an unverified sidecar over finishing a tune. Setting it is an expressed choice to use the exchange - the first-contact consent question is skipped (announced at boot). |
 
 ## daslang core knobs dasLLAMA honours
 
