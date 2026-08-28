@@ -14,11 +14,10 @@ require ../performance/profile_common.das   // tune_gate + apply_box_profile_run
 require daslib/jobque_boost
 require daslib/fio
 
-// An ATTRIBUTION SWEEP: the Metal prefill M-curve on ONE loaded model — per-npos best-of
-// ms/tok with stage stats, then the DASLLAMA_METAL_PREFILL_SKIP knockout arms, which
-// attribute wall cost across stage families (attn / gemm / ew / nongemm) and select no
-// implementation. Direction-grade. It found the 64-row M-pad staircase (npos=160 billed
-// as 192) that the ceil32 pad removed.
+// Phase-0 KO attribution on Qwen3-8B (BF16 file, q8 lane): interleaved base/family knockout
+// at npos=512, best-of-3, base re-measured before every family (drift-guarded). Adds the new
+// act_cvt arm (dense activation converts) beside devw_cvt (weight staging). Direction-grade;
+// output is GARBAGE while a family is skipped.
 
 def measure_one(tr : Model; npos : int64; reps : int) : double {
     var best = 1.0e30lf
@@ -45,43 +44,34 @@ def measure_one(tr : Model; npos : int64; reps : int) : double {
 def main {
     let env = g_env_harness.models_dir
     let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-    let path = path_join(mdir, "gemma-4-12B-it-Q4_K_M.gguf")
+    let path = path_join(mdir, "Qwen3-8B-BF16.gguf")
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_mode(MetalMode.required)   // before load — pins the metal serving, same as the bench's --ngl leg
         var tr <- load_model_cached(path, QuantMode.q8)
         if (!tr.metal_blob) {
-            panic("msweep: the mapped flavor is not metal_blob - wrong leg")
+            panic("p0: the mapped flavor is not metal_blob - wrong leg")
         }
         tr.config.seq_len = 2048l
         apply_box_profile_runtime()
         if (!tune_gate()) {   // never measure on fallback winners
-            panic("msweep: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
+            panic("p0: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
         }
         with_job_que() {
             setup_dasllama_jobque_()
             measure_one(tr, 512l, 1)   // warm: JIT + blob upload + first graphs
-            let p0 = metal_prefill_stats()
-            for (npos in [512l, 384l, 256l, 192l, 160l, 128l, 96l, 64l]) {
-                metal_prefill_stage_reset()
-                let best = measure_one(tr, npos, 3)
-                let ss = metal_prefill_stage_stats()
-                print("msweep npos={npos} best_ms={best} ms_tok={best / double(npos)} stage(prefills={ss.prefills} setup={ss.setup_us} enc={ss.encode_us} wait={ss.wait_us} gpu={ss.gpu_us} rb={ss.readback_us})\n")
-            }
-            let p1 = metal_prefill_stats()
-            print("msweep serve check: prefills +{p1.prefills - p0.prefills}, declines +{p1.declines - p0.declines}\n")
-            for (npos in [160l, 512l]) {
+            let npos = 512l
+            for (fam in ["gemm", "attn", "ew", "act_cvt", "devw_cvt", "nongemm"]) {
                 let base = measure_one(tr, npos, 3)
-                print("knockout npos={npos} base={base}ms\n")
-                for (fam in ["attn", "gemm", "ew", "act_cvt", "devw_cvt", "nongemm"]) {
-                    set_metal_prefill_skip(fam)
-                    let ms = measure_one(tr, npos, 3)
-                    set_metal_prefill_skip("")
-                    print("knockout npos={npos} skip={fam} ms={ms} share={(base - ms) / base} (output GARBAGE - timing attribution only)\n")
-                }
+                set_metal_prefill_skip(fam)
+                let ms = measure_one(tr, npos, 3)
+                set_metal_prefill_skip("")
+                print("p0 ko npos={npos} base={base} skip={fam} ms={ms} delta_ms={base - ms} share={(base - ms) / base} (output GARBAGE - timing attribution only)\n")
             }
+            let base_post = measure_one(tr, npos, 3)
+            print("p0 ko base(post)={base_post}ms\n")
         }
         delete tr
     } else {
-        print("msweep: no das_metal on this build - nothing to measure for {path}\n")
+        print("p0: no das_metal on this build - nothing to measure for {path}\n")
     }
 }

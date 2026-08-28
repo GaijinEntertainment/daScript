@@ -1026,6 +1026,8 @@ def private encode_draft_step(t : Model; var r : StepRes; with_cls : bool = true
     let conc = decode_concurrent() && empty(g_skip)
     var enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
     gr_arm(conc)   // the draft step rides the same capture rail as the main step
+    let hz_d0 = conc ? metal_dispatch_calls() : 0l
+    let hz_g0 = g_hz_gated
     unsafe {
         var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), uint64(dim * 4l))
         enc_rms(enc, r.bx, 0ul, bw_en, r.bxb, r.u_dim, r.u_eps)
@@ -1044,6 +1046,7 @@ def private encode_draft_step(t : Model; var r : StepRes; with_cls : bool = true
     }
     if (conc) {
         graph_flush_sched(enc)
+        hz_coverage_check(metal_dispatch_calls() - hz_d0, g_hz_gated - hz_g0)
     }
     metal_end_encoding(enc)
     metal_release(enc)

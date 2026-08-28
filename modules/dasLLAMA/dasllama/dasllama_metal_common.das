@@ -1700,18 +1700,18 @@ def graph_flush(enc : MetalComputeEncoder?; order : array<int>) {
 }
 
 // the coverage check: every dispatch on a gated encoder must have passed hz_gate — a raw
-// metal_dispatch_* in a decode-path helper would run UNBARRIERED (silent race), so a count
+// metal_dispatch_* in a step-path helper would run UNBARRIERED (silent race), so a count
 // mismatch is loud: strict panics, otherwise one LOG_ERROR per process
-def hz_coverage_check(ndisp, ngated : int64) {
+def hz_coverage_check(ndisp, ngated : int64; who : string = "decode") {
     if (ndisp == ngated) {
         return
     }
     if (g_hz_strict) {
-        panic("dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder")
+        panic("dasLLAMA metal {who}: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder")
     }
     if (!g_hz_cover_warned) {
         g_hz_cover_warned = true
-        to_log(LOG_ERROR, "dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder - ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026,LINT019 — correctness tripwire; firing at all means the encoder is already wrong
+        to_log(LOG_ERROR, "dasLLAMA metal {who}: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder - ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026,LINT019 — correctness tripwire; firing at all means the encoder is already wrong
     }
 }
 

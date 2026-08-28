@@ -3851,6 +3851,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     cbs |> reserve(ncb)
     var cb : MetalCommandBuffer?
     var enc : MetalComputeEncoder?
+    var hz_d0 = 0l   //! per-cb coverage-check snapshots (cap only) — decode's hz_d0/hz_g0 twins
+    var hz_g0 = 0l
     var dnli = 0l   //! recurrent-layer index — addresses the dn state/conv mirror slices in order
     {
         for (l in range64(n_enc_layers)) {
@@ -3858,6 +3860,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 if (enc != null) {
                     if (cap) {
                         graph_flush_sched(enc)
+                        hz_coverage_check(metal_dispatch_calls() - hz_d0, g_hz_gated - hz_g0, "prefill")
                     }
                     metal_end_encoding(enc)
                     metal_release(enc)
@@ -3868,6 +3871,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 enc = cap ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
                 if (cap) {
                     gr_arm(true)
+                    hz_d0 = metal_dispatch_calls()
+                    hz_g0 = g_hz_gated
                 }
             }
             if (l == 0l && wide) {   //! slice the wide quantum on-device: x, then the slice-major ds planes
@@ -3883,7 +3888,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     let bemb = blob_of(g_dev, t, t.ple_emb_off)
                     pf_enc_ple_gather(enc, bemb.buf, bemb.boff, bemb.buf, bple_tok, bple, pka, c.n_layers, npos, ple_n)
                     let bwp = bf16_of(g_dev, t, t.ple_model_off)
-                    pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim), dim)
+                    pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"), dim)
                     var bw_pn = upload_region(addr < void? >(t.fblob[t.ple_pnorm_off]), uint64(ple_n * 4l))
                     pf_enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers, npos, ple_n)
                 }
@@ -3901,7 +3906,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
                     pf_enc_rms(enc, bwm_tmp, 0ul, bw_hn, bxb2, u_dim, u_eps, npos)
                     pf_enc_cat2(enc, bwm_cat, bxb, bxb2, u_dim, u_wm_tot, npos * dim)
-                    let bxh_cat = pf_cvt_panel(enc, bwm_cat, mp, 2l * dim)
+                    let bxh_cat = pf_cvt_panel(enc, bwm_cat, mp, 2l * dim, g_pf_skip == "act_cvt")
                     if (t.mtp_ehproj_fmt == KqFmt.q8) {
                         let behp = blob_of(g_dev, t, t.mtp_ehproj_off)
                         enc_gemm_mm(enc, behp.buf, behp.boff, bwm_cat, bx, u_dim2, u_dim, mp, dim, 0ul, 2l * dim, npos, bxh_cat)
@@ -3939,7 +3944,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 if (recr) {
                     if (g_pf_skip != "gemm") {
                         if (bxh_x == null) {
-                            bxh_x = pf_cvt_panel(enc, bxb, mp, dim)
+                            bxh_x = pf_cvt_panel(enc, bxb, mp, dim, g_pf_skip == "act_cvt")
                         }
                         let bwqkv = blob_of(g_dev, t, t.dnqkv_offs[l])
                         enc_gemm_mm(enc, bwqkv.buf, bwqkv.boff, bxb, bdnqkv, u_dim, u_dn_cd, mp, cd_dn, 0ul, dim, npos, bxh_x)
@@ -3975,14 +3980,14 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                     if (g_pf_skip != "gemm") {
                         let bwo = blob_of(g_dev, t, t.dnout_offs[l])
-                        enc_gemm_mm(enc, bwo.buf, bwo.boff, bdno, bxb2, u_dn_di, u_dim, mp, dim, 0ul, di_dn, npos, pf_cvt_panel(enc, bdno, mp, di_dn))
+                        enc_gemm_mm(enc, bwo.buf, bwo.boff, bdno, bxb2, u_dn_di, u_dim, mp, dim, 0ul, di_dn, npos, pf_cvt_panel(enc, bdno, mp, di_dn, g_pf_skip == "act_cvt"))
                     }
                     dnli++
                 }
                 if (!recr && g_pf_skip != "gemm") {
                     //! K-quant tensors take their mul_mm twins per tensor; q8-tagged tensors keep the blob path
                     if (bxh_x == null) {
-                        bxh_x = pf_cvt_panel(enc, bxb, mp, dim)
+                        bxh_x = pf_cvt_panel(enc, bxb, mp, dim, g_pf_skip == "act_cvt")
                     }
                     let fq = fmt_at(t.wq_fmt, l)
                     let fk = fmt_at(t.wk_fmt, l)
@@ -4099,7 +4104,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     if (g_pf_skip != "attn_qk") {
                         if (mmattn) {
                             enc_qk_mm(enc, bq, bks[l], batt, atka, mp, nk64, n_heads,
-                                bqh = pf_cvt_panel(enc, bq, mp, qd_l))
+                                bqh = pf_cvt_panel(enc, bq, mp, qd_l, g_pf_skip == "act_cvt"))
                         } else {
                             enc_qk(enc, bq, bks[l], batt, atka, mp, nk64, n_heads)
                         }
@@ -4125,7 +4130,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
                 if (!recr && g_pf_skip != "gemm") {
                     let fo = fmt_at(t.wo_fmt, l)
-                    let bxh_av = pf_cvt_panel(enc, bxb, mp, qd_l)
+                    let bxh_av = pf_cvt_panel(enc, bxb, mp, qd_l, g_pf_skip == "act_cvt")
                     if (fo != KqFmt.q8) {
                         pf_enc_kq_site_mm(enc, t, fo, t.wo_offs[l], dim, bxb, bxb2, u_qd_l, u_dim, mp, 0ul, bxh_av, qd_l)
                     } else {
@@ -4209,7 +4214,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         }
                         if (nsh > 0l) {
                             //! shexp gate/up: dense q8 mul_mm at the wsh planes (bhb/bhb2 sized max(hidden, nsh))
-                            let bxh_sh = pf_cvt_panel(enc, bxb, mp, dim)
+                            let bxh_sh = pf_cvt_panel(enc, bxb, mp, dim, g_pf_skip == "act_cvt")
                             let bwsh1 = blob_of(g_dev, t, t.wsh1_off + l * dim * nsh)
                             enc_gemm_mm(enc, bwsh1.buf, bwsh1.boff, bxb, bhb, u_dim, u_moe_nsh, mp, nsh, 0ul, dim, npos, bxh_sh)
                             let bwsh3 = blob_of(g_dev, t, t.wsh3_off + l * dim * nsh)
@@ -4241,7 +4246,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                                         fe2 == KqFmt.k6 ? g_pf_pso_moe_mm_k6_th != null : (
                                             fe2 == KqFmt.q51 && g_pf_pso_moe_mm_q51_th != null)))))
                         //! the bucket panel is PADDED - the convert must cover mpad rows, not the mtot prefix
-                        let bxh_mg = down_th ? pf_cvt_panel(enc, bmg, mpad, c.n_ff_exp, g_pf_skip == "moe_cvt") : null
+                        let bxh_mg = down_th ? pf_cvt_panel(enc, bmg, mpad, c.n_ff_exp, g_pf_skip == "moe_cvt" || g_pf_skip == "act_cvt") : null
                         if (t.experts_mx4) {
                             var bwb2 = upload_region(unsafe(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim])), uint64(c.n_expert * dim * 4l))
                             pf_enc_moe_mm_mx4(enc, t, t.we2_offs[l], dim, npos, bmg, bmdn,
@@ -4256,7 +4261,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         if (nsh > 0l) {
                             //! shexp down into bxb2 (free post-residual) — bxb still feeds the reduce
                             let bwsh2 = blob_of(g_dev, t, t.wsh2_off + l * dim * nsh)
-                            enc_gemm_mm(enc, bwsh2.buf, bwsh2.boff, bhb, bxb2, u_moe_nsh, u_dim, mp, dim, 0ul, nsh, npos, pf_cvt_panel(enc, bhb, mp, nsh))
+                            enc_gemm_mm(enc, bwsh2.buf, bwsh2.boff, bhb, bxb2, u_moe_nsh, u_dim, mp, dim, 0ul, nsh, npos, pf_cvt_panel(enc, bhb, mp, nsh, g_pf_skip == "act_cvt"))
                         }
                     }
                     if (!pf_skip_moe_reduce()) {
@@ -4276,7 +4281,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 let u_th_l = (u_total_h2 == null || hid_l == hidden) ? u_total_h : u_total_h2
                 if ((!moe || g4moe) && g_pf_skip != "gemm") {   //! g4: the dense parallel shared branch
                     if (bxh_ffn == null) {
-                        bxh_ffn = pf_cvt_panel(enc, bxb, mp, dim)
+                        bxh_ffn = pf_cvt_panel(enc, bxb, mp, dim, g_pf_skip == "act_cvt")
                     }
                     let f1 = fmt_at(t.w1_fmt, l)
                     let f3 = fmt_at(t.w3_fmt, l)
@@ -4320,7 +4325,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
                 if ((!moe || g4moe) && g_pf_skip != "gemm") {
                     if (bxh_h == null) {
-                        bxh_h = pf_cvt_panel(enc, bhb, mp, hid_l)
+                        bxh_h = pf_cvt_panel(enc, bhb, mp, hid_l, g_pf_skip == "act_cvt")
                     }
                     let f2 = fmt_at(t.w2_fmt, l)
                     if (f2 != KqFmt.q8) {
@@ -4350,14 +4355,14 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                     if (g_pf_skip != "gemm") {
                         let bwpg = blob_of(g_dev, t, t.ple_gate_off + l * dim * ple_n)
-                        enc_gemm_mm(enc, bwpg.buf, bwpg.boff, bx, bpleg, u_dim, u_ple, mp, ple_n, 0ul, dim, npos, pf_cvt_panel(enc, bx, mp, dim))
+                        enc_gemm_mm(enc, bwpg.buf, bwpg.boff, bx, bpleg, u_dim, u_ple, mp, ple_n, 0ul, dim, npos, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"))
                     }
                     if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                         enc_geglu(enc, bpleg, 0ul, bple, uint64(l * npos * ple_n * 4l), u_ple_tot, npos * ple_n)
                     }
                     if (g_pf_skip != "gemm") {
                         let bwpp = blob_of(g_dev, t, t.ple_proj_off + l * ple_n * dim)
-                        enc_gemm_mm(enc, bwpp.buf, bwpp.boff, bpleg, bxb, u_ple, u_dim, mp, dim, 0ul, ple_n, npos, pf_cvt_panel(enc, bpleg, mp, ple_n))
+                        enc_gemm_mm(enc, bwpp.buf, bwpp.boff, bpleg, bxb, u_ple, u_dim, mp, dim, 0ul, ple_n, npos, pf_cvt_panel(enc, bpleg, mp, ple_n, g_pf_skip == "act_cvt"))
                     }
                     if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                         var bw_pn = upload_region(addr < void? >(t.fblob[t.ple_post_off + l * dim]), uint64(dim * 4l))
@@ -4401,6 +4406,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         }
         if (cap) {
             graph_flush_sched(enc)
+            hz_coverage_check(metal_dispatch_calls() - hz_d0, g_hz_gated - hz_g0, "prefill")
         }
         metal_end_encoding(enc)
         metal_release(enc)
