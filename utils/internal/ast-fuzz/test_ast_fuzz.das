@@ -34,6 +34,15 @@ def test_verifier_cuts_a_cycle(t : T?) {
 }
 
 [test]
+def test_verifier_reports_an_abstract_node(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/internal/ast-fuzz/selftest/abstract_node.das"], out, 60.0)
+    t |> success(!died(ec, out), "compile crashed (exit {ec})\n{out}")
+    t |> success(find(out, "is a base class, not a node") >= 0,
+        "did not report the abstract node\n{out}")
+}
+
+[test]
 def test_verifier_drops_a_null_vector_entry(t : T?) {
     var out : string
     let ec = run([BIN, "utils/internal/ast-fuzz/selftest/null_entry.das"], out, 60.0)

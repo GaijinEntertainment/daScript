@@ -164,7 +164,10 @@ def private gate_ast_verify(daslang : string) : bool {
         to_log(LOG_INFO, "ast-verify: diff touches no macro/AST surface - skipped\n")
         return true
     }
-    var das_files <- changed_files("*.das")
+    // The ast-fuzz selftest fixtures break their own AST on purpose and assert the report
+    // that follows, so their reports are the fixture working, not a node built wrong.
+    var das_files <- [for (f in changed_files("*.das"));
+        f; where find(f, "utils/internal/ast-fuzz/selftest/") < 0]
     var subject = "{length(das_files)} changed files"
     if (empty(das_files)) {
         das_files |> push("tests/jit_tests/array.das")

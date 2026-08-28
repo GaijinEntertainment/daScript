@@ -801,10 +801,41 @@ class private AstVerifyVisitor : AstVisitor {
     }
 }
 
+// Neither base overrides visit, so a walk reaching one asserts in Expression::visit - this
+// verifier's own walk included. Hence the gc list rather than a descent, and the early out.
+def private verify_no_abstract_nodes(mod : Module?) : int {
+    var n = 0
+    for_each_gc_expression(mod) $(e) {
+        if (e is ExprConst || e is ExprMakeLocal) {
+            n++
+            let loc = describe(e.at)
+            let msg = "AST verify: {e.__rtti} is a base class, not a node - build a concrete subclass"
+            to_log(LOG_ERROR, empty(loc) ? "{msg}\n" : "{msg} at {loc}\n")
+            compiling_program() |> macro_sticky_error(e.at, msg)
+        }
+    }
+    return n
+}
+
+// verify_function has no module to scan, so it asks the program being compiled for one.
+def private verify_no_abstract_nodes_being_compiled() : int {
+    var total = 0
+    program_for_each_module(compiling_program()) $(m) {
+        if (empty(m.name)) {
+            total += verify_no_abstract_nodes(m)
+        }
+    }
+    return total
+}
+
 def public verify_module(prog : ProgramPtr; mod : Module?) : int {
     //! Verifies one module in place, emitting a sticky compile error per violation and
     //! returning the count. Call it from a macro's ``apply()`` right after building
     //! AST — the repo's ast-fuzz suite README covers when each entry point applies.
+    let abstract_nodes = verify_no_abstract_nodes(mod)
+    if (abstract_nodes > 0) {
+        return abstract_nodes
+    }
     var v = new AstVerifyVisitor(check_unique = prog._options |> find_arg("_ast_verify_unique") ?as tBool ?? true)
     make_visitor(*v) $(adapter) {
         v.adapter = adapter
@@ -838,6 +869,9 @@ def public verify_function(var fn : FunctionPtr) : int {
     //! Verifies one function IN PLACE, signature included. For a macro that BUILDS a
     //! function: add_function mangles the signature at once, so a malformed result or
     //! argument type crashes there, before [[verify_module]] could see it.
+    if (verify_no_abstract_nodes_being_compiled() > 0) {
+        return 1
+    }
     var v = new AstVerifyVisitor()
     make_visitor(*v) $(adapter) {
         visit(fn, adapter)
@@ -1356,6 +1390,10 @@ def public verify_module_after_infer(prog : ProgramPtr; mod : Module?) : int {
     //! Verifies one module is ready for codegen, returning the violation count.
     //! Separate from [[verify_module]]: a half-inferred tree legitimately violates
     //! these, so they can only be asserted here.
+    let abstract_nodes = verify_no_abstract_nodes(mod)
+    if (abstract_nodes > 0) {
+        return abstract_nodes
+    }
     var v = new AstPostInferVerifyVisitor()
     make_visitor(*v) $(adapter) {
         visit_module(prog, adapter, mod)
