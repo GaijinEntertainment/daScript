@@ -99,6 +99,56 @@ def private check_last_known_good {
     }
 }
 
+// the corpus half of REVIEW.md's write-time provenance rules that are decidable from tree
+// state alone: every stored run measured with no remote-desktop session, every archived
+// sidecar minted on a quiet box. (Ref-pin equality and stamp reachability bind the DIFF -
+// historical rows legitimately carry older pins and shas - so they stay out of this sweep;
+// reachability runs in make-pr's chain, where the orphan hazard appears.)
+let private RECORDS_DIR = "modules/dasLLAMA/performance/records"
+
+def private check_records_corpus {
+    dir(RECORDS_DIR) $(name) {
+        return if (!(name |> ends_with(".json")) || name == "annotations.json")
+        let full = "{RECORDS_DIR}/{name}"
+        let text = fread(full)
+        if (empty(text)) {
+            gate_finding(full, "missing or unreadable")
+            return
+        }
+        var jerr = ""
+        var doc = read_json(text, jerr)
+        defer() {
+            unsafe {
+                delete doc
+            }
+        }
+        if (doc == null) {
+            gate_finding(full, "does not parse as JSON: {jerr}")
+            return
+        }
+        if (name |> find(".tune.") >= 0) {
+            let noise = "{doc?["provenance"]?["noise"] ?? ""}"
+            if (!empty(noise) && noise != "ok") {   // empty = archived before the field existed
+                gate_finding(full, "provenance.noise is '{noise}' - an archived sidecar generation carries a quiet mint (noise ok)")
+            }
+            return
+        }
+        return if (!(doc.value is _array))
+        for (model in doc.value as _array) {
+            let runs = model?["runs"]
+            continue if (runs == null || !(runs.value is _array))
+            for (r in runs.value as _array) {
+                let rd = "{r?["hardware"]?["remote_desktop"] ?? ""}"
+                continue if (empty(rd))   // rows minted before the field existed
+                if (rd != "off") {
+                    let gguf = "{model?["gguf"] ?? "?"}"
+                    gate_finding(full, "{gguf}: hardware.remote_desktop is '{rd}' - a stored run is measured with no remote-desktop session; re-mint")
+                }
+            }
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist(SNAPSHOT)) {
@@ -108,5 +158,6 @@ def main() : int {
     check_last_known_good()
     check_schema_engine_free()
     check_single_exchange_client()
+    check_records_corpus()
     return gate_verdict("dasllama-performance")
 }

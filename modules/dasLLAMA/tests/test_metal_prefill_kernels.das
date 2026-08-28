@@ -2235,24 +2235,42 @@ def private metal4_tensor_available(dev) : bool {
 
 //! device-free: the dev-W knee arithmetic (the pick the board's deep-dense cells ride).
 //! Expectations hold at the DEVW_SMALL_PANEL default (32 MiB) - no sidecar loads here
-[test]
+[test, unused_argument(t)]   // off-Apple the body feints without touching t
 def test_devw_tile_pick(t : T?) {
-    let cap = 16ul * 1024ul * 1024ul * 1024ul
-    // small panel (16 MiB, narrow N) serves whole
-    t |> equal(devw_tile_pick(256l, 4096l, 2048l, false, cap), 1l)
-    // deep-dense up/gate (320 MiB, d/64 = 512): first divisor tile under the small knee is 16 -
-    // unreachable under a 2..8 cap
-    t |> equal(devw_tile_pick(2048l, 32768l, 5120l, false, cap), 16l)
-    // deep-dense down (long-K, d/64 = 80): tc = 10, and rows below the long-K floor decline
-    t |> equal(devw_tile_pick(2048l, 5120l, 32768l, false, cap), 10l)
-    t |> equal(devw_tile_pick(512l, 5120l, 32768l, false, cap), 0l)
-    // over-knee under the tiled-rows floor: no form serves - unless the slow-fallback class
-    // lowers the floor to 512
-    t |> equal(devw_tile_pick(512l, 32768l, 5120l, false, cap), 0l)
-    t |> equal(devw_tile_pick(512l, 32768l, 5120l, true, cap), 16l)
-    // mid panel (40 MiB) needs the big-rows floor
-    t |> equal(devw_tile_pick(2048l, 4096l, 5120l, false, cap), 1l)
-    t |> equal(devw_tile_pick(1024l, 4096l, 5120l, false, cap), 0l)
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let cap = 16ul * 1024ul * 1024ul * 1024ul
+        // small panel (16 MiB, narrow N) serves whole
+        t |> equal(devw_tile_pick(256l, 4096l, 2048l, false, cap), 1l)
+        // deep-dense up/gate (320 MiB, d/64 = 512): first divisor tile under the small knee is
+        // 16 - unreachable under a 2..8 cap
+        t |> equal(devw_tile_pick(2048l, 32768l, 5120l, false, cap), 16l)
+        // deep-dense down (long-K, d/64 = 80): tc = 10, and rows below the long-K floor decline
+        t |> equal(devw_tile_pick(2048l, 5120l, 32768l, false, cap), 10l)
+        t |> equal(devw_tile_pick(512l, 5120l, 32768l, false, cap), 0l)
+        // over-knee under the tiled-rows floor: no form serves - unless the slow-fallback class
+        // lowers the floor to 512
+        t |> equal(devw_tile_pick(512l, 32768l, 5120l, false, cap), 0l)
+        t |> equal(devw_tile_pick(512l, 32768l, 5120l, true, cap), 16l)
+        // mid panel (40 MiB) needs the big-rows floor
+        t |> equal(devw_tile_pick(2048l, 4096l, 5120l, false, cap), 1l)
+        t |> equal(devw_tile_pick(1024l, 4096l, 5120l, false, cap), 0l)
+    } else {
+        feint("das_metal is not built on this platform; the knee predicate is not compiled\n")
+    }
+}
+
+//! device-free: the dense tall-kq pick - the byte knee, the 128-row floor, and the
+//! set_metal_prefill_tall A/B seat (the seat clause is what the override contract pins)
+[test, unused_argument(t)]   // off-Apple the body feints without touching t
+def test_tallkq_pick(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> success(tallkq_pick(512l, 16384l, 4096l, true), "over-knee tall panel takes")
+        t |> success(!tallkq_pick(512l, 16384l, 4096l, false), "set_metal_prefill_tall(false) pins the tall form off")
+        t |> success(!tallkq_pick(96l, 16384l, 4096l, true), "under the 128-row floor declines")
+        t |> success(!tallkq_pick(512l, 4096l, 4096l, true), "under the byte knee declines")
+    } else {
+        feint("das_metal is not built on this platform; the knee predicate is not compiled\n")
+    }
 }
 
 def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : array<int>) {

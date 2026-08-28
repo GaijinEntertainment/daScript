@@ -133,8 +133,8 @@ logits-tolerance form. Counting cells stay token-exact.
 **A diff that adds a metal kernel class under `../dasllama/` - a `[metal_kernel]` def or a
 new instance of a template carrying one - covers that class in `test_kernel_coverage.das`,
 one of two ways.** Either a census row there dispatches the class, or the diff names it in
-that file's `CENSUS_NEVER_DISPATCHED`, with the reason no row can reach it. A dispatching
-row runs on a small model - one the suite runs without `DASLLAMA_PARITY_FULL=1`. Naming a
+that file's `CENSUS_NEVER_DISPATCHED`, with the reason no row can reach it. A
+`DASLLAMA_PARITY_FULL`-gated census row counts as the dispatching arm. Naming a
 class a census row could dispatch is a defect.
 
 **A kernel-unit cell missing a compare against a CPU oracle that can witness the cell's

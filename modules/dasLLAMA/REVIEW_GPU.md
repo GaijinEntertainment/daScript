@@ -69,14 +69,15 @@ of the tile.
 The K/V GEMMs write full M-tile rows at the chunk's row offset, so a panel sized to the live
 count is overrun silently into whatever the pool put next to it.
 
-**Never pass `npos` to `enc_gemm_mm` (`dasllama/dasllama_metal_prefill.das`) from a GEMM site
-whose output rows are wider than the `d` it passes - leave `npos` at zero and dispatch the
-padded tile instead.** The tail rows `enc_gemm_mm` peels off write their y rows at that `d`,
-so a wider-row site lands its tail rows on top of the row beside them.
+**A row-splitting GEMM encoder - one that dispatches a subset of a site's output rows at an
+offset - is called only from a site whose output row stride equals the width it dispatches; a
+wider-row site passes the full stride or dispatches the padded tile.** A split row writes at
+`row x dispatched-width`, so a wider-row caller lands its split rows on top of the row beside
+them.
 
-**Never leave a pipeline of dispatches with fewer scratch buffers than it has dispatches in
-flight - give each dispatch site its own instead.** One shared scratch serializes the whole
-chain through its write-after-read hazards.
+**A scratch buffer a dispatch writes is never rebound for a new write before the reader of
+its previous write is encoded; a flip set smaller than the chain's encode-overlap depth is a
+defect.** One shared scratch serializes the whole chain through its write-after-read hazards.
 
 **A diff that adds dispatches to an encoder path to save bandwidth also gates that path on
 work size, in the same change.** The gate's threshold is measured at both ends of the size

@@ -3219,6 +3219,12 @@ def pf_enc_bf16_mm(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64
     }
 }
 
+//! the dense tall-kq gate's pure half: env_tall is the set_metal_prefill_tall A/B seat -
+//! the tall form must honor it like every other form override
+def tallkq_pick(mp, rows, kdim : int64; env_tall : bool) : bool {
+    return env_tall && kdim > 0l && mp >= 128l && uint64(rows * kdim * 2l) >= TALLKQ_MIN_PANEL
+}
+
 //! k6 binds its split scale plane twice: sub-scales at soff, the f16 d tail at doff
 def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows : int64;   // nolint:STYLE037 — flat per-format form-pick ladder
                               bx, by, bk, bn : MetalBuffer?; mp : int64; yoff : uint64 = 0ul; bxh : MetalBuffer? = null; kdim : int64 = 0l) {
@@ -3229,8 +3235,7 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
     //! in-kernel-dequant stamp reads the quant plane once per 128-row tile instead of
     //! materializing and re-streaming a 2B/element f16 panel
     let tall128 = fmt == KqFmt.k6 ? g_pf_pso_kq_mm6_th128 : (fmt == KqFmt.k4 ? g_pf_pso_kq_mm4_th128 : g_pf_pso_kq_mm5_th128)
-    if (fmt_tensor && bxh != null && tall128 != null && kdim > 0l && mp >= 128l
-            && uint64(rows * kdim * 2l) >= TALLKQ_MIN_PANEL) {
+    if (fmt_tensor && bxh != null && tall128 != null && tallkq_pick(mp, rows, kdim, g_pf_env_tall)) {
         let r0 = mp / 128l * 128l
         if (fmt == KqFmt.k6) {
             enc_kq_mm_k6_th128_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bxh, 0ul, by, yoff, bk, bn, r0, rows)

@@ -66,9 +66,9 @@ marking it a placeholder in a source comment is a defect.**
 **A placeholder number a page reader could take for a fact is a defect - mark it as a
 placeholder on the page itself.**
 
-**A diff that changes one copy of a `dl-*` selector defined in BOTH
-`files/dasllama-table.css` (the file dasllama.io loads) and `dasllama.html`'s inline `<style>`
-copy, and not the other, is a defect - give both copies the same body.**
+**Weakening `REVIEW.das`'s `dl-*` selector-parity check - the gate that compares each
+selector body defined in BOTH `files/dasllama-table.css` and `dasllama.html`'s inline
+`<style>` - is a defect.**
 
 **A diff that adds or moves a `dl-*` selector defines it in `dasllama.html` when
 `dasllama.html`'s markup uses it, and in `files/dasllama-table.css` when a page under

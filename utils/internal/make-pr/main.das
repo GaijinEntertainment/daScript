@@ -10,6 +10,7 @@ require daslib/fio
 require daslib/clargs
 require daslib/defer
 require daslib/strings_boost
+require daslib/json_boost
 require gates
 
 [CommandLineArgs]
@@ -17,7 +18,7 @@ struct Config {
     @clarg_doc = "Diff base ref"
     base : string = "origin/master"
 
-    @clarg_doc = "Run a single gate: sync | review-md | dupes | ast-verify | jit-smoke"
+    @clarg_doc = "Run a single gate: sync | review-md | stamp-reach | dupes | ast-verify | jit-smoke"
     only : string
 
     @clarg_doc = "Skip a gate by name (repeatable)"
@@ -98,6 +99,72 @@ def private gate_review_md(daslang : string) : bool {
         return false
     }
     return true
+}
+
+// A record store's das rows and a tune sidecar's provenance stamp engine commits; a rebase
+// orphans every stamp minted on the pre-rebase branch, and the row then names bytes no
+// reader can check out. This runs where the hazard appears - right after sync's rebase, on
+// a dev box's full clone - so REVIEW.das stays spawn-free (its corpus rules are JSON-pure).
+// Ref-engine rows stamp upstream commits and are not checked. Only stamps the diff ADDS are
+// checked: historical rows legitimately carry shas their own PR's squash-merge orphaned.
+def private gate_stamp_reach() : bool {
+    let added = build_string() $(var writer) {
+        for (f in changed_files("*/performance/records/*.json")) {
+            var out = ""
+            run(["git", "diff", "{g_cfg.base}..HEAD", "--", f], out)
+            for (line in split(out, "\n")) {
+                if ((line |> starts_with("+")) && !(line |> starts_with("+++"))) {
+                    writer |> write(line)
+                    writer |> write("\n")
+                }
+            }
+        }
+    }
+    var stamps : array<string>
+    for (f in changed_files("*/performance/records/*.json")) {
+        continue if (!fexist(f) || (f |> ends_with("annotations.json")))
+        let text = fread(f)
+        continue if (empty(text))
+        var jerr = ""
+        var doc = read_json(text, jerr)
+        continue if (doc == null)
+        if (f |> find(".tune.") >= 0) {
+            let sha = "{doc?["provenance"]?["engine_sha"] ?? ""}"
+            if (!empty(sha) && (added |> find(sha) >= 0) && stamps |> find_index(sha) < 0) {
+                stamps |> push(sha)
+            }
+        } elif (doc.value is _array) {
+            for (model in doc.value as _array) {
+                let runs = model?["runs"]
+                continue if (runs == null || !(runs.value is _array))
+                for (r in runs.value as _array) {
+                    continue if ("{r?["engine"] ?? ""}" != "das")
+                    let sha = "{r?["sha"] ?? ""}"
+                    if (!empty(sha) && (added |> find(sha) >= 0) && stamps |> find_index(sha) < 0) {
+                        stamps |> push(sha)
+                    }
+                }
+            }
+        }
+        unsafe {
+            delete doc
+        }
+    }
+    var ok = true
+    for (sha in stamps) {
+        var out = ""
+        if (run(["git", "cat-file", "-e", "{sha}^\{commit\}"], out) != 0) {
+            to_log(LOG_ERROR, "stamp-reach: '{sha}' names no commit in this repo - re-mint or re-stamp (modules/dasLLAMA/performance/REVIEW.md)\n")
+            ok = false
+        } elif (run(["git", "merge-base", "--is-ancestor", sha, "HEAD"], out) != 0) {
+            to_log(LOG_ERROR, "stamp-reach: '{sha}' is not reachable from HEAD - the rebase orphaned it; re-mint or re-stamp (modules/dasLLAMA/performance/REVIEW.md)\n")
+            ok = false
+        }
+    }
+    if (ok) {
+        to_log(LOG_INFO, "stamp-reach: {length(stamps)} engine stamp(s) in the changed record stores all reachable from HEAD\n")
+    }
+    return ok
 }
 
 def private touched_scopes() : array<string> {
@@ -240,6 +307,7 @@ def main() : int {
     }
     if ((want("sync") && !gate_sync()) ||
             (want("review-md") && !gate_review_md(daslang)) ||
+            (want("stamp-reach") && !gate_stamp_reach()) ||
             (want("dupes") && !gate_dupes(daslang)) ||
             (want("ast-verify") && !gate_ast_verify(daslang)) ||
             (want("jit-smoke") && !gate_jit_smoke(daslang))) {

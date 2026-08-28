@@ -7,7 +7,7 @@ require strings
 require daslib/fio
 require daslib/strings_boost
 
-let public GATE_NAMES <- fixed_array("sync", "review-md", "dupes", "ast-verify", "jit-smoke")
+let public GATE_NAMES <- fixed_array("sync", "review-md", "stamp-reach", "dupes", "ast-verify", "jit-smoke")
 
 def public want_gate(only : string; skip : array<string>; gate : string) : bool {
     if (!empty(only)) {

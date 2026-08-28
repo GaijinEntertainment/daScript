@@ -630,3 +630,10 @@
     carrying the scaffold with the decode behind an abstract method spliced flat at emission -
     the `MetalMoeMulMmBase` pattern - with every format's bit-exact gate green and the MSL of
     the pre-existing four stamps unchanged.
+
+54. **The hardware probe stamps `remote_desktop` on daemon presence, not session activity.**
+    The stored-run ban means an ACTIVE remote-desktop session (its encoder load taints the
+    measurement); a dormant autostart daemon is harmless, yet the probe stamps its name,
+    which is why 47 historical m1/zen2 rows read `parsec` and were hand-corrected to `off`
+    (dormant by the box discipline). Done = the probe stamps `off` unless a session is live
+    (a connected-client check per product), with the value naming the product only then.
