@@ -2351,7 +2351,7 @@ function renderExchange() {
     // shows only on the zero-config path — until a choice is recorded, and again when the
     // recorded choice is "declined" (as the way to change your mind).
     const banner = $("ex-consent");
-    if (!pol.configured && consent !== "accepted") {
+    if (!pol.configured && consent !== "accepted" && exchangeState.consent_notice) {
         $("ex-consent-text").textContent = (consent === "declined" ? "The exchange is currently declined — accepting re-enables it.\n\n" : "")
             + (exchangeState.consent_notice || "");
         banner.style.display = "";
