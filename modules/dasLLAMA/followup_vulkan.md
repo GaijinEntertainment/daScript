@@ -225,7 +225,12 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    nibble+scale extraction). Wiring: pf_f16_feed admits k4, the feed flags are GROUP-wide
    ANDs (a k6 sibling pins its group to the kq route - Q4_K_M mixes k4+k6 in one group).
    Qwen3-4B Q4_K_M mode-3/4 pair: pp 1626 -> 2654 (+63%), tg equal, parity token-exact.
-   NEXT: the k6 decode callback (unpins the mixed groups - the rest of the 3x), then k5/q40.
+   Q6_K tiles LANDED PINNED (same day, commit d89b74681): oracle 0-off on both tiles, but
+   the rate collapsed - 9.3-13.4 TF/s vs the kq tile's 11.9 (the two-plane ql/qh compose
+   hits a driver cliff the k4 single-plane spelling avoids; unpinned e2e regressed 2654 ->
+   2436, so pf_f16_feed keeps k6 on the kq route). NEXT: the k6 decode-spelling chase
+   (diff against llama.cpp's dequantFuncQ6_K via the cm2x bisect method - probe arm `k6`
+   is armed), then k5/q40. The k4 route is the template: probe first, wire second.
    (ngfx GPU Trace, our gate loop vs their MUL_MAT loop; counters now read UNELEVATED):
    ours tensor 44.6 / L2 54.2 / l1tex 44.9 / dram 15.3, theirs tensor 56.1 / L2 23.8 /
    l1tex 27.6 / dram 29.7 - their cm2 keeps the MMA pipe ~26% busier and streams weights
