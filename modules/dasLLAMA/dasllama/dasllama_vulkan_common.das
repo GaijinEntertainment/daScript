@@ -138,14 +138,17 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
     if (cores == 0l) {
         return 256l
     }
+    if (cnt <= 128l) {
+        return 128l   // the l tile's 256-token column would run half-empty
+    }
     let wtiles = (d + 127l) / 128l
     let tiles_l = wtiles * ((cnt + 255l) / 256l)
     let tiles_m = wtiles * ((cnt + 127l) / 128l)
-    // prefer l when either grid overfills the SMs, or l fits with a 3-way split where m would
-    // not fit with a 2-way one
-    let prefer_large = (tiles_m > cores || tiles_l > cores
-        || (tiles_l <= cores / 3l && tiles_m > cores / 2l))
-    return cnt > 128l && prefer_large ? 256l : 128l
+    // wave efficiency, cross-multiplied; m only on a STRICT win — a tie goes to l, whose
+    // bigger tile carries twice the arithmetic intensity (probe-fit on the 3B + tinyllama roles)
+    let waves_l = (tiles_l + cores - 1l) / cores
+    let waves_m = (tiles_m + cores - 1l) / cores
+    return tiles_m * waves_l > tiles_l * waves_m ? 128l : 256l
 }
 
 // the split-k heuristic: long K on an under-half-full grid splits the reduction across
@@ -727,8 +730,10 @@ def nonowning_buf(h : uint64) : Buffer {
 // The coopmat-mode ladder, shared by vk_moe_init and the DlimConfiguration source — one
 // resolver, so the config's recorded mode can never drift from the mode the device runs.
 def resolve_coopmat_mode(has_cm, has_cm2 : bool) : int {
-    // fastest MEASURED default (mm; cm2 opt-in until it beats mm); DASLLAMA_COOPMAT overrides
-    var cmode = has_cm ? 3 : 0
+    // fastest MEASURED default: cm2 where the hardware has it (beats mm back-to-back on both
+    // serving llama models since the 16-bit decode + wave-efficiency tile picks), else mm;
+    // DASLLAMA_COOPMAT overrides
+    var cmode = has_cm2 ? 4 : (has_cm ? 3 : 0)
     if (has_cm) {
         let mode = g_env_vulkan.coopmat
         if (mode == "sdot4") {
