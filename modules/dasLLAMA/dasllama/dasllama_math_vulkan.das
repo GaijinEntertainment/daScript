@@ -284,7 +284,7 @@ def private vk_bake_tag : string {
     return dlim_vulkan_tag(v)
 }
 
-[init]
+[init, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def dasllama_math_vulkan_register() {
     register_kernel_backend(KernelBackend(name = "vulkan", mm = @@vulkan_no_gemv, batch = @@vulkan_no_batch,
         group3 = @@vulkan_no_group3, repack = @@vulkan_repack_noop,
@@ -299,6 +299,7 @@ def dasllama_math_vulkan_register() {
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)
     set_moe_gpu_binding_cap(@@vk_binding_cap)
+    install_rdec_prefill_ids(@@vk_rdec_prefill_ids, @@vk_rdec_set_emb, @@vk_rdec_upload_emb_f32)
     install_moe_gpu_resident(@@vk_arena_reserve, @@vk_arena_place, @@vk_rdec_prepare,
         @@vk_rdec_upload_norms, @@vk_rdec_set_layer, @@vk_rdec_set_cls, @@vk_rdec_token, @@vk_rdec_prefill,
         @@vk_rdec_sync_kv, @@vk_rdec_read_kv, @@vk_rdec_read_kv_bulk)

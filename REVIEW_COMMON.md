@@ -40,6 +40,11 @@ describes this function; verify it does.
 audit pass over an anchor's section text and citer set discharges every audit duty the diff
 triggers on that anchor - the duties never cascade.
 
+**A diff that moves a fact out of a function's comment into an `ARCHITECTURE*.md` lands three
+things in the same change: the statement, a `{#anchor}` on the heading of the section it joins,
+and an `[arch(at=...)]` citation on that function - and the comment goes.** The citation is
+what keeps the section true: a section nothing cites is never re-checked when the code changes.
+
 **A rule that a test, a lint, or the folder's `REVIEW.das` enforces is deleted.** Automation
 replaces the rule; the checklist keeps at most "weakening that check is a defect." A rule
 that COULD be automated is a lint or `REVIEW.das` candidate - say so in the review round.

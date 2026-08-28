@@ -92,6 +92,73 @@ def q8f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
     }
 }
 
+// Q4_K x f16 GEMM oracle (the cm2 k4 tile's shape): per weight d*sc*q - dmin*mn off the
+// repacked planes, rounded f16 as the decode callback rounds, f16 activations — approx bars
+def k4f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                      recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dm = unpackHalf2x16(wsu[sb * 5])
+                    for (g in range(8)) {
+                        let sc = float(int((wsu[sb * 5 + 1 + g / 4] >> uint((g % 4) * 8)) & 0xFFu))
+                        let mn = float(int((wsu[sb * 5 + 3 + g / 4] >> uint((g % 4) * 8)) & 0xFFu))
+                        for (e in range(32)) {
+                            let by = byte_u8(wq, sb * 128 + g * 16 + e % 16)
+                            let q = float((by >> ((e / 16) * 4)) & 0xF)
+                            let w = float(float16(dm.x * sc * q - dm.y * mn))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+// Q6_K x f16 GEMM oracle (the cm2 k6 tile's shape): 6-bit compose - 32, per-16 signed
+// sub-scale times the superblock d, rounded f16 as the decode rounds — approx bars
+def k6f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                      recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dd = unpackHalf2x16(wsu[sb * 5 + 4]).x
+                    for (e in range(256)) {
+                        let bu = e / 32
+                        let hh = (e / 16) % 2
+                        let j = e % 16
+                        let lo = byte_u8(wq, sb * 192 + bu * 16 + j)
+                        let hby = byte_u8(wq, sb * 192 + 128 + (bu / 4) * 32 + hh * 16 + j)
+                        let q6 = (((lo >> (hh * 4)) & 0xF) | (((hby >> ((bu % 4) * 2)) & 3) << 4)) - 32
+                        let sidx = e / 16
+                        let scb = int((wsu[sb * 5 + sidx / 4] >> uint((sidx % 4) * 8)) & 0xFFu)
+                        let sc = scb >= 128 ? scb - 256 : scb
+                        let w = float(float16(dd * float(sc) * float(q6)))
+                        acc += w * half_at(xf, (row0 + r) * n + s * 256 + e)
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
 // a kq class instance with plane members bound — its blk_contrib IS the per-block dequant
 // bit-math under test, callable on the CPU (no subgroup machinery inside)
 def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvBase? {

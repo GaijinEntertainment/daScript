@@ -1502,6 +1502,7 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64;
                          non_causal : bool = false; src_off : int64 = 0l; skip_logits : bool = false;
                          span_lo : int64 = -1l; span_hi : int64 = -1l; ds_wide : bool = false) {
@@ -1535,8 +1536,6 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     let dim = t.config.dim
     let ts_embed = prof_ticks()
     if (ds_wide) {
-        // arm the wide BORROW instead of splitting: a wide-capable override uploads the whole
-        // quantum and extracts slices on the GPU; the CPU fallback splits via ds_split_quantum
         unsafe {
             s.wide_src = addr < float const? >(embd[0])
         }
@@ -1567,6 +1566,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
         s.attn_uniform_lo = 0l
         s.attn_uniform_end = 0l
     }
+    s.embed_gpu_pending = false   // this entry filled x_b itself - no stash for the body to backfill
     forward_prefill_body(t, s, npos, start_pos, skip_logits)
     s.attn_uniform_lo = 0l
     s.attn_uniform_end = 0l

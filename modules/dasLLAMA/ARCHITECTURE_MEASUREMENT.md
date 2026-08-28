@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE.md`; section numbers are that document's.
 
-### 2.5 There is ONE benchmark rig, and the records are the baseline
+### 2.5 There is ONE benchmark rig, and the records are the baseline {#one-benchmark-rig}
 
 `benchmarks/lcpp_bench.das` is the only thing that measures performance. It is a *mirror* of
 the upstream `llama-bench` - the same test shapes, rep counts and timing boundaries, applied to
@@ -28,6 +28,14 @@ harness would produce numbers that cannot be compared to any of this.
 an untuned invocation re-execs into a full retune rather than measuring - so re-mint the box
 manifest and check its winners against the stored rows' `tune` stamps before trusting a delta.
 
+**The Vulkan GEMM probe attributes prefill GEMM cost on three axes.**
+`harness/vk_gemm_probe.das` times one shape at a time: the serving GEMM against its alternates
+on the dense role shapes (gate/up, down, q/wo, k/v - the mm_a kernel against the cm2 l and m
+tiles, the sdot4 kq tile against the k4 and k6 cm2 tiles); one decode callback against
+spellings of itself with the rest of the tile held fixed (the `cm2x` and `k6x` bisect arms);
+and our tile against the upstream coopmat2 GEMM blob, served in place of a probe class's body
+through `DASLLAMA_VK_SPV_OVERRIDE` (the `ref` arm). A new arm joins one of the three.
+
 **A measured number proves its kernel provenance through `tune_gate()`
 (`performance/profile_common.das`), one arm per world it can run in.** Three worlds, because
 `tune_status()` populates in exactly one of them: a standalone exe checks the sidecar the
@@ -37,7 +45,10 @@ worse, measures on fallback kernels - which is why every measuring entry point c
 before its first timed rep. Two rig shapes fall outside "measuring entry point" by the
 property itself, ledgered here: a kernel A/B lab dispatches its variants through its own arms
 (never the `[tune]` selection), and `lcpp_bench.das`'s `--tok` cell dispatches no kernels at
-all - neither can measure a fallback silently.
+all - neither can measure a fallback silently. A kernel A/B lab is also outside the
+in-process reference check: `harness/vk_gemm_probe.das` dispatches the shipped, suite-gated
+kernels on timing fixtures, compares no arm's output, and marks every row `timing-only`; its
+rows never enter a record store, and a decision it seeds is confirmed by the e2e board rows.
 
 **The retune re-exec bites scaffolding, and the pin for it is checked in.** Any bare `daslang`
 run that requires the engine - a probe, a one-off script, a REPL experiment - re-execs into a

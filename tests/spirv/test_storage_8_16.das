@@ -39,4 +39,32 @@ def test_storage_8_16(t : T?) {
         }
         delete words
     }
+    t |> run("small-int STORE half: narrowing casts + 8/16-bit stores; spirv-val clean") <| @(t : T?) {
+        var words <- q8store_words()
+        t |> success(count_op(words, SpvOp.SConvert) >= 3, "int8()/int16() narrow via OpSConvert - 3 in q8store_kernel")
+        t |> success(has_op(words, SpvOp.UConvert), "uint16(uint) narrows via OpUConvert")
+        t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.StorageBuffer8BitAccess)), "StorageBuffer8BitAccess")
+        t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.StorageBuffer16BitAccess)), "StorageBuffer16BitAccess")
+        let r = validate_spirv(words)
+        if (r.ran) {
+            t |> success(r.ok, "spirv-val: {r.msg}")
+        } else {
+            feint("spirv-val not found locally; skipping (CI enforces)\n")
+        }
+        delete words
+    }
+    t |> run("unpack8 on 16-bit lanes: int16 -> byte2 and uint16 -> ubyte2 bitcasts with a runtime lane select; spirv-val clean") <| @(t : T?) {
+        var words <- unpack16_words()
+        t |> success(count_op(words, SpvOp.Bitcast) >= 2, "the two 16-bit -> 8-bit x2 bitcasts are present")
+        t |> success(has_op(words, SpvOp.VectorExtractDynamic), "the runtime lane select is a dynamic extract")
+        t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.Int16)), "Int16")
+        t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.Int8)), "Int8")
+        let r = validate_spirv(words)
+        if (r.ran) {
+            t |> success(r.ok, "spirv-val: {r.msg}")
+        } else {
+            feint("spirv-val not found locally; skipping (CI enforces)\n")
+        }
+        delete words
+    }
 }

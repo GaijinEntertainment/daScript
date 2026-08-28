@@ -191,6 +191,51 @@ def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn
     g_rdec_installed = true
 }
 
+typedef RdecPrefillIdsFn = function<(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) : void>
+typedef RdecSetEmbFn = function<(emb_block : int64) : bool>
+typedef RdecUploadEmbF32Fn = function<(fblob : array<float>; off : int64; vocab : int64; dim : int64) : bool>
+
+//! The raw f32 embd table rides the residency plan's headroom only up to this size; past it the CPU embed serves.
+let public RDEC_EMB_F32_CAP = 512l * 1024l * 1024l
+
+//! The device bytes the f32 embed-gather arm would upload for a (vocab x dim) table - 0 past its cap.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#resident-plan")]
+def public rdec_emb_f32_bytes(vocab, dim : int64) : int64 {
+    let bytes = vocab * dim * 4l
+    return bytes > RDEC_EMB_F32_CAP ? 0l : bytes
+}
+
+[unused_argument(tokens, emb_scale, cos_batch, npos, logits)]
+def private rdec_unset_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) {
+    panic("dasLLAMA: ids-form resident prefill hit without an installed GPU driver")
+}
+[unused_argument(emb_block)]
+def private rdec_unset_set_emb(emb_block : int64) : bool => false
+[unused_argument(fblob, off, vocab, dim)]
+def private rdec_unset_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool => false
+
+var g_rdec_prefill_ids = @@rdec_unset_prefill_ids
+var g_rdec_set_emb = @@rdec_unset_set_emb
+var g_rdec_upload_emb_f32 = @@rdec_unset_upload_emb_f32
+var g_rdec_prefill_ids_installed = false
+
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public install_rdec_prefill_ids(prefill_ids : RdecPrefillIdsFn; set_emb : RdecSetEmbFn; upload_emb_f32 : RdecUploadEmbF32Fn) {
+    g_rdec_prefill_ids = prefill_ids
+    g_rdec_set_emb = set_emb
+    g_rdec_upload_emb_f32 = upload_emb_f32
+    g_rdec_prefill_ids_installed = true
+}
+
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_prefill_ids_installed() : bool => g_rdec_prefill_ids_installed
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) { invoke(g_rdec_prefill_ids, tokens, emb_scale, cos_batch, npos, logits) }
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_set_emb(emb_block : int64) : bool => invoke(g_rdec_set_emb, emb_block)
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool => invoke(g_rdec_upload_emb_f32, fblob, off, vocab, dim)
+
 def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)
 def public rdec_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => invoke(g_rdec_place, wq, ws, n, rows, fmt)

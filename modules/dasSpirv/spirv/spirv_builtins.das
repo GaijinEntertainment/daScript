@@ -412,8 +412,7 @@ def public coopmatMulAdd(a : coopmatA_s8_16x32; b : coopmatB_s8_32x16; c : coopm
 // ===== cooperative matrices v2 (SPV_NV_cooperative_matrix2 — tensor addressing, workgroup scope) =====
 // A cm2 tile is WORKGROUP-scoped (the whole workgroup owns one MxN tile; the driver manages staging)
 // and is addressed through tensor LAYOUT objects (dims + strides + a per-load slice window + an
-// optional q8-style block size) instead of a flat (idx, stride) pair. The wg markers are name-parsed:
-// coopmatWg{A|B|Acc}_{f16|f32|s8|s32}_{R}x{C} — declare a new struct here and coopmat_info picks it up.
+// optional q8-style block size) instead of a flat (idx, stride) pair.
 struct coopmatWgA_f16_64x16 {}
 struct coopmatWgB_f16_16x16 {}
 struct coopmatWgB_f16_16x32 {}
@@ -444,6 +443,8 @@ struct coopmatWgB_f16_32x32 {}
 struct coopmatWgB_f16_32x128 {}
 struct coopmatWgB_f16_64x64 {}
 struct coopmatWgB_f16_128x32 {}
+[arch(at="../ARCHITECTURE.md#cm2-tile-markers")]
+struct coopmatWgAcc_f16_64x128 {}
 struct coopmatWgAcc_f32_64x128 {}
 // the int8 twins (q8 x q8 -> s32 at workgroup scope; K-tile 32)
 struct coopmatWgA_s8_64x32 {}

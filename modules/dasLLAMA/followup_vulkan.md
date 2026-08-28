@@ -113,6 +113,139 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    DASLLAMA_COOPMAT=sdot4|f16|int8|mm|cm2 (+ DASLLAMA_CM2_TILE/DASLLAMA_CM2_SPLITK as A/B
    instruments); reference side: GGML_VK_DISABLE_COOPMAT / _COOPMAT2 / _COOPMAT2_DECODE_VECTOR
    (verified in its device-init walk).
+   Baseline re-pin (2026-08-27, zen2 / 5060 Ti, driver 610.74, debug-jit vs the reference exe
+   b10659; fa + native f16 mirrors now in the default path): llama-3.2-3B Q8 das
+   6644.8 +/- 98.4 pp512 / 105.4 +/- 0.2 tg128 vs 7691.0 +/- 42.7 / 110.0 +/- 0.3 =
+   86.4% pp / 95.9% tg (was 75.5% / 95.1% at the 8/06 family walkthrough; upstream itself
+   did not move b9860 -> b10659). GPU_PROF split of the pp window: ~99% GPU-busy (submit
+   75.2 ms, gpu 74.7, prep+record ~2), so the gap is per-GEMM kernel rate, not CPU
+   serialization - FFN GEMMs are 63% of the window and gate/up run ~43 TFLOP/s where
+   down/q reach ~50-53; attn is 3% post-fa. Decode sits at the bandwidth ceiling (~358 of
+   448 GB/s; theirs ~371). Open probes: (e) capture the reference exe's same-shape dispatch under
+   ngfx and diff the four counters (ours: tensor 27.4 / L2 45.0 / dram 10.4 / l1tex 19.5);
+   (f) why the widest GEMMs (gate/up, d=8192) run ~20% below down at the same M.
+   PROBES (e)+(f) ANSWERED (2026-08-27, `harness/vk_gemm_probe.das` - the mm_a serving
+   kernel isolated at the 3B role shapes, record-once + timed submits; one arg pins a
+   single shape as the ngfx capture window): (f) the kernel is SHAPE-UNIFORM -
+   gate/up 48.3 / down 49.3 / q 49.8 TFLOP/s isolated; the in-situ 43-vs-53 split is
+   timestamp/stall attribution, not shape behavior. k/v starved ISOLATED (26.5 TFLOP/s at
+   32 wgs) but NOT in situ: the chain records q,k,v with no barrier between them, the level
+   overlaps on the device, and the merged-k|v GEMM (shipped behind DASLLAMA_VK_KV_MERGE, one
+   dispatch over the adjacent planes at d = 2*kvd) measured a WASH on the 3B
+   (6571 +/- 78 vs 6555 +/- 68 = +0.24%). The merge stays for the record shortening
+   (28 dispatches + 28 copies + a barrier per window gone - CPU record cost, the overlap
+   arc's term), not as a GPU win. mm_a at 48 vs the old cm2-l harness's 28.9 also
+   re-confirms mm as the right default. (e) their
+   isolated q8_0 GEMM op (its per-op perf harness, m=4096 n=512 k=14336, their only q8/n=512
+   stock case) = 51.5 TFLOP/s - the isolated kernel-rate gap is <= ~6%. Counter diff
+   THE CM2 CLIFF, FOUND AND FIXED (2026-08-27): our cm2 l-tile ran 28-35 TFLOP/s where
+   upstream's identical geometry ran 62-66 - root cause was ONE BIT in the SPIR-V emitter:
+   `coopmatClamp`'s hand-emitted per-element loop carried `OpLoopMerge ... None`; unrolled
+   (glslang spells the same loop `[[unroll]]`), the driver keeps the wg-scope accumulator in
+   tensor-register form - left rolled, the dynamic per-element index demotes the coopmat to
+   addressable storage FOR THE WHOLE KERNEL. Fix: `spirv_emit.das` coopmatClamp loop control
+   None -> Unroll; min-kernel 34.2 -> 57.8 TFLOP/s (+64%). Hunt instruments (all in
+   `harness/vk_gemm_probe.das` + envs): `cm2x` arg = decode-cost bisect variants; `their` arg
+   = the reference exe's glslc-built coopmat2 GEMM blob dispatched in OUR harness via
+   DASLLAMA_VK_SPV_OVERRIDE (spec constants patched by spirv-opt to the l geometry);
+   DASLLAMA_VK_SPV_DUMP (new env) = the override's capture half. Bisect ledger (gate shape,
+   drain-free): their stock 66.0 / their+external-scale-plane 60 / +our-decode-arithmetic 55.4
+   / a GLSL twin of OUR minimal kernel 58.1 / our minimal pre-fix 34.7 - so decode spelling
+   costs ~9% (their 16-bit unpack8 form needs Int8 caps we do not emit) and the interleaved
+   scale ~5%; everything else was the clamp-loop bit. Post-fix shipped-kernel table
+   (cnt=512, drain-free): cm2l 58.1/60.3 gate/down BEATS mm 53.7/54.9; with the probe's
+   write-write barriers cm2l 47.8/40.8 vs mm 48.9/52.0 - the smaller cm2 grids (half mm's
+   wg count) pay wave-quantization drains. E2E 3B (debug-jit, REBAR=0): mm 7058 +/- 28 pp
+   (unchanged serving default), mode-4 cm2 6676 +/- 32 - the kernel now wins isolated but
+   the chain packaging (grid sizes, barrier drains, the f16 staging step) still favors mm;
+   blunt DASLLAMA_CM2_SPLITK=2 across all GEMMs = 4058 (the reduce tax on well-filled
+   shapes). Items (b)+(c) are therefore LIVE again: the l/m/split heuristics were tuned
+   against the 2x-slower kernel and must be re-tuned before the mode-4 default flip.
+   THE DECODE SPELLING, CLOSED (2026-08-27 late): the last ~15% was the decode-callback
+   ARITHMETIC FORM. Probe ladder on their kernel, our two-plane data (gate, drain-free):
+   16-bit load + unpack8 + [i&1] lane = 62.7 (their stock 63.3 - the external scale plane
+   costs ~1%); 32-bit word + variable shifts = 55.4; 32-bit unpack8 + dynamic 4-lane
+   select = 20.3 (VectorExtractDynamic on v4char poisons the block-load path outright).
+   The driver pattern-matches THEIR EXACT 16-bit spelling. Shipped: VkQ8Blk is int16[16]
+   and decode_q8 is `unpack8(qs[(cib.y & 30) >> 1])[cib.y & 1]` - the das storage-type
+   surface (int8/16 SSBO members, unpack8/pack32, Int8/Int16 + storage caps) already
+   existed golden-tested in dasSpirv (test_storage_8_16); the ONLY additions were the
+   unpack8(int16/uint16) -> byte2/ubyte2 lingua-franca overloads (zero emitter change) and
+   the core shaderInt16 device feature across the vulkan_boost storage_8_16 creator family
+   (+ the storage_8_16_supported gate; the caps validated only by luck before). RESULTS:
+   cm2l drain-free 62.2/64.7 gate/down = par with their blob, +15-18% over mm; E2E 3B
+   mode-4 pp 7293.9 +/- 47 - NEW BEST, BEATS mm (7058 +/- 28) by +3.3% = 94.8% of their
+   cm2 build; tg 104.4 (decode decoupled). tinyllama mode-4 18102 vs mm 19754 (-9%): the
+   small shapes starve the 128x256 l grids (kv = 4 wgs) - item (b)'s re-tune is what the
+   (c) default flip waits on, per-model or per-shape. Newly visible after the fix: the
+   wg_blk0 Workgroup-storage read in decode costs ~9% (lit 51.6 vs full 47.3 at cnt=512
+   with barriers) - a push-constant block base for single-region dense dispatches is the
+   next kernel-side lever. OWED from the storage-type plan: small-int SSBO STORE coverage
+   (no fixture writes int8/int16 today) - unblocks deleting the hand-rolled word-packing
+   in every requant writer kernel.
+   (b)+(c) CLOSED (2026-08-27, commit 57437c8f7): cm2_tile_cols rewritten to a
+   wave-efficiency comparison (cross-multiplied occupied/allocated wave slots, m only on a
+   strict win, ties to l) - probe-fit on all 8 role-shape points; tinyllama mode-4
+   18102 -> 20159 on this alone. With that, mode 4 beats mm back-to-back on BOTH serving
+   models and `resolve_coopmat_mode` now DEFAULTS to cm2 on coopmat2 hardware. Default-path
+   board vs b10659: 3B 7406.8 +/- 310 pp / 105.7 tg = 96.3%/96.1%; tinyllama
+   20188.1 +/- 185 / 294.4 = 99.6% pp (inside their row noise), tg ahead. Mode-4 headroom
+   still unported: the ar+rq fusion (the fq6 gate skips it), the kvm merge (mode-4
+   excluded), the wg_blk0 push-constant base (~9% of the decode callback).
+   ar fusion PORTED (2026-08-27, commit 4b690e77e): cls_ar_f16_b - the fused add+rms twin's
+   f16 form, bit-identical to the split cls_ar + f16cvt pair (gated). vk_fuse A/B: 3B pp
+   7463 -> 7584 (+1.6%), tg +2.6%; tinyllama pp 19978 -> 20374 (+2.0%), tg +4.0% - both
+   models' new bests, tinyllama pp now ~100.5% of their row.
+   wg_blk0 lever DEAD (same day): the cm2x probe grew a `push` variant (base off pa.ksplit)
+   - push is the SLOWEST spelling (gate/up 49.6 vs full 52.5 vs lit 51.4 TF/s; down 41.7 /
+   43.9 / 42.8), and lit no longer beats the shipped form either. The old lit-51.6-vs-47.3
+   delta predates the 16-bit decode respelling; with the cheap decode the shared wg_blk0
+   read is free. Item closed as measured-no.
+   kvm merge PORTED to mode 4 (same day, commit 2a4431fb2): the exclusion was pure caution -
+   pf_gemm_enc is parametric in (d, blk). vk_kv_merge A/B on cm2: 3B pp 7419 -> 7633 (+2.9%),
+   tinyllama +0.5%. fa f16-out stamp (commit 5267a63b1): FaCm2H64/H128 templated
+   (OUT16/typedef OT), the O accumulator converts in-kernel and lands the wo feed - the
+   per-layer b+6 attn->f16 convert never encodes; bit-exact vs the split pair's own device
+   f16cvt (CPU float16() differs on rounding ties - device converts agree with each other).
+   A/B: 3B 7669 -> 7737/7708 (+0.7-0.9%), tinyllama 20796 -> 20986 (+0.9%).
+   END-OF-DAY BOARD vs b10659: 3B pp 7737.2 +/- 67 = 100.6% - AHEAD of the reference exe for the
+   first time; tinyllama pp 20986 +/- 357 = ~103.5%, tg ahead. 3B tg 105.1 = ~95.5% (decode
+   chain untouched today).
+   Small-int STORE ledger CLOSED (2026-08-28, commit a59d095d9): the 8/16-bit store half got
+   its coverage - a golden fixture (narrowing converts + 8/16-bit access-chain stores,
+   spirv-val clean) and a live-device exact-bytes cell (test_storage_8_16_store_gpu) - and on
+   that foundation every Q8 requant writer stores quants as bytes: q8_pack4 and the q8k
+   butterfly (2 subgroup shuffles per element) deleted, outq members array<int8>. Bit-exact
+   by the gates; perf-neutral where the writers run hot (mm-mode 3B pair 7077 vs 7061, tg
+   equal). Remaining tail: item (a) K-quant generalization, (d) decode_vector driver-blocked.
+   Item (a) OPENED with Q4_K (2026-08-28, commit f72694fbe): K4Cm2LBatch/K4Cm2MBatch - the
+   Q8 tile geometry with a Q4_K decode callback (nibble + per-32-group scale/min off the
+   repacked planes, (1, 256) layout blocks). Oracle-gated 0-off; probe: 35.8-38.2 TF/s vs
+   the kq tile's 12.0-12.7 on every Qwen3-4B role shape (~70% of Q8-cm2's rate - the
+   nibble+scale extraction). Wiring: pf_f16_feed admits k4, the feed flags are GROUP-wide
+   ANDs (a k6 sibling pins its group to the kq route - Q4_K_M mixes k4+k6 in one group).
+   Qwen3-4B Q4_K_M mode-3/4 pair: pp 1626 -> 2654 (+63%), tg equal, parity token-exact.
+   Q6_K tiles LANDED PINNED (same day, commit d89b74681): oracle 0-off on both tiles, but
+   the rate collapsed to 9.3-13.4 TF/s vs the kq tile's 11.9 - unpinned e2e regressed.
+   Q6_K CLIFF FOUND AND FIXED (same day, commit 4603a7373): the k6x bisect (nil 59.6 /
+   flat 39.7 / ql 47.8 / pair 13.4) proved the two-plane 6-bit compose costs only ~33% -
+   the killer was ONE byte4 DYNAMIC select in the sub-scale extract (unpack8(word)[i&3]),
+   the same death shape the Q8 chase found; byte2 [i&1] selects are fine. Respelled as
+   shift + arithmetic-shift sign extension: 12.8 -> 32.9 TF/s. RULE for every future
+   decode: NEVER index unpack8 of a 32-bit word dynamically - shift+mask, or byte2 [i&1].
+   k6 UNPINNED: Qwen3-4B Q4_K_M pp 1626 (mode 3) -> 2669 (k4) -> 3188 (k4+k6) = +96%.
+   NEXT: k5/q40 stamps (mechanical now the trap is named), then (d) driver-blocked.
+   (ngfx GPU Trace, our gate loop vs their GEMM loop; counters now read UNELEVATED):
+   ours tensor 44.6 / L2 54.2 / l1tex 44.9 / dram 15.3, theirs tensor 56.1 / L2 23.8 /
+   l1tex 27.6 / dram 29.7 - their cm2 keeps the MMA pipe ~26% busier and streams weights
+   DRAM->MMA with little cache traffic, while our staged L-tile pays L2/L1 bandwidth as
+   overhead (caveat: their 58.7 MB working set cannot sit in L2, ours ~25 MB can, so the
+   dram/L2 halves partly reflect working-set size; the tensor-busy delta is the honest
+   headline). Their HMMA-per-FLOP is ~18% higher than ours (0.140 vs 0.112 per cycle at
+   only 1.066x the FLOP rate) - unexplained, parked. Decomposition of the 14% pp window
+   gap: <= ~6% per-GEMM rate + our non-GEMM dispatch chain (~4.4 ms elementwise + ~2 ms
+   per-dispatch drain across 452 nodes / 367 barriers per window) - so the levers are
+   epilogue fusion / barrier reduction and the k/v grid, before any cm2 chase.
 
 12. **Arena slabs - the 4 GiB storage-range ceiling (LANDED in-arc 2026-08-06; was the
    PR gate - the MAIN FACTOR for MoltenVK/M1 enablement, where maxStorageBufferRange is far
@@ -176,6 +309,19 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    the pageable-aware device-local signal WDDM wants - has zero references in the tree.
    Small addition: enable when present, and consider demoting cold stacks' priority instead
    of only boosting everything.
+   MEASURED INCIDENT (2026-08-27, zen2): the ReBAR weight arena (mapped
+   host-visible|device-local heap, "uploads write direct to VRAM") LOST WDDM residency
+   mid-session - every weight-reading role fell to PCIe speed (decode 254 ms/token = 13.4
+   GB/s exactly; 3B tg 105 -> 3.9, pp 6645 -> 395) while attn/rope/elementwise stayed at
+   rate and the reference exe in the same minutes stayed healthy (its weights are UNMAPPED
+   device-local; it also ships priority 1.0 - #17624 - and no pageable extension, no
+   heartbeat). Priority 1.0 did not hold the mapped heap; `DASLLAMA_VK_REBAR=0` (staged
+   uploads, unmapped device-local) restored 6584 immediately, same session. The morning
+   half of the session served the mapped heap at full speed, so the hazard ARMS with some
+   driver/desktop state (ngfx profiling sessions and the Parsec virtual display both ran
+   that day). Design consequence to rule on: long-lived weight planes out of the mapped
+   heap by default (ReBAR kept for transient staging), with this item's runtime priority
+   as the second layer and a Metal-style residency heartbeat in reserve.
 
 18. **`rsqrt` vs `1.0/sqrt` - the RMS-norm parity spelling (ledgered 2026-08-07, found by
    the cross-backend similarity audit).** The three rails spell the same inverse norm two
@@ -241,3 +387,62 @@ module) is independent and can land any time - it is pure structure.
     `x`/`y`/`ndim`/`ddim` binding block, differing only in the weight-plane views and the
     decode. Give those two families a base the way `MetalMoeMulMmBase` already does, so a
     binding or epilogue fix lands once per family instead of once per variant.
+
+23. **Command-chain overlap + record-once for the re-recording tiers (ruled 2026-08-10,
+    post-#3681; parked behind the jit-infra work then - this entry is the durable copy of
+    that ruling).** The resident DENSE decode ladder already records once per
+    set_layer/set_cls epoch (`rd_record_token`; `--rerecord-ab` prices the re-encode
+    delta - it is why decode wins tg). What still re-records: PREFILL (the full window
+    chain, one submit per window) and the chunked/MoE `g_gpu` tier
+    (`ffn_gemv_prep`/qkv per token). Upstream re-records everything every graph evaluation
+    but overlaps CPU recording with GPU execution via incremental submits every
+    ~200 GFLOP. The plan: (a) prefill overlap - split the window chain into a few
+    submits, fence at the end, pipeline across windows (also hides `embed_row`);
+    (b) MoE-tier record-once - routing already rides the `fill_stack_sched_rows`
+    meta-buffer CONTENT; the two leaks are the stack binding (`find_stack` per token ->
+    bind the slab union / sched carries the stack id) and the streamed-miss arm (stays a
+    dynamic prelude, the slow path); CPU top-k is the natural chain split; MoE prefill
+    grids vary per window -> overlap only there.
+    ACCEPTANCE (Boris, 2026-08-10): the O0-vs-O3 pp512 delta IS the CPU-on-critical-path
+    share (measured then on tinyllama: 18200.64 O3 vs 14785.32 O0 = -18.8%, ~6.5 ms
+    CPU/window; tg free at O0 - record-once decode has no per-token CPU); overlap
+    succeeds when the two rows CONVERGE. Two bench rows, no profiler, drift-cancelling.
+    SIZING DATUM (2026-08-27, llama-3.2-3B Q8 GPU_PROF): the 3B prefill window is ~99%
+    GPU-busy - on small dense models the lever is per-GEMM kernel rate (item 11), not
+    overlap; overlap pays where per-token CPU still rides the chain (the MoE/chunked
+    tier, long multi-window prefill, and the O0-class boxes the acceptance test prices).
+    SHIPPED 2026-08-27 (both halves measured, REBAR=0 protocol, debug-jit):
+    (a) chunked submits (`DASLLAMA_VK_OVERLAP`, 1,2,4,8-layer ramp, cmd ring, one fence on
+    the last chunk) - tinyllama pp 18074 -> 18463 (+2.2%), 3B +0.7%: exactly the record
+    wall, as the GPU_PROF datum predicted; the O0/O3 pair had read 34%/15% CPU share but
+    most of that is O0-inflated record cost.
+    (b) device-side embed gather (`DASLLAMA_VK_GPU_EMBED`, the ids-form prefill seam +
+    engine embed gate with CPU backfill; the q8 arm gathers from the tied cls plane (a
+    tied Q8 table only), the f32 arm uploads the raw fblob table, 512 MB cap +
+    budget-guarded) - 3B pp 6664 -> 7062 (+6.0%), tinyllama 18158 -> 19527 (+6.8%);
+    tg untouched (a one-run tinyllama tg dip re-measured as box state). Footprint of the
+    trade, by construction: a tied q8 model places nothing (the cls plane is reused - the 3B
+    case); a raw-f32 table costs vocab x dim x 4 bytes of device memory (tinyllama: 32000 x
+    2048 x 4 = 262 MB) and the residency plan counts it before it picks the context cap, so
+    a box that cannot afford it keeps the CPU embed rather than a shorter context. Decision:
+    taken - the +6% pp buys the table on every box the plan clears.
+    (c) the prefill batch ar+rq fusion (`ClsArAddRmsRqB`, one wg per row, verbatim
+    reduce/amax fold - bit-exact vs the split pair by suite gate; rides `DASLLAMA_VK_FUSE`;
+    both sites, the last layer keeps split ar for fin_rq's xb) - tinyllama pp 19527 ->
+    19989 (+2.4%), 3B a wash (its elementwise share was already small).
+    DAY-END STANDINGS vs the reference exe b10659 (same box, back-to-back): tinyllama
+    19989 +/- 60 pp / 291.9 tg vs 20277 +/- 260 / 291.4 = **98.6% pp (inside their row
+    noise), tg AT PAR** - the llama family is effectively closed on this box; 3B
+    7071 +/- 84 / 105.4 vs 7691 / 110.0 = 91.9% pp / 95.8% tg - the 3B residual is
+    per-GEMM rate (this item's (e)/(f) counters), not chain shape. Still-serial per
+    window: cos rows + their upload, prep (~0.45 ms total - the last ~1.4% of tinyllama).
+
+24. **The cm2 tiles stamp from one class template (ruled 2026-08-28 at the vkclass PR round:
+    a follow-up PR, not this one).** `Q8Cm2LBatch`/`Q8Cm2MBatch`, `K4Cm2LBatch`/`K4Cm2MBatch`
+    and `K6Cm2LBatch`/`K6Cm2MBatch` are six hand-stamped bodies over two axes (tile width
+    128/256, decode format); `REVIEW_GPU.md`'s twin rule asks for one `class template` with a
+    `@template_constant` for the width, typedefs for the block/coopmat types, and a
+    `def override decode_*` per format - the shape `harness/vk_gemm_probe.das`'s `K6PxBase`
+    already proves. Gate: the six oracle cells in `tests/test_vulkan_kernels.das` stay 0-off,
+    the probe's l/m rows stay within noise. The k5/q40 stamps (item 11's NEXT) land on the
+    template, not as two more copies.

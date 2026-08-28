@@ -1,7 +1,7 @@
 # dasVulkan Tutorials Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../CLAUDE.md`. A recording-pipeline change - a `record_*.das` driver, wherever the diff puts
+doc: `../ARCHITECTURE.md`. A recording-pipeline change - a `record_*.das` driver, wherever the diff puts
 it, or the shared `recording/` harness - is reviewed with `skills/internal/vulkan_recording.md`
 (repo root).
 

@@ -68,6 +68,33 @@ def private d_read(l, pos : int64; kp : uint8?; vp : uint8?) {}
 [unused_argument(l, kp, vp, npos)]
 def private d_read_bulk(l : int64; kp : uint8?; vp : uint8?; npos : int64) {}
 
+// ===== the ids-form prefill seat's doubles (installed separately from the driver bundle) =====
+
+var private g_ids_npos = -1l
+var private g_ids_scale = 0.0
+var private g_emb_block = -1l
+var private g_emb_f32_vocab = -1l
+
+[unused_argument(tokens, cos_batch)]
+def private d_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) {
+    g_ids_npos = npos
+    g_ids_scale = emb_scale
+    if (!empty(logits)) {
+        logits[0] = 43.0
+    }
+}
+
+def private d_set_emb(emb_block : int64) : bool {
+    g_emb_block = emb_block
+    return emb_block >= 0l
+}
+
+[unused_argument(fblob, off, dim)]
+def private d_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool {
+    g_emb_f32_vocab = vocab
+    return vocab > 0l
+}
+
 def private arm_on() : bool => true
 
 def private arm_off() : bool => false
@@ -143,5 +170,33 @@ def test_gpu_tier_contract(t : T?) {
         set_moe_gpu_arm("", @@arm_off)
         t |> success(!moe_gpu_tier_arm_(), "reset to unarmed for the rest of the process")
         t |> success(!moe_gpu_backend_registered(), "registration witness resets with the hook")
+    }
+}
+
+[test]
+def test_rdec_prefill_ids_seam(t : T?) {
+    t |> run("the ids-form prefill seat: unset declines, installed doubles receive the forwarded values") @(t : T?) {
+        t |> success(!rdec_prefill_ids_installed(), "the seat starts uninstalled")
+        t |> success(!rdec_set_emb(3l), "an unset set_emb declines - the engine keeps the CPU embed")
+        let nofblob : array<float>
+        t |> success(!rdec_upload_emb_f32(nofblob, 0l, 16l, 8l), "an unset f32 upload declines")
+        t |> equal(rdec_emb_f32_bytes(1000l, 256l), 1000l * 256l * 4l)
+        t |> equal(rdec_emb_f32_bytes(1l << 20l, 4096l), 0l)   // past RDEC_EMB_F32_CAP the arm declines, so the plan counts nothing
+        install_rdec_prefill_ids(@@d_prefill_ids, @@d_set_emb, @@d_upload_emb_f32)
+        t |> success(rdec_prefill_ids_installed(), "install must flip the witness")
+        t |> success(rdec_set_emb(9l), "the double's answer forwards")
+        t |> equal(g_emb_block, 9l)
+        t |> success(!rdec_set_emb(-1l), "the double's decline forwards")
+        t |> success(rdec_upload_emb_f32(nofblob, 4l, 32000l, 2048l), "the f32 double's answer forwards")
+        t |> equal(g_emb_f32_vocab, 32000l)
+        var ids : array<int64>
+        ids |> push(5l)
+        let cosb : array<float>
+        var logits : array<float>
+        logits |> resize(4)
+        rdec_prefill_ids(ids, 1.5, cosb, 1l, logits)
+        t |> equal(g_ids_npos, 1l)
+        t |> equal(g_ids_scale, 1.5)
+        t |> equal(logits[0], 43.0)
     }
 }

@@ -151,9 +151,13 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   64-bit INT (`arith_width_ok` allows width 64 only for floats); `cpu_only_lattice_width`
   keys both emitters' fail-closed diagnostic.
 
-## 29. shader_lingua_franca
+## 29. shader_lingua_franca {#shader-lingua-franca}
 
 - **Every symbol is either an exact CPU mirror of its GPU semantics or a `[sideeffects]`
   dummy every rail lowers by name** - the dummies return zero on the host, so a CPU replay
   reproduces GPU semantics only for the real-bodied set. Unsigned overloads never fold into
   signed twins (glslang picks the unsigned opcode).
+- **A width-variant of a lowered-by-name symbol is one more overload here, never an emitter
+  arm.** `unpack8` carries `int16 -> byte2` and `uint16 -> ubyte2` beside the 32-bit pair; every
+  overload is the same `reinterpret` on the host and the same single `OpBitcast` on the SPIR-V
+  rail, so the emitter matches the name and reads the width off the operand type.

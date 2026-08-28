@@ -99,6 +99,8 @@ modules/dasLLAMA/
   ARCHITECTURE.md             # what-goes-where ledger — which module owns which concern
   ARCHITECTURE_ENGINE.md      # companion: the engine, format, load, CPU-tier, support and serving charters
   ARCHITECTURE_GPU.md         # companion: the GPU backend role table, the backend asymmetries, the refuted kernel shapes
+  ARCHITECTURE_GPU_PREFILL.md # companion: the Metal prefill driver's GEMM ladder
+  ARCHITECTURE_GPU_VULKAN.md  # companion: the Vulkan resident driver - window chain, cm2 tiles, residency plan, slot marks
   ARCHITECTURE_MEDIA.md       # companion: the encoder-tower, audio, ASR and vision charters
   ARCHITECTURE_IMAGE.md       # companion: the prepared-image (.dlim) rail
   ARCHITECTURE_RUNTIME.md     # companion: kernel shape, caches, knobs, coverage, the GPU ramp

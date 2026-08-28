@@ -140,6 +140,12 @@ def is_skip_dir(name : string) : bool {
     return name |> starts_with(".")
 }
 
+// A CMake build tree is not source, whatever it is named: FetchContent checkouts under it
+// carry .das and .md the tree never wrote
+def is_build_tree(path : string) : bool {
+    return stat("{path}/CMakeCache.txt").is_valid
+}
+
 def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>; var skipped : int&) {
     let st = stat(path)
     return if (!st.is_valid)
@@ -164,6 +170,7 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
         let fst = stat(full)
         return if (!fst.is_valid)
         if (fst.is_dir) {
+            return if (is_build_tree(full))
             scan_das_files(full, files, cache, skipped)
         } elif (fst.is_reg && name |> ends_with(".das") && !cache |> key_exists(full)) {
             if (is_skip_file(name)) {
@@ -192,49 +199,49 @@ def rule_is_on(code : string; disabled_codes, enabled_codes : table<string>) : b
     return !key_exists(disabled_codes, code) && (empty(enabled_codes) || key_exists(enabled_codes, code))
 }
 
-// Directories under `path` whose OWN .lint_config arms a [docs] flag: rule_docs_only feeds
-// LINT025, enforce_arch feeds LINT026's reverse direction, and either one feeds LINT027's
-// line gate. Folder property, no cascade - each directory answers for itself. Skip rules
-// mirror scan_das_files so all passes see one tree.
-def scan_docs_folders(path : string; want_rule_docs, want_arch, want_doc_lines : bool;
-                      var folders, arch_folders, line_folders : array<string>; var seen : table<string; void?>) {
+// Directories under `path` the two tagged-or-present folder rules answer for: a folder whose
+// OWN .lint_config sets rule_docs_only feeds LINT025, and any folder holding a rule document
+// feeds LINT027's line gate. Folder property, no cascade - each directory answers for itself.
+// Skip rules mirror scan_das_files so all passes see one tree.
+def scan_docs_folders(path : string; want_rule_docs, want_doc_lines : bool;
+                      var folders, line_folders : array<string>; var seen : table<string; void?>) {
     let st = stat(path)
     return if (!st.is_valid || !st.is_dir || seen |> key_exists(path))
     seen |> insert(path, null)
-    let cfg = "{path}/.lint_config"
-    let armed_rule_docs = (want_rule_docs || want_doc_lines) && rule_docs_only_at(cfg)
-    let armed_arch = (want_arch || want_doc_lines) && enforce_arch_at(cfg)
-    if (want_rule_docs && armed_rule_docs) {
+    if (want_rule_docs && rule_docs_only_at("{path}/.lint_config")) {
         folders |> push(path)
     }
-    if (want_arch && armed_arch) {
-        arch_folders |> push(path)
-    }
-    if (want_doc_lines && (armed_rule_docs || armed_arch)) {
+    if (want_doc_lines && folder_holds_rule_doc(path)) {
         line_folders |> push(path)
     }
     fio::dir(path) $(name) {
         return if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name))
         let full = "{path}/{name}"
         let fst = stat(full)
-        if (fst.is_valid && fst.is_dir) {
-            scan_docs_folders(full, want_rule_docs, want_arch, want_doc_lines, folders, arch_folders, line_folders, seen)
+        if (fst.is_valid && fst.is_dir && !is_build_tree(full)) {
+            scan_docs_folders(full, want_rule_docs, want_doc_lines, folders, line_folders, seen)
         }
     }
 }
 
-// One walk of the run's scan roots for all three folder rules - the tree is walked once
+// One walk of the run's scan roots for the two folder-keyed rules - the tree is walked once
 // however many of them are on, and not at all when none is.
-def collect_docs_folders(roots : array<string>; want_rule_docs, want_arch, want_doc_lines : bool;
-                         var folders, arch_folders, line_folders : array<string>&) {
-    return if (!want_rule_docs && !want_arch && !want_doc_lines)
+def collect_docs_folders(roots : array<string>; want_rule_docs, want_doc_lines : bool;
+                         var folders, line_folders : array<string>&) {
+    return if (!want_rule_docs && !want_doc_lines)
     var seen : table<string; void?>
     for (root in roots) {
-        scan_docs_folders(root, want_rule_docs, want_arch, want_doc_lines, folders, arch_folders, line_folders, seen)
+        scan_docs_folders(root, want_rule_docs, want_doc_lines, folders, line_folders, seen)
     }
     folders |> sort
-    arch_folders |> sort
     line_folders |> sort
+}
+
+// A folder holds a rule document when any of its own (non-recursive) .md files is one
+def folder_holds_rule_doc(path : string) : bool {
+    var docs : array<string>
+    collect_folder_mds(path, true, docs)
+    return !empty(docs)
 }
 
 // The .md files in `folder` (non-recursive) on one side of `is_rule_doc_name`: the strays
@@ -306,22 +313,25 @@ def run_doc_lines_pass(folders : array<string>) : int {
 // Forward direction: one finding per citation the shared scanner
 // (`utils/common/arch_citations.das`) cannot resolve, in that scanner's words.
 def private report_arch_citation(file : string; c : ArchCitation; var docs : ArchDocs) : int {
-    let reason = citation_failure_reason(docs, c)
+    let reason = citation_failure_reason(docs, file, c)
     return 0 if (empty(reason))
     print("{file}:{c.line}: LINT026: [arch] citation does not resolve - {reason} (\"{c.raw}\")\n")
     return 1
 }
 
-// Both halves of the reverse check in one walk of an armed folder: the .md files that declare
-// anchors and the .das files that may cite them. Same pruning as scan_das_files.
-def private scan_arch_folder(path : string; var mds, dases : array<string>) {
+// Both halves of the citation check in one walk: the .md files that declare anchors and the
+// .das files that may cite them. Same pruning as scan_das_files; `seen` folds nested roots.
+def private scan_arch_folder(path : string; var mds, dases : array<string>; var seen : table<string; void?>) {
+    return if (seen |> key_exists(path))
+    seen |> insert(path, null)
     fio::dir(path) $(name) {
         return if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name))
         let full = "{path}/{name}"
         let fst = stat(full)
         return if (!fst.is_valid)
         if (fst.is_dir) {
-            scan_arch_folder(full, mds, dases)
+            return if (is_build_tree(full))
+            scan_arch_folder(full, mds, dases, seen)
         } elif (fst.is_reg && name |> ends_with(".md")) {
             mds |> push(full)
         } elif (fst.is_reg && name |> ends_with(".das") && !is_skip_file(name)) {
@@ -330,57 +340,40 @@ def private scan_arch_folder(path : string; var mds, dases : array<string>) {
     }
 }
 
-// Reverse direction, for a folder whose .lint_config sets [docs] enforce_arch = true: an anchor
-// is a promise that some code answers for the section, so an uncited one is either code that
-// forgot to say so or a section that was never anyone's contract.
-def private run_arch_reverse(folder : string) : int {
+// [arch] citation pass, both directions off one read of each file: forward reports every
+// citation that does not resolve, reverse every anchor no citation names - an anchor is a
+// promise that some code answers for the section, so an uncited one is either code that forgot
+// to say so or a section that was never anyone's contract. The roots are read as ONE set (a
+// daslib citer satisfies a module's anchor), each .md parsed once through the shared index.
+// A folder pass like LINT025 - once per invocation, not once per file.
+def run_arch_pass(roots : array<string>) : int {
     var mds : array<string>
     var dases : array<string>
-    scan_arch_folder(folder, mds, dases)
+    var seen : table<string; void?>
+    for (root in roots) {
+        scan_arch_folder(root, mds, dases, seen)
+    }
     mds |> sort
     dases |> sort
+    var found = 0
+    var docs : ArchDocs
     var cited : table<string>
     for (f in dases) {
         let text = fread(f)
-        continue if (empty(text))
+        continue if (empty(text) || find(text, "arch") < 0)
         for (c in collect_arch_citations(f, text)) {
+            found += report_arch_citation(f, c, docs)
             continue if (empty(c.anchor))
             cited |> insert("{c.doc}#{c.anchor}")
         }
     }
-    var found = 0
     for (md in mds) {
         let doc = arch_path(md)
-        for (a in collect_md_anchors(md)) {
-            continue if (cited |> key_exists("{doc}#{a.name}"))
+        each_arch_anchor(docs, doc) $(a) {
+            return if (cited |> key_exists("{doc}#{a.name}"))
             print("{md}:{a.line}: LINT026: anchor \{#{a.name}\} has no [arch] citation - cite it from the owning code, or strip the anchor to demote the section to narrative\n")
             found ++
         }
-    }
-    return found
-}
-
-// [arch] citation pass: forward over every .das under the run's scan roots, reverse over the
-// folders that armed it. A folder pass like LINT025 - once per invocation, not once per file.
-def run_arch_pass(roots, arch_folders : array<string>) : int {
-    var files : array<string>
-    var cache : table<string; void?>
-    var skipped = 0
-    for (root in roots) {
-        scan_das_files(root, files, cache, skipped)
-    }
-    files |> sort
-    var found = 0
-    var docs : ArchDocs
-    for (f in files) {
-        let text = fread(f)
-        continue if (empty(text))
-        for (c in collect_arch_citations(f, text)) {
-            found += report_arch_citation(f, c, docs)
-        }
-    }
-    for (folder in arch_folders) {
-        found += run_arch_reverse(folder)
     }
     return found
 }
@@ -861,16 +854,14 @@ def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes 
     let want_arch = rule_is_on("LINT026", disabled_codes, enabled_codes)
     let want_doc_lines = rule_is_on("LINT027", disabled_codes, enabled_codes)
     var rule_docs_folders : array<string>
-    var arch_folders : array<string>
     var line_folders : array<string>
-    collect_docs_folders(docs_roots, want_rule_docs, want_arch, want_doc_lines,
-        rule_docs_folders, arch_folders, line_folders)
+    collect_docs_folders(docs_roots, want_rule_docs, want_doc_lines, rule_docs_folders, line_folders)
     var found = 0
     if (want_rule_docs) {
         found += run_rule_docs_pass(rule_docs_folders)
     }
     if (want_arch) {
-        found += run_arch_pass(docs_roots, arch_folders)
+        found += run_arch_pass(docs_roots)
     }
     if (want_doc_lines) {
         found += run_doc_lines_pass(line_folders)

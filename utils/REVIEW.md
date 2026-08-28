@@ -5,8 +5,10 @@ doc: `CLAUDE.md` (repo root).
 
 **A file under `utils/` that belongs to a tool other than the one owning the directory it
 sits in is reviewed with that tool's own `REVIEW.md`, where one exists, as well as with this
-checklist - not with the checklist of the directory it sits in.** A tool's file OUTSIDE
-`utils/` answers to the checklist of the folder that contains it.
+checklist - not with the checklist of the directory it sits in. A file in a `utils/` library
+directory (`common/`) is reviewed with this checklist and with the checklist of every tool
+that requires it.** A tool's file OUTSIDE `utils/` answers to the checklist of the folder that
+contains it.
 
 **A diff that changes the consent wording in `watchdog/watchdog.py` answers to
 `modules/dasLLAMA/performance/REVIEW.md` (repo root) too.**

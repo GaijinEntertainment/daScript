@@ -212,8 +212,11 @@ run_check "mcp.das (empty stdin)" bash -c \
 run_check "dastest.exe runs a shipped suite" bash -c \
     "set -o pipefail; '$BUNDLE/bin/dastest${DASEXE_SUFFIX}' --test utils/common/tests --isolated-mode | tee '$LOG.suite' \
      && grep -Eq '^[1-9][0-9]* tests, [1-9][0-9]* passed, 0 failed, 0 errors' '$LOG.suite'"
+# LINT026 is off here by construction: an [arch] citation names an ARCHITECTURE*.md, and
+# those documents never ship (see the leak check below), so in the bundle every citation
+# in daslib is a dangling one. The source tree's lint lanes verify the citations.
 run_check "lint.exe lints daslib, no skips" bash -c \
-    "set -o pipefail; '$BUNDLE/bin/lint${DASEXE_SUFFIX}' daslib | tee '$LOG.lint' \
+    "set -o pipefail; '$BUNDLE/bin/lint${DASEXE_SUFFIX}' daslib --disable LINT026 | tee '$LOG.lint' \
      && grep -Eq '^[0-9]+ files, 0 issue\(s\), 0 error\(s\)\$' '$LOG.lint'"
 
 # Shipped skills must not send the reader to a path the bundle does not contain.

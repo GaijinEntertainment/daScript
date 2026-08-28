@@ -365,15 +365,17 @@ jobs:
         # build/doc_verify holds .das extracted verbatim from RST by the doc-verify step above - not authored source
         $BIN/das-fmt.exe --path ./ --verify --exclude-mask build/
 
-    - name: "Run lint on changed .das files"
+    - name: "Run lint on changed .das and .md files"
       if: matrix.target == 'linux'
       run: |
         set -eux
         BASE_REF="${{ github.event.pull_request.base.ref }}"
         BASE_REF="${BASE_REF:-master}"
-        mapfile -t CHANGED < <(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- '*.das')
+        # a changed .md arms its folder's document rules (LINT025/026/027) with no .das compiled;
+        # a repo-root .md arms the whole tree - intended, and a few seconds with nothing to compile
+        mapfile -t CHANGED < <(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- '*.das' '*.md')
         if [ ${#CHANGED[@]} -eq 0 ]; then
-          echo "no .das files changed; skipping lint"
+          echo "no .das or .md files changed; skipping lint"
           exit 0
         fi
         echo "linting: ${CHANGED[*]}"

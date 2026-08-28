@@ -109,20 +109,25 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `DASLLAMA_COOPMAT` | text | auto | Cooperative-matrix mode; the flash-attention twin needs it even when the GEMM runs sdot4. |
+| `DASLLAMA_COOPMAT` | text | auto | Cooperative-matrix mode (auto = cm2 where the device has NV_cooperative_matrix2, else mm, else sdot4); the flash-attention twin needs it even when the GEMM runs sdot4. |
 | `DASLLAMA_MM_SMALL` | text | 32 | Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L. |
 | `DASLLAMA_MM_SMALLD` | number | 64 | Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument. |
-| `DASLLAMA_VK_FUSE` | flag | on | Fused decode tail (add+rms+requant, qk-norm+rope); 0 pins the split dispatches for a same-build A/B. |
+| `DASLLAMA_VK_FUSE` | flag | on | Fused add+rms+requant: the decode tail (plus qk-norm+rope) AND the prefill batch ar+rq pairs; 0 pins the split dispatches for a same-build A/B. |
 | `DASLLAMA_VK_XFERQ` | flag | on | Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail. |
 | `DASLLAMA_VK_IMPORT` | flag | on | Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path. |
 | `DASLLAMA_TRIM` | flag | off | Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity). |
 | `DASLLAMA_VK_MEMPRIO` | flag | on | Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours. |
 | `DASLLAMA_VK_FA` | flag | on | Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths. |
+| `DASLLAMA_VK_KV_MERGE` | flag | on | Merged k|v prefill GEMM - one dispatch over the adjacent k+v arena planes; 0 pins the split k + v dispatches for a same-build A/B. |
+| `DASLLAMA_VK_OVERLAP` | flag | on | Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role). |
+| `DASLLAMA_VK_GPU_EMBED` | flag | on | Device-side token-embedding gather for the resident prefill (a tied q8 table gathers from the resident cls plane; a raw f32 table uploads whole under a 512 MB cap); 0 keeps the CPU embed loop. |
+| `DASLLAMA_VK_FULLSG` | flag | off | Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured slower than plain pipelines on the mm_a gate shape, so those are the default). |
 | `DASLLAMA_VK_REBAR` | flag | on | Use a ReBAR device-local host-visible heap when one larger than 1GB is present. |
 | `DASLLAMA_VK_KV32` | number | 0 | Arm the resident driver with f32 KV mirrors instead of the f16 default (A/B instrument; only sessions of the armed codec are served). |
 | `DASLLAMA_CM2_TILE` | number | 0 | cm2 prefill tile pick: 0 = occupancy heuristic, 128 = force the m tile, 256 = force the l tile (A/B instrument). |
 | `DASLLAMA_CM2_SPLITK` | number | 0 | cm2 split-k: 0 = occupancy heuristic, 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). |
 | `DASLLAMA_VK_SPV_OVERRIDE` | path | unset | Directory of <kernel>.spv files served instead of the emitted words at pipeline creation (offline spirv-opt / hand-patched A/B instrument). |
+| `DASLLAMA_VK_SPV_DUMP` | path | unset | Directory to write each kernel's emitted words as <kernel>.spv at pipeline creation (the override instrument's capture half). |
 | `DASLLAMA_VK_HAZARD_PARANOID` | flag | off | Barrier at every dispatch (correctness bisect). |
 | `DASLLAMA_VK_HAZARD_TRACE` | flag | off | Log every detected hazard and the barrier it produced. |
 
