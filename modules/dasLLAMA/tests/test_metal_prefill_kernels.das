@@ -42,6 +42,137 @@ def private approx(x, y : float) : bool {
     return abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
 }
 
+// The fused qk_norm+rope kernel vs the composed CPU twins (per-head RMS then rope_scaled*_tab)
+// at one (hx, donorm, neox, partial-rot) arm. Rows past nreal are PAD: the f32 panel must come
+// back untouched and the HX twin must carry their raw f16 copies (the cvt-on-pads contract);
+// the HX twin is additionally gated BIT-equal to float16(panel) per element (the dual-store
+// contract). GENERIC (untyped dev/queue) so it instantiates only inside the Apple static_if.
+def private qk_rope_gate(t : T?; dev, queue; hx, donorm, neox, partial : bool) {
+    let tag = "qk_rope{hx ? " hx" : ""}{donorm ? " norm" : ""}{neox ? " neox" : ""}{partial ? " part" : ""}"
+    var err : string
+    var pso = (hx
+        ? pipeline_from_source(dev, MetalQkRopeHX_metal_qk_rope_msl, MetalQkRopeHX_metal_qk_rope_msl_entry, MetalQkRopeHX_metal_qk_rope_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalQkRope_metal_qk_rope_msl, MetalQkRope_metal_qk_rope_msl_entry, MetalQkRope_metal_qk_rope_msl_fastmath, err))
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let nreal = 6
+    let npad = hx ? 2 : 0
+    let nrows = nreal + npad
+    let hs = HEAD_SIZE
+    let nh = N_HEADS
+    let rstride = nh * hs
+    let rot = partial ? hs / 2 : hs
+    let halfr = rot / 2
+    var xv : array<float>
+    var wv : array<float>
+    var tc : array<float>
+    var ts : array<float>
+    var want : array<float>
+    xv |> resize(nrows * rstride)
+    want |> resize(nrows * rstride)
+    wv |> resize(hs)
+    tc |> resize(nreal * halfr)
+    ts |> resize(nreal * halfr)
+    for (k in range(nrows * rstride)) {
+        xv[k] = 0.19 * float(k % 29) - 1.7
+    }
+    for (k in range(hs)) {
+        wv[k] = 0.8 + 0.05 * float(k % 7)
+    }
+    for (k in range(nreal * halfr)) {
+        tc[k] = cos(0.03 * float(k % 83))
+        ts[k] = sin(0.03 * float(k % 83))
+    }
+    for (k in range(nrows * rstride)) {
+        want[k] = xv[k]
+    }
+    unsafe {
+        for (p in range(nreal)) {
+            if (donorm) {
+                for (h in range(nh)) {
+                    let rb = p * rstride + h * hs
+                    var ss = 0.0
+                    for (j in range(hs)) {
+                        ss += want[rb + j] * want[rb + j]
+                    }
+                    let inv = 1.0 / sqrt(ss / float(hs) + EPS)
+                    for (j in range(hs)) {
+                        want[rb + j] = wv[j] * (want[rb + j] * inv)
+                    }
+                }
+            }
+            if (partial) {
+                rope_scaled_neox_tab_part(addr(want[p * rstride]), int64(hs), int64(rot),
+                    int64(rstride), addr < float const? >(tc[p * halfr]), addr < float const? >(ts[p * halfr]))
+            } elif (neox) {
+                rope_scaled_neox_tab(addr(want[p * rstride]), int64(hs),
+                    int64(rstride), addr < float const? >(tc[p * halfr]), addr < float const? >(ts[p * halfr]))
+            } else {
+                rope_scaled_tab(addr(want[p * rstride]), int64(hs),
+                    int64(rstride), addr < float const? >(tc[p * halfr]), addr < float const? >(ts[p * halfr]))
+            }
+        }
+    }
+    // anti-vacuous: the composed oracle must actually move the panel
+    var moved = 0
+    for (k in range(nreal * rstride)) {
+        moved += approx(want[k], xv[k]) ? 0 : 1
+    }
+    t |> success(moved > 0, "{tag}: oracle is not the identity ({moved} moved)")
+    var bx = buf_upload(dev, xv)
+    var bw = buf_upload(dev, wv)
+    var btc = buf_upload(dev, tc)
+    var bts = buf_upload(dev, ts)
+    var bxh = hx ? buf_fill(dev, nrows * rstride, float16(-77.0)) : null   // poison fill: an unwritten twin row reds the pad compare
+    var ka = QkRopeArgs(rstride = uint(rstride), hs = uint(hs), eps = EPS,
+        donorm = donorm ? 1u : 0u, neox = neox || partial ? 1u : 0u, rot = uint(rot), nreal = uint(nreal))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, hx ? MetalQkRopeHX_metal_qk_rope_msl_tgmem : MetalQkRope_metal_qk_rope_msl_tgmem, 0)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, bw, 0ul, 1)
+        metal_set_buffer(enc, btc, 0ul, 2)
+        metal_set_buffer(enc, bts, 0ul, 3)
+        metal_set_bytes(enc, unsafe(addr < void? >(ka)), uint64(typeinfo sizeof(ka)), 4)
+        if (hx) {
+            metal_set_buffer(enc, bxh, 0ul, 5)
+        }
+        metal_dispatch_threadgroups(enc, uint3(uint(nh), uint(nrows), 1u), uint3(uint(hs / 2), 1u, 1u))
+    }
+    t |> success(ran, "{tag} dispatch: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bx, want, tag), 0)
+        if (hx) {
+            // pads ride the copy arm; the twin is BIT-equal to float16(panel) everywhere
+            var badh = 0
+            unsafe {
+                let pf = reinterpret<float const?>(metal_buffer_contents(bx))
+                let ph = reinterpret<uint16 const?>(metal_buffer_contents(bxh))
+                for (k in range(nrows * rstride)) {
+                    let wantbits = uint(reinterpret<uint16>(float16(pf[k])))
+                    if (uint(ph[k]) != wantbits) {
+                        badh++
+                    }
+                }
+            }
+            t |> equal(badh, 0, "{tag}: f16 twin bit-equals float16(panel)")
+        }
+    }
+    metal_release(bx)
+    metal_release(bw)
+    metal_release(btc)
+    metal_release(bts)
+    if (bxh != null) {
+        metal_release(bxh)
+    }
+    metal_release(pso)
+    delete xv
+    delete wv
+    delete tc
+    delete ts
+    delete want
+}
+
 // The tiled sgmat attention trio (QK^T -> rowstat -> P.V) vs a direct causal-GQA oracle at one
 // (head_size, heads, kv_heads, npos) shape. Buffers carry np32 rows like the driver's (whole-tile
 // sgmat stores + staging reads walk the padded rows); rows >= npos are pad. GENERIC (untyped
@@ -482,6 +613,13 @@ def test_metal_prefill_kernels(t : T?) {
                 metal_release(brhs)
                 metal_release(brnp)
                 metal_release(pso_rope)
+
+                // ===== the fused qk_norm+rope kernel: every (hx, donorm, pairing) production arm =====
+                qk_rope_gate(t, dev, queue, false, true, true, false)    // K rows, qwen3 class
+                qk_rope_gate(t, dev, queue, true, true, true, false)     // q panel + twin, qwen3 class
+                qk_rope_gate(t, dev, queue, false, true, false, false)   // classic pairing with norm
+                qk_rope_gate(t, dev, queue, true, false, false, false)   // rope-only + twin, llama class
+                qk_rope_gate(t, dev, queue, false, false, true, true)    // partial rot, Wave D class
 
                 // ===== attention: the tiled sgmat trio vs the direct causal-GQA oracle, at the
                 // classic small shape (hs 32 — one QK k-slab) AND the llama-3B head shape

@@ -1572,6 +1572,95 @@ class MetalRope {
     }
 }
 
+struct QkRopeArgs {
+    rstride : uint  //!< row width (qd or kv_dim)
+    hs : uint
+    eps : float
+    donorm : uint   //!< 0 = rope-only (no per-head RMS)
+    neox : uint
+    rot : uint      //!< partial rotary width (== hs for full rope)
+    nreal : uint    //!< rows past this are PAD: copied (and f16-stored), never normed or roped
+}
+
+//! The fused qk_norm + rope pass, one thread per rope PAIR (hs/2 per (head, row) tg): RMS by
+//! simd/part reduction, rotation in-register, ONE panel write vs the split dispatches' three
+//! passes; the HX stamp dual-stores the f16 twin, retiring the q panel's pf_cvt_panel pass
+[ |> template_struct_instance]
+class template MetalQkRopeT {
+    @ssbo @binding = 0 @off = "xoff" x : array<float>     //!< bound at the panel offset; rewritten in place
+    @ssbo @binding = 1 @role = "weight" w : array<float>  //!< per-head norm weight (ignored when donorm == 0)
+    @ssbo @binding = 2 @role = "weight" tcos : array<float>  //!< [nreal x rot/2]
+    @ssbo @binding = 3 @role = "weight" tsin : array<float>
+    @uniform @binding = 4 ka : QkRopeArgs
+    @ssbo @binding = 5 @role = "write" @template_gate = HX xh : array<float16>   //!< f16 twin of the panel
+    @template_constant HX : bool = false
+    @workgroup part : float[16]     //!< one per simdgroup - hs/2 <= 256 threads
+
+    [metal_kernel]
+    def metal_qk_rope {
+        let h = gl_WorkGroupID.x
+        let p = gl_WorkGroupID.y
+        let lid = gl_LocalInvocationID.x
+        let hs = ka.hs
+        let half = hs / 2u
+        let halfr = ka.rot / 2u
+        let hb = p * ka.rstride + h * hs
+        let in_rot = lid < halfr
+        //! the pair mapping is MetalRope's verbatim: neox pairs (j, j+halfr) with the
+        //! identity pairs covering [rot, hs); classic pairs (2j, 2j+1)
+        var i = 0u
+        var i2 = 0u
+        if (ka.neox != 0u) {
+            i = in_rot ? hb + lid : hb + ka.rot + (lid - halfr)
+            i2 = in_rot ? i + halfr : i + (half - halfr)
+        } else {
+            i = hb + 2u * lid
+            i2 = i + 1u
+        }
+        var v0 = x[i]
+        var v1 = x[i2]
+        let live = p < ka.nreal   //! workgroup-uniform - the barrier below never diverges
+        if (live && ka.donorm != 0u) {
+            let s1 = simd_sum(v0 * v0 + v1 * v1)
+            if (gl_SubgroupInvocationID == 0u) {
+                part[gl_SubgroupID] = s1
+            }
+            barrier()
+            var total = 0.0
+            var sg = 0u
+            while (sg < gl_NumSubgroups) {
+                total += part[sg]
+                sg++
+            }
+            let inv = 1.0 / sqrt(total / float(hs) + ka.eps)
+            v0 = w[i - hb] * (v0 * inv)
+            v1 = w[i2 - hb] * (v1 * inv)
+        }
+        var r0 = v0
+        var r1 = v1
+        if (live && in_rot) {
+            let fcr = tcos[p * halfr + lid]
+            let fci = tsin[p * halfr + lid]
+            r0 = v0 * fcr - v1 * fci
+            r1 = v0 * fci + v1 * fcr
+        }
+        x[i] = r0
+        x[i2] = r1
+        static_if (HX) {
+            xh[i] = float16(r0)
+            xh[i2] = float16(r1)
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_qk_rope", pso = "g_pf_pso_qkr", tg = "hs2", grid = "nheads, nrows", params = "nheads : int64, nrows : int64, hs2 : int64")]
+class MetalQkRope : MetalQkRopeT {}
+
+[metal_dispatch(name = "enc_qk_rope_hx", pso = "g_pf_pso_qkr_hx", tg = "hs2", grid = "nheads, nrows", params = "nheads : int64, nrows : int64, hs2 : int64")]
+class MetalQkRopeHX : MetalQkRopeT {
+    override HX = true
+}
+
 [metal_dispatch(name = "enc_add_bias_rows", pso = "g_pf_pso_addbias", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalAddBiasRows {
     @ssbo @binding = 0 @role = "readwrite" @off = "off" @span = "total*4" x : array<float>     //!< [nrows x n], updated in place (bound at the panel offset)
@@ -2196,6 +2285,8 @@ var private g_max_npos = 2048l          //!< naive-attention P footprint cap: he
 var private g_prefills = 0l
 var private g_pf_inited = false
 var private g_pf_pso_rope : MetalComputePipeline?
+var private g_pf_pso_qkr : MetalComputePipeline?     //!< fused qk_norm+rope (K rows and twin-less panels)
+var private g_pf_pso_qkr_hx : MetalComputePipeline?  //!< its f16 dual-store stamp (the q panel)
 var private g_pf_pso_addbias : MetalComputePipeline?
 var private g_pf_pso_qk : MetalComputePipeline?
 var private g_pf_pso_rowstat : MetalComputePipeline?
@@ -2370,6 +2461,13 @@ def public set_metal_prefill_tall(v : bool) {
     to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_tall({v}) - GEMM form override\n")
 }
 
+//! A/B seat: the fused qk_norm+rope pass (one panel rewrite + the q twin dual-store) vs the
+//! split norm/rope/cvt dispatches. Default on; `DASLLAMA_METAL_QK_ROPE=0` pins it off.
+def public set_metal_prefill_qk_rope(v : bool) {
+    g_pf_env_qkr = v
+    to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_qk_rope({v}) - ew form override\n")
+}
+
 //! The prefill knockout rail as an in-process setter (timing attribution — served output is
 //! GARBAGE while non-empty): the `DASLLAMA_METAL_PREFILL_SKIP` families above; `""` restores
 //! full math. Switchable between measurement windows, same contract as `set_metal_decode_skip`.
@@ -2522,6 +2620,14 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     if (g_pf_pso_rope != null) {
         metal_release(g_pf_pso_rope)
         g_pf_pso_rope = null
+    }
+    if (g_pf_pso_qkr != null) {
+        metal_release(g_pf_pso_qkr)
+        g_pf_pso_qkr = null
+    }
+    if (g_pf_pso_qkr_hx != null) {
+        metal_release(g_pf_pso_qkr_hx)
+        g_pf_pso_qkr_hx = null
     }
     if (g_pf_pso_addbias != null) {
         metal_release(g_pf_pso_addbias)
@@ -2709,6 +2815,8 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     CVT_MIN_ROWS = metal_cvt_min_rows()
     var ok = true
     g_pf_pso_rope = compile_pso(metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath, ok)
+    g_pf_pso_qkr = compile_pso(MetalQkRope_metal_qk_rope_msl, MetalQkRope_metal_qk_rope_msl_entry, MetalQkRope_metal_qk_rope_msl_fastmath, ok)
+    g_pf_pso_qkr_hx = compile_pso(MetalQkRopeHX_metal_qk_rope_msl, MetalQkRopeHX_metal_qk_rope_msl_entry, MetalQkRopeHX_metal_qk_rope_msl_fastmath, ok)
     g_pf_pso_addbias = compile_pso(metal_add_bias_rows_msl, metal_add_bias_rows_msl_entry, metal_add_bias_rows_msl_fastmath, ok)
     g_pf_pso_qk = compile_pso(metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, ok)
     g_pf_pso_rowstat = compile_pso(metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, ok)
@@ -4206,7 +4314,36 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     enc_add_bias_rows(enc, bks[l], koff, bbk, 0ul, u_kvd, u_totkv, npos * kv_dim)
                     enc_add_bias_rows(enc, bvs[l], koff, bbv, 0ul, u_kvd, u_totkv, npos * kv_dim)
                 }
-                if (!recr && has_qkn && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                //! rot mirrors enc_rope's @default: the null u_rot bind means "the class's own hs"
+                let rot_l = c.rope_dim > 0l && c.rope_dim != head_size ? c.rope_dim : hs_l
+                let qkr_on = (g_pf_env_qkr && g_pf_pso_qkr != null && g_pf_pso_qkr_hx != null
+                    && hs_l % 2l == 0l && hs_l / 2l <= 1024l && rot_l % 2l == 0l && rot_l >= 2l && rot_l <= hs_l)
+                var bqh_q : MetalBuffer? = null    //! the fused arm's q twin, claimed at rope time - the QK site consumes it
+                var bqh_q_live = false
+                if (!recr && qkr_on && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                    //! fused qk_norm+rope: one panel rewrite per q/k instead of norm RW + rope RW,
+                    //! and q dual-stores the f16 twin pf_cvt_panel would build at the QK site
+                    var bcos_l = lsl && dual_rope ? bcos_swa : bcos
+                    var bsin_l = lsl && dual_rope ? bsin_swa : bsin
+                    //! donorm == 0 never reads w - bcos_l just keeps the binding valid
+                    var bqw = has_qkn ? upload_region(addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(hs_l * 4l)) : bcos_l
+                    var qka = QkRopeArgs(rstride = uint(qd_l), hs = uint(hs_l), eps = c.norm_eps,
+                        donorm = has_qkn ? 1u : 0u, neox = c.rope_neox ? 1u : 0u, rot = uint(rot_l), nreal = uint(npos))
+                    bqh_q = mp >= CVT_MIN_ROWS ? pf_twin_panel(mp, qd_l) : null
+                    bqh_q_live = true
+                    if (bqh_q != null && g_pf_skip != "act_cvt") {
+                        enc_qk_rope_hx(enc, bq, 0ul, bqw, bcos_l, bsin_l, qka, bqh_q, n_heads, mp, hs_l / 2l)
+                    } else {
+                        enc_qk_rope(enc, bq, 0ul, bqw, bcos_l, bsin_l, qka, n_heads, npos, hs_l / 2l)
+                    }
+                    if (!kvsh) {
+                        var bkw = has_qkn ? upload_region(addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(hs_l * 4l)) : bcos_l
+                        var kka = QkRopeArgs(rstride = uint(kvd_l), hs = uint(hs_l), eps = c.norm_eps,
+                            donorm = has_qkn ? 1u : 0u, neox = c.rope_neox ? 1u : 0u, rot = uint(rot_l), nreal = uint(npos))
+                        enc_qk_rope(enc, bks[l], koff, bkw, bcos_l, bsin_l, kka, kvd_l / hs_l, npos, hs_l / 2l)
+                    }
+                }
+                if (!recr && !qkr_on && has_qkn && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! per-head QK-norm before rope — the chunk's q panel and its new K rows
                     var bqw = upload_region(addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(hs_l * 4l))
                     var qka = QkNormArgs(nq = uint(n_heads), koffe = uint(qd_l), rstride = uint(qd_l),
@@ -4219,7 +4356,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         enc_qk_norm(enc, bks[l], koff, bkw, kka, kvd_l / hs_l, npos, hs_l)
                     }
                 }
-                if (!recr && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                if (!recr && !qkr_on && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! sliding layers rope with the swa row pair, whose rows are the class's own hs/2 wide
                     var bcos_l = lsl && dual_rope ? bcos_swa : bcos
                     var bsin_l = lsl && dual_rope ? bsin_swa : bsin
@@ -4240,8 +4377,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         ulo = s.attn_uniform_end > 0l ? uint(s.attn_uniform_lo) : 0u)
                     if (g_pf_skip != "attn_qk") {
                         if (mmattn) {
+                            //! the fused qk_rope arm already dual-stored the twin - re-converting would double-pay
                             enc_qk_mm(enc, bq, bks[l], batt, atka, mp, nk64, n_heads,
-                                bqh = pf_cvt_panel(enc, bq, mp, qd_l, g_pf_skip == "act_cvt"))
+                                bqh = bqh_q_live ? bqh_q : pf_cvt_panel(enc, bq, mp, qd_l, g_pf_skip == "act_cvt"))
                         } else {
                             enc_qk(enc, bq, bks[l], batt, atka, mp, nk64, n_heads)
                         }
@@ -4847,6 +4985,7 @@ var private g_pf_env_half_x = true
 var private g_pf_env_dev_w = true
 var private g_pf_env_devw_res_bytes = 0ul   //!< DASLLAMA_METAL_DEVW_RESIDENT budget (MB env, bytes here); 0 = off
 var private g_pf_env_tall = true
+var private g_pf_env_qkr = true
 
 var private CVT_MIN_ROWS = 256l          //!< sidecar knob "metal_cvt_min_rows" — cached at init
 var private TALL_OCC_FLOOR = 64l         //!< sidecar knob "metal_tall_floor" — cached at init
@@ -4879,6 +5018,7 @@ def dasllama_metal_prefill_register() {
     if (!g_pf_env_mm_tail) {
         to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_MM_TAIL=0 - small npos % 32 remainders bill the padded tile (numerics move with the form)\n")
     }
+    g_pf_env_qkr = g_env_metal.qk_rope
     g_pf_env_span = g_env_metal.span
     g_pf_env_logits = g_env_metal.logits
     g_pf_env_attn = g_env_metal.attn

@@ -193,6 +193,9 @@ struct public MetalEnv {
     @clarg_doc = "GEMV-tail prefill dispatch: npos % 32 in [1,8] peels the last M tile's real rows onto the fixed-B GEMV family instead of billing a full 32-row tile; 0 pins the padded-tile path (the A/B rail)."
     mm_tail : bool = true
 
+    @clarg_doc = "Fused prefill qk_norm+rope pass (one panel rewrite, q panel dual-stores its f16 twin); 0 restores the split norm/rope/cvt dispatches (the A/B rail)."
+    qk_rope : bool = true
+
     @clarg_default_doc = "~4 layers/chunk"
     @clarg_doc = "Command-buffer split: each chunk commits as encoded so the scheduler overlaps chunk k with k-1."
     ncb : int = 0
