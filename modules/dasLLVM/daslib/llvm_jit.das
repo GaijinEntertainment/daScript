@@ -2982,6 +2982,32 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMPositionBuilderAtEnd(g_builder, check_end)
     }
 
+    def division_overflow_cond(lval, right : LLVMOpaqueValue?; opType : TypeDeclPtr) : LLVMOpaqueValue? {
+        if (opType.baseType != Type.tInt && opType.baseType != Type.tInt64) {
+            panic("division overflow guard on {describe(opType)}")
+        }
+        let ty = type_to_llvm_type(opType)
+        let intMin = 1ul << uint64(LLVMGetIntTypeWidth(ty) - 1u)
+        var is_min = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, lval,
+            LLVMConstInt(ty, intMin, 0), "cmp_is_intmin")
+        var is_m1 = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, right,
+            LLVMConstAllOnes(ty), "cmp_is_minus_one")
+        return LLVMBuildAnd(g_builder, is_min, is_m1, "cmp_div_ovf")
+    }
+
+    def check_division_overflow(lval, right : LLVMOpaqueValue?; at : LineInfo; opType : TypeDeclPtr) {
+        var check_ovf = append_basic_block("check_div_ovf")
+        var check_true = append_basic_block("check_ovf_true")
+        var check_end = append_basic_block("check_ovf_end")
+        LLVMBuildBr(g_builder, check_ovf)
+        LLVMPositionBuilderAtEnd(g_builder, check_ovf)
+        LLVMBuildCondBr(g_builder, division_overflow_cond(lval, right, opType), check_true, check_end)
+        LLVMPositionBuilderAtEnd(g_builder, check_true)
+        build_exception("division overflow", at)
+        LLVMBuildBr(g_builder, check_end)
+        LLVMPositionBuilderAtEnd(g_builder, check_end)
+    }
+
     def isExprIntNZ(expr : ExpressionPtr) {
         return (((expr is ExprConstInt) && (expr as ExprConstInt).value != 0)
             || ((expr is ExprConstUInt) && (expr as ExprConstUInt).value != 0u)
@@ -3194,6 +3220,15 @@ class public LlvmJitVisitor : AstVisitor {
             if (isNumeric(opType) && isNumeric(expr.left._type)) {
                 if (!isExprIntNZ(expr.right)) {
                     check_divide_by_0(right, expr.at, opType, string(expr.op))
+                }
+                if (opType.isSignedInteger) {
+                    let lval = expr.op == "/" || expr.op == "%" ? left : r2v_left
+                    if (expr.op == "%" || expr.op == "%=") {
+                        right = LLVMBuildSelect(g_builder, division_overflow_cond(lval, right, opType),
+                            LLVMConstInt(type_to_llvm_type(opType), 1ul, 0), right, "mod_ovf_to_1")
+                    } else {
+                        check_division_overflow(lval, right, expr.at, opType)
+                    }
                 }
             }
             if (expr.op == "/") {
@@ -7652,6 +7687,10 @@ class public ResolveExternVisitor : AstVisitor {
     @do_not_delete thisBlock : array<ExprBlock?>
     uid : UidNodes?
 
+    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool {
+        return false
+    }
+
     def override preVisitFunction(var fun : FunctionPtr) : void {
         uid.reset(fun)
         thisFunc = fun
@@ -8190,6 +8229,10 @@ class public DisableJitVisitor : AstVisitor {
     uids : table<uint64, uint64>
     def TypeInfoVisitor {
         disable = false
+    }
+
+    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool {
+        return false
     }
     // Default-argument inits are inlined into call sites at infer, so the copy left on the
     // argument is a dead husk LlvmJitVisitor declines too - and ClearUnusedSymbols nulls refs

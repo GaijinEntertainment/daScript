@@ -378,6 +378,14 @@ namespace das {
                 return true;
             }
         }
+        for ( auto & tme : decl->typeMacroExpr ) {
+            if ( tme && tme->rtti_isTypeDecl() ) {
+                auto te = static_cast<ExprTypeDecl *>(tme);
+                if ( te->typeexpr && isLoop(visited, te->typeexpr) ) {
+                    return true;
+                }
+            }
+        }
         if ( decl->baseType == Type::alias ) {
             visited.pop_back();
         }
@@ -389,7 +397,7 @@ namespace das {
         if (decl->baseType == Type::typeDecl || decl->baseType == Type::typeMacro) {
             return nullptr;
         }
-        if (decl->baseType == Type::autoinfer && !autoToAlias) { // until alias is fully resolved, can't infer
+        if (decl->baseType == Type::autoinfer && (!autoToAlias || decl->alias.empty())) {
             return nullptr;
         }
         if (decl->baseType == Type::alias || (decl->baseType == Type::autoinfer && autoToAlias)) {
@@ -480,6 +488,8 @@ namespace das {
             if (decl->firstType) {
                 resT->firstType = inferAlias(decl->firstType, fptr, aliases, options, autoToAlias);
                 if (!resT->firstType)
+                    return nullptr;
+                if (!resT->firstType->isAutoOrAlias() && !resT->firstType->isTableKeyType())
                     return nullptr;
             }
             if (decl->secondType) {

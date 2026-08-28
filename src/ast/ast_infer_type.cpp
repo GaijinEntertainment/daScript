@@ -305,7 +305,23 @@ namespace das {
     }
     bool InferTypes::canVisitStructure(Structure *st) {
         if ( fatalAliasLoop ) return false;
-        return !st->isTemplate; // we don't do a thing with templates
+        if ( st->isTemplate ) return false; // we don't do a thing with templates
+        bool aliasLoop = false;
+        st->aliases.foreach([&](const TypeDeclPtr & atype) -> bool {
+            vector<string> visited;
+            visited.push_back(atype->alias);
+            if ( isLoop(visited, atype) ) {
+                aliasLoop = true;
+                error("alias loop detected: '" + describeType(atype) + "'", "", "",
+                      atype->at, CompilationError::recursion_type_alias);
+            }
+            return true;
+        });
+        if ( aliasLoop ) {
+            fatalAliasLoop = true;
+            return false;
+        }
+        return true;
     }
     void InferTypes::preVisit(Structure *that) {
         Visitor::preVisit(that);
@@ -1058,6 +1074,7 @@ namespace das {
                     }
                 }
             }
+            if (blk->isClosure) break;
         }
         return nullptr;
     }
@@ -5329,6 +5346,8 @@ namespace das {
                 return Visitor::visit(expr);
             } else if (expr->iteratorVariables.size() != expr->sources.size()) {
                 return Visitor::visit(expr);
+            } else if (!expr->body) {
+                return Visitor::visit(expr);
             }
             // only topmost
             //  which in case of generator is 2, due to
@@ -5339,6 +5358,11 @@ namespace das {
             uint32_t tf = expr->body->getEvalFlags();
             if (tf & EvalFlags::yield) { // only unwrap if it has "yield"
                 auto blk = replaceGeneratorFor(expr, func);
+                if (!blk) {
+                    error("generator for is not fully inferred yet", "", "",
+                          expr->at, CompilationError::not_resolved_yet_block);
+                    return Visitor::visit(expr);
+                }
                 scopes.back()->needCollapse = true;
                 reportAstChanged();
                 return blk;

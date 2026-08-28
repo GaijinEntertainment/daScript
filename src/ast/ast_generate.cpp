@@ -876,6 +876,10 @@ namespace das {
         }
         virtual void preVisit ( ExprFor * expr ) override {
             Visitor::preVisit(expr);
+            if ( expr->iterators.size() != expr->iteratorVariables.size() ) {
+                ready = false;
+                return;
+            }
             if ( scopes.size()==0 ) {   // only top level for loop
                 for ( size_t i=0; i!=expr->iterators.size(); ++i ) {
                     auto & varName = expr->iterators[i];
@@ -908,14 +912,17 @@ namespace das {
                 expr->name = it->second;
             }
         }
+    public:
+        bool ready = true;
     protected:
         vector<ExprBlock *> scopes;
         das_hash_map<string,string> rename;
     };
 
-    void giveBlockVariablesUniqueNames  ( ExpressionPtr expr ) {
+    bool giveBlockVariablesUniqueNames  ( ExpressionPtr expr ) {
         RenameVar rename;
         expr->visit(rename);
+        return rename.ready;
     }
 
     // rename variable
@@ -1442,7 +1449,9 @@ namespace das {
         if ( expr->body->rtti_isBlock() ) {
             forCopy = static_cast<ExprFor*>(expr->clone());
             bodyBlock = static_cast<ExprBlock*>(forCopy->body);
-            giveBlockVariablesUniqueNames(forCopy);
+            if ( !giveBlockVariablesUniqueNames(forCopy) ) {
+                return nullptr;
+            }
             if ( hasFinally ) {
                 // break -> set flag, goto mid (finally runs, flag check -> end, iterator_close runs)
                 // continue -> mid (finally runs, advances iterator, re-checks)
