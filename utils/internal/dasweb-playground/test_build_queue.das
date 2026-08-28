@@ -61,13 +61,15 @@ def test_detect_build_mode(t : T?) {
         tt |> equal(detect_build_mode("require audio/audio_boost\n"), BUILD_MODE_PAGE)
         tt |> equal(detect_build_mode("require stbimage\n"), BUILD_MODE_PAGE)
         tt |> equal(detect_build_mode("require strudel/strudel_player\n"), BUILD_MODE_PAGE)
-        tt |> equal(detect_build_mode("require live_stub   // playground shim\n"), BUILD_MODE_PAGE)
+        tt |> equal(detect_build_mode("require live/glfw_live\n"), BUILD_MODE_PAGE)
+        tt |> equal(detect_build_mode("require live_host\n"), BUILD_MODE_PAGE)
     }
     t |> run("optional-require marker and tabs still match") @(tt : T?) {
         tt |> equal(detect_build_mode("require ?audio\n"), BUILD_MODE_PAGE)
         tt |> equal(detect_build_mode("require\tglfw/glfw_boost\n"), BUILD_MODE_PAGE)
     }
     t |> run("lookalikes stay module builds") @(tt : T?) {
+        tt |> equal(detect_build_mode("require live_stub   // the retired shim name\n"), BUILD_MODE_MODULE)
         tt |> equal(detect_build_mode("require daslib/glfw_helpers.das\n"), BUILD_MODE_MODULE)   // daslib root, not glfw
         tt |> equal(detect_build_mode("requirements = 1\n"), BUILD_MODE_MODULE)
         tt |> equal(detect_build_mode("// require glfw\n"), BUILD_MODE_MODULE)
