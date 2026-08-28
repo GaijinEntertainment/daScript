@@ -174,6 +174,7 @@ var g_pso_ln : MetalComputePipeline?
 var g_pso_gelu_erf : MetalComputePipeline?
 var g_pso_gelu_lut : MetalComputePipeline?
 var g_pso_posadd : MetalComputePipeline?
+var g_pso_q3v_stem : MetalComputePipeline?   //!< the qwen3v stem assemble (reorder-gather + bias + pos)
 var g_pso_clamp : MetalComputePipeline?        // gemma4v: the ClippableLinear clamp
 var g_pso_rope2d : MetalComputePipeline?       // gemma4v: the two-axis NEOX rope
 var g_pso_head_restride : MetalComputePipeline?   // gemma3v: head-width repack around the attention tiles

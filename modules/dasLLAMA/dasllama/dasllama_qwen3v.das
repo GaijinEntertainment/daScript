@@ -548,9 +548,30 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
         st.qscales |> reserve_resize(qo / 32l)
         q3v_read_planes(m, bytes, st, serve_sizes)
         q3v_repack_all(st, serve_sizes)
+        if (!st.t.q8 && !st.t.blk_bf16 && !st.t.mm_bf16
+                && gguf_tensor_type(m, "v.blk.0.attn_qkv.weight") == GGML_TYPE_F16
+                && gguf_tensor_type(m, "mm.0.weight") == GGML_TYPE_F16) {
+            q3v_bake_half_twin(st)
+        }
     }
     fclose(f)
     return <- st
+}
+
+//! The exact lane's f16 GEMM twin (f16-SOURCED files only, so the GEMM regions are the file's
+//! own bits): the whole blob at the same element offsets, halfword. The Metal tower's f16-W
+//! route reads it zero-copy; absence of the plane IS the ineligibility flag (bf16/f32/q8).
+def private q3v_bake_half_twin(var st : Qwen3vStaging) {
+    let n = long_length(st.blob)
+    st.wblob |> reserve_resize(n)
+    unsafe {
+        let sp = addr<float const?>(st.blob[0])
+        var dp = addr<float16?>(st.wblob[0])
+        for (i in range64(n)) {
+            // the clamp guards the ride-along f32 regions (conv fold, pos) the route never reads
+            dp[i] = float16(clamp(sp[i], -65504.0, 65504.0))
+        }
+    }
 }
 
 //! Load the qwen3v tower, image-backed (`dasllama_gemma4v`'s load shape: a prepared `.dlim`
@@ -741,9 +762,9 @@ def private q3v_block(t : Qwen3vTower; var s : Qwen3vState; l, npos : int64) {
     asr_prof_add("q3v.ffn", tp)
 }
 
-// the stem: im2col → conv (folded W) → merge-reorder + patch bias + resized pos table, leaving
-// the reordered residual stream in s.x; sizes every block buffer for this canvas
-def private q3v_stem(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, pw, ph : int64) : int64 {
+// the stem's column half, both routes: im2col + scratch sizing + the resized pos table when
+// the grid is off the learned 48 - everything the GPU stem cannot do cheaper itself
+def private q3v_stem_cols(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, pw, ph : int64) : int64 {
     let d = t.n_embd
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)
     ensure_length(s.xn, npos * d)
@@ -756,11 +777,25 @@ def private q3v_stem(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>
     ensure_length(s.vv, npos * d)
     ensure_length(s.hu, npos * t.ff_pad)
     ensure_length(s.m0, (npos / 4l) * 4l * d)
+    if (pw != t.pos_side || ph != t.pos_side) {
+        interpolate_grid_bilinear_aa(s.pos_rs, t.blob, t.pos_w, t.pos_side, t.pos_side, pw, ph, d)
+    }
+    return npos
+}
+
+//! Whether the last [[q3v_stem_cols]] left the position rows in ``s.pos_rs`` (grid off the
+//! learned side) - the GPU stem reads them there; on-plane grids read ``t.pos_w`` directly.
+def qwen3v_pos_resized(t : Qwen3vTower; s : Qwen3vState) : bool {
+    return s.grid_w != t.pos_side || s.grid_h != t.pos_side
+}
+
+// the stem's compute half, the CPU route: patch GEMM + the merge-walk assemble into s.x
+def private q3v_stem_finish(t : Qwen3vTower; var s : Qwen3vState; npos, pw, ph : int64) {
+    let d = t.n_embd
     mm_plane_b(s.xn, false, t.wblob, t.blob, t.patch_w, s.x0, t.patch_dim, d, npos)
     var pos_base = t.pos_w
     var from_plane = true
     if (pw != t.pos_side || ph != t.pos_side) {
-        interpolate_grid_bilinear_aa(s.pos_rs, t.blob, t.pos_w, t.pos_side, t.pos_side, pw, ph, d)
         from_plane = false
         pos_base = 0l
     }
@@ -779,7 +814,6 @@ def private q3v_stem(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>
             }
         }
     }
-    return npos
 }
 
 //! The soft-token row width this tower emits: proj_dim, widened by the deepstack slices.
@@ -842,7 +876,7 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
     let ph = h / t.patch
     var tp = ref_time_ticks()
     q3v_rope_tables(t, s, pw, ph)
-    let npos = q3v_stem(t, s, planes, w, h, pw, ph)
+    let npos = q3v_stem_cols(t, s, planes, w, h, pw, ph)
     asr_prof_add("q3v.stem", tp)
     let nds = t.n_deepstack
     if (nds > 0l) {
@@ -857,7 +891,13 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
         if (nds > 0l) {
             ensure_length(s.ds_stash, nds * nout4 * t.proj_dim)
         }
-        gpu_served = invoke(g_q3v_gpu, t, s, npos)   // blocks + taps + tail on GPU: proj outputs land in ds_stash/ds_slice
+        // stem GEMM + assemble ride the driver's cb too - it reads s.x0/s.pos_rs, never s.x
+        gpu_served = invoke(g_q3v_gpu, t, s, npos)   // stem + blocks + taps + tail on GPU: proj outputs land in ds_stash/ds_slice
+    }
+    if (!gpu_served) {
+        tp = ref_time_ticks()
+        q3v_stem_finish(t, s, npos, pw, ph)   // the CPU route (and the GPU decline fallback)
+        asr_prof_add("q3v.stem", tp)
     }
     if (gpu_served) {
         let nout4 = npos / 4l

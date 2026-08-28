@@ -274,7 +274,10 @@ exact lane's set, and the proof that the served slices still carry signal is the
 zeroed-slices decoder control in `test_vision_chat.das`; a METAL tower cell (both towers,
 tower pinned ON, its own GPU bars 4e-2 / 8e-2*rms per the gemma3v f16-tile precedent, gray
 off the GPU-ds set like the q8-ds cell, engage proven by encode/block counter deltas per
-GATED fixture, and its own GPU-lane zero-layer poison); and a model-free lane-knob cell.
+GATED fixture, and its own GPU-lane zero-layer poison); an f16-W ROUTE cell (crowns pinned
+via set_metal_tensor_crowns + prefill re-init so the half twins compile, the 4B fixtures on
+the same GPU bars, engage proven by the metal_tower_f16_encodes delta, plus the knob-off
+leg whose counter must not move); and a model-free lane-knob cell.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - the qwen25v tower (Qwen2.5-Omni's window-attention ViT, projector

@@ -175,7 +175,7 @@ struct public MetalEnv {
     @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower."
     tower : bool = true
 
-    @clarg_doc = "Serve the qwen3v tower's block/merger GEMMs from a once-converted f16 weight shadow on the crowned tensor mul_mm twins (the file's GEMM tensors are f16, so the shadow holds their exact values; needs a tensor crown - a box without one keeps the f32 route); 0 pins the f32 GEMM route - the A/B rail."
+    @clarg_doc = "Serve the qwen3v tower's block/merger GEMMs from the image's baked f16 twin plane on the crowned tensor mul_mm twins (the mint bakes the twin only for f16-sourced GEMMs, so it holds the file's own values; needs a tensor crown - a box without one, or an image without the plane, keeps the f32 route); 0 pins the f32 GEMM route - the A/B rail."
     tower_f16 : bool = true
 
     @clarg_doc = "Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 pins the CPU decoder."

@@ -3551,6 +3551,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_gelu_erf = compile_pso(MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, ok)
     g_pso_gelu_lut = compile_pso(MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, ok)
     g_pso_posadd = compile_pso(metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, ok)
+    g_pso_q3v_stem = compile_pso(metal_q3v_stem_msl, metal_q3v_stem_msl_entry, metal_q3v_stem_msl_fastmath, ok)
     g_pso_clamp = compile_pso(metal_clamp_msl, metal_clamp_msl_entry, metal_clamp_msl_fastmath, ok)
     g_pso_rope2d = compile_pso(metal_rope2d_msl, metal_rope2d_msl_entry, metal_rope2d_msl_fastmath, ok)
     g_pso_head_restride = compile_pso(metal_head_restride_msl, metal_head_restride_msl_entry, metal_head_restride_msl_fastmath, ok)
@@ -4253,6 +4254,7 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_posadd)
         g_pso_posadd = null
     }
+    release_pso(g_pso_q3v_stem)
     release_pso(g_pso_clamp)
     release_pso(g_pso_rope2d)
     release_pso(g_pso_head_restride)
@@ -4736,6 +4738,35 @@ class MetalPosAdd2D {
         let ex = tbl[(p % ncols) * dim + i]
         let ey = tbl[(pos_entries + p / ncols) * dim + i]
         x[gid] = (x[gid] + ex) + ey
+    }
+}
+
+// The qwen3v stem assemble: residual row r (the merge-adjacent walk - 2x2 partners adjacent,
+// groups row-major) gathers its natural-order conv row, + conv bias + that row's position -
+// bit-exact vs the CPU stem's (crow + bp) + prow order.
+[metal_dispatch(name = "enc_q3v_stem", pso = "g_pso_q3v_stem", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalQ3vStemAsm {
+    @ssbo @binding = 0 @role = "read" xn : array<float>                  // conv out, natural patch order [npos x dim]
+    @ssbo @binding = 1 @role = "weight" @off = "boff" b : array<float>   // conv bias [dim]
+    @ssbo @binding = 2 @role = "read" @off = "poff" pos : array<float>   // pos rows, natural order [npos x dim]
+    @ssbo @binding = 3 @role = "write" x : array<float>                  // residual, merge-adjacent [npos x dim]
+    @uniform @binding = 4 dim : uint
+    @uniform @binding = 5 pw : uint
+    @uniform @binding = 6 total : uint
+
+    [metal_kernel(name="metal_q3v_stem_msl")]
+    def metal_q3v_stem {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let r = gid / dim
+        let i = gid % dim
+        let g = r / 4u
+        let sub = r % 4u
+        let gcols = pw / 2u
+        let src = ((g / gcols) * 2u + sub / 2u) * pw + (g % gcols) * 2u + sub % 2u
+        x[gid] = (xn[src * dim + i] + b[i]) + pos[src * dim + i]
     }
 }
 

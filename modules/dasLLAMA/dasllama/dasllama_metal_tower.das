@@ -30,7 +30,6 @@ var private g_tw_failed = false
 var private g_tw_pool : MetalBufferPool
 var private g_tw_env_tower = true
 var private g_tw_env_tower_f16 = true
-var private g_tw_f16_shadow : table<uint64; MetalBuffer?>   // qwen3v f16 weight shadows, keyed by the f32 blob's address
 var private g_tw_ones : MetalBuffer?      // [TW_ONES_DIM] ones — the weightless-rms weight bind
 let private TW_ONES_DIM = 8192
 
@@ -625,27 +624,9 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     return true
 }
 
-//! The qwen3v f16 weight shadow: the whole f32 blob converted once to f16 at the SAME element
-//! offsets (the file's GEMM tensors are f16 — the shadow holds their exact values). Built in
-//! the first encode's own cb, keyed by blob address; null = alloc failed, f32 route serves.
-def private tw_f16_shadow(enc : MetalComputeEncoder?; bblob : MetalBuffer?; key : uint64; nelem : int64) : MetalBuffer? {
-    if (key_exists(g_tw_f16_shadow, key)) {
-        return g_tw_f16_shadow[key]   // nolint:PERF026 — key_exists-guarded read, never inserts
-    }
-    var sh = metal_new_buffer(g_dev, uint64(nelem * 2l))
-    if (sh != null) {
-        residency_note(sh)
-        var cka = CvtArgs(total = uint(nelem))
-        enc_cvt_half(enc, bblob, sh, cka, nelem)
-        to_log(LOG_INFO, "dasLLAMA metal tower: qwen3v f16 weight shadow built ({nelem * 2l / 1048576l} MB)\n")   // nolint:PERF028,PERF026 — one-shot fill arm
-    }
-    g_tw_f16_shadow[key] = sh   // nolint:PERF026 — one insert per loaded tower
-    return sh
-}
-
 //! One block/merger GEMM on either route: f16 = X converts into the shared xh panel and the
-//! crowned half twins read W from the shadow at the f32 route's element offset (bytes x2);
-//! f32 = today's enc_f32_mm. `cvt` false reuses the panel a previous site already converted.
+//! crowned half twins read W from the baked f16 twin plane at the f32 route's element offset
+//! (bytes x2); f32 = enc_f32_mm. `cvt` false reuses the panel a previous site converted.
 def private tw_mm(enc : MetalComputeEncoder?; f16w : bool; bwh, bblob : MetalBuffer?; welem : int64;
                   bx, bxh, by : MetalBuffer?; yoff : uint64; bk, bn : MetalBuffer?;
                   rows, nd, kdim : int64; cvt : bool) {
@@ -676,8 +657,8 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     let ff = t.ff_pad
     let proj = t.proj_dim
     let hs_pad = hs <= 64l ? 64l : 128l
-    // %4 npos: the x4 merge reshape is the tap/tail GEMMs' row view
-    if (d % 64l != 0l || ff % 64l != 0l || hs > 128l || hs % 2l != 0l || proj % 64l != 0l || npos % 4l != 0l) {
+    // %4 npos: the x4 merge reshape is the tap/tail GEMMs' row view; %64 patch_dim: the stem GEMM's K
+    if (d % 64l != 0l || ff % 64l != 0l || hs > 128l || hs % 2l != 0l || proj % 64l != 0l || npos % 4l != 0l || t.patch_dim % 64l != 0l) {
         return tw_decline(MetalTowerDecline.shape)
     }
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
@@ -720,19 +701,26 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var bm4b = pool_acquire_pinned(g_tw_pool, g_dev, bytes_m4)    // fc1/mm0 out, GELU'd in place
     var btail = pool_acquire_pinned(g_tw_pool, g_dev, bytes_pr)
     var btap = nds > 0l ? pool_acquire_pinned(g_tw_pool, g_dev, uint64(nds) * bytes_pr) : null
-    // bf16-sourced GEMMs stay on the f32 route: bf16's exponent range overflows the f16 shadow
-    let f16_route = g_tw_env_tower_f16 && !t.blk_bf16 && !t.mm_bf16 && pf_hmm_ready()
+    // an empty wblob IS the ineligibility flag: the mint bakes the f16 twin only for f16-sourced GEMMs
+    let f16_route = g_tw_env_tower_f16 && length(t.wblob) > 0l && pf_hmm_ready()
     let bytes_xh = uint64(max(mp * ff, mp4 * 4l * d) * 2l)
     var bxh = f16_route ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null   // the shared f16 X panel
-    var bwh : MetalBuffer? = null   // the f16 weight shadow — resolved inside the encoder (its cvt encodes there)
+    var bwh = f16_route ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
+    let bytes_x0 = uint64(mp * t.patch_dim * 4l)
+    var bx0 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x0)   // im2col rows - the GPU stem's input
+    let pos_resized = qwen3v_pos_resized(t, s)
+    var bposr = pos_resized ? pool_acquire_pinned(g_tw_pool, g_dev, uint64(npos * d * 4l)) : null
     unsafe {
-        var p = reinterpret<uint8?>(metal_buffer_contents(bx))
-        memcpy(p, addr(s.x[0]), npos * d * 4l)
+        memcpy(metal_buffer_contents(bx0), addr(s.x0[0]), npos * t.patch_dim * 4l)
         if (rows_ext > npos) {   // DEFENSIVE pad zero (controls stay green without it): guards stale-Inf pool reuse
+            var p = reinterpret<uint8?>(metal_buffer_contents(bx))
             var zp = reinterpret<float?>(p + npos * d * 4l)
             for (i in range64((rows_ext - npos) * d)) {
                 zp[i] = 0.0
             }
+        }
+        if (bposr != null) {
+            memcpy(metal_buffer_contents(bposr), addr(s.pos_rs[0]), npos * d * 4l)
         }
         memcpy(metal_buffer_contents(bcos), addr(s.cos_t[0]), npos * half * 4l)
         memcpy(metal_buffer_contents(bsin), addr(s.sin_t[0]), npos * half * 4l)
@@ -752,16 +740,22 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var u_totpr = uniform_u32(uint(nout * proj))
     var u_np_rope = uniform_u32(uint(npos * d / 2l))           // rope pairs over a compact q/k buffer
     var u_neox = uniform_u32(1u)
+    var u_pd = uniform_u32(uint(t.patch_dim))
+    var u_pw = uniform_u32(uint(s.grid_w))                     // the stem assemble's merge-walk column count
     var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
     residency_flush()   // commit THIS encode's own notes before its first submission
     var err = ""
+    let f16w = bwh != null && bxh != null
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        if (f16_route && bxh != null) {
-            bwh = tw_f16_shadow(enc, bblob, intptr(blob_ptr), length(t.blob))
+        // the stem GEMM stays f32: the conv fold is a computed plane, never the f16 twin
+        enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, braw, 0ul, u_pd, u_d, mp, d)
+        if (bposr != null) {
+            enc_q3v_stem(enc, braw, bblob, uint64(t.patch_b * 4l), bposr, 0ul, bx, u_d, u_pw, u_totd, npos * d)
+        } else {
+            enc_q3v_stem(enc, braw, bblob, uint64(t.patch_b * 4l), bblob, uint64(t.pos_w * 4l), bx, u_d, u_pw, u_totd, npos * d)
         }
-        let f16w = bwh != null && bxh != null
         for (l in range64(t.n_layer)) {
             let o = qwen3v_block_offs(t, l)
             enc_ln(enc, bx, bblob, uint64(o.ln1_w * 4l), bblob, uint64(o.ln1_b * 4l), bxb, u_d, u_eps, npos)
@@ -823,7 +817,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
         g_tower_encodes++
         g_tower_rows += npos
         g_tower_blocks += t.n_layer
-        if (bwh != null && bxh != null) {
+        if (f16w) {
             g_tower_f16_encodes++
         }
         served = true
@@ -850,6 +844,12 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     if (bxh != null) {
         pool_release(g_tw_pool, bxh, bytes_xh)
     }
+    pool_release(g_tw_pool, bx0, bytes_x0)
+    if (bposr != null) {
+        pool_release(g_tw_pool, bposr, uint64(npos * d * 4l))
+    }
+    pool_release(g_upool, u_pd, 4ul)
+    pool_release(g_upool, u_pw, 4ul)
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_d4, 4ul)
     pool_release(g_upool, u_ff, 4ul)
