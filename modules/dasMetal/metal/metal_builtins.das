@@ -599,18 +599,20 @@ def public tmm2d_tg_begin_deva(var acc; a : float16 const?; m, n, sgs, kk : uint
 }
 
 //! step, deva flavor: acc[r][j] += a[r*lda + k] * tb[j][k] over one K-chunk — `a` points at
-//! the chunk's first activation (device f32 or f16, row stride lda), tb flat [n][kk] f16 staged.
+//! the chunk's first activation (device f32 or f16, row stride lda), tb flat [n][ldb] f16
+//! staged, where ldb mirrors the emitter: 72-half padded rows for a kk=64 tile, kk otherwise.
 [sideeffects]
 def public tmm2d_tg_step_deva(var acc; a : float const?; lda : uint; tb; m, n, kk : uint) {
     if (gl_LocalInvocationID.x != 0u) {
         return
     }
+    let ldb = kk == 64u ? 72 : int(kk)
     unsafe {
         for (r in range(int(m))) {
             for (j in range(int(n))) {
                 var facc = 0.0
                 for (k in range(int(kk))) {
-                    facc += a[r * int(lda) + k] * float(tb[j * int(kk) + k])
+                    facc += a[r * int(lda) + k] * float(tb[j * ldb + k])
                 }
                 acc[r * int(n) + j] += facc
             }
@@ -623,12 +625,13 @@ def public tmm2d_tg_step_deva(var acc; a : float16 const?; lda : uint; tb; m, n,
     if (gl_LocalInvocationID.x != 0u) {
         return
     }
+    let ldb = kk == 64u ? 72 : int(kk)
     unsafe {
         for (r in range(int(m))) {
             for (j in range(int(n))) {
                 var facc = 0.0
                 for (k in range(int(kk))) {
-                    facc += float(a[r * int(lda) + k]) * float(tb[j * int(kk) + k])
+                    facc += float(a[r * int(lda) + k]) * float(tb[j * ldb + k])
                 }
                 acc[r * int(n) + j] += facc
             }

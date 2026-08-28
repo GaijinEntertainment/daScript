@@ -28,14 +28,19 @@ The rows that remain pick one of four forms, in this order, per site per forward
    already a multiple of 128, and otherwise stays whole-dispatch 32-tile.
 4. **32-row tile** - the default stamp.
 
-**The tall staged-q8 stamp double-buffers its W staging** (`DASLLAMA_METAL_DBUF=0` is the
+**The dense staged stamps double-buffer their W staging** (`DASLLAMA_METAL_DBUF=0` is the
 single-tile rail): two 64-deep ping-pong tiles hold 18432 B of threadgroup memory - probed at
 the allocation law's edge, 0-2% tax by shape - and the loop runs ONE barrier per chunk, which
 both publishes the tile staged last iteration and fences the previous `op.run` off the tile
-about to be overwritten; staging chunk b+1 overlaps the tensor op on chunk b. Raced +1.7%
-end-to-end on 8B pp512 (3435 -> 3492 tok/s); outputs are bit-equal to the single-tile form
-because the staged f16 rounding and chunk order are identical. The pattern is the one Apple
-ships in MLX's fp-quantized NAX family at this exact tile size.
+about to be overwritten; staging chunk b+1 overlaps the tensor op on chunk b. Raced per
+family: the staged-q8 stamps +1.7% end-to-end on 8B pp512 (3435 -> 3492 tok/s), the kq
+in-kernel-dequant stamps +1.8% on gemma-4-12B Q4_K_M (2040 -> 2077); the MoE q8 expert
+stamps measured -5.0% (Qwen3-30B-A3B q8) - the expert z-grid's many small dispatches pay
+the 18432 B occupancy cost the 2-D dense grids do not - so the MoE staged family stays
+single-tile. Outputs are bit-equal to the single-tile forms because the staged f16 rounding
+and chunk order are identical (the k6 stamp pins the factored `dsc*(q-32)` like its dequant
+kernel, so the equality holds by source). The pattern is the one Apple ships in MLX's
+fp-quantized NAX family at this exact tile size.
 
 **A swiglu epilogue folded into the gate GEMM's store is REFUTED on M5.** Any per-element
 access of the cooperative C after `op.run` - the scattered-store walk, a modify-in-place

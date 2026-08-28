@@ -586,11 +586,15 @@ def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
 // the double-buffered staging twin vs the single-tile tall staged-q8 form: same staged f16
 // rounding, same 64-chunk order, so the outputs must match BIT-exact (the DBUF A/B rail's
 // numerics contract); kdim % 64 == 32 arms the tail chunk on both
-def private q8_dbuf_gate(t : T?; dev, queue; m, kdim, ndim : int) {
-    let tag = "q8_dbuf m={m} k={kdim} n={ndim}"
+def private q8_dbuf_gate(t : T?; dev, queue; m, kdim, ndim : int; mt : int = 128) {
+    let tag = "q8_dbuf mt{mt} m={m} k={kdim} n={ndim}"
     var err : string
-    var pso_a = pipeline_from_source(dev, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_fastmath, err)
-    var pso_b = pipeline_from_source(dev, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_entry, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_fastmath, err)
+    var pso_a = (mt == 128
+        ? pipeline_from_source(dev, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, err))
+    var pso_b = (mt == 128
+        ? pipeline_from_source(dev, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_entry, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalQ8MulMmTHDb_metal_q8_mulmm_db_msl, MetalQ8MulMmTHDb_metal_q8_mulmm_db_msl_entry, MetalQ8MulMmTHDb_metal_q8_mulmm_db_msl_fastmath, err))
     if ((pso_a == null || pso_b == null) && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
         return
@@ -623,11 +627,11 @@ def private q8_dbuf_gate(t : T?; dev, queue; m, kdim, ndim : int) {
         metal_set_buffer(enc, by_a, 0ul, 3)
         metal_set_buffer(enc, bk, 0ul, 4)
         metal_set_buffer(enc, bn, 0ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
         metal_set_pipeline(enc, pso_b)
         metal_set_threadgroup_memory_length(enc, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_tgmem, 0)
         metal_set_buffer(enc, by_b, 0ul, 3)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
@@ -679,6 +683,87 @@ def private q8_dbuf_gate(t : T?; dev, queue; m, kdim, ndim : int) {
     delete blob
     delete wdeq
     delete xf
+    delete xh
+}
+
+// the kq double-buffered twins vs their single-tile forms: same in-kernel dequant staged in
+// the same chunk order, so the outputs must match BIT-exact (the DBUF rail's kq contract)
+def private kq_dbuf_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
+    let tag = "kq_dbuf_k{fmt} m={m} k={kdim} n={ndim}"
+    var err : string
+    let asrc = fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl)
+    let aentry = fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_entry)
+    let afm = fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_fastmath)
+    let bsrc = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl : MetalKqMulMmK6THDb128_metal_kq_mulmm_k6_db_msl)
+    let bentry = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_entry : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl_entry : MetalKqMulMmK6THDb128_metal_kq_mulmm_k6_db_msl_entry)
+    let bfm = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl_fastmath : MetalKqMulMmK6THDb128_metal_kq_mulmm_k6_db_msl_fastmath)
+    var pso_a = pipeline_from_source(dev, asrc, aentry, afm, err)
+    var pso_b = pipeline_from_source(dev, bsrc, bentry, bfm, err)
+    if ((pso_a == null || pso_b == null) && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        return
+    }
+    t |> success(pso_a != null && pso_b != null, "{tag}: pipeline: {err}")
+    return if (pso_a == null || pso_b == null)
+    let nb = kdim / 256
+    let nsb = ndim * nb
+    var kq : array<uint8>
+    var ks : array<uint8>
+    kq_fill_planes(fmt, nsb, kq, ks)
+    var xh : array<float16>
+    xh |> resize(m * kdim)
+    for (i in range(m * kdim)) {
+        xh[i] = float16(0.05 * float(i % 41) - 0.9)
+    }
+    var bks = buf_upload(dev, ks)
+    var bkq = buf_upload(dev, kq)
+    var bx = buf_upload(dev, xh)
+    var by_a = buf_fill(dev, m * ndim, -1000.0)
+    var by_b = buf_fill(dev, m * ndim, -500.0)   // distinct poison fills: an unwritten tile reds the compare
+    var bk = buf_u32(dev, uint(kdim))
+    var bn = buf_u32(dev, uint(ndim))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        for (arm in range(2)) {
+            metal_set_pipeline(enc, arm == 0 ? pso_a : pso_b)
+            metal_set_threadgroup_memory_length(enc, arm == 0 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_tgmem, 0)
+            metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   // k6: the f16 d tail
+            metal_set_buffer(enc, bks, 0ul, 1)
+            metal_set_buffer(enc, bkq, 0ul, 2)
+            metal_set_buffer(enc, bx, 0ul, 3)
+            metal_set_buffer(enc, arm == 0 ? by_a : by_b, 0ul, 4)
+            metal_set_buffer(enc, bk, 0ul, 5)
+            metal_set_buffer(enc, bn, 0ul, 6)
+            metal_dispatch_threadgroups(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        }
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        var bad = 0
+        unsafe {
+            let pa = reinterpret<uint const?>(metal_buffer_contents(by_a))
+            let pb = reinterpret<uint const?>(metal_buffer_contents(by_b))
+            for (i in range(m * ndim)) {
+                if (pa[i] != pb[i]) {
+                    if (bad < 4) {
+                        to_log(LOG_ERROR, "{tag}: [{i}] single={pa[i]} dbuf={pb[i]}\n")
+                    }
+                    bad++
+                }
+            }
+        }
+        t |> equal(bad, 0)
+    }
+    metal_release(bks)
+    metal_release(bkq)
+    metal_release(bx)
+    metal_release(by_a)
+    metal_release(by_b)
+    metal_release(bk)
+    metal_release(bn)
+    metal_release(pso_a)
+    metal_release(pso_b)
+    delete kq
+    delete ks
     delete xh
 }
 
@@ -1956,10 +2041,14 @@ def test_metal_gemm_kernels(t : T?) {
                 for (fmt in [0, 4, 5, 6]) {
                     devw_bake_mirror_gate(t, dev, queue, fmt, 64, 512)
                 }
-                // the double-buffered staging twin, bit-equal to the single-tile form
+                // the double-buffered staging twins, bit-equal to the single-tile forms
                 q8_dbuf_gate(t, dev, queue, 128, 256, 64)
                 q8_dbuf_gate(t, dev, queue, 128, 288, 128)   // kdim%64 == 32: the tail chunk on both arms
                 q8_dbuf_gate(t, dev, queue, 256, 512, 128)   // two M-tiles, deeper K
+                q8_dbuf_gate(t, dev, queue, 64, 256, 64, mt = 32)   // the 32-row stamp pair
+                for (fmt in [4, 5, 6]) {
+                    kq_dbuf_gate(t, dev, queue, fmt, 128, 512, 64)
+                }
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64, halfx = true)

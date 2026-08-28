@@ -202,7 +202,7 @@ struct public MetalEnv {
     @clarg_doc = "Last-layer FFN tail narrowing: the final dense layer's FFN runs the last row alone (only the classifier reads past the final attention); 0 pins the full-panel tail (the A/B rail). Session keep_hidden opts a forward out."
     lastrow : bool = true
 
-    @clarg_doc = "Double-buffered W staging on the tall staged-q8 prefill GEMM: two ping-pong tiles, one barrier per 64-chunk, staging overlaps the tensor op; 0 pins the single-tile form (the A/B rail)."
+    @clarg_doc = "Double-buffered W staging on the dense staged prefill GEMMs (q8 and kq stamps; the MoE family measured a loss and stays single-tile): two ping-pong tiles, one barrier per 64-chunk, staging overlaps the tensor op; 0 pins the single-tile forms (the A/B rail)."
     dbuf : bool = true
 
     @clarg_default_doc = "~4 layers/chunk"
