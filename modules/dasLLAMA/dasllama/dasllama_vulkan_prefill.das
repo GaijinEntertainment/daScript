@@ -39,8 +39,11 @@ let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn qu
 var private @scratch g_pf_idsw : array<uint>   // per-window token-id staging for the gather upload
 
 // mode 4 feeds the dense q8/k4 prefill GEMMs f16 rows through the cm2 tiles (the decode GEMV
-// keeps its quant chains — the format pick is decoupled)
-def private pf_f16_feed(f : int) : bool => (f == int(KqFmt.q8) || f == int(KqFmt.k4)) && g_gpu.coopmat_mode == 4
+// keeps its quant chains). k6 stays PINNED to the kq tile: its cm2 decode measured 9.3-13.4
+// TF/s vs the kq tile's 11.9 — unpin after the k6 decode-spelling chase (followup item 11a)
+def private pf_f16_feed(f : int) : bool {
+    return (f == int(KqFmt.q8) || f == int(KqFmt.k4)) && g_gpu.coopmat_mode == 4
+}
 
 // group feeds: one activation buffer serves every GEMM of a group, so the f16 form engages
 // only when EVERY member is cm2-servable (a k6 sibling pins the whole group to its quant feed)
@@ -48,10 +51,13 @@ def private pf_qkv6(l : int64) : bool => (pf_f16_feed(g_rd.layers[l].fq)
     && pf_f16_feed(g_rd.layers[l].fk) && pf_f16_feed(g_rd.layers[l].fv))
 def private pf_gu6(l : int64) : bool => pf_f16_feed(g_rd.layers[l].f1) && pf_f16_feed(g_rd.layers[l].f3)
 
-// the cm2 tile class picks per weight format (q8 = fmt-0 planes, k4 = Q4_K superblock planes)
+// the cm2 tile class picks per weight format (q8 = fmt-0 planes, k4/k6 = superblock planes)
 def private cm2_cls_ensure(fmt : int; ml : bool) : bool {
     if (fmt == int(KqFmt.k4)) {
         return ml ? ensure_kq_batch_k4_cm2l_cls() : ensure_kq_batch_k4_cm2m_cls()
+    }
+    if (fmt == int(KqFmt.k6)) {
+        return ml ? ensure_kq_batch_k6_cm2l_cls() : ensure_kq_batch_k6_cm2m_cls()
     }
     return ml ? ensure_q8_batch_cm2l_cls() : ensure_q8_batch_cm2m_cls()
 }
@@ -59,6 +65,9 @@ def private cm2_cls_ensure(fmt : int; ml : bool) : bool {
 def private cm2_cls_set(fmt : int; ml : bool; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     if (fmt == int(KqFmt.k4)) {
         return ml ? set_kq_batch_k4_cm2l_cls(bufs, sizes, gbits) : set_kq_batch_k4_cm2m_cls(bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.k6)) {
+        return ml ? set_kq_batch_k6_cm2l_cls(bufs, sizes, gbits) : set_kq_batch_k6_cm2m_cls(bufs, sizes, gbits)
     }
     return ml ? set_q8_batch_cm2l_cls(bufs, sizes, gbits) : set_q8_batch_cm2m_cls(bufs, sizes, gbits)
 }
@@ -69,6 +78,12 @@ def private cm2_cls_enc(fmt : int; ml : bool; raw : VkCommandBuffer; var h : VkH
             enc_kq_batch_k4_cm2l_cls(raw, h, s, pc, groups)
         } else {
             enc_kq_batch_k4_cm2m_cls(raw, h, s, pc, groups)
+        }
+    } elif (fmt == int(KqFmt.k6)) {
+        if (ml) {
+            enc_kq_batch_k6_cm2l_cls(raw, h, s, pc, groups)
+        } else {
+            enc_kq_batch_k6_cm2m_cls(raw, h, s, pc, groups)
         }
     } elif (ml) {
         enc_q8_batch_cm2l_cls(raw, h, s, pc, groups)
