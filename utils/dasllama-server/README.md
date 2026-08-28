@@ -200,6 +200,7 @@ Windows locks the DLLs.
 | `POST` | `/exchange/apply` | `{"sha": ...}`: download + validate (content sha, schema, `DASLLAMA_VERSION`) + adopt that sidecar, then drain and exit **4** so the relaunch stamps its winners |
 | `POST` | `/exchange/submit` | Privacy-strip and submit this box's own tune to the exchange (refuses exchange-sourced or foreign-box sidecars) |
 | `POST` | `/exchange/retune` | Arm a local re-tune: removes the sidecar, skips the exchange once, restarts - the next boot races this box (~12 min, quiet machine) |
+| `POST` | `/exchange/consent` | `{"accept": true\|false}`: record the first-contact choice (the GDPR gate below). Accept on an untuned/stale box drains and exits **4** so the relaunch runs the lookup |
 | `POST` | `/gc` | Schedule a validated collection at the next lifecycle safe point; concurrent requests coalesce |
 | `POST` | `/shutdown` | Stop admitting new LLM/ASR work, drain accepted work, then exit |
 
@@ -214,7 +215,16 @@ match downloads and applies instead of racing ~12 minutes; unverified NEVER auto
 offer on the control page and the watchdog balloon; `always` shares it automatically), and
 `exchange_url` (baked default `https://dasllama.io`). `DASLLAMA_EXCHANGE_URL` /
 `DASLLAMA_EXCHANGE_ACCEPT` env override for tests and one-shot watchdog relaunches. Lookup
-failure is never fatal - the boot falls through to the local tuner. The `gpu` key (`auto | off | metal | metal-required | vulkan`) is the first-class
+failure is never fatal - the boot falls through to the local tuner.
+
+**First-contact consent (GDPR):** nothing is sent to the exchange until a choice is
+expressed. Setting any `exchange_*` key (TOML or env) IS that choice; on the zero-config
+path the recorded choice lives in `<app>.tune.consent` beside the sidecar
+(`accepted`/`declined`, one word). With no recorded choice: an interactive terminal asks
+inline (Enter = Accept); a supervised boot emits `@sidecar consent state=needed` - the
+watchdog shows a native Accept/Decline dialog - and this page's exchange card carries the
+same banner (`POST /exchange/consent`). Until one of those answers, the box tunes locally
+and no request leaves. The `gpu` key (`auto | off | metal | metal-required | vulkan`) is the first-class
 backend selector, and **defaults-first: unset (with no legacy `--metal` flag) behaves as
 `auto`** - the boot probes the box and serves on the best detected backend (the Metal rails
 where the box has them, else the Vulkan tier when a device answers, else the CPU), logging

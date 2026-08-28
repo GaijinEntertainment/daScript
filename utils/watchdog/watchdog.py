@@ -35,7 +35,7 @@ import threading
 import time
 import webbrowser
 from urllib.error import URLError
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -626,6 +626,89 @@ SIDECAR_EVENT_PREFIX = "@sidecar "
 # fresh 11 s PowerShell process on Windows) is pure spam. Persist across children in the process.
 _BALLOONED: set[str] = set()
 
+# First-contact consent (GDPR): the exchange client reports `@sidecar consent state=needed`
+# when no choice is recorded and no terminal can ask; this dialog is the supervised-session
+# answer surface. PLACEHOLDER wording — Gaijin legal owns the final text; keep in sync with
+# EXCHANGE_CONSENT_NOTICE in modules/dasLLAMA/dasllama/dasllama_exchange.das.
+CONSENT_TITLE = "dasLLAMA — tuning preset exchange"
+CONSENT_TEXT = (
+    "dasLLAMA can download a ready performance-tuning preset (a \"sidecar\") for this "
+    "machine from dasllama.io, instead of spending ~12 minutes tuning locally.\n\n"
+    "The request sends only your hardware class — platform, CPU model and OS build. "
+    "No serial numbers, user names or other personal data; no cookies. Sharing your own "
+    "tuning results back is always confirmed separately.\n\n"
+    "Details: https://legal.gaijin.net/privacypolicy"
+)
+
+
+def show_consent_dialog() -> bool | None:
+    """Blocking native Accept/Decline dialog. True/False = the user's choice; None = no
+    dialog surface here (headless Linux), it failed, or the user walked away (timeout /
+    closed it) — None must leave the question open, never count as either answer."""
+    if IS_WINDOWS:
+        # MessageBoxW offers fixed captions, so the text maps them: Yes = Accept, No = Decline.
+        MB_YESNO, MB_ICONINFORMATION, MB_TOPMOST = 0x04, 0x40, 0x00040000
+        IDYES, IDNO = 6, 7
+        try:
+            r = ctypes.windll.user32.MessageBoxW(
+                0, CONSENT_TEXT + "\n\nYes = Accept, No = Decline", CONSENT_TITLE,
+                MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST)
+        except OSError:
+            return None
+        return True if r == IDYES else False if r == IDNO else None
+    if sys.platform == "darwin":
+        safe_text = CONSENT_TEXT.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        safe_title = CONSENT_TITLE.replace("\\", "\\\\").replace('"', '\\"')
+        script = (
+            f'display dialog "{safe_text}" with title "{safe_title}" '
+            'buttons {"Decline", "Accept"} default button "Accept" '
+            "with icon note giving up after 3600"
+        )
+        try:
+            out = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, text=True, timeout=3700, check=False,
+            ).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if "gave up:true" in out:
+            return None
+        if "button returned:Accept" in out:
+            return True
+        if "button returned:Decline" in out:
+            return False
+        return None  # Escape/closed — the question stays open
+    return None
+
+
+def handle_consent_needed(args: argparse.Namespace, logger: logging.Logger,
+                          consent_path_quoted: str) -> None:
+    """Ask via the native dialog on a worker thread and record the answer into the consent
+    file the exchange client named (url-encoded in the event — values cannot carry spaces).
+    Accept while a tune is racing rides the existing stop rail: abort at the next kernel
+    boundary, relaunch clean, and the fresh boot runs the (now consented) exchange lookup."""
+    path_text = unquote(consent_path_quoted)
+    if not path_text:
+        return
+
+    def worker() -> None:
+        answer = show_consent_dialog()
+        if answer is None:
+            notify(f"{args.name}: enable the tuning-preset exchange?",
+                   "Open the control page to choose")
+            return
+        try:
+            Path(path_text).write_text("accepted\n" if answer else "declined\n",
+                                       encoding="ascii")
+        except OSError as exc:
+            emit(logger, "consent_write_failed", path=path_text, error=str(exc))
+            return
+        emit(logger, "consent_recorded", accepted=answer, path=path_text)
+        if answer and tune_in_flight():
+            request_tune_stop(args, logger, "consent")
+
+    threading.Thread(target=worker, name="consent-dialog", daemon=True).start()
+
 
 def parse_child_event(message: str, prefix: str) -> tuple[str, dict[str, str]] | None:
     """Return (kind, fields) for a `<prefix><kind> k=v ...` line, or None. Never raises."""
@@ -689,6 +772,9 @@ def apply_sidecar_event(sidecar: dict[str, object], kind: str, fields: dict[str,
     elif kind == "submitted":
         sidecar.pop("pending_submit", None)
         sidecar["submitted"] = fields.get("sha", "")
+    elif kind == "consent":
+        # "needed" while unanswered, then "accepted"/"declined" from whichever surface records it
+        sidecar["consent"] = fields.get("state", "")
 
 
 def stream_child(
@@ -698,6 +784,7 @@ def stream_child(
     jit_dlls: set[Path],
     stage: dict[str, object],
     name: str,
+    wd_args: argparse.Namespace,
 ) -> None:
     assert proc.stdout is not None
     # Per child, and published immediately: the tune-bootstrap restart is the normal first-run
@@ -735,6 +822,14 @@ def stream_child(
             # Balloons announce a DECISION the user can make; they never carry the action
             # (a PowerShell balloon cannot) — the tray menu and the control page do. Announce
             # once per distinct sha (a noise-abort loop re-emits the same offer every boot).
+            if kind == "consent" and fields.get("state") == "needed":
+                # once per consent file for the watchdog's lifetime — an unanswered dialog
+                # re-emits `needed` on every restart of the noise/untuned boot loop
+                consent_key = "consent:" + fields.get("path", "")
+                if consent_key not in _BALLOONED:
+                    _BALLOONED.add(consent_key)
+                    handle_consent_needed(wd_args, logger, fields.get("path", ""))
+                continue
             sha = fields.get("sha", "")
             balloon_key = f"{kind}:{sha}"
             if kind in ("offer", "pending_submit") and balloon_key not in _BALLOONED:
@@ -988,15 +1083,19 @@ def request_tune_stop(args: argparse.Namespace, logger: logging.Logger, mode: st
     always completes). `use_sidecar` arms a ONE-SHOT unverified-accept relaunch — precise
     consent that must never outlive this click; `untuned` makes fallback stamps sticky for
     the rest of this watchdog session (revocable via 'Resume tuning'), so a later crash-restart
-    cannot surprise the box with a 20-minute tune."""
+    cannot surprise the box with a ~12-minute tune."""
     if mode == "use_sidecar":
         action: dict[str, object] = {
             "mode": mode, "env": {"DASLLAMA_EXCHANGE_ACCEPT": "any"}, "sticky": False}
+    elif mode == "consent":
+        # consent just granted mid-tune: stop the race, relaunch clean — the fresh boot's
+        # resolver reads the recorded consent and runs the normal (verified-only) lookup
+        action = {"mode": mode, "env": {}, "sticky": False}
     else:
         action = {"mode": mode, "env": {"DAS_TUNE_POLICY": "fallback"}, "sticky": True}
     # Arm STATE BEFORE writing the file: the supervision loop unlinks the control file and then
     # take_tune_stop()s at each spawn — if the file were written first, that unlink could delete
-    # it and the take miss the action, letting a fresh child tune for the full ~20 minutes.
+    # it and the take miss the action, letting a fresh child tune for the full ~12 minutes.
     set_state(tune_stop=action)
     path = tune_control_path(args)
     try:
@@ -1591,7 +1690,7 @@ def supervise(
             stage: dict[str, object] = {"name": None, "rank": 0, "since": time.monotonic()}
             output = threading.Thread(
                 target=stream_child,
-                args=(child, logger, tune_restart_seen, jit_dlls, stage, args.name),
+                args=(child, logger, tune_restart_seen, jit_dlls, stage, args.name, args),
                 daemon=True,
             )
             output.start()

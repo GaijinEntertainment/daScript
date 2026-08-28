@@ -448,6 +448,7 @@ def test_policy_and_discovery(t : T?) {
         tt |> equal(p0.url, EXCHANGE_URL_DEFAULT)
         tt |> equal(p0.accept, "verified")
         tt |> equal(p0.submit, "ask")
+        tt |> success(!p0.configured, "the baked defaults are not an expressed choice")
         let res = create_temp_file_result("exchange_policy_", ".toml")
         if (res is error) {
             tt |> failure("could not create a temp file")
@@ -459,10 +460,36 @@ def test_policy_and_discovery(t : T?) {
         tt |> equal(p1.url, "http://127.0.0.1:9")
         tt |> equal(p1.accept, "any")
         tt |> equal(p1.submit, "never")
+        tt |> success(p1.configured, "any exchange_* key in the config is an expressed choice (consent)")
         fwrite(path, "exchange_accept = \"yolo\"\nexchange_submit = \"whatever\"\n")
         let p2 = exchange_policy_from_config(path)
         tt |> equal(p2.accept, "verified", "a typo must never widen acceptance")
         tt |> equal(p2.submit, "ask")
         remove(path)
+    }
+}
+
+[test]
+def test_consent(t : T?) {
+    t |> run("consent: unset, record, round-trip") @(tt : T?) {
+        let res = create_temp_file_result("exchange_consent_", ".tune.json")
+        if (res is error) {
+            tt |> failure("could not create a temp file")
+            return
+        }
+        let manifest = res as value
+        let consent_file = "{slice(manifest, 0, length(manifest) - 5)}.consent"
+        set_tune_manifest_runtime_path(manifest)
+        remove(consent_file)
+        tt |> equal(exchange_consent_status(), "", "no file - never asked")
+        tt |> success(exchange_record_consent(true), "record accept")
+        tt |> equal(exchange_consent_status(), "accepted")
+        tt |> success(exchange_record_consent(false), "record decline")
+        tt |> equal(exchange_consent_status(), "declined")
+        fwrite(consent_file, "garbage\n")
+        tt |> equal(exchange_consent_status(), "", "an unreadable choice reads as never asked, not as either answer")
+        set_tune_manifest_runtime_path("")
+        remove(consent_file)
+        remove(manifest)
     }
 }

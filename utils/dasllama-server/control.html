@@ -413,6 +413,13 @@ button:disabled { opacity: 0.45; cursor: default; }
 
     <div class="sec" id="exchange"><span>§ 12</span><span class="rule"></span><span>sidecar exchange</span></div>
     <div class="panel">
+        <div class="cfg-file" id="ex-consent" style="display:none">
+            <div id="ex-consent-text" style="white-space:pre-line"></div>
+            <div class="controls" style="margin-top:8px">
+                <button id="b-consent-accept" type="button">accept — use the exchange</button>
+                <button id="b-consent-decline" type="button">decline — tune locally</button>
+            </div>
+        </div>
         <div class="cfg-file" id="ex-current">loading…</div>
         <div class="controls" style="margin:10px 0">
             <button id="b-ex-check" type="button">check the exchange</button>
@@ -2335,10 +2342,44 @@ function renderExchange() {
         box.appendChild(exLine("written " + (c.written || "?") + " · noise " + (c.noise || "?") + " · engine sha " + (c.engine_sha || "?")
             + (c.local ? (c.shared ? " · shared with the exchange" : " · not shared yet") : "")));
     }
-    box.appendChild(exLine("exchange " + (pol.url || "") + " · accept " + (pol.accept || "verified") + " · share " + (pol.submit || "ask")));
+    const consent = pol.configured ? "configured" : (exchangeState.consent || "");
+    box.appendChild(exLine("exchange " + (pol.url || "") + " · accept " + (pol.accept || "verified") + " · share " + (pol.submit || "ask")
+        + " · consent " + (consent || "not asked yet")));
     $("ex-always").checked = pol.submit === "always";
     $("b-ex-submit").style.display = (c.present && c.local && !c.shared) ? "" : "none";
+    // The GDPR first-contact banner: an explicit exchange config is itself consent, so it
+    // shows only on the zero-config path — until a choice is recorded, and again when the
+    // recorded choice is "declined" (as the way to change your mind).
+    const banner = $("ex-consent");
+    if (!pol.configured && consent !== "accepted") {
+        $("ex-consent-text").textContent = (consent === "declined" ? "The exchange is currently declined — accepting re-enables it.\n\n" : "")
+            + (exchangeState.consent_notice || "");
+        banner.style.display = "";
+    } else {
+        banner.style.display = "none";
+    }
 }
+
+async function postConsent(accept) {
+    $("b-consent-accept").disabled = $("b-consent-decline").disabled = true;
+    try {
+        const r = await fetch("/exchange/consent", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accept })
+        });
+        const doc = await r.json();
+        if (!r.ok) throw new Error(doc.error && doc.error.message || String(r.status));
+        $("ex-note").textContent = doc.restarting
+            ? "exchange enabled — restarting to look up a preset for this box…"
+            : (accept ? "exchange enabled" : "declined — this box tunes locally");
+        await loadExchange();
+    } catch (e) {
+        $("ex-note").textContent = "consent: " + e.message;
+    }
+    $("b-consent-accept").disabled = $("b-consent-decline").disabled = false;
+}
+$("b-consent-accept").addEventListener("click", () => postConsent(true));
+$("b-consent-decline").addEventListener("click", () => postConsent(false));
 
 async function loadExchange() {
     try {
