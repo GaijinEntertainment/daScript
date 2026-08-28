@@ -45,11 +45,12 @@ Two real deltas remain, both fixable in shared source:
    same classes (loop, music gate, nolint-comment drift) plus boulder-dash's port-only
    files (`sfx_gen.das`, its dastest suites) - decide per file: fold desktop-side or
    charter as sanctioned port-only.
-3. **Kill the copy**: the deploy/staging step (pages.yml + the samples build) stages
-   game `.das` files from `examples/games/<g>/`; `web/examples/ui/samples/examples/<g>/`
-   keeps only chartered port-only files. `examples/games/REVIEW.das` flips from
-   file-list cross-check to banning a re-formed fork (no `.das` under the samples tree
-   that also exists desktop-side).
+3. **Ban the fork re-forming** (amended from "kill the copy"): the copies stay in git
+   but `examples/games/REVIEW.das` gains `check_port_identity` - every `.das` under a
+   samples dir with a desktop twin must be byte-identical to it, in both directions.
+   True stage-from-examples (deleting the git copies, staging at deploy time) stays an
+   OPEN OPTION, not taken because it rewires pages.yml, which runs only on master
+   pushes - a mistake there breaks the live site with no PR-time signal.
 
 ## Traps and notes for the doer
 

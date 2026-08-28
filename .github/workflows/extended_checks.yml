@@ -346,6 +346,12 @@ jobs:
           linux)
             sudo bash ci/apt_install.sh xvfb
             xvfb-run -a bash examples/games/sequence/ci_smoke_test.sh "$(pwd)"
+            # The ported games, 60 frames each: settles the eval_main_loop exit
+            # arms, the --max-frames cap, shutdown, and the threaded music arm -
+            # the parts no dastest suite can reach.
+            for g in arcanoid pacman boulder-dash river_run; do
+              timeout 120 xvfb-run -a ./bin/daslang examples/games/$g/main.das -- --max-frames 60
+            done
             ;;
           *)
             bash examples/games/sequence/ci_smoke_test.sh "$(pwd)"

@@ -93,8 +93,10 @@ gain, duration tracks event weight (per-tick chatter 0.035-0.09 s, once-per-life
 every explosion is byte-identical. `AUDIO_RATE` sizes the buffers AND is the rate passed to
 playback; both live in `sfx_gen` so they cannot diverge.
 
-Music runs on the threaded strudel player and only where the audio backend is threaded;
-the game sends colon-separated string commands, one track per named layer.
+Music runs on the strudel player through one of two arms - a worker thread where the
+runtime can host one, the main-thread channel (`strudel_create_channel` + per-frame
+`strudel_tick`) where it cannot - and the game sends colon-separated string commands,
+one track per named layer, routed by `music_dispatch` to whichever arm is live.
 
 ## 7. Rendering
 
