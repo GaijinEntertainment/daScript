@@ -160,5 +160,5 @@ Binaries produced by `cmake --install` are ad-hoc code signed automatically, whi
 
 ## License
 
-BSD 3-Clause License - Copyright (c) 2019-2026, Gaijin Entertainment.
+BSD 3-Clause License - Copyright (c) 2018-2026, Gaijin Games Kft.
 See `LICENSE` for the full text.

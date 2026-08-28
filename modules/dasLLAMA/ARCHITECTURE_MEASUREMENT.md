@@ -64,3 +64,9 @@ stages, tokenizer build) - the rails do not apply. A clock whose value feeds log
 flow, not instrumentation; it is marked `// clock: control` so the sweep and any future lint
 leave it alone.
 
+The override-announce rule (REVIEW.md) draws its boundary here: a knob or setter whose purpose
+is timing still counts as an override when it moves computed numerics - two GEMM forms of the
+same math differ in float terms - while one that changes only WHEN work happens does not, and
+a CLI flag is never an override (it is the run's own command line, visible where the run is
+launched).
+

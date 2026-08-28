@@ -82,9 +82,16 @@ no ETA is published and none should be synthesized from these numbers.
 ### The exchange (`@sidecar` events, the tray's tune actions)
 
 dasllama's exchange client emits `@sidecar <kind> k=v ...` on the same contract (`lookup`,
-`none`, `offer`, `apply`, `pending_submit`, `submitted`); the watchdog folds them into
-`STATE["sidecar"]` and logs each one. Balloons announce a decision but never carry the action -
-the tray menu and the control page do:
+`none`, `offer`, `apply`, `pending_submit`, `submitted`, `consent`); the watchdog folds them
+into `STATE["sidecar"]` and logs each one. `consent state=needed` (the GDPR first-contact
+gate: the client found no recorded choice and no terminal to ask on) raises a native
+Accept/Decline dialog - osascript on macOS, MessageBoxW on Windows, a plain notification
+pointing at the control page elsewhere - once per consent file for the watchdog's lifetime.
+The answer lands in the consent file the event names (url-encoded `path=`); Accept during a
+tune also rides the stop rail below (mode `consent`: stop at the boundary, relaunch clean,
+the fresh boot runs the now-consented lookup). Walking away from the dialog answers nothing.
+Balloons announce a decision but never carry the action - the tray menu and the control page
+do:
 
 - **Use available sidecar instead (stops tuning)** - visible while a tune is in flight AND an
   unverified offer exists. Writes the tune-control file (the tuner polls `DAS_TUNE_CONTROL` at
@@ -92,7 +99,7 @@ the tray menu and the control page do:
   a ONE-SHOT `DASLLAMA_EXCHANGE_ACCEPT=any` - consent that never outlives the click.
 - **Stop tuning, run untuned** - visible while a tune is in flight. Same stop file, then a
   `DAS_TUNE_POLICY=fallback` hold kept in `STATE["sticky_env"]` and re-applied on every spawn,
-  so a later crash-restart cannot surprise the box with a 20-minute tune. The hold shows as
+  so a later crash-restart cannot surprise the box with a ~12-minute tune. The hold shows as
   `* tuning off` in the tooltip and is revocable via **Resume tuning**; a control-page config
   restart (which a re-tune rides) also clears it, so the re-tune is not silently defeated.
 - **Resume tuning** - visible only while a run-untuned hold is active; clears it so the next

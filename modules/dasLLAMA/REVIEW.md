@@ -1,9 +1,9 @@
 # dasLLAMA Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`; the perf
-backlog is `PERF_LEDGER.md` - a performance followup goes there, everything else in the
-two followup ledgers.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+docs: `ARCHITECTURE.md` and the `ARCHITECTURE_*.md` companions it indexes. Planned work:
+`followup_general.md`, `followup_vulkan.md`, `PERF_LEDGER.md` (performance goes to the perf
+ledger, everything else to the followup ledgers).
 
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
@@ -87,8 +87,12 @@ file's sec.1 charter line in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, or
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
 file.**
 
-**A new engine concern that is not `Model`/`Session`/`Config` state gets its own file, not
-more of `dasllama/dasllama_common.das`.**
+**A diff that adds a new engine concern that is not `Model`/`Session`/`Config` state to
+`dasllama/dasllama_common.das` is a defect - give the concern its own file.**
+
+**A boot-path prompt (code that runs at startup, before the first request) that reads stdin
+without first proving both stdin and stdout are terminals is a defect - emit the question as
+a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
 **A NEW clock read paired with a print or log of the elapsed interval is a defect in an engine
 file (`dasllama/`) outside a cold one-shot load, bake, map, or tokenizer-build progress log** -
@@ -124,14 +128,13 @@ template strings any of them look up, records a `tests/test_tokenizer.das` run w
 EXECUTED, not skipped.**
 
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.**
-An override is an environment knob or an exported runtime setter that moves a gate, policy, or
-threshold off its default and thereby changes what the run writes, reads, mints, or computes -
-including a knob or setter whose purpose is timing when it moves computed numerics, since two
-GEMM forms of the same math differ in float terms. A knob or setter that changes only WHEN work
-happens is not an override, and a CLI flag is never one. The announce is a line the run prints
-where the override changes the outcome, naming it by the spelling a user would set - the
-environment variable name, the sidecar key, or the setter's function name. Per-site repeats are
-fine. A set-but-inert override stays silent.
+An override is an environment knob, an exported runtime setter, or an on-disk state file that
+moves a gate, policy, or threshold off its default and thereby changes what the run writes,
+reads, mints, or computes - a timing knob included when it moves computed numerics. A knob
+that changes only WHEN work happens is not one, and a CLI flag is never one. The announce is
+a line the run prints where the override changes the outcome, naming it by the spelling a
+user would set - the environment variable name, the sidecar or file key, or the setter's
+function name. Per-site repeats are fine; a set-but-inert override stays silent.
 
 **A change to user-facing API updates every place it is shown: a tutorial source, `.rst` page,
 docstring, help string, `README.md`, or checked-in document still showing the old call, flag, or
@@ -238,7 +241,8 @@ file** - a single-caller helper sanctioned as tower-worthy is ledgered on
 **A harness that prints output for another tool to compare exits non-zero when its run ends
 without those comparison lines - wrong flags, failed load.**
 
-**Tool wire text - building or parsing - is produced only in `dasllama/dasllama_tools.das`.**
+**Tool wire text (the text of a model's tool/function call, built or parsed) is produced only
+in `dasllama/dasllama_tools.das`.**
 
 **No engine file (`dasllama/`) other than `dasllama/dasllama_audio_io.das` requires `audio` (the
 miniaudio decode module).**

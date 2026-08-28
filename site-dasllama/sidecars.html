@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>sidecars — dasllama.io</title>
-<meta name="description" content="The sidecar exchange — per-box tune manifests for dasLLAMA. Pick one up for your platform, architecture and engine version instead of spending 20 minutes tuning."/>
+<meta name="description" content="The sidecar exchange — per-box tune manifests for dasLLAMA. Pick one up for your platform, architecture and engine version instead of spending ~12 minutes tuning."/>
 <meta property="og:title" content="dasLLAMA sidecars"/>
 <meta property="og:description" content="Per-box tune manifests: kernel winners, runtime scalars, provenance. Pick one up instead of tuning."/>
 <meta property="og:type" content="website"/>
@@ -10,9 +10,7 @@
 <link rel="canonical" href="https://dasllama.io/sidecars.html"/>
 <link rel="icon" href="files/dasllama-favicon.svg" type="image/svg+xml"/>
 <link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap"/>
+<link rel="stylesheet" href="files/fonts/fonts.css"/>
 <link rel="stylesheet" href="files/forge.css"/>
 <link rel="stylesheet" href="files/dasllama-table.css"/>
 <link rel="stylesheet" href="files/dasllama-io.css"/>
@@ -34,7 +32,8 @@
 <header class="dio-head"><div class="forge-container"><div class="dio-head__row">
 <div>
 <h1>Somebody may already have tuned <em>your box.</em></h1>
-<p class="dio-head__lede">A sidecar is dasLLAMA's per-box tune manifest: which JIT kernel variant won in each of ~40 families, 23 tuned runtime scalars, and the provenance to prove where it came from. Producing one costs about 20 minutes of quiet machine. <b style="color:var(--fg);font-weight:400">dasllama-server picks a matching sidecar up automatically at startup</b> — this page is the manual browse.</p>
+<!-- ~12 min: measured first-boot tune on M1 Max 2026-08-28 - 11:46 wall incl. cold JIT codegen, 40 kernel families raced (42 planned), re-exec, model load; run stated in the introducing PR -->
+<p class="dio-head__lede">A sidecar is dasLLAMA's per-box tune manifest: which JIT kernel variant won in each of ~40 families, 23 tuned runtime scalars, and the provenance to prove where it came from. Producing one costs about 12 minutes of quiet machine. <b style="color:var(--fg);font-weight:400">dasllama-server picks a matching sidecar up automatically at startup</b> — this page is the manual browse.</p>
 </div>
 <!-- dio-sc-stats is filled live by mountSidecars; this is the pre-load/API-down fallback (must
      match what the JS renders — a sidecar keys on version × BOX, not arch) -->
@@ -62,18 +61,18 @@
 <div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span>the cli does this for you</div>
 <div class="dio-get__grid">
 <div>
-<h2 class="forge-h2">No questions asked.</h2>
-<p class="forge-p">At startup the server matches your box against the exchange — one code path, no prompts. Manual download is for air-gapped boxes and for people who want to read the manifest before trusting it.</p>
+<h2 class="forge-h2">One question, once.</h2>
+<p class="forge-p">The first start asks once whether to use the exchange — Accept and every later start matches your box automatically, one code path; Decline and the box tunes itself locally. Setting the exchange policy yourself - <code class="forge-code">exchange_*</code> keys in a hand-written config, or the <code class="forge-code">DASLLAMA_EXCHANGE_*</code> environment - skips the question: it IS the answer. Manual download is for air-gapped boxes and for people who want to read the manifest before trusting it.</p>
 <div class="dio-get__steps">
 <div class="dio-get__step"><i>01</i><span>verified match → downloaded, validated, applied</span></div>
 <div class="dio-get__step"><i>02</i><span>unverified match → never auto-applied; adopt it from the control page, or from the tray while a tune runs</span></div>
-<div class="dio-get__step"><i>03</i><span>nothing → the box tunes itself, ~20 min quiet machine, and can share the result back</span></div>
+<div class="dio-get__step"><i>03</i><span>nothing → the box tunes itself, ~12 min quiet machine, and can share the result back</span></div>
 </div>
 </div>
 <!-- every command and output line below is verbatim from a real untuned dasllama-server
      boot against a live exchange (REVIEW.md: no invented shell commands) -->
 <div class="forge-terminal">
-<div class="forge-terminal__header"><div class="forge-terminal__dots"><span class="forge-terminal__dot forge-terminal__dot--red"></span><span class="forge-terminal__dot forge-terminal__dot--amber"></span><span class="forge-terminal__dot forge-terminal__dot--green"></span></div><span class="forge-terminal__label">dasllama-server</span><span class="forge-terminal__status">first start, untuned box</span></div>
+<div class="forge-terminal__header"><div class="forge-terminal__dots"><span class="forge-terminal__dot forge-terminal__dot--red"></span><span class="forge-terminal__dot forge-terminal__dot--amber"></span><span class="forge-terminal__dot forge-terminal__dot--green"></span></div><span class="forge-terminal__label">dasllama-server</span><span class="forge-terminal__status">first start after Accept, untuned box</span></div>
 <div class="forge-output" style="border-top:0;padding:18px 20px;font-size:12.5px;line-height:1.85">
 <div class="forge-output__line"><span class="forge-output__prompt">$</span> daslang -jit main.das -- --model model.gguf</div>
 <div class="forge-output__line">exchange: scope 'dasllama' is untuned - looking up a sidecar for this box (dasllama version 1)</div>
@@ -96,7 +95,7 @@
 <div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="sidecars.html">sidecars</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
 <div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
 <div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
-</div></div></footer>
+<div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>
 
 
 </div></body></html>

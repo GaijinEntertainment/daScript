@@ -523,6 +523,7 @@ jobs:
       run: |
         set -eux
         python3 utils/watchdog/test_tray_state.py
+        python3 utils/watchdog/test_consent.py
 
     - name: "Test pip wheel repack (python)"
       if: matrix.target == 'linux'

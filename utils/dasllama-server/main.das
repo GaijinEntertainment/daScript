@@ -16,7 +16,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // Then point any OpenAI client at http://127.0.0.1:<port>/v1 (opencode, Open WebUI, the `llm` CLI, …).
 //
 // Per-box tuning: the first start on an untuned box consults the sidecar exchange (dasllama.io —
-// a verified match downloads instead of racing ~20 min; exchange_accept/exchange_submit in the
+// a verified match downloads instead of racing ~12 min; exchange_accept/exchange_submit in the
 // config), else runs the dasLLAMA kernel tuner; either way it exits so the watchdog can restart
 // with the winners (missing = "restart"); `--tune` forces a local re-tune. Set DAS_TUNE_POLICY=error
 // while developing to skip per-start tuning (it prints the tuner command instead). The winners live
@@ -167,7 +167,7 @@ struct ModelEntry {
 }
 
 // registered from [init] so it lands before the tune-policy guard at the top of main: an
-// untuned boot consults the exchange (verified matches only by default) before racing ~20 min
+// untuned boot consults the exchange (verified matches only by default) before racing ~12 min
 [init]
 def register_exchange_resolver {
     exchange_register_resolver("dasllama-server.toml")
