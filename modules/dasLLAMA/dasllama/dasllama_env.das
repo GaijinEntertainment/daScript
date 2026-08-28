@@ -200,6 +200,10 @@ struct public MetalEnv {
     @clarg_doc = "Skip per-dispatch retain/release on the prefill command buffers."
     unretained : bool = false
 
+    @clarg_default_doc = "0 (off)"
+    @clarg_doc = "MB budget for RESIDENT dev-W f16 panels: static weights dequantize ONCE and the panels persist across forwards (vs the per-forward scratch re-dequant). Sites past the budget fall back to scratch."
+    devw_resident : int = 0
+
     @clarg_doc = "Record each prefill chunk as a step graph and replay on a concurrent encoder; 0 is serial-encode rollback."
     pf_capture : bool = true
 

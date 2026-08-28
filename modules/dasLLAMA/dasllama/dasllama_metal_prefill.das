@@ -2215,6 +2215,9 @@ var private g_pf_pso_hmm_th : MetalComputePipeline?  //!< all-device half x half
 var private g_pf_pso_hmm_th128 : MetalComputePipeline?
 var private g_pf_bwh : MetalBuffer?     //!< per-forward f16 W panels (dev-W form), double-buffered like bxh
 var private g_pf_bwh2 : MetalBuffer?
+var private g_pf_devw_res : table<uint64; MetalBuffer?>   //!< RESIDENT dev-W panels, key = blob ptr + site offset (in-buffer, so globally unique) — filled once, read every forward
+var private g_pf_devw_res_bytes : uint64
+var private g_pf_devw_res_full = false   //!< budget exhausted once — later sites stay on scratch, warned once
 var private g_pf_bwh_flip : bool
 var private g_pf_bwh_bytes : uint64
 var private g_pf_pso_bf16_mm : MetalComputePipeline?   //!< native-BF16 A twin (E-series model_proj)
@@ -2414,6 +2417,7 @@ def public metal_prefill_pso_init : bool {
 def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-release-per-PSO list
     kcov_fold()   //! PSO pointers recycle across re-init — counts fold into names first
     residency_reset()   //! the set references pooled buffers the drains below release
+    pf_devw_res_release()   //! resident dev-W panels die with the driver (and any weight refill re-fills)
     pool_drain(g_pf_pool)
     pool_drain(g_pf_upool)
     if (g_pf_pso_moe_mm_q8_t != null) {
@@ -3008,6 +3012,65 @@ def private pf_enc_hmm(enc : MetalComputeEncoder?; bwh, bxh, by : MetalBuffer?; 
     }
 }
 
+//! The RESIDENT panel seat: dequantize a site's whole W plane once into a persistent
+//! hazard-TRACKED buffer and reuse it every forward (the scratch route re-pays the dequant
+//! per site per forward). null = budget refused or off - the caller stays on scratch
+def private pf_devw_resident_panel(key : uint64; bytes : uint64; var fresh : bool&) : MetalBuffer? {
+    fresh = false
+    var cached = g_pf_devw_res?[key] ?? null
+    if (cached != null) {
+        return cached
+    }
+    if (g_pf_env_devw_res_bytes == 0ul) {
+        return null
+    }
+    if (g_pf_devw_res_bytes + bytes > g_pf_env_devw_res_bytes) {
+        if (!g_pf_devw_res_full) {
+            g_pf_devw_res_full = true
+            to_log(LOG_WARNING, "dasLLAMA metal prefill: devw-resident budget exhausted at {int64(g_pf_devw_res_bytes) / 1048576l} MB - later sites stay on the scratch route\n")   // nolint:PERF028,PERF026 — one-shot fill arm
+        }
+        return null
+    }
+    var bwh = metal_new_buffer(g_dev, bytes)
+    if (bwh == null) {
+        return null
+    }
+    residency_note(bwh)
+    g_pf_devw_res[key] = bwh   // nolint:PERF026 — one-shot fill arm, 4 inserts per layer per process
+    g_pf_devw_res_bytes += bytes
+    fresh = true
+    return bwh
+}
+
+def private pf_devw_res_release {
+    for (b in values(g_pf_devw_res)) {
+        if (b != null) {
+            metal_release(b)
+        }
+    }
+    g_pf_devw_res |> clear()
+    g_pf_devw_res_bytes = 0ul
+    g_pf_devw_res_full = false
+}
+
+//! the q8 resident arm: whole-plane dequant on first touch, then the single full-panel hmm.
+//! false = not resident (off/budget) - the caller runs the scratch tile loop
+def private pf_devw_panel_q8_resident(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
+                                      bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64) : bool {
+    var fresh = false
+    var bwh = pf_devw_resident_panel(intptr(bwblob) + wboff, uint64(d * kdim * 2l), fresh)
+    if (bwh == null) {
+        return false
+    }
+    if (fresh) {
+        let nblk = d * (kdim / 32l)
+        var dka = CvtArgs(total = uint(nblk))
+        enc_dequant_q8h(enc, bwblob, wboff, bwblob, bwh, dka, (nblk + 255l) / 256l * 256l)
+    }
+    pf_enc_hmm(enc, bwh, bxh, by, yoff, bk, bn, rows, d, d, kdim)
+    return true
+}
+
 //! N-column tile: bn stays the FULL row stride, the y base pointer carries the column base
 def private pf_enc_devw_q8_tile(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
                                 bxh, by, bk, bn : MetalBuffer?; rows, tbase, td, dfull, kdim : int64; yoff : uint64) {
@@ -3026,6 +3089,9 @@ def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wbo
     let tiles = pf_devw_tiles(rows, d, kdim)
     if (tiles <= 0l) {
         return false
+    }
+    if (pf_devw_panel_q8_resident(enc, bwblob, wboff, bxh, by, bk, bn, rows, d, kdim, yoff)) {
+        return true
     }
     let td = d / tiles
     for (ti in range64(tiles)) {
@@ -3048,6 +3114,23 @@ def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt;
     }
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
+    var rfresh = false
+    var brh = pf_devw_resident_panel(intptr(bq.buf) + uint64(woff), uint64(d * kdim * 2l), rfresh)
+    if (brh != null) {
+        if (rfresh) {
+            var rka = CvtArgs(total = uint(d * kdim / 32l))
+            let rgt = (d * kdim / 32l + 255l) / 256l * 256l
+            if (fmt == KqFmt.k6) {
+                enc_dequant_k6h(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, brh, rka, rgt)
+            } elif (fmt == KqFmt.k4) {
+                enc_dequant_k4h(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, brh, rka, rgt)
+            } else {
+                enc_dequant_k5h(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, brh, rka, rgt)
+            }
+        }
+        pf_enc_hmm(enc, brh, bxh, by, yoff, bk, bn, rows, d, d, kdim)
+        return true
+    }
     let td = d / tiles
     let nsb = kdim / 256l
     for (ti in range64(tiles)) {
@@ -4708,6 +4791,7 @@ var private g_pf_env_mulmm = true
 var private g_pf_env_mm_tail = true
 var private g_pf_env_half_x = true
 var private g_pf_env_dev_w = true
+var private g_pf_env_devw_res_bytes = 0ul   //!< DASLLAMA_METAL_DEVW_RESIDENT budget (MB env, bytes here); 0 = off
 var private g_pf_env_tall = true
 
 var private CVT_MIN_ROWS = 256l          //!< sidecar knob "metal_cvt_min_rows" — cached at init
@@ -4745,6 +4829,7 @@ def dasllama_metal_prefill_register() {
     g_pf_env_logits = g_env_metal.logits
     g_pf_env_attn = g_env_metal.attn
     g_pf_env_unretained = g_env_metal.unretained
+    g_pf_env_devw_res_bytes = uint64(max(g_env_metal.devw_resident, 0)) * 1024ul * 1024ul
     g_pf_env_capture = g_env_metal.pf_capture
     g_pf_env_ncb = g_env_metal.ncb
     if (!empty(g_env_metal.prefill_skip)) {

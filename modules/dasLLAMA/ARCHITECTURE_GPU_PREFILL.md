@@ -65,6 +65,15 @@ count repays. The raced evidence
 (32 MiB wins everywhere, 47 MiB only from 2048 rows, 112 MiB loses everywhere) is
 `benchmarks/matmul/bench_metal_nax_probe.das`'s grid.
 
+**Resident panels remove the re-dequant entirely.** The dev-W scratch pair re-pays every
+site's dequant every forward - at 8B geometry ~4.5 GB of panel writes and quant reads per
+512-chunk, the whole `devw_cvt` knockout pool (~7.7 ms). Under a `DASLLAMA_METAL_DEVW_RESIDENT`
+MB budget, a served site's whole W plane dequantizes ONCE into a persistent hazard-tracked
+buffer keyed by blob pointer plus site offset, reads as a single full-panel GEMM (no
+N-column tiling - tiling exists only for the scratch pair's capacity), and dies with the
+driver shutdown or a weight refill. Sites past the budget stay on scratch, warned once.
+Measured 8B npos=512: 162.1 -> 154.0 ms with the budget at 4 GB (~3.0 GB used).
+
 Clauses the isolated grid cannot see, because it races one site while production overlaps
 sites:
 
