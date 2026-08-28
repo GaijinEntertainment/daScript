@@ -811,7 +811,7 @@ class TmmTensor {
     @workgroup tgb : float16[512]               // B chunk, transposed [16][32]
     @workgroup tgc : float16[512]               // B chunk, NATURAL [32][16] (the nt flavors)
     @workgroup tqu : float16[512]               // q8u staged W tile, bk = 32
-    @workgroup tq64 : float16[1024]             // q8u staged W tile, bk = 64
+    @workgroup tq64 : float16[1152]             // q8u staged W tile, bk = 64 (72-half padded rows)
     @workgroup tso : float[128]                 // tile_tg destination scratch
     @workgroup trow : float[8]                  // rowscale factors, one per tile row
 

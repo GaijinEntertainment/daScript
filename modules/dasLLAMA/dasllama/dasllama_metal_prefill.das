@@ -107,7 +107,7 @@ class template MetalQ8MulMmTensorT {
     @ssbo @binding = 3 @off = "yoff" @span = "mp*d*4" y : array<float>
     @uniform @binding = 4 kdim : uint
     @uniform @binding = 5 ndim : uint
-    @workgroup twb : float16[4096]          //!< W chunk: 64 wcols x 64 k (bk=64), dequant-staged by the helper
+    @workgroup twb : float16[6144]          //!< W chunk: 64 wcols x 72-half padded rows (bk=64; 12288B lands mid-plateau)
 
     [metal_kernel(float_a_ok=true)]
     def metal_q8_mulmm_t {
@@ -431,7 +431,7 @@ class template MetalKqMulMmK45TensorT {
     @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @workgroup twb : float16[4096]          //!< W chunk: 64 wrows x 64 k (bk=64), flat row-major
+    @workgroup twb : float16[6144]          //!< W chunk: 64 wrows x 72-half padded rows (bk=64; 12288B lands mid-plateau)
     @template_constant BLK : uint = 32u
     @template_constant QH : bool = false
 
@@ -476,10 +476,10 @@ class template MetalKqMulMmK45TensorT {
                         let u = kqu[blk * BLK + (js / 2u) * 8u + e / 4u]
                         let hu = kqu[blk * BLK + 32u + e / 4u]
                         let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
-                        twb[j * 64u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
+                        twb[j * 72u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
                     } else {
                         let q = (kqu[blk * BLK + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
-                        twb[j * 64u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
+                        twb[j * 72u + (sub >> 1u) * 32u + e] = float16(dsc * float(q) - dmn)
                     }
                 }
                 work += gl_WorkGroupSize.x
@@ -543,7 +543,7 @@ class template MetalKqMulMmK6TensorT {
     @ssbo @binding = 4 @off = "yoff" @span = "mp*rows*4" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @workgroup twb : float16[4096]
+    @workgroup twb : float16[6144]
 
     [metal_kernel(float_a_ok=true)]
     def metal_kq_mulmm_k6_t {
@@ -583,7 +583,7 @@ class template MetalKqMulMmK6TensorT {
                     let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
                     let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
                     let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                    twb[j * 64u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
+                    twb[j * 72u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
                 }
                 work += gl_WorkGroupSize.x
             }
@@ -920,7 +920,7 @@ class template MetalMoeMulMmQ8TensorT {
     @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 6 cnt : array<uint>
     @ssbo @binding = 7 basep : array<uint>
-    @workgroup twb : float16[4096]          //!< W chunk: 64 wcols x 64 k (bk=64), dequant-staged by the helper
+    @workgroup twb : float16[6144]          //!< W chunk: 64 wcols x 72-half padded rows (bk=64; 12288B lands mid-plateau)
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_q8_t {
@@ -969,7 +969,7 @@ class template MetalMoeMulMmK45TensorT : MetalMoeMulMmKqTensorBase {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
-    @workgroup twb : float16[4096]
+    @workgroup twb : float16[6144]
     @template_constant BLK : uint = 32u
     @template_constant QH : bool = false
 
@@ -1007,10 +1007,10 @@ class template MetalMoeMulMmK45TensorT : MetalMoeMulMmKqTensorBase {
                 let u = kqu[blk * BLK + (js / 2u) * 8u + el / 4u]
                 let hu = kqu[blk * BLK + 32u + el / 4u]
                 let q = ((u >> (8u * (el % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (el % 4u) + js)) & 1u) << 4u)
-                twb[j * 64u + (sub >> 1u) * 32u + el] = float16(dsc * float(q) - dmn)
+                twb[j * 72u + (sub >> 1u) * 32u + el] = float16(dsc * float(q) - dmn)
             } else {
                 let q = (kqu[blk * BLK + (js / 2u) * 8u + el / 4u] >> (8u * (el % 4u) + (js & 1u) * 4u)) & 15u
-                twb[j * 64u + (sub >> 1u) * 32u + el] = float16(dsc * float(q) - dmn)
+                twb[j * 72u + (sub >> 1u) * 32u + el] = float16(dsc * float(q) - dmn)
             }
         }
     }
@@ -1072,7 +1072,7 @@ class MetalMoeMulMmK5THR : MetalMoeMulMmK45TensorT {
 class template MetalMoeMulMmQ51TensorT : MetalMoeMulMmKqTensorBase {
     @ssbo @binding = 0 @role = "weight" @off = "soff" wsh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "qoff" wqu : array<uint>
-    @workgroup twb : float16[4096]
+    @workgroup twb : float16[6144]
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_q51_t {
@@ -1095,7 +1095,7 @@ class template MetalMoeMulMmQ51TensorT : MetalMoeMulMmKqTensorBase {
             let el = kh + uint(t)
             let u = wqu[qb + uint(t) / 4u]
             let q = ((u >> (8u * (uint(t) % 4u) + nsh)) & 15u) | (((qh >> el) & 1u) << 4u)
-            twb[j * 64u + (sub >> 1u) * 32u + el] = float16(d * float(q) + m)
+            twb[j * 72u + (sub >> 1u) * 32u + el] = float16(d * float(q) + m)
         }
     }
 }
@@ -1127,7 +1127,7 @@ class template MetalMoeMulMmK6TensorT : MetalMoeMulMmKqTensorBase {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
-    @workgroup twb : float16[4096]
+    @workgroup twb : float16[6144]
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_k6_t {
@@ -1160,7 +1160,7 @@ class template MetalMoeMulMmK6TensorT : MetalMoeMulMmKqTensorBase {
             let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
             let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
             let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-            twb[j * 64u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
+            twb[j * 72u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
         }
     }
 }
