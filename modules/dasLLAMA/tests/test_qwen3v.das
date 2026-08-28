@@ -12,6 +12,8 @@ require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
 require ?das_metal dasllama/dasllama_metal_tower   // the CPU gates pin the tower knob off
+require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown - the f16-route cell re-arms crowned PSOs
+require dasllama/dasllama_common   // set_metal_tensor_crowns - the f16-route cell's crown pin
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 
 // Tier-1 qwen3v tower parity vs llama-mtmd-debug -p encode (the Omni-30B SigLIP-geometry ViT).
@@ -233,6 +235,54 @@ def test_qwen3v_tier1_metal(t : T?) {
             delete tw4
         } else {
             tt |> skip("no das_metal on this build - the Metal tower arm has no device to serve")
+        }
+    }
+}
+
+// The f16-W GEMM route: under a tensor crown the tower serves block/merger GEMMs from the
+// f16 weight shadow on the crowned half twins. Same oracle, same GPU bars - the shadow holds
+// the file's own f16 values, so only the tensor op's accumulation order separates the routes.
+[test]
+def test_qwen3v_tier1_metal_f16(t : T?) {
+    t |> run("tier-1 on the Metal tower's f16-W route (crowned twins, 4B deepstack)") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let mm4 = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
+            if (!model_available(tt, mm4)) {
+                return
+            }
+            set_metal_tensor_crowns("mulmm_q8")   // any crowned family compiles the half twins
+            metal_prefill_shutdown()              // crowns are read when the PSOs compile
+            set_qwen3v_q8(false)
+            var tw4 <- load_qwen3v_tower(mm4)
+            reset_qwen3v_q8()
+            set_metal_tower(true)
+            set_metal_tower_f16(true)
+            var st4 = Qwen3vState()
+            let f0 = metal_tower_f16_encodes()
+            var gated = 0l
+            if (tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)) {
+                gated++
+            }
+            if (tt |> gate_encode(tw4, st4, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_GPU_DS)) {
+                gated++
+            }
+            let f1 = metal_tower_f16_encodes()
+            if (gated == 0l) {
+                tt |> skip("no oracle dumps present - the f16-route parity fixtures all skipped")
+            } else {
+                tt |> success(f1 - f0 >= gated, "every gated encode rode the f16-W route ({f1 - f0} of {gated})")
+                // the knob-off leg: same fixture, same bar, and the route counter must NOT move
+                set_metal_tower_f16(false)
+                tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)
+                tt |> equal(metal_tower_f16_encodes() - f1, 0l, "the knob-off leg keeps the f32 GEMM route")
+            }
+            set_metal_tower_f16(true)
+            set_metal_tensor_crowns("")
+            metal_prefill_shutdown()
+            delete st4
+            delete tw4
+        } else {
+            tt |> skip("no das_metal on this build - the f16-W route has no device to serve")
         }
     }
 }

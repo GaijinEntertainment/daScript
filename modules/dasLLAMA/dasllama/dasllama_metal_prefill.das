@@ -3407,14 +3407,21 @@ def private pf_devw_tiles(rows, d, kdim : int64; slow_fb : bool = false) : int64
 //! the DBUF pick: the double-buffered twin serves when the knob is on and its PSO compiled
 def private pf_dbuf(pso : MetalComputePipeline?) : bool => g_pf_env_dbuf && pso != null
 
+//! Whether [[pf_enc_hmm]] can serve: the half twins compile only under a tensor crown, so a
+//! box without one (every pre-M5 Apple GPU) answers false and callers keep their f32 route.
+def pf_hmm_ready() : bool => g_pf_pso_hmm_th != null && g_pf_pso_cvt_half != null
+
 def private pf_devw_flip : MetalBuffer ? {
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh
     g_pf_bwh_flip = !g_pf_bwh_flip
     return bwh
 }
 
-def private pf_enc_hmm(enc : MetalComputeEncoder?; bwh, bxh, by : MetalBuffer?; yoff : uint64;
-                       bk, bn : MetalBuffer?; rows, td, dfull, kdim : int64; woff : uint64 = 0ul) {
+//! The all-device half x half mul_mm dispatch (tall/1-D picks included): f16 W at `woff` bytes,
+//! f16 X panel, f32 y. The dev-W route's own form pick — and the Metal tower's f16-W route
+//! rides it too, so it is public.
+def pf_enc_hmm(enc : MetalComputeEncoder?; bwh, bxh, by : MetalBuffer?; yoff : uint64;
+               bk, bn : MetalBuffer?; rows, td, dfull, kdim : int64; woff : uint64 = 0ul) {
     var r0 = 0l
     if (g_pf_env_tall && g_pf_pso_hmm_th128 != null && rows >= 128l
             && rows / 128l * (td / 64l) >= TALL_OCC_FLOOR) {

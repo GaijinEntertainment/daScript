@@ -75,6 +75,7 @@ var g_tower_encodes = 0l
 var g_tower_rows = 0l
 var g_tower_blocks = 0l
 var g_tower_convs = 0l                       // conv-frontend chunks served on the GPU
+var g_tower_f16_encodes = 0l                 // encodes whose GEMMs rode the f16-W shadow route
 var g_tower_declines_by_reason : table<string; int64>
 
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
