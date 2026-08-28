@@ -7,6 +7,9 @@
   `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
   covers it.
 
+- **A change gated on a platform - a `get_platform_name()` test or a target-triple branch -
+  runs the module-owned suite on that platform.**
+
 - **A diff that adds work to, or moves work within, what `run_jit`
   (`daslib/llvm_jit_run.das`) executes - its own body or any callee - also prints an
   `LLVM JIT time:` number for that work: its own line, or the number of a phase that includes
@@ -15,12 +18,9 @@
 
 - **A change that can alter the machine code emitted for identical inputs bumps
   `LLVM_JIT_CODEGEN_VERSION`** (`daslib/llvm_jit_run.das`; what counts as emitting:
-  `ARCHITECTURE.md` sec.1.2). An edit inside an `EMITTER_FILES` file
-  (`tests-cpp/small/test_jit_emitter_pin.cpp`, repo root) that provably leaves the emitted
-  code identical - a comment, a nolint, a same-value rewrite - re-pins
-  `LLVM_JIT_EMITTER_HASH` only. A change that only SELECTS among existing generators'
-  `[llvm_code]` arguments - the `[tune]` stamping - needs neither: stamped arguments fold into
-  the cache keys per function.
+  `ARCHITECTURE.md` sec.1.2). Selecting among existing generators' `[llvm_code]` arguments -
+  the `[tune]` stamping - is not such a change: stamped arguments fold into the cache keys
+  per function.
 
 - **A diff that adds an environment or config input to the cache key folds it inside
   `jit_env_salt` (`daslib/llvm_jit_run.das`), never directly into either cache key - the DLL

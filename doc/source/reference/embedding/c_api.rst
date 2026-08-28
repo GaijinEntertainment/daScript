@@ -38,6 +38,21 @@ but does not expose every C++ feature (e.g. class adapters, custom
 annotations).
 
 
+Linking
+=======
+
+With CMake, ``find_package(DAS REQUIRED)`` and linking
+``DAS::libDaScript`` pulls in the whole link set.  A hand-wired project
+(a plain Visual Studio project, a custom build system) must list it
+all: the daslang runtime is split out of the compiler library, so
+linking ``libDaScript`` alone fails with unresolved symbols such as
+``das::ptr_ref_count::ref_count_track`` — the runtime half defines
+them.  Link ``libDaScript``, ``libDaScript_runtime`` and
+``libUriParser``; on Windows add the system libraries ``dbghelp``,
+``ws2_32``, ``mswsock``, ``advapi32``, ``rpcrt4``.  This applies to the
+C++ API (``daScript.h``) the same way.
+
+
 Explicit-length strings
 =======================
 

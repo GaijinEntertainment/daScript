@@ -83,6 +83,6 @@ def test_preflight_config(tt : T?) {
         remove(path)
         t |> success(!empty(error), "invalid config reports an error")
         t |> equal(settings.jit_threads, 0)
-        t |> equal(settings.jit_max_file_time, 60.0)
+        t |> equal(settings.jit_max_file_time, 120.0)
     }
 }

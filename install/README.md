@@ -68,6 +68,30 @@ target_link_libraries(your_app PRIVATE DAS::libDaScript)
 
 See `tutorials/integration/` for complete C and C++ embedding examples.
 
+## Embedding without CMake
+
+`DAS::libDaScript` pulls in the rest of the link set automatically; a hand-wired
+project (a plain Visual Studio project, a custom build system) must list it all.
+The daslang runtime is split out of the compiler library, so linking
+`libDaScript` alone fails with unresolved symbols such as
+`das::ptr_ref_count::ref_count_track` - the runtime half defines them.
+
+Link, from `lib/`:
+
+```
+libDaScript.lib  libDaScript_runtime.lib  libUriParser.lib
+```
+
+plus, on Windows, the system libraries:
+
+```
+dbghelp.lib  ws2_32.lib  mswsock.lib  advapi32.lib  rpcrt4.lib
+```
+
+Add `include/` to the include path and compile as C++17 or newer. On
+non-Windows platforms the same three daslang libraries apply, with the platform's
+usual thread and dl libraries in place of the Windows list.
+
 ## Tree-sitter Grammar
 
 A full tree-sitter grammar for daslang is included in `tree-sitter-daslang/`. Use it for:

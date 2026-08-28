@@ -36,7 +36,8 @@ AOT pipeline overview
 1. **Compile** the ``.das`` file as normal.
 2. **Run** the AOT tool: ``daslang -aot script.das output.cpp``
 3. **Build** the generated ``.cpp`` alongside your application and
-   link ``libDaScript``.
+   link ``libDaScript`` and ``libDaScript_runtime`` (the full hand-wired
+   link set: :ref:`embedding_c_api`, section *Linking*).
 4. At runtime, ``simulate()`` detects AOT-compiled functions and uses
    them instead of the interpreter.
 

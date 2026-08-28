@@ -1119,8 +1119,10 @@ def classify_build_fail(gate, base : string; r : tuple<rc : int; out : string>; 
 }
 
 def gate_tests_interp(ctx : PreflightCtx) : GateResult {
+    // 2x CI's per-file cap: the chained run executes suites while other gates load the
+    // same cores, and CI's 30 measures scheduler pressure there, not the test
     return run_test_gate("tests-interp",
-        [ctx.daslang, "dastest/dastest.das", "--", "--failures-only", "--max-file-time", "30", "--timeout", "1800", "--test", "tests"],
+        [ctx.daslang, "dastest/dastest.das", "--", "--failures-only", "--max-file-time", "60", "--timeout", "1800", "--test", "tests"],
         "interpreter suite failures")
 }
 
@@ -1194,8 +1196,9 @@ def gate_tests_aot(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "tests-aot", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "test_aot binary not found next to daslang ({test_aot})")
     }
+    // 2x CI's per-file cap - same chained-load reasoning as gate_tests_interp
     return run_test_gate("tests-aot",
-        [test_aot, "-use-aot", "dastest/dastest.das", "--", "--use-aot", "--failures-only", "--max-file-time", "30", "--timeout", "1800", "--test", "tests"],
+        [test_aot, "-use-aot", "dastest/dastest.das", "--", "--use-aot", "--failures-only", "--max-file-time", "60", "--timeout", "1800", "--test", "tests"],
         "AOT suite failures (error[50101] → skills/internal/aot_hash_desync_debugging.md)")
 }
 
