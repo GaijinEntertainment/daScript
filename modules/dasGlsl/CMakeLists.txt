@@ -5,6 +5,12 @@ IF(NOT DAS_GLSL_INCLUDED)
     ADD_MODULE_DAS_FROM_DESCRIPTOR(glsl glsl)
     ADD_MODULE_DAS_FROM_DESCRIPTOR(geometry glsl)
 
+    # runtime-callable module code the AOT suite must carry stubs for (glsl_* stays out:
+    # emission-side macro code, nothing calls it at runtime)
+    SET(DASGLSL_AOT_FILES
+        modules/dasGlsl/glsl/geom_gen.das
+)
+
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasGlsl/glsl
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasGlsl
         FILES_MATCHING

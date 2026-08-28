@@ -267,6 +267,17 @@ DAS_CC_API void das_fileaccess_introduce_native_modules ( das_file_access * acce
 DAS_CC_API int das_fileaccess_introduce_native_module ( das_file_access * access, const char * req );
 DAS_CC_API int das_fileaccess_introduce_native_module_n ( das_file_access * access, const char * req, size_t req_length );
 
+// Register a module as an implicit dependency of every program compiled through
+// this file access, as if each program had a 'require' for it. This is how the
+// daslang CLI injects daslib support modules: "just_in_time" ('-jit'),
+// "debug" ('-debugger'), "profiler" ('-profiler').
+// 'module_name' is the require name; 'module_file' is the path to its source
+// (e.g. "<dasroot>/daslib/just_in_time.das").
+DAS_CC_API void das_fileaccess_add_extra_module ( das_file_access * access, const char * module_name, const char * module_file );
+DAS_CC_API void das_fileaccess_add_extra_module_n ( das_file_access * access,
+                                                    const char * module_name, size_t module_name_length,
+                                                    const char * module_file, size_t module_file_length );
+
 // Lock the file access. While locked, getNewFileInfo() returns NULL for all
 // files not already in the cache, so only pre-introduced files can be accessed.
 DAS_CC_API void das_fileaccess_lock ( das_file_access * access );
@@ -279,6 +290,13 @@ DAS_CC_API int das_fileaccess_is_locked ( das_file_access * access );
 // (including the null terminator). The root path is used to locate daslib/ and other resources.
 DAS_CC_API void das_get_root ( char * root, int maxbuf );
 DAS_CC_API void das_get_root_n ( char * root, size_t maxbuf );
+
+// Set the daslang root path. When unset, the root is derived from the host
+// executable's location (walking up past bin/), which is wrong for embedded
+// applications that live outside the daslang distribution - call this before
+// creating file access objects so daslib/, modules/ and lib/ resolve.
+DAS_CC_API void das_set_root ( const char * root );
+DAS_CC_API void das_set_root_n ( const char * root, size_t root_length );
 
 // --- Compilation ---
 
@@ -787,7 +805,9 @@ typedef enum das_bool_policy {
     DAS_POLICY_LOG_OPTIMIZATION_PASSES,          // Log the AST after every optimizer pass (verbose)
     DAS_POLICY_FUSION,                           // Fuse interpreter nodes into wider superinstructions at simulate time (default: on)
     DAS_POLICY_AUTO_INLINE_FUNCTIONS,            // Heuristic best-effort inlining of plain calls and operator sites of small same-module [inline]-shaped functions (default ON; silent declines; optimized builds only; cross-module inlining stays the explicit [inline] contract)
-    DAS_POLICY_DISABLE_TEMP_STRING_RECLAIM       // Disable the temp-string reclaim pass (fresh-string call results riding the 1-slot dispose queue)
+    DAS_POLICY_DISABLE_TEMP_STRING_RECLAIM,      // Disable the temp-string reclaim pass (fresh-string call results riding the 1-slot dispose queue)
+    DAS_POLICY_JIT_ENABLED,                      // Enable JIT compilation of [jit] functions. The flag alone is not enough: the host must also register the "just_in_time" extra module (see das_fileaccess_add_extra_module) so the LLVM JIT backend is compiled in
+    DAS_POLICY_JIT_DLL_MODE                      // With JIT: cache generated code as per-script DLLs under <dasroot>/.jitted_scripts (default: on). Off = codegen in-memory every run, no cache writes. The cache path needs a DLL build of daslang; a static-linked host always codegens in-memory regardless of this flag
 } das_bool_policy;
 
 // Integer policy fields (stack size, heap limits).

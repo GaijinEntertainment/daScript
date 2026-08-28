@@ -661,6 +661,8 @@ namespace das {
 
     void setDasRoot ( const string & dr ) {
         g_dasRoot = dr;
+        // same normalization the derived root gets below - callers concatenate with '/'
+        replace(g_dasRoot.begin(), g_dasRoot.end(), '\\', '/');
     }
 
     string getDasRoot ( void ) {

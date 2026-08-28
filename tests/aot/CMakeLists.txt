@@ -32,6 +32,7 @@ SET(DAS_AOT_DASMETAL_MODULE_DEPENDS ${DASMETAL_AOT_DEPENDS})
 # the module is disabled). Bridge them to the suite-named vars the loops below consume. spirv/msl
 # also pull one test-side fixture; dasMetal/dasSpirv are always enabled so no gate is needed.
 SET(AOT_STBIMAGE_MODULE_FILES ${DASSTBIMAGE_AOT_FILES})
+SET(AOT_GLSL_MODULE_FILES ${DASGLSL_AOT_FILES})
 SET(AOT_SPIRV_MODULE_FILES ${DASSPIRV_AOT_FILES} tests/spirv/_spirv_common.das)
 SET(AOT_MSL_MODULE_FILES ${DASMETAL_AOT_FILES} tests/msl/_msl_common.das)
 
@@ -409,7 +410,7 @@ foreach(_s IN LISTS DAS_AOT_SUITES)
     list(APPEND TEST_AOT_ALL_DAS ${AOT_${_u}_FILES})
 endforeach()
 
-set(DAS_AOT_MODULE_SUITES daslib decs language linq macro_boost math quote stbimage)
+set(DAS_AOT_MODULE_SUITES daslib decs glsl language linq macro_boost math quote stbimage)
 foreach(_s IN LISTS DAS_AOT_MODULE_SUITES)
     string(TOUPPER ${_s} _u)
     add_custom_target(test_aot_${_s}_modules)

@@ -453,6 +453,8 @@ namespace das {
     DAS_CC_API void addModuleLintMacro ( Module * module, PassMacroPtr _newM, Context * );
     DAS_CC_API void addModuleGlobalLintMacro ( Module * module, PassMacroPtr _newM, Context * );
     DAS_CC_API void addModuleOptimizationMacro ( Module * module, PassMacroPtr _newM, Context * );
+    DAS_CC_API void addModulePostRewriteMacro ( Module * module, PassMacroPtr _newM, Context * );
+    DAS_CC_API void addModulePostCompileMacro ( Module * module, PassMacroPtr _newM, Context * );
     DAS_CC_API VariantMacroPtr makeVariantMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     DAS_CC_API void addModuleVariantMacro ( Module * module, VariantMacroPtr newM, Context * context );
     DAS_CC_API ForLoopMacroPtr makeForLoopMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
