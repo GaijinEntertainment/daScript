@@ -162,6 +162,7 @@ var g_pso_rms : MetalComputePipeline?
 var g_pso_rms_hx : MetalComputePipeline?   // dual-store stamp: + the f16 twin panel
 var g_pso_add : MetalComputePipeline?
 var g_pso_addrms : MetalComputePipeline?
+var g_pso_addrms_hx : MetalComputePipeline?   // dual-store stamp: + the f16 twin panel (prefill spine)
 var g_pso_preaddrms : MetalComputePipeline?
 var g_pso_swiglu : MetalComputePipeline?
 var g_pso_swiglu_hx : MetalComputePipeline?   // dual-store stamp

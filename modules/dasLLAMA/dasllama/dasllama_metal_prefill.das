@@ -4149,14 +4149,26 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         var bw_pa = upload_region(addr < void? >(t.fblob[t.rms_post_att_off + l * dim]), uint64(dim * 4l))
                         pf_enc_rms(enc, bxb2, 0ul, bw_pa, bxb2, u_dim, u_eps, npos)
                     }
-                    enc_add(enc, bx, 0ul, bxb2, 0ul, u_total_dim, npos * dim)
                     //! dual-store only where a dense FFN reads the twin - the routed-MoE arm rides bmxg/bmg,
                     //! so its layers would pay the f16 write for nothing
-                    bxh_ffn = (!moe || g4moe) && g_pso_rms_hx != null ? pf_twin_panel(mp, dim) : null
-                    if (bxh_ffn != null) {
-                        pf_enc_rms_hx(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, bxh_ffn, npos)
+                    let want_hx = !moe || g4moe
+                    if (dim <= ADD_RMS_MAX_DIM && g_pso_addrms != null) {
+                        //! spine fusion: residual add + FFN norm ride one dispatch (the norm's panel
+                        //! re-read comes from the tgmem slab instead of device memory)
+                        bxh_ffn = want_hx && g_pso_addrms_hx != null ? pf_twin_panel(mp, dim) : null
+                        if (bxh_ffn != null) {
+                            pf_enc_add_rms_bhx(enc, bx, bxb2, bw_ffn, bxb, u_dim, u_eps, bxh_ffn, npos)
+                        } else {
+                            enc_add_rms_b(enc, bx, bxb2, bw_ffn, bxb, u_dim, u_eps, npos)
+                        }
                     } else {
-                        pf_enc_rms(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, npos)
+                        enc_add(enc, bx, 0ul, bxb2, 0ul, u_total_dim, npos * dim)
+                        bxh_ffn = want_hx && g_pso_rms_hx != null ? pf_twin_panel(mp, dim) : null
+                        if (bxh_ffn != null) {
+                            pf_enc_rms_hx(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, bxh_ffn, npos)
+                        } else {
+                            pf_enc_rms(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, npos)
+                        }
                     }
                 }
                 if (moe && g_pf_skip != "gemm" && g_pf_skip != "moe") {

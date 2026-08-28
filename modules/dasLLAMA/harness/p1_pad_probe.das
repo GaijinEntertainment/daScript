@@ -5,12 +5,12 @@ options _dasllama_internal = true
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost
 require ?das_metal dasllama/dasllama_metal_prefill   // the production TH128 q8 MSL text
-require math
 require strings
 
-// Phase-1 #1: staged-W threadgroup tile row-stride padding 64 -> 72 halves (128B -> 144B).
-// The padded arm is the production MetalQ8MulMmTH128 MSL with the stage index and the W
-// tensor strides rewritten - nothing else differs, so outputs must match bit-exact.
+// Phase-1 #1 race instrument: staged-W tile row stride 72 halves (production, 144B rows)
+// vs the unpadded 64-half control (128B rows - the tg bank-conflict worst case). The control
+// is the production MetalQ8MulMmTH128 MSL with the stage index and the W tensor strides
+// rewritten back - nothing else differs, so outputs must match bit-exact.
 // Interleaved race at the Qwen3-8B q8 GEMM shapes, m=512 (pp512 chunk).
 
 def upload_u32(dev; v : uint) {
@@ -76,13 +76,13 @@ def main {
             panic("p1pad: no metal device")
         }
         var queue = metal_new_command_queue(dev)
-        let src_base = MetalQ8MulMmTH128_metal_q8_mulmm_t_msl
-        var src_pad = replace(src_base, "wt + col * 64u", "wt + col * 72u")
-        src_pad = replace(src_pad, "wt + col * 32u + kh", "wt + col * 40u + kh")
-        src_pad = replace(src_pad, "(threadgroup half *)wt, dextents<int32_t, 2>(64, 64))", "(threadgroup half *)wt, dextents<int32_t, 2>(64, 64), metal::array<int32_t, 2>\{1, 72\})")
-        src_pad = replace(src_pad, "(threadgroup half *)wt, dextents<int32_t, 2>(32, 64))", "(threadgroup half *)wt, dextents<int32_t, 2>(32, 64), metal::array<int32_t, 2>\{1, 40\})")
-        if (src_pad == src_base) {
-            panic("p1pad: padding rewrite matched nothing - emitted MSL shape changed")
+        let src_pad = MetalQ8MulMmTH128_metal_q8_mulmm_t_msl
+        var src_base = replace(src_pad, "wt + col * 72u", "wt + col * 64u")
+        src_base = replace(src_base, "wt + col * 40u + kh", "wt + col * 32u + kh")
+        src_base = replace(src_base, "(threadgroup half *)wt, dextents<int32_t, 2>(64, 64), metal::array<int32_t, 2>\{1, 72\})", "(threadgroup half *)wt, dextents<int32_t, 2>(64, 64))")
+        src_base = replace(src_base, "(threadgroup half *)wt, dextents<int32_t, 2>(32, 64), metal::array<int32_t, 2>\{1, 40\})", "(threadgroup half *)wt, dextents<int32_t, 2>(32, 64))")
+        if (src_base == src_pad) {
+            panic("p1pad: un-padding rewrite matched nothing - emitted MSL shape changed")
         }
         var err : string
         var pso_base = pipeline_from_source(dev, src_base, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, true, err)
