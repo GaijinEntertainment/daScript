@@ -38,11 +38,10 @@ let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn qu
 
 var private @scratch g_pf_idsw : array<uint>   // per-window token-id staging for the gather upload
 
-// mode 4 feeds the dense q8/k4 prefill GEMMs f16 rows through the cm2 tiles (the decode GEMV
-// keeps its quant chains). k6 stays PINNED to the kq tile: its cm2 decode measured 9.3-13.4
-// TF/s vs the kq tile's 11.9 — unpin after the k6 decode-spelling chase (followup item 11a)
+// mode 4 feeds the dense q8/k4/k6 prefill GEMMs f16 rows through the cm2 tiles (the decode
+// GEMV keeps its quant chains — the format pick is decoupled)
 def private pf_f16_feed(f : int) : bool {
-    return (f == int(KqFmt.q8) || f == int(KqFmt.k4)) && g_gpu.coopmat_mode == 4
+    return (f == int(KqFmt.q8) || f == int(KqFmt.k4) || f == int(KqFmt.k6)) && g_gpu.coopmat_mode == 4
 }
 
 // group feeds: one activation buffer serves every GEMM of a group, so the f16 form engages

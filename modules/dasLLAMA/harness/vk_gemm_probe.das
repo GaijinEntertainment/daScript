@@ -462,8 +462,203 @@ def private run_k4_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 
     delete axsh
 }
 
-// k6 (Q6_K) cm2 decode-in-load vs the serving kq tile - same instrument as run_k4_shape
-def private run_k6_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
+// ===== k6 decode-spelling bisect (arg "k6x") - the shipped k6 l-tile body with the decode
+// varied: nil = constant (ceiling), flat = current compose w/o scale reads, ql = nibble only
+// (no qh stream), pair = llama.cpp's 16-bit-pair compose + ONE unpack8 select (v4 form),
+// pair16 = the same compose selected through a 2-lane byte2 (the Q8-winning select width) =====
+
+// the shared probe base: members + the single-region fast-path l-tile body; leaves override
+// decode_k6 (the kq-family tile_shell/stage_w pattern)
+class K6PxBase : MoeCmBase {
+    @ssbo @binding = 0 @readonly wq : array<VkK6Blk>
+    @ssbo @binding = 1 @role = "alias" @readonly wsu : array<uint>
+    @ssbo @binding = 3 @readonly xf16 : array<float16>
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint
+
+    [spirv_decode]
+    def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
+        return float16(0.05)
+    }
+
+    def body {
+        let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u
+        let wblk0 = sched[rb]
+        let row0 = sched[rb + 1u]
+        let cnt = sched[rb + 2u]
+        let ttiles = (cnt + 255u) / 256u
+        let tix = gl_WorkGroupID.x - sched[rb + 3u]
+        let xt = tix % ttiles
+        let wt = tix / ttiles
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x256
+        var acc : coopmatWgAcc_f16_128x256
+        let t0 = row0 + xt * 256u
+        let m0 = wt * 128u
+        var fla : tensorLayout2D
+        tensorLayoutCreate(fla)
+        tensorLayoutSetBlockSize(fla, 1u, 256u)
+        tensorLayoutSetDimension(fla, pa.d, pa.n)
+        tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
+        var flb : tensorLayout2D
+        tensorLayoutCreate(flb)
+        tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+        var flo : tensorLayout2D
+        tensorLayoutCreate(flo)
+        tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+        var k = 0u
+        for (_i in range(int(pa.n / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < pa.n) {
+            coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+            coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x256
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
+    }
+}
+
+[vk_dispatch(name = "k6px_nil", grid = "wgs", params = "wgs : int64")]
+class K6PxNil : K6PxBase {
+    [spirv_kernel(local_size_x = 256, name = "k6px_nil_spv")]
+    def run {
+        body()
+    }
+}
+
+[vk_dispatch(name = "k6px_flat", grid = "wgs", params = "wgs : int64")]
+class K6PxFlat : K6PxBase {
+    [spirv_decode]
+    def override decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let bu = e >> 5u
+        let hh = (e >> 4u) & 1u
+        let j = e & 15u
+        let lo = uint(int(unpack8(blk.ql[int((bu * 16u + j) >> 1u)])[int(j & 1u)])) & 0xFFu
+        let hby = uint(int(unpack8(blk.qh[int(((bu >> 2u) * 32u + hh * 16u + j) >> 1u)])[int(j & 1u)])) & 0xFFu
+        let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
+        return float16(0.001) * float16(float(q6))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "k6px_flat_spv")]
+    def run {
+        body()
+    }
+}
+
+[vk_dispatch(name = "k6px_ql", grid = "wgs", params = "wgs : int64")]
+class K6PxQl : K6PxBase {
+    [spirv_decode]
+    def override decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let bu = e >> 5u
+        let hh = (e >> 4u) & 1u
+        let j = e & 15u
+        let lo = uint(int(unpack8(blk.ql[int((bu * 16u + j) >> 1u)])[int(j & 1u)])) & 0xFFu
+        let q6 = int((lo >> (hh * 4u)) & 0xFu) - 8
+        return float16(0.001) * float16(float(q6))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "k6px_ql_spv")]
+    def run {
+        body()
+    }
+}
+
+[vk_dispatch(name = "k6px_pair", grid = "wgs", params = "wgs : int64")]
+class K6PxPair : K6PxBase {
+    [spirv_decode]
+    def override decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let bu = e >> 5u
+        let hh = (e >> 4u) & 1u
+        let j = e & 15u
+        let qlw = (uint(int(blk.ql[int((bu * 16u + j) >> 1u)])) >> (hh * 4u)) & 0x0F0Fu
+        let qhw = ((uint(int(blk.qh[int(((bu >> 2u) * 32u + hh * 16u + j) >> 1u)])) >> ((bu & 3u) * 2u)) & 0x0303u) << 4u
+        let q = int(unpack8(int(qlw | qhw))[int(j & 1u)]) - 32
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let sidx = e >> 4u
+        let sc = unpack8(int(wsu[srow + (sidx >> 2u)]))[int(sidx & 3u)]
+        let d = unpackHalf2x16(wsu[srow + 4u]).x
+        return float16(d * float(int(sc)) * float(q))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "k6px_pair_spv")]
+    def run {
+        body()
+    }
+}
+
+[vk_dispatch(name = "k6px_sfix", grid = "wgs", params = "wgs : int64")]
+class K6PxSfix : K6PxBase {
+    [spirv_decode]
+    def override decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let bu = e >> 5u
+        let hh = (e >> 4u) & 1u
+        let j = e & 15u
+        let lo = uint(int(unpack8(blk.ql[int((bu * 16u + j) >> 1u)])[int(j & 1u)])) & 0xFFu
+        let hby = uint(int(unpack8(blk.qh[int(((bu >> 2u) * 32u + hh * 16u + j) >> 1u)])[int(j & 1u)])) & 0xFFu
+        let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let sidx = e >> 4u
+        // signed sub-scale via shift+mask - NOT a byte4 dynamic select (the Q8-chase death shape)
+        let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+        let d = unpackHalf2x16(wsu[srow + 4u]).x
+        return float16(d * float(sc) * float(q6))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "k6px_sfix_spv")]
+    def run {
+        body()
+    }
+}
+
+[vk_dispatch(name = "k6px_pair16", grid = "wgs", params = "wgs : int64")]
+class K6PxPair16 : K6PxBase {
+    [spirv_decode]
+    def override decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let bu = e >> 5u
+        let hh = (e >> 4u) & 1u
+        let j = e & 15u
+        let qlw = (uint(int(blk.ql[int((bu * 16u + j) >> 1u)])) >> (hh * 4u)) & 0x0F0Fu
+        let qhw = ((uint(int(blk.qh[int(((bu >> 2u) * 32u + hh * 16u + j) >> 1u)])) >> ((bu & 3u) * 2u)) & 0x0303u) << 4u
+        let q = int(unpack8(int16(int(qlw | qhw)))[int(j & 1u)]) - 32
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let sidx = e >> 4u
+        let sc = unpack8(int(wsu[srow + (sidx >> 2u)]))[int(sidx & 3u)]
+        let d = unpackHalf2x16(wsu[srow + 4u]).x
+        return float16(d * float(int(sc)) * float(q))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "k6px_pair16_spv")]
+    def run {
+        body()
+    }
+}
+
+// k6 (Q6_K) cm2 decode-in-load vs the serving kq tile - same instrument as run_k4_shape;
+// bisect adds the k6px decode-spelling variants
+def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) {   // nolint:STYLE037,STYLE038 — one linear measurement sweep
     let nsb = n / 256
     let totsb = d * nsb
     var wqh : array<uint>
@@ -513,8 +708,8 @@ def private run_k6_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 
         upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
         upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
         upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        let vnames = fixed_array("k6l ", "k6m ", "k6lnb", "kqtile")
-        for (v in range(4)) {
+        let vnames = fixed_array("k6l ", "k6m ", "k6lnb", "kqtile", "xnil ", "xflat", "xql  ", "xpair", "xpr16", "xsfix")
+        for (v in range(bisect ? 10 : 4)) {
             let ttile = v == 1 ? 128 : (v == 3 ? 32 : 256)
             let wtile = v == 3 ? 32 : 128
             let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
@@ -530,7 +725,32 @@ def private run_k6_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var hz : VkHaz
             var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            if (v == 3) {
+            if (v >= 4) {
+                let bufs = fixed_array(wqd, wsd, scd, xfd, yd)
+                let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
+                let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
+                for (_k in range(DISPATCHES)) {
+                    if (v == 4) {
+                        var s = set_k6px_nil(bufs, sizes, gbits)
+                        enc_k6px_nil(raw, hz, s, pc, int64(wgs))
+                    } elif (v == 5) {
+                        var s = set_k6px_flat(bufs, sizes, gbits)
+                        enc_k6px_flat(raw, hz, s, pc, int64(wgs))
+                    } elif (v == 6) {
+                        var s = set_k6px_ql(bufs, sizes, gbits)
+                        enc_k6px_ql(raw, hz, s, pc, int64(wgs))
+                    } elif (v == 7) {
+                        var s = set_k6px_pair(bufs, sizes, gbits)
+                        enc_k6px_pair(raw, hz, s, pc, int64(wgs))
+                    } elif (v == 8) {
+                        var s = set_k6px_pair16(bufs, sizes, gbits)
+                        enc_k6px_pair16(raw, hz, s, pc, int64(wgs))
+                    } else {
+                        var s = set_k6px_sfix(bufs, sizes, gbits)
+                        enc_k6px_sfix(raw, hz, s, pc, int64(wgs))
+                    }
+                }
+            } elif (v == 3) {
                 var s = kq_batch_cls_set_for(int(KqFmt.k6), false,
                     fixed_array(wqd, wsd, scd, xqd, axsd, yd),
                     fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
@@ -1073,9 +1293,22 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     }
     var only = ""
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "their" || a == "tl" || a == "k4" || a == "k6") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "their" || a == "tl" || a == "k4" || a == "k6" || a == "k6x") {
             only = a
         }
+    }
+    if (only == "k6x") {
+        if (!g_gpu.has_coopmat2) {
+            print("no coopmat2 on this device\n")
+            return
+        }
+        verify(ensure_kq_batch_k6_cm2l_cls() && ensure_kq_batch_k6_cm2m_cls()
+            && kq_batch_cls_ensure(int(KqFmt.k6), false)
+            && ensure_k6px_nil() && ensure_k6px_flat() && ensure_k6px_ql()
+            && ensure_k6px_pair() && ensure_k6px_pair16() && ensure_k6px_sfix(), "k6x probe pipelines must engage")
+        run_k6_shape("q6k gate", 9728, 2560, 512, true)
+        run_k6_shape("q6k down", 2560, 9728, 512, true)
+        return
     }
     if (only == "k6") {
         if (!g_gpu.has_coopmat2) {

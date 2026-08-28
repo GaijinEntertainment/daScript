@@ -4108,9 +4108,10 @@ class K6Cm2LBatch : MoeCmBase {
         let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let sidx = e >> 4u
-        let sc = unpack8(int(wsu[srow + (sidx >> 2u)]))[int(sidx & 3u)]
+        // signed sub-scale via shift+mask: a byte4 DYNAMIC select here measured 12.8 TF/s vs 32.9
+        let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
         let d = unpackHalf2x16(wsu[srow + 4u]).x
-        return float16(d * float(int(sc)) * float(q6))
+        return float16(d * float(sc) * float(q6))
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2l_cls_spv")]
@@ -4282,9 +4283,10 @@ class K6Cm2MBatch : MoeCmBase {
         let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let sidx = e >> 4u
-        let sc = unpack8(int(wsu[srow + (sidx >> 2u)]))[int(sidx & 3u)]
+        // signed sub-scale via shift+mask: a byte4 DYNAMIC select here measured 12.8 TF/s vs 32.9
+        let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
         let d = unpackHalf2x16(wsu[srow + 4u]).x
-        return float16(d * float(int(sc)) * float(q6))
+        return float16(d * float(sc) * float(q6))
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2m_cls_spv")]
