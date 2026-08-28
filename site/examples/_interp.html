@@ -60,7 +60,7 @@
         var font = get(GAME + '/droidsansmono.ttf')
           .then(function (b) { mount('/modules/dasStbImage/fonts/droidsansmono.ttf', b); })
           .catch(function () {});
-        var src = Promise.all((GAME_FILES[GAME] || ['main.das', 'live_stub.das']).map(function (f) {
+        var src = Promise.all((GAME_FILES[GAME] || ['main.das']).map(function (f) {
           return get(GAME + '/' + f).then(function (b) { mount(f, b); });
         }));
         Promise.all([font, src]).then(function () {

@@ -8,12 +8,12 @@
     {
       "name" : "Game: Arcanoid (3D, arrow keys + space)",
       "slug" : "arcanoid",
-      "files" : ["examples/arcanoid/main.das", "examples/arcanoid/live_stub.das"]
+      "files" : ["examples/arcanoid/main.das"]
     },
     {
       "name" : "Game: Pac-Man (3D, arrow keys + space)",
       "slug" : "pacman",
-      "files" : ["examples/pacman/main.das", "examples/pacman/live_stub.das"]
+      "files" : ["examples/pacman/main.das"]
     },
     {
       "name" : "Game: Boulder Dash (3D, arrows + Z grab)",
