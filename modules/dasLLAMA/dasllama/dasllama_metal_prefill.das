@@ -286,6 +286,7 @@ class MetalDequantK6H {
 [ |> template_struct_instance]
 class template MetalHalfMulMmTensorT {
     @template_constant MT : uint = 32u      //!< M-tile rows: the panel re-reads M/MT times
+    @template_constant L1D : bool = false   //!< 1-D grid: the launch order is FORCED linear (M-fastest), not a driver heuristic
     @ssbo @binding = 0 @role = "read" @off = "woff" wh : array<float16>   //!< pre-dequantized W panel, d x kdim (woff = a baked plane's site base)
     @ssbo @binding = 1 @role = "read" @off = "xoff" xf : array<float16>   //!< the f16 activation panel (half-X)
     @ssbo @binding = 2 @off = "yoff" y : array<float>
@@ -294,8 +295,13 @@ class template MetalHalfMulMmTensorT {
 
     [metal_kernel]
     def metal_half_mulmm_th {
-        let mBase = gl_WorkGroupID.x * MT
-        let nBase = gl_WorkGroupID.y * 64u
+        var mBase = gl_WorkGroupID.x * MT   // nolint:LINT003,LINT010,LINT019 — template: the L1D instance overwrites, the base instance keeps it
+        var nBase = gl_WorkGroupID.y * 64u   // nolint:LINT003,LINT010,LINT019 — same
+        static_if (L1D) {
+            let mtiles = gl_NumWorkGroups.x / (ndim / 64u)
+            mBase = (gl_WorkGroupID.x % mtiles) * MT
+            nBase = (gl_WorkGroupID.x / mtiles) * 64u
+        }
         var wp = unsafe(addr(wh[nBase * kdim]))
         var ap = unsafe(addr(xf[mBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
@@ -309,6 +315,12 @@ class MetalHalfMulMmTH : MetalHalfMulMmTensorT {}
 [metal_dispatch(name = "enc_gemm_hmm_th128", pso = "g_pf_pso_hmm_th128", tg = 128, grid = "mp/128, d/64", params = "mp : int64, d : int64")]
 class MetalHalfMulMmTH128 : MetalHalfMulMmTensorT {
     override MT = 128u
+}
+
+[metal_dispatch(name = "enc_gemm_hmm_th128_l1", pso = "g_pf_pso_hmm_th128_l1", tg = 128, grid = "ntg", params = "ntg : int64")]
+class MetalHalfMulMmTH128L1 : MetalHalfMulMmTensorT {
+    override MT = 128u
+    override L1D = true
 }
 
 [ |> template_struct_instance]
@@ -2307,6 +2319,7 @@ var private g_pf_pso_dq_k5 : MetalComputePipeline?
 var private g_pf_pso_dq_k6 : MetalComputePipeline?
 var private g_pf_pso_hmm_th : MetalComputePipeline?  //!< all-device half x half mul_mm reading that panel
 var private g_pf_pso_hmm_th128 : MetalComputePipeline?
+var private g_pf_pso_hmm_th128_l1 : MetalComputePipeline?   //!< its 1-D-grid twin (the launch-order A/B)
 var private g_pf_bwh : MetalBuffer?     //!< per-forward f16 W panels (dev-W form), double-buffered like bxh
 var private g_pf_bwh2 : MetalBuffer?
 struct private DevwResEntry {
@@ -2466,6 +2479,13 @@ def public set_metal_prefill_tall(v : bool) {
 def public set_metal_prefill_qk_rope(v : bool) {
     g_pf_env_qkr = v
     to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_qk_rope({v}) - ew form override\n")
+}
+
+//! A/B seat: the 1-D-grid tall hmm twin (launch order forced linear, M-fastest) vs the 2-D
+//! grid whose walk order is the driver's. Default off; `DASLLAMA_METAL_GRID1D=1` arms it.
+def public set_metal_prefill_grid1d(v : bool) {
+    g_pf_env_grid1d = v
+    to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_grid1d({v}) - GEMM launch-order override\n")
 }
 
 //! The prefill knockout rail as an in-process setter (timing attribution — served output is
@@ -2693,6 +2713,10 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_hmm_th128)
         g_pf_pso_hmm_th128 = null
     }
+    if (g_pf_pso_hmm_th128_l1 != null) {
+        metal_release(g_pf_pso_hmm_th128_l1)
+        g_pf_pso_hmm_th128_l1 = null
+    }
     if (g_pf_pso_bf16_mm != null) {
         metal_release(g_pf_pso_bf16_mm)
         g_pf_pso_bf16_mm = null
@@ -2865,6 +2889,7 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     if (g_pf_mm_tensor || g_pf_kq_mm4_tensor || g_pf_kq_mm5_tensor || g_pf_kq_mm6_tensor) {
         g_pf_pso_hmm_th = compile_pso(MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, ok)
         g_pf_pso_hmm_th128 = compile_pso(MetalHalfMulMmTH128_metal_half_mulmm_th_msl, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_fastmath, ok)
+        g_pf_pso_hmm_th128_l1 = compile_pso(MetalHalfMulMmTH128L1_metal_half_mulmm_th_msl, MetalHalfMulMmTH128L1_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH128L1_metal_half_mulmm_th_msl_fastmath, ok)
     }
     if (g_pf_kq_mm4_tensor) {
         g_pf_pso_dq_k4 = compile_pso(MetalDequantK4H_metal_dequant_k45_msl, MetalDequantK4H_metal_dequant_k45_msl_entry, MetalDequantK4H_metal_dequant_k45_msl_fastmath, ok)
@@ -3122,7 +3147,11 @@ def private pf_enc_hmm(enc : MetalComputeEncoder?; bwh, bxh, by : MetalBuffer?; 
     if (g_pf_env_tall && g_pf_pso_hmm_th128 != null && rows >= 128l
             && rows / 128l * (td / 64l) >= TALL_OCC_FLOOR) {
         r0 = rows / 128l * 128l
-        enc_gemm_hmm_th128(enc, bwh, woff, bxh, 0ul, by, yoff, bk, bn, r0, td)
+        if (g_pf_env_grid1d && g_pf_pso_hmm_th128_l1 != null) {
+            enc_gemm_hmm_th128_l1(enc, bwh, woff, bxh, 0ul, by, yoff, bk, bn, r0 / 128l * (td / 64l))
+        } else {
+            enc_gemm_hmm_th128(enc, bwh, woff, bxh, 0ul, by, yoff, bk, bn, r0, td)
+        }
     }
     if (rows - r0 > 0l) {
         enc_gemm_hmm_th(enc, bwh, woff, bxh, uint64(r0 * kdim * 2l), by, yoff + uint64(r0 * dfull * 4l), bk, bn, rows - r0, td)
@@ -4986,6 +5015,7 @@ var private g_pf_env_dev_w = true
 var private g_pf_env_devw_res_bytes = 0ul   //!< DASLLAMA_METAL_DEVW_RESIDENT budget (MB env, bytes here); 0 = off
 var private g_pf_env_tall = true
 var private g_pf_env_qkr = true
+var private g_pf_env_grid1d = false
 
 var private CVT_MIN_ROWS = 256l          //!< sidecar knob "metal_cvt_min_rows" — cached at init
 var private TALL_OCC_FLOOR = 64l         //!< sidecar knob "metal_tall_floor" — cached at init
@@ -5019,6 +5049,7 @@ def dasllama_metal_prefill_register() {
         to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_MM_TAIL=0 - small npos % 32 remainders bill the padded tile (numerics move with the form)\n")
     }
     g_pf_env_qkr = g_env_metal.qk_rope
+    g_pf_env_grid1d = g_env_metal.grid1d
     g_pf_env_span = g_env_metal.span
     g_pf_env_logits = g_env_metal.logits
     g_pf_env_attn = g_env_metal.attn
