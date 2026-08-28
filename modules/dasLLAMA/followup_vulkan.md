@@ -201,6 +201,18 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    43.9 / 42.8), and lit no longer beats the shipped form either. The old lit-51.6-vs-47.3
    delta predates the 16-bit decode respelling; with the cheap decode the shared wg_blk0
    read is free. Item closed as measured-no.
+   kvm merge PORTED to mode 4 (same day, commit 2a4431fb2): the exclusion was pure caution -
+   pf_gemm_enc is parametric in (d, blk). vk_kvm A/B on cm2: 3B pp 7419 -> 7633 (+2.9%),
+   tinyllama +0.5%. fa f16-out stamp (commit 5267a63b1): FaCm2H64/H128 templated
+   (OUT16/typedef OT), the O accumulator converts in-kernel and lands the wo feed - the
+   per-layer b+6 attn->f16 convert never encodes; bit-exact vs the split pair's own device
+   f16cvt (CPU float16() differs on rounding ties - device converts agree with each other).
+   A/B: 3B 7669 -> 7737/7708 (+0.7-0.9%), tinyllama 20796 -> 20986 (+0.9%).
+   END-OF-DAY BOARD vs b10659: 3B pp 7737.2 +/- 67 = 100.6% - AHEAD of llama.cpp for the
+   first time; tinyllama pp 20986 +/- 357 = ~103.5%, tg ahead. 3B tg 105.1 = ~95.5% (decode
+   chain untouched today). Remaining mode-4 tail: small-int SSBO STORE fixture (unblocks
+   deleting hand-rolled word-packing in requant writers), item (a) K-quant generalization,
+   (d) decode_vector driver-blocked.
    (ngfx GPU Trace, our gate loop vs their MUL_MAT loop; counters now read UNELEVATED):
    ours tensor 44.6 / L2 54.2 / l1tex 44.9 / dram 15.3, theirs tensor 56.1 / L2 23.8 /
    l1tex 27.6 / dram 29.7 - their cm2 keeps the MMA pipe ~26% busier and streams weights
