@@ -23,7 +23,7 @@
     {
       "name" : "Game: River Run (3D, arrows + space)",
       "slug" : "river_run",
-      "files" : ["examples/river_run/main.das", "examples/river_run/rr_globals.das", "examples/river_run/rr_shaders.das", "examples/river_run/rr_models.das", "examples/river_run/rr_postfx.das", "examples/river_run/river.das", "examples/river_run/rr_audio.das", "examples/river_run/gameplay.das", "examples/river_run/hud.das", "examples/river_run/hud3d.das", "examples/river_run/live_stub.das"]
+      "files" : ["examples/river_run/main.das", "examples/river_run/rr_globals.das", "examples/river_run/rr_shaders.das", "examples/river_run/rr_models.das", "examples/river_run/rr_postfx.das", "examples/river_run/river.das", "examples/river_run/rr_audio.das", "examples/river_run/gameplay.das", "examples/river_run/hud.das", "examples/river_run/hud3d.das", "examples/river_run/rr_live.das"]
     },
     {
       "name" : "ImGui: Fourier Series (epicycles)",

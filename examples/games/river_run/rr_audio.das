@@ -31,12 +31,12 @@ var audio_initialized = false
 var asch : AudioSystemChannels
 
 var music_initialized = false
-// The strudel player runs on its own worker. Under a single-threaded audio
-// backend -- which is what the wasm build gets -- there is no worker to host it,
-// so music is gated off there and the generated SFX carry the whole soundtrack.
-// Set from audio_is_single_threaded() at init, so ONE source serves native and
-// wasm alike.
+// The strudel player has two arms: a worker thread (strudel_init/strudel_play)
+// where the runtime can host one, and a main-thread channel (strudel_create_channel
+// + per-frame strudel_tick) where it cannot. Same music engine either way; only
+// where a command runs differs (music_dispatch below). Arm choice is init_audio's.
 var music_enabled = false
+var music_threaded = false
 var g_music_tracks : table<string; int>
 var prev_music_state = GameState.menu
 var low_fuel_music_active = false
@@ -236,7 +236,8 @@ def music_cmd(cmd : string) {
     }
 }
 
-// Rich tracks are built on the strudel thread so they can use the full
+// Rich tracks are built wherever the command dispatches -- the strudel thread
+// in the threaded arm, the main thread in the tick arm -- and use the full
 // Pattern API (chunk/sometimesby/jux/etc.).
 def build_rich_track(name : string) {
     if (name == "0") {
@@ -260,32 +261,43 @@ def build_rich_track(name : string) {
     }
 }
 
+// Route a music command to wherever the engine runs: the strudel thread in the
+// threaded arm, or straight into the handler here in the main-thread arm
+// (strudel_command is a silent no-op without the thread's command stream).
+def music_dispatch(cmd : string) {
+    if (music_threaded) {
+        strudel_command(cmd)
+    } else {
+        music_cmd(cmd)
+    }
+}
+
 def stop_all_tracks(fade : float) {
-    strudel_command("stop:drums:{fade}")
-    strudel_command("stop:bass:{fade}")
-    strudel_command("stop:lead:{fade}")
-    strudel_command("stop:arp:{fade}")
-    strudel_command("stop:pad:{fade}")
+    music_dispatch("stop:drums:{fade}")
+    music_dispatch("stop:bass:{fade}")
+    music_dispatch("stop:lead:{fade}")
+    music_dispatch("stop:arp:{fade}")
+    music_dispatch("stop:pad:{fade}")
 }
 
 def start_menu_music() {
     strudel_set_bpm(96.0lf)
-    strudel_command("rich:menu")
+    music_dispatch("rich:menu")
 }
 
 def start_tension_music() {
     strudel_set_bpm(110.0lf)
-    strudel_command("rich:tension")
+    music_dispatch("rich:tension")
 }
 
 def start_game_over_music() {
     strudel_set_bpm(80.0lf)
-    strudel_command("rich:gameover")
+    music_dispatch("rich:gameover")
 }
 
 def start_win_music() {
     strudel_set_bpm(148.0lf)
-    strudel_command("rich:win")
+    music_dispatch("rich:win")
 }
 
 // ─── Per-voice rich builders ─────────────────────────────────────────
@@ -470,19 +482,19 @@ def start_section_music(section : int) {
     let s = section % 5
     if (s == 0) {
         strudel_set_bpm(128.0lf)
-        strudel_command("rich:0")
+        music_dispatch("rich:0")
     } elif (s == 1) {
         strudel_set_bpm(136.0lf)
-        strudel_command("rich:1")
+        music_dispatch("rich:1")
     } elif (s == 2) {
         strudel_set_bpm(140.0lf)
-        strudel_command("rich:2")
+        music_dispatch("rich:2")
     } elif (s == 3) {
         strudel_set_bpm(148.0lf)
-        strudel_command("rich:3")
+        music_dispatch("rich:3")
     } else {
         strudel_set_bpm(158.0lf)
-        strudel_command("rich:4")
+        music_dispatch("rich:4")
     }
 }
 
@@ -494,6 +506,11 @@ def strudel_music_main() {
 def update_music_state() {
     if (!music_enabled || !music_initialized) {
         return
+    }
+    if (!music_threaded) {
+        // Main-thread arm renders its PCM here. Self-regulating: strudel_tick
+        // skips whenever the audio buffer is far enough ahead.
+        strudel_tick()
     }
     let low_fuel = (game_state == GameState.playing && player_fuel < LOW_FUEL_THRESHOLD)
     if (game_state != prev_music_state) {
@@ -541,10 +558,24 @@ def init_audio() {
     if (!audio_initialized) {
         return
     }
-    music_enabled = !audio_is_single_threaded()
-    if (music_enabled && !music_initialized) {
-        strudel_init(@@strudel_music_main)
+    if (!music_initialized) {
+        // The worker arm needs a real thread: any native build has one, and so
+        // does the standalone wasm card (pthread pool + a yielding main loop).
+        // The wasm playground interpreter does not -- spawning there parks the
+        // whole tab -- and a single-threaded audio backend has no consumer for
+        // a worker either. Everyone else falls back to the main-thread arm.
+        music_threaded = (
+            !audio_is_single_threaded() &&
+            (get_platform_name() != "emscripten" || is_standalone_exe())
+        )
+        if (music_threaded) {
+            strudel_init(@@strudel_music_main)
+        } else {
+            strudel_create_channel()
+            start_menu_music()
+        }
         strudel_set_volume(0.35, 0.0)
+        music_enabled = true
         music_initialized = true
         prev_music_state = game_state
     }

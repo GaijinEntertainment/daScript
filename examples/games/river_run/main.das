@@ -372,18 +372,20 @@ def parse_args() {
     }
 }
 
+// eval_main_loop drives the block once per frame: a blocking while-loop
+// natively, emscripten_set_main_loop (rAF) on the web -- one main for both.
+// live_end_frame only swaps buffers, so the loop body owns the GC boundary.
 [export]
 def main() {
     parse_args()
     init()
     var frame_count = 0
-    while (!exit_requested()) {
+    eval_main_loop() {
         update()
         maybe_collect_gc()
         frame_count++
-        if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
-            break
-        }
+        return false if (max_frame_limit > 0 && frame_count >= max_frame_limit)
+        return !exit_requested()
     }
     shutdown()
 }
