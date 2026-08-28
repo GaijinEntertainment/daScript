@@ -16,7 +16,7 @@ let PORTS_DIR = "web/examples/ui/samples/examples"
 let GAMES_DIR = "examples/games"
 
 // What the interpreted fallback mounts for a game its GAME_FILES map does not name.
-let DEFAULT_BUNDLE = "live_stub.das main.das"
+let DEFAULT_BUNDLE = "main.das"
 
 def private dir_exists(path : string) : bool {
     let st = stat(path)
@@ -159,6 +159,30 @@ def private check_port_bundles(games : array<string>) {
 
 // daspkg names the released card from package_name and emits <name>/<name>.wasm, while
 // the deploy verifies and stages <dir>/<dir>.wasm. The two spellings have to be one.
+// The playground bundle is the desktop game, verbatim - the wasm runtime resolves the
+// same live/* requires the desktop uses, so the staged copy carries no port edits. Any
+// .das that differs between the two trees, or exists only in the staged copy, is the
+// fork re-forming by hand.
+def private check_port_identity(games : array<string>) {
+    for (g in games) {
+        let port_dir = "{PORTS_DIR}/{g}"
+        continue if (!dir_exists(port_dir))
+        fio::dir(port_dir) $(f) {
+            return if (!ends_with(f, ".das"))
+            let twin = "{GAMES_DIR}/{g}/{f}"
+            if (!fexist(twin)) {
+                gate_finding("{port_dir}/{f}",
+                    "no desktop twin at {twin} - the staged copy carries only files the desktop game has")
+                return
+            }
+            if (fread("{port_dir}/{f}") != fread(twin)) {
+                gate_finding("{port_dir}/{f}",
+                    "differs from {twin} - the staged copy is the desktop file verbatim; edit the desktop file and copy it over")
+            }
+        }
+    }
+}
+
 def private check_package_names {
     dir(GAMES_DIR) $(name) {
         return if (name == "." || name == "..")
@@ -238,6 +262,7 @@ def main() : int {
         let games <- [for (g in split(lists[0], " ")); g; where !empty(g)]
         check_card_wiring(pages, games)
         check_port_bundles(games)
+        check_port_identity(games)
     }
     check_package_names()
     return gate_verdict("examples/games")
