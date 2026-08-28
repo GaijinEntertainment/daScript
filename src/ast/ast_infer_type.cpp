@@ -4734,7 +4734,8 @@ namespace das {
                 TypeDecl::clone(expr->returnType, func->result);
             }
         }
-        if (expr->subexpr && expr->subexpr->type && expr->subexpr->type->isVoid() && !expr->moveSemantics) {
+        if (expr->subexpr && expr->subexpr->type && expr->subexpr->type->isVoid() && !expr->moveSemantics
+            && isVoidReturnValueSettled(expr->subexpr)) {
             const auto & resT = blocks.size() ? blocks.back()->type : func->result;
             if (resT && resT->isVoid()) {
                 // lower 'return void_expr' to { void_expr; return; } so the backends
