@@ -1050,6 +1050,22 @@ namespace das {
                   expr->at, CompilationError::not_resolved_yet_expression_type);
         }
     }
+    bool InferTypes::isVoidReturnValueSettled(Expression *subexpr) const {
+        if (!subexpr->rtti_isCallFunc()) {
+            return true;
+        }
+        auto callee = ((ExprCallFunc *)subexpr)->func;
+        if (!callee) {
+            return false;
+        }
+        if (callee->builtIn || callee->isFullyInferred) {
+            return true;
+        }
+        if (callee->module && callee->module != program->thisModule.get()) {
+            return true;
+        }
+        return callee->hasReturn;
+    }
     bool InferTypes::inferReturnType(TypeDeclPtr &resType, ExprReturn *expr) {
         if (expr->subexpr && expr->subexpr->type && expr->subexpr->type->isVoid()) {
             // 'return void_expr' is legal when the result is void, or a bare auto which the
@@ -1059,6 +1075,10 @@ namespace das {
                 if (expr->moveSemantics) {
                     error("can't return void value via move", "", "",
                           expr->at, CompilationError::invalid_result);
+                    return false;
+                }
+                if (!isVoidReturnValueSettled(expr->subexpr)) {
+                    error("subexpression type is not fully resolved yet", "", "", expr->at, CompilationError::not_resolved_yet_expression_type);
                     return false;
                 }
                 if (resType->isVoid()) {

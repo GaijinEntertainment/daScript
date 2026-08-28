@@ -1,5 +1,6 @@
 options gen2
 require dastest/testing_boost public
+require daslib/constant_expression
 
 var g_hits = 0
 
@@ -47,6 +48,41 @@ def forward_generic(blk) {
 def mixed_result(n : int) : int {
     call_void() $(x) => bump_by(x)
     return g_hits + n
+}
+
+// until [constant_expression] folds the argument in, the raw instance is an empty void function
+[generic, constant_expression(name), unused_argument(name)]
+def get_by_name(name : string) {
+    static_if (!typeinfo is_argument(name)) {
+        static_if (name == "one") {
+            return 1
+        } static_elif (name == "two") {
+            return 2
+        }
+    }
+}
+
+def pick_by_name(sel : int) {
+    if (sel == 1) {
+        return get_by_name("one")
+    }
+    return get_by_name("two")
+}
+
+def ping(n : int) : void {
+    if (n <= 0) {
+        return
+    }
+    g_hits++
+    return pong(n - 1)
+}
+
+def pong(n : int) : void {
+    if (n <= 0) {
+        return
+    }
+    g_hits++
+    return ping(n - 1)
 }
 
 [test]
@@ -132,5 +168,16 @@ def test_return_void_forwarding(t : T?) {
     t |> run("void block inside a non-void function") @(t : T?) {
         g_hits = 0
         t |> equal(mixed_result(10), 13)
+    }
+
+    t |> run("transiently-void generic call does not poison a bare-auto result") @(t : T?) {
+        t |> equal(pick_by_name(1), 1)
+        t |> equal(pick_by_name(2), 2)
+    }
+
+    t |> run("mutually recursive void functions forward through return") @(t : T?) {
+        g_hits = 0
+        ping(5)
+        t |> equal(g_hits, 5)
     }
 }

@@ -534,6 +534,7 @@ namespace das {
         ExpressionPtr visit(ExprTryCatch *expr) override;
         // ExprReturn
         bool inferReturnType(TypeDeclPtr &resType, ExprReturn *expr);
+        bool isVoidReturnValueSettled(Expression *subexpr) const;
         void reportUnresolvedReturnValue(ExprReturn *expr);
         virtual void preVisit(ExprReturn *expr) override;
         void getDetailsAndSuggests(ExprReturn *expr, string &details, string &suggestions) const;
