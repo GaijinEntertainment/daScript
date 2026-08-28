@@ -136,7 +136,7 @@ def cmd_set_section(input : JsonValue?) : JsonValue? {
     current_section = clamp(args.section, 0, MAX_SECTIONS - 1)
     section_dist = 0.0
     set_env_immediate(section_idx())
-    spawn_section_objects()
+    spawn_section_objects(current_section, player_pos.y + 40.0)
     commit()
     return JV(args)
 }
@@ -207,13 +207,13 @@ def cmd_spawn(input : JsonValue?) : JsonValue? {
     if (args.kind == SpawnKind.boat) {
         spawn_enemy_boat(float3(x, y, BOAT_Z))
     } elif (args.kind == SpawnKind.plane) {
-        spawn_enemy_plane(float3(x, y, PLANE_Z))
+        spawn_enemy_plane(float3(x, y, PLANE_Z), current_section)
     } elif (args.kind == SpawnKind.heli) {
         spawn_enemy_heli(float3(x, y, ENEMY_HELI_Z))
     } elif (args.kind == SpawnKind.depot) {
         spawn_fuel_depot(float3(x, y, FUEL_DEPOT_Z))
     } elif (args.kind == SpawnKind.bridge) {
-        spawn_bridge(float3(0.0, y, BRIDGE_Z))
+        spawn_bridge(float3(0.0, y, BRIDGE_Z), current_section)
     } elif (args.kind == SpawnKind.island) {
         spawn_island(float3(x, y, ISLAND_Z))
     } elif (args.kind == SpawnKind.tree) {

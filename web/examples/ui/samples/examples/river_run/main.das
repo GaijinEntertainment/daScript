@@ -276,7 +276,7 @@ def render_frame(game_time : float) {
     apply_environment(game_time)
 
     begin_shadow_pass()
-    render_shadow_casters()
+    render_shadow_casters(game_time)
     end_shadow_pass()
 
     begin_scene_pass(env_now.horizon_color)

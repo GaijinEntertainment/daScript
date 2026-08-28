@@ -7,23 +7,23 @@ require rr_globals public
 // River is defined by a ring of RiverSegment, each with left/right bank X at a world Y.
 // Banks are rendered as a triangle strip rebuilt each frame.
 
-def river_section_amplitude() : float {
-    return 1.5 + float(min(current_section, 5)) * 0.5
+def river_section_amplitude(sec : int) : float {
+    return 1.5 + float(min(sec, 5)) * 0.5
 }
 
-def river_section_frequency() : float {
-    return 0.018 + float(min(current_section, 6)) * 0.003
+def river_section_frequency(sec : int) : float {
+    return 0.018 + float(min(sec, 6)) * 0.003
 }
 
-def river_target_half_width() : float {
-    let s = float(min(current_section, 8))
+def river_target_half_width(sec : int) : float {
+    let s = float(min(sec, 8))
     // Start wider/easier in section 0 and gradually narrow with progression.
     let base = (RIVER_HALF_WIDTH_MAX + 1.15) - s * 0.33
     return clamp(base, RIVER_HALF_WIDTH_MIN + 0.75, RIVER_HALF_WIDTH_MAX + 1.8)
 }
 
-def pick_split_half() : float {
-    let s = float(min(current_section, 9))
+def pick_split_half(sec : int) : float {
+    let s = float(min(sec, 9))
     // Section 0 keeps split center narrow (wider channels); later sections can narrow channels more.
     let min_half = 0.68 + s * 0.09
     let max_half = min(3.15, 1.42 + s * 0.17)
@@ -48,6 +48,8 @@ def init_river() {
     river_split_hold = 0.0
     river_first_split_pending = true
     river_first_split_start_y = player_pos.y + random_range(95.0, 150.0)
+    river_ripple_phase = 0.0
+    river_ripple_amp = river_section_amplitude(0)
 
     for (_i in range(RIVER_SEGMENTS_COUNT)) {
         advance_river_one()
@@ -56,34 +58,38 @@ def init_river() {
 }
 
 def advance_river_one() {
+    // Shape parameters follow the section that OWNS this segment's Y, not the
+    // one the player is in -- the ring runs a couple of sections ahead, and the
+    // river has to change character at the zone boundary, not at the player.
+    let sec = section_for_y(river_gen_y)
     // Gradually drift center and width toward targets
     river_center_x += (river_center_target - river_center_x) * 0.15
     river_half_width += (river_width_target - river_half_width) * 0.12
 
     // Occasionally pick new targets
     if (random_f() < 0.12) {
-        let max_drift = RIVER_CENTER_DRIFT_MAX - float(min(current_section, 5)) * 0.3
+        let max_drift = RIVER_CENTER_DRIFT_MAX - float(min(sec, 5)) * 0.3
         river_center_target = random_range(-max_drift, max_drift)
     }
     if (random_f() < 0.12) {
-        let lo = max(RIVER_HALF_WIDTH_MIN + 0.6, river_target_half_width() - 2.2)
-        let hi = min(RIVER_HALF_WIDTH_MAX + 2.2, river_target_half_width() + 2.4)
+        let lo = max(RIVER_HALF_WIDTH_MIN + 0.6, river_target_half_width(sec) - 2.2)
+        let hi = min(RIVER_HALF_WIDTH_MAX + 2.2, river_target_half_width(sec) + 2.4)
         river_width_target = random_range(lo, hi)
     }
 
     // Force one split in section 0 once we get away from spawn.
     if (river_first_split_pending && river_gen_y >= river_first_split_start_y) {
         river_split_target = true
-        river_split_half = pick_split_half()
+        river_split_half = pick_split_half(sec)
         river_split_hold = random_range(90.0, 170.0)
         river_first_split_pending = false
     }
 
     // Split / merge events are allowed from section 0 onward.
-    let split_chance = 0.035 + float(min(current_section, 6)) * 0.008
+    let split_chance = 0.035 + float(min(sec, 6)) * 0.008
     if (!river_first_split_pending && !river_split_target && river_split_blend <= 0.01 && random_f() < split_chance) {
         river_split_target = true
-        river_split_half = pick_split_half()
+        river_split_half = pick_split_half(sec)
         river_split_hold = random_range(90.0, 190.0)
     }
     if (river_split_target && river_split_blend >= 0.99) {
@@ -93,7 +99,7 @@ def advance_river_one() {
         }
     }
     if (river_split_target && random_f() < 0.10) {
-        river_split_half = pick_split_half()
+        river_split_half = pick_split_half(sec)
     }
 
     let split_speed = 0.10
@@ -105,16 +111,16 @@ def advance_river_one() {
     }
 
     // Add sine wave ripple on top
-    let amp = river_section_amplitude()
-    let freq = river_section_frequency()
-    let ripple = sin(river_gen_y * freq) * amp
+    river_ripple_amp += (river_section_amplitude(sec) - river_ripple_amp) * 0.06
+    river_ripple_phase += river_section_frequency(sec) * SEGMENT_LENGTH
+    let ripple = sin(river_ripple_phase) * river_ripple_amp
 
     let center_line = river_center_x + ripple
     let left_x = center_line - river_half_width
     let right_x = center_line + river_half_width
 
     // Early sections guarantee roomier split channels; later sections may get tighter.
-    let min_channel_half = max(2.1, 3.25 - float(min(current_section, 8)) * 0.14)
+    let min_channel_half = max(2.1, 3.25 - float(min(sec, 8)) * 0.14)
     let max_split_half = max(river_half_width - min_channel_half, 0.0)
     let split_wave = 0.9 + 0.1 * sin(river_gen_y * 0.03)
     let split_half = min(max_split_half, river_split_half * river_split_blend * split_wave)
