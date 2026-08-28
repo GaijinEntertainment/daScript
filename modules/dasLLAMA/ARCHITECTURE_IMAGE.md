@@ -93,12 +93,15 @@ backend.
 
 ### 2.1h The baked dev-W f16 panel plane {#image-devw-plane}
 
-A metal-flavor image carries `devwf16`: every dev-W-eligible q8 weight (a blob job whose f16
-panel fits `DEVW_BAKE_PANEL_MAX`, the prefill knee's mirror) pre-dequantized at mint into one
-concatenated f16 plane, with parallel site tables (`devwf16_fmt/key/off/n`) serialized as
-ordinary planes. The mint dequant is the CPU mirror of the runtime dev-W dequant kernel -
-every rounding replayed - so a baked panel is bit-equal to a runtime one. The first served
-prefill seeds the resident-panel cache with zero-copy `(buffer, offset)` views over the mapped
-plane, so a baked site never dispatches a dequant and holds no dedicated memory; sites the
-bake does not cover (k-quant formats - the tables reserve their fmt ids - and owned gguf
-loads) stay on the runtime path, resident under `DASLLAMA_METAL_DEVW_RESIDENT` or scratch.
+A metal-flavor image carries `devwf16`: every dev-W-eligible q8 and k4/k5/k6 weight (a plane
+job whose f16 panel fits `DEVW_BAKE_PANEL_MAX`, the prefill knee's mirror) pre-dequantized at
+mint into one concatenated f16 plane, with parallel site tables (`devwf16_fmt/key/off/n`)
+serialized as ordinary planes. The mint dequant is the format's CPU mirror of the runtime
+dev-W dequant kernel, and every mirror is bit-exact by construction: each f32 product fits
+the 24-bit significand exactly (the widest, k6's `dsc*q`, needs 24), so only the final f16
+round exists and contraction cannot move it - a baked panel is bit-equal to a runtime one.
+The first served prefill seeds the resident-panel cache with zero-copy `(buffer, offset)`
+views over the mapped plane, so a baked site never dispatches a dequant and holds no
+dedicated memory; sites the bake does not cover (q40/q51 - the dev-W route has no dequant
+kernel for them - and owned gguf loads) stay on the runtime path, resident under
+`DASLLAMA_METAL_DEVW_RESIDENT` or scratch.

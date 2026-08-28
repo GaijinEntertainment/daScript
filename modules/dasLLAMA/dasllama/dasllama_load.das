@@ -828,7 +828,7 @@ let DEVW_BAKE_PANEL_MAX = 48ul * 1024ul * 1024ul
 //! CPU mirror of the GPU dev-W q8 dequant (MetalDequantQ8H), bit-exact: the scale narrows to
 //! f16 exactly as the blob stores it, the product computes in f32 (exact for half x int8) and
 //! rounds ONCE to f16 — a baked panel equals what the runtime dequant kernel writes
-def private devw_dequant_q8_core(qp : int8 const?; sf : float const?; nblk : int64; var dst : float16?) {
+def devw_dequant_q8_core(qp : int8 const?; sf : float const?; nblk : int64; var dst : float16?) {
     unsafe {
         for (b in range64(nblk)) {
             let sh = float16(clamp(sf[b], -65504.0, 65504.0))
@@ -840,12 +840,90 @@ def private devw_dequant_q8_core(qp : int8 const?; sf : float const?; nblk : int
     }
 }
 
-//! The bake set: q8 blob jobs whose f16 panel fits the dev-W ceiling, ascending woff — the
-//! ONE order both the table build and the plane fill walk
+//! CPU mirror of the GPU dev-W k4/k5 dequant (MetalDequantK45T), bit-exact: every f32 product
+//! is exact (d*sc <=17 sig bits, dsc*q <=22), so contraction cannot move the one f16 round.
+//! sstride = scale row stride: 20 on the raw transcode temp, 16 on the GPU compact form
+def devw_dequant_k45_core(kq : uint8 const?; ks : uint8 const?; sstride, nsb : int64; qh : bool; var dst : float16?) {
+    let blkw = qh ? 40l : 32l
+    unsafe {
+        for (sb in range64(nsb)) {
+            let sp = reinterpret<float16 const?>(ks + sb * sstride)
+            let sv = reinterpret<uint const?>(ks + sb * sstride)
+            let qp = reinterpret<uint const?>(kq + sb * blkw * 4l)
+            for (jsi in range(8)) {
+                let js = uint(jsi)
+                var sc = 0u
+                var mn = 0u
+                if (js < 4u) {
+                    sc = (sv[1] >> (8u * js)) & 63u
+                    mn = (sv[2] >> (8u * js)) & 63u
+                } else {
+                    let j2 = js - 4u
+                    let hi = sv[3] >> (8u * j2)
+                    sc = (hi & 15u) | (((sv[1] >> (8u * j2 + 6u)) & 3u) << 4u)
+                    mn = ((hi >> 4u) & 15u) | (((sv[2] >> (8u * j2 + 6u)) & 3u) << 4u)
+                }
+                let dsc = float(sp[0]) * float(sc)
+                let dmn = float(sp[1]) * float(mn)
+                for (ei in range(32)) {
+                    let e = uint(ei)
+                    var q = (qp[(js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
+                    if (qh) {
+                        q |= ((qp[32u + e / 4u] >> (8u * (e % 4u) + js)) & 1u) << 4u
+                    }
+                    dst[sb * 256l + int64(js) * 32l + int64(e)] = float16(dsc * float(q) - dmn)
+                }
+            }
+        }
+    }
+}
+
+//! CPU mirror of the GPU dev-W k6 dequant (MetalDequantK6H), bit-exact: every f32 product is
+//! exact (d*s6 <=18 sig bits, dsc*q <=24), so contraction cannot move the one f16 round.
+//! ks/sstride = 16B sub-scale rows; kd/dstride = f16 d rows (raw temp 18, GPU split form 2)
+def devw_dequant_k6_core(kq : uint8 const?; ks : uint8 const?; sstride : int64; kd : uint8 const?; dstride, nsb : int64; var dst : float16?) {
+    unsafe {
+        for (sb in range64(nsb)) {
+            let dall = float(reinterpret<float16 const?>(kd + sb * dstride)[0])
+            let sbp = ks + sb * sstride
+            let qp = reinterpret<uint const?>(kq + sb * 192l)
+            for (jsi in range(8)) {
+                let js = uint(jsi)
+                let half6 = js / 4u
+                let gg = js % 4u
+                let nsh = (gg / 2u) * 4u
+                let hsh = gg * 2u
+                for (h in range(2)) {
+                    let ile = uint(h)
+                    let si = half6 * 8u + gg * 2u + ile
+                    let s6 = float((int(sbp[si]) ^ 128) - 128)
+                    let dsc = dall * s6
+                    for (ti in range(16)) {
+                        let k = uint(ti) / 4u
+                        let c = uint(ti) % 4u
+                        let u = qp[half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
+                        let hu = qp[32u + half6 * 8u + ile * 4u + k]
+                        let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
+                        // the kernel's factored form verbatim - the zero SIGN depends on it
+                        dst[sb * 256l + int64(js) * 32l + int64(ile) * 16l + int64(ti)] = float16(dsc * (float(q) - 32.0))
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! The bake set: q8 blob and k4/k5/k6 plane jobs whose f16 panel fits the dev-W ceiling,
+//! ascending woff — the ONE order both the table build and the plane fill walk. q40/q51 stay
+//! out: the prefill dev-W route has no dequant kernel for them
 def private devw_bake_jobs(t : Model; jobs : array<FillJob>) : array<FillJob> {
-    var mine <- [for (j in jobs); j; where stream_field_of(t, j.fmt) == "mblob" && uint64(j.n * 2l) <= DEVW_BAKE_PANEL_MAX]
+    var mine <- [for (j in jobs); j; where devw_bake_covers(stream_field_of(t, j.fmt)) && uint64(j.n * 2l) <= DEVW_BAKE_PANEL_MAX]
     mine |> sort() $(a, b : FillJob) => a.woff < b.woff
     return <- mine
+}
+
+def private devw_bake_covers(field : string) : bool {
+    return field == "mblob" || field == "k4q" || field == "k5q" || field == "k6q"
 }
 
 //! Fill the site tables (fmt/key/off/n) for the panels the plane fill will write — call BEFORE
@@ -859,8 +937,10 @@ def devw_bake_tables(var t : Model; jobs : array<FillJob>) : int64 {
     t.devwf16_n |> reserve(length(mine))
     var cur = 0l
     for (j in mine) {
-        t.devwf16_fmt |> push(0)
-        t.devwf16_key |> push((j.woff / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB))
+        //! the key is what the prefill's resident lookup recomputes: q8 = the site's mblob
+        //! BYTE offset, kq = the site's ELEM woff (kq_quants_of adds it to the plane buffer)
+        t.devwf16_fmt |> push(j.fmt == KqFmt.q8 ? 0 : kq_stream_code(j.fmt))
+        t.devwf16_key |> push(j.fmt == KqFmt.q8 ? (j.woff / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB) : j.woff)
         t.devwf16_off |> push(cur)
         t.devwf16_n |> push(j.n)
         cur += j.n
@@ -869,8 +949,8 @@ def devw_bake_tables(var t : Model; jobs : array<FillJob>) : int64 {
     return cur * 2l
 }
 
-//! Write the devwf16 plane: per baked site, transcode its q8 data from the gguf mapping and
-//! dequantize through devw_dequant_q8_core (the CPU mirror of the runtime dev-W dequant), so
+//! Write the devwf16 plane: per baked site, transcode its data from the gguf mapping and run
+//! the format's devw_dequant_*_core (the CPU mirror of the runtime dev-W dequant kernel), so
 //! a baked panel is bit-equal to a runtime one. Walks the table build's sorted set verbatim
 def fill_devwf16_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model;
                        jobs : array<FillJob>;
@@ -879,26 +959,51 @@ def fill_devwf16_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model;
     verify(length(mine) == length(t.devwf16_key))
     var temp_q8 : array<int8>
     var temp_sf : array<float>
+    var temp_kq : array<uint8>
+    var temp_ks : array<uint8>
     var scratch : array<float>
     var panel : array<float16>
     var ok = true
     for (j in mine) {
-        temp_q8 |> grow_resize(int(j.n))
-        temp_sf |> grow_resize(int(j.n / 32l))
-        let kind = transcode_q8_tensor(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off, scratch)
-        if (empty(kind)) {
-            ok = false
-            break
-        }
         panel |> grow_resize(int(j.n))
+        if (j.fmt == KqFmt.q8) {
+            temp_q8 |> grow_resize(int(j.n))
+            temp_sf |> grow_resize(int(j.n / 32l))
+            let kind = transcode_q8_tensor(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off, scratch)
+            if (empty(kind)) {
+                ok = false
+                break
+            }
+            unsafe {
+                devw_dequant_q8_core(addr(temp_q8[0]), addr(temp_sf[0]), j.n / 32l, addr(panel[0]))
+            }
+        } else {
+            let nsb = j.n / 256l
+            temp_kq |> grow_resize(int(nsb * kq_qsb(j.fmt)))
+            temp_ks |> grow_resize(int(nsb * kq_ssb(j.fmt)))
+            let kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, temp_kq, temp_ks, 0l, j.n, j.src_off, scratch)
+            if (empty(kind)) {
+                ok = false
+                break
+            }
+            unsafe {
+                if (j.fmt == KqFmt.k6) {
+                    // raw transcode rows: [16B sub-scales][2B f16 d], stride K6_SSB = 18
+                    devw_dequant_k6_core(addr(temp_kq[0]), addr(temp_ks[0]), K6_SSB, addr(temp_ks[16]), K6_SSB, nsb, addr(panel[0]))
+                } else {
+                    devw_dequant_k45_core(addr(temp_kq[0]), addr(temp_ks[0]), K4_SSB, nsb, j.fmt == KqFmt.k5, addr(panel[0]))
+                }
+            }
+        }
         unsafe {
-            devw_dequant_q8_core(addr(temp_q8[0]), addr(temp_sf[0]), j.n / 32l, addr(panel[0]))
             invoke(append, addr<void?>(panel[0]), uint64(j.n * 2l))
         }
     }
     delete mine
     delete temp_q8
     delete temp_sf
+    delete temp_kq
+    delete temp_ks
     delete scratch
     delete panel
     return ok

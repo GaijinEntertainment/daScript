@@ -69,8 +69,9 @@ count repays. The raced evidence
 site's dequant every forward - at 8B geometry ~4.5 GB of panel writes and quant reads per
 512-chunk, the whole `devw_cvt` knockout pool (~7.7 ms). A resident site reads as a single
 full-panel GEMM at a `(buffer, offset)` seat (no N-column tiling - tiling exists only for the
-scratch pair's capacity), keyed by blob pointer plus site offset, released on driver shutdown
-or weight refill. Panels become resident two ways: an image-served model seeds them ZERO-COPY
+scratch pair's capacity), keyed by the site's quant-plane buffer pointer plus its offset in
+that plane's own unit (q8: mblob bytes; kq: elem woff), released on driver shutdown or weight
+refill. Panels become resident two ways: an image-served model seeds them ZERO-COPY
 from its baked `devwf16` plane (`ARCHITECTURE_IMAGE.md` sec.2.1h - no dequant ever, no
 dedicated memory), and an owned load dequantizes once into persistent hazard-tracked buffers
 under the `DASLLAMA_METAL_DEVW_RESIDENT` MB budget (past it, scratch, warned once).

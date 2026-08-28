@@ -772,9 +772,9 @@ struct Model {
     // scale strips, k6s the GPU split form. CPU inference on a blob-only model PANICS.
     mblob : array<uint8>
     metal_blob : bool = false
-    // Baked dev-W f16 panels (metal-flavor .dlim): eligible weights pre-dequantized at mint,
-    // one concatenated plane + parallel site tables; the prefill dev-W route binds them
-    // zero-copy (empty = runtime dequant). fmt 0 = q8, key = mblob BYTE offset (kq reserved).
+    // Baked dev-W f16 panels (metal-flavor .dlim): pre-dequantized at mint, bound zero-copy
+    // by the prefill dev-W route (empty = runtime dequant); ARCHITECTURE_IMAGE.md sec.2.1h.
+    // fmt 0 = q8, key = mblob BYTE offset; fmt 4/5/6 = k4/k5/k6, key = the site's ELEM woff.
     devwf16 : array<float16>
     devwf16_fmt : array<int>
     devwf16_key : array<int64>

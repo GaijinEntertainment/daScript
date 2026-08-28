@@ -10,6 +10,7 @@ require ?das_metal dasllama/dasllama_metal_kernels  // the kq mul_mm trio (Apple
 require ?das_metal dasllama/dasllama_metal_prefill  // the mul_mm twins (bf16 + Metal-4 tensor forms)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers, kq plane builders + eyeball-dump compares
+require dasllama/dasllama_load            // devw_dequant_*_core — the image mint's dev-W bake mirrors
 require math
 
 // The production GEMM corpus vs CPU references on synthetic planes: the prefill K-quant
@@ -580,6 +581,126 @@ def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     delete want
     delete env
     delete wrow
+}
+
+// the bake-mirror gate: the image mint's CPU dequant core against the GPU dev-W dequant
+// kernel, BIT-exact over the whole panel (the sec.2.1h baked-panel contract), plus a
+// flipped-halfword control proving the compare reads both sides
+def private devw_bake_mirror_gate(t : T?; dev, queue; fmt : int; ndim, kdim : int) {
+    let tag = "devw_bake_mirror fmt{fmt} n={ndim} k={kdim}"
+    var err : string
+    let dsrc = fmt == 0 ? metal_dequant_q8h_msl : (fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl : metal_dequant_k6h_msl))
+    let dentry = fmt == 0 ? metal_dequant_q8h_msl_entry : (fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl_entry : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl_entry : metal_dequant_k6h_msl_entry))
+    let dfm = fmt == 0 ? metal_dequant_q8h_msl_fastmath : (fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl_fastmath : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl_fastmath : metal_dequant_k6h_msl_fastmath))
+    var dq_pso = pipeline_from_source(dev, dsrc, dentry, dfm, err)
+    t |> success(dq_pso != null, "{tag}: pipeline: {err}")
+    return if (dq_pso == null)
+    let nblk = ndim * (kdim / 32)
+    var mir : array<float16>
+    mir |> resize(ndim * kdim)
+    var bwh = buf_fill(dev, ndim * kdim, float16(-100.0))   // poison fill: an unwritten panel block reds the bit-compare
+    var dka = CvtArgs(total = uint(nblk))
+    var ran = false
+    if (fmt == 0) {
+        var blob : array<uint8>
+        var wdeq : array<float>
+        q8_blob_fill(ndim, kdim / 32, blob, wdeq)
+        // the mirror eats the transcode pair (int8 quants + f32 scales); the blob's f16
+        // scales widen to f32 and re-narrow exactly, so the pair IS the blob's content
+        var q : array<int8>
+        var sf : array<float>
+        q |> resize(nblk * 32)
+        sf |> resize(nblk)
+        unsafe {
+            for (b in range(nblk)) {
+                sf[b] = float(addr<float16 const?>(blob[b * 34])[0])
+                for (c in range(32)) {
+                    q[b * 32 + c] = int8(blob[b * 34 + 2 + c])
+                }
+            }
+            devw_dequant_q8_core(addr(q[0]), addr(sf[0]), int64(nblk), addr(mir[0]))
+        }
+        var bw = buf_upload(dev, blob)
+        ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, dq_pso)
+            metal_set_buffer(enc, bw, 0ul, 0)
+            metal_set_buffer(enc, bw, 0ul, 1)
+            metal_set_buffer(enc, bwh, 0ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(dka)), uint64(typeinfo sizeof(dka)), 3)
+            metal_dispatch_threadgroups(enc, uint3(uint((nblk + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+        }
+        metal_release(bw)
+        delete blob
+        delete wdeq
+        delete q
+        delete sf
+    } else {
+        let nsb = ndim * (kdim / 256)
+        var kq : array<uint8>
+        var ks : array<uint8>
+        kq_fill_planes(fmt, nsb, kq, ks)
+        unsafe {
+            if (fmt == 6) {
+                devw_dequant_k6_core(addr(kq[0]), addr(ks[0]), 16l, addr(ks[nsb * 16]), 2l, int64(nsb), addr(mir[0]))
+            } else {
+                devw_dequant_k45_core(addr(kq[0]), addr(ks[0]), 16l, int64(nsb), fmt == 5, addr(mir[0]))
+            }
+        }
+        var bks = buf_upload(dev, ks)
+        var bkq = buf_upload(dev, kq)
+        ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, dq_pso)
+            metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   // k6: the f16 d tail
+            metal_set_buffer(enc, bks, 0ul, 1)
+            metal_set_buffer(enc, bkq, 0ul, 2)
+            metal_set_buffer(enc, bwh, 0ul, 3)
+            metal_set_bytes(enc, unsafe(addr<void?>(dka)), uint64(typeinfo sizeof(dka)), 4)
+            metal_dispatch_threadgroups(enc, uint3(uint((nblk + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+        }
+        metal_release(bks)
+        metal_release(bkq)
+        delete kq
+        delete ks
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        var bad = 0
+        var first = -1
+        unsafe {
+            let p = reinterpret<uint16 const?>(metal_buffer_contents(bwh))
+            let mp = addr<uint16 const?>(mir[0])
+            for (i in range(ndim * kdim)) {
+                if (p[i] != mp[i]) {
+                    bad++
+                    if (first < 0) {
+                        first = i
+                    }
+                    if (bad <= 4) {
+                        to_log(LOG_ERROR, "{tag}: [{i}] gpu={uint(p[i])} cpu={uint(mp[i])}\n")
+                    }
+                }
+            }
+        }
+        if (bad != 0) {
+            to_log(LOG_ERROR, "{tag}: {bad} halfwords differ, first at {first}\n")
+        }
+        t |> equal(bad, 0)
+        var bad_p = 0
+        unsafe {
+            let p = reinterpret<uint16 const?>(metal_buffer_contents(bwh))
+            var mp = addr<uint16?>(mir[0])
+            mp[0] = uint16(uint(mp[0]) ^ 1u)
+            for (i in range(ndim * kdim)) {
+                if (p[i] != mp[i]) {
+                    bad_p++
+                }
+            }
+        }
+        t |> success(bad_p != 0, "{tag}: flipped-halfword control must miss the GPU panel")
+    }
+    metal_release(bwh)
+    metal_release(dq_pso)
+    delete mir
 }
 
 // the native-bf16 A-stage pair: W is bf16 halfwords (top 16 bits of f32), row-major [ndim x kdim]
@@ -1731,6 +1852,10 @@ def test_metal_gemm_kernels(t : T?) {
                 for (fmt in [4, 5, 6]) {
                     kq_devw_gate(t, dev, queue, fmt, 64, 512, 64)
                     kq_devw_gate(t, dev, queue, fmt, 32, 512, 128)   // ndim%128: the tiled leg runs
+                }
+                // the image mint's bake mirrors vs the same dequant kernels, bit-exact
+                for (fmt in [0, 4, 5, 6]) {
+                    devw_bake_mirror_gate(t, dev, queue, fmt, 64, 512)
                 }
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)

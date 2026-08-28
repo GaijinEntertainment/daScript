@@ -274,7 +274,10 @@ class MetalDequantK6H {
                 let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
                 let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
                 let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                wh[blk * 256u + js * 32u + ile * 16u + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
+                //! factored on purpose: the compiler factors dsc*q - dsc*32 anyway, and the
+                //! explicit form pins the zero SIGN (q == 32 with negative dsc yields -0) so
+                //! the image bake's CPU mirror is bit-equal by source, not by toolchain mood
+                wh[blk * 256u + js * 32u + ile * 16u + uint(t)] = float16(dsc * (float(q) - 32.0))
             }
         }
     }
@@ -3078,13 +3081,21 @@ def private pf_devw_seed_baked(t : Model) {
     if (bpan == null) {
         return
     }
-    let bb = blob_of(g_dev, t, 0l)
     var seeded = 0
     for (i in range(length(t.devwf16_key))) {
-        if (t.devwf16_fmt[i] != 0) {
-            continue   // kq bakes are reserved - nothing mints them yet
+        //! the key mirrors the resident lookup at the site's route: q8 = mblob buffer + BYTE
+        //! offset, kq = the fmt's quant plane buffer + ELEM woff (both plane_buffer-cached,
+        //! so the seed and the forward resolve the same base)
+        let f = t.devwf16_fmt[i]
+        var key = 0ul
+        if (f == 0) {
+            key = intptr(blob_of(g_dev, t, 0l).buf) + uint64(t.devwf16_key[i])
+        } elif (f == 4 || f == 5 || f == 6) {
+            let kfmt = f == 4 ? KqFmt.k4 : (f == 5 ? KqFmt.k5 : KqFmt.k6)
+            key = intptr(kq_quants_of(g_dev, t, kfmt, t.devwf16_key[i]).buf) + uint64(t.devwf16_key[i])
+        } else {
+            continue   // an fmt this build does not know - a newer image's site stays runtime-served
         }
-        let key = intptr(bb.buf) + uint64(t.devwf16_key[i])
         if (!key_exists(g_pf_devw_res, key)) {
             g_pf_devw_res[key] = DevwResEntry(buf = bpan, boff = uint64(t.devwf16_off[i] * 2l), owned = false)   // nolint:PERF026 — once per mapped plane
             seeded++
