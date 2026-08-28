@@ -99,18 +99,19 @@ the box its provenance names, at the current `dasllama_version` - never a hand-e
 `validation` `ok`, every `race` winner equal to its `kernels` value); weakening that gate is a
 defect.
 
-**A diff that changes the exchange consent notice wording updates every copy of that wording
-in the same change.** The copies are `EXCHANGE_CONSENT_NOTICE` (`../dasllama/dasllama_exchange.das`)
-and `CONSENT_TITLE` / `CONSENT_TEXT` (`utils/watchdog/watchdog.py`, repo root). The console
-prompt and the control page both render the served constant, so they are not further copies.
-Nothing machine-checks the pair.
+**A diff that changes the exchange consent notice wording updates every checked-in copy in
+the same change, and a diff that adds a copy names it here in the same change:
+`EXCHANGE_CONSENT_NOTICE` (`../dasllama/dasllama_exchange.das`), `CONSENT_TITLE` /
+`CONSENT_TEXT` (`utils/watchdog/watchdog.py`, repo root), and the captured
+`utils/dasllama-server/tests/fixtures/exchange.json` (repo root).** The console prompt and the
+control page render the served constant, so they are not copies.
 
-**A diff that adds an outbound exchange request reachable from a boot path without routing it
-through the consent gate (`exchange_consent_gate`, `../dasllama/dasllama_exchange.das`) is a
-defect.** An explicit `exchange_*` key (hand-written TOML or env) is itself the expressed
-choice; with no such key, nothing leaves the box until the recorded choice reads "accepted".
+**A diff that adds an outbound exchange request reachable from a tune-boot path
+(`exchange_scope_resolver` / `exchange_boot_submit_check`) without routing it through
+`exchange_may_contact` (`../dasllama/dasllama_exchange.das`) is a defect.**
 
-**A boot-path prompt that reads stdin without first proving both stdin and stdout are
-terminals is a defect** - a supervised or piped boot must never block on input. The offline
-arm emits the question as a `@sidecar` event instead, for the watchdog dialog and the control
-page to answer.
+**A diff that adds a tune-boot-path (`exchange_scope_resolver` /
+`exchange_boot_submit_check`) consent question with no terminal to ask on also emits that
+question as a `@sidecar` event, in the same change** - the watchdog dialog and the control
+page are the answer surfaces a supervised boot has. (The stdin-prompt ban itself is
+`modules/dasLLAMA/REVIEW.md`'s, which every file under the module applies.)

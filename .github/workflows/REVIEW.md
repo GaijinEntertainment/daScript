@@ -10,12 +10,13 @@ such step enforces its rule automatically, with no reviewer involved -
 `skills/internal/preflight.md` sec."doc.yml - the gates", sec."extended_checks.yml".
 
 **A diff that adds or changes a per-PR gate step - a workflow step that runs on
-`pull_request` and fails the lane when it finds a defect - makes that step red the lane
-whenever the artifact the step names fails.**
+`pull_request` and fails the lane when it finds a defect - makes the step's failure the
+lane's failure: no `continue-on-error`, no trailing `|| true`, no swallowed exit code.**
 
 **A diff that adds or changes a per-PR gate step states a run of that step's command on the
-lane's platform in its PR body or commit message - or the PR's own green lane run stands as
-that evidence.** A step that fails for a non-defect turns a green branch red for everyone.
+lane's platform in its PR body or commit message; a green run of that lane on the PR's head
+commit is that evidence.** A step that fails for a non-defect turns a green branch red for
+everyone.
 
 **A diff that adds or changes a step in `pages.yml` that names the deployed games writes
 that list as a `for g in <ids>; do` loop.** `examples/games/REVIEW.das` (repo root) reads

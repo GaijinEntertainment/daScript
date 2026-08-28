@@ -13,8 +13,8 @@ exact argv `modules/dasLLAMA/performance/gen_bench_records.das` (or the released
 spawns) ran is a defect.**
 
 **A row that `files/dasllama.js` renders without its run's `cmd` + `date` line is a defect -
-render that line on every row the run produced.** One run's `cmd` + `date` covers several rendered
-rows.
+render that line on every row the run produced.** One run's `cmd` + `date` covers several
+rendered rows.
 
 **A `cmd` or `date` inside a run's `tests` entry in `files/dasllama/bench_records.json` is a
 defect - the pair belongs on the run object that produced the rows.**

@@ -344,14 +344,18 @@ def exchange_policy_from_config(config_path : string) : ExchangePolicy {
 
 // ===== consent (GDPR first-contact gate) =====
 
+// the sidecar-sibling naming rule: foo.tune.json and foo.tune both yield foo.tune.<ext>
+def private sidecar_sibling_path(manifest : string; ext : string) : string {
+    return (ends_with(manifest, ".json")
+        ? "{slice(manifest, 0, length(manifest) - 5)}.{ext}"
+        : "{manifest}.{ext}")
+}
+
 // the sidecar-sibling consent file: "accepted" / "declined", one word. An explicit exchange
 // config (any exchange_* key, TOML or env) is itself consent, so the file only governs the
 // zero-config default path.
 def private exchange_consent_path() : string {
-    let manifest = tune_manifest_path()
-    return (ends_with(manifest, ".json")
-        ? "{slice(manifest, 0, length(manifest) - 5)}.consent"
-        : "{manifest}.consent")
+    return sidecar_sibling_path(tune_manifest_path(), "consent")
 }
 
 //! The recorded first-contact choice: "accepted" | "declined" | "" (never asked).
@@ -395,8 +399,7 @@ def private consent_prompt_console() : bool {
 def private exchange_consent_gate() : bool {
     let status = exchange_consent_status()
     if (status == "accepted") {
-        print("exchange: consent on record at {exchange_consent_path()} (exchange_record_consent) - proceeding
-")
+        print("exchange: consent on record at {exchange_consent_path()} (exchange_record_consent) - proceeding\n")
         return true
     }
     if (status == "declined") {
@@ -455,16 +458,8 @@ def private exchange_scope_resolver(scope_name : string; manifest_path : string;
         return false
     }
     let policy = exchange_policy_from_config(exchange_discover_config(g_resolver_config))
-    // GDPR first-contact gate: nothing leaves for the exchange without an expressed choice —
-    // an explicit exchange config IS that choice; otherwise the recorded consent file governs
-    if (policy.accept == "off") {
-        return false
-    }
-    if (policy.configured) {
-        // the override announce: name the knob that expressed the choice and waived the question
-        print("exchange: consent expressed via {policy.configured_via} - not asking
-")
-    } elif (!exchange_consent_gate()) {
+    // GDPR first-contact gate: nothing leaves for the exchange without an expressed choice
+    if (!exchange_may_contact(policy)) {
         return false
     }
     let box = tune_box_identity()
@@ -511,9 +506,7 @@ def private exchange_scope_resolver(scope_name : string; manifest_path : string;
 
 // the sidecar-sibling state file remembering what this box already shared
 def private exchange_state_path(manifest : string) : string {
-    return (ends_with(manifest, ".json")
-        ? "{slice(manifest, 0, length(manifest) - 5)}.exchange.json"
-        : "{manifest}.exchange.json")
+    return sidecar_sibling_path(manifest, "exchange.json")
 }
 
 def private state_submitted_for(manifest : string) : string {

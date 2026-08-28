@@ -22,14 +22,17 @@ reader does is not the page's claim.
 **Copy or rendering that lets a row with no reference engine's figure imply parity with a
 reference engine is a defect - an empty ratio cell reads "not raced".**
 
-**A new `dl-*` CSS rule in any file under this directory is a defect** - site chrome here
-uses the `dio-` prefix in `files/dasllama-io.css`; the `dl-*` measurement-table styles are
-`site/files/dasllama-table.css`'s (this folder's `dasllama-io.css` carries a few ledgered
-`dl-*` OVERRIDES of that shared sheet - overrides of existing selectors, never new rules).
+**A `dl-*` selector that `site/files/dasllama-table.css` (repo root) does not already
+define, declared in any file under this directory, is a defect** - site chrome here uses the
+`dio-` prefix in `files/dasllama-io.css`, and the `dl-*` measurement-table language is that
+shared sheet's.
 
-**A statement on a page here about what a shipped tool does is a defect unless it matches the
-current code.** The same truth duty binds `_news/*.md` entries, including a claim about what a
-page here renders - check that one against the page's markup and `files/dasllama-io.js`.** An entry for something not yet shipped is a defect.
+**A statement on a page here about what a shipped tool does is a defect unless it matches
+the current code.**
+
+**A claim in a `_news/*.md` entry that is not true at publish time is a defect, including a
+claim about what a page here renders - check that one against the page's markup and
+`files/dasllama-io.js`.** An entry for something not yet shipped is a defect.
 
 **A hand-edit between the `news:begin` and `news:end` markers in index.html is a defect -
 edit `_news/` and re-run `build_news.py` instead.** A diff that changes `_news/` also lands
