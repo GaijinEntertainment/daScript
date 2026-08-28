@@ -204,6 +204,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 - `utils/daspkg/`, `utils/dascov/` - package manager; code coverage
 - `utils/aot/` - AOT generation driver (`bin/daslang utils/aot/main.das -- -aot <in.das> <out.cpp>`; `-ctx` emits a standalone context dir - the integration tutorial scaffolds invoke it)
 - `utils/fix-lint-errors/` - auto-fixer for mechanical lint findings (`--dry-run` to preview)
+- `utils/jit/` - LLVM compile driver (`bin/daslang utils/jit/main.das -- <files-or-dirs>`): prewarms the JIT dll cache, `--exe` builds a standalone binary, `--aot-object` emits a native `.o`
 - `utils/benchctl/` - benchmark result database + statistical comparison (needs the sqlite module)
 - `utils/dasllama-server/` - OpenAI-compatible dasLLAMA inference server (JIT-only; `deploy-jit.ps1` builds a standalone bundle)
 - `utils/dasllama-convert/` - offline GGUF -> `.dlim` model prep

@@ -76,6 +76,7 @@ COMPILE_TESTS=(
     "daspkg|utils/daspkg/main.das"
     "detect-dupe|utils/detect-dupe/main.das"
     "fix-lint-errors|utils/fix-lint-errors/main.das"
+    "jit|utils/jit/main.das"
     "jobque-timeline|utils/jobque-timeline/main.das"
     "lint|utils/lint/main.das"
     "mcp|utils/mcp/main.das"

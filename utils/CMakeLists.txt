@@ -49,8 +49,8 @@ set(DAS_UTILS
     das-fmt
     detect-dupe
     lint
+    jit
     internal/hygiene
-    internal/jit
 )
 
 if(NOT DAS_SQLITE_DISABLED)

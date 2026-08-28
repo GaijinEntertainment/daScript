@@ -326,10 +326,10 @@ MACRO(DAS_LLVM_AOT_LIB input_files genList mainTarget)
         if(_batch_n EQUAL 32 OR _llvm_aot_idx EQUAL _llvm_aot_total)
             ADD_CUSTOM_COMMAND(
                 OUTPUT  ${_batch_objs}
-                DEPENDS daslang ${_batch_srcs} ${PROJECT_SOURCE_DIR}/utils/internal/jit/main.das ${_das_llvm_aot_codegen}
+                DEPENDS daslang ${_batch_srcs} ${PROJECT_SOURCE_DIR}/utils/jit/main.das ${_das_llvm_aot_codegen}
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
                 COMMENT "LLVM-AOT compiling ${_batch_n} files"
-                COMMAND daslang ${PROJECT_SOURCE_DIR}/utils/internal/jit/main.das -- ${_batch_rels} --aot-object --aot-object-prefix ${mainTarget}
+                COMMAND daslang ${PROJECT_SOURCE_DIR}/utils/jit/main.das -- ${_batch_rels} --aot-object --aot-object-prefix ${mainTarget}
             )
             set(_batch_rels "")
             set(_batch_srcs "")
@@ -1902,6 +1902,9 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/fast_float/LICENSE DESTINATION ${DAS
 
 # Install aot tool (the AOT generation driver the integration scaffolds invoke)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)
+
+# Install jit tool (the LLVM compile driver: dll cache prewarm, -exe, native .o)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/jit/main.das DESTINATION utils/jit)
 
 # Install fix-lint-errors tool (mechanical lint auto-fixer)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/fix-lint-errors/main.das DESTINATION utils/fix-lint-errors)
