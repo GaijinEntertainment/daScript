@@ -159,16 +159,13 @@ def private check_port_bundles(games : array<string>) {
 
 // daspkg names the released card from package_name and emits <name>/<name>.wasm, while
 // the deploy verifies and stages <dir>/<dir>.wasm. The two spellings have to be one.
-// The playground bundle is the desktop game, verbatim - the wasm runtime resolves the
-// same live/* requires the desktop uses, so the staged copy carries no port edits. Any
-// .das that differs between the two trees, or exists only in the staged copy, is the
-// fork re-forming by hand. Walks every dir with a desktop twin, not the deployed list -
-// an undeployed port is still a copy that can drift; a dir with no twin (a
-// playground-native sample like macros/) is not a copy of anything.
+// The playground bundle is the desktop game, verbatim (ARCHITECTURE.md sec. 1); a .das
+// differing between the trees, missing from either side, is the fork re-forming by hand.
+// Walks every samples dir with a desktop twin, not the deployed list - an undeployed
+// port still drifts; a dir with no twin (a playground-native sample) copies nothing.
 def private check_port_identity {
     fio::dir(PORTS_DIR) $(g) {
-        return if (g == "." || g == "..")
-        return if (!dir_exists("{GAMES_DIR}/{g}"))
+        return if (g == "." || g == ".." || !dir_exists("{GAMES_DIR}/{g}"))
         let port_dir = "{PORTS_DIR}/{g}"
         return if (!dir_exists(port_dir))
         fio::dir(port_dir) $(f) {
@@ -183,6 +180,11 @@ def private check_port_identity {
                 gate_finding("{port_dir}/{f}",
                     "differs from {twin} - the staged copy is the desktop file verbatim; edit the desktop file and copy it over")
             }
+        }
+        fio::dir("{GAMES_DIR}/{g}") $(f) {
+            return if (!ends_with(f, ".das") || fexist("{port_dir}/{f}"))
+            gate_finding("{GAMES_DIR}/{g}/{f}",
+                "missing from {port_dir} - every .das of a ported game ships in the staged copy too")
         }
     }
 }

@@ -1,8 +1,10 @@
 # Boulder Dash Sample Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`. **A diff that changes a `.das` in this folder also applies
-`examples/games/REVIEW.md` and runs `examples/games/REVIEW.das` (both repo root).**
+`ARCHITECTURE.md`.
+
+**A diff that changes a `.das` in this folder also applies `examples/games/REVIEW.md` and
+runs `examples/games/REVIEW.das` (both repo root).**
 
 **Never read the state a tick produced anywhere but between that `cave_tick` call and the
 next tick - scoring from `collected`, `play_tick_sfx`, and `cave_consume_input` run

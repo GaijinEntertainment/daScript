@@ -23,12 +23,12 @@
   <script>
     // Interpreted runner for the /examples player's non-memory64 fallback.
     // Loads daslang_static.wasm (the universal wasm32 interpreter the playground
-    // uses), mounts the game's main.das + live_stub.das into MEMFS, and callMain's
-    // it — the C++ WebLoop drives the exported init/update/shutdown per rAF.
+    // uses), mounts the game's source bundle into MEMFS, and callMain's it — the
+    // C++ WebLoop drives the exported init/update/shutdown per rAF.
     var GAME = (new URLSearchParams(location.search).get('g') || '').replace(/[^a-z0-9_-]/gi, '');
     var WASM_DIR = '../files/wasm/';
     // Per-game source bundles (mirrors the file lists in web/examples/ui/samples/data.json);
-    // games not listed here ship the default two-file bundle.
+    // games not listed here ship main.das alone.
     var GAME_FILES = {
       'boulder-dash': ['main.das', 'cave.das', 'cave_gen.das', 'sfx_gen.das'],
       'river_run': ['main.das', 'rr_globals.das', 'rr_shaders.das', 'rr_models.das', 'rr_postfx.das', 'river.das', 'rr_audio.das', 'gameplay.das', 'hud.das', 'hud3d.das', 'rr_live.das'],

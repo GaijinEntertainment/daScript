@@ -13,7 +13,7 @@ such step enforces its rule automatically, with no reviewer involved -
 `pull_request` and fails the lane when it finds a defect - makes that step fail on every
 defect in what it checks, and on nothing else.**
 
-**A diff that adds a step to the deploy workflow (`pages.yml`) naming the games it deploys
-writes that list as a `for g in <ids>; do` loop.** `examples/games/REVIEW.das` (repo root)
-reads the deployed game list from those loops, so a list spelled any other way is one
-nothing cross-checks.
+**A diff that adds or changes a step in `pages.yml` that names the deployed games writes
+that list as a `for g in <ids>; do` loop.** `examples/games/REVIEW.das` (repo root) reads
+the deployed game list from those loops, so a list spelled any other way is one nothing
+cross-checks.
