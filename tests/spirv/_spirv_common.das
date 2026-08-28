@@ -2056,6 +2056,30 @@ def public q8blk_words : array<uint> {
     return clone_to_move(q8blk_spv)
 }
 
+// ===== the 8/16-bit STORE half: narrowing casts (OpSConvert/OpUConvert) and stores through
+// 8/16-bit access chains — the requant-writer shapes (a quantizer writing int8 quants and an
+// f16 scale directly instead of hand-packing words). Zero NEW opcodes. =====
+var @ssbo @binding = 0 st_blocks : array<BlockQ8>
+var @ssbo @binding = 1 st_i8 : array<int8>
+var @ssbo @binding = 2 st_i16 : array<int16>
+var @ssbo @binding = 3 st_u16 : array<uint16>
+var @ssbo @binding = 4 st_src : array<int>
+
+[compute_shader(local_size_x=64, name="q8store_spv"), marker(no_coverage)]
+def q8store_kernel {
+    let gi = gl_GlobalInvocationID.x
+    let v = st_src[gi]
+    st_i8[gi] = int8(v)
+    st_i16[gi] = int16(v)
+    st_u16[gi] = uint16(uint(v))
+    st_blocks[gi].qs[int(gi & 31u)] = int8(v)
+    st_blocks[gi].d = float16(0.5)
+}
+
+def public q8store_words : array<uint> {
+    return clone_to_move(q8store_spv)
+}
+
 // ===== cooperative matrix (SPV_KHR_cooperative_matrix): an f16 x f16 -> f32 GEMM tile. Loads a 16x16 A
 // (row-major) and B (column-major) from f16 SSBOs into subgroup tiles, one MulAdd into a zero-initialized
 // (OpConstantNull) f32 accumulator, stores the 16x16 result column-major. Exercises

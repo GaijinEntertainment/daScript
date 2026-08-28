@@ -85,6 +85,28 @@ def gq8_kernel {
     gq8_y[b] = acc * float(gq8_blocks[b].d)
 }
 
+// the STORE half: narrowing casts + 8/16-bit stores land exact bytes (a requant writer's shape)
+var @ssbo @binding = 0 gst_blocks : array<GBlockQ8>
+var @ssbo @binding = 1 gst_i16 : array<int16>
+var @ssbo @binding = 2 gst_u16 : array<uint16>
+var @ssbo @binding = 3 gst_src : array<int>
+
+[compute_shader(local_size_x=64, name="gst_spv")]
+def gst_kernel {
+    let gi = gl_GlobalInvocationID.x
+    let v = gst_src[gi]
+    gst_i16[gi] = int16(v)
+    gst_u16[gi] = uint16(uint(v) * 3u)
+    if (gi < 16u) {
+        gst_blocks[gi].d = float16(0.25 * float(1u + gi % 3u))
+        var k = 0u
+        while (k < 32u) {
+            gst_blocks[gi].qs[int(k)] = int8(int(gi * 32u + k) - 200)
+            k++
+        }
+    }
+}
+
 // ===== a multi-SSBO compute runner =====
 
 // One host-visible coherent STORAGE buffer per binding, uploaded from / read back into `bufs`
@@ -369,6 +391,68 @@ def test_storage_8_16_gpu(t : T?) {
     delete words
     delete bufs
     delete expected
+}
+
+[test]
+def test_storage_8_16_store_gpu(t : T?) {
+    let sup = probe_support()
+    if (!sup.storage) {
+        feint("device lacks 8/16-bit SSBO storage features; skipping\n")
+        return
+    }
+    let n = 64
+    var bufs : array<array<uint8>>
+    var blocks : array<uint8>
+    blocks |> resize(16 * 34)
+    bufs |> emplace(blocks)
+    var i16b : array<uint8>
+    i16b |> resize(n * 2)
+    bufs |> emplace(i16b)
+    var u16b : array<uint8>
+    u16b |> resize(n * 2)
+    bufs |> emplace(u16b)
+    var srcb : array<uint8>
+    srcb |> resize(n * 4)
+    for (i in range(n)) {
+        let v = uint(i * 517 + 3)
+        srcb[i * 4] = uint8(v & 0xFFu)
+        srcb[i * 4 + 1] = uint8((v >> 8u) & 0xFFu)
+        srcb[i * 4 + 2] = uint8((v >> 16u) & 0xFFu)
+        srcb[i * 4 + 3] = uint8((v >> 24u) & 0xFFu)
+    }
+    bufs |> emplace(srcb)
+    var words <- clone_to_move(gst_spv)
+    let no_spec : array<SpecConstantValue>
+    run_multi(words, bufs, 1u, no_spec, true)
+    // int16/uint16 element stores: exact little-endian bytes of the narrowed values
+    var bad16 = 0
+    for (i in range(n)) {
+        let v = uint(i * 517 + 3)
+        let want16 = v & 0xFFFFu
+        let got16 = uint(bufs[1][i * 2]) | (uint(bufs[1][i * 2 + 1]) << 8u)
+        let wantu = (v * 3u) & 0xFFFFu
+        let gotu = uint(bufs[2][i * 2]) | (uint(bufs[2][i * 2 + 1]) << 8u)
+        if (got16 != want16 || gotu != wantu) {
+            bad16++
+        }
+    }
+    t |> success(bad16 == 0, "int16/uint16 element stores land exact bytes ({bad16} of {n} wrong)")
+    // struct-member stores: f16 d at +0, int8 qs at +2 - every byte of every block placed
+    var badblk = 0
+    for (b in range(16)) {
+        let dbits = packHalf2x16(float2(0.25 * float(1 + b % 3), 0.0)) & 0xFFFFu
+        if (uint(bufs[0][b * 34]) != (dbits & 0xFFu) || uint(bufs[0][b * 34 + 1]) != ((dbits >> 8u) & 0xFFu)) {
+            badblk++
+        }
+        for (k in range(32)) {
+            if (int(bufs[0][b * 34 + 2 + k]) != ((b * 32 + k - 200) & 0xFF)) {
+                badblk++
+            }
+        }
+    }
+    t |> success(badblk == 0, "int8/f16 struct-member stores land exact bytes ({badblk} wrong)")
+    delete words
+    delete bufs
 }
 
 [test]

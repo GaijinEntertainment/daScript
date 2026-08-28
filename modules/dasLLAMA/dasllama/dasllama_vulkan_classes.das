@@ -39,7 +39,8 @@ struct ArArgs {
     ascale : float
 }
 
-// the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide, the pack is scalar)
+// the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide; each quant lands as
+// its own BYTE through the 8-bit store path, which replaced the hand-rolled word packing)
 def private q8_amax3(m0 : float) : float {
     var m = m0
     m = max(m, subgroupShuffleXor(m, 1u))
@@ -48,17 +49,11 @@ def private q8_amax3(m0 : float) : float {
     return m
 }
 
-def private q8_pack4(v0, v1, v2, v3 : float; id : float) : uint {
-    let q0 = int(round(v0 * id))
-    let q1 = int(round(v1 * id))
-    let q2 = int(round(v2 * id))
-    let q3 = int(round(v3 * id))
-    return ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
-        | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
+def private q8_store1(v, id : float) : int8 {
+    return int8(int(round(v * id)))
 }
 
-// ... and the Q8_K twins: whole-subgroup 5-shuffle amax fold, butterfly byte pack (lanes
-// 4j..4j+3 fold one round's bytes into word j — the lane%4==0 caller stores it)
+// ... and the Q8_K twin: whole-subgroup 5-shuffle amax fold
 def private q8k_amax5(m0 : float) : float {
     var m = m0
     m = max(m, subgroupShuffleXor(m, 1u))
@@ -67,13 +62,6 @@ def private q8k_amax5(m0 : float) : float {
     m = max(m, subgroupShuffleXor(m, 8u))
     m = max(m, subgroupShuffleXor(m, 16u))
     return m
-}
-
-def private q8k_pack_butterfly(v, id : float) : uint {
-    let q = int(round(v * id))
-    let b8 = uint(q) & 0xFFu
-    let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
-    return p | (subgroupShuffleXor(p, 2u) << 16u)
 }
 
 // the workgroup-rms machinery the row kernels share (one wg reduces one row)
@@ -150,7 +138,7 @@ class ClsArAddRms : ArBase {
 // xb never reaches memory. Verbatim reduce/amax/rounding => bit-identical to the split pair.
 [vk_dispatch(name = "cls_ar_rq", grid = "wgs", params = "wgs : int64")]
 class ArAddRmsRq : ArBase {
-    @ssbo @binding = 3 outq : array<uint>    // the quantized words
+    @ssbo @binding = 3 outq : array<int8>    // the quantized bytes
     @ssbo @binding = 4 outs : array<float>   // per-32-block scales
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_spv")]
@@ -174,7 +162,10 @@ class ArAddRmsRq : ArBase {
             if (lane8 == 0u) {
                 outs[b] = d
             }
-            outq[b * 8u + lane8] = q8_pack4(v0, v1, v2, v3, id)
+            outq[base] = q8_store1(v0, id)
+            outq[base + 1u] = q8_store1(v1, id)
+            outq[base + 2u] = q8_store1(v2, id)
+            outq[base + 3u] = q8_store1(v3, id)
             b += 32u
         }
     }
@@ -185,7 +176,7 @@ class ArAddRmsRq : ArBase {
 // bit-identical to cls_ar followed by cls_dn_rq.
 [vk_dispatch(name = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRmsRqB : ArBase {
-    @ssbo @binding = 3 outq : array<uint>    // the quantized words, row-major blocks
+    @ssbo @binding = 3 outq : array<int8>    // the quantized bytes, row-major blocks
     @ssbo @binding = 4 outs : array<float>   // per-32-block scales
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv")]
@@ -210,7 +201,11 @@ class ClsArAddRmsRqB : ArBase {
             if (lane8 == 0u) {
                 outs[qb0 + b] = d
             }
-            outq[(qb0 + b) * 8u + lane8] = q8_pack4(v0, v1, v2, v3, id)
+            let qb = qb0 * 32u + base
+            outq[qb] = q8_store1(v0, id)
+            outq[qb + 1u] = q8_store1(v1, id)
+            outq[qb + 2u] = q8_store1(v2, id)
+            outq[qb + 3u] = q8_store1(v3, id)
             b += 32u
         }
     }
@@ -245,7 +240,7 @@ struct RqArgs {
 [vk_dispatch(name = "cls_dn_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class DnRequant {
     @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 outq : array<uint>
+    @ssbo @binding = 1 outq : array<int8>
     @ssbo @binding = 2 outs : array<float>
     @push_constant pa : RqArgs
 
@@ -268,7 +263,11 @@ class DnRequant {
             if (lane8 == 0u) {
                 outs[b] = d
             }
-            outq[b * 8u + lane8] = q8_pack4(v0, v1, v2, v3, id)
+            let qb = b * 32u + lane8 * 4u
+            outq[qb] = q8_store1(v0, id)
+            outq[qb + 1u] = q8_store1(v1, id)
+            outq[qb + 2u] = q8_store1(v2, id)
+            outq[qb + 3u] = q8_store1(v3, id)
         }
     }
 }
@@ -277,7 +276,7 @@ class DnRequant {
 [vk_dispatch(name = "cls_q8k_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8kRequant {
     @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 outq : array<uint>
+    @ssbo @binding = 1 outq : array<int8>
     @ssbo @binding = 2 outs : array<float>
     @push_constant pa : RqArgs
 
@@ -287,13 +286,6 @@ class Q8kRequant {
             outs[b] = d
         }
         return d != 0.0 ? 1.0 / d : 0.0
-    }
-
-    def pack_word(b, r, lane : uint; v, id : float) {
-        let w = q8k_pack_butterfly(v, id)
-        if (lane % 4u == 0u) {
-            outq[b * 64u + r * 8u + lane / 4u] = w
-        }
     }
 
     [spirv_kernel(local_size_x = 256, name = "cls_q8k_rq_spv")]
@@ -312,7 +304,7 @@ class Q8kRequant {
             }
             let id = blk_scale(b, lane, m)
             for [unroll] (r in range(8)) {
-                pack_word(b, uint(r), lane, vals[r], id)
+                outq[b * 256u + uint(r) * 32u + lane] = q8_store1(vals[r], id)
             }
         }
     }
@@ -337,26 +329,30 @@ def private act_mul_sel(v, u : float; gelu : uint) : float {
 class ActRqMembers {
     @ssbo @binding = 0 gate : array<float>     // gate rows (act's v side)
     @ssbo @binding = 1 up : array<float>       // up rows (act's u side)
-    @ssbo @binding = 2 outq : array<uint>      // quantized words out
+    @ssbo @binding = 2 outq : array<int8>      // quantized bytes out
     @ssbo @binding = 3 outs : array<float>     // per-block scales out
     @push_constant pa : ActArgs
 
     def act_mul(v, u : float) : float => act_mul_sel(v, u, pa.gelu)
 }
 
-// fused act + Q8_0 requant: subgroup per 4 blocks, word per lane, 8-lane shuffle amax (xor 1/2/4)
+// fused act + Q8_0 requant: subgroup per 4 blocks, 4 quants per lane, 8-lane shuffle amax (xor 1/2/4)
 [vk_dispatch(name = "q8_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8ActRq : ActRqMembers {
     // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b],
-    // returns this lane's packed word
-    def blk_pack(b, lane8 : uint; v0, v1, v2, v3 : float) : uint {
+    // this lane's 4 quants land as bytes
+    def blk_store(b, lane8 : uint; v0, v1, v2, v3 : float) {
         let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
         let d = m / 127.0
         let id = d != 0.0 ? 1.0 / d : 0.0
         if (lane8 == 0u) {
             outs[b] = d
         }
-        return q8_pack4(v0, v1, v2, v3, id)
+        let qb = b * 32u + lane8 * 4u
+        outq[qb] = q8_store1(v0, id)
+        outq[qb + 1u] = q8_store1(v1, id)
+        outq[qb + 2u] = q8_store1(v2, id)
+        outq[qb + 3u] = q8_store1(v3, id)
     }
 
     [spirv_kernel(local_size_x = 256, name = "q8_actrq_cls_spv")]
@@ -371,13 +367,12 @@ class Q8ActRq : ActRqMembers {
             let v1 = act_mul(gate[eb + 1u], up[eb + 1u])
             let v2 = act_mul(gate[eb + 2u], up[eb + 2u])
             let v3 = act_mul(gate[eb + 3u], up[eb + 3u])
-            outq[b * 8u + lane % 8u] = blk_pack(b, lane % 8u, v0, v1, v2, v3)
+            blk_store(b, lane % 8u, v0, v1, v2, v3)
         }
     }
 }
 
-// the Q8_K twin: one subgroup per 256-weight superblock, whole-subgroup 5-shuffle amax,
-// butterfly byte pack
+// the Q8_K twin: one subgroup per 256-weight superblock, whole-subgroup 5-shuffle amax
 [vk_dispatch(name = "q8k_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8kActRq : ActRqMembers {
     def blk_scale(b, lane : uint; m0 : float) : float {
@@ -386,13 +381,6 @@ class Q8kActRq : ActRqMembers {
             outs[b] = d
         }
         return d != 0.0 ? 1.0 / d : 0.0
-    }
-
-    def pack_word(b, r, lane : uint; v, id : float) {
-        let w = q8k_pack_butterfly(v, id)
-        if (lane % 4u == 0u) {
-            outq[b * 64u + r * 8u + lane / 4u] = w
-        }
     }
 
     [spirv_kernel(local_size_x = 256, name = "q8k_actrq_cls_spv")]
@@ -412,7 +400,7 @@ class Q8kActRq : ActRqMembers {
             }
             let id = blk_scale(b, lane, m)
             for [unroll] (r in range(8)) {
-                pack_word(b, uint(r), lane, vals[r], id)
+                outq[base + uint(r) * 32u + lane] = q8_store1(vals[r], id)
             }
         }
     }

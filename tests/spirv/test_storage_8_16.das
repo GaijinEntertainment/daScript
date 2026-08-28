@@ -39,4 +39,19 @@ def test_storage_8_16(t : T?) {
         }
         delete words
     }
+    t |> run("small-int STORE half: narrowing casts + 8/16-bit stores; spirv-val clean") <| @(t : T?) {
+        var words <- q8store_words()
+        // int8(v)/int16(v) narrow via OpSConvert; uint16(uint) via OpUConvert
+        t |> success(count_op(words, SpvOp.SConvert) >= 3, "signed narrowing converts present")
+        t |> success(has_op(words, SpvOp.UConvert), "unsigned narrowing convert present")
+        t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.StorageBuffer8BitAccess)), "StorageBuffer8BitAccess")
+        t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.StorageBuffer16BitAccess)), "StorageBuffer16BitAccess")
+        let r = validate_spirv(words)
+        if (r.ran) {
+            t |> success(r.ok, "spirv-val: {r.msg}")
+        } else {
+            feint("spirv-val not found locally; skipping (CI enforces)\n")
+        }
+        delete words
+    }
 }
