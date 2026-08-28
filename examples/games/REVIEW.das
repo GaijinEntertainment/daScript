@@ -162,11 +162,15 @@ def private check_port_bundles(games : array<string>) {
 // The playground bundle is the desktop game, verbatim - the wasm runtime resolves the
 // same live/* requires the desktop uses, so the staged copy carries no port edits. Any
 // .das that differs between the two trees, or exists only in the staged copy, is the
-// fork re-forming by hand.
-def private check_port_identity(games : array<string>) {
-    for (g in games) {
+// fork re-forming by hand. Walks every dir with a desktop twin, not the deployed list -
+// an undeployed port is still a copy that can drift; a dir with no twin (a
+// playground-native sample like macros/) is not a copy of anything.
+def private check_port_identity {
+    fio::dir(PORTS_DIR) $(g) {
+        return if (g == "." || g == "..")
+        return if (!dir_exists("{GAMES_DIR}/{g}"))
         let port_dir = "{PORTS_DIR}/{g}"
-        continue if (!dir_exists(port_dir))
+        return if (!dir_exists(port_dir))
         fio::dir(port_dir) $(f) {
             return if (!ends_with(f, ".das"))
             let twin = "{GAMES_DIR}/{g}/{f}"
@@ -262,7 +266,7 @@ def main() : int {
         let games <- [for (g in split(lists[0], " ")); g; where !empty(g)]
         check_card_wiring(pages, games)
         check_port_bundles(games)
-        check_port_identity(games)
+        check_port_identity()
     }
     check_package_names()
     return gate_verdict("examples/games")

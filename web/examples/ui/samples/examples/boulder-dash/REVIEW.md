@@ -1,7 +1,8 @@
 # Boulder Dash Sample Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`.
+`ARCHITECTURE.md`. **A diff that changes a `.das` in this folder also applies
+`examples/games/REVIEW.md` and runs `examples/games/REVIEW.das` (both repo root).**
 
 **Never read the state a tick produced anywhere but between that `cave_tick` call and the
 next tick - scoring from `collected`, `play_tick_sfx`, and `cave_consume_input` run
@@ -20,8 +21,8 @@ is invisible.
 change to the other, in the same change** - a tile matched by one family test and not the
 other draws with one family's color and another's material.
 
-**Weakening or deleting a check in `test_cave_rules.das` or `test_sfx_gen.das` is a
-defect** - those two suites are the only enforcement of the couplings this checklist names.
+**Weakening or deleting a check in this folder's dastest suites is a defect** - they are
+the only enforcement of the couplings this checklist names.
 
 **A diff that adds or reorders two moves that share a cell in one tick puts the move whose
 SOURCE is the shared cell first** - `move_tile` clears the source cell before writing the
@@ -36,7 +37,7 @@ missing the first latches the event across ticks; missing the second makes it si
 `paint_interior` and everything it calls, plus `finish_cave` - says in the PR that it
 reshuffles every cave of every seed.** Generation is a pure function of
 `(world_seed, cave_index)`, and that purity is the retry-after-death mechanism
-(ARCHITECTURE.md sec. Generation).
+(ARCHITECTURE.md sec. 5).
 
 **Placement - one file, one line: a diff keeps each file inside its line, and a new file
 adds its line here, with its tests, in the same change.**
