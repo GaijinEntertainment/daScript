@@ -11,7 +11,7 @@ require daslib/toml
 
 struct public PreflightSettings {
     jit_threads : int = 0
-    jit_max_file_time : float = 60.0
+    jit_max_file_time : float = 120.0
 }
 
 //! The pure half of the untracked-files gate: repo-relative paths from
