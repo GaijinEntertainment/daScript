@@ -91,7 +91,7 @@ dispatch (`enc_mv_b4_c`) - reads whole 128-quant rounds and needs `kdim % 128`.
 Prefill attention is a three-kernel pipeline over one per-head f16 score slab padded to
 `np32 = ceil32(npos)` columns: QK writes the raw scores half once, rowstat mints each row's max
 and reciprocal sum, and AV applies `exp` while it stages P. The slab is written once and read
-once, and no separate softmax pass touches it. Every stage and every stamp of every stage binds
+three times - rowstat's max pass, rowstat's sum pass, and AV. Every stage and every stamp of every stage binds
 ONE `AttnArgs` value, derived once per layer, and ignores the fields it does not read. Two forms
 serve it: the tiled QK/AV GEMM pair (the default, needing `head_size % 64` on BOTH attention
 classes) and the scalar 32x32 trio, which serves when that gate fails or `DASLLAMA_METAL_ATTN=0`
