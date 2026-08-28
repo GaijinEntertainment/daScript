@@ -202,8 +202,8 @@ def spawn_enemy_boat(pos : float3) {
     }
 }
 
-def spawn_enemy_plane(pos : float3) {
-    let spd = PLANE_SPEED * section_speed_mult()
+def spawn_enemy_plane(pos : float3; section : int) {
+    let spd = PLANE_SPEED * section_speed_mult_for(section)
     create_entity() @(eid, cmp) {
         apply_decs_template(cmp, EnemyPlane(
             pos = pos,
@@ -233,7 +233,7 @@ def spawn_fuel_depot(pos : float3) {
     }
 }
 
-def spawn_bridge(pos : float3) {
+def spawn_bridge(pos : float3; section : int) {
     let seg = sample_river_segment(pos.y)
     let bounds = (
         seg.split
@@ -260,7 +260,7 @@ def spawn_bridge(pos : float3) {
     )
     let bridge_health = min(
         BRIDGE_HEALTH_MAX,
-        BRIDGE_HEALTH_MIN + current_section / BRIDGE_HEALTH_STEP_SECTIONS
+        BRIDGE_HEALTH_MIN + section / BRIDGE_HEALTH_STEP_SECTIONS
     )
     create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Bridge(
@@ -404,23 +404,25 @@ def find_safe_respawn_pos(from_pos : float3) : float3 {
     return float3(x, from_pos.y, PLAYER_Z)
 }
 
-def spawn_section_objects() {
-    // Determine a Y range ahead of player to place objects
-    let base_y = player_pos.y + 40.0
-    let section_mult = float(min(current_section + 1, 5))
-    spawn_section_bridges(base_y, section_mult)
+// Populate one section band of world starting at base_y. Bands are anchored to
+// zone boundaries and spawned a full section before the player can reach them
+// -- past the fog and the far plane -- so a zone's content is already standing
+// out there by the time it comes into view, instead of popping in mid-screen.
+def spawn_section_objects(section : int; base_y : float) {
+    let section_mult = float(min(section + 1, 5))
+    spawn_section_bridges(section, base_y, section_mult)
     spawn_section_islands(base_y, section_mult)
     spawn_section_trees(base_y)
     spawn_section_houses(base_y)
     spawn_section_depots(base_y)
-    spawn_section_enemies(base_y, section_mult)
+    spawn_section_enemies(section, base_y, section_mult)
 }
 
-def spawn_section_bridges(base_y, section_mult : float) {
+def spawn_section_bridges(section : int; base_y, section_mult : float) {
     let bridge_count = int(1.0 + section_mult * 0.4)
     for (i in range(bridge_count)) {
         let by = base_y + SECTION_LENGTH * (float(i + 1) / float(bridge_count + 1))
-        spawn_bridge(float3(0.0, by, BRIDGE_Z))
+        spawn_bridge(float3(0.0, by, BRIDGE_Z), section)
     }
     commit()
 }
@@ -593,10 +595,10 @@ def boat_spot_blocked(candidate : float3) : bool {
 }
 
 // Enemies — staggered ahead
-def spawn_section_enemies(base_y, section_mult : float) {
+def spawn_section_enemies(section : int; base_y, section_mult : float) {
     let boat_count = int(2.0 + section_mult * 1.0)
-    let plane_count = (current_section >= 1 ? int(1.0 + section_mult * 0.6) : 0)
-    let heli_count = (current_section >= 2 ? int(section_mult * 0.5) : 0)
+    let plane_count = (section >= 1 ? int(1.0 + section_mult * 0.6) : 0)
+    let heli_count = (section >= 2 ? int(section_mult * 0.5) : 0)
 
     for (_i in range(boat_count)) {
         for (_try in range(10)) {
@@ -614,7 +616,7 @@ def spawn_section_enemies(base_y, section_mult : float) {
         let ey = base_y + random_range(5.0, SECTION_LENGTH - 5.0)
         let bounds = river_clamp_x_for(ey, random_sign() * 20.0)
         let side_x = (random_f() < 0.5 ? bounds.x - 3.0 : bounds.y + 3.0)
-        spawn_enemy_plane(float3(side_x, ey, PLANE_Z))
+        spawn_enemy_plane(float3(side_x, ey, PLANE_Z), section)
     }
     for (_i in range(heli_count)) {
         let ey = base_y + random_range(15.0, SECTION_LENGTH - 15.0)
@@ -661,7 +663,10 @@ def reset_game() {
 
     global_rng_seed = uint(get_uptime() * 1000.0)
     init_river()
-    spawn_section_objects()
+    // Populate the opening section and the one after it, so the first horizon
+    // is already continuous; each crossing then tops up one section ahead.
+    spawn_section_objects(0, player_pos.y + 40.0)
+    spawn_section_objects(1, player_pos.y + SECTION_LENGTH + 40.0)
     game_state = GameState.playing
 }
 
@@ -849,8 +854,10 @@ def update_section() {
         if (current_section >= MAX_SECTIONS) {
             game_state = GameState.win_state
             restart_input_lock = 1.5
-        } else {
-            spawn_section_objects()
+        } elif (current_section + 1 < MAX_SECTIONS) {
+            // The section just entered was populated a boundary ago; extend the
+            // world by the NEXT one, still beyond the fog and the far plane.
+            spawn_section_objects(current_section + 1, player_pos.y + (SECTION_LENGTH - section_dist) + 40.0)
         }
     }
 }
@@ -1518,9 +1525,32 @@ def private jet_palette() {
 // Craft bank into a turn. Purely cosmetic, but it is most of what makes the
 // helicopter feel like it is being flown rather than slid.
 def private player_orientation() : float4 {
-    let roll = clamp(-player_vel.x * 0.075, -0.55, 0.55)
+    let roll = clamp(player_vel.x * 0.075, -0.55, 0.55)
     let pitch = clamp((player_fwd_speed - PLAYER_FWD_SPEED_MIN) * 0.018, 0.0, 0.22)
     return quat_mul(quat_y_rot(roll), quat_x_rot(-pitch))
+}
+
+// Enemy craft face where they are going (boats, jets) or the player
+// (helicopters). The models are authored nose toward +Y, so facing is a
+// quarter or half turn around Z. Heel, bob and bank compose on top in model
+// space; the heli drift is the one world-space lean -- it tracks the player
+// along world X, and under the half turn a model-space roll would lean the
+// wrong way. Shadows use the same orientation.
+def private boat_orientation(patrol_dir, pos_x, game_time : float) : float4 {
+    let face = quat_z_rot(-patrol_dir * PI * 0.5)
+    let heel = quat_y_rot(patrol_dir * 0.14)
+    let bob = quat_x_rot(sin(game_time * 1.7 + pos_x) * 0.05)
+    return quat_mul(face, quat_mul(heel, bob))
+}
+
+def private plane_orientation(vel_x : float) : float4 {
+    let dir = (vel_x >= 0.0 ? 1.0 : -1.0)
+    return quat_mul(quat_z_rot(-dir * PI * 0.5), quat_y_rot(dir * 0.30))
+}
+
+def private enemy_heli_orientation(drift_x : float) : float4 {
+    let drift = quat_y_rot(clamp(drift_x * 0.06, -0.45, 0.45))
+    return quat_mul(drift, quat_z_rot(PI))
 }
 
 // --- Shadow map pass ---
@@ -1529,24 +1559,24 @@ def private player_orientation() : float4 {
 // shadows are gone: props now shade each other and the banks.
 
 // Aircraft and boats: the movers, whose shadows track the action.
-def private shadow_cast_craft() {
+def private shadow_cast_craft(game_time : float) {
     if (player_respawn_timer <= PLAYER_RESPAWN_BLINK) {
         draw_shadow_caster(player_pos, float3(PLAYER_SIZE * 1.85), player_orientation())
         geo_heli |> draw_geometry_fragment()
     }
 
     query() $(b : EnemyBoat) {
-        draw_shadow_caster(b.pos, float3(BOAT_SIZE * 1.25), quat_z_rot(b.patrol_dir * 0.12))
+        draw_shadow_caster(b.pos, float3(BOAT_SIZE * 1.25), boat_orientation(b.patrol_dir, b.pos.x, game_time))
         geo_gunboat |> draw_geometry_fragment()
     }
 
     query() $(p : EnemyPlane) {
-        draw_shadow_caster(p.pos, float3(PLANE_SIZE * 1.35))
+        draw_shadow_caster(p.pos, float3(PLANE_SIZE * 1.35), plane_orientation(p.vel.x))
         geo_jet |> draw_geometry_fragment()
     }
 
     query() $(h : EnemyHelicopter) {
-        draw_shadow_caster(h.pos, float3(ENEMY_HELI_SIZE * 1.7), quat_y_rot(sin(h.hover_phase) * 0.2))
+        draw_shadow_caster(h.pos, float3(ENEMY_HELI_SIZE * 1.7), enemy_heli_orientation(h.target_x - h.pos.x))
         geo_heli |> draw_geometry_fragment()
     }
 
@@ -1613,11 +1643,11 @@ def private shadow_cast_obstacles() {
     }
 }
 
-def render_shadow_casters() {
+def render_shadow_casters(game_time : float) {
     glUseProgram(shadow_program)
     active_program = shadow_program
     render_river_shadow()
-    shadow_cast_craft()
+    shadow_cast_craft(game_time)
     shadow_cast_scenery()
     shadow_cast_obstacles()
 }
@@ -1647,24 +1677,19 @@ def render_enemies(game_time : float) {
 
     query() $(b : EnemyBoat) {
         boat_palette()
-        // Heel the hull into its patrol direction and let it ride the swell.
-        let heel = quat_y_rot(b.patrol_dir * 0.14)
-        let bob = quat_x_rot(sin(game_time * 1.7 + b.pos.x) * 0.05)
-        draw_prop(b.pos, float3(BOAT_SIZE * 1.25), float3(1.0), quat_mul(heel, bob), MAT_HULL)
+        draw_prop(b.pos, float3(BOAT_SIZE * 1.25), float3(1.0), boat_orientation(b.patrol_dir, b.pos.x, game_time), MAT_HULL)
         geo_gunboat |> draw_geometry_fragment()
     }
 
     query() $(p : EnemyPlane) {
         jet_palette()
-        let bank = quat_y_rot(clamp(p.vel.x * 0.10, -0.5, 0.5))
-        draw_prop(p.pos, float3(PLANE_SIZE * 1.35), float3(1.0), bank, MAT_METAL)
+        draw_prop(p.pos, float3(PLANE_SIZE * 1.35), float3(1.0), plane_orientation(p.vel.x), MAT_METAL)
         geo_jet |> draw_geometry_fragment()
     }
 
     query() $(h : EnemyHelicopter) {
         enemy_heli_palette()
-        let drift = quat_y_rot(clamp((h.target_x - h.pos.x) * 0.06, -0.45, 0.45))
-        draw_prop(h.pos, float3(ENEMY_HELI_SIZE * 1.7), float3(1.0), drift, MAT_HULL)
+        draw_prop(h.pos, float3(ENEMY_HELI_SIZE * 1.7), float3(1.0), enemy_heli_orientation(h.target_x - h.pos.x), MAT_HULL)
         geo_heli |> draw_geometry_fragment()
     }
 

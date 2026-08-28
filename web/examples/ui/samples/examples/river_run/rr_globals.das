@@ -31,7 +31,9 @@ let RIVER_HALF_WIDTH_MAX = 7.0
 let RIVER_HALF_WIDTH_MIN = 3.0
 let RIVER_CENTER_DRIFT_MAX = 3.5
 let SEGMENT_LENGTH = 6.0
-let RIVER_SEGMENTS_COUNT = 52
+// Enough ring to keep real segments under everything prespawned one full
+// section ahead (advance keeps ~4 segments behind the player).
+let RIVER_SEGMENTS_COUNT = 96
 let SECTION_LENGTH = 240.0
 let MAX_SECTIONS = 10
 
@@ -330,6 +332,10 @@ var @live river_split_half = 0.0
 var @live river_split_hold = 0.0
 var @live river_first_split_pending = true
 var @live river_first_split_start_y = 0.0
+// Ripple phase is integrated segment by segment (and the amplitude eased), so
+// a per-section frequency change bends the river instead of stepping it.
+var @live river_ripple_phase = 0.0
+var @live river_ripple_amp = 1.5
 
 var tick_dt = 0.0
 // Effect-inspection rig: with fx_freeze set, the world and its particles both
@@ -605,8 +611,22 @@ def get_fog_color() : float3 {
     return env_now.fog_color
 }
 
+def section_speed_mult_for(section : int) : float {
+    return 1.0 + float(section) * 0.15
+}
+
 def section_speed_mult() : float {
-    return 1.0 + float(current_section) * 0.15
+    return section_speed_mult_for(current_section)
+}
+
+// Which section owns a world Y, anchored to the next boundary ahead of the
+// player -- prespawned content and river generation agree on zone edges.
+def section_for_y(world_y : float) : int {
+    let ahead = world_y - (player_pos.y + (SECTION_LENGTH - section_dist))
+    if (ahead < 0.0) {
+        return current_section
+    }
+    return min(current_section + 1 + int(ahead / SECTION_LENGTH), MAX_SECTIONS - 1)
 }
 
 def add_screen_shake(amount : float) {
