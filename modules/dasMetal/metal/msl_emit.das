@@ -2359,6 +2359,70 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint; bk : uint = 32u) 
         // index/fold work anywhere in the hot path. q8uh streams HALF activations: a float A
         // operand keeps matmul2d off the native half x half path (measured 8-11% per GEMM)
         let at = kind == "q8uh" ? "half" : "float"
+        if (bk == 128u) {
+            // 64-deep DOUBLE-BUFFERED chunks (bk names the resident staging footprint: two
+            // 64-deep tiles ping-pong in an n*144-half wt): ONE barrier per chunk - it orders
+            // the previous run against the overwrite of its tile AND publishes the tile staged
+            // last iteration; staging chunk b+1 overlaps op.run on chunk b (disjoint halves)
+            return build_string() $(var w) {
+                w |> write("static void {name}(threadgroup half * wt, device const half * ws, device const char * wq, device const {at} * a, uint lda, device float * c, uint ldc, uint kk, uint ldwb, uint tid) \{\n")
+                w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, true, matmul2d_descriptor::mode::multiply_accumulate);\n")
+                w |> write("    matmul2d<d, execution_simdgroups<{int(sgs)}>> op;\n")
+                w |> write("    using AT = tensor<device {at}, dextents<int32_t, 2>, tensor_inline>;\n")
+                w |> write("    using WT = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;\n")
+                w |> write("    auto cT = op.get_destination_cooperative_tensor<AT, WT, float>();\n")
+                w |> write("    const uint nb = kk / 64u;\n")
+                w |> write("    for (uint work = tid; work < {int(n)}u * 4u; work += {int(sgs * 32u)}u) \{\n")
+                w |> write("        const uint col = work >> 2;\n")
+                w |> write("        const uint sub = work & 3u;\n")
+                w |> write("        const uint blk = col * ldwb + (sub >> 1);\n")
+                w |> write("        const uint kh = (sub & 1u) * 16u;\n")
+                w |> write("        const float sc = float(ws[blk * 17u]);\n")
+                w |> write("        device const char * q = wq + blk * 34u + kh;\n")
+                w |> write("        threadgroup half * dstp = wt + col * 72u + sub * 16u;\n")
+                w |> write("        _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+                w |> write("    \}\n")
+                w |> write("    for (uint b = 0; b < nb; ++b) \{\n")
+                w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+                w |> write("        if (b + 1u < nb) \{\n")
+                w |> write("            threadgroup half * nxt = wt + ((b + 1u) & 1u) * {int(n)}u * 72u;\n")
+                w |> write("            for (uint work = tid; work < {int(n)}u * 4u; work += {int(sgs * 32u)}u) \{\n")
+                w |> write("                const uint col = work >> 2;\n")
+                w |> write("                const uint sub = work & 3u;\n")
+                w |> write("                const uint blk = col * ldwb + (b + 1u) * 2u + (sub >> 1);\n")
+                w |> write("                const uint kh = (sub & 1u) * 16u;\n")
+                w |> write("                const float sc = float(ws[blk * 17u]);\n")
+                w |> write("                device const char * q = wq + blk * 34u + kh;\n")
+                w |> write("                threadgroup half * dstp = nxt + col * 72u + sub * 16u;\n")
+                w |> write("                _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+                w |> write("            \}\n")
+                w |> write("        \}\n")
+                w |> write("        auto A = AT((device {at} *)(a + b * 64u), dextents<int32_t, 2>(64, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+                w |> write("        auto W = WT((threadgroup half *)(wt + (b & 1u) * {int(n)}u * 72u), dextents<int32_t, 2>(64, {int(n)}), metal::array<int32_t, 2>\{1, 72\});\n")
+                w |> write("        op.run(A, W, cT);\n")
+                w |> write("    \}\n")
+                w |> write("    if ((kk & 32u) != 0u) \{\n")
+                w |> write("        const uint b32 = nb * 2u;\n")
+                w |> write("        threadgroup half * tail = wt + (nb & 1u) * {int(n)}u * 72u;\n")
+                w |> write("        for (uint work = tid; work < {int(n)}u * 2u; work += {int(sgs * 32u)}u) \{\n")
+                w |> write("            const uint col = work >> 1;\n")
+                w |> write("            const uint kh = (work & 1u) * 16u;\n")
+                w |> write("            const uint blk = col * ldwb + b32;\n")
+                w |> write("            const float sc = float(ws[blk * 17u]);\n")
+                w |> write("            device const char * q = wq + blk * 34u + kh;\n")
+                w |> write("            threadgroup half * dstp = tail + col * 40u + kh;\n")
+                w |> write("            _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+                w |> write("        \}\n")
+                w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
+                w |> write("        auto A = AT((device {at} *)(a + nb * 64u), dextents<int32_t, 2>(32, {int(m)}), metal::array<int32_t, 2>\{1, int(lda)\});\n")
+                w |> write("        auto W = WT((threadgroup half *)tail, dextents<int32_t, 2>(32, {int(n)}), metal::array<int32_t, 2>\{1, 40\});\n")
+                w |> write("        op.run(A, W, cT);\n")
+                w |> write("    \}\n")
+                w |> write("    auto C = tensor<device float, dextents<int32_t, 2>, tensor_inline>(c, dextents<int32_t, 2>({int(n)}, {int(m)}), metal::array<int32_t, 2>\{1, int(ldc)\});\n")
+                w |> write("    cT.store(C);\n")
+                w |> write("\}")
+            }
+        }
         if (bk == 64u) {
             // 64-deep staged chunks: half the barriers per K walk (raced 5-11% per GEMM on
             // M5); wt is n*64; a kk % 64 == 32 K width finishes with one classic 32-chunk
@@ -2875,8 +2939,8 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     var nvals = length(ec.arguments)
     if (kind == "q8u" || kind == "q8uh") {
         bk = tmm2d_const_uint(ctx, ec.arguments[13], "bk (staged K-chunk depth)")
-        if (bk != 32u && bk != 64u) {
-            err(ctx, ec.at, "{cname}: bk must be 32 or 64")
+        if (bk != 32u && bk != 64u && bk != 128u) {
+            err(ctx, ec.at, "{cname}: bk must be 32, 64, or 128 (= 64-deep double-buffered: two ping-pong tiles, an n*144-half wt)")
             return
         }
         nvals = 13

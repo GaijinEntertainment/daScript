@@ -28,6 +28,15 @@ The rows that remain pick one of four forms, in this order, per site per forward
    already a multiple of 128, and otherwise stays whole-dispatch 32-tile.
 4. **32-row tile** - the default stamp.
 
+**The tall staged-q8 stamp double-buffers its W staging** (`DASLLAMA_METAL_DBUF=0` is the
+single-tile rail): two 64-deep ping-pong tiles hold 18432 B of threadgroup memory - probed at
+the allocation law's edge, 0-2% tax by shape - and the loop runs ONE barrier per chunk, which
+both publishes the tile staged last iteration and fences the previous `op.run` off the tile
+about to be overwritten; staging chunk b+1 overlaps the tensor op on chunk b. Raced +1.7%
+end-to-end on 8B pp512 (3435 -> 3492 tok/s); outputs are bit-equal to the single-tile form
+because the staged f16 rounding and chunk order are identical. The pattern is the one Apple
+ships in MLX's fp-quantized NAX family at this exact tile size.
+
 **A swiglu epilogue folded into the gate GEMM's store is REFUTED on M5.** Any per-element
 access of the cooperative C after `op.run` - the scattered-store walk, a modify-in-place
 before the optimized `cT.store`, even a cooperative-load register combine of the up panel -

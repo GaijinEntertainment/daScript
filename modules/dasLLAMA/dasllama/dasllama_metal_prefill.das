@@ -144,6 +144,38 @@ class MetalQ8MulMmTH128 : MetalQ8MulMmTensorT {
     override MT = 128u
 }
 
+//! the double-buffered staged twin (bk=128 footprint): two ping-pong W tiles, ONE barrier per
+//! 64-deep chunk - staging chunk b+1 overlaps the tensor op on chunk b. Same staged f16
+//! rounding as the single-tile form, so outputs are BIT-equal; the A/B rail is the knob alone
+[ |> template_struct_instance]
+class template MetalQ8MulMmDbT {
+    @template_constant MT : uint = 128u
+    @ssbo @binding = 0 @role = "weight" @off = "wboff" wsh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "wboff" wqb : array<int8>
+    @ssbo @binding = 2 @off = "xoff" xf : array<XT>
+    @ssbo @binding = 3 @off = "yoff" @span = "mp*d*4" y : array<float>
+    @uniform @binding = 4 kdim : uint
+    @uniform @binding = 5 ndim : uint
+    @workgroup twb : float16[9216]   //!< two 64x72-half tiles = 18432B (probed: 0-2% off the alloc plateau)
+
+    [metal_kernel(float_a_ok=true)]
+    def metal_q8_mulmm_db {
+        let mBase = gl_WorkGroupID.x * MT
+        let nBase = gl_WorkGroupID.y * 64u
+        let blk0 = nBase * (kdim / 32u)
+        var sp = unsafe(addr(wsh[blk0 * 17u]))
+        var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
+        var ap = unsafe(addr(xf[mBase * kdim]))
+        var cp = unsafe(addr(y[mBase * ndim + nBase]))
+        tmm2d_q8u_f32(MT, 64u, 4u, twb, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u, gl_LocalInvocationIndex, 128u)
+    }
+}
+
+[metal_dispatch(name = "enc_gemm_mm_thdb128_c", pso = "g_pf_pso_mm_thdb128", tgmem = "MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_tgmem", tg = 128, grid = "mp/128, d/64", params = "mp : int64, d : int64")]
+class MetalQ8MulMmTHDb128 : MetalQ8MulMmDbT {
+    typedef XT = float16
+}
+
 struct CvtArgs {
     total : uint
 }
@@ -2308,6 +2340,7 @@ var private g_pf_pso_mm_t : MetalComputePipeline?  //!< the mul_mm TENSOR twin; 
 var private g_pf_pso_mm_th : MetalComputePipeline?  //!< its half-X stamp (the converted f16 activation panel)
 var private g_pf_pso_mm_t128 : MetalComputePipeline?
 var private g_pf_pso_mm_th128 : MetalComputePipeline?
+var private g_pf_pso_mm_thdb128 : MetalComputePipeline?   //!< the double-buffered staging twin (the dbuf A/B)
 var private g_pf_pso_cvt_half : MetalComputePipeline?
 var private g_pf_bxh : MetalBuffer?     //!< per-forward f16 activation scratch panel (null = the f32 path)
 var private g_pf_bxh2 : MetalBuffer?
@@ -2494,6 +2527,14 @@ def public set_metal_prefill_grid1d(v : bool) {
 def public set_metal_prefill_lastrow(v : bool) {
     g_pf_env_lastrow = v
     to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_lastrow({v}) - prefill tail override\n")
+}
+
+//! A/B seat: double-buffered W staging on the tall staged-q8 GEMM (one barrier per 64-chunk,
+//! staging overlaps the tensor op) vs the single-tile form. Default on (raced +1.7% e2e on
+//! 8B pp512); `DASLLAMA_METAL_DBUF=0` pins the single-tile form. Outputs are BIT-equal.
+def public set_metal_prefill_dbuf(v : bool) {
+    g_pf_env_dbuf = v
+    to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_dbuf({v}) - staged GEMM form override\n")
 }
 
 //! The prefill knockout rail as an in-process setter (timing attribution — served output is
@@ -2725,6 +2766,10 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_hmm_th128_l1)
         g_pf_pso_hmm_th128_l1 = null
     }
+    if (g_pf_pso_mm_thdb128 != null) {
+        metal_release(g_pf_pso_mm_thdb128)
+        g_pf_pso_mm_thdb128 = null
+    }
     if (g_pf_pso_bf16_mm != null) {
         metal_release(g_pf_pso_bf16_mm)
         g_pf_pso_bf16_mm = null
@@ -2862,6 +2907,7 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         g_pf_pso_mm_th = compile_pso(MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, ok)
         g_pf_pso_mm_t128 = compile_pso(MetalQ8MulMmT128_metal_q8_mulmm_t_msl, MetalQ8MulMmT128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT128_metal_q8_mulmm_t_msl_fastmath, ok)
         g_pf_pso_mm_th128 = compile_pso(MetalQ8MulMmTH128_metal_q8_mulmm_t_msl, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_fastmath, ok)
+        g_pf_pso_mm_thdb128 = compile_pso(MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_entry, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_fastmath, ok)
         g_pf_pso_dq_q8 = compile_pso(metal_dequant_q8h_msl, metal_dequant_q8h_msl_entry, metal_dequant_q8h_msl_fastmath, ok)
     }
     g_pf_bf16_mm_tensor = metal_tensor_crowned("mulmm_bf16")
@@ -3365,7 +3411,11 @@ def private enc_gemm_mm_tensor(enc : MetalComputeEncoder?; bwblob : MetalBuffer?
         if (tall != null) {
             r0 = rows / 128l * 128l
             if (half_form) {
-                enc_gemm_mm_th128_c(enc, bwblob, wboff, bwblob, bxh, 0ul, by, yoff, bk, bn, r0, d)
+                if (g_pf_env_dbuf && g_pf_pso_mm_thdb128 != null) {
+                    enc_gemm_mm_thdb128_c(enc, bwblob, wboff, bwblob, bxh, 0ul, by, yoff, bk, bn, r0, d)
+                } else {
+                    enc_gemm_mm_th128_c(enc, bwblob, wboff, bwblob, bxh, 0ul, by, yoff, bk, bn, r0, d)
+                }
             } else {
                 enc_gemm_mm_t128_c(enc, bwblob, wboff, bwblob, bx, 0ul, by, yoff, bk, bn, r0, d)
             }
@@ -5068,6 +5118,7 @@ var private g_pf_env_tall = true
 var private g_pf_env_qkr = true
 var private g_pf_env_grid1d = false
 var private g_pf_env_lastrow = true
+var private g_pf_env_dbuf = true
 
 var private CVT_MIN_ROWS = 256l          //!< sidecar knob "metal_cvt_min_rows" — cached at init
 var private TALL_OCC_FLOOR = 64l         //!< sidecar knob "metal_tall_floor" — cached at init
@@ -5103,6 +5154,7 @@ def dasllama_metal_prefill_register() {
     g_pf_env_qkr = g_env_metal.qk_rope
     g_pf_env_grid1d = g_env_metal.grid1d
     g_pf_env_lastrow = g_env_metal.lastrow
+    g_pf_env_dbuf = g_env_metal.dbuf
     g_pf_env_span = g_env_metal.span
     g_pf_env_logits = g_env_metal.logits
     g_pf_env_attn = g_env_metal.attn

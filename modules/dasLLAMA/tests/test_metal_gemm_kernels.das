@@ -583,6 +583,105 @@ def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     delete wrow
 }
 
+// the double-buffered staging twin vs the single-tile tall staged-q8 form: same staged f16
+// rounding, same 64-chunk order, so the outputs must match BIT-exact (the DBUF A/B rail's
+// numerics contract); kdim % 64 == 32 arms the tail chunk on both
+def private q8_dbuf_gate(t : T?; dev, queue; m, kdim, ndim : int) {
+    let tag = "q8_dbuf m={m} k={kdim} n={ndim}"
+    var err : string
+    var pso_a = pipeline_from_source(dev, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_fastmath, err)
+    var pso_b = pipeline_from_source(dev, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_entry, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_fastmath, err)
+    if ((pso_a == null || pso_b == null) && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        return
+    }
+    t |> success(pso_a != null && pso_b != null, "{tag}: pipeline: {err}")
+    return if (pso_a == null || pso_b == null)
+    let nb = kdim / 32
+    var blob : array<uint8>
+    var wdeq : array<float>
+    q8_blob_fill(ndim, nb, blob, wdeq)
+    var xf : array<float>
+    q8_x_fill(m * kdim, xf)
+    var xh : array<float16>
+    xh |> resize(m * kdim)
+    for (i in range(m * kdim)) {
+        xh[i] = float16(xf[i])
+    }
+    var bw = buf_upload(dev, blob)
+    var bx = buf_upload(dev, xh)
+    var by_a = buf_fill(dev, m * ndim, -1000.0)
+    var by_b = buf_fill(dev, m * ndim, -500.0)   // distinct poison fills: an unwritten tile reds the compare
+    var bk = buf_u32(dev, uint(kdim))
+    var bn = buf_u32(dev, uint(ndim))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso_a)
+        metal_set_threadgroup_memory_length(enc, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_tgmem, 0)
+        metal_set_buffer(enc, bw, 0ul, 0)
+        metal_set_buffer(enc, bw, 0ul, 1)
+        metal_set_buffer(enc, bx, 0ul, 2)
+        metal_set_buffer(enc, by_a, 0ul, 3)
+        metal_set_buffer(enc, bk, 0ul, 4)
+        metal_set_buffer(enc, bn, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        metal_set_pipeline(enc, pso_b)
+        metal_set_threadgroup_memory_length(enc, MetalQ8MulMmTHDb128_metal_q8_mulmm_db_msl_tgmem, 0)
+        metal_set_buffer(enc, by_b, 0ul, 3)
+        metal_dispatch_threadgroups(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        var bad = 0
+        unsafe {
+            let pa = reinterpret<uint const?>(metal_buffer_contents(by_a))
+            let pb = reinterpret<uint const?>(metal_buffer_contents(by_b))
+            for (i in range(m * ndim)) {
+                if (pa[i] != pb[i]) {
+                    if (bad < 4) {
+                        to_log(LOG_ERROR, "{tag}: [{i}] single={pa[i]} dbuf={pb[i]}\n")
+                    }
+                    bad++
+                }
+            }
+        }
+        t |> equal(bad, 0)
+        // the single-tile arm also matches the CPU dequant oracle within the shared envelope -
+        // proving the pair is not bit-equal-garbage
+        var want : array<float>
+        var env : array<float>
+        want |> resize(m * ndim)
+        env |> resize(m * ndim)
+        for (j in range(ndim)) {
+            for (r in range(m)) {
+                var acc = 0.0lf
+                var ev = 0.0lf
+                for (c in range(kdim)) {
+                    let p = double(wdeq[j * kdim + c]) * double(xf[r * kdim + c])
+                    acc += p
+                    ev += abs(p)
+                }
+                want[r * ndim + j] = float(acc)
+                env[r * ndim + j] = float(ev)
+            }
+        }
+        t |> equal(buf_mismatch_env(by_a, want, env, 2e-3, tag), 0)
+        delete want
+        delete env
+    }
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(by_a)
+    metal_release(by_b)
+    metal_release(bk)
+    metal_release(bn)
+    metal_release(pso_a)
+    metal_release(pso_b)
+    delete blob
+    delete wdeq
+    delete xf
+    delete xh
+}
+
 // the bake-mirror gate: the image mint's CPU dequant core against the GPU dev-W dequant
 // kernel, BIT-exact over the whole panel (the sec.2.1h baked-panel contract), plus a
 // flipped-halfword control proving the compare reads both sides
@@ -1857,6 +1956,10 @@ def test_metal_gemm_kernels(t : T?) {
                 for (fmt in [0, 4, 5, 6]) {
                     devw_bake_mirror_gate(t, dev, queue, fmt, 64, 512)
                 }
+                // the double-buffered staging twin, bit-equal to the single-tile form
+                q8_dbuf_gate(t, dev, queue, 128, 256, 64)
+                q8_dbuf_gate(t, dev, queue, 128, 288, 128)   // kdim%64 == 32: the tail chunk on both arms
+                q8_dbuf_gate(t, dev, queue, 256, 512, 128)   // two M-tiles, deeper K
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64, halfx = true)

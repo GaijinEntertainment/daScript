@@ -448,8 +448,10 @@ def public tmm2d_q8b_f32(m, n, sgs : uint; wsh : float16 const?; wqb : int8 cons
 //! cooperative C across the whole K loop. Same blob views and arg meanings as tmm2d_q8b_f32;
 //! `tid` is the caller's gl_LocalInvocationIndex (the staging stride). The CPU replay mirrors
 //! the f16 rounding of the staged dequant so conformance stays exact on f16-exact fixtures.
-//! `bk` (call-site constant 32/64) is the staged K-chunk depth: 64 halves the staging barriers
-//! (raced 5-11% per GEMM on M5) and needs an n*64 `wt`; a kk % 64 == 32 tail runs one 32-chunk.
+//! `bk` (call-site constant 32/64/128) is the staged K footprint: 64 halves the staging
+//! barriers (raced 5-11% per GEMM on M5) and needs an n*72-half `wt`; 128 = 64-deep
+//! DOUBLE-BUFFERED (two ping-pong tiles in an n*144-half `wt`, ONE barrier per chunk -
+//! staging chunk b+1 overlaps the run on chunk b); a kk % 64 == 32 tail runs one 32-chunk.
 [unused_argument(sgs, wt, tid, bk), sideeffects]
 def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 const?; a : float const?; lda : uint; var c : float?; ldc : uint; kk : uint; ldwb : uint; tid : uint; bk : uint = 32u) {
     if (gl_LocalInvocationID.x != 0u) {

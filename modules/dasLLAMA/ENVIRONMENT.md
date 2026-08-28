@@ -78,6 +78,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_QK_ROPE` | flag | on | Fused prefill qk_norm+rope pass (one panel rewrite, q panel dual-stores its f16 twin); 0 restores the split norm/rope/cvt dispatches (the A/B rail). |
 | `DASLLAMA_METAL_GRID1D` | flag | off | 1-D-grid tall hmm GEMM twin: the threadgroup launch order is forced linear (M-fastest) instead of the driver's 2-D walk; experiment rail, off by default. |
 | `DASLLAMA_METAL_LASTROW` | flag | on | Last-layer FFN tail narrowing: the final dense layer's FFN runs the last row alone (only the classifier reads past the final attention); 0 pins the full-panel tail (the A/B rail). Session keep_hidden opts a forward out. |
+| `DASLLAMA_METAL_DBUF` | flag | on | Double-buffered W staging on the tall staged-q8 prefill GEMM: two ping-pong tiles, one barrier per 64-chunk, staging overlaps the tensor op; 0 pins the single-tile form (the A/B rail). |
 | `DASLLAMA_METAL_NCB` | number | ~4 layers/chunk | Command-buffer split: each chunk commits as encoded so the scheduler overlaps chunk k with k-1. |
 | `DASLLAMA_METAL_UNRETAINED` | flag | off | Skip per-dispatch retain/release on the prefill command buffers. |
 | `DASLLAMA_METAL_DEVW_RESIDENT` | number | 0 (off) | MB budget for RESIDENT dev-W f16 panels: static weights dequantize ONCE and the panels persist across forwards (vs the per-forward scratch re-dequant). Sites past the budget fall back to scratch. |
