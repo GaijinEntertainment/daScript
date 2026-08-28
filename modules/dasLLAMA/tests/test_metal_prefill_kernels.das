@@ -618,6 +618,7 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_gemv_q51_gate(t, dev, queue, 64, 24, 5, 3, 3, true)    // batch streams, down form
                 moe_mulmm_q51_gate(t, dev, queue, 64, 64, [32, 40, 64])    // padded tail on expert 1
                 moe_mulmm_q51_gate(t, dev, queue, 96, 128, [8, 96])        // 2 col tiles, tiny run + multi-tile
+                moe_mulmm_q51_gate(t, dev, queue, 64, 64, [136, 32])       // counts crossing 128 — both tall-pair stamps live
 
                 // ===== mx4 expert GEMV (reworked to the q51 shape — gpt-oss's decode kernel) =====
                 moe_gemv_mx4_gate(t, dev, queue, 96, 24, 5, 3, 1, false, false)   // gate/up (shared x)
@@ -2214,6 +2215,64 @@ def private moe_gemv_mx4_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
 // The gathered q51 mul_mm: ne experts with padded-CSR row runs (gather = 0 bucket-rows mode);
 // exact-arithmetic planes (the A tile's f16(d*q + m) values are dyadic <= 63.25 — f16-exact),
 // int x rows — every simdgroup accumulate is exact, so the whole padded y compares BIT-exact.
+// Metal-4 tensor toolchain probe (the gemm file's twin, file-private there): one crowned
+// twin PSO compiling proves the toolchain, so a later twin compile failure is a RED
+var private g_m4_probed = false
+var private g_m4_ok = false
+
+def private metal4_tensor_available(dev) : bool {
+    if (!g_m4_probed) {
+        g_m4_probed = true
+        var err : string
+        var p1 = pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err)
+        var p2 = pipeline_from_source(dev, MetalBf16MulMmT_metal_bf16_mulmm_t_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_fastmath, err)
+        g_m4_ok = p1 != null || p2 != null
+        metal_release(p1)
+        metal_release(p2)
+    }
+    return g_m4_ok
+}
+
+//! device-free: the dev-W knee arithmetic (the pick the board's deep-dense cells ride).
+//! Expectations hold at the DEVW_SMALL_PANEL default (32 MiB) - no sidecar loads here
+[test, unused_argument(t)]   // off-Apple the body feints without touching t
+def test_devw_tile_pick(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let cap = 16ul * 1024ul * 1024ul * 1024ul
+        // small panel (16 MiB, narrow N) serves whole
+        t |> equal(devw_tile_pick(256l, 4096l, 2048l, false, cap), 1l)
+        // deep-dense up/gate (320 MiB, d/64 = 512): first divisor tile under the small knee is
+        // 16 - unreachable under a 2..8 cap
+        t |> equal(devw_tile_pick(2048l, 32768l, 5120l, false, cap), 16l)
+        // deep-dense down (long-K, d/64 = 80): tc = 10, and rows below the long-K floor decline
+        t |> equal(devw_tile_pick(2048l, 5120l, 32768l, false, cap), 10l)
+        t |> equal(devw_tile_pick(512l, 5120l, 32768l, false, cap), 0l)
+        // over-knee under the tiled-rows floor: no form serves - unless the slow-fallback class
+        // lowers the floor to 512
+        t |> equal(devw_tile_pick(512l, 32768l, 5120l, false, cap), 0l)
+        t |> equal(devw_tile_pick(512l, 32768l, 5120l, true, cap), 16l)
+        // mid panel (40 MiB) needs the big-rows floor
+        t |> equal(devw_tile_pick(2048l, 4096l, 5120l, false, cap), 1l)
+        t |> equal(devw_tile_pick(1024l, 4096l, 5120l, false, cap), 0l)
+    } else {
+        feint("das_metal is not built on this platform; the knee predicate is not compiled\n")
+    }
+}
+
+//! device-free: the dense tall-kq pick - the byte knee, the 128-row floor, and the
+//! set_metal_prefill_tall A/B seat (the seat clause is what the override contract pins)
+[test, unused_argument(t)]   // off-Apple the body feints without touching t
+def test_tallkq_pick(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> success(tallkq_pick(512l, 16384l, 4096l, true), "over-knee tall panel takes")
+        t |> success(!tallkq_pick(512l, 16384l, 4096l, false), "set_metal_prefill_tall(false) pins the tall form off")
+        t |> success(!tallkq_pick(96l, 16384l, 4096l, true), "under the 128-row floor declines")
+        t |> success(!tallkq_pick(512l, 4096l, 4096l, true), "under the byte knee declines")
+    } else {
+        feint("das_metal is not built on this platform; the knee predicate is not compiled\n")
+    }
+}
+
 def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : array<int>) {
     var err : string
     var pso = pipeline_from_source(dev, metal_moe_mulmm_q51_msl, metal_moe_mulmm_q51_msl_entry, metal_moe_mulmm_q51_msl_fastmath, err)
@@ -2285,6 +2344,130 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
     }
     t |> success(ran, "moe q51 mulmm dispatch kdim={kdim} ndim={ndim} ne={ne} pad={pad}: {err}")
     t |> equal(buf_mismatch_exact(by, want), 0)
+    // the contiguous tensor twin (TH stamp over an f16 X): same exact-arithmetic oracle —
+    // pow2 d / quarter m / int x all stage to f16 losslessly, so the twin is BIT-exact too.
+    // The leg keys on the ENGINE's own pick predicate: weakening moe_q51_twin_fits dispatches
+    // the twin on the kdim=96 fixture, whose 64-deep K walk reads off the plane and mismatches.
+    if (!moe_q51_twin_fits(uint(kdim))) {
+        metal_release(bw)
+        metal_release(bs)
+        metal_release(bx)
+        metal_release(by)
+        metal_release(bcnt)
+        metal_release(bbase)
+        metal_release(bbkt)
+        metal_release(pso)
+        delete qp
+        delete sp
+        delete wref
+        delete cnt
+        delete basep
+        delete xv
+        delete want
+        return
+    }
+    var terr : string
+    var tw_pso = pipeline_from_source(dev, MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl, MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_entry, MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_fastmath, terr)
+    if (tw_pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "moe q51 mulmm twin: no Metal-4 tensor toolchain - twin leg skipped\n")
+    } else {
+        t |> success(tw_pso != null, "moe q51 mulmm twin: pipeline: {terr}")
+    }
+    if (tw_pso != null) {
+        var xh <- [for (v in xv); float16(v)]
+        var bxh = buf_upload(dev, xh)
+        var by_t = buf_fill(dev, pad * ndim, -500.0)
+        let rant = with_compute_encoder(queue, terr) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, tw_pso)
+            metal_set_threadgroup_memory_length(enc, MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_tgmem, 0)
+            metal_set_buffer(enc, bs, 0ul, 0)
+            metal_set_buffer(enc, bw, 0ul, 1)
+            metal_set_buffer(enc, bxh, 0ul, 3)
+            metal_set_buffer(enc, by_t, 0ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+            metal_set_buffer(enc, bcnt, 0ul, 6)
+            metal_set_buffer(enc, bbase, 0ul, 7)
+            metal_dispatch_threadgroups(enc, uint3(uint(tiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+        }
+        t |> success(rant, "moe q51 mulmm twin: encode: {terr}")
+        if (rant) {
+            t |> equal(buf_mismatch_exact(by_t, want), 0)
+        }
+        // the float-X T stamp (the bxh == null pick arm): stages raw f32 rows to the same
+        // f16 tiles, so the int-valued fixtures stay bit-exact through it too
+        var tf_pso = pipeline_from_source(dev, MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl, MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_entry, MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_fastmath, terr)
+        t |> success(tf_pso != null, "moe q51 mulmm T stamp: pipeline: {terr}")
+        if (tf_pso != null) {
+            var by_f = buf_fill(dev, pad * ndim, -600.0)
+            let ranf = with_compute_encoder(queue, terr) $(enc : MetalComputeEncoder?) {
+                metal_set_pipeline(enc, tf_pso)
+                metal_set_threadgroup_memory_length(enc, MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_tgmem, 0)
+                metal_set_buffer(enc, bs, 0ul, 0)
+                metal_set_buffer(enc, bw, 0ul, 1)
+                metal_set_buffer(enc, bx, 0ul, 3)
+                metal_set_buffer(enc, by_f, 0ul, 4)
+                metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+                metal_set_buffer(enc, bcnt, 0ul, 6)
+                metal_set_buffer(enc, bbase, 0ul, 7)
+                metal_dispatch_threadgroups(enc, uint3(uint(tiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+            }
+            t |> success(ranf, "moe q51 mulmm T stamp: encode: {terr}")
+            if (ranf) {
+                t |> equal(buf_mismatch_exact(by_f, want), 0)
+            }
+            metal_release(by_f)
+            metal_release(tf_pso)
+        }
+        // the tall pair: 128-floor stamp + remainder stamp over the same fixtures — the
+        // toolchain is proven (tw_pso compiled), so a pair PSO that fails to compile is a RED
+        var tl_pso = pipeline_from_source(dev, MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl, MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_entry, MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_fastmath, terr)
+        var rm_pso = pipeline_from_source(dev, MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl, MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_entry, MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_fastmath, terr)
+        t |> success(tl_pso != null && rm_pso != null, "moe q51 mulmm tall pair: pipeline: {terr}")
+        if (tl_pso != null && rm_pso != null) {
+            var maxce = 0
+            for (c in cnt) {
+                maxce = max(maxce, int(c))
+            }
+            var by_p = buf_fill(dev, pad * ndim, -700.0)
+            let ranp = with_compute_encoder(queue, terr) $(enc : MetalComputeEncoder?) {
+                metal_set_pipeline(enc, tl_pso)
+                metal_set_threadgroup_memory_length(enc, MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_tgmem, 0)
+                metal_set_buffer(enc, bs, 0ul, 0)
+                metal_set_buffer(enc, bw, 0ul, 1)
+                metal_set_buffer(enc, bxh, 0ul, 3)
+                metal_set_buffer(enc, by_p, 0ul, 4)
+                metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+                metal_set_buffer(enc, bcnt, 0ul, 6)
+                metal_set_buffer(enc, bbase, 0ul, 7)
+                metal_dispatch_threadgroups(enc, uint3(uint((maxce + 127) / 128), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+                metal_set_pipeline(enc, rm_pso)
+                metal_set_threadgroup_memory_length(enc, MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_tgmem, 0)
+                metal_set_buffer(enc, bs, 0ul, 0)
+                metal_set_buffer(enc, bw, 0ul, 1)
+                metal_set_buffer(enc, bxh, 0ul, 3)
+                metal_set_buffer(enc, by_p, 0ul, 4)
+                metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+                metal_set_buffer(enc, bcnt, 0ul, 6)
+                metal_set_buffer(enc, bbase, 0ul, 7)
+                metal_dispatch_threadgroups(enc, uint3(4u, uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+            }
+            t |> success(ranp, "moe q51 mulmm tall pair: encode: {terr}")
+            if (ranp) {
+                t |> equal(buf_mismatch_exact(by_p, want), 0)
+            }
+            metal_release(by_p)
+        }
+        if (tl_pso != null) {
+            metal_release(tl_pso)
+        }
+        if (rm_pso != null) {
+            metal_release(rm_pso)
+        }
+        metal_release(bxh)
+        metal_release(by_t)
+        metal_release(tw_pso)
+        delete xh
+    }
     metal_release(bw)
     metal_release(bs)
     metal_release(bx)

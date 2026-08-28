@@ -1962,7 +1962,7 @@
           "ram_config":"8×32 GB @ 2666 MT/s",
           "power_plan":"High performance",
           "smt":"on",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "asr:jfk.wav":{
@@ -2051,7 +2051,7 @@
           "ram_config":"8×32 GB @ 2666 MT/s",
           "power_plan":"High performance",
           "smt":"on",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "asr:jfk.wav":{
@@ -2129,7 +2129,7 @@
           "ram_config":"8×32 GB @ 2666 MT/s",
           "power_plan":"High performance",
           "smt":"on",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "asr:jfk.wav":{
@@ -2229,7 +2229,7 @@
           "ram_config":"8×32 GB @ 2666 MT/s",
           "power_plan":"High performance",
           "smt":"on",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "asr:jfk.wav":{

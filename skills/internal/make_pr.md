@@ -3,8 +3,9 @@
 Complete every step in order; fix a failure before proceeding.
 
 **The mechanical gates are one command:** `daslang utils/internal/make-pr/main.das --` runs
-sync -> review-md walk -> dupes -> ast-verify -> jit-smoke (the last two auto-skip when the diff
-has no macro/AST or JIT surface), then chains `preflight --full` (`skills/internal/preflight.md`
+sync -> review-md walk -> stamp-reach -> dupes -> ast-verify -> jit-smoke (stamp-reach checks
+the changed record stores' engine stamps are reachable from HEAD - a rebase orphans them; the
+last two auto-skip when the diff has no macro/AST or JIT surface), then chains `preflight --full` (`skills/internal/preflight.md`
 maps each gate to its CI lane). `--only <gate>` reruns one; `--no-preflight` skips the chain; exit 2 names the red gate. This
 file is the authority on fix policy and on what the tool prints as STILL YOURS. Commit, run
 it, push once (one batched PR).

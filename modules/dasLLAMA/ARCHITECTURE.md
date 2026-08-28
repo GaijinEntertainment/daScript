@@ -13,7 +13,7 @@ Shipped-arc plan docs live in `history/dasLLAMA/` (the archive log is `history/R
 a `*_plan.md` in this folder is an ACTIVE arc's working plan. Passages retired from this
 document are archived in `history/dasLLAMA/architecture_retired_notes.md`.
 
-Seven companions carry this document's sections, each keeping its sections' numbers. The
+The companions carry this document's sections, each keeping its sections' numbers. The
 routing block under each numbered heading below is the index: it names every companion that
 section runs to, and the sections that companion holds.
 
@@ -38,8 +38,10 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 
 - `ARCHITECTURE_IMAGE.md` - sec.2.1-2.1g: the prepared-image rail.
 - `ARCHITECTURE_GPU.md` - sec.2.2b: the tensor-GEMM and fused-attention shapes that measured out.
-- `ARCHITECTURE_RUNTIME.md` - sec.2.2-2.4, 2.6-2.9, 2.11, 2.12: kernel shape, caches, lint
-  policy, knobs, coverage, the GPU ramp.
+- `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2i: the Metal prefill driver's GEMM form ladder,
+  dev-W knee map, attention slab, MoE bucket rail, and chunked submission.
+- `ARCHITECTURE_RUNTIME.md` - sec.2.2, 2.3, 2.3a, 2.4, 2.6-2.9, 2.11, 2.12: kernel shape,
+  caches, lint policy, knobs, coverage, the GPU ramp.
 - `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10: the benchmark rig, the tune gate, and the
   sanctioned instrumentation rails.
 

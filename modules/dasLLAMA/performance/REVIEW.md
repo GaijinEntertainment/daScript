@@ -8,29 +8,36 @@ validate through `../dasllama/dasllama_exchange_schema.das` instead.** The engin
 `dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
 that gate is a defect.
 
-**A diff that adds a row to `records/` whose `hardware.remote_desktop` is anything but `off`,
-or a sidecar whose `provenance.noise` is not `ok`, is a defect - re-mint on a box with no
+**A diff that writes a row to `records/` (adds one or re-mints one in place) whose
+`hardware.remote_desktop` is anything but `off` is a defect - re-mint on a box with no
 remote-desktop session.**
 
-**A diff that adds a commit stamp to `records/` naming a commit the branch under review cannot
-reach is a defect - re-mint.** The commit stamps are a `das` row's `sha` and a sidecar's
+**A diff that writes a sidecar to `records/` whose `provenance.noise` is not `ok` is a
+defect - re-mint on a quiet box.**
+
+**A diff that writes a commit stamp to `records/` naming a commit the branch under review
+cannot reach is a defect - re-mint, or re-stamp to a reachable commit whose
+`modules/dasLLAMA/` tree is byte-identical to the tree that was measured, with the PR body
+naming the re-stamp.** The commit stamps are a `das` row's `sha` and a sidecar's
 `provenance.engine_sha`. A stamp that resolves to no commit at all counts as unreachable.
 
-**A diff that adds a reference-engine row to `records/` whose `sha` is not the standing ref pin
+**A diff that writes a reference-engine row to `records/` whose `sha` is not the standing ref pin
 (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`) is a defect - re-mint.**
 
-**A diff that adds a sidecar to `records/` whose `provenance.dasllama_version` differs from
+**A diff that writes a sidecar to `records/` whose `provenance.dasllama_version` differs from
 `DASLLAMA_VERSION` (`../dasllama/dasllama_version.das`) is a defect - re-mint.** Read
 `DASLLAMA_VERSION` at the commit the sidecar's `provenance.engine_sha` names.
 
-**A diff that adds a row to `records/<box>.json` mints that row from a board cell.** A board
+**A diff that writes a row to `records/<box>.json` mints that row from a board cell.** A board
 cell is one `gen_bench_records.das` spawns, or a manual `../benchmarks/lcpp_bench.das` cell
-its `../PROFILE.md` section documents. A timing taken any other way settles its own decision
-in its own report. Those other ways include a lab's A/B arm, a reading compared across two
-processes or two commits, and a wall measured from outside the benchmark process.
+its `../PROFILE.md` section documents. A timing taken any other way stays out of `records/`
+and settles its own decision in the report where it was taken.
 
-**A diff that adds a row to `records/<box>.json` times that row with the released `lcpp_bench`
-exe.** That exe is `../benchmarks/lcpp_bench.das` built by `daspkg release`.
+**A diff that writes a `das` row to `records/<box>.json` times that row with the released
+`lcpp_bench` exe.** That exe is `../benchmarks/lcpp_bench.das` built by `daspkg release`.
+
+**A diff that writes a reference-engine row to `records/<box>.json` times that row with the
+reference exe the ref pin builds.**
 
 **A field added to what `write_bench_records` (`profile_common.das`) writes is added to
 `../dasllama/dasllama_exchange_schema.das`'s run validation in the same change** - the
@@ -49,7 +56,9 @@ strip, and the rails.
 **A diff that adds a submission path around `exchange_strip_private` is a defect, even where
 the strip itself is intact.**
 
-**A boot path that fails when the exchange lookup fails is a defect.**
+**A tune-boot path (`exchange_scope_resolver` / `exchange_boot_submit_check`,
+`../dasllama/dasllama_exchange.das`) that fails when `exchange_lookup` fails is a defect -
+it falls through to the local sidecar and the baked winners.**
 
 **Outside `model_specs()` (text, in `model_specs.das`) and `asr_catalog()` (audio, in
 `profile_common.das`), a `.das` function under this folder that lists model files, quants,

@@ -54,7 +54,17 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalMoeMulMmK5TH128", "MetalMoeMulMmK5THR",
     "MetalMoeMulMmK6TH128", "MetalMoeMulMmK6THR",
     "MetalMoeMulMmQ8TH128", "MetalMoeMulMmQ8THR",
-    "MetalMoeMulMmMx4TH128", "MetalMoeMulMmMx4THR"
+    "MetalMoeMulMmMx4TH128", "MetalMoeMulMmMx4THR",
+    // the q5_1 MoE tensor twins, ALL stamps: no stocked carrier holds a Q5_1 expert plane
+    // (the zoo's MoE carriers are Q8_0 / Q5_K_M / Q4_K_M / mxfp4; Q5_1 appears only when
+    // expert_ffn % 256 != 0 forces the converter off K-quants). Their coverage is the
+    // bit-exact twin + tall-pair gate in test_metal_prefill_kernels.das (moe_mulmm_q51_gate)
+    "MetalMoeMulMmQ51T", "MetalMoeMulMmQ51TH",
+    "MetalMoeMulMmQ51TH128", "MetalMoeMulMmQ51THR",
+    // the dense tall in-kernel-dequant kq stamps: they engage only when a site's f16 panel
+    // would reach TALLKQ_MIN_PANEL (96 MiB) - the zoo's small carriers top out far below it.
+    // Their coverage is the tall kernel-unit leg in test_metal_gemm_kernels.das (kq_mulmm_gate)
+    "MetalKqMulMmK4TH128", "MetalKqMulMmK5TH128", "MetalKqMulMmK6TH128"
 ]
 
 def private counting_prompt(start, last : int) : string {

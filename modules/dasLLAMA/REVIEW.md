@@ -11,6 +11,9 @@ two followup ledgers.
 **A timing rig - a script whose output is a measured wall or rate - wherever the diff puts
 it, answers to `benchmarks/REVIEW.md`.**
 
+**A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
+code comment, or a PR body - or adds a servable capability applies `REVIEW_MEASUREMENT.md`.**
+
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
 answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj, or an image or audio
@@ -63,6 +66,7 @@ that can change between dispatches goes in a uniform, a kargs field, or an `@off
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`) - keep the multiply order the code already has.** A regrouping
 moves the angles in the last bits and flips token-exact fixtures.
+
 **A diff that changes a kernel-selection predicate in `dasllama/` is based on timing that ran
 both variants interleaved in one process, under one instrument.** The same holds for a
 constant in `dasllama/` whose value was chosen by timing two candidates against each other. A
@@ -128,50 +132,6 @@ happens is not an override, and a CLI flag is never one. The announce is a line 
 where the override changes the outcome, naming it by the spelling a user would set - the
 environment variable name, the sidecar key, or the setter's function name. Per-site repeats are
 fine. A set-but-inert override stays silent.
-
-**A self-measured served-turn time entering `PERF_LEDGER.md` comes from the released
-`lcpp_bench` exe, never from the `-jit` script.** A served-turn time is a tok/s figure or a
-turn wall. The released exe is `benchmarks/lcpp_bench.das` built by `daspkg release`. It is
-spawned by `performance/gen_bench_records.das`, or run by hand where the cell's `PROFILE.md`
-section says so. A `--for-debug-purposes` row is a debug instrument. A tutorial's printed
-wall-clock is teaching output, feeding no board.
-
-**A subtraction of two measured walls written into `PERF_LEDGER.md` carries both raw walls
-in the entry.**
-
-**A diff that adds an entry to `PERF_LEDGER.md` names the instrument that produced the entry's
-reading.** The rule fires only for a reading no board cell produced. The entry also tags that
-reading `direction-grade` when the reading compares across two processes or two commits. The
-entry tags the reading `out-of-process` when the wall was measured from outside the benchmark
-process. A reading that is neither carries no tag.
-
-**A diff that adds an entry to `PERF_LEDGER.md` never records a lab's A/B selection timing.**
-That timing settles its adoption decision in the lab's own report and in the PR that lands the
-kernel. The ledger learns the winner only through a re-measured cell.
-
-**A new servable capability gets its cell in the same change**: a board row spawned by
-`performance/gen_bench_records.das`, or a manual `benchmarks/lcpp_bench.das` cell with its own
-`PROFILE.md` section. A servable capability is a modality, a family, or a serving path - a
-lane a user's turn can be served through, a q8 or f32 serving lane and a GPU tower included;
-a new family or serving path landing inside an existing cell re-mints that cell's row on at
-least one box instead.
-
-**A timing figure describing a served turn as a whole - tok/s, latency, a whole-turn model
-or engine comparison - is a defect wherever it is written down with no cell behind it: a
-checked-in doc, a ledger, a code comment, or a PR description.** The cell states its quant
-mode and stamps box and engine provenance, so a number can never silently describe a format
-nobody serves or a kernel set nobody ships. A rig-internal measurement margin - a crown
-delta, a noise floor, tuner timing - is settled by the sidecar or manifest that carries the
-value. A margin written into a source comment or a doc is a timing figure like any other.
-
-**A figure measuring one engine stage inside a served turn names the harness and flags that
-produced it.** A stage figure is a stage wall, a stage share, a stage speedup, or a
-cross-engine comparison of one stage. The rule holds wherever the figure is written down: a
-checked-in doc, a ledger, a code comment, or a PR description. A board cell's `pp`/`tg` rate
-and the whole wall of a `benchmarks/lcpp_bench.das` `-p`/`-n` cell measure the turn, not a
-stage, and are not stage figures. The naming sits in the figure's own sentence, in a table
-heading that covers the table's rows, or in a section-level provenance line that covers the
-paragraphs under it.
 
 **A change to user-facing API updates every place it is shown: a tutorial source, `.rst` page,
 docstring, help string, `README.md`, or checked-in document still showing the old call, flag, or

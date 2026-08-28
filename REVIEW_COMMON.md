@@ -27,6 +27,19 @@ reachable branch ships a test that fails without it; a diff that adds a branch n
 distinguishes is a defect. The audit procedure - including how to settle "would this test fail
 without the change?" - is `skills/tdd_audit.md`.
 
+**A diff that changes a function carrying `[arch(at="<doc>#<anchor>")]` - beyond comments -
+audits the anchor's other citing functions and the cited section: read the section, check it
+still describes the code and each citer still conforms, verdict per function.** The citers of
+one anchor share one mechanism; MCP `arch_sites` lists them.
+
+**A diff that adds, removes, or retargets an `[arch(at=...)]` citation audits the cited
+section against the code - both sections on a retarget.** The citation claims the section
+describes this function; verify it does.
+
+**A diff that changes an anchored section audits every function citing that anchor.** One
+audit pass over an anchor's section text and citer set discharges every audit duty the diff
+triggers on that anchor - the duties never cascade.
+
 **A rule that a test, a lint, or the folder's `REVIEW.das` enforces is deleted.** Automation
 replaces the rule; the checklist keeps at most "weakening that check is a defect." A rule
 that COULD be automated is a lint or `REVIEW.das` candidate - say so in the review round.
