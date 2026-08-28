@@ -218,6 +218,14 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    butterfly (2 subgroup shuffles per element) deleted, outq members array<int8>. Bit-exact
    by the gates; perf-neutral where the writers run hot (mm-mode 3B pair 7077 vs 7061, tg
    equal). Remaining tail: item (a) K-quant generalization, (d) decode_vector driver-blocked.
+   Item (a) OPENED with Q4_K (2026-08-28, commit f72694fbe): K4Cm2LBatch/K4Cm2MBatch - the
+   Q8 tile geometry with a Q4_K decode callback (nibble + per-32-group scale/min off the
+   repacked planes, (1, 256) layout blocks). Oracle-gated 0-off; probe: 35.8-38.2 TF/s vs
+   the kq tile's 12.0-12.7 on every Qwen3-4B role shape (~70% of Q8-cm2's rate - the
+   nibble+scale extraction). Wiring: pf_f16_feed admits k4, the feed flags are GROUP-wide
+   ANDs (a k6 sibling pins its group to the kq route - Q4_K_M mixes k4+k6 in one group).
+   Qwen3-4B Q4_K_M mode-3/4 pair: pp 1626 -> 2654 (+63%), tg equal, parity token-exact.
+   NEXT: the k6 decode callback (unpins the mixed groups - the rest of the 3x), then k5/q40.
    (ngfx GPU Trace, our gate loop vs their MUL_MAT loop; counters now read UNELEVATED):
    ours tensor 44.6 / L2 54.2 / l1tex 44.9 / dram 15.3, theirs tensor 56.1 / L2 23.8 /
    l1tex 27.6 / dram 29.7 - their cm2 keeps the MMA pipe ~26% busier and streams weights
