@@ -971,6 +971,14 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 aot_dtor = pair._1
             }
             generate_global_ctors_dtors(g_prim_t, emit_aot_object ? false : !(use_dll || gen_exe), aot_ctor, aot_dtor)
+            if (emit_aot_object) {
+                // before optimization: the folding this catches also deletes the evidence
+                let unresolved = collect_unresolved_address_globals(g_mod)
+                if (!(unresolved |> empty())) {
+                    reset_jit_globals_after_failure()
+                    panic("Internal jit error. AOT address globals left unresolved by the globinit ctor: {join(unresolved, ", ")}\n")
+                }
+            }
             if (g_jit_fast_math) {
                 apply_fast_math_to_module(g_mod)   // EXPERIMENT: stamp all FP ops fast (non-bit-exact ceiling)
             }

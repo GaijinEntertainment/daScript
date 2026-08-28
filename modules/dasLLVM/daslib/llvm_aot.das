@@ -10,6 +10,8 @@ require llvm/daslib/llvm_exe
 require llvm/daslib/llvm_dll_utils
 require daslib/ast_boost
 require daslib/rtti
+require daslib/safe_addr
+require strings
 
 //! LLVM-AOT registration pass. After the JIT visitor has generated + optimized the module (as for a
 //! normal exe), this adds the offline-AOT-object registration layer so a statically-linked .o binds
@@ -100,4 +102,36 @@ def public emit_aot_object_globinit(ctx : LLVMContextRef; mod : LLVMOpaqueModule
 def public build_llvm_aot_ctors(ctx : LLVMContextRef; mod : LLVMOpaqueModule?; var types : PrimitiveTypes?; var funcs : array<FunctionPtr>; var uids : UidNodes?; prog : Program?) : tuple<LLVMOpaqueValue?, LLVMOpaqueValue?> {
     let glob_ctor = emit_aot_object_globinit(ctx, mod, types, funcs, uids)
     return emit_aot_register_ctor_dtor(types, funcs, uids, prog, glob_ctor)
+}
+
+//! Names the DllName.glob() address globals nothing fills at load, for the caller to panic on.
+def public collect_unresolved_address_globals(mod : LLVMOpaqueModule?) : array<string> {
+    var bad : array<string>
+    var glob = LLVMGetFirstGlobal(mod)
+    while (glob != null) {
+        let init = LLVMGetInitializer(glob)
+        if (init != null && LLVMIsNull(init) != 0) {
+            var name_len = 0ul
+            let name = LLVMGetValueName2(glob, safe_addr(name_len))
+            if (name |> ends_with(" glob")) {
+                var loaded = false
+                var escaped = false
+                var use = LLVMGetFirstUse(glob)
+                while (use != null) {
+                    let user = LLVMGetUser(use)
+                    if (LLVMIsALoadInst(user) != null) {
+                        loaded = true
+                    } else {
+                        escaped = true   // stored into, or the address itself is passed on
+                    }
+                    use = LLVMGetNextUse(use)
+                }
+                if (loaded && !escaped) {
+                    bad |> push(clone_string(name))
+                }
+            }
+        }
+        glob = LLVMGetNextGlobal(glob)
+    }
+    return <- bad
 }
