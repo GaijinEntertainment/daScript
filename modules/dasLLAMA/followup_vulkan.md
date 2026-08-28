@@ -226,11 +226,15 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    ANDs (a k6 sibling pins its group to the kq route - Q4_K_M mixes k4+k6 in one group).
    Qwen3-4B Q4_K_M mode-3/4 pair: pp 1626 -> 2654 (+63%), tg equal, parity token-exact.
    Q6_K tiles LANDED PINNED (same day, commit d89b74681): oracle 0-off on both tiles, but
-   the rate collapsed - 9.3-13.4 TF/s vs the kq tile's 11.9 (the two-plane ql/qh compose
-   hits a driver cliff the k4 single-plane spelling avoids; unpinned e2e regressed 2654 ->
-   2436, so pf_f16_feed keeps k6 on the kq route). NEXT: the k6 decode-spelling chase
-   (diff against llama.cpp's dequantFuncQ6_K via the cm2x bisect method - probe arm `k6`
-   is armed), then k5/q40. The k4 route is the template: probe first, wire second.
+   the rate collapsed to 9.3-13.4 TF/s vs the kq tile's 11.9 - unpinned e2e regressed.
+   Q6_K CLIFF FOUND AND FIXED (same day, commit 4603a7373): the k6x bisect (nil 59.6 /
+   flat 39.7 / ql 47.8 / pair 13.4) proved the two-plane 6-bit compose costs only ~33% -
+   the killer was ONE byte4 DYNAMIC select in the sub-scale extract (unpack8(word)[i&3]),
+   the same death shape the Q8 chase found; byte2 [i&1] selects are fine. Respelled as
+   shift + arithmetic-shift sign extension: 12.8 -> 32.9 TF/s. RULE for every future
+   decode: NEVER index unpack8 of a 32-bit word dynamically - shift+mask, or byte2 [i&1].
+   k6 UNPINNED: Qwen3-4B Q4_K_M pp 1626 (mode 3) -> 2669 (k4) -> 3188 (k4+k6) = +96%.
+   NEXT: k5/q40 stamps (mechanical now the trap is named), then (d) driver-blocked.
    (ngfx GPU Trace, our gate loop vs their MUL_MAT loop; counters now read UNELEVATED):
    ours tensor 44.6 / L2 54.2 / l1tex 44.9 / dram 15.3, theirs tensor 56.1 / L2 23.8 /
    l1tex 27.6 / dram 29.7 - their cm2 keeps the MMA pipe ~26% busier and streams weights
