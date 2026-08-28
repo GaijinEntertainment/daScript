@@ -777,7 +777,7 @@ def private run_probe {
     }
     var only = ""
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "their") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "their" || a == "tl") {
             only = a
         }
     }
@@ -788,6 +788,14 @@ def private run_probe {
         }
         verify(ensure_cm2px_their() && ensure_cm2px_their2() && ensure_cm2px_min(), "their-blob pipelines must engage")
         run_their(8192, 3072, 256)
+        return
+    }
+    if (only == "tl") {
+        // tinyllama-1.1B role shapes (dim 2048, hidden 5632, kvd 256) - the small-model tile pick data
+        run_shape("tl gate", 5632, 2048, 512)
+        run_shape("tl down", 2048, 5632, 512)
+        run_shape("tl q/wo", 2048, 2048, 512)
+        run_shape("tl k/v ", 256, 2048, 512)
         return
     }
     if (only == "cm2x") {
