@@ -48,6 +48,47 @@ Four axes are opt-in, because each leaves parser-shaped AST behind:
 | `--synth-bind` | binds resolved pointers directly (`ExprVar.variable`, `ExprCall.func`, `ExprAddr.func`, `ExprConstEnumeration.enumType`, `ExprField.fieldIndex`) the way a macro does, rather than leaving the name for inference |
 | `--synth-pretype` | pre-sets `Expression._type`; infer treats a typed node as already inferred, so a wrong type reaches codegen |
 
+### Typed mode (`--synth-typed`)
+
+The four axes above all generate *ill-typed* AST on purpose, which is what finds
+crashes - but it also means inference stops at the first error, so 85-90% of runs
+end in a compiler error and the deep half of the type checker is never reached.
+Typed mode is the other half of the tool: it builds each expression bottom-up
+from a requested type, so the program is **well-typed by construction**, every
+seed compiles clean, and inference runs to the end - through overload resolution,
+generic instantiation, make-local and codegen.
+
+```
+daslang utils/internal/ast-fuzz/main.das -- --bin bin/daslang --threads 16 \
+    --seeds 4800 --synth-typed --synth-funcs 4 --synth-size 8 --synth-depth 4
+```
+
+A compiler **error** in typed mode is a generator bug, not a finding: the whole
+contract is that these programs are legal. What still counts is a crash, a hang,
+or a verifier report.
+
+The type universe is closed and addressed by an int code, so a `TypeDecl` is
+rebuilt fresh at every use and no node is ever shared between two slots:
+
+| Code | Types |
+|---|---|
+| basic | `int` `uint` `float` `double` `bool` `string` `int64` `uint64`, the int/float 2-3-4 vectors, `void` |
+| `T_ARRAY + c` | `array<c>` |
+| `T_TABLE + c` | `table<string; c>` |
+| `T_STRUCT + i` | a synthesized structure whose fields are all basic codes |
+| `T_PTR + i` | a pointer to one |
+
+What it reaches that random mode cannot: `[[S f0=...]]` make-struct literals and
+CMRES returns, field reads, `new S` / `delete p`, `p ?? [[S ...]]` and
+`p?.f0 ?? lit`, `t["k"] = v` writes with `t?["k"] ?? lit` reads, `a := b` and
+`a <- b`, `invoke($ : T { return v })` closure blocks, string builders, `unsafe`
+and `try`/`recover` blocks, and two **generics** (`def f(a) { return a }` and
+`def f(a, b) { return a + b }`, both `auto`-argument and `auto`-result, filed via
+`add_generic`) that instantiate afresh at every call site.
+
+Function results are real types with a matching `return`, and each function may
+call the ones added before it, which keeps the call graph a DAG.
+
 Handled-type annotations come from a fixed list of real types (`HANDLED_TYPES` in
 `_ast_synth.das`) rather than being enumerated: `module_find_type_annotation`
 `static_cast`s whatever `findAnnotation` returns, so asking it for `export` would
@@ -94,6 +135,37 @@ or abort). A **timeout** is reported separately, because it is ambiguous: a real
 hang *or* just a slow compile. Re-run with a larger `--timeout` to tell them
 apart. Hitting the `--memcap` ceiling is reported as `resource`: unbounded
 allocation on a pathological input is not a compiler crash.
+
+## Source probes (`probe.das`)
+
+The generator builds trees no source can produce, so its findings are verifier checks by
+construction. `probe.das` asks the same question about **ordinary source text**, where a
+crash is a compiler bug with a repro anyone can paste:
+
+```
+daslang utils/internal/ast-fuzz/probe.das -- --bin bin/daslang --threads 12
+```
+
+Three matrices, each a cross product written out as one tiny program per cell:
+
+| matrix | what it varies | expected |
+|---|---|---|
+| `--mismatch` | 23 declared types x 10 wrong initializers x 30 uses | compiler ERRORS; a crash is a bug |
+| `--legal` | 20 legally typed values x the same 30 uses | nothing at all - this is the control |
+| `--depth` | nesting to 8192 (parens, unary, `array<>`, `+` chains) | nothing at all |
+
+A compiler error is the *expected* outcome of the mismatch matrix - the probes are
+deliberately ill-typed. Only an abnormal exit, a `CRASH:` banner or a timeout is reported,
+and each one is written out as `__probes/crash_<name>.das`.
+
+The mismatch matrix is what found the const-folding crash: a local `let` whose declared
+type and initializer disagree propagates its constant to the variable's uses, and folding
+then reads the literal's bits through the declared type's policy - `SIGSEGV at 0x2` for the
+literal `2`, `0x40200000` for `2.5`. That crash is fixed - a mismatched initializer is no longer substituted for the declared
+type (`ast_const_folding.cpp`, `tests/language/failed_const_init_type_folding.das`) - so all
+three matrices are gated as tests: `test_probe_mismatch_matrix_never_crashes`,
+`test_probe_legal_matrix_is_clean`, `test_probe_depth_matrix_is_clean`. The mismatch gate
+takes `--sample 5` to stay affordable; drop `--sample` for the full 6900-cell sweep.
 
 ## Verifier (`daslib/ast_verify`)
 

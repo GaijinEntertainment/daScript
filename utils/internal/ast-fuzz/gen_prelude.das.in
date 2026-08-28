@@ -31,6 +31,76 @@ let private BASETYPES = fixed_array(Type.tInt, Type.tInt8, Type.tInt16, Type.tIn
     Type.tShort4, Type.tUShort4, Type.tByte4, Type.tUByte4, Type.tUInt2,
     Type.tUInt3, Type.tUInt4, Type.fakeContext, Type.anyArgument, Type.option)
 let private ALIASES = fixed_array("P", "C", "D", "V", "E", "B", "__nope")
+
+// Typed mode works over a closed type universe addressed by an int code, so a
+// type is rebuilt fresh at every use and no TypeDecl is ever shared between two
+// slots. Codes below N_BASIC index TY_NAMES / TY_BASETYPES; T_ARRAY + c is
+// array<c>, T_TABLE + c is table<string; c>.
+let public T_INT = 0
+let public T_UINT = 1
+let public T_FLOAT = 2
+let public T_DOUBLE = 3
+let public T_BOOL = 4
+let public T_STRING = 5
+let public T_INT64 = 6
+let public T_UINT64 = 7
+let public T_INT2 = 8
+let public T_INT3 = 9
+let public T_INT4 = 10
+let public T_FLOAT2 = 11
+let public T_FLOAT3 = 12
+let public T_FLOAT4 = 13
+let public T_VOID = 14
+let public T_ARRAY = 100
+let public T_TABLE = 200
+let public T_STRUCT = 300
+let public T_PTR = 400
+let public T_TUPLE = 600
+// the tuple shapes typed mode can build, as (first, second) code pairs
+let private TUP_A = fixed_array(T_INT, T_STRING, T_FLOAT)
+let private TUP_B = fixed_array(T_FLOAT, T_INT, T_FLOAT2)
+let private TY_NAMES = fixed_array("int", "uint", "float", "double", "bool",
+    "string", "int64", "uint64", "int2", "int3", "int4", "float2", "float3",
+    "float4", "void")
+let private TY_BASETYPES = fixed_array(Type.tInt, Type.tUInt, Type.tFloat,
+    Type.tDouble, Type.tBool, Type.tString, Type.tInt64, Type.tUInt64,
+    Type.tInt2, Type.tInt3, Type.tInt4, Type.tFloat2, Type.tFloat3,
+    Type.tFloat4, Type.tVoid)
+let public VALUE_CODES = fixed_array(T_INT, T_UINT, T_FLOAT, T_DOUBLE, T_BOOL,
+    T_STRING, T_INT64, T_UINT64, T_INT2, T_INT3, T_INT4, T_FLOAT2, T_FLOAT3,
+    T_FLOAT4)
+let private NUM_CODES = fixed_array(T_INT, T_UINT, T_FLOAT, T_DOUBLE, T_INT64,
+    T_UINT64)
+let private INT_CODES = fixed_array(T_INT, T_UINT, T_INT64, T_UINT64)
+let private VEC_CODES = fixed_array(T_INT2, T_INT3, T_INT4, T_FLOAT2, T_FLOAT3,
+    T_FLOAT4)
+// `/` and `%` are absent on purpose: a folded division by a zero literal is its
+// own bug class, and mixing it in here would swamp every other classification.
+let private ARITH_OPS = fixed_array("+", "-", "*")
+let private INT_OPS = fixed_array("+", "-", "*", "&", "|", "^")
+let private CMP_OPS = fixed_array("==", "!=", "<", ">", "<=", ">=")
+let private FLOAT_FNS = fixed_array("sqrt", "sin", "cos", "floor", "ceil",
+    "abs", "saturate")
+
+// kind 0 is a concrete signature; kind 1 is `def f(a) { return a }` with an auto
+// argument and auto result, which instantiates afresh at every call site; kind 2
+// is the same but two arguments joined by a numeric operator.
+let public FN_CONCRETE = 0
+let public FN_GENERIC_ID = 1
+let public FN_GENERIC_OP = 2
+
+struct public TypedFn {
+    name : string
+    ret : int
+    kind : int
+    args : array<int>
+}
+
+struct public TypedStruct {
+    name : string
+    fields : array<int>
+}
+
 class public GenAll {
     seed : int4
     max_depth : int = 5
@@ -45,6 +115,16 @@ class public GenAll {
     bind_refs : bool = false
     pre_typed : bool = false
     @safe_when_uninitialized at : LineInfo
+    tv_names : array<string>
+    tv_codes : array<int>
+    tv_wr : array<bool>
+    typed_fns : array<TypedFn>
+    @do_not_delete ts_ptr : array<Structure?>
+    ts_fields : array<TypedStruct>
+    piped_fns : array<string>
+    run_mode : bool = false
+    res_code : int = T_VOID
+    n_named : int = 0
 
     def rnd(n : int) : int {
         return n <= 1 ? 0 : abs(random_int(seed)) % n
@@ -201,5 +281,827 @@ class public GenAll {
 
     def gen_stmt(depth : int) : ExpressionPtr {
         return gen_any(depth, true)
+    }
+
+    // ---- typed mode ------------------------------------------------------
+    // Everything below builds bottom-up from a requested type code, so the
+    // result is well-typed by construction: inference runs to completion and
+    // the program reaches codegen, instead of stopping at the first error.
+
+    def ty_decl(code : int) : TypeDeclPtr { // nolint:STYLE037 — one branch per type family; splitting hides the table
+        if (code >= T_TUPLE) {
+            var td = new TypeDecl(at = rat(), baseType = Type.tTuple)
+            var a = ty_decl(TUP_A[code - T_TUPLE])
+            td.argTypes |> emplace(a)
+            var b = ty_decl(TUP_B[code - T_TUPLE])
+            td.argTypes |> emplace(b)
+            return td
+        }
+        if (code >= T_PTR) {
+            var td = new TypeDecl(at = rat(), baseType = Type.tPointer)
+            td.firstType = ty_decl(T_STRUCT + code - T_PTR)
+            return td
+        }
+        if (code >= T_STRUCT) {
+            var td = new TypeDecl(at = rat(), baseType = Type.tStructure)
+            td.structType = ts_ptr[code - T_STRUCT]
+            return td
+        }
+        if (code >= T_TABLE) {
+            var td = new TypeDecl(at = rat(), baseType = Type.tTable)
+            td.firstType = new TypeDecl(at = rat(), baseType = Type.tString)
+            td.secondType = ty_decl(code - T_TABLE)
+            return td
+        }
+        if (code >= T_ARRAY) {
+            var td = new TypeDecl(at = rat(), baseType = Type.tArray)
+            td.firstType = ty_decl(code - T_ARRAY)
+            return td
+        }
+        return new TypeDecl(at = rat(), baseType = TY_BASETYPES[code])
+    }
+
+    def any_code() : int {
+        if (!empty(ts_ptr) && rnd(5) == 0) {
+            let i = rnd(length(ts_ptr))
+            return (rnd(3) == 0 ? T_PTR : T_STRUCT) + i
+        }
+        if (rnd(9) == 0) {
+            return T_TUPLE + rnd(length(TUP_A))
+        }
+        return VALUE_CODES[rnd(length(VALUE_CODES))]
+    }
+
+    def is_tuple(code : int) : bool {
+        return code >= T_TUPLE
+    }
+
+    def gen_tuple_val(code : int; depth : int) : ExpressionPtr {
+        let k = code - T_TUPLE
+        var e = new ExprMakeTuple(at = rat(), makeType = ty_decl(code))
+        var a = gen_val(TUP_A[k], depth + 1)
+        e.values |> emplace(a)
+        var b = gen_val(TUP_B[k], depth + 1)
+        e.values |> emplace(b)
+        return e
+    }
+
+    // `t._0` / `t._1` - tuple element access, one more route to a scalar
+    def gen_tuple_field(code : int; depth : int) : ExpressionPtr {
+        for (k in range(length(TUP_A))) {
+            let nm = tv_find(T_TUPLE + k)
+            if (empty(nm)) {
+                continue
+            }
+            if (TUP_A[k] == code) {
+                return new ExprField(at = rat(), value = var_ref(nm), name := "_0")
+            }
+            if (TUP_B[k] == code) {
+                return new ExprField(at = rat(), value = var_ref(nm), name := "_1")
+            }
+        }
+        return null
+    }
+
+    def is_struct(code : int) : bool {
+        return code >= T_STRUCT && code < T_PTR
+    }
+
+    def is_ptr(code : int) : bool {
+        return code >= T_PTR
+    }
+
+    // block<(int):int>, the shape the piped-landing search is written for
+    def block_type(code : int) : TypeDeclPtr {
+        var td = new TypeDecl(at = rat(), baseType = Type.tBlock)
+        td.firstType = ty_decl(code)
+        // the parser marks a block argument const, and the block passed at the call
+        // site has to carry the same flag or the types do not match
+        var arg = ty_decl(T_INT)
+        arg.flags.constant = true
+        td.argTypes |> emplace(arg)
+        // a block parameter is const, and the value handed over at the call site is a
+        // const block too - a non-const parameter would reject it
+        td.flags.constant = true
+        return td
+    }
+
+    def make_int_block(depth : int) : ExpressionPtr {
+        var blk = new ExprBlock(at = rat(), returnType = ty_decl(T_INT))
+        blk.blockFlags.isClosure = true
+        var at1 = ty_decl(T_INT)
+        at1.flags.constant = true
+        var av <- new Variable(at = rat(), name := "bx", _type = at1)
+        blk.arguments |> emplace(av)
+        var body = new ExprOp2(at = rat(), op := "+", left = var_ref("bx"),
+            right = gen_lit(T_INT))
+        var r = new ExprReturn(at = rat(), subexpr = body)
+        blk.list |> emplace(r)
+        return new ExprMakeBlock(at = rat(), _block = blk)
+    }
+
+    // `f(blk)` where f is (a : int = 1; b : int = 2; blk : block<...>): the positional
+    // match fails and inference has to pad the defaults and land the block, which is the
+    // only way the piped-landing search runs.
+    def gen_piped_call(code : int; depth : int) : ExpressionPtr {
+        if (code != T_INT || empty(piped_fns)) {
+            return null
+        }
+        var e = new ExprCall(at = rat(), name := piped_fns[rnd(length(piped_fns))])
+        var mb = make_int_block(depth)
+        e.arguments |> emplace(mb)
+        // the padding search only runs for a trailing-block call, which the parser marks
+        // with this flag - a plain positional call is rejected before it is reached
+        e.pipedCallArgument = true
+        return e
+    }
+
+    def is_num(code : int) : bool {
+        return find_index(NUM_CODES, code) >= 0
+    }
+
+    def is_int_code(code : int) : bool {
+        return find_index(INT_CODES, code) >= 0
+    }
+
+    def is_vec(code : int) : bool {
+        return find_index(VEC_CODES, code) >= 0
+    }
+
+    def tv_push(name : string; code : int; writable : bool = true) : void {
+        tv_names |> push(name)
+        tv_codes |> push(code)
+        tv_wr |> push(writable)
+    }
+
+    def tv_trim(n : int) : void {
+        tv_names |> resize(n)
+        tv_codes |> resize(n)
+        tv_wr |> resize(n)
+    }
+
+    // A function argument is const, so a write target has to come from the
+    // writable half of the scope.
+    def tv_find_w(code : int; need_write : bool) : string {
+        var n = 0
+        for (c, w in tv_codes, tv_wr) {
+            if (c == code && (w || !need_write)) {
+                n++
+            }
+        }
+        if (n == 0) {
+            return ""
+        }
+        var pick = rnd(n)
+        for (nm, c, w in tv_names, tv_codes, tv_wr) {
+            if (c != code || !(w || !need_write)) {
+                continue
+            }
+            if (pick == 0) {
+                return nm
+            }
+            pick--
+        }
+        return ""
+    }
+
+    def tv_find(code : int) : string {
+        return tv_find_w(code, false)
+    }
+
+    def fresh_name() : string {
+        n_named++
+        return "v{n_named}"
+    }
+
+    def var_ref(name : string) : ExpressionPtr {
+        return new ExprVar(at = rat(), name := name)
+    }
+
+    def call1(name : string; var a : ExpressionPtr) : ExpressionPtr {
+        var e = new ExprCall(at = rat(), name := name)
+        e.arguments |> emplace(a)
+        return e
+    }
+
+    def call2(name : string; var a : ExpressionPtr; var b : ExpressionPtr) : ExpressionPtr {
+        var e = new ExprCall(at = rat(), name := name)
+        e.arguments |> emplace(a)
+        e.arguments |> emplace(b)
+        return e
+    }
+
+    def gen_lit(code : int) : ExpressionPtr { // nolint:STYLE037 — one branch per scalar type; splitting hides the table
+        if (code == T_UINT) {
+            return new ExprConstUInt(at = rat(), value = uint(rnd(200)))
+        }
+        if (code == T_FLOAT) {
+            return new ExprConstFloat(at = rat(), value = float(rnd(200) - 100) * 0.5f)
+        }
+        if (code == T_DOUBLE) {
+            return new ExprConstDouble(at = rat(), value = double(rnd(200) - 100) * 0.25lf)
+        }
+        if (code == T_BOOL) {
+            return new ExprConstBool(at = rat(), value = rnd(2) == 0)
+        }
+        if (code == T_STRING) {
+            return new ExprConstString(at = rat(), value := rname())
+        }
+        if (code == T_INT64) {
+            return new ExprConstInt64(at = rat(), value = int64(rnd(10000)))
+        }
+        if (code == T_UINT64) {
+            return new ExprConstUInt64(at = rat(), value = uint64(rnd(10000)))
+        }
+        if (code == T_INT2) {
+            return new ExprConstInt2(at = rat(), value = int2(rnd(50), rnd(50)))
+        }
+        if (code == T_INT3) {
+            return new ExprConstInt3(at = rat(), value = int3(rnd(50), rnd(50), rnd(50)))
+        }
+        if (code == T_INT4) {
+            return new ExprConstInt4(at = rat(),
+                value = int4(rnd(50), rnd(50), rnd(50), rnd(50)))
+        }
+        if (code == T_FLOAT2) {
+            return new ExprConstFloat2(at = rat(),
+                value = float2(float(rnd(50)) * 0.5f, float(rnd(50)) * 0.5f))
+        }
+        if (code == T_FLOAT3) {
+            return new ExprConstFloat3(at = rat(),
+                value = float3(float(rnd(50)) * 0.5f, float(rnd(50)) * 0.5f,
+                    float(rnd(50)) * 0.5f))
+        }
+        if (code == T_FLOAT4) {
+            return new ExprConstFloat4(at = rat(),
+                value = float4(float(rnd(50)) * 0.5f, float(rnd(50)) * 0.5f,
+                    float(rnd(50)) * 0.5f, float(rnd(50)) * 0.5f))
+        }
+        return new ExprConstInt(at = rat(), value = rnd(200) - 100)
+    }
+
+    def gen_op2_typed(code : int; depth : int) : ExpressionPtr {
+        var op = ""
+        if (is_int_code(code)) {
+            op = INT_OPS[rnd(length(INT_OPS))]
+        } elif (is_num(code) || is_vec(code)) {
+            op = ARITH_OPS[rnd(length(ARITH_OPS))]
+        } else {
+            return gen_lit(code)
+        }
+        return new ExprOp2(at = rat(), op := op, left = gen_val(code, depth + 1),
+            right = gen_val(code, depth + 1))
+    }
+
+    def gen_builtin(code : int; depth : int) : ExpressionPtr {
+        if (code == T_FLOAT && rnd(2) == 0) {
+            return call1(FLOAT_FNS[rnd(length(FLOAT_FNS))], gen_val(T_FLOAT, depth + 1))
+        }
+        if (rnd(2) == 0) {
+            return call1("abs", gen_val(code, depth + 1))
+        }
+        return call2(rnd(2) == 0 ? "min" : "max", gen_val(code, depth + 1),
+            gen_val(code, depth + 1))
+    }
+
+    def fn_ok(f : TypedFn; code : int) : bool {
+        if (f.kind == FN_GENERIC_ID) {
+            return true
+        }
+        if (f.kind == FN_GENERIC_OP) {
+            return is_num(code)
+        }
+        return f.ret == code
+    }
+
+    def gen_fn_call(code : int; depth : int) : ExpressionPtr {
+        var n = 0
+        for (f in typed_fns) {
+            if (fn_ok(f, code)) {
+                n++
+            }
+        }
+        if (n == 0) {
+            return null
+        }
+        var pick = rnd(n)
+        for (f in typed_fns) {
+            if (!fn_ok(f, code)) {
+                continue
+            }
+            if (pick > 0) {
+                pick--
+                continue
+            }
+            var e = new ExprCall(at = rat(), name := f.name)
+            if (f.kind == FN_CONCRETE) {
+                for (a in f.args) {
+                    var c = gen_val(a, depth + 1)
+                    e.arguments |> emplace(c)
+                }
+            } else {
+                let nargs = f.kind == FN_GENERIC_OP ? 2 : 1
+                for (_a in range(nargs)) {
+                    var c = gen_val(code, depth + 1)
+                    e.arguments |> emplace(c)
+                }
+            }
+            return e
+        }
+        return null
+    }
+
+    // `invoke($ : T { return <v> })` - a closure block whose result type is the
+    // requested one, so block inference and invoke resolution both run.
+    def gen_invoke_val(code : int; depth : int) : ExpressionPtr {
+        var blk = new ExprBlock(at = rat(), returnType = ty_decl(code))
+        blk.blockFlags.isClosure = true
+        var r = new ExprReturn(at = rat(), subexpr = gen_val(code, depth + 1))
+        blk.list |> emplace(r)
+        var mb = new ExprMakeBlock(at = rat(), _block = blk)
+        if (rnd(3) == 0) {
+            // both flags or neither: the verifier rejects a lambda make-block whose
+            // block is not itself marked as a lambda block
+            mb.mmFlags.isLambda = true
+            blk.blockFlags.isLambdaBlock = true
+        }
+        // `invoke` is its own node, not a call by that name
+        var e = new ExprInvoke(at = rat(), name := "invoke")
+        e.arguments |> emplace(mb)
+        return e
+    }
+
+    def gen_bool_val(depth : int) : ExpressionPtr {
+        let pick = rnd(6)
+        if (pick == 0 || depth + 1 >= max_depth) {
+            return gen_lit(T_BOOL)
+        }
+        if (pick == 1) {
+            return new ExprOp1(at = rat(), op := "!", subexpr = gen_val(T_BOOL, depth + 1))
+        }
+        if (pick == 2) {
+            let c = NUM_CODES[rnd(length(NUM_CODES))]
+            return new ExprOp2(at = rat(), op := CMP_OPS[rnd(length(CMP_OPS))],
+                left = gen_val(c, depth + 1), right = gen_val(c, depth + 1))
+        }
+        if (pick == 3) {
+            return new ExprOp2(at = rat(), op := rnd(2) == 0 ? "&&" : "||",
+                left = gen_val(T_BOOL, depth + 1), right = gen_val(T_BOOL, depth + 1))
+        }
+        if (pick == 4) {
+            let anm = tv_find(T_ARRAY + VALUE_CODES[rnd(length(VALUE_CODES))])
+            if (!empty(anm)) {
+                return call1("empty", var_ref(anm))
+            }
+        }
+        return gen_lit(T_BOOL)
+    }
+
+    def gen_make_struct_val(code : int; depth : int) : ExpressionPtr {
+        let idx = code - T_STRUCT
+        var e = new ExprMakeStruct(at = rat(), makeType = ty_decl(code))
+        var mks = new MakeStruct(uninitialized)
+        for (fc, fi in ts_fields[idx].fields, count()) {
+            var mf = new MakeFieldDecl(at = rat(), name := "f{fi}",
+                value = gen_val(fc, depth + 1))
+            emplace_new(*mks, mf)
+        }
+        e.structs |> emplace(mks)
+        return e
+    }
+
+    // `p ?? [[S ...]]` - the pointer form of null coalescing, which is the only
+    // way that path is reached without a source-level `??`.
+    def gen_deref_or_default(code : int; depth : int) : ExpressionPtr {
+        let pc = T_PTR + code - T_STRUCT
+        var ptr = gen_val(pc, depth + 1)
+        var fallback = gen_make_struct_val(code, depth + 1)
+        return new ExprNullCoalescing(at = rat(), subexpr = ptr, defaultValue = fallback)
+    }
+
+    // `p?.f0 ?? <lit>` - safe field through a pointer, then coalesce to the
+    // requested scalar type.
+    def gen_safe_field_val(code : int; depth : int) : ExpressionPtr {
+        for (ts, si in ts_fields, count()) {
+            for (fc, fi in ts.fields, count()) {
+                if (fc != code) {
+                    continue
+                }
+                var ptr = gen_val(T_PTR + si, depth + 1)
+                var sf = new ExprSafeField(at = rat(), value = ptr, name := "f{fi}")
+                return new ExprNullCoalescing(at = rat(), subexpr = sf,
+                    defaultValue = gen_lit(code))
+            }
+        }
+        return null
+    }
+
+    // `t?["k"] ?? <lit>` - the read half of a table, without the insert-on-read
+    // that plain `t[k]` would do.
+    def gen_table_read(code : int; depth : int) : ExpressionPtr {
+        let tnm = tv_find(T_TABLE + code)
+        if (empty(tnm)) {
+            return null
+        }
+        var sa = new ExprSafeAt(at = rat(), subexpr = var_ref(tnm),
+            index = gen_lit(T_STRING))
+        return new ExprNullCoalescing(at = rat(), subexpr = sa,
+            defaultValue = gen_lit(code))
+    }
+
+    def gen_string_builder(depth : int) : ExpressionPtr {
+        var e = new ExprStringBuilder(at = rat())
+        for (_i in range(1 + rnd(3))) {
+            var c = gen_val(rnd(2) == 0 ? T_STRING : NUM_CODES[rnd(length(NUM_CODES))],
+                depth + 1)
+            e.elements |> emplace(c)
+        }
+        return e
+    }
+
+    def gen_field_val(code : int; depth : int) : ExpressionPtr {
+        for (ts, si in ts_fields, count()) {
+            for (fc, fi in ts.fields, count()) {
+                if (fc != code) {
+                    continue
+                }
+                let nm = tv_find(T_STRUCT + si)
+                if (empty(nm)) {
+                    continue
+                }
+                return new ExprField(at = rat(), value = var_ref(nm), name := "f{fi}")
+            }
+        }
+        return null
+    }
+
+    def gen_val(code : int; depth : int) : ExpressionPtr { // nolint:STYLE037 — one branch per value shape; splitting hides the table
+        if (is_tuple(code)) {
+            let nm = tv_find(code)
+            if (!empty(nm) && rnd(3) == 0) {
+                return var_ref(nm)
+            }
+            return gen_tuple_val(code, depth >= max_depth ? max_depth - 1 : depth)
+        }
+        if (is_ptr(code)) {
+            let nm = tv_find(code)
+            if (!empty(nm) && rnd(2) == 0) {
+                return var_ref(nm)
+            }
+            return new ExprNew(at = rat(), typeexpr = ty_decl(T_STRUCT + code - T_PTR))
+        }
+        if (is_struct(code)) {
+            let nm = tv_find(code)
+            if (!empty(nm) && rnd(3) == 0) {
+                return var_ref(nm)
+            }
+            if (depth + 1 >= max_depth) {
+                return gen_make_struct_val(code, max_depth - 1)
+            }
+            if (rnd(4) == 0) {
+                return gen_deref_or_default(code, depth)
+            }
+            return gen_make_struct_val(code, depth)
+        }
+        if (code >= T_ARRAY || code == T_VOID || depth >= max_depth) {
+            return gen_lit(code)
+        }
+        let pick = rnd(18)
+        if (pick == 0) {
+            return gen_lit(code)
+        }
+        if (pick == 10) {
+            return gen_invoke_val(code, depth)
+        }
+        if (pick <= 2) {
+            let nm = tv_find(code)
+            if (!empty(nm)) {
+                return var_ref(nm)
+            }
+        }
+        if (pick == 3) {
+            return new ExprOp3(at = rat(), op := "?",
+                subexpr = gen_val(T_BOOL, depth + 1), left = gen_val(code, depth + 1),
+                right = gen_val(code, depth + 1))
+        }
+        if (code == T_BOOL) {
+            return gen_bool_val(depth)
+        }
+        if (code == T_STRING) {
+            if (pick == 4) {
+                return call1("string", gen_val(NUM_CODES[rnd(length(NUM_CODES))], depth + 1))
+            }
+            if (pick == 5) {
+                return new ExprOp2(at = rat(), op := "+", left = gen_val(T_STRING, depth + 1),
+                    right = gen_val(T_STRING, depth + 1))
+            }
+            return gen_lit(code)
+        }
+        if (pick == 4) {
+            let anm = tv_find(T_ARRAY + code)
+            if (!empty(anm)) {
+                return new ExprAt(at = rat(), subexpr = var_ref(anm),
+                    index = safe_index(anm, depth))
+            }
+        }
+        if (pick == 5 && is_num(code)) {
+            return call1(TY_NAMES[code], gen_val(NUM_CODES[rnd(length(NUM_CODES))], depth + 1))
+        }
+        if (pick == 6 && is_vec(code)) {
+            return call1(TY_NAMES[code], gen_val(code <= T_INT4 ? T_INT : T_FLOAT, depth + 1))
+        }
+        if (pick == 7) {
+            var c = gen_fn_call(code, depth)
+            if (c != null) {
+                return c
+            }
+        }
+        if (pick == 8 && is_num(code)) {
+            return gen_builtin(code, depth)
+        }
+        if (pick == 11) {
+            var fv = gen_field_val(code, depth)
+            if (fv != null) {
+                return fv
+            }
+        }
+        if (pick == 12) {
+            var sf = gen_safe_field_val(code, depth)
+            if (sf != null) {
+                return sf
+            }
+        }
+        if (pick == 13) {
+            var tr = gen_table_read(code, depth)
+            if (tr != null) {
+                return tr
+            }
+        }
+        if (pick == 14 && code == T_STRING) {
+            return gen_string_builder(depth)
+        }
+        if (pick == 15) {
+            var pc = gen_piped_call(code, depth)
+            if (pc != null) {
+                return pc
+            }
+        }
+        if (pick == 16) {
+            var tf = gen_tuple_field(code, depth)
+            if (tf != null) {
+                return tf
+            }
+        }
+        if (pick == 9 && (is_num(code) || is_vec(code))) {
+            return new ExprOp1(at = rat(), op := "-", subexpr = gen_val(code, depth + 1))
+        }
+        return gen_op2_typed(code, depth)
+    }
+
+    // `i` in compile-only mode, `abs(i) % length(a)` in run mode
+    def safe_index(arr : string; depth : int) : ExpressionPtr {
+        if (!run_mode) {
+            return gen_val(T_INT, depth + 1)
+        }
+        var idx = call1("abs", gen_val(T_INT, depth + 1))
+        var len = call1("length", var_ref(arr))
+        return new ExprOp2(at = rat(), op := "%", left = idx, right = len)
+    }
+
+    def gen_typed_let(depth : int) : ExpressionPtr {
+        var e = new ExprLet(at = rat())
+        let nm = fresh_name()
+        if (rnd(5) == 0) {
+            let ec = VALUE_CODES[rnd(length(VALUE_CODES))]
+            var av <- new Variable(at = rat(), name := nm, _type = ty_decl(T_ARRAY + ec))
+            if (run_mode) {
+                // ExprMakeArray alone is a fixed dim; `[{T ...}]` is that wrapped in
+                // to_array_move, which is what yields array<T>
+                var mk = new ExprMakeArray(at = rat(), makeType = ty_decl(ec))
+                for (_i in range(3)) {
+                    var el = gen_lit(ec)
+                    mk.values |> emplace(el)
+                }
+                av.init = call1("to_array_move", mk)
+                av.flags.init_via_move = true
+            }
+            e.variables |> emplace(av)
+            tv_push(nm, T_ARRAY + ec)
+            return e
+        }
+        let code = any_code()
+        var v <- new Variable(at = rat(), name := nm, _type = ty_decl(code),
+            init = gen_val(code, depth + 1))
+        e.variables |> emplace(v)
+        tv_push(nm, code)
+        return e
+    }
+
+    def gen_typed_assign(depth : int) : ExpressionPtr {
+        let code = VALUE_CODES[rnd(length(VALUE_CODES))]
+        let nm = tv_find_w(code, true)
+        if (empty(nm)) {
+            return gen_typed_let(depth)
+        }
+        return new ExprCopy(at = rat(), op := "=", left = var_ref(nm),
+            right = gen_val(code, depth + 1))
+    }
+
+    def gen_typed_opassign(depth : int) : ExpressionPtr {
+        let code = NUM_CODES[rnd(length(NUM_CODES))]
+        let nm = tv_find_w(code, true)
+        if (empty(nm)) {
+            return gen_typed_let(depth)
+        }
+        return new ExprOp2(at = rat(), op := rnd(2) == 0 ? "+=" : "-=",
+            left = var_ref(nm), right = gen_val(code, depth + 1))
+    }
+
+    def gen_typed_push(depth : int) : ExpressionPtr {
+        let ec = VALUE_CODES[rnd(length(VALUE_CODES))]
+        let anm = tv_find_w(T_ARRAY + ec, true)
+        if (empty(anm)) {
+            return gen_typed_let(depth)
+        }
+        return call2("push", var_ref(anm), gen_val(ec, depth + 1))
+    }
+
+    def gen_typed_block(depth : int) : ExpressionPtr {
+        let mark = length(tv_names)
+        var b = new ExprBlock(at = rat())
+        for (_i in range(1 + rnd(3))) {
+            var st = gen_typed_stmt(depth + 1)
+            b.list |> emplace(st)
+        }
+        tv_trim(mark)
+        return b
+    }
+
+    def gen_typed_if(depth : int) : ExpressionPtr {
+        var e = new ExprIfThenElse(at = rat(), cond = gen_val(T_BOOL, depth + 1),
+            if_true = gen_typed_block(depth + 1))
+        if (rnd(2) == 0) {
+            e.if_false = gen_typed_block(depth + 1)
+        }
+        return e
+    }
+
+    def gen_typed_while(depth : int) : ExpressionPtr {
+        // `&& false` keeps the loop finite once the program is actually run,
+        // while the left side still goes through condition inference.
+        var cond = new ExprOp2(at = rat(), op := "&&", left = gen_val(T_BOOL, depth + 1),
+            right = new ExprConstBool(at = rat(), value = false))
+        return new ExprWhile(at = rat(), cond = cond, body = gen_typed_block(depth + 1))
+    }
+
+    def add_iterator(var e : ExprFor?; name : string) : void {
+        let i = length(e.iterators)
+        e.iterators |> resize(i + 1)
+        e.iterators[i] := name
+        e.iteratorsAka |> resize(i + 1)
+        e.iteratorsAka[i] := ""
+        e.iteratorsTags |> resize(i + 1)
+        e.iteratorsAt |> push(rat())
+    }
+
+    def gen_typed_for(depth : int) : ExpressionPtr {
+        let mark = length(tv_names)
+        var e = new ExprFor(at = rat())
+        let nm = fresh_name()
+        add_iterator(e, nm)
+        let ec = VALUE_CODES[rnd(length(VALUE_CODES))]
+        let anm = rnd(2) == 0 ? tv_find(T_ARRAY + ec) : ""
+        if (empty(anm)) {
+            var src = call1("range", gen_lit(T_INT))
+            e.sources |> emplace(src)
+            tv_push(nm, T_INT, false)
+        } else {
+            var src = var_ref(anm)
+            e.sources |> emplace(src)
+            tv_push(nm, ec, false)
+        }
+        e.body = gen_typed_block(depth + 1)
+        tv_trim(mark)
+        return e
+    }
+
+    // A table local is declared and then written through `t[k] = v`; reads go
+    // through the safe form so a read never inserts.
+    def gen_typed_table_let(depth : int) : ExpressionPtr {
+        var e = new ExprLet(at = rat())
+        let nm = fresh_name()
+        let vc = VALUE_CODES[rnd(length(VALUE_CODES))]
+        var v <- new Variable(at = rat(), name := nm, _type = ty_decl(T_TABLE + vc))
+        e.variables |> emplace(v)
+        tv_push(nm, T_TABLE + vc)
+        return e
+    }
+
+    def gen_typed_table_write(depth : int) : ExpressionPtr {
+        let vc = VALUE_CODES[rnd(length(VALUE_CODES))]
+        let tnm = tv_find_w(T_TABLE + vc, true)
+        if (empty(tnm)) {
+            return gen_typed_table_let(depth)
+        }
+        var slot = new ExprAt(at = rat(), subexpr = var_ref(tnm), index = gen_lit(T_STRING))
+        return new ExprCopy(at = rat(), op := "=", left = slot,
+            right = gen_val(vc, depth + 1))
+    }
+
+    // `a1 := a2` and `a1 <- a2` - the clone and move statement forms, which no
+    // scalar assignment reaches.
+    def gen_typed_move_or_clone(depth : int) : ExpressionPtr {
+        let ec = VALUE_CODES[rnd(length(VALUE_CODES))]
+        let dst = tv_find_w(T_ARRAY + ec, true)
+        if (empty(dst)) {
+            return gen_typed_let(depth)
+        }
+        let src = tv_find(T_ARRAY + ec)
+        if (empty(src) || src == dst) {
+            return gen_typed_let(depth)
+        }
+        if (rnd(2) == 0) {
+            return new ExprClone(at = rat(), op := ":=", left = var_ref(dst),
+                right = var_ref(src))
+        }
+        return new ExprMove(at = rat(), op := "<-", left = var_ref(dst),
+            right = var_ref(src))
+    }
+
+    def gen_typed_delete(depth : int) : ExpressionPtr {
+        if (run_mode || empty(ts_ptr)) {
+            return gen_typed_let(depth)
+        }
+        let i = rnd(length(ts_ptr))
+        let nm = tv_find_w(T_PTR + i, true)
+        if (empty(nm)) {
+            return gen_typed_let(depth)
+        }
+        // deleting a struct pointer needs unsafe, the same as it does in source
+        var body = new ExprBlock(at = rat())
+        var del = new ExprDelete(at = rat(), subexpr = var_ref(nm))
+        body.list |> emplace(del)
+        return new ExprUnsafe(at = rat(), body = body)
+    }
+
+    def gen_typed_stmt(depth : int) : ExpressionPtr { // nolint:STYLE037 — one branch per statement shape; splitting hides the table
+        let pick = depth >= max_depth ? rnd(3) : rnd(17)
+        if (pick == 0 || pick == 1) {
+            return gen_typed_let(depth)
+        }
+        if (pick == 2) {
+            return gen_typed_assign(depth)
+        }
+        if (pick == 3) {
+            return gen_typed_if(depth)
+        }
+        if (pick == 4 || pick == 5) {
+            return gen_typed_for(depth)
+        }
+        if (pick == 6) {
+            return gen_typed_while(depth)
+        }
+        if (pick == 7) {
+            return gen_typed_block(depth)
+        }
+        if (pick == 8) {
+            return gen_typed_push(depth)
+        }
+        if (pick == 9) {
+            return gen_typed_opassign(depth)
+        }
+        if (pick == 11) {
+            return gen_typed_table_let(depth)
+        }
+        if (pick == 12) {
+            return gen_typed_table_write(depth)
+        }
+        if (pick == 13) {
+            return gen_typed_move_or_clone(depth)
+        }
+        if (pick == 14) {
+            return gen_typed_delete(depth)
+        }
+        if (pick == 15) {
+            return new ExprUnsafe(at = rat(), body = gen_typed_block(depth + 1))
+        }
+        if (pick == 16) {
+            return new ExprTryCatch(at = rat(), try_block = gen_typed_block(depth + 1),
+                catch_block = gen_typed_block(depth + 1))
+        }
+        return call1("print", gen_val(T_STRING, depth + 1))
+    }
+
+    def gen_typed_body(nstmt : int) : ExpressionPtr {
+        var b = new ExprBlock(at = rat())
+        for (_i in range(nstmt)) {
+            var st = gen_typed_stmt(0)
+            b.list |> emplace(st)
+        }
+        if (res_code != T_VOID) {
+            var r = new ExprReturn(at = rat(), subexpr = gen_val(res_code, 1))
+            b.list |> emplace(r)
+        }
+        return b
     }
 

@@ -98,6 +98,198 @@ def private fill_pools(var g : GenAll?; var pool : DeclPool; bind_refs : bool; p
     g.pre_typed = pre_typed
 }
 
+// Typed mode: whole functions with a real result type and a body that returns
+// it, so the program is well-typed and inference runs to the end. Every function
+// may call the ones added before it, which keeps the call graph a DAG.
+// Structures whose fields are all from the typed universe, so a make-struct
+// literal for them is well-typed and the make-local paths get exercised.
+def private add_typed_structs(mod : Module?; var g : GenAll?; seedInt, count : int) : void {
+    for (i in range(count)) {
+        var ts = TypedStruct(name = "TS{seedInt}_{i}")
+        var st <- new Structure(at = g.at, name := ts.name)
+        let nfields = 1 + i % 3
+        ts.fields |> reserve(nfields)
+        for (f in range(nfields)) {
+            let fc = VALUE_CODES[g.rnd(length(VALUE_CODES))]
+            ts.fields |> push(fc)
+            add_structure_field(st, "f{f}", g.ty_decl(fc), null)
+        }
+        var stp = st
+        if (mod |> add_structure(st)) {
+            g.ts_ptr |> push(stp)
+            g.ts_fields |> push_clone(ts)
+        }
+    }
+}
+
+// A callee whose trailing parameter is a block and whose leading parameters all have
+// defaults. Calling it with the block alone forces inference down the piped-landing
+// search, which nothing else in the generator reaches.
+def private add_piped_helpers(mod : Module?; var g : GenAll?; seedInt : int;
+                              at : LineInfo) : int {
+    var added = 0
+    for (i in range(2)) {
+        let name = "tpipe_{seedInt}_{i}"
+        var fn <- new Function(at = at, atDecl = at, name := name, result = g.ty_decl(T_INT))
+        for (a in range(1 + i)) {
+            var av <- new Variable(at = at, name := "p{a}", _type = g.ty_decl(T_INT),
+                init = new ExprConstInt(at = at, value = a + 1))
+            fn.arguments |> emplace(av)
+        }
+        var bv <- new Variable(at = at, name := "blk", _type = g.block_type(T_INT))
+        fn.arguments |> emplace(bv)
+        var call = new ExprInvoke(at = at, name := "invoke")
+        var bref = new ExprVar(at = at, name := "blk")
+        call.arguments |> emplace(bref)
+        var parg = new ExprVar(at = at, name := "p0")
+        call.arguments |> emplace(parg)
+        var body = new ExprBlock(at = at)
+        var r = new ExprReturn(at = at, subexpr = call)
+        body.list |> emplace(r)
+        fn.body = body
+        verify_function(fn)
+        if (mod |> add_function(fn)) {
+            added++
+            g.piped_fns |> push(name)
+        }
+    }
+    return added
+}
+
+// Two generic shapes with `auto` arguments and an `auto` result: every call site
+// instantiates them again, which is the only way the generic machinery runs at all.
+def private add_generic_passthrough(mod : Module?; seedInt : int; at : LineInfo;
+                                    var known : array<TypedFn>) : int {
+    var added = 0
+    for (k in range(2))  {
+        let two = k == 1
+        var sig = TypedFn(name = two ? "tgen_{seedInt}_op" : "tgen_{seedInt}_id",
+            kind = two ? FN_GENERIC_OP : FN_GENERIC_ID)
+        var fn <- new Function(at = at, atDecl = at, name := sig.name,
+            result = new TypeDecl(at = at, baseType = Type.autoinfer))
+        for (a in range(two ? 2 : 1)) {
+            var av <- new Variable(at = at, name := "a{a}",
+                _type = new TypeDecl(at = at, baseType = Type.autoinfer))
+            fn.arguments |> emplace(av)
+        }
+        var body = new ExprBlock(at = at)
+        var value : ExpressionPtr
+        if (two) {
+            value = new ExprOp2(at = at, op := "+", left = new ExprVar(at = at, name := "a0"),
+                right = new ExprVar(at = at, name := "a1"))
+        } else {
+            value = new ExprVar(at = at, name := "a0")
+        }
+        var r = new ExprReturn(at = at, subexpr = value)
+        body.list |> emplace(r)
+        fn.body = body
+        verify_function(fn)
+        // an auto-argument function is a generic, and generics live in their own
+        // module slot - add_function would file it where no call site looks
+        if (mod |> add_generic(fn)) {
+            added++
+            known |> push_clone(sig)
+        }
+    }
+    return added
+}
+
+// Run mode: give the victim a main that calls every synthesized function with literal
+// arguments and prints each result, so the same program can be executed twice - with and
+// without the optimizer - and the two outputs compared.
+def private emit_run_main(mod : Module?; var g : GenAll?; sigs : array<TypedFn>;
+                          at : LineInfo) : void {
+    var body = new ExprBlock(at = at)
+    for (sig in sigs) {
+        if (sig.kind != FN_CONCRETE) {
+            continue
+        }
+        var call = new ExprCall(at = at, name := sig.name)
+        for (a in sig.args) {
+            var arg = g.gen_val(a, g.max_depth - 1)
+            call.arguments |> emplace(arg)
+        }
+        if (sig.ret == T_VOID) {
+            body.list |> emplace(call)
+            continue
+        }
+        // print only what has a stable textual form; a pointer would differ per run
+        if (sig.ret >= T_STRUCT) {
+            var sink = new ExprLet(at = at)
+            var sv <- new Variable(at = at, name := "sink_{length(body.list)}",
+                _type = g.ty_decl(sig.ret), init = call)
+            sink.variables |> emplace(sv)
+            body.list |> emplace(sink)
+            continue
+        }
+        var sb = new ExprStringBuilder(at = at)
+        // the leading newline keeps the marker at the start of a line even when a
+        // generated body printed something without one
+        var tag = new ExprConstString(at = at, value := "\nR {sig.name} ")
+        sb.elements |> emplace(tag)
+        sb.elements |> emplace(call)
+        var nl = new ExprConstString(at = at, value := "\n")
+        sb.elements |> emplace(nl)
+        var pr = new ExprCall(at = at, name := "print")
+        pr.arguments |> emplace(sb)
+        body.list |> emplace(pr)
+    }
+    for_each_function(mod, "main") $(var fn) {
+        fn.body = body
+        fn.not_inferred()
+    }
+}
+
+def private add_synth_typed_functions(mod : Module?; seedInt : int; count, depth,
+                                      size : int; at : LineInfo; run_mode : bool) : int {
+    var known : array<TypedFn>
+    var added = add_generic_passthrough(mod, seedInt, at, known)
+    var decls = new GenAll(seed = random_seed(seedInt * 131 + 7), max_depth = depth,
+        run_mode = run_mode, at = at)
+    add_typed_structs(mod, decls, seedInt, 1 + abs(random_int(decls.seed)) % 3)
+    added += add_piped_helpers(mod, decls, seedInt, at)
+    for (i in range(count)) {
+        var g = new GenAll(seed = random_seed(seedInt + i * 7919), max_depth = depth,
+            run_mode = run_mode, at = at)
+        g.typed_fns |> push_clone_from(known)
+        g.ts_ptr |> push_from(decls.ts_ptr)
+        g.ts_fields |> push_clone_from(decls.ts_fields)
+        g.piped_fns |> push_clone_from(decls.piped_fns)
+        var sig = TypedFn(name = "tsynth_{seedInt}_{i}", kind = FN_CONCRETE,
+            ret = g.rnd(4) == 0 ? T_VOID : g.any_code())
+        var fn <- new Function(at = at, atDecl = at, name := sig.name,
+            result = g.ty_decl(sig.ret))
+        let nargs = g.rnd(4)
+        sig.args |> reserve(nargs)
+        for (a in range(nargs)) {
+            let ac = g.any_code()
+            sig.args |> push(ac)
+            let an = "a{a}"
+            var av <- new Variable(at = at, name := an, _type = g.ty_decl(ac))
+            fn.arguments |> emplace(av)
+            g.tv_push(an, ac, false)
+        }
+        g.res_code = sig.ret
+        fn.body = g.gen_typed_body(size)
+        verify_function(fn)
+        unsafe {
+            delete g
+        }
+        if (mod |> add_function(fn)) {
+            added++
+            known |> push_clone(sig)
+        }
+    }
+    if (run_mode) {
+        decls.typed_fns |> push_clone_from(known)
+        emit_run_main(mod, decls, known, at)
+    }
+    unsafe {
+        delete decls
+    }
+    return added
+}
+
 def private add_synth_functions(mod : Module?; seedInt : int; count : int; depth : int) : int {
     var seed = random_seed(seedInt * 31 + 17)
     var added = 0
@@ -150,6 +342,19 @@ class AstSynthMacro : AstPassMacro {
         let ndecls = prog._options |> find_arg("_ast_synth_decls") ?as tInt ?? 0
         let bind_refs = prog._options |> find_arg("_ast_synth_bind") ?as tBool ?? false
         let pre_typed = prog._options |> find_arg("_ast_synth_pretype") ?as tBool ?? false
+        let typed = prog._options |> find_arg("_ast_synth_typed") ?as tBool ?? false
+        if (typed) {
+            var vat = LineInfo()
+            for_each_function(mod, "") $(fn) {
+                vat = fn.at
+            }
+            let run_mode = prog._options |> find_arg("_ast_synth_run") ?as tBool ?? false
+            let nadded = add_synth_typed_functions(mod, seedInt, nfuncs > 0 ? nfuncs : 3,
+                depth, size, vat, run_mode)
+            to_log(LOG_ERROR, "AST-SYNTH-TYPED: added {nadded} function(s)\n")
+            to_log(LOG_ERROR, "AST-SYNTH: seed={seedInt} typed depth={depth} size={size}\n")
+            return nadded > 0
+        }
         var pool : DeclPool
         if (ndecls > 0) {
             add_synth_decls(mod, pool, seedInt, ndecls, depth)

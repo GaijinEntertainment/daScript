@@ -62,6 +62,10 @@ struct Config {
     @clarg_doc = "Bind resolved pointers (ExprVar.variable, ExprCall.func, ExprConstEnumeration.enumType) directly, as a macro does, instead of leaving the name for inference"
     synth_bind : bool
 
+    @clarg_name = "synth-typed"
+    @clarg_doc = "Typed mode: synthesize whole functions that are well-typed by construction, so inference runs to completion and the program reaches codegen instead of stopping at the first error"
+    synth_typed : bool
+
     @clarg_name = "synth-pretype"
     @clarg_doc = "Pre-set Expression._type on some nodes. Infer treats a typed node as already inferred, so this is how a wrong type reaches codegen"
     synth_pretype : bool
@@ -130,6 +134,9 @@ def build_victim(cfg : Config; seed : int) : string {
         if (cfg.synth_pretype) {
             w |> write("options _ast_synth_pretype = true\n")
         }
+        if (cfg.synth_typed) {
+            w |> write("options _ast_synth_typed = true\n")
+        }
         if (cfg.synth_rflags) {
             w |> write("options _ast_synth_rflags = true\n")
         }
@@ -150,6 +157,10 @@ def build_victim(cfg : Config; seed : int) : string {
         }
         if (cfg.synth_report) {
             w |> write("options _ast_synth_report = true\n")
+        }
+        if (cfg.synth_typed) {
+            // the typed pool calls math builtins, which have to be visible in the victim
+            w |> write("require math\n")
         }
         w |> write("require _ast_synth\n")
         w |> write("\n")
@@ -231,6 +242,9 @@ def private child_flags(cfg : Config) : string {
         }
         if (cfg.synth_pretype) {
             w |> write(" --synth-pretype")
+        }
+        if (cfg.synth_typed) {
+            w |> write(" --synth-typed")
         }
         if (cfg.synth_rflags) {
             w |> write(" --synth-rflags")

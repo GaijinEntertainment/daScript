@@ -66,6 +66,7 @@ doc/source/stdlib/generated/
 utils/internal/ast-fuzz/__*.das
 utils/internal/ast-fuzz/__*.log
 utils/internal/ast-fuzz/_ast_synth_all.das
+utils/internal/ast-fuzz/__probes/
 # Tutorial recordings: APNG intermediates land here from modules/dasImgui/tests
 # record_* drivers; the MP4 deliverables are staged here from the docs-assets
 # GitHub release by utils/internal/docs-assets/fetch — neither is tracked.

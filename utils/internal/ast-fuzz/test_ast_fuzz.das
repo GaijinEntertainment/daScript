@@ -174,3 +174,54 @@ def test_generator_runs_and_classifies(t : T?) {
     t |> success(!died(ec, out), "driver itself crashed or hung (exit {ec})\n{out}")
     t |> success(find(out, "run(s) —") >= 0, "driver produced no summary\n{out}")
 }
+
+// Typed mode has to compile CLEAN - that is the whole point of it: a well-typed
+// program runs inference to the end and reaches codegen, so any compiler error
+// here is a generator bug, not a finding.
+[test]
+def test_typed_mode_compiles_clean(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/internal/ast-fuzz/main.das", "--", "--bin", BIN,
+        "--seeds", "3", "--synth-typed", "--synth-funcs", "3", "--synth-size", "6",
+        "--synth-depth", "3", "--timeout", "60"], out, 300.0)
+    t |> success(!died(ec, out), "driver itself crashed or hung (exit {ec})\n{out}")
+    t |> success(find(out, "3 clean") >= 0,
+        "typed mode did not compile clean; a compiler error means the generator built ill-typed AST\n{out}")
+}
+
+// The mismatch matrix is deliberately ill-typed - every probe must produce a compiler
+// ERROR, never a crash. This is the matrix that found the const-initializer folding
+// crash, so it stays gated. The gate samples every fifth cell to stay affordable; a full
+// sweep is `probe.das -- --mismatch --threads N` with no --sample.
+[test]
+def test_probe_mismatch_matrix_never_crashes(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/internal/ast-fuzz/probe.das", "--", "--bin", BIN,
+        "--mismatch", "--threads", "8", "--sample", "5", "--timeout", "30"], out, 1800.0)
+    t |> success(!died(ec, out), "probe tool itself crashed or hung (exit {ec})\n{out}")
+    t |> success(find(out, "0 finding(s)") >= 0,
+        "an ill-typed probe crashed the compiler instead of reporting an error\n{out}")
+}
+
+// The legal matrix is the control: every value in it is correctly typed, so the
+// compiler must survive all of it. A finding here needs no type error at all.
+[test]
+def test_probe_legal_matrix_is_clean(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/internal/ast-fuzz/probe.das", "--", "--bin", BIN,
+        "--legal", "--threads", "8", "--timeout", "30"], out, 900.0)
+    t |> success(!died(ec, out), "probe tool itself crashed or hung (exit {ec})\n{out}")
+    t |> success(find(out, "0 finding(s)") >= 0,
+        "a legally typed probe crashed the compiler\n{out}")
+}
+
+// Deeply nested expressions and types must error or compile, never exhaust the stack.
+[test]
+def test_probe_depth_matrix_is_clean(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/internal/ast-fuzz/probe.das", "--", "--bin", BIN,
+        "--depth", "--threads", "8", "--timeout", "30"], out, 600.0)
+    t |> success(!died(ec, out), "probe tool itself crashed or hung (exit {ec})\n{out}")
+    t |> success(find(out, "0 finding(s)") >= 0,
+        "a nesting-depth probe crashed the compiler\n{out}")
+}
