@@ -283,7 +283,7 @@ class MetalDequantK6H {
 [ |> template_struct_instance]
 class template MetalHalfMulMmTensorT {
     @template_constant MT : uint = 32u      //!< M-tile rows: the panel re-reads M/MT times
-    @ssbo @binding = 0 @role = "read" wh : array<float16>   //!< pre-dequantized W panel, d x kdim
+    @ssbo @binding = 0 @role = "read" @off = "woff" wh : array<float16>   //!< pre-dequantized W panel, d x kdim (woff = a baked plane's site base)
     @ssbo @binding = 1 @role = "read" @off = "xoff" xf : array<float16>   //!< the f16 activation panel (half-X)
     @ssbo @binding = 2 @off = "yoff" y : array<float>
     @uniform @binding = 3 kdim : uint
@@ -2215,9 +2215,15 @@ var private g_pf_pso_hmm_th : MetalComputePipeline?  //!< all-device half x half
 var private g_pf_pso_hmm_th128 : MetalComputePipeline?
 var private g_pf_bwh : MetalBuffer?     //!< per-forward f16 W panels (dev-W form), double-buffered like bxh
 var private g_pf_bwh2 : MetalBuffer?
-var private g_pf_devw_res : table<uint64; MetalBuffer?>   //!< RESIDENT dev-W panels, key = blob ptr + site offset (in-buffer, so globally unique) — filled once, read every forward
-var private g_pf_devw_res_bytes : uint64
+struct private DevwResEntry {
+    buf : MetalBuffer?
+    boff : uint64        //!< site base within the panel buffer (0 for runtime-owned panels)
+    owned : bool         //!< runtime-allocated (released at shutdown) vs a baked image plane
+}
+var private g_pf_devw_res : table<uint64; DevwResEntry>   //!< RESIDENT dev-W panels, key = blob ptr + site offset (in-buffer, so globally unique) — filled once, read every forward
+var private g_pf_devw_res_bytes : uint64   //!< runtime-OWNED bytes only — baked planes are file-backed and free
 var private g_pf_devw_res_full = false   //!< budget exhausted once — later sites stay on scratch, warned once
+var private @scratch g_pf_devw_seeded : table<uint64; bool>   //!< baked-table seeding, once per mapped plane
 var private g_pf_bwh_flip : bool
 var private g_pf_bwh_bytes : uint64
 var private g_pf_pso_bf16_mm : MetalComputePipeline?   //!< native-BF16 A twin (E-series model_proj)
@@ -3000,74 +3006,108 @@ def private pf_devw_flip : MetalBuffer ? {
 }
 
 def private pf_enc_hmm(enc : MetalComputeEncoder?; bwh, bxh, by : MetalBuffer?; yoff : uint64;
-                       bk, bn : MetalBuffer?; rows, td, dfull, kdim : int64) {
+                       bk, bn : MetalBuffer?; rows, td, dfull, kdim : int64; woff : uint64 = 0ul) {
     var r0 = 0l
     if (g_pf_env_tall && g_pf_pso_hmm_th128 != null && rows >= 128l
             && rows / 128l * (td / 64l) >= TALL_OCC_FLOOR) {
         r0 = rows / 128l * 128l
-        enc_gemm_hmm_th128(enc, bwh, bxh, 0ul, by, yoff, bk, bn, r0, td)
+        enc_gemm_hmm_th128(enc, bwh, woff, bxh, 0ul, by, yoff, bk, bn, r0, td)
     }
     if (rows - r0 > 0l) {
-        enc_gemm_hmm_th(enc, bwh, bxh, uint64(r0 * kdim * 2l), by, yoff + uint64(r0 * dfull * 4l), bk, bn, rows - r0, td)
+        enc_gemm_hmm_th(enc, bwh, woff, bxh, uint64(r0 * kdim * 2l), by, yoff + uint64(r0 * dfull * 4l), bk, bn, rows - r0, td)
     }
 }
 
-//! The RESIDENT panel seat: dequantize a site's whole W plane once into a persistent
-//! hazard-TRACKED buffer and reuse it every forward (the scratch route re-pays the dequant
-//! per site per forward). null = budget refused or off - the caller stays on scratch
-def private pf_devw_resident_panel(key : uint64; bytes : uint64; var fresh : bool&) : MetalBuffer? {
+//! The RESIDENT panel seat: a baked image plane when the seed put one here, else a persistent
+//! hazard-TRACKED buffer the first forward dequantizes into (the scratch route re-pays the
+//! dequant per site per forward). null buf = budget refused or off - the caller stays on scratch
+def private pf_devw_resident_panel(key : uint64; bytes : uint64; var fresh : bool&) : DevwResEntry {
     fresh = false
-    var cached = g_pf_devw_res?[key] ?? null
-    if (cached != null) {
-        return cached
+    if (key_exists(g_pf_devw_res, key)) {
+        return g_pf_devw_res[key]   // nolint:PERF026 — key_exists-guarded read, never inserts
     }
     if (g_pf_env_devw_res_bytes == 0ul) {
-        return null
+        return DevwResEntry()
     }
     if (g_pf_devw_res_bytes + bytes > g_pf_env_devw_res_bytes) {
         if (!g_pf_devw_res_full) {
             g_pf_devw_res_full = true
             to_log(LOG_WARNING, "dasLLAMA metal prefill: devw-resident budget exhausted at {int64(g_pf_devw_res_bytes) / 1048576l} MB - later sites stay on the scratch route\n")   // nolint:PERF028,PERF026 — one-shot fill arm
         }
-        return null
+        return DevwResEntry()
     }
     var bwh = metal_new_buffer(g_dev, bytes)
     if (bwh == null) {
-        return null
+        return DevwResEntry()
     }
     residency_note(bwh)
-    g_pf_devw_res[key] = bwh   // nolint:PERF026 — one-shot fill arm, 4 inserts per layer per process
+    var e = DevwResEntry(buf = bwh, boff = 0ul, owned = true)
+    g_pf_devw_res[key] = e   // nolint:PERF026 — one-shot fill arm, 4 inserts per layer per process
     g_pf_devw_res_bytes += bytes
     fresh = true
-    return bwh
+    return e
 }
 
 def private pf_devw_res_release {
-    for (b in values(g_pf_devw_res)) {
-        if (b != null) {
-            metal_release(b)
+    for (e in values(g_pf_devw_res)) {
+        if (e.owned && e.buf != null) {
+            metal_release(e.buf)
         }
     }
     g_pf_devw_res |> clear()
     g_pf_devw_res_bytes = 0ul
     g_pf_devw_res_full = false
+    unsafe {
+        delete g_pf_devw_seeded
+    }
 }
 
-//! the q8 resident arm: whole-plane dequant on first touch, then the single full-panel hmm.
-//! false = not resident (off/budget) - the caller runs the scratch tile loop
+//! Seed the resident cache from the image's baked dev-W tables: every baked site lands as a
+//! zero-copy (buf, offset) view over the mapped devwf16 plane - no dequant ever runs for it.
+//! Idempotent per mapped plane; a model without the plane costs one empty-check per forward.
+def private pf_devw_seed_baked(t : Model) {
+    if (empty(t.devwf16) || !t.metal_blob) {
+        return
+    }
+    let pkey = intptr(unsafe(addr(t.devwf16[0])))
+    if (g_pf_devw_seeded?[pkey] ?? false) {
+        return
+    }
+    g_pf_devw_seeded[pkey] = true
+    var bpan = plane_buffer(g_dev, unsafe(addr < void? >(t.devwf16[0])), uint64(long_length(t.devwf16) * 2l), t.image_map != null)
+    if (bpan == null) {
+        return
+    }
+    let bb = blob_of(g_dev, t, 0l)
+    var seeded = 0
+    for (i in range(length(t.devwf16_key))) {
+        if (t.devwf16_fmt[i] != 0) {
+            continue   // kq bakes are reserved - nothing mints them yet
+        }
+        let key = intptr(bb.buf) + uint64(t.devwf16_key[i])
+        if (!key_exists(g_pf_devw_res, key)) {
+            g_pf_devw_res[key] = DevwResEntry(buf = bpan, boff = uint64(t.devwf16_off[i] * 2l), owned = false)   // nolint:PERF026 — once per mapped plane
+            seeded++
+        }
+    }
+    to_log(LOG_INFO, "dasLLAMA metal prefill: {seeded} baked dev-W panels seeded ({long_length(t.devwf16) * 2l >> 20l} MB, zero-copy)\n")   // nolint:PERF028,PERF026 — once per mapped plane
+}
+
+//! the q8 resident arm: a baked or once-dequantized panel, then the single full-panel hmm.
+//! false = not resident (off/budget, no bake) - the caller runs the scratch tile loop
 def private pf_devw_panel_q8_resident(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
                                       bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64) : bool {
     var fresh = false
-    var bwh = pf_devw_resident_panel(intptr(bwblob) + wboff, uint64(d * kdim * 2l), fresh)
-    if (bwh == null) {
+    let e = pf_devw_resident_panel(intptr(bwblob) + wboff, uint64(d * kdim * 2l), fresh)
+    if (e.buf == null) {
         return false
     }
     if (fresh) {
         let nblk = d * (kdim / 32l)
         var dka = CvtArgs(total = uint(nblk))
-        enc_dequant_q8h(enc, bwblob, wboff, bwblob, bwh, dka, (nblk + 255l) / 256l * 256l)
+        enc_dequant_q8h(enc, bwblob, wboff, bwblob, e.buf, dka, (nblk + 255l) / 256l * 256l)
     }
-    pf_enc_hmm(enc, bwh, bxh, by, yoff, bk, bn, rows, d, d, kdim)
+    pf_enc_hmm(enc, e.buf, bxh, by, yoff, bk, bn, rows, d, d, kdim, e.boff)
     return true
 }
 
@@ -3115,20 +3155,20 @@ def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt;
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
     var rfresh = false
-    var brh = pf_devw_resident_panel(intptr(bq.buf) + uint64(woff), uint64(d * kdim * 2l), rfresh)
-    if (brh != null) {
+    let re = pf_devw_resident_panel(intptr(bq.buf) + uint64(woff), uint64(d * kdim * 2l), rfresh)
+    if (re.buf != null) {
         if (rfresh) {
             var rka = CvtArgs(total = uint(d * kdim / 32l))
             let rgt = (d * kdim / 32l + 255l) / 256l * 256l
             if (fmt == KqFmt.k6) {
-                enc_dequant_k6h(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, brh, rka, rgt)
+                enc_dequant_k6h(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, re.buf, rka, rgt)
             } elif (fmt == KqFmt.k4) {
-                enc_dequant_k4h(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, brh, rka, rgt)
+                enc_dequant_k4h(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, re.buf, rka, rgt)
             } else {
-                enc_dequant_k5h(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, brh, rka, rgt)
+                enc_dequant_k5h(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, re.buf, rka, rgt)
             }
         }
-        pf_enc_hmm(enc, brh, bxh, by, yoff, bk, bn, rows, d, d, kdim)
+        pf_enc_hmm(enc, re.buf, bxh, by, yoff, bk, bn, rows, d, d, kdim, re.boff)
         return true
     }
     let td = d / tiles
@@ -3557,6 +3597,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var why = prefill_decline(t, s, npos, start_pos)
     if (why == MetalPrefillDecline.none && !metal_prefill_init()) {
         why = MetalPrefillDecline.device
+    }
+    if (why == MetalPrefillDecline.none) {
+        pf_devw_seed_baked(t)   //! baked image panels land in the resident cache before any encode
     }
     if (why != MetalPrefillDecline.none) {
         if (s.ple_gpu_pending) {   //! the gate promised a device pre-step — build it on CPU first

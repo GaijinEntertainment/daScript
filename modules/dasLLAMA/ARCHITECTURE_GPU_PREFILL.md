@@ -67,12 +67,14 @@ count repays. The raced evidence
 
 **Resident panels remove the re-dequant entirely.** The dev-W scratch pair re-pays every
 site's dequant every forward - at 8B geometry ~4.5 GB of panel writes and quant reads per
-512-chunk, the whole `devw_cvt` knockout pool (~7.7 ms). Under a `DASLLAMA_METAL_DEVW_RESIDENT`
-MB budget, a served site's whole W plane dequantizes ONCE into a persistent hazard-tracked
-buffer keyed by blob pointer plus site offset, reads as a single full-panel GEMM (no
-N-column tiling - tiling exists only for the scratch pair's capacity), and dies with the
-driver shutdown or a weight refill. Sites past the budget stay on scratch, warned once.
-Measured 8B npos=512: 162.1 -> 154.0 ms with the budget at 4 GB (~3.0 GB used).
+512-chunk, the whole `devw_cvt` knockout pool (~7.7 ms). A resident site reads as a single
+full-panel GEMM at a `(buffer, offset)` seat (no N-column tiling - tiling exists only for the
+scratch pair's capacity), keyed by blob pointer plus site offset, released on driver shutdown
+or weight refill. Panels become resident two ways: an image-served model seeds them ZERO-COPY
+from its baked `devwf16` plane (`ARCHITECTURE_IMAGE.md` sec.2.1h - no dequant ever, no
+dedicated memory), and an owned load dequantizes once into persistent hazard-tracked buffers
+under the `DASLLAMA_METAL_DEVW_RESIDENT` MB budget (past it, scratch, warned once).
+Measured 8B npos=512: 162.1 -> 153.8 ms, both ways.
 
 Clauses the isolated grid cannot see, because it races one site while production overlaps
 sites:
