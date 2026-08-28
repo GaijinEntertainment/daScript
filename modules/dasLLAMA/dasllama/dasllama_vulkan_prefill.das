@@ -44,9 +44,9 @@ def private pf_f16_feed(f : int) : bool => f == int(KqFmt.q8) && g_gpu.coopmat_m
 
 // the k|v GEMMs merge into ONE dispatch when the two q8 planes sit adjacent in the arena
 // (the bump allocator places them back-to-back unless a slab boundary intervenes): d = 2*kvd
-// doubles the starved k/v grid and deletes the v copy. The cm2 feed keeps the split pair.
+// doubles the starved k/v grid and deletes the v copy.
 def private pf_kv_merged(l, dim, kvd : int64) : bool {
-    if (!g_env_vulkan.vk_kvm || g_gpu.coopmat_mode == 4
+    if (!g_env_vulkan.vk_kvm
             || g_rd.layers[l].fk != int(KqFmt.q8) || g_rd.layers[l].fv != int(KqFmt.q8)) {
         return false
     }
