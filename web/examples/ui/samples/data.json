@@ -8,22 +8,22 @@
     {
       "name" : "Game: Arcanoid (3D, arrow keys + space)",
       "slug" : "arcanoid",
-      "files" : ["examples/arcanoid/main.das", "examples/arcanoid/live_stub.das"]
+      "files" : ["examples/arcanoid/main.das"]
     },
     {
       "name" : "Game: Pac-Man (3D, arrow keys + space)",
       "slug" : "pacman",
-      "files" : ["examples/pacman/main.das", "examples/pacman/live_stub.das"]
+      "files" : ["examples/pacman/main.das"]
     },
     {
       "name" : "Game: Boulder Dash (3D, arrows + Z grab)",
       "slug" : "boulder-dash",
-      "files" : ["examples/boulder-dash/main.das", "examples/boulder-dash/cave.das", "examples/boulder-dash/cave_gen.das", "examples/boulder-dash/sfx_gen.das", "examples/boulder-dash/live_stub.das"]
+      "files" : ["examples/boulder-dash/main.das", "examples/boulder-dash/cave.das", "examples/boulder-dash/cave_gen.das", "examples/boulder-dash/sfx_gen.das"]
     },
     {
       "name" : "Game: River Run (3D, arrows + space)",
       "slug" : "river_run",
-      "files" : ["examples/river_run/main.das", "examples/river_run/rr_globals.das", "examples/river_run/rr_shaders.das", "examples/river_run/rr_models.das", "examples/river_run/rr_postfx.das", "examples/river_run/river.das", "examples/river_run/rr_audio.das", "examples/river_run/gameplay.das", "examples/river_run/hud.das", "examples/river_run/hud3d.das", "examples/river_run/live_stub.das"]
+      "files" : ["examples/river_run/main.das", "examples/river_run/rr_globals.das", "examples/river_run/rr_shaders.das", "examples/river_run/rr_models.das", "examples/river_run/rr_postfx.das", "examples/river_run/river.das", "examples/river_run/rr_audio.das", "examples/river_run/gameplay.das", "examples/river_run/hud.das", "examples/river_run/hud3d.das", "examples/river_run/rr_live.das"]
     },
     {
       "name" : "ImGui: Fourier Series (epicycles)",

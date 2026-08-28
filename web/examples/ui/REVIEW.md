@@ -3,14 +3,17 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `site/README.md`.
 
-**Every rule of `site/REVIEW.md` binds a change under `src/` and `samples/` as if the files
-lived under `site/playground/`.** The deploy copies them into the site (`pages.yml`), so
+**A boulder-dash sample file - a `.das` source, a dastest suite, or that sample's
+`ARCHITECTURE.md` - answers to `samples/examples/boulder-dash/REVIEW.md`, wherever the diff
+puts it.**
+
+**A diff that changes a file of this folder applies `site/REVIEW.md` (repo root) too.** The
+deploy copies these files into the site (`.github/workflows/pages.yml`, repo root), so
 `site/playground/` never shows the change.
 
-**Never write a `// verify:` line into a sample source - put the budget or the expected pattern
+**A `.das` file under `samples/` not written in gen2, or not a full program that compiles and
+runs with the current toolchain, is a defect.**
+
+**Never write a `// verify:` line into a `.das` file under `samples/` - put the budget or the expected pattern
 in `utils/internal/dasweb-verify/browser/expectations.json` instead.** A sample-source change
 voids that sample's nightly build-cache entry.
-
-**A file of the boulder-dash sample - its `.das` sources, its dastest suites, its
-`ARCHITECTURE.md` - answers to `samples/examples/boulder-dash/REVIEW.md` wherever the
-diff puts it.**

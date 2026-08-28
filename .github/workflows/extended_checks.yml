@@ -346,6 +346,12 @@ jobs:
           linux)
             sudo bash ci/apt_install.sh xvfb
             xvfb-run -a bash examples/games/sequence/ci_smoke_test.sh "$(pwd)"
+            # The ported games, 60 frames each: settles the eval_main_loop exit
+            # arms, the --max-frames cap, shutdown, and the threaded music arm -
+            # the parts no dastest suite can reach.
+            for g in arcanoid pacman boulder-dash river_run; do
+              timeout 120 xvfb-run -a ./bin/daslang examples/games/$g/main.das -- --max-frames 60
+            done
             ;;
           *)
             bash examples/games/sequence/ci_smoke_test.sh "$(pwd)"
@@ -528,10 +534,10 @@ jobs:
       if: matrix.target == 'linux'
       run: |
         set -eux
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./examples/games/boulder-dash/test_cave.das
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./examples/games/boulder-dash/test_generate.das
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./web/examples/ui/samples/examples/boulder-dash/test_cave_rules.das
-        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./web/examples/ui/samples/examples/boulder-dash/test_sfx_gen.das
+        # dastest walks the folder: every test_*.das runs, files without [test]
+        # annotations just compile - a new suite cannot be silently left out.
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./examples/games/boulder-dash
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./web/examples/ui/samples/examples/boulder-dash
 
     - name: "Test review-md discovery"
       if: matrix.target == 'linux'

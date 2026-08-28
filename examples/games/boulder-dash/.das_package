@@ -11,5 +11,5 @@ def package() {
 [export]
 def release() {
     release_main("main.das")            // single source: native desktop live-reload AND wasm64
-                                        // (live_api/dashv skipped on wasm via `require ?dashv`; music gated off)
+                                        // (live_api/dashv skipped on wasm via `require ?dashv`)
 }

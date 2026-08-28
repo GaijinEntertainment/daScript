@@ -12,3 +12,8 @@ such step enforces its rule automatically, with no reviewer involved -
 **A diff that adds or changes a per-PR gate step - a workflow step that runs on
 `pull_request` and fails the lane when it finds a defect - makes that step fail on every
 defect in what it checks, and on nothing else.**
+
+**A diff that adds or changes a step in `pages.yml` that names the deployed games writes
+that list as a `for g in <ids>; do` loop.** `examples/games/REVIEW.das` (repo root) reads
+the deployed game list from those loops, so a list spelled any other way is one nothing
+cross-checks.

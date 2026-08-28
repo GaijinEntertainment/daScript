@@ -2,15 +2,13 @@ options gen2
 options persistent_heap
 options gc
 
-// river run -- web playground port. rr_live (the REST command surface) is a
-// development tool with no role here, so it is not part of this copy.
-
 require rr_globals public
 require rr_audio
 require river
 require gameplay
 require hud
 require hud3d
+require rr_live
 require daslib/strings_convert
 
 // --- GL Setup ---
@@ -374,11 +372,9 @@ def parse_args() {
     }
 }
 
-// Entry point for the standalone cross-compiled build (daslang -exe -> .wasm).
-// eval_main_loop drives the block once per frame: a blocking while-loop natively,
-// emscripten_set_main_loop (rAF) on the web -- so the same main runs in the browser
-// without blocking. Returns false to end the loop. update() ends its frame through
-// live_end_frame, which collects, so the loop body must not collect again.
+// eval_main_loop drives the block once per frame: a blocking while-loop
+// natively, emscripten_set_main_loop (rAF) on the web -- one main for both.
+// live_end_frame only swaps buffers, so the loop body owns the GC boundary.
 [export]
 def main() {
     parse_args()
@@ -386,6 +382,7 @@ def main() {
     var frame_count = 0
     eval_main_loop() {
         update()
+        maybe_collect_gc()
         frame_count++
         return false if (max_frame_limit > 0 && frame_count >= max_frame_limit)
         return !exit_requested()

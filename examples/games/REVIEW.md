@@ -1,9 +1,9 @@
 # examples/games Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
+`ARCHITECTURE.md`. Planned work: `plans/port_convergence.md` (repo root).
 
-**Weakening the card-wiring check in `REVIEW.das` (beside this file) is a defect.**
+**A diff that deletes a check in `REVIEW.das` (beside this file), narrows what it walks, or
+drops a finding it used to report is a defect** - updating a constant so a check keeps
+matching the tree is not.
 
-**A diff that adds a step to the deploy workflow naming the games it deploys writes that
-list as a `for g in <ids>; do` loop.** The check beside this file reads the deployed game
-list from those loops, so a list spelled any other way is one nothing cross-checks.
