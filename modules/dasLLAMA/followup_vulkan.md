@@ -183,6 +183,15 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    next kernel-side lever. OWED from the storage-type plan: small-int SSBO STORE coverage
    (no fixture writes int8/int16 today) - unblocks deleting the hand-rolled word-packing
    in every requant writer kernel.
+   (b)+(c) CLOSED (2026-08-27, commit 57437c8f7): cm2_tile_cols rewritten to a
+   wave-efficiency comparison (cross-multiplied occupied/allocated wave slots, m only on a
+   strict win, ties to l) - probe-fit on all 8 role-shape points; tinyllama mode-4
+   18102 -> 20159 on this alone. With that, mode 4 beats mm back-to-back on BOTH serving
+   models and `resolve_coopmat_mode` now DEFAULTS to cm2 on coopmat2 hardware. Default-path
+   board vs b10659: 3B 7406.8 +/- 310 pp / 105.7 tg = 96.3%/96.1%; tinyllama
+   20188.1 +/- 185 / 294.4 = 99.6% pp (inside their row noise), tg ahead. Mode-4 headroom
+   still unported: the ar+rq fusion (the fq6 gate skips it), the kvm merge (mode-4
+   excluded), the wg_blk0 push-constant base (~9% of the decode callback).
    (ngfx GPU Trace, our gate loop vs their MUL_MAT loop; counters now read UNELEVATED):
    ours tensor 44.6 / L2 54.2 / l1tex 44.9 / dram 15.3, theirs tensor 56.1 / L2 23.8 /
    l1tex 27.6 / dram 29.7 - their cm2 keeps the MMA pipe ~26% busier and streams weights
