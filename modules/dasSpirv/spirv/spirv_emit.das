@@ -5089,7 +5089,10 @@ class SpirvEmit : AstVisitor {
             let bt = type_bool(bm)
             let cnd = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.ULessThan, bt, cnd, iv, len)
-            emit(bm, SEC_FUNCS, SpvOp.LoopMerge, merge, cont, 0u)
+            // Unroll is LOAD-BEARING: left as None, the dynamic per-element index into the
+            // accumulator defeats the driver's register promotion of the coopmat for the WHOLE
+            // kernel (measured 34.2 -> 57.8 TFLOP/s on the cm2 l-tile, 5060 Ti, driver 610.74)
+            emit(bm, SEC_FUNCS, SpvOp.LoopMerge, merge, cont, 1u)
             emit(bm, SEC_FUNCS, SpvOp.BranchConditional, cnd, body, merge)
             emit(bm, SEC_FUNCS, SpvOp.Label, body)
             let ept = type_pointer(bm, SpvStorageClass.Function, comp_t)

@@ -320,6 +320,9 @@ struct public VulkanEnv {
     @clarg_doc = "Device-side token-embedding gather for the resident prefill (the embd plane joins the arena; tied models reuse the cls plane); 0 keeps the CPU embed loop."
     vk_gpu_embed : bool = true
 
+    @clarg_doc = "Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured -9% on the mm_a gate shape on the 5060 Ti, so plain pipelines are the default)."
+    vk_fullsg : bool = false
+
     @clarg_doc = "Use a ReBAR device-local host-visible heap when one larger than 1GB is present."
     vk_rebar : bool = true
 
@@ -335,6 +338,10 @@ struct public VulkanEnv {
     @clarg_path
     @clarg_doc = "Directory of <kernel>.spv files served instead of the emitted words at pipeline creation (offline spirv-opt / hand-patched A/B instrument)."
     vk_spv_override : string = ""
+
+    @clarg_path
+    @clarg_doc = "Directory to write each kernel's emitted words as <kernel>.spv at pipeline creation (the override instrument's capture half)."
+    vk_spv_dump : string = ""
 
     @clarg_doc = "Barrier at every dispatch (correctness bisect)."
     vk_hazard_paranoid : bool = false

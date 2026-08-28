@@ -2271,6 +2271,31 @@ def test_vulkan_attention(t : T?) {
                 t |> success(cy.maxdiff <= AT_REL_TOL * cy.maxref,
                     "{tag}: out rows within tolerance (maxdiff {cy.maxdiff} vs {AT_REL_TOL * cy.maxref} bar, maxref {cy.maxref})")
                 let ck = compare_gout(kout, kp)
+                if (ck.maxdiff > AT_REL_TOL * ck.maxref) {
+                    // flake forensics: which ROWS diverge (window-boundary alignment names the racer)
+                    var frow = -1l
+                    var lrow = -1l
+                    var nbad = 0l
+                    for (rw in range64(npos)) {
+                        var bad = false
+                        for (c in range64(ATKVD)) {
+                            if (abs(kout[int(rw * ATKVD + c)] - kp[int(rw * ATKVD + c)]) > AT_REL_TOL * ck.maxref) {
+                                bad = true
+                                break
+                            }
+                        }
+                        if (bad) {
+                            if (frow < 0l) {
+                                frow = rw
+                            }
+                            lrow = rw
+                            nbad++
+                        }
+                    }
+                    to_log(LOG_ERROR, "roped-k forensics: bad rows {nbad} first {frow} last {lrow} (npos {npos})\n")
+                    let sr = frow * ATKVD
+                    to_log(LOG_ERROR, "roped-k row {frow} gpu [{kout[int(sr)]}, {kout[int(sr + 1l)]}] ref [{kp[int(sr)]}, {kp[int(sr + 1l)]}]\n")
+                }
                 t |> success(ck.maxdiff <= AT_REL_TOL * ck.maxref,
                     "{tag}: roped k rows within tolerance (maxdiff {ck.maxdiff} vs {AT_REL_TOL * ck.maxref} bar)")
                 let cv = compare_gout(vout, vy)

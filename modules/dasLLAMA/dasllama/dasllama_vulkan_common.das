@@ -415,6 +415,7 @@ struct GpuState {
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops)
+    full_sg : bool           // computeFullSubgroups enabled — every class pipeline pins REQUIRE_FULL_SUBGROUPS
     coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile (default), 4 = cm2 decode-in-load
     sm_count : int           // shaderSMCount (VK_NV_shader_sm_builtins; 0 = unknown -> l-tile always, no split-k)
     weight_budget : int64    // resident-weight cap — queried heap budget minus reserve, or VRAM_BUDGET
@@ -1020,7 +1021,8 @@ def vk_moe_init : bool {
     g_gpu.staging = make_host_buf(STAGING_BYTES, false)
     g_gpu.host_mem |> erase(g_gpu.staging.buf)   // process-lifetime — exempt from the model-drop sweep
     g_init_failed = false
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg)\n")
+    g_gpu.full_sg = g_env_vulkan.vk_fullsg && compute_full_subgroups_supported(g_gpu.phys)
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg ? ", full subgroups" : ""})\n")
     if (dasllama_noisy()) {
         // storage-range is the limit that actually binds the arena; allocs/descriptors do not
         var lp : VkPhysicalDeviceProperties
@@ -2271,14 +2273,29 @@ def private spv_override_load(kernel : string; var spv : array<uint>) {
     }
 }
 
+def private spv_dump_save(kernel : string; spv : array<uint>) {
+    let dir = g_env_vulkan.vk_spv_dump
+    if (empty(dir)) {
+        return
+    }
+    fopen("{dir}/{kernel}.spv", "wb") $(f) {
+        if (f != null) {
+            f |> fwrite(spv)
+        }
+    }
+}
+
 [cold_path]   // pipeline creation — once per kernel
 def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
     if (length(c.pipes) <= ord) {
         c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
     }
     spv_override_load(kernel, spv)
+    spv_dump_save(kernel, spv)
     var shader <- create_shader_module(g_gpu.device, spv)
-    c.pipes[ord] <- create_compute_pipeline(g_gpu.device, c.pipe_layout, shader)
+    c.pipes[ord] <- (g_gpu.full_sg
+        ? create_compute_pipeline_full_subgroups(g_gpu.device, c.pipe_layout, shader)
+        : create_compute_pipeline(g_gpu.device, c.pipe_layout, shader))
     let pk = intptr(boost_value_to_vk(c.pipes[ord]))
     g_pipe_access[pk] = uint2(rmask, wmask)
     g_pipe_names[pk] = kernel

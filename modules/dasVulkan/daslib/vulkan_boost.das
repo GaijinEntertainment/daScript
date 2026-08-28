@@ -387,7 +387,8 @@ def public create_device(phys : VkPhysicalDevice; queue_families : array<uint>; 
 
 //! True iff ``phys`` supports the 8/16-bit SSBO storage set the dasSpirv storage wave emits:
 //! ``storageBuffer16BitAccess`` (Vulkan11Features) + ``storageBuffer8BitAccess`` + ``shaderFloat16`` +
-//! ``shaderInt8`` (Vulkan12Features). Gate 8/16-bit kernels — old/software drivers can miss any bit.
+//! ``shaderInt8`` (Vulkan12Features) + core ``shaderInt16``. Gate 8/16-bit kernels — old/software
+//! drivers can miss any bit.
 def public storage_8_16_supported(phys : VkPhysicalDevice) : bool {
     var f11 = VkPhysicalDeviceVulkan11Features()
     var f12 = VkPhysicalDeviceVulkan12Features()
@@ -398,10 +399,10 @@ def public storage_8_16_supported(phys : VkPhysicalDevice) : bool {
     }
     vkGetPhysicalDeviceFeatures2(phys, f2)
     return (f11.storageBuffer16BitAccess != 0u && f12.storageBuffer8BitAccess != 0u
-        && f12.shaderFloat16 != 0u && f12.shaderInt8 != 0u)
+        && f12.shaderFloat16 != 0u && f12.shaderInt8 != 0u && f2.features.shaderInt16 != 0u)
 }
 
-//! Create a device with the 8/16-bit SSBO storage set enabled (the four bits storage_8_16_supported
+//! Create a device with the 8/16-bit SSBO storage set enabled (the five bits storage_8_16_supported
 //! probes), threaded as a Vulkan11Features -> Vulkan12Features chain through the features2 overload.
 //! Pairs with dasSpirv's ``float16``/``int8`` SSBO members and ``unpack8``/``pack32``; gate first.
 def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : uint) : Device {
@@ -417,6 +418,7 @@ def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : ui
     f12.shaderFloat16 = 1u
     f12.shaderInt8 = 1u
     var f2 = VkPhysicalDeviceFeatures2()
+    f2.features.shaderInt16 = 1u   // core bit: the Int16 SPIR-V capability (int16 SSBO members widen through it)
     unsafe {
         f2.pNext = addr<void?>(f11)
         f11.pNext = addr<void?>(f12)
@@ -563,6 +565,7 @@ def public create_device_storage_8_16_int_dot(phys : VkPhysicalDevice; queue_fam
     f12.shaderInt8 = 1u
     fdot.shaderIntegerDotProduct = 1u
     var f2 = VkPhysicalDeviceFeatures2()
+    f2.features.shaderInt16 = 1u   // core bit: the Int16 SPIR-V capability (int16 SSBO members widen through it)
     unsafe {
         f2.pNext = addr<void?>(f11)
         f11.pNext = addr<void?>(f12)
@@ -628,7 +631,14 @@ def public create_device_storage_8_16_int_dot_coopmat(phys : VkPhysicalDevice; q
     fcm.cooperativeMatrix = 1u
     fmp.memoryPriority = 1u
     fpg.pageableDeviceLocalMemory = 1u
+    // the Vulkan 1.3 subgroup pair, when reported: full-subgroup pipelines may then drop
+    // partial-subgroup guards (create_compute_pipeline_full_subgroups)
+    let with_fullsg = compute_full_subgroups_supported(phys)
+    var f13 = VkPhysicalDeviceVulkan13Features()
+    f13.subgroupSizeControl = 1u
+    f13.computeFullSubgroups = 1u
     var f2 = VkPhysicalDeviceFeatures2()
+    f2.features.shaderInt16 = 1u   // core bit: the Int16 SPIR-V capability
     unsafe {
         f2.pNext = addr<void?>(f11)
         f11.pNext = addr<void?>(f12)
@@ -639,6 +649,15 @@ def public create_device_storage_8_16_int_dot_coopmat(phys : VkPhysicalDevice; q
         }
         if (with_pageable) {
             fmp.pNext = addr<void?>(fpg)
+        }
+        if (with_fullsg) {
+            if (with_pageable) {
+                fpg.pNext = addr<void?>(f13)
+            } elif (with_memprio) {
+                fmp.pNext = addr<void?>(f13)
+            } else {
+                fcm.pNext = addr<void?>(f13)
+            }
         }
     }
     var props : VkPhysicalDeviceProperties
@@ -815,6 +834,7 @@ def public create_device_storage_8_16_int_dot_coopmat2(phys : VkPhysicalDevice; 
     fmp.memoryPriority = 1u
     fpg.pageableDeviceLocalMemory = 1u
     var f2 = VkPhysicalDeviceFeatures2()
+    f2.features.shaderInt16 = 1u   // core bit: the Int16 SPIR-V capability
     unsafe {
         f2.pNext = addr<void?>(f11)
         f11.pNext = addr<void?>(f12)
@@ -1692,6 +1712,45 @@ def public create_compute_pipeline(device : Device; layout : PipelineLayout; sha
 def public create_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string = "main") : Pipeline {
     var stage = VkPipelineShaderStageCreateInfo()
     stage.stage.compute = true
+    stage.module_ = boost_value_to_vk(shader)
+    stage.pName = entry
+    var cp = VkComputePipelineCreateInfo()
+    cp.stage = stage
+    cp.layout = boost_value_to_vk(layout)
+    var h : VkPipeline
+    unsafe {
+        vk_check(vkCreateComputePipelines(boost_value_to_vk(device), null, 1u, addr(cp), null, addr(h)), null)
+    }
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
+}
+
+//! True when the device reports the Vulkan 1.3 subgroup pair (``subgroupSizeControl`` +
+//! ``computeFullSubgroups``) — the gate for create_compute_pipeline_full_subgroups.
+def public compute_full_subgroups_supported(phys : VkPhysicalDevice) : bool {
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    if (props.apiVersion < make_api_version(1u, 3u, 0u)) {
+        return false
+    }
+    var q13 = VkPhysicalDeviceVulkan13Features()
+    var q2 = VkPhysicalDeviceFeatures2()
+    unsafe {
+        q2.pNext = addr<void?>(q13)
+    }
+    vkGetPhysicalDeviceFeatures2(phys, q2)
+    return q13.subgroupSizeControl != 0u && q13.computeFullSubgroups != 0u
+}
+
+//! ``create_compute_pipeline`` with REQUIRE_FULL_SUBGROUPS set on the stage: the compiler may
+//! drop partial-subgroup guards. Valid only on a device created with ``computeFullSubgroups``
+//! enabled and a workgroup width that is a subgroup multiple.
+def public create_compute_pipeline_full_subgroups(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string = "main") : Pipeline {
+    var stage = VkPipelineShaderStageCreateInfo()
+    stage.stage.compute = true
+    stage.flags.require_full_subgroups = true
     stage.module_ = boost_value_to_vk(shader)
     stage.pName = entry
     var cp = VkComputePipelineCreateInfo()

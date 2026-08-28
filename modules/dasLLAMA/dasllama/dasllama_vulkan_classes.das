@@ -3330,8 +3330,11 @@ class KqQ40CmF16 : MoeCmBase {
 // ===== the cm2 (NV_cooperative_matrix2) prefill tiles: native fmt-0 planes, decode-in-load =====
 
 struct VkQ8Blk {
-    qs : uint[8]   // one fmt-0 q8 block: 32 packed int8 quants; the scale lives in wsh
-}
+    qs : int16[16]   // one fmt-0 q8 block: 32 packed int8 quants viewed as 16-bit lanes; the scale
+}                    // lives in wsh. The 16-bit width is LOAD-BEARING: the driver's cm2 block-load
+                     // decode pattern-matches the 16-bit load + unpack8 lane select (62.7 TFLOP/s
+                     // on the 5060 Ti) where a 32-bit word + shift extraction runs 55.4 and a
+                     // 32-bit unpack8 + dynamic 4-lane select collapses to 20.3
 
 // the cm2 quant "l" geometry on the NATIVE fmt-0 two-plane layout: 256 threads, one
 // 128-weight x 256-token tile per wg, BK=64 (2 blocks) per step, 8x-unrolled k loop. The decode
@@ -3347,9 +3350,8 @@ class Q8Cm2LBatch : MoeCmBase {
 
     [spirv_decode]
     def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
-        let w = blk.qs[int(cib.y >> 2u)]
-        let q = (int(w) << ((3 - int(cib.y & 3u)) * 8)) >> 24
-        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(q))
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
+        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
     }
 
     [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2l_cls_spv")]
@@ -3529,9 +3531,8 @@ class Q8Cm2MBatch : MoeCmBase {
 
     [spirv_decode]
     def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
-        let w = blk.qs[int(cib.y >> 2u)]
-        let q = (int(w) << ((3 - int(cib.y & 3u)) * 8)) >> 24
-        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(q))
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
+        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
     }
 
     [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2m_cls_spv")]

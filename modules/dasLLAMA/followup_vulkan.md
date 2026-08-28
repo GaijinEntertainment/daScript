@@ -138,6 +138,51 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    re-confirms mm as the right default. (e) their
    isolated q8_0 MUL_MAT (test-backend-ops perf, m=4096 n=512 k=14336, their only q8/n=512
    stock case) = 51.5 TFLOP/s - the isolated kernel-rate gap is <= ~6%. Counter diff
+   THE CM2 CLIFF, FOUND AND FIXED (2026-08-27): our cm2 l-tile ran 28-35 TFLOP/s where
+   llama.cpp's identical geometry ran 62-66 - root cause was ONE BIT in the SPIR-V emitter:
+   `coopmatClamp`'s hand-emitted per-element loop carried `OpLoopMerge ... None`; unrolled
+   (glslang spells the same loop `[[unroll]]`), the driver keeps the wg-scope accumulator in
+   tensor-register form - left rolled, the dynamic per-element index demotes the coopmat to
+   addressable storage FOR THE WHOLE KERNEL. Fix: `spirv_emit.das` coopmatClamp loop control
+   None -> Unroll; min-kernel 34.2 -> 57.8 TFLOP/s (+64%). Hunt instruments (all in
+   `harness/vk_gemm_probe.das` + envs): `cm2x` arg = decode-cost bisect variants; `their` arg
+   = llama.cpp's glslc-built mul_mm_cm2 blob dispatched in OUR harness via
+   DASLLAMA_VK_SPV_OVERRIDE (spec constants patched by spirv-opt to the l geometry);
+   DASLLAMA_VK_SPV_DUMP (new env) = the override's capture half. Bisect ledger (gate shape,
+   drain-free): their stock 66.0 / their+external-scale-plane 60 / +our-decode-arithmetic 55.4
+   / a GLSL twin of OUR minimal kernel 58.1 / our minimal pre-fix 34.7 - so decode spelling
+   costs ~9% (their 16-bit unpack8 form needs Int8 caps we do not emit) and the interleaved
+   scale ~5%; everything else was the clamp-loop bit. Post-fix shipped-kernel table
+   (cnt=512, drain-free): cm2l 58.1/60.3 gate/down BEATS mm 53.7/54.9; with the probe's
+   write-write barriers cm2l 47.8/40.8 vs mm 48.9/52.0 - the smaller cm2 grids (half mm's
+   wg count) pay wave-quantization drains. E2E 3B (debug-jit, REBAR=0): mm 7058 +/- 28 pp
+   (unchanged serving default), mode-4 cm2 6676 +/- 32 - the kernel now wins isolated but
+   the chain packaging (grid sizes, barrier drains, the f16 staging step) still favors mm;
+   blunt DASLLAMA_CM2_SPLITK=2 across all GEMMs = 4058 (the reduce tax on well-filled
+   shapes). Items (b)+(c) are therefore LIVE again: the l/m/split heuristics were tuned
+   against the 2x-slower kernel and must be re-tuned before the mode-4 default flip.
+   THE DECODE SPELLING, CLOSED (2026-08-27 late): the last ~15% was the decode-callback
+   ARITHMETIC FORM. Probe ladder on their kernel, our two-plane data (gate, drain-free):
+   16-bit load + unpack8 + [i&1] lane = 62.7 (their stock 63.3 - the external scale plane
+   costs ~1%); 32-bit word + variable shifts = 55.4; 32-bit unpack8 + dynamic 4-lane
+   select = 20.3 (VectorExtractDynamic on v4char poisons the block-load path outright).
+   The driver pattern-matches THEIR EXACT 16-bit spelling. Shipped: VkQ8Blk is int16[16]
+   and decode_q8 is `unpack8(qs[(cib.y & 30) >> 1])[cib.y & 1]` - the das storage-type
+   surface (int8/16 SSBO members, unpack8/pack32, Int8/Int16 + storage caps) already
+   existed golden-tested in dasSpirv (test_storage_8_16); the ONLY additions were the
+   unpack8(int16/uint16) -> byte2/ubyte2 lingua-franca overloads (zero emitter change) and
+   the core shaderInt16 device feature across the vulkan_boost storage_8_16 creator family
+   (+ the storage_8_16_supported gate; the caps validated only by luck before). RESULTS:
+   cm2l drain-free 62.2/64.7 gate/down = par with their blob, +15-18% over mm; E2E 3B
+   mode-4 pp 7293.9 +/- 47 - NEW BEST, BEATS mm (7058 +/- 28) by +3.3% = 94.8% of their
+   cm2 build; tg 104.4 (decode decoupled). tinyllama mode-4 18102 vs mm 19754 (-9%): the
+   small shapes starve the 128x256 l grids (kv = 4 wgs) - item (b)'s re-tune is what the
+   (c) default flip waits on, per-model or per-shape. Newly visible after the fix: the
+   wg_blk0 Workgroup-storage read in decode costs ~9% (lit 51.6 vs full 47.3 at cnt=512
+   with barriers) - a push-constant block base for single-region dense dispatches is the
+   next kernel-side lever. OWED from the storage-type plan: small-int SSBO STORE coverage
+   (no fixture writes int8/int16 today) - unblocks deleting the hand-rolled word-packing
+   in every requant writer kernel.
    (ngfx GPU Trace, our gate loop vs their MUL_MAT loop; counters now read UNELEVATED):
    ours tensor 44.6 / L2 54.2 / l1tex 44.9 / dram 15.3, theirs tensor 56.1 / L2 23.8 /
    l1tex 27.6 / dram 29.7 - their cm2 keeps the MMA pipe ~26% busier and streams weights
