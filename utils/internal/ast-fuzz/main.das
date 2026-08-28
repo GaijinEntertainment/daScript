@@ -9,6 +9,9 @@ let FUZZ_DIR = "utils/internal/ast-fuzz"
 let ALL_PATH = "utils/internal/ast-fuzz/_ast_synth_all.das"
 var WRAP_PATH = "utils/internal/ast-fuzz/__wrap.das"
 var MEMCAP_KB = 4194304
+// Distinguishes concurrent sweeps in one tree. Sharing a victim or a worker log means each
+// sweep reads the other's file, and every number both report is garbage.
+var RUN_TOKEN = 0
 
 [CommandLineArgs]
 struct Config {
@@ -41,6 +44,10 @@ struct Config {
 
     @clarg_doc = "Worker id: gives this process its own wrapper file (__wrap<N>.das). Set by --threads; only pass it by hand to run one worker of a split sweep"
     worker : int
+
+    @clarg_name = "run-token"
+    @clarg_doc = "Distinguishes one sweep's victim and log files from another's in the same tree; set automatically for workers"
+    run_token : int
 
     @clarg_name = "synth-size"
     @clarg_doc = "Statements per synthesized body (default 12)"
@@ -98,6 +105,38 @@ struct Config {
     @clarg_doc = "Print a per-node-kind histogram of what was generated"
     synth_report : bool
 
+    @clarg_name = "mutate"
+    @clarg_doc = "Mutate the AST of this real .das file instead of synthesizing one. The seed range sweeps the candidate node index, so --seeds N covers the first N nodes"
+    mutate : string
+
+    @clarg_name = "mutate-dir"
+    @clarg_doc = "Mutate every .das in this directory: each file x each kind, with the candidate-node count measured per pair so the seed range covers exactly the nodes that exist"
+    mutate_dir : string
+
+    @clarg_name = "mut-kinds"
+    @clarg_doc = "Which kinds --mutate-dir sweeps, comma separated (default 0,1,2,3,4)"
+    mut_kinds : string
+
+    @clarg_name = "mut-count"
+    @clarg_doc = "Apply N edits at once instead of one, kinds and positions drawn from the seed. Each edit stays source-expressible; the combination is what a single edit cannot reach"
+    mut_count : int
+
+    @clarg_name = "mut-stride"
+    @clarg_doc = "--mutate-dir takes every Nth file (default 1)"
+    mut_stride : int
+
+    @clarg_name = "mut-cap"
+    @clarg_doc = "Never sweep more than this many nodes per file/kind (default 300)"
+    mut_cap : int
+
+    @clarg_name = "mut-kind"
+    @clarg_doc = "Which AST edit to apply: 0 operator, 1 int literal, 2 swap two call arguments, 3 variable name, 4 declared type of a let, 5 let type to auto, 6 let const, 7 let type wrapped in array, 8 copy to move or clone, 9 statement into unsafe/try/scope, 10 statement into a closure, 11 statement duplicated, 12 argument const, 13 default value on the last argument, 14 result type to auto, 15 let type nested, 16 statement nested in closures (default 0)"
+    mut_kind : int
+
+    @clarg_name = "mut-depth"
+    @clarg_doc = "How many levels the nesting kinds (15, 16) pile on (default 8)"
+    mut_depth : int
+
     @clarg_doc = "Reproduce mode: compile this victim path once and report"
     file : string
 
@@ -111,7 +150,31 @@ def read_text(path : string) : string {
     return fread(path)
 }
 
+// Mutation victim: the real file, with the macro required in front of it and the node
+// index carried in the options. Everything downstream - subprocess isolation, the
+// crash/verifier/timeout classification, --threads - is the existing driver.
+def build_mutation_victim(cfg : Config; seed : int) : string {
+    return build_string() $(var w) {
+        w |> write("options _enable_ast_synth = true\n")
+        if (cfg.mut_count > 0) {
+            w |> write("options _ast_synth_mut_count = {cfg.mut_count}\n")
+        } else {
+            w |> write("options _ast_synth_mut_at = {seed}\n")
+            w |> write("options _ast_synth_mut_kind = {cfg.mut_kind}\n")
+        }
+        w |> write("options _ast_synth_seed = {seed}\n")
+        if (cfg.mut_depth > 0) {
+            w |> write("options _ast_synth_mut_depth = {cfg.mut_depth}\n")
+        }
+        w |> write("require _ast_synth\n")
+        w |> write(read_text(cfg.mutate))
+    }
+}
+
 def build_victim(cfg : Config; seed : int) : string {
+    if (!empty(cfg.mutate)) {
+        return build_mutation_victim(cfg, seed)
+    }
     return build_string() $(var w) {
         w |> write("options gen2\n")
         w |> write("options _enable_ast_synth = true\n")
@@ -194,7 +257,10 @@ def is_crash(exit_code : int; out : string) : bool {
     if (exit_code >= 128 || exit_code < 0) {
         return true
     }
-    return find(out, "CRASH:") >= 0 || find(out, "Segmentation fault") >= 0
+    // An assertions-enabled build reports an internal invariant violation and traps; the
+    // banner is what identifies it even if the trap itself is swallowed.
+    return (find(out, "CRASH:") >= 0 || find(out, "Segmentation fault") >= 0
+        || find(out, "assertion failed") >= 0)
 }
 
 def ensure_generated(bin : string) : bool {
@@ -246,6 +312,13 @@ def private child_flags(cfg : Config) : string {
         if (cfg.synth_typed) {
             w |> write(" --synth-typed")
         }
+        if (!empty(cfg.mutate)) {
+            w |> write(" --mutate {cfg.mutate}")
+            w |> write(" --mut-kind {cfg.mut_kind}")
+            if (cfg.mut_count > 0) {
+                w |> write(" --mut-count {cfg.mut_count}")
+            }
+        }
         if (cfg.synth_rflags) {
             w |> write(" --synth-rflags")
         }
@@ -261,6 +334,7 @@ def private child_flags(cfg : Config) : string {
         if (cfg.timeout > 0.0) {
             w |> write(" --timeout {cfg.timeout}")
         }
+        w |> write(" --run-token {RUN_TOKEN}")
     }
 }
 
@@ -272,7 +346,7 @@ def private run_threaded(cfg : Config; bin : string; threads, base, seeds : int;
         for (i in range(threads)) {
             w |> write("nice -n 15 '{bin}' {FUZZ_DIR}/main.das -- --bin '{bin}'")
             w |> write(" --worker {i + 1} --base-seed {base + i * per} --seeds {per}{flags}")
-            w |> write(" > {FUZZ_DIR}/__worker{i + 1}.log 2>&1 & ")
+            w |> write(" > {FUZZ_DIR}/__worker{RUN_TOKEN}_{i + 1}.log 2>&1 & ")
         }
         w |> write("wait")
     }
@@ -286,7 +360,7 @@ def private run_threaded(cfg : Config; bin : string; threads, base, seeds : int;
     }
     var crashes = 0
     for (i in range(threads)) {
-        let log = read_text("{FUZZ_DIR}/__worker{i + 1}.log")
+        let log = read_text("{FUZZ_DIR}/__worker{RUN_TOKEN}_{i + 1}.log")
         for (ln in split(log, "\n")) {
             if (find(ln, "run(s) —") >= 0) {
                 to_log(LOG_INFO, "  worker {i + 1}: {strip(slice(ln, find(ln, "run(s) —")))}\n")
@@ -296,8 +370,79 @@ def private run_threaded(cfg : Config; bin : string; threads, base, seeds : int;
             }
         }
     }
-    to_log(LOG_INFO, "ast-fuzz: {crashes} crash(es) across {threads} worker(s); logs in {FUZZ_DIR}/__worker*.log\n")
+    to_log(LOG_INFO, "ast-fuzz: {crashes} crash(es) across {threads} worker(s); logs in {FUZZ_DIR}/__worker{RUN_TOKEN}_*.log\n")
     return crashes > 0 ? 1 : 0
+}
+
+// How many nodes of this kind the file actually has. The macro reports it, so one
+// compile answers it - without this the sweep spends most of its seeds on indices that
+// do not exist and every run comes back a no-op.
+def private count_candidates(cfg : Config; bin : string; file : string; kind : int;
+                             timeout : float) : int {
+    var probe = cfg
+    probe.mutate = file
+    probe.mut_kind = kind
+    if (!fwrite(WRAP_PATH, build_victim(probe, 0))) {
+        return 0
+    }
+    var out : string
+    run_and_capture([bin, "-compile-only", WRAP_PATH], out, timeout)
+    let at = find(out, "of ")
+    if (at < 0) {
+        return 0
+    }
+    let rest = slice(out, at + 3)
+    let sp = find(rest, " ")
+    return sp < 0 ? 0 : to_int(slice(rest, 0, sp))
+}
+
+def private run_mutation_sweep(cfg : Config; bin : string; timeout : float) : int {
+    var kinds : array<int>
+    let spec = empty(cfg.mut_kinds) ? "0,1,2,3,4" : cfg.mut_kinds
+    for (k in split(spec, ",")) {
+        if (!empty(strip(k))) {
+            kinds |> push(to_int(strip(k)))
+        }
+    }
+    let cap = cfg.mut_cap > 0 ? cfg.mut_cap : 300
+    var files : array<string>
+    glob(cfg.mutate_dir, "*.das") $(filename, is_dir) {
+        if (!is_dir && !starts_with(base_name(filename), "_")) {
+            files |> push(path_join(cfg.mutate_dir, filename))
+        }
+    }
+    files |> sort()
+    let stride = max(cfg.mut_stride, 1)
+    var picked <- [for (f, fi in files, count()); f; where fi % stride == 0]
+    to_log(LOG_INFO, "ast-fuzz: mutating {length(picked)} of {length(files)} file(s) x {length(kinds)} kind(s)\n")
+    var findings = 0
+    for (f in picked) {
+        for (k in kinds) {
+            // in --mut-count mode every seed is a different combination of edits, so
+            // there is nothing to calibrate: the seed range is just how many to try
+            var n = cap
+            if (cfg.mut_count <= 0) {
+                n = min(count_candidates(cfg, bin, f, k, timeout), cap)
+            }
+            if (n < 1) {
+                continue
+            }
+            var c = cfg
+            c.mutate = f
+            c.mut_kind = k
+            c.seeds = n
+            c.base_seed = 1
+            c.mutate_dir = ""
+            to_log(LOG_INFO, "ast-fuzz: {base_name(f)} kind={k} nodes={n}\n")
+            let th = cfg.threads > 1 && n >= cfg.threads ? cfg.threads : 1
+            let rc = run_threaded(c, bin, th, 1, n, timeout)
+            if (rc == 1) {
+                findings++
+            }
+        }
+    }
+    to_log(LOG_INFO, "ast-fuzz: mutation sweep done, {findings} file/kind pair(s) with findings\n")
+    return findings > 0 ? 1 : 0
 }
 
 [export]
@@ -320,8 +465,11 @@ def main : int { // nolint:STYLE037,STYLE038 — one linear sweep with a flat cl
     if (cfg.memcap > 0) {
         MEMCAP_KB = cfg.memcap * 1024
     }
+    RUN_TOKEN = cfg.run_token > 0 ? cfg.run_token : int(int64(get_clock()) % 99991)
     if (cfg.worker > 0) {
-        WRAP_PATH = "{FUZZ_DIR}/__wrap{cfg.worker}.das"
+        // The run token keeps two sweeps in one tree off each other's victims. Sharing one
+        // file means each sweep compiles the other's input and every number is garbage.
+        WRAP_PATH = "{FUZZ_DIR}/__wrap{RUN_TOKEN}_{cfg.worker}.das"
     }
     let timeout = cfg.timeout > 0.0 ? cfg.timeout : 20.0
 
@@ -340,6 +488,9 @@ def main : int { // nolint:STYLE037,STYLE038 — one linear sweep with a flat cl
 
     let seeds = cfg.seeds > 0 ? cfg.seeds : 20
     let base = cfg.base_seed > 0 ? cfg.base_seed : 1
+    if (!empty(cfg.mutate_dir)) {
+        return run_mutation_sweep(cfg, bin, timeout)
+    }
     if (cfg.threads > 1) {
         return run_threaded(cfg, bin, cfg.threads, base, seeds, timeout)
     }
@@ -361,6 +512,11 @@ def main : int { // nolint:STYLE037,STYLE038 — one linear sweep with a flat cl
         let ec = run_wrapper(bin, cfg.verify, out, timeout)
         if (is_timeout(ec)) {
             nTimeout++
+            // A mutant that outruns the timeout is the compile-time-blowup class, so it
+            // needs a repro on disk just as much as a crash does.
+            let slow = "{FUZZ_DIR}/__slow.seed{seed}.das"
+            fwrite(slow, read_text(WRAP_PATH))
+            repros |> push("seed={seed} TIMEOUT repro={slow}")
         } elif (is_resource(out)) {
             nResource++
         } elif (is_crash(ec, out)) {

@@ -134,7 +134,34 @@ A run is `CRASH` only on a definitive abnormal exit (a `CRASH:` banner, signal,
 or abort). A **timeout** is reported separately, because it is ambiguous: a real
 hang *or* just a slow compile. Re-run with a larger `--timeout` to tell them
 apart. Hitting the `--memcap` ceiling is reported as `resource`: unbounded
-allocation on a pathological input is not a compiler crash.
+allocation on a pathological input is not a compiler crash. A timeout keeps a
+`__slow.seed<N>.das` repro, the same way a crash keeps `__crash.seed<N>.das`.
+
+## Mutation of real programs
+
+`--mutate <file>` / `--mutate-dir <dir>` re-infers an existing program with edits
+applied to its AST during inference. Every edit is a shape source could also
+spell, so a crash from one is a compiler bug rather than a malformed-tree report.
+
+`--mut-kind K` applies one kind at node `--mut-at`; `--mut-count N` applies N
+random edits per run. Kinds: 0 op2 operator, 1 int literal, 2 call argument
+order, 3 variable name, 4 let type, 5 let type to `auto`, 6 let const, 7 let type
+wrapped in `array`, 8 copy to move/clone, 9 statement into unsafe/try/scope, 10
+statement into a closure, 11 statement duplicated, 12 argument const, 13 default
+value on the last argument, 14 result type to `auto`, 15 let type nested
+`--mut-depth` deep, 16 statement nested `--mut-depth` closures deep.
+
+A timeout in this mode is measured against the **wrapper**, not the file. Requiring the
+macro module costs about a second in a Release build and about ten in a Debug one,
+before any edit is applied, so a bare-file baseline makes every slow victim look like a
+compile-time blowup. Time a no-op wrapper compile of the same file first; only the
+excess over that is the mutation's.
+
+Two properties keep this honest. `--verify` must report **zero**
+verifier-caught runs: one means the mutator is building trees source cannot
+produce, not programs. And only the module being compiled can be mutated - a
+required module is already inferred when the macro runs, so edits to it are
+never re-checked and every run comes back clean.
 
 ## Source probes (`probe.das`)
 

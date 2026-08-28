@@ -15,6 +15,12 @@ require strings
 require daslib/strings_boost
 
 var private g_synthed = false
+// --synth-skip, applied to every generator instance. Filling it at one creation site only
+// leaves the flag silently inert everywhere else, which makes a bisect report the wrong kind.
+var private g_skip_kinds = ""
+// How many levels the nesting kinds (15, 16) pile on. Legal source can nest this deep, so
+// a compiler that descends recursively has to survive it.
+var private g_mut_depth = 8
 
 let private HANDLED_TYPES = fixed_array(
     "$:das_string", "$:clock", "$:HashBuilder",
@@ -31,6 +37,14 @@ struct private DeclPool {
     @do_not_delete annots : array<TypeAnnotation?>
     @do_not_delete vars : array<VariablePtr>
     @do_not_delete funcs : array<Function?>
+}
+
+def private apply_skip(var g : GenAll?) : void {
+    for (sk in split(g_skip_kinds, ",")) {
+        if (!empty(strip(sk))) {
+            g.skip[strip(sk)] := true
+        }
+    }
 }
 
 def private harvest_annotations(var pool : DeclPool) : void {
@@ -53,6 +67,7 @@ def private harvest_annotations(var pool : DeclPool) : void {
 def private add_synth_decls(mod : Module?; var pool : DeclPool; seedInt : int; count : int;
                             depth : int) : void {
     var g = new GenAll(seed = random_seed(seedInt * 131 + 7), max_depth = depth, at = LineInfo())
+    apply_skip(g)
     pool.structs |> reserve(count)
     pool.enums |> reserve(count)
     pool.vars |> reserve(count)
@@ -246,11 +261,13 @@ def private add_synth_typed_functions(mod : Module?; seedInt : int; count, depth
     var added = add_generic_passthrough(mod, seedInt, at, known)
     var decls = new GenAll(seed = random_seed(seedInt * 131 + 7), max_depth = depth,
         run_mode = run_mode, at = at)
+    apply_skip(decls)
     add_typed_structs(mod, decls, seedInt, 1 + abs(random_int(decls.seed)) % 3)
     added += add_piped_helpers(mod, decls, seedInt, at)
     for (i in range(count)) {
         var g = new GenAll(seed = random_seed(seedInt + i * 7919), max_depth = depth,
             run_mode = run_mode, at = at)
+        apply_skip(g)
         g.typed_fns |> push_clone_from(known)
         g.ts_ptr |> push_from(decls.ts_ptr)
         g.ts_fields |> push_clone_from(decls.ts_fields)
@@ -296,6 +313,7 @@ def private add_synth_functions(mod : Module?; seedInt : int; count : int; depth
     for (i in range(count)) {
         var g = new GenAll(seed = random_seed(seedInt + i * 6151), max_depth = depth,
             at = LineInfo())
+        apply_skip(g)
         let nargs = abs(random_int(seed)) % 3
         // the body is replaced with random statements below, so a non-void result is
         // error[30310] every time and the program never reaches codegen
@@ -318,6 +336,314 @@ def private add_synth_functions(mod : Module?; seedInt : int; count : int; depth
     return added
 }
 
+// Mutation of a REAL program's AST, as opposed to synthesis from nothing. Every edit is
+// one a person could have typed - a different operator, a different literal, a swapped
+// argument, another declared type - so a crash it provokes is a compiler bug rather than
+// a shape only a macro can build. One deterministic edit per run (the Nth candidate node
+// gets kind K), which makes a finding reproducible and already close to minimal.
+let private MUT_OPS = fixed_array("+", "-", "*", "%", "==", "!=", "<", ">", "<=", ">=",
+    "&&", "||", "&", "|", "^", "<<", ">>")
+
+class private Mutator : AstVisitor {
+    at_target : int = -1
+    kind : int = 0
+    idx : int = 0
+    applied : string
+    seed : int4
+
+    def pick(n : int) : int {
+        return n <= 1 ? 0 : abs(random_int(seed)) % n
+    }
+
+    def hit() : bool {
+        let me = idx
+        idx++
+        return me == at_target
+    }
+
+    def override visitExprOp2(var expr : ExprOp2?) : ExpressionPtr {
+        if (kind == 0 && hit()) {
+            let was = "{expr.op}"
+            expr.op := MUT_OPS[pick(length(MUT_OPS))]
+            applied = "op2 {was} -> {expr.op}"
+        }
+        return expr
+    }
+
+    def override visitExprConstInt(var expr : ExprConstInt?) : ExpressionPtr {
+        if (kind == 1 && hit()) {
+            let was = expr.value
+            expr.value = pick(3) == 0 ? 0 : (pick(2) == 0 ? -1 : 2147483647)
+            applied = "int {was} -> {expr.value}"
+        }
+        return expr
+    }
+
+    def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
+        if (kind == 2 && hit() && length(expr.arguments) >= 2) {
+            var a <- expr.arguments[0]
+            var b <- expr.arguments[1]
+            expr.arguments[0] <- b
+            expr.arguments[1] <- a
+            applied = "swapped first two arguments of {expr.name}"
+        }
+        return expr
+    }
+
+    // 8: the same assignment written as a move, or as a clone
+    def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
+        if (kind == 8 && hit()) {
+            var l <- expr.left
+            var r <- expr.right
+            if (pick(2) == 0) {
+                applied = "copy -> move"
+                return new ExprMove(at = expr.at, op := "<-", left = l, right = r)
+            }
+            applied = "copy -> clone"
+            return new ExprClone(at = expr.at, op := ":=", left = l, right = r)
+        }
+        return expr
+    }
+
+    // 9: put one statement inside a construct that changes nothing at runtime but does
+    // change the context inference sees - unsafe, try/recover, or a bare scope
+    // 10: run one statement through a closure instead of inline
+    def override visitExprBlock(var expr : ExprBlock?) : ExpressionPtr {
+        if (kind == 9 && hit() && !empty(expr.list)) {
+            let at = pick(length(expr.list))
+            var inner = new ExprBlock(at = expr.at)
+            var stmt <- expr.list[at]
+            inner.list |> emplace(stmt)
+            let form = pick(3)
+            if (form == 0) {
+                applied = "statement wrapped in unsafe"
+                expr.list[at] = new ExprUnsafe(at = expr.at, body = inner)
+            } elif (form == 1) {
+                applied = "statement wrapped in try/recover"
+                expr.list[at] = new ExprTryCatch(at = expr.at, try_block = inner,
+                    catch_block = new ExprBlock(at = expr.at))
+            } else {
+                applied = "statement wrapped in a bare scope"
+                expr.list[at] = inner
+            }
+        }
+        if (kind == 10 && hit() && !empty(expr.list)) {
+            let at = pick(length(expr.list))
+            var body = new ExprBlock(at = expr.at)
+            body.blockFlags.isClosure = true
+            body.returnType = new TypeDecl(at = expr.at, baseType = Type.tVoid)
+            var stmt <- expr.list[at]
+            body.list |> emplace(stmt)
+            var mb = new ExprMakeBlock(at = expr.at, _block = body)
+            var inv = new ExprInvoke(at = expr.at, name := "invoke")
+            inv.arguments |> emplace(mb)
+            expr.list[at] = inv
+            applied = "statement moved into an invoked closure"
+        }
+        // 16: the same statement, but reached through g_mut_depth nested closures
+        if (kind == 16 && hit() && !empty(expr.list)) {
+            let at = pick(length(expr.list))
+            var stmt <- expr.list[at]
+            for (_i in range(g_mut_depth)) {
+                var body = new ExprBlock(at = expr.at)
+                body.blockFlags.isClosure = true
+                body.returnType = new TypeDecl(at = expr.at, baseType = Type.tVoid)
+                body.list |> emplace(stmt)
+                var inv = new ExprInvoke(at = expr.at, name := "invoke")
+                var mb = new ExprMakeBlock(at = expr.at, _block = body)
+                inv.arguments |> emplace(mb)
+                stmt <- inv
+            }
+            expr.list[at] <- stmt
+            applied = "statement nested in {g_mut_depth} closures"
+        }
+        if (kind == 11 && hit() && !empty(expr.list)) {
+            let at = pick(length(expr.list))
+            var dup = clone_expression(expr.list[at])
+            expr.list |> emplace(dup, at + 1)
+            applied = "statement duplicated"
+        }
+        return expr
+    }
+
+    def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
+        if (kind == 3 && hit()) {
+            let was = "{expr.name}"
+            expr.name := "{was}_"
+            expr.variable = null
+            expr.varFlags = ExprVarFlags(0)
+            applied = "var {was} -> {expr.name}"
+        }
+        return expr
+    }
+
+    // 5: drop the declared type and make inference derive it
+    // 6: same declaration, but const
+    // 7: same declaration, but a container of the old type
+    def override visitExprLetVariable(var expr : ExprLet?; var arg : VariablePtr;
+                                      lastArg : bool) : VariablePtr {
+        if (kind == 5 && hit() && arg._type != null && arg.init != null) {
+            applied = "let type {describe(arg._type)} -> auto"
+            arg._type = new TypeDecl(at = arg.at, baseType = Type.autoinfer)
+            return arg
+        }
+        if (kind == 6 && hit() && arg._type != null) {
+            applied = "let {describe(arg._type)} -> const"
+            arg._type.flags.constant = true
+            return arg
+        }
+        if (kind == 7 && hit() && arg._type != null) {
+            let was = describe(arg._type)
+            var outer = new TypeDecl(at = arg.at, baseType = Type.tArray)
+            outer.firstType = clone_type(arg._type)
+            arg._type = outer
+            applied = "let type {was} -> array of it"
+            return arg
+        }
+        // 15: the same declaration, but nested g_mut_depth containers deep. Legal source
+        // can spell this, so a recursive descent over the type has to survive it.
+        if (kind == 15 && hit() && arg._type != null && arg.init == null) {
+            let was = describe(arg._type)
+            for (_i in range(g_mut_depth)) {
+                var outer = new TypeDecl(at = arg.at, baseType = Type.tArray)
+                outer.firstType = clone_type(arg._type)
+                arg._type = outer
+            }
+            applied = "let type {was} -> array nested {g_mut_depth} deep"
+            return arg
+        }
+        if (kind == 4 && hit() && arg._type != null) {
+            let was = describe(arg._type)
+            var g = new GenAll(seed = seed, max_depth = 2, at = arg.at)
+            apply_skip(g)
+            arg._type = g.ty_decl(VALUE_CODES[pick(length(VALUE_CODES))])
+            let now = describe(arg._type)
+            unsafe {
+                delete g
+            }
+            applied = "let type {was} -> {now}"
+        }
+        return arg
+    }
+
+    // 12: same argument, but const
+    // 13: the last argument gains a default value
+    def override visitFunctionArgument(var fun : FunctionPtr; var arg : VariablePtr;
+                                       lastArg : bool) : VariablePtr {
+        if (kind == 12 && hit() && arg._type != null) {
+            applied = "argument {arg.name} {describe(arg._type)} -> const"
+            arg._type.flags.constant = true
+            return arg
+        }
+        if (kind == 13 && hit() && lastArg && arg.init == null && arg._type != null &&
+            !arg._type.flags.ref) {
+            let bt = arg._type.baseType
+            if (bt == Type.tInt) {
+                arg.init := new ExprConstInt(at = arg.at, value = 0)
+                applied = "argument {arg.name} default = 0"
+            } elif (bt == Type.tFloat) {
+                arg.init := new ExprConstFloat(at = arg.at, value = 0.0)
+                applied = "argument {arg.name} default = 0."
+            } elif (bt == Type.tBool) {
+                arg.init := new ExprConstBool(at = arg.at, value = false)
+                applied = "argument {arg.name} default = false"
+            } elif (bt == Type.tString) {
+                arg.init := new ExprConstString(at = arg.at, value := "")
+                applied = "argument {arg.name} default = empty string"
+            }
+        }
+        return arg
+    }
+
+    // 14: the result type is dropped, so inference has to derive it from the body
+    def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
+        if (kind == 14 && hit() && fun.result != null &&
+            fun.result.baseType != Type.autoinfer) {
+            applied = "result type {describe(fun.result)} -> auto"
+            fun.result = new TypeDecl(at = fun.at, baseType = Type.autoinfer)
+        }
+        return fun
+    }
+}
+
+// One pass that mutates nothing, to learn how many candidates of this kind exist.
+def private count_kind(prog : ProgramPtr; mod : Module?; kind : int) : int {
+    var m = new Mutator(at_target = -1, kind = kind, seed = random_seed(1))
+    make_visitor(*m) $(adapter) {
+        visit_module(prog, adapter, mod)
+    }
+    let n = m.idx
+    unsafe {
+        delete m
+    }
+    return n
+}
+
+def private apply_one(prog : ProgramPtr; mod : Module?; at_target, kind : int;
+                      seed : int4; var what : string&) : bool {
+    var m = new Mutator(at_target = at_target, kind = kind, seed = seed)
+    make_visitor(*m) $(adapter) {
+        visit_module(prog, adapter, mod)
+    }
+    what = m.applied
+    unsafe {
+        delete m
+    }
+    return !empty(what)
+}
+
+// Several edits at once. Each one on its own is something a person could type, but the
+// combination puts inference in a state no single edit reaches - which is where a
+// well-formed program still has a chance of breaking it.
+def private mutate_module_many(prog : ProgramPtr; mod : Module?; seedInt, count,
+                               nkinds : int) : bool {
+    var seed = random_seed(seedInt * 104729 + 7)
+    var applied = 0
+    for (i in range(count)) {
+        let kind = abs(random_int(seed)) % nkinds
+        let n = count_kind(prog, mod, kind)
+        if (n < 1) {
+            continue
+        }
+        let at = abs(random_int(seed)) % n
+        var what : string
+        if (apply_one(prog, mod, at, kind, seed, what)) {
+            applied++
+            to_log(LOG_ERROR, "AST-MUT[{i}]: kind={kind} at={at}/{n}: {what}\n")
+        }
+    }
+    to_log(LOG_ERROR, "AST-MUT: {applied} edit(s) applied\n")
+    if (applied == 0) {
+        return false
+    }
+    for_each_function(mod, "") $(var fn) {
+        fn.not_inferred()
+    }
+    return true
+}
+
+def private mutate_module(prog : ProgramPtr; mod : Module?; seedInt, at_target,
+                          kind : int) : bool {
+    var m = new Mutator(at_target = at_target, kind = kind,
+        seed = random_seed(seedInt * 7919 + 13))
+    make_visitor(*m) $(adapter) {
+        visit_module(prog, adapter, mod)
+    }
+    let nodes = m.idx
+    let what = m.applied
+    unsafe {
+        delete m
+    }
+    to_log(LOG_ERROR, "AST-MUT: kind={kind} at={at_target} of {nodes} candidate(s): {empty(what) ? "nothing" : what}\n")
+    if (empty(what)) {
+        return false
+    }
+    for_each_function(mod, "") $(var fn) {
+        fn.not_inferred()
+    }
+    return true
+}
+
 [infer_macro]
 class AstSynthMacro : AstPassMacro {
     def override apply(prog : ProgramPtr; mod : Module?) : bool { // nolint:STYLE038 — dispatch over node kinds; splitting hides the table
@@ -329,7 +655,7 @@ class AstSynthMacro : AstPassMacro {
         let size = prog._options |> find_arg("_ast_synth_size") ?as tInt ?? 12
         let depth = prog._options |> find_arg("_ast_synth_depth") ?as tInt ?? 4
         let prune = prog._options |> find_arg("_ast_synth_prune") ?as tInt ?? -1
-        let skip_kinds = prog._options |> find_arg("_ast_synth_skip") ?as tString ?? ""
+        g_skip_kinds = prog._options |> find_arg("_ast_synth_skip") ?as tString ?? ""
         let rand_flags = prog._options |> find_arg("_ast_synth_rflags") ?as tBool ?? false
         let report = prog._options |> find_arg("_ast_synth_report") ?as tBool ?? false
         let dump = prog._options |> find_arg("_ast_synth_dump") ?as tBool ?? false
@@ -342,6 +668,27 @@ class AstSynthMacro : AstPassMacro {
         let ndecls = prog._options |> find_arg("_ast_synth_decls") ?as tInt ?? 0
         let bind_refs = prog._options |> find_arg("_ast_synth_bind") ?as tBool ?? false
         let pre_typed = prog._options |> find_arg("_ast_synth_pretype") ?as tBool ?? false
+        let mutCount = prog._options |> find_arg("_ast_synth_mut_count") ?as tInt ?? 0
+        g_mut_depth = prog._options |> find_arg("_ast_synth_mut_depth") ?as tInt ?? 8
+        // Only the module being compiled can be mutated: a required module is already
+        // inferred by the time this macro runs, so edits to it are never re-checked.
+        var target : Module?
+        program_for_each_module(prog) $(m) {
+            if (empty(m.name)) {
+                target = m
+            }
+        }
+        if (target == null) {
+            return false
+        }
+        if (mutCount > 0) {
+            return mutate_module_many(prog, target, seedInt, mutCount, 17)
+        }
+        let mutAt = prog._options |> find_arg("_ast_synth_mut_at") ?as tInt ?? -1
+        if (mutAt >= 0) {
+            let mutKind = prog._options |> find_arg("_ast_synth_mut_kind") ?as tInt ?? 0
+            return mutate_module(prog, target, seedInt, mutAt, mutKind)
+        }
         let typed = prog._options |> find_arg("_ast_synth_typed") ?as tBool ?? false
         if (typed) {
             var vat = LineInfo()
@@ -380,12 +727,8 @@ class AstSynthMacro : AstPassMacro {
             {
                 var g = new GenAll(seed = random_seed(seedInt + n * 7919), max_depth = depth,
                     rand_flags = rand_flags, at = fn.at)
+                apply_skip(g)
                 fill_pools(g, pool, bind_refs, pre_typed)
-                for (sk in split(skip_kinds, ",")) {
-                    if (!empty(strip(sk))) {
-                        g.skip[strip(sk)] := true
-                    }
-                }
                 var blk = new ExprBlock(at = fn.at)
                 for (_i in range(size)) {
                     var st = g.gen_expr(0)
