@@ -1,7 +1,7 @@
 # dasllama-server Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `README.md`.
+doc: `README.md`. Planned work: `CONTROL_PAGE_PLAN.md`.
 
 **A diff to a file that requires a `dasllama/*` module applies `modules/dasLLAMA/REVIEW.md`
 (repo root) too.**
@@ -15,14 +15,13 @@ check scans, adding a name to a check's licensed set (the names that check does 
 changing a finding text so it no longer names what failed. What the gate enforces is read from
 the gate itself.
 
-**A diff that adds or removes a route, or changes its path, method, or a request field the
-server reads, updates every surface that documents or uses that route, in the same change**:
-the `README.md` route row, the endpoint table in
-`doc/source/reference/utils/dasllama_server.rst` (repo root), and `control.html` where the
-page uses it.
+**A diff that adds a route, or changes a request field the server reads, updates
+`control.html` where the page uses it, in the same change.** The `README.md` route row and the
+`doc/source/reference/utils/dasllama_server.rst` endpoint table are `REVIEW.das`'s to enforce.
 
-**A diff that adds, removes, or renames a key in a response body re-captures that route's
-fixtures under `tests/fixtures/` and updates that route's row in `README.md` (beside this
-file) - a new or renamed key is listed there, a removed key is struck from it - in the same
-change** - the fixtures are the recorded response shape, and the row is where a consumer learns
-the key exists.
+**A diff that makes `control.html` or a spec under `tests/` read a response key that no
+fixture under `tests/fixtures/` carries is a defect - re-capture the fixture per
+`tests/fixtures/README.md` and list the key in that route's `README.md` row, in the same
+change.** The fixtures are the recorded response shape, the row is where a consumer learns the
+key exists, and a hand-authored wire body in a spec is the same defect as a hand-edited
+fixture.

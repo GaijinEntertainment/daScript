@@ -98,3 +98,19 @@ the box its provenance names, at the current `dasllama_version` - never a hand-e
 `REVIEW.das` (beside this file) machine-checks the age-independent half (`noise` `ok`,
 `validation` `ok`, every `race` winner equal to its `kernels` value); weakening that gate is a
 defect.
+
+**A diff that changes the exchange consent notice wording updates every copy of that wording
+in the same change.** The copies are `EXCHANGE_CONSENT_NOTICE` (`../dasllama/dasllama_exchange.das`)
+and `CONSENT_TITLE` / `CONSENT_TEXT` (`utils/watchdog/watchdog.py`, repo root). The console
+prompt and the control page both render the served constant, so they are not further copies.
+Nothing machine-checks the pair.
+
+**A diff that adds an outbound exchange request reachable from a boot path without routing it
+through the consent gate (`exchange_consent_gate`, `../dasllama/dasllama_exchange.das`) is a
+defect.** An explicit `exchange_*` key (hand-written TOML or env) is itself the expressed
+choice; with no such key, nothing leaves the box until the recorded choice reads "accepted".
+
+**A boot-path prompt that reads stdin without first proving both stdin and stdout are
+terminals is a defect** - a supervised or piped boot must never block on input. The offline
+arm emits the question as a `@sidecar` event instead, for the watchdog dialog and the control
+page to answer.

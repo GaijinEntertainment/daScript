@@ -653,10 +653,10 @@ struct public ExampleEnv {
 
 [EnvConfig(env_prefix = "DASLLAMA")]
 struct public ExchangeEnv {
-    @clarg_doc = "Sidecar exchange base URL override (tests, mirrors); unset = the baked-in dasllama.io."
+    @clarg_doc = "Sidecar exchange base URL override (tests, mirrors); unset = the baked-in dasllama.io. Setting it is an expressed choice to use the exchange - the first-contact consent question is skipped (announced at boot)."
     exchange_url : string = ""
 
-    @clarg_doc = "One-shot exchange accept-policy override: verified | any | off; unset = the app config's exchange_accept. The watchdog arms 'any' on a relaunch when the user adopts an unverified sidecar over finishing a tune."
+    @clarg_doc = "One-shot exchange accept-policy override: verified | any | off; unset = the app config's exchange_accept. The watchdog arms 'any' on a relaunch when the user adopts an unverified sidecar over finishing a tune. Setting it is an expressed choice to use the exchange - the first-contact consent question is skipped (announced at boot)."
     exchange_accept : string = ""
 }
 

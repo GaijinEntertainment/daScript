@@ -3495,6 +3495,8 @@ def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpRespons
     if (!empty(err)) {
         return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
     }
+    // explicitly fetching a sidecar IS engaging the exchange - record the consent it expresses
+    exchange_record_consent(true)
     to_log(LOG_INFO, "dasllama-server: exchange sidecar {sha} applied via the control page; draining for restart\n")
     g_shutdown_requested = true
     g_restart_requested = true

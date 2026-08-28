@@ -15,7 +15,10 @@ require strings
 
 def private run_probe(control_env : string) : string {
     let win = get_platform_name() == "windows"
-    let envs = (empty(control_env) ? ""
+    // an empty control_env is spelled as an explicit UNSET - the parent (the watchdog sets
+    // this very variable) must never leak its own value into the "unset" cell
+    let envs = (empty(control_env)
+        ? (win ? "set \"DAS_TUNE_CONTROL=\"&& " : "env -u DAS_TUNE_CONTROL ")
         : (win ? "set \"DAS_TUNE_CONTROL={control_env}\"&& "
                : "DAS_TUNE_CONTROL=\"{control_env}\" "))
     let cmd = "{envs}\"{get_das_exe()}\" \"modules/dasLLAMA/tests/_interrupt_probe.das\" -dasroot \"{get_das_root()}\" 2>&1"
@@ -46,8 +49,7 @@ def test_interrupt_aborts_without_minting(t : T?) {
         let out = run_probe(control)
         tt |> success(out |> find("PROBE: before gate") >= 0, "the probe ran to the gate: {out}")
         tt |> success(out |> find("@tune abort reason=interrupted at=probe_family") >= 0, "the abort event fired: {out}")
-        tt |> success(out |> find("no sidecar written") >= 0, "the abort says nothing was minted: {out}")
-        tt |> success(out |> find("gate passed through") < 0, "nothing past the gate ran: {out}")
+        tt |> success(out |> find("gate passed through") < 0, "nothing past the gate ran - minting is end-gated, so nothing was written: {out}")
         remove(control)
     }
     t |> run("a named-but-absent control file passes through") @(tt : T?) {

@@ -50,6 +50,7 @@ struct ExchangePolicy {
     accept : string = "verified"    // verified | any | off
     submit : string = "ask"         // ask | always | never
     configured : bool = false       // any exchange_* key came from the config file or env — an explicit choice
+    configured_via : string = ""    // the knob spelling that expressed it, for the waiver announce
 }
 
 //! The first-contact notice, shown before ANY request leaves for the exchange (GDPR: the
@@ -286,20 +287,33 @@ def exchange_policy_from_config(config_path : string) : ExchangePolicy {
             var terr = ""
             var root = read_toml(body, terr)
             if (root != null) {
+                // an AUTHORITATIVE toml is what the control page saves, and its gatherConfig
+                // persists the exchange defaults on EVERY save - so its exchange keys are not
+                // evidence of a choice; only a hand-written config's are (env overrides too)
+                let hand_written = !(root?["authoritative"] ?? false)
                 let u : string = root?["exchange_url"] ?? ""
                 if (!empty(u)) {
                     p.url = u
-                    p.configured = true
+                    if (hand_written) {
+                        p.configured = true
+                        p.configured_via = "exchange_url (config)"
+                    }
                 }
                 let a : string = root?["exchange_accept"] ?? ""
                 if (!empty(a)) {
                     p.accept = a
-                    p.configured = true
+                    if (hand_written) {
+                        p.configured = true
+                        p.configured_via = "exchange_accept (config)"
+                    }
                 }
                 let s : string = root?["exchange_submit"] ?? ""
                 if (!empty(s)) {
                     p.submit = s
-                    p.configured = true
+                    if (hand_written) {
+                        p.configured = true
+                        p.configured_via = "exchange_submit (config)"
+                    }
                 }
                 unsafe {
                     delete root
@@ -310,10 +324,12 @@ def exchange_policy_from_config(config_path : string) : ExchangePolicy {
     if (!empty(g_env_exchange.exchange_url)) {
         p.url = g_env_exchange.exchange_url
         p.configured = true
+        p.configured_via = "DASLLAMA_EXCHANGE_URL (env)"
     }
     if (!empty(g_env_exchange.exchange_accept)) {
         p.accept = g_env_exchange.exchange_accept
         p.configured = true
+        p.configured_via = "DASLLAMA_EXCHANGE_ACCEPT (env)"
     }
     if (p.accept != "verified" && p.accept != "any" && p.accept != "off") {
         print("exchange: unknown exchange_accept '{p.accept}' - using verified (valid: verified | any | off)\n")
@@ -379,6 +395,8 @@ def private consent_prompt_console() : bool {
 def private exchange_consent_gate() : bool {
     let status = exchange_consent_status()
     if (status == "accepted") {
+        print("exchange: consent on record at {exchange_consent_path()} (exchange_record_consent) - proceeding
+")
         return true
     }
     if (status == "declined") {
@@ -407,6 +425,22 @@ def exchange_register_resolver(app_config_name : string) {
     tune_set_scope_resolver(@@exchange_scope_resolver)
 }
 
+//! The pre-request decision the boot resolver enforces: nothing leaves for the exchange
+//! without an expressed choice. `accept = off` never contacts; an explicit exchange config
+//! IS the choice (announced by the knob that expressed it); otherwise the recorded consent
+//! file governs - unset asks on a real terminal or emits the `@sidecar consent` event.
+def exchange_may_contact(policy : ExchangePolicy) : bool {
+    if (policy.accept == "off") {
+        return false
+    }
+    if (policy.configured) {
+        // the override announce: name the knob that expressed the choice and waived the question
+        print("exchange: consent expressed via {policy.configured_via} - not asking\n")
+        return true
+    }
+    return exchange_consent_gate()
+}
+
 def private exchange_scope_resolver(scope_name : string; manifest_path : string; _fnames : string) : bool {
     // one lookup per process — a second scope re-checks completeness off the same applied file
     if (g_resolve_attempted) {
@@ -423,7 +457,14 @@ def private exchange_scope_resolver(scope_name : string; manifest_path : string;
     let policy = exchange_policy_from_config(exchange_discover_config(g_resolver_config))
     // GDPR first-contact gate: nothing leaves for the exchange without an expressed choice —
     // an explicit exchange config IS that choice; otherwise the recorded consent file governs
-    if (policy.accept == "off" || (!policy.configured && !exchange_consent_gate())) {
+    if (policy.accept == "off") {
+        return false
+    }
+    if (policy.configured) {
+        // the override announce: name the knob that expressed the choice and waived the question
+        print("exchange: consent expressed via {policy.configured_via} - not asking
+")
+    } elif (!exchange_consent_gate()) {
         return false
     }
     let box = tune_box_identity()
@@ -708,7 +749,9 @@ def exchange_boot_submit_check(policy : ExchangePolicy) {
     if (state_submitted_for(manifest) == raw_sha) {
         return
     }
-    if (policy.submit == "always") {
+    // submit=always out of an authoritative toml is not consent either (the page persists it
+    // on every save) - without a recorded choice the auto-share degrades to the ask offer
+    if (policy.submit == "always" && (policy.configured || exchange_consent_status() == "accepted")) {
         let err = exchange_submit_current(policy)
         if (empty(err)) {
             print("exchange: shared this box's tune (exchange_submit=always)\n")

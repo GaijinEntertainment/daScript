@@ -10,8 +10,9 @@ implementation that does not exist yet.
 **A code sample shown on a page that does not compile and run with the current toolchain is
 a defect.**
 
-**A number shown on a page is a defect unless it is rendered from live data, copied from a
-checked-in measurement record, or carries an HTML comment naming it a placeholder.**
+**A number shown on a page carries checkable provenance: rendered from live data, copied from
+a named checked-in measurement record, or an HTML comment naming the box, date, and what was
+measured (or naming it a placeholder). A number with none of these is a defect.**
 
 **A claim in words on index.html that one engine beats another ("beats", "Nx faster than",
 "fastest") is a defect, the generated news region included.** Figures copied from a
@@ -21,13 +22,14 @@ reader does is not the page's claim.
 **Copy or rendering that lets a row with no reference engine's figure imply parity with a
 reference engine is a defect - an empty ratio cell reads "not raced".**
 
-**A new `dl-*` CSS rule in any file under this directory is a defect** - the `dl-*`
-measurement-table styles live only in `site/files/dasllama-table.css`, and site chrome here
-uses the `dio-` prefix in `files/dasllama-io.css`.
+**A new `dl-*` CSS rule in any file under this directory is a defect** - site chrome here
+uses the `dio-` prefix in `files/dasllama-io.css`; the `dl-*` measurement-table styles are
+`site/files/dasllama-table.css`'s (this folder's `dasllama-io.css` carries a few ledgered
+`dl-*` OVERRIDES of that shared sheet - overrides of existing selectors, never new rules).
 
-**A claim in a `_news/*.md` entry that is not true at publish time is a defect, including a
-claim about what a page here renders - check that one against the page's markup and
-`files/dasllama-io.js`.** An entry for something not yet shipped is a defect.
+**A statement on a page here about what a shipped tool does is a defect unless it matches the
+current code.** The same truth duty binds `_news/*.md` entries, including a claim about what a
+page here renders - check that one against the page's markup and `files/dasllama-io.js`.** An entry for something not yet shipped is a defect.
 
 **A hand-edit between the `news:begin` and `news:end` markers in index.html is a defect -
 edit `_news/` and re-run `build_news.py` instead.** A diff that changes `_news/` also lands
@@ -40,3 +42,7 @@ quoted-attribute values, `Number(...)` for anything numeric, and `safeApiHref()`
 
 **A page that lacks `<title>`, a meta description, OpenGraph tags, or the Atom `<link>` is a
 defect - a new or renamed page included.**
+
+**A diff that adds a file under `files/` also verifies the dasllama.io deploy step
+(`.github/workflows/pages.yml`, "Stage dasllama.io for deployment") stages it, in the same
+change.** Local preview serves the tree directly, so a staging miss is invisible until deploy.

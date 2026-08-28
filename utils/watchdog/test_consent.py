@@ -8,7 +8,7 @@ import importlib.util
 import logging
 from pathlib import Path
 import tempfile
-import threading
+from types import SimpleNamespace
 from urllib.parse import quote
 
 spec = importlib.util.spec_from_file_location("wd", Path(__file__).with_name("watchdog.py"))
@@ -46,11 +46,11 @@ def test_consent_stop_mode_is_one_shot_and_env_free():
 
 def run_handler(answer, tune_running, consent_path):
     """Drive handle_consent_needed with the dialog seam and thread spawn mocked; returns
-    whether a tune stop was requested."""
+    the list of stop modes requested."""
     args = argparse.Namespace(name="t", log=consent_path.parent / "t.log")
     stopped = []
     saved = (wd.show_consent_dialog, wd.tune_in_flight, wd.request_tune_stop,
-             wd.threading.Thread, wd.notify)
+             wd.threading, wd.notify)
     wd.show_consent_dialog = lambda: answer
     wd.tune_in_flight = lambda: tune_running
     wd.request_tune_stop = lambda a, lg, mode: stopped.append(mode)
@@ -63,12 +63,13 @@ def run_handler(answer, tune_running, consent_path):
         def start(self):
             self._target()
 
-    wd.threading.Thread = SyncThread
+    # rebind the MODULE's threading attribute - never mutate the shared stdlib module
+    wd.threading = SimpleNamespace(Thread=SyncThread)
     try:
         wd.handle_consent_needed(args, logging.getLogger("t"), quote(str(consent_path)))
     finally:
         (wd.show_consent_dialog, wd.tune_in_flight, wd.request_tune_stop,
-         wd.threading.Thread, wd.notify) = saved
+         wd.threading, wd.notify) = saved
     return stopped
 
 
@@ -103,6 +104,55 @@ def test_walkaway_answers_nothing():
         stopped = run_handler(None, True, p)
         assert not p.exists()
         assert stopped == []
+
+
+def test_stream_child_dispatches_the_dialog_once_per_path():
+    # the @sidecar consent event must reach handle_consent_needed exactly once per consent
+    # file for the watchdog's lifetime - a noise/untuned boot loop re-emits it every restart
+    class FakeProc:
+        def __init__(self, lines):
+            self.stdout = iter(lines)
+            self.pid = 42
+    lines = [
+        "@sidecar consent state=needed path=a%2Fb.consent\n",
+        "@sidecar consent state=needed path=a%2Fb.consent\n",
+        "@sidecar consent state=needed path=other.consent\n",
+    ]
+    calls = []
+    args = argparse.Namespace(name="t", log=Path("/tmp/t.log"))
+    saved = (wd.handle_consent_needed, wd.notify)
+    wd.handle_consent_needed = lambda a, lg, path: calls.append(path)
+    wd.notify = lambda *a, **k: None
+    wd._BALLOONED.clear()
+    try:
+        wd.stream_child(FakeProc(lines), logging.getLogger("t"),
+                        __import__("threading").Event(), set(), {}, "t", args)
+    finally:
+        wd.handle_consent_needed, wd.notify = saved
+        wd._BALLOONED.clear()
+    assert calls == ["a%2Fb.consent", "other.consent"]
+
+
+def test_darwin_dialog_parse_arms():
+    # the osascript OUTPUT parse is unit-testable even though showing the dialog is not:
+    # Accept/Decline must map to True/False, gave-up and Escape must leave the question open
+    if not hasattr(wd, "show_consent_dialog") or wd.IS_WINDOWS or wd.sys.platform != "darwin":
+        return  # the parse under test is the darwin arm
+    def fake_run(stdout):
+        return SimpleNamespace(stdout=stdout)
+    saved = wd.subprocess
+    outs = {}
+    wd.subprocess = SimpleNamespace(
+        run=lambda *a, **k: fake_run(outs["v"]), TimeoutExpired=Exception)
+    try:
+        for text, want in [("button returned:Accept", True),
+                           ("button returned:Decline", False),
+                           ("button returned:Accept, gave up:true", None),
+                           ("", None)]:
+            outs["v"] = text
+            assert wd.show_consent_dialog() is want, (text, want)
+    finally:
+        wd.subprocess = saved
 
 
 if __name__ == "__main__":

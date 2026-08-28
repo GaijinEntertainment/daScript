@@ -3,8 +3,10 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md` (repo root).
 
-**A file that belongs to a tool is reviewed with that tool's own `REVIEW.md`, where one exists,
-as well as with this checklist - not the checklist of the directory the file sits in.**
+**A file under `utils/` that belongs to another tool is reviewed with that tool's own
+`REVIEW.md`, where one exists, as well as with this checklist - not with the checklist of the
+tool directory the file sits in.** A tool's file OUTSIDE `utils/` answers to the checklist of
+the folder that contains it.
 
 **Weakening `REVIEW.das` (beside this file) is a defect.** What the gate checks is read from the
 script itself, and each check's finding text states its rule.

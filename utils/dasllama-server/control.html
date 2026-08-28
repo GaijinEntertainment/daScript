@@ -2479,7 +2479,7 @@ $("b-ex-submit").addEventListener("click", async () => {
 });
 
 $("b-ex-retune").addEventListener("click", async () => {
-    if (!window.confirm("Re-tune this box? ~20 minutes on a QUIET machine — the server restarts, races the kernels, then relaunches itself. It does not serve while tuning.\n(needs the watchdog running)")) return;
+    if (!window.confirm("Re-tune this box? ~12 minutes on a QUIET machine — the server restarts, races the kernels, then relaunches itself. It does not serve while tuning.\n(needs the watchdog running)")) return;
     $("b-ex-retune").disabled = true;
     try {
         const r = await fetch("/exchange/retune", { method: "POST" });
@@ -2491,7 +2491,7 @@ $("b-ex-retune").addEventListener("click", async () => {
             $("b-ex-retune").disabled = false;
             return;
         }
-        $("ex-note").textContent = "re-tune armed — the tune takes ~20 minutes; reload this page when the server is back";
+        $("ex-note").textContent = "re-tune armed — the tune takes ~12 minutes; reload this page when the server is back";
         restartingSince = performance.now();
         setBadge("warn", "restarting");
         waitForRestart();
@@ -2533,6 +2533,11 @@ $("ex-always").addEventListener("change", async () => {
         }
         exchangePolicy.submit = want;
         savedSnapshot = JSON.stringify(body);
+        // opting INTO auto-share is deliberate exchange engagement — record the consent it
+        // expresses, or the boot-time submit check degrades the choice back to an offer
+        if (want === "always" && (exchangeState.consent || "") !== "accepted") {
+            await postConsent(true);
+        }
         $("ex-note").textContent = want === "always"
             ? "every fresh tune on this box will be shared automatically"
             : "sharing goes back to asking first";

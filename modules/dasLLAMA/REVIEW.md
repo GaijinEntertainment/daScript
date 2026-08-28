@@ -1,9 +1,10 @@
 # dasLLAMA Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`; the perf
-backlog is `PERF_LEDGER.md` - a performance followup goes there, everything else in the
-two followup ledgers.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`,
+`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_general.md`,
+`followup_vulkan.md`, `PERF_LEDGER.md` (performance goes to the perf ledger, everything else
+to the followup ledgers).
 
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
@@ -87,8 +88,8 @@ file's sec.1 charter line in `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, or
 **Platform-specific code in an engine file (`dasllama/`) lands only in that platform's backend
 file.**
 
-**A new engine concern that is not `Model`/`Session`/`Config` state gets its own file, not
-more of `dasllama/dasllama_common.das`.**
+**A diff that adds a new engine concern that is not `Model`/`Session`/`Config` state to
+`dasllama/dasllama_common.das` is a defect - give the concern its own file.**
 
 **A NEW clock read paired with a print or log of the elapsed interval is a defect in an engine
 file (`dasllama/`) outside a cold one-shot load, bake, map, or tokenizer-build progress log** -
@@ -124,14 +125,14 @@ template strings any of them look up, records a `tests/test_tokenizer.das` run w
 EXECUTED, not skipped.**
 
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.**
-An override is an environment knob or an exported runtime setter that moves a gate, policy, or
-threshold off its default and thereby changes what the run writes, reads, mints, or computes -
-including a knob or setter whose purpose is timing when it moves computed numerics, since two
-GEMM forms of the same math differ in float terms. A knob or setter that changes only WHEN work
-happens is not an override, and a CLI flag is never one. The announce is a line the run prints
-where the override changes the outcome, naming it by the spelling a user would set - the
-environment variable name, the sidecar key, or the setter's function name. Per-site repeats are
-fine. A set-but-inert override stays silent.
+An override is an environment knob, an exported runtime setter, or an on-disk state file that
+moves a gate, policy, or threshold off its default and thereby changes what the run writes,
+reads, mints, or computes. The announce is a line the run prints where the override changes
+the outcome, naming it by the spelling a user would set - the environment variable name, the
+sidecar or file key, or the setter's function name. Per-site repeats are fine; a set-but-inert
+override stays silent. The carve-outs (timing knobs that move computed numerics count; a knob
+changing only WHEN work happens does not; a CLI flag is never one) are
+`ARCHITECTURE_MEASUREMENT.md` sec.2.10's.
 
 **A change to user-facing API updates every place it is shown: a tutorial source, `.rst` page,
 docstring, help string, `README.md`, or checked-in document still showing the old call, flag, or
@@ -180,7 +181,9 @@ carries it.
 
 **A def of `dasllama/dasllama.das` - and a new OVERLOAD of one - is TAUGHT: demonstrated in
 runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
-`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** The gate matches def NAMES only, so
+`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** Only the facade is taught: the other
+public entry modules (`dasllama_scheduler`, `dasllama_exchange`) are operational surfaces
+whose consumer document is `utils/dasllama-server/README.md`, not the tutorial set. The gate matches def NAMES only, so
 an overload passes on a sibling's tutorial - the reviewer confirms a tutorial calls the NEW
 signature, and a mention that only names it (a comment, a passing reference) does not count.
 
@@ -238,7 +241,9 @@ file** - a single-caller helper sanctioned as tower-worthy is ledgered on
 **A harness that prints output for another tool to compare exits non-zero when its run ends
 without those comparison lines - wrong flags, failed load.**
 
-**Tool wire text - building or parsing - is produced only in `dasllama/dasllama_tools.das`.**
+**Tool wire text (the text of a model's tool/function call, built or parsed) is produced only
+in `dasllama/dasllama_tools.das`.** Supervisor event lines (`@tune`, `@sidecar`) are not tool
+wire text.
 
 **No engine file (`dasllama/`) other than `dasllama/dasllama_audio_io.das` requires `audio` (the
 miniaudio decode module).**

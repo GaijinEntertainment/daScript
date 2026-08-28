@@ -465,12 +465,65 @@ def test_policy_and_discovery(t : T?) {
         let p2 = exchange_policy_from_config(path)
         tt |> equal(p2.accept, "verified", "a typo must never widen acceptance")
         tt |> equal(p2.submit, "ask")
+        fwrite(path, "authoritative = true\nexchange_url = \"http://127.0.0.1:9\"\nexchange_accept = \"any\"\n")
+        let p3 = exchange_policy_from_config(path)
+        tt |> equal(p3.accept, "any", "an authoritative toml still sets the policy")
+        tt |> success(!p3.configured, "the control page persists exchange defaults on EVERY save - an authoritative toml's keys are not consent")
         remove(path)
     }
 }
 
 [test]
 def test_consent(t : T?) {
+    t |> run("may_contact: the gate composition over every consent state") @(tt : T?) {
+        let res = create_temp_file_result("exchange_gate_", ".tune.json")
+        if (res is error) {
+            tt |> failure("could not create a temp file")
+            return
+        }
+        let manifest = res as value
+        let consent_file = "{slice(manifest, 0, length(manifest) - 5)}.consent"
+        set_tune_manifest_runtime_path(manifest)
+        remove(consent_file)
+        var off = ExchangePolicy()
+        off.accept = "off"
+        tt |> success(!exchange_may_contact(off), "accept=off never contacts, whatever the consent state")
+        var conf = ExchangePolicy()
+        conf.configured = true
+        conf.configured_via = "exchange_accept (config)"
+        tt |> success(exchange_may_contact(conf), "an expressed exchange config waives the question")
+        let zero = ExchangePolicy()
+        tt |> success(!exchange_may_contact(zero), "zero-config + never asked: nothing leaves (dastest has no TTY, so the event arm answers)")
+        verify(exchange_record_consent(false))
+        tt |> success(!exchange_may_contact(zero), "a recorded decline keeps the box offline")
+        verify(exchange_record_consent(true))
+        tt |> success(exchange_may_contact(zero), "a recorded accept opens the gate")
+        set_tune_manifest_runtime_path("")
+        remove(consent_file)
+        remove(manifest)
+    }
+    t |> run("configured attribution: each exchange_* key alone expresses the choice") @(tt : T?) {
+        let res = create_temp_file_result("exchange_onekey_", ".toml")
+        if (res is error) {
+            tt |> failure("could not create a temp file")
+            return
+        }
+        let path = res as value
+        fwrite(path, "exchange_url = \"http://127.0.0.1:9\"\n")
+        tt |> success(exchange_policy_from_config(path).configured, "exchange_url alone")
+        fwrite(path, "exchange_accept = \"any\"\n")
+        tt |> success(exchange_policy_from_config(path).configured, "exchange_accept alone")
+        fwrite(path, "exchange_submit = \"never\"\n")
+        tt |> success(exchange_policy_from_config(path).configured, "exchange_submit alone")
+        remove(path)
+    }
+    t |> run("consent path: a manifest without the .json suffix still gets a sibling") @(tt : T?) {
+        set_tune_manifest_runtime_path("some_app.tune")
+        verify(exchange_record_consent(true))
+        tt |> equal(exchange_consent_status(), "accepted", "the suffixless-manifest arm works")
+        remove("some_app.tune.consent")
+        set_tune_manifest_runtime_path("")
+    }
     t |> run("consent: unset, record, round-trip") @(tt : T?) {
         let res = create_temp_file_result("exchange_consent_", ".tune.json")
         if (res is error) {
