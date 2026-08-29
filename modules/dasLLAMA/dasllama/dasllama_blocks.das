@@ -1520,7 +1520,9 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     if (span_lo >= 0l && (span_hi <= span_lo || span_hi > npos)) {
         panic("forward_prefill_embd: span [{span_lo},{span_hi}) outside [0,{npos})")
     }
-    dispatch_phase_batch()   // hybrid boxes: wake the slow tier for the batched GEMMs
+    if (npos >= 32l) {   // hybrid boxes: wake the slow tier — a smaller batch can't fill it past the grain
+        dispatch_phase_batch()
+    }
     // ds_wide (qwen3vl deepstack): every row is (1+n_deepstack)·dim wide — slice 0 is the
     // residual input, the tail slices stash for the per-layer adds (text rows carry zeros)
     let n_ds = ds_wide ? t.config.n_deepstack : 0l

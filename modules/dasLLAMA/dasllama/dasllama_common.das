@@ -4760,7 +4760,9 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         }
         return
     }
-    dispatch_phase_batch()   // hybrid boxes: wake the slow tier for the batched GEMMs
+    if (npos >= 32l) {   // hybrid boxes: wake the slow tier — a smaller batch can't fill it past the grain
+        dispatch_phase_batch()
+    }
     let ts_alloc = prof_ticks()
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)
