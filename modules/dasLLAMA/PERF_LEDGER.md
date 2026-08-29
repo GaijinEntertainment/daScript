@@ -1126,6 +1126,12 @@ group; wording kept.
   (1.10-1.28x) and at 0.99-1.12x on q8/mxfp4. Not a pool-policy artifact - the hybrid pool
   roughly doubled our own MoE pp vs 6 lanes; the gap class is the k-quant MoE batch GEMM
   (expert-grouped rows), and both engines' MoE pp turns noisy at 18 lanes (cv 2-8% vs <1%
-  dense - routing imbalance across lanes). Instrument: lcpp_bench -p 512 CPU on 26B-A4B (the
-  widest gap) + a batch-GEMM expert-shape microbench; ref bar re-taken against the b10659
-  clean-cpu build at the arc-end re-mint.
+  dense - routing imbalance across lanes). Profile (26B-A4B pp512/pp2048, --prof): the grouped
+  sb_kq expert batch GEMMs are 87% of ffn wall at ~0.85 TFLOP/s vs the dense batch kernel's
+  ~4.7 on the same box - NOT per-expert-M starvation (rate flat from M~32 to M~128), NOT MoE
+  plumbing (route+gather+reduce ~6%), NOT q51 alone (k4 gate/up 0.87 vs q51 down 0.79); mxfp4
+  MoE sits at parity, so the sb_kq expert path specifically. Remaining suspects: the narrow
+  per-expert output dim (D=704 -> 88 mr=8 row-tiles; q51 mr=4) and the kq_batch_groupn
+  per-region walk vs the dense flat sweep. Instrument: bare-kernel microbench at expert shapes
+  (704x2816, M 32/128, dense-shape control) - needs a synthetic k4 fixture (repo has a k5
+  encoder, no k4); ref bar re-taken against the b10659 clean-cpu build at the arc-end re-mint.
