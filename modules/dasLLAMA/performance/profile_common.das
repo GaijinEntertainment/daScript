@@ -1191,11 +1191,11 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
         // (model card) — hp0-class single-window greedy decode runaway-loops on repetitive
         // audio in BOTH engines, the model's limitation, not a budget choice; 40 s chunked
         // long-form (the NVIDIA-sanctioned usage) is ledgered
-        AsrModelSpec(display = "Canary-Qwen 2.5B", das_model = "canary-qwen-2.5b-decoder-f16.gguf",
+        AsrModelSpec(display = "Canary-Qwen 2.5B", das_model = "canary-qwen-2.5b-decoder-q8_0.gguf",
             das_mmproj = "canary-qwen-2.5b-encoder-f32.bin", root = lroot,
             refs <- [AsrRef(tool = "nemo", handle = "nvidia/canary-qwen-2.5b", exec_fmt = "bf16")],
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto", tier = Tier.large,
-            prov = ProvEntry(name = "canary-qwen-2.5b-decoder-f16.gguf", root = "llm", recipe = CANARY_DEC_RECIPE),
+            prov = ProvEntry(name = "canary-qwen-2.5b-decoder-q8_0.gguf", root = "llm", recipe = CANARY_DEC_RECIPE),
             companions <- [ProvEntry(name = "canary-qwen-2.5b-encoder-f32.bin", root = "llm",
                 bytes = 3252768256l, sha256 = "37d1057ced3150cfde2fb996c1fc0a3d702d23a97f9347aedb52795ebec03e5c",
                 recipe = CANARY_ENC_RECIPE)]),

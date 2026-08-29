@@ -1109,8 +1109,11 @@ group; wording kept.
 
 ### From the canary M5 baseline (2026-08-29)
 
-- **OPEN - canary is 2.5x behind nemo on gb1 (das CPU 44.6 s vs nemo/torch-MPS 17.8 s);
-  jfk is ahead (2.24 vs 2.65 s).** Two independent notches: (a) the FastConformer-32 encoder
+- **OPEN (decoder half CLOSED same day) - canary gb1 44.6 s vs nemo 17.8 s.** Notch (b) is
+  closed: the serving decoder is the Q8_0 re-quant (CANARY_DEC_RECIPE), cls_q8 serves and the
+  blob drivers accept - jfk 1.25 s (2.12x ahead), jfk3 3.91 s (1.64x), gb1 27.7 s (0.64x),
+  transcript gate verbatim both serves. What remains of gb1 is notch (a) alone.
+  Original finding: Two independent notches: (a) the FastConformer-32 encoder
   is CPU f32/q8 (26.8 s of the gb1 turn) - a Metal driver is the gemma4a-recipe class of
   work; (b) the decoder cannot ride the Metal rail: the f16-sourced GGUF's TIED classifier
   serves the exact fp32 path (cls_q8 wants a Q8_0 disk embedding) and the blob drivers

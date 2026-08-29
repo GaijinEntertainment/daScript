@@ -171,11 +171,15 @@ bin/daslang modules/dasLLAMA/performance/fetch_models.das --   # later: verify-o
       differing hash means environment drift: stop and compare, never bench it.
     - **canary DECODER** does real math (the torch LoRA merge, fp16) - ARM and x86 torch
       round the last ulp differently, and the gguf writer stamps tool versions, so its
-      byte hash is canonical only per (architecture, convert-kit version). The gate that
+      byte hash is canonical only per (architecture, convert-kit version). The SERVING
+      artifact is the fp16 output re-quantized with `llama-quantize <f16> <q8_0> Q8_0`
+      (a Q8_0 disk embedding lets the tied classifier serve `cls_q8` on the Metal rail;
+      the fp16 stays stocked as the frozen-NeMo-ids parity carrier). The gate that
       matters is OUTPUT parity: transcribe the three canary corpus clips
       (`asr_bench.das --text` over jfk/jfk3/gb1) and diff token-for-token against
       `benchmarks/asr/canary_transcripts.expected` - proven identical across an
-      ARM-converted and an x86-converted decoder on 2026-07-29. Bit-identity across
+      ARM-converted and an x86-converted decoder on 2026-07-29, and again through the
+      Q8_0 re-quant. Bit-identity across
       arches was never the goal for LLM/ASR outputs (you cannot attribute a bit of drift
       to model bit reduction vs cache reduction vs speculative decoding without massive
       effort); token-for-token output parity is.
@@ -250,7 +254,7 @@ for m in $WHISPER_CPP/models/ggml-tiny.bin $WHISPER_CPP/models/ggml-large-v3-tur
          <models-dir>/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf; do
     bin/daslang -jit utils/dasllama-convert/main.das -- -m "$m"
 done
-bin/daslang -jit utils/dasllama-convert/main.das -- -m <models-dir>/canary-qwen-2.5b-decoder-f16.gguf
+bin/daslang -jit utils/dasllama-convert/main.das -- -m <models-dir>/canary-qwen-2.5b-decoder-q8_0.gguf
 # the GC step covers the whisper models dir too:
 bin/daslang -jit utils/dasllama-convert/main.das -- -m $WHISPER_CPP/models --clean --apply
 ```
