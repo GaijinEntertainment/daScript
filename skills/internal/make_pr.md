@@ -50,6 +50,16 @@ kills the chain's JIT loads, AOT links, and spawned tools mid-suite).
 
 ## 0a0-0a3. Agent topology
 
+**The order is strict: row 0a0 FINISHES - the harvester's ledger ruled, every accepted landing
+applied (the `[arch]` citations, the anchors, the REVIEW.md rules, the `//!` keepers), the
+amend committed - before ANY agent of 0a, 0a2, 0a3 or the review round spawns.** The audits
+exist to check the harvested tree: a `review-md-auditor` reads whether the landed rules bind,
+the `style-hygiene-auditor` reads the surviving comments, LINT026 reads the citations. An
+audit started beside the harvester audits a tree that no longer exists by the time it
+reports, and its verdicts are noise. "Final branch shape" for the woodpecker means the same
+thing: after the harvest landed. Nothing runs concurrently with the harvester except the
+harvester itself (one per module root, in one message).
+
 **0a0** - ONE `harvester` (`.claude/agents/harvester.md`) per touched module root, scoped to the comments the diff adds; it edits only the source files (deletions, `//!` compressions) and PROPOSES every document landing - the session rules on the ledger and lands what it accepts. Same registry caveat as 0a.
 
 **0a** - ONE `review-md-auditor` (`.claude/agents/review-md-auditor.md`) per discovered checklist, each auditing only its own under the self-review rule, plus ONE `tdd-auditor` (`.claude/agents/tdd-auditor.md`) for the whole diff; merge the reports. **Registry caveat: agent definitions snapshot at session start - a just-pulled or just-edited definition only exists in the NEXT session.** A non-trivial change runs the full round (`skills/internal/review_round.md`) on top; these instances are its surfacing phase, not a repeat.

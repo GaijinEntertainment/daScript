@@ -66,8 +66,10 @@ re-mint moves the crowns or `DASLLAMA_VERSION` bumps.
 
 Engine timing goes through the rails that aggregate and tag it: the `jobque_profile` markers
 (`profile_tag` / `profile_marker` and the `trace_*` wrappers in `dasllama_math.das`), the
-`prof_add` / `forward_profile_*` decode buckets (`dasllama_common.das`), and the `asr_prof_add`
-encode buckets (`dasllama_audio.das`). A new clock read paired with a print of the elapsed
+`prof_add` / `forward_profile_*` decode buckets (`dasllama_common.das`), the `asr_prof_add`
+encode buckets (`dasllama_audio.das`), and the Vulkan tier's `vk_prof()`-gated ledgers
+(`DASLLAMA_GPU_PROF=1`; per-dispatch and per-submit sums the tier prints at its own cadence -
+a report leg, never the served path). A new clock read paired with a print of the elapsed
 interval bypasses the aggregation - it measures one call site once, is not filterable, and rots
 where a rail entry would keep serving. Where a timed line IS the deliverable - `benchmarks/`,
 `performance/`, `harness/`, and cold one-shot load/mint progress logs (image bake/map, load

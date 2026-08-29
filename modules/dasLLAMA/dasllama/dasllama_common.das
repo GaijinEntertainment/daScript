@@ -709,6 +709,7 @@ def public build_decode_rope_row_swa(t : Model; pos : int64; var cos_tab, sin_ta
 
 //! The copyable hot-path block pointers, resolved onto the Model at load and called per layer.
 struct ArchBlocks {
+    std_chain : bool              // OPT-IN: attention AND ffn are the standard chain (attention_std_*, ffn_*_decode) the decode span replaces whole - a custom block never rides it
     attn_decode : AttnDecodeFn
     ffn_decode : FfnDecodeFn
     attn_prefill : AttnPrefillFn
@@ -1686,6 +1687,9 @@ struct Session {
     // holds (0 = never resident-prefilled); hydrated = host KV has been read back since
     rdec_gen : int64
     rdec_hydrated : bool
+    dat_gen : int64             // the per-op decode attention block's mirror generation this session claimed (0 = none)
+    tail_next1 : int64          // 1 + the layer whose resident FFN may take the decode tail this token (0 = none)
+    tail_taken : bool           // the tail took this layer's FFN: the residual add is the device's
     kv_signs : array<float>   // tq4 rotation signs (±1, max head_size; smaller heads use a prefix)
     key_cache : array<uint8>
     value_cache : array<uint8>
@@ -1801,6 +1805,14 @@ struct Session {
     @scratch moe_hs : array<float>       // bucket hidden requant scales (same / 32)
     @scratch @exact_size moe_gout : array<float>     // bucket (then shared-expert) down-projection output (npos x dim)
     @scratch @exact_size moe_eout : array<float>     // routed expert outputs parked by (position, slot) (npos x k x dim)
+    // the streamed-layer split (GPU streams+computes the LPT head of the regions, the CPU the tail, concurrently)
+    @scratch moe_offs1_cpu : array<int64>   // the CPU tail of the gate/up/down region triples
+    @scratch moe_offs3_cpu : array<int64>
+    @scratch moe_offs2_cpu : array<int64>
+    @scratch moe_w_gpu : array<float>      // routing weights with the CPU slots zeroed (the GPU combine's plane)
+    @scratch moe_w_cpu : array<float>      // ... and with the GPU slots zeroed (the CPU reduce's)
+    @scratch moe_exp_gpu : array<int8>   // per expert: 1 = this layer's GPU share (n_expert)
+    @scratch @exact_size moe_gpu_out : array<float>  // the GPU half's combined rows (npos x dim), joined after the CPU half
     ffn_offs : array<int64>     // dense/shexp gate+up fuse: 2 region (weight, activation) offset pairs
     ffn_gu : array<float>       // dense/shexp gate+up fuse output — gate half then up half (2 x max_ffn_width)
     mx4_wq : array<int8>        // grouped-prefill expansion of ONE native-MXFP4 expert to exact Q8 (dim x n_ff_exp)
@@ -2203,6 +2215,23 @@ def rms_at(var o : array<float> | #; t : Model; woff : int64; x : array<float>; 
     unsafe {
         rmsnorm(addr < float? >(o[0]), addr < float const? >(x[xoff]),
             addr < float const? >(t.fblob[woff]), size, t.config.norm_eps)
+    }
+}
+
+//! Threaded residual add over a batch: d[0..n) += s[0..n) in row blocks - a serial add_inplace walks
+//! the whole window on one lane behind a GEMM that used them all. Same per-element op and order.
+def add_batch(var d : float?; s : float const?; n : int64) {
+    let blk = 65_536l
+    let nblk = int((n + blk - 1l) / blk)
+    unsafe {
+        maybe_parallel_for(n >= g_norm_par_threshold, 0, nblk, get_dispatch_lanes()) $(bb, be) {
+            unsafe {
+                for (b in range(bb, be)) {
+                    let j0 = int64(b) * blk
+                    add_inplace(d + j0, s + j0, min(blk, n - j0))
+                }
+            }
+        }
     }
 }
 
@@ -4995,6 +5024,15 @@ def private embed_backfill_cpu(t : Model; var s : Session; npos : int64) {
 // the shared prefill core: rope table + layer stack + final norm/classifier, over a pre-filled
 // s.x_b residual stream (token or embedding sourced)
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+// the decode block's mirrors: ONE claim per prefill, after every window and layer; the tier mints
+// only when a window filled a mirror, and 0 says keep your own generation
+def private prefill_claim_mirrors(var s : Session) {
+    let dat_gen = moe_gpu_attn_dec_claim(false)
+    if (dat_gen != 0l) {
+        s.dat_gen = dat_gen
+    }
+}
+
 def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; skip_logits : bool = false) {
     let c = t.config
     let dim = c.dim
@@ -5069,4 +5107,5 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
         s.logits[id] = -1.0e30
     }
     prof_add("final", ts_final)
+    prefill_claim_mirrors(s)
 }

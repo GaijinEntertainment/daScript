@@ -440,9 +440,78 @@ module) is independent and can land any time - it is pure structure.
 24. **The cm2 tiles stamp from one class template (ruled 2026-08-28 at the vkclass PR round:
     a follow-up PR, not this one).** `Q8Cm2LBatch`/`Q8Cm2MBatch`, `K4Cm2LBatch`/`K4Cm2MBatch`
     and `K6Cm2LBatch`/`K6Cm2MBatch` are six hand-stamped bodies over two axes (tile width
-    128/256, decode format); `REVIEW_GPU.md`'s twin rule asks for one `class template` with a
+    128/256, decode format) - nine since the MoE s tiles (`*Cm2SBatch`, 32-row columns with
+    the semi-fast partial-column path) joined them, generated from the m bodies by a script;
+    `REVIEW_GPU.md`'s twin rule asks for one `class template` with a
     `@template_constant` for the width, typedefs for the block/coopmat types, and a
     `def override decode_*` per format - the shape `harness/vk_gemm_probe.das`'s `K6PxBase`
-    already proves. Gate: the six oracle cells in `tests/test_vulkan_kernels.das` stay 0-off,
+    already proves. Gate: the nine oracle cells in `tests/test_vulkan_kernels.das` stay 0-off,
     the probe's l/m rows stay within noise. The k5/q40 stamps (item 11's NEXT) land on the
-    template, not as two more copies.
+    template, not as more copies.
+
+25. **Try `VK_NV_cooperative_vector` for decode GEMV on real hardware (Boris, 2026-08-28).**
+    cm2 has no matrix-vector op - its seven feature bits are all tile-shaped, minimum tile 16 -
+    but the separate cooperative-vector extension (`OpCooperativeVectorMatrixMulNV` and kin,
+    vendored in `modules/dasVulkan` headers/bindings, absent from the SPIR-V emitter, unused by
+    upstream's matvec shaders too) is the inference matvec path. Every decode matmul
+    on the tier today is an sdot4 subgroup kernel (`Q8Gemv`, `KqGemvK4/Q40/K5/K6`), sitting at
+    the bandwidth ceiling by the bandwidth oracle. Boris's ruling: the bandwidth-only oracle
+    has lied too many times - measure on the hardware, not the model. The arm: (a) emitter
+    support for the cooperative-vector ops (`spirv_builtins.das` markers + `spirv_emit.das`
+    lowering, the device feature bit in `vulkan_boost`'s creator family), (b) one probe kernel
+    in `harness/vk_gemm_probe.das` at the decode shapes (3B gate/down rows, the 30B expert
+    rows), quant weights decoded to the vector op's f16/int8 forms, (c) a back-to-back tg pair
+    against the sdot4 GEMV on the 5060 Ti. Driver 610.74 exposes the extension or it does not -
+    the probe says which. Keep or kill on the pair, never on the oracle.
+
+26. **DONE 2026-08-29 - the whole-token decode span** (`ARCHITECTURE_GPU_VULKAN_DECODE.md`
+    sec.2.2t): the resident suffix as one submit per token; router + top-k on the device write the
+    FFN chain's metas. The board row lives in the PR that landed it; parity 40/40 on the 30B.
+
+27. **VRAM accounting for the decode-era scratch.** `carved_budget` carves the stream slots and
+    the decode mirrors (`set_moe_gpu_dat_need`); the prefill scratch (batch state ~250 MB, the
+    combine planes ~135 MB, the xf plane 64 MB, at ~90 MB, hq/hs 42 MB) still comes out of the
+    desktop reserve after placement, so the tier sits one allocation from the eviction cliff
+    (the 741 us FFN submit). Carve them too, and size the mirror cap from the session's context
+    (`DAT_MIRROR_ROWS` 2048 is 402 MB on the 30B; 1024 frees a half layer). Every layer moved
+    from the CPU streamed set to the device is ~0.43 ms/token on the 30B (the streamed layers'
+    CPU FFN is 6.9 ms of the 18 ms token at the DDR4 wall).
+
+28. **Model-free coverage the decode arc still owes (the TDD audit's untested set).** The device
+    half is pinned (`test_vulkan_dec_tail`, `test_vulkan_moe_cm2`, `test_vulkan_kernels`); these
+    arms are not: (a) the cm2 expert chain's multi-chunk loop and `MoeGatherF16`'s window guard -
+    `ffn_cm2_chunk_rows(2048, 512)` is 8064 rows and the largest cell is 600, so nothing chunks;
+    a cell past the cap (or a chunk-cap knob for tests) makes the guard load-bearing; (b) the
+    top-k kernel's `norm == 0` and `wscale` arms and its lowest-index tie rule - the span cell
+    records once per process, so a variant needs its own quad pair; (c) a `qk_norm` quad
+    (`set_qkn_rope_f16_cls`) in the block cell; (d) the pure host tables: `kq_bytes_per_weight`,
+    the split's LPT claim loop (extract it to a function first), `add_batch`; (e) the composed
+    model path - GPU prefill fills the mirrors, one claim per prefill, SERVE with no hydrate,
+    tail, span - belongs in `test_parity.das` as an A/B arm over `DASLLAMA_GPU_DEC_SPAN` /
+    `_DEC_TAIL` / `_MOE_SPLIT` (today the session's 40/40 parity is the only evidence).
+    Lint candidate from (a): a kernel window pair (`r0`/`r1`) whose only test caller passes the
+    full range is a guard that ships undistinguished.
+
+29. **The split's waste, both halves.** The CPU tail gathers, activates and requantizes ALL `nk`
+    bucket rows (`moe_gather_rows(s, 0, nk)`, `gate_batch(.., nk)`, `requant_rows_q8k_bs(.., nk)`)
+    while only its tail regions reach the GEMMs; the GPU head gathers every row and runs the
+    activation over the whole window while only the head regions' GEMMs run. Neither is wrong
+    (the combine skips zero-weight slots) but each caps the split's win and biases its cost model,
+    which also ignores that floor. Scope both to their share, then re-fit the three constants; the
+    LPT loop can also take one post-loop step (`max(t_gpu(i+1), t_cpu(i+1)) < t_cpu(i)`).
+
+30. **A paranoid-vs-normal hazard cell.** The span and the tail carry six hand-declared fences on
+    the edges the derived masks cannot see; `DASLLAMA_VK_HAZARD_PARANOID=1` barriers before every
+    node. A cell that runs the span twice, once under each, and compares rows is the one cheap
+    check that separates "the chain's math is right" from "the fences are complete" - it needs the
+    knob readable per run (today it is read once at init).
+
+31. **`feint` is a zero-assertion pass.** `tests/test_vulkan_kernels.das` carries ~70 `feint(..)`
+    + `return` gates from before the `t |> skip` rule; the s-tile cell and the two new files now
+    skip. Sweep the family in one change.
+
+32. **A top-k fixture over the dark arms.** `topk_cls` runs in the suite at one shape (4 experts,
+    k = 2, one subgroup live, renorm on, scale 1). A fixture driving the kernel alone against
+    `moe_select_core` over several `ne` / `k` shapes, exact ties, `norm == 0` and `wscale != 1`
+    covers the cross-subgroup argmax, the tie rule and both weight arms (the Metal twin has one:
+    `test_metal_prefill_kernels.das`'s select cell).

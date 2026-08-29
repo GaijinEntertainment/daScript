@@ -77,7 +77,14 @@ that a question answered for one backend has an obvious address in the other. Th
   rather than a per-class `enc_*` builder.
 - **`dasllama_gpu_tier.das`** - the device-cooperation SPI: hook types, install/unset slots,
   route/mark/want/status state, engine-facing forwarders. Vulkan implements it (per-op offload plus
-  resident plumbing); Metal deliberately does not, because UMA makes residency moot there and Metal
+  resident plumbing, and the decode-era seats it alone fills: the cm2 expert chain
+  `set_moe_gpu_ffn_xf_hooks` / `_async_hooks`, the decode attention block
+  `set_moe_gpu_attn_dec_hooks`, the decode FFN tail `set_moe_gpu_ffn_tail_hooks`, the
+  whole-token span `set_moe_gpu_span_dec_hook` - the span rides common's decode override
+  registry as `vulkan_moe_span`, selected by the MoE placement and declining per token). The
+  installs are one-way: a test that arms the tier installs the seats and never restores them,
+  because no uninstall exists and none is needed - a seat serves whatever model loads next; Metal
+  deliberately does not, because UMA makes residency moot there and Metal
   integrates as a whole-forward driver through common's override registries (the ASR-decoder
   driver is the one exception: whisper is not a `Model`, so its hooks are family registries in
   `dasllama_whisper`, same decline contract).

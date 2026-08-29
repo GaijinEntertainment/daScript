@@ -1,7 +1,7 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: this folder's `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`.
+doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`.
 
 **Every PR runs `run.das -- --suite model-free`, plus every test here the change reaches - never
 the whole directory.** A change reaches a test when it alters anything the test's result
@@ -71,11 +71,13 @@ cached hit at admit (`prefix_attach`) and donates no pages at reap (`donate_stre
 defect.** Cache keys are token ids, and the KV past the splice does not follow from them.
 
 **A test that silently vanishes on one platform is a defect, and so is a zero-assertion pass -
-a test passes or skips explicitly on every platform.** A cell whose whole body is
-platform-gated registers `t |> skip` on the platforms where that body compiles out.
+a test passes or skips explicitly on every platform.** A cell that returns without asserting -
+the module is absent, no device answered, a capability declined - registers `t |> skip` there;
+`feint` is a print, not a skip.
 
 **A skip gate keys on a device capability, a run-mode knob's value, or a stocked fixture beside
-the models (a model file, an mmproj, an oracle dump - a model gate) - never on the existence of
+the models (a model file, an mmproj, an oracle dump - a model gate), or on a compile-time
+module-presence check (`typeinfo builtin_module_exists`) - never on the existence of
 an artifact this repo's build or a previous test run produced (a mint, a generated binary, a
 dump a test wrote).** An artifact gate goes permanently false when its producer moves.
 
@@ -130,9 +132,9 @@ a defect.** A resize cap is not evidence.
 **A freeform token-parity cell is a defect.** Freeform coverage uses the forced-feed
 logits-tolerance form. Counting cells stay token-exact.
 
-**A diff that adds a metal kernel class under `../dasllama/` - a `[metal_kernel]` def or a
-new instance of a template carrying one - covers that class in `test_kernel_coverage.das`,
-one of two ways.** Either a census row there dispatches the class, or the diff names it in
+**A diff that adds a GPU kernel class under `../dasllama/` - a `[metal_kernel]` def, a
+`[vk_dispatch]` declaration, or a new instance of a template carrying one - covers that class in
+`test_kernel_coverage.das`, one of two ways.** Either a census row there dispatches the class, or the diff names it in
 that file's `CENSUS_NEVER_DISPATCHED`, with the reason no row can reach it. A
 `DASLLAMA_PARITY_FULL`-gated census row counts as the dispatching arm. Naming a
 class a census row could dispatch is a defect.
@@ -167,7 +169,8 @@ defect.**
 **A cell that does not establish every driver hook and serving-lane knob its claim depends on,
 and restore each to its default before returning, is a defect.** This holds even when the
 claim needs the knob at its DEFAULT value. A hook is any process-wide setter with no
-read-back. The environment can carry a knob either way. The mechanism (why the hooks flip legs
+read-back. The Vulkan tier's installs (`install_moe_gpu_tier` and the `set_moe_gpu_*_hook(s)`
+seats) are one-way and establish-only - `ARCHITECTURE_GPU.md` sec.1.5 sanctions them. The environment can carry a knob either way. The mechanism (why the hooks flip legs
 silently) is `CLAUDE.md`'s "Metal fixtures" section.
 
 **A cell claiming a family serving lane that does not pin it with `set_<family>_q8` and undo

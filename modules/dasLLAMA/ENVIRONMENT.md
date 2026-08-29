@@ -45,6 +45,9 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_QKV` | flag | off | Fused QKV rail on the GPU; stays off under DASLLAMA_GPU (measured a wash). |
 | `DASLLAMA_GPU_CLS` | flag | on | Keep the classifier plane on the GPU - the best ms-per-GB region; 0 is the CPU A/B lever. |
 | `DASLLAMA_GPU_COMBINE` | flag | on | Device-side routed MoE combine; 0 falls back to the host combine. |
+| `DASLLAMA_GPU_MOE_SPLIT` | flag | on | Split each STREAMED expert layer's prefill between the GPU (the experts it can stream in the CPU's time) and the CPU (the rest, concurrently); 0 streams whole layers. |
+| `DASLLAMA_GPU_DEC_TAIL` | flag | on | Decode FFN tail: a resident expert layer's FFN carries the combine, the residual and the next layer's attention feed on the device, so the two submits share one fence wait; 0 collects every FFN on the host. |
+| `DASLLAMA_GPU_DEC_SPAN` | flag | on | Whole-token decode span: every resident expert layer's attention, router, top-k, FFN and combine as ONE recorded chain and one submit per token; 0 runs the per-layer submits. |
 | `DASLLAMA_GPU_HEAT` | number | 0 | Expert heat threshold: hold the N hottest experts resident regardless of layer placement. |
 | `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
 

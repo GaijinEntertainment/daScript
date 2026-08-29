@@ -194,8 +194,9 @@ run is `harness/parity.das` on either backend, or - on Metal only - the in-suite
 `tests/run.das`.
 
 **Parity evidence counts only when its backend was armed: the Metal arm ran with `--ngl`; the
-Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows `resident driver
-armed`.** The Vulkan driver declines codec-mismatched sessions silently.
+Vulkan arm ran with `DASLLAMA_GPU=1` - never `--ngl` - and its log shows the tier that serves
+the changed path armed (`resident driver armed` for the whole-model driver, `GPU MoE tier: ...
+resident` for the per-op tier).** The Vulkan driver declines codec-mismatched sessions silently.
 
 **A change other than a comment-only one to `dasllama/dasllama_metal_tower.das`, to the
 `AttnArgs` kargs struct, to any kernel class the tower dispatches or builder the tower
@@ -221,7 +222,8 @@ are the ASR-decoder driver's parity instrument, and the shared common paths and 
 kernels reach that driver with no line of its own file touched.
 
 **Never leave a K/V codec unserved by the kernels that read or write the residency rail's
-`k_mirror`/`v_mirror` slabs - a K/V codec is the mirror's element type, f16 or f32.** Two
+`k_mirror`/`v_mirror` slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair - a
+K/V codec is the mirror's element type, f16 or f32.** Two
 shapes serve both: instances of one template cover both codecs, or a single-codec kernel has
 a sibling that serves the other codec behind an arming gate that keys on `kv16`. The rail
 serves both codecs, so a codec no kernel covers silently drops that codec's GPU path.
@@ -273,8 +275,8 @@ changes the engine's GPU-embed probe - the gate registered through `register_emb
 engine skips the CPU embed on a true probe, so a probe that is true where that path declines
 hands the next consumer an unfilled residual stream.
 
-**A diff that adds a module-level variable to `dasllama/dasllama_gpu_resident.das` whose value
-depends on the installed model also adds it to `moe_gpu_model_marks_save_`,
+**A diff that adds a module-level variable to `dasllama/dasllama_gpu_resident.das` or
+`dasllama/dasllama_gpu_tier.das` whose value depends on the installed model also adds it to `moe_gpu_model_marks_save_`,
 `moe_gpu_model_marks_restore_` and `moe_gpu_drop_model_`, in the same change.** A global
 missing from one of the three survives a model swap and routes the next model's dispatches at
 the old model's planes.

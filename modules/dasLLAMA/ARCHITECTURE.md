@@ -40,9 +40,12 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU.md` - sec.2.2b: the tensor-GEMM and fused-attention shapes that measured out.
 - `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2i: the Metal prefill driver's GEMM form ladder,
   dev-W knee map, attention slab, MoE bucket rail, and chunked submission.
-- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j-2.2p: the Vulkan resident driver - the prefill window
+- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j-2.2q: the Vulkan resident driver - the prefill window
   chain, the cm2 decode lanes and tile pick, the class-pipeline build seat, the residency plan,
-  the GPU-slot marks swap, and the Q8 requant byte store.
+  the GPU-slot marks swap, the Q8 requant byte store, and the MoE expert chain on the cm2 tiles.
+- `ARCHITECTURE_GPU_VULKAN_DECODE.md` - sec.2.2r-2.2t: the per-op tier's decode era - the decode
+  attention block over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, and the
+  whole-token decode span.
 - `ARCHITECTURE_RUNTIME.md` - sec.2.2, 2.3, 2.3a, 2.4, 2.6-2.9, 2.11, 2.12: kernel shape,
   caches, lint policy, knobs, coverage, the GPU ramp.
 - `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10: the benchmark rig, the tune gate, and the

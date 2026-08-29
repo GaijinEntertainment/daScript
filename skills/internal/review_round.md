@@ -17,6 +17,10 @@ Always the WHOLE arc - never just the topmost commit of a multi-commit branch.
 
 ## Phase 0 - grounding (one agent)
 
+**When the round is `make_pr`'s surfacing phase, the comment harvest (row 0a0) has LANDED
+before Phase 0 starts** - ledger ruled, citations, anchors, rules and keepers applied, the
+amend committed. Every agent below reads the harvested tree; none starts beside the harvester.
+
 Spawn ONE `targeted-reviewer` instance (`.claude/agents/targeted-reviewer.md`) over the full
 diff range. It produces a map, not findings:
 
