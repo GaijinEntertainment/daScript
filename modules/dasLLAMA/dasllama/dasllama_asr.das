@@ -228,7 +228,10 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         return <- m
     }
     var m = AsrModel(kind = AsrKind.qwen3a)
-    m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
+    // the qwen3a decode path is a plain Model session (embed rows + eval), so it rides the
+    // box's decode policy — blob-metal when armed; whisper/parakeet stay planar (their custom
+    // CPU decoders read planes)
+    m.dec <- load_model_cached(path, QuantMode.q8)
     // Same qwen3a AuT tower, two thinkers: Qwen3-ASR is a dense qwen3 (arch `qwen3`/`qwen3vl`);
     // Qwen3-Omni-30B is the MoE thinker (arch `qwen3vlmoe`), driven as a chat/transcription turn.
     if (m.dec.arch == "qwen3vlmoe") {
@@ -237,7 +240,13 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the GGUF ASR route expects a Qwen3-ASR (qwen3/qwen3vl) or Qwen3-Omni (qwen3vlmoe) decoder")
     }
     m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
-    m.q3t <- load_qwen3a_tower(mmproj)
+    if (g_asr_force_fp32 || g_asr_tower_fp32) {   // the facade's fp32 rail pins the exact lane for this load
+        set_qwen3a_q8(false)
+        m.q3t <- load_qwen3a_tower(mmproj)
+        reset_qwen3a_q8()
+    } else {
+        m.q3t <- load_qwen3a_tower(mmproj)
+    }
     if (m.q3t.proj_dim != m.dec.config.dim) {
         panic("dasLLAMA asr: mmproj projects to {m.q3t.proj_dim} but the decoder is {m.dec.config.dim}-wide - mismatched pair")
     }

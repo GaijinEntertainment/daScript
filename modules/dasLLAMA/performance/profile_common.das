@@ -1201,9 +1201,9 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
                 recipe = CANARY_ENC_RECIPE)]),
         // jfk3 (33 s) replaced gemma4a_test2.wav — the one corpus clip with no traceable
         // provenance; every published input must be re-fetchable (B2/B3)
-        // the 0.6B AuT pair (fetch_models-pinned): the small dense thinker — cheap cells; its
-        // GPU serve (the conv2d frontend) stands on the stage probe, not these rows — the
-        // metal leg is whisper-only and the cpu/accel rows pin the drivers off
+        // the 0.6B AuT pair (fetch_models-pinned): the small dense thinker — cheap cells; the
+        // gpu leg serves the WHOLE turn (f32 tower + bf16 twin on the Metal tower driver, the
+        // decoder on the standard Metal rail); the cpu/accel rows pin the drivers off
         AsrModelSpec(display = "Qwen3-ASR-0.6B", das_model = "Qwen3-ASR-0.6B-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-ASR-0.6B-bf16.gguf", root = lroot,
             // mtmd's CPU AuT encode runs near xRT 1 — the same per-rep budget cap as omni's

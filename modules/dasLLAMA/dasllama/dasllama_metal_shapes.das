@@ -367,7 +367,7 @@ def ffn_second_hidden(t : Model) : int64 {
     return h1
 }
 
-def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = false; allow_kv_share : bool = false; allow_hetero_hidden : bool = false) : MetalDecodeDecline {
+def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = false; allow_kv_share : bool = false; allow_hetero_hidden : bool = false; mint_time : bool = false) : MetalDecodeDecline {
     if (t.quant != QuantMode.q8) {
         return MetalDecodeDecline.quant_mode
     }
@@ -379,7 +379,10 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
             (!t.blocks.ffn_is_dense && !(allow_moe && moe_metal_ok(t)))) {
         return MetalDecodeDecline.graph
     }
-    if (kernel_backend_needs_repack(active_kernel_backend())) {
+    // a RUNTIME gate like the planar check: repacked planes are unreadable by the drivers, but a
+    // fresh METAL mint never repacks — mint-time servability must not read the transient backend
+    // (the load itself selects the repacking CPU backend before deciding the flavor)
+    if (!mint_time && kernel_backend_needs_repack(active_kernel_backend())) {
         return MetalDecodeDecline.backend_repack
     }
     if (!get_rope_table_mode()) {
@@ -428,7 +431,7 @@ def private metal_model_servable_impl(t : Model) : bool {
     if (t.config.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8) {
         return false
     }
-    return decode_shape_decline(t, DECODE_NEEDS_OK, true, true, true) == MetalDecodeDecline.none
+    return decode_shape_decline(t, DECODE_NEEDS_OK, true, true, true, mint_time = true) == MetalDecodeDecline.none
 }
 
 [init]

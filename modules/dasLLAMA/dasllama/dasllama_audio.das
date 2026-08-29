@@ -518,8 +518,9 @@ struct AudioTower {
     stack_factor : int64 = 1  // frame-concat width before the projector (ultravox 8, voxtral 4)
     mm1_out : int64 = 0l      // projector hidden width (ultravox: pre-swiglu, voxtral: pre-gelu)
     has_k_bias : bool = false // qwen3a attention carries a k bias; whisper towers don't
+    blk_bf16 : bool = false   // the twin's dispatch family: bf16-sourced GEMMs (qwen3a AuT) vs f16 (whisper)
     fblob : PlaneF = PlaneF()
-    wblob : PlaneU16 = PlaneU16()   // the baked f16 GEMM twin ([[tower_bake_half_twin]]); empty = route-ineligible
+    wblob : PlaneU16 = PlaneU16()   // the baked halfword GEMM twin ([[tower_bake_half_twin]]); empty = route-ineligible
     q8 : bool = false         // encoder GEMMs quantized: qblob/qscales carry the COMPACT Q8_0 set
     qblob : PlaneI8 = PlaneI8()   // dense GEMM-only Q8_0 planes (fblob keeps just the non-GEMM rest)
     qscales : PlaneF = PlaneF()   // per-32-block scales, indexed at woff/32
@@ -552,9 +553,9 @@ def finalize(var t : AudioTower) {
     }
 }
 
-// the tripwire: serialize_image_meta(AudioTower) covers 28 fields; image_map + image_bytes
+// the tripwire: serialize_image_meta(AudioTower) covers 31 fields; image_map + image_bytes
 // are deliberate skips. A new non-array AudioTower field trips this until BOTH agree.
-let private TOWER_META_FIELDS = 30 + 2
+let private TOWER_META_FIELDS = 31 + 2
 
 // every non-array AudioTower field, explicitly, both directions (see dasllama_image).
 // Public: WhisperModel's serialize_image_meta reuses it for its nested `enc` tower.
@@ -573,6 +574,7 @@ def serialize_image_meta(var arch : Archive; var t : AudioTower) {
     arch |> serialize_raw(t.stack_factor)
     arch |> serialize_raw(t.mm1_out)
     arch |> serialize_raw(t.has_k_bias)
+    arch |> serialize_raw(t.blk_bf16)
     arch |> serialize_raw(t.q8)
     arch |> serialize_raw(t.conv1_w_off)
     arch |> serialize_raw(t.conv1_b_off)
@@ -1339,13 +1341,22 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
 // cannot be required from here). Serves the whole block loop or declines; the CPU loop below
 // stays the correct fallback. The diff-stage rail keeps the CPU loop (its dumps ARE the point).
 typedef TowerBlocksGpuFn = function<(t : AudioTower; var s : EncoderState; npos : int64) : bool>
+typedef TowerServesFn = function<() : bool>
 var private g_tw_blocks_gpu : TowerBlocksGpuFn
 var private g_tw_blocks_gpu_set = false
+var private g_tw_serves : TowerServesFn
+var private g_tw_serves_set = false
 
-def register_tower_blocks_gpu(fn : TowerBlocksGpuFn) {
+def register_tower_blocks_gpu(fn : TowerBlocksGpuFn; serves : TowerServesFn) {
     g_tw_blocks_gpu = fn
+    g_tw_serves = serves
     g_tw_blocks_gpu_set = true
+    g_tw_serves_set = true
 }
+
+//! Would the Metal tower serve a block loop — the lane policies ask (a serving driver wants
+//! f32 planes, so the family lane defaults to exact); false on CPU builds or with the knob off.
+def audio_tower_gpu_serves() : bool => g_tw_serves_set && invoke(g_tw_serves)
 
 //! The conv-frontend twin: serves conv1/conv2/pos-add for one mel chunk (s.x filled) or
 //! declines with false — the CPU conv above stays the correct fallback, best-effort inside

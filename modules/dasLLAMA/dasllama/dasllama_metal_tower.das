@@ -235,12 +235,15 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 2l)
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
-    // an empty wblob IS the ineligibility flag: the mint bakes the twin only for f16-sourced GEMMs
-    let f16_route = g_tw_env_tower_f16 && length(t.wblob) > 0l && pf_hmm_ready()
+    // an empty wblob IS the ineligibility flag: the mint bakes the twin only for f16/bf16-sourced GEMMs
+    let twin = g_tw_env_tower_f16 && length(t.wblob) > 0l
+    let f16_route = twin && !t.blk_bf16 && pf_hmm_ready()
+    let bf16_route = twin && t.blk_bf16
     let bytes_xh = uint64(mp * ff * 2l)
-    var bxh = f16_route ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null   // the shared f16 X panel
-    var bwh = f16_route ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
+    var bxh = (f16_route || (bf16_route && pf_bf16_half_ready())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null   // the shared f16 X panel
+    var bwh = (f16_route || bf16_route) ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
     let f16w = f16_route && bwh != null && bxh != null
+    let bf16w = bf16_route && bwh != null
     var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
@@ -273,29 +276,29 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
         for (l in range64(t.n_layer)) {
             let lo = enc_layer_offsets(t, l)
             enc_ln(enc, bx, bblob, uint64(lo.ln1_w * 4l), bblob, uint64(lo.ln1_b * 4l), bxb, u_d, u_eps, npos)
-            tw_mm(enc, f16w, false, bwh, bblob, lo.q_w, bxb, bxh, bq, 0ul, u_d, u_d, mp, d, d, true)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.q_w, bxb, bxh, bq, 0ul, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, bq, 0ul, bblob, uint64(lo.q_b * 4l), u_d, u_totd, npos * d)
-            tw_mm(enc, f16w, false, bwh, bblob, lo.k_w, bxb, bxh, bk, 0ul, u_d, u_d, mp, d, d, false)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.k_w, bxb, bxh, bk, 0ul, u_d, u_d, mp, d, d, false)
             if (t.has_k_bias) {
                 enc_add_bias_rows(enc, bk, 0ul, bblob, uint64(lo.k_b * 4l), u_d, u_totd, npos * d)
             }
-            tw_mm(enc, f16w, false, bwh, bblob, lo.v_w, bxb, bxh, bv, 0ul, u_d, u_d, mp, d, d, false)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.v_w, bxb, bxh, bv, 0ul, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, bv, 0ul, bblob, uint64(lo.v_b * 4l), u_d, u_totd, npos * d)
             enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
             enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
             enc_av_mm(enc, batt, bv, bxb2, ka, bstat, mp, t.n_head, hs)
-            tw_mm(enc, f16w, false, bwh, bblob, lo.o_w, bxb2, bxh, bxb, 0ul, u_d, u_d, mp, d, d, true)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.o_w, bxb2, bxh, bxb, 0ul, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(lo.o_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
             enc_ln(enc, bx, bblob, uint64(lo.ln2_w * 4l), bblob, uint64(lo.ln2_b * 4l), bxb, u_d, u_eps, npos)
-            tw_mm(enc, f16w, false, bwh, bblob, lo.fc1_w, bxb, bxh, bh, 0ul, u_d, u_ff, mp, ff, d, true)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.fc1_w, bxb, bxh, bh, 0ul, u_d, u_ff, mp, ff, d, true)
             enc_add_bias_rows(enc, bh, 0ul, bblob, uint64(lo.fc1_b * 4l), u_ff, u_totff, npos * ff)
             if (t.gelu_tanh) {
                 enc_gelu_lut(enc, bh, 0ul, u_totff, npos * ff)
             } else {
                 enc_gelu_erf(enc, bh, 0ul, u_totff, npos * ff)
             }
-            tw_mm(enc, f16w, false, bwh, bblob, lo.fc2_w, bh, bxh, bxb2, 0ul, u_ff, u_d, mp, d, ff, true)
+            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.fc2_w, bh, bxh, bxb2, 0ul, u_ff, u_d, mp, d, ff, true)
             enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(lo.fc2_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
         }
@@ -308,7 +311,7 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
         g_tower_encodes++
         g_tower_rows += npos
         g_tower_blocks += t.n_layer
-        if (f16w) {
+        if (f16w || bf16w) {
             g_tower_f16_encodes++
         }
         served = true
@@ -1464,7 +1467,7 @@ def dasllama_metal_tower_register {
     register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_tower_serves)
     register_qwen3v_gpu(@@metal_qwen3v_blocks, @@metal_tower_serves)
     register_qwen25v_gpu(@@metal_qwen25v_blocks)
-    register_tower_blocks_gpu(@@metal_tower_blocks)
+    register_tower_blocks_gpu(@@metal_tower_blocks, @@metal_tower_serves)
     register_tower_conv_gpu(@@metal_conv_frontend)
     register_qwen3a_conv_gpu(@@metal_q3a_convs)
 }

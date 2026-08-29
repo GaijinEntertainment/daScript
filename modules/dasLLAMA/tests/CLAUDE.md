@@ -88,9 +88,12 @@ map must both clear it; `gemma4uv-metal` is the GPU tower
 driver's parity/counter/knob gate for the gemma4uv embedder, Apple builds only (`--arm
 gemma4uv` selects it too - arm filters match by substring); `mtower` is the whisper-class
 tower-blocks gate, Apple builds only - whisper tiny + large-v3-turbo transcript-exact and
-qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter deltas, plus
-the tower q8-decline (the serving default never dispatches the TOWER), required-mode panic, and
-Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv`
+qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter deltas, the
+twin-W legs (whisper f16 + qwen3a bf16: engage by the route counter, the twin-knob freeze,
+and whisper's wblob-ONLY poison that must CHANGE the GPU transcript), plus the tower
+q8-decline (a PINNED-q8 tower never dispatches - the un-pinned lane default follows the Metal
+tower on Apple builds: serving driver => f32 planes, the vision-tower policy), required-mode
+panic, and Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv`
 cell in `test_model_image.das` - GPU cross-KV on the q8 serving default, transcript-exact
 against the CPU chain with window/step counter deltas and the knob and quant_mode declines,
 required-mode, step-floor and shutdown-re-arm contract; the voxtral arm re-saves a

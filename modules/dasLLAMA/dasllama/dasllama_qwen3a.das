@@ -133,21 +133,55 @@ def private register_qwen3a_image_tags {
     register_image_family_tag("qwen3a-q8")
 }
 
-// q8 is the only serving format for the shared core AND the cblob GEMM trio (board policy);
-// the flag is the fp32 reference route parity legs compare against
-var private g_q3a_q8 = true
+// The lane policy follows the fastest GEMM path on the box: a serving Metal tower wants f32
+// planes (the driver declines q8) and flips the default to the exact lane; else q8 (the CPU
+// serving format). A pin overrides — the parity legs pin each lane explicitly.
+enum private Q3aLane {
+    unset    // the policy decides
+    exact    // f32 planes
+    q8
+}
+var private g_q3a_pin = Q3aLane.unset
 
-//! Select the qwen3a tower's weight format for subsequent loads: q8 (the serving default) vs
-//! the fp32 reference route parity legs compare against.
+def private q3a_serve_q8() : bool {
+    if (g_q3a_pin != Q3aLane.unset) {
+        return g_q3a_pin == Q3aLane.q8
+    }
+    return !audio_tower_gpu_serves()
+}
+
+//! Pin the qwen3a tower's weight format for subsequent loads: q8 (the CPU serving format) vs
+//! f32 planes (the Metal tower's lane; also the fp32 reference-route parity legs).
+//! ``reset_qwen3a_q8`` returns to the policy default.
 def set_qwen3a_q8(on : bool) {
-    g_q3a_q8 = on
+    g_q3a_pin = on ? Q3aLane.q8 : Q3aLane.exact
+}
+
+def reset_qwen3a_q8() {
+    g_q3a_pin = Q3aLane.unset
+}
+
+//! Would the next load serve the tower q8 — the pin when set, the policy otherwise.
+def qwen3a_serves_q8() : bool => q3a_serve_q8()
+
+// the twin-bake gate: every block GEMM tensor carries the SAME halfword type, so the baked
+// twin round-trips the file's own halves exactly
+def private q3a_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
+    for (l in range64(n_layer)) {
+        for (nm in ["attn_q", "attn_k", "attn_v", "attn_out", "ffn_up", "ffn_down"]) {
+            if (gguf_tensor_type(m, "a.blk.{l}.{nm}.weight") != gt) {
+                return false
+            }
+        }
+    }
+    return true
 }
 
 //! Load a Qwen3-ASR mmproj GGUF (projector type `qwen3a`, bf16/f16/f32 tensors). Like
 //! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload;
 //! ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_qwen3a_tower(path : string) : Qwen3aTower {
-    let tag = g_q3a_q8 ? "qwen3a-q8" : "qwen3a-f32"
+    let tag = q3a_serve_q8() ? "qwen3a-q8" : "qwen3a-f32"
     if (path |> ends_with(".dlim")) {
         // named directly — no mmproj to regenerate from, so a wrong identity panics
         apply_box_profile_runtime()
@@ -243,9 +277,14 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         }
         gguf_read_tensor_f32(m, bytes, "a.post_ln.weight", st.core.fblob, c.lnp_w_off, d)
         gguf_read_tensor_f32(m, bytes, "a.post_ln.bias", st.core.fblob, c.lnp_b_off, d)
+        let gt = gguf_tensor_type(m, "a.blk.0.attn_q.weight")
+        c.blk_bf16 = gt == GGML_TYPE_BF16
         st.e.core <- c
-        if (g_q3a_q8) {
+        if (q3a_serve_q8()) {
             tower_quantize(st.e.core, st.core)   // arm the shared core's q8 rail (encoder_blocks reads core.q8)
+        } elif ((gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16) && q3a_gemm_types_uniform(m, st.e.core.n_layer, gt)) {
+            // the halfword GEMM twin: plane absence IS the ineligibility flag (mixed/f32 files)
+            tower_bake_half_twin(st.core.fblob, st.core.wblob, st.e.core.blk_bf16)
         }
 
         // conv frontend + projector blob
@@ -292,7 +331,7 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.bias", st.cblob, st.e.mm1_b_off, d)
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", st.cblob, st.e.mm2_w_off, st.e.proj_dim * d)
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.bias", st.cblob, st.e.mm2_b_off, st.e.proj_dim)
-        if (g_q3a_q8) {
+        if (q3a_serve_q8()) {
             q3a_cblob_quantize(st.e, st.cblob, st.qcblob, st.qcscales)
         }
     }
@@ -631,7 +670,7 @@ struct Qwen3aAsrSession {
 //! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
 //! from the facade, which owns the shared LLM). The AuT core serves q8 GEMM planes.
 def qwen3a_exec_fmt(dec_fmt : string) : string {
-    return "{g_q3a_q8 ? "q8" : "f32"}/{dec_fmt}"
+    return "{q3a_serve_q8() ? "q8" : "f32"}/{dec_fmt}"
 }
 
 //! The family's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm):

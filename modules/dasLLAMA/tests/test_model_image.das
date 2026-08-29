@@ -1304,6 +1304,7 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         if (!model_available(t, path)) {
             return
         }
+        set_qwen3a_q8(true)   // this cell claims the q8 RAIL — the policy default follows the Metal tower on Apple builds
         let img = image_path_for(path, "qwen3a-q8")
         remove(img)
         // off-rail truth: the staged read — both cached loads are image-backed and cannot
@@ -1337,7 +1338,8 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         var inscope c32 <- load_qwen3a_tower(path)
         t |> success(!c32.core.q8, "f32 rail still serves")
         t |> equal(count_mismatch(a32.core.fblob, c32.core.fblob), 0l, "f32 core.fblob element-exact")
-        set_qwen3a_q8(true)
+        t |> success(long_length(a32.core.wblob) > 0l, "the bf16 mmproj bakes the halfword twin on the exact lane")
+        reset_qwen3a_q8()
     }
 }
 
@@ -1788,6 +1790,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
             t |> skip("jfk.wav not present beside the models")
             return
         }
+        set_qwen3a_q8(true)   // this cell claims the q8 RAIL — the policy default follows the Metal tower on Apple builds
         var inscope twq <- load_qwen3a_tower(path)
         t |> success(twq.core.q8, "tower core is on the q8 rail")
         set_qwen3a_q8(false)
@@ -1822,6 +1825,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
         to_log(LOG_INFO, "qwen3a q8-vs-f32 window 0: rel-rms {rel_rms}, maxdiff {maxd} (signal max {maxa}) over {nv} values\n")
         // element-level tripwire; the real gate is transcript-level (test_qwen3a_transcribe_q8_ab)
         t |> success(rel_rms < 0.05, "q8 core tracks the f32 rail (element-level bar)")
+        reset_qwen3a_q8()
         delete samples
     }
 }
@@ -1850,6 +1854,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
             // decoder off-rail (REVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
             dec.config.seq_len = min(dec.config.seq_len, 8192l)
+            set_qwen3a_q8(true)   // leg A claims the q8 RAIL — the policy default follows the Metal tower
             var inscope tw <- load_qwen3a_tower(mmp_path)
             t |> success(tw.core.q8, "leg A tower core is on the q8 rail")
             var inscope s <- create_qwen3a_asr_session(dec, tw, "auto", false)
@@ -1863,7 +1868,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
             qwen3a_transcribe(dec, tw32, s32, "", samples, $(seg : TranscribeSegment) {
                 f32_text += seg.text
             }, lang)
-            set_qwen3a_q8(true)
+            reset_qwen3a_q8()
             delete dec
         }
         to_log(LOG_INFO, "qwen3a q8 : {q8_text}\n")
@@ -1906,6 +1911,7 @@ def test_qwen3a_metal_tower(tst : T?) {
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
                 set_qwen3a_q8(false)
+                set_metal_tower_f16(false)   // this cell's element bar claims the f32 GPU chain; the twin leg below re-arms
                 var inscope tw <- load_qwen3a_tower(mmp_path)
                 t |> success(!tw.core.q8, "tower core is on the f32 rail")
                 nlayer = tw.core.n_layer
@@ -1945,7 +1951,18 @@ def test_qwen3a_metal_tower(tst : T?) {
                     sa += double(ecpu.out[i] * ecpu.out[i])
                 }
                 enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
-                set_qwen3a_q8(true)
+                // the twin leg: the bf16 mmproj's baked halfword twin serves the block GEMMs -
+                // transcript must MATCH the f32 GPU turn, engage proven by the route counter
+                set_metal_tower_f16(true)
+                let tw0 = metal_tower_f16_encodes()
+                var twin_text = ""
+                var inscope s3 <- create_qwen3a_asr_session(dec, tw, "auto", false)
+                qwen3a_transcribe(dec, tw, s3, "", samples, $(seg : TranscribeSegment) {
+                    twin_text += seg.text
+                }, lang)
+                t |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the bf16-sourced tower rode the twin route")
+                t |> equal(gpu_text, twin_text, "twin route: transcript matches the f32 GPU turn")
+                reset_qwen3a_q8()
                 delete dec
             }
             t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
