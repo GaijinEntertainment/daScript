@@ -136,6 +136,124 @@ class LabPfFusedAttn {
     }
 }
 
+var g_lab_pso_twr : MetalComputePipeline?
+
+// The TOWER flash form: bidirectional (every key visible - uend the whole canvas), COMPACT
+// hs=72 heads (the vision towers' pre-restride q/k/v layout) - no 128 pad, no restride
+// passes, no score slab, no rowstat pass. One tg per (32-query block, head); K/V walk in
+// 32-position tiles, online softmax in f32, O in an accumulate-mode cooperative tensor.
+[metal_dispatch(name = "lab_enc_twr_attn", pso = "g_lab_pso_twr", tgmem = "lab_twr_attn_msl_tgmem", tg = 128, grid = "mp/32, heads", params = "mp : int64, heads : int64")]
+class LabTowerFlashAttn {
+    @ssbo @binding = 0 @role = "read" q : array<float>     // [np x heads*72], roped, UNSCALED
+    @ssbo @binding = 1 @role = "read" k : array<float>     // [np x heads*72]
+    @ssbo @binding = 2 @role = "read" v : array<float>     // [np x heads*72]
+    @ssbo @binding = 3 @role = "write" xb : array<float>   // [mp x heads*72] attention output
+    @uniform @binding = 4 ka : AttnArgs
+    @workgroup tq : float16[2560]           // Q tile: 32 q-rows x 80 (72 + 8 zero pad - matmul2d wants K%16), scale folded
+    @workgroup tk : float16[2560]           // K tile: 32 k-rows x 80, per jb
+    @workgroup tv : float16[2304]           // V^T tile: 72 v-cols x 32 pos, per jb
+    @workgroup ts : float[1024]             // score tile 32x32 f32 (the never-DRAM slab)
+    @workgroup tp : float16[1024]           // P tile 32x32 f16 (post-softmax)
+    @workgroup trs : float[32]              // per-row online rescale exp(m_old - m_new)
+    @workgroup tinv : float[32]             // per-row 1/sum at the end
+    @workgroup tsm : float[32]              // running row max
+    @workgroup tss : float[32]              // running row sum
+
+    [metal_kernel(name="lab_twr_attn_msl")]
+    def lab_twr_attn {   // nolint:STYLE038 — one MSL kernel body, tgmem-barrier coupled
+        let qi0 = gl_WorkGroupID.x * 32u
+        let h = gl_WorkGroupID.y
+        let hs = 72u
+        let hoff = h * hs
+        let lid = gl_LocalInvocationID.x
+        var acc : float[2304]               // O: 32 q-rows x 72, cooperative on GPU
+        var i = lid
+        while (i < 32u * 80u) {
+            let qr = qi0 + i / 80u
+            let dd = i % 80u
+            tq[i] = (qr < ka.npos && dd < hs) ? float16(q[qr * ka.qd + hoff + dd] * ka.scale) : float16(0.0)
+            i += gl_WorkGroupSize.x
+        }
+        var r0 = lid
+        while (r0 < 32u) {
+            tsm[r0] = -3.0e38
+            tss[r0] = 0.0
+            r0 += gl_WorkGroupSize.x
+        }
+        tmm2d_tg_begin(acc, 32u, 72u, 4u, 32u)
+        var jb = 0u
+        while (jb < ka.np32) {
+            // K tile: 32 key rows x 72, rows past npos zeroed (pads can carry NaN)
+            var w = lid
+            while (w < 64u) {
+                let r = w >> 1u
+                let kh = (w & 1u) * 40u
+                let pos = jb + r
+                for [unroll_full] (t in range(40)) {
+                    let dd = kh + uint(t)
+                    tk[r * 80u + dd] = (pos < ka.npos && dd < hs) ? float16(k[pos * ka.kv_dim + hoff + dd]) : float16(0.0)
+                }
+                w += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tile_tg(tq, tk, ts, 32u, 32u, 4u, 80u)
+            barrier()
+            // online softmax: thread r < 32 owns q-row r; every staged key column is visible
+            var rr = lid
+            while (rr < 32u) {
+                var tmax = -3.0e38
+                for (j in range(32)) {
+                    if (jb + uint(j) < ka.npos) {
+                        tmax = max(tmax, ts[int(rr) * 32 + j])
+                    }
+                }
+                let mold = tsm[rr]
+                let mnew = max(mold, tmax)
+                let resc = mnew > -3.0e38 ? exp(max(mold - mnew, -80.0)) : 1.0
+                var psum = 0.0
+                for (j in range(32)) {
+                    var p = 0.0
+                    if (jb + uint(j) < ka.npos && mnew > -3.0e38) {
+                        p = exp(ts[int(rr) * 32 + j] - mnew)
+                    }
+                    tp[int(rr) * 32 + j] = float16(p)
+                    psum += p
+                }
+                tsm[rr] = mnew
+                tss[rr] = tss[rr] * resc + psum
+                trs[rr] = resc
+                rr += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_rowscale(acc, trs, 32u, 72u)
+            // V^T tile: 72 v-cols x 32 pos (the transpose gather), pad pos zeroed
+            w = lid
+            while (w < 144u) {
+                let c = w >> 1u
+                let ph = (w & 1u) * 16u
+                for [unroll_full] (t in range(16)) {
+                    let pos = jb + ph + uint(t)
+                    tv[c * 32u + ph + uint(t)] = pos < ka.npos ? float16(v[pos * ka.kv_dim + hoff + c]) : float16(0.0)
+                }
+                w += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step(acc, tp, tv, 32u, 72u, 32u)
+            barrier()
+            jb += 32u
+        }
+        var rf = lid
+        while (rf < 32u) {
+            tinv[rf] = tss[rf] > 0.0 ? 1.0 / tss[rf] : 0.0
+            rf += gl_WorkGroupSize.x
+        }
+        barrier()
+        tmm2d_tg_rowscale(acc, tinv, 32u, 72u)
+        var op = unsafe(addr(xb[qi0 * ka.qd + hoff]))
+        tmm2d_tg_store(acc, op, 32u, 72u, ka.qd)
+    }
+}
+
 def private cpu_oracle(q, k, v : array<float>; var o : array<float>; np, heads, hs, kvmul, qd, kvd : int; scale : float) {
     for (h in range(heads)) {
         let kvh = (h / kvmul) * hs
@@ -183,6 +301,11 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
             print("fused pso: {err}\n")
             return
         }
+        g_lab_pso_twr = pipeline_from_source(dev, lab_twr_attn_msl, lab_twr_attn_msl_entry, lab_twr_attn_msl_fastmath, err)
+        if (g_lab_pso_twr == null) {
+            print("tower pso: {err}\n")
+            return
+        }
         var pso_qk = pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
         var pso_sm = pipeline_from_source(dev, metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, err)
         var pso_av = pipeline_from_source(dev, MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, err)
@@ -192,15 +315,20 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
             print("three-pass pso: {err}\n")
             return
         }
-        let heads = 32
-        let hs = 64
-        let kvmul = 4
-        let qd = heads * hs
-        let kvd = (heads / kvmul) * hs
-        for (np in [512, 2048]) {
+        // rows: decoder-1B-like (the arc's original pair) + the gemma3v tower shape (bidirectional
+        // via uend = np - the vision-canvas attention the slab bills 27x per encode)
+        for (shape in [(np = 512, heads = 32, hs = 64, kvmul = 4, uend = 0),
+                       (np = 2048, heads = 32, hs = 64, kvmul = 4, uend = 0),
+                       (np = 4096, heads = 16, hs = 128, kvmul = 1, uend = 4096)]) {
+            let np = shape.np
+            let heads = shape.heads
+            let hs = shape.hs
+            let kvmul = shape.kvmul
+            let qd = heads * hs
+            let kvd = (heads / kvmul) * hs
             var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kvmul),
                 npos = uint(np), np32 = uint(np), scale = 0.125, qoff = 0u, qrows = uint(np),
-                window = 0u, softcap = 0.0, hass = 0u, uend = 0u, ulo = 0u)
+                window = 0u, softcap = 0.0, hass = 0u, uend = uint(shape.uend), ulo = 0u)
             var qh <- race_x_f32(np * qd)
             var kh <- race_x_f32(np * kvd)
             var vh <- race_x_f32(np * kvd)
@@ -303,6 +431,116 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
                 kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
             })
             print("  av_mm np={np}: base={t_avb}ms tensor={t_avt}ms ratio={t_avt / t_avb}\n")
+            if (shape.uend > 0) {
+                // the tower flash arm: compact hs=72 (first 72 of each padded head-block) vs
+                // the production three-pass on its padded layout - the exact A/B production faces
+                let hst = 72
+                let qdt = heads * hst
+                var qt : array<float>
+                var kt : array<float>
+                var vt : array<float>
+                qt |> resize(np * qdt)
+                kt |> resize(np * qdt)
+                vt |> resize(np * qdt)
+                for (p in range(np)) {
+                    for (hh in range(heads)) {
+                        for (dd in range(hst)) {
+                            qt[(p * heads + hh) * hst + dd] = qh[p * qd + hh * hs + dd]
+                            kt[(p * heads + hh) * hst + dd] = kh[p * kvd + hh * hs + dd]
+                            vt[(p * heads + hh) * hst + dd] = vh[p * kvd + hh * hs + dd]
+                        }
+                    }
+                }
+                var bqt = race_buf(dev, uint64(np * qdt * 4), unsafe(addr<void?>(qt[0])))
+                var bkt = race_buf(dev, uint64(np * qdt * 4), unsafe(addr<void?>(kt[0])))
+                var bvt = race_buf(dev, uint64(np * qdt * 4), unsafe(addr<void?>(vt[0])))
+                var bot = race_buf(dev, uint64(np * qdt * 4), null)
+                var kat = AttnArgs(qd = uint(qdt), kv_dim = uint(qdt), head_size = uint(hst), kv_mul = 1u,
+                    npos = uint(np), np32 = uint(np), scale = 0.125, qoff = 0u, qrows = uint(np),
+                    window = 0u, softcap = 0.0, hass = 0u, uend = uint(np), ulo = 0u)
+                var t_slab = -1.0lf
+                var t_flash = -1.0lf
+                race_pair_ms(queue, 5, t_slab, t_flash, $(enc) {
+                    kn_pipeline(enc, pso_qkt)
+                    kn_buffer(enc, bq, 0ul, 0)
+                    kn_buffer(enc, bk, 0ul, 1)
+                    kn_buffer(enc, batt, 0ul, 2)
+                    kn_kargs(enc, ka, 3)
+                    kn_dispatch(enc, uint3(uint(np / 32), uint(np / 64), uint(heads)), uint3(128u, 1u, 1u))
+                    kn_pipeline(enc, pso_sm)
+                    kn_tgmem(enc, metal_attn_rowstat_msl_tgmem, 0)
+                    kn_buffer(enc, batt, 0ul, 0)
+                    kn_kargs(enc, ka, 1)
+                    kn_buffer(enc, bstat, 0ul, 2)
+                    kn_buffer(enc, bsink, 0ul, 20)
+                    kn_dispatch(enc, uint3(uint(np), uint(heads), 1u), uint3(128u, 1u, 1u))
+                    kn_pipeline(enc, pso_av)
+                    kn_tgmem(enc, MetalAttnAVMm_metal_attn_av_mm_msl_tgmem, 0)
+                    kn_buffer(enc, batt, 0ul, 0)
+                    kn_buffer(enc, bv, 0ul, 1)
+                    kn_buffer(enc, bs, 0ul, 2)
+                    kn_kargs(enc, ka, 3)
+                    kn_buffer(enc, bstat, 0ul, 4)
+                    kn_dispatch(enc, uint3(uint(np / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
+                }, $(enc) {
+                    kn_pipeline(enc, g_lab_pso_twr)
+                    kn_tgmem(enc, lab_twr_attn_msl_tgmem, 0)
+                    kn_buffer(enc, bqt, 0ul, 0)
+                    kn_buffer(enc, bkt, 0ul, 1)
+                    kn_buffer(enc, bvt, 0ul, 2)
+                    kn_buffer(enc, bot, 0ul, 3)
+                    kn_kargs(enc, kat, 4)
+                    kn_dispatch(enc, uint3(uint(np / 32), uint(heads), 1u), uint3(128u, 1u, 1u))
+                })
+                // numerics: the flash arm vs a bidirectional oracle on the first 128 q-rows
+                let ncheck = 128
+                var maxrel_t = 0.0
+                unsafe {
+                    let pg = reinterpret<float?>(metal_buffer_contents(bot))
+                    for (hh in range(heads)) {
+                        for (qi in range(ncheck)) {
+                            var mx = -3.0e38
+                            for (j in range(np)) {
+                                var sd = 0.0lf
+                                for (dd in range(hst)) {
+                                    sd += double(qt[qi * qdt + hh * hst + dd]) * double(kt[j * qdt + hh * hst + dd])
+                                }
+                                mx = max(mx, float(sd) * 0.125)
+                            }
+                            var tot = 0.0lf
+                            var oa : float[72]
+                            for (dd in range(hst)) {
+                                oa[dd] = 0.0
+                            }
+                            for (j in range(np)) {
+                                var sd = 0.0lf
+                                for (dd in range(hst)) {
+                                    sd += double(qt[qi * qdt + hh * hst + dd]) * double(kt[j * qdt + hh * hst + dd])
+                                }
+                                let e = exp(float(sd) * 0.125 - mx)
+                                tot += double(e)
+                                for (dd in range(hst)) {
+                                    oa[dd] += e * vt[j * qdt + hh * hst + dd]
+                                }
+                            }
+                            for (dd in range(hst)) {
+                                let want = oa[dd] / float(tot)
+                                let got = pg[qi * qdt + hh * hst + dd]
+                                let r = abs(got - want) / max(abs(want), 1e-3)
+                                maxrel_t = max(maxrel_t, r)
+                            }
+                        }
+                    }
+                }
+                print("  TOWER np={np}: slab(hs128)={t_slab}ms flash(hs72)={t_flash}ms ratio={t_flash / t_slab}  maxrel={maxrel_t}\n")
+                metal_release(bqt)
+                metal_release(bkt)
+                metal_release(bvt)
+                metal_release(bot)
+                delete qt
+                delete kt
+                delete vt
+            }
             delete oc
             metal_release(bq)
             metal_release(bk)
