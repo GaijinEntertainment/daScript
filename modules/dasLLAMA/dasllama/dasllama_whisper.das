@@ -568,6 +568,9 @@ def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
         }
         if (enc_q8) {
             tower_quantize(st.e.enc, st.enc)
+        } elif (wenc_gemm_all_f16(recs, encJobs)) {
+            // the halfword GEMM twin: plane absence IS the ineligibility flag (f32-sourced GEMMs)
+            tower_bake_half_twin(st.enc.fblob, st.enc.wblob, false)
         }
         st.dblob |> reserve_resize(sz.dec_len)
         for (j in decJobs) {
@@ -586,6 +589,17 @@ def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
 
 // a job's dense-q8 membership: a marked GEMM whose contraction is a 32-multiple
 def private wjob_quantizable(j : WFillJob) : bool => j.gemm_n != 0l && j.gemm_n % 32l == 0l
+
+// the twin-bake gate: every encoder GEMM tensor is f16 in the bin, so the baked twin
+// round-trips the file's own halves exactly
+def private wenc_gemm_all_f16(recs : table<string; WTensorRec>; jobs : array<WFillJob>) : bool {
+    for (j in jobs) {
+        if (j.gemm_n != 0l && (recs?[j.name] ?? default<WTensorRec>).ttype != GGML_TYPE_F16) {
+            return false
+        }
+    }
+    return true
+}
 
 // the tied token embedding streams into BOTH planes (fp32 rows for lookups, q8 for the logits GEMV)
 def private wjob_dual(j : WFillJob) : bool => j.name == "decoder.token_embedding.weight"
@@ -606,25 +620,26 @@ def private wq_total(jobs : array<WFillJob>) : int64 {
 // holes zero-filled; the q kinds walk only the quantizable GEMM jobs, densely.
 def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #;
                           jobs : array<WFillJob>;
-                          kind : int;   // 0 = fp32, 1 = q8 quants, 2 = q8 scales
+                          kind : int;   // 0 = fp32, 1 = q8 quants, 2 = q8 scales, 3 = the f16 twin
                           q8 : bool;    // compact split on (an fp32 mint streams every job into kind 0)
                           rep : bool;   // repack GEMM regions — same gate the eager quantizers take
                           var w : ImgWriter; var sections : array<ImgSection>; name : string) : bool {
     w_zeros(w, pad_to_page(w.cur) - w.cur)
     let at = w.cur
     var scratch : array<float>
+    var half : array<uint16>
     var q8s : array<int8>
     var qss : array<float>
     var cur = 0l
     for (j in jobs) {
         let qz = q8 && wjob_quantizable(j)
-        if (kind == 0) {
+        if (kind == 0 || kind == 3) {
             if (j.off > cur) {
                 // a layout hole no tensor fills (whisper's biasless k slots) — kept as zeros
-                w_zeros(w, uint64((j.off - cur) * 4l))
+                w_zeros(w, uint64((j.off - cur) * (kind == 3 ? 2l : 4l)))
             }
             cur = j.off + j.n   // a skipped GEMM advances the old-layout cursor without emitting
-            continue if (qz && !wjob_dual(j))
+            continue if (kind == 0 && qz && !wjob_dual(j))
         } else {
             continue if (!qz)
         }
@@ -632,6 +647,20 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
             scratch |> grow_resize(int(j.n))
         }
         wjob_read(recs, b, j, scratch, -j.off)   // land the tensor at scratch[0]
+        if (kind == 3) {
+            // byte-identical to the eager tower_bake_half_twin over the same span
+            if (long_length(half) < j.n) {
+                half |> grow_resize(int(j.n))
+            }
+            unsafe {
+                var hp = addr<float16?>(half[0])
+                for (i in range64(j.n)) {
+                    hp[i] = float16(clamp(scratch[i], -65504.0, 65504.0))
+                }
+                w_append(w, addr<void?>(half[0]), uint64(j.n * 2l))
+            }
+            continue
+        }
         if (kind == 0) {
             unsafe {
                 w_append(w, addr<void?>(scratch[0]), uint64(j.n * 4l))
@@ -655,6 +684,7 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
         }
     }
     delete scratch
+    delete half
     delete q8s
     delete qss
     sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
@@ -707,7 +737,11 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
         let bk = select_matmul_backend_for_load_()
         let rep_enc = enc_q8 && bk
         let rep_dec = dec_q8 && bk
+        let enc_twin = !enc_q8 && wenc_gemm_all_f16(recs, encJobs)   // the f16 GEMM twin rides fp32-enc mints
         var extra = uint64(sz.enc_len * 4l) + uint64(sz.dec_len * 4l) + 2ul * uint64(IMAGE_PAGE)
+        if (enc_twin) {
+            extra += uint64(sz.enc_len * 2l) + uint64(IMAGE_PAGE)
+        }
         if (enc_q8) {   // quant plane (over-estimate: compact is smaller) + scales + pages
             extra += uint64(sz.enc_len) + uint64((sz.enc_len / 32l) * 4l) + 2ul * uint64(IMAGE_PAGE)
         }
@@ -721,6 +755,9 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
             }
             if (name == "enc.fblob") {
                 return wstream_plane(recs, bytes, encJobs, 0, enc_q8, rep_enc, w, sections, name)
+            }
+            if (enc_twin && name == "enc.wblob") {
+                return wstream_plane(recs, bytes, encJobs, 3, false, false, w, sections, name)
             }
             if (dec_q8 && name == "dqblob") {
                 return wstream_plane(recs, bytes, decJobs, 1, dec_q8, rep_dec, w, sections, name)

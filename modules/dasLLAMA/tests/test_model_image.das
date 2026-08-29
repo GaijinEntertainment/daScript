@@ -961,6 +961,43 @@ def test_whisper_metal_tower(tst : T?) {
                 t |> success(!empty(lg.text), "large: non-empty transcript")
                 t |> success(lc.text == lg.text, "large: transcript-exact CPU vs GPU")
             }
+            // the twin-W leg: crowns pinned so the half GEMM stamps compile — the f16-sourced
+            // bin's baked twin serves the block GEMMs, transcript still exact, engage by counter
+            set_metal_tensor_crowns("mulmm_q8")
+            metal_prefill_shutdown()   // crowns are read when the PSOs compile
+            let tw0 = metal_tower_f16_encodes()
+            let twg = whisper_transcribe_text(path, samples, cached = false)
+            t |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the f16-sourced tower rode the twin route")
+            t |> success(twg.text == cpu.text, "twin route: transcript-exact vs CPU")
+            // the twin-knob leg: DASLLAMA_METAL_TOWER_F16 off pins the f32 route (counter frozen)
+            set_metal_tower_f16(false)
+            let tw1 = metal_tower_f16_encodes()
+            let twf = whisper_transcribe_text(path, samples, cached = false)
+            set_metal_tower_f16(true)
+            t |> equal(metal_tower_f16_encodes(), tw1, "twin knob off: the route never engaged")
+            t |> success(twf.text == cpu.text, "twin knob off: the f32 route stays transcript-exact")
+            // the twin poison: a zeroed wblob layer (fblob INTACT) must CHANGE the GPU
+            // transcript — proof the route reads the twin plane, not the f32 blob
+            var inscope wpz = WhisperModel()
+            var inscope stgz <- stage_whisper_model(path, false)
+            t |> success(long_length(stgz.enc.wblob) > 0l, "the f16 bin baked a twin at stage")
+            let zbase = stgz.e.enc.layers_off + 2l * stgz.e.enc.layer_stride
+            for (i in range64(long_length(stgz.enc.wblob) > 0l ? stgz.e.enc.layer_stride : 0l)) {
+                stgz.enc.wblob[zbase + i] = uint16(0)
+            }
+            mint_whisper_model(stgz, wpz)
+            var z_text = ""
+            with_job_que() {
+                setup_dasllama_jobque()
+                var sz <- create_session(wpz)
+                transcribe(wpz, sz, samples) $(seg) {
+                    z_text += seg.text
+                }
+                delete sz
+            }
+            t |> success(z_text != cpu.text, "a zeroed twin layer CHANGES the GPU transcript (the twin is read)")
+            set_metal_tensor_crowns("")
+            metal_prefill_shutdown()
             // the q8 SERVING DEFAULT declines (quant_mode) and never dispatches — the shipped path stays CPU
             var inscope w8 = WhisperModel()
             var inscope stg8 <- stage_whisper_model(path, true)

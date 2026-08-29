@@ -519,6 +519,7 @@ struct AudioTower {
     mm1_out : int64 = 0l      // projector hidden width (ultravox: pre-swiglu, voxtral: pre-gelu)
     has_k_bias : bool = false // qwen3a attention carries a k bias; whisper towers don't
     fblob : PlaneF = PlaneF()
+    wblob : PlaneU16 = PlaneU16()   // the baked f16 GEMM twin ([[tower_bake_half_twin]]); empty = route-ineligible
     q8 : bool = false         // encoder GEMMs quantized: qblob/qscales carry the COMPACT Q8_0 set
     qblob : PlaneI8 = PlaneI8()   // dense GEMM-only Q8_0 planes (fblob keeps just the non-GEMM rest)
     qscales : PlaneF = PlaneF()   // per-32-block scales, indexed at woff/32
@@ -600,12 +601,14 @@ def private image_post_load(var t : AudioTower) {}   // no derived state — off
 struct AudioTowerPlanes {
     image_planes : bool = true   // the marker the image write walk static_ifs on
     fblob : array<float>
+    wblob : array<uint16>
     qblob : array<int8>
     qscales : array<float>
 }
 
 def finalize(var pl : AudioTowerPlanes) {
     delete pl.fblob
+    delete pl.wblob
     delete pl.qblob
     delete pl.qscales
 }
@@ -615,6 +618,7 @@ def finalize(var pl : AudioTowerPlanes) {
 struct AudioTowerStaging {
     e : AudioTower = AudioTower()
     fblob : array<float>
+    wblob : array<uint16>
     qblob : array<int8>
     qscales : array<float>
 }
@@ -625,6 +629,7 @@ def private serialize_image_meta(var arch : Archive; var st : AudioTowerStaging)
 
 def finalize(var st : AudioTowerStaging) {
     delete st.fblob
+    delete st.wblob
     delete st.qblob
     delete st.qscales
     delete st.e
