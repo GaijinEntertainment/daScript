@@ -11,13 +11,13 @@ options _allow_imgui_legacy = true
 // then diffused and decayed. Out of those local rules emerge the organic transport networks the
 // real Physarum polycephalum builds. The simulation never converges, so the window stays alive.
 //
-// The worker-thread slider is the star: it partitions the agents across N background threads, and
-// the agents/sec readout climbs as you add threads. The agent pass is dispatched from update() on
-// the main thread and polled non-blocking next frame — never joined on the main thread — because
-// emscripten cannot service a main-thread block on Web Workers in the browser (the same reason the
-// Path Tracer Lab dispatches from update()). The pass is race-free by construction: a worker only
+// The worker-thread slider is the star: it partitions the agents across N bands of a persistent job
+// queue, and the agents/sec readout climbs as you add bands. The agent pass is dispatched from
+// update() on the main thread and polled non-blocking next frame — never joined on the main thread —
+// because emscripten cannot service a main-thread block on Web Workers in the browser (the same
+// reason the Path Tracer Lab dispatches from update()). The pass is race-free by construction: a worker only
 // READS the shared field (sensing) and writes its OWN slice of the agent array; the deposit
-// (scatter) and the diffuse/decay run on the main thread after the workers join, so no two threads
+// (scatter) and the diffuse/decay run on the main thread once the pass is ready, so no two threads
 // ever write the same memory. Uses the daslang-live harness so it live-reloads on desktop and runs
 // in the wasm examples pipeline + the playground.
 
@@ -327,7 +327,11 @@ def start_update_pass(n : int) {
         let hi = min((c + 1) * chunk, g_agent_count)
         var st = status
         if (lo >= hi) {
-            st |> notify_and_release   // more bands than agents — balance the wait-group, skip the thread
+            // More bands than agents: balance the wait group and skip the job. `notify`, NOT
+            // `notify_and_release` — append() raises the remaining count without taking a
+            // reference, and the per-band reference is the one new_job's capture takes. Releasing
+            // here drops a reference that was never added, and the status goes negative.
+            status |> notify
             continue
         }
         // new_job over the persistent que, NOT a per-pass new_thread: a thread created per band per

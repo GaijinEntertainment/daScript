@@ -56,11 +56,11 @@ enum Mode {
 }
 
 // ----- render state (all main-thread-owned; update() drives the passes) -----
-// Threading is dispatched FROM update() (the main thread), never from a background coordinator:
-// emscripten can't service worker-initiated thread creation while main() is busy, so dispatching the
-// band threads from a background worker would deadlock. The main thread yields between frames (harness
-// rAF), so it can both create threads and stay responsive. Band threads share the surface by raw
-// pointer (shared wasm memory under -pthread; shared address space on desktop).
+// Bands are dispatched FROM update() (the main thread), never from a background coordinator:
+// emscripten cannot service worker-initiated dispatch while main() is busy. The que's workers are
+// created once in init() and only signalled per pass, so a frame costs a signal rather than a
+// pthread create/exit. Band jobs share the surface by raw pointer (shared wasm memory under
+// -pthread; shared address space on desktop).
 
 // Opens on the multi-band jobque path, not SingleThread: both CPU modes dispatch through
 // new_job, but only this one exercises N-way dispatch per frame, so the lab (and the sample
@@ -449,7 +449,7 @@ def init() {
     // that clamps navigator.hardwareConcurrency (e.g. Vivaldi -> 2 -> get_total_hw_threads() == 1),
     // and capped at the MAX_BANDS ceiling. Drag the slider up to MAX_BANDS to oversubscribe.
     g_max_threads = clamp(get_total_hw_threads(), 4, MAX_BANDS)
-    // Persistent job queue for the band passes (start_threaded_pass uses new_job). Created once here
+    // Persistent job queue for the band passes (start_threads_pass uses new_job). Created once here
     // so it spans the externally-driven frame loop (emscripten set_main_loop) — a with_job_que block can't.
     create_job_que()
 }
