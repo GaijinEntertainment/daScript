@@ -12,16 +12,17 @@ what it costs today and what the fix would change.
 
 ## Entries
 
-- **OPEN - the tower attention SLAB dominates the gemma3v encode at its fixed 4096-row
-  canvas.** The Metal tower materializes the full attention matrix per layer (16 heads x
-  mp x nk64 f16 = ~545 MB at 896^2), written by QK and re-read by AV: ~29 GB of slab
-  traffic per encode across 27 blocks, plus the hs 72 -> 128 pad (1.78x) in both attention
-  GEMMs. With the baked f16 twin serving the block GEMMs (M5, crowned) the encode is
-  486 ms vs the reference's flash-form 370 - the slab is most of the residual; qwen-class
-  towers at ~1200 rows never feel it (slab ~4 MB). The fix is a flash/tiled bidirectional
-  attention form for the tower driver (never materialize att; native hs) - a new kernel
-  class, its own slice. Costs today: the gemma3v encode cell trails 0.76x; gemma-3-12b's
-  tower is the same geometry and inherits it.
+- **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
+  pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
+  668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous
+  f16 K/V restride; the lab race: flash 8.5-8.9 ms/layer vs slab 11.8 at np 4096, and the
+  hc layout alone was worth 1.4x - a strided compact K/V scatters every simdgroup tile).
+  Cell shape now: gemma-3-4b 404 ms and gemma-3-12b 407 vs the pair's 370/380. The
+  remaining ~30 ms splits across the per-layer hc-cvt dispatches (~8 ms), the ledgered
+  post-CPU-window commit slack, and race-vs-cb occupancy; next levers if reopened: fold
+  the hc restride into the K/V GEMM epilogues (dual-store), a Q=16/C=128 flash variant via
+  the disasm discipline, and the flash's masked ragged-npos tail (would admit the qwen
+  towers, whose ~1200-row attention is small anyway).
 
 - **LANDED - the mul_mm prefill billed ceil-32 M tiles, so an npos just past a tile boundary
   paid a whole extra tile-row of wall for rows nothing reads; the GEMV-tail dispatch peels
