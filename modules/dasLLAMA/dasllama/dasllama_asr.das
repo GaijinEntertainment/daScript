@@ -203,7 +203,8 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     }
     if (eproj == "gemma4a") {
         var m = AsrModel(kind = AsrKind.gemma4a)
-        m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
+        // plain Model session (embed rows + eval) — rides the box's decode policy, like qwen3a
+        m.dec <- load_model_cached(path, QuantMode.q8)
         if (m.dec.arch != "gemma4") {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the gemma4a audio route expects a Gemma-4 decoder")
         }

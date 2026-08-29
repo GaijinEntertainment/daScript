@@ -298,7 +298,10 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         }
         let das_ms = measure_das(m, samples, reps, spec.lang, text, enc_ms)
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (gpu && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
+            // only the AudioTower families have a Metal tower driver; gemma4a/canary/parakeet
+            // encoders are CPU by design (the reference's Conformer encode is CPU too)
+            let tower_kind = m.kind == AsrKind.whisper || m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni
+            if (gpu && tower_kind && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never dispatched the tower (encodes delta {metal_tower_stats().encodes - tw_enc0}, encode_ms {enc_ms}) - a \"metal\" row that measured the CPU\n")
                 leg_ok = false
             }
@@ -311,7 +314,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
             }
             // the audio-chat decoders ride the standard Metal rail on the gpu leg: a flat
             // prefill counter means the turn's context prefill ran on the CPU
-            if (gpu && (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni) && metal_prefill_stats().prefills == pf_n0) {
+            if (gpu && (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.gemma4a) && metal_prefill_stats().prefills == pf_n0) {
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never engaged the Metal prefill (prefills delta 0) - the decoder half measured the CPU\n")
                 leg_ok = false
             }
