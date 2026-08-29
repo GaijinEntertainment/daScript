@@ -17,8 +17,9 @@ options _allow_imgui_legacy = true
 // daslang-live harness so it live-reloads on desktop and runs in the wasm examples pipeline + the
 // playground. The path tracer header is reused by relative require.
 //
-// (No JobQue mode: with_job_que creates a worker pool whose pthread spawn can't be serviced while
-// main() is busy in the wasm interpreter, and it is perf-equivalent to the Threads mode here anyway.)
+// The band passes run on a persistent job queue created in init(): with_job_que cannot span an
+// externally-driven frame loop, and a per-pass new_thread pays a pthread create/exit round trip
+// through the main thread on every band of every frame.
 
 require math
 require strings
@@ -61,7 +62,10 @@ enum Mode {
 // rAF), so it can both create threads and stay responsive. Band threads share the surface by raw
 // pointer (shared wasm memory under -pthread; shared address space on desktop).
 
-var g_mode = int(Mode.SingleThread)   // UI render mode
+// Opens on the multi-band jobque path, not SingleThread: both CPU modes dispatch through
+// new_job, but only this one exercises N-way dispatch per frame, so the lab (and the sample
+// verifier that drives it unattended) puts the queue under real load without a UI click.
+var g_mode = int(Mode.Threads)        // UI render mode
 var g_epoch = 0                       // bumped on mode switch; resets the pass
 var g_render_epoch = -1               // epoch the render state machine is synced to (detects switches)
 var g_pass = -1                       // completed accumulation passes (frameCount-1)
@@ -242,7 +246,10 @@ def start_threads_pass(pidx, n : int) {
         let ymin = c * chunk
         let ymax = min((c + 1) * chunk, TRACE_H)
         var st = status
-        new_thread() <| @capture(= pbb, = pepoch, = pray, = my_epoch, = pidx, = ymin, = ymax, = st) {
+        // new_job over the persistent que, NOT a per-pass new_thread: a thread created per band per
+        // frame costs a pthread create/exit round trip through the main thread on emscripten, where
+        // the que's workers are created once and then only signalled.
+        new_job() <| @capture(= pbb, = pepoch, = pray, = my_epoch, = pidx, = ymin, = ymax, = st) {
             worker_band(pbb, pepoch, pray, my_epoch, pidx, ymin, ymax)
             st |> notify_and_release
         }
@@ -442,6 +449,9 @@ def init() {
     // that clamps navigator.hardwareConcurrency (e.g. Vivaldi -> 2 -> get_total_hw_threads() == 1),
     // and capped at the MAX_BANDS ceiling. Drag the slider up to MAX_BANDS to oversubscribe.
     g_max_threads = clamp(get_total_hw_threads(), 4, MAX_BANDS)
+    // Persistent job queue for the band passes (start_threaded_pass uses new_job). Created once here
+    // so it spans the externally-driven frame loop (emscripten set_main_loop) — a with_job_que block can't.
+    create_job_que()
 }
 
 [export]
@@ -476,6 +486,7 @@ def shutdown() {
         }
         g_threads_status = null
     }
+    destroy_job_que()
     harness_shutdown()
 }
 

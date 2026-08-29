@@ -330,10 +330,10 @@ def start_update_pass(n : int) {
             st |> notify_and_release   // more bands than agents — balance the wait-group, skip the thread
             continue
         }
-        // new_thread per band (the Path Tracer pattern), NOT new_job: the persistent jobque wedges
-        // the interpreted wasm runner (playground), while per-pass threads work on every runner and
-        // map onto the same pre-spawned Web Worker pool in the compiled build.
-        new_thread() <| @capture(= pagents, = pfield, = read_offset, = lo, = hi, = prm, = st) {
+        // new_job over the persistent que, NOT a per-pass new_thread: a thread created per band per
+        // frame costs a pthread create/exit round trip through the main thread on emscripten (~2000
+        // postMessages/s at 4 bands), where the que's workers are created once and then only signalled.
+        new_job() <| @capture(= pagents, = pfield, = read_offset, = lo, = hi, = prm, = st) {
             update_agents_band(pagents, pfield, read_offset, lo, hi, prm)
             st |> notify_and_release
         }
@@ -663,6 +663,9 @@ def init() {
     // Open at the detected core count, floored to 4 so it never looks single-threaded on a browser
     // that clamps navigator.hardwareConcurrency, and capped at MAX_BANDS. Drag the slider up to oversubscribe.
     g_threads = clamp(get_total_hw_threads(), 4, MAX_BANDS)
+    // Persistent job queue for the agent passes (start_update_pass uses new_job). Created once here so it
+    // spans the externally-driven frame loop (emscripten set_main_loop) — a with_job_que block can't.
+    create_job_que()
     if (g_audio_enabled) {
         setup_audio()
     }
@@ -711,6 +714,7 @@ def shutdown() {
             g_audio_owned = false
         }
     }
+    destroy_job_que()
     harness_shutdown()
 }
 
