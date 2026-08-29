@@ -1,11 +1,14 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2j-2.2p, the mechanisms of the Vulkan resident driver: the prefill window
+carries sections 2.2j-2.2q, the mechanisms of the Vulkan resident driver: the prefill window
 chain, how a cm2 tile decodes its quant bytes and how one is picked, the class-pipeline build
 seat both shader instruments hang on, the residency plan, the marks swap that lets one GPU slot
-serve many models, and the Q8 requant byte store. The GPU backend role table these sections
-build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
+serve many models, the Q8 requant byte store, and the MoE expert chain on the cm2 tiles. The
+decode-era mechanisms of the per-op tier - the decode attention block, the streamed layer's
+split, the whole-token decode span - are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections
+2.2r-2.2t. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md`
+sec.1.5.
 
 ### 2.2j The Vulkan resident prefill window chain {#vk-prefill-window-chain}
 
@@ -82,11 +85,18 @@ way, which is why the block structs are `int16` arrays over the same bytes.
 the l tile (256-row columns) and the m tile (128-row columns) each need some number of
 workgroups; each grid runs in whole waves over the device's SM count, and the pick compares
 occupied slots over allocated slots, cross-multiplied. The m tile wins only on a strict win; a
-tie goes to l, whose bigger tile carries twice the arithmetic intensity. Two rules sit ahead of
-the comparison: a window of 128 rows or fewer takes m (the l column would run half empty), and
-a device that reports no SM count takes l and never splits k. The pick is PURE in
-`(d, cnt, sm_count)`, so the class the pipeline binds and the tile rule the meta fill writes
-can never disagree. There is no third tile: the narrow-n end is GEMV's.
+tie goes to l, whose bigger tile carries twice the arithmetic intensity. Three rules sit ahead
+of the comparison: a region of 64 rows or fewer takes the s tile (32-row columns - the MoE
+expert-bucket shape, where a 512-token window routes ~32 rows to each of 128 experts and an m
+column would pad three quarters of every tile and take the edge path on all of them), a window
+of 128 rows or fewer takes m (the l column would run half empty), and a device that reports no
+SM count takes l and never splits k. The pick is PURE in `(d, cnt, sm_count)`, so the class the
+pipeline binds and the tile rule the meta fill writes can never disagree; `cnt` is the AVERAGE
+rows per active region of the dispatch, so one tile serves every region of a MoE schedule. The
+narrow-n end below s is GEMV's. The s tile's fast path loads a partial 32-row column UNCLAMPED
+and clamps only the store, so every f16 plane the chain feeds it - the gathered activation
+image and the hidden plane - is sized with 32 rows of slack past its last region
+(`ffn_cm2_chunk_rows`).
 
 **The f16 feed admits exactly three weight formats - q8, Q4_K and Q6_K** - the same set the cm2
 decode callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE generated class. The
@@ -157,3 +167,30 @@ each hold one byte of the word - two subgroup shuffles per element on top. The s
 the same under either form: the amax fold, the scale and the rounding decide them, and all
 three sit above the store. The path needs the device's 8/16-bit storage feature set, which the
 family's device creator enables.
+
+### 2.2q The MoE expert batch arm rides the cm2 tiles through a device-side f16 gather {#cm2-expert-chain}
+
+The per-op tier's expert FFN batch arm has two forms over the same region schedule. The quant
+form takes the CPU's gathered activation image (the engine requantizes the normed rows, then
+copies each bucket row's quants into expert order) and encodes the kq batch tiles. The f16 form
+takes the window's f32 activation rows themselves - one per position - plus the combine's slot
+map, and does the gather on the device: one workgroup per (position, slot) grid entry scatters
+its position's row as f16 into the entry's bucket row, the inverse walk of the combine over the
+same map. Gate and up then run the cm2 decode-in-load tiles over that f16 image, the act writes
+the hidden plane as f16, and down runs the cm2 tiles again - the resident dense chain's
+`pf_gemm_enc` feed, with the region records the quant form already fills. The engine asks the
+tier per layer (`moe_gpu_ffn_xf_ok`): the answer is yes only in mode 4 on a coopmat2 device, for
+a gate/up/down triple whose every format the f16 feed admits (sec.2.2l), with the window inside
+the x plane's cap - and on yes it skips its own requant and gather, so the CPU cost of the
+layer's FFN is the routing alone. The f16 form is the combined (`npos > 0`) form only: the
+combine is what makes the device-side gather pay, since neither the gathered image nor the
+bucket rows ever cross PCIe. Streamed groups take the same arm after the slot bind.
+
+**The per-op attention chain runs the same cm2 flash-attention tile the resident chain runs**
+(`fa_cm2_h64` / `h128`, sec.2.2j) when the device carries the coopmat2-fa trio, the fa knob is
+on, the head size is one the tile family stamps, and the model's attention is not gated - the
+tile has no gated epilogue, so gated models keep the flash-style `at_attn` pass. The tile reads
+f16 K/V: the chain keeps its f32 roped-k / raw-v planes at absolute positions for the host
+readback the CPU cache store consumes, and fills f16 shadows of them with the base-less
+`f16cvt` over the whole attended prefix each window; the fa output lands in the same out plane
+`at_attn` writes, so the requant and `wo` stages never learn which pass ran.

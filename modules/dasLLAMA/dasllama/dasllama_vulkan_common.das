@@ -129,8 +129,11 @@ def cm2_splitk_env : int64 {
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def cm2_tile_cols(d, cnt : int64) : int64 {
     let forced = cm2_tile_env()
-    if (forced == 128l || forced == 256l) {
+    if (forced == 32l || forced == 128l || forced == 256l) {
         return forced
+    }
+    if (cnt <= 64l) {
+        return 32l
     }
     if (cnt <= 128l) {
         return 128l
@@ -310,7 +313,7 @@ struct VkStack {
     batch_xbit : uint
     batch_ybit : uint
     batch_map_off : int64
-    batch_cls_sets : VkDescriptorSet[8]
+    batch_cls_sets : VkDescriptorSet[10]   // q8 router variants 0..4, q40 f16 5, kq 6, cm2 s/m/l 7/8/9
     batch_cls_ready : uint
     // decode class-GEMV set over the stack's own planes/meta/scratch (lazy; role bits are
     // role-fluid — re-declared per chain via hz_set_bits before each record)
@@ -347,6 +350,30 @@ struct StreamSlot {
     wait_value : uint64      // timeline value of the slot's in-flight transfer-queue fill (0 = none)
 }
 
+//! one attention layer's decode-block state: its f16 K/V mirror (rows [0, cnt) valid for the
+//! owning session) and the chain's class sets over the layer's resident quad
+struct DatLayer {
+    k_mir : uint64           // f16 K rows at absolute positions
+    v_mir : uint64
+    cnt : int64              // positions the mirror holds (contiguous from 0)
+    filled : bool            // a prefill window filled this mirror since the last claim
+    sets_made : bool
+    cmd : VkCommandBuffer    // the layer's token chain, recorded ONCE (pos rides TokMeta; the readback sits at fixed offsets)
+    recorded : bool
+    fq : int
+    fk : int
+    fv : int
+    fo : int
+    norms : uint64           // the layer's qk-norm rows (q then k, hs floats each)
+    s_q : VkDescriptorSet
+    s_k : VkDescriptorSet
+    s_v : VkDescriptorSet
+    s_qkr : VkDescriptorSet  // qk-norm+rope (or plain rope) writing the mirror row
+    s_attn : VkDescriptorSet
+    s_rq : VkDescriptorSet
+    s_wo : VkDescriptorSet
+}
+
 // pre-recorded decode-form FFN chain per (gate, up, down) stack triple: GEMV pair, fused
 // act+requant, down GEMV, y DMA — refreshed per token via the stacks' host-visible metas,
 // resubmitted as-is
@@ -356,6 +383,34 @@ struct FfnCmd {
     down_set : VkDescriptorSet    // down stack planes + hq/hs as activations + its y_dev (class set)
     nrows : int64                 // row count cmd was recorded with
     gelu : bool                   // activation form recorded into the push (re-record key with nrows)
+}
+
+//! the decode FFN tail: the resident FFN chain plus combine -> add-rms -> requant into the NEXT
+//! layer's attention acts image, recorded once per layer pair, submitted without a fence
+struct TailCmd {
+    cmd : VkCommandBuffer
+    an_dev : uint64               // the next layer's attention rms weight row
+    s_comb : VkDescriptorSet
+    s_ar : VkDescriptorSet
+    s_rq : VkDescriptorSet
+    nrows : int64                 // the routed slot count the chain was recorded with
+}
+
+//! one decode-span layer's own sets; its attention chain's and FFN chain's sets stay the per-layer ones
+struct SpanLayer {
+    woq : int64
+    sq : int
+    s1 : int
+    s3 : int
+    s2 : int
+    s_ar_ffn : VkDescriptorSet    // x += xb2; xb = rms(x) * ffn_norm
+    s_rq_g1 : VkDescriptorSet     // xb -> the gate stack's feed image
+    s_rq_g3 : VkDescriptorSet     // xb -> the up stack's feed image
+    s_router : VkDescriptorSet
+    s_topk : VkDescriptorSet
+    s_comb : VkDescriptorSet      // x += sum w_j * down_j
+    s_ar_att : VkDescriptorSet    // xb = rms(x) * the NEXT layer's att_norm (absent on the last)
+    s_rq_att : VkDescriptorSet    // xb -> the next layer's q-stack feed image
 }
 
 // one recurrent layer's pre-recorded deltanet decode-step chain + its device-resident state.
@@ -471,6 +526,27 @@ struct GpuState {
     // heat-pinned expert cache (decode split-FFN) + the one-in-flight async FFN discipline
     heat_pools : table<int64; HeatPool>   // layer -> slot pool
     ffn_pend_s2 : int = -1        // down stack of the pending async FFN (-1 = none in flight)
+    tail_cmds : table<int64; TailCmd>   // the next layer's q plane offset -> its FFN-plus-tail chain
+    tail_ready : bool
+    tail_xin : HostBuf            // the residual row in (host-staged per token)
+    tail_w : HostBuf              // the routing weights (host-staged per token)
+    tail_xres_dev : uint64        // the residual row out
+    tail_xb_dev : uint64          // the normed row (scratch)
+    tail_xres : HostBuf           // the residual row's readback staging
+    tail_pending_woq : int64 = -1l   // the q plane whose attention submit collects the pending tail (-1 = none)
+    tail_xout : float?            // where the collected residual row lands on the host
+    span_x_dev : uint64           // the residual row across the span
+    span_xb_dev : uint64          // the normed row (scratch)
+    span_w_dev : uint64           // the combine weights the top-k writes
+    span_logits_dev : uint64      // the router logits
+    span_router_dev : uint64      // the span's router planes, f32, layer-major
+    span_norms_dev : uint64       // [att | ffn] norm rows per span layer
+    span_xin : HostBuf            // the residual row in (host-staged per token, copied at the chain's head)
+    span_out : HostBuf            // per-layer raw k/v rows, then the residual row (readback staging)
+    span_cmd : VkCommandBuffer
+    span_key : int64 = -1l        // the recorded span's first q plane offset (-1 = none)
+    span_nl : int64
+    span_layers : array<SpanLayer>
     ffn_pend_bytes : int64
     qkv_cmds : table<int64; QkvCmd>   // q plane offset -> the layer's decode q/k/v group
     dev_mem : table<uint64; uint64>   // device buffer -> its VkDeviceMemory (rollback destroy needs it)
@@ -507,6 +583,11 @@ struct GpuState {
     comb_y : HostBuf         // host-cached readback staging
     comb_set : VkDescriptorSet
     comb_ready : bool
+    // cm2 expert-chain state (lazy — first f16-fed combined prefill dispatch creates it)
+    batch_xf_dev : uint64    // the window's f32 activation rows, one per position (the gather's source)
+    batch_gather_set : VkDescriptorSet   // gather: x rows + the combine's slot map -> the f16 bucket image
+    batch_actf16_set : VkDescriptorSet   // act straight to the f16 hidden plane (y1/y2 -> hq_dev as f16)
+    xf_ready : bool
     // streamed-prefill state (lazy — first streamed dispatch creates the slots)
     @do_not_delete stream_stacks : array<StreamStack>
     stream_slots : array<StreamSlot>
@@ -564,6 +645,32 @@ struct GpuState {
     at_attn_set : VkDescriptorSet
     at_rq_set : VkDescriptorSet      // the o-requant family set (the encoder picks q8k/q8 per window)
     at_ready : bool
+    // the cm2 flash-attention arm (lazy - first non-gated 64/128-head window on a coopmat2-fa device):
+    // f16 shadows of the roped-k / raw-v planes, the two converts that fill them, the fa set
+    at_k16_dev : uint64
+    at_v16_dev : uint64
+    at_k16cvt_set : VkDescriptorSet
+    at_v16cvt_set : VkDescriptorSet
+    at_fa_set : VkDescriptorSet
+    at_fa_ready : bool
+    // the per-op tier's decode attention block (lazy): per-layer f16 K/V mirrors keyed by the q plane
+    // offset, the token planes the chain writes, the cos|sin row, TokMeta, and the readback
+    // (wo row f32 | raw k row f32 | raw v row f32)
+    dat_layers : table<int64; DatLayer>
+    dat_ready : bool
+    dat_qd : int64
+    dat_kvd : int64
+    dat_dim : int64
+    dat_hs : int64
+    dat_q_dev : uint64
+    dat_kv_dev : uint64
+    dat_attn_dev : uint64
+    dat_aq_dev : uint64
+    dat_as_dev : uint64
+    dat_xb2_dev : uint64
+    dat_cos : HostBuf
+    dat_tok : HostBuf
+    dat_out : HostBuf
 }
 
 var g_gpu : GpuState?
@@ -818,13 +925,19 @@ def carved_budget : int64 {
     if (gpu_want_moe_stream() != 0l) {
         let need = moe_gpu_stream_need()
         if (need > 0l) {
-            r -= 2l * need
+            r -= int64(stream_slot_count()) * need
         } elif (gpu_want_moe_stream() > 0l) {
             r -= STREAM_RESERVE
         }
     }
+    r -= moe_gpu_dat_need()
     return max(r, 0l)
 }
+
+//! The streamed-prefill slot count: two (compute on one while the transfer queue fills the other)
+//! on the whole-group rail; ONE where the split can engage (the knob on, a cm2 device), whose on-demand
+//! partial copies never prefetch - a device the split cannot serve keeps both.
+def stream_slot_count : int => gpu_want_moe_split() && g_gpu != null && g_gpu.has_coopmat2 && g_gpu.coopmat_mode == 4 ? 1 : 2
 
 var g_vk_dry_want = false
 var g_vk_dry_cfg = DlimVulkanConfig()
@@ -1449,6 +1562,7 @@ def vk_drop_model_state {
     }
     g_gpu.pend_wait = 0ul
     assert(g_gpu.ffn_pend_s2 == -1, "dasLLAMA vulkan tier: model drop with an async FFN in flight")
+    assert(g_gpu.tail_pending_woq < 0l, "dasLLAMA vulkan tier: model drop with a decode ffn tail in flight")
     // the resident driver's das-side shell first (its VK objects die in the sweeps below)
     if (g_rd != null) {
         unsafe {
@@ -1510,6 +1624,13 @@ def vk_drop_model_state {
     g_gpu.af_down_sets |> clear()
     g_gpu.ffn_cmds |> clear()
     g_gpu.qkv_cmds |> clear()
+    g_gpu.dat_layers |> clear()
+    g_gpu.tail_cmds |> clear()
+    g_gpu.span_layers |> clear()
+    g_gpu.tail_pending_woq = -1l
+    g_gpu.tail_xout = null
+    g_gpu.span_key = -1l
+    g_gpu.span_nl = 0l
     g_gpu.dnd_steps |> clear()
     delete g_gpu.heat_pools
     g_gpu.stream_max_gu_wq = 0l
@@ -1525,6 +1646,10 @@ def vk_drop_model_state {
     g_gpu.batch_acts_cls_ready = false
     g_gpu.comb_ready = false
     g_gpu.stream_ready = false
+    g_gpu.dat_ready = false
+    g_gpu.tail_ready = false
+    g_gpu.at_fa_ready = false
+    g_gpu.xf_ready = false
     g_gpu.dn_ready = false
     g_gpu.dn_cls_ready = false
     g_gpu.dnd_ready = false
@@ -2079,6 +2204,9 @@ let VHB_ATG = 0x800u      // at gate/o rows
 let VHB_ATK = 0x1000u     // at roped-k panel
 let VHB_ATV = 0x2000u     // at v panel (absolute positions)
 let VHB_VRAW = 0x4000u    // at raw-v window
+let VHB_XF = 0x8000u      // the cm2 expert chain's f32 activation rows (batch_xf_dev)
+let VHB_ATK16 = 0x10000u  // at roped-k f16 shadow (the fa tile's K)
+let VHB_ATV16 = 0x20000u  // at v f16 shadow (the fa tile's V)
 
 // serial-seam region bits (decode GEMV preps, arena + standalone seams) — third namespace, same rail
 let VHG_META = 0x1u       // ffn/dn params staged to device
@@ -2091,6 +2219,18 @@ let VHG_ST = 0x40u        // dn recurrent state (in place)
 let VHG_WS = 0x80u        // dn o scratch (oq+os)
 let VHG_X = 0x100u        // add_rms residual x (in place)
 let VHG_YO = 0x200u       // the host-bound result plane (the DMA source)
+let VHG_XRES = 0x400u     // the decode FFN tail's residual row (the combine's out, the add-rms's in)
+let VHG_XB = 0x800u       // the tail's normed row
+let VHG_ACTS = 0x1000u    // the tail's requant target: the next layer's q-stack acts image
+
+// the decode span's own regions - above every VHZ/VHG bit (VHZ_SK, 0x40000, is the highest), so an edge
+// of the span aliases nothing (a collision would only cost a spurious barrier; a MISSED edge is the hazard)
+let VHS_X = 0x80000u      // the residual row across the span
+let VHS_XB = 0x100000u     // the span's normed row
+let VHS_ACTS = 0x200000u   // an attention feed image (the next layer's q-stack xq/xs)
+let VHS_GACTS = 0x400000u  // the gate/up feed images
+let VHS_LOG = 0x800000u   // the router logits
+let VHS_META = 0x1000000u  // the three stacks' slot metas + the combine weights
 let VHZ_SK = 0x40000u     // cm2 split-k partial planes (the reduce's input scratch) — shares the VHZ namespace with the roles it interleaves
 
 struct VkHaz {
@@ -2579,6 +2719,19 @@ def fill_stack_acts(si : int; xqp : int8 const?; xsp : float const?; xq_bytes : 
     unsafe {
         memcpy(g_gpu.stacks[si].xq.mapped, reinterpret<void?>(xqp), xq_bytes)
         memcpy(g_gpu.stacks[si].xs.mapped, reinterpret<void?>(xsp), (xq_bytes / unit) * 4l)
+    }
+}
+
+// ===== the decode attention block's per-layer mirrors =====
+
+
+//! The layer's decode-block state exists after this, its f16 K/V mirror allocated on first sight
+//! (keyed by the q plane offset - the identity both the prefill chain and the decode block carry).
+[cold_path]   // once per layer: the mirror pair
+def dat_layer_ensure(woq, kvd : int64) {
+    if (!key_exists(g_gpu.dat_layers, woq)) {
+        let bytes = DAT_MIRROR_ROWS * kvd * 2l
+        g_gpu.dat_layers |> insert(woq, DatLayer(k_mir = make_device_buf(bytes), v_mir = make_device_buf(bytes), cnt = 0l))
     }
 }
 

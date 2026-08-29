@@ -132,6 +132,15 @@ struct public GpuTierEnv {
     @clarg_doc = "Device-side routed MoE combine; 0 falls back to the host combine."
     gpu_combine : bool = true
 
+    @clarg_doc = "Split each STREAMED expert layer's prefill between the GPU (the experts it can stream in the CPU's time) and the CPU (the rest, concurrently); 0 streams whole layers."
+    gpu_moe_split : bool = true
+
+    @clarg_doc = "Decode FFN tail: a resident expert layer's FFN carries the combine, the residual and the next layer's attention feed on the device, so the two submits share one fence wait; 0 collects every FFN on the host."
+    gpu_dec_tail : bool = true
+
+    @clarg_doc = "Whole-token decode span: every resident expert layer's attention, router, top-k, FFN and combine as ONE recorded chain and one submit per token; 0 runs the per-layer submits."
+    gpu_dec_span : bool = true
+
     @clarg_default_doc = "0"
     @clarg_doc = "Expert heat threshold: hold the N hottest experts resident regardless of layer placement."
     gpu_heat : Option<int64>

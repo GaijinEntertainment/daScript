@@ -53,6 +53,7 @@ struct public DlimVulkanConfig {
     dense_attn : bool
     dense_shexp : bool
     trim : bool   //!< P3: big CPU weight families dropped from the image (GPU-resident consumers only)
+    split : bool   //!< the streamed-layer split want: one stream slot instead of two under cm2, so the carve - and the walk - differ
     subgroup_size : int
     max_storage_range : int64
 }
@@ -150,7 +151,7 @@ def public dlim_vulkan_tag(v : DlimVulkanConfig) : string {
     return ("vulkan|m{v.coopmat_mode} b{v.vram_mb}"
         + " l{v.moe_layers} s{v.moe_stream}"
         + " r{v.dn ? 1 : 0}{v.attn ? 1 : 0}{v.dnd ? 1 : 0}{v.shexp ? 1 : 0}{v.qkv ? 1 : 0}{v.cls ? 1 : 0}"
-        + "{v.dense ? 1 : 0}{v.dense_attn ? 1 : 0}{v.dense_shexp ? 1 : 0}{v.trim ? " T" : ""}")
+        + "{v.dense ? 1 : 0}{v.dense_attn ? 1 : 0}{v.dense_shexp ? 1 : 0}{v.split ? 1 : 0}{v.trim ? " T" : ""}")
 }
 
 //! Round-trip: the JSON embedded in the image meta and consumed by `dasllama-convert --config`.

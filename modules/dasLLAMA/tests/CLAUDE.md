@@ -148,6 +148,13 @@ the `model-free` suite: the runner disarms the guard that tripwire asserts. A `m
 file runs under plain dastest (still `-jit`), or as a set through
 `run.das -- --suite model-free`, the per-PR gate. The map below is partial. `run.das`'s
 `model-free` list is the census.
+`test_vulkan_dec_tail.das` - model-free (a Vulkan device, else skips): the per-op tier's decode
+era against a CPU reference - the decode attention block (K-quant and q8 quads, both rope
+pairings, the hydrate arms), the decode FFN tail, and the whole-token decode span with its
+device router + top-k against `moe_select_core`, plus the `vulkan_moe_span` override reached
+through its registry.
+`test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
+device-side f16 gather, the streamed-group slot hand-off, and the streamed split's async head.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the

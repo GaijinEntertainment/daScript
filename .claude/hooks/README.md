@@ -20,17 +20,10 @@ use instead is `daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch`,
 run bare in a background Bash (exit code is the verdict). A single un-looped
 `gh pr checks <N>` from Bash passes.
 
-## arch_inject.py - PostToolUse, `Edit|Write|MultiEdit`
-
-When an edit lands inside a `.das` function carrying `[arch(at="<doc>.md#<anchor>")]`,
-the hook returns the cited section as `additionalContext` - the 40 lines that govern the
-function arrive when the function is touched, instead of a 300-line document being read
-first. Once per anchor per session: a memo in the temp directory
-(`claude-arch-memo-<session_id>.json`) keeps each anchor's section hash, so twelve citers
-of one section cost one injection and an edited section re-injects. `--reset` (registered
-on `PreCompact` and `SessionEnd`) drops the memo, because after a compaction the earlier
-copy has left the context. Sections cap at 60 lines; `arch_of` returns the rest. Reads and
-`arch_of` stay quiet - the moment that matters is writing.
+There is no `[arch]` section-injection hook either: the citations route the reading
+(`[arch(at=...)]` names the section, `arch_of` returns it, LINT026 keeps both honest), and
+reading the cited section before editing is the rule. An injection at write time only
+repeats what that reading already put in context.
 
 ## Registration
 

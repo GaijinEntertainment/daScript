@@ -124,7 +124,10 @@ NAMES carry their geometry - `coopmatWg{A|B|Acc}_{f16|f32|s8|s32}_{R}x{C}` - and
 shape is therefore one struct declaration plus the overload that types the das call
 (`coopmatMulAdd` for a multiply tile, `coopmatConvert` for an accumulator-only tile): no
 emitter arm changes, because every cm2 arm reads rows, columns and component width out of the
-parse.
+parse. The tile markers are empty structs with no storage, so the CPU bodies of `coopmatMulAdd`
+(returns `c`) and `coopmatConvert` (writes nothing) cannot compute what the emitted form
+computes: a coopmat kernel's device test takes a plain CPU reference as its oracle, the one
+sanctioned exception to the emitter checklist's CPU-body rule.
 
 ## 4. Test architecture - "every emitted instruction has a test"
 

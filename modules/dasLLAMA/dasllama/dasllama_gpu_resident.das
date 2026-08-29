@@ -977,7 +977,12 @@ def moe_gpu_drop_model_() {
     if (active_decode_override() == "vulkan") {
         select_decode_override("")
     }
+    if (active_decode_override() == "vulkan_moe_span") {
+        select_decode_override("")
+    }
     moe_gpu_drop_model_state()
+    set_moe_gpu_stream_need(0l)
+    set_moe_gpu_dat_need(0l)
     // loader-contract reset — the same clean slate moe_gpu_upload_resident starts from
     set_moe_gpu_layer_count(0l)
     set_moe_gpu_from_layer(1000000l)
@@ -995,6 +1000,7 @@ def moe_gpu_drop_model_() {
 // Upload the offloaded layers' expert stacks to the GPU tier from the PREPARED planes. Called at
 // the end of every load rail so DASLLAMA_GPU_MOE_LAYERS behaves identically however the model
 // arrived. Layers go resident from the end while the tier's VRAM budget holds.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
 def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven sequential rail walks sharing one rollback cursor; splitting them hides the partial-group unwind
     set_moe_gpu_from_layer(t.config.n_layers)   // nothing resident until an upload lands
     set_moe_gpu_stream_from(t.config.n_layers)
@@ -1014,6 +1020,8 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     let dn_want = gpu_want_dn() || gpu_want_dnd()   // the decode step rides the same dn uploads
     let at_want = gpu_want_attn()
     // layer count tests == 0, NOT <= 0: -1 is the auto sentinel and must read as a REQUEST
+    set_moe_gpu_stream_need(0l)   // both needs are THIS model's: a load that carves nothing leaves nothing behind
+    set_moe_gpu_dat_need(0l)
     if (!moe_gpu_tier_installed()
             || (moe_gpu_layer_count() == 0l && nstream <= 0l && !dn_want && !at_want
                 && !gpu_want_shexp() && !gpu_want_qkv() && !gpu_want_cls())) {
@@ -1037,6 +1045,10 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             sdn = max(sdn, moe_gpu_plane_bytes(snfe, sne * t.config.dim, int(fmt_at(t.we2_fmt, sl))))
         }
         set_moe_gpu_stream_need(sgu > 0l ? 2l * sgu + sdn : 0l)
+    }
+    if (at_want) {   // the decode block's mirrors for any model whose quads ride the tier, the span's router planes for a MoE one
+        set_moe_gpu_dat_need(t.config.n_layers * DAT_MIRROR_ROWS * layer_kv_dim(t.config, 0l) * 4l
+            + (t.config.n_expert > 0l ? t.config.n_layers * t.config.n_expert * t.config.dim * 4l : 0l))
     }
     // dense models that fully fit: try the whole-stack resident driver FIRST — it subsumes every
     // rail below (all planes + classifier resident, one-submit device prefill + mirror decode).
@@ -1439,5 +1451,8 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         let cls_note = moe_gpu_cls_on_gpu(t.wcls_off) ? "classifier + " : ""
         let stream_note = sfrom < from_l ? ", [{sfrom}..{from_l}) streamed" : ""
         to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: {cls_note}expert stacks of layers [{from_l}..{layers}) resident{stream_note}, {get_time_usec(ts_gpu) / 1000} ms\n")
+        if (moe_gpu_span_ok()) {
+            select_decode_override("vulkan_moe_span")
+        }
     }
 }

@@ -142,7 +142,9 @@ def private suite_files(name : string) : array<string> {   // nolint:STYLE038 - 
                     "modules/dasLLAMA/tests/test_vision.das",
                     "modules/dasLLAMA/tests/test_vision_chat.das",
                     "modules/dasLLAMA/tests/test_vision_embedder.das",
+                    "modules/dasLLAMA/tests/test_vulkan_dec_tail.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das",
                     "modules/dasLLAMA/tests/test_whisper.das" ]
     } elif (name == "all") {

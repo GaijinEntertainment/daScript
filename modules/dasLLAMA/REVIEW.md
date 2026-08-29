@@ -96,8 +96,9 @@ a `@sidecar` event instead.** A supervised or piped boot must never block on inp
 
 **A NEW clock read paired with a print or log of the elapsed interval is a defect in an engine
 file (`dasllama/`) outside a cold one-shot load, bake, map, or tokenizer-build progress log** -
-instrumentation goes through the sanctioned rails, listed with their reasons in
-`ARCHITECTURE_MEASUREMENT.md` sec.2.10.
+instrumentation goes through the sanctioned rails - `profile_tag` / `profile_marker`, `prof_add`,
+`asr_prof_add`, the Vulkan tier's `vk_prof()`-gated ledgers - whose reasons are
+`ARCHITECTURE_MEASUREMENT.md` sec.2.10's.
 
 **A clock value that changes what the program DOES - control flow, eviction, a generated
 name; not a reported wall or a best-of reduction over reported walls - is marked
@@ -204,6 +205,12 @@ owns lands the sec.1 edit that keeps the charters true - in `ARCHITECTURE_ENGINE
 `ARCHITECTURE_GPU.md`, or `ARCHITECTURE_MEDIA.md` - in the same change.** A diff that adds
 a file beside one that has its own sec.1 charter line lands that edit too. A module-root doc
 file - a ledger, a plan, `LAWS.md` - has no charter line and lands free.
+
+**A diff that adds an `ARCHITECTURE_*.md` companion, or moves a section between companions,
+lands `ARCHITECTURE.md`'s index line and section range and repoints every prose `sec.N` /
+file citation of the moved sections, in the same change.** The `[arch]` citations are
+LINT026-gated; the prose ones are not, and a prose citation of a section that left its file
+sends the reader to nothing.
 
 **A per-file inventory restated in this checklist is a defect of the checklist.** The sec.1
 charters - `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md` - own the
