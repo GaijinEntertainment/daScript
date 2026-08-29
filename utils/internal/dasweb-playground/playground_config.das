@@ -27,7 +27,7 @@ struct ServerArgs {
     base_url : string = "https://daslang.io"
 
     @clarg_doc = "Reject sources larger than this many bytes"
-    max_source_bytes : int = 262144
+    max_source_bytes : int = 524288
 
     @clarg_doc = "Per-IP sample-insert ceiling per hour"
     max_inserts_per_ip_hour : int = 100
