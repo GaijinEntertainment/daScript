@@ -56,7 +56,7 @@ struct Config {
     clang : string
 
     @clarg_short = "j"
-    @clarg_doc = "Parallel width for the C++ syntax pass; 0 = hardware threads"
+    @clarg_doc = "Parallel width for the C++ syntax pass and cmake builds; 0 = hardware threads"
     jobs : int
 
     @clarg_doc = "Per-user preflight TOML (default: platform config directory)"
@@ -1168,13 +1168,19 @@ def gate_tests_cpp(ctx : PreflightCtx) : GateResult {
     return run_test_gate("tests-cpp", args, "ctest -L small failures (build tests-cpp-small target if missing)")
 }
 
+//! The build fan-out for every cmake invocation: the user's ``-j`` when set, else hardware
+//! threads. A bare ``--parallel`` is unlimited ``make -j`` on the Makefile generator.
+def cmake_jobs(ctx : PreflightCtx) : string {
+    return "{ctx.jobs > 0 ? ctx.jobs : get_total_hw_threads()}"
+}
+
 def gate_tests_aot(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     if (empty(ctx.build_dir)) {
         return GateResult(name = "tests-aot", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no configured build dir — cmake -B build first")
     }
-    let b = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config, "--target", "test_aot", "--parallel"])
+    let b = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config, "--target", "test_aot", "--parallel", cmake_jobs(ctx)])
     if (b.rc != 0) {
         // root CMakeLists gates tests/aot out on DAS_AOT_EXAMPLES_DISABLED and
         // 32-bit Windows — an absent target is a config choice, not a failure.
@@ -1210,7 +1216,7 @@ def gate_sequence(ctx : PreflightCtx) : GateResult {
     }
     let b = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config, "--target",
         "dasModuleGlfw", "dasModuleLiveHost", "dasModuleHV", "dasModuleAudio",
-        "dasModulePUGIXML", "dasModuleStbImage", "--parallel"])
+        "dasModulePUGIXML", "dasModuleStbImage", "--parallel", cmake_jobs(ctx)])
     if (b.rc != 0) {
         let lower = to_lower(b.out)
         if (find(lower, "unknown target") >= 0 || find(lower, "no rule to make target") >= 0 || find(lower, "does not exist") >= 0) {
@@ -1258,7 +1264,7 @@ def gate_imgui(ctx : PreflightCtx) : GateResult {
     }
     let b = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config, "--target",
         "daslang-live", "dasModuleLiveHost", "dasModuleGlfw", "dasModuleHV", "dasModuleClipboard",
-        "dasModulePUGIXML", "dasModuleStbImage", "dasModuleImgui", "imguiApp", "imguiAppHeadless", "--parallel"])
+        "dasModulePUGIXML", "dasModuleStbImage", "dasModuleImgui", "imguiApp", "imguiAppHeadless", "--parallel", cmake_jobs(ctx)])
     if (b.rc != 0) {
         let lower = to_lower(b.out)
         if (find(lower, "unknown target") >= 0 || find(lower, "no rule to make target") >= 0 || find(lower, "does not exist") >= 0) {
