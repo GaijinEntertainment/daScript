@@ -1189,14 +1189,16 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         // the GPU tile computes activation block sums in-kernel — skip the per-16 sum gather
         moe_gather_rows(s, 0l, nk, dim, k, moe_kform && !fused_gpu, moe_kform)
         prof_add("moe_gather", ts_gather)
-        // region triples (woff, row0, cnt) per touched expert; the three planes share row0/cnt
-        s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(ne * 3l)
-        s.moe_offs3 |> clear(); s.moe_offs3 |> reserve(ne * 3l)
-        s.moe_offs2 |> clear(); s.moe_offs2 |> reserve(ne * 3l)
+        // region triples per touched expert, CPU arms capped at 32 rows/region — batch-groupn chunks units by COUNT, so an unsplit heavy expert straggles the barrier (620 vs 3929 GFLOP/s zipf k4); GPU keeps whole regions
+        let split_cap = !gpu_comb && !fused_gpu ? 32l : 0l
+        let cap_reg = split_cap > 0l ? ne + nk / split_cap + 1l : ne
+        s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(cap_reg * 3l)
+        s.moe_offs3 |> clear(); s.moe_offs3 |> reserve(cap_reg * 3l)
+        s.moe_offs2 |> clear(); s.moe_offs2 |> reserve(cap_reg * 3l)
         if (c.moe_exps_bias) {
-            s.moe_boffs1 |> clear(); s.moe_boffs1 |> reserve(ne)
-            s.moe_boffs3 |> clear(); s.moe_boffs3 |> reserve(ne)
-            s.moe_boffs2 |> clear(); s.moe_boffs2 |> reserve(ne)
+            s.moe_boffs1 |> clear(); s.moe_boffs1 |> reserve(cap_reg)
+            s.moe_boffs3 |> clear(); s.moe_boffs3 |> reserve(cap_reg)
+            s.moe_boffs2 |> clear(); s.moe_boffs2 |> reserve(cap_reg)
         }
         // LPT order (biggest buckets first) front-loads expensive spans; expert-order left 32% of GEMM windows idle
         s.moe_ord |> clear()
@@ -1216,21 +1218,26 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
             let eg = l * ne + e
             let base = e * dim * nfe
-            s.moe_offs1 |> push(t.we1_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs1 |> push(b0)
-            s.moe_offs1 |> push(cnt)
-            s.moe_offs3 |> push(t.we3_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs3 |> push(b0)
-            s.moe_offs3 |> push(cnt)
-            s.moe_offs2 |> push(t.we2_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs2 |> push(b0)
-            s.moe_offs2 |> push(cnt)
-            if (c.moe_exps_bias) {
-                s.moe_boffs1 |> push(t.web1_off + eg * nfe)
-                s.moe_boffs3 |> push(t.web3_off + eg * nfe)
-                s.moe_boffs2 |> push(t.web2_off + eg * dim)
+            var sub0 = 0l
+            while (sub0 < cnt) {   // sub-regions share the expert's weights; biases repeat per sub-region
+                let scnt = split_cap > 0l ? min(cnt - sub0, split_cap) : cnt
+                s.moe_offs1 |> push(t.we1_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
+                s.moe_offs1 |> push(b0 + sub0)
+                s.moe_offs1 |> push(scnt)
+                s.moe_offs3 |> push(t.we3_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
+                s.moe_offs3 |> push(b0 + sub0)
+                s.moe_offs3 |> push(scnt)
+                s.moe_offs2 |> push(t.we2_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
+                s.moe_offs2 |> push(b0 + sub0)
+                s.moe_offs2 |> push(scnt)
+                if (c.moe_exps_bias) {
+                    s.moe_boffs1 |> push(t.web1_off + eg * nfe)
+                    s.moe_boffs3 |> push(t.web3_off + eg * nfe)
+                    s.moe_boffs2 |> push(t.web2_off + eg * dim)
+                }
+                nreg++
+                sub0 += scnt
             }
-            nreg++
         }
         let ts_g1 = prof_ticks()
         if (gpu_comb) {   // GPU tier: gate+up/act/requant/down AND the routed weighted-sum combine

@@ -1120,7 +1120,17 @@ group; wording kept.
 
 ### From the CPU board sweep under the hybrid pool (2026-08-29)
 
-- **OPEN - MoE Q4_K_M CPU batch pp trails the reference on all three MoE carriers** (das/stock-BLAS
+- **CLOSED (same day) - MoE CPU batch pp trailed on a groupn straggler, fixed by the 32-row
+  region split.** The grouped-prefill offs builder now caps a CPU sub-region at 32 rows: the
+  batch-groupn dispatch chunks its region x row-group units by COUNT while a unit's cost is the
+  region's row count, so one zipf-heavy expert straggled the whole barrier (bare-kernel probe:
+  620 GFLOP/s zipf vs 3537 uniform vs 3929 split; the kernel itself was never slow - narrow
+  D=704 costs 2%, M=32 costs 14%). Post-fix cells (das/stock-BLAS ref best): 26B-A4B 448/301 =
+  1.49x (was 0.82x), gpt-oss 382/238 = 1.60x (0.99x), 30B-A3B 396/280 = 1.41x (0.91x), 35B-A3B
+  410/283 = 1.45x (0.94x); sanity argmax+logit fingerprints bit-identical on all four, MoE
+  family matrix cells green. GPU tiles keep whole regions (unsplit). Residue: MoE pp cv 6-9%
+  under the 18-lane pool remains on both engines.
+  Original finding (das/stock-BLAS
   ref, both at their best lane count: 26B-A4B 242/301 = 0.82x, 30B-A3B 254/280 = 0.91x,
   35B-A3B 266/283 = 0.94x) while the same sweep has das AHEAD on every dense Q4_K_M pp cell
   (1.10-1.28x) and at 0.99-1.12x on q8/mxfp4. Not a pool-policy artifact - the hybrid pool
