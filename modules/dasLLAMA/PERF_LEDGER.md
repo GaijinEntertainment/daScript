@@ -1105,3 +1105,14 @@ group; wording kept.
   KV-attention shape, not an audio-specific one. The whole-chunk encoder is GPU (gb1 encode
   550 ms), so this gap is the cell's remaining red (gb1 0.83x). Instrument: lcpp_bench tg at
   d4096 on the E2B carrier.
+
+### From the canary M5 baseline (2026-08-29)
+
+- **OPEN - canary is 2.5x behind nemo on gb1 (das CPU 44.6 s vs nemo/torch-MPS 17.8 s);
+  jfk is ahead (2.24 vs 2.65 s).** Two independent notches: (a) the FastConformer-32 encoder
+  is CPU f32/q8 (26.8 s of the gb1 turn) - a Metal driver is the gemma4a-recipe class of
+  work; (b) the decoder cannot ride the Metal rail: the f16-sourced GGUF's TIED classifier
+  serves the exact fp32 path (cls_q8 wants a Q8_0 disk embedding) and the blob drivers
+  decline a tied-fp32 classifier - either an fp32-table classifier GEMV on the rail, or a
+  Q8_0 re-quantized decoder artifact (provenance churn: the CANARY_DEC_RECIPE would change).
+  Instrument: lcpp_bench --asr -m Canary vs canary_qwen_bench.py.

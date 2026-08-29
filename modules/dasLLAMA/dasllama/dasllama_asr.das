@@ -223,6 +223,9 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     }
     if (emagic == CANARY_MAGIC) {
         var m = AsrModel(kind = AsrKind.canary)
+        // planar stays: the f16-sourced decoder's TIED classifier serves the exact fp32 path
+        // (cls_q8 wants a Q8_0 disk embedding), and the metal blob drivers decline a tied-fp32
+        // classifier — a metal flavor would mint dead
         m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
         if (m.dec.arch != "qwen3") {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the Canary route expects a Qwen3-1.7B decoder")
