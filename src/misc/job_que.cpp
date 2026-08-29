@@ -69,6 +69,17 @@ namespace das {
         if ( sysctlbyname("hw.perflevel0.logicalcpu", &good, &len, nullptr, 0) != 0 ) return 0;
         return good;
     }
+
+    // The KIND of the second tier, not just its size: Apple names the perflevels, and the name
+    // decides whether the tier is worth computing on. An M5 Max reports "Super"/"Performance" —
+    // both full compute tiers, so a batch pool gains from spanning them; earlier M-series report
+    // "Performance"/"Efficiency", and an Efficiency core straggles every barrier-synchronized
+    // parallel_for it joins (measured ~1.6x slower on an 8P+2E prefill vs P-only).
+    static bool apple_slow_tier_is_compute() {
+        char name[64] = {}; size_t len = sizeof(name) - 1;
+        if ( sysctlbyname("hw.perflevel1.name", name, &len, nullptr, 0) != 0 ) return false;
+        return strncmp(name, "Efficiency", 10) != 0;
+    }
 #endif
 
     // Worker count. Generic rule: logical cores - 1, capped at DAS_MAX_HW_JOBS — parallel_for's
@@ -136,6 +147,16 @@ namespace das {
         // Windows/Linux hybrid (Intel P/E) topology detection is not wired yet — callers fall
         // back to the homogeneous rule, and the env knobs cover asymmetric boxes until it is
         return 0;
+#endif
+    }
+
+    bool JobQue::is_slow_tier_compute() {
+#if defined(__APPLE__)
+        return apple_perf_core_count() > 0 && apple_slow_tier_is_compute();
+#else
+        // Intel E-cores would answer false too; unknown topology stays false — a pool never
+        // silently extends onto a tier nobody vouched for (env/app knobs override per config)
+        return false;
 #endif
     }
 

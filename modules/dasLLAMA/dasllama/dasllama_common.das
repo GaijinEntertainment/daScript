@@ -1299,7 +1299,7 @@ def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v :
 //! Apply the runtime knobs from the app tune sidecar's optional "runtime" section (see
 //! tune_for_this_box.md): token block, L2 budget, threading thresholds, chunk multipliers, and an
 //! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
-def apply_box_profile_runtime(path : string = "") {
+def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a flat knob catalog; a split would invent seams
     if (path == "" && box_profile_stale()) {
         to_log(LOG_INFO, "dasLLAMA: tune sidecar is older than the binary - runtime knobs not applied (re-tune)\n")
         return
@@ -1347,6 +1347,11 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "dispatch_worker_limit") $(v) { set_dispatch_worker_limit_(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "gemv_wave_fill") $(v) { set_gemv_wave_fill(v != 0l) }
     apply_i64_knob(rt, "fused_decode") $(v) { set_fused_decode(v != 0l) }
+    // per-config pool shape: the box profile's answer beats the tier-kind heuristic (an env
+    // DAS_JOBQUE_THREADS still beats both, and an app cap still bounds the pool). Declarations
+    // for the NEXT que — inert for one that already exists when the profile loads.
+    apply_i64_knob(rt, "jobque_pool") $(v) { set_jobque_threads(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "phase_decode_workers") $(v) { set_phase_decode_workers(int(min(v, 2147483647l))) }
     // stored only — the queue may not exist yet; setup_dasllama_jobque applies these inside with_job_que
     apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us(v) }
     apply_i64_knob(rt, "jobque_join_poll") $(v) { set_jobque_join_poll(v) }

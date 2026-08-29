@@ -143,6 +143,36 @@ def test_partial_and_missing_are_no_ops(t : T?) {
 }
 
 [test]
+def test_jobque_pool_knobs_apply(t : T?) {
+    // declarations for the NEXT que: the knob path must land in set_jobque_threads /
+    // set_phase_decode_workers exactly (the [init] tier heuristic seeds them; a profile overrides)
+    let saved_pool = get_jobque_threads()
+    let saved_decode = get_phase_decode_workers()
+    var terr = ""
+    let dir = temp_directory(terr)
+    let path = path_join(dir, "dasllama_test_box_profile_pool.json")
+    t |> success(fwrite(path, "\{\"runtime\":\{\"jobque_pool\":14,\"phase_decode_workers\":9\}\}"), "pool profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(get_jobque_threads(), 14, "jobque_pool applied")
+    t |> equal(get_phase_decode_workers(), 9, "phase_decode_workers applied")
+    set_jobque_threads(saved_pool)
+    set_phase_decode_workers(saved_decode)
+    remove(path)
+}
+
+[test]
+def test_slow_tier_kind_contract(t : T?) {
+    // a compute-grade second tier only exists on a box whose fast tier is known — the [init]
+    // pool extension keys on both, so the pair must never disagree
+    if (is_slow_tier_compute()) {
+        t |> success(get_total_perf_cores() > 0, "compute slow tier implies known perf-core topology")
+        t |> success(get_total_perf_cores() < get_total_hw_cores(), "compute slow tier implies a genuine second tier")
+    } else {
+        t |> success(true, "homogeneous/Efficiency/unknown topology: extension stays off")
+    }
+}
+
+[test]
 def test_metal_prefill_knobs_apply(t : T?) {
     var terr = ""
     let dir = temp_directory(terr)

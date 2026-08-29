@@ -1117,3 +1117,15 @@ group; wording kept.
   decline a tied-fp32 classifier - either an fp32-table classifier GEMV on the rail, or a
   Q8_0 re-quantized decoder artifact (provenance churn: the CANARY_DEC_RECIPE would change).
   Instrument: lcpp_bench --asr -m Canary vs canary_qwen_bench.py.
+
+### From the CPU board sweep under the hybrid pool (2026-08-29)
+
+- **OPEN - MoE Q4_K_M CPU batch pp trails the reference on all three MoE carriers** (das/stock-BLAS
+  ref, both at their best lane count: 26B-A4B 242/301 = 0.82x, 30B-A3B 254/280 = 0.91x,
+  35B-A3B 266/283 = 0.94x) while the same sweep has das AHEAD on every dense Q4_K_M pp cell
+  (1.10-1.28x) and at 0.99-1.12x on q8/mxfp4. Not a pool-policy artifact - the hybrid pool
+  roughly doubled our own MoE pp vs 6 lanes; the gap class is the k-quant MoE batch GEMM
+  (expert-grouped rows), and both engines' MoE pp turns noisy at 18 lanes (cv 2-8% vs <1%
+  dense - routing imbalance across lanes). Instrument: lcpp_bench -p 512 CPU on 26B-A4B (the
+  widest gap) + a batch-GEMM expert-shape microbench; ref bar re-taken against the b10659
+  clean-cpu build at the arc-end re-mint.

@@ -269,15 +269,15 @@ def setup_dasllama_jobque_() {
     set_current_thread_priority(clamp(g_env_engine.caller_prio, -2, 2))
 }
 
-// SMT shares FMA/load ports: the pool gets physical cores - 1 workers. Heterogeneous boxes
-// (M5 Max 6 Super + 12 Performance; Intel P/E): the pool spans ALL cores and the GEMV cap
-// defaults to the fast tier — pp every core, tg fast-only. Box-profile caps + DAS_JOBQUE_THREADS override.
+// SMT shares ports: pool = physical cores - 1 workers. A hybrid box splits by the SECOND tier's
+// kind: compute tiers (M5 Super+Performance) extend the pool to all cores, GEMV capped to the fast
+// tier; Efficiency tiers (M1/M4) straggle batch barriers, so fast-tier-only. Knobs/env override.
 [init]
 def dasllama_jobque_threads_cap() {
     let cores = get_total_hw_cores()
     set_jobque_threads_cap(max(cores - 1, 1))
     let perf = get_total_perf_cores()
-    if (perf > 0 && perf < cores) {
+    if (perf > 0 && perf < cores && is_slow_tier_compute()) {
         set_jobque_threads(cores)
         set_gemv_lane_cap(perf)
         set_phase_decode_workers(max(perf - 1, 1))

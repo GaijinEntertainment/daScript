@@ -1384,6 +1384,13 @@ namespace das {
         return JobQue::get_num_perf_cores();
     }
 
+    // Whether the second tier is full compute cores worth extending a batch pool over (an M5
+    // Max's "Performance" tier under "Super"). False for Efficiency tiers — they straggle every
+    // barrier-synchronized parallel_for — and for unknown topology.
+    bool isSlowTierCompute () {
+        return JobQue::is_slow_tier_compute();
+    }
+
     // Affinity mode of a future JobQue: 0 off / 1 ideal-CPU hint / 2 hard mask (-1 = unset).
     // Applied at worker spawn — call BEFORE with_job_que / create_job_que. The
     // DAS_JOBQUE_AFFINITY env still overrides it (the A/B rail).
@@ -1746,6 +1753,8 @@ namespace das {
                 SideEffects::accessExternal, "getJobqueThreads");
             addExtern<DAS_BIND_FUN(getTotalPerfCores)>(*this, lib,  "get_total_perf_cores",
                 SideEffects::accessExternal, "getTotalPerfCores");
+            addExtern<DAS_BIND_FUN(isSlowTierCompute)>(*this, lib,  "is_slow_tier_compute",
+                SideEffects::accessExternal, "isSlowTierCompute");
             addExtern<DAS_BIND_FUN(setJobqueAffinity)>(*this, lib,  "set_jobque_affinity",
                 SideEffects::modifyExternal, "setJobqueAffinity")
                     ->args({"mode"});
