@@ -758,6 +758,7 @@ namespace das
         void relocateCode( bool pwh = false );
         void announceCreation();
         void collectHeap(LineInfo * at, bool stringHeap, bool validate);
+        bool collectHeapIfMostlyFree(LineInfo * at = nullptr);
         void reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly);
         void instrumentFunction ( SimFunction * , bool isInstrumenting, uint64_t userData, bool threadLocal );
         void instrumentContextNode ( const Block & blk, bool isInstrumenting, Context * context, LineInfo * line );

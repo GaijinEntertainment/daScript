@@ -1850,6 +1850,7 @@ namespace {
         } else {
             ((void(*)(das::Context*))lc->updateFn)(lc->ctx);
         }
+        if ( keepGoing ) lc->ctx->collectHeapIfMostlyFree();
         if ( !keepGoing ) {
             emscripten_cancel_main_loop();
             if ( lc->shutdownFn ) ((void(*)(das::Context*))lc->shutdownFn)(lc->ctx);

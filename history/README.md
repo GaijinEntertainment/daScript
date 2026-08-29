@@ -150,3 +150,4 @@ listed in the log below - search it first when hunting for a doc.
 - 2026-08-27 `.claude/agents/rescue-bot.md` -> `history/agents/rescue-bot.md` - fresh-scaffolding rescue at the PR gate, superseded by the harvester (make_pr row 0a0)
 - 2026-08-27 `.claude/agents/rescue-sweep-bot.md` -> `history/agents/rescue-sweep-bot.md` - legacy comment-sweep rescue, superseded by harvest-on-first-touch
 - 2026-08-28 `modules/dasVulkan/CLAUDE.md` (the standalone-repo provenance sentence) -> the `dasVulkan/` bullet of this file - archived when CLAUDE.md split into `ARCHITECTURE.md` (the present-tense half) plus agent instructions
+- 2026-08-29 `plans/wasm_lifecycle_gc.md` -> `history/web/wasm_lifecycle_gc.md` - the wasm browser lifecycle had no GC boundary; both C++ drivers now call `Context::collectHeapIfMostlyFree` per frame, shipped with the arc

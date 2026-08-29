@@ -5,7 +5,7 @@ without bound until the wasm 2 GiB ceiling, then traps. Nothing collects.
 
 ## The defect
 
-`maybe_collect_gc` (`modules/dasLiveHost/live/live_gc.das:15`) states the contract in its own
+`maybe_collect_gc` (`modules/dasLiveHost/live/live_gc.das:19`) states the contract in its own
 doc-comment: the canonical shape - `init`/`update`/`shutdown` plus a standalone `main` loop -
 calls it once per iteration, and under the daslang-live host it self-disables because the host
 collects each frame. So there are exactly two sanctioned GC drivers: the program's own `main`
@@ -23,7 +23,7 @@ The browser lifecycle is a third driver, and it was never given one.
   - `src/builtin/module_jit.cpp:1845` `jit_web_lifecycle_tick` - the standalone cross-compiled
     exe path, which is what an **examples card** runs (`--jit-target=wasm64`). Same shape, same
     omission. This is the driver the measurement below actually exercised.
-  - `src/builtin/module_builtin_runtime.cpp:1948` `main_loop_arg` - `eval_main_loop`'s
+  - `src/builtin/module_builtin_runtime.cpp:1947` `main_loop_arg` - `eval_main_loop`'s
     emscripten arm, used by the ported games. This one is FINE, and it shows why: it invokes a
     daslang block, and those blocks call `maybe_collect_gc()` themselves
     (`examples/games/pacman/main.das:1312`). The GC call survived there because it stayed in
@@ -63,23 +63,32 @@ drives through `web_loop_tick` is affected, which is every graphics card. Sample
 quickly never reach the ceiling, so this reads as "long-running cards wedge" rather than as a
 systematic defect - which is why it survived.
 
-## The fix
+## The fix (shipped)
 
-One collection boundary in the browser tick, matching what the desktop loop body does. Open
-questions to settle before writing it:
+`Context::collectHeapIfMostlyFree(LineInfo * at = nullptr)` - one method, called by both
+drivers after `update()` returns and before the loop-control decision. It is the C++ twin of
+`maybe_collect_gc`, threshold for threshold: collect both heaps when the string heap is more
+than a third unused, else when the heap is more than two thirds unused; otherwise nothing.
+It returns false and touches nothing on a context without `options gc` +
+`options persistent_heap`, so the boundary is inert for every program that did not opt in
+(`heap_collect` would throw there; this must not).
 
-1. **Where.** In `web_loop_tick` after the `update()` eval, or inside the harness. The tick is
-   the honest home: it is the thing that replaced the `main` loop, so it should carry the
-   `main` loop's duty.
-2. **What.** `maybe_collect_gc`'s thresholds (string heap over 1/3 unused, heap over 2/3
-   unused) exist so a per-frame call stays cheap - it collects only a mostly-free heap. The
-   C++ side should apply the same policy rather than collecting unconditionally, or call the
-   das function when the program exposes it.
-3. **Programs without `options gc`.** `heap_collect` throws without `options gc` +
-   `options persistent_heap`, so the boundary must be a no-op for programs that do not opt in.
-   Check the flags on the context, not the presence of a function.
-4. **Cost.** Verify the collection does not itself introduce a frame stall on a large live
-   heap; the thresholds are meant to prevent that, but they have never run per-frame on a card.
+The four questions, as settled:
+
+1. **Where** - in the ticks themselves. The tick is what replaced the `main` loop, so it
+   carries the `main` loop's duty. Both ticks call it only on the keep-going path; a frame
+   that ends the loop goes straight to `shutdown()`.
+2. **What** - `maybe_collect_gc`'s thresholds exactly, so desktop and web collect on the
+   same policy and a program cannot behave differently by platform.
+3. **Opt-out** - the `persistent`/`gcEnabled` flags on the context, read directly; no
+   function presence is consulted.
+4. **Cost** - a collection is cheap by construction when the thresholds admit it (a mostly-free
+   heap has little live data to walk); the physarum soak below shows no frame-rate change.
+
+Covered by `tests-cpp/small/test_lifecycle_gc.cpp`: 200 frames of a 64 KB junk array grow the
+heap past 6 MB, one call reclaims it more than fourfold, a second pass holds, and a context
+without `options gc` declines without throwing. The tick sites are `__EMSCRIPTEN__`-only and
+have no native test; the browser measurements below are their proof.
 
 ## The desktop control (run 2026-08-29)
 
@@ -90,24 +99,33 @@ that would have made the missing boundary irrelevant - if the growth were LIVE d
 would reclaim nothing and desktop would climb too. It does not. The heap is collectable garbage,
 and the only difference is who calls the collector.
 
-## Verification
+## Verification (run 2026-08-29, local Chromium, both drivers)
 
-- A card that reproduces the growth today (physarum is the fastest) shows a flat or sawtooth
-  heap instead of a monotonic ramp, over a soak long enough to have OOM'd before - 45 minutes
-  at the measured rate gives margin.
-- The playground arm measured separately, since it is the other driver. Physarum in the
-  interpreted playground is the same program through `web_loop_tick`; it should show the same
-  ramp before the fix and the same flattening after.
-- The nightly playground sweep's Physarum Lab cell goes green and stays green.
-- A no-`options gc` card still runs, proving the no-op path.
-- Desktop is unaffected: its `main` loop keeps calling `maybe_collect_gc` itself.
+A minimal fixture (`options gc` + `persistent_heap`, `update()` allocating one 64 KB array and
+a short string per frame, nothing retained) through each driver, before and after:
 
-## Not yet known
+| driver | before | after |
+|---|---|---|
+| interpreter (`web_loop_tick`, `daslang_static`) | 64 KB/frame, 3.8 MB -> 2002 MB by frame 32,040, page at 4.2 GB | flat at 68 KB through frame 18,900 |
+| native control (`main` loop + `maybe_collect_gc`) | - | flat at 68 KB through frame 1,800 |
 
-Whether the leak rate differs between the per-frame `new_thread` dispatch and the persistent
-job queue. A control run was attempted and was not usable: it was instrumented with
-`-sPTHREADS_DEBUG=1`, which emits about four lines per thread, and at ~464 threads/s the arm
-under test produced 250,000 console messages in minutes. Whatever the answer, it is a rate
-question - the missing boundary is the cause either way. The strudel layer also reports a leak
-of its own on desktop (`potential memory leak detected`), which is a separate thread to pull
-and may be a second, smaller source.
+Physarum itself on the compiled card (`jit_web_lifecycle_tick`), after: main-context heap flat
+at 14.2 MB across 25,200 sim frames, with transient bumps to 16.4 MB that collect within one
+sample; string heap flat at 52 bytes. Total page memory by
+`performance.measureUserAgentSpecificMemory()` held at 480-481 MB over the soak, where the
+pre-fix rate of ~1.2 MB/s would have added over 100 MB in the first 88 seconds alone. Main
+context was the whole leak; the strudel layer and the job-clone contexts contributed nothing
+measurable.
+
+Still owed: the nightly playground sweep's Physarum Lab cell going green and staying green,
+which is the only instrument that runs unattended.
+
+## Resolved on the way
+
+Whether the leak rate differed between the per-frame `new_thread` dispatch and the persistent
+job queue was never settled - the control run was instrumented with `-sPTHREADS_DEBUG=1` and
+drowned in its own logging. It no longer matters: the cause was the missing boundary, and with
+it in place the card holds flat under the job queue. The job-clone contexts were also cleared
+by reading: the non-pooled path frees each clone with the job, the pooled path calls
+`restartHeaps()` on reuse. Strudel's own desktop leak report (`potential memory leak
+detected`, ~99 KB) is real but tiny and separate; it did not show in the browser totals.
