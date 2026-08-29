@@ -1186,12 +1186,7 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     toks |> reserve(512)
     raw |> reserve(512)
     for (_i in range64(max_new)) {
-        var best = 0
-        for (i in range(1, length(s.qctx.logits))) {
-            if (s.qctx.logits[i] > s.qctx.logits[best]) {
-                best = i
-            }
-        }
+        let best = int(hargmax(s.qctx.logits))
         toks |> push(best)
         if (int64(best) == turn_end || int64(best) == eos) {   // EOG: emitted into the ids, then stop
             break

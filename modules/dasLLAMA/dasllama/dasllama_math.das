@@ -2358,6 +2358,55 @@ def hmax(x : float const?; n : int64) : float {
     }
 }
 
+//! Greedy argmax over a row — [[hmax]] then a 4-wide locate of the first max position. The ASR
+//! decode loops call it once per generated token over the whole vocab; the scalar walk they
+//! carried was a measurable per-token tax (~0.15-0.3 ms at 152-262k).
+def hargmax(x : array<float> | #) : int64 {
+    let n = long_length(x)
+    if (n <= 0l) return 0l
+    unsafe {
+        let p = addr<float const?>(x[0])
+        let mx = hmax(p, n)
+        var i = 0l
+        while (i + 4l <= n) {
+            if (p[i] == mx || p[i + 1l] == mx || p[i + 2l] == mx || p[i + 3l] == mx) {
+                break
+            }
+            i += 4l
+        }
+        while (i < n) {
+            if (p[i] == mx) {
+                return i
+            }
+            i++
+        }
+    }
+    return 0l
+}
+
+//! Σ exp(x[i] − mx) — exp4-vectorized, groups of 4 accumulated in double (the mel dot's
+//! rounding pattern). With [[hargmax]]'s max this is the greedy pick's logsumexp half:
+//! logprob = x[best] − (log(hlse) + mx).
+def hlse(x : array<float> | #; mx : float) : double {
+    let n = long_length(x)
+    var sum = 0.0lf
+    unsafe {
+        let p = addr<float const?>(x[0])
+        let m4 = float4(mx, mx, mx, mx)
+        var i = 0l
+        while (i + 4l <= n) {
+            let e = exp4(max(float4(p[i], p[i + 1l], p[i + 2l], p[i + 3l]) - m4, EXP4_LO))
+            sum += double(e.x + e.y + e.z + e.w)
+            i += 4l
+        }
+        while (i < n) {
+            sum += double(exp(max(p[i] - mx, -80.0)))
+            i++
+        }
+    }
+    return sum
+}
+
 def template softmax_template(var x : float ?; size : int64) : void {
     if (size <= 0) return   // seeds the reduction with x[0]; size<=0 must be a no-op (same contract as the array overload)
     unsafe {

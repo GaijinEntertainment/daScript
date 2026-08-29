@@ -1170,18 +1170,9 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
     var hit_eos = false
     let tdec = ref_time_ticks()
     for (_i in range64(max_new)) {
-        var best = 0
-        for (i in range(1, length(s.qctx.logits))) {
-            if (s.qctx.logits[i] > s.qctx.logits[best]) {
-                best = i
-            }
-        }
+        let best = int(hargmax(s.qctx.logits))
         let mx = s.qctx.logits[best]
-        var lse = 0.0lf
-        for (v in s.qctx.logits) {
-            lse += double(exp(v - mx))
-        }
-        plog_sum += double(s.qctx.logits[best]) - (log(lse) + double(mx))
+        plog_sum += double(s.qctx.logits[best]) - (log(hlse(s.qctx.logits, mx)) + double(mx))
         toks |> push(best)
         if (int64(best) == im_end) {   // EOS: emitted into the ids, then stop
             hit_eos = true
