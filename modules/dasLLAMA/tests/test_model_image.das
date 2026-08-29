@@ -2199,7 +2199,7 @@ def test_dlim_flavor_lanes(t : T?) {
         let planar = image_identity("", "q8")
         t |> equal(dlim_identity_lane(planar), "q8#", "planar lane is quant-only")
         t |> equal(dlim_identity_lane("{planar}|metal"), "q8#metal", "metal tag folds into the lane")
-        let vk_tag = "vulkan|m2n b8192 l4 s1 r110000110"
+        let vk_tag = "vulkan|m2n b8192 l4 s1 r1100001101"
         t |> equal(dlim_identity_lane("{planar}|{vk_tag}"), "q8#{vk_tag}", "vulkan tags keep their inner pipes")
         var current <- dlim_current_identities()
         var p = DlimPeek(valid = true, version = IMAGE_VERSION, identity = planar)

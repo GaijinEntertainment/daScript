@@ -338,6 +338,7 @@ def private is_rt_stage(stage : ShaderStage) : bool {
 // Pull the StorageBuffer8/16BitAccess capability for a sub-32-bit member reachable through an
 // @ssbo (std430) layout. std140 blocks never see sub-32 members (compute_block_layout rejects
 // them), so std140 calls are no-ops by construction.
+[arch(at="../ARCHITECTURE.md#small-int-surface")]
 def private ensure_member_storage_caps(var m : SpirvModule; bt : Type; rules : BlockLayoutRules) {
     if (rules != BlockLayoutRules.std430) return
     let w = scalar_width(bt)
@@ -525,9 +526,8 @@ def private is_subpass_input_type(t : TypeDecl?) : bool {
     return "{t.structType.name}" == "subpassInput"
 }
 
-// Parse a WORKGROUP-scope cm2 marker name: coopmatWg{A|B|Acc}_{f16|f32|s8|s32}_{R}x{C}. The caller
-// already verified the "coopmatWg" prefix. Name-parsed (not a table) so adding a tile shape is one
-// struct declaration in spirv_builtins.das. One peek_data pass; `good` fails the parse closed.
+// The caller already verified the "coopmatWg" prefix. One peek_data pass; `good` fails the parse closed.
+[arch(at="../ARCHITECTURE.md#cm2-tile-markers")]
 def private coopmat_wg_info(n : string) : tuple<ok : bool; is_float : bool; signed : bool; comp_width : uint; rows : uint; cols : uint; use : uint> {
     var ok = false
     var isf = false
@@ -2221,6 +2221,7 @@ def private scalar_type_name_class(name : string) : tuple<cls : int; width : int
 // are FConvert (f16<->f32) / SConvert / UConvert (SPIR-V narrowing keeps low bits = the das
 // C-truncation); class changes are value conversions (width-agnostic opcodes). A cross-sign
 // cross-width int cast is supported only when it NARROWS; widening fails closed.
+[arch(at="../ARCHITECTURE.md#small-int-surface")]
 def private convert_op(src_cls, src_w, dst_cls, dst_w : int) : tuple<ok : bool; code : SpvOp> {
     if (src_cls == dst_cls) {
         if (src_w == dst_w) return (ok = false, code = SpvOp.Nop)   // no-op — caller's case
@@ -4487,6 +4488,7 @@ class SpirvEmit : AstVisitor {
     // ----- calls: texture / vector constructors / dot / GLSL.std.450 math (args pre-visited) -----
     // Mirrors emit_call but reads operand ids via value_of (children already visited). for-source
     // range()/urange() calls are consumed by preVisitExprForBody and skipped here.
+    [arch(at="../ARCHITECTURE.md#files-and-emission"), arch(at="../ARCHITECTURE.md#small-int-surface")]
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
         if (key_exists(for_src, intptr(expr))) return expr
         var bm & = unsafe(*m)
@@ -5032,8 +5034,7 @@ class SpirvEmit : AstVisitor {
             return expr
         }
         // coopmatClamp(mat, lo, hi): per-element FClamp over a float accumulator tile — the
-        // f16-accumulate ±65504 overflow guard. OpCooperativeMatrixLengthKHR bounds a hand-emitted
-        // structured loop that AccessChains each element of the Function-storage tile local.
+        // f16-accumulate ±65504 overflow guard.
         if (origin_name == "coopmatClamp") {
             if (ctx.stage != ShaderStage.Compute) {
                 errs |> push("coopmatClamp is only valid in a compute shader")
@@ -5089,7 +5090,7 @@ class SpirvEmit : AstVisitor {
             let bt = type_bool(bm)
             let cnd = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.ULessThan, bt, cnd, iv, len)
-            emit(bm, SEC_FUNCS, SpvOp.LoopMerge, merge, cont, 0u)
+            emit(bm, SEC_FUNCS, SpvOp.LoopMerge, merge, cont, uint(SpvLoopControl.Unroll))
             emit(bm, SEC_FUNCS, SpvOp.BranchConditional, cnd, body, merge)
             emit(bm, SEC_FUNCS, SpvOp.Label, body)
             let ept = type_pointer(bm, SpvStorageClass.Function, comp_t)
@@ -5525,9 +5526,6 @@ class SpirvEmit : AstVisitor {
             e2id[k] = res
             return expr
         }
-        // unpack8 / pack32: reinterpret one 32-bit scalar as four 8-bit lanes (and back) — a single
-        // OpBitcast; the byte4/ubyte4 type factory pulls the Int8 capability. Widening the unpacked
-        // lanes (`int4(b4)`) rides the existing OpSConvert path, giving sign extension for free.
         if (name == "unpack8" || name == "pack32") {
             if (length(expr.arguments) != 1) {
                 errs |> push("{name} expects 1 argument")

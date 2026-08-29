@@ -54,6 +54,7 @@ struct public Swapchain {
     readback_supported : bool         //!< true if the images carry TRANSFER_SRC (host readback is possible)
 }
 
+[arch(at="../ARCHITECTURE.md#ownership")]
 def public finalize(var sc : Swapchain) {
     for (i in range(length(sc.framebuffers))) {
         delete sc.framebuffers[i]
@@ -198,6 +199,7 @@ struct public FrameSync {
     render_finished : Semaphore
 }
 
+[arch(at="../ARCHITECTURE.md#ownership")]
 def public finalize(var f : FrameSync) {
     delete f.image_available
     delete f.render_finished

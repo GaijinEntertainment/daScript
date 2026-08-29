@@ -3,12 +3,20 @@ options persistent_heap
 options gc
 
 require glfw/glfw_boost
+require live/glfw_live
 require opengl/opengl_boost
 require opengl/opengl_gen
 require opengl/opengl_cache
 require daslib/defer
 require daslib/safe_addr
 require daslib/decs_boost
+require live/decs_live
+require live/opengl_live
+require live/live_commands
+require ?dashv live/live_api
+require live/live_watch_boost
+require live/live_vars
+require live/audio_live
 require daslib/json_boost
 require daslib/math_boost
 require daslib/archive
@@ -16,13 +24,10 @@ require opengl/opengl_ttf
 require audio/audio_boost
 require strudel/strudel
 require strudel/strudel_player
+require strudel/strudel_live
 require daslib/strings_boost
-require live_stub   // playground shim: replaces the live/* + live_host stack (window, clock, no-op [live_command])
-
-// Music uses the THREADED strudel player (strudel_init/strudel_play). The playground
-// interpreter shares the renderer's runtime and cannot host that worker safely; only
-// standalone builds may enable it, and only with a threaded audio backend. SFX stay on.
-var music_enabled = false
+require daslib/strings_convert
+require live_host
 
 // ===== Constants =====
 
@@ -168,13 +173,19 @@ var @live snd_level_win   : array<float>
 var @live audio_initialized = false
 
 def init_audio_samples() {
-    snd_eat_pellet <- gen_sine_sweep(600.0, 400.0, 0.04, 0.15)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
-    snd_eat_power <- gen_sine_sweep(300.0, 900.0, 0.12, 0.3)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
-    snd_eat_ghost <- gen_sine_sweep(800.0, 1400.0, 0.1, 0.3)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
-    snd_pac_die <- gen_sine_sweep(440.0, 110.0, 0.6, 0.3)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
+    // release the @live buffers before the move-assigns refill them
+    delete snd_eat_pellet
+    delete snd_eat_power
+    delete snd_eat_ghost
+    delete snd_pac_die
+    delete snd_level_win
+    snd_eat_pellet <- gen_sine_sweep(600.0, 400.0, 0.04, 0.15)
+    snd_eat_power <- gen_sine_sweep(300.0, 900.0, 0.12, 0.3)
+    snd_eat_ghost <- gen_sine_sweep(800.0, 1400.0, 0.1, 0.3)
+    snd_pac_die <- gen_sine_sweep(440.0, 110.0, 0.6, 0.3)
     let extra <- gen_noise_burst(0.3, 0.1)
     mix_into(snd_pac_die, extra)
-    snd_level_win <- gen_sine_sweep(523.0, 1047.0, 0.5, 0.25)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
+    snd_level_win <- gen_sine_sweep(523.0, 1047.0, 0.5, 0.25)
 }
 
 def play_sfx(samples : array<float>) {
@@ -224,43 +235,49 @@ def strudel_music_main() {
     strudel_play(@@strudel_music_cmd)
 }
 
+// Route a music command to wherever the engine runs: the strudel thread in the
+// threaded arm, or straight into the handler here in the main-thread arm
+// (strudel_command is a silent no-op without the thread's command stream).
+def music_dispatch(cmd : string) {
+    if (music_threaded) {
+        strudel_command(cmd)
+    } else {
+        strudel_music_cmd(cmd)
+    }
+}
+
 def stop_all_music(fade : float) {
-    return if (!music_enabled)
-    strudel_command("stop:drums:{fade}")
-    strudel_command("stop:bass:{fade}")
-    strudel_command("stop:lead:{fade}")
+    music_dispatch("stop:drums:{fade}")
+    music_dispatch("stop:bass:{fade}")
+    music_dispatch("stop:lead:{fade}")
 }
 
 def start_menu_music() {
-    return if (!music_enabled)
     strudel_set_bpm(120.0lf)
-    strudel_command("play:drums:<bd ~ sd ~> <bd [hh hh] sd hh>:0.4")
-    strudel_command("note:bass:<[c2 c2] ~ [g2 g2] ~> <[c2 c2] ~ [f2 f2] [g2 g2]>:square:0.25")
-    strudel_command("note:lead:<c5 e5 g5 e5> <a4 c5 e5 g5> <f5 e5 d5 c5> <g5 ~ e5 ~>:triangle:0.15")
+    music_dispatch("play:drums:<bd ~ sd ~> <bd [hh hh] sd hh>:0.4")
+    music_dispatch("note:bass:<[c2 c2] ~ [g2 g2] ~> <[c2 c2] ~ [f2 f2] [g2 g2]>:square:0.25")
+    music_dispatch("note:lead:<c5 e5 g5 e5> <a4 c5 e5 g5> <f5 e5 d5 c5> <g5 ~ e5 ~>:triangle:0.15")
 }
 
 def start_play_music() {
-    return if (!music_enabled)
     strudel_set_bpm(140.0lf)
-    strudel_command("play:drums:<bd [hh hh] sd [hh hh]> <bd [hh hh] sd [hh cp]>:0.5")
-    strudel_command("note:bass:<[c2 c2] [c2 c2] [f2 f2] [g2 g2]> <[c2 c2] [e2 e2] [f2 f2] [e2 e2]>:square:0.28")
-    strudel_command("note:lead:<c5 ~ e5 ~> <~ g5 ~ e5> <f5 e5 d5 ~> <~ c5 ~ ~>:sawtooth:0.18")
+    music_dispatch("play:drums:<bd [hh hh] sd [hh hh]> <bd [hh hh] sd [hh cp]>:0.5")
+    music_dispatch("note:bass:<[c2 c2] [c2 c2] [f2 f2] [g2 g2]> <[c2 c2] [e2 e2] [f2 f2] [e2 e2]>:square:0.28")
+    music_dispatch("note:lead:<c5 ~ e5 ~> <~ g5 ~ e5> <f5 e5 d5 ~> <~ c5 ~ ~>:sawtooth:0.18")
 }
 
 def start_flee_music() {
-    return if (!music_enabled)
     strudel_set_bpm(180.0lf)
-    strudel_command("play:drums:<bd [hh hh hh hh] sd [hh hh]>:0.6")
-    strudel_command("note:bass:<[c3 c3 c3 c3] [f3 f3 f3 f3]> <[g3 g3 g3 g3] [e3 e3 f3 g3]>:square:0.3")
-    strudel_command("note:lead:<c6 e6 g6 e6> <f6 e6 d6 c6>:triangle:0.2")
+    music_dispatch("play:drums:<bd [hh hh hh hh] sd [hh hh]>:0.6")
+    music_dispatch("note:bass:<[c3 c3 c3 c3] [f3 f3 f3 f3]> <[g3 g3 g3 g3] [e3 e3 f3 g3]>:square:0.3")
+    music_dispatch("note:lead:<c6 e6 g6 e6> <f6 e6 d6 c6>:triangle:0.2")
 }
 
 def start_gameover_music() {
-    return if (!music_enabled)
     strudel_set_bpm(80.0lf)
-    strudel_command("play:drums:<bd ~ ~ ~> <~ ~ bd ~>:0.2")
-    strudel_command("note:bass:<c2 ~ bb1 ~> <ab1 ~ g1 ~>:sine:0.3")
-    strudel_command("note:lead:<eb4 ~ d4 ~> <c4 ~ ~ ~>:triangle:0.2")
+    music_dispatch("play:drums:<bd ~ ~ ~> <~ ~ bd ~>:0.2")
+    music_dispatch("note:bass:<c2 ~ bb1 ~> <ab1 ~ g1 ~>:sine:0.3")
+    music_dispatch("note:lead:<eb4 ~ d4 ~> <c4 ~ ~ ~>:triangle:0.2")
 }
 
 // ===== Shaders =====
@@ -478,6 +495,12 @@ var space_was_pressed = false
 var esc_was_pressed   = false
 var @live prev_music_state = GameState.menu
 var music_initialized = false
+var music_enabled = false
+// The strudel player has two arms: a worker thread (strudel_init/strudel_play)
+// where the runtime can host one, and a main-thread channel (strudel_create_channel
+// + per-frame strudel_tick) where it cannot. Same music engine either way; only
+// where a command runs differs (music_dispatch below). Arm choice is init's.
+var music_threaded = false
 var @live die_timer = 0.0       // death animation timer
 var @live end_screen_timer = 0.0  // blocks restart input briefly after game over / win
 var @live shake_timer = 0.0     // screen shake remaining time
@@ -734,7 +757,13 @@ def draw_hud() {
 // ===== Update: Music transitions =====
 
 def update_music() {
-    if (game_state == prev_music_state) { return ; }
+    return if (!music_enabled || !music_initialized)
+    if (!music_threaded) {
+        // Main-thread arm renders its PCM here. Self-regulating: strudel_tick
+        // skips whenever the audio buffer is far enough ahead.
+        strudel_tick()
+    }
+    return if (game_state == prev_music_state)
     let FADE = 0.5
     stop_all_music(FADE)
     if (game_state == GameState.menu) {
@@ -774,7 +803,7 @@ def update_scatter_chase(dt : float) {
 
 var @live pac_move_acc = 0.0  // sub-cell accumulator
 
-def update_pac(dt : float) {  // nolint:STYLE038 -- one tick of a state machine; the phases share mutable state
+def update_pac(dt : float) {
     if (pac_dead || game_state != GameState.playing) { return ; }
 
     // Read input → queue next direction
@@ -825,11 +854,7 @@ def update_pac(dt : float) {  // nolint:STYLE038 -- one tick of a state machine;
                 fruit = Fruit(active = true, kind = next_fruit_idx, timer = 9.0, world_pos = fw)
                 ++next_fruit_idx
             }
-            if (!has_pellets() && !power_pills_any()) {
-                game_state = GameState.win_state
-                end_screen_timer = 2.0
-                play_sfx(snd_level_win)
-            }
+            check_level_cleared()
         } elif (power_pills[pi]) {
             power_pills[pi] = false
             score += POWER_SCORE
@@ -847,11 +872,7 @@ def update_pac(dt : float) {  // nolint:STYLE038 -- one tick of a state machine;
             // Switch music to flee
             stop_all_music(0.2)
             start_flee_music()
-            if (!has_pellets() && !power_pills_any()) {
-                game_state = GameState.win_state
-                end_screen_timer = 2.0
-                play_sfx(snd_level_win)
-            }
+            check_level_cleared()
         }
     }
 }
@@ -861,6 +882,14 @@ def power_pills_any() : bool {
         if (p) { return true; }
     }
     return false
+}
+
+def check_level_cleared() {
+    if (!has_pellets() && !power_pills_any()) {
+        game_state = GameState.win_state
+        end_screen_timer = 2.0
+        play_sfx(snd_level_win)
+    }
 }
 
 // ===== Update: Bonus fruit =====
@@ -1089,10 +1118,24 @@ def init() {
         audio_initialized = true
         init_audio_samples()
     }
-    music_enabled = is_standalone_exe() && !audio_is_single_threaded()
-    if (music_enabled && !music_initialized) {
-        strudel_init(@@strudel_music_main)
+    if (!music_initialized) {
+        // The worker arm needs a real thread: any native build has one, and so
+        // does the standalone wasm card (pthread pool + a yielding main loop).
+        // The wasm playground interpreter does not -- spawning there parks the
+        // whole tab -- and a single-threaded audio backend has no consumer for
+        // a worker either. Everyone else falls back to the main-thread arm.
+        music_threaded = (
+            !audio_is_single_threaded() &&
+            (get_platform_name() != "emscripten" || is_standalone_exe())
+        )
+        if (music_threaded) {
+            strudel_init(@@strudel_music_main)
+        } else {
+            strudel_create_channel()
+            strudel_set_bpm(130.0lf)
+        }
         strudel_set_volume(0.4, 0.0)
+        music_enabled = true
         music_initialized = true
         start_menu_music()
     }
@@ -1111,7 +1154,7 @@ def init() {
 }
 
 [export]
-def update() {  // nolint:STYLE038 -- game frame: input, sim, and render phases share mutable state
+def update() {   // nolint:STYLE038 - one linear frame: input, timers, simulation, render, HUD
     if (!live_begin_frame()) { return ; }
     live_get_framebuffer_size(display_w, display_h)
     glViewport(0, 0, display_w, display_h)
@@ -1237,22 +1280,38 @@ def update() {  // nolint:STYLE038 -- game frame: input, sim, and render phases 
 
 [export]
 def shutdown() {
-    if (music_enabled) {
+    if (music_initialized) {
         strudel_shutdown()
+        music_initialized = false
     }
     audio_system_finalize(asch.command, asch.next_sid)
     live_destroy_window()
 }
 
-// Entry point for the standalone cross-compiled build (daslang -exe → .wasm).
-// eval_main_loop drives the block once per frame: a blocking while-loop natively,
-// emscripten_set_main_loop (rAF) on the web — so the same main runs in the browser
-// without blocking. Returns false to end the loop.
+var max_frame_limit = 0
+
+def parse_args() {
+    let args <- get_command_line_arguments()
+    for (i in range(length(args) - 1)) {
+        if (args[i] == "--max-frames") {
+            max_frame_limit = try_to_int(args[i + 1]) ?? 0   // garbage = no cap
+        }
+    }
+}
+
+// eval_main_loop drives the block once per frame: a blocking while-loop
+// natively, emscripten_set_main_loop (rAF) on the web -- one main for both.
+// live_end_frame only swaps buffers, so the loop body owns the GC boundary.
 [export]
 def main() {
+    parse_args()
     init()
+    var frame_count = 0
     eval_main_loop() {
         update()
+        maybe_collect_gc()
+        frame_count++
+        return false if (max_frame_limit > 0 && frame_count >= max_frame_limit)
         return !exit_requested()
     }
     shutdown()

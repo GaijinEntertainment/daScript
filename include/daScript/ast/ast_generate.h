@@ -273,7 +273,7 @@ namespace das {
         give variables in the scope of 'expr' block unique names
         only for the top-level block
      */
-    void giveBlockVariablesUniqueNames  ( ExpressionPtr expr );
+    bool giveBlockVariablesUniqueNames  ( ExpressionPtr expr );
 
     /*
         replace break and continue of a particular loop

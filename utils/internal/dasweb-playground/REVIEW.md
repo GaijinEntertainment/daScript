@@ -4,8 +4,7 @@
 `README.md`. Planned work: `plans/dasweb_backend.md`.
 
 **A diff that adds or changes a route, a store operation, or a config or limit behavior covers
-it with a dastest test in this directory, in the same change.** `main.das` and `admin.das` stay
-argv/dispatch glue over tested modules, so they need no test of their own.
+it with a dastest test in this directory, in the same change.**
 
 **Never register a `[test]` file in a `CMakeLists.txt`, and never put one under the repo-root
 `tests/` tree - `[test]` files live in this directory and require their siblings by bare name.**
@@ -30,6 +29,10 @@ stays between `init` and `start`, so the server binds loopback only.**
 is a defect, as is a hash or insert reachable without the size check against the configured
 cap.** The service can only check a body already buffered in full.
 
+**A `max_source_bytes` at or above the `request_body max_size` standing in front of
+`/api/samples*` in `caddy.snippet` is a defect.** Whichever limit is lower produces the 413, and
+under the proxy's the caller gets a bare response instead of the service's JSON error body.
+
 **Never use a request body whose byte count disagrees with its string length - read the body as
 bytes and reject the mismatch.** A das string ends at the first NUL, so a body used without that
 guard can be stored truncated under a hash that does not describe it.
@@ -44,8 +47,10 @@ cross-origin POST to a proxied route.
 
 **A remote-builder route (`/api/build/toolchain`, `/api/build/next`, `/api/build/result`) that
 does not authenticate by the config bearer token compared with `constant_time_equal` is a
-defect, as is one that logs, echoes, or short-circuit-compares the token.** An empty configured
-token disables the surface, never opens it.
+defect, as is one that logs, echoes, or short-circuit-compares the token.**
+
+**A remote-builder route (`/api/build/toolchain`, `/api/build/next`, `/api/build/result`) that
+answers anything but a refusal while the configured bearer token is empty is a defect.**
 
 **Never assemble an artifact-cache path from anything but components validated in
 `build_artifacts`, and never land an upload in the served tree other than by renaming a stage
@@ -81,9 +86,9 @@ admin endpoint to the public route set.**
 **Never put a secret - a token or a credential - in a log line, a response body, or an error
 message.**
 
-**A route that does not emit one structured line - method, path, status, duration, client ip,
-bytes - is a defect; `GET /healthz` emits none.** The watchdog polls `/healthz` every few
-seconds, and logging it would bury the signal.
+**A route other than `GET /healthz` that does not emit one structured line - method, path,
+status, duration, client ip, bytes - is a defect, as is a diff that gives `GET /healthz` a log
+line.** The watchdog polls it every few seconds, and logging it would bury the signal.
 
 **A diff that adds a store mutation or a job/state transition also emits a structured line for
 it.** A failure path that can trigger without leaving a log line is a defect.
@@ -106,9 +111,9 @@ thread that serves it.**
 **Never ship a file an operator edits on the box with plain `release_include` - ship it with
 `release_include_if_missing` and have `deploy.sh` carry it forward across upgrades.**
 
-**Never put a production value in the checked-in `dasweb-playground.toml` - it holds
-development values.** The config file is discovered automatically beside the module, so a
-production path in it makes an in-repo run open the live database.
+**Never put an absolute path, a secret, or a public origin in the checked-in
+`dasweb-playground.toml`; use the development equivalent.** The config file is discovered
+automatically beside the module, so whatever it names is what an in-repo run opens.
 
 **A diff that edits a shipped `[sql_migration]` body is a defect - a schema change adds a new
 version instead.**
@@ -138,5 +143,6 @@ its line here, with its tests, in the same change.**
   reads the filesystem; no store mutation that bypasses `samples_store` functions.
 - `admin.das` - operator CLI (listing curation). Talks to the store the same way the server
   does; no second implementation of a store operation.
+- `test_*.das` - the dastest suites for the files above.
 - `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh`, `caddy.snippet` -
   packaging, deployment, and the public route boundary.

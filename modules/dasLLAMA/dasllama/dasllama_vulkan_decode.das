@@ -874,13 +874,13 @@ def private stack_gemv_cls_set(si : int) : VkDescriptorSet {
 // pre-record (or refresh on a row-count / activation-form change) the triple's chain: gate+up
 // GEMV pair, fused act+requant, down GEMV, y DMA. Per token only the stacks' host-visible
 // regions and the activation image change — the recorded buffer resubmits as-is.
-def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool) : VkCommandBuffer {
+[cold_path]   // creates the triple's sets once
+def private ffn_cmd_key(s1, s3, s2 : int) : int64 {
     let key = (int64(s1) * int64(MAX_STACKS) + int64(s3)) * int64(MAX_STACKS) + int64(s2)
     if (!key_exists(g_gpu.ffn_cmds, key)) {
         var fc = FfnCmd(cmd = alloc_cmd(), nrows = 0l)
-        // the requant form follows the DOWN stack
-        let dkq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
-        verify((dkq ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()) && gemv_cls_ensure(g_gpu.stacks[s2].fmt),
+        let down_is_kq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
+        verify((down_is_kq ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()) && gemv_cls_ensure(g_gpu.stacks[s2].fmt),
             "vk decode: the class rails must engage on a live device")
         // fused act+requant (class): gate@0, up@1, hq@2, hs@3 — one family set serves both forms
         fc.actrq_set = set_actrq_cls(
@@ -894,6 +894,36 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool)
             fixed_array(0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO))
         g_gpu.ffn_cmds |> insert(key, fc)
     }
+    return key
+}
+
+//! Records the decode FFN chain into an OPEN command buffer: gate/up GEMVs, the fused
+//! act+requant, the down GEMV (its rows land in the down stack's y_dev under VHG_YO).
+def private ffn_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var fc : FfnCmd; s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool) {
+    var gset = stack_gemv_cls_set(s1)
+    var uset = stack_gemv_cls_set(s3)
+    hz_set_bits(gset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
+    hz_set_bits(uset, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
+    let rpw = g_gpu.rows_per_wg
+    let ggu = (nrows * nfe + rpw - 1l) / rpw
+    var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nrows), ybase = 0u)
+    gemv_cls_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, ggu)
+    gemv_cls_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, ggu)
+    let down_is_kq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
+    var pca = ActArgs(nelem = uint(nrows * nfe), gelu = is_gelu ? 1u : 0u,
+        nblk = uint(nrows * nfe / (down_is_kq ? 256l : 32l)))
+    let awgs = (nrows * nfe / (down_is_kq ? 8l : 4l) + 255l) / 256l
+    if (down_is_kq) {
+        enc_q8k_actrq_cls(raw, h, fc.actrq_set, pca, awgs)
+    } else {
+        enc_q8_actrq_cls(raw, h, fc.actrq_set, pca, awgs)
+    }
+    var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = uint(nrows), ybase = 0u)
+    gemv_cls_enc(g_gpu.stacks[s2].fmt, raw, h, fc.down_set, pcd, (nrows * n + rpw - 1l) / rpw)
+}
+
+def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool) : VkCommandBuffer {
+    let key = ffn_cmd_key(s1, s3, s2)
     var fc = g_gpu.ffn_cmds[key]
     if (fc.nrows != nrows || fc.gelu != is_gelu) {
         if (fc.nrows != 0l) {
@@ -903,29 +933,8 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool)
         let raw = fc.cmd
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
-        // gate/up roles on the two stacks' class sets, this chain's view (re-declared per record)
-        var gset = stack_gemv_cls_set(s1)
-        var uset = stack_gemv_cls_set(s3)
-        hz_set_bits(gset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
-        hz_set_bits(uset, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
         var h : VkHaz
-        let rpw = g_gpu.rows_per_wg
-        let ggu = (nrows * nfe + rpw - 1l) / rpw
-        var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nrows), ybase = 0u)
-        gemv_cls_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, ggu)
-        gemv_cls_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, ggu)
-        // the requant form follows the DOWN stack
-        let dkq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
-        var pca = ActArgs(nelem = uint(nrows * nfe), gelu = is_gelu ? 1u : 0u,
-            nblk = uint(nrows * nfe / (dkq ? 256l : 32l)))
-        let awgs = (nrows * nfe / (dkq ? 8l : 4l) + 255l) / 256l
-        if (dkq) {
-            enc_q8k_actrq_cls(raw, h, fc.actrq_set, pca, awgs)
-        } else {
-            enc_q8_actrq_cls(raw, h, fc.actrq_set, pca, awgs)
-        }
-        var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = uint(nrows), ybase = 0u)
-        gemv_cls_enc(g_gpu.stacks[s2].fmt, raw, h, fc.down_set, pcd, (nrows * n + rpw - 1l) / rpw)
+        ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.stacks[s2].y_dev, g_gpu.stacks[s2].y.buf, nrows * n * 4l)
         if (vk_prof()) {
@@ -938,9 +947,7 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool)
     return fc.cmd
 }
 
-// fill metas/acts and fetch the recorded chain — shared by the sync GEMV form and the async
-// begin/join pair. Returns the down stack index alongside the cmd (join reads its y staging).
-def private ffn_gemv_prep(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool) : tuple<cmd : VkCommandBuffer; s2 : int> {
+def private ffn_fill(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int) : tuple<s1 : int; s3 : int; s2 : int> {
     ensure_ffn_state()   // hq/hs planes for the act+requant: a shexp-only run dispatches FFN first
     let s1 = find_stack(unsafe(offs1[0]), f1, "decode ffn gate")
     let s3 = find_stack(unsafe(offs3[0]), f3, "decode ffn up")
@@ -959,15 +966,37 @@ def private ffn_gemv_prep(offs1 : int64 const?; offs3 : int64 const?; offs2 : in
     fill_stack_sched_rows(s2, offs2, nregions, nrows, nfe / fmt_unit(f2))
     fill_stack_acts(s1, xqp, xsp, nrows * n)
     fill_stack_acts(s3, xqp, xsp, nrows * n)
-    return (cmd = ffn_cmd_for(s1, s3, s2, nrows, n, nfe, is_gelu), s2 = s2)
+    return (s1 = s1, s3 = s3, s2 = s2)
 }
+
+//! Fills metas/acts and returns the recorded chain with the down stack index - the async join
+//! reads that stack's y staging.
+def private ffn_gemv_prep(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool) : tuple<cmd : VkCommandBuffer; s2 : int> {
+    let st = ffn_fill(offs1, offs3, offs2, nregions, xqp, xsp, n, nfe, nrows, f1, f3, f2)
+    return (cmd = ffn_cmd_for(st.s1, st.s3, st.s2, nrows, n, nfe, is_gelu), s2 = st.s2)
+}
+
+//! DASLLAMA_GPU_PROF=1 decode ledger: per-token sums over each per-layer submit (prep + submit + wait).
+var private g_dec_prof_tokens = 0l
+var private g_dec_prof_ffn_us = 0l
+var private g_dec_prof_ffn_n = 0l
+var private g_dec_prof_attn_us = 0l
+var private g_dec_prof_attn_n = 0l
+var private g_dec_prof_attn_rec_us = 0l
+var private g_dec_prof_attn_wait_us = 0l
+var private g_dec_prof_first_woq = -1l
 
 def vk_moe_ffn_gemv(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool) {
     // decode-form only — vk_moe_ffn routes the combined (npos > 0) contract to the batch arm instead
+    let ts0 = ref_time_ticks()
     var pc = ffn_gemv_prep(offs1, offs3, offs2, nregions, xqp, xsp, n, nfe, nrows, f1, f3, f2, is_gelu)
     submit_wait(pc.cmd)
     unsafe {
         memcpy(reinterpret<void?>(goutp), g_gpu.stacks[pc.s2].y.mapped, nrows * n * 4l)
+    }
+    if (vk_prof()) {
+        g_dec_prof_ffn_us += int64(get_time_usec(ts0))
+        g_dec_prof_ffn_n++
     }
 }
 
@@ -989,6 +1018,294 @@ def vk_moe_ffn_join(var goutp : float?) {
         memcpy(reinterpret<void?>(goutp), g_gpu.stacks[g_gpu.ffn_pend_s2].y.mapped, g_gpu.ffn_pend_bytes)
     }
     g_gpu.ffn_pend_s2 = -1
+}
+
+// ===== the decode FFN tail: FFN(l) + combine + add-rms + requant into layer l+1's attention acts =====
+
+[cold_path]   // lazy init, once per model
+def private ensure_tail_state(n : int64) {
+    if (g_gpu.tail_ready) {
+        return
+    }
+    verify(ensure_dec_combine_cls() && ensure_cls_ar() && ensure_cls_q8k_rq() && ensure_cls_dn_rq(),
+        "vk decode ffn tail: the class rails must engage on a live device")
+    g_gpu.tail_xin = make_host_buf(n * 4l, true)
+    g_gpu.tail_w = make_host_buf(MAX_ROUTED_SLOTS * 4l, true)
+    g_gpu.tail_xres_dev = make_device_buf(n * 4l)
+    g_gpu.tail_xb_dev = make_device_buf(n * 4l)
+    g_gpu.tail_xres = make_host_buf(n * 4l, false, [cached = true])
+    g_gpu.tail_ready = true
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: decode ffn tail engaged (DASLLAMA_GPU_DEC_TAIL=0 collects every FFN on the host)\n")
+}
+
+let private MAX_ROUTED_SLOTS = 64l   // routed slots the tail's and the span's weight staging hold (n_expert_used)
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]   // recording leg: once per layer pair
+def private tail_cmd_for(s1, s3, s2, sq : int; woq_next : int64; fq_next : int; anp : float const?; n, nfe, nrows : int64; is_gelu : bool; eps : float) : VkCommandBuffer {
+    if (!key_exists(g_gpu.tail_cmds, woq_next)) {
+        let key = ffn_cmd_key(s1, s3, s2)
+        var fc = g_gpu.ffn_cmds[key]
+        var tc = TailCmd(cmd = alloc_cmd(), nrows = nrows)
+        tc.an_dev = make_device_buf(n * 4l)
+        upload_region_at(tc.an_dev, 0l, unsafe(reinterpret<uint8 const?>(anp)), n * 4l)
+        tc.s_comb = set_dec_combine_cls(
+            fixed_array(g_gpu.tail_xin.buf, g_gpu.tail_w.buf, g_gpu.stacks[s2].y_dev, g_gpu.tail_xres_dev),
+            fixed_array(n * 4l, MAX_ROUTED_SLOTS * 4l, Y_BYTES, n * 4l),
+            fixed_array(0u, 0u, VHG_YO, VHG_XRES))
+        tc.s_ar = set_cls_ar(fixed_array(g_gpu.tail_xres_dev, g_gpu.tail_xres_dev, tc.an_dev, g_gpu.tail_xb_dev),
+            fixed_array(n * 4l, n * 4l, n * 4l, n * 4l), fixed_array(VHG_XRES, VHG_XRES, 0u, VHG_XB))
+        tc.s_rq = set_rq_cls(fixed_array(g_gpu.tail_xb_dev, g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf),
+            fixed_array(n * 4l, XQ_BYTES, XS_BYTES), fixed_array(VHG_XB, VHG_ACTS, VHG_ACTS))
+        let raw = tc.cmd
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
+        var pcc = DecCombineArgs(n = uint(n), k = uint(nrows))
+        enc_dec_combine_cls(raw, h, tc.s_comb, pcc, (n + 255l) / 256l)
+        var pca = ArArgs(dim = uint(n), add_on = 0u, woff = 0u, eps = eps, ascale = 1.0)
+        enc_cls_ar(raw, h, tc.s_ar, pca, 1l)
+        rq_enc(raw, h, tc.s_rq, fq_next, n)
+        vhz_dep(raw, h, VHG_XRES | VHG_ACTS, 0u, true)
+        cmd_copy_whole(raw, g_gpu.tail_xres_dev, g_gpu.tail_xres.buf, n * 4l)
+        if (vk_prof()) {
+            to_log(LOG_INFO, "vk_ffn_tail hz: {h.disp} nodes, {h.barriers} barriers\n")
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        g_gpu.tail_cmds |> insert(woq_next, tc)
+    }
+    var tc = g_gpu.tail_cmds[woq_next]
+    assert(tc.nrows == nrows, "dasLLAMA vulkan tier: decode ffn tail recorded with another slot count")
+    return tc.cmd
+}
+
+//! MoeGpuFfnTailFn: the resident FFN chain plus its tail - combine + residual, the next layer's
+//! attention rms + requant into that layer's acts image - submitted WITHOUT a fence; the next
+//! attention submit's fence covers both and its collect lands the residual row in xoutp.
+[hot_path]   // per token
+def vk_moe_ffn_tail(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool; wp : float const?; xp : float const?; var xoutp : float?; woq_next : int64; fq_next : int; anp : float const?; eps : float) {
+    assert(g_gpu.tail_pending_woq < 0l, "dasLLAMA vulkan tier: decode ffn tail while one is pending")
+    assert(nrows <= MAX_ROUTED_SLOTS, "dasLLAMA vulkan tier: decode ffn tail slot count exceeds its weight staging")
+    let ts0 = ref_time_ticks()
+    let st = ffn_fill(offs1, offs3, offs2, nregions, xqp, xsp, n, nfe, nrows, f1, f3, f2)
+    ensure_tail_state(n)
+    let sq = find_stack(woq_next, fq_next, "decode ffn tail q")
+    ensure_gemv_scratch(sq)
+    var cmd = tail_cmd_for(st.s1, st.s3, st.s2, sq, woq_next, fq_next, anp, n, nfe, nrows, is_gelu, eps)
+    unsafe {
+        memcpy(g_gpu.tail_xin.mapped, reinterpret<void?>(xp), n * 4l)
+        memcpy(g_gpu.tail_w.mapped, reinterpret<void?>(wp), nrows * 4l)
+    }
+    submit_nofence(cmd)
+    g_gpu.tail_pending_woq = woq_next
+    g_gpu.tail_xout = xoutp
+    if (vk_prof()) {
+        g_dec_prof_ffn_us += int64(get_time_usec(ts0))
+        g_dec_prof_ffn_n++
+    }
+}
+
+//! MoeGpuFfnTailPendingFn: a tail is in flight, uncollected
+def vk_moe_ffn_tail_pending : bool => g_gpu.tail_pending_woq >= 0l
+
+// ===== the whole-token decode span: the resident layers as ONE recorded chain, ONE submit =====
+
+
+def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
+    let nl = long_length(a.woq)
+    let dim = a.dim
+    let nb = dim * 4l
+    var SL = SpanLayer(woq = a.woq[li], sq = find_stack(a.woq[li], a.fq[li], "span q"),
+        s1 = find_stack(a.we1[li], a.f1[li], "span gate"), s3 = find_stack(a.we3[li], a.f3[li], "span up"),
+        s2 = find_stack(a.we2[li], a.f2[li], "span down"))
+    ensure_gemv_scratch(SL.sq)
+    ensure_gemv_scratch(SL.s1)
+    ensure_gemv_scratch(SL.s3)
+    ensure_gemv_scratch(SL.s2)
+    SL.s_ar_ffn = set_cls_ar(fixed_array(g_gpu.span_x_dev, g_gpu.dat_xb2_dev, g_gpu.span_norms_dev, g_gpu.span_xb_dev),
+        fixed_array(nb, nb, nl * 2l * nb, nb), fixed_array(VHS_X, VHZ_XB2, 0u, VHS_XB))
+    SL.s_rq_g1 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.s1].xq.buf, g_gpu.stacks[SL.s1].xs.buf),
+        fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
+    SL.s_rq_g3 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.s3].xq.buf, g_gpu.stacks[SL.s3].xs.buf),
+        fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
+    SL.s_router = set_router_gemv_cls(fixed_array(g_gpu.span_router_dev, g_gpu.span_xb_dev, g_gpu.span_logits_dev),
+        fixed_array(nl * a.ne * nb, nb, SPAN_MAX_EXPERTS * 4l), fixed_array(0u, VHS_XB, VHS_LOG))
+    SL.s_topk = set_topk_cls(
+        fixed_array(g_gpu.span_logits_dev, g_gpu.stacks[SL.s1].meta.buf, g_gpu.stacks[SL.s3].meta.buf, g_gpu.stacks[SL.s2].meta.buf, g_gpu.span_w_dev),
+        fixed_array(SPAN_MAX_EXPERTS * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l),
+        fixed_array(VHS_LOG, VHS_META, VHS_META, VHS_META, VHS_META))
+    SL.s_comb = set_dec_combine_cls(fixed_array(g_gpu.span_x_dev, g_gpu.span_w_dev, g_gpu.stacks[SL.s2].y_dev, g_gpu.span_x_dev),
+        fixed_array(nb, MAX_ROUTED_SLOTS * 4l, Y_BYTES, nb), fixed_array(VHS_X, VHS_META, VHG_YO, VHS_X))
+    if (li + 1l < nl) {
+        let sqn = find_stack(a.woq[li + 1l], a.fq[li + 1l], "span next q")
+        ensure_gemv_scratch(sqn)
+        SL.s_ar_att = set_cls_ar(fixed_array(g_gpu.span_x_dev, g_gpu.span_x_dev, g_gpu.span_norms_dev, g_gpu.span_xb_dev),
+            fixed_array(nb, nb, nl * 2l * nb, nb), fixed_array(VHS_X, VHS_X, 0u, VHS_XB))
+        SL.s_rq_att = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[sqn].xq.buf, g_gpu.stacks[sqn].xs.buf),
+            fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_ACTS, VHS_ACTS))
+    }
+    return SL
+}
+
+let private SPAN_MAX_EXPERTS = 256l   // the top-k kernel's one-workgroup reach
+
+def private rq_enc(raw : VkCommandBuffer; var h : VkHaz; var rq_set : VkDescriptorSet; fmt : int; dim : int64) {
+    if (kq_sb(fmt)) {
+        var pcr = RqArgs(inbase = 0u, nblk = uint(dim / 256l))
+        enc_cls_q8k_rq(raw, h, rq_set, pcr, (dim / 8l + 255l) / 256l)
+    } else {
+        var pcr = RqArgs(inbase = 0u, nblk = uint(dim / 32l))
+        enc_cls_dn_rq(raw, h, rq_set, pcr, (dim / 4l + 255l) / 256l)
+    }
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+def private span_meta_base(woff : int64; si : int; fmt : int) : uint {
+    let unit = fmt_unit(fmt)
+    let rel = woff - g_gpu.stacks[si].base
+    assert(rel % unit == 0l, "dasLLAMA vulkan tier: unaligned expert plane offset")
+    return uint(rel / unit)
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]   // recording leg: once per span
+def private span_record(a : MoeSpanDec) {
+    let nl = long_length(a.woq)
+    let dim = a.dim
+    let qd = a.qd
+    let kvd = a.kvd
+    g_gpu.span_cmd = alloc_cmd()
+    var raw = g_gpu.span_cmd
+    let begin = VkCommandBufferBeginInfo()
+    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h : VkHaz
+    vhz_dep(raw, h, 0u, VHS_X, true)
+    cmd_copy_whole(raw, g_gpu.span_xin.buf, g_gpu.span_x_dev, dim * 4l)
+    for (li in range64(nl)) {
+        var L & = unsafe(g_gpu.dat_layers[a.woq[li]])
+        var SL = g_gpu.span_layers[li]
+        at_chain_enc(raw, h, L, a.fq[li], a.fk[li], a.fv[li], a.fo[li], dim, qd, kvd, a.hs, a.n_heads, a.kv_mul, a.scale, a.eps, a.neox, a.qk_norm)
+        vhz_dep(raw, h, VHZ_XB2 | VHZ_KVK | VHZ_KVV, 0u, true)
+        cmd_copy_range(raw, g_gpu.dat_kv_dev, qd * 4l, g_gpu.span_out.buf, li * 2l * kvd * 4l, 2l * kvd * 4l)
+        var pcar = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((li * 2l + 1l) * dim), eps = a.eps, ascale = 1.0)
+        enc_cls_ar(raw, h, SL.s_ar_ffn, pcar, 1l)
+        rq_enc(raw, h, SL.s_rq_g1, a.f1[li], dim)
+        rq_enc(raw, h, SL.s_rq_g3, a.f3[li], dim)
+        vhz_dep(raw, h, VHS_GACTS, 0u)
+        var pcro = RouterArgs(ne = uint(a.ne), dim = uint(dim), woff = uint(li * a.ne * dim))
+        enc_router_gemv_cls(raw, h, SL.s_router, pcro, a.ne)
+        var pct = TopkArgs(ne = uint(a.ne), k = uint(a.k), norm = a.norm_topk ? 1u : 0u, wscale = a.wscale,
+            base1 = span_meta_base(a.we1[li], SL.s1, a.f1[li]), stride1 = uint(a.nfe * dim / fmt_unit(a.f1[li])),
+            base3 = span_meta_base(a.we3[li], SL.s3, a.f3[li]), stride3 = uint(a.nfe * dim / fmt_unit(a.f3[li])),
+            base2 = span_meta_base(a.we2[li], SL.s2, a.f2[li]), stride2 = uint(a.nfe * dim / fmt_unit(a.f2[li])),
+            xnb2 = uint(a.nfe / fmt_unit(a.f2[li])))
+        enc_topk_cls(raw, h, SL.s_topk, pct, 1l)
+        vhz_dep(raw, h, VHS_META, 0u)
+        var fc = g_gpu.ffn_cmds[ffn_cmd_key(SL.s1, SL.s3, SL.s2)]
+        ffn_chain_enc(raw, h, fc, SL.s1, SL.s3, SL.s2, a.k, dim, a.nfe, a.is_gelu)
+        var pcc = DecCombineArgs(n = uint(dim), k = uint(a.k))
+        enc_dec_combine_cls(raw, h, SL.s_comb, pcc, (dim + 255l) / 256l)
+        if (li + 1l < nl) {
+            var pca2 = ArArgs(dim = uint(dim), add_on = 0u, woff = uint((li + 1l) * 2l * dim), eps = a.eps, ascale = 1.0)
+            enc_cls_ar(raw, h, SL.s_ar_att, pca2, 1l)
+            rq_enc(raw, h, SL.s_rq_att, a.fq[li + 1l], dim)
+            vhz_dep(raw, h, VHS_ACTS, 0u)
+        }
+    }
+    vhz_dep(raw, h, VHS_X, 0u, true)
+    cmd_copy_range(raw, g_gpu.span_x_dev, 0l, g_gpu.span_out.buf, nl * 2l * kvd * 4l, dim * 4l)
+    if (vk_prof()) {
+        to_log(LOG_INFO, "vk_span hz: {h.disp} nodes, {h.barriers} barriers over {nl} layers\n")
+    }
+    vk_check(vkEndCommandBuffer(raw), null)
+}
+
+[cold_path]   // lazy init, once per span
+def private ensure_span_state(a : MoeSpanDec) {
+    let nl = long_length(a.woq)
+    if (g_gpu.span_key >= 0l) {
+        assert(g_gpu.span_key == a.woq[0] && g_gpu.span_nl == nl, "dasLLAMA vulkan tier: the decode span changed under a live model")
+        return
+    }
+    assert(a.ne <= SPAN_MAX_EXPERTS && a.k <= MAX_ROUTED_SLOTS, "dasLLAMA vulkan tier: decode span routing exceeds the top-k kernel's reach")
+    verify(ensure_router_gemv_cls() && ensure_topk_cls() && ensure_dec_combine_cls() && ensure_cls_ar()
+            && ensure_cls_q8k_rq() && ensure_cls_dn_rq(),
+        "vk decode span: the class rails must engage on a live device")
+    let dim = a.dim
+    g_gpu.span_x_dev = make_device_buf(dim * 4l)
+    g_gpu.span_xb_dev = make_device_buf(dim * 4l)
+    g_gpu.span_w_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
+    g_gpu.span_logits_dev = make_device_buf(SPAN_MAX_EXPERTS * 4l)
+    g_gpu.span_router_dev = make_device_buf(nl * a.ne * dim * 4l)
+    g_gpu.span_norms_dev = make_device_buf(nl * 2l * dim * 4l)
+    unsafe {
+        upload_region_at(g_gpu.span_router_dev, 0l, reinterpret<uint8 const?>(a.router), nl * a.ne * dim * 4l)
+        for (li in range64(nl)) {
+            upload_region_at(g_gpu.span_norms_dev, li * 2l * dim * 4l, reinterpret<uint8 const?>(a.att_norm + li * dim), dim * 4l)
+            upload_region_at(g_gpu.span_norms_dev, (li * 2l + 1l) * dim * 4l, reinterpret<uint8 const?>(a.ffn_norm + li * dim), dim * 4l)
+        }
+    }
+    g_gpu.span_xin = make_host_buf(dim * 4l, false)
+    g_gpu.span_out = make_host_buf(nl * 2l * a.kvd * 4l + dim * 4l, false, [cached = true])
+    g_gpu.span_layers |> clear()
+    g_gpu.span_layers |> reserve(nl)
+    for (li in range64(nl)) {
+        g_gpu.span_layers |> push(span_layer_sets(a, li))
+    }
+    span_record(a)
+    g_gpu.span_key = a.woq[0]
+    g_gpu.span_nl = nl
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: decode span engaged ({nl} resident layers as one submit per token; DASLLAMA_GPU_DEC_SPAN=0 runs the per-layer submits)\n")
+}
+
+//! MoeGpuSpanDecFn: one token through the resident layers - one submit; the host feeds the
+//! first layer's attention row and takes back x and every layer's raw k/v rows.
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]   // per token
+def vk_moe_span_dec(var a : MoeSpanDec) {
+    let ts0 = ref_time_ticks()
+    let nl = long_length(a.woq)
+    ensure_dat_state(a.dim, a.qd, a.kvd, a.hs)
+    ensure_ffn_state()
+    for (li in range64(nl)) {
+        dat_layer_ensure(a.woq[li], a.kvd)
+        dat_layer_sets(a.woq[li], a.wok[li], a.wov[li], a.woo[li], a.fq[li], a.fk[li], a.fv[li], a.fo[li], a.rmsq[li], a.rmsk[li], a.qk_norm)
+    }
+    ensure_span_state(a)
+    assert(g_gpu.tail_pending_woq < 0l, "dasLLAMA vulkan tier: decode span with a decode ffn tail pending")
+    fill_stack_acts(g_gpu.span_layers[0].sq, a.xq, a.xs, a.dim)
+    unsafe {
+        memcpy(g_gpu.span_xin.mapped, reinterpret<void?>(a.x), a.dim * 4l)
+        memcpy(g_gpu.dat_cos.mapped, reinterpret<void?>(a.cossin), a.hs * 4l)
+        var tm = reinterpret<TokMeta?>(g_gpu.dat_tok.mapped)
+        tm.pos = uint(a.pos)
+        tm.cnt = uint(a.pos + 1l)
+    }
+    let ts1 = ref_time_ticks()
+    submit_wait(g_gpu.span_cmd)
+    unsafe {
+        var op = reinterpret<uint8?>(g_gpu.span_out.mapped)
+        let kvb = a.kvd * 4l
+        for (li in range64(nl)) {
+            memcpy(reinterpret<void?>(a.kout + li * a.kvd), reinterpret<void?>(op + li * 2l * kvb), kvb)
+            memcpy(reinterpret<void?>(a.vout + li * a.kvd), reinterpret<void?>(op + li * 2l * kvb + kvb), kvb)
+        }
+        memcpy(reinterpret<void?>(a.x), reinterpret<void?>(op + nl * 2l * kvb), a.dim * 4l)
+    }
+    for (li in range64(nl)) {
+        var L : DatLayer?
+        unsafe {
+            L = g_gpu.dat_layers?[a.woq[li]]
+        }
+        L.cnt = a.pos + 1l
+    }
+    if (vk_prof()) {
+        g_dec_prof_attn_rec_us += int64(get_time_usec(ts0)) - int64(get_time_usec(ts1))
+        g_dec_prof_attn_wait_us += int64(get_time_usec(ts1))
+        g_dec_prof_attn_us += int64(get_time_usec(ts0))
+        g_dec_prof_attn_n++
+        if (g_dec_prof_first_woq < 0l) {
+            g_dec_prof_first_woq = a.woq[0]
+        }
+    }
 }
 
 // ===== decode q/k/v group (one submit per attention layer) =====
@@ -1279,5 +1596,300 @@ def vk_moe_cls(var yp : float?; woff : int64; xqp : int8 const?; xsp : float con
     submit_wait(g_gpu.stacks[si].cls_cmd)
     unsafe {
         memcpy(reinterpret<void?>(yp), g_gpu.stacks[si].y.mapped, d * 4l)
+    }
+}
+
+// ===== the decode attention block (the per-op tier): one submit per layer =====
+
+var private g_dat_gen = 0l
+
+[cold_path]   // lazy init, once per model
+def private ensure_dat_state(dim, qd, kvd, hs : int64) {
+    if (g_gpu.dat_ready) {
+        assert(dim == g_gpu.dat_dim && qd == g_gpu.dat_qd && kvd == g_gpu.dat_kvd && hs == g_gpu.dat_hs,
+            "dasLLAMA vulkan tier: decode attention block geometry changed under a live model")
+        return
+    }
+    verify(ensure_qkn_rope_f16_cls() && ensure_rope_kv_f16_cls() && ensure_da_attn_f16_cls()
+            && ensure_cls_q8k_rq() && ensure_cls_dn_rq(),
+        "vk decode attention: the class rails must engage on a live device")
+    g_gpu.dat_dim = dim
+    g_gpu.dat_qd = qd
+    g_gpu.dat_kvd = kvd
+    g_gpu.dat_hs = hs
+    g_gpu.dat_q_dev = make_device_buf(qd * 4l)
+    g_gpu.dat_kv_dev = make_device_buf((qd + 2l * kvd) * 4l)
+    g_gpu.dat_attn_dev = make_device_buf(qd * 4l)
+    g_gpu.dat_aq_dev = make_device_buf(qd)
+    g_gpu.dat_as_dev = make_device_buf((qd / 32l) * 4l)
+    g_gpu.dat_xb2_dev = make_device_buf(dim * 4l)
+    g_gpu.dat_cos = make_host_buf(hs * 4l, true)   // the kernels read the host-visible row directly
+    g_gpu.dat_tok = make_host_buf(16l, true)
+    g_gpu.dat_out = make_host_buf(dim * 4l + 2l * kvd * 4l, false, [cached = true])   // wo row | raw k | raw v
+    g_gpu.dat_ready = true
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: decode attention block engaged (mirror cap {DAT_MIRROR_ROWS} rows)\n")
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]   // once per layer: the chain's sets
+def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rmsqp : float const?; rmskp : float const?; qk_norm : bool) {
+    var L & = unsafe(g_gpu.dat_layers[woq])
+    if (L.sets_made) {
+        return
+    }
+    let sq = find_stack(woq, fq, "decode attn q")
+    let sk = find_stack(wok, fk, "decode attn k")
+    let sv = find_stack(wov, fv, "decode attn v")
+    let so = find_stack(woo, fo, "decode attn o")
+    ensure_gemv_scratch(sq)
+    ensure_gemv_scratch(sk)
+    ensure_gemv_scratch(sv)
+    ensure_gemv_scratch(so)
+    var qreg = fixed_array(woq, 0l, 1l)
+    var kreg = fixed_array(wok, 0l, 1l)
+    var vreg = fixed_array(wov, 0l, 1l)
+    var oreg = fixed_array(woo, 0l, 1l)
+    unsafe {   // regions are ours to pin: these stacks serve no other decode GEMV
+        fill_stack_sched_rows(sq, addr(qreg[0]), 1l, 1l, 0l)
+        fill_stack_sched_rows(sk, addr(kreg[0]), 1l, 1l, 0l)
+        fill_stack_sched_rows(sv, addr(vreg[0]), 1l, 1l, 0l)
+        fill_stack_sched_rows(so, addr(oreg[0]), 1l, 1l, 0l)
+    }
+    verify(gemv_cls_ensure(fq) && gemv_cls_ensure(fk) && gemv_cls_ensure(fv) && gemv_cls_ensure(fo),
+        "vk decode attention: the gemv class rail must engage on a live device")
+    let qd = g_gpu.dat_qd
+    let kvd = g_gpu.dat_kvd
+    let dim = g_gpu.dat_dim
+    let hs = g_gpu.dat_hs
+    let mirbytes = DAT_MIRROR_ROWS * kvd * 2l
+    L.s_q = gemv_cls_set(fq, fixed_array(g_gpu.stacks[sq].wqbuf, g_gpu.stacks[sq].wsbuf, g_gpu.stacks[sq].meta.buf,
+            g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf, g_gpu.dat_q_dev),
+        fixed_array(g_gpu.stacks[sq].wqbytes, ws_range(sq), META_BYTES, XQ_BYTES, XS_BYTES, qd * 4l),
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHZ_Q))
+    L.s_k = gemv_cls_set(fk, fixed_array(g_gpu.stacks[sk].wqbuf, g_gpu.stacks[sk].wsbuf, g_gpu.stacks[sk].meta.buf,
+            g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf, g_gpu.dat_kv_dev),
+        fixed_array(g_gpu.stacks[sk].wqbytes, ws_range(sk), META_BYTES, XQ_BYTES, XS_BYTES, (qd + 2l * kvd) * 4l),
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHZ_KVK))
+    L.s_v = gemv_cls_set(fv, fixed_array(g_gpu.stacks[sv].wqbuf, g_gpu.stacks[sv].wsbuf, g_gpu.stacks[sv].meta.buf,
+            g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf, g_gpu.dat_kv_dev),
+        fixed_array(g_gpu.stacks[sv].wqbytes, ws_range(sv), META_BYTES, XQ_BYTES, XS_BYTES, (qd + 2l * kvd) * 4l),
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHZ_KVV))
+    if (qk_norm) {
+        L.norms = make_device_buf(2l * hs * 4l)
+        unsafe {
+            upload_region_at(L.norms, 0l, reinterpret<uint8 const?>(rmsqp), hs * 4l)
+            upload_region_at(L.norms, hs * 4l, reinterpret<uint8 const?>(rmskp), hs * 4l)
+        }
+        L.s_qkr = set_qkn_rope_f16_cls(
+            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, L.norms, g_gpu.dat_tok.buf),
+            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 2l * hs * 4l, 16l),
+            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u))
+    } else {
+        L.s_qkr = set_rope_kv_f16_cls(
+            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, g_gpu.dat_tok.buf),
+            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 16l),
+            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u))
+    }
+    L.s_attn = set_da_attn_f16_cls(
+        fixed_array(g_gpu.dat_q_dev, L.k_mir, L.v_mir, g_gpu.dat_attn_dev, g_gpu.dat_tok.buf),
+        fixed_array(qd * 4l, mirbytes, mirbytes, qd * 4l, 16l),
+        fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u))
+    L.s_rq = set_rq_cls(fixed_array(g_gpu.dat_attn_dev, g_gpu.dat_aq_dev, g_gpu.dat_as_dev),
+        fixed_array(qd * 4l, qd, (qd / 32l) * 4l),
+        fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ))
+    L.s_wo = gemv_cls_set(fo, fixed_array(g_gpu.stacks[so].wqbuf, g_gpu.stacks[so].wsbuf, g_gpu.stacks[so].meta.buf,
+            g_gpu.dat_aq_dev, g_gpu.dat_as_dev, g_gpu.dat_xb2_dev),
+        fixed_array(g_gpu.stacks[so].wqbytes, ws_range(so), META_BYTES, qd, (qd / 32l) * 4l, dim * 4l),
+        fixed_array(0u, 0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2))
+    L.fq = fq
+    L.fk = fk
+    L.fv = fv
+    L.fo = fo
+    L.sets_made = true
+}
+
+//! prefill window fills of a decode mirror since the last mint - record_at_cmd's fill increments it,
+//! the claim consumes it
+var g_dat_mirror_fills = 0l
+
+//! the model drop's decode-side reset: a dropped model's fills must not mint the next model's generation
+def vk_decode_drop_state {
+    g_dat_mirror_fills = 0l
+}
+
+//! MoeGpuAttnDecClaimFn: mint the mirrors' generation - after a GPU prefill filled them (fresh =
+//! false), or for a session decoding from position 0 (fresh = true: every layer starts empty).
+def vk_moe_attn_dec_claim(fresh : bool) : int64 {
+    if (!fresh && g_dat_mirror_fills == 0l) {   // nothing filled since the last mint: no mint, 0 = the caller keeps its own generation
+        return 0l
+    }
+    if (g_gpu != null) {
+        for (L in values(g_gpu.dat_layers)) {   // a mirror no window filled holds another session's rows
+            if (fresh || !L.filled) {
+                L.cnt = 0l
+            }
+            L.filled = false
+        }
+    }
+    g_dat_mirror_fills = 0l
+    g_dat_gen++
+    return g_dat_gen
+}
+
+//! MoeGpuAttnDecOkFn: serve when the layer's mirror holds exactly [0, pos) of the session's
+//! generation; else name what the engine must do first (claim fresh / hydrate the layer) or never.
+def vk_moe_attn_dec_ok(woq, pos, gen : int64) : int {
+    if (g_gpu == null || g_gpu.dry || pos >= DAT_MIRROR_ROWS) {
+        return DAT_NEVER
+    }
+    if (gen == 0l || gen != g_dat_gen) {
+        return DAT_STALE_GEN
+    }
+    if (!key_exists(g_gpu.dat_layers, woq) || unsafe(g_gpu.dat_layers[woq]).cnt != pos) {
+        return DAT_HYDRATE
+    }
+    return DAT_SERVE
+}
+
+var private @scratch g_dat_h16 : array<float16>
+
+//! MoeGpuAttnDecHydrateFn: the layer's mirror takes the host cache's rows [0, npos) (K roped, V
+//! raw - the host cache's own forms; f16 rows copy through, f32 rows convert), then holds exactly
+//! those positions. npos = 0 leaves it empty.
+[cold_path]   // a remedy leg (a rewind, a CPU-prefilled prefix) - never the served token
+def vk_moe_attn_dec_hydrate(woq : int64; kp : uint8 const?; vp : uint8 const?; npos, kvd : int64; f16 : bool) {
+    dat_layer_ensure(woq, kvd)
+    var L : DatLayer?
+    unsafe {
+        L = g_gpu.dat_layers?[woq]
+    }
+    if (npos > 0l && f16) {
+        upload_region_at(L.k_mir, 0l, kp, npos * kvd * 2l)
+        upload_region_at(L.v_mir, 0l, vp, npos * kvd * 2l)
+    } elif (npos > 0l) {
+        g_dat_h16 |> resize(npos * kvd)
+        unsafe {
+            let kf = reinterpret<float const?>(kp)
+            let vf = reinterpret<float const?>(vp)
+            for (i in range64(npos * kvd)) {
+                g_dat_h16[i] = float16(clamp(kf[i], -65504.0, 65504.0))
+            }
+            upload_region_at(L.k_mir, 0l, addr<uint8 const?>(g_dat_h16[0]), npos * kvd * 2l)
+            for (i in range64(npos * kvd)) {
+                g_dat_h16[i] = float16(clamp(vf[i], -65504.0, 65504.0))
+            }
+            upload_region_at(L.v_mir, 0l, addr<uint8 const?>(g_dat_h16[0]), npos * kvd * 2l)
+        }
+    }
+    L.cnt = npos
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
+def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer; fq, fk, fv, fo : int; dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
+    let rpw = g_gpu.rows_per_wg
+    var pcq = GemvArgs(n = uint(dim), d = uint(qd), nreg = 1u, ybase = 0u)
+    gemv_cls_enc(fq, raw, h, L.s_q, pcq, (qd + rpw - 1l) / rpw)
+    var pck = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd))
+    gemv_cls_enc(fk, raw, h, L.s_k, pck, (kvd + rpw - 1l) / rpw)
+    var pcv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd + kvd))
+    gemv_cls_enc(fv, raw, h, L.s_v, pcv, (kvd + rpw - 1l) / rpw)
+    if (qk_norm) {
+        var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
+            neox = neox ? 1u : 0u, nh = uint(n_heads), layerbase = 0u, qwoff = 0u, kwoff = uint(hs), eps = eps)
+        enc_qkn_rope_f16_cls(raw, h, L.s_qkr, pcf, n_heads + kvd / hs)
+    } else {
+        var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
+            neox = neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(qd / 2l + kvd / 2l), layerbase = 0u)
+        enc_rope_kv_f16_cls(raw, h, L.s_qkr, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
+    }
+    var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale)
+    enc_da_attn_f16_cls(raw, h, L.s_attn, pca, n_heads)
+    rq_enc(raw, h, L.s_rq, fo, qd)
+    var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u)
+    gemv_cls_enc(fo, raw, h, L.s_wo, pcw, (dim + rpw - 1l) / rpw)
+}
+
+//! MoeGpuAttnDecFn: one layer's decode attention on the device. The chain
+//! records ONCE per layer (pos rides TokMeta); per token only the acts, the rope row and the
+//! submit move. k and v come back raw - the host derives its cache row.
+[cold_path]   // recording leg (also the rerecord A/B probe) - not the steady-state token path
+def private at_record_layer(var L : DatLayer; fq, fk, fv, fo : int; dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
+if (!L.recorded || vk_rdec_rerecord_on()) {
+    if (!L.recorded) {
+        L.cmd = alloc_cmd()
+    } else {
+        let rf : VkCommandBufferResetFlags
+        vk_check(vkResetCommandBuffer(L.cmd, rf), null)
+    }
+    var raw = L.cmd
+    let begin = VkCommandBufferBeginInfo()
+    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h : VkHaz
+    at_chain_enc(raw, h, L, fq, fk, fv, fo, dim, qd, kvd, hs, n_heads, kv_mul, scale, eps, neox, qk_norm)
+    vhz_dep(raw, h, VHZ_XB2 | VHZ_KVK | VHZ_KVV, 0u, true)
+    cmd_copy_whole(raw, g_gpu.dat_xb2_dev, g_gpu.dat_out.buf, dim * 4l)
+    cmd_copy_range(raw, g_gpu.dat_kv_dev, qd * 4l, g_gpu.dat_out.buf, dim * 4l, 2l * kvd * 4l)
+    vk_check(vkEndCommandBuffer(raw), null)
+    L.recorded = true
+}
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]   // per token
+def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wok, wov, woo : int64; fq, fk, fv, fo : int;
+                    xqp : int8 const?; xsp : float const?; cosp : float const?; rmsqp : float const?; rmskp : float const?;
+                    pos, dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
+    let ts0 = ref_time_ticks()
+    ensure_dat_state(dim, qd, kvd, hs)
+    dat_layer_ensure(woq, kvd)
+    dat_layer_sets(woq, wok, wov, woo, fq, fk, fv, fo, rmsqp, rmskp, qk_norm)
+    var L : DatLayer?
+    unsafe {
+        L = g_gpu.dat_layers?[woq]   // the ensure above made the key: a read, never an insert
+    }
+    let sq = find_stack(woq, fq, "decode attn q")
+    at_record_layer(*L, fq, fk, fv, fo, dim, qd, kvd, hs, n_heads, kv_mul, scale, eps, neox, qk_norm)
+    let has_pending_tail = g_gpu.tail_pending_woq >= 0l
+    if (has_pending_tail) {
+        assert(g_gpu.tail_pending_woq == woq, "dasLLAMA vulkan tier: the pending decode ffn tail targets another layer")
+    } else {
+        fill_stack_acts(sq, xqp, xsp, dim)
+    }
+    unsafe {
+        memcpy(g_gpu.dat_cos.mapped, reinterpret<void?>(cosp), hs * 4l)
+        var tm = reinterpret<TokMeta?>(g_gpu.dat_tok.mapped)
+        tm.pos = uint(pos)
+        tm.cnt = uint(pos + 1l)
+    }
+    let ts1 = ref_time_ticks()
+    submit_wait(L.cmd)
+    if (vk_prof()) {
+        g_dec_prof_attn_rec_us += int64(get_time_usec(ts0)) - int64(get_time_usec(ts1))
+        g_dec_prof_attn_wait_us += int64(get_time_usec(ts1))
+    }
+    unsafe {
+        var op = reinterpret<uint8?>(g_gpu.dat_out.mapped)
+        memcpy(reinterpret<void?>(xb2p), reinterpret<void?>(op), dim * 4l)
+        memcpy(reinterpret<void?>(kp), reinterpret<void?>(op + dim * 4l), kvd * 4l)
+        memcpy(reinterpret<void?>(vp), reinterpret<void?>(op + dim * 4l + kvd * 4l), kvd * 4l)
+    }
+    L.cnt = pos + 1l
+    if (has_pending_tail) {
+        unsafe {
+            memcpy(reinterpret<void?>(g_gpu.tail_xout), g_gpu.tail_xres.mapped, dim * 4l)
+        }
+        g_gpu.tail_pending_woq = -1l
+        g_gpu.tail_xout = null
+    }
+    if (vk_prof()) {
+        g_dec_prof_attn_us += int64(get_time_usec(ts0))
+        g_dec_prof_attn_n++
+        if (g_dec_prof_first_woq < 0l) {
+            g_dec_prof_first_woq = woq
+        }
+        if (woq == g_dec_prof_first_woq) {
+            g_dec_prof_tokens++
+            if (g_dec_prof_tokens % 32l == 0l) {
+                to_log(LOG_INFO, "vk_dec prof over {g_dec_prof_tokens} tokens: attn block {g_dec_prof_attn_us / g_dec_prof_tokens} us/token ({g_dec_prof_attn_n / g_dec_prof_tokens} submits, {g_dec_prof_attn_us / max(g_dec_prof_attn_n, 1l)} us each = record {g_dec_prof_attn_rec_us / max(g_dec_prof_attn_n, 1l)} + submit/wait {g_dec_prof_attn_wait_us / max(g_dec_prof_attn_n, 1l)}), ffn chain {g_dec_prof_ffn_us / g_dec_prof_tokens} us/token ({g_dec_prof_ffn_n / g_dec_prof_tokens} submits, {g_dec_prof_ffn_us / max(g_dec_prof_ffn_n, 1l)} us each)\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
+            }
+        }
     }
 }

@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE.md`; section numbers are that document's.
 
-### 1.5 GPU backends
+### 1.5 GPU backends {#gpu-backends}
 
 A GPU backend is a FAMILY of role files - matching things in matching files across backends, so
 that a question answered for one backend has an obvious address in the other. The roles:
@@ -77,7 +77,14 @@ that a question answered for one backend has an obvious address in the other. Th
   rather than a per-class `enc_*` builder.
 - **`dasllama_gpu_tier.das`** - the device-cooperation SPI: hook types, install/unset slots,
   route/mark/want/status state, engine-facing forwarders. Vulkan implements it (per-op offload plus
-  resident plumbing); Metal deliberately does not, because UMA makes residency moot there and Metal
+  resident plumbing, and the decode-era seats it alone fills: the cm2 expert chain
+  `set_moe_gpu_ffn_xf_hooks` / `_async_hooks`, the decode attention block
+  `set_moe_gpu_attn_dec_hooks`, the decode FFN tail `set_moe_gpu_ffn_tail_hooks`, the
+  whole-token span `set_moe_gpu_span_dec_hook` - the span rides common's decode override
+  registry as `vulkan_moe_span`, selected by the MoE placement and declining per token). The
+  installs are one-way: a test that arms the tier installs the seats and never restores them,
+  because no uninstall exists and none is needed - a seat serves whatever model loads next; Metal
+  deliberately does not, because UMA makes residency moot there and Metal
   integrates as a whole-forward driver through common's override registries (the ASR-decoder
   driver is the one exception: whisper is not a `Model`, so its hooks are family registries in
   `dasllama_whisper`, same decline contract).
@@ -88,6 +95,11 @@ that a question answered for one backend has an obvious address in the other. Th
   override registries. `"vulkan"` is the tier string it registers under, not a dependency, which is
   why it compiles on every box. It requires common back for `Model`/`Session`, so like the Metal
   drivers it is required from the transformer umbrella, never from common.
+- **A dry bake runs the whole resident arm with no device.** `vulkan_bake_role` puts the tier in
+  bake mode, and each `rdec_*` device seam answers for itself so the arm walk reaches the end: a
+  seam that only records a layout (`vk_rdec_set_emb`) answers true, a seam that would allocate
+  device memory (`vk_rdec_upload_emb_f32`) answers false without touching a device. The split is
+  what keeps a baked `.dlim` layout equal to the one a real arm produces.
 - **`dasllama_kernel_access.das`** - the shared body-walk read/write classifier both GPU lenses run
   on, plus the dispatch-lens micro-grammar (the grid/tg/params spec tokenizers and the shared
   AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_call1`,
@@ -151,6 +163,17 @@ entry here:**
   footprint gate: Metal's own pipeline compile fails loudly with the footprint in the error.
 - **Vulkan has no shapes module yet** - `resident_upload` declines ad hoc by feature name; the
   gap is `followup_vulkan.md` item 1, not a precedent to copy.
+- **The device-side token-embedding gather is Vulkan-only.** The engine asks one probe before
+  it embeds (`register_embed_gpu_gate`, `dasllama_common.das`); on true it stashes the token
+  ids, skips the CPU embed loop, and the resident driver gathers the rows on device through
+  the ids-form prefill. That prefill installs SEPARATELY from the resident driver bundle
+  (`install_rdec_prefill_ids`), so a tier without it never arms the gate, and a late decline
+  backfills the stash on the CPU in `forward_prefill_body`. The arms mirror `embed_row`'s
+  ladder: a tied q8 table gathers from the resident cls plane, a raw f32 table uploads whole
+  to a device plane under a size cap the residency plan counts first, and the kq ladder keeps
+  the CPU embed. What leaves the window wall is the CPU embed loop and the x upload - the ids
+  ride a 4-byte-per-row upload instead. Metal has no twin: its whole-forward driver embeds
+  host-side.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
 
@@ -188,3 +211,5 @@ The positive laws these races established - half operands, stage-only-to-transfo
 consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules and the
 `modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
 and why they lose.
+
+Sections 2.2j-2.2p, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`.

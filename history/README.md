@@ -27,7 +27,8 @@ Process and criteria: `skills/internal/doc_archiving.md`.
 - `agents/` - retired agent charters, superseded by their successors (the harvester
   absorbed both rescue bots)
 - `dasVulkan/` - the original boost-layer design plan, carried over when the module moved
-  in-tree; the living docs are `modules/dasVulkan/CLAUDE.md` and its `ROADMAP.md`
+  in-tree from the standalone borisbat/dasVulkan repo, which is archived with full history;
+  the living docs are `modules/dasVulkan/ARCHITECTURE.md`, `CLAUDE.md` and `ROADMAP.md`
 - `linq_fold/` - the linq_fold arc's plans, audits and the archived masterplan; the living
   reference is `daslib/ARCHITECTURE_LINQ.md` sec. 37, results stay at `benchmarks/sql/results.md`
 - `examples/` - plans, findings, and research notes behind shipped examples
@@ -148,3 +149,5 @@ listed in the log below - search it first when hunting for a doc.
 - 2026-08-27 `modules/dasLLAMA/ARCHITECTURE.md` (retired-note passages) -> `history/dasLLAMA/architecture_retired_notes.md` - the deleted whisper-decoder attention kernel and the three "superseded/corrected" narrations of the archived design docs, archived when ARCHITECTURE.md was groomed and split into its seven companions
 - 2026-08-27 `.claude/agents/rescue-bot.md` -> `history/agents/rescue-bot.md` - fresh-scaffolding rescue at the PR gate, superseded by the harvester (make_pr row 0a0)
 - 2026-08-27 `.claude/agents/rescue-sweep-bot.md` -> `history/agents/rescue-sweep-bot.md` - legacy comment-sweep rescue, superseded by harvest-on-first-touch
+- 2026-08-28 `modules/dasVulkan/CLAUDE.md` (the standalone-repo provenance sentence) -> the `dasVulkan/` bullet of this file - archived when CLAUDE.md split into `ARCHITECTURE.md` (the present-tense half) plus agent instructions
+- 2026-08-29 `plans/wasm_lifecycle_gc.md` -> `history/web/wasm_lifecycle_gc.md` - the wasm browser lifecycle had no GC boundary; both C++ drivers now call `Context::collectHeapIfMostlyFree` per frame, shipped with the arc

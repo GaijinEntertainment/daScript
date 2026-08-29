@@ -801,7 +801,7 @@ def tern {
     let i = gl_GlobalInvocationID.x
     let a = fdata[i]
     let b = fdata[i + 1u]
-    let s = a > b ? a : b                                        // scalar OpSelect // nolint:PERF015
+    let s = a > b ? a : b                                        // nolint:PERF015 -- the scalar OpSelect fixture: the ternary IS the shape under test
     let v = a > b ? float4(a, a, a, a) : float4(b, b, b, b)      // vector OpSelect (splatted condition)
     fdata[i] = s + v.x
 }
@@ -2056,6 +2056,48 @@ def public q8blk_words : array<uint> {
     return clone_to_move(q8blk_spv)
 }
 
+// ===== the 8/16-bit STORE half: narrowing casts (OpSConvert/OpUConvert) and stores through
+// 8/16-bit access chains — the requant-writer shapes (a quantizer writing int8 quants and an
+// f16 scale directly instead of hand-packing words). Zero NEW opcodes. =====
+var @ssbo @binding = 0 st_blocks : array<BlockQ8>
+var @ssbo @binding = 1 st_i8 : array<int8>
+var @ssbo @binding = 2 st_i16 : array<int16>
+var @ssbo @binding = 3 st_u16 : array<uint16>
+var @ssbo @binding = 4 st_src : array<int>
+
+[compute_shader(local_size_x=64, name="q8store_spv"), marker(no_coverage)]
+def q8store_kernel {
+    let gi = gl_GlobalInvocationID.x
+    let v = st_src[gi]
+    st_i8[gi] = int8(v)
+    st_i16[gi] = int16(v)
+    st_u16[gi] = uint16(uint(v))
+    st_blocks[gi].qs[int(gi & 31u)] = int8(v)
+    st_blocks[gi].d = float16(0.5)
+}
+
+def public q8store_words : array<uint> {
+    return clone_to_move(q8store_spv)
+}
+
+// ===== unpack8 on 16-bit lanes: an int16/uint16 SSBO element bitcast to byte2/ubyte2 and a runtime
+// lane select (the cm2 decode callbacks' 16-bit quant read). Zero NEW opcodes. =====
+var @ssbo @binding = 0 up16_i16 : array<int16>
+var @ssbo @binding = 1 up16_u16 : array<uint16>
+var @ssbo @binding = 2 up16_i8 : array<int8>
+var @ssbo @binding = 3 up16_u8 : array<uint8>
+
+[compute_shader(local_size_x=64, name="unpack16_spv"), marker(no_coverage)]
+def unpack16_kernel {
+    let gi = gl_GlobalInvocationID.x
+    up16_i8[gi] = unpack8(up16_i16[gi >> 1u])[int(gi & 1u)]
+    up16_u8[gi] = unpack8(up16_u16[gi >> 1u])[int(gi & 1u)]
+}
+
+def public unpack16_words : array<uint> {
+    return clone_to_move(unpack16_spv)
+}
+
 // ===== cooperative matrix (SPV_KHR_cooperative_matrix): an f16 x f16 -> f32 GEMM tile. Loads a 16x16 A
 // (row-major) and B (column-major) from f16 SSBOs into subgroup tiles, one MulAdd into a zero-initialized
 // (OpConstantNull) f32 accumulator, stores the 16x16 result column-major. Exercises
@@ -2256,6 +2298,50 @@ def public coopmat2_words : array<uint> {
     return clone_to_move(coopmat2_spv)
 }
 
+// the s-tile siblings of coopmat2_kernel (A f16 128x64 decoded from q8, B f16 64x32, acc f16 128x32
+// converted to f32 128x32): the MoE expert-bucket geometry dasLLAMA's cm2 chain runs
+[compute_shader(local_size_x=128, name="coopmat2s_spv"), marker(no_coverage)]
+def coopmat2s_kernel {
+    let m = cm2_meta[0u]
+    let n = cm2_meta[1u]
+    let kk = cm2_meta[2u]
+    let ti = gl_WorkGroupID.x
+    let tj = gl_WorkGroupID.y
+    var tla : tensorLayout2DPad
+    tensorLayoutCreate(tla)
+    tensorLayoutSetBlockSize(tla, 1u, 32u)
+    tensorLayoutSetDimension(tla, m, kk)
+    tensorLayoutSetStride(tla, kk / 32u, 1u)
+    var tlb : tensorLayout2DPad
+    tensorLayoutCreate(tlb)
+    tensorLayoutSetDimension(tlb, n, kk)
+    tensorLayoutSetStride(tlb, kk, 1u)
+    var tlo : tensorLayout2D
+    tensorLayoutCreate(tlo)
+    tensorLayoutSetDimension(tlo, m, n)
+    tensorLayoutSetStride(tlo, n, 1u)
+    var tv : tensorView2Dt
+    tensorViewCreate(tv)
+    var a : coopmatWgA_f16_128x64
+    var b : coopmatWgB_f16_64x32
+    var acc : coopmatWgAcc_f16_128x32
+    var k = 0u
+    while (k < kk) {
+        coopmatLoadTensorDecode(a, cm2_a, 0u, tla, ti * 128u, 128u, k, 64u, @@cm2_decode_q8)
+        coopmatLoadTensor(b, cm2_b, 0u, tlb, tj * 32u, 32u, k, 64u, tv)
+        acc = coopmatMulAdd(a, b, acc)
+        k += 64u
+    }
+    coopmatClamp(acc, -65504.0, 65504.0)
+    var accw : coopmatWgAcc_f32_128x32
+    coopmatConvert(accw, acc)
+    coopmatStoreTensor(accw, cm2_c, 0u, tlo, ti * 128u, 128u, tj * 32u, 32u)
+}
+
+def public coopmat2s_words : array<uint> {
+    return clone_to_move(coopmat2s_spv)
+}
+
 // ===== The cm2 flash-attention fixture: llama.cpp's flash_attn_cm2 inner loop at Br=Bc=64,
 // HSK=64, HSV=128 — online softmax over KV tiles. Exercises every reduce/per-element rail shape:
 // row reduce (same-shape rowmax + the COLUMN-RESIZING smear 64x64 -> 64x128), per-element with no
@@ -2405,7 +2491,8 @@ def public coopmat2fa_emitter_opcodes : table<uint> {
     for (op in [
         SpvOp.CooperativeMatrixReduceNV,
         SpvOp.CooperativeMatrixPerElementOpNV,
-        SpvOp.MatrixTimesScalar
+        SpvOp.MatrixTimesScalar,
+        SpvOp.VectorExtractDynamic       // a runtime lane select on unpack8's byte vector (the cm2 decode callbacks' quant read)
     ]) {
         s |> insert(uint(op))
     }

@@ -479,8 +479,19 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                     memcpy(reinterpret<void?>(gs + j * nb), sxs, nb * 4l)
                 }
             }
-            matmul_moe_gpu_ffn(s.moe_dn, s.moe_offs1, s.moe_offs3, s.moe_offs2, k,
-                s.moe_gxq, s.moe_gxs, dim, nfe, k, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+            if (s.tail_next1 == l + 1l) {
+                s.tail_next1 = 0l
+                unsafe {
+                    matmul_moe_gpu_ffn_tail(s.moe_offs1, s.moe_offs3, s.moe_offs2, k, s.moe_gxq, s.moe_gxs, dim, nfe, k,
+                        int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu, s.moe_w, s.x, t.wq_offs[l + 1l], int(fmt_at(t.wq_fmt, l + 1l)),
+                        addr<float const?>(t.fblob[t.rms_att_off + (l + 1l) * dim]), c.norm_eps)
+                }
+                s.tail_taken = true
+                moe_chained = true
+            } else {
+                matmul_moe_gpu_ffn(s.moe_dn, s.moe_offs1, s.moe_offs3, s.moe_offs2, k,
+                    s.moe_gxq, s.moe_gxs, dim, nfe, k, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+            }
             prof_add("mm_moe", ts_gu)
         } elif (nhits > 0l) {
             // split-FFN: compacted hit regions (pool coordinates, rows 0..nhits) dispatch async

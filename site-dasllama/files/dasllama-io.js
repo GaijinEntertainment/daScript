@@ -661,7 +661,7 @@
       });
       var head = '<div class="dio-sc__head"><span>status</span><span>box</span><span>engine sha</span><span>date</span><span>noise</span><span></span><span></span></div>';
       if (!show.length) {
-        listBox.innerHTML = head + '<div class="dl-empty">Nothing here yet — tuning your box takes ~20 min of quiet machine and publishes the sidecar that rides along.</div>';
+        listBox.innerHTML = head + '<div class="dl-empty">Nothing here yet — tuning your box takes ~12 min of quiet machine and publishes the sidecar that rides along.</div>';
         return;
       }
       listBox.innerHTML = head + show.map(function (r, i) {

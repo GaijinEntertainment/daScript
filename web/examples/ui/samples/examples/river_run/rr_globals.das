@@ -1,28 +1,38 @@
 options gen2
 options persistent_heap
 
-// river run -- web playground port (live/* + live_host replaced by live_stub)
-
-// Playground shim: replaces the whole live/* + live_host stack (window, clock,
-// no-op [live_command]). Static requires cannot be switched at runtime, which
-// is the reason this port exists as a copy at all.
-require live_stub public
 require glfw/glfw_boost public
+require live/glfw_live public
 require opengl/opengl_boost public
 require opengl/opengl_gen public
 require opengl/opengl_cache public
+require live/opengl_live public
 require rr_shaders public
 require rr_models public
 require rr_postfx public
+require live/live_commands public
+// Optional: the REST API needs dashv/libhv, which the wasm build has no use for
+// and cannot link. `?` skips it there and keeps it on the desktop.
+require ?dashv live/live_api public
+require live/live_watch_boost public
+require live/live_vars public
+// Without decs_live every reload emptied the world -- the player kept flying
+// down a river with no enemies, bridges or scenery, because init() correctly
+// skips re-spawning under is_reload(). The templates are all POD, so they
+// serialize cleanly.
+require live/decs_live public
+require live/audio_live public
 require audio/audio_boost public
 require strudel/strudel public
 require strudel/strudel_player public
+require strudel/strudel_live public
 require daslib/math_boost public
 require daslib/json public
 require daslib/json_boost public
 require daslib/strings_boost public
 require daslib/safe_addr public
 require opengl/opengl_ttf public
+require live_host public
 require daslib/decs_boost public
 
 // --- Constants ---

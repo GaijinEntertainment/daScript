@@ -1,8 +1,9 @@
 # Claude Code hooks
 
-Hooks for agent sessions in this repo. **A hook reads only its stdin payload -
-no daslang, no config reads - and returns in tens of milliseconds.** It must
-work when the das binary is down.
+Hooks for agent sessions in this repo. **A hook reads only its stdin payload, the
+file that payload names, and the documents that file cites - no daslang, no config
+reads - and returns in tens of milliseconds.** It must work when the das binary is
+down.
 
 There is deliberately no write-time comment hook: comments are working
 scaffolding - write them freely during a PR. The gate is `make_pr`'s comment
@@ -18,6 +19,11 @@ command also carries `--watch`, `while`, `until`, or `sleep` - the watcher to
 use instead is `daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch`,
 run bare in a background Bash (exit code is the verdict). A single un-looped
 `gh pr checks <N>` from Bash passes.
+
+There is no `[arch]` section-injection hook either: the citations route the reading
+(`[arch(at=...)]` names the section, `arch_of` returns it, LINT026 keeps both honest), and
+reading the cited section before editing is the rule. An injection at write time only
+repeats what that reading already put in context.
 
 ## Registration
 

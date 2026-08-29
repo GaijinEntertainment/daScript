@@ -126,13 +126,17 @@ def cm2_splitk_env : int64 {
 }
 
 
-// the cm2 tile pick over our two tiles (no s tile — GEMV owns the
-// narrow-n end): l unless the m grid fills the SMs better. Pure in (d, cnt, sm_count), so the
-// pipe pick and the meta fill can never disagree
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def cm2_tile_cols(d, cnt : int64) : int64 {
     let forced = cm2_tile_env()
-    if (forced == 128l || forced == 256l) {
+    if (forced == 32l || forced == 128l || forced == 256l) {
         return forced
+    }
+    if (cnt <= 64l) {
+        return 32l
+    }
+    if (cnt <= 128l) {
+        return 128l
     }
     let cores = int64(g_gpu.sm_count)
     if (cores == 0l) {
@@ -141,11 +145,9 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
     let wtiles = (d + 127l) / 128l
     let tiles_l = wtiles * ((cnt + 255l) / 256l)
     let tiles_m = wtiles * ((cnt + 127l) / 128l)
-    // prefer l when either grid overfills the SMs, or l fits with a 3-way split where m would
-    // not fit with a 2-way one
-    let prefer_large = (tiles_m > cores || tiles_l > cores
-        || (tiles_l <= cores / 3l && tiles_m > cores / 2l))
-    return cnt > 128l && prefer_large ? 256l : 128l
+    let waves_l = (tiles_l + cores - 1l) / cores
+    let waves_m = (tiles_m + cores - 1l) / cores
+    return tiles_m * waves_l > tiles_l * waves_m ? 128l : 256l
 }
 
 // the split-k heuristic: long K on an under-half-full grid splits the reduction across
@@ -194,9 +196,10 @@ let COMB_WI_BYTES = 2_097_152l     // combine w / inv plane cap (npos*k grid ent
 let CLS_META_BYTES = 64l           // classifier GEMV params (one region, filled once)
 var g_coopmat_mode_force = -1
 
-//! Test hook: pin the GEMM mode (0 sdot4 / 1 f16 / 2 int8 / 3 mm) ahead of the mm default and
+//! Test hook: pin the GEMM mode (0 sdot4 / 1 f16 / 2 int8 / 3 mm / 4 cm2) ahead of the resolved default and
 //! DASLLAMA_COOPMAT — must run before the tier's lazy device init. The CPU-reference tier tests
 //! pin 0 so their oracles stay reference-kernel-deterministic under any router default.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def vk_force_coopmat_mode(m : int) {
     g_coopmat_mode_force = m
 }
@@ -310,7 +313,7 @@ struct VkStack {
     batch_xbit : uint
     batch_ybit : uint
     batch_map_off : int64
-    batch_cls_sets : VkDescriptorSet[8]
+    batch_cls_sets : VkDescriptorSet[10]   // q8 router variants 0..4, q40 f16 5, kq 6, cm2 s/m/l 7/8/9
     batch_cls_ready : uint
     // decode class-GEMV set over the stack's own planes/meta/scratch (lazy; role bits are
     // role-fluid — re-declared per chain via hz_set_bits before each record)
@@ -347,6 +350,30 @@ struct StreamSlot {
     wait_value : uint64      // timeline value of the slot's in-flight transfer-queue fill (0 = none)
 }
 
+//! one attention layer's decode-block state: its f16 K/V mirror (rows [0, cnt) valid for the
+//! owning session) and the chain's class sets over the layer's resident quad
+struct DatLayer {
+    k_mir : uint64           // f16 K rows at absolute positions
+    v_mir : uint64
+    cnt : int64              // positions the mirror holds (contiguous from 0)
+    filled : bool            // a prefill window filled this mirror since the last claim
+    sets_made : bool
+    cmd : VkCommandBuffer    // the layer's token chain, recorded ONCE (pos rides TokMeta; the readback sits at fixed offsets)
+    recorded : bool
+    fq : int
+    fk : int
+    fv : int
+    fo : int
+    norms : uint64           // the layer's qk-norm rows (q then k, hs floats each)
+    s_q : VkDescriptorSet
+    s_k : VkDescriptorSet
+    s_v : VkDescriptorSet
+    s_qkr : VkDescriptorSet  // qk-norm+rope (or plain rope) writing the mirror row
+    s_attn : VkDescriptorSet
+    s_rq : VkDescriptorSet
+    s_wo : VkDescriptorSet
+}
+
 // pre-recorded decode-form FFN chain per (gate, up, down) stack triple: GEMV pair, fused
 // act+requant, down GEMV, y DMA — refreshed per token via the stacks' host-visible metas,
 // resubmitted as-is
@@ -356,6 +383,34 @@ struct FfnCmd {
     down_set : VkDescriptorSet    // down stack planes + hq/hs as activations + its y_dev (class set)
     nrows : int64                 // row count cmd was recorded with
     gelu : bool                   // activation form recorded into the push (re-record key with nrows)
+}
+
+//! the decode FFN tail: the resident FFN chain plus combine -> add-rms -> requant into the NEXT
+//! layer's attention acts image, recorded once per layer pair, submitted without a fence
+struct TailCmd {
+    cmd : VkCommandBuffer
+    an_dev : uint64               // the next layer's attention rms weight row
+    s_comb : VkDescriptorSet
+    s_ar : VkDescriptorSet
+    s_rq : VkDescriptorSet
+    nrows : int64                 // the routed slot count the chain was recorded with
+}
+
+//! one decode-span layer's own sets; its attention chain's and FFN chain's sets stay the per-layer ones
+struct SpanLayer {
+    woq : int64
+    sq : int
+    s1 : int
+    s3 : int
+    s2 : int
+    s_ar_ffn : VkDescriptorSet    // x += xb2; xb = rms(x) * ffn_norm
+    s_rq_g1 : VkDescriptorSet     // xb -> the gate stack's feed image
+    s_rq_g3 : VkDescriptorSet     // xb -> the up stack's feed image
+    s_router : VkDescriptorSet
+    s_topk : VkDescriptorSet
+    s_comb : VkDescriptorSet      // x += sum w_j * down_j
+    s_ar_att : VkDescriptorSet    // xb = rms(x) * the NEXT layer's att_norm (absent on the last)
+    s_rq_att : VkDescriptorSet    // xb -> the next layer's q-stack feed image
 }
 
 // one recurrent layer's pre-recorded deltanet decode-step chain + its device-resident state.
@@ -415,7 +470,8 @@ struct GpuState {
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops)
-    coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile (default), 4 = cm2 decode-in-load
+    full_sg_on : bool        // DASLLAMA_VK_FULLSG asked and the device has the feature: every class pipeline pins REQUIRE_FULL_SUBGROUPS
+    coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile, 4 = cm2 decode-in-load (the default where the device has it, else 3)
     sm_count : int           // shaderSMCount (VK_NV_shader_sm_builtins; 0 = unknown -> l-tile always, no split-k)
     weight_budget : int64    // resident-weight cap — queried heap budget minus reserve, or VRAM_BUDGET
     dry : bool               // OFFLINE BAKE: accept/refuse arithmetic runs, every device call is gated off
@@ -470,6 +526,27 @@ struct GpuState {
     // heat-pinned expert cache (decode split-FFN) + the one-in-flight async FFN discipline
     heat_pools : table<int64; HeatPool>   // layer -> slot pool
     ffn_pend_s2 : int = -1        // down stack of the pending async FFN (-1 = none in flight)
+    tail_cmds : table<int64; TailCmd>   // the next layer's q plane offset -> its FFN-plus-tail chain
+    tail_ready : bool
+    tail_xin : HostBuf            // the residual row in (host-staged per token)
+    tail_w : HostBuf              // the routing weights (host-staged per token)
+    tail_xres_dev : uint64        // the residual row out
+    tail_xb_dev : uint64          // the normed row (scratch)
+    tail_xres : HostBuf           // the residual row's readback staging
+    tail_pending_woq : int64 = -1l   // the q plane whose attention submit collects the pending tail (-1 = none)
+    tail_xout : float?            // where the collected residual row lands on the host
+    span_x_dev : uint64           // the residual row across the span
+    span_xb_dev : uint64          // the normed row (scratch)
+    span_w_dev : uint64           // the combine weights the top-k writes
+    span_logits_dev : uint64      // the router logits
+    span_router_dev : uint64      // the span's router planes, f32, layer-major
+    span_norms_dev : uint64       // [att | ffn] norm rows per span layer
+    span_xin : HostBuf            // the residual row in (host-staged per token, copied at the chain's head)
+    span_out : HostBuf            // per-layer raw k/v rows, then the residual row (readback staging)
+    span_cmd : VkCommandBuffer
+    span_key : int64 = -1l        // the recorded span's first q plane offset (-1 = none)
+    span_nl : int64
+    span_layers : array<SpanLayer>
     ffn_pend_bytes : int64
     qkv_cmds : table<int64; QkvCmd>   // q plane offset -> the layer's decode q/k/v group
     dev_mem : table<uint64; uint64>   // device buffer -> its VkDeviceMemory (rollback destroy needs it)
@@ -506,6 +583,11 @@ struct GpuState {
     comb_y : HostBuf         // host-cached readback staging
     comb_set : VkDescriptorSet
     comb_ready : bool
+    // cm2 expert-chain state (lazy — first f16-fed combined prefill dispatch creates it)
+    batch_xf_dev : uint64    // the window's f32 activation rows, one per position (the gather's source)
+    batch_gather_set : VkDescriptorSet   // gather: x rows + the combine's slot map -> the f16 bucket image
+    batch_actf16_set : VkDescriptorSet   // act straight to the f16 hidden plane (y1/y2 -> hq_dev as f16)
+    xf_ready : bool
     // streamed-prefill state (lazy — first streamed dispatch creates the slots)
     @do_not_delete stream_stacks : array<StreamStack>
     stream_slots : array<StreamSlot>
@@ -563,6 +645,32 @@ struct GpuState {
     at_attn_set : VkDescriptorSet
     at_rq_set : VkDescriptorSet      // the o-requant family set (the encoder picks q8k/q8 per window)
     at_ready : bool
+    // the cm2 flash-attention arm (lazy - first non-gated 64/128-head window on a coopmat2-fa device):
+    // f16 shadows of the roped-k / raw-v planes, the two converts that fill them, the fa set
+    at_k16_dev : uint64
+    at_v16_dev : uint64
+    at_k16cvt_set : VkDescriptorSet
+    at_v16cvt_set : VkDescriptorSet
+    at_fa_set : VkDescriptorSet
+    at_fa_ready : bool
+    // the per-op tier's decode attention block (lazy): per-layer f16 K/V mirrors keyed by the q plane
+    // offset, the token planes the chain writes, the cos|sin row, TokMeta, and the readback
+    // (wo row f32 | raw k row f32 | raw v row f32)
+    dat_layers : table<int64; DatLayer>
+    dat_ready : bool
+    dat_qd : int64
+    dat_kvd : int64
+    dat_dim : int64
+    dat_hs : int64
+    dat_q_dev : uint64
+    dat_kv_dev : uint64
+    dat_attn_dev : uint64
+    dat_aq_dev : uint64
+    dat_as_dev : uint64
+    dat_xb2_dev : uint64
+    dat_cos : HostBuf
+    dat_tok : HostBuf
+    dat_out : HostBuf
 }
 
 var g_gpu : GpuState?
@@ -723,11 +831,9 @@ def nonowning_buf(h : uint64) : Buffer {
     return b
 }
 
-// The coopmat-mode ladder, shared by vk_moe_init and the DlimConfiguration source — one
-// resolver, so the config's recorded mode can never drift from the mode the device runs.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
 def resolve_coopmat_mode(has_cm, has_cm2 : bool) : int {
-    // fastest MEASURED default (mm; cm2 opt-in until it beats mm); DASLLAMA_COOPMAT overrides
-    var cmode = has_cm ? 3 : 0
+    var cmode = has_cm2 ? 4 : (has_cm ? 3 : 0)
     if (has_cm) {
         let mode = g_env_vulkan.coopmat
         if (mode == "sdot4") {
@@ -819,13 +925,19 @@ def carved_budget : int64 {
     if (gpu_want_moe_stream() != 0l) {
         let need = moe_gpu_stream_need()
         if (need > 0l) {
-            r -= 2l * need
+            r -= int64(stream_slot_count()) * need
         } elif (gpu_want_moe_stream() > 0l) {
             r -= STREAM_RESERVE
         }
     }
+    r -= moe_gpu_dat_need()
     return max(r, 0l)
 }
+
+//! The streamed-prefill slot count: two (compute on one while the transfer queue fills the other)
+//! on the whole-group rail; ONE where the split can engage (the knob on, a cm2 device), whose on-demand
+//! partial copies never prefetch - a device the split cannot serve keeps both.
+def stream_slot_count : int => gpu_want_moe_split() && g_gpu != null && g_gpu.has_coopmat2 && g_gpu.coopmat_mode == 4 ? 1 : 2
 
 var g_vk_dry_want = false
 var g_vk_dry_cfg = DlimVulkanConfig()
@@ -858,7 +970,7 @@ def private query_sm_count(phys : VkPhysicalDevice) : int {
     return int(sp.shaderSMCount)
 }
 
-[cold_path]   // one-time device bring-up; steady-state cost is the two guard checks
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-class-pipeline-build")]
 def vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
         return false
@@ -896,7 +1008,7 @@ def vk_moe_init : bool {
     g_gpu.phys = select_physical_device(g_gpu.instance)
     if (!storage_8_16_supported(g_gpu.phys) || !subgroup_compute_ops_supported(g_gpu.phys)
             || !integer_dot_product_supported(g_gpu.phys)) {
-        to_log(LOG_ERROR, "dasLLAMA vulkan tier: device lacks 8/16-bit SSBO storage, compute subgroup ops, or shaderIntegerDotProduct - tier disabled\n")
+        to_log(LOG_ERROR, "dasLLAMA vulkan tier: device lacks the 8/16-bit SSBO storage set (incl. shaderInt16), compute subgroup ops, or shaderIntegerDotProduct - tier disabled\n")
         return false
     }
     g_gpu.fam = select_graphics_queue_family(g_gpu.phys)
@@ -915,12 +1027,12 @@ def vk_moe_init : bool {
     if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == 4) {
         // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load, {g_gpu.sm_count} SMs)\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load, {g_gpu.sm_count} SMs; DASLLAMA_COOPMAT=mm restores the mul_mm tiles)\n")
     } elif (g_gpu.has_coopmat) {
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam, xfam)
         if (g_gpu.coopmat_mode != 0) {
             let cm_name = g_gpu.coopmat_mode == 1 ? "f16" : (g_gpu.coopmat_mode == 2 ? "int8" : "mul_mm L-tile")
-            to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on {cm_name} cooperative-matrix tiles\n")
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on {cm_name} cooperative-matrix tiles (DASLLAMA_COOPMAT picks the family)\n")
         }
     } else {
         g_gpu.device <- create_device_storage_8_16_int_dot(g_gpu.phys, g_gpu.fam)
@@ -1020,7 +1132,8 @@ def vk_moe_init : bool {
     g_gpu.staging = make_host_buf(STAGING_BYTES, false)
     g_gpu.host_mem |> erase(g_gpu.staging.buf)   // process-lifetime — exempt from the model-drop sweep
     g_init_failed = false
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg)\n")
+    g_gpu.full_sg_on = g_env_vulkan.vk_fullsg && compute_full_subgroups_supported(g_gpu.phys)
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""})\n")
     if (dasllama_noisy()) {
         // storage-range is the limit that actually binds the arena; allocs/descriptors do not
         var lp : VkPhysicalDeviceProperties
@@ -1449,6 +1562,7 @@ def vk_drop_model_state {
     }
     g_gpu.pend_wait = 0ul
     assert(g_gpu.ffn_pend_s2 == -1, "dasLLAMA vulkan tier: model drop with an async FFN in flight")
+    assert(g_gpu.tail_pending_woq < 0l, "dasLLAMA vulkan tier: model drop with a decode ffn tail in flight")
     // the resident driver's das-side shell first (its VK objects die in the sweeps below)
     if (g_rd != null) {
         unsafe {
@@ -1510,6 +1624,13 @@ def vk_drop_model_state {
     g_gpu.af_down_sets |> clear()
     g_gpu.ffn_cmds |> clear()
     g_gpu.qkv_cmds |> clear()
+    g_gpu.dat_layers |> clear()
+    g_gpu.tail_cmds |> clear()
+    g_gpu.span_layers |> clear()
+    g_gpu.tail_pending_woq = -1l
+    g_gpu.tail_xout = null
+    g_gpu.span_key = -1l
+    g_gpu.span_nl = 0l
     g_gpu.dnd_steps |> clear()
     delete g_gpu.heat_pools
     g_gpu.stream_max_gu_wq = 0l
@@ -1525,6 +1646,10 @@ def vk_drop_model_state {
     g_gpu.batch_acts_cls_ready = false
     g_gpu.comb_ready = false
     g_gpu.stream_ready = false
+    g_gpu.dat_ready = false
+    g_gpu.tail_ready = false
+    g_gpu.at_fa_ready = false
+    g_gpu.xf_ready = false
     g_gpu.dn_ready = false
     g_gpu.dn_cls_ready = false
     g_gpu.dnd_ready = false
@@ -1913,8 +2038,15 @@ struct RDec {
     pf_logits_host : HostBuf
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
-    @scratch pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*8 + router variant (lazy insert, steady-state hit)
+    @scratch pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*16 + variant (lazy insert, steady-state hit)
     pf_cmd : VkCommandBuffer
+    pf_cmd_ring : array<VkCommandBuffer>
+    emb_blk : int64 = -1l
+    emb_f32 : uint64
+    emb_f32_bytes : int64
+    pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
+    pf_emb_set : VkDescriptorSet
+    pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [l*2] = the ffn site, [l*2+1] = addr_next
 }
 
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
@@ -2056,8 +2188,7 @@ let VHZ_FFO = 0x4000u     // ffn down out
 let VHZ_LOG = 0x10000u    // logits
 let VHZ_COS = 0x20000u    // rope cos/sin rows
 
-// batch/hybrid-tier region bits — a separate namespace over the same rail (each recorder's VkHaz
-// is private to its cmd buffer, so the two families never meet in one pending set)
+// batch/hybrid-tier region bits — a separate namespace over the same rail
 let VHB_ACT = 0x1u        // batch_xq/batch_xs activation staging
 let VHB_META = 0x2u       // stack batch metas + the chain's params (ffn/dn/at meta)
 let VHB_Y1 = 0x4u         // batch_y1 (gate / qkv / q|gate / down / wo out)
@@ -2073,6 +2204,9 @@ let VHB_ATG = 0x800u      // at gate/o rows
 let VHB_ATK = 0x1000u     // at roped-k panel
 let VHB_ATV = 0x2000u     // at v panel (absolute positions)
 let VHB_VRAW = 0x4000u    // at raw-v window
+let VHB_XF = 0x8000u      // the cm2 expert chain's f32 activation rows (batch_xf_dev)
+let VHB_ATK16 = 0x10000u  // at roped-k f16 shadow (the fa tile's K)
+let VHB_ATV16 = 0x20000u  // at v f16 shadow (the fa tile's V)
 
 // serial-seam region bits (decode GEMV preps, arena + standalone seams) — third namespace, same rail
 let VHG_META = 0x1u       // ffn/dn params staged to device
@@ -2085,6 +2219,18 @@ let VHG_ST = 0x40u        // dn recurrent state (in place)
 let VHG_WS = 0x80u        // dn o scratch (oq+os)
 let VHG_X = 0x100u        // add_rms residual x (in place)
 let VHG_YO = 0x200u       // the host-bound result plane (the DMA source)
+let VHG_XRES = 0x400u     // the decode FFN tail's residual row (the combine's out, the add-rms's in)
+let VHG_XB = 0x800u       // the tail's normed row
+let VHG_ACTS = 0x1000u    // the tail's requant target: the next layer's q-stack acts image
+
+// the decode span's own regions - above every VHZ/VHG bit (VHZ_SK, 0x40000, is the highest), so an edge
+// of the span aliases nothing (a collision would only cost a spurious barrier; a MISSED edge is the hazard)
+let VHS_X = 0x80000u      // the residual row across the span
+let VHS_XB = 0x100000u     // the span's normed row
+let VHS_ACTS = 0x200000u   // an attention feed image (the next layer's q-stack xq/xs)
+let VHS_GACTS = 0x400000u  // the gate/up feed images
+let VHS_LOG = 0x800000u   // the router logits
+let VHS_META = 0x1000000u  // the three stacks' slot metas + the combine weights
 let VHZ_SK = 0x40000u     // cm2 split-k partial planes (the reduce's input scratch) — shares the VHZ namespace with the roles it interleaves
 
 struct VkHaz {
@@ -2264,14 +2410,34 @@ def private spv_override_load(kernel : string; var spv : array<uint>) {
     }
 }
 
-[cold_path]   // pipeline creation — once per kernel
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-class-pipeline-build")]
+def private spv_dump_save(kernel : string; spv : array<uint>) {
+    let dir = g_env_vulkan.vk_spv_dump
+    if (empty(dir)) {
+        return
+    }
+    let path = path_join(dir, "{kernel}.spv")
+    fopen(path, "wb") $(f) {
+        if (f != null) {
+            f |> fwrite(spv)
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_SPV_DUMP wrote {path}\n")
+        } else {
+            to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_VK_SPV_DUMP could not write {path}\n")
+        }
+    }
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-class-pipeline-build")]
 def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
     if (length(c.pipes) <= ord) {
         c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
     }
+    spv_dump_save(kernel, spv)   // the EMITTED words, before an override replaces them
     spv_override_load(kernel, spv)
     var shader <- create_shader_module(g_gpu.device, spv)
-    c.pipes[ord] <- create_compute_pipeline(g_gpu.device, c.pipe_layout, shader)
+    c.pipes[ord] <- (g_gpu.full_sg_on
+        ? create_compute_pipeline_full_subgroups(g_gpu.device, c.pipe_layout, shader)
+        : create_compute_pipeline(g_gpu.device, c.pipe_layout, shader))
     let pk = intptr(boost_value_to_vk(c.pipes[ord]))
     g_pipe_access[pk] = uint2(rmask, wmask)
     g_pipe_names[pk] = kernel
@@ -2477,10 +2643,10 @@ def alloc_cmd : VkCommandBuffer {
     return raw
 }
 
-def submit_nowait(var raw : VkCommandBuffer) {
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def private submit_core(var raw : VkCommandBuffer; fence : VkFence) {
     var submit = VkSubmitInfo()
     submit.commandBufferCount = 1u
-    let fence = g_gpu.fence
     // a pending transfer-queue handoff attaches here — later in-order submits inherit the ordering
     var tss = VkTimelineSemaphoreSubmitInfo()
     var wval = g_gpu.pend_wait
@@ -2501,6 +2667,16 @@ def submit_nowait(var raw : VkCommandBuffer) {
         }
         vk_check(vkQueueSubmit(g_gpu.queue, 1u, addr(submit), fence), null)
     }
+}
+
+def submit_nowait(var raw : VkCommandBuffer) {
+    submit_core(raw, g_gpu.fence)
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def submit_nofence(var raw : VkCommandBuffer) {
+    var nofence : VkFence
+    submit_core(raw, nofence)
 }
 
 def wait_fence {
@@ -2543,6 +2719,19 @@ def fill_stack_acts(si : int; xqp : int8 const?; xsp : float const?; xq_bytes : 
     unsafe {
         memcpy(g_gpu.stacks[si].xq.mapped, reinterpret<void?>(xqp), xq_bytes)
         memcpy(g_gpu.stacks[si].xs.mapped, reinterpret<void?>(xsp), (xq_bytes / unit) * 4l)
+    }
+}
+
+// ===== the decode attention block's per-layer mirrors =====
+
+
+//! The layer's decode-block state exists after this, its f16 K/V mirror allocated on first sight
+//! (keyed by the q plane offset - the identity both the prefill chain and the decode block carry).
+[cold_path]   // once per layer: the mirror pair
+def dat_layer_ensure(woq, kvd : int64) {
+    if (!key_exists(g_gpu.dat_layers, woq)) {
+        let bytes = DAT_MIRROR_ROWS * kvd * 2l
+        g_gpu.dat_layers |> insert(woq, DatLayer(k_mir = make_device_buf(bytes), v_mir = make_device_buf(bytes), cnt = 0l))
     }
 }
 

@@ -44,6 +44,36 @@ def geq(a, b) {
     return a >= b
 }
 
+[sideeffects]
+def opaque(x) {
+    return x
+}
+
+[test]
+def test_half_subnormals_survive_conversion(t : T?) {
+    t |> equal(float(half(opaque(3.0517578e-5f))), 3.0517578e-5f)
+    t |> equal(float(half(opaque(5.9604645e-8f))), 5.9604645e-8f)   // min subnormal
+    t |> equal(float(half(opaque(6.097555e-5f))), 6.097555e-5f)     // max subnormal
+    t |> equal(float(half(opaque(2.9802322e-8f))), 0.0f)            // half of min: to zero
+}
+
+[test]
+def test_abs_clears_the_sign_of_zero(t : T?) {
+    t |> run("folded") @@(t : T?) {
+        t |> equal(unsafe(reinterpret<uint>(abs(-0.0f))), 0u)
+        t |> equal(unsafe(reinterpret<uint64>(abs(-0.0lf))), 0ul)
+        t |> equal(unsafe(reinterpret<uint4>(abs(float4(-0.0f, -0.0f, -0.0f, -0.0f)))), uint4(0u, 0u, 0u, 0u))
+    }
+    t |> run("runtime") @@(t : T?) {
+        t |> equal(unsafe(reinterpret<uint>(abs(opaque(-0.0f)))), 0u)
+        t |> equal(unsafe(reinterpret<uint64>(abs(opaque(-0.0lf)))), 0ul)
+        let mz4 = float4(opaque(-0.0f), opaque(-0.0f), opaque(-0.0f), opaque(-0.0f))
+        t |> equal(unsafe(reinterpret<uint4>(abs(mz4))), uint4(0u, 0u, 0u, 0u))
+        let mz2 = float2(opaque(-0.0f), opaque(-0.0f))
+        t |> equal(unsafe(reinterpret<uint2>(abs(mz2))), uint2(0u, 0u))
+    }
+}
+
 [test]
 def test_inf_and_nan(t : T?) {
     if (host_folds_non_finite()) {

@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `../ARCHITECTURE_MEASUREMENT.md` (the benchmark rig is sec.2.5). Planned work:
-`../PERF_LEDGER.md` for a performance followup, `../followup_general.md` for everything else.
+`../followup_vulkan.md` for anything about the Vulkan backend, `../PERF_LEDGER.md` for any
+other performance followup, `../followup_general.md` for everything else.
 
 **A diff that adds or changes an instrument whose timed body runs a forward pass through a
 pipeline the model runtime selected also calls `tune_gate()`
@@ -43,6 +44,7 @@ reader takes the sweep's arms for an adoption decision it never made.
 `../performance/gen_bench_records.das`, or a `lcpp_bench.das` cell with its own
 `../PROFILE.md` section, instead.** A served turn is a whole prefill-plus-decode run. A
 second instrument's numbers cannot be compared to any row the board already carries.
+
 **An out-of-process observer never measures what the benchmark process can measure about
 itself - that measurement goes inside the process instead.** An out-of-process observer is a
 script that measures a benchmark process from outside.

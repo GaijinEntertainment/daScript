@@ -20,7 +20,7 @@ def test_defaults_and_toml(t : T?) {
         t |> success(apply_config_text(cfg, "# empty\n", args, sources, err), "empty toml parses")
         t |> equal(cfg.port, 8101)
         t |> equal(cfg.base_url, "https://daslang.io")
-        t |> equal(cfg.max_source_bytes, 262144)
+        t |> equal(cfg.max_source_bytes, 524288)
     }
     t |> run("toml overrides defaults and records provenance") @(t : T?) {
         var cfg = ServerArgs()
@@ -53,7 +53,7 @@ def test_defaults_and_toml(t : T?) {
         let args <- no_args()
         t |> success(!apply_config_text(cfg, "max_source_bytes = \"256k\"\n", args, sources, err), "string for a number fails")
         t |> success(find(err, "max_source_bytes") >= 0, "error names the key")
-        t |> equal(cfg.max_source_bytes, 262144)   // default stands
+        t |> equal(cfg.max_source_bytes, 524288)   // default stands
     }
     t |> run("a number where a string belongs is an error") @(t : T?) {
         var cfg = ServerArgs()

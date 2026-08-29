@@ -4,8 +4,8 @@ options indenting = 4
 
 require opengl/opengl_boost public
 require opengl/opengl_cache public
-// No live_vars here: without it `@live` is inert metadata, which is what the
-// playground wants -- there is no reload to persist across.
+require live_host public
+require live/live_vars public
 require daslib/math_boost public
 require daslib/safe_addr public
 

@@ -12,6 +12,7 @@
 #include "daScript/simulate/runtime_range.h"
 #include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/hash.h"
+#include "daScript/simulate/das_qsort_r.h"
 
 #include "daScript/simulate/simulate_nodes.h"
 
@@ -3986,7 +3987,7 @@ namespace das
                 allInitFunctions.push_back(&fn);
             }
         }
-        stable_sort(allInitFunctions.begin(), allInitFunctions.end(), [](auto a, auto b) { // sort them, so that late init is last
+        das_stable_sort(allInitFunctions.data(), allInitFunctions.data() + allInitFunctions.size(), [](auto a, auto b) {
             int lateA = a->debugInfo->flags & FuncInfo::flag_late_init;
             int lateB = b->debugInfo->flags & FuncInfo::flag_late_init;
             return lateA < lateB;

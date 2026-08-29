@@ -498,7 +498,348 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
     }
 }
 
+var private @scratch g_dat_cossin : array<float>
+
+var private g_dat_hyd_k : array<float>   // a non-f16/f32 KV session's rows decoded for the hydrate
+var private g_dat_hyd_v : array<float>
+
+// any codec but f16/f32: the host decodes the rows [0, pos) to f32 (kv_load_row), the block converts
+[cold_path]   // a remedy leg, not the served token
+def private attn_dec_hydrate_codec(var s : Session; l, pos, woq, kvd, seq_len : int64) {
+    g_dat_hyd_k |> resize(pos * kvd)
+    g_dat_hyd_v |> resize(pos * kvd)
+    unsafe {
+        let kb = kv_layer_kbase(s, l, seq_len)
+        let vb = kv_layer_vbase(s, l, seq_len)
+        for (r in range64(pos)) {
+            kv_load_row(kb, s.kv_dtype_k, kvd, r, 0l, kvd, addr(g_dat_hyd_k[r * kvd]))
+            kv_load_row(vb, s.kv_dtype_v, kvd, r, 0l, kvd, addr(g_dat_hyd_v[r * kvd]))
+        }
+        matmul_moe_gpu_attn_dec_hydrate(woq, addr<uint8 const?>(g_dat_hyd_k[0]), addr<uint8 const?>(g_dat_hyd_v[0]), pos, kvd, false)
+    }
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
+def private attn_dec_shape_ok(t : Model; s : Session; l : int64) : bool {
+    let c = t.config
+    if (!moe_gpu_attn_on_gpu(l) || t.kv_src[l] != l || s.kv_pool != null || c.attn_qkv_bias || c.attn_out_bias
+            || c.v_norm || c.attn_sinks || c.attn_logit_softcap != 0.0 || c.q_gated || layer_is_sliding(c, l)
+            || s.kv_dtype_k == KVDtype.tq4 || s.kv_dtype_v == KVDtype.tq4
+            || (c.rope_dim > 0l && c.rope_dim != layer_head_size(c, l))
+            || c.dim > 4096l || layer_head_size(c, l) > 256l   // the chain's add-rms stages a row of at most AR_MAX_DIM, the attention a head of at most 256
+            || layer_kv_dim(c, l) != layer_kv_dim(c, 0l) || layer_head_size(c, l) != layer_head_size(c, 0l)) {   // the block holds ONE geometry
+        return false
+    }
+    let fq = fmt_at(t.wq_fmt, l)
+    return kq_sb(fq) == kq_sb(fmt_at(t.wk_fmt, l)) && kq_sb(fq) == kq_sb(fmt_at(t.wv_fmt, l))
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
+def private attn_dec_gpu_next_serves(t : Model; s : Session; l, pos : int64) : bool {
+    if (l >= t.config.n_layers || !attn_dec_shape_ok(t, s, l)) {
+        return false
+    }
+    return moe_gpu_attn_dec_ok(t.wq_offs[l], pos, s.dat_gen) == DAT_SERVE
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
+def private attn_dec_gpu_serves(t : Model; var s : Session; l, pos : int64) : bool {
+    let c = t.config
+    if (!attn_dec_shape_ok(t, s, l)) {
+        return false
+    }
+    let woq = t.wq_offs[l]
+    var verdict = moe_gpu_attn_dec_ok(woq, pos, s.dat_gen)
+    if (verdict == DAT_STALE_GEN) {   // once per token: the claim makes every later layer current
+        s.dat_gen = moe_gpu_attn_dec_claim(true)
+        verdict = moe_gpu_attn_dec_ok(woq, pos, s.dat_gen)
+    }
+    if (verdict == DAT_HYDRATE) {
+        let kv_is_f16 = s.kv_dtype_k == KVDtype.f16 && s.kv_dtype_v == KVDtype.f16
+        let kv_is_f32 = s.kv_dtype_k == KVDtype.f32 && s.kv_dtype_v == KVDtype.f32
+        let kvd = layer_kv_dim(c, l)
+        unsafe {
+            if (pos == 0l || kv_is_f16 || kv_is_f32) {
+                matmul_moe_gpu_attn_dec_hydrate(woq, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos, kvd, kv_is_f16)
+            } else {
+                attn_dec_hydrate_codec(s, l, pos, woq, kvd, c.seq_len)
+            }
+        }
+        verdict = moe_gpu_attn_dec_ok(woq, pos, s.dat_gen)
+    }
+    return verdict == DAT_SERVE
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
+def private attention_gpu_decode(t : Model; var s : Session; l : int64; pos : int64) {
+    let c = t.config
+    let dim = c.dim
+    let kv_dim = layer_kv_dim(c, l)
+    let head_size = layer_head_size(c, l)
+    let n_heads = c.n_heads
+    let qd = n_heads * head_size
+    let kv_mul = n_heads / layer_n_kv_heads(c, l)
+    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
+    let fq = fmt_at(t.wq_fmt, l)
+    let ts_norm0 = prof_ticks()
+    let q8 = fq == KqFmt.q8
+    if (!moe_gpu_ffn_tail_pending()) {
+        rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
+        if (q8) {
+            quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
+        } else {
+            quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
+        }
+    }
+    prof_add("norm", ts_norm0)
+    g_dat_cossin |> resize(head_size)
+    build_rope_row_packed(g_dat_cossin, 0l, pos + s.rope_pos_delta, head_size, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale, t.rope_freqs)
+    let ts_gpu = prof_ticks()
+    unsafe {
+        let rq = c.qk_norm ? addr<float const?>(t.fblob[t.rms_q_offs[l]]) : null
+        let rk = c.qk_norm ? addr<float const?>(t.fblob[t.rms_k_offs[l]]) : null
+        if (q8) {
+            matmul_moe_gpu_attn_dec(s.xb2, s.k, s.v, t.wq_offs[l], t.wk_offs[l], t.wv_offs[l], t.wo_offs[l],
+                int(fq), int(fmt_at(t.wk_fmt, l)), int(fmt_at(t.wv_fmt, l)), int(fmt_at(t.wo_fmt, l)),
+                s.xq, s.xs, g_dat_cossin, rq, rk, pos, dim, qd, kv_dim, head_size, n_heads, kv_mul, scale, c.norm_eps, c.rope_neox, c.qk_norm)
+        } else {
+            matmul_moe_gpu_attn_dec(s.xb2, s.k, s.v, t.wq_offs[l], t.wk_offs[l], t.wv_offs[l], t.wo_offs[l],
+                int(fq), int(fmt_at(t.wk_fmt, l)), int(fmt_at(t.wv_fmt, l)), int(fmt_at(t.wo_fmt, l)),
+                s.kxq, s.kxs, g_dat_cossin, rq, rk, pos, dim, qd, kv_dim, head_size, n_heads, kv_mul, scale, c.norm_eps, c.rope_neox, c.qk_norm)
+        }
+    }
+    prof_add("attn_gpu", ts_gpu)
+    attn_dec_store_kv(t, s, l, pos)
+    let ts_resid0 = prof_ticks()
+    if (c.pre_post_norm) {
+        rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
+    }
+    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
+    prof_add("act_resid", ts_resid0)
+    let tail_shape = (g_env_gpu.gpu_dec_tail && moe_gpu_ffn_tail_ok() && c.n_ff_shexp == 0l && !c.pre_post_norm && !c.layer_out_scale
+        && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai && t.quant == QuantMode.q8 && c.n_expert_used <= 64l)
+    s.tail_next1 = 0l
+    if (tail_shape && !c.moe_exps_bias && l >= c.n_layer_dense_lead && moe_gpu_layer_on_gpu(l) && attn_dec_gpu_next_serves(t, s, l + 1l, pos)) {
+        s.tail_next1 = l + 1l
+    }
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
+def private attn_dec_store_kv(t : Model; var s : Session; l, pos : int64) {
+    let c = t.config
+    let kv_dim = layer_kv_dim(c, l)
+    let head_size = layer_head_size(c, l)
+    let ts_kv = prof_ticks()
+    if (c.qk_norm) {
+        rms_batch(s.k, s.k, t, t.rms_k_offs[l], head_size, layer_n_kv_heads(c, l))
+    }
+    unsafe {
+        let crow = addr<float const?>(g_dat_cossin[0])
+        let srow = addr<float const?>(g_dat_cossin[head_size / 2l])
+        if (c.rope_neox) {
+            rope_scaled_neox_tab(addr(s.k[0]), head_size, kv_dim, crow, srow)
+        } else {
+            rope_scaled_tab(addr(s.k[0]), head_size, kv_dim, crow, srow)
+        }
+    }
+    var kcl = kv_layer_kbase(s, l, c.seq_len)
+    var vcl = kv_layer_vbase(s, l, c.seq_len)
+    unsafe {
+        kv_store_row(kcl, s.kv_dtype_k, kv_dim, kv_phys_row(s, pos), 0l, kv_dim, addr<float const?>(s.k[0]))
+        kv_store_row(vcl, s.kv_dtype_v, kv_dim, kv_phys_row(s, pos), 0l, kv_dim, addr<float const?>(s.v[0]))
+    }
+    prof_add("kv_store", ts_kv)
+}
+
+// ===== the whole-token decode override: the resident suffix as one device chain =====
+
+var private g_span_args : MoeSpanDec   // reused per token: the per-layer arrays keep their capacity
+var private g_span_k : array<float>
+var private g_span_v : array<float>
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+def private span_first_layer(t : Model; var s : Session; pos : int64) : int64 {
+    let c = t.config
+    var l0 = c.n_layers
+    while (l0 > 0l) {
+        let l = l0 - 1l
+        if (l < c.n_layer_dense_lead || !moe_gpu_layer_on_gpu(l) || kq_sb(fmt_at(t.we1_fmt, l)) != kq_sb(fmt_at(t.we3_fmt, l))
+                || !attn_dec_gpu_serves(t, s, l, pos)) {
+            break
+        }
+        l0 = l
+    }
+    return l0
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+def private span_model_ok(t : Model) : bool {
+    let c = t.config
+    if (!g_env_gpu.gpu_dec_span || !moe_gpu_span_ok() || t.quant != QuantMode.q8 || c.n_expert == 0l
+            || c.n_expert_used > 64l || c.n_expert > 256l || c.moe_gate != MoeGate.softmax || c.moe_router_bias || c.moe_exp_probs
+            || c.n_layers * c.n_expert * c.dim * 4l > moe_gpu_binding_cap() || !t.blocks.std_chain
+            || c.n_ff_shexp > 0l || c.pre_post_norm || c.layer_out_scale || c.moe_exps_bias || t.experts_mx4) {
+        return false
+    }
+    return c.ffn_act != FfnAct.swiglu_oai && !has_ple(c) && c.n_layer_nextn == 0l
+}
+
+[cold_path]   // once per span shape: the arrays keep their capacity
+def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
+    let c = t.config
+    let dim = c.dim
+    a.woq |> resize(nl)
+    a.wok |> resize(nl)
+    a.wov |> resize(nl)
+    a.woo |> resize(nl)
+    a.fq |> resize(nl)
+    a.fk |> resize(nl)
+    a.fv |> resize(nl)
+    a.fo |> resize(nl)
+    a.we1 |> resize(nl)
+    a.we3 |> resize(nl)
+    a.we2 |> resize(nl)
+    a.f1 |> resize(nl)
+    a.f3 |> resize(nl)
+    a.f2 |> resize(nl)
+    a.rmsq |> resize(nl)
+    a.rmsk |> resize(nl)
+    unsafe {
+        for (li in range64(nl)) {
+            let l = l0 + li
+            a.woq[li] = t.wq_offs[l]
+            a.wok[li] = t.wk_offs[l]
+            a.wov[li] = t.wv_offs[l]
+            a.woo[li] = t.wo_offs[l]
+            a.fq[li] = int(fmt_at(t.wq_fmt, l))
+            a.fk[li] = int(fmt_at(t.wk_fmt, l))
+            a.fv[li] = int(fmt_at(t.wv_fmt, l))
+            a.fo[li] = int(fmt_at(t.wo_fmt, l))
+            a.we1[li] = t.we1_offs[l]
+            a.we3[li] = t.we3_offs[l]
+            a.we2[li] = t.we2_offs[l]
+            a.f1[li] = int(fmt_at(t.we1_fmt, l))
+            a.f3[li] = int(fmt_at(t.we3_fmt, l))
+            a.f2[li] = int(fmt_at(t.we2_fmt, l))
+            a.rmsq[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_q_offs[l]]) : null
+            a.rmsk[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_k_offs[l]]) : null
+        }
+        a.router = addr<float const?>(t.fblob[t.router_off + l0 * c.n_expert * dim])
+        a.att_norm = addr<float const?>(t.fblob[t.rms_att_off + l0 * dim])
+        a.ffn_norm = addr<float const?>(t.fblob[t.rms_ffn_off + l0 * dim])
+        a.blob = addr<float const?>(t.fblob[0])
+    }
+    g_span_k |> resize(nl * layer_kv_dim(c, l0))
+    g_span_v |> resize(nl * layer_kv_dim(c, l0))
+}
+
+//! the cached span arguments still describe (t, l0, nl): the same carrier (the router and norm
+//! rows are raw pointers into it), the same suffix length and the same first attention offset
+def public span_args_current(a : MoeSpanDec; t : Model; l0, nl : int64) : bool {
+    if (nl <= 0l || long_length(a.woq) != nl || a.woq[0] != t.wq_offs[l0]) {
+        return false
+    }
+    var blob : float const?
+    if (!empty(t.fblob)) {
+        blob = unsafe(addr<float const?>(t.fblob[0]))
+    }
+    return a.blob == blob
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+def private span_run(t : Model; var s : Session; pos, l0 : int64) {
+    let c = t.config
+    let dim = c.dim
+    let nl = c.n_layers - l0
+    let hs = layer_head_size(c, l0)
+    let kvd = layer_kv_dim(c, l0)
+    var a & = g_span_args
+    a.pos = pos
+    a.dim = dim
+    a.qd = c.n_heads * hs
+    a.kvd = kvd
+    a.hs = hs
+    a.n_heads = c.n_heads
+    a.kv_mul = c.n_heads / layer_n_kv_heads(c, l0)
+    a.ne = c.n_expert
+    a.k = c.n_expert_used
+    a.nfe = c.n_ff_exp
+    a.scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs))
+    a.eps = c.norm_eps
+    a.wscale = c.expert_weights_scale
+    a.neox = c.rope_neox
+    a.qk_norm = c.qk_norm
+    a.norm_topk = c.norm_topk_prob
+    a.is_gelu = c.ffn_act == FfnAct.gelu
+    if (!span_args_current(a, t, l0, nl)) {
+        span_fill_layers(t, a, l0, nl)
+    }
+    let ts_norm = prof_ticks()
+    rms_at(s.xb, t, t.rms_att_off + l0 * dim, s.x, dim)
+    unsafe {
+        if (fmt_at(t.wq_fmt, l0) == KqFmt.q8) {
+            quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
+            a.xq = addr<int8 const?>(s.xq[0])
+            a.xs = addr<float const?>(s.xs[0])
+        } else {
+            quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
+            a.xq = addr<int8 const?>(s.kxq[0])
+            a.xs = addr<float const?>(s.kxs[0])
+        }
+    }
+    prof_add("norm", ts_norm)
+    g_dat_cossin |> resize(hs)
+    build_rope_row_packed(g_dat_cossin, 0l, pos + s.rope_pos_delta, hs, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale, t.rope_freqs)
+    unsafe {
+        a.cossin = addr<float const?>(g_dat_cossin[0])
+        a.x = addr(s.x[0])
+        a.kout = addr(g_span_k[0])
+        a.vout = addr(g_span_v[0])
+    }
+    let ts_span = prof_ticks()
+    matmul_moe_gpu_span_dec(a)
+    prof_add("span_gpu", ts_span)
+    for (li in range64(nl)) {
+        copy_floats(g_span_k, li * kvd, s.k, 0l, kvd)
+        copy_floats(g_span_v, li * kvd, s.v, 0l, kvd)
+        attn_dec_store_kv(t, s, l0 + li, pos)
+    }
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]   // per token
+def private moe_span_decode(t : Model; var s : Session; _token, pos : int64) : bool {
+    let c = t.config
+    if (!span_model_ok(t)) {
+        return false
+    }
+    let l0 = span_first_layer(t, s, pos)
+    if (c.n_layers - l0 < 2l || (l0 > 0l && moe_gpu_layer_on_gpu(l0 - 1l))) {
+        return false
+    }
+    for (l in range64(l0)) {
+        let ts_blk_attn = prof_ticks()
+        t.blocks.attn_decode(t, s, l, pos)
+        prof_add("blk_attn", ts_blk_attn)
+        let ts_blk_ffn = prof_ticks()
+        t.blocks.ffn_decode(t, s, l)
+        prof_add("blk_ffn", ts_blk_ffn)
+    }
+    span_run(t, s, pos, l0)
+    return true
+}
+
+//! registered at init, dormant until the MoE placement selects it by name; dastest runs no
+//! [init], so a test registers through this entry and then selects - never calls the override
+[init]
+def dasllama_blocks_span_register() {
+    register_decode_override("vulkan_moe_span", @@moe_span_decode)
+}
+
 def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { // nolint:STYLE037,STYLE038 — dispatches every attention flavour (fused/flash/blocked/classic, GPU or CPU) from one place; the ladder IS the contract
+    if (attn_dec_gpu_serves(t, s, l, pos)) {
+        attention_gpu_decode(t, s, l, pos)
+        return
+    }
     if (fused_attn_ok(t, l)) {
         attention_chain_decode(t, s, l, pos)
         return
@@ -754,7 +1095,7 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
     }
     prof_add("kv_store", ts_kv)
     let ts_resid = prof_ticks()
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    add_batch(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
     prof_add("at_resid", ts_resid)
 }
 
@@ -859,7 +1200,7 @@ def ffn_dense_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm per position before residual
         rms_batch(s.xb_b, s.xb_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
     }
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
+    add_batch(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
     // E-series applies out_scale AFTER its PLE block (in ffn_gemma4_prefill) — skip it here when PLE is on
     if (c.layer_out_scale && !has_ple(c)) {  // gemma4: scale the whole layer output (after the residual)
         let os = t.fblob[t.out_scale_off + l]
@@ -1043,6 +1384,28 @@ def gpu_combine_on : bool {
     return g_gpu_combine
 }
 
+//! the split's cost model - the reference box's measurements (ARCHITECTURE_GPU_VULKAN_DECODE.md sec.2.2s: the measured values, tuned)
+let private SPLIT_BUS_BPS = 13.5e9
+let private SPLIT_GPU_ROW_S = 1.2e-6
+let private SPLIT_CPU_ROW_S = 10.0e-6
+
+//! bytes per weight of a repacked plane: the superblock quant payload + its 20-byte scale row
+def private kq_bytes_per_weight(f : KqFmt) : float {
+    if (f == KqFmt.q40) {
+        return 144.0 / 256.0   // 4-bit quants plus an f16 scale per 32
+    }
+    if (f == KqFmt.k4) {
+        return 148.0 / 256.0
+    }
+    if (f == KqFmt.k5) {
+        return 180.0 / 256.0
+    }
+    if (f == KqFmt.k6) {
+        return 212.0 / 256.0
+    }
+    return 34.0 / 32.0   // q8: 32 quants + an f16 scale per block
+}
+
 //! Runtime routing gate over the device-side routed combine (overrides the
 //! ``DASLLAMA_GPU_COMBINE`` env probe) — the in-process A/B lever: both arms share one
 //! process, one residency, one paging weather, so the measured delta is the combine alone.
@@ -1062,6 +1425,7 @@ def set_moe_gpu_prefill_route(on : bool) {
 
 def gpu_prefill_route_on() : bool => g_gpu_prefill_route
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split")]
 def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
     let c = t.config
     let dim = c.dim
@@ -1088,6 +1452,8 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         && (moe_gpu_layer_on_gpu(l) || moe_gpu_layer_streamed(l)) && g_moe_fused_expert_gemms && npos >= 32l && gpu_prefill_route_on())
     // device-side combine rides fused_gpu; DASLLAMA_GPU_COMBINE=0 falls back to park + CPU reduce
     let gpu_comb = fused_gpu && gpu_combine_on()
+    let gpu_xf = gpu_comb && moe_gpu_ffn_xf_ok(npos, dim, int(f1), int(f3), int(f2))
+    var split_gpu_regions = 0l
     let fused = (t.experts_mx4 && g_active_mx4_native_batch && g_moe_fused_expert_gemms) || fused_kq || fused_gpu
     let grows = fused ? nk : npos
     // a long media prefill (omni ASR, ~2.6k rows x k experts) sizes these into the tens of MB (sizing mirrors ple.das)
@@ -1116,6 +1482,8 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     trace_tag(TRACE_TAG_ROUTE)
     let ts_route = prof_ticks()
     mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb_b, dim, ne, npos)
+    prof_add("moe_router", ts_route)
+    let ts_select = prof_ticks()
     // per-row bias+select+gate dot, threaded: serial loop was ~2-3ms every-lane-idle/layer here
     unsafe {
         var rlp = addr(s.moe_rlog[0])
@@ -1165,11 +1533,15 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         s.moe_bkt[s.moe_cnt[e]] = r
         s.moe_cnt[e]++
     }
-    prof_add("moe_route", ts_route)
+    prof_add("moe_route", ts_select)
 
     // 2. quantize every normed activation row ONCE; kq v2 gate/up gathers off Q8_K, q8 stacks off Q8_0
     let moe_kform = kq_layer && moe_pair_kform(f1, f3)
-    if (moe_kform) {
+    if (gpu_xf) {
+        if (nsh > 0l) {   // the shared expert's GEMM reads the Q8_0 image whatever the routed feed is
+            requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
+        }
+    } elif (moe_kform) {
         s.kxqb |> resize(npos * dim)
         s.kxsb |> resize(npos * dim / 256l)
         s.kxbsb |> resize(npos * dim / 16l)
@@ -1186,8 +1558,9 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     if (fused) {
         trace_tag(TRACE_TAG_MOE)
         let ts_gather = prof_ticks()
-        // the GPU tile computes activation block sums in-kernel — skip the per-16 sum gather
-        moe_gather_rows(s, 0l, nk, dim, k, moe_kform && !fused_gpu, moe_kform)
+        if (!gpu_xf) {
+            moe_gather_rows(s, 0l, nk, dim, k, moe_kform && !fused_gpu, moe_kform)
+        }
         prof_add("moe_gather", ts_gather)
         // region triples per touched expert, CPU arms capped at 32 rows/region — batch-groupn chunks units by COUNT, so an unsplit heavy expert straggles the barrier (620 vs 3929 GFLOP/s zipf k4); GPU keeps whole regions
         let split_cap = !gpu_comb && !fused_gpu ? 32l : 0l
@@ -1239,6 +1612,26 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 sub0 += scnt
             }
         }
+        if (gpu_xf && moe_gpu_layer_streamed(l) && gpu_want_moe_split() && sb_fusable
+                && kq_sb(f1) && kq_sb(f3) && kq_sb(f2) && nk <= moe_gpu_ffn_xf_async_rows(dim, nfe)) {
+            let bytes_e = float(nfe * dim) * (kq_bytes_per_weight(f1) + kq_bytes_per_weight(f3) + kq_bytes_per_weight(f2))
+            var rows_gpu = 0l
+            var rows_cpu = nk
+            for (oe in s.moe_ord) {
+                let cnt = int64(oe.y)
+                let t_gpu = float(split_gpu_regions + 1l) * bytes_e / SPLIT_BUS_BPS + float(rows_gpu + cnt) * SPLIT_GPU_ROW_S
+                let t_cpu = float(rows_cpu - cnt) * SPLIT_CPU_ROW_S
+                if (t_gpu > t_cpu) {
+                    break
+                }
+                split_gpu_regions++
+                rows_gpu += cnt
+                rows_cpu -= cnt
+            }
+            if (split_gpu_regions >= nreg) {
+                split_gpu_regions = 0l
+            }
+        }
         let ts_g1 = prof_ticks()
         if (gpu_comb) {   // GPU tier: gate+up/act/requant/down AND the routed weighted-sum combine
             // gout comes back as npos combined rows; the 33MB-class bucket-row readback + park scatter disappear
@@ -1246,9 +1639,69 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             for (j in range64(nk)) {
                 s.moe_inv[s.moe_bkt[j]] = uint(j)
             }
-            matmul_moe_gpu_ffn_combined(s.moe_eout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
-            prof_add("moe_gpu", ts_g1)
+            if (split_gpu_regions > 0l) {
+                s.moe_exp_gpu |> resize(ne)
+                for (e in range64(ne)) {
+                    s.moe_exp_gpu[e] = int8(0)
+                }
+                for (r in range64(split_gpu_regions)) {
+                    s.moe_exp_gpu[s.moe_ord[r].x] = int8(1)
+                }
+                s.moe_w_gpu |> resize(nk)
+                s.moe_w_cpu |> resize(nk)
+                for (j in range64(nk)) {
+                    let on_gpu = s.moe_exp_gpu[s.moe_idx_b[j]] != int8(0)
+                    s.moe_w_gpu[j] = on_gpu ? s.moe_w_b[j] : 0.0
+                    s.moe_w_cpu[j] = on_gpu ? 0.0 : s.moe_w_b[j]
+                }
+                let nreg_c = nreg - split_gpu_regions
+                s.moe_offs1_cpu |> resize(nreg_c * 3l)
+                s.moe_offs3_cpu |> resize(nreg_c * 3l)
+                s.moe_offs2_cpu |> resize(nreg_c * 3l)
+                for (i in range64(nreg_c * 3l)) {
+                    s.moe_offs1_cpu[i] = s.moe_offs1[split_gpu_regions * 3l + i]
+                    s.moe_offs3_cpu[i] = s.moe_offs3[split_gpu_regions * 3l + i]
+                    s.moe_offs2_cpu[i] = s.moe_offs2[split_gpu_regions * 3l + i]
+                }
+                matmul_moe_gpu_ffn_combined_xf_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, split_gpu_regions,
+                    s.xb_b, s.moe_w_gpu, s.moe_inv, dim, nfe, nk, npos, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                prof_add("moe_gpu", ts_g1)
+                let ts_c = prof_ticks()
+                s.kxqb |> resize(npos * dim)
+                s.kxsb |> resize(npos * dim / 256l)
+                s.kxbsb |> resize(npos * dim / 16l)
+                requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
+                moe_gather_rows(s, 0l, nk, dim, k, true, true)
+                mm_b_kq_groupn(s.moe_ghb, t, f1, s.moe_offs1_cpu, nreg_c, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
+                mm_b_kq_groupn(s.moe_ghb2, t, f3, s.moe_offs3_cpu, nreg_c, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
+                gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, nk)
+                requant_rows_q8k_bs(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
+                mm_b_kq_groupn(s.moe_gout, t, f2, s.moe_offs2_cpu, nreg_c, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
+                unsafe {
+                    let gp = addr<float const?>(s.moe_gout[0])
+                    var ep = addr(s.moe_eout[0])
+                    for (r in range64(nreg_c)) {
+                        let b0 = s.moe_offs1_cpu[r * 3l + 1l]
+                        let b1 = b0 + s.moe_offs1_cpu[r * 3l + 2l]
+                        for (b in range64(b0, b1)) {
+                            copy_floats(ep + s.moe_bkt[b] * dim, gp + b * dim, dim)
+                        }
+                    }
+                }
+                prof_add("mm_gemm", ts_c)
+                let ts_join = prof_ticks()
+                s.moe_gpu_out |> zeroed_resize(npos * dim)
+                matmul_moe_gpu_ffn_combined_xf_join(s.moe_gpu_out)
+                prof_add("split_wait", ts_join)   // GPU residue after the CPU tail - 0 = fully hidden
+            } elif (gpu_xf) {
+                matmul_moe_gpu_ffn_combined_xf(s.moe_eout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
+                    s.xb_b, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                prof_add("moe_gpu", ts_g1)
+            } else {
+                matmul_moe_gpu_ffn_combined(s.moe_eout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
+                    s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                prof_add("moe_gpu", ts_g1)
+            }
         } elif (fused_gpu) {   // combine off: per-row gout + the park/CPU-reduce path below
             matmul_moe_gpu_ffn(s.moe_gout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
                 s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
@@ -1426,7 +1879,8 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     unsafe {
         var ap = addr(s.xb2_b[0])
         let ep = addr<float const?>(s.moe_eout[0])
-        let wp = addr<float const?>(s.moe_w_b[0])
+        let wp = split_gpu_regions > 0l ? addr<float const?>(s.moe_w_cpu[0]) : addr<float const?>(s.moe_w_b[0])
+        let split_gpu_rows = split_gpu_regions > 0l ? addr<float const?>(s.moe_gpu_out[0]) : null
         let sp = nsh > 0l ? addr<float const?>(s.moe_gout[0]) : null
         let gp = nsh > 0l && c.moe_shexp_gated ? addr<float const?>(s.moe_gl_b[0]) : null
         maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
@@ -1434,7 +1888,21 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 for (p in range(rb, re)) {
                     let pp = int64(p)
                     var arow = ap + pp * dim
-                    if (gpu_comb) {
+                    if (split_gpu_rows != null) {
+                        let cr = split_gpu_rows + pp * dim
+                        for (i in range64(dim)) {
+                            arow[i] = cr[i]
+                        }
+                        for (j in range64(k)) {
+                            let w = wp[pp * k + j]
+                            if (w != 0.0) {
+                                let er = ep + (pp * k + j) * dim
+                                for (i in range64(dim)) {
+                                    arow[i] += w * er[i]
+                                }
+                            }
+                        }
+                    } elif (gpu_comb) {
                         let cr = ep + pp * dim
                         for (i in range64(dim)) {
                             arow[i] = cr[i]
@@ -1468,7 +1936,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     if (c.pre_post_norm) {
         rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
     }
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    add_batch(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
     prof_add("act_resid", ts_resid)
 }
 
@@ -1509,6 +1977,7 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64;
                          non_causal : bool = false; src_off : int64 = 0l; skip_logits : bool = false;
                          span_lo : int64 = -1l; span_hi : int64 = -1l; ds_wide : bool = false) {
@@ -1545,8 +2014,6 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     let dim = t.config.dim
     let ts_embed = prof_ticks()
     if (ds_wide) {
-        // arm the wide BORROW instead of splitting: a wide-capable override uploads the whole
-        // quantum and extracts slices on the GPU; the CPU fallback splits via ds_split_quantum
         unsafe {
             s.wide_src = addr < float const? >(embd[0])
         }
@@ -1577,6 +2044,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
         s.attn_uniform_lo = 0l
         s.attn_uniform_end = 0l
     }
+    s.embed_gpu_pending = false   // this entry filled x_b itself - no stash for the body to backfill
     forward_prefill_body(t, s, npos, start_pos, skip_logits)
     s.attn_uniform_lo = 0l
     s.attn_uniform_end = 0l
@@ -1806,6 +2274,10 @@ def ffn_moe_decode(t : Model; var s : Session; l : int64) {
     rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
     prof_add("norm", ts_norm)
     moe_ffn_core(t, s, l)
+    if (s.tail_taken) {
+        s.tail_taken = false
+        return
+    }
     let ts_resid = prof_ticks()
     if (c.pre_post_norm) {
         rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
@@ -2075,14 +2547,14 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
 }
 
 def std_blocks() : ArchBlocks {
-    return ArchBlocks(attn_decode = @@attention_std_decode, ffn_decode = @@ffn_dense_decode,
+    return ArchBlocks(std_chain = true, attn_decode = @@attention_std_decode, ffn_decode = @@ffn_dense_decode,
                       attn_prefill = @@attention_std_prefill, ffn_prefill = @@ffn_dense_prefill)
 }
 
 //! The MoE block set: standard attention + the routed-experts FFN (decode and naive-per-token
 //! prefill). Arches whose configure sets `moe` register these instead of std_blocks.
 def moe_blocks() : ArchBlocks {
-    return ArchBlocks(attn_decode = @@attention_std_decode, ffn_decode = @@ffn_moe_decode,
+    return ArchBlocks(std_chain = true, attn_decode = @@attention_std_decode, ffn_decode = @@ffn_moe_decode,
                       attn_prefill = @@attention_std_prefill, ffn_prefill = @@ffn_moe_prefill,
                       ffn_is_dense = false)
 }

@@ -27,6 +27,10 @@ typedef MoeGpuUploadFn = function<(wq : uint8 const?; ws : uint8 const?; woff : 
 typedef MoeGpuClsFn = function<(var yp : float?; woff : int64; xqp : int8 const?; xsp : float const?; n : int64; d : int64; fmt : int) : void>
 typedef MoeGpuDenseFn = function<(var yp : float?; woff : int64; xqp : int8 const?; xsp : float const?; n : int64; d : int64; nrows : int64; fmt : int) : void>
 typedef MoeGpuDropFn = function<(n : int; stream : bool) : void>
+// The f16-fed twin of MoeGpuFfnFn: the window's f32 activation rows (npos x n, one per position)
+// in place of the gathered quant image - the tier gathers, converts and combines device-side
+typedef MoeGpuFfnXfFn = function<(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n : int64; nfe : int64; nrows : int64; npos : int64; f1 : int; f3 : int; f2 : int; is_gelu : bool) : void>
+typedef MoeGpuFfnXfOkFn = function<(npos : int64; n : int64; f1 : int; f3 : int; f2 : int) : bool>
 // The whole deltanet attention block of one recurrent layer as ONE device chain: qkv + z-gate
 // GEMMs (Q8_0, always q8 plane), depthwise conv + silu + q/k L2-norm, chunked delta-rule scan,
 // gated out-norm, out projection. histp feeds conv history channel-major; zeros = dn_reset's fresh state.
@@ -190,6 +194,51 @@ def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn
     g_rdec_read_kv_bulk = read_kv_bulk
     g_rdec_installed = true
 }
+
+typedef RdecPrefillIdsFn = function<(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) : void>
+typedef RdecSetEmbFn = function<(emb_block : int64) : bool>
+typedef RdecUploadEmbF32Fn = function<(fblob : array<float>; off : int64; vocab : int64; dim : int64) : bool>
+
+//! The raw f32 embd table rides the residency plan's headroom only up to this size; past it the CPU embed serves.
+let public RDEC_EMB_F32_CAP = 512l * 1024l * 1024l
+
+//! The device bytes the f32 embed-gather arm would upload for a (vocab x dim) table - 0 past its cap.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#resident-plan")]
+def public rdec_emb_f32_bytes(vocab, dim : int64) : int64 {
+    let bytes = vocab * dim * 4l
+    return bytes > RDEC_EMB_F32_CAP ? 0l : bytes
+}
+
+[unused_argument(tokens, emb_scale, cos_batch, npos, logits)]
+def private rdec_unset_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) {
+    panic("dasLLAMA: ids-form resident prefill hit without an installed GPU driver")
+}
+[unused_argument(emb_block)]
+def private rdec_unset_set_emb(emb_block : int64) : bool => false
+[unused_argument(fblob, off, vocab, dim)]
+def private rdec_unset_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool => false
+
+var g_rdec_prefill_ids = @@rdec_unset_prefill_ids
+var g_rdec_set_emb = @@rdec_unset_set_emb
+var g_rdec_upload_emb_f32 = @@rdec_unset_upload_emb_f32
+var g_rdec_prefill_ids_installed = false
+
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public install_rdec_prefill_ids(prefill_ids : RdecPrefillIdsFn; set_emb : RdecSetEmbFn; upload_emb_f32 : RdecUploadEmbF32Fn) {
+    g_rdec_prefill_ids = prefill_ids
+    g_rdec_set_emb = set_emb
+    g_rdec_upload_emb_f32 = upload_emb_f32
+    g_rdec_prefill_ids_installed = true
+}
+
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_prefill_ids_installed() : bool => g_rdec_prefill_ids_installed
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) { invoke(g_rdec_prefill_ids, tokens, emb_scale, cos_batch, npos, logits) }
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_set_emb(emb_block : int64) : bool => invoke(g_rdec_set_emb, emb_block)
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool => invoke(g_rdec_upload_emb_f32, fblob, off, vocab, dim)
 
 def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)
@@ -423,6 +472,71 @@ def public set_moe_gpu_heat_hooks(query : MoeGpuHeatQueryFn; advise : MoeGpuHeat
 
 def public moe_gpu_heat_on : bool {
     return g_moe_gpu_heat_installed && g_moe_gpu_heat_route
+}
+
+// ===== the f16-fed (cm2) expert chain: an optional seat beside the FFN hook =====
+
+[unused_argument(goutp, offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)]
+def private moe_gpu_unset_ffn_xf(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64;
+                                 xp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64;
+                                 f1, f3, f2 : int; is_gelu : bool) {
+    panic("dasLLAMA: f16-fed GPU FFN dispatch hit without an installed chain")
+}
+
+[unused_argument(npos, n, f1, f3, f2)]
+def private moe_gpu_no_ffn_xf(npos, n : int64; f1, f3, f2 : int) : bool => false
+
+var g_moe_gpu_ffn_xf = @@moe_gpu_unset_ffn_xf
+var g_moe_gpu_ffn_xf_ok = @@moe_gpu_no_ffn_xf
+
+//! Tier registration of the f16-fed expert chain (beside install_moe_gpu_tier); a tier without
+//! one leaves the seat unset and every layer takes the quant batch arm.
+def public set_moe_gpu_ffn_xf_hooks(ffn : MoeGpuFfnXfFn; ok : MoeGpuFfnXfOkFn) {
+    g_moe_gpu_ffn_xf = ffn
+    g_moe_gpu_ffn_xf_ok = ok
+}
+
+//! Does the tier serve a layer whose expert triple is (f1, f3, f2) through the f16-fed chain at
+//! this window? Asked per layer: the formats decide, and the tier's x plane bounds the window.
+def public moe_gpu_ffn_xf_ok(npos, n : int64; f1, f3, f2 : int) : bool {
+    return invoke(g_moe_gpu_ffn_xf_ok, npos, n, f1, f3, f2)
+}
+
+// The async twin of the f16-fed chain: begin submits and returns, join waits and reads the
+// combined rows. ONE in flight. The streamed-layer split runs its CPU tail between the two.
+typedef MoeGpuFfnXfBeginFn = function<(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n : int64; nfe : int64; nrows : int64; npos : int64; f1 : int; f3 : int; f2 : int; is_gelu : bool) : void>
+typedef MoeGpuFfnXfJoinFn = function<(var goutp : float?) : void>
+typedef MoeGpuFfnXfRowsFn = function<(n : int64; nfe : int64) : int64>
+
+[unused_argument(offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)]
+def private moe_gpu_unset_ffn_xf_begin(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64;
+                                       xp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64;
+                                       f1, f3, f2 : int; is_gelu : bool) {
+    panic("dasLLAMA: async f16-fed GPU FFN begin hit without an installed chain")
+}
+
+[unused_argument(goutp)]
+def private moe_gpu_unset_ffn_xf_join(var goutp : float?) {
+    panic("dasLLAMA: async f16-fed GPU FFN join hit without an installed chain")
+}
+
+[unused_argument(n, nfe)]
+def private moe_gpu_no_ffn_xf_rows(n, nfe : int64) : int64 => 0l
+
+var g_moe_gpu_ffn_xf_begin = @@moe_gpu_unset_ffn_xf_begin
+var g_moe_gpu_ffn_xf_join = @@moe_gpu_unset_ffn_xf_join
+var g_moe_gpu_ffn_xf_rows = @@moe_gpu_no_ffn_xf_rows
+
+//! Tier registration of the async f16-fed chain (beside set_moe_gpu_ffn_xf_hooks).
+def public set_moe_gpu_ffn_xf_async_hooks(begin : MoeGpuFfnXfBeginFn; join : MoeGpuFfnXfJoinFn; rows : MoeGpuFfnXfRowsFn) {
+    g_moe_gpu_ffn_xf_begin = begin
+    g_moe_gpu_ffn_xf_join = join
+    g_moe_gpu_ffn_xf_rows = rows
+}
+
+//! The bucket-row cap of the async arm (one chunk); 0 when no async chain is installed.
+def public moe_gpu_ffn_xf_async_rows(n, nfe : int64) : int64 {
+    return invoke(g_moe_gpu_ffn_xf_rows, n, nfe)
 }
 
 //! Runtime routing gate over the heat cache (the --heat-ab in-process lever; pins/uploads stay).
@@ -751,6 +865,11 @@ def public gpu_want_dense_shexp : bool
 def public gpu_want_dense_attn : bool
     => g_env_gpu.gpu_dense_attn
 
+//! The streamed-layer split want (``DASLLAMA_GPU_MOE_SPLIT``): it decides the stream slot count
+//! the carve reserves, so the image identity carries it.
+def public gpu_want_moe_split : bool
+    => g_env_gpu.gpu_moe_split
+
 def public gpu_want_dnd : bool
     => g_env_gpu.gpu_dnd ?? (g_gpu_want.dnd || gpu_want_auto())
 
@@ -947,6 +1066,115 @@ def public set_moe_gpu_stream_need(bytes : int64) {
 
 def public moe_gpu_stream_need() : int64 => g_moe_gpu_stream_need
 
+let DAT_MIRROR_ROWS = 2_048l
+var private g_moe_gpu_dat_need = 0l
+
+//! Loader contract: the decode attention block's per-layer f16 K/V mirrors for THIS model
+//! (layers x DAT_MIRROR_ROWS x kvd x 4 bytes); the tier carves them from the weight budget
+//! BEFORE placement - allocated after placement they come out of the desktop reserve and page the resident stacks out.
+def public set_moe_gpu_dat_need(bytes : int64) {
+    g_moe_gpu_dat_need = bytes
+}
+
+def public moe_gpu_dat_need() : int64 => g_moe_gpu_dat_need
+
+typedef MoeGpuFfnTailFn = function<(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64;
+    xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool;
+    wp : float const?; xp : float const?; var xoutp : float?; woq_next : int64; fq_next : int; anp : float const?; eps : float) : void>
+typedef MoeGpuFfnTailPendingFn = function<() : bool>
+var private g_moe_gpu_ffn_tail : MoeGpuFfnTailFn
+var private g_moe_gpu_ffn_tail_pending : MoeGpuFfnTailPendingFn
+
+//! Tier contract: the decode FFN tail - a resident layer's FFN chain plus combine + residual and
+//! the NEXT layer's attention rms/requant on the device, submitted without a fence; that layer's
+//! attention submit collects it (its fence covers both) and lands the residual row in x.
+def public set_moe_gpu_ffn_tail_hooks(tail : MoeGpuFfnTailFn; pending : MoeGpuFfnTailPendingFn) {
+    g_moe_gpu_ffn_tail = tail
+    g_moe_gpu_ffn_tail_pending = pending
+}
+
+def public moe_gpu_ffn_tail_ok : bool => g_moe_gpu_ffn_tail != null
+
+//! true between a tail submit and the attention submit that collects it: the host's x is stale
+//! and the next layer's attention acts already sit on the device
+def public moe_gpu_ffn_tail_pending : bool => g_moe_gpu_ffn_tail_pending != null && invoke(g_moe_gpu_ffn_tail_pending)
+
+def public matmul_moe_gpu_ffn_tail(offs1 : array<int64>; offs3 : array<int64>; offs2 : array<int64>; nregions : int64;
+                                   xq : array<int8>; xs : array<float>; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool;
+                                   w : array<float>; var x : array<float>; woq_next : int64; fq_next : int; anp : float const?; eps : float) {
+    unsafe {
+        invoke(g_moe_gpu_ffn_tail,
+            addr<int64 const?>(offs1[0]), addr<int64 const?>(offs3[0]), addr<int64 const?>(offs2[0]), nregions,
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, nfe, nrows, f1, f3, f2, is_gelu,
+            addr<float const?>(w[0]), addr<float const?>(x[0]), addr(x[0]), woq_next, fq_next, anp, eps)
+    }
+}
+
+//! The whole-token decode span's arguments: the resident layers [l0, l1) as ONE device chain.
+//! Per-layer arrays run over the span; the feed is layer l0's attention row in its plane's acts
+//! form; x rides in and out; kout/vout take every layer's raw k and v rows (nl x kvd each).
+struct MoeSpanDec {
+    pos : int64
+    dim : int64
+    qd : int64
+    kvd : int64
+    hs : int64
+    n_heads : int64
+    kv_mul : int64
+    ne : int64
+    k : int64
+    nfe : int64
+    scale : float
+    eps : float
+    wscale : float
+    neox : bool
+    qk_norm : bool
+    norm_topk : bool
+    is_gelu : bool
+    woq : array<int64>
+    wok : array<int64>
+    wov : array<int64>
+    woo : array<int64>
+    fq : array<int>
+    fk : array<int>
+    fv : array<int>
+    fo : array<int>
+    we1 : array<int64>       // expert 0's plane element offsets per layer
+    we3 : array<int64>
+    we2 : array<int64>
+    f1 : array<int>
+    f3 : array<int>
+    f2 : array<int>
+    rmsq : array<float const?>   // the qk-norm rows (null when off)
+    rmsk : array<float const?>
+    router : float const?        // [nl x ne x dim] f32 rows, layer-major
+    att_norm : float const?      // [nl x dim]
+    ffn_norm : float const?      // [nl x dim]
+    blob : float const?          // the carrier those rows live in - with woq[0] and the suffix length, the engine's refill key
+    xq : int8 const?             // layer l0's attention feed
+    xs : float const?
+    cossin : float const?        // this position's packed rope row
+    x : float?                   // the residual row in/out
+    kout : float?                // [nl x kvd] raw k rows out
+    vout : float?
+}
+
+typedef MoeGpuSpanDecFn = function<(var a : MoeSpanDec) : void>
+var private g_moe_gpu_span_dec : MoeGpuSpanDecFn
+
+//! Tier contract: the whole-token decode span - every resident layer's attention, router,
+//! top-k, FFN and combine as one recorded chain and ONE submit; the host feeds the first
+//! layer's attention row and takes back the residual row and every layer's raw k/v rows.
+def public set_moe_gpu_span_dec_hook(fn : MoeGpuSpanDecFn) {
+    g_moe_gpu_span_dec = fn
+}
+
+def public moe_gpu_span_ok : bool => g_moe_gpu_span_dec != null
+
+def public matmul_moe_gpu_span_dec(var a : MoeSpanDec) {
+    invoke(g_moe_gpu_span_dec, a)
+}
+
 //! Loader contract: "" = the loaded model rides the armed tier; otherwise the human reason it
 //! cannot (reset per load; meaningless while the tier is unarmed).
 def public set_moe_gpu_model_support(reason : string) {
@@ -1033,6 +1261,119 @@ def public matmul_moe_gpu_ffn_combined(var gout : array<float>; offs1 : array<in
             addr<int64 const?>(offs1[0]), addr<int64 const?>(offs3[0]), addr<int64 const?>(offs2[0]), nregions,
             addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<float const?>(w[0]), addr<uint const?>(inv[0]),
             n, nfe, nrows, npos, f1, f3, f2, is_gelu)
+    }
+}
+
+//! The f16-fed twin of matmul_moe_gpu_ffn_combined: `x` is the window's normed activation rows
+//! (npos x n, f32) - no quant image, no CPU gather; the tier gathers by `inv` device-side.
+//! Ask moe_gpu_ffn_xf_ok first: the seat serves only the formats its chain admits.
+def public matmul_moe_gpu_ffn_combined_xf(var gout : array<float>; offs1 : array<int64>; offs3 : array<int64>; offs2 : array<int64>;
+                                          nregions : int64; x : array<float>; w : array<float>; inv : array<uint>;
+                                          n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
+    unsafe {
+        invoke(g_moe_gpu_ffn_xf, addr(gout[0]),
+            addr<int64 const?>(offs1[0]), addr<int64 const?>(offs3[0]), addr<int64 const?>(offs2[0]), nregions,
+            addr<float const?>(x[0]), addr<float const?>(w[0]), addr<uint const?>(inv[0]),
+            n, nfe, nrows, npos, f1, f3, f2, is_gelu)
+    }
+}
+
+//! The async form of matmul_moe_gpu_ffn_combined_xf: submit the chain over the FIRST `nregions`
+//! triples of the offs arrays and return; the CPU serves whatever it keeps meanwhile, then
+//! matmul_moe_gpu_ffn_combined_xf_join collects the combined rows. Bound by moe_gpu_ffn_xf_async_rows.
+def public matmul_moe_gpu_ffn_combined_xf_begin(offs1 : array<int64>; offs3 : array<int64>; offs2 : array<int64>;
+                                                nregions : int64; x : array<float>; w : array<float>; inv : array<uint>;
+                                                n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
+    unsafe {
+        invoke(g_moe_gpu_ffn_xf_begin,
+            addr<int64 const?>(offs1[0]), addr<int64 const?>(offs3[0]), addr<int64 const?>(offs2[0]), nregions,
+            addr<float const?>(x[0]), addr<float const?>(w[0]), addr<uint const?>(inv[0]),
+            n, nfe, nrows, npos, f1, f3, f2, is_gelu)
+    }
+}
+
+def public matmul_moe_gpu_ffn_combined_xf_join(var gout : array<float>) {
+    unsafe {
+        invoke(g_moe_gpu_ffn_xf_join, addr(gout[0]))
+    }
+}
+
+// ===== the decode attention block: one submit per layer over the resident q/k/v/o quad =====
+// The tier keeps a per-layer f16 K/V mirror the prefill chain fills; a served token returns the
+// wo row plus its RAW k and v rows (f32, before norm and rope) so the host re-derives its cache row.
+typedef MoeGpuAttnDecFn = function<(var xb2p : float?; var kp : float?; var vp : float?; woq : int64; wok : int64; wov : int64; woo : int64; fq : int; fk : int; fv : int; fo : int; xqp : int8 const?; xsp : float const?; cosp : float const?; rmsqp : float const?; rmskp : float const?; pos : int64; dim : int64; qd : int64; kvd : int64; hs : int64; n_heads : int64; kv_mul : int64; scale : float; eps : float; neox : bool; qk_norm : bool) : void>
+typedef MoeGpuAttnDecOkFn = function<(woq : int64; pos : int64; gen : int64) : int>
+typedef MoeGpuAttnDecClaimFn = function<(fresh : bool) : int64>
+typedef MoeGpuAttnDecHydrateFn = function<(woq : int64; kp : uint8 const?; vp : uint8 const?; npos : int64; kvd : int64; f16 : bool) : void>
+// MoeGpuAttnDecOkFn's answers
+let DAT_SERVE = 0        // the layer's mirror holds exactly [0, pos) of the session's generation
+let DAT_STALE_GEN = 1    // the session's generation is not the mirrors' - claim fresh at layer 0
+let DAT_HYDRATE = 2      // this generation, but the layer's rows are not [0, pos) - refill from the host cache
+let DAT_NEVER = 3        // no block, or pos past the mirror cap
+
+[unused_argument(xb2p, kp, vp, woq, wok, wov, woo, fq, fk, fv, fo, xqp, xsp, cosp, rmsqp, rmskp, pos, dim, qd, kvd, hs, n_heads, kv_mul, scale, eps, neox, qk_norm)]
+def private moe_gpu_unset_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wok, wov, woo : int64; fq, fk, fv, fo : int;
+                                   xqp : int8 const?; xsp : float const?; cosp : float const?; rmsqp : float const?; rmskp : float const?;
+                                   pos, dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
+    panic("dasLLAMA: GPU decode attention hit without an installed block")
+}
+
+[unused_argument(woq, pos, gen)]
+def private moe_gpu_no_attn_dec(woq, pos, gen : int64) : int => DAT_NEVER
+
+[unused_argument(fresh)]
+def private moe_gpu_noop_attn_dec_claim(fresh : bool) : int64 => 0l
+
+[unused_argument(woq, kp, vp, npos, kvd, f16)]
+def private moe_gpu_unset_attn_dec_hydrate(woq : int64; kp : uint8 const?; vp : uint8 const?; npos, kvd : int64; f16 : bool) {
+    panic("dasLLAMA: GPU decode attention hydrate hit without an installed block")
+}
+
+var g_moe_gpu_attn_dec = @@moe_gpu_unset_attn_dec
+var g_moe_gpu_attn_dec_ok = @@moe_gpu_no_attn_dec
+var g_moe_gpu_attn_dec_claim = @@moe_gpu_noop_attn_dec_claim
+var g_moe_gpu_attn_dec_hydrate = @@moe_gpu_unset_attn_dec_hydrate
+
+//! Tier registration of the decode attention block (beside install_moe_gpu_tier).
+def public set_moe_gpu_attn_dec_hooks(dec : MoeGpuAttnDecFn; ok : MoeGpuAttnDecOkFn; claim : MoeGpuAttnDecClaimFn; hydrate : MoeGpuAttnDecHydrateFn) {
+    g_moe_gpu_attn_dec = dec
+    g_moe_gpu_attn_dec_ok = ok
+    g_moe_gpu_attn_dec_claim = claim
+    g_moe_gpu_attn_dec_hydrate = hydrate
+}
+
+//! Refill one layer's mirror with the host cache's K/V rows [0, npos) - f32 rows (converted) or
+//! f16 rows (copied) - for a session reaching the block mid-sequence or after a rewind; npos = 0
+//! empties it. The layer then holds exactly those positions.
+def public matmul_moe_gpu_attn_dec_hydrate(woq : int64; kp : uint8 const?; vp : uint8 const?; npos, kvd : int64; f16 : bool) {
+    invoke(g_moe_gpu_attn_dec_hydrate, woq, kp, vp, npos, kvd, f16)
+}
+
+//! The mirrors change hands: after a GPU prefill from position 0 they hold the prefilling session's
+//! rows (fresh = false keeps them); a session decoding from position 0 starts them EMPTY (fresh =
+//! true zeroes every layer's count). The tier mints a generation the session keeps (Session.dat_gen).
+def public moe_gpu_attn_dec_claim(fresh : bool) : int64 {
+    return invoke(g_moe_gpu_attn_dec_claim, fresh)
+}
+
+//! Does the block serve layer `woq`'s token at `pos` for the session holding generation `gen`?
+//! One of DAT_SERVE / DAT_STALE_GEN / DAT_HYDRATE / DAT_NEVER.
+def public moe_gpu_attn_dec_ok(woq, pos, gen : int64) : int {
+    return invoke(g_moe_gpu_attn_dec_ok, woq, pos, gen)
+}
+
+//! One layer's decode attention on the GPU (q/k/v projections, qk-norm+rope into the layer's
+//! mirror, attention over it, wo). `xb2` gets the wo row; `k`/`v` the RAW projection rows -
+//! the host cache's K takes its own norm + rope from them.
+def public matmul_moe_gpu_attn_dec(var xb2 : array<float>; var k : array<float>; var v : array<float>;
+                                   woq, wok, wov, woo : int64; fq, fk, fv, fo : int;
+                                   xq : array<int8>; xs : array<float>; cossin : array<float>;
+                                   rmsq : float const?; rmsk : float const?;
+                                   pos, dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
+    unsafe {
+        invoke(g_moe_gpu_attn_dec, addr(xb2[0]), addr(k[0]), addr(v[0]), woq, wok, wov, woo, fq, fk, fv, fo,
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<float const?>(cossin[0]), rmsq, rmsk,
+            pos, dim, qd, kvd, hs, n_heads, kv_mul, scale, eps, neox, qk_norm)
     }
 }
 

@@ -39,7 +39,7 @@ struct ArArgs {
     ascale : float
 }
 
-// the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide, the pack is scalar)
+// the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
 def private q8_amax3(m0 : float) : float {
     var m = m0
     m = max(m, subgroupShuffleXor(m, 1u))
@@ -48,17 +48,12 @@ def private q8_amax3(m0 : float) : float {
     return m
 }
 
-def private q8_pack4(v0, v1, v2, v3 : float; id : float) : uint {
-    let q0 = int(round(v0 * id))
-    let q1 = int(round(v1 * id))
-    let q2 = int(round(v2 * id))
-    let q3 = int(round(v3 * id))
-    return ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
-        | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+def private q8_quant1(v, id : float) : int8 {
+    return int8(int(round(v * id)))
 }
 
-// ... and the Q8_K twins: whole-subgroup 5-shuffle amax fold, butterfly byte pack (lanes
-// 4j..4j+3 fold one round's bytes into word j — the lane%4==0 caller stores it)
+// ... and the Q8_K twin: whole-subgroup 5-shuffle amax fold
 def private q8k_amax5(m0 : float) : float {
     var m = m0
     m = max(m, subgroupShuffleXor(m, 1u))
@@ -67,13 +62,6 @@ def private q8k_amax5(m0 : float) : float {
     m = max(m, subgroupShuffleXor(m, 8u))
     m = max(m, subgroupShuffleXor(m, 16u))
     return m
-}
-
-def private q8k_pack_butterfly(v, id : float) : uint {
-    let q = int(round(v * id))
-    let b8 = uint(q) & 0xFFu
-    let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
-    return p | (subgroupShuffleXor(p, 2u) << 16u)
 }
 
 // the workgroup-rms machinery the row kernels share (one wg reduces one row)
@@ -150,10 +138,10 @@ class ClsArAddRms : ArBase {
 // xb never reaches memory. Verbatim reduce/amax/rounding => bit-identical to the split pair.
 [vk_dispatch(name = "cls_ar_rq", grid = "wgs", params = "wgs : int64")]
 class ArAddRmsRq : ArBase {
-    @ssbo @binding = 3 outq : array<uint>    // the quantized words
+    @ssbo @binding = 3 outq : array<int8>    // the quantized bytes
     @ssbo @binding = 4 outs : array<float>   // per-32-block scales
 
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_spv")]
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let tid = gl_LocalInvocationID.x
         let ss = accum_row(0u)
@@ -174,8 +162,65 @@ class ArAddRmsRq : ArBase {
             if (lane8 == 0u) {
                 outs[b] = d
             }
-            outq[b * 8u + lane8] = q8_pack4(v0, v1, v2, v3, id)
+            outq[base] = q8_quant1(v0, id)
+            outq[base + 1u] = q8_quant1(v1, id)
+            outq[base + 2u] = q8_quant1(v2, id)
+            outq[base + 3u] = q8_quant1(v3, id)
             b += 32u
+        }
+    }
+}
+
+[vk_dispatch(name = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
+class ClsArAddRmsRqB : ArBase {
+    @ssbo @binding = 3 outq : array<int8>    // the quantized bytes, row-major blocks
+    @ssbo @binding = 4 outs : array<float>   // per-32-block scales
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def run {
+        let tid = gl_LocalInvocationID.x
+        let rbase = gl_WorkGroupID.x * pa.dim
+        let ss = accum_row(rbase)
+        let inv = rms_inv(ss)
+        let nblk = pa.dim / 32u
+        let qb0 = gl_WorkGroupID.x * nblk
+        let lane8 = tid % 8u
+        var b = tid / 8u
+        while (b < nblk) {
+            let base = b * 32u + lane8 * 4u
+            let v0 = wn[pa.woff + base] * (row[base] * inv)
+            let v1 = wn[pa.woff + base + 1u] * (row[base + 1u] * inv)
+            let v2 = wn[pa.woff + base + 2u] * (row[base + 2u] * inv)
+            let v3 = wn[pa.woff + base + 3u] * (row[base + 3u] * inv)
+            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
+            let d = m / 127.0
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            if (lane8 == 0u) {
+                outs[qb0 + b] = d
+            }
+            let qb = qb0 * 32u + base
+            outq[qb] = q8_quant1(v0, id)
+            outq[qb + 1u] = q8_quant1(v1, id)
+            outq[qb + 2u] = q8_quant1(v2, id)
+            outq[qb + 3u] = q8_quant1(v3, id)
+            b += 32u
+        }
+    }
+}
+
+[vk_dispatch(name = "cls_ar_f16_b", grid = "nrows", params = "nrows : int64")]
+class ClsArAddRmsF16B : ArBase {
+    @ssbo @binding = 3 outh : array<float16>   // the normed rows, f16
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+    def run {
+        let rbase = gl_WorkGroupID.x * pa.dim
+        let ss = accum_row(rbase)
+        let inv = rms_inv(ss)
+        var k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            outh[rbase + k] = float16(wn[pa.woff + k] * (row[k] * inv))
+            k += 256u
         }
     }
 }
@@ -189,11 +234,11 @@ struct RqArgs {
 [vk_dispatch(name = "cls_dn_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class DnRequant {
     @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 outq : array<uint>
+    @ssbo @binding = 1 outq : array<int8>
     @ssbo @binding = 2 outs : array<float>
     @push_constant pa : RqArgs
 
-    [spirv_kernel(local_size_x = 256, name = "cls_dn_rq_spv")]
+    [spirv_kernel(local_size_x = 256, name = "cls_dn_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let gid = gl_GlobalInvocationID.x
         let sg = gid / 32u
@@ -212,7 +257,11 @@ class DnRequant {
             if (lane8 == 0u) {
                 outs[b] = d
             }
-            outq[b * 8u + lane8] = q8_pack4(v0, v1, v2, v3, id)
+            let qb = b * 32u + lane8 * 4u
+            outq[qb] = q8_quant1(v0, id)
+            outq[qb + 1u] = q8_quant1(v1, id)
+            outq[qb + 2u] = q8_quant1(v2, id)
+            outq[qb + 3u] = q8_quant1(v3, id)
         }
     }
 }
@@ -221,7 +270,7 @@ class DnRequant {
 [vk_dispatch(name = "cls_q8k_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8kRequant {
     @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 outq : array<uint>
+    @ssbo @binding = 1 outq : array<int8>
     @ssbo @binding = 2 outs : array<float>
     @push_constant pa : RqArgs
 
@@ -233,14 +282,7 @@ class Q8kRequant {
         return d != 0.0 ? 1.0 / d : 0.0
     }
 
-    def pack_word(b, r, lane : uint; v, id : float) {
-        let w = q8k_pack_butterfly(v, id)
-        if (lane % 4u == 0u) {
-            outq[b * 64u + r * 8u + lane / 4u] = w
-        }
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "cls_q8k_rq_spv")]
+    [spirv_kernel(local_size_x = 256, name = "cls_q8k_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let gid = gl_GlobalInvocationID.x
         let b = gid / 32u
@@ -256,7 +298,7 @@ class Q8kRequant {
             }
             let id = blk_scale(b, lane, m)
             for [unroll] (r in range(8)) {
-                pack_word(b, uint(r), lane, vals[r], id)
+                outq[b * 256u + uint(r) * 32u + lane] = q8_quant1(vals[r], id)
             }
         }
     }
@@ -281,26 +323,30 @@ def private act_mul_sel(v, u : float; gelu : uint) : float {
 class ActRqMembers {
     @ssbo @binding = 0 gate : array<float>     // gate rows (act's v side)
     @ssbo @binding = 1 up : array<float>       // up rows (act's u side)
-    @ssbo @binding = 2 outq : array<uint>      // quantized words out
+    @ssbo @binding = 2 outq : array<int8>      // quantized bytes out
     @ssbo @binding = 3 outs : array<float>     // per-block scales out
     @push_constant pa : ActArgs
 
     def act_mul(v, u : float) : float => act_mul_sel(v, u, pa.gelu)
 }
 
-// fused act + Q8_0 requant: subgroup per 4 blocks, word per lane, 8-lane shuffle amax (xor 1/2/4)
+// fused act + Q8_0 requant: subgroup per 4 blocks, 4 quants per lane, 8-lane shuffle amax (xor 1/2/4)
 [vk_dispatch(name = "q8_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8ActRq : ActRqMembers {
-    // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b],
-    // returns this lane's packed word
-    def blk_pack(b, lane8 : uint; v0, v1, v2, v3 : float) : uint {
+    // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b]
+    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def blk_store(b, lane8 : uint; v0, v1, v2, v3 : float) {
         let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
         let d = m / 127.0
         let id = d != 0.0 ? 1.0 / d : 0.0
         if (lane8 == 0u) {
             outs[b] = d
         }
-        return q8_pack4(v0, v1, v2, v3, id)
+        let qb = b * 32u + lane8 * 4u
+        outq[qb] = q8_quant1(v0, id)
+        outq[qb + 1u] = q8_quant1(v1, id)
+        outq[qb + 2u] = q8_quant1(v2, id)
+        outq[qb + 3u] = q8_quant1(v3, id)
     }
 
     [spirv_kernel(local_size_x = 256, name = "q8_actrq_cls_spv")]
@@ -315,13 +361,12 @@ class Q8ActRq : ActRqMembers {
             let v1 = act_mul(gate[eb + 1u], up[eb + 1u])
             let v2 = act_mul(gate[eb + 2u], up[eb + 2u])
             let v3 = act_mul(gate[eb + 3u], up[eb + 3u])
-            outq[b * 8u + lane % 8u] = blk_pack(b, lane % 8u, v0, v1, v2, v3)
+            blk_store(b, lane % 8u, v0, v1, v2, v3)
         }
     }
 }
 
-// the Q8_K twin: one subgroup per 256-weight superblock, whole-subgroup 5-shuffle amax,
-// butterfly byte pack
+// the Q8_K twin: one subgroup per 256-weight superblock, whole-subgroup 5-shuffle amax
 [vk_dispatch(name = "q8k_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8kActRq : ActRqMembers {
     def blk_scale(b, lane : uint; m0 : float) : float {
@@ -332,14 +377,7 @@ class Q8kActRq : ActRqMembers {
         return d != 0.0 ? 1.0 / d : 0.0
     }
 
-    def pack_word(b, r, lane : uint; v, id : float) {
-        let w = q8k_pack_butterfly(v, id)
-        if (lane % 4u == 0u) {
-            outq[b * 64u + r * 8u + lane / 4u] = w
-        }
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "q8k_actrq_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "q8k_actrq_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def run {
         let gid = gl_GlobalInvocationID.x
         let b = gid / 32u
@@ -356,7 +394,7 @@ class Q8kActRq : ActRqMembers {
             }
             let id = blk_scale(b, lane, m)
             for [unroll] (r in range(8)) {
-                pack_word(b, uint(r), lane, vals[r], id)
+                outq[base + uint(r) * 32u + lane] = q8_quant1(vals[r], id)
             }
         }
     }
@@ -376,10 +414,10 @@ class ActF16 {
     def run {
         let e = gl_GlobalInvocationID.x * 4u
         if (e < pa.nelem) {
-            outh[e] = float16(act_mul(gate[e], up[e]))
-            outh[e + 1u] = float16(act_mul(gate[e + 1u], up[e + 1u]))
-            outh[e + 2u] = float16(act_mul(gate[e + 2u], up[e + 2u]))
-            outh[e + 3u] = float16(act_mul(gate[e + 3u], up[e + 3u]))
+            outh[e] = float16(clamp(act_mul(gate[e], up[e]), -65504.0, 65504.0))
+            outh[e + 1u] = float16(clamp(act_mul(gate[e + 1u], up[e + 1u]), -65504.0, 65504.0))
+            outh[e + 2u] = float16(clamp(act_mul(gate[e + 2u], up[e + 2u]), -65504.0, 65504.0))
+            outh[e + 3u] = float16(clamp(act_mul(gate[e + 3u], up[e + 3u]), -65504.0, 65504.0))
         }
     }
 }
@@ -395,10 +433,64 @@ class F16Cvt {
     def run {
         let e = gl_GlobalInvocationID.x * 4u
         if (e < pa.nelem) {
-            outh[e] = float16(src[e])
-            outh[e + 1u] = float16(src[e + 1u])
-            outh[e + 2u] = float16(src[e + 2u])
-            outh[e + 3u] = float16(src[e + 3u])
+            outh[e] = float16(clamp(src[e], -65504.0, 65504.0))
+            outh[e + 1u] = float16(clamp(src[e + 1u], -65504.0, 65504.0))
+            outh[e + 2u] = float16(clamp(src[e + 2u], -65504.0, 65504.0))
+            outh[e + 3u] = float16(clamp(src[e + 3u], -65504.0, 65504.0))
+        }
+    }
+}
+
+struct EmbArgs {
+    npos : uint
+    dim : uint
+    wblk0 : uint   // the embd plane's slab-local block base
+    embed_scale : float
+}
+
+[vk_dispatch(name = "emb_gather_cls", grid = "wgs", params = "wgs : int64")]
+class EmbGather {
+    @ssbo @binding = 0 @role = "weight" wq : array<uint>        // weight quant words
+    @ssbo @binding = 1 @role = "weight" wsh : array<float16>    // per-block weight scales
+    @ssbo @binding = 2 ids : array<uint>       // one token id per row
+    @ssbo @binding = 3 xout : array<float>
+    @push_constant pa : EmbArgs
+
+    [spirv_kernel(local_size_x = 256, name = "emb_gather_cls_spv"), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.npos * pa.dim) {
+            let row = e / pa.dim
+            let col = e % pa.dim
+            let ib = pa.wblk0 + ids[row] * (pa.dim / 32u) + col / 32u
+            let lw = (col % 32u) / 4u
+            let v = (float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])) * pa.embed_scale   // dequant then scale - the CPU's order
+            xout[e] = v.x
+            xout[e + 1u] = v.y
+            xout[e + 2u] = v.z
+            xout[e + 3u] = v.w
+        }
+    }
+}
+
+[vk_dispatch(name = "emb_gather_f32_cls", grid = "wgs", params = "wgs : int64")]
+class EmbGatherF32 {
+    @ssbo @binding = 0 @role = "weight" wf : array<float>       // the f32 embd table, vocab x dim rows
+    @ssbo @binding = 2 ids : array<uint>       // one token id per row (binding 1 unused: ids/xout sit where the q8 twin binds them)
+    @ssbo @binding = 3 xout : array<float>
+    @push_constant pa : EmbArgs
+
+    [spirv_kernel(local_size_x = 256, name = "emb_gather_f32_cls_spv"), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.npos * pa.dim) {
+            let row = e / pa.dim
+            let col = e % pa.dim
+            let src = ids[row] * pa.dim + col
+            xout[e] = wf[src] * pa.embed_scale
+            xout[e + 1u] = wf[src + 1u] * pa.embed_scale
+            xout[e + 2u] = wf[src + 2u] * pa.embed_scale
+            xout[e + 3u] = wf[src + 3u] * pa.embed_scale
         }
     }
 }
@@ -431,12 +523,245 @@ class MoeCombine {
             var j = 0u
             while (j < pa.k) {
                 let jb = slot_idx[p * pa.k + j]
-                if (jb >= pa.r0 && jb < pa.r1) {
-                    acc += slot_w[p * pa.k + j] * down_rows[(jb - pa.r0) * pa.n + i]
+                let wj = slot_w[p * pa.k + j]
+                if (jb >= pa.r0 && jb < pa.r1 && wj != 0.0) {   // a zero-weight slot's row may be stale (the split's CPU share)
+                    acc += wj * down_rows[(jb - pa.r0) * pa.n + i]
                 }
                 j++
             }
             acc_rows[p * pa.n + i] = acc
+            i += 256u
+        }
+    }
+}
+
+struct DecCombineArgs {
+    n : uint    // row width
+    k : uint    // routed slots
+}
+
+[vk_dispatch(name = "dec_combine_cls", grid = "wgs", params = "wgs : int64")]
+class DecCombine {
+    @ssbo @binding = 0 xin : array<float>        // the residual row before the FFN
+    @ssbo @binding = 1 w : array<float>          // the k routing weights
+    @ssbo @binding = 2 down_rows : array<float>  // the down GEMV's k rows
+    @ssbo @binding = 3 xout : array<float>       // the residual row after the FFN
+    @push_constant pa : DecCombineArgs
+
+    [spirv_kernel(local_size_x = 256, name = "dec_combine_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        if (i < pa.n) {
+            var acc = 0.0
+            var j = 0u
+            while (j < pa.k) {
+                acc += w[j] * down_rows[j * pa.n + i]
+                j++
+            }
+            xout[i] = xin[i] + acc
+        }
+    }
+}
+
+struct RouterArgs {
+    ne : uint     // expert rows
+    dim : uint    // row width
+    woff : uint   // this layer's row base in the span's router plane (elements)
+}
+
+[vk_dispatch(name = "router_gemv_cls", grid = "ne", params = "ne : int64")]
+class RouterGemv {
+    @ssbo @binding = 0 @role = "weight" w : array<float>   // the router planes, row-major [ne x dim] per layer
+    @ssbo @binding = 1 x : array<float>       // the FFN-normed row
+    @ssbo @binding = 2 logits : array<float>  // ne logits
+    @push_constant pa : RouterArgs
+    @workgroup part : float[64]
+
+    [spirv_kernel(local_size_x = 256, name = "router_gemv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+    def run {
+        let e = gl_WorkGroupID.x
+        let base = pa.woff + e * pa.dim
+        var acc = 0.0
+        var i = gl_LocalInvocationID.x
+        while (i < pa.dim) {
+            acc += w[base + i] * x[i]
+            i += 256u
+        }
+        let s = subgroupAdd(acc)
+        if (gl_SubgroupInvocationID == 0u) {
+            part[gl_SubgroupID] = s
+        }
+        barrier()
+        if (gl_LocalInvocationID.x == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += part[sgi]
+                sgi++
+            }
+            logits[e] = tot
+        }
+    }
+}
+
+let private F16_MIN_NORMAL = 6.103515625e-5   // the host select's renorm floor
+
+struct TopkArgs {
+    ne : uint
+    k : uint
+    norm : uint      // renormalize the selected weights to sum 1
+    wscale : float   // 0 or 1 = none
+    base1 : uint     // the gate stack's expert-0 weight block (stack-relative, in the plane's units)
+    stride1 : uint   // blocks per expert
+    base3 : uint
+    stride3 : uint
+    base2 : uint
+    stride2 : uint
+    xnb2 : uint      // the down feed's blocks per hidden row: slot j reads row j (gate/up read the one feed row)
+}
+
+[vk_dispatch(name = "topk_cls", grid = "one", params = "one : int64")]
+class TopK {
+    @ssbo @binding = 0 logits : array<float>
+    @ssbo @binding = 1 meta1 : array<uint>   // the gate stack's (wblock, xblock) per slot row
+    @ssbo @binding = 2 meta3 : array<uint>
+    @ssbo @binding = 3 meta2 : array<uint>
+    @ssbo @binding = 4 w : array<float>      // the k routing weights
+    @push_constant pa : TopkArgs
+    @workgroup part : float[64]
+    @workgroup parti : uint[64]
+    @workgroup pick : uint[64]
+    @workgroup pickw : float[64]
+    @workgroup wg_max : float[1]
+    @workgroup wg_sum : float[1]
+
+    [spirv_kernel(local_size_x = 256, name = "topk_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+    def run {
+        let tid = gl_LocalInvocationID.x
+        let live = tid < pa.ne
+        let lg = live ? logits[tid] : -3.0e38
+        let m0 = subgroupMax(lg)
+        if (gl_SubgroupInvocationID == 0u) {
+            part[gl_SubgroupID] = m0
+        }
+        barrier()
+        if (tid == 0u) {
+            var m = part[0u]
+            var sgi = 1u
+            while (sgi < gl_NumSubgroups) {
+                m = max(m, part[sgi])
+                sgi++
+            }
+            wg_max[0u] = m
+        }
+        barrier()
+        let e = live ? exp(max(lg - wg_max[0u], -80.0)) : 0.0
+        let s0 = subgroupAdd(e)
+        if (gl_SubgroupInvocationID == 0u) {
+            part[gl_SubgroupID] = s0
+        }
+        barrier()
+        if (tid == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += part[sgi]
+                sgi++
+            }
+            wg_sum[0u] = tot
+        }
+        barrier()
+        var p = live ? e / wg_sum[0u] : -3.0e38
+        var j = 0u
+        while (j < pa.k) {
+            let vm = subgroupMax(p)
+            let im = subgroupMin(p == vm ? tid : 0xFFFFFFFFu)
+            if (gl_SubgroupInvocationID == 0u) {
+                part[gl_SubgroupID] = vm
+                parti[gl_SubgroupID] = im
+            }
+            barrier()
+            if (tid == 0u) {
+                var bv = part[0u]
+                var bi = parti[0u]
+                var sgi = 1u
+                while (sgi < gl_NumSubgroups) {
+                    if (part[sgi] > bv || (part[sgi] == bv && parti[sgi] < bi)) {
+                        bv = part[sgi]
+                        bi = parti[sgi]
+                    }
+                    sgi++
+                }
+                pick[j] = bi
+                pickw[j] = bv
+            }
+            barrier()
+            if (tid == pick[j]) {
+                p = -3.0e38
+            }
+            j++
+        }
+        if (tid == 0u) {
+            write_picks()
+        }
+    }
+
+    def write_picks {
+        var ws = 0.0
+        var jj = 0u
+        while (jj < pa.k) {
+            ws += pickw[jj]
+            jj++
+        }
+        ws = max(ws, F16_MIN_NORMAL)
+        jj = 0u
+        while (jj < pa.k) {
+            var wj = pickw[jj]
+            if (pa.norm != 0u) {
+                wj /= ws
+            }
+            if (pa.wscale != 0.0 && pa.wscale != 1.0) {
+                wj *= pa.wscale
+            }
+            w[jj] = wj
+            let ex = min(pick[jj], pa.ne - 1u)   // a NaN row leaves the sentinel: never a wild weight block
+            meta1[jj * 2u] = pa.base1 + ex * pa.stride1
+            meta1[jj * 2u + 1u] = 0u
+            meta3[jj * 2u] = pa.base3 + ex * pa.stride3
+            meta3[jj * 2u + 1u] = 0u
+            meta2[jj * 2u] = pa.base2 + ex * pa.stride2
+            meta2[jj * 2u + 1u] = jj * pa.xnb2
+            jj++
+        }
+    }
+}
+
+struct GatherArgs {
+    n : uint    // row width
+    k : uint    // slots per position (grid entry r sits at position r / k)
+    r0 : uint   // this dispatch's bucket-row window [r0, r1)
+    r1 : uint
+}
+
+[vk_dispatch(name = "moe_gather_f16_cls", grid = "nk", params = "nk : int64")]
+class MoeGatherF16 {
+    @ssbo @binding = 0 x : array<float>        // the normed activation rows, one per position
+    @ssbo @binding = 1 slot_idx : array<uint>  // position -> its k slot rows (the combine's map)
+    @ssbo @binding = 2 xg : array<float16>     // the gathered rows, bucket order, window-relative
+    @push_constant pa : GatherArgs
+
+    [spirv_kernel(local_size_x = 256, name = "moe_gather_f16_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-expert-chain")]
+    def run {
+        let r = gl_WorkGroupID.x
+        let b = slot_idx[r]
+        if (b < pa.r0 || b >= pa.r1) {
+            return
+        }
+        let src = (r / pa.k) * pa.n
+        let dst = (b - pa.r0) * pa.n
+        var i = gl_LocalInvocationID.x
+        while (i < pa.n) {
+            xg[dst + i] = float16(clamp(x[src + i], -65504.0, 65504.0))
             i += 256u
         }
     }
@@ -1429,15 +1754,16 @@ struct FaCm2Args {
 
 // hs=64 (tinyllama-class). The h128 twin below differs only in the head-size-shaped tiles —
 // duplication tolerated until the kernel-reification arc.
-[vk_dispatch(name = "fa_cm2_h64_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class FaCm2H64 {
+[ |> template_struct_instance]
+class template FaCm2H64T {
     @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
     @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
     @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
-    @ssbo @binding = 3 outp : array<float>       // attention out plane (rows x qd)
+    @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
     @push_constant pa : FaCm2Args
+    @template_constant OUT16 : bool = false
 
-    [spirv_kernel(local_size_x = 128, name = "fa_cm2_h64_cls_spv")]
+    [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
         let qtiles = (pa.rows + 63u) / 64u
         let h = gl_WorkGroupID.x / qtiles
@@ -1505,23 +1831,41 @@ class FaCm2H64 {
         coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
         coopmatPerElement(ld, ld, @@facm2_recip)
         coopmatMulElem(o, ld, o)                                        // O /= L (padding rows discard at store)
-        coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 64u, 64u)
+        static_if (OUT16) {
+            var of : coopmatWgAcc_f16_64x64
+            coopmatConvert(of, o)
+            coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * 64u, 64u)
+        } else {
+            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 64u, 64u)
+        }
     }
+}
+
+[vk_dispatch(name = "fa_cm2_h64_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64 : FaCm2H64T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_cm2_h64_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64F16 : FaCm2H64T {
+    typedef OT = float16
+    override OUT16 = true
 }
 
 // hs=128 (llama-3.2-3B-class): same algorithm at Bc=32 (the head-size cut — K^T/V/softmax
 // state at 32 columns, KV loop steps 32). Fast standalone (24.7 TFLOP/s, right beside the h64) and
 // WINS end-to-end when the shadows fit (3B 4287 vs 3955 no-fa) — serving is gated only on the
 // resident plan learning the f16 shadow cost (see the pf_facm2 gate)
-[vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class FaCm2H128 {
+[ |> template_struct_instance]
+class template FaCm2H128T {
     @ssbo @binding = 0 qpanel : array<float>
     @ssbo @binding = 1 kh : array<float16>
     @ssbo @binding = 2 vh : array<float16>
-    @ssbo @binding = 3 outp : array<float>
+    @ssbo @binding = 3 outp : array<OT>
     @push_constant pa : FaCm2Args
+    @template_constant OUT16 : bool = false
 
-    [spirv_kernel(local_size_x = 128, name = "fa_cm2_h128_cls_spv")]
+    [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
         let qtiles = (pa.rows + 63u) / 64u
         let h = gl_WorkGroupID.x / qtiles
@@ -1589,8 +1933,25 @@ class FaCm2H128 {
         coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
         coopmatPerElement(ld, ld, @@facm2_recip)
         coopmatMulElem(o, ld, o)
-        coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 128u, 128u)
+        static_if (OUT16) {
+            var of : coopmatWgAcc_f16_64x128
+            coopmatConvert(of, o)
+            coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * 128u, 128u)
+        } else {
+            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 128u, 128u)
+        }
     }
+}
+
+[vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128 : FaCm2H128T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_cm2_h128_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128F16 : FaCm2H128T {
+    typedef OT = float16
+    override OUT16 = true
 }
 
 struct DaAttnBArgs {
@@ -3236,7 +3597,7 @@ class KqQ40CmF16 : MoeCmBase {
 // ===== the cm2 (NV_cooperative_matrix2) prefill tiles: native fmt-0 planes, decode-in-load =====
 
 struct VkQ8Blk {
-    qs : uint[8]   // one fmt-0 q8 block: 32 packed int8 quants; the scale lives in wsh
+    qs : int16[16]   // one fmt-0 q8 block: 32 packed int8 quants as 16-bit lanes; the scale lives in wsh
 }
 
 // the cm2 quant "l" geometry on the NATIVE fmt-0 two-plane layout: 256 threads, one
@@ -3245,20 +3606,19 @@ struct VkQ8Blk {
 // exists. Binding 4 unused (sparse)
 [vk_dispatch(name = "q8_batch_cm2l_cls", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2LBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (8 words each)
+    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (32 bytes each, read as 16-bit lanes)
     @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
     @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
 
-    [spirv_decode]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
-        let w = blk.qs[int(cib.y >> 2u)]
-        let q = (int(w) << ((3 - int(cib.y & 3u)) * 8)) >> 24
-        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(q))
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
+        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
     }
 
-    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2l_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2l_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
@@ -3423,24 +3783,23 @@ class Q8Cm2LBatch : MoeCmBase {
     }
 }
 
-// the m-tile sibling (cm2 quant "m": BN=128, same A / BK / thread count) — picked by
-// cm2_tile_cols when the l grid underfills the SMs; body mirrors Q8Cm2LBatch at 128-token width
+// the m-tile sibling (cm2 quant "m": BN=128, same A / BK / thread count); the body mirrors
+// Q8Cm2LBatch at 128-token width
 [vk_dispatch(name = "q8_batch_cm2m_cls", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2MBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (8 words each)
+    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (32 bytes each, read as 16-bit lanes)
     @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
     @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
 
-    [spirv_decode]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
     def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
-        let w = blk.qs[int(cib.y >> 2u)]
-        let q = (int(w) << ((3 - int(cib.y & 3u)) * 8)) >> 24
-        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(q))
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
+        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
     }
 
-    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2m_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2m_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
@@ -3589,6 +3948,1215 @@ class Q8Cm2MBatch : MoeCmBase {
         var accw : coopmatWgAcc_f32_128x128
         coopmatConvert(accw, acc)
         coopmatStoreTensor(accw, y, ybase, tlo, t0, 128u, m0, 128u, tv)
+    }
+}
+
+// the s-tile sibling (BN=32): the MoE expert-bucket shape - a region of ~32 rows fills the
+// tile instead of padding three quarters of an m column; the body mirrors Q8Cm2MBatch at
+// 32-token width
+[vk_dispatch(name = "q8_batch_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class Q8Cm2SBatch : MoeCmBase {
+    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (32 bytes each, read as 16-bit lanes)
+    @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
+    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
+        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2s_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let ttiles = (cnt + 31u) / 32u
+        // split-k: wgs stack nsplit planes of (wtiles x ttiles); plane ks covers k [k0, k1) and
+        // stores f32 partials at ybase (the reduce sums the planes into y). SINGLE-REGION (dense)
+        // dispatches only — the plane size rides row0 + cnt, so multi-region planes would collide
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
+        let xt = tix % ttiles             // token 32-tile (fastest)
+        let wt = tix / ttiles             // weight 128-tile
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()   // wg_blk0 visible before the first decode load
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x32
+        var acc : coopmatWgAcc_f16_128x32
+        let t0 = row0 + xt * 32u
+        let m0 = wt * 128u
+        // FAST PATH — see Q8Cm2LBatch; identical rule at the s width, same literal-bound
+        // no-split specialization (the k0/k1/ybase form in the hot loop measured -27% pp)
+        if (m0 + 128u <= pa.d && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 32u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 5u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + ((cnt + 31u) & ~31u), pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2DPad
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x32
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 32u, m0, 128u, tv)
+                return
+            }
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < k1) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x32
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 32u, m0, 128u, tv)
+            return
+        }
+        // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetBlockSize(tla, 1u, 32u)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n / 32u, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(tlo, pa.d, 1u)
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x32
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 32u, m0, 128u, tv)
+            return
+        }
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < k1) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x32
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 32u, m0, 128u, tv)
+    }
+}
+
+// ===== the cm2 K-quant tiles: Q4_K decode-in-load over the repacked superblock planes =====
+
+struct VkK4Blk {
+    qs : int16[64]   // one Q4_K superblock's 128 nibble bytes as 16-bit lanes; its scale row (d|dmin + 8 sc + 8 mn bytes) lives in wsu
+}
+
+// the l-tile Q4_K twin of Q8Cm2LBatch: same geometry, superblock (1, 256) blocks, nibble + per-32-group scale/min decode
+[vk_dispatch(name = "kq_batch_k4_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class K4Cm2LBatch : MoeCmBase {
+    @ssbo @binding = 0 @role = "weight" wq : array<VkK4Blk>       // Q4_K quant plane (128-byte superblocks)
+    @ssbo @binding = 1 @role = "weight" wsu : array<uint>         // scale plane: 5 words per superblock
+    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint                    // the region's SUPERBLOCK base, staged for the decode
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode_k4(blk : VkK4Blk; bc, cib : uint2) : float16 {
+        let g = cib.y >> 5u
+        let e = cib.y & 31u
+        let bidx = g * 16u + (e & 15u)
+        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
+        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let dm = unpackHalf2x16(wsu[srow])
+        let sc = (wsu[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+        let mn = (wsu[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+        return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cm2l_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let ttiles = (cnt + 255u) / 256u
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
+        let xt = tix % ttiles
+        let wt = tix / ttiles
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()   // wg_blk0 visible before the first decode load
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x256
+        var acc : coopmatWgAcc_f16_128x256
+        let t0 = row0 + xt * 256u
+        let m0 = wt * 128u
+        // FAST PATH — see Q8Cm2LBatch (kq n is always a 256-multiple, so only tile bounds gate)
+        if (m0 + 128u <= pa.d && xt * 256u + 256u <= cnt && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 256u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2D
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x256
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
+                return
+            }
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < k1) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x256
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 256u, m0, 128u, tv)
+            return
+        }
+        // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetBlockSize(tla, 1u, 256u)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(tlo, pa.d, 1u)
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x256
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 256u, m0, 128u, tv)
+            return
+        }
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < k1) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x256
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 256u, m0, 128u, tv)
+    }
+}
+
+// the m-tile Q4_K sibling (BN=128) — the k4 decode on the m geometry
+[vk_dispatch(name = "kq_batch_k4_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class K4Cm2MBatch : MoeCmBase {
+    @ssbo @binding = 0 @role = "weight" wq : array<VkK4Blk>
+    @ssbo @binding = 1 @role = "weight" wsu : array<uint>
+    @ssbo @binding = 3 xf16 : array<float16>
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode_k4(blk : VkK4Blk; bc, cib : uint2) : float16 {
+        let g = cib.y >> 5u
+        let e = cib.y & 31u
+        let bidx = g * 16u + (e & 15u)
+        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
+        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let dm = unpackHalf2x16(wsu[srow])
+        let sc = (wsu[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+        let mn = (wsu[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+        return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cm2m_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let ttiles = (cnt + 127u) / 128u
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
+        let xt = tix % ttiles
+        let wt = tix / ttiles
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x128
+        var acc : coopmatWgAcc_f16_128x128
+        let t0 = row0 + xt * 128u
+        let m0 = wt * 128u
+        if (m0 + 128u <= pa.d && xt * 128u + 128u <= cnt && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 256u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2D
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x128
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 128u, m0, 128u, tv)
+                return
+            }
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < k1) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x128
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 128u, m0, 128u, tv)
+            return
+        }
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetBlockSize(tla, 1u, 256u)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(tlo, pa.d, 1u)
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x128
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 128u, m0, 128u, tv)
+            return
+        }
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < k1) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x128
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 128u, m0, 128u, tv)
+    }
+}
+
+// the s-tile Q4_K sibling (BN=32) - the k4 decode on the expert-bucket geometry (see Q8Cm2SBatch)
+[vk_dispatch(name = "kq_batch_k4_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class K4Cm2SBatch : MoeCmBase {
+    @ssbo @binding = 0 @role = "weight" wq : array<VkK4Blk>
+    @ssbo @binding = 1 @role = "weight" wsu : array<uint>
+    @ssbo @binding = 3 xf16 : array<float16>
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode_k4(blk : VkK4Blk; bc, cib : uint2) : float16 {
+        let g = cib.y >> 5u
+        let e = cib.y & 31u
+        let bidx = g * 16u + (e & 15u)
+        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
+        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let dm = unpackHalf2x16(wsu[srow])
+        let sc = (wsu[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+        let mn = (wsu[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+        return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cm2s_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let ttiles = (cnt + 31u) / 32u
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
+        let xt = tix % ttiles
+        let wt = tix / ttiles
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x32
+        var acc : coopmatWgAcc_f16_128x32
+        let t0 = row0 + xt * 32u
+        let m0 = wt * 128u
+        if (m0 + 128u <= pa.d && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 256u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + ((cnt + 31u) & ~31u), pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2DPad
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x32
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 32u, m0, 128u, tv)
+                return
+            }
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < k1) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x32
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 32u, m0, 128u, tv)
+            return
+        }
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetBlockSize(tla, 1u, 256u)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(tlo, pa.d, 1u)
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x32
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 32u, m0, 128u, tv)
+            return
+        }
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < k1) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x32
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 32u, m0, 128u, tv)
+    }
+}
+
+struct VkK6Blk {
+    ql : int16[64]   // one Q6_K superblock's 128 low-nibble bytes as 16-bit lanes
+    qh : int16[32]   // ... and its 64 high-2-bit bytes; scales (16 int8 + f16 d) live in wsu
+}
+
+// the l-tile Q6_K twin: 6-bit compose (nibble | qh 2 bits) - 32, per-16 signed sub-scale
+[vk_dispatch(name = "kq_batch_k6_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class K6Cm2LBatch : MoeCmBase {
+    @ssbo @binding = 0 @role = "weight" wq : array<VkK6Blk>       // Q6_K quant plane (192-byte superblocks)
+    @ssbo @binding = 1 @role = "weight" wsu : array<uint>         // scale plane: 5 words per superblock
+    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint                    // the region's SUPERBLOCK base, staged for the decode
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let bu = e >> 5u
+        let hh = (e >> 4u) & 1u
+        let j = e & 15u
+        let lb = bu * 16u + j
+        let lo = uint(int(unpack8(blk.ql[int(lb >> 1u)])[int(lb & 1u)])) & 0xFFu
+        let qb = (bu >> 2u) * 32u + hh * 16u + j
+        let hby = uint(int(unpack8(blk.qh[int(qb >> 1u)])[int(qb & 1u)])) & 0xFFu
+        let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let sidx = e >> 4u
+        let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+        let d = unpackHalf2x16(wsu[srow + 4u]).x
+        return float16(d * float(sc) * float(q6))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2l_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let ttiles = (cnt + 255u) / 256u
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
+        let xt = tix % ttiles
+        let wt = tix / ttiles
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()   // wg_blk0 visible before the first decode load
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x256
+        var acc : coopmatWgAcc_f16_128x256
+        let t0 = row0 + xt * 256u
+        let m0 = wt * 128u
+        if (m0 + 128u <= pa.d && xt * 256u + 256u <= cnt && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 256u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2D
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x256
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
+                return
+            }
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < k1) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x256
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 256u, m0, 128u, tv)
+            return
+        }
+        // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetBlockSize(tla, 1u, 256u)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(tlo, pa.d, 1u)
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x256
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 256u, m0, 128u, tv)
+            return
+        }
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < k1) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x256
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 256u, m0, 128u, tv)
+    }
+}
+
+// the m-tile Q6_K sibling (BN=128)
+[vk_dispatch(name = "kq_batch_k6_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class K6Cm2MBatch : MoeCmBase {
+    @ssbo @binding = 0 @role = "weight" wq : array<VkK6Blk>
+    @ssbo @binding = 1 @role = "weight" wsu : array<uint>
+    @ssbo @binding = 3 xf16 : array<float16>
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let bu = e >> 5u
+        let hh = (e >> 4u) & 1u
+        let j = e & 15u
+        let lb = bu * 16u + j
+        let lo = uint(int(unpack8(blk.ql[int(lb >> 1u)])[int(lb & 1u)])) & 0xFFu
+        let qb = (bu >> 2u) * 32u + hh * 16u + j
+        let hby = uint(int(unpack8(blk.qh[int(qb >> 1u)])[int(qb & 1u)])) & 0xFFu
+        let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let sidx = e >> 4u
+        let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+        let d = unpackHalf2x16(wsu[srow + 4u]).x
+        return float16(d * float(sc) * float(q6))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2m_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let ttiles = (cnt + 127u) / 128u
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
+        let xt = tix % ttiles
+        let wt = tix / ttiles
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x128
+        var acc : coopmatWgAcc_f16_128x128
+        let t0 = row0 + xt * 128u
+        let m0 = wt * 128u
+        if (m0 + 128u <= pa.d && xt * 128u + 128u <= cnt && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 256u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2D
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x128
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 128u, m0, 128u, tv)
+                return
+            }
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < k1) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x128
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 128u, m0, 128u, tv)
+            return
+        }
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetBlockSize(tla, 1u, 256u)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(tlo, pa.d, 1u)
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x128
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 128u, m0, 128u, tv)
+            return
+        }
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < k1) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x128
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 128u, m0, 128u, tv)
+    }
+}
+
+// the s-tile Q6_K sibling (BN=32, see Q8Cm2SBatch)
+[vk_dispatch(name = "kq_batch_k6_cm2s_cls", grid = "wgs", params = "wgs : int64")]
+class K6Cm2SBatch : MoeCmBase {
+    @ssbo @binding = 0 @role = "weight" wq : array<VkK6Blk>
+    @ssbo @binding = 1 @role = "weight" wsu : array<uint>
+    @ssbo @binding = 3 xf16 : array<float16>
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let bu = e >> 5u
+        let hh = (e >> 4u) & 1u
+        let j = e & 15u
+        let lb = bu * 16u + j
+        let lo = uint(int(unpack8(blk.ql[int(lb >> 1u)])[int(lb & 1u)])) & 0xFFu
+        let qb = (bu >> 2u) * 32u + hh * 16u + j
+        let hby = uint(int(unpack8(blk.qh[int(qb >> 1u)])[int(qb & 1u)])) & 0xFFu
+        let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let sidx = e >> 4u
+        let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+        let d = unpackHalf2x16(wsu[srow + 4u]).x
+        return float16(d * float(sc) * float(q6))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2s_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let ttiles = (cnt + 31u) / 32u
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
+        let xt = tix % ttiles
+        let wt = tix / ttiles
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x32
+        var acc : coopmatWgAcc_f16_128x32
+        let t0 = row0 + xt * 32u
+        let m0 = wt * 128u
+        if (m0 + 128u <= pa.d && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 256u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + ((cnt + 31u) & ~31u), pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2DPad
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x32
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 32u, m0, 128u, tv)
+                return
+            }
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < k1) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x32
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 32u, m0, 128u, tv)
+            return
+        }
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetBlockSize(tla, 1u, 256u)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(tlo, pa.d, 1u)
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x32
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 32u, m0, 128u, tv)
+            return
+        }
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < k1) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x32
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 32u, m0, 128u, tv)
     }
 }
 
@@ -3770,7 +5338,8 @@ struct RopeKvBArgs {
     layerbase : uint // this layer's K/V mirror base
     npos : uint
     pos0 : uint      // the window's first absolute position
-    voff : uint      // v rows' base inside the kv projection buffer
+    voff : uint
+    kstride : uint
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
@@ -3785,7 +5354,7 @@ class template RopeKvStoreBT {
     @push_constant pa : RopeKvBArgs
     @template_constant CLAMP16 : bool = true
 
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.npos * pa.ppp) {
@@ -3802,11 +5371,11 @@ class template RopeKvStoreBT {
             let e1 = pa.neox != 0u ? j + pa.half : j * 2u + 1u
             let apos = pa.pos0 + p
             if (is_k) {
-                let kb = p * pa.kvd + h * pa.hs
+                let kb = p * pa.kstride + h * pa.hs
                 let a0 = kvrows[kb + e0]
                 let a1 = kvrows[kb + e1]
                 let mo = pa.layerbase + apos * pa.kvd + h * pa.hs
-                let vb = pa.voff + p * pa.kvd + h * pa.hs
+                let vb = pa.voff + p * pa.kstride + h * pa.hs
                 static_if (CLAMP16) {
                     kmir[mo + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
                     kmir[mo + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))

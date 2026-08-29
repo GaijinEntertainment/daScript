@@ -190,8 +190,12 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   (record stores + tune sidecars); the dasllama.io ladder service builds on it.
 - **`dasllama/dasllama_exchange.das`** - the sidecar-exchange client (a sanctioned public entry point): the boot-time
   lookup/apply (llvm_tune's scope resolver - a verified per-box match downloads instead of a
-  ~20-minute tune), the privacy-stripped submit rails, and the control-page surface
-  dasllama-server serves at `/exchange`.
+  ~12-minute tune), the privacy-stripped submit rails, and the control-page surface
+  dasllama-server serves at `/exchange`. The first-contact consent gate (GDPR) sits ahead of
+  every lookup: an explicit `exchange_*` config counts as the expressed choice, otherwise the
+  `<stem>.consent` sidecar-sibling file governs - unset asks on a real terminal, or emits
+  `@sidecar consent state=needed` for the watchdog dialog / control page, and no request
+  leaves until a surface records "accepted".
 - **`benchmarks/asr/mem_census.sh`** - the peak-memory census (`/usr/bin/time -l` around one
   asr_bench process per cell; macOS only) - the interim footprint instrument until a footprint
   leg lands in `gen_bench_records`; its numbers live in `PERF_LEDGER.md`, never the stores.

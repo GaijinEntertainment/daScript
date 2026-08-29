@@ -413,6 +413,13 @@ button:disabled { opacity: 0.45; cursor: default; }
 
     <div class="sec" id="exchange"><span>§ 12</span><span class="rule"></span><span>sidecar exchange</span></div>
     <div class="panel">
+        <div class="cfg-file" id="ex-consent" style="display:none">
+            <div id="ex-consent-text" style="white-space:pre-line"></div>
+            <div class="controls" style="margin-top:8px">
+                <button id="b-consent-accept" type="button">accept — use the exchange</button>
+                <button id="b-consent-decline" type="button">decline — tune locally</button>
+            </div>
+        </div>
         <div class="cfg-file" id="ex-current">loading…</div>
         <div class="controls" style="margin:10px 0">
             <button id="b-ex-check" type="button">check the exchange</button>
@@ -2335,10 +2342,44 @@ function renderExchange() {
         box.appendChild(exLine("written " + (c.written || "?") + " · noise " + (c.noise || "?") + " · engine sha " + (c.engine_sha || "?")
             + (c.local ? (c.shared ? " · shared with the exchange" : " · not shared yet") : "")));
     }
-    box.appendChild(exLine("exchange " + (pol.url || "") + " · accept " + (pol.accept || "verified") + " · share " + (pol.submit || "ask")));
+    const consent = pol.configured ? "configured" : (exchangeState.consent || "");
+    box.appendChild(exLine("exchange " + (pol.url || "") + " · accept " + (pol.accept || "verified") + " · share " + (pol.submit || "ask")
+        + " · consent " + (consent || "not asked yet")));
     $("ex-always").checked = pol.submit === "always";
     $("b-ex-submit").style.display = (c.present && c.local && !c.shared) ? "" : "none";
+    // The GDPR first-contact banner: an explicit exchange config is itself consent, so it
+    // shows only on the zero-config path — until a choice is recorded, and again when the
+    // recorded choice is "declined" (as the way to change your mind).
+    const banner = $("ex-consent");
+    if (!pol.configured && consent !== "accepted" && exchangeState.consent_notice) {
+        $("ex-consent-text").textContent = (consent === "declined" ? "The exchange is currently declined — accepting re-enables it.\n\n" : "")
+            + (exchangeState.consent_notice || "");
+        banner.style.display = "";
+    } else {
+        banner.style.display = "none";
+    }
 }
+
+async function postConsent(accept) {
+    $("b-consent-accept").disabled = $("b-consent-decline").disabled = true;
+    try {
+        const r = await fetch("/exchange/consent", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accept })
+        });
+        const doc = await r.json();
+        if (!r.ok) throw new Error(doc.error && doc.error.message || String(r.status));
+        $("ex-note").textContent = doc.restarting
+            ? "exchange enabled — restarting to look up a preset for this box…"
+            : (accept ? "exchange enabled" : "declined — this box tunes locally");
+        await loadExchange();
+    } catch (e) {
+        $("ex-note").textContent = "consent: " + e.message;
+    }
+    $("b-consent-accept").disabled = $("b-consent-decline").disabled = false;
+}
+$("b-consent-accept").addEventListener("click", () => postConsent(true));
+$("b-consent-decline").addEventListener("click", () => postConsent(false));
 
 async function loadExchange() {
     try {
@@ -2438,7 +2479,7 @@ $("b-ex-submit").addEventListener("click", async () => {
 });
 
 $("b-ex-retune").addEventListener("click", async () => {
-    if (!window.confirm("Re-tune this box? ~20 minutes on a QUIET machine — the server restarts, races the kernels, then relaunches itself. It does not serve while tuning.\n(needs the watchdog running)")) return;
+    if (!window.confirm("Re-tune this box? ~12 minutes on a QUIET machine — the server restarts, races the kernels, then relaunches itself. It does not serve while tuning.\n(needs the watchdog running)")) return;
     $("b-ex-retune").disabled = true;
     try {
         const r = await fetch("/exchange/retune", { method: "POST" });
@@ -2450,7 +2491,7 @@ $("b-ex-retune").addEventListener("click", async () => {
             $("b-ex-retune").disabled = false;
             return;
         }
-        $("ex-note").textContent = "re-tune armed — the tune takes ~20 minutes; reload this page when the server is back";
+        $("ex-note").textContent = "re-tune armed — the tune takes ~12 minutes; reload this page when the server is back";
         restartingSince = performance.now();
         setBadge("warn", "restarting");
         waitForRestart();
@@ -2492,6 +2533,11 @@ $("ex-always").addEventListener("change", async () => {
         }
         exchangePolicy.submit = want;
         savedSnapshot = JSON.stringify(body);
+        // opting INTO auto-share is deliberate exchange engagement — record the consent it
+        // expresses, or the boot-time submit check degrades the choice back to an offer
+        if (want === "always" && (exchangeState.consent || "") !== "accepted") {
+            await postConsent(true);
+        }
         $("ex-note").textContent = want === "always"
             ? "every fresh tune on this box will be shared automatically"
             : "sharing goes back to asking first";

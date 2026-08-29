@@ -351,6 +351,7 @@ namespace {
             }
         }
         // void update(): runs until the page closes or the next run stops it.
+        if ( keepGoing ) loop->ctx->collectHeapIfMostlyFree();
         if ( !keepGoing ) stop_browser_loop();
     }
 

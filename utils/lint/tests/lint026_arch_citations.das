@@ -144,13 +144,12 @@ def private build_forward(name : string) : string {
 }
 
 
-// An armed folder whose document declares one cited anchor and one orphan, beside an unarmed
-// folder whose anchors nobody owes a citation for.
+// A folder whose document declares one cited anchor and one orphan, beside a sibling folder
+// whose NOTES.md carries a loose anchor - every anchor is owed a citation, no tag arms it.
 def private build_reverse(name : string) : string {
     let root = path_join(tmp_root(), name)
     let armed = path_join(root, "armed")
     mkdir_rec(armed)
-    plant(armed, ".lint_config", "[docs]\nenforce_arch = true\n")
     plant_doc(armed, "ARCHITECTURE.md", ["cited", "orphan"])
     plant_code(armed, "ok.das", [Cite(doc = "ARCHITECTURE.md", anchor = "cited", fn = "one"),
                                  Cite(doc = "ARCHITECTURE.md", anchor = "cited", fn = "two")])
@@ -202,18 +201,19 @@ def test_arch_forward_control(t : T?) {
         plant_code(dir, "ok.das", [Cite(doc = "ARCHITECTURE.md", anchor = "nope", fn = "only")])
         var out : string
         run_lint(dir, out)
-        t |> equal(count_of(out, "LINT026"), 1, "the dangling anchor fires\n{out}")
+        t |> equal(count_of(out, "does not resolve"), 1, "the dangling citation fires\n{out}")
+        t |> equal(count_of(out, "has no [arch] citation"), 1, "and the anchor it missed is uncited\n{out}")
         // mutate: the same citation, pointed at a section the document declares
         plant_code(dir, "ok.das", [Cite(doc = "ARCHITECTURE.md", anchor = "alpha", fn = "only")])
         var fixed : string
         let rc = run_lint(dir, fixed)
-        t |> equal(count_of(fixed, "LINT026"), 0, "a resolving citation is silent\n{fixed}")
+        t |> equal(count_of(fixed, "LINT026"), 0, "a resolving citation is silent both ways\n{fixed}")
         t |> equal(rc, 0, "and the run is clean\n{fixed}")
         // restore
         plant_code(dir, "ok.das", [Cite(doc = "ARCHITECTURE.md", anchor = "nope", fn = "only")])
         var again : string
         run_lint(dir, again)
-        t |> equal(count_of(again, "LINT026"), 1, "restoring the citation brings the finding back\n{again}")
+        t |> equal(count_of(again, "LINT026"), 2, "restoring the citation brings both findings back\n{again}")
     }
     t |> run("a commented-out citation is not a citation") @(t : T?) {
         let dir = path_join(tmp_root(), "commented")
@@ -226,8 +226,9 @@ def test_arch_forward_control(t : T?) {
         })
         var out : string
         let rc = run_lint(dir, out)
-        t |> equal(count_of(out, "LINT026"), 0, "a `//` line is prose, not a citation\n{out}")
-        t |> equal(rc, 0, "and the run is clean\n{out}")
+        t |> equal(count_of(out, "does not resolve"), 0, "a `//` line is prose, not a citation\n{out}")
+        t |> equal(count_of(out, "has no [arch] citation"), 1, "so the document's anchor has no citer\n{out}")
+        t |> equal(rc, 2, "the uncited anchor sets the issue exit code\n{out}")
     }
     t |> run("a structure's citation is shape-checked by lint - the compiler never sees it") @(t : T?) {
         let dir = path_join(tmp_root(), "malformed")
@@ -242,24 +243,83 @@ def test_arch_forward_control(t : T?) {
         })
         var out : string
         let rc = run_lint(dir, out)
-        t |> equal(count_of(out, "LINT026"), 1, "the anchor-less citation fires\n{out}")
+        t |> equal(count_of(out, "does not resolve"), 1, "the anchor-less citation fires\n{out}")
         t |> success(find(out, "ok.das:3: LINT026: [arch] citation does not resolve - malformed citation") >= 0,
             "reported at the annotation, as malformed\n{out}")
         t |> equal(rc, 2, "a finding, not a compile error\n{out}")
+    }
+    t |> run("a citation stays in the document's folder tree - an ancestor's document resolves, a sibling's does not") @(t : T?) {
+        let root = path_join(tmp_root(), "scope")
+        let a = path_join(root, "a")
+        let b = path_join(root, "b")
+        mkdir_rec(a)
+        mkdir_rec(b)
+        plant_doc(root, "ARCHITECTURE.md", ["alpha"])
+        plant_doc(a, "ARCHITECTURE.md", ["beta"])
+        plant_code(b, "ok.das", [Cite(doc = "../ARCHITECTURE.md", anchor = "alpha", fn = "near"),
+                                 Cite(doc = "../a/ARCHITECTURE.md", anchor = "beta", fn = "far")])
+        var out : string
+        let rc = run_lint(root, out)
+        t |> equal(count_of(out, "outside this file's folder tree"), 1, "the sibling-folder citation is the finding\n{out}")
+        t |> equal(count_of(out, "LINT026"), 1, "the ancestor citation resolves, and the far citation still counts as beta's citer\n{out}")
+        t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
+    }
+}
+
+
+[test]
+def test_arch_roots(t : T?) {
+    t |> run("a CMake build tree under a root is not source - its documents and files are skipped") @(t : T?) {
+        let root = path_join(tmp_root(), "buildtree")
+        let gen = path_join(root, "gen")
+        mkdir_rec(gen)
+        plant(gen, "CMakeCache.txt", "CMAKE_HOME_DIRECTORY:INTERNAL=x\n")
+        plant_doc(gen, "vendored.md", ["build_include"])
+        plant_code(gen, "ok.das", [Cite(doc = "missing.md", anchor = "nope", fn = "only")])
+        plant_code(root, "ok.das", [])
+        var out : string
+        let rc = run_lint(root, out)
+        t |> equal(count_of(out, "LINT026"), 0, "nothing under the build tree is reported\n{out}")
+        t |> equal(rc, 0, "and the run is clean\n{out}")
+    }
+    t |> run("a .md positional arms its folder with no .das compiled - the changed-document PR shape") @(t : T?) {
+        let root = path_join(tmp_root(), "mdpos")
+        mkdir_rec(root)
+        plant_doc(root, "ARCHITECTURE.md", ["alpha", "orphan"])
+        plant_code(root, "ok.das", [Cite(doc = "ARCHITECTURE.md", anchor = "alpha", fn = "only")])
+        var out : string
+        let rc = run_lint(path_join(root, "ARCHITECTURE.md"), out)
+        t |> success(find(out, "0 files") >= 0, "no .das is compiled for a document positional\n{out}")
+        t |> equal(count_of(out, "has no [arch] citation"), 1, "the folder's orphan anchor is found through the document\n{out}")
+        t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
+    }
+    t |> run("nested roots fold into one walk - a subfolder's citer satisfies the parent's anchor, and nothing reports twice") @(t : T?) {
+        let root = path_join(tmp_root(), "nested")
+        let sub = path_join(root, "sub")
+        mkdir_rec(sub)
+        plant_doc(root, "ARCHITECTURE.md", ["alpha", "orphan"])
+        plant_code(sub, "ok.das", [Cite(doc = "../ARCHITECTURE.md", anchor = "alpha", fn = "only")])
+        plant_doc(sub, "NOTES.md", ["loose"])
+        var out : string
+        let rc = run_lint_argv([sub], root, out)
+        t |> equal(count_of(out, "\{#orphan\}"), 1, "the parent's orphan is found once\n{out}")
+        t |> equal(count_of(out, "\{#loose\}"), 1, "the subfolder given twice reports its loose anchor once\n{out}")
+        t |> equal(count_of(out, "\{#alpha\}"), 0, "the subfolder's citer satisfies the parent's anchor\n{out}")
+        t |> equal(rc, 2, "the two findings set the issue exit code\n{out}")
     }
 }
 
 
 [test]
 def test_arch_reverse(t : T?) {
-    t |> run("an uncited anchor fires, and only in an armed folder") @(t : T?) {
+    t |> run("an uncited anchor fires in every folder - no tag arms the reverse pass") @(t : T?) {
         let root = build_reverse("rev")
         var out : string
         let rc = run_lint(root, out)
-        t |> equal(count_of(out, "LINT026"), 1, "only the orphan is a finding\n{out}")
+        t |> equal(count_of(out, "LINT026"), 2, "the orphan and the sibling's loose anchor are the findings\n{out}")
         t |> success(find(out, "armed/ARCHITECTURE.md:6: LINT026: anchor \{#orphan\} has no [arch] citation") >= 0,
             "the finding names the anchor at its heading line\n{out}")
-        t |> success(find(out, "NOTES.md") < 0, "an unarmed folder's anchors stay narrative\n{out}")
+        t |> success(find(out, "NOTES.md") >= 0, "a sibling folder's loose anchor is owed too\n{out}")
         t |> success(find(out, "\{#cited\}") < 0, "two citations satisfy one anchor\n{out}")
         t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
     }
@@ -268,7 +328,7 @@ def test_arch_reverse(t : T?) {
         let armed = path_join(root, "armed")
         var before : string
         run_lint(root, before)
-        t |> equal(count_of(before, "LINT026"), 1, "only the orphan\n{before}")
+        t |> equal(count_of(before, "LINT026"), 2, "the orphan and the loose anchor\n{before}")
         // mutate: the code stops citing `cited`, so both anchors are owed
         plant_code(armed, "ok.das", [Cite(doc = "ARCHITECTURE.md", anchor = "orphan", fn = "one")])
         var swapped : string
@@ -298,7 +358,7 @@ def test_arch_modes(t : T?) {
         let root = build_reverse("revdis")
         var out : string
         let rc = run_lint_argv(["--disable", "LINT026"], root, out)
-        t |> equal(count_of(out, "LINT026"), 0, "the armed folder reports nothing\n{out}")
+        t |> equal(count_of(out, "LINT026"), 0, "the reverse pass reports nothing\n{out}")
         t |> equal(rc, 0, "and the run is clean\n{out}")
     }
     t |> run("--enable whitelist mode without LINT026 silences it") @(t : T?) {

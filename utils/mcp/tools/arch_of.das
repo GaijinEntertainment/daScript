@@ -22,12 +22,12 @@ def private write_section(var w : StringBuilderWriter; body : string) {
 }
 
 def private write_citation(var w : StringBuilderWriter; var docs : ArchDocs;
-                           rel : string; c : ArchCitation; symbol : string) {
+                           file, rel : string; c : ArchCitation; symbol : string) {
     w |> write("{rel}:{c.line}: arch(at=\"{c.raw}\")\n")
     if (!empty(symbol)) {
         w |> write("  symbol: {symbol}\n")
     }
-    let reason = citation_failure_reason(docs, c)
+    let reason = citation_failure_reason(docs, file, c)
     if (!empty(reason)) {
         w |> write("  does not resolve - {reason}\n")
         if (!empty(c.doc)) {
@@ -59,7 +59,7 @@ def do_arch_of(file : string; symbol : string = "") : string {
             let owner = annotated_symbol(lines, c.line)
             continue if (!empty(symbol) && owner != symbol)
             shown ++
-            write_citation(w, docs, rel, c, owner)
+            write_citation(w, docs, arch_path(resolved), rel, c, owner)
         }
     }
     if (shown == 0) {

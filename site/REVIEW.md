@@ -12,9 +12,9 @@ shows.**
 exact argv `modules/dasLLAMA/performance/gen_bench_records.das` (or the released bench exe it
 spawns) ran is a defect.**
 
-**A row `files/dasllama.js` renders without its run's `cmd` + `date` line is a defect - render
-that line on every row the run produced.** One run's `cmd` + `date` covers several rendered
-rows.
+**A row that `files/dasllama.js` renders without its run's `cmd` + `date` line is a defect -
+render that line on every row the run produced.** One run's `cmd` + `date` covers several
+rendered rows.
 
 **A `cmd` or `date` inside a run's `tests` entry in `files/dasllama/bench_records.json` is a
 defect - the pair belongs on the run object that produced the rows.**
@@ -42,26 +42,31 @@ from the vendored dasProfile records, the `files/profile_results_<platform>.json
 dasProfile record.** Provenance - the `das_capture` and `ext_capture` stamps - travels in the
 dasProfile files themselves.
 
-**A code sample shown as a partial snippet or as pseudo-code is a defect - show every sample as
-a full program that compiles and runs with the current toolchain.**
+**A code sample embedded in a page under this folder shown as a partial snippet or as
+pseudo-code is a defect - show every embedded sample as a full program that compiles and runs
+with the current toolchain.**
 
-**A code sample without a "try it on playground" link is a defect - link every sample.**
+**A code sample embedded in a page under this folder without a "try it on playground" link is
+a defect - link every embedded sample.**
 
-**A daslang sample not written in gen2 is a defect.**
+**A daslang sample embedded in a page not written in gen2 is a defect.**
 
-**A diff that changes the deployed playground sources - `playground/` (this folder),
-`web/examples/ui/src/`, or `web/examples/ui/samples/` - states a run of the WASM-staged
-Playwright suite (`tests/playground/`, this folder) in its PR body or commit message, naming
-the passes and any failures, in the same change.** The no-WASM lane cannot see a broken runtime
-path, and every sample on the page runs through that path.
+**A diff that changes `playground/` (this folder) or `examples/_interp.html` (this folder)
+states a run of the WASM-staged Playwright suite (`tests/playground/`, this folder) in its PR
+body or commit message, naming the passes and any failures, in the same change.** The no-WASM
+lane cannot see a broken runtime path, and every sample on the page runs through that path.
 
-**A stated Playwright run names the runtime artifacts it used: built from this change when the
-change feeds `web/output/daslang_static.*`, the deployed ones otherwise.**
+**A stated Playwright run names every sample the diff changed: for each, the spec that loaded
+it, or - when no spec loads it - that it was opened and run by hand in the playground.**
+
+**A stated Playwright run names the runtime artifacts it used: built from this change when
+the diff touches `src/`, `include/`, `daslib/`, `modules/`, `dastest/`, or
+`web/CMakeLists.txt` (all repo root); the deployed ones otherwise.**
 
 **A diff that puts a measurement number - a rate, a duration, a size, a score some run
-produced, never a fixture or run parameter such as an image's dimensions or a token budget - on
-a page without rendering it from live data, copying it from a checked-in measurement record, or
-marking it a placeholder in a source comment is a defect.**
+produced, never a fixture or run parameter - on a page without rendering it from live data,
+copying it from a checked-in measurement record, or marking it a placeholder in a source
+comment is a defect.**
 
 **A placeholder number a page reader could take for a fact is a defect - mark it as a
 placeholder on the page itself.**
@@ -75,5 +80,4 @@ selector body defined in BOTH `files/dasllama-table.css` and `dasllama.html`'s i
 `site-dasllama/` (repo root - the dasllama.io site) uses it.** Markup counts what
 `files/dasllama.js` injects.
 
-**An entry in `_news/*.md` for something not yet true at publish time is a defect - a news
-entry states a real, shipped event.**
+**An entry in `_news/*.md` for something not shipped at publish time is a defect.**

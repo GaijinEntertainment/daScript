@@ -28,6 +28,7 @@ require daslib/strings_convert
 require live_host
 require cave
 require cave_gen
+require sfx_gen
 
 let CELL_SIZE = 1.0
 let LIGHT_DIR = normalize(float3(-0.28, -0.62, -1.2))
@@ -35,8 +36,6 @@ let FILL_DIR = normalize(float3(0.55, 0.28, -0.32))
 let CAM_EYE = float3(0.0, -6.0, 26.0)
 let CAM_TARGET = float3(0.0, -0.65, 0.0)
 let START_LIVES = 3
-let AUDIO_RATE = 48000
-let AUDIO_CHANNELS = 1
 
 let COL_DIRT = float3(0.45, 0.28, 0.12)
 let COL_BOULDER = float3(0.55, 0.55, 0.58)
@@ -129,60 +128,6 @@ var display_w = 0
 var display_h = 0
 var skip_draw : array<bool>
 
-def gen_sine_sweep(freq_start, freq_end : float; duration : float; volume : float = 0.3) : array<float> {
-    let num_samples = int(float(AUDIO_RATE) * duration)
-    var samples : array<float>
-    samples |> resize(num_samples)
-    for (i in range(num_samples)) {
-        let t = float(i) / float(AUDIO_RATE)
-        let frac = t / duration
-        let phase = freq_start * t + (freq_end - freq_start) * t * t / (2.0 * duration)
-        samples[i] = sin(2.0 * PI * phase) * (1.0 - frac) * volume
-    }
-    return <- samples
-}
-
-def gen_noise_burst(duration : float; volume : float = 0.2) : array<float> {
-    let num_samples = int(float(AUDIO_RATE) * duration)
-    var samples : array<float>
-    samples |> resize(num_samples)
-    var seed = 12345u
-    for (i in range(num_samples)) {
-        let frac = float(i) / float(num_samples)
-        seed = seed * 1103515245u + 12345u
-        let noise = float(int(seed >> 16u) % 1000) / 500.0 - 1.0
-        samples[i] = noise * (1.0 - frac) * volume
-    }
-    return <- samples
-}
-
-def gen_tone(freq, duration, volume : float) : array<float> {
-    return <- gen_sine_sweep(freq, freq, duration, volume)
-}
-
-def overlay_at(var dst : array<float>; src : array<float>; at : int) {
-    let need = at + length(src)
-    if (length(dst) < need) {
-        dst |> resize(need)
-    }
-    for (i in range(length(src))) {
-        dst[at + i] += src[i]
-    }
-}
-
-def gen_fanfare(base : float; vol : float = 0.28) : array<float> {
-    var out : array<float>
-    let step = int(float(AUDIO_RATE) * 0.11)
-    let n1 <- gen_tone(base, 0.09, vol)
-    let n2 <- gen_tone(base * 1.25, 0.09, vol)
-    let n3 <- gen_tone(base * 1.5, 0.10, vol * 1.05)
-    let n4 <- gen_tone(base * 2.0, 0.28, vol * 1.15)
-    overlay_at(out, n1, 0)
-    overlay_at(out, n2, step)
-    overlay_at(out, n3, step * 2)
-    overlay_at(out, n4, step * 3)
-    return <- out
-}
 
 var @live snd_dig : array<float>
 var @live snd_gem : array<float>
@@ -255,6 +200,11 @@ def play_sfx(samples : array<float>) {
 var g_music_tracks : table<string; int>
 var music_initialized = false
 var music_enabled = false
+// The strudel player has two arms: a worker thread (strudel_init/strudel_play)
+// where the runtime can host one, and a main-thread channel (strudel_create_channel
+// + per-frame strudel_tick) where it cannot. Same music engine either way; only
+// where a command runs differs (music_dispatch below). Arm choice is init's.
+var music_threaded = false
 
 def strudel_music_cmd(cmd : string) {
     let parts <- split(cmd, ":")
@@ -286,36 +236,47 @@ def strudel_music_main() {
     strudel_play(@@strudel_music_cmd)
 }
 
+// Route a music command to wherever the engine runs: the strudel thread in the
+// threaded arm, or straight into the handler here in the main-thread arm
+// (strudel_command is a silent no-op without the thread's command stream).
+def music_dispatch(cmd : string) {
+    if (music_threaded) {
+        strudel_command(cmd)
+    } else {
+        strudel_music_cmd(cmd)
+    }
+}
+
 def stop_all_music(fade : float) {
-    strudel_command("stop:drums:{fade}")
-    strudel_command("stop:hats:{fade}")
-    strudel_command("stop:bass:{fade}")
-    strudel_command("stop:lead:{fade}")
-    strudel_command("stop:arp:{fade}")
+    music_dispatch("stop:drums:{fade}")
+    music_dispatch("stop:hats:{fade}")
+    music_dispatch("stop:bass:{fade}")
+    music_dispatch("stop:lead:{fade}")
+    music_dispatch("stop:arp:{fade}")
 }
 
 def start_menu_music() {
     strudel_set_bpm(92.0lf)
-    strudel_command("play:drums:<bd ~ ~ hh?0.4> <~ sd ~ ~> <bd ~ [~ hh?0.5] ~> <~ ~ sd?0.6 cp?0.3>:0.32")
-    strudel_command("play:hats:hh(3,8):0.18")
-    strudel_command("note:bass:<[d2 ~] [a1 ~] [f1 ~] [g1 ~] [d2 ~] [c2 ~] [bb1 ~] [a1 a1?0.5]>:sine:0.22")
-    strudel_command("note:lead:<d4 ~ f4 ~ a4 ~ g4 ~> <~ f4 ~ d4 ~ a3 ~ c4> <d4 f4?0.6 ~ a4 ~ g4 f4 ~> <~ d4 ~ ~ a4?0.5 ~ ~ ~>:triangle:0.14")
+    music_dispatch("play:drums:<bd ~ ~ hh?0.4> <~ sd ~ ~> <bd ~ [~ hh?0.5] ~> <~ ~ sd?0.6 cp?0.3>:0.32")
+    music_dispatch("play:hats:hh(3,8):0.18")
+    music_dispatch("note:bass:<[d2 ~] [a1 ~] [f1 ~] [g1 ~] [d2 ~] [c2 ~] [bb1 ~] [a1 a1?0.5]>:sine:0.22")
+    music_dispatch("note:lead:<d4 ~ f4 ~ a4 ~ g4 ~> <~ f4 ~ d4 ~ a3 ~ c4> <d4 f4?0.6 ~ a4 ~ g4 f4 ~> <~ d4 ~ ~ a4?0.5 ~ ~ ~>:triangle:0.14")
 }
 
 def start_play_music() {
     strudel_set_bpm(118.0lf)
-    strudel_command("play:drums:<bd [hh hh] sd [hh hh] bd [hh hh] sd [hh cp] bd [hh?0.75 hh] sd [hh hh] bd [hh hh] [sd?0.45 sd] [hh cp?0.35] bd [hh hh] sd [hh?0.6 hh] bd [hh cp?0.4] sd [hh hh] bd [hh hh] sd [cp?0.5 hh]>:0.48")
-    strudel_command("play:hats:hh(5,8,2):0.2")
-    strudel_command("note:bass:<[d2 d2] [d2 a1] [f2 f2] [g2 g2] [d2 d2] [c2 c2] [bb1 bb1] [a1 a1] [d2 d2] [d2 f2] [g2 g2] [a1 a1] [d2 d2] [f2?0.65 f2] [g2 g2] [a1 c2]>:square:0.24")
-    strudel_command("note:lead:<d4 ~ f4 a4 ~ g4 f4 ~ d4 ~ a4 c5 ~ g4 f4 d4 ~ f4 ~ g4 a4 ~ c5 a4 g4 ~ d4 ~ [f4 g4] a4 ~ g4?0.55 f4 d4 ~ a4 ~ f4 ~ d4 g4 ~ f4 ~>:triangle:0.16")
-    strudel_command("note:arp:<[d4 f4 a4 d5] [f4 a4 c5 f5?0.45] [d4 f4 a4 d5] [c4 e4 g4 c5?0.4] [d4 f4 a4 d5] [a3 d4 f4 a4] [d4 f4 a4 d5?0.5] [g3 bb3 d4 g4]>:triangle:0.09")
+    music_dispatch("play:drums:<bd [hh hh] sd [hh hh] bd [hh hh] sd [hh cp] bd [hh?0.75 hh] sd [hh hh] bd [hh hh] [sd?0.45 sd] [hh cp?0.35] bd [hh hh] sd [hh?0.6 hh] bd [hh cp?0.4] sd [hh hh] bd [hh hh] sd [cp?0.5 hh]>:0.48")
+    music_dispatch("play:hats:hh(5,8,2):0.2")
+    music_dispatch("note:bass:<[d2 d2] [d2 a1] [f2 f2] [g2 g2] [d2 d2] [c2 c2] [bb1 bb1] [a1 a1] [d2 d2] [d2 f2] [g2 g2] [a1 a1] [d2 d2] [f2?0.65 f2] [g2 g2] [a1 c2]>:square:0.24")
+    music_dispatch("note:lead:<d4 ~ f4 a4 ~ g4 f4 ~ d4 ~ a4 c5 ~ g4 f4 d4 ~ f4 ~ g4 a4 ~ c5 a4 g4 ~ d4 ~ [f4 g4] a4 ~ g4?0.55 f4 d4 ~ a4 ~ f4 ~ d4 g4 ~ f4 ~>:triangle:0.16")
+    music_dispatch("note:arp:<[d4 f4 a4 d5] [f4 a4 c5 f5?0.45] [d4 f4 a4 d5] [c4 e4 g4 c5?0.4] [d4 f4 a4 d5] [a3 d4 f4 a4] [d4 f4 a4 d5?0.5] [g3 bb3 d4 g4]>:triangle:0.09")
 }
 
 def start_gameover_music() {
     strudel_set_bpm(68.0lf)
-    strudel_command("play:drums:<bd ~ ~ ~> <~ ~ bd?0.5 ~> <bd ~ hh?0.3 ~> <~ ~ ~ bd?0.35>:0.2")
-    strudel_command("note:bass:<d2 ~ bb1 ~> <a1 ~ g1 ~> <f1 ~ a1 ~> <d2 ~ ~ ~>:sine:0.26")
-    strudel_command("note:lead:<f4 ~ e4 ~> <d4 ~ c4 ~> <bb3 ~ a3 ~> <d4?0.6 ~ ~ ~>:triangle:0.16")
+    music_dispatch("play:drums:<bd ~ ~ ~> <~ ~ bd?0.5 ~> <bd ~ hh?0.3 ~> <~ ~ ~ bd?0.35>:0.2")
+    music_dispatch("note:bass:<d2 ~ bb1 ~> <a1 ~ g1 ~> <f1 ~ a1 ~> <d2 ~ ~ ~>:sine:0.26")
+    music_dispatch("note:lead:<f4 ~ e4 ~> <d4 ~ c4 ~> <bb3 ~ a3 ~> <d4?0.6 ~ ~ ~>:triangle:0.16")
 }
 
 def start_music_for_state() {
@@ -870,7 +831,13 @@ def sim_playing(dt : float) {
 }
 
 def update_music() {
-    return if (!music_enabled || prev_music_state == game_state)
+    return if (!music_enabled || !music_initialized)
+    if (!music_threaded) {
+        // Main-thread arm renders its PCM here. Self-regulating: strudel_tick
+        // skips whenever the audio buffer is far enough ahead.
+        strudel_tick()
+    }
+    return if (prev_music_state == game_state)
     stop_all_music(0.2)
     start_music_for_state()
 }
@@ -889,15 +856,29 @@ def setup_camera() {
 def init() {
     live_create_window("Boulder Dash", 1280, 720)
     create_gl_objects()
-    music_enabled = !audio_is_single_threaded()
     if (!audio_initialized) {
         asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
     }
-    if (music_enabled && !music_initialized) {
-        strudel_init(@@strudel_music_main)
+    if (!music_initialized) {
+        // The worker arm needs a real thread: any native build has one, and so
+        // does the standalone wasm card (pthread pool + a yielding main loop).
+        // The wasm playground interpreter does not -- spawning there parks the
+        // whole tab -- and a single-threaded audio backend has no consumer for
+        // a worker either. Everyone else falls back to the main-thread arm.
+        music_threaded = (
+            !audio_is_single_threaded() &&
+            (get_platform_name() != "emscripten" || is_standalone_exe())
+        )
+        if (music_threaded) {
+            strudel_init(@@strudel_music_main)
+        } else {
+            strudel_create_channel()
+            strudel_set_bpm(110.0lf)
+        }
         strudel_set_volume(0.4, 0.0)
+        music_enabled = true
         music_initialized = true
         start_music_for_state()
     }
@@ -964,8 +945,9 @@ def update() {
 
 [export]
 def shutdown() {
-    if (music_enabled) {
+    if (music_initialized) {
         strudel_shutdown()
+        music_initialized = false
     }
     if (!is_reload()) {
         audio_system_finalize(asch.command, asch.next_sid)
@@ -1122,18 +1104,20 @@ def cmd_slow_motion(input : JsonValue?) : JsonValue? {
     return JV(args)
 }
 
+// eval_main_loop drives the block once per frame: a blocking while-loop
+// natively, emscripten_set_main_loop (rAF) on the web -- one main for both.
+// live_end_frame only swaps buffers, so the loop body owns the GC boundary.
 [export]
 def main() {
     parse_args()
     init()
     var frame_count = 0
-    while (!exit_requested()) {
+    eval_main_loop() {
         update()
         maybe_collect_gc()
         frame_count++
-        if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
-            break
-        }
+        return false if (max_frame_limit > 0 && frame_count >= max_frame_limit)
+        return !exit_requested()
     }
     shutdown()
 }

@@ -66,6 +66,8 @@ def test_coopmat2(t : T?) {
             "one OpCooperativeMatrixLengthKHR")
         t |> success(count_op(words, SpvOp.Phi) == 1,
             "one OpPhi (the coopmatClamp element loop)")
+        t |> success(count_op_operand_at(words, SpvOp.LoopMerge, 2, uint(SpvLoopControl.Unroll)) == 1,
+            "the coopmatClamp element loop's OpLoopMerge carries Unroll (left rolled, the accumulator leaves tensor registers)")
         // the decode function: a second OpFunction with exactly 3 OpFunctionParameters, its
         // PhysicalStorageBuffer pointer decorated Aliased, and Aligned loads inside
         t |> success(count_op(words, SpvOp.Function) == 2,

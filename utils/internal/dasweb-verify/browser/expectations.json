@@ -33,6 +33,7 @@
     "Game: Arcanoid (3D, arrow keys + space)": {},
     "Game: Pac-Man (3D, arrow keys + space)": {},
     "Game: Boulder Dash (3D, arrows + Z grab)": {},
+    "Game: River Run (3D, arrows + space)": {},
     "ImGui: Fourier Series (epicycles)": {},
     "Path Tracer Lab (jobque + threads + GPU)": { "budget_ms": 120000, "min_rafs": 10, "min_draws": 3 },
     "Physarum Lab (threads + audio)": {

@@ -378,6 +378,14 @@ namespace das {
                 return true;
             }
         }
+        for ( auto & tme : decl->typeMacroExpr ) {
+            if ( tme && tme->rtti_isTypeDecl() ) {
+                auto te = static_cast<ExprTypeDecl *>(tme);
+                if ( te->typeexpr && isLoop(visited, te->typeexpr) ) {
+                    return true;
+                }
+            }
+        }
         if ( decl->baseType == Type::alias ) {
             visited.pop_back();
         }
@@ -389,7 +397,7 @@ namespace das {
         if (decl->baseType == Type::typeDecl || decl->baseType == Type::typeMacro) {
             return nullptr;
         }
-        if (decl->baseType == Type::autoinfer && !autoToAlias) { // until alias is fully resolved, can't infer
+        if (decl->baseType == Type::autoinfer && (!autoToAlias || decl->alias.empty())) {
             return nullptr;
         }
         if (decl->baseType == Type::alias || (decl->baseType == Type::autoinfer && autoToAlias)) {
@@ -480,6 +488,8 @@ namespace das {
             if (decl->firstType) {
                 resT->firstType = inferAlias(decl->firstType, fptr, aliases, options, autoToAlias);
                 if (!resT->firstType)
+                    return nullptr;
+                if (!resT->firstType->isAutoOrAlias() && !resT->firstType->isTableKeyType())
                     return nullptr;
             }
             if (decl->secondType) {
@@ -1050,6 +1060,22 @@ namespace das {
                   expr->at, CompilationError::not_resolved_yet_expression_type);
         }
     }
+    bool InferTypes::isVoidReturnValueSettled(Expression *subexpr) const {
+        if (!subexpr->rtti_isCallFunc()) {
+            return true;
+        }
+        auto callee = ((ExprCallFunc *)subexpr)->func;
+        if (!callee) {
+            return false;
+        }
+        if (callee->builtIn || callee->isFullyInferred) {
+            return true;
+        }
+        if (callee->module && callee->module != program->thisModule.get()) {
+            return true;
+        }
+        return callee->hasReturn;
+    }
     bool InferTypes::inferReturnType(TypeDeclPtr &resType, ExprReturn *expr) {
         if (expr->subexpr && expr->subexpr->type && expr->subexpr->type->isVoid()) {
             // 'return void_expr' is legal when the result is void, or a bare auto which the
@@ -1059,6 +1085,10 @@ namespace das {
                 if (expr->moveSemantics) {
                     error("can't return void value via move", "", "",
                           expr->at, CompilationError::invalid_result);
+                    return false;
+                }
+                if (!isVoidReturnValueSettled(expr->subexpr)) {
+                    error("subexpression type is not fully resolved yet", "", "", expr->at, CompilationError::not_resolved_yet_expression_type);
                     return false;
                 }
                 if (resType->isVoid()) {

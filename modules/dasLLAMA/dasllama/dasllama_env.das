@@ -132,6 +132,15 @@ struct public GpuTierEnv {
     @clarg_doc = "Device-side routed MoE combine; 0 falls back to the host combine."
     gpu_combine : bool = true
 
+    @clarg_doc = "Split each STREAMED expert layer's prefill between the GPU (the experts it can stream in the CPU's time) and the CPU (the rest, concurrently); 0 streams whole layers."
+    gpu_moe_split : bool = true
+
+    @clarg_doc = "Decode FFN tail: a resident expert layer's FFN carries the combine, the residual and the next layer's attention feed on the device, so the two submits share one fence wait; 0 collects every FFN on the host."
+    gpu_dec_tail : bool = true
+
+    @clarg_doc = "Whole-token decode span: every resident expert layer's attention, router, top-k, FFN and combine as ONE recorded chain and one submit per token; 0 runs the per-layer submits."
+    gpu_dec_span : bool = true
+
     @clarg_default_doc = "0"
     @clarg_doc = "Expert heat threshold: hold the N hottest experts resident regardless of layer placement."
     gpu_heat : Option<int64>
@@ -302,10 +311,10 @@ struct public MetalEnv {
 
 // ===== Vulkan backend =====
 
-[EnvConfig(env_prefix = "DASLLAMA")]
+[EnvConfig(env_prefix = "DASLLAMA"), arch(at="../ARCHITECTURE_RUNTIME.md#env-knobs")]
 struct public VulkanEnv {
     @clarg_default_doc = "auto"
-    @clarg_doc = "Cooperative-matrix mode; the flash-attention twin needs it even when the GEMM runs sdot4."
+    @clarg_doc = "Cooperative-matrix mode (auto = cm2 where the device has NV_cooperative_matrix2, else mm, else sdot4); the flash-attention twin needs it even when the GEMM runs sdot4."
     coopmat : string = ""
 
     @clarg_default_doc = "32"
@@ -315,7 +324,7 @@ struct public VulkanEnv {
     @clarg_doc = "Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument."
     mm_smalld : int64 = 64l
 
-    @clarg_doc = "Fused decode tail (add+rms+requant, qk-norm+rope); 0 pins the split dispatches for a same-build A/B."
+    @clarg_doc = "Fused add+rms+requant: the decode tail (plus qk-norm+rope) AND the prefill batch ar+rq pairs; 0 pins the split dispatches for a same-build A/B."
     vk_fuse : bool = true
 
     @clarg_doc = "Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail."
@@ -333,6 +342,18 @@ struct public VulkanEnv {
     @clarg_doc = "Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths."
     vk_fa : bool = true
 
+    @clarg_doc = "Merged k|v prefill GEMM - one dispatch over the adjacent k+v arena planes; 0 pins the split k + v dispatches for a same-build A/B."
+    vk_kv_merge : bool = true
+
+    @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role)."
+    vk_overlap : bool = true
+
+    @clarg_doc = "Device-side token-embedding gather for the resident prefill (a tied q8 table gathers from the resident cls plane; a raw f32 table uploads whole under a 512 MB cap); 0 keeps the CPU embed loop."
+    vk_gpu_embed : bool = true
+
+    @clarg_doc = "Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured slower than plain pipelines on the mm_a gate shape, so those are the default)."
+    vk_fullsg : bool = false
+
     @clarg_doc = "Use a ReBAR device-local host-visible heap when one larger than 1GB is present."
     vk_rebar : bool = true
 
@@ -348,6 +369,10 @@ struct public VulkanEnv {
     @clarg_path
     @clarg_doc = "Directory of <kernel>.spv files served instead of the emitted words at pipeline creation (offline spirv-opt / hand-patched A/B instrument)."
     vk_spv_override : string = ""
+
+    @clarg_path
+    @clarg_doc = "Directory to write each kernel's emitted words as <kernel>.spv at pipeline creation (the override instrument's capture half)."
+    vk_spv_dump : string = ""
 
     @clarg_doc = "Barrier at every dispatch (correctness bisect)."
     vk_hazard_paranoid : bool = false
@@ -675,10 +700,10 @@ struct public ExampleEnv {
 
 [EnvConfig(env_prefix = "DASLLAMA")]
 struct public ExchangeEnv {
-    @clarg_doc = "Sidecar exchange base URL override (tests, mirrors); unset = the baked-in dasllama.io."
+    @clarg_doc = "Sidecar exchange base URL override (tests, mirrors); unset = the baked-in dasllama.io. Setting it is an expressed choice to use the exchange - the first-contact consent question is skipped (announced at boot)."
     exchange_url : string = ""
 
-    @clarg_doc = "One-shot exchange accept-policy override: verified | any | off; unset = the app config's exchange_accept. The watchdog arms 'any' on a relaunch when the user adopts an unverified sidecar over finishing a tune."
+    @clarg_doc = "One-shot exchange accept-policy override: verified | any | off; unset = the app config's exchange_accept. The watchdog arms 'any' on a relaunch when the user adopts an unverified sidecar over finishing a tune. Setting it is an expressed choice to use the exchange - the first-contact consent question is skipped (announced at boot)."
     exchange_accept : string = ""
 }
 

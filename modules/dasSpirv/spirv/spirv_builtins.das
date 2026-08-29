@@ -412,8 +412,7 @@ def public coopmatMulAdd(a : coopmatA_s8_16x32; b : coopmatB_s8_32x16; c : coopm
 // ===== cooperative matrices v2 (SPV_NV_cooperative_matrix2 — tensor addressing, workgroup scope) =====
 // A cm2 tile is WORKGROUP-scoped (the whole workgroup owns one MxN tile; the driver manages staging)
 // and is addressed through tensor LAYOUT objects (dims + strides + a per-load slice window + an
-// optional q8-style block size) instead of a flat (idx, stride) pair. The wg markers are name-parsed:
-// coopmatWg{A|B|Acc}_{f16|f32|s8|s32}_{R}x{C} — declare a new struct here and coopmat_info picks it up.
+// optional q8-style block size) instead of a flat (idx, stride) pair.
 struct coopmatWgA_f16_64x16 {}
 struct coopmatWgB_f16_16x16 {}
 struct coopmatWgB_f16_16x32 {}
@@ -433,6 +432,10 @@ struct coopmatWgAcc_f32_128x256 {}
 struct coopmatWgB_f16_64x128 {}
 struct coopmatWgAcc_f16_128x128 {}
 struct coopmatWgAcc_f32_128x128 {}
+// the s-tile siblings (BN=32, same A / BK): the MoE expert-bucket shape, ~32 rows per region
+struct coopmatWgB_f16_64x32 {}
+struct coopmatWgAcc_f16_128x32 {}
+struct coopmatWgAcc_f32_128x32 {}
 
 // flash-attention tiles (Br=64, head sizes 64 / 128): Q & O accumulators, Qf16/P as A, K^T/V/One
 // as B. h64 runs Bc=64; h128 runs Bc=32 (llama.cpp's big-head cut — the 64-wide KV tile set
@@ -444,6 +447,8 @@ struct coopmatWgB_f16_32x32 {}
 struct coopmatWgB_f16_32x128 {}
 struct coopmatWgB_f16_64x64 {}
 struct coopmatWgB_f16_128x32 {}
+[arch(at="../ARCHITECTURE.md#cm2-tile-markers")]
+struct coopmatWgAcc_f16_64x128 {}
 struct coopmatWgAcc_f32_64x128 {}
 // the int8 twins (q8 x q8 -> s32 at workgroup scope; K-tile 32)
 struct coopmatWgA_s8_64x32 {}
@@ -475,6 +480,10 @@ def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x256; c
 def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f16_128x128) : coopmatWgAcc_f16_128x128 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f32_128x128) : coopmatWgAcc_f32_128x128 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x32; c : coopmatWgAcc_f16_128x32) : coopmatWgAcc_f16_128x32 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x32; c : coopmatWgAcc_f32_128x32) : coopmatWgAcc_f32_128x32 { return c }
 // flash-attention shapes: S = Qf16 @ K^T (hsk 64 / 128), O += P @ V (hsv 64 / 128), rowsum = P @ One
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 { return c }
@@ -551,6 +560,8 @@ def public coopmatConvert(var dst : coopmatWgAcc_f32_64x64; src : coopmatWgAcc_f
 def public coopmatConvert(var dst : coopmatWgAcc_f32_128x256; src : coopmatWgAcc_f16_128x256) : void {}
 [unused_argument(dst, src), sideeffects]
 def public coopmatConvert(var dst : coopmatWgAcc_f32_128x128; src : coopmatWgAcc_f16_128x128) : void {}
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_128x32; src : coopmatWgAcc_f16_128x32) : void {}
 // The generic form covers every other float width/use conversion pair (validated at emission): a
 // same-use width change is a plain componentwise convert; a USE-changing pair (f32 accumulator ->
 // f16 A, the flash-attention Q/P path) additionally requires the conversions device feature.

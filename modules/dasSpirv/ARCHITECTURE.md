@@ -48,7 +48,7 @@ compute test as a ready-made end-to-end gate.
    raises it to 1.4 because `SPV_EXT_mesh_shader` requires it, and a few subgroup and
    cooperative-matrix ops raise it to 1.5. Every other stage stays at 1.3.
 
-## 3. Files and emission mechanism
+## 3. Files and emission mechanism {#files-and-emission}
 
 `modules/dasSpirv` is **pure daslang** (mirrors dasGlsl: a `spirv/` subdir of `.das` files +
 CMake resolver rows derived from `.das_module`; no `.shared_module`, no C++). dasVulkan
@@ -89,6 +89,45 @@ without macro plumbing.
 **`[spirv_decode]` method form.** The decode callback's SPIR-V signature is a rigid three
 parameters. The method form erases the das-level `self` from it, so the decode body still reads
 its class members - a separate scale plane, push constants, `@workgroup` staging.
+
+**Cooperative-matrix element loops carry `Unroll`.** `coopmatClamp` walks a coopmat local
+element by element through a hand-emitted structured loop bounded by
+`OpCooperativeMatrixLengthKHR`, and its `OpLoopMerge` sets loop control `Unroll` - the control
+glslang emits for `[[unroll]]`. Rolled, the dynamic per-element `OpAccessChain` index demotes
+the accumulator out of tensor-register form into addressable storage for the whole kernel, not
+only for the loop. On an RTX 5060 Ti (driver 610.74) the cm2 l-tile min-kernel runs 34.2 TFLOP/s
+rolled and 57.8 unrolled.
+
+### 3.1 The 8/16-bit small-integer surface {#small-int-surface}
+
+A shader reads AND writes `int8`/`uint8`/`int16`/`uint16`/`float16` SSBO elements and struct
+members, and the write direction costs the emitter no arm of its own. A narrowing daslang cast
+(`int8(v)`, `uint16(u)`) is one of the conversion opcodes `convert_op` already picks for any
+narrowing pair, and a store reaches its element through the same width-aware std430 access chain
+a load reads - so `ensure_member_storage_caps`, pulling `StorageBuffer8BitAccess` /
+`StorageBuffer16BitAccess` per member width, serves both directions from one call site. That is
+what lets a shader write quantized data - int8 quants beside an f16 scale - instead of packing
+32-bit words by hand.
+
+`unpack8` extends the same way. The `daslib/shader_lingua_franca.das` overloads add
+`int16 -> byte2` and `uint16 -> ubyte2` beside the 32-bit pair, and every one of them lowers
+through the single `OpBitcast` the emitter already emits for the name, so a 16-bit quant read
+needs no emitter change at all. The `byte4`/`ubyte4` type factory pulls the `Int8` capability,
+and widening an unpacked lane (`int4(b4)`) is a same-class `OpSConvert`, which gives sign
+extension for free.
+
+### 3.2 A cm2 tile shape is one struct declaration {#cm2-tile-markers}
+
+The workgroup-scope cooperative-matrix tiles are marker structs in `spirv_builtins.das` whose
+NAMES carry their geometry - `coopmatWg{A|B|Acc}_{f16|f32|s8|s32}_{R}x{C}` - and
+`coopmat_wg_info` parses that name instead of looking the struct up in a table. Adding a tile
+shape is therefore one struct declaration plus the overload that types the das call
+(`coopmatMulAdd` for a multiply tile, `coopmatConvert` for an accumulator-only tile): no
+emitter arm changes, because every cm2 arm reads rows, columns and component width out of the
+parse. The tile markers are empty structs with no storage, so the CPU bodies of `coopmatMulAdd`
+(returns `c`) and `coopmatConvert` (writes nothing) cannot compute what the emitted form
+computes: a coopmat kernel's device test takes a plain CPU reference as its oracle, the one
+sanctioned exception to the emitter checklist's CPU-body rule.
 
 ## 4. Test architecture - "every emitted instruction has a test"
 

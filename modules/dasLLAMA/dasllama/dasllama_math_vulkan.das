@@ -47,6 +47,7 @@ def private vk_dlim_wants_fill(var v : DlimVulkanConfig) {
     v.dense_attn = gpu_want_dense_attn()
     v.dense_shexp = gpu_want_dense_shexp()
     v.trim = g_env_vulkan.trim
+    v.split = gpu_want_moe_split()
 }
 
 //! Arm the tier for an OFFLINE bake: the load walk runs its full accept/refuse arithmetic
@@ -66,9 +67,26 @@ def vulkan_dry_bake_arm(v : DlimVulkanConfig) : bool {
     g_vk_dry_cfg = v
     set_moe_gpu_layer_count(v.moe_layers)
     if (!moe_gpu_tier_installed()) {
-        install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+        install_vk_moe_hooks()
     }
     return true
+}
+
+// the tier's whole hook set - the dry bake and the live arm install the same seven seats
+def install_vk_moe_hooks {
+    install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+    set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
+    set_moe_gpu_ffn_xf_async_hooks(@@vk_moe_ffn_xf_begin, @@vk_moe_ffn_xf_join, @@vk_moe_ffn_xf_async_rows)
+    set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
+    set_moe_gpu_ffn_tail_hooks(@@vk_moe_ffn_tail, @@vk_moe_ffn_tail_pending)
+    set_moe_gpu_span_dec_hook(@@vk_moe_span_dec)
+}
+
+// the model drop: no chain may be in flight, the decode-side counters reset, then the tier's teardown
+def vk_drop_model {
+    vk_xf_drop_check()
+    vk_decode_drop_state()
+    vk_drop_model_state()
 }
 
 //! MoeGpuFfnFn: routed experts' whole FFN chain (gate+up GEMMs, activation, requant, down GEMM)
@@ -93,6 +111,41 @@ def vk_moe_ffn(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; o
     }
 }
 
+//! MoeGpuFfnXfFn: the f16-fed (cm2) twin of vk_moe_ffn — the combined batch form over the
+//! window's f32 rows; resident stacks dispatch directly, a streamed group binds its slot first.
+def vk_moe_ffn_xf(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
+    ensure_ffn_state()
+    if (find_stack_idx(unsafe(offs1[0]), f1) < 0) {
+        let w0 = unsafe(offs1[0])
+        let g = find_stream_group(w0, f1)
+        if (g < 0) {
+            panic("dasLLAMA vulkan tier: dispatch against a region that is neither resident nor streamed (fmt {f1} element offset {w0})")
+        }
+        vk_moe_ffn_streamed_xf(g, goutp, offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
+        return
+    }
+    vk_moe_ffn_batch_xf(goutp, offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
+}
+
+//! MoeGpuFfnXfBeginFn: the async cm2 chain - a streamed group binds its slot with ONLY the given
+//! regions' experts (the split's share), a resident layer dispatches directly; join collects.
+def vk_moe_ffn_xf_begin(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
+    ensure_ffn_state()
+    if (find_stack_idx(unsafe(offs1[0]), f1) < 0) {
+        let w0 = unsafe(offs1[0])
+        let g = find_stream_group(w0, f1)
+        if (g < 0) {
+            panic("dasLLAMA vulkan tier: dispatch against a region that is neither resident nor streamed (fmt {f1} element offset {w0})")
+        }
+        stream_group_bind_partial(g, nrows, f3, f2, offs1, nregions, nfe * n)
+    }
+    vk_moe_ffn_batch_xf_begin(offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
+}
+
+def vk_moe_ffn_xf_join(var goutp : float?) {
+    vk_moe_ffn_batch_xf_join(goutp)
+}
+
 // ===== registration =====
 
 
@@ -114,7 +167,7 @@ def private vk_unmap_notify(base : void?; bytes : uint64) {
     }
     if (hit) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: model unmapping - dropping imported stream mirrors first\n")
-        vk_drop_model_state()
+        vk_drop_model()
     }
 }
 
@@ -234,7 +287,7 @@ def vulkan_moe_gpu_arm : bool {
     }
     set_moe_gpu_layer_count(layers)
     if (!moe_gpu_tier_installed()) {
-        install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+        install_vk_moe_hooks()
     }
     arm_say(1, "GPU tier armed - vulkan, moe layers {layers}{layers < 0l ? " (auto)" : ""}, stream {gpu_want_moe_stream()}")
     return true
@@ -284,7 +337,7 @@ def private vk_bake_tag : string {
     return dlim_vulkan_tag(v)
 }
 
-[init]
+[init, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def dasllama_math_vulkan_register() {
     register_kernel_backend(KernelBackend(name = "vulkan", mm = @@vulkan_no_gemv, batch = @@vulkan_no_batch,
         group3 = @@vulkan_no_group3, repack = @@vulkan_repack_noop,
@@ -299,12 +352,13 @@ def dasllama_math_vulkan_register() {
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)
     set_moe_gpu_binding_cap(@@vk_binding_cap)
+    install_rdec_prefill_ids(@@vk_rdec_prefill_ids, @@vk_rdec_set_emb, @@vk_rdec_upload_emb_f32)
     install_moe_gpu_resident(@@vk_arena_reserve, @@vk_arena_place, @@vk_rdec_prepare,
         @@vk_rdec_upload_norms, @@vk_rdec_set_layer, @@vk_rdec_set_cls, @@vk_rdec_token, @@vk_rdec_prefill,
         @@vk_rdec_sync_kv, @@vk_rdec_read_kv, @@vk_rdec_read_kv_bulk)
     set_moe_gpu_dn_state_hooks(@@vk_dn_step_flush, @@vk_dn_step_invalidate)
     set_moe_gpu_heat_hooks(@@vk_moe_heat_query, @@vk_moe_heat_advise, @@vk_moe_ffn_begin, @@vk_moe_ffn_join)
     set_moe_gpu_qkv_hook(@@vk_moe_qkv)
-    set_moe_gpu_drop_model_hook(@@vk_drop_model_state)
+    set_moe_gpu_drop_model_hook(@@vk_drop_model)
     vulkan_moe_gpu_arm()
 }

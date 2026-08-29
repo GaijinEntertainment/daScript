@@ -50,10 +50,10 @@ def expected_artifact_names(mode : string) : array<string> {
 
 // Require-path roots that force the standalone-page artifact: their native halves
 // (GL context, audio device, image decode) live in emscripten's JS glue, which a
-// bare wasi module cannot carry. strudel and live_stub are here for what they
-// require transitively (audio; a glfw window) — the scan only sees source text.
+// bare wasi module cannot carry. strudel, live and live_host are here for what
+// they require transitively (audio; a glfw window) — the scan only sees source text.
 let private PAGE_REQUIRE_ROOTS : table<string> <- {
-    "glfw", "opengl", "imgui", "audio", "minfft", "stbimage", "clipboard", "strudel", "live_stub"
+    "glfw", "opengl", "imgui", "audio", "minfft", "stbimage", "clipboard", "strudel", "live", "live_host"
 }
 
 def private text_requires_page(text : string) : bool {

@@ -53,9 +53,10 @@ Assertions
 
 .. das:function:: assert(x, str)
 
-    Triggers an application-defined assert if ``x`` is ``false``.
-    ``assert`` may be removed in release builds, so the expression ``x``
-    must have **no side effects** — the compiler will reject it otherwise:
+    Triggers an application-defined assert if ``x`` is ``false``. It always runs — the
+    interpreter, AOT and JIT all evaluate it — but the expression ``x`` must have
+    **no side effects**; the compiler rejects one that does (an assertion checks
+    state, it never changes it):
 
     .. das-doc: given var index : int
     .. code-block:: das
@@ -64,10 +65,9 @@ Assertions
 
 .. das:function:: verify(x, str)
 
-    Triggers an application-defined assert if ``x`` is ``false``.
-    Unlike ``assert``, ``verify`` is **never removed** from release builds
-    (it generates ``DAS_VERIFY`` in C++ rather than ``DAS_ASSERT``).
-    Additionally, the expression ``x`` is allowed to have side effects:
+    Triggers an application-defined assert if ``x`` is ``false``, exactly as
+    ``assert`` does. The one difference: the expression ``x`` is allowed to have
+    side effects, so a call whose result must be checked goes here:
 
     .. das-doc: given def initialize_system : bool { return true }
     .. code-block:: das

@@ -51,6 +51,7 @@ struct public MdAnchor {
 struct public ArchDocs {
     counts : table<string; int>
     known : table<string; bool>
+    anchors : table<string; array<MdAnchor>>
 }
 
 
@@ -188,13 +189,25 @@ def private arch_doc_exists(var docs : ArchDocs; doc : string) : bool {
         let ok = st.is_valid && st.is_reg
         docs.known[doc] = ok
         if (ok) {
-            for (a in collect_md_anchors(doc)) {
+            var found <- collect_md_anchors(doc)
+            for (a in found) {
                 let key = "{doc}#{a.name}"
                 docs.counts[key] = (docs.counts ?[key] ?? 0) + 1
             }
+            docs.anchors[doc] <- found
         }
     }
     return docs.known[doc]
+}
+
+
+// Every anchor `doc` declares, through the same one-parse index the forward check uses; nothing
+// when the document is missing.
+def public each_arch_anchor(var docs : ArchDocs; doc : string; blk : block<(a : MdAnchor) : void>) {
+    return if (!arch_doc_exists(docs, doc))
+    for (a in docs.anchors[doc]) {
+        invoke(blk, a)
+    }
 }
 
 
@@ -208,5 +221,26 @@ def public citation_failure_reason(var docs : ArchDocs; c : ArchCitation) : stri
     let n = docs.counts ?["{c.doc}#{c.anchor}"] ?? 0
     return "no such anchor" if (n == 0)
     return "anchor appears {n} times" if (n > 1)
+    return ""
+}
+
+
+// True when the cited document does not sit in the citing file's own folder tree - the document's
+// folder must be the file's folder or one of its ancestors. A mechanism another folder's document
+// states is restated in prose in a document of the citer's own tree and cited there.
+def public citation_outside_subtree(file : string; c : ArchCitation) : bool {
+    let fdir = arch_path(dir_name(file))
+    let ddir = dir_name(c.doc)
+    return !(fdir == ddir || fdir |> starts_with("{ddir}/"))
+}
+
+
+// `citation_failure_reason` plus the scope check: a citation that resolves but reaches outside
+// the citing file's folder tree is reported after the resolution reasons, so a broken far
+// citation is named for what is broken first.
+def public citation_failure_reason(var docs : ArchDocs; file : string; c : ArchCitation) : string {
+    let reason = citation_failure_reason(docs, c)
+    return reason if (!empty(reason))
+    return "cites a document outside this file's folder tree - restate the mechanism in an architecture doc of this folder's tree and cite that" if (citation_outside_subtree(file, c))
     return ""
 }
