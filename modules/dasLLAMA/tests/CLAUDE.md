@@ -92,7 +92,9 @@ qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter d
 twin-W legs (whisper f16 + qwen3a bf16: engage by the route counter, the twin-knob freeze,
 and whisper's wblob-ONLY poison that must CHANGE the GPU transcript), the gemma4a Metal
 Conformer cell (f32-lane transcript equality CPU vs GPU + encode rel-rms + counter deltas -
-the lane pin/reset discipline mirrors qwen3a's), plus the tower q8-decline (a PINNED-q8 tower
+the lane pin/reset discipline mirrors qwen3a's), the canary Metal FastConformer cell (the
+same discipline over the rel-pos XL block loop; decoder = the q8_0 serving artifact), plus
+the tower q8-decline (a PINNED-q8 tower
 never dispatches - the un-pinned lane default follows the Metal tower on Apple builds:
 serving driver => f32 planes, the vision-tower policy; gemma4a follows the same policy),
 required-mode panic, and Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv`

@@ -1109,7 +1109,16 @@ group; wording kept.
 
 ### From the canary M5 baseline (2026-08-29)
 
-- **OPEN (decoder half CLOSED same day) - canary gb1 44.6 s vs nemo 17.8 s.** Notch (b) is
+- **CLOSED - canary gb1 44.6 s -> 6.5 s (2.7x AHEAD of nemo's 17.8).** Notch (a) closed by the
+  Metal FastConformer driver: the 32-block loop rides one command buffer on the f32 blob
+  (enc_cn_attn = full bidirectional rel-pos XL attention with online softmax, one thread per
+  (q,head); enc_cn_dw = centered k9 + folded BN + SiLU; LN/GLU/SiLU/axpy/GEMM/bias reuse the
+  tower kernels). gb1 encode 26.8 -> 5.9 s; cells jfk 310 ms (8.5x ahead), jfk3 895 (7.2x),
+  gb1 6522; transcripts verbatim on all three; encode rel-rms vs CPU 3.1e-4; kernels-suite
+  oracle+poison gates + the canary mtower cell green. Residue: the encode's CPU half (mel +
+  subsample front + proj, ~5.9 s of gb1) - the gemma4a whole-chunk recipe applies if the cell
+  must go further.
+  Original finding (decoder half): Notch (b) is
   closed: the serving decoder is the Q8_0 re-quant (CANARY_DEC_RECIPE), cls_q8 serves and the
   blob drivers accept - jfk 1.25 s (2.12x ahead), jfk3 3.91 s (1.64x), gb1 27.7 s (0.64x),
   transcript gate verbatim both serves. What remains of gb1 is notch (a) alone.

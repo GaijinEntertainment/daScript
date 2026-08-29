@@ -718,6 +718,224 @@ def private tower_win_gate(t : T?; dev, queue) {
 // ===== the gemma4a sliding-window RPE attention (causal window 12, softcap, per-dim scale) =====
 // f16-representable inputs keep the f64 oracle exact up to f32 accumulation; the oracle attends
 // STRICTLY within [i-11, i], so any horizon leak fails the compare itself.
+def private cn_attn_gate(t : T?; dev, queue) {
+    let tag = "cn_attn"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_cn_attn_msl, metal_cn_attn_msl_entry, metal_cn_attn_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let np = 24
+    let heads = 2
+    let hs = 128
+    let d = heads * hs
+    let ww = 2 * np - 1
+    let scale = 1.0 / sqrt(float(hs))
+    var qv : array<float>
+    var kv : array<float>
+    var vv : array<float>
+    qv |> resize(np * d)
+    kv |> resize(np * d)
+    vv |> resize(np * d)
+    for (i in range(np * d)) {
+        qv[i] = float(float16(0.11 * float(i % 37) - 1.9))
+        kv[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
+        vv[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
+    }
+    var pl : array<float>
+    pl |> resize(ww * d)
+    for (i in range(ww * d)) {
+        pl[i] = float(float16(0.03 * float((i * 11) % 29) - 0.4))
+    }
+    var bu : array<float>
+    var bvv : array<float>
+    bu |> resize(d)
+    bvv |> resize(d)
+    for (i in range(d)) {
+        bu[i] = float(float16(0.02 * float(i % 19) - 0.15))
+        bvv[i] = float(float16(0.015 * float((i * 3) % 23) - 0.11))
+    }
+    var want : array<float>
+    want |> resize(np * d)
+    for (h in range(heads)) {
+        for (qi in range(np)) {
+            let base = np - 1 - qi
+            var mx = -3.0e38
+            var sc : float[64]
+            for (j in range(np)) {
+                var cs = 0.0lf
+                var rs = 0.0lf
+                for (dd in range(hs)) {
+                    let qd0 = double(qv[qi * d + h * hs + dd])
+                    cs += (qd0 + double(bu[h * hs + dd])) * double(kv[j * d + h * hs + dd])
+                    rs += (qd0 + double(bvv[h * hs + dd])) * double(pl[(base + j) * d + h * hs + dd])
+                }
+                let s = float((cs + rs) * double(scale))
+                sc[j] = s
+                mx = max(mx, s)
+            }
+            var tot = 0.0lf
+            var oa : float[128]
+            for (dd in range(hs)) {
+                oa[dd] = 0.0
+            }
+            for (j in range(np)) {
+                let e = exp(sc[j] - mx)
+                tot += double(e)
+                for (dd in range(hs)) {
+                    oa[dd] += e * vv[j * d + h * hs + dd]
+                }
+            }
+            for (dd in range(hs)) {
+                want[qi * d + h * hs + dd] = oa[dd] / float(tot)
+            }
+        }
+    }
+    var bq = buf_upload(dev, qv)
+    var bk = buf_upload(dev, kv)
+    var bv = buf_upload(dev, vv)
+    var bpl = buf_upload(dev, pl)
+    var bbu = buf_upload(dev, bu)
+    var bbv = buf_upload(dev, bvv)
+    var bo = buf_fill(dev, np * d, -1.0e30)
+    let ka = CnAttnArgs(d = uint(d), hs = uint(hs), npos = uint(np), scale = scale)
+    let np64 = (np + 63) / 64
+    let run_once <- @(bvx : MetalBuffer?; bbvx : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso)
+            metal_set_buffer(enc, bq, 0ul, 0)
+            metal_set_buffer(enc, bk, 0ul, 1)
+            metal_set_buffer(enc, bvx, 0ul, 2)
+            metal_set_buffer(enc, bo, 0ul, 3)
+            metal_set_buffer(enc, bpl, 0ul, 4)
+            metal_set_buffer(enc, bbu, 0ul, 5)
+            metal_set_buffer(enc, bbvx, 0ul, 6)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 7)
+            metal_dispatch_threadgroups(enc, uint3(uint(np64), uint(heads), 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
+    }
+    return if (!invoke(run_once, bv, bbv))
+    t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
+    // poison 1: +3.0 on ONE V element must red the bars (full attention sees every row)
+    vv[18 * d + hs / 2] += 3.0
+    var bv2 = buf_upload(dev, vv)
+    if (invoke(run_once, bv2, bbv)) {
+        t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} V poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned V element reds the bars")
+    }
+    // poison 2: +2.0 on ONE bias_v element must red — proves the rel term is live
+    vv[18 * d + hs / 2] -= 3.0
+    var bv3 = buf_upload(dev, vv)
+    bvv[hs / 3] += 2.0
+    var bbv2 = buf_upload(dev, bvv)
+    if (invoke(run_once, bv3, bbv2)) {
+        t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} bias_v poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned rel bias reds the bars")
+    }
+    metal_release(bq)
+    metal_release(bk)
+    metal_release(bv)
+    metal_release(bv2)
+    metal_release(bv3)
+    metal_release(bpl)
+    metal_release(bbu)
+    metal_release(bbv)
+    metal_release(bbv2)
+    metal_release(bo)
+    metal_release(pso)
+}
+
+def private cn_dw_gate(t : T?; dev, queue) {
+    let tag = "cn_dw"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_cn_dw_msl, metal_cn_dw_msl_entry, metal_cn_dw_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let np = 13
+    let d = 32
+    let nk = 9
+    let kpad = (nk - 1) / 2
+    var xv : array<float>
+    xv |> resize(np * d)
+    for (i in range(np * d)) {
+        xv[i] = float(float16(0.09 * float((i * 5) % 43) - 1.7))
+    }
+    var wv : array<float>
+    wv |> resize(d * nk)
+    for (i in range(d * nk)) {
+        wv[i] = float(float16(0.06 * float((i * 7) % 31) - 0.8))
+    }
+    var bnw : array<float>
+    var bnb : array<float>
+    bnw |> resize(d)
+    bnb |> resize(d)
+    for (i in range(d)) {
+        bnw[i] = float(float16(0.8 + 0.03 * float(i % 11)))
+        bnb[i] = float(float16(0.01 * float((i * 3) % 17) - 0.07))
+    }
+    var want : array<float>
+    want |> resize(np * d)
+    for (tt in range(np)) {
+        for (c in range(d)) {
+            var acc = 0.0
+            for (kk in range(nk)) {
+                let src = tt + kk - kpad
+                if (src >= 0 && src < np) {
+                    acc += wv[c * nk + kk] * xv[src * d + c]
+                }
+            }
+            let bvv2 = acc * bnw[c] + bnb[c]
+            want[tt * d + c] = bvv2 / (1.0 + exp(-bvv2))
+        }
+    }
+    var bx = buf_upload(dev, xv)
+    var bw = buf_upload(dev, wv)
+    var bbnw = buf_upload(dev, bnw)
+    var bbnb = buf_upload(dev, bnb)
+    var by = buf_fill(dev, np * d, -1.0e30)
+    let total = np * d
+    let run_once <- @(bwx : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso)
+            metal_set_buffer(enc, bx, 0ul, 0)
+            metal_set_buffer(enc, by, 0ul, 1)
+            metal_set_buffer(enc, bwx, 0ul, 2)
+            metal_set_buffer(enc, bbnw, 0ul, 3)
+            metal_set_buffer(enc, bbnb, 0ul, 4)
+            var u_d = uint(d)
+            var u_nk = uint(nk)
+            var u_np = uint(np)
+            var u_tot = uint(total)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 5)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_nk)), 4ul, 6)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_np)), 4ul, 7)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 8)
+            metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
+    }
+    return if (!invoke(run_once, bw))
+    t |> equal(buf_mismatch_bars(by, want, 1e-5, 1e-6, tag), 0)
+    // the poison: +2.0 on ONE tap must red the same bars
+    wv[5 * nk + 3] += 2.0
+    var bw2 = buf_upload(dev, wv)
+    if (invoke(run_once, bw2)) {
+        t |> success(buf_mismatch_bars(by, want, 1e-5, 1e-6, "{tag} poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned tap reds the bars")
+    }
+    metal_release(bx)
+    metal_release(bw)
+    metal_release(bw2)
+    metal_release(bbnw)
+    metal_release(bbnb)
+    metal_release(by)
+    metal_release(pso)
+}
+
 def private g4a_attn_gate(t : T?; dev, queue) {
     let tag = "g4a_attn"
     var err : string
@@ -1104,6 +1322,8 @@ def test_metal_prefill_kernels(t : T?) {
                 tower_flash_gate(t, dev, queue)
                 tower_win_gate(t, dev, queue)
                 g4a_attn_gate(t, dev, queue)
+                cn_attn_gate(t, dev, queue)
+                cn_dw_gate(t, dev, queue)
                 tower_gather_gate(t, dev, queue)
 
                 // ===== attention: the tiled sgmat trio vs the direct causal-GQA oracle, at the

@@ -1858,6 +1858,88 @@ def test_gemma4a_tower_metal(t : T?) {
 }
 
 [test]
+def test_canary_tower_metal(t : T?) {
+    t |> run("canary tower: the Metal FastConformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "canary") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let dec_path = path_join(models_dir(), "canary-qwen-2.5b-decoder-q8_0.gguf")
+            let mmp_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+            if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present beside the models")
+                return
+            }
+            var cpu_text = ""
+            var gpu_text = ""
+            var nlayer = 0l
+            var enc_delta = 0l
+            var blk_delta = 0l
+            var enc_rel_rms = 0.0
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var dec <- load_model_(dec_path, QuantMode.q8)
+                dec.config.seq_len = min(dec.config.seq_len, 8192l)
+                set_canary_enc_q8(false)   // the GPU driver's lane; the q8 lane declines by design
+                var inscope enc <- load_canary_encoder(mmp_path, false)
+                t |> success(!enc.q8, "encoder is on the f32 rail")
+                nlayer = enc.n_layer
+                set_metal_tower(false)
+                var inscope s <- create_canary_asr_session(dec, "en")
+                var lang = ""
+                canary_transcribe(dec, enc, s, samples, $(seg : TranscribeSegment) {
+                    cpu_text += seg.text
+                }, lang)
+                let s0 = metal_tower_stats()
+                set_metal_tower(true)
+                var inscope s2 <- create_canary_asr_session(dec, "en")
+                canary_transcribe(dec, enc, s2, samples, $(seg : TranscribeSegment) {
+                    gpu_text += seg.text
+                }, lang)
+                let s1 = metal_tower_stats()
+                enc_delta = s1.encodes - s0.encodes
+                blk_delta = s1.blocks - s0.blocks
+                // one encode pair, same f32 blob, tower off/on: the element instrument
+                var inscope stc = CanaryState()
+                var inscope stg = CanaryState()
+                set_metal_tower(false)
+                canary_log_mel(enc, samples, stc)
+                canary_encode(enc, stc)
+                set_metal_tower(true)
+                canary_log_mel(enc, samples, stg)
+                canary_encode(enc, stg)
+                var sd = 0.0lf
+                var sa = 0.0lf
+                for (i in range64(long_length(stc.out))) {
+                    let df = stc.out[i] - stg.out[i]
+                    sd += double(df * df)
+                    sa += double(stc.out[i] * stc.out[i])
+                }
+                enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
+                reset_canary_enc_q8()
+                delete dec
+            }
+            t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
+            t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
+            // measured 3.1e-4 on the jfk fixture (f32 GEMMs both sides; the online-softmax
+            // attention re-orders accumulation) — the bar leaves deep-GPU headroom, logged either way
+            t |> success(enc_rel_rms < 5.0e-2, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
+            to_log(LOG_INFO, "canary mtower encode rel-rms: {enc_rel_rms}\n")
+            to_log(LOG_INFO, "canary mtower CPU eyeball: {cpu_text}\n")
+            to_log(LOG_INFO, "canary mtower GPU eyeball: {gpu_text}\n")
+            t |> success(!empty(gpu_text), "non-empty transcript")
+            // a legitimate near-tie flip means converting this cell to forced-feed, not loosening the compare
+            t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
+            delete samples
+        }
+    }
+}
+
+[test]
 def test_qwen3a_tower_q8_ab(t : T?) {
     t |> run("qwen3a tower: the q8 core tracks the f32 rail on jfk window 0") @(t : T?) {
         if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return

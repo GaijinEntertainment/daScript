@@ -2867,6 +2867,123 @@ class MetalG4aSilu {
     }
 }
 
+struct CnAttnArgs {
+    d : uint            //!< model width (rows are compact [npos x d])
+    hs : uint           //!< head size (<= 128 — the accumulator array's bound)
+    npos : uint
+    scale : float       //!< 1/sqrt(hs), applied to content + rel scores together (the CPU form)
+}
+
+//! The canary FastConformer rel-pos (Transformer-XL) attention: one thread per (q row, head) —
+//! FULL bidirectional scores (Q+u)·K + (Q+v)·pos[npos-1-q+j] with an online softmax (the score
+//! row never materializes), u/v biases read off the blob at per-dispatch offsets.
+[metal_dispatch(name = "enc_cn_attn", pso = "g_pf_pso_cn_attn", tg = 64, grid = "np64, heads", params = "np64 : int64, heads : int64")]
+class MetalCnAttn {
+    @ssbo @binding = 0 @role = "read" q : array<float>      //!< [npos x d] compact
+    @ssbo @binding = 1 @role = "read" k : array<float>      //!< [npos x d] compact
+    @ssbo @binding = 2 @role = "read" v : array<float>      //!< [npos x d] compact
+    @ssbo @binding = 3 @role = "write" ao : array<float>    //!< [npos x d] attention out
+    @ssbo @binding = 4 @role = "read" posl : array<float>   //!< [(2 npos - 1) x d] the layer's projected rel table
+    @ssbo @binding = 5 @role = "weight" @off = "buoff" bu : array<float>   //!< [d] bias_u (content)
+    @ssbo @binding = 6 @role = "weight" @off = "bvoff" bv : array<float>   //!< [d] bias_v (rel)
+    @uniform @binding = 7 ka : CnAttnArgs
+
+    [metal_kernel(name="metal_cn_attn_msl")]
+    def metal_cn_attn {
+        let i = gl_GlobalInvocationID.x
+        let h = gl_WorkGroupID.y
+        if (i >= ka.npos) {
+            return
+        }
+        let d = ka.d
+        let hs = ka.hs
+        let hoff = h * hs
+        let base = ka.npos - 1u - i
+        var acc : float[128]
+        var n = 0u
+        while (n < hs) {
+            acc[n] = 0.0
+            n++
+        }
+        var m = -1.5e38
+        var den = 0.0
+        var j = 0u
+        while (j < ka.npos) {
+            var cs = 0.0
+            var rs = 0.0
+            n = 0u
+            while (n < hs) {
+                let qv = q[i * d + hoff + n]
+                cs += (qv + bu[hoff + n]) * k[j * d + hoff + n]
+                rs += (qv + bv[hoff + n]) * posl[(base + j) * d + hoff + n]
+                n++
+            }
+            let s = (cs + rs) * ka.scale
+            if (s > m) {
+                let r = exp(m - s)
+                den *= r
+                n = 0u
+                while (n < hs) {
+                    acc[n] *= r
+                    n++
+                }
+                m = s
+            }
+            let w = exp(s - m)
+            den += w
+            n = 0u
+            while (n < hs) {
+                acc[n] += w * v[j * d + hoff + n]
+                n++
+            }
+            j++
+        }
+        let inv = 1.0 / den
+        n = 0u
+        while (n < hs) {
+            ao[i * d + hoff + n] = acc[n] * inv
+            n++
+        }
+    }
+}
+
+//! The canary conv module's depthwise k=9 CENTERED conv over time + the folded BatchNorm
+//! (bn_w/bn_b carry the fold) + SiLU — one kernel, the CPU loop's exact form.
+[metal_dispatch(name = "enc_cn_dw", pso = "g_pf_pso_cn_dw", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalCnDw {
+    @ssbo @binding = 0 @role = "read" x : array<float>      //!< [npos x d] GLU output
+    @ssbo @binding = 1 @role = "write" y : array<float>     //!< [npos x d]
+    @ssbo @binding = 2 @role = "weight" @off = "woff" w : array<float>     //!< [d x nk] taps
+    @ssbo @binding = 3 @role = "weight" @off = "bnwoff" bnw : array<float> //!< [d] folded BN scale
+    @ssbo @binding = 4 @role = "weight" @off = "bnboff" bnb : array<float> //!< [d] folded BN shift
+    @uniform @binding = 5 d : uint
+    @uniform @binding = 6 nk : uint         //!< taps (odd; canary 9)
+    @uniform @binding = 7 npos : uint
+    @uniform @binding = 8 total : uint      //!< grid guard: npos * d
+
+    [metal_kernel(name="metal_cn_dw_msl")]
+    def metal_cn_dw {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let t = gid / d
+        let c = gid % d
+        let kpad = (nk - 1u) / 2u
+        var acc = 0.0
+        var kk = 0u
+        while (kk < nk) {
+            let src = t + kk   // src row = t + kk - kpad, guarded in unsigned form
+            if (src >= kpad && src - kpad < npos) {
+                acc += w[c * nk + kk] * x[(src - kpad) * d + c]
+            }
+            kk++
+        }
+        let bv2 = acc * bnw[c] + bnb[c]
+        y[gid] = bv2 / (1.0 + exp(-bv2))
+    }
+}
+
 //! Magnitude spectrum off the DFT GEMM's interleaved re/im rows: mag[i,k] = sqrt(re^2 + im^2)
 //! for k < nbins, 0 in the pad columns (the mel GEMM's k-pad reads them).
 [metal_dispatch(name = "enc_g4a_mag", pso = "g_pf_pso_g4a_mag", tg = 64, grid = "total/64", params = "total : int64")]
@@ -3171,6 +3288,8 @@ var private g_pf_pso_twr_flash : MetalComputePipeline?   //!< the tower flash (D
 var private g_pf_pso_twr_kvhc : MetalComputePipeline?    //!< its K/V per-head-contiguous f16 restride
 var private g_pf_pso_twr_win : MetalComputePipeline?     //!< the qwen2.5 ViT per-window attention
 var private g_pf_pso_twr_gather : MetalComputePipeline?  //!< its stem's window-sort row gather
+var private g_pf_pso_cn_attn : MetalComputePipeline?     //!< the canary rel-pos (XL) full attention
+var private g_pf_pso_cn_dw : MetalComputePipeline?       //!< its centered depthwise k9 + folded BN + SiLU
 var private g_pf_pso_g4a_attn : MetalComputePipeline?    //!< the gemma4a sliding-window RPE attention
 var private g_pf_pso_g4a_glu : MetalComputePipeline?     //!< its conv-module GLU halves
 var private g_pf_pso_g4a_dw : MetalComputePipeline?      //!< its causal depthwise k=5
@@ -3602,6 +3721,8 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     release_pso(g_pf_pso_twr_kvhc)
     release_pso(g_pf_pso_twr_win)
     release_pso(g_pf_pso_twr_gather)
+    release_pso(g_pf_pso_cn_attn)
+    release_pso(g_pf_pso_cn_dw)
     release_pso(g_pf_pso_g4a_attn)
     release_pso(g_pf_pso_g4a_glu)
     release_pso(g_pf_pso_g4a_dw)
@@ -3847,6 +3968,8 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_twr_kvhc = compile_pso(metal_tower_kv_hc_msl, metal_tower_kv_hc_msl_entry, metal_tower_kv_hc_msl_fastmath, ok)
     g_pf_pso_twr_win = compile_pso(metal_tower_win_msl, metal_tower_win_msl_entry, metal_tower_win_msl_fastmath, ok)
     g_pf_pso_twr_gather = compile_pso(metal_tower_row_gather_msl, metal_tower_row_gather_msl_entry, metal_tower_row_gather_msl_fastmath, ok)
+    g_pf_pso_cn_attn = compile_pso(metal_cn_attn_msl, metal_cn_attn_msl_entry, metal_cn_attn_msl_fastmath, ok)
+    g_pf_pso_cn_dw = compile_pso(metal_cn_dw_msl, metal_cn_dw_msl_entry, metal_cn_dw_msl_fastmath, ok)
     g_pf_pso_g4a_attn = compile_pso(metal_g4a_attn_msl, metal_g4a_attn_msl_entry, metal_g4a_attn_msl_fastmath, ok)
     g_pf_pso_g4a_glu = compile_pso(metal_g4a_glu_msl, metal_g4a_glu_msl_entry, metal_g4a_glu_msl_fastmath, ok)
     g_pf_pso_g4a_dw = compile_pso(metal_g4a_dw_msl, metal_g4a_dw_msl_entry, metal_g4a_dw_msl_fastmath, ok)
@@ -4110,6 +4233,13 @@ def pf_bf16_half_ready() : bool => g_pf_pso_bf16_mm_th != null && g_pf_pso_cvt_h
 def pf_tower_flash_ready() : bool => g_pf_pso_twr_flash != null && g_pf_pso_twr_kvhc != null
 
 def pf_tower_win_ready() : bool => g_pf_pso_twr_win != null && g_pf_pso_twr_gather != null
+
+//! The canary FastConformer kernel set compiled — its blocks driver's device gate (LN, GLU,
+//! SiLU, axpy ride the shared/g4a kernels).
+def pf_cn_ready() : bool {
+    return (g_pf_pso_cn_attn != null && g_pf_pso_cn_dw != null && g_pf_pso_g4a_glu != null
+        && g_pf_pso_g4a_silu != null && g_pf_pso_g4a_axpy != null)
+}
 
 //! The gemma4a Conformer kernel set compiled — its tower driver's device gate.
 def pf_g4a_ready() : bool {

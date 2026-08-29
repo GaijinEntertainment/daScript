@@ -162,7 +162,9 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     //! bin = Canary-Qwen FastConformer. Every decoder loads Q8 (the tuned rail); the fp32 parity arm rides ``QuantMode.fp32 + image_fp32`` off-facade. Either file may be a prepared ``.dlim`` (the mmproj routes on its baked family tag).
     var emagic = 0u
     var eproj = ""
-    var canary_q8 = !(g_asr_force_fp32 || g_asr_tower_fp32)   // raw-bin default; a .dlim's baked tag overrides
+    // raw-bin default follows the lane policy (a serving Metal driver wants the f32 blob);
+    // the facade's fp32 knobs pin exact, and a .dlim's baked tag overrides either
+    var canary_q8 = !(g_asr_force_fp32 || g_asr_tower_fp32) && canary_enc_serves_q8()
     if (mmproj |> ends_with(".dlim")) {
         let tag = image_family_tag(mmproj)
         if (tag == "qwen3a-f32") {
