@@ -520,11 +520,17 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     let dp = t.n_head * hs_pad   // the padded attention width
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
+    // an empty wblob IS the ineligibility flag: the mint bakes the twin only for f16-sourced GEMMs
+    let f16_route = g_tw_env_tower_f16 && length(t.wblob) > 0l && pf_hmm_ready()
     let bytes_row = uint64(mp * d * 4l)
     let bytes_rowp = uint64(mp * dp * 4l)
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 2l)
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
+    let bytes_xh = uint64(mp * ff * 2l)
+    var bxh = f16_route ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null   // the shared f16 X panel
+    var bwh = f16_route ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
+    let f16w = f16_route && bwh != null && bxh != null
     var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
@@ -563,27 +569,27 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
         for (l in range64(t.n_layer)) {
             let o = gemma3v_block_offs(t, l)
             enc_ln(enc, bx, bblob, uint64(o.ln1_w * 4l), bblob, uint64(o.ln1_b * 4l), bxb, u_d, u_eps, npos)
-            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_Q] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
+            tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_Q], bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_Q] * 4l), u_d, u_totd, npos * d)
             enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
-            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_K] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
+            tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_K], bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_K] * 4l), u_d, u_totd, npos * d)
             enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
-            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_V] * 4l), bxb, braw, 0ul, u_d, u_d, mp, d)
+            tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_V], bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_V] * 4l), u_d, u_totd, npos * d)
             enc_head_restride(enc, braw, 0ul, bv, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
             enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
             enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
             enc_av_mm(enc, batt, bv, bo_p, ka, bstat, mp, t.n_head, hs_pad)
             enc_head_restride(enc, bo_p, 0ul, bxb2, 0ul, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
-            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_O] * 4l), bxb2, bxb, 0ul, u_d, u_d, mp, d)
+            tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_O], bxb2, bxh, bxb, 0ul, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_O] * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
             enc_ln(enc, bx, bblob, uint64(o.ln2_w * 4l), bblob, uint64(o.ln2_b * 4l), bxb, u_d, u_eps, npos)
-            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_UP] * 4l), bxb, bh, 0ul, u_d, u_ff, mp, ff)
+            tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_UP], bxb, bxh, bh, 0ul, u_d, u_ff, mp, ff, d, true)
             enc_add_bias_rows(enc, bh, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_UP] * 4l), u_ff, u_totff, npos * ff)
             enc_gelu_lut(enc, bh, 0ul, u_totff, npos * ff)
-            enc_f32_mm(enc, bblob, uint64(o.w[GEMMA3V_GEMM_DOWN] * 4l), bh, bxb2, 0ul, u_ff, u_d, mp, d)
+            tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_DOWN], bh, bxh, bxb2, 0ul, u_ff, u_d, mp, d, ff, true)
             enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_DOWN] * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
         }
@@ -596,6 +602,9 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
         g_tower_encodes++
         g_tower_rows += npos
         g_tower_blocks += t.n_layer
+        if (f16w) {
+            g_tower_f16_encodes++
+        }
         served = true
     }
     pool_release(g_tw_pool, bx, bytes_row)
@@ -609,6 +618,9 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     pool_release(g_tw_pool, bh, bytes_h)
     pool_release(g_tw_pool, batt, bytes_att)
     pool_release(g_tw_pool, bstat, bytes_stat)
+    if (bxh != null) {
+        pool_release(g_tw_pool, bxh, bytes_xh)
+    }
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_ff, 4ul)
     pool_release(g_upool, u_hs, 4ul)

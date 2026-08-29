@@ -575,6 +575,32 @@ def geglu_quick_lut_rows(var h : array<float>; gate, up : array<float>; ff, npos
     }
 }
 
+//! Bake a tower's halfword GEMM twin off its staged f32 blob - the file's own bits (an f16
+//! source round-trips exactly; bf16 = the f32 word's top halfword). Whole-blob at the same
+//! element offsets; ride-along f32 regions clamp on the f16 form and the route never reads them.
+def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : bool) {
+    let n = long_length(blob)
+    if (long_length(wblob) < n) {
+        wblob |> reserve(n)
+    }
+    wblob |> resize(n)
+    unsafe {
+        if (bf16) {
+            let up = addr<uint const?>(blob[0])
+            var dp = addr(wblob[0])
+            for (i in range64(n)) {
+                dp[i] = uint16(up[i] >> 16u)
+            }
+        } else {
+            let sp = addr<float const?>(blob[0])
+            var dp = addr<float16?>(wblob[0])
+            for (i in range64(n)) {
+                dp[i] = float16(clamp(sp[i], -65504.0, 65504.0))
+            }
+        }
+    }
+}
+
 //! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in [C][KH][KW]
 //! order (row index c·p² + ky·p + kx), one row per non-overlapping p×p patch walking the canvas
 //! row-major (pos_x = i % n_cols, pos_y = i / n_cols). Returns npos; ``x0`` grows to npos × 3p².

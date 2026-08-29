@@ -12,6 +12,17 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **OPEN - the tower attention SLAB dominates the gemma3v encode at its fixed 4096-row
+  canvas.** The Metal tower materializes the full attention matrix per layer (16 heads x
+  mp x nk64 f16 = ~545 MB at 896^2), written by QK and re-read by AV: ~29 GB of slab
+  traffic per encode across 27 blocks, plus the hs 72 -> 128 pad (1.78x) in both attention
+  GEMMs. With the baked f16 twin serving the block GEMMs (M5, crowned) the encode is
+  486 ms vs the reference's flash-form 370 - the slab is most of the residual; qwen-class
+  towers at ~1200 rows never feel it (slab ~4 MB). The fix is a flash/tiled bidirectional
+  attention form for the tower driver (never materialize att; native hs) - a new kernel
+  class, its own slice. Costs today: the gemma3v encode cell trails 0.76x; gemma-3-12b's
+  tower is the same geometry and inherits it.
+
 - **LANDED - the mul_mm prefill billed ceil-32 M tiles, so an npos just past a tile boundary
   paid a whole extra tile-row of wall for rows nothing reads; the GEMV-tail dispatch peels
   npos % 32 in [1,8] onto the fixed-B mv family (measured 2026-08-24, M1 Max, the qwen

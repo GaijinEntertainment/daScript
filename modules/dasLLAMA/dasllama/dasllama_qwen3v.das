@@ -559,28 +559,10 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
     return <- st
 }
 
-//! The exact lane's halfword GEMM twin: the whole blob at the same element offsets, the file's
-//! own bits (bf16 = the f32 blob's top halfword). The Metal twin-W route reads it zero-copy;
-//! plane absence IS the ineligibility flag (mixed/f32/q8), and `blk_bf16` names the format.
+//! The exact lane's halfword GEMM twin ([[tower_bake_half_twin]]): plane absence IS the
+//! ineligibility flag (mixed/f32/q8), and `blk_bf16` names the format the route dispatches.
 def private q3v_bake_half_twin(var st : Qwen3vStaging; bf16 : bool) {
-    let n = long_length(st.blob)
-    st.wblob |> reserve_resize(n)
-    unsafe {
-        let sp = addr<float const?>(st.blob[0])
-        if (bf16) {
-            let up = addr<uint const?>(st.blob[0])
-            var dp = addr(st.wblob[0])
-            for (i in range64(n)) {
-                dp[i] = uint16(up[i] >> 16u)
-            }
-        } else {
-            var dp = addr<float16?>(st.wblob[0])
-            for (i in range64(n)) {
-                // the clamp guards the ride-along f32 regions (conv fold, pos) the route never reads
-                dp[i] = float16(clamp(sp[i], -65504.0, 65504.0))
-            }
-        }
-    }
+    tower_bake_half_twin(st.blob, st.wblob, bf16)
 }
 
 //! Load the qwen3v tower, image-backed (`dasllama_gemma4v`'s load shape: a prepared `.dlim`

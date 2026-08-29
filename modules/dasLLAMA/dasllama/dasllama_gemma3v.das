@@ -54,6 +54,7 @@ struct Gemma3vTower {
     // qblob/qscales; everything else is f32 in blob — the file's f16 widens exactly at read
     q8 : bool
     blob : PlaneF = PlaneF()
+    wblob : PlaneU16 = PlaneU16()   // the exact lane's f16 GEMM twin (f16-sourced files; empty = ineligible)
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
     patch_w : int64      // [n_embd × patch_dim]
@@ -154,6 +155,7 @@ def private image_post_load(var t : Gemma3vTower) {}   // no derived state — o
 struct Gemma3vStaging {
     t : Gemma3vTower = Gemma3vTower()
     blob : array<float>
+    wblob : array<uint16>
     qblob : array<int8>       // q8 lane: the block GEMMs as Q8_0 (repacked for the active backend)
     qscales : array<float>
 }
@@ -165,6 +167,7 @@ def private serialize_image_meta(var arch : Archive; var st : Gemma3vStaging) {
 // staging owns its plane bytes outright — every array here is heap, none is borrowed
 def finalize(var st : Gemma3vStaging) {
     delete st.blob
+    delete st.wblob
     delete st.qblob
     delete st.qscales
     delete st.t
@@ -483,6 +486,12 @@ def stage_gemma3v_tower(path : string) : Gemma3vStaging {
         st.qscales |> reserve_resize(qo / 32l)
         g3v_read_planes(m, bytes, st, names, gemm_sizes)
         g3v_repack_all(st, gemm_sizes)
+        // the twin plane ([[tower_bake_half_twin]]): f16-sourced block GEMMs only - absence
+        // is the Metal twin route's ineligibility flag (bf16/f32/q8 stay on the f32 route)
+        if (!st.t.q8 && gguf_tensor_type(m, "v.blk.0.attn_q.weight") == GGML_TYPE_F16
+                && gguf_tensor_type(m, "v.blk.0.ffn_down.weight") == GGML_TYPE_F16) {
+            tower_bake_half_twin(st.blob, st.wblob, false)
+        }
     }
     fclose(f)
     return <- st
