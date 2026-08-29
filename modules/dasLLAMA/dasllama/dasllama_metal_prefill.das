@@ -2997,6 +2997,109 @@ class MetalG4aIm2col {
     }
 }
 
+//! The qwen3a conv-frontend feature shuffle: feat[ci*13 + ow][h + 16*ch] = y3[ci-chunk row
+//! (h*13 + ow), channel ch] off the ncp-strided conv3 slab — one thread per feat element.
+[metal_dispatch(name = "enc_q3a_shuffle", pso = "g_pf_pso_q3a_shuffle", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalQ3aShuffle {
+    @ssbo @binding = 0 @role = "read" y3 : array<float>     //!< [n_chunks x mp3 x ncp]
+    @ssbo @binding = 1 @role = "write" feat : array<float>  //!< [npos x featw]
+    @uniform @binding = 2 featw : uint      //!< 16 * nch
+    @uniform @binding = 3 nch : uint
+    @uniform @binding = 4 ncp : uint
+    @uniform @binding = 5 mp3ncp : uint     //!< one chunk's slab stride (mp3 * ncp)
+    @uniform @binding = 6 total : uint      //!< grid guard: npos * featw
+
+    [metal_kernel(name="metal_q3a_shuffle_msl")]
+    def metal_q3a_shuffle {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let row = gid / featw
+        let j = gid % featw
+        let ci = row / 13u
+        let ow = row % 13u
+        let h = j % 16u
+        let ch = j / 16u
+        feat[gid] = y3[ci * mp3ncp + (h * 13u + ow) * ncp + ch]
+    }
+}
+
+//! Power spectrum off the DFT GEMM's interleaved re/im rows: pow[i,k] = re^2 + im^2 for
+//! k < nbins, 0 in the pad columns (the mel GEMM's k-pad reads them).
+[metal_dispatch(name = "enc_q3a_pow", pso = "g_pf_pso_q3a_pow", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalQ3aPow {
+    @ssbo @binding = 0 @role = "read" reim : array<float>   //!< [nrows x ldin] interleaved re/im
+    @ssbo @binding = 1 @role = "write" pw : array<float>    //!< [nrows x ldout]
+    @uniform @binding = 2 nbins : uint
+    @uniform @binding = 3 ldin : uint
+    @uniform @binding = 4 ldout : uint
+    @uniform @binding = 5 total : uint      //!< grid guard: nrows * ldout
+
+    [metal_kernel(name="metal_q3a_pow_msl")]
+    def metal_q3a_pow {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let r = gid / ldout
+        let k = gid % ldout
+        if (k >= nbins) {
+            pw[gid] = 0.0
+            return
+        }
+        let re = reim[r * ldin + k * 2u]
+        let im = reim[r * ldin + k * 2u + 1u]
+        pw[gid] = re * re + im * im
+    }
+}
+
+//! The whisper-shape mel finish, transposed into the mel-major plane:
+//! out[j*n_len + i] = log(max(raw[i*n_mel + j], floor)) * scale (scale = log10 e).
+[metal_dispatch(name = "enc_q3a_logmel_t", pso = "g_pf_pso_q3a_logmel_t", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalQ3aLogMelT {
+    @ssbo @binding = 0 @role = "read" raw : array<float>    //!< [n_len x n_mel] frame-major
+    @ssbo @binding = 1 @role = "write" y : array<float>     //!< [n_mel x n_len] mel-major
+    @uniform @binding = 2 nmel : uint
+    @uniform @binding = 3 nlen : uint
+    @uniform @binding = 4 mfloor : float
+    @uniform @binding = 5 mscale : float
+    @uniform @binding = 6 total : uint      //!< grid guard: n_len * n_mel
+
+    [metal_kernel(name="metal_q3a_logmel_t_msl")]
+    def metal_q3a_logmel_t {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let i = gid / nmel
+        let j = gid % nmel
+        y[j * nlen + i] = log(max(raw[gid], mfloor)) * mscale
+    }
+}
+
+//! The qwen3a conv-frontend epilogue: x += cout bias + the per-chunk position row
+//! (positions reset every 13 rows) — one thread per element.
+[metal_dispatch(name = "enc_q3a_finish", pso = "g_pf_pso_q3a_finish", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalQ3aFinish {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>     //!< [npos x d]
+    @ssbo @binding = 1 @role = "weight" @off = "boff" bias : array<float>   //!< [d]
+    @ssbo @binding = 2 @role = "weight" @off = "poff" pos : array<float>    //!< [13 x d]
+    @uniform @binding = 3 d : uint
+    @uniform @binding = 4 total : uint      //!< grid guard: npos * d
+
+    [metal_kernel(name="metal_q3a_finish_msl")]
+    def metal_q3a_finish {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let c = gid % d
+        let row = gid / d
+        x[gid] += bias[c] + pos[(row % 13u) * d + c]
+    }
+}
+
 //! Scaled residual add g += u * ascale — the macaron half-step (enc_add's form is (g+u)*scale).
 [metal_dispatch(name = "enc_g4a_axpy", pso = "g_pf_pso_g4a_axpy", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalG4aAxpy {
@@ -3073,6 +3176,10 @@ var private g_pf_pso_g4a_glu : MetalComputePipeline?     //!< its conv-module GL
 var private g_pf_pso_g4a_dw : MetalComputePipeline?      //!< its causal depthwise k=5
 var private g_pf_pso_g4a_silu : MetalComputePipeline?    //!< in-place SiLU
 var private g_pf_pso_g4a_axpy : MetalComputePipeline?    //!< the macaron half-step residual
+var private g_pf_pso_q3a_shuffle : MetalComputePipeline? //!< the qwen3a conv feature shuffle
+var private g_pf_pso_q3a_finish : MetalComputePipeline?  //!< its bias + per-chunk position epilogue
+var private g_pf_pso_q3a_pow : MetalComputePipeline?     //!< power spectrum off the DFT rows
+var private g_pf_pso_q3a_logmel_t : MetalComputePipeline? //!< the mel-major log10 finish
 var private g_pf_pso_g4a_mag : MetalComputePipeline?     //!< magnitude spectrum off the DFT rows
 var private g_pf_pso_g4a_logmel : MetalComputePipeline?  //!< the mel's log stage
 var private g_pf_pso_g4a_lnrelu : MetalComputePipeline?  //!< subsample LayerNorm(channels)+ReLU
@@ -3500,6 +3607,10 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     release_pso(g_pf_pso_g4a_dw)
     release_pso(g_pf_pso_g4a_silu)
     release_pso(g_pf_pso_g4a_axpy)
+    release_pso(g_pf_pso_q3a_shuffle)
+    release_pso(g_pf_pso_q3a_finish)
+    release_pso(g_pf_pso_q3a_pow)
+    release_pso(g_pf_pso_q3a_logmel_t)
     release_pso(g_pf_pso_g4a_mag)
     release_pso(g_pf_pso_g4a_logmel)
     release_pso(g_pf_pso_g4a_lnrelu)
@@ -3741,6 +3852,10 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_g4a_dw = compile_pso(metal_g4a_dw_msl, metal_g4a_dw_msl_entry, metal_g4a_dw_msl_fastmath, ok)
     g_pf_pso_g4a_silu = compile_pso(metal_g4a_silu_msl, metal_g4a_silu_msl_entry, metal_g4a_silu_msl_fastmath, ok)
     g_pf_pso_g4a_axpy = compile_pso(metal_g4a_axpy_msl, metal_g4a_axpy_msl_entry, metal_g4a_axpy_msl_fastmath, ok)
+    g_pf_pso_q3a_shuffle = compile_pso(metal_q3a_shuffle_msl, metal_q3a_shuffle_msl_entry, metal_q3a_shuffle_msl_fastmath, ok)
+    g_pf_pso_q3a_finish = compile_pso(metal_q3a_finish_msl, metal_q3a_finish_msl_entry, metal_q3a_finish_msl_fastmath, ok)
+    g_pf_pso_q3a_pow = compile_pso(metal_q3a_pow_msl, metal_q3a_pow_msl_entry, metal_q3a_pow_msl_fastmath, ok)
+    g_pf_pso_q3a_logmel_t = compile_pso(metal_q3a_logmel_t_msl, metal_q3a_logmel_t_msl_entry, metal_q3a_logmel_t_msl_fastmath, ok)
     g_pf_pso_g4a_mag = compile_pso(metal_g4a_mag_msl, metal_g4a_mag_msl_entry, metal_g4a_mag_msl_fastmath, ok)
     g_pf_pso_g4a_logmel = compile_pso(metal_g4a_logmel_msl, metal_g4a_logmel_msl_entry, metal_g4a_logmel_msl_fastmath, ok)
     g_pf_pso_g4a_lnrelu = compile_pso(metal_g4a_lnrelu_msl, metal_g4a_lnrelu_msl_entry, metal_g4a_lnrelu_msl_fastmath, ok)
@@ -4007,6 +4122,12 @@ def pf_g4a_front_ready() : bool {
     return (g_pf_pso_g4a_mag != null && g_pf_pso_g4a_logmel != null
         && g_pf_pso_g4a_lnrelu != null && g_pf_pso_g4a_im2col != null)
 }
+
+//! The qwen3a conv-frontend tail kernels compiled — its front driver's extra device gate.
+def pf_q3a_front_ready() : bool => g_pf_pso_q3a_shuffle != null && g_pf_pso_q3a_finish != null
+
+//! The qwen3a mel kernels compiled — its mel driver's extra device gate.
+def pf_q3a_mel_ready() : bool => g_pf_pso_q3a_pow != null && g_pf_pso_q3a_logmel_t != null
 
 def private pf_devw_flip : MetalBuffer ? {
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh

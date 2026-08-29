@@ -1816,37 +1816,46 @@ def private q3a_stage(enc : MetalComputeEncoder?; bsrc : MetalBuffer?; soff : ui
     enc_gelu_erf(enc, bout, yoff, u_tm, tm)
 }
 
-// The qwen3a conv2d frontend for one WINDOW: every chunk's three conv stages in one command
-// buffer (the conv planes are f32 regardless of the q8 tower, so this serves the q8 SERVING
-// DEFAULT too); the shuffle/conv_out tail stays CPU. BEST-EFFORT: declines are a silent false.
+// The qwen3a front for one WINDOW: chunk convs + feature shuffle + conv_out + bias/positions
+// in one command buffer, s.x readback. The q8 cblob lane declines (the cout trio lives in
+// qcblob); BEST-EFFORT — declines are a silent false.
 [hot_path]
-def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var y3all : array<float>) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var s : EncoderState) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     let nm = t.core.n_mel
     let nch = t.n_ch
     let ncp = (nch + 63l) & ~63l
     let k2 = 9l * nch
-    // the k2%32 shape gate runs first so a forever-declining tower never mints the padded slab
-    if (k2 % 32l != 0l || !g_tw_env_tower || !metal_tower_init() || !q3a_wpad_attach(t)) {
+    let d = t.core.d_model
+    let featw = 16l * nch
+    let npos = n_chunks * QWEN3A_TOK_PER_CHUNK
+    // the shape gates run first so a forever-declining tower never mints the padded slab
+    if (k2 % 32l != 0l || featw % 32l != 0l || d % 64l != 0l || t.cq8
+            || !g_tw_env_tower || !metal_tower_init() || !pf_q3a_front_ready() || !q3a_wpad_attach(t)) {
         return false
     }
     let xin_n = QWEN3A_CHUNK * nm
-    let y3_n = 16l * QWEN3A_TOK_PER_CHUNK * nch
     let y3_rows = 16l * QWEN3A_TOK_PER_CHUNK   // 208 per chunk
     let mp3 = (y3_rows + 31l) / 32l * 32l      // the stage-3 GEMM pads to 224 rows
-    y3all |> reserve_resize(n_chunks * y3_n)   // nolint:PERF026 — the caller's @scratch y3all; grows once, reused across windows
+    let mpn = (npos + 31l) / 32l * 32l
     let o2 = ncp * 32l
     let o3 = o2 + ncp * k2
     let o4 = o3 + ncp * k2
+    let mapped = t.image_map != null
+    var bcb = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.cblob, 0l))), uint64(length(t.cblob) * 4l), mapped)
     let bytes_xin = uint64(n_chunks * xin_n * 4l)
     let bytes_col = uint64(max(3200l * 32l, 800l * k2) * 4l)
     let bytes_y1 = uint64(3200l * ncp * 4l)
     let bytes_y2 = uint64(800l * ncp * 4l)
     let bytes_y3 = uint64(n_chunks * mp3 * ncp * 4l)
+    let bytes_feat = uint64(mpn * featw * 4l)
+    let bytes_x = uint64(mpn * d * 4l)
     var bxin = pool_acquire_pinned(g_tw_pool, g_dev, bytes_xin)
     var bcol = pool_acquire_pinned(g_tw_pool, g_dev, bytes_col)
     var by1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y1)
     var by2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y2)
     var by3 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y3)
+    var bfeat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_feat)
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x)
     unsafe {   // the per-chunk [ih][iw] extract from the window's mel-major plane, straight into the mapped slab
         var p = reinterpret<float?>(metal_buffer_contents(bxin))
         for (ci in range64(n_chunks)) {
@@ -1877,6 +1886,11 @@ def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     var u_tm1 = uniform_u32(uint(3200l * ncp))
     var u_tm2 = uniform_u32(uint(800l * ncp))
     var u_tm3 = uniform_u32(uint(y3_rows * ncp))
+    var u_featw = uniform_u32(uint(featw))
+    var u_mp3ncp = uniform_u32(uint(mp3 * ncp))
+    var u_totf = uniform_u32(uint(npos * featw))
+    var u_d = uniform_u32(uint(d))
+    var u_totx = uniform_u32(uint(npos * d))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         for (ci in range64(n_chunks)) {
@@ -1890,17 +1904,15 @@ def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
                 u_iw25, u_ih32, u_nch, u_ow13, u_k2, u_ncp, u_ti3, u_k2, u_ncp, u_tm3,
                 y3_rows * k2, y3_rows * ncp, mp3, ncp, uint64(o3 * 4l), uint64((o4 + 2l * ncp) * 4l))
         }
+        // the window tail: feature shuffle -> conv_out GEMM -> bias + per-chunk positions
+        enc_q3a_shuffle(enc, by3, bfeat, u_featw, u_nch, u_ncp, u_mp3ncp, u_totf, npos * featw)
+        enc_f32_mm(enc, bcb, uint64(t.cout_w_off * 4l), bfeat, bx, 0ul, u_featw, u_d, mpn, d)
+        enc_q3a_finish(enc, bx, bcb, uint64(t.cout_b_off * 4l), bcb, uint64(t.pos_off * 4l), u_d, u_totx, npos * d)
     }
     var served = false
     if (ran) {
-        unsafe {   // strided readback: the GPU rows carry ncp floats, y3all wants the nch slice
-            let src = reinterpret<float const?>(metal_buffer_contents(by3))
-            var dst = addr(y3all[0])
-            for (ci in range64(n_chunks)) {
-                for (r in range64(y3_rows)) {
-                    memcpy(dst + (ci * y3_rows + r) * nch, src + (ci * mp3 + r) * ncp, nch * 4l)
-                }
-            }
+        unsafe {
+            memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
         }
         g_tower_convs += n_chunks
         served = true
@@ -1910,6 +1922,8 @@ def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     pool_release(g_tw_pool, by1, bytes_y1)
     pool_release(g_tw_pool, by2, bytes_y2)
     pool_release(g_tw_pool, by3, bytes_y3)
+    pool_release(g_tw_pool, bfeat, bytes_feat)
+    pool_release(g_tw_pool, bx, bytes_x)
     pool_release(g_upool, u_iw100, 4ul)
     pool_release(g_upool, u_ih128, 4ul)
     pool_release(g_upool, u_c1, 4ul)
@@ -1930,6 +1944,116 @@ def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     pool_release(g_upool, u_tm1, 4ul)
     pool_release(g_upool, u_tm2, 4ul)
     pool_release(g_upool, u_tm3, 4ul)
+    pool_release(g_upool, u_featw, 4ul)
+    pool_release(g_upool, u_mp3ncp, 4ul)
+    pool_release(g_upool, u_totf, 4ul)
+    pool_release(g_upool, u_d, 4ul)
+    pool_release(g_upool, u_totx, 4ul)
+    return served
+}
+
+// The qwen3a mel: DFT (transposed-twiddle GEMM) -> power -> mel-filter GEMM -> the mel-major
+// log10 store, one command buffer off the CPU-windowed xw frames; m.data readback. The global
+// max−8 clamp stays with the caller. BEST-EFFORT: declines are a silent false.
+[hot_path]
+def private metal_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64;   // nolint:STYLE038 — the dispatch chain is the shape
+                          twiddles, filters : array<float>; var m : WhisperMel) : bool {
+    if (n_mel % 64l != 0l || n_len < 1l || !g_tw_env_tower || !metal_tower_init() || !pf_q3a_mel_ready()) {
+        return false
+    }
+    let mp = (n_len + 31l) / 32l * 32l
+    let kfp = (n_fft + 31l) / 32l * 32l
+    let ndtw = (2l * n_bins + 63l) / 64l * 64l
+    let ldpow = (n_bins + 31l) / 32l * 32l
+    let bytes_xw = uint64(mp * kfp * 4l)
+    let bytes_tw = uint64(ndtw * kfp * 4l)
+    let bytes_re = uint64(mp * ndtw * 4l)
+    let bytes_pow = uint64(mp * ldpow * 4l)
+    let bytes_fil = uint64(n_mel * ldpow * 4l)
+    let bytes_raw = uint64(mp * n_mel * 4l)
+    let bytes_out = uint64(n_mel * n_len * 4l)
+    var bxw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_xw)
+    var btw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tw)
+    var bre = pool_acquire_pinned(g_tw_pool, g_dev, bytes_re)
+    var bpow = pool_acquire_pinned(g_tw_pool, g_dev, bytes_pow)
+    var bfil = pool_acquire_pinned(g_tw_pool, g_dev, bytes_fil)
+    var braw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_raw)
+    var bout = pool_acquire_pinned(g_tw_pool, g_dev, bytes_out)
+    unsafe {
+        // xw rows at the padded k stride, zero tails; pad rows zeroed
+        var xp = reinterpret<float?>(metal_buffer_contents(bxw))
+        let sxp = addr<float const?>(xw[0])
+        for (r in range64(n_len)) {
+            memcpy(xp + r * kfp, sxp + r * n_fft, n_fft * 4l)
+            for (k in range64(n_fft, kfp)) {
+                xp[r * kfp + k] = 0.0
+            }
+        }
+        for (i in range64(n_len * kfp, mp * kfp)) {
+            xp[i] = 0.0
+        }
+        // the transposed twiddle panel [ndtw x kfp], zero-padded both ways
+        var tp = reinterpret<float?>(metal_buffer_contents(btw))
+        for (i in range64(ndtw * kfp)) {
+            tp[i] = 0.0
+        }
+        let stp = addr<float const?>(twiddles[0])
+        for (k in range64(n_fft)) {
+            for (n in range64(2l * n_bins)) {
+                tp[n * kfp + k] = stp[k * 2l * n_bins + n]
+            }
+        }
+        // the mel filterbank [n_mel x ldpow], k-padded
+        var fp = reinterpret<float?>(metal_buffer_contents(bfil))
+        let sfp = addr<float const?>(filters[0])
+        for (j in range64(n_mel)) {
+            memcpy(fp + j * ldpow, sfp + j * n_bins, n_bins * 4l)
+            for (k in range64(n_bins, ldpow)) {
+                fp[j * ldpow + k] = 0.0
+            }
+        }
+    }
+    var u_kfp = uniform_u32(uint(kfp))
+    var u_ndtw = uniform_u32(uint(ndtw))
+    var u_nbins = uniform_u32(uint(n_bins))
+    var u_ldpow = uniform_u32(uint(ldpow))
+    var u_totpow = uniform_u32(uint(mp * ldpow))
+    var u_nmel = uniform_u32(uint(n_mel))
+    var u_nlen = uniform_u32(uint(n_len))
+    var u_floor = uniform_f32(5.960464477539063e-08)   // the whisper preprocessor's 2^-24 floor
+    var u_scale = uniform_f32(0.43429448190325176)     // log10 e — the CPU stores log10
+    var u_totm = uniform_u32(uint(n_len * n_mel))
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        enc_f32_mm(enc, btw, 0ul, bxw, bre, 0ul, u_kfp, u_ndtw, mp, ndtw)
+        enc_q3a_pow(enc, bre, bpow, u_nbins, u_ndtw, u_ldpow, u_totpow, mp * ldpow)
+        enc_f32_mm(enc, bfil, 0ul, bpow, braw, 0ul, u_ldpow, u_nmel, mp, n_mel)
+        enc_q3a_logmel_t(enc, braw, bout, u_nmel, u_nlen, u_floor, u_scale, u_totm, n_len * n_mel)
+    }
+    var served = false
+    if (ran) {
+        unsafe {
+            memcpy(addr(m.data[0]), metal_buffer_contents(bout), uint64(n_mel * n_len * 4l))
+        }
+        served = true
+    }
+    pool_release(g_tw_pool, bxw, bytes_xw)
+    pool_release(g_tw_pool, btw, bytes_tw)
+    pool_release(g_tw_pool, bre, bytes_re)
+    pool_release(g_tw_pool, bpow, bytes_pow)
+    pool_release(g_tw_pool, bfil, bytes_fil)
+    pool_release(g_tw_pool, braw, bytes_raw)
+    pool_release(g_tw_pool, bout, bytes_out)
+    pool_release(g_upool, u_kfp, 4ul)
+    pool_release(g_upool, u_ndtw, 4ul)
+    pool_release(g_upool, u_nbins, 4ul)
+    pool_release(g_upool, u_ldpow, 4ul)
+    pool_release(g_upool, u_totpow, 4ul)
+    pool_release(g_upool, u_nmel, 4ul)
+    pool_release(g_upool, u_nlen, 4ul)
+    pool_release(g_upool, u_floor, 4ul)
+    pool_release(g_upool, u_scale, 4ul)
+    pool_release(g_upool, u_totm, 4ul)
     return served
 }
 
@@ -1945,7 +2069,8 @@ def dasllama_metal_tower_register {
     register_qwen25v_gpu(@@metal_qwen25v_blocks)
     register_tower_blocks_gpu(@@metal_tower_blocks, @@metal_tower_serves)
     register_tower_conv_gpu(@@metal_conv_frontend)
-    register_qwen3a_conv_gpu(@@metal_q3a_convs)
+    register_qwen3a_front_gpu(@@metal_q3a_front)
+    register_qwen3a_mel_gpu(@@metal_q3a_mel)
     register_gemma4a_gpu(@@metal_gemma4a_blocks, @@metal_tower_serves)
     register_gemma4a_chunk_gpu(@@metal_gemma4a_chunk)
 }

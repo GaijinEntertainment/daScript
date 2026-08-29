@@ -1100,11 +1100,11 @@ group; wording kept.
 
 ### From the gemma4a Metal-tower bring-up (2026-08-29)
 
-- **OPEN - gemma4a decode trails at long context.** gb1 decode ~9 ms/tok vs the reference's
-  ~7.5 at ~5k ctx on the standard Metal rail (jfk-scale ctx is at parity) - a decode-rail
-  KV-attention shape, not an audio-specific one. The whole-chunk encoder is GPU (gb1 encode
-  550 ms), so this gap is the cell's remaining red (gb1 0.83x). Instrument: lcpp_bench tg at
-  d4096 on the E2B carrier.
+- **OPEN - audio-chat decode trails at long context.** gb1 decode ~9 ms/tok vs the
+  reference's ~7.5 at ~5k ctx on the standard Metal rail (jfk-scale ctx is at parity) - a
+  decode-rail KV-attention shape, not an audio-specific one. With both encoders fully GPU it
+  is the remaining red on gemma4a (gb1 0.83x) and Qwen3-ASR (gb1 0.92x, encode 318 ms).
+  Instrument: lcpp_bench tg at d4096 on the E2B carrier.
 
 ### From the canary M5 baseline (2026-08-29)
 
