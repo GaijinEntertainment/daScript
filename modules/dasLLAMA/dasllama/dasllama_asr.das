@@ -209,7 +209,13 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the gemma4a audio route expects a Gemma-4 decoder")
         }
         m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
-        m.g4a <- load_gemma4a_encoder(mmproj)
+        if (g_asr_force_fp32 || g_asr_tower_fp32) {   // the facade's fp32 rail pins the exact lane for this load
+            set_gemma4a_q8(false)
+            m.g4a <- load_gemma4a_encoder(mmproj)
+            reset_gemma4a_q8()
+        } else {
+            m.g4a <- load_gemma4a_encoder(mmproj)
+        }
         if (m.g4a.proj_dim != m.dec.config.dim) {
             panic("dasLLAMA asr: gemma4a encoder projects to {m.g4a.proj_dim} but the decoder is {m.dec.config.dim}-wide - mismatched pair")
         }

@@ -715,6 +715,140 @@ def private tower_win_gate(t : T?; dev, queue) {
     delete want
 }
 
+// ===== the gemma4a sliding-window RPE attention (causal window 12, softcap, per-dim scale) =====
+// f16-representable inputs keep the f64 oracle exact up to f32 accumulation; the oracle attends
+// STRICTLY within [i-11, i], so any horizon leak fails the compare itself.
+def private g4a_attn_gate(t : T?; dev, queue) {
+    let tag = "g4a_attn"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_g4a_attn_msl, metal_g4a_attn_msl_entry, metal_g4a_attn_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let np = 40
+    let heads = 2
+    let hs = 128
+    let d = heads * hs
+    let past = 12
+    let qscale = (1.0 / sqrt(float(hs))) / log(2.0)
+    let kscale = log(1.0 + exp(1.0)) / log(2.0)
+    let cap = 50.0
+    var qv : array<float>
+    var kv : array<float>
+    var vv : array<float>
+    qv |> resize(np * d)
+    kv |> resize(np * d)
+    vv |> resize(np * d)
+    for (i in range(np * d)) {
+        qv[i] = float(float16(0.11 * float(i % 37) - 1.9))
+        kv[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
+        vv[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
+    }
+    var rpe : array<float>
+    rpe |> resize((past + 1) * d)
+    for (i in range((past + 1) * d)) {
+        rpe[i] = float(float16(0.03 * float((i * 11) % 29) - 0.4))
+    }
+    var pds : array<float>
+    pds |> resize(hs)
+    for (i in range(hs)) {
+        pds[i] = float(float16(0.5 + 0.02 * float(i % 17)))
+    }
+    var want : array<float>
+    want |> resize(np * d)
+    for (h in range(heads)) {
+        for (qi in range(np)) {
+            let j0 = max(0, qi - (past - 1))
+            var mx = -3.0e38
+            var sc : float[16]
+            for (j in range(j0, qi + 1)) {
+                var cs = 0.0lf
+                var rs = 0.0lf
+                let rr = (past - (qi - j)) * d
+                for (dd in range(hs)) {
+                    let qd0 = double(qv[qi * d + h * hs + dd]) * double(qscale) * double(pds[dd])
+                    cs += qd0 * (double(kv[j * d + h * hs + dd]) * double(kscale))
+                    rs += qd0 * double(rpe[rr + h * hs + dd])
+                }
+                let raw = float(cs + rs)
+                let s = cap * float(tanh(double(raw) / double(cap)))
+                sc[j - j0] = s
+                mx = max(mx, s)
+            }
+            var tot = 0.0lf
+            var oa : float[128]
+            for (dd in range(hs)) {
+                oa[dd] = 0.0
+            }
+            for (j in range(j0, qi + 1)) {
+                let e = exp(sc[j - j0] - mx)
+                tot += double(e)
+                for (dd in range(hs)) {
+                    oa[dd] += e * vv[j * d + h * hs + dd]
+                }
+            }
+            for (dd in range(hs)) {
+                want[qi * d + h * hs + dd] = oa[dd] / float(tot)
+            }
+        }
+    }
+    var bq = buf_upload(dev, qv)
+    var bk = buf_upload(dev, kv)
+    var bv = buf_upload(dev, vv)
+    var brp = buf_upload(dev, rpe)
+    var bpd = buf_upload(dev, pds)
+    var bo = buf_fill(dev, np * d, -1.0e30)
+    var ka = G4aAttnArgs(d = uint(d), hs = uint(hs), npos = uint(np), past = uint(past),
+        qscale = qscale, kscale = kscale, cap = cap)
+    let np64 = (np + 63) / 64
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bq, 0ul, 0)
+        metal_set_buffer(enc, bk, 0ul, 1)
+        metal_set_buffer(enc, bv, 0ul, 2)
+        metal_set_buffer(enc, bo, 0ul, 3)
+        metal_set_buffer(enc, brp, 0ul, 4)
+        metal_set_buffer(enc, bpd, 0ul, 5)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 6)
+        metal_dispatch_threadgroups(enc, uint3(uint(np64), uint(heads), 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag} dispatch: {err}")
+    return if (!ran)
+    t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
+    // the poison: +3.0 on ONE V element inside row 20's window must red the same bars
+    vv[18 * d + hs / 2] += 3.0
+    var bv2 = buf_upload(dev, vv)
+    let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bq, 0ul, 0)
+        metal_set_buffer(enc, bk, 0ul, 1)
+        metal_set_buffer(enc, bv2, 0ul, 2)
+        metal_set_buffer(enc, bo, 0ul, 3)
+        metal_set_buffer(enc, brp, 0ul, 4)
+        metal_set_buffer(enc, bpd, 0ul, 5)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 6)
+        metal_dispatch_threadgroups(enc, uint3(uint(np64), uint(heads), 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran2, "{tag} poison dispatch: {err}")
+    if (ran2) {
+        t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned V element reds the bars")
+    }
+    metal_release(bq)
+    metal_release(bk)
+    metal_release(bv)
+    metal_release(bv2)
+    metal_release(brp)
+    metal_release(bpd)
+    metal_release(bo)
+    metal_release(pso)
+    delete qv
+    delete kv
+    delete vv
+    delete rpe
+    delete pds
+    delete want
+}
+
 // ===== the tower row gather (the qwen25v stem's window-sort reorder) =====
 def private tower_gather_gate(t : T?; dev, queue) {
     let tag = "tower_gather"
@@ -969,6 +1103,7 @@ def test_metal_prefill_kernels(t : T?) {
                 // ===== the tower flash + its hc K/V restride =====
                 tower_flash_gate(t, dev, queue)
                 tower_win_gate(t, dev, queue)
+                g4a_attn_gate(t, dev, queue)
                 tower_gather_gate(t, dev, queue)
 
                 // ===== attention: the tiled sgmat trio vs the direct causal-GQA oracle, at the

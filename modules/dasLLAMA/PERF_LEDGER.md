@@ -1097,3 +1097,16 @@ group; wording kept.
 - **OPEN - qwen25v full layers ride the padded slab (hs 80 -> 96).** Four of 32 layers restride
   to hs_pad 96 through the attention trio; a dk80 flash monomorph (the gemma3v dk72 recipe,
   per-head-contiguous K/V) applies if the slab ever shows at big npos.
+
+### From the gemma4a Metal-tower bring-up (2026-08-29)
+
+- **OPEN - gemma4a mel + subsample front end are CPU.** The Conformer blocks ride the GPU
+  (gb1 encode 8749 -> 1592 ms at -t 8), so the residual encode is the mel (DFT twiddle GEMM,
+  ~1.1 s on gb1 at -t 8) and the conv subsample + input projection (~0.8 s). Their GEMMs fit
+  the existing enc_f32_mm form (twiddles/im2col are plain panels); the cell needs them to
+  reach parity with the reference's fully-GPU encode (gb1 das 6085 vs 4264 ms). Instrument:
+  asr_prof g4a.mel / g4a.enc.front on gb1.
+- **OPEN - gemma4a decode trails at long context.** gb1 decode ~9 ms/tok vs the reference's
+  ~7.5 at ~5k ctx on the standard Metal rail (jfk-scale ctx is at parity) - a decode-rail
+  KV-attention shape, not an audio-specific one. Instrument: lcpp_bench tg at d4096 on the
+  E2B carrier.

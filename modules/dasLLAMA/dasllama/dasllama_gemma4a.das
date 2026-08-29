@@ -46,7 +46,7 @@ let private G4A_SOFTCAP = 50.0
 let private G4A_RES_W = 0.5        // macaron half-step residual weight
 
 //! Per-layer weight offsets into ``blob`` + the clamp ranges of the clamped matmuls.
-struct private G4aLayer {
+struct G4aLayer {
     ff_norm : int64
     ff_up : int64; ff_down : int64; ff_post_norm : int64
     c_ff_up : Clamp; c_ff_down : Clamp
@@ -290,10 +290,10 @@ def private g4a_htk_filterbank(n_mel, n_fft, sample_rate : int64) : array<float>
 }
 
 //! Load a gemma4a audio mmproj GGUF (`a.*` / `mm.a.*` tensors; the vision tower is ignored).
-//! The GEMM set transcodes to Q8_0 planes (forced — no fp32 weight lane); convs/norms/biases stay fp32.
-//! Caches a box/knob-specific PREPARED IMAGE like ``load_model``; ``DASLLAMA_IMAGE=0`` disables, a ``.dlim`` path loads directly.
+//! The q8 lane transcodes the GEMM set to Q8_0 planes; the f32 lane (the GPU driver's) keeps
+//! the whole blob fp32. Prepared-image caching matches ``load_model`` (``DASLLAMA_IMAGE=0`` disables).
 def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
-    let tag = g_g4a_q8 ? "gemma4a-q8" : "gemma4a-f32"
+    let tag = g4a_serve_q8() ? "gemma4a-q8" : "gemma4a-f32"
     if (path |> ends_with(".dlim")) {
         // named directly — no mmproj to regenerate from, so a wrong identity panics
         apply_box_profile_runtime()
@@ -421,7 +421,7 @@ def private g4a_repack_all(var st : Gemma4aStaging) {
 //! arrays beside it. Nothing here is servable — the image build is what produces a live encoder.
 def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
     var st = Gemma4aStaging()
-    st.e.q8 = g_g4a_q8
+    st.e.q8 = g4a_serve_q8()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA gemma4a: cannot open mmproj gguf '{path}'")
@@ -596,20 +596,72 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
 
 // ===== mel (gemma4a: no preemphasis, natural-log magnitude, HTK, no per-feature norm) =====
 
-// q8 is the only serving format (board policy); the flag is the fp32 reference route parity
-// legs compare against
-var private g_g4a_q8 = true
+// the GPU hook (registered by dasllama_metal_tower at [init]; requires-back): after the front
+// (mel + subsample + inproj) it runs the 12 Conformer blocks on s.x in one command buffer;
+// false = declined, the CPU loop falls back
+typedef Gemma4aGpuBlocksFn = function<(t : Gemma4aEncoder; var s : Gemma4aState; npos : int64) : bool>
+typedef Gemma4aServesFn = function<() : bool>
+var private g_g4a_gpu : Gemma4aGpuBlocksFn
+var private g_g4a_serves : Gemma4aServesFn
+var private g_g4a_gpu_set = false
+var private g_g4a_serves_set = false
 
-//! Select the gemma4a tower's weight format for subsequent loads: q8 (the serving default) vs
-//! the fp32 reference route parity legs compare against.
-def set_gemma4a_q8(on : bool) {
-    g_g4a_q8 = on
+def register_gemma4a_gpu(fn : Gemma4aGpuBlocksFn; serves : Gemma4aServesFn) {
+    g_g4a_gpu = fn
+    g_g4a_serves = serves
+    g_g4a_gpu_set = true
+    g_g4a_serves_set = true
 }
 
+//! Would the Metal tower serve the block loop — the lane policy asks (a serving driver wants
+//! the f32 blob, so the un-pinned lane defaults to exact); false on CPU builds or knob-off.
+def gemma4a_gpu_serves() : bool => g_g4a_serves_set && invoke(g_g4a_serves)
+
+//! The causal attention horizon (window = self + past - 1 previous rows) — the GPU driver's
+//! kernel sizes its score window off this.
+def gemma4a_attn_past() : int64 => G4A_PAST
+
+//! The attention-score soft cap — the GPU driver mirrors the CPU form.
+def gemma4a_softcap() : float => G4A_SOFTCAP
+
+//! The macaron half-step residual weight.
+def gemma4a_res_w() : float => G4A_RES_W
+
+// the lane policy mirrors qwen3a's: a serving Metal tower wants the f32 blob (its driver
+// declines q8), so the un-pinned default follows [[gemma4a_gpu_serves]]; tests and the CPU
+// board rows pin a lane explicitly
+enum private G4aLane {
+    unset
+    exact
+    q8
+}
+var private g_g4a_pin = G4aLane.unset
+
+def private g4a_serve_q8() : bool {
+    if (g_g4a_pin != G4aLane.unset) {
+        return g_g4a_pin == G4aLane.q8
+    }
+    return !gemma4a_gpu_serves()
+}
+
+//! Pin the gemma4a tower's weight format for subsequent loads: q8 (the CPU serving lane) vs
+//! the fp32 lane the parity legs and the GPU driver read. ``reset_gemma4a_q8`` returns to the
+//! policy default (exact when the Metal tower serves).
+def set_gemma4a_q8(on : bool) {
+    g_g4a_pin = on ? G4aLane.q8 : G4aLane.exact
+}
+
+def reset_gemma4a_q8() {
+    g_g4a_pin = G4aLane.unset
+}
+
+//! The lane subsequent loads would take — the facade's exec_fmt and the tests read it.
+def gemma4a_serves_q8() : bool => g4a_serve_q8()
+
 //! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
-//! from the facade, which owns the shared LLM). The Conformer tower serves q8 GEMM planes.
+//! from the facade, which owns the shared LLM).
 def gemma4a_exec_fmt(dec_fmt : string) : string {
-    return "{g_g4a_q8 ? "q8" : "f32"}/{dec_fmt}"
+    return "{g4a_serve_q8() ? "q8" : "f32"}/{dec_fmt}"
 }
 
 //! Gemma4a's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm);
@@ -657,6 +709,9 @@ def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len :
         }
     }
     ensure_length(st.reim, n_len * n_bins * 2l)
+    for (i in range64(n_len * n_bins * 2l)) {
+        st.reim[i] = 0.0   // gemm accumulates: the reused state buffer must start zeroed
+    }
     gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(enc.twiddles, 0l),
              n_len, G4A_N_FFT, n_bins * 2l)
 
@@ -860,6 +915,14 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
     let k_scale = log(1.0 + exp(1.0)) / log(2.0)
     let inv_softcap = 1.0 / G4A_SOFTCAP
 
+    if (g_g4a_gpu_set) {
+        tprof = ref_time_ticks()
+        if (invoke(g_g4a_gpu, enc, st, npos)) {
+            asr_prof_add("g4a.enc.blocks.gpu", tprof)
+            return g4a_encode_tail(enc, st, npos)
+        }
+    }
+
     g4a_requant_rpe(enc, st, d)
 
     for (l in range64(enc.n_layer)) {
@@ -965,8 +1028,14 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
         asr_prof_add("g4a.enc.ffn", tprof)
     }
 
-    // output projection -> RMSNorm (weightless) -> mm input projection
-    tprof = ref_time_ticks()
+    return g4a_encode_tail(enc, st, npos)
+}
+
+// output projection -> RMSNorm (weightless) -> mm input projection — shared by the CPU loop
+// and the GPU block serve (the tail stays CPU on both)
+def private g4a_encode_tail(enc : Gemma4aEncoder; var st : Gemma4aState; npos : int64) : int64 {
+    let d = enc.d_model
+    let tprof = ref_time_ticks()
     ensure_length(st.tmp, npos * enc.proj_dim)
     ensure_length(st.out, npos * enc.proj_dim)
     g4a_mm_rq(enc, st, st.tmp, enc.outproj_w, st.x, d, enc.proj_dim, npos)

@@ -714,6 +714,9 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
         }
     }
     ensure_length(st.reim, n_len * n_bins * 2l)
+    for (i in range64(n_len * n_bins * 2l)) {
+        st.reim[i] = 0.0   // gemm accumulates: the reused state buffer must start zeroed
+    }
     gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(m.twiddles, 0l),
              n_len, n_fft, n_bins * 2l)
 

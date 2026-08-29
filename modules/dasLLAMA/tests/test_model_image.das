@@ -1692,6 +1692,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         if (!model_available(t, path)) {
             return
         }
+        set_gemma4a_q8(true)   // this cell claims the q8 RAIL — the policy default follows the Metal tower on Apple builds
         let img = image_path_for(path, "gemma4a-q8")
         remove(img)
         // off-rail truth: the staging carrier re-runs the read-time transcode + repack under
@@ -1725,7 +1726,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         var inscope c32 <- load_gemma4a_encoder(path)
         t |> success(!c32.q8, "f32 rail still serves")
         t |> equal(count_mismatch(a32.blob, c32.blob), 0l, "f32 blob element-exact")
-        set_gemma4a_q8(true)
+        reset_gemma4a_q8()
     }
 }
 
@@ -1752,6 +1753,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
             setup_dasllama_jobque_()
             // decoder off-rail (REVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
+            set_gemma4a_q8(true)   // this cell claims the q8 RAIL — the policy default follows the Metal tower on Apple builds
             var inscope enc <- load_gemma4a_encoder(mmp_path)
             var inscope s <- create_gemma4a_asr_session(dec)
             t |> success(enc.q8, "leg A tower is on the q8 rail")
@@ -1765,13 +1767,93 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
             gemma4a_transcribe(dec, enc32, s32, samples, $(seg : TranscribeSegment) {
                 f32_text += seg.text
             }, lang)
-            set_gemma4a_q8(true)
+            reset_gemma4a_q8()
             delete dec
         }
         to_log(LOG_INFO, "gemma4a q8 : {q8_text}\n")
         to_log(LOG_INFO, "gemma4a f32: {f32_text}\n")
         t |> equal(q8_text, f32_text, "q8 tower transcript matches the f32 rail")
         delete samples
+    }
+}
+
+[test]
+def test_gemma4a_tower_metal(t : T?) {
+    t |> run("gemma4a tower: the Metal Conformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "gemma4a") || !arm_on(t, "mtower")) return
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
+            let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+            if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
+            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                t |> skip("jfk.wav not present beside the models")
+                return
+            }
+            var cpu_text = ""
+            var gpu_text = ""
+            var lang = ""
+            var nlayer = 0l
+            var enc_delta = 0l
+            var blk_delta = 0l
+            var enc_rel_rms = 0.0
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var dec <- load_model_(dec_path, QuantMode.q8)
+                dec.config.seq_len = min(dec.config.seq_len, 8192l)
+                set_gemma4a_q8(false)   // the GPU driver's lane; the q8 lane declines by design
+                var inscope enc <- load_gemma4a_encoder(mmp_path)
+                t |> success(!enc.q8, "tower is on the f32 rail")
+                nlayer = enc.n_layer
+                set_metal_tower(false)
+                var inscope s <- create_gemma4a_asr_session(dec)
+                gemma4a_transcribe(dec, enc, s, samples, $(seg : TranscribeSegment) {
+                    cpu_text += seg.text
+                }, lang)
+                let s0 = metal_tower_stats()
+                set_metal_tower(true)
+                var inscope s2 <- create_gemma4a_asr_session(dec)
+                gemma4a_transcribe(dec, enc, s2, samples, $(seg : TranscribeSegment) {
+                    gpu_text += seg.text
+                }, lang)
+                let s1 = metal_tower_stats()
+                enc_delta = s1.encodes - s0.encodes
+                blk_delta = s1.blocks - s0.blocks
+                // one-chunk encode pair, same f32 blob, tower off/on: the element instrument
+                var inscope stc = Gemma4aState()
+                var inscope stg = Gemma4aState()
+                set_metal_tower(false)
+                gemma4a_log_mel(enc, samples, 0l, long_length(samples), stc)
+                gemma4a_encode(enc, stc)
+                set_metal_tower(true)
+                gemma4a_log_mel(enc, samples, 0l, long_length(samples), stg)
+                gemma4a_encode(enc, stg)
+                var sd = 0.0lf
+                var sa = 0.0lf
+                for (i in range64(long_length(stc.out))) {
+                    let df = stc.out[i] - stg.out[i]
+                    sd += double(df * df)
+                    sa += double(stc.out[i] * stc.out[i])
+                }
+                enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
+                reset_gemma4a_q8()
+                delete dec
+            }
+            t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
+            t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
+            // measured 3.9e-4 on the jfk fixture (12 blocks, window-12 attention caps the mixing)
+            t |> success(enc_rel_rms < 5.0e-3, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
+            to_log(LOG_INFO, "gemma4a mtower CPU eyeball: {cpu_text}\n")
+            to_log(LOG_INFO, "gemma4a mtower GPU eyeball: {gpu_text}\n")
+            t |> success(!empty(gpu_text), "non-empty transcript")
+            // a legitimate near-tie flip means converting this cell to forced-feed, not loosening the compare
+            t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
+            delete samples
+        }
     }
 }
 

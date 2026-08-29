@@ -90,10 +90,12 @@ gemma4uv` selects it too - arm filters match by substring); `mtower` is the whis
 tower-blocks gate, Apple builds only - whisper tiny + large-v3-turbo transcript-exact and
 qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter deltas, the
 twin-W legs (whisper f16 + qwen3a bf16: engage by the route counter, the twin-knob freeze,
-and whisper's wblob-ONLY poison that must CHANGE the GPU transcript), plus the tower
-q8-decline (a PINNED-q8 tower never dispatches - the un-pinned lane default follows the Metal
-tower on Apple builds: serving driver => f32 planes, the vision-tower policy), required-mode
-panic, and Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv`
+and whisper's wblob-ONLY poison that must CHANGE the GPU transcript), the gemma4a Metal
+Conformer cell (f32-lane transcript equality CPU vs GPU + encode rel-rms + counter deltas -
+the lane pin/reset discipline mirrors qwen3a's), plus the tower q8-decline (a PINNED-q8 tower
+never dispatches - the un-pinned lane default follows the Metal tower on Apple builds:
+serving driver => f32 planes, the vision-tower policy; gemma4a follows the same policy),
+required-mode panic, and Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv`
 cell in `test_model_image.das` - GPU cross-KV on the q8 serving default, transcript-exact
 against the CPU chain with window/step counter deltas and the knob and quant_mode declines,
 required-mode, step-floor and shutdown-re-arm contract; the voxtral arm re-saves a
@@ -190,8 +192,10 @@ CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas - Apple bu
 skips honestly without the qwen2audio / voxtral mmprojs.
 `test_whisper.das` - model-free suite; model-gated: the whisper/parakeet/canary/gemma4a/omni
 oracle cells, the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
-f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp), and the q8-gate CPU-vs-CPU claims
-(CPU-claim cells, wdec knob pinned OFF); its ungated cells are the model-free half.
+f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp), the q8-gate CPU-vs-CPU claims
+(CPU-claim cells, wdec knob pinned OFF), and the mel state-reuse determinism cell (gemma4a +
+canary: `gemm_f32` accumulates, so a reused state's `st.reim` must start zeroed - bit-equal
+mels across calls); its ungated cells are the model-free half.
 `test_asr_verbs.das` - model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
 `asr_encode_bucket`) over constructed structs and parakeet's SPM detokenizer over a toy vocab.
 `test_model_specs.das` - model-free: the model-set table's shape invariants

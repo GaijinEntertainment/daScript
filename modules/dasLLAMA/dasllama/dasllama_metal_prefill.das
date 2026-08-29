@@ -2722,6 +2722,169 @@ class MetalTowerRowGather {
     }
 }
 
+//! The gemma4a Conformer attention's argument block (the sliding causal window + sinusoidal RPE).
+struct G4aAttnArgs {
+    d : uint            //!< model width (rows are compact [npos x d])
+    hs : uint           //!< head size
+    npos : uint
+    past : uint         //!< causal window = self + (past - 1) previous rows; RPE rows = past + 1
+    qscale : float      //!< the query scale ahead of per_dim_scale
+    kscale : float
+    cap : float         //!< attention-score soft cap
+}
+
+//! The gemma4a causal sliding-window attention: one thread per (q row, head) — window <= 16 rows,
+//! per-dim-scaled Q against K and the projected RPE table, softcapped scores, plain softmax.
+[metal_dispatch(name = "enc_g4a_attn", pso = "g_pf_pso_g4a_attn", tg = 64, grid = "np64, heads", params = "np64 : int64, heads : int64")]
+class MetalG4aAttn {
+    @ssbo @binding = 0 @role = "read" q : array<float>      //!< [npos x d] compact
+    @ssbo @binding = 1 @role = "read" k : array<float>      //!< [npos x d] compact
+    @ssbo @binding = 2 @role = "read" v : array<float>      //!< [npos x d] compact
+    @ssbo @binding = 3 @role = "write" ao : array<float>    //!< [npos x d] attention out
+    @ssbo @binding = 4 @role = "read" rpe : array<float>    //!< [(past+1) x d] the layer's projected RPE
+    @ssbo @binding = 5 @role = "read" pds : array<float>    //!< [hs] the layer's per-dim query scale
+    @uniform @binding = 6 ka : G4aAttnArgs
+
+    [metal_kernel(name="metal_g4a_attn_msl")]
+    def metal_g4a_attn {
+        let i = gl_GlobalInvocationID.x
+        let h = gl_WorkGroupID.y
+        if (i >= ka.npos) {
+            return
+        }
+        let d = ka.d
+        let hs = ka.hs
+        let hoff = h * hs
+        let j0 = i >= ka.past - 1u ? i - (ka.past - 1u) : 0u
+        var sarr : float[16]
+        var m = -1.5e38
+        var j = j0
+        while (j <= i) {
+            let rr = (ka.past - (i - j)) * d
+            var cs = 0.0
+            var rs = 0.0
+            var n = 0u
+            while (n < hs) {
+                let qv = q[i * d + hoff + n] * ka.qscale * pds[n]
+                cs += qv * (k[j * d + hoff + n] * ka.kscale)
+                rs += qv * rpe[rr + hoff + n]
+                n++
+            }
+            // tanh via the exp identity (the CPU softcap's form; Metal tanh NaNs past ~44)
+            let raw = cs + rs
+            let sc = ka.cap * (1.0 - 2.0 / (1.0 + exp(raw * 2.0 / ka.cap)))
+            sarr[j - j0] = sc
+            m = max(m, sc)
+            j++
+        }
+        var stot = 0.0
+        j = j0
+        while (j <= i) {
+            let p = exp(sarr[j - j0] - m)
+            sarr[j - j0] = p
+            stot += p
+            j++
+        }
+        let inv = 1.0 / stot
+        var n = 0u
+        while (n < hs) {
+            var acc = 0.0
+            j = j0
+            while (j <= i) {
+                acc += sarr[j - j0] * v[j * d + hoff + n]
+                j++
+            }
+            ao[i * d + hoff + n] = acc * inv
+            n++
+        }
+    }
+}
+
+//! The gemma4a conv module's GLU: y[t x d] = h[t][0..d) * sigmoid(h[t][d..2d)) off the pw1 rows.
+[metal_dispatch(name = "enc_g4a_glu", pso = "g_pf_pso_g4a_glu", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalG4aGlu {
+    @ssbo @binding = 0 @role = "read" h : array<float>      //!< [npos x 2d] pw1 output
+    @ssbo @binding = 1 @role = "write" y : array<float>     //!< [npos x d]
+    @uniform @binding = 2 d : uint
+    @uniform @binding = 3 total : uint      //!< grid guard: npos * d
+
+    [metal_kernel(name="metal_g4a_glu_msl")]
+    def metal_g4a_glu {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let t = gid / d
+        let c = gid % d
+        y[gid] = h[t * 2u * d + c] / (1.0 + exp(-h[t * 2u * d + d + c]))
+    }
+}
+
+//! The gemma4a causal depthwise conv (k = 5, taps [d x 5] in the blob): one thread per element,
+//! rows before the window's reach read nothing (zero left context — chunk starts cold).
+[metal_dispatch(name = "enc_g4a_dw", pso = "g_pf_pso_g4a_dw", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalG4aDw {
+    @ssbo @binding = 0 @role = "read" x : array<float>      //!< [npos x d] GLU output
+    @ssbo @binding = 1 @role = "write" y : array<float>     //!< [npos x d]
+    @ssbo @binding = 2 @role = "weight" @off = "woff" w : array<float>   //!< [d x 5] causal taps
+    @uniform @binding = 3 d : uint
+    @uniform @binding = 4 total : uint      //!< grid guard: npos * d
+
+    [metal_kernel(name="metal_g4a_dw_msl")]
+    def metal_g4a_dw {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let t = gid / d
+        let c = gid % d
+        var acc = 0.0
+        var kk = 0u
+        while (kk < 5u) {
+            if (t + kk >= 4u) {   // src = t - 4 + kk >= 0 in unsigned form
+                acc += w[c * 5u + kk] * x[(t + kk - 4u) * d + c]
+            }
+            kk++
+        }
+        y[gid] = acc
+    }
+}
+
+//! In-place SiLU over a panel — the gemma4a FFN/conv activation.
+[metal_dispatch(name = "enc_g4a_silu", pso = "g_pf_pso_g4a_silu", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalG4aSilu {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @uniform @binding = 1 total : uint      //!< grid guard
+
+    [metal_kernel(name="metal_g4a_silu_msl")]
+    def metal_g4a_silu {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let vv = x[gid]
+        x[gid] = vv / (1.0 + exp(-vv))
+    }
+}
+
+//! Scaled residual add g += u * ascale — the macaron half-step (enc_add's form is (g+u)*scale).
+[metal_dispatch(name = "enc_g4a_axpy", pso = "g_pf_pso_g4a_axpy", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalG4aAxpy {
+    @ssbo @binding = 0 @role = "readwrite" g : array<float>
+    @ssbo @binding = 1 @role = "read" u : array<float>
+    @uniform @binding = 2 total : uint      //!< grid guard
+    @uniform @binding = 3 ascale : float
+
+    [metal_kernel(name="metal_g4a_axpy_msl")]
+    def metal_g4a_axpy {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        g[gid] += u[gid] * ascale
+    }
+}
+
 //! Interleave two [npos x d] panels into the [npos x 2d] MTP eh_proj input: rows are [enorm(embed) ; hnorm(hidden)].
 [metal_dispatch(name = "pf_enc_cat2", pso = "g_pf_pso_cat2", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalPfCat2 {
@@ -2775,6 +2938,11 @@ var private g_pf_pso_twr_flash : MetalComputePipeline?   //!< the tower flash (D
 var private g_pf_pso_twr_kvhc : MetalComputePipeline?    //!< its K/V per-head-contiguous f16 restride
 var private g_pf_pso_twr_win : MetalComputePipeline?     //!< the qwen2.5 ViT per-window attention
 var private g_pf_pso_twr_gather : MetalComputePipeline?  //!< its stem's window-sort row gather
+var private g_pf_pso_g4a_attn : MetalComputePipeline?    //!< the gemma4a sliding-window RPE attention
+var private g_pf_pso_g4a_glu : MetalComputePipeline?     //!< its conv-module GLU halves
+var private g_pf_pso_g4a_dw : MetalComputePipeline?      //!< its causal depthwise k=5
+var private g_pf_pso_g4a_silu : MetalComputePipeline?    //!< in-place SiLU
+var private g_pf_pso_g4a_axpy : MetalComputePipeline?    //!< the macaron half-step residual
 var private g_pf_pso_mm_t : MetalComputePipeline?  //!< the mul_mm TENSOR twin; the base is the shared g_pso_mm
 var private g_pf_pso_mm_th : MetalComputePipeline?  //!< its half-X stamp (the converted f16 activation panel)
 var private g_pf_pso_mm_t128 : MetalComputePipeline?
@@ -3193,6 +3361,11 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     release_pso(g_pf_pso_twr_kvhc)
     release_pso(g_pf_pso_twr_win)
     release_pso(g_pf_pso_twr_gather)
+    release_pso(g_pf_pso_g4a_attn)
+    release_pso(g_pf_pso_g4a_glu)
+    release_pso(g_pf_pso_g4a_dw)
+    release_pso(g_pf_pso_g4a_silu)
+    release_pso(g_pf_pso_g4a_axpy)
     if (g_pf_pso_cvt_half != null) {
         metal_release(g_pf_pso_cvt_half)
         g_pf_pso_cvt_half = null
@@ -3425,6 +3598,11 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_twr_kvhc = compile_pso(metal_tower_kv_hc_msl, metal_tower_kv_hc_msl_entry, metal_tower_kv_hc_msl_fastmath, ok)
     g_pf_pso_twr_win = compile_pso(metal_tower_win_msl, metal_tower_win_msl_entry, metal_tower_win_msl_fastmath, ok)
     g_pf_pso_twr_gather = compile_pso(metal_tower_row_gather_msl, metal_tower_row_gather_msl_entry, metal_tower_row_gather_msl_fastmath, ok)
+    g_pf_pso_g4a_attn = compile_pso(metal_g4a_attn_msl, metal_g4a_attn_msl_entry, metal_g4a_attn_msl_fastmath, ok)
+    g_pf_pso_g4a_glu = compile_pso(metal_g4a_glu_msl, metal_g4a_glu_msl_entry, metal_g4a_glu_msl_fastmath, ok)
+    g_pf_pso_g4a_dw = compile_pso(metal_g4a_dw_msl, metal_g4a_dw_msl_entry, metal_g4a_dw_msl_fastmath, ok)
+    g_pf_pso_g4a_silu = compile_pso(metal_g4a_silu_msl, metal_g4a_silu_msl_entry, metal_g4a_silu_msl_fastmath, ok)
+    g_pf_pso_g4a_axpy = compile_pso(metal_g4a_axpy_msl, metal_g4a_axpy_msl_entry, metal_g4a_axpy_msl_fastmath, ok)
     g_pf_pso_avmm = compile_pso(MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_pso_avmm_p = compile_pso(MetalAttnAVMmP_metal_attn_av_mm_msl, MetalAttnAVMmP_metal_attn_av_mm_msl_entry, MetalAttnAVMmP_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_qkmm_tensor = metal_tensor_crowned("attn_qkmm")
@@ -3675,6 +3853,12 @@ def pf_bf16_half_ready() : bool => g_pf_pso_bf16_mm_th != null && g_pf_pso_cvt_h
 def pf_tower_flash_ready() : bool => g_pf_pso_twr_flash != null && g_pf_pso_twr_kvhc != null
 
 def pf_tower_win_ready() : bool => g_pf_pso_twr_win != null && g_pf_pso_twr_gather != null
+
+//! The gemma4a Conformer kernel set compiled — its tower driver's device gate.
+def pf_g4a_ready() : bool {
+    return (g_pf_pso_g4a_attn != null && g_pf_pso_g4a_glu != null && g_pf_pso_g4a_dw != null
+        && g_pf_pso_g4a_silu != null && g_pf_pso_g4a_axpy != null)
+}
 
 def private pf_devw_flip : MetalBuffer ? {
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh

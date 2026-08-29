@@ -17,6 +17,8 @@ require dasllama/dasllama_qwen3v   // Qwen3vTower/Qwen3vState — the qwen3vl Vi
 require dasllama/dasllama_qwen25v   // Qwen25vTower/Qwen25vState — the window-attention ViT block loop
 require dasllama/dasllama_audio   // AudioTower/EncoderState — the whisper-class block loop
 require dasllama/dasllama_qwen3a   // Qwen3aTower — the conv2d frontend hook
+require dasllama/dasllama_gemma4a   // Gemma4aEncoder/Gemma4aState — the Conformer block loop
+require dasllama/dasllama_tower   // Clamp — the calibration record the gemma4a sites carry
 require metal/das_metal_boost
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_kernels
@@ -333,6 +335,211 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     pool_release(g_upool, u_eps, 4ul)
     pool_release(g_upool, u_totd, 4ul)
     pool_release(g_upool, u_totff, 4ul)
+    if (!served) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
+// One clamped f32 GEMM on the gemma4a chain: clamp-in to bxc, the GEMM, clamp-out in place —
+// an inactive record skips both passes (the CPU g4a_mm_clamped's skip, dispatch for dispatch).
+def private g4a_mm_site(enc : MetalComputeEncoder?; bblob, bbounds : MetalBuffer?; c : Clamp; brec : uint64;
+                        bsrc, bxc, bdst : MetalBuffer?; woff : int64; u_in, u_out, u_k, u_n, u_totin, u_totout : MetalBuffer?;
+                        totin, totout, mp, ndim : int64) {
+    if (c.active) {
+        enc_clamp(enc, bsrc, 0ul, bxc, 0ul, bbounds, brec, u_in, u_totin, totin)
+        enc_f32_mm(enc, bblob, uint64(woff * 4l), bxc, bdst, 0ul, u_k, u_n, mp, ndim)
+        enc_clamp(enc, bdst, 0ul, bdst, 0ul, bbounds, brec, u_out, u_totout, totout)
+    } else {
+        enc_f32_mm(enc, bblob, uint64(woff * 4l), bsrc, bdst, 0ul, u_k, u_n, mp, ndim)
+    }
+}
+
+def private g4a_rec(var bp : float?; idx : int64; c : Clamp) {
+    unsafe {
+        bp[idx * 4l] = c.imin
+        bp[idx * 4l + 1l] = c.imax
+        bp[idx * 4l + 2l] = c.omin
+        bp[idx * 4l + 3l] = c.omax
+    }
+}
+
+// The gemma4a Conformer block loop as ONE command buffer on the f32 blob — clamped f32 GEMMs,
+// the sliding-window RPE attention, the conv module and the macaron halves as g4a kernels.
+// The front (mel + subsample + inproj) and the proj tail stay CPU; the q8 lane declines.
+[hot_path]
+def private metal_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    if (t.q8) {
+        return tw_decline(MetalTowerDecline.quant_mode)
+    }
+    let d = t.d_model
+    let hs = t.d_head
+    let ff = t.n_ff
+    let past = gemma4a_attn_past()
+    if (d % 64l != 0l || ff % 64l != 0l || 2l * d % 64l != 0l || t.n_head * hs != d || past > 15l || npos < 1l) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    if (!metal_tower_init() || !pf_g4a_ready()) {   // per-encode: re-arms after any shutdown seat
+        return tw_decline(MetalTowerDecline.device)
+    }
+    residency_flush()   // pin/commit before the first submission (the post-CPU-front slack)
+    let mp = (npos + 31l) / 32l * 32l
+    let np64 = (npos + 63l) / 64l
+    let mapped = t.image_map != null
+    var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
+    let bytes_row = uint64(mp * d * 4l)
+    let bytes_c = uint64(mp * ff * 4l)
+    let bytes_rpe = uint64(32l * d * 4l)
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bao = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bglu = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bcvd = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bxc = pool_acquire_pinned(g_tw_pool, g_dev, bytes_c)
+    var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_c)
+    var bpos = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rpe)
+    var bprpe = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rpe)
+    unsafe {
+        var p = reinterpret<uint8?>(metal_buffer_contents(bx))
+        memcpy(p, addr(s.x[0]), npos * d * 4l)
+        if (mp > npos) {   // DEFENSIVE pad zero (controls stay green without it): guards stale-Inf pool reuse
+            var zp = reinterpret<float?>(p + npos * d * 4l)
+            for (i in range64((mp - npos) * d)) {
+                zp[i] = 0.0
+            }
+        }
+        // the RPE table, zero-padded to the GEMM's 32-row floor
+        var pp = reinterpret<float?>(metal_buffer_contents(bpos))
+        let sp = plane_at(t.pos_emb, 0l)
+        for (i in range64((past + 1l) * d)) {
+            pp[i] = sp[i]
+        }
+        for (i in range64((past + 1l) * d, 32l * d)) {
+            pp[i] = 0.0
+        }
+    }
+    // the calibration records, one [imin imax omin omax] row per clamped GEMM site
+    let bytes_rec = uint64(t.n_layer * 10l * 16l)
+    var bbounds = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rec)
+    unsafe {
+        var bp = reinterpret<float?>(metal_buffer_contents(bbounds))
+        for (l in range64(t.n_layer)) {
+            let lo = t.layers[l]
+            g4a_rec(bp, l * 10l, lo.c_ff_up)
+            g4a_rec(bp, l * 10l + 1l, lo.c_ff_down)
+            g4a_rec(bp, l * 10l + 2l, lo.c_q)
+            g4a_rec(bp, l * 10l + 3l, lo.c_k)
+            g4a_rec(bp, l * 10l + 4l, lo.c_v)
+            g4a_rec(bp, l * 10l + 5l, lo.c_o)
+            g4a_rec(bp, l * 10l + 6l, lo.c_pw1)
+            g4a_rec(bp, l * 10l + 7l, lo.c_pw2)
+            g4a_rec(bp, l * 10l + 8l, lo.c_ff_up_1)
+            g4a_rec(bp, l * 10l + 9l, lo.c_ff_down_1)
+        }
+    }
+    var u_d = uniform_u32(uint(d))
+    var u_2d = uniform_u32(uint(2l * d))
+    var u_ff = uniform_u32(uint(ff))
+    var u_eps = uniform_f32(t.eps)
+    var u_totd = uniform_u32(uint(npos * d))
+    var u_tot2d = uniform_u32(uint(npos * 2l * d))
+    var u_totff = uniform_u32(uint(npos * ff))
+    var u_in = uniform_u32(0u)    // the clamp record's input pair
+    var u_out = uniform_u32(1u)   // its output pair
+    var u_half = uniform_f32(gemma4a_res_w())
+    var ka = G4aAttnArgs(d = uint(d), hs = uint(hs), npos = uint(npos), past = uint(past),
+        qscale = (1.0 / sqrt(float(hs))) / log(2.0), kscale = log(1.0 + exp(1.0)) / log(2.0),
+        cap = gemma4a_softcap())
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        for (l in range64(t.n_layer)) {
+            let lo = t.layers[l]
+            let rb = uint64(l * 10l * 16l)
+            var bw_ffn = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.ff_norm))), uint64(d * 4l))
+            var bw_ffp = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.ff_post_norm))), uint64(d * 4l))
+            var bw_apre = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.attn_pre_norm))), uint64(d * 4l))
+            var bw_apost = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.attn_post_norm))), uint64(d * 4l))
+            var bw_ncv = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.norm_conv))), uint64(d * 4l))
+            var bw_cvn = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.conv_norm))), uint64(d * 4l))
+            var bw_ffn1 = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.ff_norm_1))), uint64(d * 4l))
+            var bw_ffp1 = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.ff_post_norm_1))), uint64(d * 4l))
+            var bw_ln2 = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.ln2))), uint64(d * 4l))
+            var bpds = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.per_dim_scale))), uint64(hs * 4l))
+            // FFN1 (macaron half): rms -> up -> SiLU -> down -> post-rms -> x += 0.5*y
+            pf_enc_rms(enc, bx, 0ul, bw_ffn, bxb, u_d, u_eps, npos)
+            g4a_mm_site(enc, bblob, bbounds, lo.c_ff_up, rb, bxb, bxc, bh, lo.ff_up, u_in, u_out, u_d, u_ff, u_totd, u_totff, npos * d, npos * ff, mp, ff)
+            enc_g4a_silu(enc, bh, u_totff, npos * ff)
+            g4a_mm_site(enc, bblob, bbounds, lo.c_ff_down, rb + 16ul, bh, bxc, bxb, lo.ff_down, u_in, u_out, u_ff, u_d, u_totff, u_totd, npos * ff, npos * d, mp, d)
+            pf_enc_rms(enc, bxb, 0ul, bw_ffp, bxb, u_d, u_eps, npos)
+            enc_g4a_axpy(enc, bx, bxb, u_totd, u_half, npos * d)
+            // attention: rms -> q/k/v -> RPE projection -> windowed attention -> o -> post-rms -> x += y
+            pf_enc_rms(enc, bx, 0ul, bw_apre, bxb, u_d, u_eps, npos)
+            g4a_mm_site(enc, bblob, bbounds, lo.c_q, rb + 32ul, bxb, bxc, bq, lo.q, u_in, u_out, u_d, u_d, u_totd, u_totd, npos * d, npos * d, mp, d)
+            g4a_mm_site(enc, bblob, bbounds, lo.c_k, rb + 48ul, bxb, bxc, bk, lo.k, u_in, u_out, u_d, u_d, u_totd, u_totd, npos * d, npos * d, mp, d)
+            g4a_mm_site(enc, bblob, bbounds, lo.c_v, rb + 64ul, bxb, bxc, bv, lo.v, u_in, u_out, u_d, u_d, u_totd, u_totd, npos * d, npos * d, mp, d)
+            enc_f32_mm(enc, bblob, uint64(lo.attn_k_rel * 4l), bpos, bprpe, 0ul, u_d, u_d, 32l, d)
+            enc_g4a_attn(enc, bq, bk, bv, bao, bprpe, bpds, ka, np64, t.n_head)
+            g4a_mm_site(enc, bblob, bbounds, lo.c_o, rb + 80ul, bao, bxc, bxb, lo.o, u_in, u_out, u_d, u_d, u_totd, u_totd, npos * d, npos * d, mp, d)
+            pf_enc_rms(enc, bxb, 0ul, bw_apost, bxb, u_d, u_eps, npos)
+            enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
+            // conv module: rms -> pw1 -> GLU -> causal depthwise -> rms -> SiLU -> pw2 -> x += y
+            pf_enc_rms(enc, bx, 0ul, bw_ncv, bxb, u_d, u_eps, npos)
+            g4a_mm_site(enc, bblob, bbounds, lo.c_pw1, rb + 96ul, bxb, bxc, bh, lo.conv_pw1, u_in, u_out, u_d, u_2d, u_totd, u_tot2d, npos * d, npos * 2l * d, mp, 2l * d)
+            enc_g4a_glu(enc, bh, bglu, u_d, u_totd, npos * d)
+            enc_g4a_dw(enc, bglu, bcvd, bblob, uint64(lo.conv_dw * 4l), u_d, u_totd, npos * d)
+            pf_enc_rms(enc, bcvd, 0ul, bw_cvn, bcvd, u_d, u_eps, npos)
+            enc_g4a_silu(enc, bcvd, u_totd, npos * d)
+            g4a_mm_site(enc, bblob, bbounds, lo.c_pw2, rb + 112ul, bcvd, bxc, bxb, lo.conv_pw2, u_in, u_out, u_d, u_d, u_totd, u_totd, npos * d, npos * d, mp, d)
+            enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
+            // FFN2 (macaron half) + the per-layer output norm
+            pf_enc_rms(enc, bx, 0ul, bw_ffn1, bxb, u_d, u_eps, npos)
+            g4a_mm_site(enc, bblob, bbounds, lo.c_ff_up_1, rb + 128ul, bxb, bxc, bh, lo.ff_up_1, u_in, u_out, u_d, u_ff, u_totd, u_totff, npos * d, npos * ff, mp, ff)
+            enc_g4a_silu(enc, bh, u_totff, npos * ff)
+            g4a_mm_site(enc, bblob, bbounds, lo.c_ff_down_1, rb + 144ul, bh, bxc, bxb, lo.ff_down_1, u_in, u_out, u_ff, u_d, u_totff, u_totd, npos * ff, npos * d, mp, d)
+            pf_enc_rms(enc, bxb, 0ul, bw_ffp1, bxb, u_d, u_eps, npos)
+            enc_g4a_axpy(enc, bx, bxb, u_totd, u_half, npos * d)
+            pf_enc_rms(enc, bx, 0ul, bw_ln2, bx, u_d, u_eps, npos)
+        }
+    }
+    var served = false
+    if (ran) {
+        unsafe {
+            memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
+        }
+        g_tower_encodes++
+        g_tower_rows += npos
+        g_tower_blocks += t.n_layer
+        served = true
+    }
+    pool_release(g_tw_pool, bbounds, bytes_rec)
+    pool_release(g_tw_pool, bx, bytes_row)
+    pool_release(g_tw_pool, bxb, bytes_row)
+    pool_release(g_tw_pool, bq, bytes_row)
+    pool_release(g_tw_pool, bk, bytes_row)
+    pool_release(g_tw_pool, bv, bytes_row)
+    pool_release(g_tw_pool, bao, bytes_row)
+    pool_release(g_tw_pool, bglu, bytes_row)
+    pool_release(g_tw_pool, bcvd, bytes_row)
+    pool_release(g_tw_pool, bxc, bytes_c)
+    pool_release(g_tw_pool, bh, bytes_c)
+    pool_release(g_tw_pool, bpos, bytes_rpe)
+    pool_release(g_tw_pool, bprpe, bytes_rpe)
+    pool_release(g_upool, u_d, 4ul)
+    pool_release(g_upool, u_2d, 4ul)
+    pool_release(g_upool, u_ff, 4ul)
+    pool_release(g_upool, u_eps, 4ul)
+    pool_release(g_upool, u_totd, 4ul)
+    pool_release(g_upool, u_tot2d, 4ul)
+    pool_release(g_upool, u_totff, 4ul)
+    pool_release(g_upool, u_in, 4ul)
+    pool_release(g_upool, u_out, 4ul)
+    pool_release(g_upool, u_half, 4ul)
     if (!served) {
         return tw_decline(MetalTowerDecline.gpu_error)
     }
@@ -1470,4 +1677,5 @@ def dasllama_metal_tower_register {
     register_tower_blocks_gpu(@@metal_tower_blocks, @@metal_tower_serves)
     register_tower_conv_gpu(@@metal_conv_frontend)
     register_qwen3a_conv_gpu(@@metal_q3a_convs)
+    register_gemma4a_gpu(@@metal_gemma4a_blocks, @@metal_tower_serves)
 }
