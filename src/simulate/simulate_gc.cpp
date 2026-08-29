@@ -932,6 +932,23 @@ namespace das
         Context * ctx = nullptr;
     };
 
+    bool Context::collectHeapIfMostlyFree ( LineInfo * at ) {
+        if ( !persistent || !gcEnabled ) return false;
+        uint64_t sUsed = stringHeap->bytesAllocated();
+        uint64_t sTotal = stringHeap->totalAlignedMemoryAllocated();
+        if ( sTotal > 0 && sUsed * 3 < sTotal * 2 ) {
+            collectHeap(at, true, false);
+            return true;
+        }
+        uint64_t hUsed = heap->bytesAllocated();
+        uint64_t hTotal = heap->totalAlignedMemoryAllocated();
+        if ( hTotal > 0 && hUsed * 3 < hTotal ) {
+            collectHeap(at, true, false);
+            return true;
+        }
+        return false;
+    }
+
     void Context::collectHeap ( LineInfo * at, bool sheap, bool validate ) {
         // refuse unattributable frames BEFORE marking - the error path must leave both
         // heaps unmarked. the check is owner-tagged positions (LINEINFO_FRAME_POS_TAG):

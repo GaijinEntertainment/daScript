@@ -6,9 +6,13 @@ module live_gc shared public
 //! Standalone-loop GC boundary, UI-neutral. The canonical application shape
 //! (``init``/``update``/``shutdown`` + a standalone ``main`` loop) calls
 //! :func:`maybe_collect_gc` once per iteration; under the daslang-live host it
-//! self-disables (the host collects each frame). Lives beside the live_host
-//! module so windowless applications (servers, tools) get the boundary without
-//! a GLFW dependency; ``live/glfw_live`` re-exports it for its callers.
+//! self-disables (the host collects each frame). In the browser the ``main``
+//! loop never runs - the lifecycle drives ``update`` per frame from C++ - and
+//! that driver applies the same thresholds itself
+//! (``Context::collectHeapIfMostlyFree``), so a program needs no per-platform
+//! edit. Lives beside the live_host module so windowless applications
+//! (servers, tools) get the boundary without a GLFW dependency;
+//! ``live/glfw_live`` re-exports it for its callers.
 
 require live_host
 
