@@ -2427,15 +2427,18 @@ class template MetalAttnAVMmSgT {
         var mb : simdgroup_half8x8[2]
         let creach = ka.qoff + mBase + 32u
         let klimit = min(ka.uend > 0u && ka.qoff + mBase < ka.uend && creach > ka.ulo ? max(ka.uend, creach) : creach, ka.np32)
+        //! head_size % 64 != 0 (the towers' 96 pad): this thread's 16-col V run may sit past the
+        //! head - zero it (loop-invariant, hoists) and clamp the address off the buffer tail
+        let vok = vBase + vc16 < ka.head_size
         var kb = 0u
         while (kb * 32u < klimit) {
             let posg = kb * 32u + pr
-            let srcA = posg * kvd4 + kvhoff4 + (vBase + vc16) / 4u
+            let srcA = vok ? posg * kvd4 + kvhoff4 + (vBase + vc16) / 4u : 0u
             let zero = float4(0.0)
-            let a0 = PADFREE ? v[srcA] : (posg < ka.npos ? v[srcA] : zero)
-            let a1 = PADFREE ? v[srcA + 1u] : (posg < ka.npos ? v[srcA + 1u] : zero)
-            let a2 = PADFREE ? v[srcA + 2u] : (posg < ka.npos ? v[srcA + 2u] : zero)
-            let a3 = PADFREE ? v[srcA + 3u] : (posg < ka.npos ? v[srcA + 3u] : zero)
+            let a0 = vok && (PADFREE || posg < ka.npos) ? v[srcA] : zero
+            let a1 = vok && (PADFREE || posg < ka.npos) ? v[srcA + 1u] : zero
+            let a2 = vok && (PADFREE || posg < ka.npos) ? v[srcA + 2u] : zero
+            let a3 = vok && (PADFREE || posg < ka.npos) ? v[srcA + 3u] : zero
             let srcB = (h * ka.qrows + mBase + lr1) * ka.np32 + kb * 32u + iy
             let qpos = ka.qoff + mBase + lr1
             let sbase = (h * ka.qrows + mBase + lr1) * 2u
@@ -2463,9 +2466,12 @@ class template MetalAttnAVMmSgT {
             kb++
         }
         let row0 = mBase + (sg / 2u) * 16u  //! accumulator rows = tokens
-        let col0 = h * ka.head_size + vBase + (sg % 2u) * 32u
+        let hcol0 = vBase + (sg % 2u) * 32u   //! head-local: a 96-pad tail tile past head_size would trample the next head
+        let col0 = h * ka.head_size + hcol0
         for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], xb, (row0 + uint(i / 4) * 8u) * ka.qd + col0 + uint(i % 4) * 8u, ka.qd)
+            if (hcol0 + uint(i % 4) * 8u < ka.head_size) {
+                simdgroup_store(mc[i], xb, (row0 + uint(i / 4) * 8u) * ka.qd + col0 + uint(i % 4) * 8u, ka.qd)
+            }
         }
     }
 }
@@ -4031,7 +4037,9 @@ def enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : 
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-attn-slab")]
 def enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; bstat : MetalBuffer?; mp, heads, head_size : int64) {   //! public: the tower driver dispatches the crowned trio too
     let walk_live = ka.qoff + ka.qrows == ka.npos
-    if (g_pf_avmm_tensor && g_pf_pso_avmm_t != null) {
+    // the towers' 96 pad: the cooperative store writes whole 64-col groups, so the tensor
+    // twins serve only %64 head sizes; the guarded simdgroup forms carry the rest
+    if (g_pf_avmm_tensor && g_pf_pso_avmm_t != null && ka.head_size % 64u == 0u) {
         if (walk_live && ka.npos % 64u == 0u && g_pf_pso_avmm_tp != null) {
             enc_av_mm_tp_c(enc, batt, bv, bxb, ka, bstat, mp, heads, head_size)
         } else {

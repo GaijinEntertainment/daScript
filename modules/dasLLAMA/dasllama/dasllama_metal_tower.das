@@ -507,7 +507,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     let d = t.n_embd
     let hs = d / t.n_head
     let ff = t.ff_pad
-    let hs_pad = hs <= 64l ? 64l : 128l
+    let hs_pad = max(64l, (hs + 31l) / 32l * 32l)   // 72 -> 96: QK walks %32, the guarded AV forms carry %64-free
     if (d % 64l != 0l || ff % 64l != 0l || hs > 128l) {
         return tw_decline(MetalTowerDecline.shape)
     }
@@ -670,7 +670,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     let hs = d / t.n_head
     let ff = t.ff_pad
     let proj = t.proj_dim
-    let hs_pad = hs <= 64l ? 64l : 128l
+    let hs_pad = max(64l, (hs + 31l) / 32l * 32l)   // 72 -> 96: QK walks %32, the guarded AV forms carry %64-free
     // %4 npos: the x4 merge reshape is the tap/tail GEMMs' row view; %64 patch_dim: the stem GEMM's K
     if (d % 64l != 0l || ff % 64l != 0l || hs > 128l || hs % 2l != 0l || proj % 64l != 0l || npos % 4l != 0l || t.patch_dim % 64l != 0l) {
         return tw_decline(MetalTowerDecline.shape)
