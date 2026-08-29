@@ -617,6 +617,18 @@ def register_gemma4a_gpu(fn : Gemma4aGpuBlocksFn; serves : Gemma4aServesFn) {
 //! the f32 blob, so the un-pinned lane defaults to exact); false on CPU builds or knob-off.
 def gemma4a_gpu_serves() : bool => g_g4a_serves_set && invoke(g_g4a_serves)
 
+// the whole-chunk GPU hook: after g4a_window_frames it runs DFT -> mel -> subsample convs ->
+// inproj -> the 12 blocks in one command buffer (st.x filled); returns npos, or -1 declined —
+// gemma4a_log_mel + gemma4a_encode stay the correct fallback
+typedef Gemma4aGpuChunkFn = function<(t : Gemma4aEncoder; var s : Gemma4aState; n_len : int64) : int64>
+var private g_g4a_chunk : Gemma4aGpuChunkFn
+var private g_g4a_chunk_set = false
+
+def register_gemma4a_chunk_gpu(fn : Gemma4aGpuChunkFn) {
+    g_g4a_chunk = fn
+    g_g4a_chunk_set = true
+}
+
 //! The causal attention horizon (window = self + past - 1 previous rows) — the GPU driver's
 //! kernel sizes its score window off this.
 def gemma4a_attn_past() : int64 => G4A_PAST
@@ -626,6 +638,9 @@ def gemma4a_softcap() : float => G4A_SOFTCAP
 
 //! The macaron half-step residual weight.
 def gemma4a_res_w() : float => G4A_RES_W
+
+//! The log-mel floor — the GPU chunk driver's log stage mirrors the CPU form.
+def gemma4a_mel_floor() : float => float(G4A_MEL_FLOOR)
 
 // the lane policy mirrors qwen3a's: a serving Metal tower wants the f32 blob (its driver
 // declines q8), so the un-pinned default follows [[gemma4a_gpu_serves]]; tests and the CPU
@@ -670,13 +685,11 @@ def gemma4a_encode_bucket : string {
     return "g4a.encode"
 }
 
-//! gemma4a log-mel for one ≤30 s chunk: semicausal left-pad (window/2) + right-pad to the PyTorch
-//! frame count, 512 Hann (320-front), magnitude spectrum, HTK mel dot, natural log(sum, floor
-//! 0.001). Frame-major ``[n_len × n_mel]``; ``n_len`` trimmed to the PyTorch frame count.
+//! The mel's CPU half for one ≤30 s chunk: semicausal left-pad (window/2) + right-pad to the
+//! PyTorch frame count, 512 Hann (320-front) windowed frames into ``st.xw`` (fills ``st.n_len``).
+//! The spectrum half follows — CPU via [[gemma4a_log_mel]], or the GPU chunk driver's head.
 [hot_path]
-def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len : int64; var st : Gemma4aState) {
-    let n_mel = enc.n_mel
-    let n_bins = enc.n_bins
+def g4a_window_frames(enc : Gemma4aEncoder; samples : array<float> | #; off, len : int64; var st : Gemma4aState) {
     let pad_left = G4A_WINDOW / 2l
     let n_with_left = len + pad_left
     let pt_frames = max((n_with_left - (G4A_WINDOW + 1l)) / G4A_HOP + 1l, 1l)
@@ -694,9 +707,6 @@ def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len :
     let n_full = (n_padded - G4A_N_FFT) / G4A_HOP + 1l
     st.n_len = min(n_full, pt_frames)
     let n_len = st.n_len
-    ensure_length(st.mel, n_len * n_mel)
-
-    // windowed frames -> DFT (twiddle gemm) -> magnitude -> mel -> natural log
     ensure_length(st.xw, n_len * G4A_N_FFT)
     for (i in range64(n_len * G4A_N_FFT)) {
         st.xw[i] = 0.0
@@ -708,6 +718,18 @@ def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len :
             st.xw[i * G4A_N_FFT + j] = enc.hann[j] * st.padded[base + j]
         }
     }
+}
+
+//! gemma4a log-mel for one ≤30 s chunk: the windowing half above, then DFT (twiddle gemm),
+//! magnitude spectrum, HTK mel dot, natural log(sum, floor 0.001). Frame-major
+//! ``[n_len × n_mel]``; ``n_len`` trimmed to the PyTorch frame count.
+[hot_path]
+def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len : int64; var st : Gemma4aState) {
+    let n_mel = enc.n_mel
+    let n_bins = enc.n_bins
+    g4a_window_frames(enc, samples, off, len, st)
+    let n_len = st.n_len
+    ensure_length(st.mel, n_len * n_mel)
     ensure_length(st.reim, n_len * n_bins * 2l)
     for (i in range64(n_len * n_bins * 2l)) {
         st.reim[i] = 0.0   // gemm accumulates: the reused state buffer must start zeroed
@@ -1062,10 +1084,22 @@ def gemma4a_encode_all(enc : Gemma4aEncoder; var st : Gemma4aState; samples : ar
     var off = 0l
     while (off < n_in) {
         let len = min(chunk, n_in - off)
-        let tmel = ref_time_ticks()
-        gemma4a_log_mel(enc, samples, off, len, st)
-        asr_prof_add("g4a.mel", tmel)
-        let n = gemma4a_encode(enc, st)
+        var n = -1l
+        if (g_g4a_chunk_set) {
+            let tg = ref_time_ticks()
+            g4a_window_frames(enc, samples, off, len, st)
+            n = invoke(g_g4a_chunk, enc, st, st.n_len)
+            if (n >= 0l) {
+                asr_prof_add("g4a.enc.chunk.gpu", tg)
+                n = g4a_encode_tail(enc, st, n)
+            }
+        }
+        if (n < 0l) {
+            let tmel = ref_time_ticks()
+            gemma4a_log_mel(enc, samples, off, len, st)
+            asr_prof_add("g4a.mel", tmel)
+            n = gemma4a_encode(enc, st)
+        }
         rows |> ensure_capacity(int(long_length(rows) + n * enc.proj_dim))
         for (i in range64(n * enc.proj_dim)) {
             rows |> push(st.out[i])   // nolint:PERF006,LINT019 — ensure_capacity above IS the reserve; exact reserve() defeats geometric growth (O(chunks^2)); PERF006 fires at the downstream instantiation

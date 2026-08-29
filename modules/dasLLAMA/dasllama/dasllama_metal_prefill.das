@@ -2867,6 +2867,136 @@ class MetalG4aSilu {
     }
 }
 
+//! Magnitude spectrum off the DFT GEMM's interleaved re/im rows: mag[i,k] = sqrt(re^2 + im^2)
+//! for k < nbins, 0 in the pad columns (the mel GEMM's k-pad reads them).
+[metal_dispatch(name = "enc_g4a_mag", pso = "g_pf_pso_g4a_mag", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalG4aMag {
+    @ssbo @binding = 0 @role = "read" reim : array<float>   //!< [nrows x ldin] interleaved re/im
+    @ssbo @binding = 1 @role = "write" mag : array<float>   //!< [nrows x ldout]
+    @uniform @binding = 2 nbins : uint
+    @uniform @binding = 3 ldin : uint
+    @uniform @binding = 4 ldout : uint
+    @uniform @binding = 5 total : uint      //!< grid guard: nrows * ldout
+
+    [metal_kernel(name="metal_g4a_mag_msl")]
+    def metal_g4a_mag {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let r = gid / ldout
+        let k = gid % ldout
+        if (k >= nbins) {
+            mag[gid] = 0.0
+            return
+        }
+        let re = reim[r * ldin + k * 2u]
+        let im = reim[r * ldin + k * 2u + 1u]
+        mag[gid] = sqrt(re * re + im * im)
+    }
+}
+
+//! The mel's log stage in place: x = log(max(x, floor)) — natural log, the CPU form.
+[metal_dispatch(name = "enc_g4a_logmel", pso = "g_pf_pso_g4a_logmel", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalG4aLogMel {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @uniform @binding = 1 total : uint      //!< grid guard
+    @uniform @binding = 2 mfloor : float
+
+    [metal_kernel(name="metal_g4a_logmel_msl")]
+    def metal_g4a_logmel {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        x[gid] = log(max(x[gid], mfloor))
+    }
+}
+
+//! The subsample conv's LayerNorm(channels, weight-only) + ReLU: one thread per row —
+//! mean/variance over ``dim`` at ``ldin`` stride, compact ``dim``-wide rows out at ``ldout``.
+[metal_dispatch(name = "enc_g4a_lnrelu", pso = "g_pf_pso_g4a_lnrelu", tg = 64, grid = "nrows/64", params = "nrows : int64")]
+class MetalG4aLnRelu {
+    @ssbo @binding = 0 @role = "read" x : array<float>      //!< [nrows x ldin]
+    @ssbo @binding = 1 @role = "write" y : array<float>     //!< [nrows x ldout]
+    @ssbo @binding = 2 @role = "weight" @off = "woff" w : array<float>   //!< [dim]
+    @uniform @binding = 3 dim : uint
+    @uniform @binding = 4 ldin : uint
+    @uniform @binding = 5 ldout : uint
+    @uniform @binding = 6 nrows : uint
+    @uniform @binding = 7 eps : float
+
+    [metal_kernel(name="metal_g4a_lnrelu_msl")]
+    def metal_g4a_lnrelu {
+        let r = gl_GlobalInvocationID.x
+        if (r >= nrows) {
+            return
+        }
+        var mean = 0.0
+        var c = 0u
+        while (c < dim) {
+            mean += x[r * ldin + c]
+            c++
+        }
+        mean /= float(dim)
+        var vv = 0.0
+        c = 0u
+        while (c < dim) {
+            let dv = x[r * ldin + c] - mean
+            vv += dv * dv
+            c++
+        }
+        let inv = rsqrt(vv / float(dim) + eps)
+        c = 0u
+        while (c < dim) {
+            let nv = (x[r * ldin + c] - mean) * inv * w[c]
+            y[r * ldout + c] = max(nv, 0.0)
+            c++
+        }
+    }
+}
+
+//! im2col for the subsample convs (k3 s2 p1 over an [ih x iw x cin] image): one thread per
+//! col element; j >= cin*9 writes the k-pad zero.
+[metal_dispatch(name = "enc_g4a_im2col", pso = "g_pf_pso_g4a_im2col", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalG4aIm2col {
+    @ssbo @binding = 0 @role = "read" x : array<float>      //!< [ih x iw x cin]
+    @ssbo @binding = 1 @role = "write" col : array<float>   //!< [oh*ow x kp]
+    @uniform @binding = 2 iw : uint
+    @uniform @binding = 3 ih : uint
+    @uniform @binding = 4 cin : uint
+    @uniform @binding = 5 ow : uint
+    @uniform @binding = 6 kp : uint         //!< padded kdim (>= cin*9, %32)
+    @uniform @binding = 7 total : uint      //!< grid guard: oh*ow*kp
+
+    [metal_kernel(name="metal_g4a_im2col_msl")]
+    def metal_g4a_im2col {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let r = gid / kp
+        let j = gid % kp
+        if (j >= cin * 9u) {
+            col[gid] = 0.0
+            return
+        }
+        let oy = r / ow
+        let ox = r % ow
+        let ic = j / 9u
+        let kh = (j % 9u) / 3u
+        let kw = j % 3u
+        // iy = oy*2 - 1 + kh, ix = ox*2 - 1 + kw in unsigned form
+        let iyp = oy * 2u + kh
+        let ixp = ox * 2u + kw
+        var vv = 0.0
+        if (iyp >= 1u && iyp <= ih && ixp >= 1u && ixp <= iw) {
+            vv = x[((iyp - 1u) * iw + ixp - 1u) * cin + ic]
+        }
+        col[gid] = vv
+    }
+}
+
 //! Scaled residual add g += u * ascale — the macaron half-step (enc_add's form is (g+u)*scale).
 [metal_dispatch(name = "enc_g4a_axpy", pso = "g_pf_pso_g4a_axpy", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalG4aAxpy {
@@ -2943,6 +3073,10 @@ var private g_pf_pso_g4a_glu : MetalComputePipeline?     //!< its conv-module GL
 var private g_pf_pso_g4a_dw : MetalComputePipeline?      //!< its causal depthwise k=5
 var private g_pf_pso_g4a_silu : MetalComputePipeline?    //!< in-place SiLU
 var private g_pf_pso_g4a_axpy : MetalComputePipeline?    //!< the macaron half-step residual
+var private g_pf_pso_g4a_mag : MetalComputePipeline?     //!< magnitude spectrum off the DFT rows
+var private g_pf_pso_g4a_logmel : MetalComputePipeline?  //!< the mel's log stage
+var private g_pf_pso_g4a_lnrelu : MetalComputePipeline?  //!< subsample LayerNorm(channels)+ReLU
+var private g_pf_pso_g4a_im2col : MetalComputePipeline?  //!< subsample conv im2col (k3 s2 p1)
 var private g_pf_pso_mm_t : MetalComputePipeline?  //!< the mul_mm TENSOR twin; the base is the shared g_pso_mm
 var private g_pf_pso_mm_th : MetalComputePipeline?  //!< its half-X stamp (the converted f16 activation panel)
 var private g_pf_pso_mm_t128 : MetalComputePipeline?
@@ -3366,6 +3500,10 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     release_pso(g_pf_pso_g4a_dw)
     release_pso(g_pf_pso_g4a_silu)
     release_pso(g_pf_pso_g4a_axpy)
+    release_pso(g_pf_pso_g4a_mag)
+    release_pso(g_pf_pso_g4a_logmel)
+    release_pso(g_pf_pso_g4a_lnrelu)
+    release_pso(g_pf_pso_g4a_im2col)
     if (g_pf_pso_cvt_half != null) {
         metal_release(g_pf_pso_cvt_half)
         g_pf_pso_cvt_half = null
@@ -3603,6 +3741,10 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_g4a_dw = compile_pso(metal_g4a_dw_msl, metal_g4a_dw_msl_entry, metal_g4a_dw_msl_fastmath, ok)
     g_pf_pso_g4a_silu = compile_pso(metal_g4a_silu_msl, metal_g4a_silu_msl_entry, metal_g4a_silu_msl_fastmath, ok)
     g_pf_pso_g4a_axpy = compile_pso(metal_g4a_axpy_msl, metal_g4a_axpy_msl_entry, metal_g4a_axpy_msl_fastmath, ok)
+    g_pf_pso_g4a_mag = compile_pso(metal_g4a_mag_msl, metal_g4a_mag_msl_entry, metal_g4a_mag_msl_fastmath, ok)
+    g_pf_pso_g4a_logmel = compile_pso(metal_g4a_logmel_msl, metal_g4a_logmel_msl_entry, metal_g4a_logmel_msl_fastmath, ok)
+    g_pf_pso_g4a_lnrelu = compile_pso(metal_g4a_lnrelu_msl, metal_g4a_lnrelu_msl_entry, metal_g4a_lnrelu_msl_fastmath, ok)
+    g_pf_pso_g4a_im2col = compile_pso(metal_g4a_im2col_msl, metal_g4a_im2col_msl_entry, metal_g4a_im2col_msl_fastmath, ok)
     g_pf_pso_avmm = compile_pso(MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_pso_avmm_p = compile_pso(MetalAttnAVMmP_metal_attn_av_mm_msl, MetalAttnAVMmP_metal_attn_av_mm_msl_entry, MetalAttnAVMmP_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_qkmm_tensor = metal_tensor_crowned("attn_qkmm")
@@ -3858,6 +4000,12 @@ def pf_tower_win_ready() : bool => g_pf_pso_twr_win != null && g_pf_pso_twr_gath
 def pf_g4a_ready() : bool {
     return (g_pf_pso_g4a_attn != null && g_pf_pso_g4a_glu != null && g_pf_pso_g4a_dw != null
         && g_pf_pso_g4a_silu != null && g_pf_pso_g4a_axpy != null)
+}
+
+//! The gemma4a mel/front kernel set compiled — the whole-chunk driver's extra device gate.
+def pf_g4a_front_ready() : bool {
+    return (g_pf_pso_g4a_mag != null && g_pf_pso_g4a_logmel != null
+        && g_pf_pso_g4a_lnrelu != null && g_pf_pso_g4a_im2col != null)
 }
 
 def private pf_devw_flip : MetalBuffer ? {
