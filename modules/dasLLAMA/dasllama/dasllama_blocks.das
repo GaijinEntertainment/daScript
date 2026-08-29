@@ -1552,7 +1552,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     prof_add("embed", ts_embed)
     if (has_ple(t.config)) {  // gemma-4 E-series: PLE side input (padding-token gather for the media path)
         let ts_ple = prof_ticks()
-        ple_pre_prefill_pad(t, s, npos)
+        ple_pre_prefill_pad_gated(t, s, npos, start_pos)
         prof_add("ple", ts_ple)
     }
     // the non-causal image span (gemma vision): span queries attend

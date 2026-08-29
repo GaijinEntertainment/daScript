@@ -748,7 +748,9 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
     embed_text_rows(dec, tail, embd, n_head + n_audio)
 
     s.qctx.n_past = 0l   // each transcribe is a fresh sequence; the KV rewinds to position 0
+    var tp = ref_time_ticks()
     eval_embd_(dec, s.qctx, embd, npos)
+    asr_prof_add("q3a.prefill", tp)
 
     let eot = special_id(dec, "<|endoftext|>")
     let max_new = dec.config.seq_len - npos - 1l
@@ -757,7 +759,9 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
     var toks : array<int>
     var plog_sum = 0.0lf
     var raw : array<string>
+    tp = ref_time_ticks()
     for (_i in range64(max_new)) {
+        let ti = ref_time_ticks()
         // greedy argmax + its logprob (logit − logsumexp) for the confidence signal
         let best = int(hargmax(s.qctx.logits))
         let mx = s.qctx.logits[best]
@@ -769,7 +773,9 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
         raw |> push(piece_(dec, int64(best)))
         one[0] = int64(best)
         eval_(dec, s.qctx, one)
+        asr_prof_add("q3a.dec.tok", ti)
     }
+    asr_prof_add("q3a.decode", tp)
 
     // parse `language {L}<asr_text>{text}` (the marker may detokenize as text or be muted)
     let full = join(raw, "")

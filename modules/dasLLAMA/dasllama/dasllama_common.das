@@ -322,6 +322,21 @@ def ple_pre_prefill_pad(t : Model; var s : Session; npos : int64) {
     invoke(g_ple_pre_prefill_pad, t, s, npos)
 }
 
+//! The embd-prefill twin of the token path's PLE gate: offer the pre-step to the device driver
+//! (pad ids stashed — the media path has no tokens), CPU pad impl on decline. The model_proj
+//! GEMM inside the finish is the whole cost, so an eligible driver must get the offer here too.
+def ple_pre_prefill_pad_gated(t : Model; var s : Session; npos, start_pos : int64) {
+    if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
+        s.ple_gpu_tokens |> resize(npos)
+        for (p in range64(npos)) {
+            s.ple_gpu_tokens[p] = 0l
+        }
+        s.ple_gpu_pending = true
+        return
+    }
+    ple_pre_prefill_pad(t, s, npos)
+}
+
 // set by an override that ALSO produced the last position's logits; reset before every invocation
 var private g_prefill_logits_done = false
 

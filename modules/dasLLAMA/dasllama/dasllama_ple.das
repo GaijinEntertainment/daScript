@@ -118,11 +118,15 @@ def private ple_pre_prefill_impl(t : Model; var s : Session; tokens : array<int6
 }
 
 // Prefill-from-embeddings (multimodal) pre-step: no token ids, so the gather uses the padding token
-// (id 0) broadcast across positions.
+// (id 0) broadcast across positions — dequantized ONCE, memcpy'd to the rest.
 def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
     let all = t.config.n_layers * t.config.n_embd_per_layer
-    for (p in range64(npos)) {
-        ple_gather_row(t, 0l, s.ple_inp, p * all)
+    ple_gather_row(t, 0l, s.ple_inp, 0l)
+    unsafe {
+        var base = addr(s.ple_inp[0])
+        for (p in range64(1l, npos)) {
+            memcpy(base + p * all, base, all * 4l)
+        }
     }
     ple_pre_finish(t, s, s.x_b, npos)
 }

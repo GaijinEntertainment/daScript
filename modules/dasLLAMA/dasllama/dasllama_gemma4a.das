@@ -1175,6 +1175,7 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     s.qctx.n_past = 0l   // fresh sequence per transcribe
     tp = ref_time_ticks()
     eval_embd_(dec, s.qctx, embd, npos)
+    asr_prof_add("g4a.prefill", tp)
 
     let turn_end = special_id(dec, "<turn|>")
     let eos = special_id(dec, "<eos>")
@@ -1185,7 +1186,9 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     var raw : array<string>
     toks |> reserve(512)
     raw |> reserve(512)
+    tp = ref_time_ticks()
     for (_i in range64(max_new)) {
+        let ti = ref_time_ticks()
         let best = int(hargmax(s.qctx.logits))
         toks |> push(best)
         if (int64(best) == turn_end || int64(best) == eos) {   // EOG: emitted into the ids, then stop
@@ -1194,6 +1197,7 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
         raw |> push(piece_(dec, int64(best)))
         one[0] = int64(best)
         eval_(dec, s.qctx, one)
+        asr_prof_add("g4a.dec.tok", ti)
     }
     asr_prof_add("g4a.decode", tp)
 

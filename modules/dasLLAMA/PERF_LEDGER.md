@@ -1100,11 +1100,12 @@ group; wording kept.
 
 ### From the gemma4a Metal-tower bring-up (2026-08-29)
 
-- **OPEN - audio-chat decode trails at long context.** gb1 decode ~9 ms/tok vs the
-  reference's ~7.5 at ~5k ctx on the standard Metal rail (jfk-scale ctx is at parity) - a
-  decode-rail KV-attention shape, not an audio-specific one. With both encoders fully GPU it
-  is the remaining red on gemma4a (gb1 0.83x) and Qwen3-ASR (gb1 0.92x, encode 318 ms).
-  Instrument: lcpp_bench tg at d4096 on the E2B carrier.
+- **CLOSED (same day) - the "long-context decode gap" was the embd path's CPU PLE pre-step.**
+  tg128-at-depth refuted the rail attribution (das ahead at every depth); the turn profile
+  pinned 774 ms of gb1's prefill on ple_pre_prefill_pad - the E-series PLE model_proj GEMM
+  run on CPU because only the TOKEN prefill offered the pre-step to the device gate. The embd
+  path now offers it too (ple_pre_prefill_pad_gated), the CPU fallback broadcasts one gather,
+  and the scalar sampler is vectorized (hargmax/hlse). gb1 cell 0.83x -> 1.00x.
 
 ### From the canary M5 baseline (2026-08-29)
 
