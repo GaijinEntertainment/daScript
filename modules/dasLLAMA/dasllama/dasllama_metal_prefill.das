@@ -2638,6 +2638,90 @@ class MetalTowerKvHc {
     }
 }
 
+//! The block-diagonal window attention of the qwen2.5 ViT: one threadgroup per (window, head),
+//! one thread per q row (windows cap at 64 rows), plain softmax - all f32 straight from device
+//! (the window's K/V rides L1; f16 staging noise compounds over 28 layers). Bidirectional, no mask.
+[metal_dispatch(name = "enc_tower_win_attn", pso = "g_pf_pso_twr_win", tg = 64, grid = "nwin, heads", params = "nwin : int64, heads : int64")]
+class MetalTowerWinAttn {
+    @ssbo @binding = 0 @role = "read" q : array<float>      //!< [npos x qd] compact, roped
+    @ssbo @binding = 1 @role = "read" k : array<float>      //!< [npos x qd] compact, roped
+    @ssbo @binding = 2 @role = "read" v : array<float>      //!< [npos x qd] compact
+    @ssbo @binding = 3 @role = "write" xb : array<float>    //!< [npos x qd] compact attention out
+    @ssbo @binding = 4 @role = "read" wlo : array<uint>     //!< [nwin + 1] window row starts + total sentinel
+    @uniform @binding = 5 ka : AttnArgs
+
+    [metal_kernel(name="metal_tower_win_msl")]
+    def metal_tower_win {
+        let wi = gl_WorkGroupID.x
+        let h = gl_WorkGroupID.y
+        let t = gl_LocalInvocationID.x
+        let hs = ka.head_size
+        let qd = ka.qd
+        let r0 = wlo[wi]
+        let wr = wlo[wi + 1u] - r0
+        if (t >= wr) {
+            return
+        }
+        let qbase = (r0 + t) * qd + h * hs
+        var sarr : float[64]
+        var m = -1.5e38
+        var j = 0u
+        while (j < wr) {
+            let kbase = (r0 + j) * qd + h * hs
+            var acc = 0.0
+            var i = 0u
+            while (i < hs) {
+                acc += q[qbase + i] * k[kbase + i]
+                i++
+            }
+            acc *= ka.scale
+            sarr[j] = acc
+            m = max(m, acc)
+            j++
+        }
+        var stot = 0.0
+        j = 0u
+        while (j < wr) {
+            let p = exp(sarr[j] - m)
+            sarr[j] = p
+            stot += p
+            j++
+        }
+        let inv = 1.0 / stot
+        var i = 0u
+        while (i < hs) {
+            var acc = 0.0
+            j = 0u
+            while (j < wr) {
+                acc += sarr[j] * v[(r0 + j) * qd + h * hs + i]
+                j++
+            }
+            xb[qbase + i] = acc * inv
+            i++
+        }
+    }
+}
+
+//! Gather full rows by index: y[r] = x[src[r]] — the stem's window-sort reorder, one thread
+//! per element.
+[metal_dispatch(name = "enc_tower_row_gather", pso = "g_pf_pso_twr_gather", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalTowerRowGather {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
+    @ssbo @binding = 2 @role = "read" src : array<uint>   //!< [nrows] source row per destination row
+    @uniform @binding = 3 d : uint
+    @uniform @binding = 4 total : uint    //!< nrows*d
+
+    [metal_kernel(name="metal_tower_row_gather_msl")]
+    def metal_tower_row_gather {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        y[gid] = x[src[gid / d] * d + gid % d]
+    }
+}
+
 //! Interleave two [npos x d] panels into the [npos x 2d] MTP eh_proj input: rows are [enorm(embed) ; hnorm(hidden)].
 [metal_dispatch(name = "pf_enc_cat2", pso = "g_pf_pso_cat2", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalPfCat2 {
@@ -2689,6 +2773,8 @@ var private g_pf_pso_av : MetalComputePipeline?
 var private g_pf_pso_cat2 : MetalComputePipeline?
 var private g_pf_pso_twr_flash : MetalComputePipeline?   //!< the tower flash (DK=DV=72 monomorph)
 var private g_pf_pso_twr_kvhc : MetalComputePipeline?    //!< its K/V per-head-contiguous f16 restride
+var private g_pf_pso_twr_win : MetalComputePipeline?     //!< the qwen2.5 ViT per-window attention
+var private g_pf_pso_twr_gather : MetalComputePipeline?  //!< its stem's window-sort row gather
 var private g_pf_pso_mm_t : MetalComputePipeline?  //!< the mul_mm TENSOR twin; the base is the shared g_pso_mm
 var private g_pf_pso_mm_th : MetalComputePipeline?  //!< its half-X stamp (the converted f16 activation panel)
 var private g_pf_pso_mm_t128 : MetalComputePipeline?
@@ -3105,6 +3191,8 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     }
     release_pso(g_pf_pso_twr_flash)
     release_pso(g_pf_pso_twr_kvhc)
+    release_pso(g_pf_pso_twr_win)
+    release_pso(g_pf_pso_twr_gather)
     if (g_pf_pso_cvt_half != null) {
         metal_release(g_pf_pso_cvt_half)
         g_pf_pso_cvt_half = null
@@ -3335,6 +3423,8 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_qkmm = compile_pso(metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, ok)
     g_pf_pso_twr_flash = compile_pso(metal_tower_flash_msl, metal_tower_flash_msl_entry, metal_tower_flash_msl_fastmath, ok)
     g_pf_pso_twr_kvhc = compile_pso(metal_tower_kv_hc_msl, metal_tower_kv_hc_msl_entry, metal_tower_kv_hc_msl_fastmath, ok)
+    g_pf_pso_twr_win = compile_pso(metal_tower_win_msl, metal_tower_win_msl_entry, metal_tower_win_msl_fastmath, ok)
+    g_pf_pso_twr_gather = compile_pso(metal_tower_row_gather_msl, metal_tower_row_gather_msl_entry, metal_tower_row_gather_msl_fastmath, ok)
     g_pf_pso_avmm = compile_pso(MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_pso_avmm_p = compile_pso(MetalAttnAVMmP_metal_attn_av_mm_msl, MetalAttnAVMmP_metal_attn_av_mm_msl_entry, MetalAttnAVMmP_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_qkmm_tensor = metal_tensor_crowned("attn_qkmm")
@@ -3583,6 +3673,8 @@ def pf_bf16_half_ready() : bool => g_pf_pso_bf16_mm_th != null && g_pf_pso_cvt_h
 //! Whether the tower flash pair compiled - the tower driver's flash-route gate (pure
 //! simdgroup kernels, no tensor crown required).
 def pf_tower_flash_ready() : bool => g_pf_pso_twr_flash != null && g_pf_pso_twr_kvhc != null
+
+def pf_tower_win_ready() : bool => g_pf_pso_twr_win != null && g_pf_pso_twr_gather != null
 
 def private pf_devw_flip : MetalBuffer ? {
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh

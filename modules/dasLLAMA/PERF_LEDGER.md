@@ -1085,3 +1085,15 @@ group; wording kept.
   the DENSE k-quant crowns rather than raced on their own; give each its own
   `metal_tensor_race` family and crown so the gate stops proxying. Instrument:
   `metal_tensor_race` on an M5 box, one q8 and one k-quant MoE model.
+
+### From the qwen25v Metal-tower bring-up (2026-08-29)
+
+- **OPEN - qwen25v window-attention kernel is the naive per-thread form.** `enc_tower_win_attn`
+  runs one thread per q row, scalar dots straight from device f32 (the f16-staged simdgroup
+  form was reverted: its staging noise re-rolls the 32-layer chaos, and the naive form still
+  lands the pair ahead - enc 106 vs 117 ms). If the encoder profile ever shows the window
+  layers, the upgrade is a simdgroup-tiled f32 form (windows are 64x80 tiles; K%16 wants pad
+  to 96). Instrument: asr_prof q25v.gpu split via a skip-family knockout, npos ~1564.
+- **OPEN - qwen25v full layers ride the padded slab (hs 80 -> 96).** Four of 32 layers restride
+  to hs_pad 96 through the attention trio; a dk80 flash monomorph (the gemma3v dk72 recipe,
+  per-head-contiguous K/V) applies if the slab ever shows at big npos.

@@ -55,5 +55,6 @@ def main {
         setup_dasllama_jobque_()
         probe_one("/Users/borisbatkin/Work/llama.cpp/models/mmproj-Qwen3VL-8B-Instruct-F16.gguf", pic)
         probe_one("/Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-3-4b-it-F16.gguf", pic)
+        probe_one("/Users/borisbatkin/Work/llama.cpp/models/mmproj-Qwen2.5-Omni-3B-f16.gguf", pic)
     }
 }

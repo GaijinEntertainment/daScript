@@ -599,6 +599,192 @@ def private tower_flash_gate(t : T?; dev, queue) {
     delete want
 }
 
+// ===== the qwen2.5 ViT per-window attention (block-diagonal, ragged last window) =====
+// f16-representable inputs keep the f64 oracle exact up to accumulation order; the oracle
+// attends STRICTLY within each window, so any cross-window leak fails the compare itself.
+def private tower_win_gate(t : T?; dev, queue) {
+    let tag = "tower_win"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_tower_win_msl, metal_tower_win_msl_entry, metal_tower_win_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let np = 160
+    let heads = 2
+    let hs = 80
+    let qd = heads * hs
+    let wlo <- [ 0u, 64u, 128u, 160u ]   // two full windows + a ragged 32-row tail
+    let nwin = 3
+    var qv : array<float>
+    var kv : array<float>
+    var vv : array<float>
+    qv |> resize(np * qd)
+    kv |> resize(np * qd)
+    vv |> resize(np * qd)
+    for (i in range(np * qd)) {
+        qv[i] = float(float16(0.11 * float(i % 37) - 1.9))
+        kv[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
+        vv[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
+    }
+    var want : array<float>
+    want |> resize(np * qd)
+    let scale = 1.0 / sqrt(float(hs))
+    for (w in range(nwin)) {
+        let r0 = int(wlo[w])
+        let r1 = int(wlo[w + 1])
+        for (h in range(heads)) {
+            for (qi in range(r0, r1)) {
+                var mx = -3.0e38
+                for (j in range(r0, r1)) {
+                    var sd = 0.0lf
+                    for (dd in range(hs)) {
+                        sd += double(float(float16(qv[qi * qd + h * hs + dd]))) * double(float(float16(kv[j * qd + h * hs + dd])))
+                    }
+                    mx = max(mx, float(sd) * scale)
+                }
+                var tot = 0.0lf
+                var oa : float[80]
+                for (dd in range(hs)) {
+                    oa[dd] = 0.0
+                }
+                for (j in range(r0, r1)) {
+                    var sd = 0.0lf
+                    for (dd in range(hs)) {
+                        sd += double(float(float16(qv[qi * qd + h * hs + dd]))) * double(float(float16(kv[j * qd + h * hs + dd])))
+                    }
+                    let e = exp(float(sd) * scale - mx)
+                    tot += double(e)
+                    for (dd in range(hs)) {
+                        oa[dd] += e * float(float16(vv[j * qd + h * hs + dd]))
+                    }
+                }
+                for (dd in range(hs)) {
+                    want[qi * qd + h * hs + dd] = oa[dd] / float(tot)
+                }
+            }
+        }
+    }
+    var bq = buf_upload(dev, qv)
+    var bk = buf_upload(dev, kv)
+    var bv = buf_upload(dev, vv)
+    var bw = buf_upload(dev, wlo)
+    var bo = buf_fill(dev, np * qd, -1.0e30)
+    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(qd), head_size = uint(hs), kv_mul = 1u,
+        npos = uint(np), np32 = uint(np), scale = scale,
+        qoff = 0u, qrows = uint(np), window = 0u, softcap = 0.0, hass = 0u, uend = uint(np))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bq, 0ul, 0)
+        metal_set_buffer(enc, bk, 0ul, 1)
+        metal_set_buffer(enc, bv, 0ul, 2)
+        metal_set_buffer(enc, bo, 0ul, 3)
+        metal_set_buffer(enc, bw, 0ul, 4)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        metal_dispatch_threadgroups(enc, uint3(uint(nwin), uint(heads), 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag} dispatch: {err}")
+    return if (!ran)
+    t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
+    // the poison: +3.0 on ONE V element (window 1) must red the same bars
+    vv[80 * qd + hs / 2] += 3.0
+    var bv2 = buf_upload(dev, vv)
+    let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bq, 0ul, 0)
+        metal_set_buffer(enc, bk, 0ul, 1)
+        metal_set_buffer(enc, bv2, 0ul, 2)
+        metal_set_buffer(enc, bo, 0ul, 3)
+        metal_set_buffer(enc, bw, 0ul, 4)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        metal_dispatch_threadgroups(enc, uint3(uint(nwin), uint(heads), 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran2, "{tag} poison dispatch: {err}")
+    if (ran2) {
+        t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned V element reds the bars")
+    }
+    metal_release(bq)
+    metal_release(bk)
+    metal_release(bv)
+    metal_release(bv2)
+    metal_release(bw)
+    metal_release(bo)
+    metal_release(pso)
+    delete qv
+    delete kv
+    delete vv
+    delete want
+}
+
+// ===== the tower row gather (the qwen25v stem's window-sort reorder) =====
+def private tower_gather_gate(t : T?; dev, queue) {
+    let tag = "tower_gather"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_tower_row_gather_msl, metal_tower_row_gather_msl_entry, metal_tower_row_gather_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    let nr = 37
+    let d = 64
+    var xv : array<float>
+    xv |> resize(nr * d)
+    for (i in range(nr * d)) {
+        xv[i] = 0.03 * float((i * 17) % 61) - 0.9
+    }
+    var src : array<uint>
+    src |> resize(nr)
+    for (r in range(nr)) {
+        src[r] = uint((r * 11) % nr)   // 11 coprime to 37: a full permutation
+    }
+    var want : array<float>
+    want |> resize(nr * d)
+    for (r in range(nr)) {
+        for (c in range(d)) {
+            want[r * d + c] = xv[int(src[r]) * d + c]
+        }
+    }
+    var bx = buf_upload(dev, xv)
+    var bs = buf_upload(dev, src)
+    var by = buf_fill(dev, nr * d, -1.0e30)
+    var u_d = uint(d)
+    var u_tot = uint(nr * d)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, by, 0ul, 1)
+        metal_set_buffer(enc, bs, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint((nr * d + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+    }
+    t |> success(ran, "{tag} dispatch: {err}")
+    return if (!ran)
+    t |> equal(buf_mismatch_exact(by, want, tag), 0)
+    // the poison: one swapped index must red the exact compare
+    src[nr / 2] = src[nr / 2] == 0u ? 1u : 0u
+    var bs2 = buf_upload(dev, src)
+    let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, by, 0ul, 1)
+        metal_set_buffer(enc, bs2, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint((nr * d + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+    }
+    t |> success(ran2, "{tag} poison dispatch: {err}")
+    if (ran2) {
+        t |> success(buf_mismatch_exact(by, want, "{tag} poison (MUST mismatch)") > 0,
+            "{tag}: a swapped gather index reds the exact compare")
+    }
+    metal_release(bx)
+    metal_release(bs)
+    metal_release(bs2)
+    metal_release(by)
+    metal_release(pso)
+    delete xv
+    delete src
+    delete want
+}
+
 [test]
 def test_metal_prefill_kernels(t : T?) {
     t |> run("phase-6 prefill kernels == dasLLAMA CPU twins") @(t : T?) {
@@ -782,6 +968,8 @@ def test_metal_prefill_kernels(t : T?) {
 
                 // ===== the tower flash + its hc K/V restride =====
                 tower_flash_gate(t, dev, queue)
+                tower_win_gate(t, dev, queue)
+                tower_gather_gate(t, dev, queue)
 
                 // ===== attention: the tiled sgmat trio vs the direct causal-GQA oracle, at the
                 // classic small shape (hs 32 — one QK k-slab) AND the llama-3B head shape

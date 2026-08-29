@@ -288,7 +288,17 @@ quad448 = the WINDOW DISCRIMINATOR (four exact-value quadrants; uniform/periodic
 make every window
 statistically identical, so an all-full-attention poison hides under them - quad reds it at
 10.7 vs the 2e-4 + 1e-2*rms bar) - plus the merged-patch-grid panic gate. No q8 lane in
-this tower, so no q8-lane cells. Skips honestly without the mmproj or dumps.
+this tower, so no q8-lane cells. On Apple builds the CPU gate pins the tower knob off, and a
+GPU rung gates four fixtures through the Metal window-ViT driver on the 8e-2*rms bar (the
+32-layer mix amplifies the f16-operand GEMM noise and re-rolls on low-bit kernel changes;
+quad448 is OFF this rung's numeric set for exactly that reason - window-distinct content
+realizes the amplification at 0.18-0.4*rms), with engage proven per fixture by the
+encodes/blocks counters, a twin-route counter witness (crowns pinned), the knob-off decline
+leg, a zeroed-block GPU-lane poison through BOTH staging planes, and the SHALLOW routing
+cells - 1-layer truncated towers (pure-window and all-full) on quad content, GPU vs the CPU
+chain at 0.1 abs, the chaos-free window discrimination for the DRIVER (the kernel's own
+block-diagonal strictness is the kernels-suite `tower_win` gate). Skips honestly without the
+mmproj or dumps.
 `_vision_oracle.das` is the shared dump parser / fixture generator / per-token compare /
 over-bar scorer (the must-EXCEED half of a poison leg) all vision tier-1 tests use (the
 `quad` generator and the q1/q2/q3 quarter-offset probe fields live here).
