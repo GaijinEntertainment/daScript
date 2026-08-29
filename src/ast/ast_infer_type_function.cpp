@@ -4,6 +4,7 @@
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_infer_type.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/simulate/das_qsort_r.h"
 
 namespace das {
 
@@ -610,7 +611,7 @@ namespace das {
                 }
                 fnm.push_back(make_pair(dist, fn));
             }
-            stable_sort(fnm.begin(), fnm.end(), [](const pair<int, Function *> &a, const pair<int, Function *> &b) { return a.first < b.first; });
+            sort(fnm.begin(), fnm.end(), [](const pair<int, Function *> &a, const pair<int, Function *> &b) { return a.first < b.first; });
             if (fnm[0].first != fnm[1].first) {
                 winners.resize(1);
                 winners[0] = fnm[0].second;
@@ -1836,7 +1837,7 @@ namespace das {
         } else if (functions.size() == 0) {
             // if there is more than one, we pick more specialized
             if (generics.size() > 1) {
-                stable_sort(generics.begin(), generics.end(), [&](const FunctionPtr &f1, const FunctionPtr &f2) { return copmareFunctionSpecialization(f1, f2, expr); });
+                das_stable_sort(generics.data(), generics.data() + generics.size(), [&](const FunctionPtr &f1, const FunctionPtr &f2) { return copmareFunctionSpecialization(f1, f2, expr); });
                 // if one is most specialized, we pick it, otherwise we report all of them
                 if (copmareFunctionSpecialization(generics.front(), generics[1], expr)) {
                     generics.resize(1);

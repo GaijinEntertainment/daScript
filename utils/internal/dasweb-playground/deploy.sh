@@ -6,6 +6,8 @@
 # The bundle comes from the builder box (zen4) — from the arc worktree there:
 #
 #   cd ~/daScript-dasweb && git pull --ff-only origin <branch>
+#   # the tree must be configured -DDAS_LLVM_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF (both default ON):
+#   # release runs `daslang -exe` through dasLLVM, and the bundle ships dasSQLITE
 #   bin/daslang utils/daspkg/main.das -- release --root utils/internal/dasweb-playground --out ~/dasweb_release
 #   SHA=$(git rev-parse --short HEAD)
 #   cd ~/dasweb_release && tar czf dasweb-playground-$SHA.tar.gz dasweb-playground
