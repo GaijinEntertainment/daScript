@@ -68,7 +68,7 @@ def samples_migration_003(db : SqlRunner) {
 
 struct StorePolicy {
     //! Every limit the store enforces; the launcher fills it from config.
-    max_source_bytes : int = 262144
+    max_source_bytes : int = 524288
     max_inserts_per_ip_hour : int = 100
 }
 

@@ -19,6 +19,7 @@ Lint Tools
 .. das-doc: given struct SomeStruct { value : int64 }
 .. das-doc: given struct Foo { x : int }
 .. das-doc: given struct State { mark : int; claimed : array<int> }
+.. das-doc: given struct Ctx { weights : array<float> }
 .. das-doc: given def compute() : int { return 0 }
 .. das-doc: given def report(ok : bool) { }
 .. das-doc: given def process(v : int) { }

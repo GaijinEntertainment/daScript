@@ -11,13 +11,13 @@ options _allow_imgui_legacy = true
 // then diffused and decayed. Out of those local rules emerge the organic transport networks the
 // real Physarum polycephalum builds. The simulation never converges, so the window stays alive.
 //
-// The worker-thread slider is the star: it partitions the agents across N background threads, and
-// the agents/sec readout climbs as you add threads. The agent pass is dispatched from update() on
-// the main thread and polled non-blocking next frame — never joined on the main thread — because
-// emscripten cannot service a main-thread block on Web Workers in the browser (the same reason the
-// Path Tracer Lab dispatches from update()). The pass is race-free by construction: a worker only
+// The worker-thread slider is the star: it partitions the agents across N bands of a persistent job
+// queue, and the agents/sec readout climbs as you add bands. The agent pass is dispatched from
+// update() on the main thread and polled non-blocking next frame — never joined on the main thread —
+// because emscripten cannot service a main-thread block on Web Workers in the browser (the same
+// reason the Path Tracer Lab dispatches from update()). The pass is race-free by construction: a worker only
 // READS the shared field (sensing) and writes its OWN slice of the agent array; the deposit
-// (scatter) and the diffuse/decay run on the main thread after the workers join, so no two threads
+// (scatter) and the diffuse/decay run on the main thread once the pass is ready, so no two threads
 // ever write the same memory. Uses the daslang-live harness so it live-reloads on desktop and runs
 // in the wasm examples pipeline + the playground.
 
@@ -327,13 +327,17 @@ def start_update_pass(n : int) {
         let hi = min((c + 1) * chunk, g_agent_count)
         var st = status
         if (lo >= hi) {
-            st |> notify_and_release   // more bands than agents — balance the wait-group, skip the thread
+            // More bands than agents: balance the wait group and skip the job. `notify`, NOT
+            // `notify_and_release` — append() raises the remaining count without taking a
+            // reference, and the per-band reference is the one new_job's capture takes. Releasing
+            // here drops a reference that was never added, and the status goes negative.
+            status |> notify
             continue
         }
-        // new_thread per band (the Path Tracer pattern), NOT new_job: the persistent jobque wedges
-        // the interpreted wasm runner (playground), while per-pass threads work on every runner and
-        // map onto the same pre-spawned Web Worker pool in the compiled build.
-        new_thread() <| @capture(= pagents, = pfield, = read_offset, = lo, = hi, = prm, = st) {
+        // new_job over the persistent que, NOT a per-pass new_thread: a thread created per band per
+        // frame costs a pthread create/exit round trip through the main thread on emscripten (~2000
+        // postMessages/s at 4 bands), where the que's workers are created once and then only signalled.
+        new_job() <| @capture(= pagents, = pfield, = read_offset, = lo, = hi, = prm, = st) {
             update_agents_band(pagents, pfield, read_offset, lo, hi, prm)
             st |> notify_and_release
         }
@@ -663,6 +667,9 @@ def init() {
     // Open at the detected core count, floored to 4 so it never looks single-threaded on a browser
     // that clamps navigator.hardwareConcurrency, and capped at MAX_BANDS. Drag the slider up to oversubscribe.
     g_threads = clamp(get_total_hw_threads(), 4, MAX_BANDS)
+    // Persistent job queue for the agent passes (start_update_pass uses new_job). Created once here so it
+    // spans the externally-driven frame loop (emscripten set_main_loop) — a with_job_que block can't.
+    create_job_que()
     if (g_audio_enabled) {
         setup_audio()
     }
@@ -711,6 +718,7 @@ def shutdown() {
             g_audio_owned = false
         }
     }
+    destroy_job_que()
     harness_shutdown()
 }
 

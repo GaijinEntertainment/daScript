@@ -14,7 +14,7 @@ handle /api/samples* {
 	# libhv imposes no transport cap of its own — an unbounded chunked POST
 	# would grow the process to the size of the body before any handler runs.
 	# This is the only place that limit can exist. Keep it comfortably above
-	# max_source_bytes (262144) so the service, not the proxy, produces the
+	# max_source_bytes (524288) so the service, not the proxy, produces the
 	# 413 that the playground surfaces to the user.
 	request_body {
 		max_size 1MB

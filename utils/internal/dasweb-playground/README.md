@@ -37,6 +37,15 @@ The public route boundary is `caddy.snippet`, the authoritative copy of what the
 vhost forwards here. It also carries the transport body cap: the service can only bounds-check
 a body already buffered in full, so that limit cannot live in this process.
 
+`max_source_bytes` is 524288 (512 KiB). The playground POSTs a multi-file sample as one JSON
+document, so the cap is measured against the whole bundle, not the largest file in it - the
+biggest curated game serializes to roughly 267 KB. Because the deployed toml is operator-owned
+and `deploy.sh` carries it forward verbatim, raising this default does NOT reach a box whose
+toml already states the old value; that file is edited on the box, and the startup banner's
+`max_source_bytes_src` says whether the running value came from `toml` or `default`. Caddy's
+`request_body max_size` on `/api/samples*` stays above it, so the 413 a user sees is the
+service's, with its JSON error body, rather than the proxy's bare response.
+
 ## Endpoints (port 8101, loopback only - Caddy fronts the internet)
 
 | Route | Behavior |

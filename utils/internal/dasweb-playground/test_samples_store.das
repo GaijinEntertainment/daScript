@@ -158,6 +158,27 @@ def test_rejections(t : T?) {
 }
 
 [test]
+def test_default_cap_admits_a_multi_file_bundle(t : T?) {
+    //! Regression: the playground POSTs a multi-file sample as one JSON
+    //! document, so the cap is measured against the whole bundle rather than
+    //! any one file. River Run's twelve sources serialize to ~267 KB, which the
+    //! old 256 KiB default refused with a 413 - the wasm build failed before the
+    //! builder ever saw the sample. Asserted against the SHIPPED default, not
+    //! `test_policy`, because that default is the thing that was wrong.
+    with_latest_sqlite(":memory:") $(db) {
+        let pol = StorePolicy()
+        t |> run("a 300 KB bundle stores") @(tt : T?) {
+            let bundle = repeat("x", 300 * 1024)
+            tt |> equal(put_sample(db, bundle, "10.0.0.1", pol, 1000l).status, PutStatus.ok)
+        }
+        t |> run("the cap still bites one byte over") @(tt : T?) {
+            let over = repeat("x", pol.max_source_bytes + 1)
+            tt |> equal(put_sample(db, over, "10.0.0.2", pol, 1010l).status, PutStatus.too_large)
+        }
+    }
+}
+
+[test]
 def test_rate_ceiling(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         let pol = test_policy()   // 3 per hour
