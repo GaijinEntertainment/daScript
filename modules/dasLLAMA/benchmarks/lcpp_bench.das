@@ -1322,10 +1322,16 @@ def main() : int {
     // hard-pin lanes to distinct physical cores on the boxes that pin. -t is the explicit ask, but
     // DAS_JOBQUE_THREADS / DAS_JOBQUE_AFFINITY envs still win the que's actual lane count.
     let t_env = g_env_core.jobque_threads
-    var threads = cfg.threads > 0 ? cfg.threads : (t_env ?? profile_threads())
+    let hybrid_default = (cfg.threads <= 0 && is_none(t_env) && get_total_perf_cores() > 0
+        && get_total_perf_cores() < get_total_hw_cores())
+    var threads = cfg.threads > 0 ? cfg.threads : (t_env ?? (hybrid_default ? get_total_hw_cores() : profile_threads()))
     if (is_some(t_env) && unwrap(t_env) != threads) {
         threads = unwrap(t_env)
         say(fmt, "warning: DAS_JOBQUE_THREADS overrides -t - running {threads} lanes\n")
+    } elif (hybrid_default) {
+        // heterogeneous box, nothing explicit: keep the engine policy (pool = all cores, GEMV
+        // capped to the fast tier) rather than capping the pool back to the fast tier
+        say(fmt, "lcpp_bench: hybrid box - pool {threads} lanes, decode capped to {get_total_perf_cores()} fast-tier lanes (-t overrides)\n")
     } elif (is_none(t_env)) {
         // the PC measurement regime caps at 16 lanes (an explicit env or -t always wins) —
         // a big-SMT box at full width measures the scheduler, not the kernels
@@ -1402,6 +1408,8 @@ def main() : int {
     var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()
+        // the regime line above prints the INTENT; this is the que that actually spawned
+        say(fmt, "live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         for (mpath in model_list) {
         continue if (empty(mpath))
         say(fmt, "loading {mpath}\n")

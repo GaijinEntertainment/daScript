@@ -1335,7 +1335,13 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "kq_q40_native") $(v) { set_kq_q40_native(v != 0l) }
     apply_i64_knob(rt, "kq_q50_native") $(v) { set_kq_q50_native(v != 0l) }
     apply_i64_knob(rt, "noisy") $(v) { set_dasllama_noisy(v != 0l) }
-    apply_i64_knob(rt, "gemv_lane_cap") $(v) { set_gemv_lane_cap(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "gemv_lane_cap") $(v) {
+        // a minted 0 is the old fast-tier-only world's "uncapped", not a measured choice — on a
+        // hybrid box it must not defeat the fast-tier decode default; a non-zero mint is an opinion
+        if (v != 0l || get_total_perf_cores() <= 0 || get_total_perf_cores() >= get_total_hw_cores()) {
+            set_gemv_lane_cap(int(min(v, 2147483647l)))
+        }
+    }
     apply_i64_knob(rt, "batch_lane_cap") $(v) { set_batch_lane_cap(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "batch_grid_2d") $(v) { set_batch_grid_2d(int(min(v, 2l))) }
     apply_i64_knob(rt, "dispatch_worker_limit") $(v) { set_dispatch_worker_limit_(int(min(v, 2147483647l))) }
@@ -3890,6 +3896,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
 def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE038 — one decode step; the phases share s and must stay in order
     let c = t.config
     let dim = c.dim
+    dispatch_phase_decode()   // hybrid boxes: park the slow tier for the per-token barriers
     kv_ensure(s, pos + 1l)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
 
     // token embedding: row `token` into the residual stream
@@ -4753,6 +4760,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         }
         return
     }
+    dispatch_phase_batch()   // hybrid boxes: wake the slow tier for the batched GEMMs
     let ts_alloc = prof_ticks()
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)

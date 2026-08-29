@@ -98,6 +98,14 @@ namespace das {
             return v;
         }();
         if ( forced > 0 ) return forced - 1;
+        // the app-declared request sits between the env and the defaults: unlike the cap it can
+        // RAISE past the fast-tier rule (a prefill-heavy workload wants the slow tier too). The
+        // cap still bounds it — an explicit "at most N" (e.g. a bench's -t) beats a standing request.
+        if ( int req = JobQue::get_default_threads(); req > 1 ) {
+            int workers = min(req, hw) - 1;
+            if ( int cap = JobQue::get_default_threads_cap() ) workers = min(workers, cap);
+            return max(1, workers);
+        }
         int def = 0;
 #if defined(__APPLE__)
         if ( int good = apple_perf_core_count() ) def = max(1, good - 1);
@@ -114,6 +122,22 @@ namespace das {
     static atomic<int> g_jobqueDefaultThreadsCap{0};
     void JobQue::set_default_threads_cap(int cap) { g_jobqueDefaultThreadsCap = max(cap, 0); }
     int JobQue::get_default_threads_cap() { return g_jobqueDefaultThreadsCap.load(); }
+
+    // App-declared TOTAL lanes of a future JobQue (das set_jobque_threads) — the raise-capable
+    // twin of the cap; <=1 = unset. The DAS_JOBQUE_THREADS env still overrides it (the A/B rail).
+    static atomic<int> g_jobqueDefaultThreads{0};
+    void JobQue::set_default_threads(int total) { g_jobqueDefaultThreads = max(total, 0); }
+    int JobQue::get_default_threads() { return g_jobqueDefaultThreads.load(); }
+
+    int JobQue::get_num_perf_cores() {
+#if defined(__APPLE__)
+        return apple_perf_core_count();
+#else
+        // Windows/Linux hybrid (Intel P/E) topology detection is not wired yet — callers fall
+        // back to the homogeneous rule, and the env knobs cover asymmetric boxes until it is
+        return 0;
+#endif
+    }
 
     // App-declared affinity mode of a future JobQue (das set_jobque_affinity — apps expose it in
     // their config next to threads). -1 = unset (off). Applied at thread spawn, so it must be set
@@ -185,6 +209,16 @@ namespace das {
         if ( mode <= 0 ) return;
         int hw = static_cast<int>(thread::hardware_concurrency());
         if ( hw <= 1 ) return;
+#if defined(__APPLE__)
+        // heterogeneous darwin: the top QoS class goes to the fast-tier slots only (slot 0 = the
+        // dispatch caller + the first perf-1 workers — the worker-limit active set); the rest take
+        // the next class down so the scheduler seats them on the slower tier instead of dicing
+        // equal-class threads across the few fast cores (a per-run tg placement lottery, measured).
+        if ( int perf = apple_perf_core_count(); perf > 0 && perf < hw ) {
+            SetCurrentThreadAffinityCpu(slot, mode >= 2 && slot < perf);
+            return;
+        }
+#endif
         int half = hw / 2;
         int cpu;
         if ( half > 0 && slot < half ) cpu = slot * 2;               // distinct cores first

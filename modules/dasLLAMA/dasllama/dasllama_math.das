@@ -269,12 +269,19 @@ def setup_dasllama_jobque_() {
     set_current_thread_priority(clamp(g_env_engine.caller_prio, -2, 2))
 }
 
-// dasLLAMA matmuls are lockstep linear algebra: SMT siblings share the FMA/load ports, so the
-// default jobque gets physical cores - 1 workers (EPYC 9654 confirmed 192 SMT
-// lanes lose to 96). Cap min()s with the stock rule; DAS_JOBQUE_THREADS overrides.
+// SMT shares FMA/load ports: the pool gets physical cores - 1 workers. Heterogeneous boxes
+// (M5 Max 6 Super + 12 Performance; Intel P/E): the pool spans ALL cores and the GEMV cap
+// defaults to the fast tier — pp every core, tg fast-only. Box-profile caps + DAS_JOBQUE_THREADS override.
 [init]
 def dasllama_jobque_threads_cap() {
-    set_jobque_threads_cap(max(get_total_hw_cores() - 1, 1))
+    let cores = get_total_hw_cores()
+    set_jobque_threads_cap(max(cores - 1, 1))
+    let perf = get_total_perf_cores()
+    if (perf > 0 && perf < cores) {
+        set_jobque_threads(cores)
+        set_gemv_lane_cap(perf)
+        set_phase_decode_workers(max(perf - 1, 1))
+    }
 }
 
 // darwin: unclassified workers demote under ambient load (big-model decode measured -5% tg);
@@ -363,6 +370,25 @@ def public get_gemv_lane_cap() : int { return g_gemv_lane_cap }
 var g_batch_lane_cap = 0
 def public set_batch_lane_cap(v : int) { g_batch_lane_cap = max(v, 0) }
 def public get_batch_lane_cap() : int { return g_batch_lane_cap }
+
+// Per-phase worker dormancy on hybrid boxes: chunk-starved slow-tier workers SPINNING beside
+// the fast decode lanes cost tg -15% (M5 Max; the rank gate does not recover it — only parking
+// does). Decode parks the slow tier, batch wakes all; a dispatch_worker_limit box knob wins.
+var g_phase_decode_workers = -1   // -1 = policy off (homogeneous box)
+def public set_phase_decode_workers(v : int) { g_phase_decode_workers = v }
+def public get_phase_decode_workers() : int { return g_phase_decode_workers }
+
+def public dispatch_phase_decode {
+    if (g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available()) {
+        set_jobque_worker_limit(g_phase_decode_workers)
+    }
+}
+
+def public dispatch_phase_batch {
+    if (g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available()) {
+        set_jobque_worker_limit(-1)
+    }
+}
 
 //! Dispatch lanes proportional to work: clamp(work / target_chunk_work, 1,
 //! min(get_dispatch_lanes(), lane_cap)). 1 means "not worth a dispatch" — the matmul_chunks
