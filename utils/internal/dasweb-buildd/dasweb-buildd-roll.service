@@ -1,0 +1,12 @@
+[Unit]
+Description=dasweb-buildd toolchain roll to the newest CI-green master
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=boris
+Environment=DASWEB_WASM_WORKTREE=/home/boris/daScript-wasm
+Environment=EMSDK=/home/boris/emsdk
+ExecStart=/bin/bash /usr/local/sbin/dasweb-roll-toolchain.sh --green --if-changed
+TimeoutStartSec=3h

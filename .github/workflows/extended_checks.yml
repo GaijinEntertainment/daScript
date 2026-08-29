@@ -651,7 +651,7 @@ jobs:
       if: matrix.target == 'linux'
       run: |
         set -eux
-        for suite in test_buildd_config test_buildd_core test_buildd_client; do
+        for suite in test_buildd_config test_buildd_core test_buildd_client test_roll_toolchain; do
           $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/internal/dasweb-buildd/$suite.das
         done
 

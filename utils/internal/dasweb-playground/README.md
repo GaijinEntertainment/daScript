@@ -112,6 +112,11 @@ immutable headers. An upload is staged under `blobs/tmp/`, every file verified a
 manifest sha256, and the whole set renamed into place atomically - a half-written artifact is
 never served. `caddy.snippet` carries the 64MB transport cap for `/api/build/*` uploads.
 
+A toolchain the builder no longer announces keeps its tree for a day after its last write - an
+open tab has long re-fetched, and a roll-back finds its cache warm - then an hourly sweep
+removes the tree. Job rows of a toolchain with no tree left go with it, so a roll-back inside
+the day still finds every cached build.
+
 A build's **mode** is decided here at request time by scanning the stored source's requires
 (`detect_build_mode` in `build_queue.das`): a native graphics/audio namespace (glfw, opengl,
 audio, ...) makes it a `page` build - a standalone `sample.{html,js,wasm}` emscripten page,

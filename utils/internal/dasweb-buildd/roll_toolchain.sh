@@ -21,6 +21,15 @@
 #
 #   ./roll_toolchain.sh                 roll to origin/master
 #   ./roll_toolchain.sh --ref <sha>     roll to a specific commit
+#   ./roll_toolchain.sh --green         roll to the newest origin/master commit
+#                                       whose required CI workflows all passed
+#   ./roll_toolchain.sh --if-changed    exit 0 without touching anything when the
+#                                       last COMPLETED roll already reached the
+#                                       target (the nightly timer's mode)
+#   ./roll_toolchain.sh --green-check <runs.json>
+#                                       exit 0 when the Actions runs in the file
+#                                       make a commit green, 1 otherwise; touches
+#                                       nothing (the predicate's test seam)
 #   ./roll_toolchain.sh --dry-run       print the plan, touch nothing
 #   ./roll_toolchain.sh --skip-restart  build and warm, leave the service alone
 #
@@ -29,6 +38,10 @@
 #   EMSDK                  the pinned emsdk root
 #   HOST_CC / HOST_CXX     compiler for the cross-compile host. Debian 12's bare
 #                          clang is 14 and cannot build the tree; clang-19 can.
+#   DASWEB_GITHUB_REPO     owner/name whose Actions runs --green reads
+#   DASWEB_GREEN_DEPTH     how many origin/master commits --green walks (30)
+#   GITHUB_TOKEN           optional; --green reads the public API unauthenticated
+#                          (60 requests/hour) and sends this as a bearer when set
 set -euo pipefail
 
 WORKTREE="${DASWEB_WASM_WORKTREE:-/home/boris/daScript-wasm}"
@@ -36,22 +49,75 @@ EMSDK_ROOT="${EMSDK:-/home/boris/emsdk}"
 HOST_CC="${HOST_CC:-clang-19}"
 HOST_CXX="${HOST_CXX:-clang++-19}"
 SERVICE="dasweb-buildd"
-REF="origin/master"
+GITHUB_REPO="${DASWEB_GITHUB_REPO:-GaijinEntertainment/daScript}"
+# The workflows a master commit must have passed to count as green.
+REQUIRED_WORKFLOWS='["wasm_build","build","build_eastl","extended checks"]'
+GREEN_DEPTH="${DASWEB_GREEN_DEPTH:-30}"
+# Written after the last roll step. --if-changed skips only when the marker AND
+# the worktree's HEAD both name the target: a roll that died after its checkout
+# leaves HEAD at a target with nothing rebuilt, and a later roll can leave HEAD
+# somewhere the marker never named.
+ROLL_MARKER=".dasweb-roll-complete"
+REF=""
+GREEN=0
+IF_CHANGED=0
+GREEN_CHECK=""
 DRY_RUN=0
 SKIP_RESTART=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --ref)          REF="${2:?--ref needs a commit-ish}"; shift 2 ;;
+        --green)        GREEN=1; shift ;;
+        --if-changed)   IF_CHANGED=1; shift ;;
+        --green-check)  GREEN_CHECK="${2:?--green-check needs a runs.json path}"; shift 2 ;;
         --dry-run)      DRY_RUN=1; shift ;;
         --skip-restart) SKIP_RESTART=1; shift ;;
-        -h|--help)      sed -n '2,31p' "$0"; exit 0 ;;
+        -h|--help)      awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
         *)              echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
+if [ "$GREEN" = 1 ] && [ -n "$REF" ]; then
+    echo "--green and --ref both name the target; pass one" >&2
+    exit 2
+fi
+[ -n "$REF" ] || REF="origin/master"
 
 say()  { printf '\n=== %s\n' "$*"; }
 run()  { if [ "$DRY_RUN" = 1 ]; then printf '  would run: %s\n' "$*"; else "$@"; fi; }
+
+# A commit is green when its push-triggered Actions runs cover every required
+# workflow with success and nothing that ran on it failed. An in-progress
+# required run is not proof, so such a commit is not green yet.
+runs_are_green() {
+    jq -e --argjson need "$REQUIRED_WORKFLOWS" '
+        [.workflow_runs[] | select(.event == "push")] as $runs
+        | ($need - [$runs[] | select(.conclusion == "success") | .name]) == []
+          and ([$runs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped")] == [])
+    ' >/dev/null
+}
+
+# Walk origin/master newest-first and print the first green commit.
+newest_green_master() {
+    local sha auth=()
+    [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    for sha in $(git rev-list --first-parent -n "$GREEN_DEPTH" origin/master); do
+        if curl -fsS "${auth[@]}" -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$GITHUB_REPO/actions/runs?head_sha=$sha&per_page=100" \
+                | runs_are_green; then
+            echo "$sha"
+            return 0
+        fi
+    done
+    echo "no green origin/master commit in the last $GREEN_DEPTH" >&2
+    return 1
+}
+
+if [ -n "$GREEN_CHECK" ]; then
+    command -v jq >/dev/null || { echo "--green-check needs jq" >&2; exit 15; }
+    runs_are_green < "$GREEN_CHECK"
+    exit $?
+fi
 
 # .git is a FILE in a linked worktree (a gitdir pointer), so ask git itself.
 git -C "$WORKTREE" rev-parse --git-dir >/dev/null 2>&1 \
@@ -72,14 +138,27 @@ OLD_ID="$(git rev-parse HEAD)"
 # Fetch even under --dry-run: it only moves remote-tracking refs, and without it
 # the printed plan would target whatever origin/master pointed at LAST fetch.
 git fetch origin --quiet
-NEW_ID="$(git rev-parse "$REF")"
+if [ "$GREEN" = 1 ]; then
+    command -v jq >/dev/null || { echo "--green needs jq" >&2; exit 15; }
+    NEW_ID="$(newest_green_master)" || exit 14
+    TARGET_LABEL="newest green origin/master"
+else
+    NEW_ID="$(git rev-parse "$REF")"
+    TARGET_LABEL="$REF"
+fi
+
+if [ "$IF_CHANGED" = 1 ] && [ "$OLD_ID" = "$NEW_ID" ] && [ "$(cat "$ROLL_MARKER" 2>/dev/null)" = "$NEW_ID" ]; then
+    echo "last completed roll already reached ${NEW_ID:0:9} ($TARGET_LABEL); nothing to do"
+    exit 0
+fi
 
 say "toolchain roll"
 printf '  worktree : %s\n  from     : %s\n  to       : %s (%s)\n' \
-    "$WORKTREE" "${OLD_ID:0:9}" "${NEW_ID:0:9}" "$REF"
-# Already-at-target is NOT an early exit: a roll that died mid-way leaves the
-# worktree moved but the rebuild/warm/restart undone, and re-running must finish
-# the job. Every later step is idempotent and cheap when already up to date.
+    "$WORKTREE" "${OLD_ID:0:9}" "${NEW_ID:0:9}" "$TARGET_LABEL"
+# Already-at-target is an early exit only under --if-changed, and only once the
+# marker says that roll completed: a roll that died mid-way leaves the worktree
+# moved but the rebuild/warm/restart undone, and re-running must finish the job.
+# Every later step is idempotent and cheap when already up to date.
 if [ "$OLD_ID" = "$NEW_ID" ]; then
     echo "  worktree already at target — resuming (rebuild/warm/restart are idempotent)"
 fi
@@ -142,7 +221,7 @@ else
         _ "$EMSDK_ROOT" "$WORKTREE" "$WARM" "$RUNTIME_LIB"
 
     echo "  page mode…"
-    # The same .das_package shape write_sample_package (buildd_core.das) writes
+    # The same .das_package shape write_page_package (buildd_core.das) writes
     # for a real page job — a change to either without the other is a defect.
     printf 'options gen2\nrequire daslib/daspkg\n\n[export]\ndef package() {\n    package_name("sample")\n}\n\n[export]\ndef release() {\n    release_name("sample")\n    release_main("main.das")\n}\n' \
         > "$WARM/src/.das_package"
@@ -157,6 +236,7 @@ else
     run sudo systemctl restart "$SERVICE"
     run sleep 3
     run systemctl is-active "$SERVICE"
+    [ "$DRY_RUN" = 1 ] || printf '%s\n' "$NEW_ID" > "$ROLL_MARKER"
 fi
 
 say "rolled ${OLD_ID:0:9} -> ${NEW_ID:0:9}"

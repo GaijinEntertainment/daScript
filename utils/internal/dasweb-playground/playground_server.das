@@ -349,6 +349,7 @@ def private handle_build_toolchain(var req : HttpRequest?; var resp : HttpRespon
         return resp |> JSON(write_json(JV((error = "malformed toolchain id"))), http_status.BAD_REQUEST)
     }
     set_current_toolchain(g_db, toolchain)
+    g_last_toolchain_sweep = 0l   // a roll retires the previous toolchain on the next tick, not within the hour
     let body = write_json(JV((toolchain = toolchain)))
     log_request("POST", "/api/build/toolchain", 200, ip, length(toolchain), length(body), t0)
     return resp |> JSON(body)
@@ -705,6 +706,7 @@ def init_server(port : int; db_path : string; policy : StorePolicy; base_url : s
     g_curated_dir = curated_dir
     g_build = build
     g_stop_requested = false
+    g_last_toolchain_sweep = 0l
     if (!empty(g_build.blobs_dir)) {
         clear_stage_dirs(g_build.blobs_dir)   // a crash mid-upload leaks a stage dir
     }
@@ -741,9 +743,21 @@ def init_server(port : int; db_path : string; policy : StorePolicy; base_url : s
     return true
 }
 
+var private g_last_toolchain_sweep : int64 = 0l
+
+def private evict_stale_toolchains(now : int64) {
+    //! Runs on the serving thread, the one that owns g_db.
+    if (empty(g_build.blobs_dir) || !toolchain_sweep_due(g_last_toolchain_sweep, now)) return
+    g_last_toolchain_sweep = now
+    let toolchain = current_toolchain(g_db)
+    sweep_stale_toolchains(g_build.blobs_dir, toolchain, now)
+    forget_stale_toolchain_jobs(g_db, toolchain, toolchains_on_disk(g_build.blobs_dir), now - STALE_TOOLCHAIN_GRACE_SECONDS)
+}
+
 def update_server : bool {
     //! One tick. Returns false once shutdown was requested.
     return false if (g_server == null)
+    evict_stale_toolchains(current_unix_time())
     g_server->tick()
     if (g_stop_requested) {
         return false

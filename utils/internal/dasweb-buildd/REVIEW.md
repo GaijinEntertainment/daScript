@@ -21,8 +21,8 @@ returns and deletes what it creates before it ends.**
 **Never let `POST /shutdown` act on a request without checking that the transport peer address
 is loopback.** No header can carry that proof.
 
-**Never write the bearer token into a log line, an error message, or the startup banner - the
-banner reports set or unset and the provenance instead.**
+**Never write the service's configured bearer token into a log line, an error message, or the
+startup banner - the banner reports set or unset and the provenance instead.**
 
 **A diff that assembles a filesystem path from a request- or build-derived name - a bundle
 source or a build output alike - without passing that name through `is_valid_source_filename`,
@@ -71,12 +71,20 @@ re-queues jobs from builders that died - is not a resolution.
 
 **Never retain a route callback with `emplace` - use `push` instead.**
 
-**A diff that changes the behavior of a box-side file - `run_build.sh`, `roll_toolchain.sh`,
-`.das_package`, `watchdog.json`, `dasweb-buildd.toml` - also updates the matching `README.md`
-section (The sandbox / The toolchain-bump protocol / Run), in the same change.**
+**A diff that changes the behavior of a file in this folder other than a `.das` source or its
+test also documents that change in `README.md` - in the section covering that file, or in a new
+section for it - in the same change.**
 
-**Never let a toolchain roll (`roll_toolchain.sh`) move the worktree without rebuilding both
-the cross-compile host and the runtime archive.**
+**A diff that changes a build command line in `run_build.sh` also updates the matching
+cache-warming build in `roll_toolchain.sh`, in the same change.**
+
+**Never let a toolchain roll (`roll_toolchain.sh`) move the worktree without also rebuilding
+`bin/daslang` - the host compiler that emits the emcc link line - and
+`web/output64/lib/*_runtime*.a`.**
+
+**Never let a roll step decide to skip itself by reading the worktree's HEAD alone - it skips
+only on a marker the roll writes after its last step.** A roll that dies after the checkout
+leaves HEAD at the target with nothing rebuilt.
 
 **A diff that changes `Containerfile` also bumps the image tag in `run_build.sh` (`IMAGE=`), in
 the same change.**
@@ -112,8 +120,11 @@ its line here, with its tests, in the same change.**
 - `buildd_client.das` - the outbound HTTP calls (claim, result upload, announce). Zero
   filesystem beyond handing paths to the multipart uploader.
 - `run_build.sh` - the box-side build recipe and its sandbox invocation; the only place a
-  build command line or a sandbox mount lives.
-- `roll_toolchain.sh` - the box-side toolchain-bump recipe; the only place a roll step lives.
+  sandboxed build invocation or a sandbox mount lives.
+- `roll_toolchain.sh` - the box-side toolchain-bump recipe; the only place a roll step lives,
+  including how the nightly target commit is chosen (`--green`).
+- `dasweb-buildd-roll.service`, `dasweb-buildd-roll.timer` - the nightly roll: the installed
+  copy of `roll_toolchain.sh` with `--green --if-changed`, as the box user. No build logic.
 - `Containerfile` - the sandbox image: only what a system must provide the toolchain;
   anything a read-only mount can supply belongs in `run_build.sh`.
 - `.das_package`, `watchdog.json`, `dasweb-buildd.toml` - packaging and deployment.

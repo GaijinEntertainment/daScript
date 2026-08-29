@@ -19,11 +19,11 @@ against the store, is a defect.
 creates.**
 
 **Never remove `set_bind_host("127.0.0.1")`, move it past `start`, or make it conditional - it
-stays between `init` and `start`, so the server binds loopback only.**
+stays between the server object's `init(port)` and `start()` calls, so the server binds loopback
+only.**
 
-**A diff that adds a SQL statement puts it through the `daslib/sql_linq` rail (`_sql` /
-`insert` / `_sql_update`) or bound parameters.** A query assembled by string interpolation or
-`format` from any request-derived value is a defect.
+**A diff that adds a SQL statement puts it through a `daslib/sql_linq` call macro or bound
+parameters.** A query assembled by string interpolation or `format` is a defect.
 
 **A route that accepts a body without a `request_body` limit in `caddy.snippet` in front of it
 is a defect, as is a hash or insert reachable without the size check against the configured
@@ -60,9 +60,10 @@ directory into place after every file's sha256 verifies.**
 instead of taking the builder's word.** A build runs the user's own compile-time code, so
 accepting whatever set the builder sends would let a build put an extra file on this origin.
 
-**Never put SQL, hashing, or policy (size, rate, listing) in a route handler, and never require
-`dashv` in `samples_store.das` - a handler validates transport shape, makes one store call, and
-formats the response, and those three live in `samples_store.das`.**
+**Never put SQL, hashing, or policy (size, rate, listing, retention) in a route handler, and
+never require `dashv` in `samples_store.das` - a handler validates transport shape, makes one
+store call, and formats the response, and SQL, hashing, and policy live in the store and cache
+files the placement block names.**
 
 **Never enable CORS on any route.** The middleware reflects the caller's `Origin` on every route
 at once, which would make stored samples and the operator surface cross-origin readable.
@@ -96,8 +97,9 @@ it.** A failure path that can trigger without leaving a log line is a defect.
 **Never serve the first request before the startup banner has logged the full effective config
 with per-key provenance.**
 
-**Never keep state the `init`/`update`/`shutdown` lifecycle owns anywhere but a module global,
-and never leave a collectable value in a `main`-loop local across `maybe_collect_gc()`.**
+**Never keep state the exported `init`/`update`/`shutdown` lifecycle in `main.das` owns anywhere
+but a module global, and never leave a collectable value in a `main`-loop local across
+`maybe_collect_gc()`.**
 
 **Never create a `SqlRunner` on one thread and use it on another - the store opens inside the
 thread that serves it.**
@@ -127,8 +129,9 @@ its line here, with its tests, in the same change.**
 - `playground_config.das` - the config schema (`ServerArgs`), the defaults/toml/CLI merge with
   per-key provenance, normalization of merged config values, the startup banner payload. No
   HTTP, no SQL, no filesystem beyond reading the config file.
-- `playground_server.das` - the `HvWebServer` class: the route table and handlers. No SQL,
-  no hashing, no policy.
+- `playground_server.das` - the `HvWebServer` class: the route table, the handlers, and
+  `init_server`/`update_server`/`shutdown_server`. No SQL statement, no hashing, no policy
+  constant (size, rate, listing, retention).
 - `samples_store.das` - the store: schema structs, migrations, store operations, content
   hashing, and every policy decision (size cap, rate ceiling, listing). Zero HTTP.
 - `build_queue.das` - the build queue: `BuildJob`/`BuildMeta` schema, the migrations it owns,
