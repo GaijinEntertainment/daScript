@@ -183,27 +183,6 @@ def StructType(types : PrimitiveTypes?; var fields : array<LLVMOpaqueType?>) {
 }
 
 
-def LLVMBuildSRemInt32(builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; lhs, rhs : LLVMOpaqueValue?; name : string) {
-    // convert lhs % rhs to lhs - int(double(lhs)/double(rhs))*rhs
-    let l = LLVMBuildSIToFP(builder, lhs, types.t_double, "")
-    let r = LLVMBuildSIToFP(builder, rhs, types.t_double, "")
-    let d = LLVMBuildFDiv(builder, l, r, "")
-    let i = LLVMBuildFPToSI(builder, d, types.t_int32, "")
-    let m = LLVMBuildMul(builder, i, rhs, "")
-    return LLVMBuildSub(builder, lhs, m, name)
-}
-
-
-def LLVMBuildURemUInt32(builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; lhs, rhs : LLVMOpaqueValue?; name : string) {
-    // convert lhs % rhs to lhs - uint(double(lhs)/double(rhs))*rhs
-    let l = LLVMBuildUIToFP(builder, lhs, types.t_double, "")
-    let r = LLVMBuildUIToFP(builder, rhs, types.t_double, "")
-    let d = LLVMBuildFDiv(builder, l, r, "")
-    let i = LLVMBuildFPToUI(builder, d, types.t_int32, "")
-    let m = LLVMBuildMul(builder, i, rhs, "")
-    return LLVMBuildSub(builder, lhs, m, name)
-}
-
 def LLVMIsVector3(typ : LLVMOpaqueType?) : bool {
     return (LLVMGetTypeKind(typ) == LLVMTypeKind.LLVMVectorTypeKind) && (LLVMGetVectorSize(typ) == 3u)
 }

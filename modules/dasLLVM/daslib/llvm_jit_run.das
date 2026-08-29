@@ -36,7 +36,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x69ul   // every string argument of an extern is substituted, not just the ones which asked (0x68: the grid formats' gemv applies signs as one masked negate per weight vector)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x6aul   // srem/urem for 32-bit % (0x69: every string argument of an extern is substituted, not just the ones which asked)
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
@@ -187,6 +187,8 @@ def jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_
     }
     h = (h ^ uint64(CONTEXT_OFFSET_OF_GLOBALS)) * JIT_FNV_PRIME
     h = (h ^ uint64(CONTEXT_OFFSET_OF_SHARED)) * JIT_FNV_PRIME
+    h = (h ^ uint64(CONTEXT_OFFSET_OF_STOP_FLAGS)) * JIT_FNV_PRIME
+    h = (h ^ uint64(CONTEXT_OFFSET_OF_EVAL_TOP)) * JIT_FNV_PRIME
     // full host-CPU identity when the TargetMachine bakes it - the cpuid bits below cover only the matrix-tier features; a wider box's object is an illegal instruction on a narrower one
     if (use_host_cpu) {
         let host_cpu = LLVMGetHostCPUName()

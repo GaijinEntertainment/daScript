@@ -3256,17 +3256,9 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             } elif (expr.op == "%") {
                 if (opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType == Type.tInt)) {
-                    if (opType.baseType == Type.tInt) {
-                        setE(expr, LLVMBuildSRemInt32(g_builder, types, left, right, ""))
-                    } else {
-                        setE(expr, LLVMBuildSRem(g_builder, left, right, ""))
-                    }
+                    setE(expr, LLVMBuildSRem(g_builder, left, right, ""))
                 } elif (opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType == Type.tUInt)) {
-                    if (opType.baseType == Type.tUInt) {
-                        setE(expr, LLVMBuildURemUInt32(g_builder, types, left, right, ""))
-                    } else {
-                        setE(expr, LLVMBuildURem(g_builder, left, right, ""))
-                    }
+                    setE(expr, LLVMBuildURem(g_builder, left, right, ""))
                 } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                     setE(expr, LLVMBuildFRem(g_builder, left, right, ""))
                 } else {
@@ -3274,17 +3266,9 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             } elif (expr.op == "%=") {
                 if (opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType == Type.tInt)) {
-                    if (opType.baseType == Type.tInt) {
-                        setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildSRemInt32(g_builder, types, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
-                    } else {
-                        setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildSRem(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
-                    }
+                    setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildSRem(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
                 } elif (opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType == Type.tUInt)) {
-                    if (opType.baseType == Type.tUInt) {
-                        setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildURemUInt32(g_builder, types, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
-                    } else {
-                        setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildURem(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
-                    }
+                    setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildURem(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
                 } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                     setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFRem(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
                 } else {
