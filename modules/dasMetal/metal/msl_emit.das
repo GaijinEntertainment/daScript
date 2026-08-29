@@ -525,7 +525,7 @@ let private MSL_LADDER_OWNED : table<string> <- {
     "barrier", "memoryBarrierShared", "simdgroup_load", "simdgroup_store", "tg_store_half4",
     "tg_store_float4", "simdgroup_multiply", "simdgroup_multiply_accumulate", "sgmat_to_half",
     "make_filled_simdgroup_float8x8", "make_filled_simdgroup_half8x8",
-    "simd_sum", "simd_shuffle", "simd_shuffle_up", "simd_shuffle_down", "simd_shuffle_xor",
+    "simd_sum", "simd_max", "simd_shuffle", "simd_shuffle_up", "simd_shuffle_down", "simd_shuffle_xor",
     "sdot4", "usdot4", "i_das_ptr_add",
     "tmm2d_f32_bf16_f32", "tmm2d_f16w_f32", "tmm2d_q8_f32", "tmm2d_q8_f16s", "tmm2d_q8b_f32", "tmm2d_q8u_f32",
     "tmm2d_tg_begin", "tmm2d_tg_step", "tmm2d_tg_store", "tmm2d_tg_store_bias", "tmm2d_tg_store_half",
@@ -1404,14 +1404,14 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         note(ctx, "call.math.{cname}.{acls}")
         return "{cname}({a}, {b})"
     }
-    if (cname == "simd_sum") {
+    if (cname == "simd_sum" || cname == "simd_max") {
         if (na != 1) {
-            err(ctx, ec.at, "simd_sum takes exactly one argument")
+            err(ctx, ec.at, "{cname} takes exactly one argument")
             return "/*call {cname}*/"
         }
         let v = emit_value(ctx, ec.arguments[0])
-        note(ctx, "call.simd_sum.{census_class(ec._type)}")
-        return "simd_sum({v})"
+        note(ctx, "call.{cname}.{census_class(ec._type)}")
+        return "{cname}({v})"
     } elif (cname == "simd_shuffle" || cname == "simd_shuffle_up" ||
             cname == "simd_shuffle_down" || cname == "simd_shuffle_xor") {
         if (na != 2) {
@@ -2146,10 +2146,6 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
         err(ctx, ec.at, "{cname} cannot address a @uniform member - use an @ssbo buffer")
         return
     }
-    if (m.workgroup && !isLoad) {
-        err(ctx, ec.at, "simdgroup_store targets an @ssbo buffer - threadgroup stores are not supported")
-        return
-    }
     let mv = emit_value(ctx, ec.arguments[0])
     let cls = sgmat_census_class(sgname)
     let off = emit_value(ctx, ec.arguments[2])
@@ -2163,7 +2159,7 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
     if (isLoad) {
         note(ctx, m.workgroup ? "call.sgmat_load_tg.{cls}" : "call.sgmat_load.{cls}")
     } else {
-        note(ctx, "call.sgmat_store.{cls}")
+        note(ctx, m.workgroup ? "call.sgmat_store_tg.{cls}" : "call.sgmat_store.{cls}")
     }
     lines |> push("{indent}{cname}({mv}, {m.msl_name} + {off}, {stride});")
 }

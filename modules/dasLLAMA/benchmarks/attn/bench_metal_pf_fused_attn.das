@@ -292,7 +292,7 @@ def private cpu_oracle(q, k, v : array<float>; var o : array<float>; np, heads, 
 }
 
 [export]
-def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
+def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var dev = metal_create_system_default_device()
         var queue = metal_new_command_queue(dev)
@@ -716,6 +716,43 @@ def main {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs st
                             }
                         }
                         print("  PORTC np={np}: slab(hs128)={t_slab4}ms lcpp-flash72hc={t_hc}ms ratio={t_hc / t_slab4}  maxrel={maxrel_c}\n")
+                        // the PRODUCTION dialect emission (metal_tower_flash_msl) on the same buffers
+                        var perrd = ""
+                        var pso_dial = pipeline_from_source(dev, metal_tower_flash_msl, metal_tower_flash_msl_entry, metal_tower_flash_msl_fastmath, perrd)
+                        if (pso_dial == null) {
+                            print("  dial pso: {perrd}\n")
+                        } else {
+                            var bod = race_buf(dev, uint64(np * qdt * 4), null)
+                            var t_slab5 = -1.0lf
+                            var t_dial = -1.0lf
+                            race_pair_ms(queue, 5, t_slab5, t_dial, $(enc) {
+                                kn_pipeline(enc, pso_qkt)
+                                kn_buffer(enc, bq, 0ul, 0)
+                                kn_buffer(enc, bk, 0ul, 1)
+                                kn_buffer(enc, batt, 0ul, 2)
+                                kn_kargs(enc, ka, 3)
+                                kn_dispatch(enc, uint3(uint(np / 32), uint(np / 64), uint(heads)), uint3(128u, 1u, 1u))
+                            }, $(enc) {
+                                kn_pipeline(enc, pso_dial)
+                                kn_tgmem(enc, metal_tower_flash_msl_tgmem, 0)
+                                kn_buffer(enc, bqt, 0ul, 0)
+                                kn_buffer(enc, bkhc, 0ul, 1)
+                                kn_buffer(enc, bvhc, 0ul, 2)
+                                kn_buffer(enc, bod, 0ul, 3)
+                                kn_kargs(enc, kat, 4)
+                                kn_dispatch(enc, uint3(uint(np / 8), uint(heads), 1u), uint3(128u, 1u, 1u))
+                            })
+                            var maxrel_d = 0.0
+                            unsafe {
+                                let pg = reinterpret<float?>(metal_buffer_contents(bod))
+                                for (ii in range(ncheck * qdt)) {
+                                    maxrel_d = max(maxrel_d, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
+                                }
+                            }
+                            print("  DIAL  np={np}: flash-dialect={t_dial}ms  maxrel={maxrel_d}\n")
+                            metal_release(bod)
+                            metal_release(pso_dial)
+                        }
                         metal_release(bkhc)
                         metal_release(bvhc)
                         metal_release(bohc)

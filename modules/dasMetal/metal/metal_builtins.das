@@ -24,6 +24,9 @@ require daslib/math_bits   // uint_bits_to_float — the tensor-op CPU stubs dec
 [unused_argument(v), sideeffects] def public simd_sum(v : int) : int { return v }
 [unused_argument(v), sideeffects] def public simd_sum(v : uint) : uint { return v }
 
+// simd_max(v): maximum of v across the simdgroup's active lanes.
+[unused_argument(v), sideeffects] def public simd_max(v : float) : float { return v }
+
 // simd_shuffle(v, lane): v from the given absolute lane. Reading an inactive lane is undefined —
 // keep shuffles in simdgroup-uniform control flow and select the edge cases on the VALUE after.
 [unused_argument(lane), sideeffects] def public simd_shuffle(v : float; lane : uint) : float { return v }

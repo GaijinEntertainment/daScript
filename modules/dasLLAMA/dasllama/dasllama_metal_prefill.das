@@ -2485,6 +2485,159 @@ class MetalAttnAVMmP : MetalAttnAVMmSgT {
     override PADFREE = true
 }
 
+//!@nolint
+//! The tower flash - the reference engine's flash_attn_ext monomorphized at DK = DV = 72
+//! (8 queries/tg, 64 keys/block, 4 simdgroups): bidirectional, no score slab, no rowstat,
+//! no head restrides. K/V are per-head-contiguous f16 panels [heads x npos x 72] with
+//! npos % 64 rows and >= 256 elements of V tail slack (dead PV-pad tiles read past the last
+//! row by design); Q and the output ride the towers' compact f32 [pos x heads*72] rows.
+[metal_dispatch(name = "enc_tower_flash", pso = "g_pf_pso_twr_flash", tgmem = "metal_tower_flash_msl_tgmem", tg = 128, grid = "mp/8, heads", params = "mp : int64, heads : int64")]
+class MetalTowerFlash {
+    @ssbo @binding = 0 @role = "read" q : array<float>      //!< [npos x heads*72] compact, roped, UNSCALED
+    @ssbo @binding = 1 @role = "read" kh : array<float16>   //!< [heads x npos x 72] f16
+    @ssbo @binding = 2 @role = "read" vh : array<float16>   //!< [heads x npos x 72] f16 + tail slack
+    @ssbo @binding = 3 @role = "write" xb : array<float>    //!< [mp x heads*72] compact attention out
+    @uniform @binding = 4 ka : AttnArgs
+    @workgroup sq : float16[576]        //!< Q tile: 8 q-rows x 72
+    @workgroup so : float[1024]         //!< O: 8 rows x PV = 128 (cols past 72 ride dead, never stored)
+    @workgroup ss : float[1024]         //!< scores: 8 rows x SH = 128 (64 used per block)
+
+    [metal_kernel(name="metal_tower_flash_msl")]
+    def metal_tower_flash {   // nolint:STYLE038 — the lifted flash body, barrier-coupled
+        let iq2 = gl_WorkGroupID.y
+        let iq1 = gl_WorkGroupID.x * 8u
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let lane = lid & 31u
+        let np = ka.npos
+        let qd = ka.qd
+        for (jj in range(2)) {
+            let j = uint(jj) * 4u + sg
+            var i = lane
+            while (i < 72u) {
+                sq[j * 72u + i] = iq1 + j < np ? float16(q[(iq1 + j) * qd + iq2 * 72u + i]) : float16(0.0)
+                so[j * 128u + i] = 0.0
+                i += 32u
+            }
+        }
+        barrier()
+        var s0acc = 0.0
+        var s1acc = 0.0
+        var m0acc = -1.5e38
+        var m1acc = -1.5e38
+        var ic = 0u
+        while (ic < np) {
+            var kp = unsafe(addr(kh[(iq2 * np + ic + sg * 8u) * 72u]))
+            var psoff = sg * 8u
+            for (_cc in range(2)) {
+                var mqk : simdgroup_float8x8
+                for [unroll_full] (i in range(9)) {
+                    var mk : simdgroup_half8x8
+                    var mq : simdgroup_half8x8
+                    simdgroup_load(mk, kp, uint(i) * 8u, 72u, true)
+                    simdgroup_load(mq, sq, uint(i) * 8u, 72u)
+                    simdgroup_multiply_accumulate(mqk, mq, mk, mqk)
+                }
+                simdgroup_store(mqk, ss, psoff, 128u)
+                kp = unsafe(kp + 8 * 4 * 72)
+                psoff += 32u
+            }
+            barrier()
+            for (jj in range(2)) {
+                let j = uint(jj) * 4u + sg
+                let mold = jj == 0 ? m0acc : m1acc
+                let sa = ss[j * 128u + 2u * lane] * ka.scale
+                let sb = ss[j * 128u + 2u * lane + 1u] * ka.scale
+                let mnew = simd_max(max(mold, max(sa, sb)))
+                let ms = exp(mold - mnew)
+                let va = exp(sa - mnew)
+                let vb = exp(sb - mnew)
+                if (jj == 0) {
+                    m0acc = mnew
+                    s0acc = s0acc * ms + simd_sum(va + vb)
+                } else {
+                    m1acc = mnew
+                    s1acc = s1acc * ms + simd_sum(va + vb)
+                }
+                ss[j * 128u + 2u * lane] = va
+                ss[j * 128u + 2u * lane + 1u] = vb
+                var i = lane
+                while (i < 72u) {
+                    so[j * 128u + i] *= ms
+                    i += 32u
+                }
+            }
+            barrier()
+            var lo : simdgroup_float8x8[4]
+            for [unroll_full] (ii in range(4)) {
+                simdgroup_load(lo[ii], so, sg * 8u + uint(ii) * 32u, 128u)
+            }
+            var pv = unsafe(addr(vh[iq2 * np * 72u + ic * 72u + sg * 8u]))
+            for (cc in range(4)) {
+                var vs0 : simdgroup_float8x8
+                var vs1 : simdgroup_float8x8
+                simdgroup_load(vs0, ss, 16u * uint(cc), 128u)
+                simdgroup_load(vs1, ss, 16u * uint(cc) + 8u, 128u)
+                for [unroll_full] (ii in range(2)) {
+                    var mv0 : simdgroup_half8x8
+                    var mv1 : simdgroup_half8x8
+                    var mv2 : simdgroup_half8x8
+                    var mv3 : simdgroup_half8x8
+                    simdgroup_load(mv0, pv, uint(ii) * 64u, 72u)
+                    simdgroup_load(mv1, pv, uint(ii) * 64u + 32u, 72u)
+                    simdgroup_load(mv2, pv, uint(ii) * 64u + 8u * 72u, 72u)
+                    simdgroup_load(mv3, pv, uint(ii) * 64u + 32u + 8u * 72u, 72u)
+                    simdgroup_multiply_accumulate(lo[2 * ii + 0], vs0, mv0, lo[2 * ii + 0])
+                    simdgroup_multiply_accumulate(lo[2 * ii + 1], vs0, mv1, lo[2 * ii + 1])
+                    simdgroup_multiply_accumulate(lo[2 * ii + 0], vs1, mv2, lo[2 * ii + 0])
+                    simdgroup_multiply_accumulate(lo[2 * ii + 1], vs1, mv3, lo[2 * ii + 1])
+                }
+                pv = unsafe(pv + 16 * 72)
+            }
+            for [unroll_full] (ii in range(4)) {
+                simdgroup_store(lo[ii], so, sg * 8u + uint(ii) * 32u, 128u)
+            }
+            barrier()
+            ic += 64u
+        }
+        for (jj in range(2)) {
+            let j = uint(jj) * 4u + sg
+            if (iq1 + j < np) {
+                let stot = jj == 0 ? s0acc : s1acc
+                let sc = stot == 0.0 ? 0.0 : 1.0 / stot
+                var i = lane
+                while (i < 72u) {
+                    xb[(iq1 + j) * qd + iq2 * 72u + i] = so[j * 128u + i] * sc
+                    i += 32u
+                }
+            }
+        }
+    }
+}
+
+//! Restride+convert one compact [npos x heads*hs] f32 tensor into the per-head-contiguous
+//! f16 panels [heads x npos x hs] the tower flash reads - one thread per element.
+[metal_dispatch(name = "enc_tower_kv_hc", pso = "g_pf_pso_twr_kvhc", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalTowerKvHc {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" xh : array<float16>
+    @uniform @binding = 2 hs : uint
+    @uniform @binding = 3 d : uint        //!< heads*hs, the compact row width
+    @uniform @binding = 4 np : uint
+    @uniform @binding = 5 total : uint    //!< np*d
+
+    [metal_kernel(name="metal_tower_kv_hc_msl")]
+    def metal_tower_kv_hc {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let p = gid / d
+        let c = gid % d
+        xh[((c / hs) * np + p) * hs + c % hs] = float16(x[gid])
+    }
+}
+
 //! Interleave two [npos x d] panels into the [npos x 2d] MTP eh_proj input: rows are [enorm(embed) ; hnorm(hidden)].
 [metal_dispatch(name = "pf_enc_cat2", pso = "g_pf_pso_cat2", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalPfCat2 {
@@ -2534,6 +2687,8 @@ var private g_pf_pso_qk : MetalComputePipeline?
 var private g_pf_pso_rowstat : MetalComputePipeline?
 var private g_pf_pso_av : MetalComputePipeline?
 var private g_pf_pso_cat2 : MetalComputePipeline?
+var private g_pf_pso_twr_flash : MetalComputePipeline?   //!< the tower flash (DK=DV=72 monomorph)
+var private g_pf_pso_twr_kvhc : MetalComputePipeline?    //!< its K/V per-head-contiguous f16 restride
 var private g_pf_pso_mm_t : MetalComputePipeline?  //!< the mul_mm TENSOR twin; the base is the shared g_pso_mm
 var private g_pf_pso_mm_th : MetalComputePipeline?  //!< its half-X stamp (the converted f16 activation panel)
 var private g_pf_pso_mm_t128 : MetalComputePipeline?
@@ -2948,6 +3103,8 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_mm_th128)
         g_pf_pso_mm_th128 = null
     }
+    release_pso(g_pf_pso_twr_flash)
+    release_pso(g_pf_pso_twr_kvhc)
     if (g_pf_pso_cvt_half != null) {
         metal_release(g_pf_pso_cvt_half)
         g_pf_pso_cvt_half = null
@@ -3176,6 +3333,8 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         g_pf_pso_dq_k6 = compile_pso(metal_dequant_k6h_msl, metal_dequant_k6h_msl_entry, metal_dequant_k6h_msl_fastmath, ok)
     }
     g_pf_pso_qkmm = compile_pso(metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, ok)
+    g_pf_pso_twr_flash = compile_pso(metal_tower_flash_msl, metal_tower_flash_msl_entry, metal_tower_flash_msl_fastmath, ok)
+    g_pf_pso_twr_kvhc = compile_pso(metal_tower_kv_hc_msl, metal_tower_kv_hc_msl_entry, metal_tower_kv_hc_msl_fastmath, ok)
     g_pf_pso_avmm = compile_pso(MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_pso_avmm_p = compile_pso(MetalAttnAVMmP_metal_attn_av_mm_msl, MetalAttnAVMmP_metal_attn_av_mm_msl_entry, MetalAttnAVMmP_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_qkmm_tensor = metal_tensor_crowned("attn_qkmm")
@@ -3420,6 +3579,10 @@ def pf_hmm_ready() : bool => g_pf_pso_hmm_th != null && g_pf_pso_cvt_half != nul
 //! Whether [[pf_enc_bf16_mm]] would take a converted half-X panel (its tensor half-X stamp
 //! compiled) - callers skip the conversion dispatch when the base form would ignore it.
 def pf_bf16_half_ready() : bool => g_pf_pso_bf16_mm_th != null && g_pf_pso_cvt_half != null
+
+//! Whether the tower flash pair compiled - the tower driver's flash-route gate (pure
+//! simdgroup kernels, no tensor crown required).
+def pf_tower_flash_ready() : bool => g_pf_pso_twr_flash != null && g_pf_pso_twr_kvhc != null
 
 def private pf_devw_flip : MetalBuffer ? {
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh

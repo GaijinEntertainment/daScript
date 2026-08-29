@@ -30,6 +30,7 @@ var private g_tw_failed = false
 var private g_tw_pool : MetalBufferPool
 var private g_tw_env_tower = true
 var private g_tw_env_tower_f16 = true
+var private g_tw_env_tower_flash = true
 var private g_tw_ones : MetalBuffer?      // [TW_ONES_DIM] ones — the weightless-rms weight bind
 let private TW_ONES_DIM = 8192
 
@@ -58,6 +59,11 @@ def set_metal_tower(on : bool) {
 //! The qwen3v f16-W route's A/B seat (DASLLAMA_METAL_TOWER_F16's in-process twin).
 def set_metal_tower_f16(on : bool) {
     g_tw_env_tower_f16 = on
+}
+
+//! The tower-flash route's A/B seat (DASLLAMA_METAL_TOWER_FLASH's in-process twin).
+def set_metal_tower_flash(on : bool) {
+    g_tw_env_tower_flash = on
 }
 
 //! Encodes whose block/merger GEMMs rode the f16-W shadow route — the engage witness.
@@ -522,15 +528,20 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
     // an empty wblob IS the ineligibility flag: the mint bakes the twin only for f16-sourced GEMMs
     let f16_route = g_tw_env_tower_f16 && length(t.wblob) > 0l && pf_hmm_ready()
+    // the flash route: head-72 towers at %64 canvases - no slab, no rowstat, no restrides
+    let flash = g_tw_env_tower_flash && hs == 72l && npos % 64l == 0l && pf_tower_flash_ready()
     let bytes_row = uint64(mp * d * 4l)
     let bytes_rowp = uint64(mp * dp * 4l)
     let bytes_h = uint64(mp * ff * 4l)
-    let bytes_att = uint64(t.n_head * mp * nk64 * 2l)
+    let bytes_att = flash ? 64ul : uint64(t.n_head * mp * nk64 * 2l)   // the slab only exists off the flash route
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
     let bytes_xh = uint64(mp * ff * 2l)
+    let bytes_hc = uint64(t.n_head * npos * hs * 2l + 512l)   // per-head-contiguous f16 K/V (+ the flash's V tail slack)
     var bxh = f16_route ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null   // the shared f16 X panel
     var bwh = f16_route ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
     let f16w = f16_route && bwh != null && bxh != null
+    var bkhc = flash ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_hc) : null
+    var bvhc = flash ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_hc) : null
     var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
@@ -561,27 +572,43 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     var u_totff = uniform_u32(uint(npos * ff))
     var u_totp = uniform_u32(uint(npos * t.n_head * hs_pad))   // restride total, pad direction
     var u_totc = uniform_u32(uint(npos * t.n_head * hs))       // restride total, compact direction
+    var u_np = uniform_u32(uint(npos))
     var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
+        qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
+    var kaf = AttnArgs(qd = uint(d), kv_dim = uint(d), head_size = uint(hs), kv_mul = 1u,
+        npos = uint(npos), np32 = uint(npos), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         for (l in range64(t.n_layer)) {
             let o = gemma3v_block_offs(t, l)
             enc_ln(enc, bx, bblob, uint64(o.ln1_w * 4l), bblob, uint64(o.ln1_b * 4l), bxb, u_d, u_eps, npos)
-            tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_Q], bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, true)
-            enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_Q] * 4l), u_d, u_totd, npos * d)
-            enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            // the flash reads Q compact, so its Q GEMM lands in bq directly (braw is reused by K/V)
+            tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_Q], bxb, bxh, flash ? bq : braw, 0ul, u_d, u_d, mp, d, d, true)
+            enc_add_bias_rows(enc, flash ? bq : braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_Q] * 4l), u_d, u_totd, npos * d)
+            if (!flash) {
+                enc_head_restride(enc, braw, 0ul, bq, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            }
             tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_K], bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_K] * 4l), u_d, u_totd, npos * d)
-            enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            if (!flash) {
+                enc_head_restride(enc, braw, 0ul, bk, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+            } else {
+                enc_tower_kv_hc(enc, braw, bkhc, u_hs, u_d, u_np, u_totd, npos * d)
+            }
             tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_V], bxb, bxh, braw, 0ul, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, braw, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_V] * 4l), u_d, u_totd, npos * d)
-            enc_head_restride(enc, braw, 0ul, bv, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
-            enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
-            enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
-            enc_av_mm(enc, batt, bv, bo_p, ka, bstat, mp, t.n_head, hs_pad)
-            enc_head_restride(enc, bo_p, 0ul, bxb2, 0ul, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
+            if (!flash) {
+                enc_head_restride(enc, braw, 0ul, bv, 0ul, u_hs, u_hsp, u_totp, npos * t.n_head * hs_pad)
+                enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
+                enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
+                enc_av_mm(enc, batt, bv, bo_p, ka, bstat, mp, t.n_head, hs_pad)
+                enc_head_restride(enc, bo_p, 0ul, bxb2, 0ul, u_hsp, u_hs, u_totc, npos * t.n_head * hs)
+            } else {
+                enc_tower_kv_hc(enc, braw, bvhc, u_hs, u_d, u_np, u_totd, npos * d)
+                enc_tower_flash(enc, bq, bkhc, bvhc, bxb2, kaf, mp, t.n_head)
+            }
             tw_mm(enc, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_O], bxb2, bxh, bxb, 0ul, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_O] * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
@@ -621,6 +648,13 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     if (bxh != null) {
         pool_release(g_tw_pool, bxh, bytes_xh)
     }
+    if (bkhc != null) {
+        pool_release(g_tw_pool, bkhc, bytes_hc)
+    }
+    if (bvhc != null) {
+        pool_release(g_tw_pool, bvhc, bytes_hc)
+    }
+    pool_release(g_upool, u_np, 4ul)
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_ff, 4ul)
     pool_release(g_upool, u_hs, 4ul)
@@ -1168,6 +1202,7 @@ def private metal_q3a_convs(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
 def dasllama_metal_tower_register {
     g_tw_env_tower = g_env_metal.tower
     g_tw_env_tower_f16 = g_env_metal.tower_f16
+    g_tw_env_tower_flash = g_env_metal.tower_flash
     register_gemma4uv_gpu(@@metal_gemma4uv_encode)
     register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_tower_serves)
     register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_tower_serves)

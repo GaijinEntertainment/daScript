@@ -440,6 +440,165 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
     delete prow
 }
 
+// ===== the tower flash (the dk72 lifted flash + its per-head-contiguous f16 K/V restride) =====
+// f16-representable inputs make the f64 oracle exact up to accumulation order; the poison is
+// a VALUE added to one V element (never a tolerance multiple), and kv_hc's panel is BIT-checked.
+def private tower_flash_gate(t : T?; dev, queue) {
+    let tag = "tower_flash"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_tower_flash_msl, metal_tower_flash_msl_entry, metal_tower_flash_msl_fastmath, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
+    return if (pso == null)
+    var pso_hc = pipeline_from_source(dev, metal_tower_kv_hc_msl, metal_tower_kv_hc_msl_entry, metal_tower_kv_hc_msl_fastmath, err)
+    t |> success(pso_hc != null, "{tag} kv_hc pipeline: {err}")
+    return if (pso_hc == null)
+    let np = 128
+    let heads = 2
+    let hs = 72
+    let qd = heads * hs
+    var qv : array<float>
+    var kv : array<float>
+    var vv : array<float>
+    qv |> resize(np * qd)
+    kv |> resize(np * qd)
+    vv |> resize(np * qd)
+    for (i in range(np * qd)) {
+        qv[i] = float(float16(0.11 * float(i % 37) - 1.9))
+        kv[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
+        vv[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
+    }
+    var khc : array<float16>
+    var vhc : array<float16>
+    khc |> resize(np * qd)
+    vhc |> resize(np * qd + 256)   // + the flash's V tail slack
+    for (p in range(np)) {
+        for (c in range(qd)) {
+            khc[((c / hs) * np + p) * hs + c % hs] = float16(kv[p * qd + c])
+            vhc[((c / hs) * np + p) * hs + c % hs] = float16(vv[p * qd + c])
+        }
+    }
+    var want : array<float>
+    want |> resize(np * qd)
+    let scale = 1.0 / sqrt(float(hs))
+    for (h in range(heads)) {
+        for (qi in range(np)) {
+            var mx = -3.0e38
+            for (j in range(np)) {
+                var sd = 0.0lf
+                for (dd in range(hs)) {
+                    sd += double(float(float16(qv[qi * qd + h * hs + dd]))) * double(kv[j * qd + h * hs + dd])
+                }
+                mx = max(mx, float(sd) * scale)
+            }
+            var tot = 0.0lf
+            var oa : float[72]
+            for (dd in range(hs)) {
+                oa[dd] = 0.0
+            }
+            for (j in range(np)) {
+                var sd = 0.0lf
+                for (dd in range(hs)) {
+                    sd += double(float(float16(qv[qi * qd + h * hs + dd]))) * double(kv[j * qd + h * hs + dd])
+                }
+                let e = exp(float(sd) * scale - mx)
+                tot += double(e)
+                for (dd in range(hs)) {
+                    oa[dd] += e * vv[j * qd + h * hs + dd]
+                }
+            }
+            for (dd in range(hs)) {
+                want[qi * qd + h * hs + dd] = oa[dd] / float(tot)
+            }
+        }
+    }
+    var bq = buf_upload(dev, qv)
+    var bkc = buf_upload(dev, kv)
+    var bvc = buf_upload(dev, vv)
+    var bkh = buf_fill(dev, np * qd, float16(-77.0))          // poison fill: an unwritten panel slot reds the bit compare
+    var bvh = buf_fill(dev, np * qd + 256, float16(-77.0))
+    var bo = buf_fill(dev, np * qd, -1.0e30)
+    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(qd), head_size = uint(hs), kv_mul = 1u,
+        npos = uint(np), np32 = uint(np), scale = scale,
+        qoff = 0u, qrows = uint(np), window = 0u, softcap = 0.0, hass = 0u, uend = uint(np))
+    var u_hs = uint(hs)
+    var u_d = uint(qd)
+    var u_np = uint(np)
+    var u_tot = uint(np * qd)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso_hc)
+        metal_set_buffer(enc, bkc, 0ul, 0)
+        metal_set_buffer(enc, bkh, 0ul, 1)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_hs)), 4ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_np)), 4ul, 4)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint((np * qd + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+        metal_set_buffer(enc, bvc, 0ul, 0)
+        metal_set_buffer(enc, bvh, 0ul, 1)
+        metal_dispatch_threadgroups(enc, uint3(uint((np * qd + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_tower_flash_msl_tgmem, 0)
+        metal_set_buffer(enc, bq, 0ul, 0)
+        metal_set_buffer(enc, bkh, 0ul, 1)
+        metal_set_buffer(enc, bvh, 0ul, 2)
+        metal_set_buffer(enc, bo, 0ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+        metal_dispatch_threadgroups(enc, uint3(uint(np / 8), uint(heads), 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag} dispatch: {err}")
+    return if (!ran)
+    t |> equal(buf_mismatch_exact(bkh, khc, "{tag} kv_hc K panel"), 0)
+    var vslice : array<float16>
+    vslice |> resize(np * qd)
+    for (i in range(np * qd)) {
+        vslice[i] = vhc[i]
+    }
+    t |> equal(buf_mismatch_exact(bvh, vslice, "{tag} kv_hc V panel"), 0)
+    t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
+    // the poison: +3.0 on ONE V element must red the same bars through the whole chain
+    vv[(np / 2) * qd + hs / 2] += 3.0
+    var bvc2 = buf_upload(dev, vv)
+    let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso_hc)
+        metal_set_buffer(enc, bvc2, 0ul, 0)
+        metal_set_buffer(enc, bvh, 0ul, 1)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_hs)), 4ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_np)), 4ul, 4)
+        metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint((np * qd + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_tower_flash_msl_tgmem, 0)
+        metal_set_buffer(enc, bq, 0ul, 0)
+        metal_set_buffer(enc, bkh, 0ul, 1)
+        metal_set_buffer(enc, bvh, 0ul, 2)
+        metal_set_buffer(enc, bo, 0ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+        metal_dispatch_threadgroups(enc, uint3(uint(np / 8), uint(heads), 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran2, "{tag} poison dispatch: {err}")
+    if (ran2) {
+        t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} poison (MUST mismatch)") > 0,
+            "{tag}: a poisoned V element reds the bars through kv_hc + flash")
+    }
+    metal_release(bq)
+    metal_release(bkc)
+    metal_release(bvc)
+    metal_release(bvc2)
+    metal_release(bkh)
+    metal_release(bvh)
+    metal_release(bo)
+    metal_release(pso)
+    metal_release(pso_hc)
+    delete qv
+    delete kv
+    delete vv
+    delete khc
+    delete vhc
+    delete vslice
+    delete want
+}
+
 [test]
 def test_metal_prefill_kernels(t : T?) {
     t |> run("phase-6 prefill kernels == dasLLAMA CPU twins") @(t : T?) {
@@ -620,6 +779,9 @@ def test_metal_prefill_kernels(t : T?) {
                 qk_rope_gate(t, dev, queue, false, true, false, false)   // classic pairing with norm
                 qk_rope_gate(t, dev, queue, true, false, false, false)   // rope-only + twin, llama class
                 qk_rope_gate(t, dev, queue, false, false, true, true)    // partial rot, Wave D class
+
+                // ===== the tower flash + its hc K/V restride =====
+                tower_flash_gate(t, dev, queue)
 
                 // ===== attention: the tiled sgmat trio vs the direct causal-GQA oracle, at the
                 // classic small shape (hs 32 — one QK k-slab) AND the llama-3B head shape
