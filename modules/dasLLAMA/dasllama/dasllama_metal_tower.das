@@ -542,6 +542,9 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     let f16w = f16_route && bwh != null && bxh != null
     var bkhc = flash ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_hc) : null
     var bvhc = flash ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_hc) : null
+    let pd = gemma3v_patch_pad(t)
+    let bytes_x0 = uint64(mp * pd * 4l)
+    var bx0 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x0)   // im2col rows - the GPU stem's input
     var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
@@ -554,9 +557,9 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     var bstat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_stat)
     unsafe {
-        var p = reinterpret<uint8?>(metal_buffer_contents(bx))
-        memcpy(p, addr(s.x[0]), npos * d * 4l)
+        memcpy(metal_buffer_contents(bx0), addr(s.x0[0]), npos * pd * 4l)
         if (mp > npos) {   // DEFENSIVE pad zero (controls stay green without it): guards stale-Inf pool reuse
+            var p = reinterpret<uint8?>(metal_buffer_contents(bx))
             var zp = reinterpret<float?>(p + npos * d * 4l)
             for (i in range64((mp - npos) * d)) {
                 zp[i] = 0.0
@@ -573,6 +576,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     var u_totp = uniform_u32(uint(npos * t.n_head * hs_pad))   // restride total, pad direction
     var u_totc = uniform_u32(uint(npos * t.n_head * hs))       // restride total, compact direction
     var u_np = uniform_u32(uint(npos))
+    var u_pd = uniform_u32(uint(pd))
     var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
@@ -581,6 +585,10 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        // the stem: padded patch GEMM + conv bias + the learned positions (all row-aligned)
+        enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, bx, 0ul, u_pd, u_d, mp, d)
+        enc_add_bias_rows(enc, bx, 0ul, bblob, uint64(t.patch_b * 4l), u_d, u_totd, npos * d)
+        enc_add(enc, bx, 0ul, bblob, uint64(t.pos_w * 4l), u_totd, npos * d)
         for (l in range64(t.n_layer)) {
             let o = gemma3v_block_offs(t, l)
             enc_ln(enc, bx, bblob, uint64(o.ln1_w * 4l), bblob, uint64(o.ln1_b * 4l), bxb, u_d, u_eps, npos)
@@ -654,6 +662,8 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     if (bvhc != null) {
         pool_release(g_tw_pool, bvhc, bytes_hc)
     }
+    pool_release(g_tw_pool, bx0, bytes_x0)
+    pool_release(g_upool, u_pd, 4ul)
     pool_release(g_upool, u_np, 4ul)
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_ff, 4ul)

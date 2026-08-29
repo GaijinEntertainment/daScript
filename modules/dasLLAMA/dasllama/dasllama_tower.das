@@ -604,11 +604,11 @@ def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : 
 //! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in [C][KH][KW]
 //! order (row index c·p² + ky·p + kx), one row per non-overlapping p×p patch walking the canvas
 //! row-major (pos_x = i % n_cols, pos_y = i / n_cols). Returns npos; ``x0`` grows to npos × 3p².
-def im2col_rgb_patches(planes : array<float>; w, h, p : int64; @scratch var x0 : array<float>) : int64 {
+def im2col_rgb_patches(planes : array<float>; w, h, p : int64; @scratch var x0 : array<float>; row_stride : int64 = 0l) : int64 {
     let n_cols = w / p
     let npos = n_cols * (h / p)
     let psq = p * p
-    let row_dim = 3l * psq
+    let row_dim = row_stride > 0l ? row_stride : 3l * psq   // a padded stride's tail lanes stay the resize's zeros
     if (long_length(x0) < npos * row_dim) {
         x0 |> reserve(npos * row_dim)
         x0 |> resize(npos * row_dim)
