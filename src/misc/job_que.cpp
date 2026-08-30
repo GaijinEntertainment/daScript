@@ -1434,7 +1434,7 @@ namespace das
     void SetCurrentThreadAffinityCpu ( int, bool ) {}
 #else
     void SetCurrentThreadAffinityCpu ( int cpu, bool hard ) {
-        if ( !hard || cpu < 0 ) return;   // linux has no soft "ideal CPU" hint - only the hard-mask mode pins; a negative cpu is GetCurrentProcessorIndex's unsupported value
+        if ( !hard || cpu < 0 || cpu >= int(CPU_SETSIZE) ) return;   // linux has no soft "ideal CPU" hint - only the hard-mask mode pins; a negative cpu is GetCurrentProcessorIndex's unsupported value, and CPU_SET past CPU_SETSIZE writes off the set
         cpu_set_t cs;
         CPU_ZERO(&cs);
         CPU_SET(cpu, &cs);

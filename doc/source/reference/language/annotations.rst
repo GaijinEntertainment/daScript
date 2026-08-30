@@ -411,8 +411,9 @@ Markers and Hints
       bounds check (interpreter and JIT). An out-of-range index then reads or writes past the
       container.
     - ``unsafe_division_check`` - every integer ``/`` and ``%`` in the function skips its
-      division-by-zero and ``INT_MIN / -1`` guards (JIT). A zero divisor then traps the
-      process instead of panicking.
+      division-by-zero and ``INT_MIN / -1`` guards (JIT). Those inputs are then undefined
+      behavior in the emitted code - never a daslang panic: x86 traps the process, ARM's
+      ``sdiv`` yields 0 with no trap.
 
     The JIT also reads ``alwaysinline``, ``noinline``, ``optnone``, ``hot``, ``cold`` and the
     other LLVM attribute keys spelled in ``modules/dasLLVM/daslib/llvm_jit.das``.
