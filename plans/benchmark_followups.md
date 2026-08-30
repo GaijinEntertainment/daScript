@@ -56,3 +56,13 @@ proper benchmarks - bind the CRT twins of every scalar math builtin in the dasTe
 the test cycle is short (no core rebuild), compare side by side in all three tiers (AOT,
 interpreter, JIT), and keep the winners; `benchmarks/core/math/exp.das` and the two bound
 functions stay.
+
+## the M1 AOT exp-loop residual after the CRT switch
+
+The 2026-08-30 re-profile: zen2 AOT exp loop 9215 -> 3412 us (level with JIT 3383 and C++ 3240),
+but the M1's went only 3592 -> 3414 while its JIT and C++ sit at ~1650. The AOT TU verifiably
+recompiled against the switched header, so exp is the CRT there - the residual is the AOT loop
+shape itself: the `das_iterator<range>` machinery and the `rcp_est` lane round-trip are the
+suspects, and neither shows on zen2 because MSVC's codegen was the bottleneck there. Wants its
+own probe on the M1 (the family-probe pattern, loop shapes instead of math). The zen2 dictionary
+JIT row swung +43% in the same capture - the known bimodal per-process lane, not a change.
