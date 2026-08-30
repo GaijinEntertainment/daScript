@@ -58,24 +58,27 @@ let Q51_QPB = 20l
 let Q51_SPB = 4l
 
 //! Quant-plane bytes per 256-weight superblock per row for a kq format id (4/5/6 = Q4_K/Q5_K/
-//! Q6_K, 40 = Q4_0). The ONE stride source for every fmt-branched kq walker/kernel/repack —
-//! an unknown id panics instead of silently walking another format's stride.
+//! Q6_K, 40 = Q4_0, 44 = IQ4_XS). The ONE stride source for every fmt-branched kq walker/
+//! kernel/repack — an unknown id panics instead of silently walking another format's stride.
 def kq_qsb(fmt : int) : int64 {
     if (fmt == 4) return kq_qsb(KqFmt.k4)
     if (fmt == 5) return kq_qsb(KqFmt.k5)
     if (fmt == 6) return kq_qsb(KqFmt.k6)
     if (fmt == 40) return kq_qsb(KqFmt.q40)
+    if (fmt == 44) return kq_qsb(KqFmt.iq4xs)
     panic("kq_qsb: unknown kq format id {fmt}")
     return 0l
 }
 
 //! Scale-plane bytes per 256-weight superblock per row (see kq_qsb): k4/k5 20 (16B disk block
-//! + 4B pad, decoded in place at repack), k6 18 (native), q40 16 (8 x f16 d, verbatim).
+//! + 4B pad, decoded in place at repack), k6 18 (native), q40 16 (8 x f16 d, verbatim),
+//! iq4xs 20 (f16 d + 8 int8 sub-scales, decoded at transcode, in the k4 row shape).
 def kq_ssb(fmt : int) : int64 {
     if (fmt == 4) return kq_ssb(KqFmt.k4)
     if (fmt == 5) return kq_ssb(KqFmt.k5)
     if (fmt == 6) return kq_ssb(KqFmt.k6)
     if (fmt == 40) return kq_ssb(KqFmt.q40)
+    if (fmt == 44) return kq_ssb(KqFmt.iq4xs)
     panic("kq_ssb: unknown kq format id {fmt}")
     return 0l
 }

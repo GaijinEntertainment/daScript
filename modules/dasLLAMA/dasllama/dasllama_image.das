@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 17   // 17: merged lineages - master's 14 and this branch's 14-16 (qwen3v f16 twin plane, devwf16 bake) numbered independently
+let IMAGE_VERSION = 18   // 18: the iq4xs plane pair (IQ4_XS native tier)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -957,7 +957,7 @@ def save_model_image(var t : Model; path : string; tag : string = ""; quant : st
 // streamed planes size as empty, so their bytes plus a page each are added here; over-reserve is free (dwrite_close truncates)
 def private stream_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
     var extra = 0ul
-    for (fname in ["qblob", "mblob", "k4q", "k5q", "k6q", "q40q", "q51q"]) {
+    for (fname in ["qblob", "mblob", "k4q", "k5q", "k6q", "q40q", "q51q", "iq4xsq"]) {
         let sb = stream_plane_bytes(t, jobs, fname)
         if (sb > 0l) {
             extra += uint64(sb) + uint64(IMAGE_PAGE)

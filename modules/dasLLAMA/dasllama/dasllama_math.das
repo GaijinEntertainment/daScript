@@ -1084,6 +1084,7 @@ struct KernelBackend {
     kq_rows_k5 : MatmulKqRowsFn = @@kq_unset_rows
     kq_rows_k6 : MatmulKqRowsFn = @@kq_unset_rows
     kq_rows_q40 : MatmulKqRowsFn = @@kq_unset_rows
+    kq_rows_iq4xs : MatmulKqRowsFn = @@kq_unset_rows
     kq_batch : MatmulKqBatchFn = @@kq_unset_batch
     kq_groupn : MatmulKqGroupNFn = @@kq_unset_groupn
     kq_batch_groupn : MatmulKqBatchGroupNFn = @@kq_unset_batch_groupn
@@ -1146,6 +1147,7 @@ var g_kq_rows_k4 = @@kq_unset_rows
 var g_kq_rows_k5 = @@kq_unset_rows
 var g_kq_rows_k6 = @@kq_unset_rows
 var g_kq_rows_q40 = @@kq_unset_rows
+var g_kq_rows_iq4xs = @@kq_unset_rows
 var g_mm_kq_batch = @@kq_unset_batch
 var g_mm_kq_groupn = @@kq_unset_groupn
 var g_mm_kq_batch_groupn = @@kq_unset_batch_groupn
@@ -1473,7 +1475,7 @@ def active_q8_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_mr : g_
 //! family split; the loader freezes these onto the Model at repack time.
 def active_kq_layout_mr(fmt : int) : int64 {
     if (g_bake_cpu_override) {
-        return fmt == 4 ? g_bake_cpu.kq_mr4 : (fmt == 5 ? g_bake_cpu.kq_mr5 : (fmt == 40 ? g_bake_cpu.kq_mr40 : g_bake_cpu.kq_mr6))
+        return fmt == 4 ? g_bake_cpu.kq_mr4 : (fmt == 5 ? g_bake_cpu.kq_mr5 : (fmt == 40 ? g_bake_cpu.kq_mr40 : (fmt == 44 ? g_bake_cpu.kq_mr44 : g_bake_cpu.kq_mr6)))
     }
     return int64(invoke(g_active_kq_layout, fmt))
 }
@@ -1649,6 +1651,7 @@ def private activate(be : KernelBackend) {
     g_kq_rows_k5 = be.kq_rows_k5
     g_kq_rows_k6 = be.kq_rows_k6
     g_kq_rows_q40 = be.kq_rows_q40
+    g_kq_rows_iq4xs = be.kq_rows_iq4xs
     g_mm_kq_batch = be.kq_batch
     g_mm_kq_groupn = be.kq_groupn
     g_mm_kq_batch_groupn = be.kq_batch_groupn
@@ -1851,6 +1854,7 @@ def kq_rows_fn(fmt : int) : MatmulKqRowsFn {
     if (fmt == 5) return g_kq_rows_k5
     if (fmt == 6) return g_kq_rows_k6
     if (fmt == 40) return g_kq_rows_q40
+    if (fmt == 44) return g_kq_rows_iq4xs
     return @@kq_unset_rows
 }
 
@@ -3210,6 +3214,9 @@ def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam
     }
     if (g_kq_rows_q40 == null) {
         g_kq_rows_q40 = @@kq_unset_rows
+    }
+    if (g_kq_rows_iq4xs == null) {
+        g_kq_rows_iq4xs = @@kq_unset_rows
     }
     if (g_mm_kq_batch == null) {
         g_mm_kq_batch = @@kq_unset_batch

@@ -546,6 +546,35 @@ def dot_q40q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp
     return acc
 }
 
+//! IQ4_XS row dot off the DISK-ORDER planes: per 32-block idot = sum IQ4NL_LUT[q] * x (signed,
+//! exact int), folded as sum sc_blk * idot_blk over the superblock, then * (d * xs). No bsum
+//! term — the codebook carries the sign, so xbsp is unused.
+[unused_argument(xbsp)]
+def dot_iq4xs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+    var acc = 0.0
+    unsafe {
+        for (sb in range64(n / 256l)) {
+            let kqo = sb * 128l
+            let kso = sb * 20l
+            let dd = f16_to_f32(uint(ksrow[kso]) | (uint(ksrow[kso + 1l]) << 8u))
+            var isum = 0
+            for (blk in range64(8l)) {
+                let ab = (sb * 8l + blk) * 32l
+                var idot = 0
+                for (l in range64(16l)) {
+                    let q = int(kqrow[kqo + blk * 16l + l])
+                    idot += int(IQ4NL_LUT[q & 15]) * int(xqp[ab + l])
+                    idot += int(IQ4NL_LUT[q >> 4]) * int(xqp[ab + 16l + l])
+                }
+                let u = int(ksrow[kso + 4l + blk])
+                isum += (u < 128 ? u : u - 256) * idot
+            }
+            acc += float(isum) * (dd * xsp[sb])
+        }
+    }
+    return acc
+}
+
 // Row-range cores + full GEMVs per format. Not `private`: invoked through hoisted function
 // pointers from lifted worker lambdas (the fused chains) and the dispatch wrappers in common.
 def k4_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
@@ -584,6 +613,15 @@ def q40_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp
     }
 }
 
+def iq4xs_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    let nsb = n / 256l
+    unsafe {
+        for (i in range64(rb, re)) {
+            yp[i] = dot_iq4xs_q8(kqp + i * nsb * 128l, ksp + i * nsb * 20l, xqp, xsp, xbsp, n)
+        }
+    }
+}
+
 def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
     var myp = yp
     maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
@@ -593,8 +631,55 @@ def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp :
             k5_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         } elif (fmt == 40) {
             q40_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
+        } elif (fmt == 44) {
+            iq4xs_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         } else {
             k6_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
+        }
+    }
+}
+
+//! q40 grp row dequant: the k4 nibble tiling with a per-block f16 d plane — w = d·(q − 8).
+def private dequant_q40_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 128l * mr
+            let sb = sbi * 16l * mr
+            for (blk in range64(8l)) {
+                let kb = sbi * 256l + blk * 32l
+                let d = f16_to_f32(uint(ksg[sb + blk * 2l * mr + 2l * r]) | (uint(ksg[sb + blk * 2l * mr + 2l * r + 1l]) << 8u))
+                for (j in range64(4l)) {
+                    for (t in range64(4l)) {
+                        let nib = uint(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
+                        dst[kb + j * 4l + t] = d * float(int(nib & 15u) - 8)
+                        dst[kb + 16l + j * 4l + t] = d * float(int(nib >> 4u) - 8)
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! iq4xs grp row dequant: the k4 tiling + the k4 scale-row interleave (d, signed int8 sc, no
+//! min) — w = (d·sc)·IQ4NL_LUT[q].
+def private dequant_iq4xs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 128l * mr
+            let sb = sbi * 20l * mr
+            let d = f16_to_f32(uint(ksg[sb + 2l * r]) | (uint(ksg[sb + 2l * r + 1l]) << 8u))
+            for (blk in range64(8l)) {
+                let kb = sbi * 256l + blk * 32l
+                let u = int(ksg[sb + 4l * mr + blk * mr + r])
+                let dl = d * float(u < 128 ? u : u - 256)
+                for (j in range64(4l)) {
+                    for (t in range64(4l)) {
+                        let nib = int(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
+                        dst[kb + j * 4l + t] = dl * float(IQ4NL_LUT[nib & 15])
+                        dst[kb + 16l + j * 4l + t] = dl * float(IQ4NL_LUT[nib >> 4])
+                    }
+                }
+            }
         }
     }
 }
@@ -607,24 +692,11 @@ def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, m
     let qsb = kq_qsb(int(fmt))
     let ssb = kq_ssb(int(fmt))
     if (fmt == 40l) {
-        // q40 grp: the k4 nibble tiling with a per-block f16 d plane — w = d·(q − 8)
-        unsafe {
-            for (sbi in range64(nsb)) {
-                let qb = sbi * qsb * mr
-                let sb = sbi * ssb * mr
-                for (blk in range64(8l)) {
-                    let kb = sbi * 256l + blk * 32l
-                    let d = f16_to_f32(uint(ksg[sb + blk * 2l * mr + 2l * r]) | (uint(ksg[sb + blk * 2l * mr + 2l * r + 1l]) << 8u))
-                    for (j in range64(4l)) {
-                        for (t in range64(4l)) {
-                            let nib = uint(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
-                            dst[kb + j * 4l + t] = d * float(int(nib & 15u) - 8)
-                            dst[kb + 16l + j * 4l + t] = d * float(int(nib >> 4u) - 8)
-                        }
-                    }
-                }
-            }
-        }
+        dequant_q40_row_grp(kqg, ksg, r, mr, nsb, dst)
+        return
+    }
+    if (fmt == 44l) {
+        dequant_iq4xs_row_grp(kqg, ksg, r, mr, nsb, dst)
         return
     }
     unsafe {
@@ -721,6 +793,8 @@ def matmul_kq_groupn(fmt : int; var y : array<float> | #; kq : array<uint8> | #;
                         myp[ii] = dot_k5q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     } elif (fmt == 40) {
                         myp[ii] = dot_q40q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
+                    } elif (fmt == 44) {
+                        myp[ii] = dot_iq4xs_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     } else {
                         myp[ii] = dot_k6q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     }

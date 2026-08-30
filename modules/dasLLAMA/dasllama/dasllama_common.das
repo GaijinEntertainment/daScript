@@ -835,6 +835,9 @@ struct Model {
     // the q51 tier's plane pair, per 32-BLOCK: 20B nibbles+qh / 4B f16 d+m (never repacked)
     q51q : array<uint8>
     q51s : array<uint8>
+    // the iq4xs tier's plane pair: 128B nibbles in the q40 tiling + a 20B decoded scale row per superblock
+    iq4xsq : array<uint8>
+    iq4xss : array<uint8>
     kquant_native : bool = false
     // kq stage 4: the kq planes were repacked at load into the active backend's grp<mr> layout.
     // From then on every kq matmul MUST run the backend slots — disk-order portable kernels would
@@ -845,6 +848,7 @@ struct Model {
     kq_repack_mr5 : int64 = 4l
     kq_repack_mr6 : int64 = 4l
     kq_repack_mr40 : int64 = 4l
+    kq_repack_mr44 : int64 = 4l
     // per-layer weight format tags (KqFmt; empty = all q8). Filled by detect_kq_formats before
     // layout_offsets so the layout walks each tensor into its format's cursor.
     wq_fmt : array<KqFmt>
@@ -1455,6 +1459,7 @@ def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
     c.kq_mr5 = active_kq_layout_mr(5)
     c.kq_mr6 = active_kq_layout_mr(6)
     c.kq_mr40 = active_kq_layout_mr(40)
+    c.kq_mr44 = active_kq_layout_mr(44)
     c.q51_mr = active_q51_layout_mr()
     // OUTCOME, not request: a backend without s16 twins keeps f32 scale planes (wscale_convert_f16)
     c.wscale_f16 = g_wscale_f16 && kernel_backend_has_wscale16()
@@ -1547,7 +1552,7 @@ def kq_active_mr(t : Model; f : KqFmt) : int64 {
     if (!t.kq_repacked) {
         return 1l
     }
-    return f == KqFmt.k4 ? t.kq_repack_mr4 : (f == KqFmt.k5 ? t.kq_repack_mr5 : (f == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40))
+    return f == KqFmt.k4 ? t.kq_repack_mr4 : (f == KqFmt.k5 ? t.kq_repack_mr5 : (f == KqFmt.k6 ? t.kq_repack_mr6 : (f == KqFmt.q40 ? t.kq_repack_mr40 : t.kq_repack_mr44)))
 }
 
 //! Load a llama-architecture GGUF into the split layout at the requested precision — straight into
@@ -3285,7 +3290,7 @@ def mm_b_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregio
 // KqFmt -> the kernel-layer format id (matmul_kq*/kq_rows_fn/kq_qsb take the int form). q8 maps
 // to 0, a poison id no kq kernel accepts — kq_rows_for calls this for EVERY tag, so it must stay
 // total even though q8 branches never read the result.
-def private kq_fi(fmt : KqFmt) : int => fmt == KqFmt.k4 ? 4 : (fmt == KqFmt.k5 ? 5 : (fmt == KqFmt.k6 ? 6 : (fmt == KqFmt.q40 ? 40 : 0)))
+def private kq_fi(fmt : KqFmt) : int => fmt == KqFmt.k4 ? 4 : (fmt == KqFmt.k5 ? 5 : (fmt == KqFmt.k6 ? 6 : (fmt == KqFmt.q40 ? 40 : (fmt == KqFmt.iq4xs ? 44 : 0))))
 
 // K-quant GEMV against a PRE-quantized activation (xq/xs/xbs already filled by the bs quantizer).
 // kq_repacked loads run the backend's stamped cores; disk-order loads run the portable kernels.
@@ -3299,6 +3304,8 @@ def mm_at_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq 
             matmul_kq_active(6, y, t.k6q, t.k6s, woff, xq, xs, xbs, n, d, yoff)
         } elif (fmt == KqFmt.q40) {
             matmul_kq_active(40, y, t.q40q, t.q40s, woff, xq, xs, xbs, n, d, yoff)
+        } elif (fmt == KqFmt.iq4xs) {
+            matmul_kq_active(44, y, t.iq4xsq, t.iq4xss, woff, xq, xs, xbs, n, d, yoff)
         } else {
             panic("mm_at_kq_pre: '{fmt}' has no kq plane pair")   // a new KqFmt must claim its arm, never ride q40's
         }
@@ -3310,6 +3317,8 @@ def mm_at_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq 
         matmul_kq(6, y, t.k6q, t.k6s, woff, xq, xs, xbs, n, d, yoff)
     } elif (fmt == KqFmt.q40) {
         matmul_kq(40, y, t.q40q, t.q40s, woff, xq, xs, xbs, n, d, yoff)
+    } elif (fmt == KqFmt.iq4xs) {
+        matmul_kq(44, y, t.iq4xsq, t.iq4xss, woff, xq, xs, xbs, n, d, yoff)
     } else {
         panic("mm_at_kq_pre: '{fmt}' has no kq plane pair")
     }
@@ -3341,6 +3350,8 @@ def mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff 
             matmul_kq_batch(6, y, t.k6q, t.k6s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
         } elif (fmt == KqFmt.q40) {
             matmul_kq_batch(40, y, t.q40q, t.q40s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
+        } elif (fmt == KqFmt.iq4xs) {
+            matmul_kq_batch(44, y, t.iq4xsq, t.iq4xss, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
         } else {
             panic("mm_b_kq: '{fmt}' has no kq plane pair")
         }
@@ -3368,6 +3379,8 @@ def mm_at_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<i
             matmul_kq_groupn_active(6, y, t.k6q, t.k6s, offs, nregions, xq, xs, xbs, n, d)
         } elif (fmt == KqFmt.q40) {
             matmul_kq_groupn_active(40, y, t.q40q, t.q40s, offs, nregions, xq, xs, xbs, n, d)
+        } elif (fmt == KqFmt.iq4xs) {
+            matmul_kq_groupn_active(44, y, t.iq4xsq, t.iq4xss, offs, nregions, xq, xs, xbs, n, d)
         } else {
             panic("mm_at_kq_groupn: '{fmt}' has no kq plane pair")
         }
@@ -3379,6 +3392,8 @@ def mm_at_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<i
         matmul_kq_groupn(6, y, t.k6q, t.k6s, offs, nregions, xq, xs, xbs, n, d)
     } elif (fmt == KqFmt.q40) {
         matmul_kq_groupn(40, y, t.q40q, t.q40s, offs, nregions, xq, xs, xbs, n, d)
+    } elif (fmt == KqFmt.iq4xs) {
+        matmul_kq_groupn(44, y, t.iq4xsq, t.iq4xss, offs, nregions, xq, xs, xbs, n, d)
     } else {
         panic("mm_at_kq_groupn: '{fmt}' has no kq plane pair")
     }
@@ -3395,6 +3410,8 @@ def mm_b_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<in
         matmul_kq_batch_groupn(6, y, t.k6q, t.k6s, offs, nregions, xq, xs, xbs, n, d)
     } elif (fmt == KqFmt.q40) {
         matmul_kq_batch_groupn(40, y, t.q40q, t.q40s, offs, nregions, xq, xs, xbs, n, d)
+    } elif (fmt == KqFmt.iq4xs) {
+        matmul_kq_batch_groupn(44, y, t.iq4xsq, t.iq4xss, offs, nregions, xq, xs, xbs, n, d)
     } else {
         panic("mm_b_kq_groupn: '{fmt}' has no kq plane pair")
     }
@@ -3413,6 +3430,8 @@ def mm_b_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq :
         matmul_kq_batch(6, y, t.k6q, t.k6s, woff, xq, xs, xbs, n, d, ntok)
     } elif (fmt == KqFmt.q40) {
         matmul_kq_batch(40, y, t.q40q, t.q40s, woff, xq, xs, xbs, n, d, ntok)
+    } elif (fmt == KqFmt.iq4xs) {
+        matmul_kq_batch(44, y, t.iq4xsq, t.iq4xss, woff, xq, xs, xbs, n, d, ntok)
     } else {
         panic("mm_b_kq_pre: '{fmt}' has no kq plane pair")
     }
@@ -3425,6 +3444,7 @@ def kq_plane_q(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
     if (fmt == KqFmt.k5) return unsafe(addr<uint8 const?>(t.k5q[sb * K5_QSB]))
     if (fmt == KqFmt.k6) return unsafe(addr<uint8 const?>(t.k6q[sb * K6_QSB]))
     if (fmt == KqFmt.q40) return unsafe(addr<uint8 const?>(t.q40q[sb * Q40_QSB]))
+    if (fmt == KqFmt.iq4xs) return unsafe(addr<uint8 const?>(t.iq4xsq[sb * IQ4XS_QSB]))
     return null
 }
 
@@ -3434,6 +3454,7 @@ def kq_plane_s(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
     if (fmt == KqFmt.k5) return unsafe(addr<uint8 const?>(t.k5s[sb * K5_SSB]))
     if (fmt == KqFmt.k6) return unsafe(addr<uint8 const?>(t.k6s[sb * K6_SSB]))
     if (fmt == KqFmt.q40) return unsafe(addr<uint8 const?>(t.q40s[sb * Q40_SSB]))
+    if (fmt == KqFmt.iq4xs) return unsafe(addr<uint8 const?>(t.iq4xss[sb * IQ4XS_SSB]))
     return null
 }
 
@@ -3794,6 +3815,8 @@ def embed_row(t : Model; token : int64; var dst : float?) {   // nolint:STYLE037
                         dequant_kq_row_grp(fmt, addr(t.embq[sbg * K6_QSB]), addr(t.embs[sbg * K6_SSB]), token % mr, mr, dim, dst)
                     } elif (t.emb_fmt == KqFmt.q40) {
                         dequant_kq_row_grp(fmt, addr(t.embq[sbg * Q40_QSB]), addr(t.embs[sbg * Q40_SSB]), token % mr, mr, dim, dst)
+                    } elif (t.emb_fmt == KqFmt.iq4xs) {
+                        dequant_kq_row_grp(fmt, addr(t.embq[sbg * IQ4XS_QSB]), addr(t.embs[sbg * IQ4XS_SSB]), token % mr, mr, dim, dst)
                     } else {
                         panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
                     }
@@ -3805,6 +3828,8 @@ def embed_row(t : Model; token : int64; var dst : float?) {   // nolint:STYLE037
                     dequant_kq_row_grp(fmt, addr(t.k6q[sbg * K6_QSB]), addr(t.k6s[sbg * K6_SSB]), token % mr, mr, dim, dst)
                 } elif (t.emb_fmt == KqFmt.q40) {
                     dequant_kq_row_grp(fmt, addr(t.q40q[sbg * Q40_QSB]), addr(t.q40s[sbg * Q40_SSB]), token % mr, mr, dim, dst)
+                } elif (t.emb_fmt == KqFmt.iq4xs) {
+                    dequant_kq_row_grp(fmt, addr(t.iq4xsq[sbg * IQ4XS_QSB]), addr(t.iq4xss[sbg * IQ4XS_SSB]), token % mr, mr, dim, dst)
                 } else {
                     panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
                 }
@@ -3827,6 +3852,8 @@ def embed_row(t : Model; token : int64; var dst : float?) {   // nolint:STYLE037
                             dequant_k6_plane_superblock(t.embq, (sb0 + s) * K6_QSB, t.embs, (sb0 + s) * K6_SSB, row, s * 256l)
                         } elif (t.emb_fmt == KqFmt.q40) {
                             dequant_q40_plane_superblock(t.embq, (sb0 + s) * Q40_QSB, t.embs, (sb0 + s) * Q40_SSB, row, s * 256l)
+                        } elif (t.emb_fmt == KqFmt.iq4xs) {
+                            dequant_iq4xs_plane_superblock(t.embq, (sb0 + s) * IQ4XS_QSB, t.embs, (sb0 + s) * IQ4XS_SSB, row, s * 256l)
                         } else {
                             panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
                         }
@@ -3842,6 +3869,8 @@ def embed_row(t : Model; token : int64; var dst : float?) {   // nolint:STYLE037
                         }
                     } elif (t.emb_fmt == KqFmt.q40) {
                         dequant_q40_plane_superblock(t.q40q, (sb0 + s) * Q40_QSB, t.q40s, (sb0 + s) * Q40_SSB, row, s * 256l)
+                    } elif (t.emb_fmt == KqFmt.iq4xs) {
+                        dequant_iq4xs_plane_superblock(t.iq4xsq, (sb0 + s) * IQ4XS_QSB, t.iq4xss, (sb0 + s) * IQ4XS_SSB, row, s * 256l)
                     } else {
                         panic("embed_row: '{t.emb_fmt}' has no kq plane pair")
                     }

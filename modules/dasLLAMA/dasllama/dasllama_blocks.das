@@ -1394,7 +1394,7 @@ def private kq_bytes_per_weight(f : KqFmt) : float {
     if (f == KqFmt.q40) {
         return 144.0 / 256.0   // 4-bit quants plus an f16 scale per 32
     }
-    if (f == KqFmt.k4) {
+    if (f == KqFmt.k4 || f == KqFmt.iq4xs) {
         return 148.0 / 256.0
     }
     if (f == KqFmt.k5) {

@@ -292,6 +292,10 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
         var q40sp : uint8? = null
         var q51qp : uint8? = null
         var q51sp : uint8? = null
+        var iq4xsqp : uint8? = null
+        var iq4xssp : uint8? = null
+        if (!empty(t.iq4xsq)) { iq4xsqp = addr(t.iq4xsq[0]) }
+        if (!empty(t.iq4xss)) { iq4xssp = addr(t.iq4xss[0]) }
         if (!empty(t.qblob)) { qbp = addr(t.qblob[0]) }
         if (!empty(t.qscales)) { qsp = addr(t.qscales[0]) }
         if (!empty(t.mxq)) { mxqp = addr(t.mxq[0]) }
@@ -323,8 +327,8 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                         let sb = rp[i].off / 256l
                         let qsb = kq_qsb(f)
                         let ssb = kq_ssb(f)
-                        var kqp = f == 4 ? k4qp : (f == 5 ? k5qp : (f == 6 ? k6qp : q40qp))
-                        var ksp = f == 4 ? k4sp : (f == 5 ? k5sp : (f == 6 ? k6sp : q40sp))
+                        var kqp = f == 4 ? k4qp : (f == 5 ? k5qp : (f == 6 ? k6qp : (f == 40 ? q40qp : iq4xsqp)))
+                        var ksp = f == 4 ? k4sp : (f == 5 ? k5sp : (f == 6 ? k6sp : (f == 40 ? q40sp : iq4xssp)))
                         invoke(rkq, f, kqp + sb * qsb, ksp + sb * ssb, rp[i].n, rp[i].d)
                     }
                 }
@@ -450,6 +454,8 @@ def private push_repack_kq(var regs : array<StreamReg>; fmt : KqFmt; woff, n, d 
         push_repack(regs, 6, woff, n, d)
     } elif (fmt == KqFmt.q40) {
         push_repack(regs, 40, woff, n, d)
+    } elif (fmt == KqFmt.iq4xs) {
+        push_repack(regs, 44, woff, n, d)
     }
 }
 
@@ -722,10 +728,12 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
         let sb0 = woff / KQ_SUPERBLOCK_ELEMS
         let qp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4q[sb0 * kq_qsb(4)])
             : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5q[sb0 * kq_qsb(5)])
-            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6q[sb0 * kq_qsb(6)]) : addr<uint8 const?>(t.q40q[sb0 * kq_qsb(40)]))))
+            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6q[sb0 * kq_qsb(6)])
+            : (fmt == KqFmt.q40 ? addr<uint8 const?>(t.q40q[sb0 * kq_qsb(40)]) : addr<uint8 const?>(t.iq4xsq[sb0 * kq_qsb(44)])))))
         let sp = (fmt == KqFmt.k4 ? addr<uint8 const?>(t.k4s[sb0 * kq_ssb(4)])
             : (fmt == KqFmt.k5 ? addr<uint8 const?>(t.k5s[sb0 * kq_ssb(5)])
-            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6s[sb0 * kq_ssb(6)]) : addr<uint8 const?>(t.q40s[sb0 * kq_ssb(40)]))))
+            : (fmt == KqFmt.k6 ? addr<uint8 const?>(t.k6s[sb0 * kq_ssb(6)])
+            : (fmt == KqFmt.q40 ? addr<uint8 const?>(t.q40s[sb0 * kq_ssb(40)]) : addr<uint8 const?>(t.iq4xss[sb0 * kq_ssb(44)])))))
         var wqp = addr(wq[0])
         var wsp = addr(ws[0])
         let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1

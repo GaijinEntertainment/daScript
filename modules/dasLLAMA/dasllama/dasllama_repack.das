@@ -373,6 +373,50 @@ def repack_q40_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete tq
     delete ts
 }
+
+//! iq4xs grp layout: the q40 quant gather (the disk k/k+16 pairing IS the k4 tiling) and the k4
+//! scale-row interleave over the DECODED 20B row — [mr x f16 d][mr x f16 0][8 x mr int8 sc][8 x mr 0].
+def repack_iq4xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 128l
+    let srow = nsb * 20l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 128l * mr
+                let ds = g * mr * srow + sbi * 20l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 128l
+                    let ss = (g * mr + r) * srow + sbi * 20l
+                    for (blk in range64(8l)) {
+                        for (j in range64(4l)) {
+                            for (t in range64(4l)) {
+                                kq[dq + ((blk * 4l + j) * mr + r) * 4l + t] = tqp[sq + blk * 16l + j * 4l + t]
+                            }
+                        }
+                        ks[ds + 4l * mr + blk * mr + r] = tsp[ss + 4l + blk]
+                        ks[ds + 12l * mr + blk * mr + r] = uint8(0)
+                    }
+                    ks[ds + 2l * r] = tsp[ss]
+                    ks[ds + 2l * r + 1l] = tsp[ss + 1l]
+                    ks[ds + 2l * mr + 2l * r] = uint8(0)
+                    ks[ds + 2l * mr + 2l * r + 1l] = uint8(0)
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
 // ===== grp<mr> panel unpack (the byte-expanded tile form the kq stamps load) =====
 
 //! Unpack ONE group's packed grp<mr> k5/k6 quant panel into the BYTE-EXPANDED tile form (wlo/whi

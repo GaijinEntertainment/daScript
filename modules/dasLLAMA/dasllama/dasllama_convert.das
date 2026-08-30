@@ -615,6 +615,46 @@ def dequant_q40_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<
     }
 }
 
+//! Transcode one IQ4_XS superblock (136 bytes at `bo`: f16 d, u16 scales_h, 4 scales_l bytes,
+//! 128 nibble bytes) into the iq4xs planes: nibbles verbatim (the disk k/k+16 pairing IS the
+//! q40 tiling), the scale row DECODED — f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad (exact).
+def transcode_iq4xs_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    ks[kso] = bytes[bo]
+    ks[kso + 1l] = bytes[bo + 1l]
+    ks[kso + 2l] = uint8(0)
+    ks[kso + 3l] = uint8(0)
+    let sh = uint(bytes[bo + 2l]) | (uint(bytes[bo + 3l]) << 8u)
+    for (blk in range64(8l)) {
+        let lo = (uint(bytes[bo + 4l + blk / 2l]) >> uint(4l * (blk % 2l))) & 15u
+        let ls = int(lo | (((sh >> uint(2l * blk)) & 3u) << 4u))
+        ks[kso + 4l + blk] = uint8(ls - 32)
+    }
+    for (i in range64(8l)) {
+        ks[kso + 12l + i] = uint8(0)
+    }
+    for (i in range64(128l)) {
+        kq[kqo + i] = bytes[bo + 8l + i]
+    }
+}
+
+//! The signed sub-scale of an iq4xs plane row: byte 4 + blk of the 20B row, read as int8.
+def iq4xs_sc(ks : array<uint8> | #; kso, blk : int64) : int => rd_i8(ks, kso + 4l + blk)
+
+//! Reference dequant of one iq4xs-plane superblock: w = (d * sc) * IQ4NL_LUT[q] per 32-block
+//! (ggml's own float order: dl = d * (ls - 32), then dl * kvalue), q = nibble (low = k, high =
+//! k+16 — the disk pairing, kept verbatim by the transcode).
+def dequant_iq4xs_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, kso))
+    for (blk in range64(8l)) {
+        let dl = d * float(iq4xs_sc(ks, kso, blk))
+        for (l in range64(16l)) {
+            let b = int(kq[kqo + blk * 16l + l])
+            dst[doff + blk * 32l + l] = dl * float(IQ4NL_LUT[b & 15])
+            dst[doff + blk * 32l + 16l + l] = dl * float(IQ4NL_LUT[b >> 4])
+        }
+    }
+}
+
 //! Transcode one Q5_1 disk block (24 bytes at `bo`: d f16, m f16, qh u32, 16 nibble bytes) into
 //! the q51 planes — verbatim splits, exact. The per-block array form the tests drive; the bulk
 //! loader (gguf_transcode_q51) runs the same split pointerized and threaded.
