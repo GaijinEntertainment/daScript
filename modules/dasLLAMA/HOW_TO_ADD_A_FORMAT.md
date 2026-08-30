@@ -363,6 +363,13 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    sidecar entry for the family (copy the app's sidecar next to the probe as
    `<probe>.tune.json`, edit the one entry). Unquirked: a policy value that names the reference
    tier outright.
+19. **The device gather's tail-row branch is a second ladder.** `moe_gpu_gather_stack_kq`
+   walks grouped rows (the grp<mr> interleave) and ungrouped rows (`d % mr` tails, or an
+   unrepacked load) through two different per-format ladders; the ungrouped one re-pairs k4
+   nibbles and re-decodes the 6-bit scale packing in its `else`, so a format that is already in
+   the device form (q40, iq4xs, k3) needs its verbatim arm in BOTH. iq4xs had only the grouped
+   one - latent, because every row of the dense 1B is grouped - and the k3 walk found it.
+   Unquirked: one per-format "device form" predicate both branches key on.
 
 ## Per-format notes
 
@@ -395,7 +402,17 @@ live, maxdiff 4.8e-7) and on the M1 (sdot mr 4/8 stamps bit-exact), `test_kquant
 at token 15 - a near tie: against the reference body on two real k3 tensors (10240 output rows,
 scratchpad `k3_rows.das` with a `"reference"` sidecar entry) 4957 rows are bit-identical and
 the worst relative difference is 1.7e-4 on a row of magnitude 6e-5 (fp32 fold-order noise).
-Vulkan, Metal: pending.
+
+Vulkan: `vk_kq_schema_id` 7 -> 3; `KqGemvK3 : KqGemvBase` (k6's blk_contrib with `k3_dot` -
+the lane/mask compose over 6 uint4 per superblock, qs 0..3 and hmask 4..5 - and the offset 4)
+and `KqBatchK3 : KqBatchK6` (a child of the k6 class: `stage_ws` inherited, `stage_w` composes
+the staged words, `blk_fma` is k6's with 4). A child class must follow its parent in the file
+(the class rail resolves parents in order). Five ladders, the class oracle arm, family cells at
+six formats, `k3_gemv_float_oracle` as the witness. The device gather
+(`moe_gpu_gather_stack_kq`) gained k3 arms in both its grouped and tail-row branches - and the
+tail-row branch turned out to lack iq4xs arms too (QUIRK 19). `test_vulkan_kernels` 64/64;
+the 1B Q3_K_L on the resident driver matches llama.cpp's greedy ids for 51 of 64 tokens at gen
+284 t/s. Metal: pending.
 
 ### IQ4_XS (the pilot, 2026-08-30)
 

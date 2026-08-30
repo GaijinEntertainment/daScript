@@ -780,8 +780,17 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                             if (grouped) {
                                 let gq = qp + sliceQ + g * mr * qrow + sbi * qsb * mr
                                 let gs = sp + sliceS + g * mr * srow + sbi * dssb * mr
-                                for (m in range64(128l)) {   // nibble region: verbatim per (blk, j, t)
-                                    dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                if (fmt == KqFmt.k3) {   // 16 qs columns, then the 8 hmask columns at 64*mr
+                                    for (m in range64(64l)) {
+                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
+                                    for (m in range64(32l)) {
+                                        dq[64l + m] = gq[64l * mr + ((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
+                                } else {
+                                    for (m in range64(128l)) {   // nibble region: verbatim per (blk, j, t)
+                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                    }
                                 }
                                 if (fmt == KqFmt.k5) {
                                     for (bj in range64(32l)) {
@@ -792,7 +801,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                         dq[128l + p] = gq[128l * mr + ((p / 4l) * mr + r) * 4l + p % 4l]
                                     }
                                 }
-                                if (fmt == KqFmt.k6) {
+                                if (fmt == KqFmt.k6 || fmt == KqFmt.k3) {
                                     for (idx in range64(16l)) {
                                         dsc[idx] = gs[idx * mr + r]
                                     }
@@ -821,8 +830,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                             } else {
                                 let rq = qp + sliceQ + ri * qrow + sbi * qsb
                                 let rs = sp + sliceS + ri * srow + sbi * dssb
-                                if (fmt == KqFmt.q40) {
-                                    for (m in range64(128l)) {   // Q4_0 bytes already pair k / k+16
+                                if (fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3) {
+                                    for (m in range64(qsb)) {   // disk bytes already in the device form (k/k+16 pairs; k3's lanes)
                                         dq[m] = rq[m]
                                     }
                                 } else {
@@ -848,7 +857,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                         dq[128l + p] = rq[128l + p]
                                     }
                                 }
-                                if (fmt == KqFmt.k6 || fmt == KqFmt.q40) {
+                                if (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3) {   // rows already in the decoded device form
                                     for (idx in range64(dssb)) {
                                         dsc[idx] = rs[idx]
                                     }

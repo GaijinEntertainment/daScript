@@ -171,6 +171,8 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
         k = new KqGemvK5()
     } elif (fmt == int(KqFmt.iq4xs)) {
         k = new KqGemvIq4xs()
+    } elif (fmt == int(KqFmt.k3)) {
+        k = new KqGemvK3()
     } else {
         k = new KqGemvK6()
     }
@@ -235,6 +237,43 @@ def iq4xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
                         bacc += float(lut[b & 15]) * float(xlo) + float(lut[b >> 4]) * float(xhi)
                     }
                     acc += xs[xsb] * dd * float(sc) * bacc
+                }
+            }
+            y[r * d + row] = acc
+        }
+    }
+    return <- y
+}
+
+// Q3_K GEMV float oracle, INDEPENDENT of the class bit-math: w = d * sc16 * (q - 4) straight off
+// the plane bytes (qs lane at shift 2*(blk%4), hmask bit blk, k6's 5-word scale row), x off the
+// Q8_K bytes — the witness a wrong lane/mask pick in k3_dot cannot pass while staying self-consistent
+def k3_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                         regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y : array<float>
+    y |> resize(nreg * d)
+    let nsb = n / 256
+    for (r in range(nreg)) {
+        for (row in range(d)) {
+            let w0 = int(regions[r * 2]) + row * nsb
+            let x0 = int(regions[r * 2 + 1])
+            var acc = 0.0
+            for (s in range(nsb)) {
+                let sb = w0 + s
+                let xsb = x0 + s
+                let dd = half_at(ws, sb * 10 + 8)
+                for (blk in range(8)) {
+                    let sh = 2 * (blk % 4)
+                    let s0 = byte_s8(ws, sb * 20 + 2 * blk)
+                    let s1 = byte_s8(ws, sb * 20 + 2 * blk + 1)
+                    var bacc = 0.0
+                    for (l in range(32)) {
+                        let q2 = (byte_u8(wq, sb * 96 + (blk / 4) * 32 + l) >> sh) & 3
+                        let hb = (byte_u8(wq, sb * 96 + 64 + l) >> blk) & 1
+                        let q = (q2 | (hb << 2)) - 4
+                        bacc += float(l < 16 ? s0 : s1) * float(q) * float(byte_s8(xq, xsb * 256 + blk * 32 + l))
+                    }
+                    acc += xs[xsb] * dd * bacc
                 }
             }
             y[r * d + row] = acc

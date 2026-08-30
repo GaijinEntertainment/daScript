@@ -2876,6 +2876,66 @@ class KqBatchK6 : KqBatchBase {
     }
 }
 
+// Q3_K tile: k6's split-half fold with the offset 4 over the k3 planes (24 words per superblock:
+// 16 qs words, 8 hmask words) — block bu takes qs words (bu/4)*8 + hh*4.. at shift 2*(bu%4)
+// OR the hmask words 16 + hh*4.. bit bu, shifted up two
+[vk_dispatch(name = "kq_batch_k3_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchK3 : KqBatchK6 {
+    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
+        for (ki in range(2)) {
+            let k = word + uint(ki) * 8u
+            let bu = k / 2u
+            let hh = k % 2u
+            var wv = uint4(0u)
+            if (wcol < pa.d) {
+                let wsb = wsb0 + wcol * nsb + s
+                let qb4 = wsb * 24u + (bu / 4u) * 8u + hh * 4u
+                let hb4 = wsb * 24u + 16u + hh * 4u
+                let shift = (bu % 4u) * 2u
+                wv = uint4(((wq[qb4] >> shift) & 0x03030303) | (((wq[hb4] >> bu) & 0x01010101) << 2u),
+                    ((wq[qb4 + 1u] >> shift) & 0x03030303) | (((wq[hb4 + 1u] >> bu) & 0x01010101) << 2u),
+                    ((wq[qb4 + 2u] >> shift) & 0x03030303) | (((wq[hb4 + 2u] >> bu) & 0x01010101) << 2u),
+                    ((wq[qb4 + 3u] >> shift) & 0x03030303) | (((wq[hb4 + 3u] >> bu) & 0x01010101) << 2u))
+            }
+            ww4[grp * 17u + k] = wv
+        }
+    }
+
+    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
+        let kL = bu * 2u
+        let kH = bu * 2u + 1u
+        let xwL = xw4[grp * 17u + kL]
+        let xwH = xw4[grp * 17u + kH]
+        let blo = sdot4(xwL.x, 0x01010101) + sdot4(xwL.y, 0x01010101) + sdot4(xwL.z, 0x01010101) + sdot4(xwL.w, 0x01010101)
+        let bhi = sdot4(xwH.x, 0x01010101) + sdot4(xwH.y, 0x01010101) + sdot4(xwH.z, 0x01010101) + sdot4(xwH.w, 0x01010101)
+        let wL0 = ww4[word * 17u + kL]
+        let wL1 = ww4[(word + 8u) * 17u + kL]
+        let wL2 = ww4[(word + 16u) * 17u + kL]
+        let wL3 = ww4[(word + 24u) * 17u + kL]
+        let wH0 = ww4[word * 17u + kH]
+        let wH1 = ww4[(word + 8u) * 17u + kH]
+        let wH2 = ww4[(word + 16u) * 17u + kH]
+        let wH3 = ww4[(word + 24u) * 17u + kH]
+        let l0 = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
+        let l1 = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
+        let l2 = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
+        let l3 = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
+        let h0 = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
+        let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
+        let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
+        let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
+        return float4(xscl * (wsw[bu * 32u + word] * float(l0 - 4 * blo) + wsw2[bu * 32u + word] * float(h0 - 4 * bhi)),
+            xscl * (wsw[bu * 32u + word + 8u] * float(l1 - 4 * blo) + wsw2[bu * 32u + word + 8u] * float(h1 - 4 * bhi)),
+            xscl * (wsw[bu * 32u + word + 16u] * float(l2 - 4 * blo) + wsw2[bu * 32u + word + 16u] * float(h2 - 4 * bhi)),
+            xscl * (wsw[bu * 32u + word + 24u] * float(l3 - 4 * blo) + wsw2[bu * 32u + word + 24u] * float(h3 - 4 * bhi)))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k3_cls_spv")]
+    def override run {
+        tile_shell()
+    }
+}
+
 // ===== the prefill batch GEMMs — cooperative-matrix variants (DASLLAMA_COOPMAT=f16|int8|mm) =====
 
 let private CML_SST = 20u   // mm shared row stride in uints (16 f16-pair data + 4 pad — bank spread)
@@ -5789,6 +5849,8 @@ def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {
         return ensure_kq_batch_q40_cls()
     } elif (fmt == int(KqFmt.iq4xs)) {
         return ensure_kq_batch_iq4xs_cls()
+    } elif (fmt == int(KqFmt.k3)) {
+        return ensure_kq_batch_k3_cls()
     }
     panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     return false
@@ -5817,6 +5879,8 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
         enc_kq_batch_q40_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq4xs)) {
         enc_kq_batch_iq4xs_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k3)) {
+        enc_kq_batch_k3_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     }
@@ -5839,6 +5903,8 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_kq_gemv_q40_cls()
     } elif (fmt == int(KqFmt.iq4xs)) {
         return ensure_kq_gemv_iq4xs_cls()
+    } elif (fmt == int(KqFmt.k3)) {
+        return ensure_kq_gemv_k3_cls()
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return false
@@ -5867,14 +5933,16 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_kq_gemv_q40_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq4xs)) {
         enc_kq_gemv_iq4xs_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k3)) {
+        enc_kq_gemv_k3_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     }
 }
 
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).
-// The five formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
-// five pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
+// The six formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
+// six pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
 [vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4 : KqGemvBase {
     def override blk_contrib(wsb, blk, xsb : uint) : float {
@@ -5932,6 +6000,46 @@ class KqGemvIq4xs : KqGemvBase {
     }
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4xs_cls_spv")]
+    def run {
+        gemv_shell()
+    }
+}
+
+// Q3_K: q = 2-bit qs lane | hmask bit << 2, minus 4, per-16 SIGNED sub-scales x d — k6's fold with
+// the offset 4 over the k3 planes (6 uint4 per superblock: qs 0..3, hmask 4..5)
+[vk_dispatch(name = "kq_gemv_k3_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK3 : KqGemvBase {
+    // (ilo, ihi, blo, bhi) — an int4, since a shader function cannot return a tuple
+    def k3_dot(ql, qh, xl, xh, hl, hh : uint4; sh, bit : uint) : int4 {
+        let m2 = 0x03030303u
+        let m1 = 0x01010101u
+        let l0 = ((ql.x >> sh) & m2) | (((hl.x >> bit) & m1) << 2u)
+        let l1 = ((ql.y >> sh) & m2) | (((hl.y >> bit) & m1) << 2u)
+        let l2 = ((ql.z >> sh) & m2) | (((hl.z >> bit) & m1) << 2u)
+        let l3 = ((ql.w >> sh) & m2) | (((hl.w >> bit) & m1) << 2u)
+        let h0 = ((qh.x >> sh) & m2) | (((hh.x >> bit) & m1) << 2u)
+        let h1 = ((qh.y >> sh) & m2) | (((hh.y >> bit) & m1) << 2u)
+        let h2 = ((qh.z >> sh) & m2) | (((hh.z >> bit) & m1) << 2u)
+        let h3 = ((qh.w >> sh) & m2) | (((hh.w >> bit) & m1) << 2u)
+        return int4(sdot4(l0, xl.x) + sdot4(l1, xl.y) + sdot4(l2, xl.z) + sdot4(l3, xl.w),
+                    sdot4(h0, xh.x) + sdot4(h1, xh.y) + sdot4(h2, xh.z) + sdot4(h3, xh.w),
+                    sdot4(xl.x, KQC_ONES) + sdot4(xl.y, KQC_ONES) + sdot4(xl.z, KQC_ONES) + sdot4(xl.w, KQC_ONES),
+                    sdot4(xh.x, KQC_ONES) + sdot4(xh.y, KQC_ONES) + sdot4(xh.z, KQC_ONES) + sdot4(xh.w, KQC_ONES))
+    }
+
+    def override blk_contrib(wsb, blk, xsb : uint) : float {
+        let xb4 = xsb * 16u + blk * 2u
+        let q4 = wsb * 6u + (blk / 4u) * 2u
+        let dot = k3_dot(wq4[q4], wq4[q4 + 1u], xq4[xb4], xq4[xb4 + 1u],
+            wq4[wsb * 6u + 4u], wq4[wsb * 6u + 5u], (blk % 4u) * 2u, blk)
+        let s4 = int4(unpack8(int(wsu[wsb * 5u + blk / 2u])))   // 4 signed sub-scales
+        let slo = (blk % 2u) == 0u ? s4.x : s4.z
+        let shi = (blk % 2u) == 0u ? s4.y : s4.w
+        let dd = unpackHalf2x16(wsu[wsb * 5u + 4u]).x
+        return axs[xsb] * dd * float(slo * (dot.x - 4 * dot.z) + shi * (dot.y - 4 * dot.w))
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_k3_cls_spv")]
     def run {
         gemv_shell()
     }
