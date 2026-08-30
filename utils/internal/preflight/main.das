@@ -440,7 +440,7 @@ def private all_digits(s : string) : bool {
 
 def gate_review_md(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
-    let r = run_argv([ctx.daslang, "utils/internal/review-md/main.das", "--", "--base", "origin/master"])
+    let r = run_argv([ctx.daslang, "utils/internal/review-md/main.das", "--", "--base", ctx.base])
     if (r.rc == 0) {
         return GateResult(name = "review-md", status = GateStatus.Pass, seconds = seconds_since(t0))
     }

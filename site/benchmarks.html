@@ -451,6 +451,7 @@
                     ext_capture: cap.ext_capture || cap.timestamp,
                     das_version: (cap.versions || {}).daslang || "", sections: {}, halfRangeOverMedian: {}, sampleCount: null, samplesSeen: false };
         var sampleCounts = {};
+        var rowsWithoutSamples = 0;
         ["Interpreted", "AOT or JIT"].forEach(function (sec) {
             var tests = {};
             var halfRangeOverMedian = {};
@@ -462,6 +463,8 @@
                     if (r.samples && r.samples.length > 1 && r.time > 0) {
                         laneHalfRangeOverMedian[r.language] = (Math.max.apply(null, r.samples) - Math.min.apply(null, r.samples)) / 2 / r.time;
                         sampleCounts[r.samples.length] = true;
+                    } else {
+                        rowsWithoutSamples++;
                     }
                 });
                 tests[t] = lanes;
@@ -472,7 +475,7 @@
         });
         var seen = Object.keys(sampleCounts);
         out.samplesSeen = seen.length > 0;
-        out.sampleCount = seen.length === 1 ? Number(seen[0]) : null;
+        out.sampleCount = seen.length === 1 && rowsWithoutSamples === 0 ? Number(seen[0]) : null;
         return out;
     }
     // Same vendored records as files/forge.js's front-page cycler: pages.yml
