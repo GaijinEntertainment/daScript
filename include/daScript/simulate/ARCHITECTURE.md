@@ -17,14 +17,14 @@ The ledger the checklist's hot-path rule routes to. Each entry: what was added, 
 correctness required it, and the alternative that was rejected.
 
 - **CRT scalar transcendentals** (`sim_policy.h`) - the scalar float arms of `Exp`, `Exp2`,
-  `Log2` and `Pow` call the CRT while the `vec4f` arms stay on the vecmath polynomials,
-  where four lanes pay for the setup. Two-box probe (MSVC/3990X SSE2, clang/M1): exp
-  9.45 -> 3.26 ns/iter, exp2 4.50 -> 2.47, pow a tie on x64 and 1.6x cheaper on the M1;
-  log2 alone got ~0.4 ns dearer on x64 - accepted because `v_log2_est_p5` was an estimate
-  where the JIT's `@llvm.log2` is exact, so the swap buys correctness and tier parity. The
-  rejected alternative: keeping the lane trick, whose `v_set_x`/`v_extract_x` round-trip is
-  a partial-register dependency chain MSVC does not break. `log`, `sin`, `cos` and `tan`
-  stay on the lane, which wins on both boxes.
+  `Log2` and `Pow` call the CRT; the `vec4f` arms stay on the vecmath polynomials, where
+  four lanes amortize the setup. The lane trick's `v_set_x`/`v_extract_x` round-trip is a
+  partial-register dependency chain scalar codegen does not break, so for these arms the
+  CRT call is cheaper than the inlined polynomial - that is the rejected alternative. `Log2`
+  is the one arm the swap does not speed up: it trades the `v_log2_est_p5` estimate for the
+  exact answer the JIT already computes, so interp, AOT and JIT agree. `log`, `sin`, `cos`
+  and `tan` stay on the lane, which is cheaper for them. The measurements behind the split:
+  `plans/benchmark_followups.md` (repo root), the scalar-exp section.
 
 - **`das_ordered2`** (`aot.h`) - a two-member aggregate the AOT emitter wraps around any
   binary op whose operands are not both side-effect-free, because braced aggregate init is
