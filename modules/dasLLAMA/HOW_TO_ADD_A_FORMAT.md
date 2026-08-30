@@ -185,12 +185,31 @@ admits q8/k4/k6 only (`pf_f16_feed`), q40 and k5 have no cm2 tile either, and
 `followup_vulkan.md` item 24 rules that new formats land on the one class template, not as
 three more hand-stamped bodies. IQ4_XS prefill rides the kq batch tile like q40 does.
 
-## 7. Metal
+## 7. Metal - a Mac session's step, not this one's
 
-Untested at the time of writing (no Mac in the session). `MetalKqGemvK4` / `MetalKqMulMmK45T`
-/ `MetalKqMvK4T` are the twins to subclass; `dasllama_metal_shapes.das` carries the servable
-predicates, `dasllama_metal_common.das` the plane buffers, `dasllama_metal_prefill.das` the
-PSO ladders.
+Not done for IQ4_XS (no Mac in the session; nothing here compiles MSL or runs it). What IS
+true today, and what the format needs on that tier:
+
+- **The tier fails closed.** `kq_fmt_gpu_supported` (`dasllama_metal_shapes.das`) admits
+  q8/k4/k5/k6 only and every resident-driver plan runs through it, so an IQ4_XS model DECLINES
+  `kquant_native` on Metal and serves from the CPU - never a wrong-layout kernel branch (the
+  dispatchers `enc_kq_gemv` / `enc_kq_mvb` treat "not k4/k6" as k5, which is why the gate
+  exists). Keep it closed until the kernels land; do not add the enum member to the gate first.
+- **No q40 precedent.** Metal serves no per-32-scale format; IQ4_XS would be the first
+  non-K-quant there, so "the q40 class plus a LUT" - the CPU, JIT and Vulkan recipe - has no
+  twin to copy. The nearest shapes are k4's: `MetalKqGemvK4`, the `MetalKqMvK4T` small-batch
+  twins, `MetalKqMulMmK45T` (prefill mul_mm), each a class the k5/k6 versions subclass.
+- **The scale plane is a DIFFERENT layout.** Metal binds `kq_scales_of` - "16B compact blocks
+  at soff" pre-baked by the blob transform (`t.metal_blob`), not the 20 B decoded device row
+  Vulkan reads verbatim. An IQ4_XS arm means a transform arm (the row's f16 d + 8 signed sc into
+  that 16 B form) plus `kq_quants_of` (128 B nibbles, the k4 arm's stride) - both ladders in
+  `dasllama_metal_common.das`.
+- **Ladders:** `kq_quants_of` / `kq_scales_of`, `enc_kq_gemv`, `enc_kq_mvb` (B2/B4/B8 twins),
+  the mul_mm PSO ladders in `dasllama_metal_prefill.das` (`g_pf_pso_moe_mm_<fmt>_th` and the
+  dense twins, the `kfmt` picks near 4350/4425), `moe_site_ok` + the `sb1/sb2/sb3` superblock
+  predicates in `dasllama_metal_shapes.das`, and finally the gate.
+- **Gates:** `tests/test_metal_gemv_kernels.das` (kq GEMV cells), the prefill/decode parity
+  suites, the support-matrix test, then the 1B IQ4_XS end to end on the M-box.
 
 ## 8. End to end
 
