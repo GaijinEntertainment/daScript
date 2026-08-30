@@ -5470,7 +5470,7 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
     @workgroup @template_gate = IQ4XS iq4lut : float[16]   // kvalues_iq4nl as floats, staged once per threadgroup
 
     [metal_kernel]
-    def metal_kq_mulmm {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
+    def metal_kq_mulmm {   // nolint:STYLE037,STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
         let lid = gl_LocalInvocationID.x
         static_if (IQ4XS) {
             if (lid < 16u) {
@@ -7211,11 +7211,9 @@ class MetalKqMvB8K3 {
     }
 }
 
-// IQ4_XS: w = d*sc*LUT[q] with sc the SIGNED (ls - 32) strip byte and no min plane. The codebook
-// sits in threadgroup memory as floats; a 16-lane half of the simdgroup owns one superblock and
-// lane (bu, il) the 8-byte half il of block bu - 8 lo + 8 hi weights from two uint loads against
-// four float4 x loads (the q40 pairing: byte l -> elems l and l + 16). The scale plane is the k6
-// split form (d plane at s0off = doff, 16B sub-scale strips at soff).
+// IQ4_XS: w = d*sc*LUT[q], sc the SIGNED strip byte, no min plane; the codebook in threadgroup
+// floats, a 16-lane half-simdgroup per superblock, lane (bu, il) = block bu's 8-byte half il
+// (two uint loads, four float4 x loads; the q40 pairing). Scale plane = the k6 split form.
 [metal_dispatch(name = "enc_kq_iq4xs_c", pso = "g_pso_kq_iq4xs", tgmem = "metal_kq_gemv_iq4xs_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq4xs {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
