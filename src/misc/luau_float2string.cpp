@@ -51,8 +51,6 @@ namespace das {
         return buf + 2;
     }
 
-// fixed-length memcpy/memset lower to plain SIMD+scalar writes; both buffers carry the
-// headroom the header's contract demands, so the overshoot never leaves owned memory
 #define DAS_F2S_MEMCPY(dst, src, size, sizefast)  do { DAS_ASSERT((size) <= sizefast); memcpy(dst, src, sizefast); } while (0)
 #define DAS_F2S_MEMSET(dst, ch, size, sizefast)   do { DAS_ASSERT((size) <= sizefast); memset(dst, ch, sizefast); } while (0)
 

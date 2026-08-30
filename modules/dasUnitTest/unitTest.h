@@ -447,8 +447,8 @@ DAS_MOD_API inline void deleteFancyClassDummy(FancyClass& ) {  } // this one in 
 DAS_MOD_API void test_abi_lambda_and_function ( das::Lambda lambda, das::Func fn, int32_t lambdaSize, das::Context * context, das::LineInfoArg * lineinfo );
 
 DAS_MOD_API bool testBindEnumFunction ( das::Context * context, das::LineInfoArg * at );
-// CRT twins of the scalar float math builtins whose interp/AOT arm runs the vecmath lane
-// trick - the A/B lane for benchmarks/core/math; the JIT's intrinsics already call these
+
+//! CRT reference twins the scalar math benchmarks in benchmarks/core/math A/B against the builtins.
 inline float crt_expf ( float a ) { return expf(a); }
 inline float crt_exp2f ( float a ) { return exp2f(a); }
 inline float crt_logf ( float a ) { return logf(a); }
