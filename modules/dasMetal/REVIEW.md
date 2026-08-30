@@ -22,7 +22,8 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
 
 - **A diff that makes the MSL emitter reject at compile time a construct it accepted before -
   a new rejection, or a widened condition on an existing one - ships a
-  `tests/msl/_fail_closed/` (repo root) fixture for that construct in the same change.** The same change asserts that construct's error
+  `tests/msl/_fail_closed/` (repo root) fixture for that construct in the same change.** The
+  same change asserts that construct's error
   needle in `tests/msl/test_msl_fail_closed.das`. An error needle is the substring of the
   compile error that names the rejected construct. A diff that stops rejecting a construct
   deletes that construct's `_fail_closed/` fixture and its needle assertion in
