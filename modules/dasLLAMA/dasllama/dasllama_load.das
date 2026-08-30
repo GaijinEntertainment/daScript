@@ -43,6 +43,7 @@ struct private LayoutSizes {
     q51_n : int64
     iq4xs_n : int64
     k3_n : int64
+    iq3s_n : int64
     pleq8_n : int64   // the dedicated q8 plane holding ONLY the PLE table (fp32/q4 serving)
 }
 
@@ -57,6 +58,7 @@ struct private KqCursors {
     q51 : int64
     iq4xs : int64
     k3 : int64
+    iq3s : int64
 }
 
 def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
@@ -93,6 +95,11 @@ def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
     if (f == KqFmt.k3) {
         let o = cur.k3
         cur.k3 += n
+        return o
+    }
+    if (f == KqFmt.iq3s) {
+        let o = cur.iq3s
+        cur.iq3s += n
         return o
     }
     let o = cur.wo
@@ -394,7 +401,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         fo += dim
     }
     return LayoutSizes(fblob_n = fo, wblob_n = cur.wo, mx_n = mx, bf16_n = bf16,
-                       k4_n = cur.k4, k5_n = cur.k5, k6_n = cur.k6, q40_n = cur.q40, q51_n = cur.q51, iq4xs_n = cur.iq4xs, k3_n = cur.k3, pleq8_n = pleq8)
+                       k4_n = cur.k4, k5_n = cur.k5, k6_n = cur.k6, q40_n = cur.q40, q51_n = cur.q51, iq4xs_n = cur.iq4xs, k3_n = cur.k3, iq3s_n = cur.iq3s, pleq8_n = pleq8)
 }
 
 
@@ -657,6 +664,8 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
         return "iq4xsq"
     } elif (fmt == KqFmt.k3) {
         return "k3q"
+    } elif (fmt == KqFmt.iq3s) {
+        return "iq3sq"
     } elif (t.quant == QuantMode.q8) {
         // the blob flavor carries q8 as gguf-native 34B blocks in ONE plane, never the split pair
         return t.metal_blob ? "mblob" : "qblob"
@@ -777,6 +786,8 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
                 memcpy(addr<void?>(t.iq4xss[(j.woff / 256l) * IQ4XS_SSB]), addr<void?>(temp_s[0]), sh.sb)
             } elif (j.fmt == KqFmt.k3) {
                 memcpy(addr<void?>(t.k3s[(j.woff / 256l) * K3_SSB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.iq3s) {
+                memcpy(addr<void?>(t.iq3ss[(j.woff / 256l) * IQ3S_SSB]), addr<void?>(temp_s[0]), sh.sb)
             } elif (j.fmt == KqFmt.q51) {
                 memcpy(addr<void?>(t.q51s[(j.woff / 32l) * Q51_SB]), addr<void?>(temp_s[0]), sh.sb)
             } elif (sh.sb == 0l && j.n > 0l && !t.metal_blob) {
@@ -814,6 +825,9 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
                 } elif (r.fmt == 3) {
                     invoke(g_stream_repack, 3, addr<void?>(temp_q[((r.off - j.woff) / 256l) * K3_QSB]),
                         addr<void?>(t.k3s[(r.off / 256l) * K3_SSB]), r.n, r.d)
+                } elif (r.fmt == 33) {
+                    invoke(g_stream_repack, 33, addr<void?>(temp_q[((r.off - j.woff) / 256l) * IQ3S_QSB]),
+                        addr<void?>(t.iq3ss[(r.off / 256l) * IQ3S_SSB]), r.n, r.d)
                 }
             }
         }
@@ -1032,6 +1046,9 @@ def private transcode_kq_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : s
     } elif (fmt == KqFmt.k3) {
         gguf_transcode_q3k(m, bytes, name, kq, ks, eloff, n, src_off)
         return "k3 transcode (Q3_K)"
+    } elif (fmt == KqFmt.iq3s) {
+        gguf_transcode_iq3s(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "iq3s transcode (IQ3_S)"
     }
     gguf_transcode_q51(m, bytes, name, kq, ks, eloff, n, src_off)
     return "q51 transcode (Q5_1)"
@@ -1074,6 +1091,8 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq4xsq, t.iq4xss, woff, n, src_off, scratch)
     } elif (fmt == KqFmt.k3) {
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.k3q, t.k3s, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.iq3s) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq3sq, t.iq3ss, woff, n, src_off, scratch)
     } elif (fmt == KqFmt.q51) {
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.q51q, t.q51s, woff, n, src_off, scratch)
     } elif (t.quant == QuantMode.q8) {
@@ -1173,8 +1192,8 @@ def private log_load_report(t : Model) {
     to_log(LOG_INFO, "dasLLAMA noisy: backend '{active_kernel_backend()}' | kquant_native {get_kquant_native()} q40_native {get_kq_q40_native()} q50_native {get_kq_q50_native()}\n")
     // the tier arms at [init], before a --noisy CLI flag can land — restate it here so the flag alone suffices
     to_log(LOG_INFO, "dasLLAMA noisy: GPU tier installed {moe_gpu_tier_installed()} | want auto {gpu_want_auto()}, moe layers {gpu_want_moe_layers()}, stream {gpu_want_moe_stream()}\n")
-    to_log(LOG_INFO, "dasLLAMA noisy: format tags - q8 {tally_fmt(t, KqFmt.q8)}, k4 {tally_fmt(t, KqFmt.k4)}, k5 {tally_fmt(t, KqFmt.k5)}, k6 {tally_fmt(t, KqFmt.k6)}, q40 {tally_fmt(t, KqFmt.q40)}, q51 {tally_fmt(t, KqFmt.q51)}, iq4xs {tally_fmt(t, KqFmt.iq4xs)}, k3 {tally_fmt(t, KqFmt.k3)}\n")
-    to_log(LOG_INFO, "dasLLAMA noisy: plane MB - q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), k4 {float(long_length(t.k4q) + long_length(t.k4s)) / mb}, k5 {float(long_length(t.k5q) + long_length(t.k5s)) / mb}, k6 {float(long_length(t.k6q) + long_length(t.k6s)) / mb}, q40 {float(long_length(t.q40q) + long_length(t.q40s)) / mb}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, iq4xs {float(long_length(t.iq4xsq) + long_length(t.iq4xss)) / mb}, k3 {float(long_length(t.k3q) + long_length(t.k3s)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
+    to_log(LOG_INFO, "dasLLAMA noisy: format tags - q8 {tally_fmt(t, KqFmt.q8)}, k4 {tally_fmt(t, KqFmt.k4)}, k5 {tally_fmt(t, KqFmt.k5)}, k6 {tally_fmt(t, KqFmt.k6)}, q40 {tally_fmt(t, KqFmt.q40)}, q51 {tally_fmt(t, KqFmt.q51)}, iq4xs {tally_fmt(t, KqFmt.iq4xs)}, k3 {tally_fmt(t, KqFmt.k3)}, iq3s {tally_fmt(t, KqFmt.iq3s)}\n")
+    to_log(LOG_INFO, "dasLLAMA noisy: plane MB - q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), k4 {float(long_length(t.k4q) + long_length(t.k4s)) / mb}, k5 {float(long_length(t.k5q) + long_length(t.k5s)) / mb}, k6 {float(long_length(t.k6q) + long_length(t.k6s)) / mb}, q40 {float(long_length(t.q40q) + long_length(t.q40s)) / mb}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, iq4xs {float(long_length(t.iq4xsq) + long_length(t.iq4xss)) / mb}, k3 {float(long_length(t.k3q) + long_length(t.k3s)) / mb}, iq3s {float(long_length(t.iq3sq) + long_length(t.iq3ss)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
 }
 
 // GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path)
@@ -1193,6 +1212,9 @@ def private kq_fmt_of(gt : int) : KqFmt {
     }
     if (gt == GGML_TYPE_Q3_K) {
         return KqFmt.k3
+    }
+    if (gt == GGML_TYPE_IQ3_S) {
+        return KqFmt.iq3s
     }
     if (gt == GGML_TYPE_Q4_0 && get_kq_q40_native()) {
         return KqFmt.q40
@@ -2029,6 +2051,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             g_stream_plane_total["q51q"] = (sz.q51_n / 32l) * Q51_QB
             g_stream_plane_total["iq4xsq"] = (sz.iq4xs_n / 256l) * IQ4XS_QSB
             g_stream_plane_total["k3q"] = (sz.k3_n / 256l) * K3_QSB
+            g_stream_plane_total["iq3sq"] = (sz.iq3s_n / 256l) * IQ3S_QSB
             let wb = mode == QuantMode.q8 ? sz.wblob_n : 0l
             g_stream_plane_total[t.metal_blob ? "mblob" : "qblob"] = (t.metal_blob
                 ? (wb / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB) : wb)
@@ -2088,6 +2111,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             t.k3s |> reserve((sz.k3_n / 256l) * K3_SSB)
             t.k3s |> resize((sz.k3_n / 256l) * K3_SSB)
+        }
+        if (sz.iq3s_n > 0l) {
+            if (!stream_q) {
+                t.iq3sq |> reserve((sz.iq3s_n / 256l) * IQ3S_QSB)
+                t.iq3sq |> resize((sz.iq3s_n / 256l) * IQ3S_QSB)
+            }
+            t.iq3ss |> reserve((sz.iq3s_n / 256l) * IQ3S_SSB)
+            t.iq3ss |> resize((sz.iq3s_n / 256l) * IQ3S_SSB)
         }
         if (mode == QuantMode.q8) {
             if (!stream_q) {
@@ -2397,6 +2428,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     t.kq_repack_mr40 = active_kq_layout_mr(40)
                     t.kq_repack_mr44 = active_kq_layout_mr(44)
                     t.kq_repack_mr3 = active_kq_layout_mr(3)
+                    t.kq_repack_mr33 = active_kq_layout_mr(33)
                 }
             } else {
                 layout_repack_q8(t)
@@ -2415,7 +2447,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     t.kq_repack_mr40 = active_kq_layout_mr(40)
                     t.kq_repack_mr44 = active_kq_layout_mr(44)
                     t.kq_repack_mr3 = active_kq_layout_mr(3)
-                    to_log(LOG_INFO, "dasLLAMA: K-quant planes repacked to the '{active_kernel_backend()}' layouts (k4 grp{t.kq_repack_mr4}, k5 grp{t.kq_repack_mr5}, k6 grp{t.kq_repack_mr6}, q40 grp{t.kq_repack_mr40}, iq4xs grp{t.kq_repack_mr44}, k3 grp{t.kq_repack_mr3})\n")
+                    t.kq_repack_mr33 = active_kq_layout_mr(33)
+                    to_log(LOG_INFO, "dasLLAMA: K-quant planes repacked to the '{active_kernel_backend()}' layouts (k4 grp{t.kq_repack_mr4}, k5 grp{t.kq_repack_mr5}, k6 grp{t.kq_repack_mr6}, q40 grp{t.kq_repack_mr40}, iq4xs grp{t.kq_repack_mr44}, k3 grp{t.kq_repack_mr3}, iq3s grp{t.kq_repack_mr33})\n")
                 }
             }
         }

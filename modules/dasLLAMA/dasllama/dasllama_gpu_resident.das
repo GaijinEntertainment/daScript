@@ -288,6 +288,11 @@ def trim_model_planes(var t : Model) : bool {   // nolint:STYLE038 — the flat 
                 t.embs |> reserve_resize(nsb * K3_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k3q[sb0 * K3_QSB]), nsb * K3_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k3s[sb0 * K3_SSB]), nsb * K3_SSB)
+            } elif (t.emb_fmt == KqFmt.iq3s) {
+                t.embq |> reserve_resize(nsb * IQ3S_QSB)
+                t.embs |> reserve_resize(nsb * IQ3S_SSB)
+                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq3sq[sb0 * IQ3S_QSB]), nsb * IQ3S_QSB)
+                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq3ss[sb0 * IQ3S_SSB]), nsb * IQ3S_SSB)
             } else {
                 to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{t.emb_fmt}' has no kq plane pair - declining\n")
                 return false
@@ -310,6 +315,8 @@ def trim_model_planes(var t : Model) : bool {   // nolint:STYLE038 — the flat 
     delete t.iq4xss
     delete t.k3q
     delete t.k3s
+    delete t.iq3sq
+    delete t.iq3ss
     delete t.q40q
     delete t.q40s
     delete t.q51q

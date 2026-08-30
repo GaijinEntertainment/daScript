@@ -399,6 +399,29 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
 
 ## Per-format notes
 
+### IQ3_S (the third format - and the first grid format, 2026-08-30)
+
+Shape: 256-superblock grid format - an 8-bit grid index plus a qh ninth bit selects
+`iq3s_grid[512]` (each uint32 = 4 weight magnitudes), the block's own sign bytes flip them (no
+ksigns table anywhere - the disk carries explicit signs), scale = f16 d x (1 + 2 x 4-bit
+sub-scale); signed reconstruction, so no `xbsp` term. Disk block 110 B: f16 d, 64 qs, 8 qh,
+32 signs, 4 packed scale nibbles. Plane pair: quants [qs 64][qh 8][signs 32] VERBATIM (104 B -
+the k3 "disk is already the device form" answer), scale row = the iq4xs/k4 20 B shape with
+(1 + 2s) decoded at transcode, so every k4-row consumer serves unchanged. Ids: `KqFmt.iq3s`
+= 8, kernel id 33, stream code 33. The codebook question a grid format adds: the 2 KB table
+ships as `iq3s_grid()` - the per-call-local worker-safe form `IQ4NL_LUT` documented, just 512
+entries now - plus the main-context `IQ3S_GRID`; the repack is 26 uniform 4-byte columns (no
+per-region split - simpler than k3's, since nothing shifts per lane). Gates on the worktree
+binary: `test_kqformat` 16/16, `test_kquant` 163 tests 150 pass / 13 env-gated skips (the
+batch-groupn family class every format shares); the emitter stubs decline (QUIRK 4), the
+family minted `verdict=rejected` (QUIRK 16's shape) after the whole-scope re-tune (QUIRK 17),
+and the reference bodies serve. End to end: `Llama-3.2-1B-Instruct-IQ3_M.gguf` (bartowski:
+IQ3_S x78 + Q4_K x34 + Q6_K embd) through `run.das` matches llama.cpp's greedy ids **64 of
+64** at gen 23 t/s - the first format to hold the whole comparison window token-for-token.
+JIT emitter, Vulkan, Metal: pending (the per-tier grid-placement answers are pre-researched:
+workgroup/threadgroup-staged table, the IQLUT axis on the cm2 template, threadgroup floats
+on Metal).
+
 ### Q3_K (the second format, 2026-08-30)
 
 Shape: 256-superblock, k6's scale structure exactly (16 per-16 signed sub-scales + f16 d, the
