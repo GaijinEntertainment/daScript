@@ -326,9 +326,7 @@ def test_tsi_method_annotation_apply(t : T?) {
     }
 }
 
-// a template CHAIN: the leaf reifies every template ancestor in one pass - constants and
-// typedefs bind at any level, the nearest override wins, and cross-level method calls
-// (run -> leaf_add) resolve to the stamped names
+//! chain fixture: cross-level calls (ChainBase`run -> ChainMid`leaf_add) must resolve to the stamped names
 [ |> template_struct_instance]
 class template ChainBase {
     @template_constant SCALE : int = 1
@@ -361,7 +359,7 @@ class ChainLeafOwn : ChainMid {
     typedef TT = int
     override SCALE = 2
 
-    def override leaf_add(x : int) : int { // instance override beats BOTH template levels
+    def override leaf_add(x : int) : int { //! instance override beats BOTH template levels
         return x - mid_v
     }
 }
@@ -371,9 +369,9 @@ def test_tsi_template_chain(t : T?) {
     t |> run("a template chain reifies whole: constants, typedefs and overrides at every level") @(t : T?) {
         unsafe {
             var inscope c <- new ChainLeaf(mid_v = 2.0)
-            t |> equal(c->run(5), 58)   // leaf_add(5) = 5+2+10 = 17; 17*3 + 7 = 58
+            t |> equal(c->run(5), (5 + 2 + 10) * 3 + 7)
             var inscope o <- new ChainLeafOwn(mid_v = 4)
-            t |> equal(o->run(9), 17)   // own leaf_add(9) = 9-4 = 5; 5*2 + 7 = 17
+            t |> equal(o->run(9), (9 - 4) * 2 + 7)
         }
     }
 }

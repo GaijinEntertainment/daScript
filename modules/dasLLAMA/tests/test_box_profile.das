@@ -144,8 +144,8 @@ def test_partial_and_missing_are_no_ops(t : T?) {
 
 [test]
 def test_jobque_pool_knobs_apply(t : T?) {
-    // declarations for the NEXT que: the knob path must land in set_jobque_threads /
-    // set_phase_decode_workers exactly (the [init] tier heuristic seeds them; a profile overrides)
+    //! these knobs declare the NEXT que, never a live one - the [init] tier heuristic seeds
+    //! them and a profile overrides
     let saved_pool = get_jobque_threads()
     let saved_decode = get_phase_decode_workers()
     var terr = ""
@@ -160,10 +160,8 @@ def test_jobque_pool_knobs_apply(t : T?) {
     remove(path)
 }
 
-[test]
+[test, arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def test_slow_tier_kind_contract(t : T?) {
-    // a compute-grade second tier only exists on a box whose fast tier is known — the [init]
-    // pool extension keys on both, so the pair must never disagree
     if (is_slow_tier_compute()) {
         t |> success(get_total_perf_cores() > 0, "compute slow tier implies known perf-core topology")
         t |> success(get_total_perf_cores() < get_total_hw_cores(), "compute slow tier implies a genuine second tier")

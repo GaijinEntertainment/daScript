@@ -583,9 +583,6 @@ def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     delete wrow
 }
 
-// the double-buffered staging twin vs the single-tile tall staged-q8 form: same staged f16
-// rounding, same 64-chunk order, so the outputs must match BIT-exact (the DBUF A/B rail's
-// numerics contract); kdim % 64 == 32 arms the tail chunk on both
 def private q8_dbuf_gate(t : T?; dev, queue; m, kdim, ndim : int; mt : int = 128) {
     let tag = "q8_dbuf mt{mt} m={m} k={kdim} n={ndim}"
     var err : string
@@ -615,7 +612,7 @@ def private q8_dbuf_gate(t : T?; dev, queue; m, kdim, ndim : int; mt : int = 128
     var bw = buf_upload(dev, blob)
     var bx = buf_upload(dev, xh)
     var by_a = buf_fill(dev, m * ndim, -1000.0)
-    var by_b = buf_fill(dev, m * ndim, -500.0)   // distinct poison fills: an unwritten tile reds the compare
+    var by_b = buf_fill(dev, m * ndim, -500.0)
     var bk = buf_u32(dev, uint(kdim))
     var bn = buf_u32(dev, uint(ndim))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
@@ -649,8 +646,6 @@ def private q8_dbuf_gate(t : T?; dev, queue; m, kdim, ndim : int; mt : int = 128
             }
         }
         t |> equal(bad, 0)
-        // the single-tile arm also matches the CPU dequant oracle within the shared envelope -
-        // proving the pair is not bit-equal-garbage
         var want : array<float>
         var env : array<float>
         want |> resize(m * ndim)
@@ -686,8 +681,6 @@ def private q8_dbuf_gate(t : T?; dev, queue; m, kdim, ndim : int; mt : int = 128
     delete xh
 }
 
-// the kq double-buffered twins vs their single-tile forms: same in-kernel dequant staged in
-// the same chunk order, so the outputs must match BIT-exact (the DBUF rail's kq contract)
 def private kq_dbuf_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     let tag = "kq_dbuf_k{fmt} m={m} k={kdim} n={ndim}"
     var err : string
@@ -719,14 +712,14 @@ def private kq_dbuf_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     var bkq = buf_upload(dev, kq)
     var bx = buf_upload(dev, xh)
     var by_a = buf_fill(dev, m * ndim, -1000.0)
-    var by_b = buf_fill(dev, m * ndim, -500.0)   // distinct poison fills: an unwritten tile reds the compare
+    var by_b = buf_fill(dev, m * ndim, -500.0)
     var bk = buf_u32(dev, uint(kdim))
     var bn = buf_u32(dev, uint(ndim))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         for (arm in range(2)) {
             metal_set_pipeline(enc, arm == 0 ? pso_a : pso_b)
             metal_set_threadgroup_memory_length(enc, arm == 0 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_tgmem, 0)
-            metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   // k6: the f16 d tail
+            metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   //! k6 keeps its f16 d scales in a tail past the 16B blocks
             metal_set_buffer(enc, bks, 0ul, 1)
             metal_set_buffer(enc, bkq, 0ul, 2)
             metal_set_buffer(enc, bx, 0ul, 3)
@@ -767,9 +760,7 @@ def private kq_dbuf_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     delete xh
 }
 
-// the bake-mirror gate: the image mint's CPU dequant core against the GPU dev-W dequant
-// kernel, BIT-exact over the whole panel (the sec.2.1h baked-panel contract), plus a
-// flipped-halfword control proving the compare reads both sides
+[arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
 def private devw_bake_mirror_gate(t : T?; dev, queue; fmt : int; ndim, kdim : int) {
     let tag = "devw_bake_mirror fmt{fmt} n={ndim} k={kdim}"
     var err : string
@@ -782,15 +773,15 @@ def private devw_bake_mirror_gate(t : T?; dev, queue; fmt : int; ndim, kdim : in
     let nblk = ndim * (kdim / 32)
     var mir : array<float16>
     mir |> resize(ndim * kdim)
-    var bwh = buf_fill(dev, ndim * kdim, float16(-100.0))   // poison fill: an unwritten panel block reds the bit-compare
+    var bwh = buf_fill(dev, ndim * kdim, float16(-100.0))
     var dka = CvtArgs(total = uint(nblk))
     var ran = false
     if (fmt == 0) {
         var blob : array<uint8>
         var wdeq : array<float>
         q8_blob_fill(ndim, kdim / 32, blob, wdeq)
-        // the mirror eats the transcode pair (int8 quants + f32 scales); the blob's f16
-        // scales widen to f32 and re-narrow exactly, so the pair IS the blob's content
+        //! the mirror eats the transcode pair (int8 quants + f32 scales) - the blob's f16 scales
+        //! widen to f32 and re-narrow exactly, so the pair IS the blob's content
         var q : array<int8>
         var sf : array<float>
         q |> resize(nblk * 32)
@@ -834,7 +825,7 @@ def private devw_bake_mirror_gate(t : T?; dev, queue; fmt : int; ndim, kdim : in
         var bkq = buf_upload(dev, kq)
         ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
             metal_set_pipeline(enc, dq_pso)
-            metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   // k6: the f16 d tail
+            metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   //! k6 keeps its f16 d scales in a tail past the 16B blocks
             metal_set_buffer(enc, bks, 0ul, 1)
             metal_set_buffer(enc, bkq, 0ul, 2)
             metal_set_buffer(enc, bwh, 0ul, 3)
@@ -1633,7 +1624,7 @@ def private moe_mulmm_q8_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : in
             metal_set_buffer(enc, by, 0ul, 3)
             metal_set_buffer(enc, bcnt, 0ul, 6)
             metal_set_buffer(enc, bbase, 0ul, 7)
-        } else {        // the joined family rider binds at the MetalMoeMulMmBase numbers
+        } else {
             metal_set_threadgroup_memory_length(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
             metal_set_buffer(enc, bx, 0ul, 3)
             metal_set_buffer(enc, by, 0ul, 4)
@@ -1751,12 +1742,12 @@ def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : i
         metal_set_buffer(enc, bnq, 0ul, 0)
         metal_set_buffer(enc, bee, 0ul, 1)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        if (tensor) {   // the tensor twin rides the shared scaffold's numbers (x@3, y@4)
+        if (tensor) {
             metal_set_buffer(enc, bx, 0ul, 3)
             metal_set_buffer(enc, by, 0ul, 4)
             metal_set_buffer(enc, bcnt, 0ul, 6)
             metal_set_buffer(enc, bbase, 0ul, 7)
-        } else {        // the joined family rider binds at the MetalMoeMulMmBase numbers
+        } else {
             metal_set_buffer(enc, bx, 0ul, 3)
             metal_set_buffer(enc, by, 0ul, 4)
             metal_set_buffer(enc, bcnt, 0ul, 7)
@@ -2037,15 +2028,13 @@ def test_metal_gemm_kernels(t : T?) {
                     kq_devw_gate(t, dev, queue, fmt, 64, 512, 64)
                     kq_devw_gate(t, dev, queue, fmt, 32, 512, 128)   // ndim%128: the tiled leg runs
                 }
-                // the image mint's bake mirrors vs the same dequant kernels, bit-exact
                 for (fmt in [0, 4, 5, 6]) {
                     devw_bake_mirror_gate(t, dev, queue, fmt, 64, 512)
                 }
-                // the double-buffered staging twins, bit-equal to the single-tile forms
                 q8_dbuf_gate(t, dev, queue, 128, 256, 64)
-                q8_dbuf_gate(t, dev, queue, 128, 288, 128)   // kdim%64 == 32: the tail chunk on both arms
-                q8_dbuf_gate(t, dev, queue, 256, 512, 128)   // two M-tiles, deeper K
-                q8_dbuf_gate(t, dev, queue, 64, 256, 64, mt = 32)   // the 32-row stamp pair
+                q8_dbuf_gate(t, dev, queue, 128, 288, 128)   //! kdim%64 == 32: the tail chunk on both arms
+                q8_dbuf_gate(t, dev, queue, 256, 512, 128)   //! two M-tiles, deeper K
+                q8_dbuf_gate(t, dev, queue, 64, 256, 64, mt = 32)   //! the 32-row stamp pair
                 for (fmt in [4, 5, 6]) {
                     kq_dbuf_gate(t, dev, queue, fmt, 128, 512, 64)
                 }

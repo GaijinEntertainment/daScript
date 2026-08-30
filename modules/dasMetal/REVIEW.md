@@ -48,3 +48,10 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
   into it - `get_destination_cooperative_tensor` already hands it back zeroed.** That walk
   forces every element into real storage before the accumulation loop, and that costs the op
   its fast path for the whole loop.
+
+- **A diff that changes the threadgroup row stride the MSL emitter writes for a staged weight
+  tile - `tmm2d_helper_text`'s `dstp` index and `emit_tmm2d_tg_step_deva`'s `ldb` extent in
+  `metal/msl_emit.das` - also changes `ldb` in `tmm2d_tg_step_deva` and the `wt` size documented
+  on `tmm2d_q8u_f32` (`metal/metal_builtins.das`), in the same change.** A staged weight tile is
+  the dequantized W the emitter parks in threadgroup memory; the das bodies replay the same
+  indexing, so a one-sided stride change reads the wrong halves with no compile error.

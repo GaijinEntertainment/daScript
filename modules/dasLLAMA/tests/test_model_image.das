@@ -961,23 +961,18 @@ def test_whisper_metal_tower(tst : T?) {
                 t |> success(!empty(lg.text), "large: non-empty transcript")
                 t |> success(lc.text == lg.text, "large: transcript-exact CPU vs GPU")
             }
-            // the twin-W leg: crowns pinned so the half GEMM stamps compile — the f16-sourced
-            // bin's baked twin serves the block GEMMs, transcript still exact, engage by counter
             set_metal_tensor_crowns("mulmm_q8")
-            metal_prefill_shutdown()   // crowns are read when the PSOs compile
+            metal_prefill_shutdown()
             let tw0 = metal_tower_f16_encodes()
             let twg = whisper_transcribe_text(path, samples, cached = false)
             t |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the f16-sourced tower rode the twin route")
             t |> success(twg.text == cpu.text, "twin route: transcript-exact vs CPU")
-            // the twin-knob leg: DASLLAMA_METAL_TOWER_F16 off pins the f32 route (counter frozen)
             set_metal_tower_f16(false)
             let tw1 = metal_tower_f16_encodes()
             let twf = whisper_transcribe_text(path, samples, cached = false)
             set_metal_tower_f16(true)
             t |> equal(metal_tower_f16_encodes(), tw1, "twin knob off: the route never engaged")
             t |> success(twf.text == cpu.text, "twin knob off: the f32 route stays transcript-exact")
-            // the twin poison: a zeroed wblob layer (fblob INTACT) must CHANGE the GPU
-            // transcript — proof the route reads the twin plane, not the f32 blob
             var inscope wpz = WhisperModel()
             var inscope stgz <- stage_whisper_model(path, false)
             t |> success(long_length(stgz.enc.wblob) > 0l, "the f16 bin baked a twin at stage")
@@ -1304,7 +1299,7 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         if (!model_available(t, path)) {
             return
         }
-        set_qwen3a_q8(true)   // this cell claims the q8 RAIL — the policy default follows the Metal tower on Apple builds
+        set_qwen3a_q8(true)
         let img = image_path_for(path, "qwen3a-q8")
         remove(img)
         // off-rail truth: the staged read — both cached loads are image-backed and cannot
@@ -1692,7 +1687,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         if (!model_available(t, path)) {
             return
         }
-        set_gemma4a_q8(true)   // this cell claims the q8 RAIL — the policy default follows the Metal tower on Apple builds
+        set_gemma4a_q8(true)
         let img = image_path_for(path, "gemma4a-q8")
         remove(img)
         // off-rail truth: the staging carrier re-runs the read-time transcode + repack under
@@ -1753,7 +1748,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
             setup_dasllama_jobque_()
             // decoder off-rail (REVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
-            set_gemma4a_q8(true)   // this cell claims the q8 RAIL — the policy default follows the Metal tower on Apple builds
+            set_gemma4a_q8(true)
             var inscope enc <- load_gemma4a_encoder(mmp_path)
             var inscope s <- create_gemma4a_asr_session(dec)
             t |> success(enc.q8, "leg A tower is on the q8 rail")
@@ -1805,7 +1800,7 @@ def test_gemma4a_tower_metal(t : T?) {
                 setup_dasllama_jobque_()
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
-                set_gemma4a_q8(false)   // the GPU driver's lane; the q8 lane declines by design
+                set_gemma4a_q8(false)
                 var inscope enc <- load_gemma4a_encoder(mmp_path)
                 t |> success(!enc.q8, "tower is on the f32 rail")
                 nlayer = enc.n_layer
@@ -1823,7 +1818,6 @@ def test_gemma4a_tower_metal(t : T?) {
                 let s1 = metal_tower_stats()
                 enc_delta = s1.encodes - s0.encodes
                 blk_delta = s1.blocks - s0.blocks
-                // one-chunk encode pair, same f32 blob, tower off/on: the element instrument
                 var inscope stc = Gemma4aState()
                 var inscope stg = Gemma4aState()
                 set_metal_tower(false)
@@ -1845,19 +1839,18 @@ def test_gemma4a_tower_metal(t : T?) {
             }
             t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
             t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
-            // measured 3.9e-4 on the jfk fixture (12 blocks, window-12 attention caps the mixing)
+            //! measured 3.9e-4 on the jfk fixture (12 blocks, window-12 attention caps the mixing)
             t |> success(enc_rel_rms < 5.0e-3, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
             to_log(LOG_INFO, "gemma4a mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "gemma4a mtower GPU eyeball: {gpu_text}\n")
             t |> success(!empty(gpu_text), "non-empty transcript")
-            // a legitimate near-tie flip means converting this cell to forced-feed, not loosening the compare
             t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
             delete samples
         }
     }
 }
 
-[test]
+[test, arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
 def test_canary_tower_metal(t : T?) {
     t |> run("canary tower: the Metal FastConformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1884,7 +1877,7 @@ def test_canary_tower_metal(t : T?) {
                 setup_dasllama_jobque_()
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
-                set_canary_enc_q8(false)   // the GPU driver's lane; the q8 lane declines by design
+                set_canary_enc_q8(false)
                 var inscope enc <- load_canary_encoder(mmp_path, false)
                 t |> success(!enc.q8, "encoder is on the f32 rail")
                 nlayer = enc.n_layer
@@ -1903,7 +1896,6 @@ def test_canary_tower_metal(t : T?) {
                 let s1 = metal_tower_stats()
                 enc_delta = s1.encodes - s0.encodes
                 blk_delta = s1.blocks - s0.blocks
-                // one encode pair, same f32 blob, tower off/on: the element instrument
                 var inscope stc = CanaryState()
                 var inscope stg = CanaryState()
                 set_metal_tower(false)
@@ -1925,14 +1917,13 @@ def test_canary_tower_metal(t : T?) {
             }
             t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
             t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
-            // measured 3.1e-4 on the jfk fixture (f32 GEMMs both sides; the online-softmax
-            // attention re-orders accumulation) — the bar leaves deep-GPU headroom, logged either way
+            //! measured 3.1e-4 on the jfk fixture (f32 GEMMs both sides; the online-softmax
+            //! attention re-orders accumulation) - the bar leaves deep-GPU headroom
             t |> success(enc_rel_rms < 5.0e-2, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
             to_log(LOG_INFO, "canary mtower encode rel-rms: {enc_rel_rms}\n")
             to_log(LOG_INFO, "canary mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "canary mtower GPU eyeball: {gpu_text}\n")
             t |> success(!empty(gpu_text), "non-empty transcript")
-            // a legitimate near-tie flip means converting this cell to forced-feed, not loosening the compare
             t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
             delete samples
         }
@@ -1954,7 +1945,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
             t |> skip("jfk.wav not present beside the models")
             return
         }
-        set_qwen3a_q8(true)   // this cell claims the q8 RAIL — the policy default follows the Metal tower on Apple builds
+        set_qwen3a_q8(true)
         var inscope twq <- load_qwen3a_tower(path)
         t |> success(twq.core.q8, "tower core is on the q8 rail")
         set_qwen3a_q8(false)
@@ -2018,7 +2009,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
             // decoder off-rail (REVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
             dec.config.seq_len = min(dec.config.seq_len, 8192l)
-            set_qwen3a_q8(true)   // leg A claims the q8 RAIL — the policy default follows the Metal tower
+            set_qwen3a_q8(true)
             var inscope tw <- load_qwen3a_tower(mmp_path)
             t |> success(tw.core.q8, "leg A tower core is on the q8 rail")
             var inscope s <- create_qwen3a_asr_session(dec, tw, "auto", false)
@@ -2045,7 +2036,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
 // The qwen3a f32-rail tower on the GPU (arm `mtower`): transcript equality with the knob off
 // vs on, blocks-counter delta derived from the loaded tower's own n_layer. The q8 SERVING
 // default declines by design (the whisper mtower cell above owns that assert).
-[test]
+[test, arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
 def test_qwen3a_metal_tower(tst : T?) {
     tst |> run("qwen3a f32 rail: the Metal tower blocks - transcript + counters") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2075,7 +2066,7 @@ def test_qwen3a_metal_tower(tst : T?) {
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
                 set_qwen3a_q8(false)
-                set_metal_tower_f16(false)   // this cell's element bar claims the f32 GPU chain; the twin leg below re-arms
+                set_metal_tower_f16(false)   //! this cell's element bar claims the f32 GPU chain; the twin leg below re-arms
                 var inscope tw <- load_qwen3a_tower(mmp_path)
                 t |> success(!tw.core.q8, "tower core is on the f32 rail")
                 nlayer = tw.core.n_layer
@@ -2115,8 +2106,6 @@ def test_qwen3a_metal_tower(tst : T?) {
                     sa += double(ecpu.out[i] * ecpu.out[i])
                 }
                 enc_rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
-                // the twin leg: the bf16 mmproj's baked halfword twin serves the block GEMMs -
-                // transcript must MATCH the f32 GPU turn, engage proven by the route counter
                 set_metal_tower_f16(true)
                 let tw0 = metal_tower_f16_encodes()
                 var twin_text = ""

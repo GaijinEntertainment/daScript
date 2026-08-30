@@ -49,7 +49,7 @@ struct Qwen25vTower {
     n_layer : int64      // 32
     n_head : int64       // 16 (head width 80)
     n_ff : int64         // the gated hidden (3420 on the 3B) — from the TENSOR dims, the metadata lies
-    ff_pad : int64       // n_ff rounded up to 64 (3456) — the SERVED ffn width (zero pads, exact)
+    ff_pad : int64       //! the SERVED ffn width: n_ff rounded up to 64 (3456 on the 3B)
     proj_dim : int64     // the merger's output width — the soft-token width (decoder width)
     patch : int64        // 14 px
     patch_dim : int64    // patch² × 3 — the im2col row (588)
@@ -59,19 +59,19 @@ struct Qwen25vTower {
     eps : float
     img_mean : float3    // CLIP per-channel normalize
     img_std : float3
-    blk_bf16 : bool      // the file's GEMM element type — names the twin's dispatch family, storage is f32-in-blob
+    blk_bf16 : bool      //! the file's GEMM element type - the twin's dispatch family only; every GEMM stages f32-in-blob
     mm_bf16 : bool
     blob : PlaneF = PlaneF()
-    wblob : PlaneU16 = PlaneU16()   // the baked halfword GEMM twin ([[tower_bake_half_twin]]); empty = route-ineligible
+    wblob : PlaneU16 = PlaneU16()   //! the baked halfword GEMM twin ([[tower_bake_half_twin]]); empty = route-ineligible
     patch_w : int64      // [n_embd × q25v_patch_pad] f32 — W0 + W1 folded, padded rows (no patch bias, no pos table)
     post_ln_w : int64    // [n_embd] RMS weight
     mm0_w : int64        // [4·n_embd → 4·n_embd]
     mm0_b : int64
     mm2_w : int64        // [4·n_embd → proj_dim]
     mm2_b : int64
-    layer_f : int64      // per-block f32 region; stride: ln1_w, ln2_w, q_b, k_b, v_b, out_b [d ×4], gate_b, up_b [ff_pad ×2], down_b [d]
+    layer_f : int64      //! per-block f32 region; q25v_layout names the members of layer_f_stride
     layer_f_stride : int64
-    layer_w : int64      // per-block GEMM region, f32-in-blob; stride layer_w_stride (the FFN trio at ff_pad)
+    layer_w : int64      //! per-block GEMM region, f32-in-blob; stride layer_w_stride (the FFN trio at ff_pad)
     layer_w_stride : int64
     image_map : void?
     image_bytes : uint64
@@ -201,10 +201,9 @@ def private register_qwen25v_image_tags {
 let private Q25V_BLK_GEMM_NAMES <- [ "attn_q", "attn_k", "attn_v", "attn_out", "ffn_gate", "ffn_up", "ffn_down" ]
 
 //! The conv/attention GEMM K width served padded — %64 fits the Metal tiles; zero pads, exact.
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]
 def q25v_patch_pad(t : Qwen25vTower) : int64 => (t.patch_dim + 63l) / 64l * 64l
 
-// the SERVED block GEMM element counts in QWEN25V_GEMM_* order (the gated FFN trio at ff_pad;
-// gate/up pad with zero weight ROWS, down with zero tail COLUMNS — outputs bit-identical)
 def private q25v_gemm_sizes(d, ffp : int64) : array<int64> {
     return <- [ d * d, d * d, d * d, d * d, d * ffp, d * ffp, ffp * d ]
 }
@@ -241,19 +240,18 @@ def private q25v_verify_tensors(m : GGUFMeta; t : Qwen25vTower) {
     }
 }
 
-[unused_argument(woff)]   // the f32 unification left no wblob planes; the cursor stays for the stage's shape
+[unused_argument(woff), arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]   // no wblob cursor: every GEMM stages f32-in-blob; woff keeps the shared layout signature
 def private q25v_layout(var t : Qwen25vTower; var off : int64&; var woff : int64&) {
     let d = t.n_embd
     let ffp = t.ff_pad
     t.patch_w = off; off += q25v_patch_pad(t) * d
     t.post_ln_w = off; off += d
-    t.mm0_w = off; off += 16l * d * d   // merger GEMMs stage f32-in-blob like the blocks
+    t.mm0_w = off; off += 16l * d * d
     t.mm0_b = off; off += 4l * d
     t.mm2_w = off; off += 4l * d * t.proj_dim
     t.mm2_b = off; off += t.proj_dim
     t.layer_f_stride = 7l * d + 2l * ffp   // ln1_w, ln2_w, q_b, k_b, v_b, out_b, down_b [d ×7]; gate_b, up_b [ffp ×2]
     t.layer_f = off; off += t.n_layer * t.layer_f_stride
-    // f32-in-blob whatever the file dtype — the Metal tower reads f32 planes or the baked twin
     t.layer_w_stride = 4l * d * d + 3l * d * ffp
     t.layer_w = off
     off += t.n_layer * t.layer_w_stride
@@ -263,10 +261,8 @@ def private q25v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qw
     let d = st.t.n_embd
     let ff = st.t.n_ff
     let fp = st.t.ff_pad
-    var wscratch : array<float>     // the padded-GEMM f32 staging, one GEMM at a time
+    var wscratch : array<float>     // the folded patch-conv W; block GEMMs stage through tower_stage_f32_*
     var rowscratch : array<float>   // the down GEMM's unpadded file rows ahead of the expand
-    // the folded conv W lands at the padded stride: file rows scatter to q25v_patch_pad-strided
-    // plane rows, the pad lanes keeping the resize's zeros
     wscratch |> reserve_resize(st.t.patch_dim * d)
     tower_read_conv_pair_folded(m, bytes, "v.patch_embd.weight", wscratch, 0l, st.t.patch_dim * d)
     unsafe {
@@ -291,7 +287,7 @@ def private q25v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qw
         for (g in range64(QWEN25V_GEMMS)) {
             gguf_read_tensor_f32(m, bytes, "{p}.{Q25V_BLK_GEMM_NAMES[g]}.bias", st.blob, fo, file_biases[g])
             if (g == QWEN25V_GEMM_GATE || g == QWEN25V_GEMM_UP) {
-                tower_zero_span(st.blob, fo + ff, fp - ff)   // the padded gate/up bias: zero tail
+                tower_zero_span(st.blob, fo + ff, fp - ff)
                 fo += fp
             } else {
                 fo += file_biases[g]
@@ -313,6 +309,7 @@ def private q25v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qw
 }
 
 //! Read the tower off an mmproj gguf into owned staging arrays — the mint side of the image rail.
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def stage_qwen25v_tower(path : string) : Qwen25vStaging {
     var st = Qwen25vStaging()
     let f = fopen(path, "rb")
@@ -382,7 +379,6 @@ def stage_qwen25v_tower(path : string) : Qwen25vStaging {
                 && (st.t.blk_bf16
                     || (gguf_tensor_type(m, "v.blk.0.attn_q.weight") == GGML_TYPE_F16
                         && gguf_tensor_type(m, "mm.0.weight") == GGML_TYPE_F16))) {
-            // the halfword GEMM twin: plane absence IS the ineligibility flag (mixed/f32 files)
             tower_bake_half_twin(st.blob, st.wblob, st.t.blk_bf16)
         }
     }
@@ -513,7 +509,7 @@ def private q25v_grid_tables(t : Qwen25vTower; var s : Qwen25vState; pw, ph : in
 // layers attend per contiguous window range, full layers ((l+1) % n_wa_pattern == 0) in full
 def private q25v_block(t : Qwen25vTower; var s : Qwen25vState; l, npos : int64) {
     let d = t.n_embd
-    let ff = t.ff_pad   // the served FFN width — zero pads, exact
+    let ffp = t.ff_pad
     let hd = d / t.n_head
     let o = qwen25v_block_offs(t, l)
     var tp = ref_time_ticks()
@@ -548,26 +544,25 @@ def private q25v_block(t : Qwen25vTower; var s : Qwen25vState; l, npos : int64) 
     rms_rows(s.xb, s.x, t.blob, o.ln2_w, d, npos, t.eps)
     asr_prof_add("q25v.norm", tp)
     tp = ref_time_ticks()
-    mm_plane_b(s.hg, false, t.wblob, t.blob, o.w[QWEN25V_GEMM_GATE], s.xb, d, ff, npos)
-    add_bias_rows(s.hg, t.blob, o.b[QWEN25V_GEMM_GATE], ff, npos)
-    mm_plane_b(s.hu, false, t.wblob, t.blob, o.w[QWEN25V_GEMM_UP], s.xb, d, ff, npos)
-    add_bias_rows(s.hu, t.blob, o.b[QWEN25V_GEMM_UP], ff, npos)
-    silu4_batch(s.hg, ff, npos)
+    mm_plane_b(s.hg, false, t.wblob, t.blob, o.w[QWEN25V_GEMM_GATE], s.xb, d, ffp, npos)
+    add_bias_rows(s.hg, t.blob, o.b[QWEN25V_GEMM_GATE], ffp, npos)
+    mm_plane_b(s.hu, false, t.wblob, t.blob, o.w[QWEN25V_GEMM_UP], s.xb, d, ffp, npos)
+    add_bias_rows(s.hu, t.blob, o.b[QWEN25V_GEMM_UP], ffp, npos)
+    silu4_batch(s.hg, ffp, npos)
     unsafe {
         var gp = addr(s.hg[0])
         let up = addr<float const?>(s.hu[0])
-        for (i in range64(npos * ff)) {
+        for (i in range64(npos * ffp)) {
             gp[i] *= up[i]
         }
     }
-    mm_plane_b(s.xb, false, t.wblob, t.blob, o.w[QWEN25V_GEMM_DOWN], s.hg, ff, d, npos)
+    mm_plane_b(s.xb, false, t.wblob, t.blob, o.w[QWEN25V_GEMM_DOWN], s.hg, ffp, d, npos)
     add_bias_rows(s.xb, t.blob, o.b[QWEN25V_GEMM_DOWN], d, npos)
     add_inplace_rows(s.x, s.xb, npos * d)
     asr_prof_add("q25v.ffn", tp)
 }
 
-// the stem's CPU half: im2col at the padded row stride + every buffer sized for this canvas
-// (the GPU driver reads s.x0 and needs s.mout sized; the CPU route continues in q25v_stem_finish)
+//! the stem's column half, both routes: im2col at the padded stride, and s.x0/s.mout sized for the driver
 def private q25v_stem_cols(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h : int64) : int64 {
     let d = t.n_embd
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0, q25v_patch_pad(t))
@@ -585,8 +580,7 @@ def private q25v_stem_cols(t : Qwen25vTower; var s : Qwen25vState; planes : arra
     return npos
 }
 
-// the stem's CPU finish: conv (folded W at the padded K, no bias, no pos table) → the
-// window-sorted reorder into s.x
+//! the stem's compute half, the CPU route: conv at the padded K, then the window-sorted reorder into s.x
 def private q25v_stem_finish(t : Qwen25vTower; var s : Qwen25vState; npos : int64) {
     let d = t.n_embd
     mm_plane_b(s.xn, false, t.wblob, t.blob, t.patch_w, s.x0, q25v_patch_pad(t), d, npos)
@@ -600,8 +594,7 @@ def private q25v_stem_finish(t : Qwen25vTower; var s : Qwen25vState; npos : int6
 }
 
 // the tail: RMS post-norm, the 2×2 merger MLP (sorted rows are merge-adjacent, so the ×4
-// reshape is flat) into s.mout — window-sorted; the un-sort scatter is the encode's, shared
-// with the GPU route
+// reshape is flat) into s.mout, window-sorted; the encode owns the un-sort scatter
 def private q25v_tail(t : Qwen25vTower; var s : Qwen25vState; npos : int64) {
     let d = t.n_embd
     let nout = npos / 4l
@@ -613,13 +606,12 @@ def private q25v_tail(t : Qwen25vTower; var s : Qwen25vState; npos : int64) {
     add_bias_rows(s.mout, t.blob, t.mm2_b, t.proj_dim, nout)
 }
 
-// the GPU hook (registered by dasllama_metal_tower at [init]; requires-back): after
-// q25v_stem_cols it runs conv/gather + every block + the merger tail off s.x0 + the grid
-// tables, leaving window-sorted [nout × proj] rows in s.mout; false = declined, CPU falls back
+//! the GPU hook: conv/gather + every block + the merger tail off s.x0, window-sorted rows into s.mout
 typedef Qwen25vGpuBlocksFn = function<(t : Qwen25vTower; var s : Qwen25vState; npos : int64) : bool>
 var private g_q25v_gpu : Qwen25vGpuBlocksFn
 var private g_q25v_gpu_set = false
 
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_qwen25v_gpu(fn : Qwen25vGpuBlocksFn) {
     g_q25v_gpu = fn
     g_q25v_gpu_set = true
@@ -660,7 +652,7 @@ def qwen25v_encode(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>
     tp = ref_time_ticks()
     let nout = npos / 4l
     ensure_length(out, nout * t.proj_dim)
-    unsafe {   // the window UN-sort into out's group-row-major order
+    unsafe {   //! the window UN-sort: out is group-row-major
         var op = addr(out[0])
         let mp = addr<float const?>(s.mout[0])
         for (g in range64(nout)) {

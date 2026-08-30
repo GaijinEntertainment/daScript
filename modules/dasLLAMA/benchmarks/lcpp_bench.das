@@ -298,8 +298,8 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         }
         let das_ms = measure_das(m, samples, reps, spec.lang, text, enc_ms)
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            // only families with a Metal tower driver (AudioTower + the gemma4a Conformer);
-            // canary/parakeet encoders are CPU by design
+            //! only families with a Metal tower driver (AudioTower + the gemma4a Conformer) -
+            //! canary/parakeet encoders are CPU by design
             let tower_kind = (m.kind == AsrKind.whisper || m.kind == AsrKind.qwen3a
                 || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.gemma4a)
             if (gpu && tower_kind && (metal_tower_stats().encodes == tw_enc0 || enc_ms <= 0.0lf)) {
@@ -313,8 +313,8 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never engaged the wdec driver (windows delta 0) - the decoder half measured the CPU\n")
                 leg_ok = false
             }
-            // the audio-chat decoders ride the standard Metal rail on the gpu leg: a flat
-            // prefill counter means the turn's context prefill ran on the CPU
+            //! the audio-chat decoders ride the standard Metal rail on the gpu leg: a flat
+            //! prefill counter means the turn's context prefill ran on the CPU
             if (gpu && (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.gemma4a) && metal_prefill_stats().prefills == pf_n0) {
                 print("lcpp_bench --asr: LOUD FAIL - gpu row {spec.display} {wav} never engaged the Metal prefill (prefills delta 0) - the decoder half measured the CPU\n")
                 leg_ok = false
@@ -357,13 +357,13 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     return leg_ok
 }
 
-// The --asr entry: catalog match -> measure -> the same cell JSON the LLM rows emit. --ngl
-// selects the gpu leg: the f32 tower rail on the Metal tower driver, and the audio-chat
-// decoders on the standard Metal rail (blob flavor); whisper/parakeet decoders keep their own
-// paths (wdec driver / CPU by design). Every measured gpu row must show tower engagement —
-// and a chat-decoder row prefill engagement — or the leg exits non-zero.
+//! The --asr entry: catalog match -> measure -> the same cell JSON the LLM rows emit. --ngl
+//! selects the gpu leg - the f32 tower rail on the Metal tower driver, the audio-chat decoders
+//! on the standard Metal rail; whisper/parakeet decoders keep their own paths (wdec driver /
+//! CPU by design). A measured gpu row without tower engagement, or a chat-decoder row without
+//! prefill engagement, exits the leg non-zero.
 def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, accel : bool) : bool {
-    allow_cpu_prefill()   // Conformer/planar decoder paths still CPU-prefill by protocol — declared intent
+    allow_cpu_prefill()   //! Conformer/planar decoder paths still CPU-prefill by protocol
     if (accel && gpu) {
         print("--accel is a CPU-tier lever - drop it or run with -ngl 0\n")
         return false
@@ -378,7 +378,7 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
     }
     if (gpu) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_mode(MetalMode.when_available)   // before the loads: the audio-chat decoders mint the blob flavor and ride the Metal rail
+            set_metal_mode(MetalMode.when_available)   //! before the loads: the audio-chat decoders mint the blob flavor and ride the Metal rail
             set_asr_tower_fp32(true)   // f32 TOWER only (q8 towers decline quant_mode); the decoder half stays on its q8 rail
             set_metal_tower(true)
             set_metal_wdec(true)        // explicit intent, like the CPU arm's pins: a stray
@@ -1329,8 +1329,8 @@ def main() : int {
         threads = unwrap(t_env)
         say(fmt, "warning: DAS_JOBQUE_THREADS overrides -t - running {threads} lanes\n")
     } elif (hybrid_default) {
-        // heterogeneous box, nothing explicit: keep the engine policy (pool = all cores, GEMV
-        // capped to the fast tier) rather than capping the pool back to the fast tier
+        //! heterogeneous box, nothing explicit: keep the engine policy (pool = all cores, GEMV
+        //! capped to the fast tier) rather than capping the pool back to the fast tier
         say(fmt, "lcpp_bench: hybrid box - pool {threads} lanes, decode capped to {get_total_perf_cores()} fast-tier lanes (-t overrides)\n")
     } elif (is_none(t_env)) {
         // the PC measurement regime caps at 16 lanes (an explicit env or -t always wins) —
@@ -1408,7 +1408,7 @@ def main() : int {
     var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()
-        // the regime line above prints the INTENT; this is the que that actually spawned
+        //! the regime line above prints the INTENT; this is the que that actually spawned
         say(fmt, "live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         for (mpath in model_list) {
         continue if (empty(mpath))

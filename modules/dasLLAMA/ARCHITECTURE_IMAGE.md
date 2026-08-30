@@ -105,3 +105,37 @@ views over the mapped plane, so a baked site never dispatches a dequant and hold
 dedicated memory; sites the bake does not cover (q40/q51 - the dev-W route has no dequant
 kernel for them - and owned gguf loads) stay on the runtime path, resident under
 `DASLLAMA_METAL_DEVW_RESIDENT` or scratch.
+
+The k6 dequant writes its value as `dsc * (q - 32)` at every site - the runtime kernel, its
+double-buffered twin, and the mint's CPU mirror. The factored spelling costs nothing, since the
+compiler factors the distributed form anyway, and it pins the SIGN of a zero result: at q == 32
+with a negative scale the distributed form yields +0 and the factored one -0. One spelling
+everywhere makes the equality hold by source rather than by toolchain mood.
+
+### 2.1i The baked tower twin-W plane {#image-tower-twin-plane}
+
+A vision- or audio-tower image carries `wblob`: the tower's block and merger GEMM weights
+re-emitted as halfwords in the same element order as the f32 blob, so a site reads its twin at
+the f32 offset doubled. The mint emits the twin only for a GEMM whose source tensor is already
+f16 or bf16, so the twin holds the file's own values and introduces no rounding; an empty
+`wblob` is therefore the ineligibility flag a driver tests, not a separate capability field. A
+GEMM whose weights are COMPUTED at load - the folded patch-conv pair of the qwen3v and qwen25v
+stems - has no source tensor, no twin, and stays on the f32 route.
+
+The f16 arm needs a tensor crown (`pf_hmm_ready`) and converts X once per encode into one
+shared half panel every site reuses; the bf16 arm reads the twin natively and takes that panel
+only where its half-X stamp compiled. `DASLLAMA_METAL_TOWER_F16=0` pins the f32 route, and
+`metal_tower_f16_encodes()` is the engage witness.
+
+The bake (`tower_bake_half_twin`) is whole-blob: the file's own halves land at the same element
+offsets, and the f32 regions that ride along (norms, biases, position tables) clamp on the f16
+form - safe because the halfword route never reads them. An f16 source round-trips exactly and a
+bf16 source is the f32 word's top halfword, so the twin holds the file's bits, not a re-rounded
+copy. A streamed mint writes the same bytes as the eager bake over the same span, so an image
+minted either way serves the same twin. The q8 lane never bakes one - it serves quantized planes
+instead. `blk_bf16` names which halfword family the route dispatches.
+
+The crown set is read when the prefill PSOs compile, not when a GEMM dispatches, so
+`pf_hmm_ready` answers for whatever crowns were armed at the last `metal_prefill_init`. A
+caller that arms a crown after bring-up runs `metal_prefill_shutdown` to force the recompile;
+without it the f16 arm silently stays unavailable and every encode takes the f32 route.

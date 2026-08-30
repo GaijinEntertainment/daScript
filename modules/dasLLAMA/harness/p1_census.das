@@ -42,9 +42,9 @@ def main {
         }
         with_job_que() {
             setup_dasllama_jobque_()
-            measure_one(tr, 512l)   // warm
+            measure_one(tr, 512l)   //! warm
             metal_kernel_coverage_reset()
-            measure_one(tr, 512l)   // the counted forward
+            measure_one(tr, 512l)   //! the counted forward
             var cov <- metal_kernel_coverage()
             var names <- [for (name in keys(cov)); name]
             names |> sort()

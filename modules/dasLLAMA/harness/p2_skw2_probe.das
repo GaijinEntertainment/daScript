@@ -126,7 +126,7 @@ def main {
             }
             let tgm = MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_tgmem
             let reps = 20
-            for (warm in range(2)) {   // pass 0 warms PSO/pages; pass 1 is the report
+            for (warm in range(2)) {   //! pass 0 warms PSO/pages; pass 1 is the report
                 let t1 = time_split(dev, queue, pso, 1, reps, tgm)
                 let t2 = time_split(dev, queue, pso, 2, reps, tgm)
                 let t4 = time_split(dev, queue, pso, 4, reps, tgm)

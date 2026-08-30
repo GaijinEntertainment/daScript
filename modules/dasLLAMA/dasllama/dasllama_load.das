@@ -819,8 +819,6 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
     return true
 }
 
-// ===== the baked dev-W f16 panel plane (metal flavor) =====
-
 //! mirrors the prefill DEVW_BIG_PANEL knee: a panel past it never serves the dev-W route,
 //! so baking it would only grow the image
 let DEVW_BAKE_PANEL_MAX = 48ul * 1024ul * 1024ul
@@ -904,7 +902,6 @@ def devw_dequant_k6_core(kq : uint8 const?; ks : uint8 const?; sstride : int64; 
                         let u = qp[half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
                         let hu = qp[32u + half6 * 8u + ile * 4u + k]
                         let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                        // the kernel's factored form verbatim - the zero SIGN depends on it
                         dst[sb * 256l + int64(js) * 32l + int64(ile) * 16l + int64(ti)] = float16(dsc * (float(q) - 32.0))
                     }
                 }
@@ -929,6 +926,7 @@ def private devw_bake_covers(field : string) : bool {
 //! Fill the site tables (fmt/key/off/n) for the panels the plane fill will write — call BEFORE
 //! the image build so the tables serialize as regular planes. Returns total panel BYTES (page
 //! padding not included); 0 = nothing to bake.
+[arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
 def devw_bake_tables(var t : Model; jobs : array<FillJob>) : int64 {
     var mine <- devw_bake_jobs(t, jobs)
     t.devwf16_fmt |> reserve(length(mine))
@@ -952,6 +950,7 @@ def devw_bake_tables(var t : Model; jobs : array<FillJob>) : int64 {
 //! Write the devwf16 plane: per baked site, transcode its data from the gguf mapping and run
 //! the format's devw_dequant_*_core (the CPU mirror of the runtime dev-W dequant kernel), so
 //! a baked panel is bit-equal to a runtime one. Walks the table build's sorted set verbatim
+[arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
 def fill_devwf16_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model;
                        jobs : array<FillJob>;
                        append : block<(p : void?; nbytes : uint64) : void>) : bool {
@@ -988,7 +987,6 @@ def fill_devwf16_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model;
             }
             unsafe {
                 if (j.fmt == KqFmt.k6) {
-                    // raw transcode rows: [16B sub-scales][2B f16 d], stride K6_SSB = 18
                     devw_dequant_k6_core(addr(temp_kq[0]), addr(temp_ks[0]), K6_SSB, addr(temp_ks[16]), K6_SSB, nsb, addr(panel[0]))
                 } else {
                     devw_dequant_k45_core(addr(temp_kq[0]), addr(temp_ks[0]), K4_SSB, nsb, j.fmt == KqFmt.k5, addr(panel[0]))

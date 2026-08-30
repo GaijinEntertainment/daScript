@@ -156,14 +156,14 @@ def load_asr_model(path : string) : AsrModel {
     return <- m
 }
 
+[arch(at="../ARCHITECTURE_MEDIA.md#asr-decoder-session")]
 def load_asr_model(path : string; mmproj : string) : AsrModel {
     //! The two-file route: ``path`` is the decoder GGUF, ``mmproj`` its audio front end — sniffed:
     //! ``qwen3a`` mmproj = Qwen3-ASR/Qwen3-Omni AuT tower, ``gemma4a`` = Gemma-4 Conformer, "CNRY"
     //! bin = Canary-Qwen FastConformer. Every decoder loads Q8 (the tuned rail); the fp32 parity arm rides ``QuantMode.fp32 + image_fp32`` off-facade. Either file may be a prepared ``.dlim`` (the mmproj routes on its baked family tag).
     var emagic = 0u
     var eproj = ""
-    // raw-bin default follows the lane policy (a serving Metal driver wants the f32 blob);
-    // the facade's fp32 knobs pin exact, and a .dlim's baked tag overrides either
+    //! the raw-bin default; a .dlim's baked tag overrides it
     var canary_q8 = !(g_asr_force_fp32 || g_asr_tower_fp32) && canary_enc_serves_q8()
     if (mmproj |> ends_with(".dlim")) {
         let tag = image_family_tag(mmproj)
@@ -205,13 +205,12 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     }
     if (eproj == "gemma4a") {
         var m = AsrModel(kind = AsrKind.gemma4a)
-        // plain Model session (embed rows + eval) — rides the box's decode policy, like qwen3a
         m.dec <- load_model_cached(path, QuantMode.q8)
         if (m.dec.arch != "gemma4") {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the gemma4a audio route expects a Gemma-4 decoder")
         }
         m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
-        if (g_asr_force_fp32 || g_asr_tower_fp32) {   // the facade's fp32 rail pins the exact lane for this load
+        if (g_asr_force_fp32 || g_asr_tower_fp32) {
             set_gemma4a_q8(false)
             m.g4a <- load_gemma4a_encoder(mmproj)
             reset_gemma4a_q8()
@@ -225,9 +224,6 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     }
     if (emagic == CANARY_MAGIC) {
         var m = AsrModel(kind = AsrKind.canary)
-        // the serving artifact is Q8_0 (recipe) so the tied classifier serves cls_q8 and the
-        // decoder rides the box's decode policy; the f16 parity carrier still mints planar on
-        // its own (the blob drivers decline its tied-fp32 classifier at mint time)
         m.dec <- load_model_cached(path, QuantMode.q8)
         if (m.dec.arch != "qwen3") {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the Canary route expects a Qwen3-1.7B decoder")
@@ -240,9 +236,6 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         return <- m
     }
     var m = AsrModel(kind = AsrKind.qwen3a)
-    // the qwen3a decode path is a plain Model session (embed rows + eval), so it rides the
-    // box's decode policy — blob-metal when armed; whisper/parakeet stay planar (their custom
-    // CPU decoders read planes)
     m.dec <- load_model_cached(path, QuantMode.q8)
     // Same qwen3a AuT tower, two thinkers: Qwen3-ASR is a dense qwen3 (arch `qwen3`/`qwen3vl`);
     // Qwen3-Omni-30B is the MoE thinker (arch `qwen3vlmoe`), driven as a chat/transcription turn.
@@ -252,7 +245,7 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the GGUF ASR route expects a Qwen3-ASR (qwen3/qwen3vl) or Qwen3-Omni (qwen3vlmoe) decoder")
     }
     m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
-    if (g_asr_force_fp32 || g_asr_tower_fp32) {   // the facade's fp32 rail pins the exact lane for this load
+    if (g_asr_force_fp32 || g_asr_tower_fp32) {
         set_qwen3a_q8(false)
         m.q3t <- load_qwen3a_tower(mmproj)
         reset_qwen3a_q8()

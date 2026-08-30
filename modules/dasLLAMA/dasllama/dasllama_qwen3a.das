@@ -133,16 +133,14 @@ def private register_qwen3a_image_tags {
     register_image_family_tag("qwen3a-q8")
 }
 
-// The lane policy follows the fastest GEMM path on the box: a serving Metal tower wants f32
-// planes (the driver declines q8) and flips the default to the exact lane; else q8 (the CPU
-// serving format). A pin overrides — the parity legs pin each lane explicitly.
 enum private Q3aLane {
-    unset    // the policy decides
-    exact    // f32 planes
+    unset
+    exact
     q8
 }
 var private g_q3a_pin = Q3aLane.unset
 
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def private q3a_serve_q8() : bool {
     if (g_q3a_pin != Q3aLane.unset) {
         return g_q3a_pin == Q3aLane.q8
@@ -164,8 +162,7 @@ def reset_qwen3a_q8() {
 //! Would the next load serve the tower q8 — the pin when set, the policy otherwise.
 def qwen3a_serves_q8() : bool => q3a_serve_q8()
 
-// the twin-bake gate: every block GEMM tensor carries the SAME halfword type, so the baked
-// twin round-trips the file's own halves exactly
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def private q3a_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
     for (l in range64(n_layer)) {
         for (nm in ["attn_q", "attn_k", "attn_v", "attn_out", "ffn_up", "ffn_down"]) {
@@ -283,7 +280,6 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         if (q3a_serve_q8()) {
             tower_quantize(st.e.core, st.core)   // arm the shared core's q8 rail (encoder_blocks reads core.q8)
         } elif ((gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16) && q3a_gemm_types_uniform(m, st.e.core.n_layer, gt)) {
-            // the halfword GEMM twin: plane absence IS the ineligibility flag (mixed/f32 files)
             tower_bake_half_twin(st.core.fblob, st.core.wblob, st.e.core.blk_bf16)
         }
 
@@ -380,13 +376,13 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
     tw_repack(qblob, qscales, t.mm2_w_off, d, t.proj_dim)
 }
 
-// The GPU mel hook (registered by dasllama_metal_tower at [init]): DFT/power/mel off the
-// CPU-windowed xw frames into m.data, or false (CPU fallback).
+//! the GPU mel hook: DFT/power/mel off the CPU-windowed xw frames into m.data
 typedef Qwen3aMelGpuFn = function<(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64;
                                    twiddles, filters : array<float>; var m : WhisperMel) : bool>
 var private g_q3a_mel_gpu : Qwen3aMelGpuFn
 var private g_q3a_mel_gpu_set = false
 
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_qwen3a_mel_gpu(fn : Qwen3aMelGpuFn) {
     g_q3a_mel_gpu = fn
     g_q3a_mel_gpu_set = true
@@ -537,12 +533,13 @@ def private conv2d_s2(@scratch var out : array<float>; @scratch var col : array<
     asr_prof_add("q3a.conv.mm", tc)
 }
 
-// The GPU front hook (registered by dasllama_metal_tower at [init]): the whole window's convs
-// + shuffle + conv_out + bias/pos into s.x, or false (CPU fallback; the q8 cblob lane declines).
+//! the GPU front hook: the whole window's convs + shuffle + conv_out + bias/pos into s.x
+//! (the q8 cblob lane declines)
 typedef Qwen3aFrontGpuFn = function<(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var s : EncoderState) : bool>
 var private g_q3a_front_gpu : Qwen3aFrontGpuFn
 var private g_q3a_front_gpu_set = false
 
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_qwen3a_front_gpu(fn : Qwen3aFrontGpuFn) {
     g_q3a_front_gpu = fn
     g_q3a_front_gpu_set = true

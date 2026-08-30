@@ -42,6 +42,11 @@ and chunk order are identical (the k6 stamp pins the factored `dsc*(q-32)` like 
 kernel, so the equality holds by source). The pattern is the one Apple ships in MLX's
 fp-quantized NAX family at this exact tile size.
 
+A threadgroup-memory REQUEST size moves the clock on its own, independent of how much of it
+the kernel indexes: 10240-16384 B is a flat plateau, 9216 B a pothole, and 20480 B and above
+degrade. A staging-depth race is therefore a 2x2 - tile stride against allocation - and the
+deeper tile is judged at equal allocation.
+
 **A swiglu epilogue folded into the gate GEMM's store is REFUTED on M5.** Any per-element
 access of the cooperative C after `op.run` - the scattered-store walk, a modify-in-place
 before the optimized `cT.store`, even a cooperative-load register combine of the up panel -
@@ -212,3 +217,38 @@ capture order, `DASLLAMA_METAL_PF_CAPTURE=0` is the serial-encode rollback).
 Completion and readback interleave: chunks complete in commit order and each completed chunk's
 roped-K and raw-V rows stream into the CPU K/V codec while later chunks keep the GPU busy. The
 residual-stream copy waits for the LAST chunk.
+
+### 2.2u The f16 twin dual-store {#prefill-twin-dual-store}
+
+A producer kernel that already holds a panel's rows in registers writes the f16 twin beside its
+f32 output, and the consumer GEMM reads that twin instead of running a conversion pass. Two
+producers carry a dual-store stamp: the fused qk_norm+rope pass writes the q panel's twin, and
+the residual-add+RMS and RMS stamps of the FFN spine write the FFN input's twin. The consumer
+takes the twin directly through `pf_twin_panel`, so `pf_cvt_panel` and its row floor never run
+for that site. The dual store is one conversion, not a second computation: the twin is bit-equal
+to `float16` of the f32 panel at every element. Rows past the live row count are PAD - their f32
+values come back untouched and their twin slots carry the raw f16 copy, so a consumer that walks
+the padded tile reads the same numbers on both planes.
+
+The fused qk_norm+rope pass is one panel rewrite per q and per k row - RMS by simdgroup
+reduction, the rotation in register - where the split form runs a norm read-write, a rope
+read-write and a conversion. It is picked per layer and needs an even head size and an even
+rotary width; `DASLLAMA_METAL_QK_ROPE=0` restores the split dispatches.
+
+The twin is written only where a dense FFN reads it. A routed-MoE layer feeds its gathered
+expert panels instead, so no dual-store stamp is selected there and those layers pay no f16
+write. Fusing the residual add into the FFN norm also lets the norm re-read its row from the
+threadgroup slab rather than from device memory.
+
+### 2.2v The last-layer FFN tail {#prefill-last-row-tail}
+
+Past the final attention only the classifier's logits and the MTP head read the residual
+stream, and both read one row. The last dense layer's FFN therefore runs that final row alone:
+the add, the norm and the three FFN GEMMs dispatch at one row through the fixed-B GEMV forms,
+not through `enc_gemm_mm`, so the mm-tail peel counters (sec.2.2e) stay an instrument of the
+full-panel path only. The narrowing declines wherever another consumer reads every row - a
+session keeping the hidden state, a warm or MTP forward, a recurrent, MoE or PLE layer, a
+sandwich-norm or gated-query model - and `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail.
+A caller that consumes the whole `x_b` plane afterwards - embedding pooling, a plane-compare
+probe - sets `Session.keep_hidden` and the prefill keeps every row; the flag is zero-init, so
+narrowing is the default.

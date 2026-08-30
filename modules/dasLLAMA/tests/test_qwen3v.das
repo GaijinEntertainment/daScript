@@ -219,7 +219,7 @@ def test_qwen3v_tier1_metal(t : T?) {   // nolint:STYLE038 — one flat gate lad
                     pst.blob[base + i] = 0.0
                 }
                 for (i in range64(long_length(pst.wblob) > 0l ? pst.t.layer_w_stride : 0l)) {
-                    pst.wblob[base + i] = uint16(0)   // the baked twin serves the GPU route - a blob-only poison is laundered
+                    pst.wblob[base + i] = uint16(0)
                 }
                 var ptw = Qwen3vTower()
                 mint_qwen3v_tower(pst, ptw)
@@ -245,11 +245,7 @@ def test_qwen3v_tier1_metal(t : T?) {   // nolint:STYLE038 — one flat gate lad
     }
 }
 
-// The twin-W GEMM route: under a tensor crown the tower serves block/merger GEMMs from the
-// image's baked halfword twin on the crowned twins - f16 files ride the half family, bf16
-// files (Omni) the bf16 family. Same oracle, same GPU bars - the twin holds the file's own
-// values, so only the tensor op's accumulation order separates the routes.
-[test]
+[test, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def test_qwen3v_tier1_metal_f16(t : T?) {
     t |> run("tier-1 on the Metal tower's twin-W route (crowned twins, 4B f16 + Omni bf16)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -257,8 +253,8 @@ def test_qwen3v_tier1_metal_f16(t : T?) {
             if (!model_available(tt, mm4)) {
                 return
             }
-            set_metal_tensor_crowns("mulmm_q8")   // any crowned family compiles the half twins
-            metal_prefill_shutdown()              // crowns are read when the PSOs compile
+            set_metal_tensor_crowns("mulmm_q8")
+            metal_prefill_shutdown()
             set_qwen3v_q8(false)
             var tw4 <- load_qwen3v_tower(mm4)
             reset_qwen3v_q8()
@@ -278,13 +274,11 @@ def test_qwen3v_tier1_metal_f16(t : T?) {
                 tt |> skip("no oracle dumps present - the f16-route parity fixtures all skipped")
             } else {
                 tt |> success(f1 - f0 >= gated, "every gated encode rode the f16-W route ({f1 - f0} of {gated})")
-                // the knob-off leg: same fixture, same bar, and the route counter must NOT move
                 set_metal_tower_f16(false)
                 tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)
                 tt |> equal(metal_tower_f16_encodes() - f1, 0l, "the knob-off leg keeps the f32 GEMM route")
                 set_metal_tower_f16(true)
             }
-            // the bf16 leg: the Omni twin rides the crowned bf16 family (its half-X tensor stamp)
             let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
             if (model_available(tt, mm)) {
                 set_qwen3v_q8(false)

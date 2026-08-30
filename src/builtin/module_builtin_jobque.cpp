@@ -1367,9 +1367,7 @@ namespace das {
         JobQue::set_default_threads_cap(cap);
     }
 
-    // App-declared TOTAL lanes of a future JobQue (N-1 workers + the computing main) — the
-    // raise-capable twin of the cap, for workloads that want the slow tier too; <=1 = unset.
-    // Call BEFORE with_job_que / create_job_que; DAS_JOBQUE_THREADS still overrides.
+    //! Read at worker spawn — call BEFORE with_job_que / create_job_que.
     void setJobqueThreads ( int32_t total ) {
         JobQue::set_default_threads(total);
     }
@@ -1378,15 +1376,10 @@ namespace das {
         return JobQue::get_default_threads();
     }
 
-    // Fast-tier physical cores on heterogeneous boxes (Apple perflevel0); 0 = homogeneous or
-    // topology unknown — callers fall back to the all-cores rule.
     int getTotalPerfCores () {
         return JobQue::get_num_perf_cores();
     }
 
-    // Whether the second tier is full compute cores worth extending a batch pool over (an M5
-    // Max's "Performance" tier under "Super"). False for Efficiency tiers — they straggle every
-    // barrier-synchronized parallel_for — and for unknown topology.
     bool isSlowTierCompute () {
         return JobQue::is_slow_tier_compute();
     }

@@ -801,9 +801,6 @@ def test_qwen3omni_audio_oracle(t : T?) {
     }
 }
 
-// gemm_f32 accumulates into its destination, so a log-mel writing st.reim through a REUSED
-// state must zero it first — chunk 2+ of a long clip (and every re-encode on one session)
-// otherwise sums the previous DFT into the spectrum (+ln k per chunk on every lit mel bin).
 [test]
 def test_mel_state_reuse_deterministic(t : T?) {
     t |> run("gemma4a/canary log-mel is bit-identical across calls on one reused state") @(t : T?) {

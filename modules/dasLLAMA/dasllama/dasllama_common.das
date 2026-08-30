@@ -798,9 +798,7 @@ struct Model {
     // scale strips, k6s the GPU split form. CPU inference on a blob-only model PANICS.
     mblob : array<uint8>
     metal_blob : bool = false
-    // Baked dev-W f16 panels (metal-flavor .dlim): pre-dequantized at mint, bound zero-copy
-    // by the prefill dev-W route (empty = runtime dequant); ARCHITECTURE_IMAGE.md sec.2.1h.
-    // fmt 0 = q8, key = mblob BYTE offset; fmt 4/5/6 = k4/k5/k6, key = the site's ELEM woff.
+    //! Baked dev-W f16 panels (metal flavor): bound zero-copy by the prefill dev-W route; empty = runtime dequant
     devwf16 : array<float16>
     devwf16_fmt : array<int>
     devwf16_key : array<int64>
@@ -1310,7 +1308,8 @@ def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v :
 //! Apply the runtime knobs from the app tune sidecar's optional "runtime" section (see
 //! tune_for_this_box.md): token block, L2 budget, threading thresholds, chunk multipliers, and an
 //! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
-def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a flat knob catalog; a split would invent seams
+[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+def apply_box_profile_runtime(path : string = "") {
     if (path == "" && box_profile_stale()) {
         to_log(LOG_INFO, "dasLLAMA: tune sidecar is older than the binary - runtime knobs not applied (re-tune)\n")
         return
@@ -1347,8 +1346,6 @@ def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a f
     apply_i64_knob(rt, "kq_q50_native") $(v) { set_kq_q50_native(v != 0l) }
     apply_i64_knob(rt, "noisy") $(v) { set_dasllama_noisy(v != 0l) }
     apply_i64_knob(rt, "gemv_lane_cap") $(v) {
-        // a minted 0 is the old fast-tier-only world's "uncapped", not a measured choice — on a
-        // hybrid box it must not defeat the fast-tier decode default; a non-zero mint is an opinion
         if (v != 0l || get_total_perf_cores() <= 0 || get_total_perf_cores() >= get_total_hw_cores()) {
             set_gemv_lane_cap(int(min(v, 2147483647l)))
         }
@@ -1358,9 +1355,6 @@ def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a f
     apply_i64_knob(rt, "dispatch_worker_limit") $(v) { set_dispatch_worker_limit_(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "gemv_wave_fill") $(v) { set_gemv_wave_fill(v != 0l) }
     apply_i64_knob(rt, "fused_decode") $(v) { set_fused_decode(v != 0l) }
-    // per-config pool shape: the box profile's answer beats the tier-kind heuristic (an env
-    // DAS_JOBQUE_THREADS still beats both, and an app cap still bounds the pool). Declarations
-    // for the NEXT que — inert for one that already exists when the profile loads.
     apply_i64_knob(rt, "jobque_pool") $(v) { set_jobque_threads(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "phase_decode_workers") $(v) { set_phase_decode_workers(int(min(v, 2147483647l))) }
     // stored only — the queue may not exist yet; setup_dasllama_jobque applies these inside with_job_que
@@ -1735,9 +1729,7 @@ struct Session {
     // grown on demand by kv_ensure. Flat sessions: kv_pool == null, block_table empty.
     @do_not_delete kv_pool : KVPool?   // borrowed — the pool outlives its sessions
     block_table : array<int>
-    // A GPU prefill narrows the LAST layer's FFN tail to the final row (only s.logits and
-    // mtp_h read past it); a caller that consumes the full x_b plane afterwards (embedding
-    // pooling, plane-compare probes) sets this and the prefill keeps every row. Zero-init = off.
+    //! set by a caller that reads the whole x_b plane after a prefill: every row of the last layer's FFN tail
     keep_hidden : bool
     // batched prefill scratch — empty until forward_prefill sizes them to npos × ... (see forward_prefill)
     x_b : array<float>        // residual stream (npos x dim)
@@ -3942,7 +3934,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
 def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE038 — one decode step; the phases share s and must stay in order
     let c = t.config
     let dim = c.dim
-    dispatch_phase_decode()   // hybrid boxes: park the slow tier for the per-token barriers
+    dispatch_phase_decode()
     kv_ensure(s, pos + 1l)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
 
     // token embedding: row `token` into the residual stream
@@ -4806,7 +4798,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         }
         return
     }
-    if (npos >= 32l) {   // hybrid boxes: wake the slow tier — a smaller batch can't fill it past the grain
+    if (npos >= 32l) {
         dispatch_phase_batch()
     }
     let ts_alloc = prof_ticks()

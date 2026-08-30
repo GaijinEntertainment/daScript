@@ -518,9 +518,9 @@ struct AudioTower {
     stack_factor : int64 = 1  // frame-concat width before the projector (ultravox 8, voxtral 4)
     mm1_out : int64 = 0l      // projector hidden width (ultravox: pre-swiglu, voxtral: pre-gelu)
     has_k_bias : bool = false // qwen3a attention carries a k bias; whisper towers don't
-    blk_bf16 : bool = false   // the twin's dispatch family: bf16-sourced GEMMs (qwen3a AuT) vs f16 (whisper)
+    blk_bf16 : bool = false   //! the twin's dispatch family: bf16-sourced GEMMs (qwen3a AuT) vs f16 (whisper)
     fblob : PlaneF = PlaneF()
-    wblob : PlaneU16 = PlaneU16()   // the baked halfword GEMM twin ([[tower_bake_half_twin]]); empty = route-ineligible
+    wblob : PlaneU16 = PlaneU16()   //! the baked halfword GEMM twin ([[tower_bake_half_twin]]); empty = route-ineligible
     q8 : bool = false         // encoder GEMMs quantized: qblob/qscales carry the COMPACT Q8_0 set
     qblob : PlaneI8 = PlaneI8()   // dense GEMM-only Q8_0 planes (fblob keeps just the non-GEMM rest)
     qscales : PlaneF = PlaneF()   // per-32-block scales, indexed at woff/32
@@ -1347,6 +1347,7 @@ var private g_tw_blocks_gpu_set = false
 var private g_tw_serves : TowerServesFn
 var private g_tw_serves_set = false
 
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_tower_blocks_gpu(fn : TowerBlocksGpuFn; serves : TowerServesFn) {
     g_tw_blocks_gpu = fn
     g_tw_serves = serves
@@ -1356,6 +1357,7 @@ def register_tower_blocks_gpu(fn : TowerBlocksGpuFn; serves : TowerServesFn) {
 
 //! Would the Metal tower serve a block loop — the lane policies ask (a serving driver wants
 //! f32 planes, so the family lane defaults to exact); false on CPU builds or with the knob off.
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def audio_tower_gpu_serves() : bool => g_tw_serves_set && invoke(g_tw_serves)
 
 //! The conv-frontend twin: serves conv1/conv2/pos-add for one mel chunk (s.x filled) or

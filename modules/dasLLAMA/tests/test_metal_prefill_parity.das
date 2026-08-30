@@ -400,7 +400,7 @@ def private blob_twin(t : T?; path : string; seq_cap : int64) : Model {
     return <- tg
 }
 
-[test]
+[test, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU-resident prefill == CPU control, 40-token greedy continuation (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
@@ -537,8 +537,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     var trsg <- blob_twin(t, spath, 2048l)
                     let sprompt <- encode(trs, counting_prompt(), true, false)
                     t |> success(select_prefill_override("metal"), "override registered (mm-tail smol)")
-                    //! the per-layer peel-count arithmetic below assumes every layer's FFN rides
-                    //! the mm path - pin the last-layer tail narrowing off for this instrument
+                    //! the peel-count arithmetic below assumes every layer's FFN rides the mm path
                     set_metal_prefill_lastrow(false)
                     var ssites : int64[2]
                     var sserved_all = true
@@ -568,9 +567,6 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         feint("metal prefill declined on smol; the alignment-guard leg skipped\n")
                     }
                     set_metal_prefill_lastrow(true)
-                    //! the last-row tail-narrowing witnesses, same model same prompt: the final
-                    //! logits stay inside the form-change envelope, the plane VISIBLY narrows
-                    //! (anti-vacuous), and keep_hidden restores the full plane bit-exactly
                     {
                         let nlr = 48l
                         var tlr : array<int64>
@@ -602,8 +598,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                                     amax_off = i
                                 }
                             }
-                            //! the narrowed row rides the same gemv the mm-tail peel serves; the full
-                            //! form stages X to f16 - measured ~7e-3 on this fixture, bar 2e-2
+                            //! narrowed rides the mm-tail gemv, full stages X to f16 - measured ~7e-3 here, bar 2e-2
                             to_log(LOG_INFO, "smol lastrow: narrowed-vs-full logits maxdiff {lmax}\n")
                             t |> success(lmax <= 2e-2, "smol lastrow: narrowed logits inside the form-change envelope ({lmax})")
                             t |> equal(amax_on, amax_off, "smol lastrow: argmax unchanged")

@@ -2284,6 +2284,7 @@ def private tmm2d_const_uint(var ctx : MslCtx; e : Expression?; what : string) :
     return 0u
 }
 
+[arch(at="../ARCHITECTURE.md#tmm2d-staging")]
 def private tmm2d_helper_text(kind : string; m, n, sgs : uint; bk : uint = 32u) : string {
     let name = bk == 32u ? "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}" : "__das_tmm2d_{kind}_{int(m)}_{int(n)}_{int(sgs)}_k{int(bk)}"
     let ct = "tensor<device int8_t, dextents<int32_t, 2>, tensor_inline>"
@@ -2356,10 +2357,6 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint; bk : uint = 32u) 
         // operand keeps matmul2d off the native half x half path (measured 8-11% per GEMM)
         let at = kind == "q8uh" ? "half" : "float"
         if (bk == 128u) {
-            // 64-deep DOUBLE-BUFFERED chunks (bk names the resident staging footprint: two
-            // 64-deep tiles ping-pong in an n*144-half wt): ONE barrier per chunk - it orders
-            // the previous run against the overwrite of its tile AND publishes the tile staged
-            // last iteration; staging chunk b+1 overlaps op.run on chunk b (disjoint halves)
             return build_string() $(var w) {
                 w |> write("static void {name}(threadgroup half * wt, device const half * ws, device const char * wq, device const {at} * a, uint lda, device float * c, uint ldc, uint kk, uint ldwb, uint tid) \{\n")
                 w |> write("    constexpr auto d = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, true, true, matmul2d_descriptor::mode::multiply_accumulate);\n")
@@ -2438,7 +2435,7 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint; bk : uint = 32u) 
                 w |> write("            const uint kh = (sub & 1u) * 16u;\n")
                 w |> write("            const float sc = float(ws[blk * 17u]);\n")
                 w |> write("            device const char * q = wq + blk * 34u + kh;\n")
-                w |> write("            threadgroup half * dstp = wt + col * 72u + sub * 16u;\n")   // 72-half padded rows: 128B stride is the tg bank-conflict worst case
+                w |> write("            threadgroup half * dstp = wt + col * 72u + sub * 16u;\n")
                 w |> write("            _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
                 w |> write("        \}\n")
                 w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
@@ -2776,6 +2773,7 @@ def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : 
     lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgta_{acc}, __tgt_{acc}, float>();")
 }
 
+[arch(at="../ARCHITECTURE.md#tmm2d-staging")]
 def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 7) {
         err(ctx, ec.at, "tmm2d_tg_step_deva takes exactly 7 arguments")
@@ -2799,8 +2797,6 @@ def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : s
         err(ctx, ec.at, "tmm2d_tg_step_deva: A stream is {at} but tmm2d_tg_begin_deva's witness typed {witness} - begin and steps must stream the same element type")
     }
     note(ctx, "call.tmm2d_tg_step_deva")
-    // 64-deep staged B rows pad to 72 halves (128B row stride is the tg bank-conflict worst
-    // case); every das-side stager of a kk=64 tile writes the matching j*72 index
     let ldb = kk == 64u ? 72u : kk
     lines |> push("{indent}\{")
     lines |> push("{indent}    auto __A = __tgta_{acc}((device {at} *)({ap}), dextents<int32_t, 2>({int(kk)}, {int(m)}), metal::array<int32_t, 2>\{1, int({lda})\});")
@@ -2929,12 +2925,12 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     if (m == 0u || n == 0u || sgs == 0u) {
         return
     }
-    // q8u/q8uh: trailing bk constant = the staged K-chunk depth (32 = the classic body);
+    // q8u/q8uh: trailing bk constant = the resident staging footprint (32 = the classic body);
     // compile-time only — it names the helper and never reaches the emitted call
     var bk = 32u
     var nvals = length(ec.arguments)
     if (kind == "q8u" || kind == "q8uh") {
-        bk = tmm2d_const_uint(ctx, ec.arguments[13], "bk (staged K-chunk depth)")
+        bk = tmm2d_const_uint(ctx, ec.arguments[13], "bk (resident staging footprint)")
         if (bk != 32u && bk != 64u && bk != 128u) {
             err(ctx, ec.at, "{cname}: bk must be 32, 64, or 128 (= 64-deep double-buffered: two ping-pong tiles, an n*144-half wt)")
             return

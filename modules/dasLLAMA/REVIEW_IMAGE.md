@@ -74,3 +74,9 @@ both element types.**
 own image identity.** A persisted form is one an image could carry. The load that picks such a
 lane prints which lane it picked. A conversion made and dropped inside one forward pass
 persists nothing and is not such a lane.
+
+**Never regroup or refactor the float products in a mint-side dequant mirror
+(`devw_dequant_q8_core` / `devw_dequant_k45_core` / `devw_dequant_k6_core`,
+`dasllama/dasllama_load.das`) - keep the multiply grouping and the subtraction order the code
+already has.** The GPU kernel's factored form decides the sign of a zero result, so a
+regrouping makes a baked panel differ from the runtime one.

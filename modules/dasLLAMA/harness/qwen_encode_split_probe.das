@@ -27,7 +27,7 @@ def probe_one(mmproj, picture : string) {
     }
     var st = VisionState()
     var rows : array<float>
-    var n = encode_image_(emb, st, pic, "probe-warm", rows)   // warm: JIT + first touch
+    var n = encode_image_(emb, st, pic, "probe-warm", rows)   //! warm: JIT + first touch
     print("warm: {n} rows\n")
     var best = 1.0e30lf
     for (r in range(REPS)) {
@@ -42,7 +42,7 @@ def probe_one(mmproj, picture : string) {
         print("rep {r}: wall {ms} ms ({n} rows)\n")
     }
     print("best wall: {best} ms\n")
-    asr_prof_report()   // the LAST rep's buckets
+    asr_prof_report()   //! the LAST rep's buckets
     delete rows
     delete st
     delete pic

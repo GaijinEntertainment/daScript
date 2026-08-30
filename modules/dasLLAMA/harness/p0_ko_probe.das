@@ -40,25 +40,25 @@ def measure_one(tr : Model; npos : int64; reps : int) : double {
     return best
 }
 
-[export]
+[export, arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def main {
     let env = g_env_harness.models_dir
     let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
     let path = path_join(mdir, "Qwen3-8B-BF16.gguf")
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_mode(MetalMode.required)   // before load — pins the metal serving, same as the bench's --ngl leg
+        set_metal_mode(MetalMode.required)   //! before load - pins the metal serving, the bench's --ngl leg
         var tr <- load_model_cached(path, QuantMode.q8)
         if (!tr.metal_blob) {
             panic("p0: the mapped flavor is not metal_blob - wrong leg")
         }
         tr.config.seq_len = 2048l
         apply_box_profile_runtime()
-        if (!tune_gate()) {   // never measure on fallback winners
+        if (!tune_gate()) {
             panic("p0: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
         }
         with_job_que() {
             setup_dasllama_jobque_()
-            measure_one(tr, 512l, 1)   // warm: JIT + blob upload + first graphs
+            measure_one(tr, 512l, 1)   //! warm: JIT + blob upload + first graphs
             let npos = 512l
             //! "nofuse" matches no skip family: every kernel encodes with full math, so this arm
             //! is the null control (base-as-candidate) - and any empty-skip-gated fused route's

@@ -20,15 +20,15 @@ def upload_u32(dev; v : uint) {
     return buf
 }
 
+//! block_q8_0 34B blocks (scale half at +0, 32 quants at +2), scales 1.0 and quants -8..7 -
+//! every product is an integer, so any accumulation order is bit-identical
 def fill_q8_blob(buf; n, kdim : int64) {
-    // block_q8_0 34B blocks: scale half at +0, 32 quants at +2; scales 1.0, quants -8..7 -
-    // every product integer, any accumulation order bit-identical
     var p = unsafe(reinterpret<uint8?>(metal_buffer_contents(buf)))
     var seed = 12345u
     for (blk in range64(n * (kdim / 32l))) {
         let base = blk * 34l
         unsafe(p[base]) = uint8(0x00)
-        unsafe(p[base + 1l]) = uint8(0x3c)   // half 1.0
+        unsafe(p[base + 1l]) = uint8(0x3c)   //! the high byte of half 1.0
         for (i in range64(32l)) {
             seed = seed * 1664525u + 1013904223u
             unsafe(p[base + 2l + i]) = uint8(int8(int(seed >> 16u) % 16 - 8))
@@ -41,7 +41,7 @@ def fill_x_f16(buf; total : int64) {
     var seed = 777u
     for (i in range64(total)) {
         seed = seed * 1664525u + 1013904223u
-        unsafe(p[i]) = float16(float(int(seed >> 16u) % 9 - 4))   // small ints - exact f16
+        unsafe(p[i]) = float16(float(int(seed >> 16u) % 9 - 4))   //! small ints - exact in f16
     }
 }
 
@@ -50,8 +50,8 @@ def time_gemm(queue; pso; bw, bx, by, bk, bn; gx, gy : uint; tgmem : uint64; rep
     var gpu_ms = 0.0lf
     let ok = with_compute_encoder_timed(queue, err, gpu_ms) $(enc) {
         metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bw, 0ul, 0)   // wsh - half view of the blob
-        metal_set_buffer(enc, bw, 0ul, 1)   // wqb - byte view of the same blob
+        metal_set_buffer(enc, bw, 0ul, 0)   //! wsh - half view of the blob
+        metal_set_buffer(enc, bw, 0ul, 1)   //! wqb - byte view of the SAME blob
         metal_set_buffer(enc, bx, 0ul, 2)
         metal_set_buffer(enc, by, 0ul, 3)
         metal_set_buffer(enc, bk, 0ul, 4)
@@ -105,7 +105,6 @@ def main {
             var u_n = upload_u32(dev, uint(g.n))
             let gx = uint(m / 128l)
             let gy = uint(g.n / 64l)
-            // numerics gate: identical accumulation order -> bit-exact match required
             time_gemm(queue, pso_base, bw, bx, by, u_k, u_n, gx, gy, 8192ul, 1)
             time_gemm(queue, pso_pad, bw, bx, by2, u_k, u_n, gx, gy, 9216ul, 1)
             var pa = unsafe(reinterpret<float?>(metal_buffer_contents(by)))
@@ -119,8 +118,6 @@ def main {
             if (bad != 0) {
                 panic("p1pad: k={g.k} n={g.n} MISMATCH {bad} elements")
             }
-            // tgmem request size ALONE moves the clock (8192/9216/16384 non-monotone), so the
-            // race is a 2x2: stride x allocation, padded judged at equal allocation
             let reps = 30
             for (round in range(3)) {
                 let b8 = time_gemm(queue, pso_base, bw, bx, by, u_k, u_n, gx, gy, 8192ul, reps)

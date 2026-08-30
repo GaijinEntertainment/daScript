@@ -596,9 +596,7 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
 
 // ===== mel (gemma4a: no preemphasis, natural-log magnitude, HTK, no per-feature norm) =====
 
-// the GPU hook (registered by dasllama_metal_tower at [init]; requires-back): after the front
-// (mel + subsample + inproj) it runs the 12 Conformer blocks on s.x in one command buffer;
-// false = declined, the CPU loop falls back
+//! the GPU block hook: after the front (mel + subsample + inproj), the 12 Conformer blocks on s.x
 typedef Gemma4aGpuBlocksFn = function<(t : Gemma4aEncoder; var s : Gemma4aState; npos : int64) : bool>
 typedef Gemma4aServesFn = function<() : bool>
 var private g_g4a_gpu : Gemma4aGpuBlocksFn
@@ -606,6 +604,7 @@ var private g_g4a_serves : Gemma4aServesFn
 var private g_g4a_gpu_set = false
 var private g_g4a_serves_set = false
 
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_gemma4a_gpu(fn : Gemma4aGpuBlocksFn; serves : Gemma4aServesFn) {
     g_g4a_gpu = fn
     g_g4a_serves = serves
@@ -617,13 +616,13 @@ def register_gemma4a_gpu(fn : Gemma4aGpuBlocksFn; serves : Gemma4aServesFn) {
 //! the f32 blob, so the un-pinned lane defaults to exact); false on CPU builds or knob-off.
 def gemma4a_gpu_serves() : bool => g_g4a_serves_set && invoke(g_g4a_serves)
 
-// the whole-chunk GPU hook: after g4a_window_frames it runs DFT -> mel -> subsample convs ->
-// inproj -> the 12 blocks in one command buffer (st.x filled); returns npos, or -1 declined —
-// gemma4a_log_mel + gemma4a_encode stay the correct fallback
+//! the whole-chunk GPU hook: DFT -> mel -> subsample convs -> inproj -> blocks off g4a_window_frames
+//! (st.x filled); returns npos, or -1 to decline
 typedef Gemma4aGpuChunkFn = function<(t : Gemma4aEncoder; var s : Gemma4aState; n_len : int64) : int64>
 var private g_g4a_chunk : Gemma4aGpuChunkFn
 var private g_g4a_chunk_set = false
 
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_gemma4a_chunk_gpu(fn : Gemma4aGpuChunkFn) {
     g_g4a_chunk = fn
     g_g4a_chunk_set = true
@@ -642,9 +641,6 @@ def gemma4a_res_w() : float => G4A_RES_W
 //! The log-mel floor — the GPU chunk driver's log stage mirrors the CPU form.
 def gemma4a_mel_floor() : float => float(G4A_MEL_FLOOR)
 
-// the lane policy mirrors qwen3a's: a serving Metal tower wants the f32 blob (its driver
-// declines q8), so the un-pinned default follows [[gemma4a_gpu_serves]]; tests and the CPU
-// board rows pin a lane explicitly
 enum private G4aLane {
     unset
     exact
@@ -652,6 +648,7 @@ enum private G4aLane {
 }
 var private g_g4a_pin = G4aLane.unset
 
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def private g4a_serve_q8() : bool {
     if (g_g4a_pin != G4aLane.unset) {
         return g_g4a_pin == G4aLane.q8
@@ -732,7 +729,7 @@ def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len :
     ensure_length(st.mel, n_len * n_mel)
     ensure_length(st.reim, n_len * n_bins * 2l)
     for (i in range64(n_len * n_bins * 2l)) {
-        st.reim[i] = 0.0   // gemm accumulates: the reused state buffer must start zeroed
+        st.reim[i] = 0.0   //! gemm accumulates: the reused state buffer must start zeroed
     }
     gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(enc.twiddles, 0l),
              n_len, G4A_N_FFT, n_bins * 2l)
@@ -1053,8 +1050,7 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
     return g4a_encode_tail(enc, st, npos)
 }
 
-// output projection -> RMSNorm (weightless) -> mm input projection — shared by the CPU loop
-// and the GPU block serve (the tail stays CPU on both)
+//! output projection -> weightless RMSNorm -> mm input projection; the tail stays CPU on both routes
 def private g4a_encode_tail(enc : Gemma4aEncoder; var st : Gemma4aState; npos : int64) : int64 {
     let d = enc.d_model
     let tprof = ref_time_ticks()

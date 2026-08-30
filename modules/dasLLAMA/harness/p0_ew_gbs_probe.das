@@ -36,8 +36,8 @@ def fill_ones(buf; n : int64) {
     }
 }
 
-// one timed encoder: set state once, `reps` back-to-back dispatches (hazard tracking on the
-// shared buffers serializes them); returns per-dispatch GPU microseconds, or -1 on failure
+//! one timed encoder: set state once, `reps` back-to-back dispatches (hazard tracking on the
+//! shared buffers serializes them); returns per-dispatch GPU microseconds, or -1 on failure
 def time_reps(queue; pso; bufs; groups : uint3; tgsz : uint; tgmem : uint64; reps : int) : double {
     var err : string
     var gpu_ms = 0.0lf
@@ -77,7 +77,7 @@ def main {
         }
         let rows = 512l
         let dim = 4096l
-        let total = rows * dim   // 2.10M elements, 8.39MB f32
+        let total = rows * dim   //! 2.10M elements, 8.39MB f32 - the working set the SLC recycles
         var bg = metal_new_buffer(dev, uint64(total * 4l))
         var bu = metal_new_buffer(dev, uint64(total * 4l))
         var bw = metal_new_buffer(dev, uint64(dim * 4l))
@@ -93,10 +93,10 @@ def main {
         var u_64 = upload_u32(dev, 64u)
         let reps = 200
         let mb = 1.0lf / (1024.0lf * 1024.0lf)
-        let add_bufs <- [bg, bu, u_total, u_one]           // residual add: g += u in place - r 2 panels, w 1 (25.2MB)
-        let rms_bufs <- [bg, bw, by, u_dim, u_eps]         // rms norm: r 1 panel + weight, w 1 (16.8MB)
-        let cvt_bufs <- [bg, bh, u_total]                  // f32->f16 convert: r 1 f32 panel, w 1 f16 (12.6MB)
-        let tiny_bufs <- [bg, bu, u_64, u_one]             // latency floor: total=64 add, one tg, dependent chain
+        let add_bufs <- [bg, bu, u_total, u_one]           //! residual add: g += u in place - r 2 panels, w 1 (25.2MB)
+        let rms_bufs <- [bg, bw, by, u_dim, u_eps]         //! rms norm: r 1 panel + weight, w 1 (16.8MB)
+        let cvt_bufs <- [bg, bh, u_total]                  //! f32->f16 convert: r 1 f32 panel, w 1 f16 (12.6MB)
+        let tiny_bufs <- [bg, bu, u_64, u_one]             //! latency floor: total=64 add, one tg, dependent chain
         for (round in range(3)) {
             let add_us = time_reps(queue, pso_add, add_bufs, uint3(uint((total + 63l) / 64l), 1u, 1u), 64u, 0ul, reps)
             let add_gbs = double(total * 4l * 3l) * mb / 1024.0lf / (add_us / 1.0e6lf)

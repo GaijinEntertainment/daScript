@@ -167,10 +167,8 @@ def test_gemma3v_tier1_gpu(t : T?) {
             tt |> success(sq1.declines - sq0.declines >= 1l, "q8 tower recorded the quant_mode decline")
             delete stq
             delete twq
-            // the twin-W leg: crowns pinned so the half twins compile, the baked f16 twin
-            // serves the block GEMMs - same fixture, same GPU bar, engage by the route counter
             set_metal_tensor_crowns("mulmm_q8")
-            metal_prefill_shutdown()   // crowns are read when the PSOs compile
+            metal_prefill_shutdown()
             var twt <- load_gemma3v_tower(mm)
             var stt = Gemma3vState()
             let tw0 = metal_tower_f16_encodes()

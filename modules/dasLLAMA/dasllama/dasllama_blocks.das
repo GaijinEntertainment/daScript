@@ -1425,7 +1425,7 @@ def set_moe_gpu_prefill_route(on : bool) {
 
 def gpu_prefill_route_on() : bool => g_gpu_prefill_route
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
 def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
     let c = t.config
     let dim = c.dim
@@ -1562,7 +1562,6 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             moe_gather_rows(s, 0l, nk, dim, k, moe_kform && !fused_gpu, moe_kform)
         }
         prof_add("moe_gather", ts_gather)
-        // region triples per touched expert, CPU arms capped at 32 rows/region — batch-groupn chunks units by COUNT, so an unsplit heavy expert straggles the barrier (620 vs 3929 GFLOP/s zipf k4); GPU keeps whole regions
         let split_cap = !gpu_comb && !fused_gpu ? 32l : 0l
         let cap_reg = split_cap > 0l ? ne + nk / split_cap + 1l : ne
         s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(cap_reg * 3l)
@@ -1592,7 +1591,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             let eg = l * ne + e
             let base = e * dim * nfe
             var sub0 = 0l
-            while (sub0 < cnt) {   // sub-regions share the expert's weights; biases repeat per sub-region
+            while (sub0 < cnt) {   //! sub-regions share the expert's weights; the bias lists repeat per sub-region
                 let scnt = split_cap > 0l ? min(cnt - sub0, split_cap) : cnt
                 s.moe_offs1 |> push(t.we1_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
                 s.moe_offs1 |> push(b0 + sub0)
@@ -1977,7 +1976,7 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends"), arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64;
                          non_causal : bool = false; src_off : int64 = 0l; skip_logits : bool = false;
                          span_lo : int64 = -1l; span_hi : int64 = -1l; ds_wide : bool = false) {
@@ -1996,7 +1995,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     if (span_lo >= 0l && (span_hi <= span_lo || span_hi > npos)) {
         panic("forward_prefill_embd: span [{span_lo},{span_hi}) outside [0,{npos})")
     }
-    if (npos >= 32l) {   // hybrid boxes: wake the slow tier — a smaller batch can't fill it past the grain
+    if (npos >= 32l) {
         dispatch_phase_batch()
     }
     // ds_wide (qwen3vl deepstack): every row is (1+n_deepstack)·dim wide — slice 0 is the
@@ -2207,6 +2206,7 @@ def private eval_embd_slice_mrope_(t : Model; var s : Session; whole : array<int
 //! Mean-pooled, L2-normalized sentence embedding for `tokens` into `out`: last-layer hidden state
 //! averaged over positions, unit-normalized. Runs one forward over `s` from position 0 — pass a
 //! FRESH session (no KV history assumed; cache is left filled).
+[arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int64; var out : array<float>) {
     let c = t.config
     let dim = c.dim
@@ -2220,7 +2220,6 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
     if (t.quant != QuantMode.q4_0 && npos > 1l) {
         // batched prefill fills s.x_b (npos × dim residual) and leaves it intact; the body norms only
         // the last position, so re-apply the final RMSNorm to EVERY position and accumulate.
-        // keep_hidden pins the full plane - a GPU prefill otherwise narrows the last layer's tail
         s.keep_hidden = true
         forward_prefill(t, s, tokens, npos, 0l)
         for (p in range64(npos)) {

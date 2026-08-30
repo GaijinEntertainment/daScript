@@ -561,6 +561,7 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
 
 //! The exact lane's halfword GEMM twin ([[tower_bake_half_twin]]): plane absence IS the
 //! ineligibility flag (mixed/f32/q8), and `blk_bf16` names the format the route dispatches.
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def private q3v_bake_half_twin(var st : Qwen3vStaging; bf16 : bool) {
     tower_bake_half_twin(st.blob, st.wblob, bf16)
 }
@@ -753,8 +754,7 @@ def private q3v_block(t : Qwen3vTower; var s : Qwen3vState; l, npos : int64) {
     asr_prof_add("q3v.ffn", tp)
 }
 
-// the stem's column half, both routes: im2col + scratch sizing + the resized pos table when
-// the grid is off the learned 48 - everything the GPU stem cannot do cheaper itself
+//! the stem's column half, both routes: im2col + scratch sizing + the pos table resized off-grid
 def private q3v_stem_cols(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, pw, ph : int64) : int64 {
     let d = t.n_embd
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)
@@ -780,7 +780,7 @@ def qwen3v_pos_resized(t : Qwen3vTower; s : Qwen3vState) : bool {
     return s.grid_w != t.pos_side || s.grid_h != t.pos_side
 }
 
-// the stem's compute half, the CPU route: patch GEMM + the merge-walk assemble into s.x
+//! the stem's compute half, the CPU route: patch GEMM + the merge-walk assemble into s.x
 def private q3v_stem_finish(t : Qwen3vTower; var s : Qwen3vState; npos, pw, ph : int64) {
     let d = t.n_embd
     mm_plane_b(s.xn, false, t.wblob, t.blob, t.patch_w, s.x0, t.patch_dim, d, npos)
@@ -882,12 +882,12 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
         if (nds > 0l) {
             ensure_length(s.ds_stash, nds * nout4 * t.proj_dim)
         }
-        // stem GEMM + assemble ride the driver's cb too - it reads s.x0/s.pos_rs, never s.x
+        //! the driver reads s.x0/s.pos_rs, never s.x
         gpu_served = invoke(g_q3v_gpu, t, s, npos)   // stem + blocks + taps + tail on GPU: proj outputs land in ds_stash/ds_slice
     }
     if (!gpu_served) {
         tp = ref_time_ticks()
-        q3v_stem_finish(t, s, npos, pw, ph)   // the CPU route (and the GPU decline fallback)
+        q3v_stem_finish(t, s, npos, pw, ph)
         asr_prof_add("q3v.stem", tp)
     }
     if (gpu_served) {

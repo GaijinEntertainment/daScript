@@ -715,7 +715,7 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
     }
     ensure_length(st.reim, n_len * n_bins * 2l)
     for (i in range64(n_len * n_bins * 2l)) {
-        st.reim[i] = 0.0   // gemm accumulates: the reused state buffer must start zeroed
+        st.reim[i] = 0.0   //! gemm accumulates: the reused state buffer must start zeroed
     }
     gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(m.twiddles, 0l),
              n_len, n_fft, n_bins * 2l)
@@ -848,9 +848,7 @@ def private cn_conv_pw(m : CanaryEncoder; var out : array<float>; x : array<floa
 
 // ===== encoder =====
 
-// the GPU hook (registered by dasllama_metal_tower at [init]; requires-back): after the
-// subsample front + inproj + pos table it runs the 32 FastConformer blocks on st.x in one
-// command buffer; false = declined, the CPU loop falls back
+//! the GPU block hook: after the subsample front + inproj + pos table, the 32 FastConformer blocks on st.x
 typedef CanaryGpuBlocksFn = function<(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) : bool>
 typedef CanaryServesFn = function<() : bool>
 var private g_cn_gpu : CanaryGpuBlocksFn
@@ -858,6 +856,7 @@ var private g_cn_serves : CanaryServesFn
 var private g_cn_gpu_set = false
 var private g_cn_serves_set = false
 
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_canary_gpu(fn : CanaryGpuBlocksFn; serves : CanaryServesFn) {
     g_cn_gpu = fn
     g_cn_serves = serves
@@ -869,8 +868,6 @@ def register_canary_gpu(fn : CanaryGpuBlocksFn; serves : CanaryServesFn) {
 //! the f32 blob, so the un-pinned encoder lane defaults to exact); false on CPU builds or knob-off.
 def canary_gpu_serves() : bool => g_cn_serves_set && invoke(g_cn_serves)
 
-// the lane policy mirrors gemma4a's: a serving Metal driver declines q8, so the un-pinned
-// default follows [[canary_gpu_serves]]; tests and the CPU rows pin a lane explicitly
 enum private CnLane {
     unset
     exact
@@ -890,6 +887,7 @@ def reset_canary_enc_q8() {
 }
 
 //! The lane subsequent loads would take — the facade's default and the tests read it.
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def canary_enc_serves_q8() : bool {
     if (g_cn_pin != CnLane.unset) {
         return g_cn_pin == CnLane.q8
@@ -897,7 +895,6 @@ def canary_enc_serves_q8() : bool {
     return !canary_gpu_serves()
 }
 
-// the CPU block loop (the GPU driver replaces exactly this; bit-for-bit the pre-hook form)
 [hot_path]
 def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) {
     let d = m.d_model
@@ -1144,7 +1141,7 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     }
 
     var gpu_served = false
-    if (g_cn_gpu_set && !m.q8) {   // the driver wants the f32 blob; q8 encoders stay CPU
+    if (g_cn_gpu_set && !m.q8) {   //! the driver reads the f32 blob; a q8 encoder stays CPU
         gpu_served = invoke(g_cn_gpu, m, st, tt, ww)
     }
     if (!gpu_served) {

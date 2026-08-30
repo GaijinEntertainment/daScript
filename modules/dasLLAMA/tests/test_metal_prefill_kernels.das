@@ -42,11 +42,8 @@ def private approx(x, y : float) : bool {
     return abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
 }
 
-// The fused qk_norm+rope kernel vs the composed CPU twins (per-head RMS then rope_scaled*_tab)
-// at one (hx, donorm, neox, partial-rot) arm. Rows past nreal are PAD: the f32 panel must come
-// back untouched and the HX twin must carry their raw f16 copies (the cvt-on-pads contract);
-// the HX twin is additionally gated BIT-equal to float16(panel) per element (the dual-store
-// contract). GENERIC (untyped dev/queue) so it instantiates only inside the Apple static_if.
+//! GENERIC (untyped dev/queue) so it instantiates only inside the Apple static_if.
+[arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-twin-dual-store")]
 def private qk_rope_gate(t : T?; dev, queue; hx, donorm, neox, partial : bool) {
     let tag = "qk_rope{hx ? " hx" : ""}{donorm ? " norm" : ""}{neox ? " neox" : ""}{partial ? " part" : ""}"
     var err : string
@@ -113,7 +110,6 @@ def private qk_rope_gate(t : T?; dev, queue; hx, donorm, neox, partial : bool) {
             }
         }
     }
-    // anti-vacuous: the composed oracle must actually move the panel
     var moved = 0
     for (k in range(nreal * rstride)) {
         moved += approx(want[k], xv[k]) ? 0 : 1
@@ -123,7 +119,7 @@ def private qk_rope_gate(t : T?; dev, queue; hx, donorm, neox, partial : bool) {
     var bw = buf_upload(dev, wv)
     var btc = buf_upload(dev, tc)
     var bts = buf_upload(dev, ts)
-    var bxh = hx ? buf_fill(dev, nrows * rstride, float16(-77.0)) : null   // poison fill: an unwritten twin row reds the pad compare
+    var bxh = hx ? buf_fill(dev, nrows * rstride, float16(-77.0)) : null
     var ka = QkRopeArgs(rstride = uint(rstride), hs = uint(hs), eps = EPS,
         donorm = donorm ? 1u : 0u, neox = neox || partial ? 1u : 0u, rot = uint(rot), nreal = uint(nreal))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
@@ -143,7 +139,6 @@ def private qk_rope_gate(t : T?; dev, queue; hx, donorm, neox, partial : bool) {
     if (ran) {
         t |> equal(buf_mismatch_approx(bx, want, tag), 0)
         if (hx) {
-            // pads ride the copy arm; the twin is BIT-equal to float16(panel) everywhere
             var badh = 0
             unsafe {
                 let pf = reinterpret<float const?>(metal_buffer_contents(bx))
@@ -441,9 +436,8 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
 }
 
 // ===== the tower flash (the dk72 lifted flash + its per-head-contiguous f16 K/V restride) =====
-// f16-representable inputs make the f64 oracle exact up to accumulation order; the poison is
-// a VALUE added to one V element (never a tolerance multiple), and kv_hc's panel is BIT-checked.
-def private tower_flash_gate(t : T?; dev, queue) {
+[arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
+def private tower_flash_kvhc_gate(t : T?; dev, queue) {
     let tag = "tower_flash"
     var err : string
     var pso = pipeline_from_source(dev, metal_tower_flash_msl, metal_tower_flash_msl_entry, metal_tower_flash_msl_fastmath, err)
@@ -470,7 +464,7 @@ def private tower_flash_gate(t : T?; dev, queue) {
     var khc : array<float16>
     var vhc : array<float16>
     khc |> resize(np * qd)
-    vhc |> resize(np * qd + 256)   // + the flash's V tail slack
+    vhc |> resize(np * qd + 256)   //! + the flash's V tail slack: its dead PV tiles read past the last V row
     for (p in range(np)) {
         for (c in range(qd)) {
             khc[((c / hs) * np + p) * hs + c % hs] = float16(kv[p * qd + c])
@@ -514,7 +508,7 @@ def private tower_flash_gate(t : T?; dev, queue) {
     var bq = buf_upload(dev, qv)
     var bkc = buf_upload(dev, kv)
     var bvc = buf_upload(dev, vv)
-    var bkh = buf_fill(dev, np * qd, float16(-77.0))          // poison fill: an unwritten panel slot reds the bit compare
+    var bkh = buf_fill(dev, np * qd, float16(-77.0))
     var bvh = buf_fill(dev, np * qd + 256, float16(-77.0))
     var bo = buf_fill(dev, np * qd, -1.0e30)
     var ka = AttnArgs(qd = uint(qd), kv_dim = uint(qd), head_size = uint(hs), kv_mul = 1u,
@@ -555,7 +549,6 @@ def private tower_flash_gate(t : T?; dev, queue) {
     }
     t |> equal(buf_mismatch_exact(bvh, vslice, "{tag} kv_hc V panel"), 0)
     t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
-    // the poison: +3.0 on ONE V element must red the same bars through the whole chain
     vv[(np / 2) * qd + hs / 2] += 3.0
     var bvc2 = buf_upload(dev, vv)
     let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
@@ -600,8 +593,7 @@ def private tower_flash_gate(t : T?; dev, queue) {
 }
 
 // ===== the qwen2.5 ViT per-window attention (block-diagonal, ragged last window) =====
-// f16-representable inputs keep the f64 oracle exact up to accumulation order; the oracle
-// attends STRICTLY within each window, so any cross-window leak fails the compare itself.
+[arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
 def private tower_win_gate(t : T?; dev, queue) {
     let tag = "tower_win"
     var err : string
@@ -612,7 +604,7 @@ def private tower_win_gate(t : T?; dev, queue) {
     let heads = 2
     let hs = 80
     let qd = heads * hs
-    let wlo <- [ 0u, 64u, 128u, 160u ]   // two full windows + a ragged 32-row tail
+    let wlo <- [ 0u, 64u, 128u, 160u ]   //! two full windows + a ragged 32-row tail
     let nwin = 3
     var qv : array<float>
     var kv : array<float>
@@ -684,7 +676,6 @@ def private tower_win_gate(t : T?; dev, queue) {
     t |> success(ran, "{tag} dispatch: {err}")
     return if (!ran)
     t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
-    // the poison: +3.0 on ONE V element (window 1) must red the same bars
     vv[80 * qd + hs / 2] += 3.0
     var bv2 = buf_upload(dev, vv)
     let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
@@ -716,8 +707,6 @@ def private tower_win_gate(t : T?; dev, queue) {
 }
 
 // ===== the gemma4a sliding-window RPE attention (causal window 12, softcap, per-dim scale) =====
-// f16-representable inputs keep the f64 oracle exact up to f32 accumulation; the oracle attends
-// STRICTLY within [i-11, i], so any horizon leak fails the compare itself.
 def private cn_attn_gate(t : T?; dev, queue) {
     let tag = "cn_attn"
     var err : string
@@ -818,14 +807,12 @@ def private cn_attn_gate(t : T?; dev, queue) {
     }
     return if (!invoke(run_once, bv, bbv))
     t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
-    // poison 1: +3.0 on ONE V element must red the bars (full attention sees every row)
     vv[18 * d + hs / 2] += 3.0
     var bv2 = buf_upload(dev, vv)
     if (invoke(run_once, bv2, bbv)) {
         t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} V poison (MUST mismatch)") > 0,
             "{tag}: a poisoned V element reds the bars")
     }
-    // poison 2: +2.0 on ONE bias_v element must red — proves the rel term is live
     vv[18 * d + hs / 2] -= 3.0
     var bv3 = buf_upload(dev, vv)
     bvv[hs / 3] += 2.0
@@ -920,7 +907,6 @@ def private cn_dw_gate(t : T?; dev, queue) {
     }
     return if (!invoke(run_once, bw))
     t |> equal(buf_mismatch_bars(by, want, 1e-5, 1e-6, tag), 0)
-    // the poison: +2.0 on ONE tap must red the same bars
     wv[5 * nk + 3] += 2.0
     var bw2 = buf_upload(dev, wv)
     if (invoke(run_once, bw2)) {
@@ -1032,7 +1018,6 @@ def private g4a_attn_gate(t : T?; dev, queue) {
     t |> success(ran, "{tag} dispatch: {err}")
     return if (!ran)
     t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
-    // the poison: +3.0 on ONE V element inside row 20's window must red the same bars
     vv[18 * d + hs / 2] += 3.0
     var bv2 = buf_upload(dev, vv)
     let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
@@ -1084,7 +1069,7 @@ def private tower_gather_gate(t : T?; dev, queue) {
     var src : array<uint>
     src |> resize(nr)
     for (r in range(nr)) {
-        src[r] = uint((r * 11) % nr)   // 11 coprime to 37: a full permutation
+        src[r] = uint((r * 11) % nr)   //! 11 coprime to 37: a full permutation
     }
     var want : array<float>
     want |> resize(nr * d)
@@ -1110,7 +1095,6 @@ def private tower_gather_gate(t : T?; dev, queue) {
     t |> success(ran, "{tag} dispatch: {err}")
     return if (!ran)
     t |> equal(buf_mismatch_exact(by, want, tag), 0)
-    // the poison: one swapped index must red the exact compare
     src[nr / 2] = src[nr / 2] == 0u ? 1u : 0u
     var bs2 = buf_upload(dev, src)
     let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
@@ -1312,14 +1296,13 @@ def test_metal_prefill_kernels(t : T?) {
                 metal_release(pso_rope)
 
                 // ===== the fused qk_norm+rope kernel: every (hx, donorm, pairing) production arm =====
-                qk_rope_gate(t, dev, queue, false, true, true, false)    // K rows, qwen3 class
-                qk_rope_gate(t, dev, queue, true, true, true, false)     // q panel + twin, qwen3 class
-                qk_rope_gate(t, dev, queue, false, true, false, false)   // classic pairing with norm
-                qk_rope_gate(t, dev, queue, true, false, false, false)   // rope-only + twin, llama class
-                qk_rope_gate(t, dev, queue, false, false, true, true)    // partial rot, Wave D class
+                qk_rope_gate(t, dev, queue, false, true, true, false)    //! K rows, qwen3 class
+                qk_rope_gate(t, dev, queue, true, true, true, false)     //! q panel + twin, qwen3 class
+                qk_rope_gate(t, dev, queue, false, true, false, false)   //! classic pairing with norm
+                qk_rope_gate(t, dev, queue, true, false, false, false)   //! rope-only + twin, llama class
+                qk_rope_gate(t, dev, queue, false, false, true, true)    //! partial rot, Wave D class
 
-                // ===== the tower flash + its hc K/V restride =====
-                tower_flash_gate(t, dev, queue)
+                tower_flash_kvhc_gate(t, dev, queue)
                 tower_win_gate(t, dev, queue)
                 g4a_attn_gate(t, dev, queue)
                 cn_attn_gate(t, dev, queue)

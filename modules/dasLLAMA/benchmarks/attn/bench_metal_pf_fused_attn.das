@@ -139,10 +139,10 @@ class LabPfFusedAttn {
 
 var g_lab_pso_twr : MetalComputePipeline?
 
-// The TOWER flash form: bidirectional (every key visible - uend the whole canvas), COMPACT
-// hs=72 heads (the vision towers' pre-restride q/k/v layout) - no 128 pad, no restride
-// passes, no score slab, no rowstat pass. One tg per (32-query block, head); K/V walk in
-// 32-position tiles, online softmax in f32, O in an accumulate-mode cooperative tensor.
+//! The TOWER flash form: bidirectional (every key visible - uend the whole canvas), COMPACT
+//! hs=72 heads (the vision towers' pre-restride q/k/v layout) - no 128 pad, no restride
+//! passes, no score slab, no rowstat pass. One tg per (32-query block, head); K/V walk in
+//! 32-position tiles, online softmax in f32, O in an accumulate-mode cooperative tensor.
 [metal_dispatch(name = "lab_enc_twr_attn", pso = "g_lab_pso_twr", tgmem = "lab_twr_attn_msl_tgmem", tg = 128, grid = "mp/32, heads", params = "mp : int64, heads : int64")]
 class LabTowerFlashAttn {
     @ssbo @binding = 0 @role = "read" q : array<float>     // [np x heads*72], roped, UNSCALED
@@ -316,8 +316,8 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
             print("three-pass pso: {err}\n")
             return
         }
-        // rows: decoder-1B-like (the arc's original pair) + the gemma3v tower shape (bidirectional
-        // via uend = np - the vision-canvas attention the slab bills 27x per encode)
+        //! rows: the decoder-1B pair + the gemma3v tower shape (bidirectional via uend = np -
+        //! the vision-canvas attention the slab bills 27x per encode)
         for (shape in [(np = 512, heads = 32, hs = 64, kvmul = 4, uend = 0),
                        (np = 2048, heads = 32, hs = 64, kvmul = 4, uend = 0),
                        (np = 4096, heads = 16, hs = 128, kvmul = 1, uend = 4096)]) {
@@ -433,8 +433,8 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
             })
             print("  av_mm np={np}: base={t_avb}ms tensor={t_avt}ms ratio={t_avt / t_avb}\n")
             if (shape.uend > 0) {
-                // the tower flash arm: compact hs=72 (first 72 of each padded head-block) vs
-                // the production three-pass on its padded layout - the exact A/B production faces
+                //! the tower flash arm: compact hs=72 (first 72 of each padded head-block) vs
+                //! the production three-pass on its padded layout - the exact A/B production faces
                 let hst = 72
                 let qdt = heads * hst
                 var qt : array<float>
@@ -442,7 +442,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                 var vt : array<float>
                 qt |> resize(np * qdt)
                 kt |> resize(np * qdt)
-                vt |> resize(np * qdt + 256)   // +tail slack: the lifted flash's dead PV tiles read past the last V row
+                vt |> resize(np * qdt + 256)   //! +tail slack: the lifted flash's dead PV tiles read past the last V row
                 for (p in range(np)) {
                     for (hh in range(heads)) {
                         for (dd in range(hst)) {
@@ -493,7 +493,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                     kn_kargs(enc, kat, 4)
                     kn_dispatch(enc, uint3(uint(np / 32), uint(heads), 1u), uint3(128u, 1u, 1u))
                 })
-                // the bidirectional oracle on the first 128 q-rows, computed once for every arm
+                //! the bidirectional oracle on the first 128 q-rows, computed once for every arm
                 let ncheck = 128
                 var owant : array<float>
                 owant |> resize(ncheck * qdt)
@@ -536,7 +536,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                     }
                 }
                 print("  TOWER np={np}: slab(hs128)={t_slab}ms flash(hs72)={t_flash}ms ratio={t_flash / t_slab}  maxrel={maxrel_t}\n")
-                // the lifted reference-flash arm (lcpp_flash_dk72.metal): np%64 and V-tail slack by contract
+                //! the lifted reference-flash arm (lcpp_flash_dk72.metal): np%64 and V-tail slack by contract
                 var fsrc = ""
                 fopen("modules/dasLLAMA/benchmarks/attn/lcpp_flash_dk72.metal", "rb") $(ff) {
                     if (ff != null) {
@@ -594,7 +594,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                     metal_release(bop)
                     metal_release(pso_port)
                 }
-                // the f16 data path (the reference's own FA_TYPES): K/V device half, half8x8 operands
+                //! the f16 data path (the reference's own FA_TYPES): K/V device half, half8x8 operands
                 var perrh = ""
                 var pso_porth = pipeline_from_source(dev, fsrc, "lab_lcpp_flash72h", true, perrh)
                 if (pso_porth == null) {
@@ -653,7 +653,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                         }
                     }
                     print("  PORTH np={np}: slab(hs128)={t_slab3}ms lcpp-flash72h={t_porth}ms ratio={t_porth / t_slab3}  maxrel={maxrel_h}\n")
-                    // hc: K/V per-head contiguous - the reference's own tensor layout (ld = 72)
+                    //! hc: K/V per-head contiguous - the reference's own tensor layout (ld = 72)
                     var perrc = ""
                     var pso_hc = pipeline_from_source(dev, fsrc, "lab_lcpp_flash72hc", true, perrc)
                     if (pso_hc == null) {
@@ -716,7 +716,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                             }
                         }
                         print("  PORTC np={np}: slab(hs128)={t_slab4}ms lcpp-flash72hc={t_hc}ms ratio={t_hc / t_slab4}  maxrel={maxrel_c}\n")
-                        // the PRODUCTION dialect emission (metal_tower_flash_msl) on the same buffers
+                        //! the PRODUCTION dialect emission (metal_tower_flash_msl) on the same buffers
                         var perrd = ""
                         var pso_dial = pipeline_from_source(dev, metal_tower_flash_msl, metal_tower_flash_msl_entry, metal_tower_flash_msl_fastmath, perrd)
                         if (pso_dial == null) {

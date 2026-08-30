@@ -142,9 +142,10 @@ class a census row could dispatch is a defect.
 **A kernel-unit cell missing a compare against a CPU oracle that can witness the cell's
 property is a defect.**
 
-**A kernel-unit cell testing cross-dispatch bit-identity that does not compare GPU against GPU,
-with its output buffers prefilled with a sentinel, is a defect.** No CPU oracle can witness
-that property.
+**A kernel-unit cell that bit-compares a buffer the GPU writes, without prefilling its output
+buffers with a sentinel, is a defect - and a cross-dispatch bit-identity compare that is not
+GPU against GPU is one too.** No CPU oracle can witness that property, and an unprefilled
+output can pass a bit compare by staying stale.
 
 **A kernel-unit cell whose output plane is its input plane, and whose compare is not paired
 with an assert that the output differs from the input at a known index, is a defect.** This
@@ -230,3 +231,21 @@ change** - the wire-shape pins, the render pins, and a live server leg gated on 
 smallest GGUF that runs on the small tier (the file homes are `CLAUDE.md`'s "Model-free /
 no-arm tests" and "Out-of-folder test files" notes). A family whose vocab lacks the markers
 has no format to test.
+
+**A kernel-unit gate that compares a GPU attention kernel against a wider-precision CPU oracle
+feeds inputs that are exact in f16.** Otherwise the compare measures input rounding, and the
+bar has to be loosened until it no longer discriminates.
+
+**A gate for a kernel that attends inside a restricted horizon - a window, a sliding span, a
+block-diagonal range - writes its CPU oracle to attend strictly inside that horizon.** A leak
+then reds the ordinary compare, so the gate needs no separate leak control.
+
+**A cell whose only compare is bit-identity between two kernel forms also compares one of the
+two against a CPU oracle, in the same cell.** Two forms can be bit-equal and both wrong.
+
+**A poison leg on a tower the Metal driver serves zeroes the poisoned region in the halfword
+twin plane (`wblob`) as well as the f32 blob.** The baked twin is what the GPU route reads, so
+a blob-only poison is laundered and the control passes on a broken kernel.
+
+**Loosening a transcript-equality assert in an ASR CPU-vs-GPU cell is a defect - convert the
+cell to the forced-feed logits-tolerance form instead.**

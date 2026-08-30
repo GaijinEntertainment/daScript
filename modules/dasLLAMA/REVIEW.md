@@ -272,3 +272,8 @@ directly.
 
 **An architecture file (`dasllama/dasllama_arch_*.das`) that changes a forward loop, or tests a
 family name on a shared path, is a defect - it carries declarative registration only.**
+
+**A diff that moves a family encode stage onto a GPU hook leaves the CPU form in place and
+changes none of its arithmetic - deleting or rewriting the CPU form in the same change is a
+defect.** The hook returns a decline value (`false`, or `-1` for the chunk hooks), and the CPU
+form serves every box with no driver.

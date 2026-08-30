@@ -1201,9 +1201,8 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
                 recipe = CANARY_ENC_RECIPE)]),
         // jfk3 (33 s) replaced gemma4a_test2.wav — the one corpus clip with no traceable
         // provenance; every published input must be re-fetchable (B2/B3)
-        // the 0.6B AuT pair (fetch_models-pinned): the small dense thinker — cheap cells; the
-        // gpu leg serves the WHOLE turn (f32 tower + bf16 twin on the Metal tower driver, the
-        // decoder on the standard Metal rail); the cpu/accel rows pin the drivers off
+        //! the 0.6B AuT pair (fetch_models-pinned): the small dense thinker, so its cells are
+        //! cheap - the cpu/accel rows pin the tower and prefill drivers off
         AsrModelSpec(display = "Qwen3-ASR-0.6B", das_model = "Qwen3-ASR-0.6B-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-ASR-0.6B-bf16.gguf", root = lroot,
             // mtmd's CPU AuT encode runs near xRT 1 — the same per-rep budget cap as omni's
@@ -1223,15 +1222,14 @@ def asr_catalog() : array<AsrModelSpec> {   // nolint:STYLE038 — flat catalog 
         // [[model_specs]] row — a companion rides the row that pins its carrier
         AsrModelSpec(display = "Gemma-4 E2B audio", das_model = "gemma-4-E2B-it-Q8_0.gguf",
             das_mmproj = "mmproj-gemma-4-E2B-it-bf16.gguf", root = lroot,
-            // the short reference ladder keeps the per-rep budget bounded on CPU-only boxes
-            // (mtmd's Metal build encodes on the GPU; a CPU-only run is near xRT 1)
+            //! short reference ladder: mtmd encodes on the GPU in its Metal build, so a CPU-only
+            //! run sits near xRT 1 and needs the per-rep budget capped
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         AsrModelSpec(display = "Qwen3-Omni-30B audio", das_model = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = lroot,
-            // the short reference ladder keeps the per-rep budget bounded on CPU-only boxes
-            // (near xRT 1 there, far worse on zen2; mtmd's Metal build encodes on the GPU)
+            //! short reference ladder: near xRT 1 on a CPU-only box, far worse on zen2
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf",
                             exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
             buckets <- corpus_buckets(), libri_short = "", lang = "auto", tier = Tier.large,

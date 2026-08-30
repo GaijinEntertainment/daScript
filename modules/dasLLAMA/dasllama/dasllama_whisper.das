@@ -569,7 +569,6 @@ def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
         if (enc_q8) {
             tower_quantize(st.e.enc, st.enc)
         } elif (wenc_gemm_all_f16(recs, encJobs)) {
-            // the halfword GEMM twin: plane absence IS the ineligibility flag (f32-sourced GEMMs)
             tower_bake_half_twin(st.enc.fblob, st.enc.wblob, false)
         }
         st.dblob |> reserve_resize(sz.dec_len)
@@ -590,8 +589,7 @@ def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
 // a job's dense-q8 membership: a marked GEMM whose contraction is a 32-multiple
 def private wjob_quantizable(j : WFillJob) : bool => j.gemm_n != 0l && j.gemm_n % 32l == 0l
 
-// the twin-bake gate: every encoder GEMM tensor is f16 in the bin, so the baked twin
-// round-trips the file's own halves exactly
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def private wenc_gemm_all_f16(recs : table<string; WTensorRec>; jobs : array<WFillJob>) : bool {
     for (j in jobs) {
         if (j.gemm_n != 0l && (recs?[j.name] ?? default<WTensorRec>).ttype != GGML_TYPE_F16) {
@@ -648,7 +646,7 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
         }
         wjob_read(recs, b, j, scratch, -j.off)   // land the tensor at scratch[0]
         if (kind == 3) {
-            // byte-identical to the eager tower_bake_half_twin over the same span
+            //! byte-identical to the eager tower_bake_half_twin over the same span
             if (long_length(half) < j.n) {
                 half |> grow_resize(int(j.n))
             }
@@ -737,7 +735,7 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
         let bk = select_matmul_backend_for_load_()
         let rep_enc = enc_q8 && bk
         let rep_dec = dec_q8 && bk
-        let enc_twin = !enc_q8 && wenc_gemm_all_f16(recs, encJobs)   // the f16 GEMM twin rides fp32-enc mints
+        let enc_twin = !enc_q8 && wenc_gemm_all_f16(recs, encJobs)
         var extra = uint64(sz.enc_len * 4l) + uint64(sz.dec_len * 4l) + 2ul * uint64(IMAGE_PAGE)
         if (enc_twin) {
             extra += uint64(sz.enc_len * 2l) + uint64(IMAGE_PAGE)

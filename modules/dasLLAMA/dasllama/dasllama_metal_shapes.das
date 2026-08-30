@@ -379,9 +379,6 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
             (!t.blocks.ffn_is_dense && !(allow_moe && moe_metal_ok(t)))) {
         return MetalDecodeDecline.graph
     }
-    // a RUNTIME gate like the planar check: repacked planes are unreadable by the drivers, but a
-    // fresh METAL mint never repacks — mint-time servability must not read the transient backend
-    // (the load itself selects the repacking CPU backend before deciding the flavor)
     if (!mint_time && kernel_backend_needs_repack(active_kernel_backend())) {
         return MetalDecodeDecline.backend_repack
     }

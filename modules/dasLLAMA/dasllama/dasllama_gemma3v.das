@@ -54,7 +54,7 @@ struct Gemma3vTower {
     // qblob/qscales; everything else is f32 in blob — the file's f16 widens exactly at read
     q8 : bool
     blob : PlaneF = PlaneF()
-    wblob : PlaneU16 = PlaneU16()   // the exact lane's f16 GEMM twin (f16-sourced files; empty = ineligible)
+    wblob : PlaneU16 = PlaneU16()   //! the exact lane's f16 GEMM twin (f16-sourced files; empty = ineligible)
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
     patch_w : int64      // [n_embd × patch_dim]
@@ -291,6 +291,7 @@ def private g3v_verify_tensors(m : GGUFMeta; t : Gemma3vTower; names : array<str
 
 //! The patch conv's SERVED K width: patch_dim (588) padded to the Metal mm tile's %64 - the
 //! plane's pad lanes are the resize's zeros, so the padded GEMM is exact on both routes.
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]
 def gemma3v_patch_pad(t : Gemma3vTower) : int64 => (t.patch_dim + 63l) / 64l * 64l
 
 // the plane layout: fp32 cursor `off` (blob), q8 cursor `qo` (qblob; scales at qo/32)
@@ -353,8 +354,6 @@ def private g3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gem
     let n_side = st.t.image_px / st.t.patch
     var wscratch : array<float>   // the padded-GEMM f32 staging, one GEMM at a time
     var rowscratch : array<float>   // the down GEMM's unpadded file rows ahead of the expand
-    // the conv W lands at the padded stride: file rows scatter to gemma3v_patch_pad-strided
-    // plane rows, the pad lanes keeping the resize's zeros
     wscratch |> reserve_resize(st.t.patch_dim * d)
     gguf_read_tensor_f32(m, bytes, "v.patch_embd.weight", wscratch, 0l, st.t.patch_dim * d)
     unsafe {
@@ -435,6 +434,7 @@ def private g3v_repack_all(var st : Gemma3vStaging; gemm_sizes : array<int64>) {
 //! Read the tower off an mmproj gguf into owned staging arrays — the mint side of the image rail,
 //! the only path that touches the source file. Every plane lands f32 in `blob` (the file's f16
 //! widens exactly); the q8 lane transcodes the block GEMMs to Q8_0 at read.
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def stage_gemma3v_tower(path : string) : Gemma3vStaging {
     var st = Gemma3vStaging()
     st.t.q8 = g3v_serve_q8()
@@ -501,8 +501,6 @@ def stage_gemma3v_tower(path : string) : Gemma3vStaging {
         st.qscales |> reserve_resize(qo / 32l)
         g3v_read_planes(m, bytes, st, names, gemm_sizes)
         g3v_repack_all(st, gemm_sizes)
-        // the twin plane ([[tower_bake_half_twin]]): f16-sourced block GEMMs only - absence
-        // is the Metal twin route's ineligibility flag (bf16/f32/q8 stay on the f32 route)
         if (!st.t.q8 && gguf_tensor_type(m, "v.blk.0.attn_q.weight") == GGML_TYPE_F16
                 && gguf_tensor_type(m, "v.blk.0.ffn_down.weight") == GGML_TYPE_F16) {
             tower_bake_half_twin(st.blob, st.wblob, false)
@@ -652,9 +650,8 @@ def private g3v_block(t : Gemma3vTower; var s : Gemma3vState; l, npos : int64) {
     asr_prof_add("g3v.ffn_mm", tp)
 }
 
-// the stem: im2col → patch conv + bias → learned position add, leaving the residual stream in
-// s.x (npos rows); planes arrive already normalized (encode_image_ owns the mean/std step)
-// the stem's column half, both routes: the padded-stride im2col + scratch sizing
+//! the stem's column half, both routes: the padded-stride im2col + scratch sizing
+//! (planes arrive already normalized - encode_image_ owns the mean/std step)
 def private g3v_stem_cols(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h : int64) : int64 {
     let d = t.n_embd
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0, gemma3v_patch_pad(t))
@@ -668,7 +665,7 @@ def private g3v_stem_cols(t : Gemma3vTower; var s : Gemma3vState; planes : array
     return npos
 }
 
-// the stem's compute half, the CPU route: padded patch GEMM + bias + the learned positions
+//! the stem's compute half, the CPU route: padded patch GEMM + bias + the learned positions
 def private g3v_stem_finish(t : Gemma3vTower; var s : Gemma3vState; npos : int64) {
     let d = t.n_embd
     mm_blob_b(s.x, t.blob, t.patch_w, s.x0, gemma3v_patch_pad(t), d, npos)
@@ -714,13 +711,12 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
     var gpu_served = false
     if (g_g3v_gpu_set) {
         tp = ref_time_ticks()
-        // the stem's GEMM + bias + positions ride the driver's cb too - it reads s.x0, never s.x
-        gpu_served = invoke(g_g3v_gpu, t, s, npos)
+        gpu_served = invoke(g_g3v_gpu, t, s, npos)   //! the stem's GEMM rides the driver's cb: it reads s.x0, never s.x
         asr_prof_add("g3v.gpu", tp)
     }
     if (!gpu_served) {
         tp = ref_time_ticks()
-        g3v_stem_finish(t, s, npos)   // the CPU route (and the GPU decline fallback)
+        g3v_stem_finish(t, s, npos)
         asr_prof_add("g3v.stem", tp)
         for (l in range64(t.n_layer)) {
             g3v_block(t, s, l, npos)

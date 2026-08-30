@@ -70,11 +70,6 @@ namespace das {
         return good;
     }
 
-    // The KIND of the second tier, not just its size: Apple names the perflevels, and the name
-    // decides whether the tier is worth computing on. An M5 Max reports "Super"/"Performance" —
-    // both full compute tiers, so a batch pool gains from spanning them; earlier M-series report
-    // "Performance"/"Efficiency", and an Efficiency core straggles every barrier-synchronized
-    // parallel_for it joins (measured ~1.6x slower on an 8P+2E prefill vs P-only).
     static bool apple_slow_tier_is_compute() {
         char name[64] = {}; size_t len = sizeof(name) - 1;
         if ( sysctlbyname("hw.perflevel1.name", name, &len, nullptr, 0) != 0 ) return false;
@@ -109,9 +104,6 @@ namespace das {
             return v;
         }();
         if ( forced > 0 ) return forced - 1;
-        // the app-declared request sits between the env and the defaults: unlike the cap it can
-        // RAISE past the fast-tier rule (a prefill-heavy workload wants the slow tier too). The
-        // cap still bounds it — an explicit "at most N" (e.g. a bench's -t) beats a standing request.
         if ( int req = JobQue::get_default_threads(); req > 1 ) {
             int workers = min(req, hw) - 1;
             if ( int cap = JobQue::get_default_threads_cap() ) workers = min(workers, cap);
@@ -134,8 +126,6 @@ namespace das {
     void JobQue::set_default_threads_cap(int cap) { g_jobqueDefaultThreadsCap = max(cap, 0); }
     int JobQue::get_default_threads_cap() { return g_jobqueDefaultThreadsCap.load(); }
 
-    // App-declared TOTAL lanes of a future JobQue (das set_jobque_threads) — the raise-capable
-    // twin of the cap; <=1 = unset. The DAS_JOBQUE_THREADS env still overrides it (the A/B rail).
     static atomic<int> g_jobqueDefaultThreads{0};
     void JobQue::set_default_threads(int total) { g_jobqueDefaultThreads = max(total, 0); }
     int JobQue::get_default_threads() { return g_jobqueDefaultThreads.load(); }
@@ -144,8 +134,6 @@ namespace das {
 #if defined(__APPLE__)
         return apple_perf_core_count();
 #else
-        // Windows/Linux hybrid (Intel P/E) topology detection is not wired yet — callers fall
-        // back to the homogeneous rule, and the env knobs cover asymmetric boxes until it is
         return 0;
 #endif
     }
@@ -154,8 +142,6 @@ namespace das {
 #if defined(__APPLE__)
         return apple_perf_core_count() > 0 && apple_slow_tier_is_compute();
 #else
-        // Intel E-cores would answer false too; unknown topology stays false — a pool never
-        // silently extends onto a tier nobody vouched for (env/app knobs override per config)
         return false;
 #endif
     }
@@ -231,10 +217,6 @@ namespace das {
         int hw = static_cast<int>(thread::hardware_concurrency());
         if ( hw <= 1 ) return;
 #if defined(__APPLE__)
-        // heterogeneous darwin: the top QoS class goes to the fast-tier slots only (slot 0 = the
-        // dispatch caller + the first perf-1 workers — the worker-limit active set); the rest take
-        // the next class down so the scheduler seats them on the slower tier instead of dicing
-        // equal-class threads across the few fast cores (a per-run tg placement lottery, measured).
         if ( int perf = apple_perf_core_count(); perf > 0 && perf < hw ) {
             SetCurrentThreadAffinityCpu(slot, mode >= 2 && slot < perf);
             return;

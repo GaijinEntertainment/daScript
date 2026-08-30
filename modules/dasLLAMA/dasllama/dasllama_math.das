@@ -269,10 +269,7 @@ def setup_dasllama_jobque_() {
     set_current_thread_priority(clamp(g_env_engine.caller_prio, -2, 2))
 }
 
-// SMT shares ports: pool = physical cores - 1 workers. A hybrid box splits by the SECOND tier's
-// kind: compute tiers (M5 Super+Performance) extend the pool to all cores, GEMV capped to the fast
-// tier; Efficiency tiers (M1/M4) straggle batch barriers, so fast-tier-only. Knobs/env override.
-[init]
+[init, arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def dasllama_jobque_threads_cap() {
     let cores = get_total_hw_cores()
     set_jobque_threads_cap(max(cores - 1, 1))
@@ -371,19 +368,18 @@ var g_batch_lane_cap = 0
 def public set_batch_lane_cap(v : int) { g_batch_lane_cap = max(v, 0) }
 def public get_batch_lane_cap() : int { return g_batch_lane_cap }
 
-// Per-phase worker dormancy on hybrid boxes: chunk-starved slow-tier workers SPINNING beside
-// the fast decode lanes cost tg -15% (M5 Max; the rank gate does not recover it — only parking
-// does). Decode parks the slow tier, batch wakes all; a dispatch_worker_limit box knob wins.
-var g_phase_decode_workers = -1   // -1 = policy off (homogeneous box)
+var g_phase_decode_workers = -1   //! the decode-phase worker limit; -1 = per-phase parking off (homogeneous box)
 def public set_phase_decode_workers(v : int) { g_phase_decode_workers = v }
 def public get_phase_decode_workers() : int { return g_phase_decode_workers }
 
+[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def public dispatch_phase_decode {
     if (g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available()) {
         set_jobque_worker_limit(g_phase_decode_workers)
     }
 }
 
+[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def public dispatch_phase_batch {
     if (g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available()) {
         set_jobque_worker_limit(-1)

@@ -144,9 +144,6 @@ class MetalQ8MulMmTH128 : MetalQ8MulMmTensorT {
     override MT = 128u
 }
 
-//! the double-buffered staged twin (bk=128 footprint): two ping-pong W tiles, ONE barrier per
-//! 64-deep chunk - staging chunk b+1 overlaps the tensor op on chunk b. Same staged f16
-//! rounding as the single-tile form, so outputs are BIT-equal; the A/B rail is the knob alone
 [ |> template_struct_instance]
 class template MetalQ8MulMmDbT {
     @template_constant MT : uint = 128u
@@ -286,7 +283,7 @@ class MetalDequantK6H {
     @ssbo @binding = 3 @role = "write" wh : array<float16>
     @uniform @binding = 4 ka : CvtArgs
 
-    [metal_kernel(name="metal_dequant_k6h_msl")]
+    [metal_kernel(name="metal_dequant_k6h_msl"), arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
     def metal_dequant_k6h {
         let gid = gl_GlobalInvocationID.x
         if (gid >= ka.total) {
@@ -312,9 +309,6 @@ class MetalDequantK6H {
                 let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
                 let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
                 let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                //! factored on purpose: the compiler factors dsc*q - dsc*32 anyway, and the
-                //! explicit form pins the zero SIGN (q == 32 with negative dsc yields -0) so
-                //! the image bake's CPU mirror is bit-equal by source, not by toolchain mood
                 wh[blk * 256u + js * 32u + ile * 16u + uint(t)] = float16(dsc * (float(q) - 32.0))
             }
         }
@@ -586,8 +580,6 @@ class MetalKqMulMmK5TH128 : MetalKqMulMmK45TensorT {
     override MT = 128u
 }
 
-//! the k4/k5 double-buffered twin: same in-kernel dequant staged into two ping-pong tiles
-//! (18432B), ONE barrier per 64-deep chunk - staging chunk kb+2 overlaps the tensor op on kb
 [ |> template_struct_instance]
 class template MetalKqMulMmK45DbT {
     @template_constant MT : uint = 32u
@@ -741,7 +733,6 @@ class template MetalKqMulMmK6TensorT {
                     let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
                     let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
                     let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                    //! factored like MetalDequantK6H: pins the zero SIGN so the Db twin is bit-equal by source
                     twb[j * 72u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * (float(q) - 32.0))
                 }
                 work += gl_WorkGroupSize.x
@@ -771,7 +762,6 @@ class MetalKqMulMmK6TH128 : MetalKqMulMmK6TensorT {
     override MT = 128u
 }
 
-//! the k6 double-buffered twin - MetalKqMulMmK45DbT's ping-pong walk on the k6 dequant
 [ |> template_struct_instance]
 class template MetalKqMulMmK6DbT {
     @template_constant MT : uint = 32u
@@ -817,7 +807,7 @@ class template MetalKqMulMmK6DbT {
         }
     }
 
-    [metal_kernel(float_a_ok=true)]
+    [metal_kernel(float_a_ok=true), arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
     def metal_kq_mulmm_k6_db {
         let mBase = gl_WorkGroupID.x * MT
         let nBase = gl_WorkGroupID.y * 64u
@@ -899,15 +889,12 @@ class MetalMoeGatherX {
     }
 }
 
-//! the shared tall/short kq-and-q51 tensor scaffold: prologue, the staged 64-deep K walk
-//! with its barrier pair, and the store. A format derives, owns bindings 0..2 (its weight
-//! views), and overrides stage_block - the per-work-item decode of one staged tile slice
 [ |> template_struct_instance]
 class template MetalMoeMulMmKqTensorBase {
     @template_constant MT : uint = 32u
     @template_constant REM : bool = false
-    @template_constant WQ : uint = 256u     //! staging quota per chunk, in work items
-    @template_constant BKD : uint = 64u     //! staged chunk depth, in k elements
+    @template_constant STAGE_ITEMS : uint = 256u     //! per staged chunk
+    @template_constant STAGE_K : uint = 64u     //! staged chunk depth, in k elements
     @ssbo @binding = 3 xf : array<XT>
     @ssbo @binding = 4 y : array<float>
     @uniform @binding = 5 ka : MoeMmArgs
@@ -934,18 +921,18 @@ class template MetalMoeMulMmKqTensorBase {
         let lid = gl_LocalInvocationID.x
         var acc : float[8192]
         var cp = unsafe(addr(y[(rbase + mBase) * ka.ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, BKD)
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, STAGE_K)
         var kb = 0u
         while (kb < nkb) {
             var work = lid
-            while (work < WQ) {
+            while (work < STAGE_ITEMS) {
                 stage_block(work, kb, e, nBase)
                 work += gl_WorkGroupSize.x
             }
             barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, MT, 64u, BKD)
+            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, MT, 64u, STAGE_K)
             barrier()
-            kb += BKD / 32u
+            kb += STAGE_K / 32u
         }
         store_out(acc, cp, e, nBase)
     }
@@ -958,8 +945,8 @@ class template MetalMoeMulMmMx4TensorT : MetalMoeMulMmKqTensorBase {
     @ssbo @binding = 12 @role = "weight" wb : array<float>   //!< [ne x ndim] per-expert bias rows
     @ssbo @binding = 13 @role = "weight" vtab : array<float> //!< [16] signed doubled-e2m1 values
     @workgroup twb : float16[2048]          //!< W chunk: 64 wrows x 32 k, flat row-major
-    override WQ = 128u
-    override BKD = 32u
+    override STAGE_ITEMS = 128u
+    override STAGE_K = 32u
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_mx4_t {
@@ -1818,9 +1805,6 @@ struct QkRopeArgs {
     nreal : uint    //!< rows past this are PAD: copied (and f16-stored), never normed or roped
 }
 
-//! The fused qk_norm + rope pass, one thread per rope PAIR (hs/2 per (head, row) tg): RMS by
-//! simd/part reduction, rotation in-register, ONE panel write vs the split dispatches' three
-//! passes; the HX stamp dual-stores the f16 twin, retiring the q panel's pf_cvt_panel pass
 [ |> template_struct_instance]
 class template MetalQkRopeT {
     @ssbo @binding = 0 @off = "xoff" x : array<float>     //!< bound at the panel offset; rewritten in place
@@ -1832,7 +1816,7 @@ class template MetalQkRopeT {
     @template_constant HX : bool = false
     @workgroup part : float[16]     //!< one per simdgroup - hs/2 <= 256 threads
 
-    [metal_kernel]
+    [metal_kernel, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-twin-dual-store")]
     def metal_qk_rope {
         let h = gl_WorkGroupID.x
         let p = gl_WorkGroupID.y
@@ -2372,8 +2356,7 @@ class MetalAttnAVMmTP : MetalAttnAVMmTensorT {
     override PADFREE = true
 }
 
-//! acc_quad is inlined here rather than inherited: a class template extending a base class
-//! from another module trips the reified struct's finalizer typing.
+//! acc_quad is inlined, not inherited: a class template extending a base class from another module trips the reified struct's finalizer typing.
 [ |> template_struct_instance]
 class template MetalAttnAVMmSgT {
     @ssbo @binding = 0 @role = "read" att : array<float16>  //!< [n_heads x qrows x np32] RAW scores, f16 slab
@@ -2407,7 +2390,7 @@ class template MetalAttnAVMmSgT {
     def metal_attn_av_mm {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u  //! token rows
+        let mBase = gl_WorkGroupID.x * 32u
         let vBase = gl_WorkGroupID.y * 64u  //! V columns within the head
         let h = gl_WorkGroupID.z
         let kvhoff4 = ((h / ka.kv_mul) * ka.head_size) / 4u
@@ -2486,7 +2469,7 @@ class MetalAttnAVMmP : MetalAttnAVMmSgT {
 }
 
 //!@nolint
-//! The tower flash - the reference engine's flash_attn_ext monomorphized at DK = DV = 72
+//! The tower flash - one-pass attention monomorphized at DK = DV = 72
 //! (8 queries/tg, 64 keys/block, 4 simdgroups): bidirectional, no score slab, no rowstat,
 //! no head restrides. K/V are per-head-contiguous f16 panels [heads x npos x 72] with
 //! npos % 64 rows and >= 256 elements of V tail slack (dead PV-pad tiles read past the last
@@ -2502,8 +2485,8 @@ class MetalTowerFlash {
     @workgroup so : float[1024]         //!< O: 8 rows x PV = 128 (cols past 72 ride dead, never stored)
     @workgroup ss : float[1024]         //!< scores: 8 rows x SH = 128 (64 used per block)
 
-    [metal_kernel(name="metal_tower_flash_msl")]
-    def metal_tower_flash {   // nolint:STYLE038 — the lifted flash body, barrier-coupled
+    [metal_kernel(name="metal_tower_flash_msl"), arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
+    def metal_tower_flash {   // nolint:STYLE038 — the one-pass flash body, barrier-coupled
         let iq2 = gl_WorkGroupID.y
         let iq1 = gl_WorkGroupID.x * 8u
         let lid = gl_LocalInvocationID.x
@@ -2639,8 +2622,8 @@ class MetalTowerKvHc {
 }
 
 //! The block-diagonal window attention of the qwen2.5 ViT: one threadgroup per (window, head),
-//! one thread per q row (windows cap at 64 rows), plain softmax - all f32 straight from device
-//! (the window's K/V rides L1; f16 staging noise compounds over 28 layers). Bidirectional, no mask.
+//! one thread per q row (windows cap at 64 rows), plain softmax, all f32 straight from device.
+//! Bidirectional, no mask.
 [metal_dispatch(name = "enc_tower_win_attn", pso = "g_pf_pso_twr_win", tg = 64, grid = "nwin, heads", params = "nwin : int64, heads : int64")]
 class MetalTowerWinAttn {
     @ssbo @binding = 0 @role = "read" q : array<float>      //!< [npos x qd] compact, roped
@@ -2650,7 +2633,7 @@ class MetalTowerWinAttn {
     @ssbo @binding = 4 @role = "read" wlo : array<uint>     //!< [nwin + 1] window row starts + total sentinel
     @uniform @binding = 5 ka : AttnArgs
 
-    [metal_kernel(name="metal_tower_win_msl")]
+    [metal_kernel(name="metal_tower_win_msl"), arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
     def metal_tower_win {
         let wi = gl_WorkGroupID.x
         let h = gl_WorkGroupID.y
@@ -2770,7 +2753,7 @@ class MetalG4aAttn {
                 rs += qv * rpe[rr + hoff + n]
                 n++
             }
-            // tanh via the exp identity (the CPU softcap's form; Metal tanh NaNs past ~44)
+            //! tanh via the exp identity (the CPU softcap's form; Metal tanh NaNs past ~44)
             let raw = cs + rs
             let sc = ka.cap * (1.0 - 2.0 / (1.0 + exp(raw * 2.0 / ka.cap)))
             sarr[j - j0] = sc
@@ -2841,7 +2824,7 @@ class MetalG4aDw {
         var acc = 0.0
         var kk = 0u
         while (kk < 5u) {
-            if (t + kk >= 4u) {   // src = t - 4 + kk >= 0 in unsigned form
+            if (t + kk >= 4u) {   //! src = t - 4 + kk >= 0 in unsigned form
                 acc += w[c * 5u + kk] * x[(t + kk - 4u) * d + c]
             }
             kk++
@@ -2973,7 +2956,7 @@ class MetalCnDw {
         var acc = 0.0
         var kk = 0u
         while (kk < nk) {
-            let src = t + kk   // src row = t + kk - kpad, guarded in unsigned form
+            let src = t + kk   //! src row = t + kk - kpad, guarded in unsigned form
             if (src >= kpad && src - kpad < npos) {
                 acc += w[c * nk + kk] * x[(src - kpad) * d + c]
             }
@@ -3103,7 +3086,7 @@ class MetalG4aIm2col {
         let ic = j / 9u
         let kh = (j % 9u) / 3u
         let kw = j % 3u
-        // iy = oy*2 - 1 + kh, ix = ox*2 - 1 + kw in unsigned form
+        //! iy = oy*2 - 1 + kh, ix = ox*2 - 1 + kw in unsigned form
         let iyp = oy * 2u + kh
         let ixp = ox * 2u + kw
         var vv = 0.0
@@ -3503,9 +3486,9 @@ def public set_metal_prefill_lastrow(v : bool) {
     to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_lastrow({v}) - prefill tail override\n")
 }
 
-//! A/B seat: double-buffered W staging on the dense staged GEMMs - the q8 and kq stamps
-//! (raced +1.7% / +1.8% e2e; the MoE family raced -5% and stays single-tile) vs the
-//! single-tile forms. Default on; `DASLLAMA_METAL_DBUF=0` pins them off. Outputs BIT-equal.
+//! A/B seat: double-buffered W staging on the dense staged GEMMs - the q8 and kq stamps - vs
+//! the single-tile forms (the MoE family stays single-tile either way). Default on;
+//! `DASLLAMA_METAL_DBUF=0` pins them off. Outputs BIT-equal.
 def public set_metal_prefill_dbuf(v : bool) {
     g_pf_env_dbuf = v
     to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_dbuf({v}) - staged GEMM form override\n")
@@ -4285,9 +4268,6 @@ def pf_enc_hmm(enc : MetalComputeEncoder?; bwh, bxh, by : MetalBuffer?; yoff : u
     }
 }
 
-//! The RESIDENT panel seat: a baked image plane when the seed put one here, else a persistent
-//! hazard-TRACKED buffer the first forward dequantizes into (the scratch route re-pays the
-//! dequant per site per forward). null buf = budget refused or off - the caller stays on scratch
 def private pf_devw_resident_panel(key : uint64; bytes : uint64; var fresh : bool&) : DevwResEntry {
     fresh = false
     if (key_exists(g_pf_devw_res, key)) {
@@ -4329,8 +4309,6 @@ def private pf_devw_res_release {
     }
 }
 
-//! Seed the resident cache from the image's baked dev-W tables: every baked site lands as a
-//! zero-copy (buf, offset) view over the mapped devwf16 plane - no dequant ever runs for it.
 //! Idempotent per mapped plane; a model without the plane costs one empty-check per forward.
 def private pf_devw_seed_baked(t : Model) {
     if (empty(t.devwf16) || !t.metal_blob) {
@@ -4347,9 +4325,6 @@ def private pf_devw_seed_baked(t : Model) {
     }
     var seeded = 0
     for (i in range(length(t.devwf16_key))) {
-        //! the key mirrors the resident lookup at the site's route: q8 = mblob buffer + BYTE
-        //! offset, kq = the fmt's quant plane buffer + ELEM woff (both plane_buffer-cached,
-        //! so the seed and the forward resolve the same base)
         let f = t.devwf16_fmt[i]
         var key = 0ul
         if (f == 0) {
@@ -4358,7 +4333,7 @@ def private pf_devw_seed_baked(t : Model) {
             let kfmt = f == 4 ? KqFmt.k4 : (f == 5 ? KqFmt.k5 : KqFmt.k6)
             key = intptr(kq_quants_of(g_dev, t, kfmt, t.devwf16_key[i]).buf) + uint64(t.devwf16_key[i])
         } else {
-            continue   // an fmt this build does not know - a newer image's site stays runtime-served
+            continue   //! an fmt this build does not know - a newer image's site stays runtime-served
         }
         if (!key_exists(g_pf_devw_res, key)) {
             g_pf_devw_res[key] = DevwResEntry(buf = bpan, boff = uint64(t.devwf16_off[i] * 2l), owned = false)   // nolint:PERF026 — once per mapped plane
@@ -4875,8 +4850,6 @@ def enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : 
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-attn-slab")]
 def enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; bstat : MetalBuffer?; mp, heads, head_size : int64) {   //! public: the tower driver dispatches the crowned trio too
     let walk_live = ka.qoff + ka.qrows == ka.npos
-    // the towers' 96 pad: the cooperative store writes whole 64-col groups, so the tensor
-    // twins serve only %64 head sizes; the guarded simdgroup forms carry the rest
     if (g_pf_avmm_tensor && g_pf_pso_avmm_t != null && ka.head_size % 64u == 0u) {
         if (walk_live && ka.npos % 64u == 0u && g_pf_pso_avmm_tp != null) {
             enc_av_mm_tp_c(enc, batt, bv, bxb, ka, bstat, mp, heads, head_size)
@@ -4913,7 +4886,7 @@ def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int
     return metal_prefill_init()
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-pad-rows-and-coop"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-chunked-submit")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-pad-rows-and-coop"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-chunked-submit"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-twin-dual-store"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) : bool {   // nolint:STYLE037,STYLE038 — the prefill step driver; the layer stack's phases are hz-barrier coupled
     var why = prefill_decline(t, s, npos, start_pos)
     if (why == MetalPrefillDecline.none && !metal_prefill_init()) {
@@ -5523,8 +5496,6 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 var bqh_q : MetalBuffer? = null    //! the fused arm's q twin, claimed at rope time - the QK site consumes it
                 var bqh_q_live = false
                 if (!recr && qkr_on && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                    //! fused qk_norm+rope: one panel rewrite per q/k instead of norm RW + rope RW,
-                    //! and q dual-stores the f16 twin pf_cvt_panel would build at the QK site
                     var bcos_l = lsl && dual_rope ? bcos_swa : bcos
                     var bsin_l = lsl && dual_rope ? bsin_swa : bsin
                     //! donorm == 0 never reads w - bcos_l just keeps the binding valid
@@ -5579,7 +5550,6 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         ulo = s.attn_uniform_end > 0l ? uint(s.attn_uniform_lo) : 0u)
                     if (g_pf_skip != "attn_qk") {
                         if (mmattn) {
-                            //! the fused qk_rope arm already dual-stored the twin - re-converting would double-pay
                             enc_qk_mm(enc, bq, bks[l], batt, atka, mp, nk64, n_heads,
                                 bqh = bqh_q_live ? bqh_q : pf_cvt_panel(enc, bq, mp, qd_l, g_pf_skip == "act_cvt"))
                         } else {
@@ -5619,22 +5589,17 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         enc_add_bias_rows(enc, bxb2, 0ul, bwo_b, 0ul, u_dim, u_total_dim, npos * dim)
                     }
                 }
-                let hid_l = layer_hidden(t, l)   //! per-layer (MatFormer E-series)
+                let hid_l = layer_hidden(t, l)
                 let u_hid_l = (u_hidden2 == null || hid_l == hidden) ? u_hidden : u_hidden2
                 let u_th_l = (u_total_h2 == null || hid_l == hidden) ? u_total_h : u_total_h2
-                //! LAST-LAYER TAIL NARROWING: past the final attention only s.logits and mtp_h are
-                //! read, so the last dense layer's FFN runs the FINAL ROW alone (the GEMV-tail
-                //! forms carry mp=1). keep_hidden restores the full x_b plane for its consumers.
                 let narrow_last = (g_pf_env_lastrow && !s.keep_hidden && !warm
                     && l == c.n_layers - 1l && npos > 1l && !recr && !moe && !plef
                     && !c.pre_post_norm && l >= nds && !c.q_gated
-                    && c.n_layer_nextn == 0l   //! MTP verify/warm read every x_b row post-prefill
+                    && c.n_layer_nextn == 0l
                     && dim % 32l == 0l && hid_l % 32l == 0l
                     && fmt_at(t.w1_fmt, l) == KqFmt.q8 && fmt_at(t.w3_fmt, l) == KqFmt.q8
                     && fmt_at(t.w2_fmt, l) == KqFmt.q8)
                 if (narrow_last) {
-                    //! straight GEMVs, not enc_gemm_mm: the 1-row form is known, and the
-                    //! mm-tail peel counters stay an uncontaminated instrument
                     let nro = uint64((npos - 1l) * dim * 4l)
                     if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                         enc_add(enc, bx, nro, bxb2, nro, u_dim, dim)
@@ -5672,12 +5637,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         var bw_pa = upload_region(addr < void? >(t.fblob[t.rms_post_att_off + l * dim]), uint64(dim * 4l))
                         pf_enc_rms(enc, bxb2, 0ul, bw_pa, bxb2, u_dim, u_eps, npos)
                     }
-                    //! dual-store only where a dense FFN reads the twin - the routed-MoE arm rides bmxg/bmg,
-                    //! so its layers would pay the f16 write for nothing
                     let want_hx = !moe || g4moe
                     if (dim <= ADD_RMS_MAX_DIM && g_pso_addrms != null) {
-                        //! spine fusion: residual add + FFN norm ride one dispatch (the norm's panel
-                        //! re-read comes from the tgmem slab instead of device memory)
                         bxh_ffn = want_hx && g_pso_addrms_hx != null ? pf_twin_panel(mp, dim) : null
                         if (bxh_ffn != null) {
                             pf_enc_add_rms_bhx(enc, bx, bxb2, bw_ffn, bxb, u_dim, u_eps, bxh_ffn, npos)

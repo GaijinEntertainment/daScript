@@ -7,11 +7,9 @@ require ?das_metal metal/das_metal_boost
 require ?das_metal dasllama/dasllama_metal_prefill   // the production TH128 q8 MSL text
 require strings
 
-// GEMM-dig gate for the double-buffered staging variant: the tgmem ALLOCATION LAW's unmeasured
-// gap. The law so far: 10240-16384B flat plateau, 9216 pothole, >=20480 degrades. A bk=64
-// ping-pong pair needs 2 x 9216 = 18432B - inside the unmeasured (16384, 20480) gap. Same
-// method as the session-1 diagnostic: the production kernel indexes only its 6144 halves, the
-// REQUEST size alone varies.
+// GEMM-dig gate for the double-buffered staging variant: the tgmem allocation law's unmeasured
+// (16384, 20480) gap, where a bk=64 ping-pong pair lands (2 x 9216 = 18432B). The production
+// kernel indexes only its 6144 halves, so the REQUEST size alone varies.
 
 def upload_u32(dev; v : uint) {
     var buf = metal_new_buffer(dev, 4ul)
@@ -66,7 +64,7 @@ def time_gemm(queue; pso; bw, bx, by, bk, bn; gx, gy : uint; tgmem : uint64; rep
     return gpu_ms * 1000.0lf / double(reps)
 }
 
-[export]
+[export, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder")]
 def main {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var dev = metal_create_system_default_device()

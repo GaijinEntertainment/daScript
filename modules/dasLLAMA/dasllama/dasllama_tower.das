@@ -578,6 +578,7 @@ def geglu_quick_lut_rows(var h : array<float>; gate, up : array<float>; ff, npos
 //! Bake a tower's halfword GEMM twin off its staged f32 blob - the file's own bits (an f16
 //! source round-trips exactly; bf16 = the f32 word's top halfword). Whole-blob at the same
 //! element offsets; ride-along f32 regions clamp on the f16 form and the route never reads them.
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : bool) {
     let n = long_length(blob)
     if (long_length(wblob) < n) {
@@ -604,11 +605,12 @@ def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : 
 //! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in [C][KH][KW]
 //! order (row index c·p² + ky·p + kx), one row per non-overlapping p×p patch walking the canvas
 //! row-major (pos_x = i % n_cols, pos_y = i / n_cols). Returns npos; ``x0`` grows to npos × 3p².
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]
 def im2col_rgb_patches(planes : array<float>; w, h, p : int64; @scratch var x0 : array<float>; row_stride : int64 = 0l) : int64 {
     let n_cols = w / p
     let npos = n_cols * (h / p)
     let psq = p * p
-    let row_dim = row_stride > 0l ? row_stride : 3l * psq   // a padded stride's tail lanes stay the resize's zeros
+    let row_dim = row_stride > 0l ? row_stride : 3l * psq
     if (long_length(x0) < npos * row_dim) {
         x0 |> reserve(npos * row_dim)
         x0 |> resize(npos * row_dim)

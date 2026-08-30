@@ -23,9 +23,8 @@ require math
 let private TIER1_ABS = 2e-4
 // x token rms; one GELU-LUT chain (the merger) rides the qwen3v Omni floor
 let private TIER1_REL = 1e-2
-// the GPU rung's bar: the deep 32-layer mix amplifies the f16-operand GEMM noise and re-rolls
-// on any low-bit kernel change (measured up to ~4e-2 rel) - the qwen3v deepstack-precedent bar
-// keeps 2x headroom while a structural break (zeroed-block class, >= 0.9) still reds
+//! measured up to ~4e-2 rel on this 32-layer mix: 2x headroom, and a structural break
+//! (zeroed-block class, >= 0.9) still reds
 let private TIER1_REL_GPU = 8e-2
 
 def private gate_encode(t : T?; tw : Qwen25vTower; var st : Qwen25vState; kind : string; w, h : int; logname : string; rel = TIER1_REL) : bool {
@@ -97,13 +96,6 @@ def test_qwen25v_tier1(t : T?) {
     }
 }
 
-// The GPU rung: the same dumps through the Metal tower's window-ViT driver - the per-window
-// fused attention on the non-full blocks, the padded slab on every 8th, swiglu at ff_pad.
-// quad448 is OFF this rung's numeric set: window-distinct content realizes the chaotic
-// amplification of the f16-operand GEMM noise over 32 mixing layers (measured 0.18-0.4 x rms
-// vs 5e-3 on uniform/periodic content), so its bar would read chaos, not structure. The GPU
-// lane's window discrimination lives in the SHALLOW routing cells below (1-layer towers on
-// quad content, chaos-free) plus the kernels-suite tower_win gate's strict oracle.
 [test]
 def test_qwen25v_tier1_gpu(t : T?) {
     t |> run("tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)") @(tt : T?) {
@@ -127,17 +119,14 @@ def test_qwen25v_tier1_gpu(t : T?) {
                     tt |> equal(metal_tower_stats().blocks - s0.blocks, tw.n_layer, "{fx.kind} {fx.w}x{fx.h}: every block ran on the driver (blocks delta)")
                 }
             }
-            // the twin-route witness: the f16-sourced mmproj bakes the halfword twin, and with
-            // the box crowns armed the block GEMMs ride it (counted per encode)
             set_metal_tensor_crowns("mulmm_q8")
-            metal_prefill_shutdown()   // crowns are read when the PSOs compile
+            metal_prefill_shutdown()
             let tw0 = metal_tower_f16_encodes()
             if (gate_encode(tt, tw, st, "cb", 448, 448, "encode25.cb448.log", TIER1_REL_GPU)) {
                 tt |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the f16-sourced tower rode the twin route")
             }
             set_metal_tensor_crowns("")
             metal_prefill_shutdown()
-            // the knob-off leg: the same tower, the CPU chain, no dispatch
             set_metal_tower(false)
             let sc0 = metal_tower_stats()
             tt |> gate_encode(tw, st, "cb", 448, 448, "encode25.cb448.log")
@@ -147,8 +136,6 @@ def test_qwen25v_tier1_gpu(t : T?) {
             set_metal_tower(true)
             delete st
             delete tw
-            // the GPU-lane poison: one mid-stack block's GEMM region zeroed through BOTH staging
-            // planes (the baked twin LAUNDERS blob-only poisons) must EXCEED the GPU bar
             var inscope stp <- stage_qwen25v_tower(mm)
             let base = stp.t.layer_w + 16l * stp.t.layer_w_stride
             for (i in range64(stp.t.layer_w_stride)) {
@@ -174,20 +161,16 @@ def test_qwen25v_tier1_gpu(t : T?) {
             }
             delete stq
             delete twp
-            // the SHALLOW routing cells: 1-layer towers on quad content, GPU vs the CPU chain
-            // at a tight bar - chaos-free window discrimination for the DRIVER (a wrong wlo,
-            // an inverted full flag, or an all-full/all-window mix-up reds at quadrant scale)
-            shallow_routing_cell(tt, mm, "window", 99l)   // (0+1) % 99 != 0 -> the window arm
-            shallow_routing_cell(tt, mm, "full", 1l)      // (0+1) % 1 == 0 -> the slab arm
+            shallow_routing_cell(tt, mm, "window", 99l)   //! (0+1) % 99 != 0 -> the window arm
+            shallow_routing_cell(tt, mm, "full", 1l)      //! (0+1) % 1 == 0 -> the slab arm
         } else {
             feint("das_metal is not built on this platform - the GPU rung is Apple-only\n")
         }
     }
 }
 
-// GPU-vs-CPU on a 1-layer truncated tower, quad content (window-distinct): per-layer GPU
-// noise measures ~2.6e-2 abs peak (the f16-operand GEMMs + the K=5120 merger on |~70| values);
-// a routing defect mixes quadrant values at >= 1.0. Bar = 0.1 abs (~4x noise, 10x under signal).
+//! one layer of GPU noise measures ~2.6e-2 abs peak here (f16-operand GEMMs + the K=5120 merger
+//! on |~70| values) and a routing defect mixes quadrants at >= 1.0, so the bar is 0.1 abs
 def private shallow_routing_cell(t : T?; mm, name : string; wa : int64) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var inscope st <- stage_qwen25v_tower(mm)

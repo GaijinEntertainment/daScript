@@ -280,3 +280,21 @@ hands the next consumer an unfilled residual stream.
 `moe_gpu_model_marks_restore_` and `moe_gpu_drop_model_`, in the same change.** A global
 missing from one of the three survives a model swap and routes the next model's dispatches at
 the old model's planes.
+
+**A diff that changes how a dev-W resident panel's cache key is built changes both the seed
+site and the lookup site in the same change** - `pf_devw_seed_baked` and
+`pf_devw_resident_panel` in `dasllama/dasllama_metal_prefill.das`. A seed keyed differently
+from the forward never hits, and every baked site silently re-dequantizes.
+
+**A tower driver that uploads fewer rows than the padded row count its kernels walk zeroes the
+pad rows in the same upload** - `dasllama/dasllama_metal_tower.das`. A pooled buffer comes back
+holding the previous encode's bytes, infinities included.
+
+**A servability gate in `dasllama/dasllama_metal_shapes.das` that a mint can reach never reads
+runtime backend state - test the model's own fields instead.** The load selects the repacking
+CPU backend before the flavor is decided, so a mint-time read bakes a verdict the drivers do
+not share.
+
+**A diff that changes a family's CPU encoder block loop also changes that family's chain in
+`dasllama/dasllama_metal_tower.das` in the same change, dispatch for dispatch - and the
+reverse.** The CPU loop is the chain's specification and the parity cells its instrument.

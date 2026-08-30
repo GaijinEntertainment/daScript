@@ -192,3 +192,34 @@ tracked (untracked reds parity). The ~1-3 ms window-scaled residual is the drive
 idle-state wake class, no user-space lever found. Related, same ledger: merely arming Metal
 makes a CPU q8 tower encode ~1.7x slower - mechanism unnamed, deleted by a GPU-served tower.
 
+
+### 2.18 The CPU worker pool on a hybrid box {#hybrid-pool-policy}
+
+SMT siblings share the FMA and load ports, so the default pool is physical cores - 1 workers. A box
+with two core tiers splits on the SECOND tier's KIND: a compute tier (an M5's Super plus Performance
+cores) extends the pool to every core with GEMV capped to the fast tier, while an efficiency tier
+(M1, M4) straggles batch barriers and gets no worker at all. A compute-grade second tier only
+exists beside a KNOWN fast tier - the `[init]` extension reads both, so a box reporting one
+without the other has an inconsistent topology, not a third policy.
+
+Chunk-starved slow-tier workers spinning beside the fast decode lanes cost ~15% of tg on an M5 Max,
+and the rank gate does not recover it - only parking does. The pool is therefore phase-shaped: a
+decode step parks the slow tier (`dispatch_phase_decode`), and a batch of 32 positions or more wakes
+every worker (`dispatch_phase_batch`) - a smaller batch cannot fill the slow tier past the dispatch
+grain.
+
+Precedence, strongest first: `DAS_JOBQUE_THREADS` and an app's own cap, then the box profile's
+`jobque_pool` / `phase_decode_workers` / `dispatch_worker_limit` entries, then this tier-kind
+policy. A profile declares the shape of the NEXT queue and is inert for one that already exists when
+the profile loads. A minted `gemv_lane_cap` of 0 records the old fast-tier-only "uncapped" rather
+than a measured choice, so a hybrid box ignores it and keeps the fast-tier cap; a non-zero mint is
+an opinion and applies.
+
+### 2.19 The CPU MoE region list caps a region at 32 rows {#moe-region-split}
+
+The grouped MoE prefill hands its expert regions to the batch dispatcher as (weight offset, first
+row, count) triples. That dispatcher chunks units by COUNT, not by work, so one heavy expert in a
+skewed routing draw becomes one unit that straggles the barrier - measured 620 against 3929 GFLOP/s
+on a zipf k4 draw. The CPU arms therefore split a region into sub-regions of at most 32 rows:
+sub-regions of one expert share its weight offset, and the per-expert bias lists repeat once per
+sub-region. The GPU arms keep whole regions - their kernels chunk by work already.
