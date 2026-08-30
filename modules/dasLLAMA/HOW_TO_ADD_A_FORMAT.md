@@ -356,6 +356,13 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    `run.das` on the box spent minutes minting before the Q3_K_L load - and every other
    sidecar on the box (`chat.das`, the harness probes) does the same on its next run. Budget
    for it; do not read the first end-to-end wall time as a load-time regression.
+18. **`DAS_TUNE_POLICY=fallback` is not "the reference body".** It walks the family's
+   `fallback=` chain, and on a box where the chain's first viable perm is the crowned one the
+   kill switch serves the very stamp under test - the k3 stamped-vs-"reference" rows diff came
+   back bit-identical for that reason. The original body is reached only by a `"reference"`
+   sidecar entry for the family (copy the app's sidecar next to the probe as
+   `<probe>.tune.json`, edit the one entry). Unquirked: a policy value that names the reference
+   tier outright.
 
 ## Per-format notes
 
@@ -376,7 +383,19 @@ misses the census found were two plane-byte accounting sums the pilot itself had
 Gates: `test_kqformat` 14/14, `test_kquant` 132/144 interpreted and 140/144 under `-jit`,
 the probe's tune-mode family (test mode waits for the emitter - QUIRK 16). End to end:
 `Llama-3.2-1B-Instruct-Q3_K_L.gguf` (bartowski: Q3_K x64 + Q5_K x48 + Q6_K embd) through `run.das` matches llama.cpp's greedy ids (`simple_ids.exe`, compared through `llama-tokenize --ids` on our text) for 52 of 64 tokens on the reference bodies, gen 22 t/s.
-JIT emitter, Vulkan, Metal: pending.
+
+JIT emitter: no new block body - a `k3` flag through `emit_block_kqv2`'s k6 arms (`k63`
+shares the scale row, the per-16 fold and the i16 flush cadence; `koff` = 4 / 32), the compose
+being qs column `(blk/4)*8 + j` (lo) / `+ 4` (hi) shifted by `2 * (blk % 4)` OR the hmask
+column `j` / `j + 4` bit `blk` shifted up two. The stubs became `kq_*_gen_impl(gc, 3)`, k3
+joined the probe's test list. Gates: the probe 10/10 perms on x64 (`dot_maddubs_width256_mr8`
+live, maxdiff 4.8e-7) and on the M1 (sdot mr 4/8 stamps bit-exact), `test_kquant -jit`
+140/144 on both. After the sidecar re-mint (`k3q8_tile_gen: dot_maddubs_width256_mr8`,
+`verdict=beats`) the 1B decodes at gen 60 t/s (22 on the reference body) and its text flips
+at token 15 - a near tie: against the reference body on two real k3 tensors (10240 output rows,
+scratchpad `k3_rows.das` with a `"reference"` sidecar entry) 4957 rows are bit-identical and
+the worst relative difference is 1.7e-4 on a row of magnitude 6e-5 (fp32 fold-order noise).
+Vulkan, Metal: pending.
 
 ### IQ4_XS (the pilot, 2026-08-30)
 
