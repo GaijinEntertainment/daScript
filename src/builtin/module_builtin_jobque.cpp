@@ -944,6 +944,14 @@ namespace das {
         SetCurrentThreadPriority((JobPriority)l);
     }
 
+    int32_t jobque_get_current_processor ( Context *, LineInfoArg * ) {
+        return GetCurrentProcessorIndex();
+    }
+
+    void jobque_set_thread_affinity ( int32_t cpu, bool hard, Context *, LineInfoArg * ) {
+        SetCurrentThreadAffinityCpu(cpu, hard);
+    }
+
     void team_parallel_for_invoke ( int32_t rangeBegin, int32_t rangeEnd, int32_t numChunks, Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in a 'with_job_que' block, or call create_job_que() first");
         int total = rangeEnd - rangeBegin;
@@ -1711,6 +1719,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(jobque_set_thread_priority)>(*this, lib,  "set_current_thread_priority",
                 SideEffects::modifyExternal, "jobque_set_thread_priority")
                     ->args({"level","context","line"});
+            addExtern<DAS_BIND_FUN(jobque_get_current_processor)>(*this, lib,  "get_current_processor",
+                SideEffects::accessExternal, "jobque_get_current_processor")
+                    ->args({"context","line"});
+            addExtern<DAS_BIND_FUN(jobque_set_thread_affinity)>(*this, lib,  "set_current_thread_affinity",
+                SideEffects::modifyExternal, "jobque_set_thread_affinity")
+                    ->args({"cpu","hard","context","line"});
             addExtern<DAS_BIND_FUN(team_parallel_for_invoke)>(*this, lib,  "team_parallel_for_invoke",
                 SideEffects::modifyExternal, "team_parallel_for_invoke")
                     ->args({"range_begin","range_end","num_chunks","lambda","function","lambdaSize","context","line"});

@@ -714,7 +714,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
 #endif
     install_das_crash_handler();
 #ifdef __APPLE__
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 #endif
     das::arm_alloc_tracking();
     bool isArgAot = false;

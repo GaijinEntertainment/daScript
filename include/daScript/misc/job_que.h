@@ -343,4 +343,5 @@ namespace das {
     void SetCurrentThreadName ( const string & str );
     void SetCurrentThreadPriority ( JobPriority priority );             // change priority of current thread, 0 - normal, >0 above normal, <0 below normal
     void SetCurrentThreadAffinityCpu ( int cpu, bool hard );            // bind current thread to a logical CPU: hard mask, or scheduler hint (Windows ideal processor); no-op where unsupported
+    int GetCurrentProcessorIndex ();
 }
