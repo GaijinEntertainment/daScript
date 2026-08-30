@@ -162,6 +162,17 @@ def reset_qwen3a_q8() {
 //! Would the next load serve the tower q8 — the pin when set, the policy otherwise.
 def qwen3a_serves_q8() : bool => q3a_serve_q8()
 
+// the lane changes what a load mints and serves, so the load says which and why
+def private q3a_announce_lane() {
+    var why = "the CPU default (no Metal tower serving)"
+    if (g_q3a_pin != Q3aLane.unset) {
+        why = "pinned via set_qwen3a_q8"
+    } elif (audio_tower_gpu_serves()) {
+        why = "the Metal tower serves f32 planes"
+    }
+    to_log(LOG_INFO, "dasLLAMA qwen3a: tower GEMM lane {q3a_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
+}
+
 [arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def private q3a_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
     for (l in range64(n_layer)) {
@@ -179,6 +190,7 @@ def private q3a_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bo
 //! ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_qwen3a_tower(path : string) : Qwen3aTower {
     let tag = q3a_serve_q8() ? "qwen3a-q8" : "qwen3a-f32"
+    q3a_announce_lane()
     if (path |> ends_with(".dlim")) {
         // named directly — no mmproj to regenerate from, so a wrong identity panics
         apply_box_profile_runtime()
@@ -583,6 +595,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     let nch = t.n_ch
     let n_chunks = win.n_len / QWEN3A_CHUNK
     let npos = n_chunks * QWEN3A_TOK_PER_CHUNK
+    dispatch_phase_encode(npos)
     if (npos > t.core.n_ctx) {
         panic("qwen3a_encode: window has {npos} positions, tower sized for {t.core.n_ctx}")
     }
@@ -675,9 +688,10 @@ struct Qwen3aAsrSession {
 }
 
 //! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
-//! from the facade, which owns the shared LLM). The AuT core serves q8 GEMM planes.
-def qwen3a_exec_fmt(dec_fmt : string) : string {
-    return "{q3a_serve_q8() ? "q8" : "f32"}/{dec_fmt}"
+//! from the facade, which owns the shared LLM) - read off the LOADED tower, not the lane
+//! policy, which a `reset_qwen3a_q8` after the load moves out from under the stamp.
+def qwen3a_exec_fmt(t : Qwen3aTower; dec_fmt : string) : string {
+    return "{t.core.q8 ? "q8" : "f32"}/{dec_fmt}"
 }
 
 //! The family's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm):

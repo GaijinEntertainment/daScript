@@ -10,7 +10,7 @@ require ?das_metal dasllama/dasllama_metal_kernels  // the kq mul_mm trio (Apple
 require ?das_metal dasllama/dasllama_metal_prefill  // the mul_mm twins (bf16 + Metal-4 tensor forms)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers, kq plane builders + eyeball-dump compares
-require dasllama/dasllama_load            // devw_dequant_*_core — the image mint's dev-W bake mirrors
+require dasllama/dasllama_convert         // devw_dequant_*_core — the image mint's dev-W bake mirrors
 require math
 
 // The production GEMM corpus vs CPU references on synthetic planes: the prefill K-quant
@@ -703,10 +703,37 @@ def private kq_dbuf_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     var kq : array<uint8>
     var ks : array<uint8>
     kq_fill_planes(fmt, nsb, kq, ks)
+    var xf : array<float>
+    xf |> resize(m * kdim)
+    for (i in range(m * kdim)) {
+        xf[i] = float(float16(0.05 * float(i % 41) - 0.9))   // f16 round-trip: the oracle dot stays exact
+    }
     var xh : array<float16>
     xh |> resize(m * kdim)
     for (i in range(m * kdim)) {
-        xh[i] = float16(0.05 * float(i % 41) - 0.9)
+        xh[i] = float16(xf[i])
+    }
+    // the single-buffered arm carries the CPU oracle: bit-identity alone would pass with both
+    // arms wrong, so one of the two is scored against the dequantized rows
+    var want : array<float>
+    var env : array<float>
+    var wrow : array<float>
+    want |> resize(m * ndim)
+    env |> resize(m * ndim)
+    wrow |> resize(kdim)
+    for (j in range(ndim)) {
+        kq_row_ref(fmt, j * nb, nb, nsb, kq, ks, wrow)
+        for (r in range(m)) {
+            var acc = 0.0lf
+            var ev = 0.0lf
+            for (c in range(kdim)) {
+                let p = double(wrow[c]) * double(xf[r * kdim + c])
+                acc += p
+                ev += abs(p)
+            }
+            want[r * ndim + j] = float(acc)
+            env[r * ndim + j] = float(ev)
+        }
     }
     var bks = buf_upload(dev, ks)
     var bkq = buf_upload(dev, kq)
@@ -745,6 +772,7 @@ def private kq_dbuf_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
             }
         }
         t |> equal(bad, 0)
+        t |> equal(buf_mismatch_env(by_a, want, env, 2e-4, tag), 0)
     }
     metal_release(bks)
     metal_release(bkq)
@@ -757,7 +785,11 @@ def private kq_dbuf_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     metal_release(pso_b)
     delete kq
     delete ks
+    delete xf
     delete xh
+    delete want
+    delete env
+    delete wrow
 }
 
 [arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]

@@ -121,10 +121,12 @@ def test_qwen25v_tier1_gpu(t : T?) {
             }
             set_metal_tensor_crowns("mulmm_q8")
             metal_prefill_shutdown()
+            set_metal_tower_f16(true)   // the twin route's own knob - established, never inherited
             let tw0 = metal_tower_f16_encodes()
             if (gate_encode(tt, tw, st, "cb", 448, 448, "encode25.cb448.log", TIER1_REL_GPU)) {
                 tt |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the f16-sourced tower rode the twin route")
             }
+            set_metal_tower_f16(true)
             set_metal_tensor_crowns("")
             metal_prefill_shutdown()
             set_metal_tower(false)
@@ -164,7 +166,7 @@ def test_qwen25v_tier1_gpu(t : T?) {
             shallow_routing_cell(tt, mm, "window", 99l)   //! (0+1) % 99 != 0 -> the window arm
             shallow_routing_cell(tt, mm, "full", 1l)      //! (0+1) % 1 == 0 -> the slab arm
         } else {
-            feint("das_metal is not built on this platform - the GPU rung is Apple-only\n")
+            tt |> skip("no das_metal on this build - the GPU rung has no device to serve")
         }
     }
 }

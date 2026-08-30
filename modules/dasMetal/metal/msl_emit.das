@@ -2091,8 +2091,8 @@ def private emit_store_target(var ctx : MslCtx; e : Expression?) : string {
 }
 
 // simdgroup_load(m, src, offset, stride) / simdgroup_store(m, dst, offset, stride): the buffer
-// argument must be a kernel-class member — @ssbo (device) for both, @workgroup (threadgroup)
-// additionally as a load source — and lowers as `name + offset`. Element-type agreement is
+// argument must be a kernel-class member — @ssbo (device) or @workgroup (threadgroup) for
+// both — and lowers as `name + offset`. Element-type agreement is
 // enforced upstream by the das overloads (the reference body indexes src/dst with the matrix's
 // element type). A das pointer local (`var p = unsafe(addr(member[..]))`) is also accepted as
 // the source/destination and lowers through the pointer.
@@ -2138,7 +2138,7 @@ def private emit_sgmat_load_store(var ctx : MslCtx; ec : ExprCall?; indent : str
     }
     let mem = member_lookup(ctx, ec.arguments[1])
     if (empty(mem)) {
-        err(ctx, ec.at, "{cname} {isLoad ? "source" : "destination"} must be an @ssbo{isLoad ? " or @workgroup" : ""} member, or a das pointer local over one")
+        err(ctx, ec.at, "{cname} {isLoad ? "source" : "destination"} must be an @ssbo or @workgroup member, or a das pointer local over one")
         return
     }
     let m = ctx.members[mem]
@@ -2365,15 +2365,17 @@ def private tmm2d_helper_text(kind : string; m, n, sgs : uint; bk : uint = 32u) 
                 w |> write("    using WT = tensor<threadgroup half, dextents<int32_t, 2>, tensor_inline>;\n")
                 w |> write("    auto cT = op.get_destination_cooperative_tensor<AT, WT, float>();\n")
                 w |> write("    const uint nb = kk / 64u;\n")
-                w |> write("    for (uint work = tid; work < {int(n)}u * 4u; work += {int(sgs * 32u)}u) \{\n")
-                w |> write("        const uint col = work >> 2;\n")
-                w |> write("        const uint sub = work & 3u;\n")
-                w |> write("        const uint blk = col * ldwb + (sub >> 1);\n")
-                w |> write("        const uint kh = (sub & 1u) * 16u;\n")
-                w |> write("        const float sc = float(ws[blk * 17u]);\n")
-                w |> write("        device const char * q = wq + blk * 34u + kh;\n")
-                w |> write("        threadgroup half * dstp = wt + col * 72u + sub * 16u;\n")
-                w |> write("        _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+                w |> write("    if (nb > 0u) \{\n")
+                w |> write("        for (uint work = tid; work < {int(n)}u * 4u; work += {int(sgs * 32u)}u) \{\n")
+                w |> write("            const uint col = work >> 2;\n")
+                w |> write("            const uint sub = work & 3u;\n")
+                w |> write("            const uint blk = col * ldwb + (sub >> 1);\n")
+                w |> write("            const uint kh = (sub & 1u) * 16u;\n")
+                w |> write("            const float sc = float(ws[blk * 17u]);\n")
+                w |> write("            device const char * q = wq + blk * 34u + kh;\n")
+                w |> write("            threadgroup half * dstp = wt + col * 72u + sub * 16u;\n")
+                w |> write("            _Pragma(\"clang loop unroll(full)\") for (short i = 0; i < 16; ++i) \{ dstp[i] = half(float(q[i]) * sc); \}\n")
+                w |> write("        \}\n")
                 w |> write("    \}\n")
                 w |> write("    for (uint b = 0; b < nb; ++b) \{\n")
                 w |> write("        threadgroup_barrier(mem_flags::mem_threadgroup);\n")
@@ -2942,7 +2944,8 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
         ctx.gen_helpers[hname] = tmm2d_helper_text(kind, m, n, sgs, bk)
     }
     let vals <- [for (i in range(3, nvals)); emit_value(ctx, ec.arguments[i])]
-    note(ctx, "call.{cname}")
+    // each bk is a distinct helper body, so each carries its own census kind
+    note(ctx, bk == 32u ? "call.{cname}" : "call.{cname}.k{int(bk)}")
     lines |> push("{indent}{hname}({join(vals, ", ")});")
 }
 

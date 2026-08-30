@@ -369,7 +369,12 @@ def public set_batch_lane_cap(v : int) { g_batch_lane_cap = max(v, 0) }
 def public get_batch_lane_cap() : int { return g_batch_lane_cap }
 
 var g_phase_decode_workers = -1   //! the decode-phase worker limit; -1 = per-phase parking off (homogeneous box)
-def public set_phase_decode_workers(v : int) { g_phase_decode_workers = v }
+def public set_phase_decode_workers(v : int) {
+    if (v == 0) {
+        to_log(LOG_WARNING, "dasLLAMA: set_phase_decode_workers(0) would park every worker - parking disabled instead\n")
+    }
+    g_phase_decode_workers = v < 1 ? -1 : v
+}
 def public get_phase_decode_workers() : int { return g_phase_decode_workers }
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
@@ -383,6 +388,16 @@ def public dispatch_phase_decode {
 def public dispatch_phase_batch {
     if (g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available()) {
         set_jobque_worker_limit(-1)
+    }
+}
+
+//! A CPU encode is batch-shaped work: a tower/ASR encode entry calls this with its row count
+//! so a preceding decode's parked pool wakes for it; under 32 rows the slow tier cannot fill
+//! past the dispatch grain, so short encodes keep the parked pool (the prefill guard's shape).
+[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+def public dispatch_phase_encode(rows : int64) {
+    if (rows >= 32l) {
+        dispatch_phase_batch()
     }
 }
 
@@ -2411,6 +2426,7 @@ def hargmax(x : array<float> | #) : int64 {
 //! logprob = x[best] − (log(hlse) + mx).
 def hlse(x : array<float> | #; mx : float) : double {
     let n = long_length(x)
+    if (n <= 0l) return 0.0lf
     var sum = 0.0lf
     unsafe {
         let p = addr<float const?>(x[0])

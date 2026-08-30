@@ -273,6 +273,92 @@ class TmmKernels {
     }
 }
 
+// The staged-footprint (bk) sweep. `bk` picks the emitted helper body; the das reference body
+// ignores it entirely, so ONE CPU replay per K width is the oracle for every bk — a bk body that
+// stages or walks the tile wrong disagrees with a replay that knows nothing about staging.
+// `kk` and `ldwb` arrive as RUNTIME arguments (read from `dims`), so one kernel per bk covers the
+// whole K sweep by dispatch. The W blob always carries LDWB blocks per column and a narrower kk
+// reads the leading ones, so the same upload serves every width.
+let KMAX = 128
+let LDWB = KMAX / 32
+let NCELL = 9
+
+// cell index -> the K width it runs: cells 0-3 are bk = 64 and 4-7 bk = 128, both over
+// 32/64/96/128 (so each bk meets a full 64-deep walk, a bare 32-deep tail, and both together);
+// the last cell is the deva 72-half tile, which is a kk = 64 shape by construction
+def private cell_kk(ci : int) : uint {
+    return ci == NCELL - 1 ? 64u : 32u * uint(ci % 4 + 1)
+}
+
+class TmmBkKernels {
+    @ssbo @binding = 0 xah : array<float16>   // A: M x KMAX f16 activations, row stride KMAX
+    @ssbo @binding = 1 wh : array<float16>    // W: N x KMAX device-half panel (the deva arm)
+    @ssbo @binding = 2 bsh : array<float16>   // interleaved q8_0 blob, half-scale view
+    @ssbo @binding = 3 bqb : array<int8>      // the SAME blob, byte view (quants pre-offset +2)
+    @ssbo @binding = 4 oc : array<float>      // C: M x N
+    @ssbo @binding = 5 dims : array<uint>     // dims[0] = kk, dims[1] = ldwb
+    @workgroup tq64 : float16[1152]           // n*72: one 64-deep chunk
+    @workgroup tq128 : float16[2304]          // n*144: two ping-pong 64-deep chunks
+    @workgroup tgb : float16[1152]            // deva B tile, [n][72] — the padded-row arm
+
+    [metal_kernel(name="tmm_bk64_msl"), marker(no_coverage)]
+    def tmm_bk64_k {
+        var sp = unsafe(addr(bsh[0]))
+        var wp = unsafe(addr(bqb[2]))
+        var ap = unsafe(addr(xah[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_q8u_f32(8u, 16u, 2u, tq64, sp, wp, ap, 128u, cp, 16u, dims[0], dims[1], gl_LocalInvocationIndex, 64u)
+    }
+
+    [metal_kernel(name="tmm_bk128_msl"), marker(no_coverage)]
+    def tmm_bk128_k {
+        var sp = unsafe(addr(bsh[0]))
+        var wp = unsafe(addr(bqb[2]))
+        var ap = unsafe(addr(xah[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_q8u_f32(8u, 16u, 2u, tq128, sp, wp, ap, 128u, cp, 16u, dims[0], dims[1], gl_LocalInvocationIndex, 128u)
+    }
+
+    // the deva arm at kk = 64: both sides stage [n][72] padded rows, so the step's B extent and
+    // the das body's ldb have to agree on 72 or the tile reads the wrong halves
+    [metal_kernel(name="tmm_deva72_msl"), marker(no_coverage)]
+    def tmm_deva72_k {
+        var acc : float[128]
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xah[0])), 8u, 16u, 2u, 64u)
+        var i = gl_LocalInvocationID.x
+        while (i < 1024u) {
+            tgb[(i / 64u) * 72u + i % 64u] = wh[(i / 64u) * 128u + i % 64u]
+            i += gl_WorkGroupSize.x
+        }
+        barrier()
+        tmm2d_tg_step_deva(acc, unsafe(addr(xah[0])), 128u, tgb, 8u, 16u, 64u)
+        barrier()
+        tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
+    }
+}
+
+def private fill_bk_oracle(var o : TmmBkKernels?) {
+    o.xah |> resize(M * KMAX)
+    o.wh |> resize(N * KMAX)
+    o.oc |> resize(M * N)
+    o.dims |> resize(2)
+    for (i in range(M * KMAX)) {
+        o.xah[i] = float16(float(i % 7 - 3))   // integer-valued -> f16-exact, any sum order exact
+    }
+    for (i in range(N * KMAX)) {
+        o.wh[i] = float16(float(i % 9 - 4))
+    }
+    o.bsh |> resize(N * LDWB * 17)
+    o.bqb |> resize(N * LDWB * 34)
+    for (blk in range(N * LDWB)) {
+        o.bsh[blk * 17] = float16(0.5 * float(1 << (blk % 3)))   // powers of two fold exact
+        for (k in range(32)) {
+            o.bqb[blk * 34 + 2 + k] = int8((blk * 7 + k * 3) % 19 - 9)
+        }
+    }
+}
+
 // Metal-4 availability probe: the tensor ops need the MPP framework + MSL 4.0 (macOS 26) —
 // absent on older runners, where the GPU half must skip (a compile failure there is not a
 // regression; on a Metal-4 box the real kernels still assert loudly).
@@ -518,6 +604,136 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
                 metal_release(bbqb)
                 metal_release(bxah)
                 metal_release(bwh)
+                metal_release(queue)
+            }
+            if (gpu_bad >= 0) {
+                t |> equal(gpu_bad, 0)
+            }
+            t |> equal(metal_live_object_count(), 0l)
+        } else {
+            feint("das_metal is not built on this platform; CPU-reference half only\n")
+        }
+        unsafe {
+            delete oracle
+        }
+    }
+}
+
+[test]
+def test_tmm2d_bk_shapes(t : T?) { // nolint:STYLE038 - one flat cell sweep over (bk, kk)
+    t |> run("tmm2d bk = 64/128 across the K sweep + the deva 72-half tile: GPU == CPU-replay exact") @(t : T?) {
+        var oracle = new TmmBkKernels()
+        fill_bk_oracle(oracle)
+        gl_LocalInvocationID = uint3(0u, 0u, 0u)
+        gl_WorkGroupSize = uint3(1u, 1u, 1u)   // width-1 replay: staging strides cover whole tiles
+        var wants : array<float>
+        wants |> resize(NCELL * M * N)
+        for (ci in range(NCELL)) {
+            oracle.dims[0] = cell_kk(ci)
+            oracle.dims[1] = uint(LDWB)
+            if (ci == NCELL - 1) {
+                oracle->tmm_deva72_k()
+            } elif (ci < 4) {
+                oracle->tmm_bk64_k()
+            } else {
+                oracle->tmm_bk128_k()
+            }
+            for (i in range(M * N)) {
+                wants[ci * M * N + i] = oracle.oc[i]
+            }
+        }
+        var nz = 0
+        for (v in wants) {
+            nz += v != 0.0 ? 1 : 0
+        }
+        t |> success(nz > NCELL * M * N / 2, "the bk reference sweep is non-trivial")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            var gpu_bad = -1
+            with_metal_device() $(dev : MetalDevice?) {
+                if (dev == null) {
+                    feint("no Metal device on this box; GPU compare skipped\n")
+                    return
+                }
+                if (!metal4_available(dev)) {
+                    feint("Metal-4 tensor ops unavailable (needs macOS 26 / MSL 4.0); GPU compare skipped\n")
+                    return
+                }
+                var perr0 : string
+                var pso0 = pipeline_from_source(dev, tmm_bk64_msl, tmm_bk64_msl_entry, false, perr0)
+                if (pso0 == null && find(perr0, "deferred-static-alloca-size") >= 0) {
+                    feint("Metal-4 cooperative tensors unsupported by this device (paravirtual runner); GPU compare skipped\n")
+                    return
+                }
+                if (pso0 != null) {
+                    metal_release(pso0)
+                }
+                var queue = metal_new_command_queue(dev)
+                var bxah = buf_upload(dev, oracle.xah)
+                var bwh = buf_upload(dev, oracle.wh)
+                var bbsh = buf_upload(dev, oracle.bsh)
+                var bbqb = buf_upload(dev, oracle.bqb)
+                gpu_bad = 0
+                for (ci in range(NCELL)) {
+                    let deva = ci == NCELL - 1
+                    let src = deva ? tmm_deva72_msl : (ci < 4 ? tmm_bk64_msl : tmm_bk128_msl)
+                    let entry = deva ? tmm_deva72_msl_entry : (ci < 4 ? tmm_bk64_msl_entry : tmm_bk128_msl_entry)
+                    let tgm = deva ? tmm_deva72_msl_tgmem : (ci < 4 ? tmm_bk64_msl_tgmem : tmm_bk128_msl_tgmem)
+                    let kkv = cell_kk(ci)
+                    var dv : array<uint>
+                    dv |> resize(2)
+                    dv[0] = kkv
+                    dv[1] = uint(LDWB)
+                    var bdims = buf_upload(dev, dv)
+                    var perr : string
+                    var pso = pipeline_from_source(dev, src, entry, false, perr)
+                    t |> success(pso != null, "pipeline {entry} kk={int(kkv)}: {perr}")
+                    if (pso == null) {
+                        gpu_bad++
+                        metal_release(bdims)
+                        continue
+                    }
+                    var boc = buf_fill(dev, M * N, 0.0)
+                    let tew = metal_pipeline_thread_execution_width(pso)
+                    var bufs <- [bxah, bwh, bbsh, bbqb, boc, bdims]
+                    var rerr : string
+                    let tpg = tew * SGS
+                    let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr, tgm)
+                    t |> success(ran, "dispatch {entry} kk={int(kkv)}: {rerr}")
+                    if (ran) {
+                        var wref : array<float>
+                        wref |> resize(M * N)
+                        for (i in range(M * N)) {
+                            wref[i] = wants[ci * M * N + i]
+                        }
+                        let bad = buf_mismatch_exact(boc, wref)
+                        if (bad != 0) {
+                            var got <- buf_download(boc, M * N, type<float>)
+                            var shown = 0
+                            for (i in range(M * N)) {
+                                if (got[i] != wref[i] && shown < 4) {
+                                    print("MISMATCH {entry} kk={int(kkv)} [{i / N},{i % N}] gpu={got[i]} want={wref[i]}\n")
+                                    shown++
+                                }
+                            }
+                            delete got
+                        }
+                        t |> equal(bad, 0)
+                        gpu_bad += bad
+                    } else {
+                        gpu_bad++
+                    }
+                    bufs |> clear()             // non-owning handles — clear() skips pointee finalize
+                    unsafe {
+                        delete bufs
+                    }
+                    metal_release(boc)
+                    metal_release(bdims)
+                    metal_release(pso)
+                }
+                metal_release(bxah)
+                metal_release(bwh)
+                metal_release(bbsh)
+                metal_release(bbqb)
                 metal_release(queue)
             }
             if (gpu_bad >= 0) {

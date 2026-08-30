@@ -23,6 +23,7 @@ require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower/metal_towe
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_prefill_shutdown — the mtower re-arm leg
 require ?das_metal dasllama/dasllama_metal_asr_dec  // set_metal_wdec/metal_wdec_stats — the cross-KV gate + the tower cell's pin
 require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown — same
+require dasllama/dasllama_gemm_schema // Q8_BLOCK_ELEMS/Q8_QPB/Q8_SPB — the dev-W bake key arithmetic
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
 require daslib/jobque_boost
 require daslib/archive
@@ -1846,6 +1847,8 @@ def test_gemma4a_tower_metal(t : T?) {
             t |> success(!empty(gpu_text), "non-empty transcript")
             t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
             delete samples
+        } else {
+            t |> skip("no Metal build - the gemma4a Conformer driver has no device to serve")
         }
     }
 }
@@ -1926,6 +1929,8 @@ def test_canary_tower_metal(t : T?) {
             t |> success(!empty(gpu_text), "non-empty transcript")
             t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
             delete samples
+        } else {
+            t |> skip("no Metal build - the canary FastConformer driver has no device to serve")
         }
     }
 }
@@ -2286,6 +2291,42 @@ struct FpRows {
 
 struct FpRowsPlus {
     rows : array<FpPairPlus>
+}
+
+// the dev-W bake tables: devw_bake_tables fills the four site tables from the job list, and it
+// is the WHOLE bake set each time - a second call on the same carrier must not append to the
+// first. Model-free: the tables are pure taxonomy over a job list, no plane bytes are read.
+[test, arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+def test_devw_bake_tables(t : T?) {
+    t |> run("the bake tables are rebuilt, not appended, and key by format") @(tt : T?) {
+        if (!arm_on(tt, "mechanics")) {
+            return
+        }
+        var m = Model()
+        m.quant = QuantMode.q8
+        m.metal_blob = true   // q8 then streams as the one mblob plane, which the bake covers
+        var jobs <- [ FillJob(name = "blk.0.attn_q.weight", woff = 64l, n = 256l, src_off = 0l, fmt = KqFmt.q8),
+                      FillJob(name = "blk.0.ffn_up.weight", woff = 512l, n = 512l, src_off = 0l, fmt = KqFmt.k4) ]
+        let bytes = devw_bake_tables(m, jobs)
+        tt |> equal(bytes, (256l + 512l) * 2l, "panel bytes = the f16 element total")
+        tt |> equal(long_length(m.devwf16_key), 2l, "both sites landed")
+        // the key is what the prefill's resident lookup recomputes: q8 = the site's mblob BYTE
+        // offset, kq = the site's ELEM woff
+        tt |> equal(m.devwf16_key[0], (64l / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB), "q8 key is a byte offset")
+        tt |> equal(m.devwf16_key[1], 512l, "kq key is the elem woff")
+        tt |> equal(m.devwf16_fmt[0], 0, "q8 sites stamp fmt 0")
+        tt |> equal(m.devwf16_fmt[1], kq_stream_code(KqFmt.k4), "kq sites stamp their stream code")
+        tt |> equal(m.devwf16_off[0], 0l, "the first panel opens the plane")
+        tt |> equal(m.devwf16_off[1], 256l, "the second follows it")
+        let again = devw_bake_tables(m, jobs)
+        tt |> equal(again, bytes, "a second call reports the same panel bytes")
+        tt |> equal(long_length(m.devwf16_key), 2l, "and does not double the key table")
+        tt |> equal(long_length(m.devwf16_fmt), 2l, "nor the fmt table")
+        tt |> equal(long_length(m.devwf16_off), 2l, "nor the offset table")
+        tt |> equal(long_length(m.devwf16_n), 2l, "nor the length table")
+        delete jobs
+        delete m
+    }
 }
 
 [test]

@@ -601,6 +601,14 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                             //! narrowed rides the mm-tail gemv, full stages X to f16 - measured ~7e-3 here, bar 2e-2
                             to_log(LOG_INFO, "smol lastrow: narrowed-vs-full logits maxdiff {lmax}\n")
                             t |> success(lmax <= 2e-2, "smol lastrow: narrowed logits inside the form-change envelope ({lmax})")
+                            // both picks decoded: a near-tie synonym flip and real garbage look the
+                            // same as ids and completely different as text
+                            var pick_off <- [amax_off]
+                            var pick_on <- [amax_on]
+                            to_log(LOG_INFO, "smol lastrow: full pick {amax_off} @{s_off.logits[amax_off]} = {eyeball_text(trsg, pick_off)}\n")
+                            to_log(LOG_INFO, "smol lastrow: narrowed pick {amax_on} @{s_on.logits[amax_on]} = {eyeball_text(trsg, pick_on)}\n")
+                            delete pick_off
+                            delete pick_on
                             t |> equal(amax_on, amax_off, "smol lastrow: argmax unchanged")
                             var row0 = 0.0
                             var plane = 0.0

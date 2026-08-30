@@ -138,7 +138,8 @@ def public tg_store_float4(var dst; idx : uint; v : float4) {
     dst[int(idx) + 3] = v.w
 }
 
-// simdgroup_store(m, dst, offset, stride): the tile back out — @ssbo destinations only.
+// simdgroup_store(m, dst, offset, stride): the tile back out — @ssbo (device) or @workgroup
+// (threadgroup) destinations, the latter writing the tile into a staged slab.
 def public simdgroup_store(m : simdgroup_float8x8; var dst; offset : uint; stride : uint) {
     for (r in range(8)) {
         for (c in range(8)) {

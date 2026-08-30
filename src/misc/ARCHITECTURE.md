@@ -20,20 +20,30 @@ workload needs to reach the slow tier. The cap still bounds an accepted request,
 
 ## 3. A second core tier is judged by KIND, not by size
 
-`apple_slow_tier_is_compute` reads `hw.perflevel1.name` and treats every name except
-"Efficiency" as compute. Apple names the perflevels, and the name is what says whether the tier
-is worth computing on: an M5 Max reports "Super"/"Performance", both full compute tiers, so a
-batch pool gains from spanning them, while earlier M-series report "Performance"/"Efficiency"
-and an Efficiency core straggles every barrier-synchronized `parallel_for` it joins - measured
-~1.6x slower on an 8P+2E prefill than the same prefill on P cores alone. Counting the tiers
-cannot tell those two boxes apart; only the name can.
+`apple_slow_tier_is_compute` reads `hw.perflevel1.name` and matches it against an ALLOWLIST of
+names known to be full compute tiers - "Performance" and "Super". Apple names the perflevels, and
+the name is what says whether the tier is worth computing on: an M5 Max reports
+"Super"/"Performance", both full compute tiers, so a batch pool gains from spanning them, while
+earlier M-series report "Performance"/"Efficiency" and an Efficiency core straggles every
+barrier-synchronized `parallel_for` it joins - measured ~1.6x slower on an 8P+2E prefill than the
+same prefill on P cores alone. Counting the tiers cannot tell those two boxes apart; only the name
+can.
+
+The list is an allowlist rather than a denylist on "Efficiency" because the two failure directions
+are not symmetric. An unrecognized future tier stays un-extended until someone vouches for it by
+adding one string: the pool is then smaller than the box could support, which shows up as a plainly
+visible idle-core deficit and is cheap to fix. A denylist instead extends the pool onto whatever
+Apple ships next - a localized, renamed, or genuinely slow tier - and a straggler on a
+barrier-synchronized pool is a silent regression that reads as ordinary slowness.
 
 ## 4. On darwin, thread placement is a QoS class
 
 macOS publishes no thread-to-CPU pin, so `SetCurrentThreadAffinityCpu` sets a QoS class there
 and ignores its cpu argument: the hard mode takes the top class, the hint mode the one below. On
 a heterogeneous Mac, `jobque_apply_affinity_slot` gives the top class to the fast-tier slots only
-- slot 0 is the dispatch caller, slots 1..perf-1 the first workers, together the worker-limit
-active set - and the next class down to the rest, so the scheduler seats the surplus lanes on the
-slower tier. One class across every lane instead lets the scheduler dice the threads over the few
+- slot 0 is the dispatch caller, slots 1..perf-1 the first workers; under the default worker-limit
+order those are exactly the active set, while `DAS_JOBQUE_LIMIT_ORDER=spread` ranks the active set
+by the golden-stride walk instead, so most of its live workers then sit on demoted slots - the
+spread A/B trades the tier placement away by design - and the next class down goes to the rest, so
+the scheduler seats the surplus lanes on the slower tier. One class across every lane instead lets the scheduler dice the threads over the few
 fast cores, which measures as a per-run token-generation placement lottery.

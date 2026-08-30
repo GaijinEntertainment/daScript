@@ -1386,7 +1386,7 @@ class template MetalMoeMulMmK6TensorT : MetalMoeMulMmKqTensorBase {
             let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
             let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
             let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-            twb[j * 72u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * float(q) - dsc * 32.0)
+            twb[j * 72u + (sub >> 1u) * 32u + kh + uint(t)] = float16(dsc * (float(q) - 32.0))
         }
     }
 }
@@ -1814,7 +1814,7 @@ class template MetalQkRopeT {
     @uniform @binding = 4 ka : QkRopeArgs
     @ssbo @binding = 5 @role = "write" @template_gate = HX xh : array<float16>   //!< f16 twin of the panel
     @template_constant HX : bool = false
-    @workgroup part : float[16]     //!< one per simdgroup - hs/2 <= 256 threads
+    @workgroup part : float[16]     //!< one per simdgroup - 16 slots = hs/2 <= 512 threads
 
     [metal_kernel, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-twin-dual-store")]
     def metal_qk_rope {
@@ -1873,10 +1873,10 @@ class template MetalQkRopeT {
     }
 }
 
-[metal_dispatch(name = "enc_qk_rope", pso = "g_pf_pso_qkr", tg = "hs2", grid = "nheads, nrows", params = "nheads : int64, nrows : int64, hs2 : int64")]
+[metal_dispatch(name = "enc_qk_rope", pso = "g_pf_pso_qkr", tgmem = "MetalQkRope_metal_qk_rope_msl_tgmem", tg = "hs2", grid = "nheads, nrows", params = "nheads : int64, nrows : int64, hs2 : int64")]
 class MetalQkRope : MetalQkRopeT {}
 
-[metal_dispatch(name = "enc_qk_rope_hx", pso = "g_pf_pso_qkr_hx", tg = "hs2", grid = "nheads, nrows", params = "nheads : int64, nrows : int64, hs2 : int64")]
+[metal_dispatch(name = "enc_qk_rope_hx", pso = "g_pf_pso_qkr_hx", tgmem = "MetalQkRopeHX_metal_qk_rope_msl_tgmem", tg = "hs2", grid = "nheads, nrows", params = "nheads : int64, nrows : int64, hs2 : int64")]
 class MetalQkRopeHX : MetalQkRopeT {
     override HX = true
 }
@@ -3259,6 +3259,13 @@ var private g_min_npos = 64l
 var private g_max_npos = 2048l          //!< naive-attention P footprint cap: heads x npos^2 floats
 var private g_prefills = 0l
 var private g_pf_inited = false
+
+//! the resident dev-W cache and its seeded set key on plane addresses and hold region
+//! buffers - a weights-epoch drop releases those buffers, so the cache dies with them
+[init]
+def private pf_devw_reload_prep_register {
+    register_reload_prep(@@pf_devw_res_release)
+}
 var private g_pf_pso_rope : MetalComputePipeline?
 var private g_pf_pso_qkr : MetalComputePipeline?     //!< fused qk_norm+rope (K rows and twin-less panels)
 var private g_pf_pso_qkr_hx : MetalComputePipeline?  //!< its f16 dual-store stamp (the q panel)
@@ -3310,6 +3317,13 @@ struct private DevwResEntry {
     buf : MetalBuffer?
     boff : uint64        //!< site base within the panel buffer (0 for runtime-owned panels)
     owned : bool         //!< runtime-allocated (released at shutdown) vs a baked image plane
+    bytes : uint64   //!< the panel bytes the key was seeded for - a hit must cover the request
+}
+
+//! one key formula for every seed and lookup: base buffer-handle address + the site offset in
+//! the plane's OWN unit (q8: bytes, kq: elems), fmt-tagged so the two unit spaces cannot collide
+def private pf_devw_key(base : uint64; off : uint64; fmt : int) : uint64 {
+    return (base + off) * 8ul + uint64(fmt)
 }
 var private g_pf_devw_res : table<uint64; DevwResEntry>   //!< RESIDENT dev-W panels, key = blob ptr + site offset (in-buffer, so globally unique) — filled once, read every forward
 var private g_pf_devw_res_bytes : uint64   //!< runtime-OWNED bytes only — baked planes are file-backed and free
@@ -4271,7 +4285,10 @@ def pf_enc_hmm(enc : MetalComputeEncoder?; bwh, bxh, by : MetalBuffer?; yoff : u
 def private pf_devw_resident_panel(key : uint64; bytes : uint64; var fresh : bool&) : DevwResEntry {
     fresh = false
     if (key_exists(g_pf_devw_res, key)) {
-        return g_pf_devw_res[key]   // nolint:PERF026 — key_exists-guarded read, never inserts
+        if (g_pf_devw_res[key].bytes == bytes) {   // nolint:PERF026 — key_exists-guarded read, never inserts
+            return g_pf_devw_res[key]   // nolint:PERF026 — key_exists-guarded read, never inserts
+        }
+        return DevwResEntry()   //! a hit must cover the request - a size mismatch is a foreign key
     }
     if (g_pf_env_devw_res_bytes == 0ul) {
         return DevwResEntry()
@@ -4288,7 +4305,7 @@ def private pf_devw_resident_panel(key : uint64; bytes : uint64; var fresh : boo
         return DevwResEntry()
     }
     residency_note(bwh)
-    var e = DevwResEntry(buf = bwh, boff = 0ul, owned = true)
+    var e = DevwResEntry(buf = bwh, boff = 0ul, owned = true, bytes = bytes)
     g_pf_devw_res[key] = e   // nolint:PERF026 — one-shot fill arm, 4 inserts per layer per process
     g_pf_devw_res_bytes += bytes
     fresh = true
@@ -4328,15 +4345,15 @@ def private pf_devw_seed_baked(t : Model) {
         let f = t.devwf16_fmt[i]
         var key = 0ul
         if (f == 0) {
-            key = intptr(blob_of(g_dev, t, 0l).buf) + uint64(t.devwf16_key[i])
+            key = pf_devw_key(intptr(blob_of(g_dev, t, 0l).buf), uint64(t.devwf16_key[i]), 0)
         } elif (f == 4 || f == 5 || f == 6) {
             let kfmt = f == 4 ? KqFmt.k4 : (f == 5 ? KqFmt.k5 : KqFmt.k6)
-            key = intptr(kq_quants_of(g_dev, t, kfmt, t.devwf16_key[i]).buf) + uint64(t.devwf16_key[i])
+            key = pf_devw_key(intptr(kq_quants_of(g_dev, t, kfmt, t.devwf16_key[i]).buf), uint64(t.devwf16_key[i]), f)
         } else {
             continue   //! an fmt this build does not know - a newer image's site stays runtime-served
         }
         if (!key_exists(g_pf_devw_res, key)) {
-            g_pf_devw_res[key] = DevwResEntry(buf = bpan, boff = uint64(t.devwf16_off[i] * 2l), owned = false)   // nolint:PERF026 — once per mapped plane
+            g_pf_devw_res[key] = DevwResEntry(buf = bpan, boff = uint64(t.devwf16_off[i] * 2l), owned = false, bytes = uint64(t.devwf16_n[i] * 2l))   // nolint:PERF026 — once per mapped plane
             seeded++
         }
     }
@@ -4348,7 +4365,7 @@ def private pf_devw_seed_baked(t : Model) {
 def private pf_devw_panel_q8_resident(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
                                       bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64) : bool {
     var fresh = false
-    let e = pf_devw_resident_panel(intptr(bwblob) + wboff, uint64(d * kdim * 2l), fresh)
+    let e = pf_devw_resident_panel(pf_devw_key(intptr(bwblob), wboff, 0), uint64(d * kdim * 2l), fresh)
     if (e.buf == null) {
         return false
     }
@@ -4405,7 +4422,7 @@ def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt;
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
     var rfresh = false
-    let re = pf_devw_resident_panel(intptr(bq.buf) + uint64(woff), uint64(d * kdim * 2l), rfresh)
+    let re = pf_devw_resident_panel(pf_devw_key(intptr(bq.buf), uint64(woff), fmt == KqFmt.k4 ? 4 : (fmt == KqFmt.k5 ? 5 : 6)), uint64(d * kdim * 2l), rfresh)
     if (re.buf != null) {
         if (rfresh) {
             var rka = CvtArgs(total = uint(d * kdim / 32l))
@@ -5492,7 +5509,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 //! rot mirrors enc_rope's @default: the null u_rot bind means "the class's own hs"
                 let rot_l = c.rope_dim > 0l && c.rope_dim != head_size ? c.rope_dim : hs_l
                 let qkr_on = (g_pf_env_qkr && g_pf_pso_qkr != null && g_pf_pso_qkr_hx != null
-                    && hs_l % 2l == 0l && hs_l / 2l <= 1024l && rot_l % 2l == 0l && rot_l >= 2l && rot_l <= hs_l)
+                    && hs_l % 2l == 0l && hs_l / 2l <= 512l && rot_l % 2l == 0l && rot_l >= 2l && rot_l <= hs_l)
                 var bqh_q : MetalBuffer? = null    //! the fused arm's q twin, claimed at rope time - the QK site consumes it
                 var bqh_q_live = false
                 if (!recr && qkr_on && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
@@ -6228,8 +6245,14 @@ def dasllama_metal_prefill_register() {
         to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_MM_TAIL=0 - small npos % 32 remainders bill the padded tile (numerics move with the form)\n")
     }
     g_pf_env_qkr = g_env_metal.qk_rope
+    if (!g_pf_env_qkr) {
+        to_log(LOG_INFO, "dasLLAMA metal prefill: DASLLAMA_METAL_QK_ROPE=0 - split norm/rope/convert dispatches (numerics move with the form)\n")
+    }
     g_pf_env_grid1d = g_env_metal.grid1d
     g_pf_env_lastrow = g_env_metal.lastrow
+    if (!g_pf_env_lastrow) {
+        to_log(LOG_INFO, "dasLLAMA metal prefill: DASLLAMA_METAL_LASTROW=0 - the last dense layer's FFN runs every row\n")
+    }
     g_pf_env_dbuf = g_env_metal.dbuf
     g_pf_env_span = g_env_metal.span
     g_pf_env_logits = g_env_metal.logits

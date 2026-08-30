@@ -202,11 +202,13 @@ cores) extends the pool to every core with GEMV capped to the fast tier, while a
 exists beside a KNOWN fast tier - the `[init]` extension reads both, so a box reporting one
 without the other has an inconsistent topology, not a third policy.
 
-Chunk-starved slow-tier workers spinning beside the fast decode lanes cost ~15% of tg on an M5 Max,
-and the rank gate does not recover it - only parking does. The pool is therefore phase-shaped: a
-decode step parks the slow tier (`dispatch_phase_decode`), and a batch of 32 positions or more wakes
-every worker (`dispatch_phase_batch`) - a smaller batch cannot fill the slow tier past the dispatch
-grain.
+Chunk-starved slow-tier workers spinning beside the fast decode lanes cost ~15% of tg on an M5 Max
+(the decode-only rep probe of `benchmarks/lcpp_bench.das`), and the rank gate does not recover it -
+only parking does. The pool is therefore phase-shaped: a decode step parks the slow tier
+(`dispatch_phase_decode`), and batch-shaped work of 32 rows or more wakes every worker - a prefill
+through `dispatch_phase_batch`, a CPU tower/ASR encode through `dispatch_phase_encode(rows)` at its
+entry - while smaller work keeps the parked pool, since it cannot fill the slow tier past the
+dispatch grain.
 
 Precedence, strongest first: `DAS_JOBQUE_THREADS` and an app's own cap, then the box profile's
 `jobque_pool` / `phase_decode_workers` / `dispatch_worker_limit` entries, then this tier-kind
@@ -220,6 +222,6 @@ an opinion and applies.
 The grouped MoE prefill hands its expert regions to the batch dispatcher as (weight offset, first
 row, count) triples. That dispatcher chunks units by COUNT, not by work, so one heavy expert in a
 skewed routing draw becomes one unit that straggles the barrier - measured 620 against 3929 GFLOP/s
-on a zipf k4 draw. The CPU arms therefore split a region into sub-regions of at most 32 rows:
+on a zipf k4 draw (`harness/moe_kq_probe.das`). The CPU arms therefore split a region into sub-regions of at most 32 rows:
 sub-regions of one expert share its weight offset, and the per-expert bias lists repeat once per
 sub-region. The GPU arms keep whole regions - their kernels chunk by work already.

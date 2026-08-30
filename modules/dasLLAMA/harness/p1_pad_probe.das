@@ -130,6 +130,6 @@ def main {
         }
         print("p1pad: numerics gate PASSED on all shapes (bit-exact)\n")
     } else {
-        print("p1pad: no das_metal on this build\n")
+        panic("p1pad: no das_metal in this build - no pad ladder to time, and a 0-row run must not read as a clean one")
     }
 }

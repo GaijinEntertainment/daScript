@@ -14,6 +14,8 @@ require ../performance/profile_common.das   // tune_gate + apply_box_profile_run
 require daslib/jobque_boost
 require daslib/fio
 
+// ATTRIBUTION SWEEP - its arms attribute the Metal prefill wall across kernel FAMILIES (gemm,
+// attn, ew, dense activation converts, weight staging), never selecting between implementations.
 // Phase-0 KO attribution on Qwen3-8B (BF16 file, q8 lane): interleaved base/family knockout
 // at npos=512, best-of-3, base re-measured before every family (drift-guarded). Adds the new
 // act_cvt arm (dense activation converts) beside devw_cvt (weight staging). Direction-grade;
@@ -75,6 +77,6 @@ def main {
         }
         delete tr
     } else {
-        print("p0: no das_metal on this build - nothing to measure for {path}\n")
+        panic("p0: no das_metal in this build - nothing to knock out for {path}, and a 0-row run must not read as a clean one")
     }
 }

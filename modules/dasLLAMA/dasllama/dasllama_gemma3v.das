@@ -256,6 +256,23 @@ def private g3v_gemm_names(swapped : bool) : array<string> {
                 swapped ? "ffn_down" : "ffn_up", swapped ? "ffn_up" : "ffn_down" ]
 }
 
+// every GEMM tensor the halfword twin route serves: the block set at every layer, plus the
+// input projection. A sample of two would let a mixed file bake a twin the route reads as one type.
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+def private g3v_gemm_types_uniform(m : GGUFMeta; names : array<string>; n_layer : int64; gt : int) : bool {
+    if (gguf_tensor_type(m, "mm.input_projection.weight") != gt) {
+        return false
+    }
+    for (l in range64(n_layer)) {
+        for (nm in names) {
+            if (gguf_tensor_type(m, "v.blk.{l}.{nm}.weight") != gt) {
+                return false
+            }
+        }
+    }
+    return true
+}
+
 // the SERVED block GEMM element counts in GEMMA3V_GEMM_* order (the FFN pair at ff_pad; the
 // file's tensors are n_ff-sized and the stage read zero-pads them into these regions)
 def private g3v_gemm_sizes(d, fp : int64) : array<int64> {
@@ -356,14 +373,7 @@ def private g3v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Gem
     var rowscratch : array<float>   // the down GEMM's unpadded file rows ahead of the expand
     wscratch |> reserve_resize(st.t.patch_dim * d)
     gguf_read_tensor_f32(m, bytes, "v.patch_embd.weight", wscratch, 0l, st.t.patch_dim * d)
-    unsafe {
-        let pp = gemma3v_patch_pad(st.t)
-        var dstw = addr(st.blob[st.t.patch_w])
-        let srcw = addr<float const?>(wscratch[0])
-        for (r in range64(d)) {
-            copy_floats(dstw + r * pp, srcw + r * st.t.patch_dim, st.t.patch_dim)
-        }
-    }
+    tower_stage_f32_pad_row_stride(st.blob, wscratch, st.t.patch_w, d, st.t.patch_dim, gemma3v_patch_pad(st.t))
     gguf_read_tensor_f32(m, bytes, "v.patch_embd.bias", st.blob, st.t.patch_b, d)
     gguf_read_tensor_f32(m, bytes, "v.position_embd.weight", st.blob, st.t.pos_w, n_side * n_side * d)
     gguf_read_tensor_f32(m, bytes, "v.post_ln.weight", st.blob, st.t.post_ln_w, d)
@@ -501,8 +511,7 @@ def stage_gemma3v_tower(path : string) : Gemma3vStaging {
         st.qscales |> reserve_resize(qo / 32l)
         g3v_read_planes(m, bytes, st, names, gemm_sizes)
         g3v_repack_all(st, gemm_sizes)
-        if (!st.t.q8 && gguf_tensor_type(m, "v.blk.0.attn_q.weight") == GGML_TYPE_F16
-                && gguf_tensor_type(m, "v.blk.0.ffn_down.weight") == GGML_TYPE_F16) {
+        if (!st.t.q8 && g3v_gemm_types_uniform(m, names, st.t.n_layer, GGML_TYPE_F16)) {
             tower_bake_half_twin(st.blob, st.wblob, false)
         }
     }
@@ -522,6 +531,8 @@ def load_gemma3v_tower(path : string) : Gemma3vTower {
         if (baked == GEMMA3V_TAG || baked == GEMMA3V_TAG_Q8) {
             tag = baked
         }
+        // a named image serves the lane it was BAKED with, so the policy has no say here
+        to_log(LOG_INFO, "dasLLAMA gemma3v: block GEMM lane {tag == GEMMA3V_TAG_Q8 ? "q8" : "exact planes"} - the named image's baked tag\n")
         apply_box_profile_runtime()
         let ts_img = ref_time_ticks()
         var t = Gemma3vTower()
@@ -707,6 +718,7 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
     }
     var tp = ref_time_ticks()
     let npos = g3v_stem_cols(t, s, planes, w, h)
+    dispatch_phase_encode(npos)
     asr_prof_add("g3v.stem", tp)
     var gpu_served = false
     if (g_g3v_gpu_set) {

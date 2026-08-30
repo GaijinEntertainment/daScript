@@ -15,9 +15,10 @@ what it costs today and what the fix would change.
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous
-  f16 K/V restride; the lab race: flash 8.5-8.9 ms/layer vs slab 11.8 at np 4096, and the
-  hc layout alone was worth 1.4x - a strided compact K/V scatters every simdgroup tile).
-  Cell shape now: gemma-3-4b 404 ms and gemma-3-12b 407 vs the pair's 370/380. The
+  f16 K/V restride - a strided compact K/V scatters every simdgroup tile; the adoption race
+  lives in `benchmarks/attn/bench_metal_pf_fused_attn.das`'s TOWER/PORTC arms and the PR).
+  Cell shape now (lcpp_bench image cells, m5): gemma-3-4b 404 ms and gemma-3-12b 407 vs the
+  pair's 370/380 [direction-grade - two processes]. The
   remaining ~30 ms splits across the per-layer hc-cvt dispatches (~8 ms), the ledgered
   post-CPU-window commit slack, and race-vs-cb occupancy; next levers if reopened: fold
   the hc restride into the K/V GEMM epilogues (dual-store), a Q=16/C=128 flash variant via
@@ -1091,7 +1092,8 @@ group; wording kept.
 - **OPEN - qwen25v window-attention kernel is the naive per-thread form.** `enc_tower_win_attn`
   runs one thread per q row, scalar dots straight from device f32 (the f16-staged simdgroup
   form was reverted: its staging noise re-rolls the 32-layer chaos, and the naive form still
-  lands the pair ahead - enc 106 vs 117 ms). If the encoder profile ever shows the window
+  lands the pair ahead - enc 106 vs 117 ms, lcpp_bench image cell vs mtmd, m5
+  [direction-grade - two processes]). If the encoder profile ever shows the window
   layers, the upgrade is a simdgroup-tiled f32 form (windows are 64x80 tiles; K%16 wants pad
   to 96). Instrument: asr_prof q25v.gpu split via a skip-family knockout, npos ~1564.
 - **OPEN - qwen25v full layers ride the padded slab (hs 80 -> 96).** Four of 32 layers restride
@@ -1101,8 +1103,9 @@ group; wording kept.
 ### From the gemma4a Metal-tower bring-up (2026-08-29)
 
 - **CLOSED (same day) - the "long-context decode gap" was the embd path's CPU PLE pre-step.**
-  tg128-at-depth refuted the rail attribution (das ahead at every depth); the turn profile
-  pinned 774 ms of gb1's prefill on ple_pre_prefill_pad - the E-series PLE model_proj GEMM
+  tg128-at-depth refuted the rail attribution (das ahead at every depth); the asr_prof turn
+  buckets (`benchmarks/lcpp_bench.das --asr`) pinned 774 ms of gb1's prefill on
+  ple_pre_prefill_pad - the E-series PLE model_proj GEMM
   run on CPU because only the TOKEN prefill offered the pre-step to the device gate. The embd
   path now offers it too (ple_pre_prefill_pad_gated), the CPU fallback broadcasts one gather,
   and the scalar sampler is vectorized (hargmax/hlse). gb1 cell 0.83x -> 1.00x.
@@ -1135,9 +1138,9 @@ group; wording kept.
 - **CLOSED (same day) - MoE CPU batch pp trailed on a groupn straggler, fixed by the 32-row
   region split.** The grouped-prefill offs builder now caps a CPU sub-region at 32 rows: the
   batch-groupn dispatch chunks its region x row-group units by COUNT while a unit's cost is the
-  region's row count, so one zipf-heavy expert straggled the whole barrier (bare-kernel probe:
-  620 GFLOP/s zipf vs 3537 uniform vs 3929 split; the kernel itself was never slow - narrow
-  D=704 costs 2%, M=32 costs 14%). Post-fix cells (das/stock-BLAS ref best): 26B-A4B 448/301 =
+  region's row count, so one zipf-heavy expert straggled the whole barrier
+  (`harness/moe_kq_probe.das`: 620 GFLOP/s zipf vs 3537 uniform vs 3929 split; the kernel
+  itself was never slow - narrow D=704 costs 2%, M=32 costs 14%). Post-fix cells (das/stock-BLAS ref best): 26B-A4B 448/301 =
   1.49x (was 0.82x), gpt-oss 382/238 = 1.60x (0.99x), 30B-A3B 396/280 = 1.41x (0.91x), 35B-A3B
   410/283 = 1.45x (0.94x); sanity argmax+logit fingerprints bit-identical on all four, MoE
   family matrix cells green. GPU tiles keep whole regions (unsplit). Residue: MoE pp cv 6-9%
@@ -1154,6 +1157,6 @@ group; wording kept.
   plumbing (route+gather+reduce ~6%), NOT q51 alone (k4 gate/up 0.87 vs q51 down 0.79); mxfp4
   MoE sits at parity, so the sb_kq expert path specifically. Remaining suspects: the narrow
   per-expert output dim (D=704 -> 88 mr=8 row-tiles; q51 mr=4) and the kq_batch_groupn
-  per-region walk vs the dense flat sweep. Instrument: bare-kernel microbench at expert shapes
-  (704x2816, M 32/128, dense-shape control) - needs a synthetic k4 fixture (repo has a k5
-  encoder, no k4); ref bar re-taken against the b10659 clean-cpu build at the arc-end re-mint.
+  per-region walk vs the dense flat sweep. Instrument: `harness/moe_kq_probe.das` (synthetic-k4
+  bare-kernel cells at expert shapes, dense-shape control included); ref bar re-taken against
+  the b10659 clean-cpu build at the arc-end re-mint.

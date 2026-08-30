@@ -268,8 +268,8 @@ class Reduce {
     }
 }
 
-// Phase-3 simdgroup intrinsics: the four simdgroup builtins and all fifteen simd_* overloads
-// (sum + the four shuffles, each for float/int/uint)
+// Phase-3 simdgroup intrinsics: the four simdgroup builtins and all sixteen simd_* overloads
+// (sum and the four shuffles, each for float/int/uint; max, float only)
 class Simd {
     @ssbo @binding = 0 fa : array<float>
     @ssbo @binding = 1 ia : array<int>
@@ -289,6 +289,7 @@ class Simd {
             (simd_shuffle_up(ia[i], 1u) + simd_shuffle_down(ia[i], 1u))) + simd_shuffle_xor(ia[i], 1u)
         uo[i] = ((simd_sum(ua[i]) + simd_shuffle(ua[i], lane)) +
             (simd_shuffle_up(ua[i], 1u) + simd_shuffle_down(ua[i], 1u))) + simd_shuffle_xor(ua[i], 1u)
+        fo[i] = fo[i] + simd_max(fa[i])
         meta[i] = (lane + gl_SubgroupSize) + (gl_NumSubgroups + gl_SubgroupID)
     }
 }
@@ -499,6 +500,29 @@ class SgMatRolled {
         for [unroll_full] (i in range(2)) {
             simdgroup_store(mc[i], yo, uint(i) * 64u, 8u)
         }
+    }
+}
+
+// Phase-5 threadgroup simdgroup_store: a tile writes back into an @workgroup slab (the staged
+// GEMM epilogue, where the result is re-read by the whole threadgroup) — both matrix classes.
+class SgMatStoreTg {
+    @ssbo @binding = 0 xa : array<float16>
+    @ssbo @binding = 1 yo : array<float>
+    @ssbo @binding = 2 yoh : array<float16>
+    @workgroup th : float16[64]         // half tile landing slab
+    @workgroup tf : float[64]           // f32 tile landing slab
+
+    [metal_kernel(name="sgmat_store_tg_msl"), marker(no_coverage)]
+    def sgmat_store_tg {
+        var mh : simdgroup_half8x8
+        simdgroup_load(mh, xa, 0u, 8u)
+        simdgroup_store(mh, th, 0u, 8u)
+        let mf = make_filled_simdgroup_float8x8(1.0)
+        simdgroup_store(mf, tf, 0u, 8u)
+        barrier()
+        let lid = gl_LocalInvocationID.x
+        yoh[lid] = th[lid]
+        yo[lid] = tf[lid]
     }
 }
 
@@ -812,6 +836,7 @@ class TmmTensor {
     @workgroup tgc : float16[512]               // B chunk, NATURAL [32][16] (the nt flavors)
     @workgroup tqu : float16[512]               // q8u staged W tile, bk = 32
     @workgroup tq64 : float16[1152]             // q8u staged W tile, bk = 64 (72-half padded rows)
+    @workgroup tq128 : float16[2304]            // q8u staged W tile, bk = 128 (two ping-pong n*72 halves)
     @workgroup tso : float[128]                 // tile_tg destination scratch
     @workgroup trow : float[8]                  // rowscale factors, one per tile row
 
@@ -857,6 +882,17 @@ class TmmTensor {
         var ap = unsafe(addr(xah[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8u_f32(8u, 16u, 2u, tq64, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex, 64u)
+    }
+
+    // the bk = 128 twin: 64-deep chunks double-buffered across two ping-pong halves of an
+    // n*144-half staging tile, so a `_k128` helper over tq128
+    [metal_kernel(name="tmmq8uh128_msl"), marker(no_coverage)]
+    def tmm_q8uh128 {
+        var sp = unsafe(addr(bsh[0]))
+        var wp = unsafe(addr(bqb[2]))
+        var ap = unsafe(addr(xah[0]))
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_q8u_f32(8u, 16u, 2u, tq128, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex, 128u)
     }
 
     // deva: A streams from device memory, only B is staged. The begin's second argument is the A
@@ -1022,6 +1058,7 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "call.simd_sum.f32",
         "call.simd_sum.i32",
         "call.simd_sum.u32",
+        "call.simd_max.f32",
         "call.simd_shuffle.f32",
         "call.simd_shuffle.i32",
         "call.simd_shuffle.u32",
@@ -1198,6 +1235,8 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "call.sgmat_load_tg.f16",
         "call.sgmat_store.f32",
         "call.sgmat_store.f16",
+        "call.sgmat_store_tg.f32",
+        "call.sgmat_store_tg.f16",
         "call.sgmat_mul.f32",
         "call.sgmat_mul.f16",
         "call.sgmat_mac.f32",
@@ -1208,6 +1247,8 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         // (deva = device A stream, nt = natural B tile, devant = both)
         "call.tmm2d_f16w_f32",
         "call.tmm2d_q8u_f32",
+        "call.tmm2d_q8u_f32.k64",
+        "call.tmm2d_q8u_f32.k128",
         "call.tmm2d_tg_begin_deva",
         "call.tmm2d_tg_step_deva",
         "call.tmm2d_tg_begin_nt",
@@ -1297,7 +1338,7 @@ def public all_msl_censuses : array<string> {
         sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
         ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, statearr_msl_census,
         tmmhw_msl_census, tmmhwh_msl_census, tmmq8u_msl_census, tmmq8uh_msl_census,
-        tmmq8uh64_msl_census, tmmdeva_msl_census, tmmdevaf_msl_census, tmmnt_msl_census,
-        tmmdevant_msl_census, sgmathalf_msl_census,
+        tmmq8uh64_msl_census, tmmq8uh128_msl_census, tmmdeva_msl_census, tmmdevaf_msl_census,
+        tmmnt_msl_census, tmmdevant_msl_census, sgmathalf_msl_census, sgmat_store_tg_msl_census,
         DerivedName_dkern_msl_census]
 }

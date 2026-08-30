@@ -451,6 +451,7 @@ def private cn_fold_bn(var blob : array<float>; w, b, mean, vr, dwb, d : int64; 
 //! Caches a box/knob-specific PREPARED IMAGE like ``load_model``; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_canary_encoder(path : string; q8 : bool = false) : CanaryEncoder {
     let tag = q8 ? "canary-q8" : "canary-f32"
+    cn_announce_lane(q8)
     if (path |> ends_with(".dlim")) {
         // named directly — no source bin to regenerate from, so a wrong identity panics
         apply_box_profile_runtime()
@@ -895,6 +896,18 @@ def canary_enc_serves_q8() : bool {
     return !canary_gpu_serves()
 }
 
+// the lane changes what a load mints and serves, so the load says which and why. The caller
+// hands the lane in, so this names ITS pick and the policy that would have been asked for it.
+def private cn_announce_lane(q8 : bool) {
+    var why = "the CPU default (no Metal FastConformer driver serving)"
+    if (g_cn_pin != CnLane.unset) {
+        why = "pinned via set_canary_enc_q8"
+    } elif (canary_gpu_serves()) {
+        why = "the Metal FastConformer driver serves f32 planes"
+    }
+    to_log(LOG_INFO, "dasLLAMA canary: encoder GEMM lane {q8 ? "q8" : "f32 planes"} - {why}\n")
+}
+
 [hot_path]
 def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) {
     let d = m.d_model
@@ -1091,6 +1104,8 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     let d = m.d_model
     let nch = m.n_sub_ch
     let n_mel = m.n_mel
+    // the conformer block loop walks the thrice-subsampled frame count
+    dispatch_phase_encode(cn_conv_out_len(cn_conv_out_len(cn_conv_out_len(st.n_len))))
 
     // conv subsampling: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]
     let t1 = (st.n_len - 1l) / 2l + 1l

@@ -461,6 +461,12 @@ def private tower_flash_kvhc_gate(t : T?; dev, queue) {
         kv[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
         vv[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
     }
+    // the SECOND 64-key block carries every row's running max (x4, a power of two, so the keys
+    // stay f16-exact): with a uniform K the max settles in block 0 and the flash's cross-block
+    // rescale multiplies by 1, which no compare can witness
+    for (i in range(64 * qd, np * qd)) {
+        kv[i] = kv[i] * 4.0
+    }
     var khc : array<float16>
     var vhc : array<float16>
     khc |> resize(np * qd)
@@ -706,7 +712,8 @@ def private tower_win_gate(t : T?; dev, queue) {
     delete want
 }
 
-// ===== the gemma4a sliding-window RPE attention (causal window 12, softcap, per-dim scale) =====
+// ===== the canary FastConformer rel-pos attention (FULL bidirectional - every query attends
+// every key - with the Transformer-XL u/v bias pair over a 2·np−1 rel-pos table) =====
 def private cn_attn_gate(t : T?; dev, queue) {
     let tag = "cn_attn"
     var err : string
@@ -922,6 +929,7 @@ def private cn_dw_gate(t : T?; dev, queue) {
     metal_release(pso)
 }
 
+// ===== the gemma4a sliding-window RPE attention (causal window 12, softcap, per-dim scale) =====
 def private g4a_attn_gate(t : T?; dev, queue) {
     let tag = "g4a_attn"
     var err : string

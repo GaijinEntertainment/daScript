@@ -823,93 +823,6 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
 //! so baking it would only grow the image
 let DEVW_BAKE_PANEL_MAX = 48ul * 1024ul * 1024ul
 
-//! CPU mirror of the GPU dev-W q8 dequant (MetalDequantQ8H), bit-exact: the scale narrows to
-//! f16 exactly as the blob stores it, the product computes in f32 (exact for half x int8) and
-//! rounds ONCE to f16 — a baked panel equals what the runtime dequant kernel writes
-def devw_dequant_q8_core(qp : int8 const?; sf : float const?; nblk : int64; var dst : float16?) {
-    unsafe {
-        for (b in range64(nblk)) {
-            let sh = float16(clamp(sf[b], -65504.0, 65504.0))
-            let sw = float(sh)
-            for (k in range64(32l)) {
-                dst[b * 32l + k] = float16(sw * float(qp[b * 32l + k]))
-            }
-        }
-    }
-}
-
-//! CPU mirror of the GPU dev-W k4/k5 dequant (MetalDequantK45T), bit-exact: every f32 product
-//! is exact (d*sc <=17 sig bits, dsc*q <=22), so contraction cannot move the one f16 round.
-//! sstride = scale row stride: 20 on the raw transcode temp, 16 on the GPU compact form
-def devw_dequant_k45_core(kq : uint8 const?; ks : uint8 const?; sstride, nsb : int64; qh : bool; var dst : float16?) {
-    let blkw = qh ? 40l : 32l
-    unsafe {
-        for (sb in range64(nsb)) {
-            let sp = reinterpret<float16 const?>(ks + sb * sstride)
-            let sv = reinterpret<uint const?>(ks + sb * sstride)
-            let qp = reinterpret<uint const?>(kq + sb * blkw * 4l)
-            for (jsi in range(8)) {
-                let js = uint(jsi)
-                var sc = 0u
-                var mn = 0u
-                if (js < 4u) {
-                    sc = (sv[1] >> (8u * js)) & 63u
-                    mn = (sv[2] >> (8u * js)) & 63u
-                } else {
-                    let j2 = js - 4u
-                    let hi = sv[3] >> (8u * j2)
-                    sc = (hi & 15u) | (((sv[1] >> (8u * j2 + 6u)) & 3u) << 4u)
-                    mn = ((hi >> 4u) & 15u) | (((sv[2] >> (8u * j2 + 6u)) & 3u) << 4u)
-                }
-                let dsc = float(sp[0]) * float(sc)
-                let dmn = float(sp[1]) * float(mn)
-                for (ei in range(32)) {
-                    let e = uint(ei)
-                    var q = (qp[(js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
-                    if (qh) {
-                        q |= ((qp[32u + e / 4u] >> (8u * (e % 4u) + js)) & 1u) << 4u
-                    }
-                    dst[sb * 256l + int64(js) * 32l + int64(e)] = float16(dsc * float(q) - dmn)
-                }
-            }
-        }
-    }
-}
-
-//! CPU mirror of the GPU dev-W k6 dequant (MetalDequantK6H), bit-exact: every f32 product is
-//! exact (d*s6 <=18 sig bits, dsc*q <=24), so contraction cannot move the one f16 round.
-//! ks/sstride = 16B sub-scale rows; kd/dstride = f16 d rows (raw temp 18, GPU split form 2)
-def devw_dequant_k6_core(kq : uint8 const?; ks : uint8 const?; sstride : int64; kd : uint8 const?; dstride, nsb : int64; var dst : float16?) {
-    unsafe {
-        for (sb in range64(nsb)) {
-            let dall = float(reinterpret<float16 const?>(kd + sb * dstride)[0])
-            let sbp = ks + sb * sstride
-            let qp = reinterpret<uint const?>(kq + sb * 192l)
-            for (jsi in range(8)) {
-                let js = uint(jsi)
-                let half6 = js / 4u
-                let gg = js % 4u
-                let nsh = (gg / 2u) * 4u
-                let hsh = gg * 2u
-                for (h in range(2)) {
-                    let ile = uint(h)
-                    let si = half6 * 8u + gg * 2u + ile
-                    let s6 = float((int(sbp[si]) ^ 128) - 128)
-                    let dsc = dall * s6
-                    for (ti in range(16)) {
-                        let k = uint(ti) / 4u
-                        let c = uint(ti) % 4u
-                        let u = qp[half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
-                        let hu = qp[32u + half6 * 8u + ile * 4u + k]
-                        let q = ((u >> (nsh + 8u * c)) & 15u) | (((hu >> (hsh + 8u * c)) & 3u) << 4u)
-                        dst[sb * 256l + int64(js) * 32l + int64(ile) * 16l + int64(ti)] = float16(dsc * (float(q) - 32.0))
-                    }
-                }
-            }
-        }
-    }
-}
-
 //! The bake set: q8 blob and k4/k5/k6 plane jobs whose f16 panel fits the dev-W ceiling,
 //! ascending woff — the ONE order both the table build and the plane fill walk. q40/q51 stay
 //! out: the prefill dev-W route has no dequant kernel for them
@@ -929,6 +842,12 @@ def private devw_bake_covers(field : string) : bool {
 [arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
 def devw_bake_tables(var t : Model; jobs : array<FillJob>) : int64 {
     var mine <- devw_bake_jobs(t, jobs)
+    // the tables are the WHOLE bake set, not an addition to one: a second call on the same
+    // carrier would otherwise double every row and desync the plane fill's verify
+    t.devwf16_fmt |> clear()
+    t.devwf16_key |> clear()
+    t.devwf16_off |> clear()
+    t.devwf16_n |> clear()
     t.devwf16_fmt |> reserve(length(mine))
     t.devwf16_key |> reserve(length(mine))
     t.devwf16_off |> reserve(length(mine))

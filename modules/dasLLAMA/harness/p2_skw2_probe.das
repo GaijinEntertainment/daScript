@@ -114,15 +114,13 @@ def main {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         with_metal_device() $(dev : MetalDevice?) {
             if (dev == null) {
-                print("no Metal device\n")
-                return
+                panic("p2 skw2: no Metal device - nothing to time, and a 0-row run must not read as a clean one")
             }
             var queue = metal_new_command_queue(dev)
             var err : string
             var pso = pipeline_from_source(dev, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_fastmath, err)
             if (pso == null) {
-                print("pso: {err}\n")
-                return
+                panic("p2 skw2: PSO compile failed ({err}) - nothing to time, and a 0-row run must not read as a clean one")
             }
             let tgm = MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_tgmem
             let reps = 20
@@ -137,6 +135,6 @@ def main {
             metal_release(pso)
         }
     } else {
-        print("no das_metal in this build\n")
+        panic("p2 skw2: no das_metal in this build - nothing to time, and a 0-row run must not read as a clean one")
     }
 }

@@ -237,6 +237,7 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     let bytes_row = uint64(mp * d * 4l)
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 2l)
+    let bytes_rowk = uint64(nk64 * d * 4l)   //! K panel: the QK grid walks nk64 key rows, past mp
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
     let twin = g_tw_env_tower_f16 && length(t.wblob) > 0l
     let f16_route = twin && !t.blk_bf16 && pf_hmm_ready()
@@ -250,7 +251,7 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
-    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowk)
     var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
     var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
@@ -262,6 +263,13 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
             var zp = reinterpret<float?>(p + npos * d * 4l)
             for (i in range64((mp - npos) * d)) {
                 zp[i] = 0.0
+            }
+        }
+        if (nk64 > npos) {
+            var pk = reinterpret<uint8?>(metal_buffer_contents(bk))
+            var zk = reinterpret<float?>(pk + npos * d * 4l)
+            for (i in range64((nk64 - npos) * d)) {
+                zk[i] = 0.0
             }
         }
     }
@@ -1046,13 +1054,14 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     let bytes_row = uint64(mp * d * 4l)
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 2l)
+    let bytes_rowk = uint64(nk64 * d * 4l)   //! K panel: the QK grid walks nk64 key rows, past mp
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
     let bytes_tabs = uint64(npos * 4l * pairs * 4l)
     var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
-    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowk)
     var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bhg = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
     var bhu = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
@@ -1066,6 +1075,13 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
             var zp = reinterpret<float?>(p + npos * d * 4l)
             for (i in range64((mp - npos) * d)) {
                 zp[i] = 0.0
+            }
+        }
+        if (nk64 > npos) {
+            var pk = reinterpret<uint8?>(metal_buffer_contents(bk))
+            var zk = reinterpret<float?>(pk + npos * d * 4l)
+            for (i in range64((nk64 - npos) * d)) {
+                zk[i] = 0.0
             }
         }
         // the rope tables, packed per row as [cx q | sx q | cy q | sy q] — the CPU's bits
@@ -1221,6 +1237,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     let flash = g_tw_env_tower_flash && hs == 72l && npos % 64l == 0l && pf_tower_flash_ready()
     let bytes_row = uint64(mp * d * 4l)
     let bytes_rowp = uint64(mp * dp * 4l)
+    let bytes_rowk = uint64(nk64 * dp * 4l)   //! K panel: the QK grid walks nk64 key rows, past mp
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = flash ? 64ul : uint64(t.n_head * mp * nk64 * 2l)
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
@@ -1239,7 +1256,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var braw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of the head restride
     var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
-    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowk)
     var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
     var bo_p = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
     var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
@@ -1248,10 +1265,17 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     unsafe {
         memcpy(metal_buffer_contents(bx0), addr(s.x0[0]), npos * pd * 4l)
         if (mp > npos) {
-            var p = reinterpret<uint8?>(metal_buffer_contents(bx))
-            var zp = reinterpret<float?>(p + npos * d * 4l)
-            for (i in range64((mp - npos) * d)) {
+            var p = reinterpret<uint8?>(metal_buffer_contents(bx0))
+            var zp = reinterpret<float?>(p + npos * pd * 4l)
+            for (i in range64((mp - npos) * pd)) {
                 zp[i] = 0.0
+            }
+        }
+        if (nk64 > npos) {
+            var pk = reinterpret<uint8?>(metal_buffer_contents(bk))
+            var zk = reinterpret<float?>(pk + npos * dp * 4l)
+            for (i in range64((nk64 - npos) * dp)) {
+                zk[i] = 0.0
             }
         }
     }
@@ -1393,7 +1417,7 @@ def private tw_mm(enc : MetalComputeEncoder?; f16w, bf16w : bool; bwh, bblob : M
 // fused qkv as three weight-offset GEMMs; tap chains encode inline over the live residual
 // (hazard-ordered), the tail merger follows, ONE readback lands proj outputs for the scatter.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
-def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {   // nolint:STYLE037,STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
@@ -1425,6 +1449,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var bblob = plane_buffer(g_dev, blob_ptr, uint64(length(t.blob) * 4l), mapped)
     let bytes_row = uint64(rows_ext * d * 4l)
     let bytes_rowp = uint64(mp * dp * 4l)
+    let bytes_rowk = uint64(nk64 * dp * 4l)   //! K panel: the QK grid walks nk64 key rows, past mp
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 2l)
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
@@ -1437,7 +1462,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var braw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of rope + the head restride
     var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
-    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowk)
     var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
     var bo_p = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
     var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
@@ -1451,7 +1476,9 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var btap = nds > 0l ? pool_acquire_pinned(g_tw_pool, g_dev, uint64(nds) * bytes_pr) : null
     let twin = g_tw_env_tower_f16 && length(t.wblob) > 0l
     let f16_route = twin && !t.blk_bf16 && pf_hmm_ready()
-    let bf16_route = twin && t.blk_bf16
+    //! the bf16 builder has no y-offset seat, so a deepstack tap 1+ would silently split one
+    //! encode across the bf16 and f32 routes - refuse the pairing until a seat exists
+    let bf16_route = twin && t.blk_bf16 && nds == 0l
     let bytes_xh = uint64(max(mp * ff, mp4 * 4l * d) * 2l)
     var bxh = (f16_route || (bf16_route && pf_bf16_half_ready())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null
     var bwh = (f16_route || bf16_route) ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
@@ -1461,6 +1488,20 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var bposr = pos_resized ? pool_acquire_pinned(g_tw_pool, g_dev, uint64(npos * d * 4l)) : null
     unsafe {
         memcpy(metal_buffer_contents(bx0), addr(s.x0[0]), npos * t.patch_dim * 4l)
+        if (mp > npos) {
+            var p0 = reinterpret<uint8?>(metal_buffer_contents(bx0))
+            var z0 = reinterpret<float?>(p0 + npos * t.patch_dim * 4l)
+            for (i in range64((mp - npos) * t.patch_dim)) {
+                z0[i] = 0.0
+            }
+        }
+        if (nk64 > npos) {
+            var pk = reinterpret<uint8?>(metal_buffer_contents(bk))
+            var zk = reinterpret<float?>(pk + npos * dp * 4l)
+            for (i in range64((nk64 - npos) * dp)) {
+                zk[i] = 0.0
+            }
+        }
         if (rows_ext > npos) {
             var p = reinterpret<uint8?>(metal_buffer_contents(bx))
             var zp = reinterpret<float?>(p + npos * d * 4l)
@@ -1661,6 +1702,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     let bf16_route = twin && t.blk_bf16
     let bytes_row = uint64(rows_ext * d * 4l)
     let bytes_rowp = uint64(mp * dp * 4l)
+    let bytes_rowk = uint64(nk64 * dp * 4l)   //! K panel: the QK grid walks nk64 key rows, past mp
     let bytes_h = uint64(mp * ff * 4l)
     let bytes_att = uint64(t.n_head * mp * nk64 * 2l)
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
@@ -1675,7 +1717,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var braw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)   // GEMM output ahead of rope + the head restride
     var bq = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
-    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
+    var bk = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowk)
     var bv = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)
     var bo_p = pool_acquire_pinned(g_tw_pool, g_dev, bytes_rowp)   // padded AV output ahead of the compact
     var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)       // ffn gate (swiglu'd in place)
@@ -1694,6 +1736,20 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     var bwh = (f16_route || bf16_route) ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
     unsafe {
         memcpy(metal_buffer_contents(bx0), addr(s.x0[0]), npos * pd * 4l)
+        if (mp > npos) {
+            var p0 = reinterpret<uint8?>(metal_buffer_contents(bx0))
+            var z0 = reinterpret<float?>(p0 + npos * pd * 4l)
+            for (i in range64((mp - npos) * pd)) {
+                z0[i] = 0.0
+            }
+        }
+        if (nk64 > npos) {
+            var pk = reinterpret<uint8?>(metal_buffer_contents(bk))
+            var zk = reinterpret<float?>(pk + npos * dp * 4l)
+            for (i in range64((nk64 - npos) * dp)) {
+                zk[i] = 0.0
+            }
+        }
         memcpy(metal_buffer_contents(bcos), addr(s.cos_t[0]), npos * half * 4l)
         memcpy(metal_buffer_contents(bsin), addr(s.sin_t[0]), npos * half * 4l)
         var sp = reinterpret<uint?>(metal_buffer_contents(bsrc))
@@ -2249,11 +2305,29 @@ def private metal_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64
     return served
 }
 
+//! g_tw_q3a_wpad keys on a host plane address - a weights-epoch drop makes that key lie, so
+//! the padded slab dies with the epoch like the region cache does
+def private tw_weights_drop {
+    if (g_tw_q3a_wpad != null) {
+        metal_release(g_tw_q3a_wpad)
+        g_tw_q3a_wpad = null
+    }
+    g_tw_q3a_key = 0ul
+    g_tw_q3a_len = 0l
+}
+
 [init]
 def dasllama_metal_tower_register {
+    register_reload_prep(@@tw_weights_drop)
     g_tw_env_tower = g_env_metal.tower
     g_tw_env_tower_f16 = g_env_metal.tower_f16
+    if (!g_tw_env_tower_f16) {
+        to_log(LOG_INFO, "dasLLAMA metal tower: DASLLAMA_METAL_TOWER_F16=0 - the twin-W route stays off, every tower GEMM rides f32\n")
+    }
     g_tw_env_tower_flash = g_env_metal.tower_flash
+    if (!g_tw_env_tower_flash) {
+        to_log(LOG_INFO, "dasLLAMA metal tower: DASLLAMA_METAL_TOWER_FLASH=0 - the dk72 one-pass attention stays off, the slab trio serves\n")
+    }
     register_gemma4uv_gpu(@@metal_gemma4uv_encode)
     register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_tower_serves)
     register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_tower_serves)

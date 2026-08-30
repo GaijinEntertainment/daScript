@@ -113,7 +113,7 @@ namespace das {
         static void set_default_threads(int total);     // app-declared TOTAL lanes of a future JobQue (N-1 workers + the computing main) - the raise-capable twin of the cap, for workloads that want the slow tier too; <=1 = unset. DAS_JOBQUE_THREADS still overrides
         static int get_default_threads();
         static int get_num_perf_cores();                // fast-tier physical cores on heterogeneous boxes (Apple perflevel0); 0 = homogeneous or topology unknown
-        static bool is_slow_tier_compute();             // true when the second tier is full compute cores worth extending a batch pool over (M5 "Super"/"Performance"); false for Efficiency tiers and unknown topology
+        static bool is_slow_tier_compute();             // true only for a second-tier name on the compute allowlist ("Performance", "Super"); any other name - Efficiency, unknown, future - answers false
         static void set_default_affinity(int mode);     // affinity mode of a future JobQue: 0 off / 1 ideal-CPU hint / 2 hard mask (-1 = unset). DAS_JOBQUE_AFFINITY still overrides
         static int get_default_affinity();
         void EvalOnMainThread(Job && expr);

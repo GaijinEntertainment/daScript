@@ -169,12 +169,16 @@ def test_gemma3v_tier1_gpu(t : T?) {
             delete twq
             set_metal_tensor_crowns("mulmm_q8")
             metal_prefill_shutdown()
+            set_metal_tower_f16(true)   // the twin route's own knob - established, never inherited
+            set_gemma3v_q8(false)       // the exact lane is the one that bakes the twin
             var twt <- load_gemma3v_tower(mm)
+            reset_gemma3v_q8()
             var stt = Gemma3vState()
             let tw0 = metal_tower_f16_encodes()
             if (gate_encode(tt, twt, stt, "cb", "g3.encode.cb896.log", TIER1_REL_GPU)) {
                 tt |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the f16-sourced tower rode the twin route")
             }
+            set_metal_tower_f16(true)
             set_metal_tensor_crowns("")
             metal_prefill_shutdown()
             delete stt

@@ -294,6 +294,7 @@ def private g4a_htk_filterbank(n_mel, n_fft, sample_rate : int64) : array<float>
 //! the whole blob fp32. Prepared-image caching matches ``load_model`` (``DASLLAMA_IMAGE=0`` disables).
 def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
     let tag = g4a_serve_q8() ? "gemma4a-q8" : "gemma4a-f32"
+    g4a_announce_lane()
     if (path |> ends_with(".dlim")) {
         // named directly — no mmproj to regenerate from, so a wrong identity panics
         apply_box_profile_runtime()
@@ -670,10 +671,22 @@ def reset_gemma4a_q8() {
 //! The lane subsequent loads would take — the facade's exec_fmt and the tests read it.
 def gemma4a_serves_q8() : bool => g4a_serve_q8()
 
+// the lane changes what a load mints and serves, so the load says which and why
+def private g4a_announce_lane() {
+    var why = "the CPU default (no Metal Conformer driver serving)"
+    if (g_g4a_pin != G4aLane.unset) {
+        why = "pinned via set_gemma4a_q8"
+    } elif (gemma4a_gpu_serves()) {
+        why = "the Metal Conformer driver serves f32 planes"
+    }
+    to_log(LOG_INFO, "dasLLAMA gemma4a: encoder GEMM lane {g4a_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
+}
+
 //! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
-//! from the facade, which owns the shared LLM).
-def gemma4a_exec_fmt(dec_fmt : string) : string {
-    return "{g4a_serve_q8() ? "q8" : "f32"}/{dec_fmt}"
+//! from the facade, which owns the shared LLM) - read off the LOADED encoder, not the lane
+//! policy, which a `reset_gemma4a_q8` after the load moves out from under the stamp.
+def gemma4a_exec_fmt(enc : Gemma4aEncoder; dec_fmt : string) : string {
+    return "{enc.q8 ? "q8" : "f32"}/{dec_fmt}"
 }
 
 //! Gemma4a's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm);
@@ -901,6 +914,8 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
     let n_head = enc.n_head
     let dh = enc.d_head
     let n_mel = enc.n_mel
+    // the conformer block loop walks the twice-subsampled frame count
+    dispatch_phase_encode(((st.n_len - 1l) / 2l + 1l - 1l) / 2l + 1l)
 
     var tprof = ref_time_ticks()
     // subsample: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]

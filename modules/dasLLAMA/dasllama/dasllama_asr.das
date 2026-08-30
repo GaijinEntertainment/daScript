@@ -7,6 +7,7 @@ options _function_length = 0   // the two sniffing loaders mirror the format zoo
 
 require dasllama/dasllama_lint public
 require math
+require daslib/defer   // the tower-lane pins unwind through defer, so a panicking load resets them
 require daslib/fio
 require strings
 require daslib/strings_boost
@@ -212,8 +213,11 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
         if (g_asr_force_fp32 || g_asr_tower_fp32) {
             set_gemma4a_q8(false)
+            // a panicking load must not leave the pin standing
+            defer() {
+                reset_gemma4a_q8()
+            }
             m.g4a <- load_gemma4a_encoder(mmproj)
-            reset_gemma4a_q8()
         } else {
             m.g4a <- load_gemma4a_encoder(mmproj)
         }
@@ -247,8 +251,11 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
     if (g_asr_force_fp32 || g_asr_tower_fp32) {
         set_qwen3a_q8(false)
+        // a panicking load must not leave the pin standing
+        defer() {
+            reset_qwen3a_q8()
+        }
         m.q3t <- load_qwen3a_tower(mmproj)
-        reset_qwen3a_q8()
     } else {
         m.q3t <- load_qwen3a_tower(mmproj)
     }
@@ -270,8 +277,8 @@ def asr_exec_fmt(m : AsrModel) : string {
     if (m.kind == AsrKind.whisper) return whisper_exec_fmt(m.whisper)
     if (m.kind == AsrKind.parakeet) return parakeet_exec_fmt(m.pk)
     if (m.kind == AsrKind.canary) return canary_exec_fmt(m.cenc, quant_fmt(m.dec.quant))
-    if (m.kind == AsrKind.gemma4a) return gemma4a_exec_fmt(quant_fmt(m.dec.quant))
-    return qwen3a_exec_fmt(quant_fmt(m.dec.quant))   // qwen3a / qwen3omni share the AuT tower
+    if (m.kind == AsrKind.gemma4a) return gemma4a_exec_fmt(m.g4a, quant_fmt(m.dec.quant))
+    return qwen3a_exec_fmt(m.q3t, quant_fmt(m.dec.quant))   // qwen3a / qwen3omni share the AuT tower
 }
 
 def asr_encode_bucket(m : AsrModel) : string {

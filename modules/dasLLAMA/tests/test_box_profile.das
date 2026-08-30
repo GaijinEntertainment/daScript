@@ -160,6 +160,30 @@ def test_jobque_pool_knobs_apply(t : T?) {
     remove(path)
 }
 
+// a sidecar minted before the hybrid split spells "uncapped" as gemv_lane_cap 0; on a slow-tier
+// box that value would hand the GEMV every lane, so the apply REFUSES it and the seeded
+// fast-tier cap stands. Any other value still applies.
+[test]
+def test_gemv_lane_cap_zero_refused_on_hybrid(t : T?) {
+    if (!is_slow_tier_compute()) {
+        t |> skip("homogeneous box - a 0 cap is the honest uncapped value here, nothing to refuse")
+        return
+    }
+    restore_defaults()
+    var terr = ""
+    let dir = temp_directory(terr)
+    let path = path_join(dir, "dasllama_test_box_profile_gemv0.json")
+    set_gemv_lane_cap(6)
+    t |> success(fwrite(path, "\{\"runtime\":\{\"gemv_lane_cap\":0\}\}"), "uncapped profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(get_gemv_lane_cap(), 6, "gemv_lane_cap 0 refused on a hybrid box - the seeded cap stands")
+    t |> success(fwrite(path, "\{\"runtime\":\{\"gemv_lane_cap\":9\}\}"), "capped profile written")
+    apply_box_profile_runtime(path)
+    t |> equal(get_gemv_lane_cap(), 9, "a nonzero cap from the same profile shape still applies")
+    remove(path)
+    restore_defaults()
+}
+
 [test, arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def test_slow_tier_kind_contract(t : T?) {
     if (is_slow_tier_compute()) {

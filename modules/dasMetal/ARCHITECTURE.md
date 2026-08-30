@@ -229,8 +229,12 @@ case).
 ## 9. tmm2d staged-W threadgroup tiles {#tmm2d-staging}
 
 The q8u/q8uh GEMM helpers dequantize the interleaved-q8_0 W tile into threadgroup memory and
-stream activations from device memory, so the staged tile's threadgroup layout is a contract
-between the emitted MSL and the das-side CPU replay of the same call.
+stream activations from device memory. The staged tile's threadgroup layout is a contract with
+two parties, and `tmm2d_q8u_f32` is neither of them - its das body never touches `wt`, so it
+replays the GEMM and says nothing about staging. The first party is `tmm2d_tg_step_deva`, whose
+das body carries an `ldb` that must equal the emitted step's B extent. The second is every
+caller: the `@workgroup` array handed in as `wt` is sized by the caller against a stride only
+this document and the emitter know.
 
 **Staged rows are padded, not packed.** A 64-deep row of halves is 128 bytes, which is the
 threadgroup bank-conflict worst case: every row then starts in the same bank. Rows pad to 72
@@ -246,3 +250,7 @@ jobs - it orders the previous `op.run` against the overwrite of the tile that ru
 and it publishes the tile staged during the previous iteration. Staging chunk `b+1` therefore
 overlaps `op.run` on chunk `b`, because the two touch disjoint halves of `wt`. A
 `kk % 64 == 32` remainder runs one 32-deep tail chunk in every mode.
+
+**`bk = 128`'s initial preload is guarded on `nb > 0`.** A `kk` under 64 has no 64-deep chunk to
+preload, and running the preload anyway reads W blocks past the panel's `ldwb` stride and writes
+`wt` bytes the tail chunk then writes again with no barrier between the two.

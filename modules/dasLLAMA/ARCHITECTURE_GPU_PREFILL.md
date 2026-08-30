@@ -33,7 +33,8 @@ single-tile rail): two 64-deep ping-pong tiles hold 18432 B of threadgroup memor
 the allocation law's edge, 0-2% tax by shape - and the loop runs ONE barrier per chunk, which
 both publishes the tile staged last iteration and fences the previous `op.run` off the tile
 about to be overwritten; staging chunk b+1 overlaps the tensor op on chunk b. Raced per
-family: the staged-q8 stamps +1.7% end-to-end on 8B pp512 (3435 -> 3492 tok/s), the kq
+family (`benchmarks/lcpp_bench.das -p 512 -n 0` A/B with `DASLLAMA_METAL_DBUF` forced per
+run, m5): the staged-q8 stamps +1.7% end-to-end on 8B pp512 (3435 -> 3492 tok/s), the kq
 in-kernel-dequant stamps +1.8% on gemma-4-12B Q4_K_M (2040 -> 2077); the MoE q8 expert
 stamps measured -5.0% (Qwen3-30B-A3B q8) - the expert z-grid's many small dispatches pay
 the 18432 B occupancy cost the 2-D dense grids do not - so the MoE staged family stays
@@ -44,7 +45,7 @@ fp-quantized NAX family at this exact tile size.
 
 A threadgroup-memory REQUEST size moves the clock on its own, independent of how much of it
 the kernel indexes: 10240-16384 B is a flat plateau, 9216 B a pothole, and 20480 B and above
-degrade. A staging-depth race is therefore a 2x2 - tile stride against allocation - and the
+degrade (`harness/p2_alloc_gap_probe.das`'s allocation ladder). A staging-depth race is therefore a 2x2 - tile stride against allocation - and the
 deeper tile is judged at equal allocation.
 
 **A swiglu epilogue folded into the gate GEMM's store is REFUTED on M5.** Any per-element
@@ -86,15 +87,17 @@ count repays. The raced evidence
 
 **Resident panels remove the re-dequant entirely.** The dev-W scratch pair re-pays every
 site's dequant every forward - at 8B geometry ~4.5 GB of panel writes and quant reads per
-512-chunk, the whole `devw_cvt` knockout pool (~7.7 ms). A resident site reads as a single
+512-chunk, the whole `devw_cvt` knockout pool (~7.7 ms, `harness/p0_ko_probe.das`). A resident site reads as a single
 full-panel GEMM at a `(buffer, offset)` seat (no N-column tiling - tiling exists only for the
 scratch pair's capacity), keyed by the site's quant-plane buffer pointer plus its offset in
-that plane's own unit (q8: mblob bytes; kq: elem woff), released on driver shutdown or weight
-refill. Panels become resident two ways: an image-served model seeds them ZERO-COPY
+that plane's own unit (q8: mblob bytes; kq: elem woff) with the format folded into the key -
+the two unit spaces cannot alias - and a hit serves only at the seeded byte size. The cache
+is released on driver shutdown, on weight refill, and by the prefill's reload prep when the
+weights epoch bumps. Panels become resident two ways: an image-served model seeds them ZERO-COPY
 from its baked `devwf16` plane (`ARCHITECTURE_IMAGE.md` sec.2.1h - no dequant ever, no
 dedicated memory), and an owned load dequantizes once into persistent hazard-tracked buffers
 under the `DASLLAMA_METAL_DEVW_RESIDENT` MB budget (past it, scratch, warned once).
-Measured 8B npos=512: 162.1 -> 153.8 ms, both ways.
+Measured 8B npos=512: 162.1 -> 153.8 ms, both ways (`benchmarks/lcpp_bench.das -p 512 -n 0`, m5).
 
 Clauses the isolated grid cannot see, because it races one site while production overlaps
 sites:
@@ -247,8 +250,11 @@ stream, and both read one row. The last dense layer's FFN therefore runs that fi
 the add, the norm and the three FFN GEMMs dispatch at one row through the fixed-B GEMV forms,
 not through `enc_gemm_mm`, so the mm-tail peel counters (sec.2.2e) stay an instrument of the
 full-panel path only. The narrowing declines wherever another consumer reads every row - a
-session keeping the hidden state, a warm or MTP forward, a recurrent, MoE or PLE layer, a
-sandwich-norm or gated-query model - and `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail.
+session keeping the hidden state, a warm or MTP forward (`n_layer_nextn` present), a
+recurrent, MoE or PLE layer, a sandwich-norm or gated-query model, a deepstack-tapped layer -
+and it engages only at `npos > 1` with `dim` and the layer's hidden width both %32 and every
+FFN weight on the q8 plane (the GEMV forms it narrows onto are q8); a Q4_K_M carrier never
+takes it. `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail.
 A caller that consumes the whole `x_b` plane afterwards - embedding pooling, a plane-compare
 probe - sets `Session.keep_hidden` and the prefill keeps every row; the flag is zero-init, so
 narrowing is the default.

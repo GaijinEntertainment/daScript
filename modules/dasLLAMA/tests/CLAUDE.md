@@ -15,7 +15,7 @@ one-arm fix into an afternoon.
 `test_model_image` - it omits `image-vulkan`, `coverage` and `model-free`.
 
 Every suite but `model-free` needs `--arm`. `--full` parses and is then refused, so `--arm` is
-the only way in. `--suite model-free` takes neither - it is the whole gate. The runner tees
+the only way in. `--suite model-free` takes neither - it is the whole gate. The runner redirects
 the COMPLETE output to a log file, and prints that path on the DONE line. It owns the dastest
 timeout. It repeats only when `--nreps` is passed explicitly (default 1, never best-of-N).
 
@@ -79,7 +79,9 @@ batch cell asserts the `graph` DECLINE on the planar model - shexp has no batch 
 blob twin's CPU batch fallback would trip the blob-only panic).
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
-carrier, model-free - runs with no model stocked) `smol metal gemma tower whisper voxtral
+carrier, model-free - runs with no model stocked; also the layout fingerprint and the dev-W
+bake tables, whose rebuild-not-append contract and per-format key arithmetic are pure taxonomy
+over a job list) `smol metal gemma tower whisper voxtral
 parakeet qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
 mtower`; `gemma4e` is the E2B metal-blob
 mint+map arm - the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
@@ -89,15 +91,19 @@ driver's parity/counter/knob gate for the gemma4uv embedder, Apple builds only (
 gemma4uv` selects it too - arm filters match by substring); `mtower` is the whisper-class
 tower-blocks gate, Apple builds only - whisper tiny + large-v3-turbo transcript-exact and
 qwen3a f32-rail transcript equality, CPU vs GPU, with geometry-derived counter deltas, the
-twin-W legs (whisper f16 + qwen3a bf16: engage by the route counter, the twin-knob freeze,
-and whisper's wblob-ONLY poison that must CHANGE the GPU transcript), the gemma4a Metal
+twin-W legs - `wblob`, the halfword copy of a tower's GEMM weights baked beside the f32 blob and
+read only where a tensor crown compiled the half GEMMs (`../ARCHITECTURE_IMAGE.md` sec 2.1i)
+- on whisper f16 + qwen3a bf16, each engaging by the route counter, plus whisper's own
+twin-knob freeze and whisper's own wblob-ONLY poison that must CHANGE the GPU transcript
+(both legs are whisper's alone; qwen3a carries neither), the gemma4a Metal
 Conformer cell (f32-lane transcript equality CPU vs GPU + encode rel-rms + counter deltas -
 the lane pin/reset discipline mirrors qwen3a's), the canary Metal FastConformer cell (the
 same discipline over the rel-pos XL block loop; decoder = the q8_0 serving artifact), plus
-the tower q8-decline (a PINNED-q8 tower
-never dispatches - the un-pinned lane default follows the Metal tower on Apple builds:
-serving driver => f32 planes, the vision-tower policy; gemma4a follows the same policy),
-required-mode panic, and Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv`
+the tower q8-decline - a q8 whisper encoder never dispatches and records the `quant_mode`
+decline, and the whisper serving default IS q8 unless `set_asr_fp32` / `set_asr_tower_fp32`
+asks for f32 (whisper carries no lane policy). Canary and gemma4a do: un-pinned, their lane
+follows whether the Metal tower would serve (`../ARCHITECTURE_MEDIA.md` sec 2.15).
+Then the required-mode panic and Conformer-absence (parakeet) cells; the arm's DECODER half is the `test_whisper_metal_cross_kv`
 cell in `test_model_image.das` - GPU cross-KV on the q8 serving default, transcript-exact
 against the CPU chain with window/step counter deltas and the knob and quant_mode declines,
 required-mode, step-floor and shutdown-re-arm contract; the voxtral arm re-saves a
@@ -151,10 +157,8 @@ garbage silently - no error, a plausible wrong number.
 
 Which files belong to the `model-free` suite is `REVIEW.md`'s to say. The runner sets
 `DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride
-the `model-free` suite: the runner disarms the guard that tripwire asserts. A `model-free`
-file runs under plain dastest (still `-jit`), or as a set through
-`run.das -- --suite model-free`, the per-PR gate. The map below is partial. `run.das`'s
-`model-free` list is the census.
+the `model-free` suite: the runner disarms the guard that tripwire asserts. The map below is
+partial. `run.das`'s `model-free` list is the census.
 `test_vulkan_dec_tail.das` - model-free (a Vulkan device, else skips): the per-op tier's decode
 era against a CPU reference - the decode attention block (K-quant and q8 quads, both rope
 pairings, the hydrate arms), the decode FFN tail, and the whole-token decode span with its
@@ -206,7 +210,9 @@ f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp), the q8-gate CPU-vs-CP
 canary: `gemm_f32` accumulates, so a reused state's `st.reim` must start zeroed - bit-equal
 mels across calls); its ungated cells are the model-free half.
 `test_asr_verbs.das` - model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
-`asr_encode_bucket`) over constructed structs and parakeet's SPM detokenizer over a toy vocab.
+`asr_encode_bucket`) over constructed structs, the audio families' lane knobs (qwen3a /
+gemma4a / canary: the un-pinned default against the predicate the policy itself consults, both
+pins, and reset from the EXACT pin), and parakeet's SPM detokenizer over a toy vocab.
 `test_model_specs.das` - model-free: the model-set table's shape invariants
 (`../performance/model_specs.das`: unique file/display keys, official => provenance pinned,
 parity-evidence shape), the derived provenance view's invariants (unique names, sha-or-recipe,
@@ -267,7 +273,12 @@ q8 serving lane on its measured 3.2e-1*rms bar (27 blocks, ffn served at the lay
 sniff/exec_fmt cells. On Apple builds the CPU gate pins the tower knob off, and a GPU rung
 gates two fixtures through the Metal block loop on its measured 4e-2*rms bar - engage proven
 per fixture by the encodes/blocks counters, plus the knob-off decline leg (the 72-wide heads
-restride to the attention tiles' 128 on the driver). Skips honestly without the mmproj or dumps.
+restride to the attention tiles' 128 on the driver), the q8-decline leg (a PINNED-q8 tower with
+the knob ARMED must never dispatch and must record the `quant_mode` decline - its Q8_0 planes
+would read as f32 garbage), and a third crowned encode on the twin-W route
+(`set_metal_tensor_crowns("mulmm_q8")` + `set_metal_tower_f16(true)`, the lane pinned exact so
+the twin is baked), witnessed by the `metal_tower_f16_encodes` delta. Skips honestly without
+the mmproj or dumps.
 `test_qwen3v.das` - the qwen3v tower tier-1 parity vs the `-p encode` dumps minted on
 f32-widened mmprojs, CPU (`qwen3vl-vision-oracle/mint.sh` + `mint_4b.sh`): the Omni leg
 (`qwen3vl_merger` no deepstack) on seven fixtures (cb96 = the pos-table downscale arm,
@@ -293,7 +304,9 @@ off the GPU-ds set like the q8-ds cell, engage proven by encode/block counter de
 GATED fixture, and its own GPU-lane zero-layer poison); an f16-W ROUTE cell (crowns pinned
 via set_metal_tensor_crowns + prefill re-init so the half twins compile, the 4B fixtures on
 the same GPU bars, engage proven by the metal_tower_f16_encodes delta, plus the knob-off
-leg whose counter must not move); and a model-free lane-knob cell.
+leg whose counter must not move, and the Omni-30B bf16 half - the same crowned route on the
+bf16-sourced tower, one fixture, its own f16-encodes delta, which is what proves the twin
+bake covers bf16 files and not just f16 ones); and a model-free lane-knob cell.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - the qwen25v tower (Qwen2.5-Omni's window-attention ViT, projector

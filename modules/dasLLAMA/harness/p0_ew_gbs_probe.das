@@ -9,6 +9,8 @@ require ?das_metal dasllama/dasllama_metal_prefill    // production MetalCvtHalf
 require math
 require strings
 
+// ATTRIBUTION SWEEP - its arms attribute the ew pool's milliseconds between memory BANDWIDTH and
+// per-DISPATCH latency, never selecting between implementations.
 // Phase-0b: achieved GB/s on single production ew dispatches at the Qwen3-8B prefill shape
 // (512 rows x dim 4096, f32). Confirms or kills the traffic model for the 11.2ms ew pool:
 // bandwidth-bound (hundreds of GB/s) vs dispatch-latency-bound (tens). Back-to-back reps on
@@ -108,6 +110,6 @@ def main {
             print("p0b round={round} add_us={add_us:.1f} add_gbs={add_gbs:.0f} rms_us={rms_us:.1f} rms_gbs={rms_gbs:.0f} cvt_us={cvt_us:.1f} cvt_gbs={cvt_gbs:.0f} tiny_add_us={tiny_us:.2f}\n")
         }
     } else {
-        print("p0b: no das_metal on this build\n")
+        panic("p0b: no das_metal in this build - no ew dispatch to time, and a 0-row run must not read as a clean one")
     }
 }

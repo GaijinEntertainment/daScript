@@ -413,6 +413,20 @@ def tower_stage_f32_pad_cols(m : GGUFMeta; b : array<uint8> | #; name : string; 
     }
 }
 
+//! Re-stride ``rows`` already-read f32 rows from ``src`` (``src_stride`` wide, packed) into
+//! ``blob`` at ``wo`` on a wider ``dst_stride`` — the padded patch-conv GEMM: each row lands at
+//! its padded pitch and the pad columns stay whatever the region was sized to (zero).
+def tower_stage_f32_pad_row_stride(var blob : array<float>; src : array<float>;
+                                   wo, rows, src_stride, dst_stride : int64) {
+    unsafe {
+        var dp = addr(blob[wo])
+        let sp = addr<float const?>(src[0])
+        for (r in range64(rows)) {
+            copy_floats(dp + r * dst_stride, sp + r * src_stride, src_stride)
+        }
+    }
+}
+
 //! Zero ``n`` floats at ``at`` — pad tails of staged planes.
 def tower_zero_span(var a : array<float>; at, n : int64) {
     if (n <= 0l) {

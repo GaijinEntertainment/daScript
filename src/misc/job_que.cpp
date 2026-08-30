@@ -73,7 +73,11 @@ namespace das {
     static bool apple_slow_tier_is_compute() {
         char name[64] = {}; size_t len = sizeof(name) - 1;
         if ( sysctlbyname("hw.perflevel1.name", name, &len, nullptr, 0) != 0 ) return false;
-        return strncmp(name, "Efficiency", 10) != 0;
+        static const char * const computeTiers[] = { "Performance", "Super" };
+        for ( const char * tier : computeTiers ) {
+            if ( strcmp(name, tier) == 0 ) return true;
+        }
+        return false;
     }
 #endif
 

@@ -10,8 +10,11 @@ require dasllama/dasllama_vision_io
 require dasllama/dasllama_tower   // set_asr_prof / asr_prof_report — the encode-stage rail
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require ?das_metal dasllama/dasllama_metal_tower   // [init] registers the GPU block serve — without it the CPU f32 path runs
+require ../performance/profile_common.das   // tune_gate — the standing pre-measure stack
 require daslib/jobque_boost
 
+// ATTRIBUTION SWEEP - its arms attribute one vision encode's wall across STAGES (preproc, stem,
+// tail) for each family, never selecting between implementations.
 // Splits one vision encode per FAMILY: wall, the preproc half (letterbox + normalize, timed
 // standalone), and the asr_prof buckets (stem/tail where the family carries them).
 // Direction-grade attribution for das-vs-clip encode gaps; best-of over REPS walls.
@@ -51,6 +54,9 @@ def probe_one(mmproj, picture : string) {
 [export]
 def main {
     let pic = "/Users/borisbatkin/Work/llama.cpp/models/coco-val2017-000000039769.jpg"
+    if (!tune_gate()) {   // never attribute on fallback winners — the stage split would be of the wrong kernels
+        panic("qwen_encode_split: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
+    }
     with_job_que() {
         setup_dasllama_jobque_()
         probe_one("/Users/borisbatkin/Work/llama.cpp/models/mmproj-Qwen3VL-8B-Instruct-F16.gguf", pic)

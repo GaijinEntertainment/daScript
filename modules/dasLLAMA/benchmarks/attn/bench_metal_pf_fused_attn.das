@@ -291,6 +291,65 @@ def private cpu_oracle(q, k, v : array<float>; var o : array<float>; np, heads, 
     }
 }
 
+//! Bidirectional (uend = np) attention reference for the first `ncheck` q-rows, f64-accumulated.
+//! One `ld` row stride and `hh * hsz` head offset serve BOTH lab layouts - the compact hs=72
+//! extract and the padded hs=128 slab - because every shape that reaches here has kv_mul = 1, so
+//! q, k and v share a stride. hsz <= 128 by the `oa` slab.
+def private bidir_oracle(q, k, v : array<float>; var o : array<float>;
+                         ncheck, np, heads, hsz, ld : int; scale : float) {
+    for (hh in range(heads)) {
+        let hoff = hh * hsz
+        for (qi in range(ncheck)) {
+            var mx = -3.0e38
+            for (j in range(np)) {
+                var sd = 0.0lf
+                for (dd in range(hsz)) {
+                    sd += double(q[qi * ld + hoff + dd]) * double(k[j * ld + hoff + dd])
+                }
+                mx = max(mx, float(sd) * scale)
+            }
+            var tot = 0.0lf
+            var oa : float[128]
+            for (dd in range(hsz)) {
+                oa[dd] = 0.0
+            }
+            for (j in range(np)) {
+                var sd = 0.0lf
+                for (dd in range(hsz)) {
+                    sd += double(q[qi * ld + hoff + dd]) * double(k[j * ld + hoff + dd])
+                }
+                let e = exp(float(sd) * scale - mx)
+                tot += double(e)
+                for (dd in range(hsz)) {
+                    oa[dd] += e * v[j * ld + hoff + dd]
+                }
+            }
+            for (dd in range(hsz)) {
+                o[qi * ld + hoff + dd] = oa[dd] / float(tot)
+            }
+        }
+    }
+}
+
+//! ONE precision class covers this lab: every arm - the five flash variants and the three-pass
+//! slab they are raced against - carries f16 operands (f16 tiles, f16 K/V, an f16 score slab)
+//! into a tensor/simdgroup accumulate, so they all answer to the same rel bound against the
+//! f64-accumulated CPU oracle. 2e-2 is NOT measured on this box - it is the standing bound for
+//! f16 attention outputs: an order of magnitude above what a correct f16 kernel prints over a
+//! few thousand positions, far below what any real defect produces. Re-derive it from observed
+//! values before tightening.
+let ATTN_F16_MAXREL = 2.0e-2
+
+//! Every timed arm's report line states the verdict, not a bare number: an unbounded `maxrel=`
+//! reads as a passing arm to anyone who does not know the tolerance. Over the bound the arm is
+//! WRONG and its milliseconds price nothing, so the run dies rather than printing a ratio.
+def private gate_maxrel(arm : string; np : int; maxrel : float) : string {
+    if (maxrel > ATTN_F16_MAXREL) {
+        panic("{arm} np={np}: maxrel {maxrel} over the f16 attention bound {ATTN_F16_MAXREL} - the arm is WRONG, its timing prices nothing")
+    }
+    return maxrel == 0.0 ? "bit-exact vs oracle" : "maxrel={maxrel} <= {ATTN_F16_MAXREL} PASS"
+}
+
 [export]
 def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -497,37 +556,27 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                 let ncheck = 128
                 var owant : array<float>
                 owant |> resize(ncheck * qdt)
-                for (hh in range(heads)) {
-                    for (qi in range(ncheck)) {
-                        var mx = -3.0e38
-                        for (j in range(np)) {
-                            var sd = 0.0lf
-                            for (dd in range(hst)) {
-                                sd += double(qt[qi * qdt + hh * hst + dd]) * double(kt[j * qdt + hh * hst + dd])
-                            }
-                            mx = max(mx, float(sd) * 0.125)
-                        }
-                        var tot = 0.0lf
-                        var oa : float[72]
-                        for (dd in range(hst)) {
-                            oa[dd] = 0.0
-                        }
-                        for (j in range(np)) {
-                            var sd = 0.0lf
-                            for (dd in range(hst)) {
-                                sd += double(qt[qi * qdt + hh * hst + dd]) * double(kt[j * qdt + hh * hst + dd])
-                            }
-                            let e = exp(float(sd) * 0.125 - mx)
-                            tot += double(e)
-                            for (dd in range(hst)) {
-                                oa[dd] += e * vt[j * qdt + hh * hst + dd]
-                            }
-                        }
-                        for (dd in range(hst)) {
-                            owant[qi * qdt + hh * hst + dd] = oa[dd] / float(tot)
-                        }
+                bidir_oracle(qt, kt, vt, owant, ncheck, np, heads, hst, qdt, 0.125)
+                //! the slab is the DENOMINATOR of all five ratios below, so it answers to the same
+                //! oracle and the same bound - an unchecked baseline misprices every arm at once.
+                //! Its own layout is the padded hs=128 one, so it needs its own reference: fewer
+                //! rows than ncheck because that oracle is 128/72 the work per row.
+                let nbase = 32
+                if (kvmul != 1) {   // one stride serves q and k/v only while every head has its own kv head
+                    panic("SLAB np={np}: kv_mul {kvmul} - the slab reference assumes kv_mul 1, teach bidir_oracle a kv stride first")
+                }
+                var swant : array<float>
+                swant |> resize(nbase * qd)
+                bidir_oracle(qh, kh, vh, swant, nbase, np, heads, hs, qd, 0.125)
+                var maxrel_s = 0.0
+                unsafe {
+                    let pg = reinterpret<float?>(metal_buffer_contents(bs))
+                    for (ii in range(nbase * qd)) {
+                        maxrel_s = max(maxrel_s, abs(pg[ii] - swant[ii]) / max(abs(swant[ii]), 1e-3))
                     }
                 }
+                print("  SLAB  np={np}: three-pass baseline (hs128) {gate_maxrel("SLAB", np, maxrel_s)}\n")
+                delete swant
                 var maxrel_t = 0.0
                 unsafe {
                     let pg = reinterpret<float?>(metal_buffer_contents(bot))
@@ -535,7 +584,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                         maxrel_t = max(maxrel_t, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
                     }
                 }
-                print("  TOWER np={np}: slab(hs128)={t_slab}ms flash(hs72)={t_flash}ms ratio={t_flash / t_slab}  maxrel={maxrel_t}\n")
+                print("  TOWER np={np}: slab(hs128)={t_slab}ms flash(hs72)={t_flash}ms ratio={t_flash / t_slab}  {gate_maxrel("TOWER", np, maxrel_t)}\n")
                 //! the lifted reference-flash arm (lcpp_flash_dk72.metal): np%64 and V-tail slack by contract
                 var fsrc = ""
                 fopen("modules/dasLLAMA/benchmarks/attn/lcpp_flash_dk72.metal", "rb") $(ff) {
@@ -590,7 +639,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                             maxrel_p = max(maxrel_p, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
                         }
                     }
-                    print("  PORT  np={np}: slab(hs128)={t_slab2}ms lcpp-flash72={t_port}ms ratio={t_port / t_slab2}  maxrel={maxrel_p}\n")
+                    print("  PORT  np={np}: slab(hs128)={t_slab2}ms lcpp-flash72={t_port}ms ratio={t_port / t_slab2}  {gate_maxrel("PORT", np, maxrel_p)}\n")
                     metal_release(bop)
                     metal_release(pso_port)
                 }
@@ -652,7 +701,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                             maxrel_h = max(maxrel_h, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
                         }
                     }
-                    print("  PORTH np={np}: slab(hs128)={t_slab3}ms lcpp-flash72h={t_porth}ms ratio={t_porth / t_slab3}  maxrel={maxrel_h}\n")
+                    print("  PORTH np={np}: slab(hs128)={t_slab3}ms lcpp-flash72h={t_porth}ms ratio={t_porth / t_slab3}  {gate_maxrel("PORTH", np, maxrel_h)}\n")
                     //! hc: K/V per-head contiguous - the reference's own tensor layout (ld = 72)
                     var perrc = ""
                     var pso_hc = pipeline_from_source(dev, fsrc, "lab_lcpp_flash72hc", true, perrc)
@@ -715,7 +764,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                                 maxrel_c = max(maxrel_c, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
                             }
                         }
-                        print("  PORTC np={np}: slab(hs128)={t_slab4}ms lcpp-flash72hc={t_hc}ms ratio={t_hc / t_slab4}  maxrel={maxrel_c}\n")
+                        print("  PORTC np={np}: slab(hs128)={t_slab4}ms lcpp-flash72hc={t_hc}ms ratio={t_hc / t_slab4}  {gate_maxrel("PORTC", np, maxrel_c)}\n")
                         //! the PRODUCTION dialect emission (metal_tower_flash_msl) on the same buffers
                         var perrd = ""
                         var pso_dial = pipeline_from_source(dev, metal_tower_flash_msl, metal_tower_flash_msl_entry, metal_tower_flash_msl_fastmath, perrd)
@@ -749,7 +798,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                                     maxrel_d = max(maxrel_d, abs(pg[ii] - owant[ii]) / max(abs(owant[ii]), 1e-3))
                                 }
                             }
-                            print("  DIAL  np={np}: flash-dialect={t_dial}ms  maxrel={maxrel_d}\n")
+                            print("  DIAL  np={np}: flash-dialect={t_dial}ms  {gate_maxrel("DIAL", np, maxrel_d)}\n")
                             metal_release(bod)
                             metal_release(pso_dial)
                         }

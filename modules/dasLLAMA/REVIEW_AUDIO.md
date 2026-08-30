@@ -35,5 +35,5 @@ table from `dasllama/dasllama_audio.das` (`build_dft_twiddles`, or `build_fft_pl
 declare - panic at the call site instead.**
 
 **A caller that pins a family tower's lane (`set_*_q8`) around a load resets it
-(`reset_*_q8`) before returning, on every path out.** A pin that outlives its load silently
-changes the lane of the next tower loaded in the process.
+(`reset_*_q8`) before returning, on every path out, panics included - pin through `defer()`.**
+A pin that outlives its load silently changes the lane of the next tower loaded in the process.

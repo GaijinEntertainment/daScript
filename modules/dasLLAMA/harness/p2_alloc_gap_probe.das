@@ -7,6 +7,8 @@ require ?das_metal metal/das_metal_boost
 require ?das_metal dasllama/dasllama_metal_prefill   // the production TH128 q8 MSL text
 require strings
 
+// ATTRIBUTION SWEEP - its arms attribute GEMM time across threadgroup-memory REQUEST sizes with
+// the indexed footprint held fixed, never selecting between implementations.
 // GEMM-dig gate for the double-buffered staging variant: the tgmem allocation law's unmeasured
 // (16384, 20480) gap, where a bk=64 ping-pong pair lands (2 x 9216 = 18432B). The production
 // kernel indexes only its 6144 halves, so the REQUEST size alone varies.
@@ -109,6 +111,6 @@ def main {
         }
         metal_release(pso)
     } else {
-        print("no das_metal in this build\n")
+        panic("p2_alloc_gap: no das_metal in this build - no GEMM to time across the tgmem gap, and a 0-row run must not read as a clean one")
     }
 }

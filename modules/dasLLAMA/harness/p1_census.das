@@ -58,6 +58,6 @@ def main {
         }
         delete tr
     } else {
-        print("census: no das_metal\n")
+        panic("p1_census: no das_metal in this build - the census has no rows to emit, and a 0-row run must not read as a clean one")
     }
 }

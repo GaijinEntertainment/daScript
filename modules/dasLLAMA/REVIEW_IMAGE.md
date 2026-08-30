@@ -77,6 +77,6 @@ persists nothing and is not such a lane.
 
 **Never regroup or refactor the float products in a mint-side dequant mirror
 (`devw_dequant_q8_core` / `devw_dequant_k45_core` / `devw_dequant_k6_core`,
-`dasllama/dasllama_load.das`) - keep the multiply grouping and the subtraction order the code
+`dasllama/dasllama_convert.das`) - keep the multiply grouping and the subtraction order the code
 already has.** The GPU kernel's factored form decides the sign of a zero result, so a
 regrouping makes a baked panel differ from the runtime one.

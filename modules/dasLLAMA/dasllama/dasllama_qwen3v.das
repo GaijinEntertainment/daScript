@@ -548,15 +548,36 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
         st.qscales |> reserve_resize(qo / 32l)
         q3v_read_planes(m, bytes, st, serve_sizes)
         q3v_repack_all(st, serve_sizes)
-        if (!st.t.q8 && st.t.blk_bf16 == st.t.mm_bf16
-                && (st.t.blk_bf16
-                    || (gguf_tensor_type(m, "v.blk.0.attn_qkv.weight") == GGML_TYPE_F16
-                        && gguf_tensor_type(m, "mm.0.weight") == GGML_TYPE_F16))) {
+        if (!st.t.q8 && q3v_gemm_types_uniform(m, st.t, st.t.blk_bf16 ? GGML_TYPE_BF16 : GGML_TYPE_F16)) {
             q3v_bake_half_twin(st, st.t.blk_bf16)
         }
     }
     fclose(f)
     return <- st
+}
+
+// every GEMM tensor the halfword twin route serves: the block set at every layer, the merger
+// pair, and each deepstack tap's fc1/fc2. A sample of two would let a mixed file bake a twin
+// the route reads as one type.
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+def private q3v_gemm_types_uniform(m : GGUFMeta; t : Qwen3vTower; gt : int) : bool {
+    if (gguf_tensor_type(m, "mm.0.weight") != gt || gguf_tensor_type(m, "mm.2.weight") != gt) {
+        return false
+    }
+    for (k in range64(t.n_deepstack)) {
+        let p = "v.deepstack.{k == 0l ? t.ds_l0 : k == 1l ? t.ds_l1 : t.ds_l2}"
+        if (gguf_tensor_type(m, "{p}.fc1.weight") != gt || gguf_tensor_type(m, "{p}.fc2.weight") != gt) {
+            return false
+        }
+    }
+    for (l in range64(t.n_layer)) {
+        for (nm in Q3V_BLK_GEMM_NAMES) {
+            if (gguf_tensor_type(m, "v.blk.{l}.{nm}.weight") != gt) {
+                return false
+            }
+        }
+    }
+    return true
 }
 
 //! The exact lane's halfword GEMM twin ([[tower_bake_half_twin]]): plane absence IS the
@@ -577,6 +598,8 @@ def load_qwen3v_tower(path : string) : Qwen3vTower {
         if (baked == QWEN3V_TAG || baked == QWEN3V_TAG_Q8) {
             tag = baked
         }
+        // a named image serves the lane it was BAKED with, so the policy has no say here
+        to_log(LOG_INFO, "dasLLAMA qwen3v: block GEMM lane {tag == QWEN3V_TAG_Q8 ? "q8" : "f32 planes"} - the named image's baked tag\n")
         apply_box_profile_runtime()
         let ts_img = ref_time_ticks()
         var t = Qwen3vTower()
@@ -865,6 +888,7 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
     }
     let pw = w / t.patch
     let ph = h / t.patch
+    dispatch_phase_encode(pw * ph)
     var tp = ref_time_ticks()
     q3v_rope_tables(t, s, pw, ph)
     let npos = q3v_stem_cols(t, s, planes, w, h, pw, ph)

@@ -23,7 +23,9 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
 - **A new construct the MSL emitter rejects at compile time ships a `tests/msl/_fail_closed/`
   (repo root) fixture in the same change.** The same change asserts that construct's error
   needle in `tests/msl/test_msl_fail_closed.das`. An error needle is the substring of the
-  compile error that names the rejected construct.
+  compile error that names the rejected construct. A diff that stops rejecting a construct
+  deletes that construct's `_fail_closed/` fixture and its needle assertion in
+  `test_msl_fail_closed.das`, in the same change.
 
 - **A kernel behavioral change ships a CPU-oracle test under `tests/metal/` (repo root).** A
   CPU-oracle test compares the GPU result against a CPU-computed expectation.
@@ -31,8 +33,8 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
 - **A change visible only in the emitted text ships a `tests/msl/` (repo root) fixture.** The
   fixture asserts the emitted text that the change alters.
 
-- **Never commit a `.msl` file and never hand-write MSL - emit it from a `[metal_kernel]` body
-  instead.**
+- **Never commit a `.msl` file and never hand-write MSL outside `metal/msl_emit.das`'s emitted
+  text - emit it from a `[metal_kernel]` body instead.**
 
 - **A new or changed host extern under `modules/dasMetal/src/` ships a host-side test under
   `tests/metal/` (repo root) in the same change.** A changed public function in
@@ -49,9 +51,14 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
   forces every element into real storage before the accumulation loop, and that costs the op
   its fast path for the whole loop.
 
-- **A diff that changes the threadgroup row stride the MSL emitter writes for a staged weight
-  tile - `tmm2d_helper_text`'s `dstp` index and `emit_tmm2d_tg_step_deva`'s `ldb` extent in
-  `metal/msl_emit.das` - also changes `ldb` in `tmm2d_tg_step_deva` and the `wt` size documented
-  on `tmm2d_q8u_f32` (`metal/metal_builtins.das`), in the same change.** A staged weight tile is
-  the dequantized W the emitter parks in threadgroup memory; the das bodies replay the same
-  indexing, so a one-sided stride change reads the wrong halves with no compile error.
+- **A diff that changes `emit_tmm2d_tg_step_deva`'s `ldb` extent (`metal/msl_emit.das`) also
+  changes `ldb` in `tmm2d_tg_step_deva` (`metal/metal_builtins.das`), in the same change.** That
+  das body replays the same tile indexing, so a one-sided change reads the wrong halves with no
+  compile error.
+
+- **A diff that changes the threadgroup row stride `tmm2d_helper_text` writes - its `dstp` index
+  and the matching tensor extent in `metal/msl_emit.das` - also changes the `wt` size documented
+  on `tmm2d_q8u_f32` (`metal/metal_builtins.das`) and every `@workgroup` staging array a
+  `tests/msl/` or `tests/metal/` (repo root) fixture sizes for that stride, in the same change.**
+  A staged weight tile is the dequantized W the emitter parks in threadgroup memory; nothing
+  checks the caller's allocation against the stride, so a one-sided change overruns it silently.

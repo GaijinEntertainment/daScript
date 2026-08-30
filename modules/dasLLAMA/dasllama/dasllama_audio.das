@@ -1376,6 +1376,7 @@ def register_tower_conv_gpu(fn : TowerConvGpuFn) {
 //! (token-major). Shared by the whisper conv frontend above and the qwen3a conv2d frontend —
 //! any frontend that leaves ``npos × d_model`` rows in ``s.x`` can run the blocks.
 def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
+    dispatch_phase_encode(npos)
     if (g_tw_blocks_gpu_set && empty(g_audio_ref_dir)) {
         let te = ref_time_ticks()
         if (invoke(g_tw_blocks_gpu, t, s, npos)) {

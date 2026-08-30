@@ -403,6 +403,8 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
     var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()
+        //! the regime line printed by main is the INTENT; this is the que that actually spawned
+        print("live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         for (spec in asr_catalog()) {
             if (find(spec.display, model) < 0 && find(spec.das_model, model) < 0) {
                 continue
@@ -527,6 +529,8 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
     var jsonModels : array<BenchModel>
     with_job_que() {
         setup_dasllama_jobque_()
+        //! the regime line printed by main is the INTENT; this is the que that actually spawned
+        print("live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         var m <- load_model_cached(model, QuantMode.q8)
         var emb <- load_vision_embedder(mmproj)
         var pic <- load_image_rgb(image)
@@ -1322,8 +1326,11 @@ def main() : int {
     // hard-pin lanes to distinct physical cores on the boxes that pin. -t is the explicit ask, but
     // DAS_JOBQUE_THREADS / DAS_JOBQUE_AFFINITY envs still win the que's actual lane count.
     let t_env = g_env_core.jobque_threads
+    //! the engine's hybrid policy verbatim (dasllama_math.das dasllama_jobque_threads_cap): the
+    //! second tier joins the pool only when its KIND is compute — dropping that clause would
+    //! spend the whole pool on E-cores wherever the engine would not
     let hybrid_default = (cfg.threads <= 0 && is_none(t_env) && get_total_perf_cores() > 0
-        && get_total_perf_cores() < get_total_hw_cores())
+        && get_total_perf_cores() < get_total_hw_cores() && is_slow_tier_compute())
     var threads = cfg.threads > 0 ? cfg.threads : (t_env ?? (hybrid_default ? get_total_hw_cores() : profile_threads()))
     if (is_some(t_env) && unwrap(t_env) != threads) {
         threads = unwrap(t_env)

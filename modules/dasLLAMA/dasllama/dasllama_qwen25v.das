@@ -200,6 +200,23 @@ def private register_qwen25v_image_tags {
 // the block GEMM tensors in QWEN25V_GEMM_* order; every per-GEMM list follows it
 let private Q25V_BLK_GEMM_NAMES <- [ "attn_q", "attn_k", "attn_v", "attn_out", "ffn_gate", "ffn_up", "ffn_down" ]
 
+// every block/merger GEMM tensor the halfword twin route serves. A sample of two would let a
+// mixed file bake a twin the route reads as one type.
+[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+def private q25v_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
+    if (gguf_tensor_type(m, "mm.0.weight") != gt || gguf_tensor_type(m, "mm.2.weight") != gt) {
+        return false
+    }
+    for (l in range64(n_layer)) {
+        for (nm in Q25V_BLK_GEMM_NAMES) {
+            if (gguf_tensor_type(m, "v.blk.{l}.{nm}.weight") != gt) {
+                return false
+            }
+        }
+    }
+    return true
+}
+
 //! The conv/attention GEMM K width served padded — %64 fits the Metal tiles; zero pads, exact.
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]
 def q25v_patch_pad(t : Qwen25vTower) : int64 => (t.patch_dim + 63l) / 64l * 64l
@@ -265,14 +282,7 @@ def private q25v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qw
     var rowscratch : array<float>   // the down GEMM's unpadded file rows ahead of the expand
     wscratch |> reserve_resize(st.t.patch_dim * d)
     tower_read_conv_pair_folded(m, bytes, "v.patch_embd.weight", wscratch, 0l, st.t.patch_dim * d)
-    unsafe {
-        let pp = q25v_patch_pad(st.t)
-        var dstw = addr(st.blob[st.t.patch_w])
-        let srcw = addr<float const?>(wscratch[0])
-        for (r in range64(d)) {
-            copy_floats(dstw + r * pp, srcw + r * st.t.patch_dim, st.t.patch_dim)
-        }
-    }
+    tower_stage_f32_pad_row_stride(st.blob, wscratch, st.t.patch_w, d, st.t.patch_dim, q25v_patch_pad(st.t))
     gguf_read_tensor_f32(m, bytes, "v.post_ln.weight", st.blob, st.t.post_ln_w, d)
     gguf_read_tensor_f32(m, bytes, "mm.0.weight", st.blob, st.t.mm0_w, 16l * d * d)
     gguf_read_tensor_f32(m, bytes, "mm.0.bias", st.blob, st.t.mm0_b, 4l * d)
@@ -375,10 +385,7 @@ def stage_qwen25v_tower(path : string) : Qwen25vStaging {
         st.blob |> reserve_resize(off)
         st.wblob |> reserve_resize(woff)
         q25v_read_planes(m, bytes, st, gemm_sizes)
-        if (st.t.blk_bf16 == st.t.mm_bf16
-                && (st.t.blk_bf16
-                    || (gguf_tensor_type(m, "v.blk.0.attn_q.weight") == GGML_TYPE_F16
-                        && gguf_tensor_type(m, "mm.0.weight") == GGML_TYPE_F16))) {
+        if (q25v_gemm_types_uniform(m, st.t.n_layer, st.t.blk_bf16 ? GGML_TYPE_BF16 : GGML_TYPE_F16)) {
             tower_bake_half_twin(st.blob, st.wblob, st.t.blk_bf16)
         }
     }
@@ -389,6 +396,9 @@ def stage_qwen25v_tower(path : string) : Qwen25vStaging {
 //! Load the qwen25v tower, image-backed (the qwen3v load shape: a prepared `.dlim` maps and
 //! every plane borrows; missing or stale, one is minted from the source mmproj).
 def load_qwen25v_tower(path : string) : Qwen25vTower {
+    // the lane census every family tower load prints; this tower has a single tag, so the
+    // line says so rather than leaving qwen25v the one family whose lane never appears
+    to_log(LOG_INFO, "dasLLAMA qwen25v: tower GEMM lane f32 planes - exact-only, no q8 lane exists\n")
     if (path |> ends_with(".dlim")) {
         apply_box_profile_runtime()
         let ts_img = ref_time_ticks()
@@ -628,6 +638,7 @@ def qwen25v_encode(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>
     }
     let pw = w / t.patch
     let ph = h / t.patch
+    dispatch_phase_encode(pw * ph)
     var tp = ref_time_ticks()
     q25v_grid_tables(t, s, pw, ph)
     let npos = q25v_stem_cols(t, s, planes, w, h)

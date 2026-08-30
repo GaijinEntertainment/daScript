@@ -278,7 +278,7 @@ def test_qwen3a_tower(t : T?) {
         }
         set_qwen3a_q8(false)
         var inscope tw <- load_qwen3a_tower(path)
-        set_qwen3a_q8(true)
+        reset_qwen3a_q8()
         t |> equal(tw.core.d_model, 896l, "d_model")
         t |> equal(tw.core.n_layer, 18l, "layers")
         t |> equal(tw.core.n_head, 14l, "heads")

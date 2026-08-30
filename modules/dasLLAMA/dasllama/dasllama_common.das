@@ -200,8 +200,8 @@ typedef AttnPrefillFn = function<(t : Model; var s : Session; l : int64; npos : 
 typedef FfnPrefillFn  = function<(t : Model; var s : Session; l : int64; npos : int64) : void>
 
 //! A whole-prefill override: claims the ENTIRE per-layer stack of one prefill. On true the KV
-//! cache is filled for every position and x_b holds the final residual stream; false = declined.
-//! Registered by name at [init], activated via select_prefill_override (env rail: DASLLAMA_PIN_PREFILL).
+//! cache is filled for every position; x_b holds the final residual stream at row npos-1 always,
+//! every row only under `Session.keep_hidden` (the Metal lastrow tail narrows). false = declined.
 typedef PrefillOverrideFn = function<(t : Model; var s : Session; npos : int64; start_pos : int64) : bool>
 
 // The prefill-override registry (see PrefillOverrideFn). Name-keyed like the kernel backends;
@@ -1309,7 +1309,7 @@ def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v :
 //! tune_for_this_box.md): token block, L2 budget, threading thresholds, chunk multipliers, and an
 //! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
 [arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
-def apply_box_profile_runtime(path : string = "") {
+def apply_box_profile_runtime(path : string = "") {   // nolint:STYLE038 — a flat knob catalog; a split would invent seams
     if (path == "" && box_profile_stale()) {
         to_log(LOG_INFO, "dasLLAMA: tune sidecar is older than the binary - runtime knobs not applied (re-tune)\n")
         return
@@ -1346,8 +1346,10 @@ def apply_box_profile_runtime(path : string = "") {
     apply_i64_knob(rt, "kq_q50_native") $(v) { set_kq_q50_native(v != 0l) }
     apply_i64_knob(rt, "noisy") $(v) { set_dasllama_noisy(v != 0l) }
     apply_i64_knob(rt, "gemv_lane_cap") $(v) {
-        if (v != 0l || get_total_perf_cores() <= 0 || get_total_perf_cores() >= get_total_hw_cores()) {
+        if (v != 0l || !is_slow_tier_compute()) {
             set_gemv_lane_cap(int(min(v, 2147483647l)))
+        } else {
+            to_log(LOG_INFO, "dasLLAMA: sidecar gemv_lane_cap = 0 is the pre-hybrid \"uncapped\" mint - keeping the fast-tier cap {get_gemv_lane_cap()}\n")
         }
     }
     apply_i64_knob(rt, "batch_lane_cap") $(v) { set_batch_lane_cap(int(min(v, 2147483647l))) }

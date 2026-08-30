@@ -55,7 +55,7 @@ struct BenchArgs {
 }
 
 [export]
-def main() : int {
+def main() : int {   // nolint:STYLE038 — flat CLI ladder then the measurement protocol; every seam here is a single-caller helper
     var r <- parse_args(type<BenchArgs>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
@@ -97,6 +97,12 @@ def main() : int {
     let t_load = ref_time_ticks()
     var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)
     let load_ms = double(get_time_usec(t_load)) / 1000.0lf
+    if (cfg.fp32_tower) {
+        //! the pins are LOAD-scoped (dasllama_asr.das drops them the same way): left set they
+        //! would also decide the format of anything loaded after this model
+        reset_gemma4a_q8()
+        reset_qwen3a_q8()
+    }
     print("LOAD\t{model_name}\t{load_ms}\n")
 
     var rc = 0
