@@ -404,8 +404,18 @@ Markers and Hints
 ^^^^^^^^^^^^^^^^^^^^^
 
 ``[hint]``
-    A dummy annotation that carries key-value arguments for optimization hints. Does not
-    change behavior by itself.
+    Carries key-value arguments for optimization hints. The compiler and the backends read
+    the keys they know and ignore the rest:
+
+    - ``unsafe_range_check`` - every index expression (``a[i]``) in the function skips its
+      bounds check (interpreter and JIT). An out-of-range index then reads or writes past the
+      container.
+    - ``unsafe_division_check`` - every integer ``/`` and ``%`` in the function skips its
+      division-by-zero and ``INT_MIN / -1`` guards (JIT). A zero divisor then traps the
+      process instead of panicking.
+
+    The JIT also reads ``alwaysinline``, ``noinline``, ``optnone``, ``hot``, ``cold`` and the
+    other LLVM attribute keys spelled in ``modules/dasLLVM/daslib/llvm_jit.das``.
 
 ``[marker]``
     A generic function marker annotation. Does not change behavior.
