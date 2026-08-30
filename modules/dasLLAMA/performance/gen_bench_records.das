@@ -1071,6 +1071,10 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} ref {ref.tool} - tool not on this box\n")
         return
     }
+    if (gpu && ref.tool == "mtmd" && empty(mtmd_bin_metal())) {
+        to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} ref mtmd gpu - no build-metal mtmd on this box (setup_asr_rig builds it on Apple)\n")
+        return
+    }
     let t0 = ref_time_ticks()
     to_log(LOG_INFO, "gen_bench_records: START {spec.display} ref {ref.tool}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr")}))

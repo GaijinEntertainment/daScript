@@ -167,7 +167,9 @@ def private build_flavor(dest, f, short_sha : string; jobs : int) : int {
             return 1
         }
     }
-    if (run_visible("cmake --build \"{build_dir}\" --config Release --target llama-bench -j {jobs}") != 0) {
+    // llama-mtmd-cli rides along: the image/audio-chat ref cells resolve it as llama-bench's
+    // sibling (gen_bench_records' sibling_mtmd rule) - a bench-only build mints das-only rows
+    if (run_visible("cmake --build \"{build_dir}\" --config Release --target llama-bench llama-mtmd-cli -j {jobs}") != 0) {
         print("error: build failed for {f}\n")
         return 1
     }

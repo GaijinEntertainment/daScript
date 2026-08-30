@@ -1330,6 +1330,13 @@ def nemo_py() : string {
 // patched with patches/mtmd-timing.patch. CPU-only is deliberate: the fast historical mtmd numbers
 // rode Metal (GPU) despite the "CPU-only" label — ggml's Conformer audio ops don't route through
 // BLAS/AMX, so a genuine CPU encode is ~16 s (and das's optimized scalar Conformer beats it).
+//! The Metal twin of mtmd_bin() — the same patched checkout built with Metal ON
+//! (setup_asr_rig's build-metal, Apple boxes); "" when absent, and the gpu ref leg skips loudly.
+def mtmd_bin_metal() : string {
+    let c = normalize("../llama.cpp-mtmd-ref/build-metal/bin/llama-mtmd-cli")
+    return stat(c).is_valid ? c : ""
+}
+
 def mtmd_bin() : string {
     let env = g_env_prof.mtmd_bin
     if (!empty(env)) {
@@ -1555,7 +1562,7 @@ def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int
     var best = -1.0lf
     encode_out = 0.0lf
     text_out = ""
-    let args <- [mtmd_bin(), "-m", model_path, "--mmproj", mmproj_path, "--audio", wav_path,
+    let args <- [gpu ? mtmd_bin_metal() : mtmd_bin(), "-m", model_path, "--mmproj", mmproj_path, "--audio", wav_path,
                  "-p", "Transcribe the audio.", "--temp", "0", "--jinja", "--reasoning", "off",
                  "-ngl", gpu ? "99" : "0", "-t", "{threads}"]
     cmd_out = argv_line(args)

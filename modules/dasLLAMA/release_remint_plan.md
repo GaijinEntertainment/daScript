@@ -82,6 +82,26 @@ NEVER-DISPATCHED report; blind-spot entries move onto real rows.
 re-mint under the new release scope; refresh `last_known_good_sidecar.json`. Sanity floor
 first; never `--quick` (followup 32); no rebuilds mid-race.
 
+## Slice C — DONE 2026-08-30: manifests minted under release scope
+
+Predictions vs outcomes (the game): mint 6-12 min / noise ok — **held** (7.3 min release,
+noise ok); >=36/40 winners identical to v14 — **held** (37/40; three near-tie elementwise
+flips); provenance stamps release 15 under the wire key — **held**. The box-manifest mint
+(m5.tune.json) agreed with the bench sidecar on all 40 winners; LKG refreshed. Ref-side
+plumbing landed on the way: setup_asr_rig builds a build-metal mtmd twin on Apple (the CPU
+build's -ngl is inert), setup_lcpp_ref builds llama-mtmd-cli beside llama-bench (the
+sibling rule), stock + metal mtmd binaries built on this box.
+
+## Slice D predictions (logged BEFORE the sweep, 2026-08-30)
+
+- Text metal cells reproduce the committed m5 rows within cv (E2B ~8.7k pp / ~162 tg;
+  every das/ref ratio holds green).
+- CPU: E2B pp ~850 das vs ~840 clean-cpu@18; MoE Q4KM pp ahead post-split (26B-A4B ~1.4x).
+- New ASR gpu cells: whisper turbo 1.0-1.4x vs whisper-cli metal; canary gb1 ~2.5-3x vs
+  nemo-MPS; gemma4a jfk ~1.0-1.25x and qwen3a jfk ~1.4-1.7x vs mtmd-metal; omni ahead
+  1.1-1.5x on the ref ladder.
+- qwen25v image cell: enc ~106 ms vs mtmd ~117 (das ahead all three axes).
+
 ## Slice D — the full M5 board re-mint (ref pin b10659)
 
 clean-cpu + stock ref builds already minted in `llama.cpp-ref-6fdd0ac`. das cpu vs
