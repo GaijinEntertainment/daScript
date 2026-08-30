@@ -30,8 +30,8 @@ correctness required it, and the alternative that was rejected.
   binary op whose operands are not both side-effect-free, because braced aggregate init is
   the C++ construct that guarantees left-to-right evaluation; a plain call argument list or
   binary operator is unsequenced, and the interpreter and JIT both evaluate left-then-right.
-  Optimized builds flatten the wrapper to nothing (full-corpus A/B: regen + compile of all
-  AOT TUs is timing-neutral); an unoptimized AOT build pays a copy of both operand values
+  Optimized builds flatten the wrapper to nothing; an unoptimized AOT build pays a copy of
+  both operand values
   plus an immediately-invoked lambda frame per wrapped op. Ops whose policy operands need a
   ref cast decline the wrapper and keep the plain unordered emission. Rejected alternative:
   hoisting operands to named temporaries in the emitter, which needs statement-position
