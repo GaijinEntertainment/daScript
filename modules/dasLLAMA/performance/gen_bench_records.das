@@ -1010,9 +1010,10 @@ def private image_ref_pass(file, path, mm, pic, bin, flavor : string; ngl : int;
 // ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
 
 // das side: one lcpp_bench --asr child per catalog model, absorbed via the same cell protocol
-// the families the metal das leg serves end to end (tower + decoder); the Conformer and
-// GGUF-tower rows would trip the --ngl anti-sandbag (their towers keep the CPU by design)
-def private is_metal_served_family(spec : AsrModelSpec) : bool => find(spec.display, "Whisper") >= 0
+// the families the metal das leg serves end to end (tower + decoder) declare it on their
+// catalog row; an unflagged row (parakeet — its GPU arm measures slower and keeps the CPU
+// by design) would trip the --ngl anti-sandbag
+def private is_metal_served_family(spec : AsrModelSpec) : bool => spec.metal_served
 
 def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store, exe : string;
                          var models : array<BenchModel>; var failed : array<string>; leg : string = "") {
@@ -1111,7 +1112,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             }
         }
         to_log(LOG_INFO, "gen_bench_records:   {ref.tool} over {length(clips)} clip(s) in one process (python model load amortized)\n")
-        let pyargs <- asr_pybench_args(ref.tool, ref.handle, clips, threads, cfg.asr_reps)
+        let pyargs <- asr_pybench_args(ref.tool, ref.handle, clips, threads, cfg.asr_reps, gpu ? "mps" : "")
         rr.cmd = argv_line(pyargs)
         var out = run_capture_argv(pyargs)
         if (find(out, "BENCH") < 0) {
@@ -1172,7 +1173,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             var enc_ms = 0.0lf
             var rtext = ""
             let ms = (ref.tool == "mtmd"
-                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms, rtext)
+                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms, rtext, gpu)
                 : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd, gpu))
             rr.cmd = cmd   // last clip's line; they differ only in -f
             if (ms > 0.0lf) {
@@ -1511,7 +1512,11 @@ def main : int {
                 settle(cfg)
                 asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed)
                 static_if (typeinfo builtin_module_exists(das_metal)) {
-                    if (rf.tool == "whisper-cli" && is_metal_served_family(spec)) {   // the metal das row's like-for-like pair
+                    // the metal das row's like-for-like pair: whisper-cli gets its own -ngl
+                    // arm, mtmd its -ngl 99 arm, nemo its torch-MPS arm; parakeet-cli and
+                    // onnx have no GPU arm worth pairing (measured slower / CPU-only export)
+                    let gpu_pair = rf.tool == "whisper-cli" || rf.tool == "mtmd" || rf.tool == "nemo"
+                    if (gpu_pair && is_metal_served_family(spec)) {
                         settle(cfg)
                         asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed, true)
                     }

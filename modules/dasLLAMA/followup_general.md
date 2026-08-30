@@ -659,11 +659,11 @@
     the arc-end re-mint on the b10659 ref pin, fresh tune manifest), and the stale m1/m4
     canary rows re-mint or retire.
 
-57. **Plane types have no `long_length`.** `length(PlaneF)` / `length(PlaneU16)` return
-    `int`, so every `uint64(length(t.blob) * 4l)` spelling caps a plane at 2^31 elements
-    before the widening - headroom-only today (whisper large-v3's twin is ~632M elements).
-    Done = `long_length` overloads in `dasllama_plane` and the buffer-sizing call sites
-    moved onto them.
+57. **RESOLVED (2026-08-30, verified no-work) - the Plane `length` overloads already return
+    `int64`.** `dasllama_plane.das` sec.108-112: `def length(pl : PlaneF) : int64 => pl.n`
+    (all five Plane types), so `uint64(length(t.blob) * 4l)` is int64 arithmetic end to end
+    and no plane caps at 2^31. The ledger entry's premise ("return `int`") was wrong when
+    written; the das-array staging twins cannot exceed 2^31 elements by the array limit.
 
 58. **Per-entry kernel-identity hashes in llvm_tune - the fine invalidation the release
     split trades away.** With tune sidecars scoped to `DASLLAMA_RELEASE` (bumped only on a

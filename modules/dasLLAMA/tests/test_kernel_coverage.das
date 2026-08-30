@@ -17,8 +17,13 @@ require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GE
 require dasllama/dasllama_gemma4uv  // the cov_tower embedder row
 require dasllama/dasllama_gemma4v   // the cov_tower ViT row
 require dasllama/dasllama_gemma3v   // the cov_tower SigLIP row (the head-restride kernel)
-require dasllama/dasllama_qwen3a    // the cov_tower conv2d carrier
+require dasllama/dasllama_qwen3a    // the cov_tower conv2d + GPU-mel carrier
+require dasllama/dasllama_gemma4a   // the cov_tower Conformer whole-chunk row
+require dasllama/dasllama_canary    // the cov_tower FastConformer row
+require dasllama/dasllama_qwen25v   // the cov_tower window-ViT row
+require dasllama/dasllama_qwen3v    // the cov_tower GPU-stem row
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
+require ?das_metal dasllama/dasllama_metal_prefill // metal_prefill_shutdown — the crowned twin-W leg re-arms PSOs
 require ?das_metal dasllama/dasllama_metal_asr_dec // set_metal_wdec — the cov_tower mixed chunk's decoder half
 require daslib/jobque_boost
 require daslib/fio  // the zoo paths
@@ -210,8 +215,9 @@ def private census_zoo(t : T?) {
     cov_tower(t)
 }
 
-// the gemma3v row of cov_tower: the fixed 896 canvas through the gemma-3-4b SigLIP tower on the
-// f32 planes — covers the head-restride kernel around the borrowed attention trio
+// the gemma3v row of cov_tower: the fixed 896 canvas through the gemma-3-4b SigLIP tower on
+// the f32 planes, BOTH attention routes — the 4096-token %64 canvas serves the tower flash
+// (flash + kv_hc), then a flash-off encode drives the slab route (head_restride + padded QK/AV)
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower_gemma3v(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -230,10 +236,127 @@ def private cov_tower_gemma3v(t : T?) {
             with_job_que() {
                 setup_dasllama_jobque()
                 gemma3v_encode(tw, st, planes, 896l, 896l, out)
+                set_metal_tower_flash(false)
+                var out2 : array<float>
+                gemma3v_encode(tw, st, planes, 896l, 896l, out2)
+                set_metal_tower_flash(true)
+                delete out2
+            }
+            delete out
+            delete st
+            // the crowned twin-W leg: a fresh load under pinned crowns bakes the halfword
+            // twin, so the f16-route kernels (cvt_half + the half GEMMs) dispatch
+            set_metal_tensor_crowns("mulmm_q8")
+            metal_prefill_shutdown()
+            set_metal_tower_f16(true)
+            set_gemma3v_q8(false)   // the exact lane is the one that bakes the twin
+            var twt <- load_gemma3v_tower(vpath)
+            reset_gemma3v_q8()
+            var stt = Gemma3vState()
+            var outt : array<float>
+            with_job_que() {
+                setup_dasllama_jobque()
+                gemma3v_encode(twt, stt, planes, 896l, 896l, outt)
+            }
+            set_metal_tensor_crowns("")
+            metal_prefill_shutdown()
+            delete outt
+            delete stt
+            delete twt
+            delete planes
+        }
+    }
+}
+
+// the qwen25v row of cov_tower: one 112x112 window (16 tokens) through the Qwen2.5-Omni
+// window ViT — the per-window attention kernel + the row-gather stem sort
+[unused_argument(t)]   // off-Apple the gated body is empty
+def private cov_tower_qwen25v(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let vpath = path_join(models_dir(), "mmproj-Qwen2.5-Omni-3B-f16.gguf")
+        if (model_available(t, vpath)) {
+            var tw <- load_qwen25v_tower(vpath)
+            var st = Qwen25vState()
+            var planes : array<float>
+            planes |> reserve_resize(112l * 112l * 3l)
+            for (i in range64(112l * 112l * 3l)) {
+                planes[i] = sin(float(i) * 0.019) * 0.5 + 0.5
+            }
+            var out : array<float>
+            with_job_que() {
+                setup_dasllama_jobque()
+                qwen25v_encode(tw, st, planes, 112l, 112l, out)
             }
             delete out
             delete planes
             delete st
+            delete tw
+        }
+    }
+}
+
+// the qwen3v row of cov_tower: a 96x96 canvas through the Omni-family merger tower — the
+// fused GPU stem (patch GEMM + merge-walk assemble) ahead of the block slab
+[unused_argument(t)]   // off-Apple the gated body is empty
+def private cov_tower_qwen3v(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let vpath = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
+        if (model_available(t, vpath)) {
+            var tw <- load_qwen3v_tower(vpath)
+            var st = Qwen3vState()
+            var planes : array<float>
+            planes |> reserve_resize(96l * 96l * 3l)
+            for (i in range64(96l * 96l * 3l)) {
+                planes[i] = sin(float(i) * 0.023) * 0.5 + 0.5
+            }
+            var out : array<float>
+            with_job_que() {
+                setup_dasllama_jobque()
+                qwen3v_encode(tw, st, planes, 96l, 96l, out)
+            }
+            delete out
+            delete planes
+            delete st
+            delete tw
+        }
+    }
+}
+
+// the gemma4a row of cov_tower: one whole chunk from raw samples — GPU mel (twiddle-T DFT
+// GEMM + mag + filter + log), both subsample convs, and the 12-block Conformer chain
+[unused_argument(t)]   // off-Apple the gated body is empty
+def private cov_tower_gemma4a(t : T?; samples : array<float>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let gpath = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        if (model_available(t, gpath) && !empty(samples)) {
+            var inscope genc <- load_gemma4a_encoder(gpath)
+            var gst = Gemma4aState()
+            var grows : array<float>
+            with_job_que() {
+                setup_dasllama_jobque()
+                gemma4a_encode_all(genc, gst, samples, grows)
+            }
+            delete grows
+            delete gst
+        }
+    }
+}
+
+// the canary row of cov_tower: CPU mel, then the 32-block Metal FastConformer chain — the
+// bidirectional rel-pos XL attention and the centered-k9 depthwise kernels
+[unused_argument(t)]   // off-Apple the gated body is empty
+def private cov_tower_canary(t : T?; samples : array<float>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let cnpath = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+        if (model_available(t, cnpath) && !empty(samples)) {
+            var inscope cenc <- load_canary_encoder(cnpath)
+            var cst = CanaryState()
+            with_job_que() {
+                setup_dasllama_jobque()
+                canary_log_mel(cenc, samples, cst)
+                canary_encode(cenc, cst)
+            }
+            delete cst
         }
     }
 }
@@ -268,7 +391,9 @@ def private cov_tower_gemma4v(t : T?) {
 // cov_tower: the tower-driver kernels (LN / f32 mul_mm / the gelu flavors / posadd / the
 // borrowed trio / the gemma4v clamp, rope2d, GEGLU-quick) AND the decoder-side cross-KV kernels
 // go non-zero — a whisper tiny MIXED chunk (f32 enc = the tower LUT flavor, q8 dec = the wdec
-// driver) plus a small gemma4uv canvas plus a 96x96 gemma4v canvas (the E2B tower)
+// driver), the qwen3a GPU-mel + conv2d window, the gemma4a whole-chunk Conformer, the canary
+// FastConformer chain, small gemma4uv/gemma4v canvases, the gemma3v flash+slab pair, the
+// qwen25v single window, and the qwen3v GPU-stem canvas
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -291,7 +416,6 @@ def private cov_tower(t : T?) {
                 delete ws
             }
         }
-        delete samples
         // the erf-GELU carrier (whisper is the LUT flavor): one qwen2audio chunk on varied mel
         let apath = path_join(models_dir(), "qwen2audio-mmproj-f32.gguf")
         if (model_available(t, apath)) {
@@ -309,29 +433,33 @@ def private cov_tower(t : T?) {
             delete aenc
             delete atw
         }
-        // the qwen3a conv2d carrier: one padded window drives the im2col2d + padded tile GEMMs
+        // the qwen3a conv2d + mel carrier: the mel built from raw samples so the GPU mel hook
+        // (twiddle-T DFT GEMM + power + mel-major log store) dispatches, then one padded
+        // window drives the im2col2d + padded tile GEMMs
         let qpath = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
-        if (model_available(t, qpath)) {
+        if (model_available(t, qpath) && !empty(samples)) {
             var inscope qtw <- load_qwen3a_tower(qpath)
-            var qmel = WhisperMel(n_mel = qtw.core.n_mel, n_len = 900l)
-            qmel.data |> resize(qtw.core.n_mel * 900l)
-            for (i in range(length(qmel.data))) {
-                qmel.data[i] = cos(float(i) * 0.0091) * 0.7
-            }
             var qenc <- make_encoder_state(qtw.core)
             var qcs = Qwen3aConvState()
             var qrows : array<float>
             with_job_que() {
                 setup_dasllama_jobque()
+                var qmel <- log_mel_qwen3a(samples, qtw.core.n_mel)
                 qwen3a_encode_all(qtw, qenc, qcs, qmel, qrows)
+                delete qmel
             }
             delete qrows
             delete qcs
             delete qenc
         }
+        cov_tower_gemma4a(t, samples)
+        cov_tower_canary(t, samples)
+        delete samples
         cov_tower_gemma4uv(t)
         cov_tower_gemma4v(t)
         cov_tower_gemma3v(t)
+        cov_tower_qwen25v(t)
+        cov_tower_qwen3v(t)
     }
 }
 

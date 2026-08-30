@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-# NeMo SALM (canary-qwen-2.5b) CPU transcribe bench — the reference-engine side of the
+# NeMo SALM (canary-qwen-2.5b) transcribe bench — the reference-engine side of the
 # Canary-Qwen ASR A/B (llama.cpp has NO canary/SALM support, and onnx-asr ships no canary
-# export, so NeMo greedy IS the only reference). Engine-level (no HTTP), greedy, CPU; the
+# export, so NeMo greedy IS the only reference). Engine-level (no HTTP), greedy; --device
+# picks the torch device (cpu default, mps = the Apple-GPU reference arm); the
 # timed region is model.generate() only (model + audio load excluded), mirroring
 # asr_bench.das's per-transcribe BENCH line. Same greedy config as canary_qwen_oracle.py.
 #
@@ -22,6 +23,7 @@ def main():
     ap.add_argument("--max-new-tokens", type=int, default=256)
     ap.add_argument("--prompt", default="Transcribe the following: ")
     ap.add_argument("--threads", type=int, default=0)
+    ap.add_argument("--device", default="cpu")
     args = ap.parse_args()
 
     import torch
@@ -35,6 +37,8 @@ def main():
     t_load = time.perf_counter()
     model = SALM.from_pretrained(args.model)
     model.eval()
+    if args.device != "cpu":
+        model = model.to(args.device)
     load_ms = (time.perf_counter() - t_load) * 1000.0
     print(f"LOAD\t{args.model}\t{load_ms:.3f}", flush=True)
 
