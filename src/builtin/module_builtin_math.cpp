@@ -786,6 +786,8 @@ namespace das {
             addExternInline<DAS_BIND_FUN(dremainder)>(*this, lib, "remainder", SideEffects::none, "dremainder")->args({"x","y"});
             addExternInline<DAS_BIND_FUN(sincosF)>(*this, lib, "sincos", SideEffects::modifyArgument, "sincosF")->args({"x","s","c"});
             addExternInline<DAS_BIND_FUN(sincosD)>(*this, lib, "sincos", SideEffects::modifyArgument, "sincosD")->args({"x","s","c"});
+            addExternInline<DAS_BIND_FUN(fexp_std)>(*this, lib, "exp_std", SideEffects::none, "fexp_std")->arg("x");
+            addExternInline<DAS_BIND_FUN(fexp_est)>(*this, lib, "exp_est", SideEffects::none, "fexp_est")->arg("x");
             // too big for intrinsic
             addExternInline<DAS_BIND_FUN(fasin)>(*this, lib, "asin", SideEffects::none, "fasin")->arg("x");
             addExternInline<DAS_BIND_FUN(facos)>(*this, lib, "acos", SideEffects::none, "facos")->arg("x");

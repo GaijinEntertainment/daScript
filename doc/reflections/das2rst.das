@@ -153,7 +153,7 @@ def document_module_math(_root : string) {
         group_by_regex("Horizontal reduce (float2, float3, float4)", mod, %regex~(hmin|hmax|hadd)$%%),
         group_by_regex("all numerics (uint*, int*, float*, double)", mod, %regex~(min|max)$%%),
         group_by_regex("float* and double", mod, %regex~(sign|abs|acos|asin|safe_acos|safe_asin|atan|atan2|cos|sin|tan|sinh|cosh|tanh|asinh|acosh|atanh|exp|log|exp2|expm1|log2|log10|log1p|pow|sqrt|cbrt|hypot|fmod|remainder|trunc|rcp|ceil|floor|abs|saturate|sincos|is_finite|is_nan|radians|degrees|step|smoothstep)$%%),
-        group_by_regex("float* only", mod, %regex~(atan_est|atan2_est|rcp_est|ceili|floori|roundi|trunci|round|rsqrt|rsqrt_est|fract|\-)$%%),
+        group_by_regex("float* only", mod, %regex~(atan_est|atan2_est|rcp_est|exp_std|exp_est|ceili|floori|roundi|trunci|round|rsqrt|rsqrt_est|fract|\-)$%%),
         group_by_regex("float3 only", mod, %regex~(cross|reflect|refract|distance|distance_sq|
 inv_distance|inv_distance_sq)$%%),
         group_by_regex("float2, float3, float4", mod, %regex~(length|length_sq|inv_length|inv_length_sq|

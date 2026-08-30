@@ -1,0 +1,1 @@
+Returns e raised to `x` through the C library's `expf` - bit-for-bit what the JIT's `exp` produces, where the interpreter and AOT compute `exp` with the vecmath polynomial. It exists to measure the two against each other.
