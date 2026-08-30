@@ -25,8 +25,8 @@ naming the re-stamp.** The commit stamps are a `das` row's `sha` and a sidecar's
 (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`) is a defect - re-mint.**
 
 **A diff that writes a sidecar to `records/` whose `provenance.dasllama_version` differs from
-`DASLLAMA_VERSION` (`../dasllama/dasllama_version.das`) is a defect - re-mint.** Read
-`DASLLAMA_VERSION` at the commit the sidecar's `provenance.engine_sha` names.
+`DASLLAMA_RELEASE` (`../dasllama/dasllama_version.das`) is a defect - re-mint.** Read
+`DASLLAMA_RELEASE` at the commit the sidecar's `provenance.engine_sha` names.
 
 **A diff that writes a row to `records/<box>.json` mints that row from a board cell.** A board
 cell is one `gen_bench_records.das` spawns, or a manual `../benchmarks/lcpp_bench.das` cell
@@ -48,7 +48,7 @@ submit) goes through `../dasllama/dasllama_exchange.das`.** The mechanical half 
 `dashv` requirer under the module) is `REVIEW.das`'s to enforce.
 
 **Weakening the exchange download gate, the submission strip, or the submit rails is a
-defect.** The download gate checks content sha, schema, and `DASLLAMA_VERSION`. The submit
+defect.** The download gate checks content sha, schema, and `DASLLAMA_RELEASE`. The submit
 rails stop a sidecar that came from the exchange, or was minted on another box, from being
 submitted. `utils/dasllama-server/test_exchange_client.das` enforces the download gate, the
 strip, and the rails.

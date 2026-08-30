@@ -86,7 +86,7 @@ def test_corpus_sidecars(t : T?) {
 def private make_das_run() : BenchRun {
     var r = BenchRun(engine = "das", backend = "cpu", flavor = "tuned", box = "testbox",
         threads = 8, date = "2026-08-10", cmd = "daslang -jit bench.das", env = "DASLLAMA_BOX=test",
-        sha = "abc123def", version = "0.6.4", dasllama_version = DASLLAMA_VERSION,
+        sha = "abc123def", version = "0.6.4", dasllama_version = DASLLAMA_RELEASE,
         tune = "k4q8_tile_gen=mr8 (manifest)", tune_sha = "cafe0123beef", exec_fmt = "q8 blob")
     r.hardware.cpu = "Test CPU 9000"
     r.tests |> insert("pp512", BenchTest(tok_s = 100.0lf, stddev = 1.0lf))

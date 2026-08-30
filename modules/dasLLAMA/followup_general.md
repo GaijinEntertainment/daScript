@@ -505,7 +505,7 @@
 - **`check_committed_records` gate in `performance/REVIEW.das`** (fused-image-span review round):
     machine-check the two records-provenance rules - every `runs[]` row's
     `hardware.remote_desktop == "off"`, every row `sha` and sidecar `provenance.engine_sha`
-    an ancestor of HEAD, and `provenance.dasllama_version` equal to `DASLLAMA_VERSION` at that
+    an ancestor of HEAD, and `provenance.dasllama_version` equal to `DASLLAMA_RELEASE` at that
     commit. When it lands, the two prose rules in `performance/REVIEW.md` collapse to the
     "weakening that gate is a defect" residue form. Also owed: a re-mint of the gemma-3-4b cpu
     image row (hand-minted in the gemma3v arc; still stamps `parsec` + a pre-branch sha, and
@@ -665,3 +665,14 @@
     before the widening - headroom-only today (whisper large-v3's twin is ~632M elements).
     Done = `long_length` overloads in `dasllama_plane` and the buffer-sizing call sites
     moved onto them.
+
+58. **Per-entry kernel-identity hashes in llvm_tune - the fine invalidation the release
+    split trades away.** With tune sidecars scoped to `DASLLAMA_RELEASE` (bumped only on a
+    declared release), a kernel changed mid-release keeps its stale sidecar winner - accepted
+    as perf-only drift (crowns pick among envelope-verified twins; races re-verify at mint).
+    The principled hardening: each sidecar kernel entry carries its kernel's identity hash
+    (the per-function AOT semantic hash the JIT dll cache already folds - in-tree precedent),
+    and a mismatching entry alone re-races or falls back while the rest of the sidecar stays
+    valid. A generic llvm_tune feature, useful beyond dasLLAMA. Done = entry-level staleness
+    by kernel hash, the release scope untouched, and the refusal-reason rail naming
+    "kernel-hash" beside the existing reasons.

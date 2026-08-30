@@ -6,7 +6,7 @@ module dasllama_exchange shared public
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_exchange_schema public   // SidecarInfo/BoxIdentity + the validators
-require dasllama/dasllama_version      // DASLLAMA_VERSION — the exchange lookup key
+require dasllama/dasllama_version      // DASLLAMA_RELEASE — the exchange lookup key
 require dasllama/dasllama_env          // g_env_exchange — the env override rail
 require llvm/daslib/llvm_tune          // box identity, manifest path, the scope-resolver seam
 require dashv/dashv_boost              // outbound HTTP + url_encode
@@ -213,7 +213,7 @@ def private exchange_write_applied(text : string; sha, doc_box, manifest_path, l
 }
 
 //! Download sidecar `sha` and adopt it as the sidecar at `manifest_path`, behind the full
-//! client-side gate: content hash, schema, `DASLLAMA_VERSION` (the load-bearing staleness
+//! client-side gate: content hash, schema, `DASLLAMA_RELEASE` (the load-bearing staleness
 //! check — the mtime rail reads any fresh download as valid), optional listing-box match.
 //! Returns "" on success, else the refusal reason. Never trusts the exchange.
 def exchange_fetch_and_apply(base_url : string; sha : string; manifest_path : string;
@@ -236,8 +236,8 @@ def exchange_fetch_and_apply(base_url : string; sha : string; manifest_path : st
     if (!parse_sidecar_info(text, info)) {
         return "malformed sidecar"
     }
-    if (info.dasllama_version != DASLLAMA_VERSION) {
-        return "made for dasllama version {info.dasllama_version}, this engine is {DASLLAMA_VERSION}"
+    if (info.dasllama_version != DASLLAMA_RELEASE) {
+        return "made for dasllama version {info.dasllama_version}, this engine is {DASLLAMA_RELEASE}"
     }
     if (!empty(expected_box) && info.box != expected_box) {
         return "box does not match the listing"
@@ -469,19 +469,19 @@ def private exchange_scope_resolver(scope_name : string; manifest_path : string;
         return false
     }
     let box = tune_box_identity()
-    print("exchange: scope '{scope_name}' is untuned - looking up a sidecar for this box (dasllama version {DASLLAMA_VERSION})\n")
-    sc_event("lookup", "version={DASLLAMA_VERSION}")
+    print("exchange: scope '{scope_name}' is untuned - looking up a sidecar for this box (dasllama version {DASLLAMA_RELEASE})\n")
+    sc_event("lookup", "version={DASLLAMA_RELEASE}")
     var hits : array<ExchangeHit>
     defer() {
         delete hits
     }
-    if (!exchange_lookup(policy.url, DASLLAMA_VERSION, box, hits)) {
+    if (!exchange_lookup(policy.url, DASLLAMA_RELEASE, box, hits)) {
         print("exchange: {policy.url} is unreachable - tuning locally\n")
         sc_event("none", "reason=unreachable")
         return false
     }
     if (empty(hits)) {
-        print("exchange: nobody has shared a sidecar for this box yet (version {DASLLAMA_VERSION}) - tuning locally\n")
+        print("exchange: nobody has shared a sidecar for this box yet (version {DASLLAMA_RELEASE}) - tuning locally\n")
         sc_event("none", "reason=no_hits")
         return false
     }
@@ -686,14 +686,14 @@ def exchange_status_json(policy : ExchangePolicy) : string {
         }
         cur_tab |> insert("shared", JV(state_submitted_for(manifest) == sha256_hex(text)))
         cur_tab |> insert("local", JV(parsed && box_match_key(info.box) == box_match_key(tune_box_identity()) && sidecar_origin(text) != "exchange"))
-        cur_tab |> insert("version_ok", JV(info.dasllama_version == DASLLAMA_VERSION))
+        cur_tab |> insert("version_ok", JV(info.dasllama_version == DASLLAMA_RELEASE))
     }
     var top <- {
         "policy" => JV((url = policy.url, accept = policy.accept, submit = policy.submit,
             configured = policy.configured)),
         "consent" => JV(exchange_consent_status()),
         "consent_notice" => JV(EXCHANGE_CONSENT_NOTICE),
-        "engine_version" => JV(int64(DASLLAMA_VERSION)),
+        "engine_version" => JV(int64(DASLLAMA_RELEASE)),
         "box" => JV(tune_box_identity()),
         "manifest" => JV(manifest),
         "current" => JV(cur_tab)
@@ -708,7 +708,7 @@ def exchange_status_json(policy : ExchangePolicy) : string {
 //! owns when that is acceptable). `{reachable, version, hits:[...]}` in the ladder's order.
 def exchange_matches_json(policy : ExchangePolicy) : string {
     var hits : array<ExchangeHit>
-    let ok = exchange_lookup(policy.url, DASLLAMA_VERSION, tune_box_identity(), hits)
+    let ok = exchange_lookup(policy.url, DASLLAMA_RELEASE, tune_box_identity(), hits)
     var arr : array<JsonValue?>
     arr |> reserve(length(hits))
     for (h in hits) {
@@ -716,7 +716,7 @@ def exchange_matches_json(policy : ExchangePolicy) : string {
             noise = h.noise, written = h.written, kernel_count = int64(h.kernel_count),
             engine_sha = h.engine_sha, dasllama_version = int64(h.dasllama_version))))
     }
-    var doc = JV((reachable = ok, version = int64(DASLLAMA_VERSION), hits = JV(arr)))
+    var doc = JV((reachable = ok, version = int64(DASLLAMA_RELEASE), hits = JV(arr)))
     let out = write_json_compact(doc)
     delete_json(doc)
     delete hits
@@ -738,10 +738,10 @@ def exchange_boot_submit_check(policy : ExchangePolicy) {
             || sidecar_origin(text) == "exchange") {
         return
     }
-    if (info.dasllama_version != DASLLAMA_VERSION) {
-        // the version keys EXCHANGE validity only (the local rail keys on mtime + box) — say why
-        // this box's sidecar quietly stops being offered after an engine version bump
-        to_log(LOG_INFO, "dasllama exchange: local sidecar is v{info.dasllama_version}, engine is v{DASLLAMA_VERSION} - not offered for submission (re-tune to publish)\n")
+    if (info.dasllama_version != DASLLAMA_RELEASE) {
+        // the release keys EXCHANGE validity only (the local rail keys on mtime + box) — say why
+        // this box's sidecar quietly stops being offered after a release bump
+        to_log(LOG_INFO, "dasllama exchange: local sidecar is v{info.dasllama_version}, engine is v{DASLLAMA_RELEASE} - not offered for submission (re-tune to publish)\n")
         return
     }
     let raw_sha = sha256_hex(text)

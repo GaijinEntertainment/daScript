@@ -52,12 +52,12 @@ not thereby pick up the other modality's checklist.
 **A routed file applies BOTH the checklist it routes to and this one; every other file under
 `modules/dasLLAMA/` applies this one.**
 
-**Any kernel work bumps `DASLLAMA_VERSION` (`dasllama/dasllama_version.das`) in the same
-change, and a bump with no kernel work is the same defect.** Kernel work is whatever changes
-the generated kernel source, or the set of compiled pipeline variants (PSOs) built from it -
-a kernel body, a variant set, or a `[tune]` / `[tune_perm]` / `[tune_companion]` grid. A
-host-side bind or dispatch-argument change (an `@off` binding, a uniform value) is not, and
-neither is `[tune_scope]` metadata (`covers=`, `tuner=`, `version_of=`).
+**`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
+a maintainer ruling that bench comparability is broken - and a bump riding any other diff is
+a defect.** Routine kernel work never bumps it: tune sidecars and board rows stay valid
+across code changes (a changed kernel keeping a stale sidecar winner is perf-only drift -
+crowns pick among envelope-verified twins), and per-change invalidation lives in the finer
+mechanisms (`IMAGE_VERSION`, the reflected layout fingerprint).
 
 **A value that cannot change between dispatches of one compiled kernel never reaches that
 kernel as a uniform, a kargs field, an `@off` bind offset, or a helper parameter.** A value

@@ -61,7 +61,7 @@ engine-free `dasllama/dasllama_exchange_schema`, and only `ladder_store.das` req
 **A write path that stores a document without validating it first is a defect: every sidecar -
 community or planted - passes `validate_sidecar_submission`, every community record store
 passes `validate_record_submission`, and `import_official_store` passes `validate_record_store`
-(shape only - official records predate the `DASLLAMA_VERSION` stamp).**
+(shape only - official records predate the `dasllama_version` stamp).**
 
 **Never write `Source` or `Verified` outside `ladder_store.das`, and never let a value from a
 public (proxied) request reach either column - the loopback operator surface sets `Verified`
