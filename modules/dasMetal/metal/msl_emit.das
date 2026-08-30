@@ -1011,7 +1011,7 @@ def private msl_uint_literal(v : uint) : string {
 // literal; `suffix` is "f" for float and "h" for half (the das float16 literal's MSL spelling)
 def private msl_float_literal(var ctx : MslCtx; at : LineInfo; v : float; suffix : string) : string {
     let s = "{v}"
-    if (s == "inf" || s == "-inf" || s == "nan") {
+    if (s == "inf" || s == "-inf" || s == "nan" || s == "-nan") {
         err(ctx, at, "non-finite float literal has no MSL form")
         return "0.0{suffix}"
     }
