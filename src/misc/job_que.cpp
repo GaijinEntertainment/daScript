@@ -131,7 +131,7 @@ namespace das {
     int JobQue::get_default_threads_cap() { return g_jobqueDefaultThreadsCap.load(); }
 
     static atomic<int> g_jobqueDefaultThreads{0};
-    void JobQue::set_default_threads(int total) { g_jobqueDefaultThreads = max(total, 0); }
+    void JobQue::set_default_threads(int total) { g_jobqueDefaultThreads = total <= 1 ? 0 : total; }
     int JobQue::get_default_threads() { return g_jobqueDefaultThreads.load(); }
 
     int JobQue::get_num_perf_cores() {
