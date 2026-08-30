@@ -51,8 +51,8 @@ deeper tile is judged at equal allocation.
 **A swiglu epilogue folded into the gate GEMM's store is REFUTED on M5.** Any per-element
 access of the cooperative C after `op.run` - the scattered-store walk, a modify-in-place
 before the optimized `cT.store`, even a cooperative-load register combine of the up panel -
-costs ~+340µs on the 512x12288 gate GEMM (940µs plain), 2.2x the standalone swiglu pass the
-fold deletes (~154µs, 8B end-to-end +11.9ms fused vs unfused). The stall is structural to the
+costs ~+340us on the 512x12288 gate GEMM (940us plain), 2.2x the standalone swiglu pass the
+fold deletes (~154us, 8B end-to-end +11.9ms fused vs unfused). The stall is structural to the
 tensor-op pipeline, not addressing: MPP tolerates elementwise epilogues only at that price,
 which is consistent with MLX shipping its epilogue slot unused. Elementwise fusion pays only
 kernel-to-kernel (rms_hx, swiglu_hx, add+rms), never inside a tensor-op store.
