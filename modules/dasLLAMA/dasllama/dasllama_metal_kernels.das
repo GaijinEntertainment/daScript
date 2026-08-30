@@ -5467,10 +5467,17 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
     @template_constant SIXBIT : bool = false // q6_K: int8 sub-scales x super-d, ql/qh compose
     @template_constant IQ4XS : bool = false // iq4xs: the k6 split scale form, the q40 pairing, codebook decode
     @template_constant K3 : bool = false // q3_K: the k6 split scale form, 2-bit lane + hmask compose, offset 4
+    @workgroup @template_gate = IQ4XS iq4lut : float[16]   // kvalues_iq4nl as floats, staged once per threadgroup
 
     [metal_kernel]
     def metal_kq_mulmm {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
         let lid = gl_LocalInvocationID.x
+        static_if (IQ4XS) {
+            if (lid < 16u) {
+                iq4lut[lid] = iq4_lut(lid)
+            }
+            barrier()
+        }
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u
         let nBase = gl_WorkGroupID.y * 64u
@@ -5566,7 +5573,8 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
                 } else {
                     static_if (IQ4XS) {
                         // iq4xs: strip byte js is the SIGNED sub-scale, super-d off the d plane (the k6 split
-                        // form); block js = 4 uints of the q40 pairing, il0 picks the nibble half; codebook per element
+                        // form); block js = 4 uints of the q40 pairing, il0 picks the nibble half; the codebook
+                        // off threadgroup memory
                         let sv = ks4[blk]
                         let scw = js < 4u ? sv.x : sv.y
                         let dsc = float(ksh[blk]) * float(((int(scw >> ((js & 3u) * 8u)) & 255) ^ 128) - 128)
@@ -5575,7 +5583,7 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
                         for [unroll_full] (k in range(4)) {
                             let u = kqu[qb + uint(k)]
                             for [unroll_full] (c in range(4)) {
-                                va[k * 4 + c] = float16(dsc * iq4_lut((u >> (8u * uint(c) + nsh)) & 15u))
+                                va[k * 4 + c] = float16(dsc * iq4lut[(u >> (8u * uint(c) + nsh)) & 15u])
                             }
                         }
                     } else {
