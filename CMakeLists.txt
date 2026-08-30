@@ -1018,6 +1018,7 @@ include/daScript/misc/platform.h
 include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
 include/daScript/misc/rangetype.h
+include/daScript/misc/float2string.h
 include/daScript/misc/string_writer.h
 include/daScript/misc/type_name.h
 include/daScript/misc/memory_model.h
@@ -1043,6 +1044,7 @@ src/misc/globals.cpp
 src/misc/hal.cpp
 src/misc/sysos.cpp
 src/misc/string_writer.cpp
+src/misc/luau_float2string.cpp
 src/misc/memory_model.cpp
 src/misc/job_que.cpp
 src/misc/handle_registry.cpp
@@ -1695,7 +1697,8 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/runtime_table_utils.h
     include/daScript/misc/safebox.h
     include/daScript/misc/smart_ptr.h
-    include/daScript/misc/string_writer.h
+    include/daScript/misc/float2string.h
+include/daScript/misc/string_writer.h
     include/daScript/misc/sysos.h
     include/daScript/misc/type_name.h
     include/daScript/misc/uric.h
@@ -1933,6 +1936,7 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_
 install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VEC_MATH.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/fmt/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME FMT.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/fast_float/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME FAST_FLOAT.LICENSE)
+install(FILES ${PROJECT_SOURCE_DIR}/src/misc/LUAU.LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LUAU.LICENSE)
 
 # utils/internal/ never installs — the folder is the audience decision
 # (machine-checked by utils/REVIEW.das).
