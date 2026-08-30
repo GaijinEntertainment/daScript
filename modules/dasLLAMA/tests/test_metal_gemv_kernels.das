@@ -69,6 +69,9 @@ def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
     let groups = vform == "k5c" ? (d + 1) / 2 : (d + 3) / 4
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
+        if (vform == "iq4xs") {
+            metal_set_threadgroup_memory_length(enc, metal_kq_gemv_iq4xs_msl_tgmem, 0)   // the codebook slab
+        }
         metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 ? uint64(nsb * 16) : 0ul, 0)   // k6/iq4xs/k3: the f16 d tail
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)

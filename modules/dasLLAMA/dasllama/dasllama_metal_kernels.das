@@ -7203,51 +7203,55 @@ class MetalKqMvB8K3 {
     }
 }
 
-// IQ4_XS: w = d*sc*LUT[q] with sc the SIGNED (ls - 32) strip byte and no min plane; each lane owns
-// one 32-block of every 4th superblock (the q40 pairing: byte l -> elems l and l + 16), the scale
-// plane is the k6 split form (d plane at s0off = doff, 16B sub-scale strips at soff).
-[metal_dispatch(name = "enc_kq_iq4xs_c", pso = "g_pso_kq_iq4xs", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+// IQ4_XS: w = d*sc*LUT[q] with sc the SIGNED (ls - 32) strip byte and no min plane. The codebook
+// sits in threadgroup memory as floats; a 16-lane half of the simdgroup owns one superblock and
+// lane (bu, il) the 8-byte half il of block bu - 8 lo + 8 hi weights from two uint loads against
+// four float4 x loads (the q40 pairing: byte l -> elems l and l + 16). The scale plane is the k6
+// split form (d plane at s0off = doff, 16B sub-scale strips at soff).
+[metal_dispatch(name = "enc_kq_iq4xs_c", pso = "g_pso_kq_iq4xs", tgmem = "metal_kq_gemv_iq4xs_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq4xs {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales + 8 pad, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq4xs quant plane, uint view (block bu of blk at 32*blk + 4*bu)
-    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
+    @workgroup lut : float[64]   // kvalues_iq4nl as floats, one slot per thread of the 64-wide group
 
     [metal_kernel(name="metal_kq_gemv_iq4xs_msl")]
     def metal_kq_gemv_iq4xs {
+        let lid = gl_LocalInvocationID.x
+        lut[lid] = iq4_lut(lid & 15u)
+        barrier()
         let lane = gl_SubgroupInvocationID
-        let ix = lane / 8u
-        let bu = lane % 8u
+        let ix = lane / 16u
+        let it = lane % 16u
+        let bu = it / 2u
+        let il = it % 2u
         let nb = ndim / 256u
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var yh : float[16]
         var sumf : float[2]
         var ib = ix
         while (ib < nb) {
-            let yb = ib * 256u + bu * 32u
-            for [unroll_full] (i in range(16)) {
-                yl[i] = x[yb + uint(i)]
-                yh[i] = x[yb + 16u + uint(i)]
-            }
+            let yb4 = ib * 64u + bu * 8u + il * 2u
+            let y0 = x[yb4]
+            let y1 = x[yb4 + 1u]
+            let y2 = x[yb4 + 4u]
+            let y3 = x[yb4 + 5u]
             for [unroll_full] (r in range(2)) {
                 let blk = (first_row + uint(r)) * nb + ib
-                let qb = blk * 32u + bu * 4u
-                var acc = 0.0
-                for [unroll_full] (u in range(4)) {
-                    let qv = kqu[qb + uint(u)]
-                    for [unroll_full] (e in range(4)) {
-                        let byv = (qv >> (8u * uint(e))) & 255u
-                        acc += yl[4 * u + e] * iq4_lut(byv & 15u) + yh[4 * u + e] * iq4_lut(byv >> 4u)
-                    }
-                }
+                let qb = blk * 32u + bu * 4u + il * 2u
+                let q0 = kqu[qb]
+                let q1 = kqu[qb + 1u]
+                var acc = y0 * float4(lut[q0 & 15u], lut[(q0 >> 8u) & 15u], lut[(q0 >> 16u) & 15u], lut[(q0 >> 24u) & 15u])
+                acc += y2 * float4(lut[(q0 >> 4u) & 15u], lut[(q0 >> 12u) & 15u], lut[(q0 >> 20u) & 15u], lut[q0 >> 28u])
+                acc += y1 * float4(lut[q1 & 15u], lut[(q1 >> 8u) & 15u], lut[(q1 >> 16u) & 15u], lut[(q1 >> 24u) & 15u])
+                acc += y3 * float4(lut[(q1 >> 4u) & 15u], lut[(q1 >> 12u) & 15u], lut[(q1 >> 20u) & 15u], lut[q1 >> 28u])
                 let sc = float((int(kscb[blk * 16u + bu]) ^ 128) - 128)
-                sumf[r] += float(kdh[blk]) * sc * acc
+                sumf[r] += float(kdh[blk]) * sc * (acc.x + acc.y + acc.z + acc.w)
             }
-            ib += 4u
+            ib += 2u
         }
         for [unroll_full] (r in range(2)) {
             let s = simd_sum(sumf[r])
