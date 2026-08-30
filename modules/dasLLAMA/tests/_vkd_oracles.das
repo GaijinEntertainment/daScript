@@ -169,6 +169,8 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
         k = new KqGemvQ40()
     } elif (fmt == int(KqFmt.k5)) {
         k = new KqGemvK5()
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        k = new KqGemvIq4xs()
     } else {
         k = new KqGemvK6()
     }
@@ -201,6 +203,42 @@ def kq_gemv_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
     }
     unsafe {
         delete k
+    }
+    return <- y
+}
+
+// IQ4_XS GEMV float oracle, INDEPENDENT of the class bit-math: w = d*sc*LUT[q] straight off the
+// plane bytes (q40 nibble tiling, the k4 row shape with signed sc), x off the Q8_K bytes — the
+// gate that a wrong codebook pack in iq4_word cannot pass while staying self-consistent
+def iq4xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                            regions : array<uint>; n, d, nreg : int) : array<float> {
+    let lut = iq4nl_lut()
+    var y : array<float>
+    y |> resize(nreg * d)
+    let nsb = n / 256
+    for (r in range(nreg)) {
+        for (row in range(d)) {
+            let w0 = int(regions[r * 2]) + row * nsb
+            let x0 = int(regions[r * 2 + 1])
+            var acc = 0.0
+            for (s in range(nsb)) {
+                let sb = w0 + s
+                let xsb = x0 + s
+                let dd = unpackHalf2x16(ws[sb * 5]).x
+                for (blk in range(8)) {
+                    let sc = byte_s8(ws, sb * 20 + 4 + blk)
+                    var bacc = 0.0
+                    for (m in range(16)) {
+                        let b = byte_u8(wq, sb * 128 + blk * 16 + m)
+                        let xlo = byte_s8(xq, xsb * 256 + blk * 32 + m)
+                        let xhi = byte_s8(xq, xsb * 256 + blk * 32 + 16 + m)
+                        bacc += float(lut[b & 15]) * float(xlo) + float(lut[b >> 4]) * float(xhi)
+                    }
+                    acc += xs[xsb] * dd * float(sc) * bacc
+                }
+            }
+            y[r * d + row] = acc
+        }
     }
     return <- y
 }

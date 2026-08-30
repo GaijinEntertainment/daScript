@@ -154,14 +154,36 @@ reference body answering, not the emitter); then `test_kquant` under `-jit` (the
 gate is bit-exact by construction); then the end-to-end run - and read QUIRK 11 before
 trusting its numbers.
 
-## 6. Vulkan - `dasllama_vulkan_classes.das`, `dasllama_vulkan_common.das`, `dasllama_vulkan_prefill.das`
+## 6. Vulkan - `dasllama_vulkan_classes.das`, `dasllama_vulkan_common.das`
 
-Untested at the time of writing. The class hierarchy: `KqGemvBase` + `def override blk_contrib`
-per format; `KqBatchBase` + `stage_w` / `stage_ws` / `blk_fma`; the cm2 tiles get a
-`[spirv_decode] def decode_<fmt>` (`followup_vulkan.md` item 24 rules the template). Plus
-`vk_kq_schema_id`, the `kq_batch_cls_*` / `gemv_cls_*` / `cm2_cls_*` ladders, `pf_f16_feed`,
-the gather's format arms, and the oracle cells in `tests/test_vulkan_kernels.das` +
-`tests/_vk_kq_fixtures.das`.
+The tier reads the CPU planes verbatim (`stack_plane_bytes` -> `arena_block_bytes` ->
+`kq_qsb(vk_kq_schema_id(fmt))` x `KQ_DEV_SSB`), so a format whose plane pair already has the
+20 B decoded scale row needs no upload work - only the id bridge and the kernels. IQ4_XS took:
+
+1. `vk_kq_schema_id` (`dasllama_vulkan_common.das`): the `int(KqFmt)` -> kernel-id arm
+   (`6 -> 44`). This is the third id space of QUIRK 5 at its Vulkan seam; without the arm the
+   arena plan panics on the first iq4xs stack.
+2. `KqGemvIq4xs : KqGemvBase` - `def override blk_contrib`: the q40 nibble tiling
+   (`wq4[wsb * 8 + blk]`), each nibble word decoded through `iq4_word` (a `fixed_array` LUT
+   local - the SPIR-V emitter lowers a `let` fixed array to a Function-storage variable and
+   indexes it) into SIGNED lanes for `sdot4` (OpSDot, signed x signed - the block-sum trick of
+   q40/k4 does not apply and is not needed), scale `d * sc` with `sc` the signed byte off word
+   1..2 of the 5-word row (`unpack8` sign-extends, the k6 spelling).
+3. `KqBatchIq4xs : KqBatchBase` - `stage_w` decodes the staged words through `iq4_word`
+   (k4's staging otherwise), `stage_ws` fills ONE plane with `d * sc`, `blk_fma` is
+   `xscl * ws * idot` (q40's without the `- 8 * bsum`).
+4. Ladders: `kq_batch_cls_ensure` / `kq_batch_cls_enc_for` / `gemv_cls_ensure` /
+   `gemv_cls_enc` gain an arm; `gemv_cls_set`'s four-way `||` became `kq_sb(fmt)`.
+5. Tests: `tests/_vkd_oracles.das` `kq_cls_ref` arm (the class-on-CPU oracle), the two family
+   cells in `tests/test_vulkan_kernels.das` go to five formats, and - because the codebook pack
+   is new bit-math that a class-vs-device compare cannot see (both sides run the same
+   `iq4_word`) - `iq4xs_gemv_float_oracle`, a float dequant straight off the plane bytes that
+   the class oracle must match.
+
+Not done, by ruling: a cm2 decode-in-load tile (`[spirv_decode] def decode_iq4xs`). The f16 feed
+admits q8/k4/k6 only (`pf_f16_feed`), q40 and k5 have no cm2 tile either, and
+`followup_vulkan.md` item 24 rules that new formats land on the one class template, not as
+three more hand-stamped bodies. IQ4_XS prefill rides the kq batch tile like q40 does.
 
 ## 7. Metal
 
@@ -291,4 +313,5 @@ family gate 10/10 perms, live stamp on this box `dot_maddubs_width256_mr8` (mr 8
 1.5e-5), `test_kquant` 121/125 under `-jit`; after the sidecar re-mint (QUIRK 11) the 1B
 decodes at 59-60 t/s against 39 t/s on the reference body, same text. The body rides mx4's
 chunk-load + lane-splat dot path; `emit_block_kqv2`'s x64 `vpbroadcastd` / `madd16` chains are
-the untried next lever. Vulkan, Metal: pending.
+the untried next lever. Vulkan (section 6): `KqGemvIq4xs` + `KqBatchIq4xs`, the kernel suite
+64/64 with the five-format family cells and the float witness, and the 1B IQ4_XS model on the resident driver reproduces the CPU text at gen 102 t/s (prefill 38 t/s on the 5-token prompt). Metal: pending.

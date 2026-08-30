@@ -2464,6 +2464,23 @@ def private k5_dep(hb : uint) : uint {
     return ((hb & 1u) << 4u) | ((hb & 2u) << 11u) | ((hb & 4u) << 18u) | ((hb & 8u) << 25u)
 }
 
+// IQ4_XS codebook decode of one word of 4 nibble lanes (bits 7..4 of each byte clear) into 4
+// SIGNED int8 lanes (ggml's kvalues_iq4nl) — the sdot4 operand form; batch and gemv share it
+def private iq4_word(n : uint) : uint {
+    let lut = fixed_array(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
+    let b0 = uint(lut[int(n & 15u)]) & 0xFFu
+    let b1 = uint(lut[int((n >> 8u) & 15u)]) & 0xFFu
+    let b2 = uint(lut[int((n >> 16u) & 15u)]) & 0xFFu
+    let b3 = uint(lut[int((n >> 24u) & 15u)]) & 0xFFu
+    return b0 | (b1 << 8u) | (b2 << 16u) | (b3 << 24u)
+}
+
+// the iq4xs scale row's sub-scale for block blk: word 1..2 of the 5-word row, SIGNED (ls - 32)
+def private iq4_sc(w : uint; blk : uint) : int {
+    let s4 = int4(unpack8(int(w)))
+    return blk % 4u == 0u ? s4.x : (blk % 4u == 1u ? s4.y : (blk % 4u == 2u ? s4.z : s4.w))
+}
+
 class KqBatchBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant planes (per-format block layout)
     @ssbo @binding = 1 wsu : array<uint>       // scale planes (5-word superblock layout)
@@ -2678,6 +2695,51 @@ class KqBatchQ40 : KqBatchK4 {
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_q40_cls_spv")]
     def override run {
+        tile_shell()
+    }
+}
+
+// IQ4_XS tile: the k4 staging with the codebook decode in stage_w (signed weight lanes, so no
+// block-sum term) and one signed-scale plane — per block acc += xs * d*sc * idot
+[vk_dispatch(name = "kq_batch_iq4xs_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchIq4xs : KqBatchBase {
+    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
+        for (ki in range(2)) {
+            let k = word + uint(ki) * 8u
+            let bu = k / 2u
+            let sh = (k % 2u) * 4u
+            var wv = uint4(0u)
+            if (wcol < pa.d) {
+                let wsb = wsb0 + wcol * nsb + s
+                let rb4 = wsb * 32u + bu * 4u
+                wv = uint4(iq4_word((wq[rb4] >> sh) & 0x0F0F0F0F), iq4_word((wq[rb4 + 1u] >> sh) & 0x0F0F0F0F),
+                    iq4_word((wq[rb4 + 2u] >> sh) & 0x0F0F0F0F), iq4_word((wq[rb4 + 3u] >> sh) & 0x0F0F0F0F))
+            }
+            ww4[grp * 17u + k] = wv
+        }
+    }
+
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var sa = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            sa = unpackHalf2x16(wsu[wsb * 5u]).x * float(iq4_sc(wsu[wsb * 5u + 1u + sblk / 4u], sblk))
+        }
+        wsw[sblk * 32u + slane] = sa
+    }
+
+    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
+        var i = int4(0)
+        dots(bu, grp, word, i)
+        let ws = float4(wsw[bu * 32u + word], wsw[bu * 32u + word + 8u],
+            wsw[bu * 32u + word + 16u], wsw[bu * 32u + word + 24u])
+        return xscl * ws * float4(i)
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_iq4xs_cls_spv")]
+    def run {
         tile_shell()
     }
 }
@@ -5576,7 +5638,7 @@ let private KQC_ONES = 0x01010101u  // sdot4 against this sums 4 signed bytes
 class KqGemvBase {
     @ssbo @binding = 0 @role = "alias" wq : array<uint>   // weight quant words (k5's qh rides this view)
     @ssbo @binding = 0 wq4 : array<uint4>      // vec4 view of the same words
-    @ssbo @binding = 1 wsu : array<uint>       // scale planes ([f16 d][f16 dmin][8 sc][8 mn] / q40 half pairs / k6 int8+d)
+    @ssbo @binding = 1 wsu : array<uint>       // scale planes ([f16 d][f16 dmin][8 sc][8 mn] / q40 half pairs / k6 int8+d / iq4xs d + 8 signed sc)
     @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region — bulk data, stays SSBO
     @ssbo @binding = 3 xq4 : array<uint4>      // activation quant words, vec4 view
     @ssbo @binding = 4 axs : array<float>      // activation block scales
@@ -5725,6 +5787,8 @@ def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {
         return ensure_kq_batch_k6_cls()
     } elif (fmt == int(KqFmt.q40)) {
         return ensure_kq_batch_q40_cls()
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        return ensure_kq_batch_iq4xs_cls()
     }
     panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     return false
@@ -5751,6 +5815,8 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
         enc_kq_batch_k6_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.q40)) {
         enc_kq_batch_q40_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        enc_kq_batch_iq4xs_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
     }
@@ -5771,6 +5837,8 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_kq_gemv_k6_cls()
     } elif (fmt == int(KqFmt.q40)) {
         return ensure_kq_gemv_q40_cls()
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        return ensure_kq_gemv_iq4xs_cls()
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return false
@@ -5779,8 +5847,8 @@ def gemv_cls_ensure(fmt : int) : bool {
 def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
     if (fmt == int(KqFmt.q8)) {
         return set_q8_gemv_cls(bufs, sizes, gbits)
-    } elif (fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40)) {
-        return set_kq_gemv_cls(bufs, sizes, gbits)   // the family shares one layout — one set serves all four
+    } elif (kq_sb(fmt)) {
+        return set_kq_gemv_cls(bufs, sizes, gbits)   // the family shares one layout — one set serves every kq format
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return VkDescriptorSet()
@@ -5797,14 +5865,16 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_kq_gemv_k6_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.q40)) {
         enc_kq_gemv_q40_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        enc_kq_gemv_iq4xs_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     }
 }
 
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).
-// The four formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
-// four pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
+// The five formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
+// five pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
 [vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4 : KqGemvBase {
     def override blk_contrib(wsb, blk, xsb : uint) : float {
@@ -5838,6 +5908,30 @@ class KqGemvQ40 : KqGemvBase {
     }
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_q40_cls_spv")]
+    def run {
+        gemv_shell()
+    }
+}
+
+// IQ4_XS: w = d*sc*LUT[q] — the q40 nibble tiling decoded through the codebook into signed
+// lanes (no block-sum term), the k4 scale-row shape with SIGNED (ls - 32) sub-scales and no min
+[vk_dispatch(name = "kq_gemv_iq4xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4xs : KqGemvBase {
+    def iq4_dot(wv, xl, xh : uint4) : int {
+        var idot = sdot4(iq4_word(wv.x & KQC_LOW), xl.x) + sdot4(iq4_word(wv.y & KQC_LOW), xl.y)
+        idot += sdot4(iq4_word(wv.z & KQC_LOW), xl.z) + sdot4(iq4_word(wv.w & KQC_LOW), xl.w)
+        idot += sdot4(iq4_word((wv.x >> 4u) & KQC_LOW), xh.x) + sdot4(iq4_word((wv.y >> 4u) & KQC_LOW), xh.y)
+        return idot + sdot4(iq4_word((wv.z >> 4u) & KQC_LOW), xh.z) + sdot4(iq4_word((wv.w >> 4u) & KQC_LOW), xh.w)
+    }
+
+    def override blk_contrib(wsb, blk, xsb : uint) : float {
+        let xb4 = xsb * 16u + blk * 2u
+        let idot = iq4_dot(wq4[wsb * 8u + blk], xq4[xb4], xq4[xb4 + 1u])
+        let dd = unpackHalf2x16(wsu[wsb * 5u]).x
+        return axs[xsb] * dd * float(iq4_sc(wsu[wsb * 5u + 1u + blk / 4u], blk) * idot)
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4xs_cls_spv")]
     def run {
         gemv_shell()
     }
