@@ -29,7 +29,7 @@ require math
 def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
     if (off < 0l) return true
     if (fmt == KqFmt.q8) return off % 256l == 0l
-    if (fmt == KqFmt.k6) return off % 512l == 0l
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs) return off % 512l == 0l   // the split scale form: the (off/256)*2 d-plane bind stays 4B-aligned
     if (fmt == KqFmt.q51) return off % 128l == 0l   // (off/32)*20 and (off/32)*4 both 16B-aligned
     return true
 }
@@ -169,6 +169,25 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
         }
         return true
     }
+    if (name == "iq4xss") {
+        // iq4xs: the k6 split form — strips = bytes 4..19 of the 20B row ([8 signed sc][8 pad]), d = bytes 0..1
+        if (!empty(t.iq4xss)) {
+            var @exact_size xc : array<uint8>
+            let nsb = long_length(t.iq4xss) / IQ4XS_SSB
+            xc |> reserve_resize(nsb * 18l)
+            unsafe {
+                var dp = addr(xc[0])
+                let sp = addr < uint8 const? >(t.iq4xss[0])
+                for (sb in range64(nsb)) {
+                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ4XS_SSB + 4l), 16)
+                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ4XS_SSB]
+                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ4XS_SSB + 1l]
+                }
+            }
+            t.iq4xss <- xc
+        }
+        return true
+    }
     if (name != "k6s") {
         return false
     }
@@ -198,7 +217,7 @@ def metal_blob_commit(var t : Model) : bool {
     if (!metal_blob_eligible(t)) {
         return false
     }
-    for (nm in ["k4s", "k5s", "k6s"]) {
+    for (nm in ["k4s", "k5s", "k6s", "iq4xss"]) {
         metal_blob_scale_plane(t, nm)
     }
     t.metal_blob = true

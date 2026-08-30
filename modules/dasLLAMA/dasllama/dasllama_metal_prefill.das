@@ -4411,6 +4411,9 @@ def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wbo
 //! quant superblocks, plus the k6 2B d tail
 def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64;
                              bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64) : bool {
+    if (fmt == KqFmt.iq4xs) {   // no dev-W dequant kernel for the codebook format yet
+        return false
+    }
     let dq = fmt == KqFmt.k6 ? g_pf_pso_dq_k6 : (fmt == KqFmt.k4 ? g_pf_pso_dq_k4 : g_pf_pso_dq_k5)
     if (dq == null) {
         return false
@@ -4573,6 +4576,10 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
     let fmt_tensor = fmt == KqFmt.k6 ? g_pf_kq_mm6_tensor : (fmt == KqFmt.k4 ? g_pf_kq_mm4_tensor : g_pf_kq_mm5_tensor)
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
+    if (fmt == KqFmt.iq4xs) {   // the base mul_mm only - no tensor / tall / dev-W twins yet
+        enc_kq_mm_iq4xs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, bk, bn, mp, rows)
+        return
+    }
     //! deep-class arm: a panel dev-W would split past 8 tiles is DRAM-resident - the tall
     //! in-kernel-dequant stamp reads the quant plane once per 128-row tile instead of
     //! materializing and re-streaming a 2B/element f16 panel
@@ -4676,7 +4683,9 @@ def private pf_enc_kq_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; w
                            bx : MetalBuffer?; xoff : uint64; by, bn, bd : MetalBuffer?) {
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
-    if (fmt == KqFmt.k6) {
+    if (fmt == KqFmt.iq4xs) {
+        enc_kq_iq4xs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
+    } elif (fmt == KqFmt.k6) {
         enc_kq_k6_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)
     } elif (fmt == KqFmt.k4) {
         enc_kq_k4_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, xoff, by, 0ul, bn, bd, rows, n)

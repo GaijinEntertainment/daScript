@@ -714,3 +714,20 @@
     once already. The tests checklist ledgers the residue; the fix is an in-process
     equivalent of `DASLLAMA_IMAGE=0` (`g_env_engine.image` is a `let` read at load), so such
     cells can run image-free instead of risking the purge.
+
+57. **Plane types have no `long_length`.** `length(PlaneF)` / `length(PlaneU16)` return
+    `int`, so every `uint64(length(t.blob) * 4l)` spelling caps a plane at 2^31 elements
+    before the widening - headroom-only today (whisper large-v3's twin is ~632M elements).
+    Done = `long_length` overloads in `dasllama_plane` and the buffer-sizing call sites
+    moved onto them.
+
+58. **The M5 pass on the IQ4_XS Metal kernels (Boris, 2026-08-30: "we'll ledger M5 pass on
+    new kernels for later").** The format's Metal set is correctness-first: `MetalKqGemvIq4xs`,
+    the `MetalKqMvIq4xsT` B2/B4 pair, `MetalKqMvB8Iq4xs` and the `IQ4XS` arm of
+    `MetalKqMulMmK45T` copy the k4/k6 lane maps with a per-element `iq4_lut` (four packed
+    words, select + shift + sign trick) and no measurement behind them; the prefill site takes
+    the base mul_mm only - no tensor (`_t`), tall (`_th128`), double-buffered (`_thdb`) or dev-W
+    dequant twins, and no MoE GEMV / mul_mm trio for the format. Done = the twins stamped on
+    the existing templates, the LUT cost measured against a `constant` table and against a
+    byte-pair decode on the M5, and `bench_metal_gemv_kernels` / `bench_metal_kq_mm_lab` rows
+    for the format beside k4's.

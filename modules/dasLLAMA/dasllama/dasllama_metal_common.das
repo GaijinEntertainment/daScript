@@ -244,6 +244,7 @@ var g_pso_kq_k4 : MetalComputePipeline?
 var g_pso_kq_k5 : MetalComputePipeline?
 var g_pso_kq_k5c : MetalComputePipeline?   // the select-form nr0=1 twin — n < 3072 / small-d sites
 var g_pso_kq_k6 : MetalComputePipeline?
+var g_pso_kq_iq4xs : MetalComputePipeline?
 var g_pso_kq_mvb2_k4 : MetalComputePipeline?   // batch B=2..8: the kq ext small-batch mv twins
 var g_pso_kq_mvb4_k4 : MetalComputePipeline?
 var g_pso_kq_mvb2_k5 : MetalComputePipeline?
@@ -253,9 +254,13 @@ var g_pso_kq_mvb4_k6 : MetalComputePipeline?
 var g_pso_kq_mvb8_k4 : MetalComputePipeline?   // B=5..8 single-pass twins (in-graph A/B vs 2 x B4 groups)
 var g_pso_kq_mvb8_k5 : MetalComputePipeline?
 var g_pso_kq_mvb8_k6 : MetalComputePipeline?
+var g_pso_kq_mvb2_iq4xs : MetalComputePipeline?
+var g_pso_kq_mvb4_iq4xs : MetalComputePipeline?
+var g_pso_kq_mvb8_iq4xs : MetalComputePipeline?
 var g_pso_kq_mm_b4 : MetalComputePipeline?   // batch B>=9: the prefill-owned kq mul_mm twins
 var g_pso_kq_mm_b5 : MetalComputePipeline?
-var g_pso_kq_mm_b6 : MetalComputePipeline?     // fused W1|W3+swiglu (s16 path)
+var g_pso_kq_mm_b6 : MetalComputePipeline?
+var g_pso_kq_mm_b44 : MetalComputePipeline?     // fused W1|W3+swiglu (s16 path)
 // the batched-step set (P4): fixed-B GEMVs + the M-pad-32 GEMM twin (f32 X) + row-table kernels
 var g_pso_gemv_b2 : MetalComputePipeline?
 var g_pso_gemv_b4 : MetalComputePipeline?
@@ -834,6 +839,10 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
             return (buf = plane_buffer(dev, addr < void? >(t.k5q[0]), uint64(long_length(t.k5q)), t.image_map != null),
                     qoff = uint64(sb0 * 160l))
         }
+        if (fmt == KqFmt.iq4xs) {
+            return (buf = plane_buffer(dev, addr < void? >(t.iq4xsq[0]), uint64(long_length(t.iq4xsq)), t.image_map != null),
+                    qoff = uint64(sb0 * 128l))
+        }
         return (buf = plane_buffer(dev, addr < void? >(t.k6q[0]), uint64(long_length(t.k6q)), t.image_map != null),
                 qoff = uint64(sb0 * 192l))
     }
@@ -854,6 +863,11 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
         if (fmt == KqFmt.k4) {
             return (buf = plane_buffer(dev, addr < void? >(t.k4s[0]), uint64(long_length(t.k4s)), t.image_map != null),
                     soff = uint64(sb0 * 16l), doff = 0ul)
+        }
+        if (fmt == KqFmt.iq4xs) {   // the k6 split form over the 18B/sb device plane
+            let plane_sb = long_length(t.iq4xss) / 18l
+            return (buf = plane_buffer(dev, addr < void? >(t.iq4xss[0]), uint64(long_length(t.iq4xss)), t.image_map != null),
+                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
         }
         return (buf = plane_buffer(dev, addr < void? >(t.k5s[0]), uint64(long_length(t.k5s)), t.image_map != null),
                 soff = uint64(sb0 * 16l), doff = 0ul)

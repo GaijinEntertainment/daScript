@@ -644,10 +644,17 @@ def iq4xs_sc(ks : array<uint8> | #; kso, blk : int64) : int => rd_i8(ks, kso + 4
 //! (ggml's own float order: dl = d * (ls - 32), then dl * kvalue), q = nibble (low = k, high =
 //! k+16 — the disk pairing, kept verbatim by the transcode).
 def dequant_iq4xs_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
-    let d = f16_to_f32(rd_u16(ks, kso))
+    dequant_iq4xs_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff)
+}
+
+//! The split-layout twin: `dso` names the f16 d halfword's byte offset independently of the
+//! 8-byte signed sub-scale strip at kso — metal-blob models keep iq4xss in the k6 split form
+//! ([nsb x 16B strips][nsb x f16 d]); the CPU row is the same math at kso + 4 / kso.
+def dequant_iq4xs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, dso))
     let lut = iq4nl_lut()
     for (blk in range64(8l)) {
-        let dl = d * float(iq4xs_sc(ks, kso, blk))
+        let dl = d * float(rd_i8(ks, kso + blk))
         for (l in range64(16l)) {
             let b = int(kq[kqo + blk * 16l + l])
             dst[doff + blk * 32l + l] = dl * float(lut[b & 15])

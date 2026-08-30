@@ -185,31 +185,51 @@ admits q8/k4/k6 only (`pf_f16_feed`), q40 and k5 have no cm2 tile either, and
 `followup_vulkan.md` item 24 rules that new formats land on the one class template, not as
 three more hand-stamped bodies. IQ4_XS prefill rides the kq batch tile like q40 does.
 
-## 7. Metal - a Mac session's step, not this one's
+## 7. Metal - `dasllama_metal_kernels.das`, `_common`, `_prefill`, `_shapes`, `dasllama_layout.das`
 
-Not done for IQ4_XS (no Mac in the session; nothing here compiles MSL or runs it). What IS
-true today, and what the format needs on that tier:
+Done for IQ4_XS over ssh on the M1 (the tier compiles MSL and runs only there). The tier is
+NOT a plane-verbatim consumer like Vulkan: a Metal-served model is the `metal_blob` flavor,
+whose kq scale planes are rebaked into device forms (k4/k5: the 16 B disk block, k6: the split
+form) and whose CPU never reads a plane again. So a format on Metal starts with a device-form
+decision, and every ladder below keys on `KqFmt` with an `else` that means "k5" or "k6" -
+without its own arm a new format runs a wrong-layout kernel silently, which is why the tier's
+gate (`kq_fmt_gpu_supported`) is closed by default. IQ4_XS took:
 
-- **The tier fails closed.** `kq_fmt_gpu_supported` (`dasllama_metal_shapes.das`) admits
-  q8/k4/k5/k6 only and every resident-driver plan runs through it, so an IQ4_XS model DECLINES
-  `kquant_native` on Metal and serves from the CPU - never a wrong-layout kernel branch (the
-  dispatchers `enc_kq_gemv` / `enc_kq_mvb` treat "not k4/k6" as k5, which is why the gate
-  exists). Keep it closed until the kernels land; do not add the enum member to the gate first.
-- **No q40 precedent.** Metal serves no per-32-scale format; IQ4_XS would be the first
-  non-K-quant there, so "the q40 class plus a LUT" - the CPU, JIT and Vulkan recipe - has no
-  twin to copy. The nearest shapes are k4's: `MetalKqGemvK4`, the `MetalKqMvK4T` small-batch
-  twins, `MetalKqMulMmK45T` (prefill mul_mm), each a class the k5/k6 versions subclass.
-- **The scale plane is a DIFFERENT layout.** Metal binds `kq_scales_of` - "16B compact blocks
-  at soff" pre-baked by the blob transform (`t.metal_blob`), not the 20 B decoded device row
-  Vulkan reads verbatim. An IQ4_XS arm means a transform arm (the row's f16 d + 8 signed sc into
-  that 16 B form) plus `kq_quants_of` (128 B nibbles, the k4 arm's stride) - both ladders in
-  `dasllama_metal_common.das`.
-- **Ladders:** `kq_quants_of` / `kq_scales_of`, `enc_kq_gemv`, `enc_kq_mvb` (B2/B4/B8 twins),
-  the mul_mm PSO ladders in `dasllama_metal_prefill.das` (`g_pf_pso_moe_mm_<fmt>_th` and the
-  dense twins, the `kfmt` picks near 4350/4425), `moe_site_ok` + the `sb1/sb2/sb3` superblock
-  predicates in `dasllama_metal_shapes.das`, and finally the gate.
-- **Gates:** `tests/test_metal_gemv_kernels.das` (kq GEMV cells), the prefill/decode parity
-  suites, the support-matrix test, then the 1B IQ4_XS end to end on the M-box.
+1. **The device scale form: the k6 split form.** `metal_blob_scale_plane("iq4xss")`
+   (`dasllama_layout.das`) turns the 20 B CPU row into `[nsb x 16 B strips][nsb x f16 d]` -
+   the strip is the row's bytes 4..19 (`[8 signed sc][8 pad]`), d is bytes 0..1; 18 B/sb, the
+   k6 numbers exactly. That choice makes `kq_scales_of` the k6 arm over `t.iq4xss`
+   (`soff = sb0*16`, `doff = plane_sb*16 + sb0*2`), `metal_blob_off_ok` the k6 rule
+   (`off % 512`), and every kernel bind the k6 pair (d plane at `s0off = doff`, strips at
+   `soff`). `metal_blob_commit` lists the plane by name. Quants: `kq_quants_of` binds
+   `t.iq4xsq` verbatim (128 B/sb).
+2. **The codebook in MSL, `iq4_lut`:** four packed words selected by nibble range, byte
+   extracted, widened with the k6 sign trick - no table memory, no fixed-array literal (the MSL
+   emitter takes fixed arrays as `var` locals with per-index stores, not as initializers).
+3. **Kernels** (`dasllama_metal_kernels.das`), each a copy of the k4/k6 shape with the per-32
+   pairing (lane = one 32-block of every 4th superblock: 4 uints, 16 lo + 16 hi weights) and
+   `d * sc * LUT[q]` with no min term: `MetalKqGemvIq4xs` (decode GEMV), `MetalKqMvIq4xsT`
+   B2/B4 + `MetalKqMvB8Iq4xs` (small batch), and an `IQ4XS` arm in `MetalKqMulMmK45T`
+   (prefill mul_mm; `MetalKqMulMmIq4xs` stamps it). PSO globals + `compile_pso` +
+   `release_pso` lines in the three ladders.
+4. **Ladders:** `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`
+   (the base mul_mm only - no tensor / tall / dev-W twins: those are the M5 kernel pass),
+   `pf_devw_panel_kq` (returns false - its `dq` pick would otherwise be k5's), `pf_enc_kq_gemv`
+   (prefill), `moe_site_ok` + the `sb1/2/3` predicates (shapes), and last the gate.
+5. **Tests:** `dequant_iq4xs_plane_superblock_at` (`dasllama_convert.das`, the split-layout
+   twin the CPU row now calls), fixtures at fmt 44 in `tests/_metal_kernel_common.das`, the
+   ladders + calls in `test_metal_gemv_kernels.das` (GEMV, B2/B4/B8) and
+   `test_metal_gemm_kernels.das` (mul_mm, base form). Gate proof: a one-byte codebook mutation
+   turns the iq4xs cells red.
+
+Result: `test_metal_gemv_kernels` 2/2 and `test_metal_gemm_kernels` 2/2 on the M1 Max; the
+tuner's first mint on that box crowned `iq4xsq8_tile_gen: mr8` (the NEON `tbl1` path of the
+JIT emitter, `verdict=beats`), and `run.das` on the CPU/NEON tier reproduces the text at gen 131 t/s;
+on the Metal tier (`set_metal_mode(MetalMode.required)` BEFORE `load_model_`, then
+`convert_model_to_metal_blob` - `run.das` itself declares CPU intent, and `DASLLAMA_GPU=1` on a
+Mac build with dasVulkan arms Vulkan-on-MoltenVK, 96 t/s, not Metal) the 1B IQ4_XS decodes the
+same text at gen 153 t/s with `metal decode/prefill: resident path live on Apple M1 Max`. Not done: the tensor / tall / dev-W mul_mm twins and
+the MoE GEMV/mul_mm trio for the format - ledgered for the M5 kernel pass.
 
 ## 8. End to end
 
@@ -305,6 +325,24 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    on the app (a whole-scope re-tune) or delete the sidecar. Unquirked: fold the family's
    generator hash (the JIT DLL cache key already carries it) into the sidecar identity, so a
    generator change reads as stale.
+12. **A fresh worktree has no JIT until `lib/LLVM.dll` is staged - on every platform.** The
+   M1 worktree's first `-jit` run died on `can't load library LLVM.dll`; `utils/mcp/setup.das`
+   stages the codegen backend on Windows only. Copy `<main>/lib/LLVM.dll` (+ `.version`) into
+   the worktree's `lib/` by hand on macOS/Linux. Unquirked: the posix arm of `stage_jit_backend`.
+13. **The Metal test ladders are nested ternaries with an `else` = k6.** `kq_gemv_gate`,
+   `kq_mvb_gate`, `kq_mulmm_gate` and the fixtures pick MSL sources / entries / fastmath /
+   tgmem names per format in four parallel ternary chains each; a format missing from any one
+   of them silently tests k6's kernel under the new format's tag. Same shape as the tier's
+   own dispatch ladders (QUIRK 1's cousin on Metal). Unquirked: one per-format record
+   (`src, entry, fastmath, tgmem`) per kernel family, indexed by format.
+14. **The mul_mm template has no `static_if ... elif`.** Adding a format arm to
+   `MetalKqMulMmK45T` beside `SIXBIT` meant re-nesting the k4/k5 arm one level deeper
+   (`static_if (IQ4XS) {...} else { <the old arm> }`); the diff is mostly indentation.
+   Unquirked: an `elif` on `static_if` in the MSL emitter.
+15. **First run on a fresh box tunes before it serves.** `run.das` on the M1 spent its first
+   minutes minting `run.tune.json` (every family, the confirm pass included) before loading
+   the model - the auto policy, working as designed, but a Mac session's first end-to-end
+   "hang" is that mint. Watch `@tune begin/end` lines in the log.
 
 ## Per-format notes
 
