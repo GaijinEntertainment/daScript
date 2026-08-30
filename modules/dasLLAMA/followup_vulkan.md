@@ -447,7 +447,11 @@ module) is independent and can land any time - it is pure structure.
     `def override decode_*` per format - the shape `harness/vk_gemm_probe.das`'s `K6PxBase`
     already proves. Gate: the nine oracle cells in `tests/test_vulkan_kernels.das` stay 0-off,
     the probe's l/m rows stay within noise. The k5/q40 stamps (item 11's NEXT) land on the
-    template, not as more copies.
+    template, not as more copies. Measured 2026-08-30 on the 1B (`lcpp_bench`, 5060 Ti): the
+    formats with no cm2 tile prefill at 5161 (iq4xs) and 5174 (k3) t/s against k4's 13144 on
+    the same box (llama.cpp 17060 / 17509 / 19719) while their decode sits at parity, so the
+    template is also the lever that puts every new format on the tile path; k4's own 0.67x is
+    the 1B-shape tier gap, a separate item.
 
 25. **Try `VK_NV_cooperative_vector` for decode GEMV on real hardware (Boris, 2026-08-28).**
     cm2 has no matrix-vector op - its seven feature bits are all tile-shaped, minimum tile 16 -

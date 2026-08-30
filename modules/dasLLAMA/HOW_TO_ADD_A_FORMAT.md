@@ -370,6 +370,19 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    the device form (q40, iq4xs, k3) needs its verbatim arm in BOTH. iq4xs had only the grouped
    one - latent, because every row of the dense 1B is grouped - and the k3 walk found it.
    Unquirked: one per-format "device form" predicate both branches key on.
+20. **A `fixed_array` local in a SPIR-V kernel is Function-storage memory.** `iq4_word`'s
+   first form held `kvalues_iq4nl` as a 16-entry `fixed_array<int>` local and indexed it per
+   nibble; the emitter lowers a dynamically indexed local array to Function storage - private
+   memory the driver spills - and the IQ4_XS Vulkan GEMV decoded at 105.7 t/s against k3's
+   372.8 on fewer bytes per weight. The form that runs at speed packs the codebook into four
+   `uint4` words (four int8 codes per word) and selects with a dynamic vector index plus a byte
+   shift, `(tbl[q >> 2] >> ((q & 3) * 8)) & 0xFF`: 338.4 t/s, 0.99x llama.cpp, kernel suite
+   64/64. SPIR-V-only: the Metal twin `iq4_lut` rewritten the same way measured flat (tg128
+   144.3 +- 6.2 against 138.7 +- 5.4, pp512 2802 against 2953), so MSL's constant-address
+   array stays - the Metal IQ4_XS decode gap (0.56x llama.cpp) is the lane map, not the
+   lookup, and belongs to followup_general #58. Unquirked: the SPIR-V emitter lowers a `let`
+   fixed_array of literals to a constant-storage array, or a lint on a dynamically indexed
+   fixed_array local inside a kernel class.
 
 ## Per-format notes
 
@@ -428,6 +441,19 @@ syntax error at the `let`. Ladders as iq4xs's; fixtures at fmt 3 reuse the k6 sp
 (`k3_metal_probe.das`, the iq4xs probe with the model swapped) decodes a coherent story at gen 223
 t/s, taking the other side of the same token-15 near tie the CPU stamp took.
 
+Against llama.cpp b10660 (`lcpp_bench`, das = the debug-jit instrument; zen2 = 16 threads, M1 =
+8; Q3_K_L, so a third of the weight bytes are k5/k6):
+
+| tier | pp512 das / llama.cpp | tg128 das / llama.cpp |
+|---|---|---|
+| zen2 CPU | 543.6 / 310.8 (1.75x) | 66.4 / 65.1 (1.02x) |
+| 5060 Ti Vulkan | 5174 / 17509 (0.30x) | 372.8 / 349.1 (1.07x) |
+| M1 CPU | 524.6 / 223.5 (2.35x) | 127.3 / 110.6 (1.15x) |
+| M1 Metal | 3316 / 3219 (1.03x) | 200.9 / 193.0 (1.04x) |
+
+Decode is at or above llama.cpp on every tier; the Vulkan prefill gap is the missing cm2 tile
+(followup_vulkan item 24).
+
 ### IQ4_XS (the pilot, 2026-08-30)
 
 Shape: 256-superblock, codebook nibble (`kvalues_iq4nl`, signed, no offset), scale = f16 d x
@@ -453,4 +479,21 @@ family gate 10/10 perms, live stamp on this box `dot_maddubs_width256_mr8` (mr 8
 decodes at 59-60 t/s against 39 t/s on the reference body, same text. The body rides mx4's
 chunk-load + lane-splat dot path; `emit_block_kqv2`'s x64 `vpbroadcastd` / `madd16` chains are
 the untried next lever. Vulkan (section 6): `KqGemvIq4xs` + `KqBatchIq4xs`, the kernel suite
-64/64 with the five-format family cells and the float witness, and the 1B IQ4_XS model on the resident driver reproduces the CPU text at gen 102 t/s (prefill 38 t/s on the 5-token prompt). Metal: pending.
+64/64 with the five-format family cells and the float witness, and the 1B IQ4_XS model on the
+resident driver reproduces the CPU text at gen 102 t/s (prefill 38 t/s on the 5-token prompt);
+the codebook lookup then cost 3.5x on the GEMV until QUIRK 20's packed-word form. Metal
+(section 7): `MetalKqGemvIq4xs`, the `MetalKqMvIq4xsT` B2/B4 + `MetalKqMvB8Iq4xs` twins, the
+`IQ4XS` mul_mm arm; gates 2/2 + 2/2 on the M1 Max.
+
+Against llama.cpp b10660 (`lcpp_bench`, das = the debug-jit instrument, ~8% under the tuned
+exe; zen2 = 16 threads, M1 = 8):
+
+| tier | pp512 das / llama.cpp | tg128 das / llama.cpp |
+|---|---|---|
+| zen2 CPU | 475.7 / 256.9 (1.85x) | 65.0 / 59.5 (1.09x) |
+| 5060 Ti Vulkan | 5161 / 17060 (0.30x) | 338.4 / 340.7 (0.99x) |
+| M1 CPU | 796.0 / 263.0 (3.03x) | 132.3 / 128.2 (1.03x) |
+| M1 Metal | 2953 / 3565 (0.83x) | 138.7 / 247.3 (0.56x) |
+
+The Vulkan prefill gap is the missing cm2 decode tile (followup_vulkan item 24: k4 on the same
+box does 13144, 0.67x); the Metal decode gap is the per-lane block map (followup_general #58).

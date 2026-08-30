@@ -2465,13 +2465,19 @@ def private k5_dep(hb : uint) : uint {
 }
 
 // IQ4_XS codebook decode of one word of 4 nibble lanes (bits 7..4 of each byte clear) into 4
-// SIGNED int8 lanes (ggml's kvalues_iq4nl) — the sdot4 operand form; batch and gemv share it
+// SIGNED int8 lanes (ggml's kvalues_iq4nl) — the sdot4 operand form; batch and gemv share it.
+// The codebook is four packed words picked by a dynamic vector index and byte-extracted: pure
+// ALU (a fixed_array local was a Function-storage table, 3.4x slower on the decode GEMV)
 def private iq4_word(n : uint) : uint {
-    let lut = fixed_array(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
-    let b0 = uint(lut[int(n & 15u)]) & 0xFFu
-    let b1 = uint(lut[int((n >> 8u) & 15u)]) & 0xFFu
-    let b2 = uint(lut[int((n >> 16u) & 15u)]) & 0xFFu
-    let b3 = uint(lut[int((n >> 24u) & 15u)]) & 0xFFu
+    let tbl = uint4(3215825025u, 4142587343u, 639175937u, 1901675829u)   // kvalues_iq4nl, 4 bytes per word
+    let q0 = n & 15u
+    let q1 = (n >> 8u) & 15u
+    let q2 = (n >> 16u) & 15u
+    let q3 = (n >> 24u) & 15u
+    let b0 = (tbl[int(q0 >> 2u)] >> ((q0 & 3u) * 8u)) & 0xFFu
+    let b1 = (tbl[int(q1 >> 2u)] >> ((q1 & 3u) * 8u)) & 0xFFu
+    let b2 = (tbl[int(q2 >> 2u)] >> ((q2 & 3u) * 8u)) & 0xFFu
+    let b3 = (tbl[int(q3 >> 2u)] >> ((q3 & 3u) * 8u)) & 0xFFu
     return b0 | (b1 << 8u) | (b2 << 16u) | (b3 << 24u)
 }
 
