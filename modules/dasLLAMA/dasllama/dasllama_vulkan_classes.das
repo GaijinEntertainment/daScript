@@ -3722,37 +3722,46 @@ class KqQ40CmF16 : MoeCmBase {
     }
 }
 
-// ===== the cm2 (NV_cooperative_matrix2) prefill tiles: native fmt-0 planes, decode-in-load =====
+// ===== the cm2 (NV_cooperative_matrix2) prefill tiles: native planes, decode-in-load =====
 
 struct VkQ8Blk {
-    qs : int16[16]   // one fmt-0 q8 block: 32 packed int8 quants as 16-bit lanes; the scale lives in wsh
+    qs : int16[16]   // one fmt-0 q8 block: 32 packed int8 quants as 16-bit lanes; the scale lives in ws
 }
 
-// the cm2 quant "l" geometry on the NATIVE fmt-0 two-plane layout: 256 threads, one
-// 128-weight x 256-token tile per wg, BK=64 (2 blocks) per step, 8x-unrolled k loop. The decode
-// METHOD reads the separate scale plane by block index — the reason the class-method decode form
-// exists. Binding 4 unused (sparse)
-[vk_dispatch(name = "q8_batch_cm2l_cls", grid = "wgs", params = "wgs : int64")]
-class Q8Cm2LBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (32 bytes each, read as 16-bit lanes)
-    @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
-    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
+struct VkK4Blk {
+    qs : int16[64]   // one Q4_K superblock's 128 nibble bytes as 16-bit lanes; its scale row (d|dmin + 8 sc + 8 mn bytes) lives in ws
+}
+
+struct VkK6Blk {
+    ql : int16[64]   // one Q6_K superblock's 128 low-nibble bytes as 16-bit lanes
+    qh : int16[32]   // ... and its 64 high-2-bit bytes; scales (16 int8 + f16 d) live in ws
+}
+
+// The cm2 tile: one class template over the two stamp axes. The token column BN - l 256, m 128,
+// s 32 (the expert-bucket geometry: STILE's fast path loads a partial column UNCLAMPED and clamps
+// only the store, so every plane it reads carries 32 rows of slack) - and the weight format: BLK
+// the 16-bit-lane block struct, ST the scale plane's element, BLKW the block's element width, and
+// the format template's decode. 256 threads, one 128-weight x BN-token tile per wg, BK=64 per
+// step, an 8x-unrolled k loop; the decode METHOD reads the separate scale plane by block index -
+// the reason the class-method decode form exists. Binding 4 unused (sparse)
+[ |> template_struct_instance]
+class template KqCm2BatchT : MoeCmBase {
+    @ssbo @binding = 0 @role = "weight" wq : array<BLK>   // the quant plane, read as 16-bit lanes
+    @ssbo @binding = 1 @role = "weight" ws : array<ST>    // the scale plane (q8: f16 per block; kq: 5 words per superblock)
+    @ssbo @binding = 3 xf16 : array<float16>              // f16 activation plane
     @ssbo @binding = 5 y : array<float>
-    @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
+    @workgroup wg_blk0 : uint                             // the region's block base, staged for the decode
+    @template_constant BN : uint = 256u                   // the token column
+    @template_constant STILE : bool = false               // the 32-row column's partial-column fast path
+    @template_constant BLKW : uint = 256u                 // elements per weight block
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
-    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
-        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
-        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2l_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
         let cnt = reg.z
-        let ttiles = (cnt + 255u) / 256u
+        let ttiles = (cnt + BN - 1u) / BN
         // split-k: wgs stack nsplit planes of (wtiles x ttiles); plane ks covers k [k0, k1) and
         // stores f32 partials at ybase (the reduce sums the planes into y). SINGLE-REGION (dense)
         // dispatches only — the plane size rides row0 + cnt, so multi-region planes would collide
@@ -3768,7 +3777,7 @@ class Q8Cm2LBatch : MoeCmBase {
             ybase = ks * (row0 + cnt) * pa.d
         }
         let k0 = ks * pa.ksplit
-        let xt = tix % ttiles             // token 256-tile (fastest)
+        let xt = tix % ttiles             // token BN-tile (fastest)
         let wt = tix / ttiles             // weight 128-tile
         if (gl_LocalInvocationID.x == 0u) {
             wg_blk0 = wblk0
@@ -3777,25 +3786,26 @@ class Q8Cm2LBatch : MoeCmBase {
         tensorViewCreate(tv)
         barrier()   // wg_blk0 visible before the first decode load
         var a : coopmatWgA_f16_128x64
-        var b : coopmatWgB_f16_64x256
-        var acc : coopmatWgAcc_f16_128x256
-        let t0 = row0 + xt * 256u
+        var b : BT
+        var acc : ACC
+        let t0 = row0 + xt * BN
         let m0 = wt * 128u
         // FAST PATH — every access of this tile provably in bounds and K a whole number of
         // BK steps: unclamped (clamp-Undefined) layouts, and the B/out strides masked to a
         // multiple of 8 f16 (identity here — pa.n and pa.d are 32-multiples — but the mask makes
-        // the alignment PROVABLE to the driver's address analysis via stride &= ~7)
-        if (m0 + 128u <= pa.d && xt * 256u + 256u <= cnt && (pa.n & 63u) == 0u) {
+        // the alignment PROVABLE to the driver's address analysis via stride &= ~7). The s column
+        // gates only the weight tile: its partial token column loads unclamped, its store clamps
+        if (m0 + 128u <= pa.d && (STILE || xt * BN + BN <= cnt) && (pa.n & 63u) == 0u) {
             var fla : tensorLayout2D
             tensorLayoutCreate(fla)
-            tensorLayoutSetBlockSize(fla, 1u, 32u)
+            tensorLayoutSetBlockSize(fla, 1u, BLKW)
             tensorLayoutSetDimension(fla, pa.d, pa.n)
-            tensorLayoutSetStride(fla, pa.n >> 5u, 1u)
+            tensorLayoutSetStride(fla, pa.n / BLKW, 1u)
             var flb : tensorLayout2D
             tensorLayoutCreate(flb)
-            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+            tensorLayoutSetDimension(flb, row0 + (STILE ? ((cnt + 31u) & ~31u) : cnt), pa.n)
             tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            var flo : tensorLayout2D
+            var flo : FLO
             tensorLayoutCreate(flo)
             tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
             tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
@@ -3805,980 +3815,144 @@ class Q8Cm2LBatch : MoeCmBase {
                 var k = 0u
                 for (_i in range(int(pa.n / 512u))) {
                     for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                         acc = coopmatMulAdd(a, b, acc)
                         k += 64u
                     }
                 }
                 while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                     acc = coopmatMulAdd(a, b, acc)
                     k += 64u
                 }
                 coopmatClamp(acc, -65504.0, 65504.0)
-                var accw : coopmatWgAcc_f32_128x256
+                var accw : ACCW
                 coopmatConvert(accw, acc)
-                coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, BN, m0, 128u, tv)
                 return
             }
             var k = k0
             for (_i in range(int((k1 - k0) / 512u))) {
                 for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                     acc = coopmatMulAdd(a, b, acc)
                     k += 64u
                 }
             }
             while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
                 acc = coopmatMulAdd(a, b, acc)
                 k += 64u
             }
             coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x256
+            var accw : ACCW
             coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, ybase, flo, t0, 256u, m0, 128u, tv)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, BN, m0, 128u, tv)
             return
         }
-        // EDGE PATH — clamp-Constant layouts everywhere. A: the region's [d x n] q8 plane, block
-        // addressing; layout coords are region-local, so the decode method's scale index is
-        // wg_blk0 + bc.x * nbb + bc.y off the staged base
+        // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
         var tla : tensorLayout2DPad
         tensorLayoutCreate(tla)
-        tensorLayoutSetBlockSize(tla, 1u, 32u)
+        tensorLayoutSetBlockSize(tla, 1u, BLKW)
         tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n / 32u, 1u)
-        // B: the f16 activation rows, transpose-viewed; the dimension cuts at the region's end
+        tensorLayoutSetStride(tla, pa.n / BLKW, 1u)
         var tlb : tensorLayout2DPad
         tensorLayoutCreate(tlb)
         tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
         tensorLayoutSetStride(tlb, pa.n, 1u)
-        // out: token-major y through the transpose view. MUST be the clamp-Constant layout type:
-        // only clamped layouts DISCARD out-of-bounds stores from a partial tile
         var tlo : tensorLayout2DPad
         tensorLayoutCreate(tlo)
         tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
         tensorLayoutSetStride(tlo, pa.d, 1u)
-        // the 8x-unrolled main loop (their UNROLL_K = BK*8 = 512), then the sub-512 tail.
-        // The hint is honored: a manual 4x expansion A/Bed dead even (2719 +- 20 vs 2749 +- 12
-        // on the 3B row), so the loop form stays. Same literal-bound specialization as the
-        // fast path — the no-split arm never reads k0/k1/ybase
         if (pa.ksplit == 0u) {
             var k = 0u
             for (_i in range(int(pa.n / 512u))) {
                 for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
                     acc = coopmatMulAdd(a, b, acc)
                     k += 64u
                 }
             }
             while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
                 acc = coopmatMulAdd(a, b, acc)
                 k += 64u
             }
             coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x256
+            var accw : ACCW
             coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, 0u, tlo, t0, 256u, m0, 128u, tv)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, BN, m0, 128u, tv)
             return
         }
         var k = k0
         for (_i in range(int((k1 - k0) / 512u))) {
             for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
                 acc = coopmatMulAdd(a, b, acc)
                 k += 64u
             }
         }
         while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
             acc = coopmatMulAdd(a, b, acc)
             k += 64u
         }
         coopmatClamp(acc, -65504.0, 65504.0)
-        var accw : coopmatWgAcc_f32_128x256
+        var accw : ACCW
         coopmatConvert(accw, acc)
-        coopmatStoreTensor(accw, y, ybase, tlo, t0, 256u, m0, 128u, tv)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, BN, m0, 128u, tv)
     }
 }
 
-// the m-tile sibling (cm2 quant "m": BN=128, same A / BK / thread count); the body mirrors
-// Q8Cm2LBatch at 128-token width
-[vk_dispatch(name = "q8_batch_cm2m_cls", grid = "wgs", params = "wgs : int64")]
-class Q8Cm2MBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (32 bytes each, read as 16-bit lanes)
-    @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
-    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
-    @ssbo @binding = 5 y : array<float>
-    @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
+// the format templates: the block struct, the scale element, the block width and the decode
+[ |> template_struct_instance]
+class template Q8Cm2T : KqCm2BatchT {
+    typedef BLK = VkQ8Blk
+    typedef ST = float16
+    override BLKW = 32u
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
-    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
+    def decode(blk : VkQ8Blk; bc, cib : uint2) : float16 {
         let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
-        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2m_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let ttiles = (cnt + 127u) / 128u
-        // split-k: wgs stack nsplit planes of (wtiles x ttiles); plane ks covers k [k0, k1) and
-        // stores f32 partials at ybase (the reduce sums the planes into y). SINGLE-REGION (dense)
-        // dispatches only — the plane size rides row0 + cnt, so multi-region planes would collide
-        var tix = reg.w
-        var ks = 0u
-        var k1 = pa.n
-        var ybase = 0u
-        if (pa.ksplit != 0u) {
-            let ptiles = ((pa.d + 127u) / 128u) * ttiles
-            ks = tix / ptiles
-            tix -= ks * ptiles
-            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
-            ybase = ks * (row0 + cnt) * pa.d
-        }
-        let k0 = ks * pa.ksplit
-        let xt = tix % ttiles             // token 128-tile (fastest)
-        let wt = tix / ttiles             // weight 128-tile
-        if (gl_LocalInvocationID.x == 0u) {
-            wg_blk0 = wblk0
-        }
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        barrier()   // wg_blk0 visible before the first decode load
-        var a : coopmatWgA_f16_128x64
-        var b : coopmatWgB_f16_64x128
-        var acc : coopmatWgAcc_f16_128x128
-        let t0 = row0 + xt * 128u
-        let m0 = wt * 128u
-        // FAST PATH — see Q8Cm2LBatch; identical rule at the m width, same literal-bound
-        // no-split specialization (the k0/k1/ybase form in the hot loop measured -27% pp)
-        if (m0 + 128u <= pa.d && xt * 128u + 128u <= cnt && (pa.n & 63u) == 0u) {
-            var fla : tensorLayout2D
-            tensorLayoutCreate(fla)
-            tensorLayoutSetBlockSize(fla, 1u, 32u)
-            tensorLayoutSetDimension(fla, pa.d, pa.n)
-            tensorLayoutSetStride(fla, pa.n >> 5u, 1u)
-            var flb : tensorLayout2D
-            tensorLayoutCreate(flb)
-            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
-            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            var flo : tensorLayout2D
-            tensorLayoutCreate(flo)
-            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
-            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
-            if (pa.ksplit == 0u) {
-                var k = 0u
-                for (_i in range(int(pa.n / 512u))) {
-                    for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                        acc = coopmatMulAdd(a, b, acc)
-                        k += 64u
-                    }
-                }
-                while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-                coopmatClamp(acc, -65504.0, 65504.0)
-                var accw : coopmatWgAcc_f32_128x128
-                coopmatConvert(accw, acc)
-                coopmatStoreTensor(accw, y, 0u, flo, t0, 128u, m0, 128u, tv)
-                return
-            }
-            var k = k0
-            for (_i in range(int((k1 - k0) / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x128
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, ybase, flo, t0, 128u, m0, 128u, tv)
-            return
-        }
-        // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
-        var tla : tensorLayout2DPad
-        tensorLayoutCreate(tla)
-        tensorLayoutSetBlockSize(tla, 1u, 32u)
-        tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n / 32u, 1u)
-        var tlb : tensorLayout2DPad
-        tensorLayoutCreate(tlb)
-        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
-        tensorLayoutSetStride(tlb, pa.n, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
-        tensorLayoutSetStride(tlo, pa.d, 1u)
-        if (pa.ksplit == 0u) {
-            var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x128
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, 0u, tlo, t0, 128u, m0, 128u, tv)
-            return
-        }
-        var k = k0
-        for (_i in range(int((k1 - k0) / 512u))) {
-            for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-        }
-        while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-            acc = coopmatMulAdd(a, b, acc)
-            k += 64u
-        }
-        coopmatClamp(acc, -65504.0, 65504.0)
-        var accw : coopmatWgAcc_f32_128x128
-        coopmatConvert(accw, acc)
-        coopmatStoreTensor(accw, y, ybase, tlo, t0, 128u, m0, 128u, tv)
+        return ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
     }
 }
 
-// the s-tile sibling (BN=32): the MoE expert-bucket shape - a region of ~32 rows fills the
-// tile instead of padding three quarters of an m column; the body mirrors Q8Cm2MBatch at
-// 32-token width
-[vk_dispatch(name = "q8_batch_cm2s_cls", grid = "wgs", params = "wgs : int64")]
-class Q8Cm2SBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (32 bytes each, read as 16-bit lanes)
-    @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
-    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
-    @ssbo @binding = 5 y : array<float>
-    @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
+[ |> template_struct_instance]
+class template K4Cm2T : KqCm2BatchT {
+    typedef BLK = VkK4Blk
+    typedef ST = uint
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
-    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
-        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
-        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2s_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let ttiles = (cnt + 31u) / 32u
-        // split-k: wgs stack nsplit planes of (wtiles x ttiles); plane ks covers k [k0, k1) and
-        // stores f32 partials at ybase (the reduce sums the planes into y). SINGLE-REGION (dense)
-        // dispatches only — the plane size rides row0 + cnt, so multi-region planes would collide
-        var tix = reg.w
-        var ks = 0u
-        var k1 = pa.n
-        var ybase = 0u
-        if (pa.ksplit != 0u) {
-            let ptiles = ((pa.d + 127u) / 128u) * ttiles
-            ks = tix / ptiles
-            tix -= ks * ptiles
-            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
-            ybase = ks * (row0 + cnt) * pa.d
-        }
-        let k0 = ks * pa.ksplit
-        let xt = tix % ttiles             // token 32-tile (fastest)
-        let wt = tix / ttiles             // weight 128-tile
-        if (gl_LocalInvocationID.x == 0u) {
-            wg_blk0 = wblk0
-        }
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        barrier()   // wg_blk0 visible before the first decode load
-        var a : coopmatWgA_f16_128x64
-        var b : coopmatWgB_f16_64x32
-        var acc : coopmatWgAcc_f16_128x32
-        let t0 = row0 + xt * 32u
-        let m0 = wt * 128u
-        // FAST PATH — see Q8Cm2LBatch; identical rule at the s width, same literal-bound
-        // no-split specialization (the k0/k1/ybase form in the hot loop measured -27% pp)
-        if (m0 + 128u <= pa.d && (pa.n & 63u) == 0u) {
-            var fla : tensorLayout2D
-            tensorLayoutCreate(fla)
-            tensorLayoutSetBlockSize(fla, 1u, 32u)
-            tensorLayoutSetDimension(fla, pa.d, pa.n)
-            tensorLayoutSetStride(fla, pa.n >> 5u, 1u)
-            var flb : tensorLayout2D
-            tensorLayoutCreate(flb)
-            tensorLayoutSetDimension(flb, row0 + ((cnt + 31u) & ~31u), pa.n)
-            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            var flo : tensorLayout2DPad
-            tensorLayoutCreate(flo)
-            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
-            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
-            if (pa.ksplit == 0u) {
-                var k = 0u
-                for (_i in range(int(pa.n / 512u))) {
-                    for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                        acc = coopmatMulAdd(a, b, acc)
-                        k += 64u
-                    }
-                }
-                while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-                coopmatClamp(acc, -65504.0, 65504.0)
-                var accw : coopmatWgAcc_f32_128x32
-                coopmatConvert(accw, acc)
-                coopmatStoreTensor(accw, y, 0u, flo, t0, 32u, m0, 128u, tv)
-                return
-            }
-            var k = k0
-            for (_i in range(int((k1 - k0) / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x32
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, ybase, flo, t0, 32u, m0, 128u, tv)
-            return
-        }
-        // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
-        var tla : tensorLayout2DPad
-        tensorLayoutCreate(tla)
-        tensorLayoutSetBlockSize(tla, 1u, 32u)
-        tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n / 32u, 1u)
-        var tlb : tensorLayout2DPad
-        tensorLayoutCreate(tlb)
-        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
-        tensorLayoutSetStride(tlb, pa.n, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
-        tensorLayoutSetStride(tlo, pa.d, 1u)
-        if (pa.ksplit == 0u) {
-            var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x32
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, 0u, tlo, t0, 32u, m0, 128u, tv)
-            return
-        }
-        var k = k0
-        for (_i in range(int((k1 - k0) / 512u))) {
-            for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-        }
-        while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-            acc = coopmatMulAdd(a, b, acc)
-            k += 64u
-        }
-        coopmatClamp(acc, -65504.0, 65504.0)
-        var accw : coopmatWgAcc_f32_128x32
-        coopmatConvert(accw, acc)
-        coopmatStoreTensor(accw, y, ybase, tlo, t0, 32u, m0, 128u, tv)
-    }
-}
-
-// ===== the cm2 K-quant tiles: Q4_K decode-in-load over the repacked superblock planes =====
-
-struct VkK4Blk {
-    qs : int16[64]   // one Q4_K superblock's 128 nibble bytes as 16-bit lanes; its scale row (d|dmin + 8 sc + 8 mn bytes) lives in wsu
-}
-
-// the l-tile Q4_K twin of Q8Cm2LBatch: same geometry, superblock (1, 256) blocks, nibble + per-32-group scale/min decode
-[vk_dispatch(name = "kq_batch_k4_cm2l_cls", grid = "wgs", params = "wgs : int64")]
-class K4Cm2LBatch : MoeCmBase {
-    @ssbo @binding = 0 @role = "weight" wq : array<VkK4Blk>       // Q4_K quant plane (128-byte superblocks)
-    @ssbo @binding = 1 @role = "weight" wsu : array<uint>         // scale plane: 5 words per superblock
-    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
-    @ssbo @binding = 5 y : array<float>
-    @workgroup wg_blk0 : uint                    // the region's SUPERBLOCK base, staged for the decode
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
-    def decode_k4(blk : VkK4Blk; bc, cib : uint2) : float16 {
+    def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
         let bidx = g * 16u + (e & 15u)
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(wsu[srow])
-        let sc = (wsu[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        let mn = (wsu[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+        let dm = unpackHalf2x16(ws[srow])
+        let sc = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+        let mn = (ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
         return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
     }
-
-    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cm2l_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let ttiles = (cnt + 255u) / 256u
-        var tix = reg.w
-        var ks = 0u
-        var k1 = pa.n
-        var ybase = 0u
-        if (pa.ksplit != 0u) {
-            let ptiles = ((pa.d + 127u) / 128u) * ttiles
-            ks = tix / ptiles
-            tix -= ks * ptiles
-            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
-            ybase = ks * (row0 + cnt) * pa.d
-        }
-        let k0 = ks * pa.ksplit
-        let xt = tix % ttiles
-        let wt = tix / ttiles
-        if (gl_LocalInvocationID.x == 0u) {
-            wg_blk0 = wblk0
-        }
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        barrier()   // wg_blk0 visible before the first decode load
-        var a : coopmatWgA_f16_128x64
-        var b : coopmatWgB_f16_64x256
-        var acc : coopmatWgAcc_f16_128x256
-        let t0 = row0 + xt * 256u
-        let m0 = wt * 128u
-        // FAST PATH — see Q8Cm2LBatch (kq n is always a 256-multiple, so only tile bounds gate)
-        if (m0 + 128u <= pa.d && xt * 256u + 256u <= cnt && (pa.n & 63u) == 0u) {
-            var fla : tensorLayout2D
-            tensorLayoutCreate(fla)
-            tensorLayoutSetBlockSize(fla, 1u, 256u)
-            tensorLayoutSetDimension(fla, pa.d, pa.n)
-            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
-            var flb : tensorLayout2D
-            tensorLayoutCreate(flb)
-            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
-            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            var flo : tensorLayout2D
-            tensorLayoutCreate(flo)
-            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
-            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
-            if (pa.ksplit == 0u) {
-                var k = 0u
-                for (_i in range(int(pa.n / 512u))) {
-                    for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
-                        acc = coopmatMulAdd(a, b, acc)
-                        k += 64u
-                    }
-                }
-                while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-                coopmatClamp(acc, -65504.0, 65504.0)
-                var accw : coopmatWgAcc_f32_128x256
-                coopmatConvert(accw, acc)
-                coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
-                return
-            }
-            var k = k0
-            for (_i in range(int((k1 - k0) / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x256
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, ybase, flo, t0, 256u, m0, 128u, tv)
-            return
-        }
-        // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
-        var tla : tensorLayout2DPad
-        tensorLayoutCreate(tla)
-        tensorLayoutSetBlockSize(tla, 1u, 256u)
-        tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
-        var tlb : tensorLayout2DPad
-        tensorLayoutCreate(tlb)
-        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
-        tensorLayoutSetStride(tlb, pa.n, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
-        tensorLayoutSetStride(tlo, pa.d, 1u)
-        if (pa.ksplit == 0u) {
-            var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x256
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, 0u, tlo, t0, 256u, m0, 128u, tv)
-            return
-        }
-        var k = k0
-        for (_i in range(int((k1 - k0) / 512u))) {
-            for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-        }
-        while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
-            acc = coopmatMulAdd(a, b, acc)
-            k += 64u
-        }
-        coopmatClamp(acc, -65504.0, 65504.0)
-        var accw : coopmatWgAcc_f32_128x256
-        coopmatConvert(accw, acc)
-        coopmatStoreTensor(accw, y, ybase, tlo, t0, 256u, m0, 128u, tv)
-    }
 }
 
-// the m-tile Q4_K sibling (BN=128) — the k4 decode on the m geometry
-[vk_dispatch(name = "kq_batch_k4_cm2m_cls", grid = "wgs", params = "wgs : int64")]
-class K4Cm2MBatch : MoeCmBase {
-    @ssbo @binding = 0 @role = "weight" wq : array<VkK4Blk>
-    @ssbo @binding = 1 @role = "weight" wsu : array<uint>
-    @ssbo @binding = 3 xf16 : array<float16>
-    @ssbo @binding = 5 y : array<float>
-    @workgroup wg_blk0 : uint
+[ |> template_struct_instance]
+class template K6Cm2T : KqCm2BatchT {
+    typedef BLK = VkK6Blk
+    typedef ST = uint
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
-    def decode_k4(blk : VkK4Blk; bc, cib : uint2) : float16 {
-        let g = cib.y >> 5u
-        let e = cib.y & 31u
-        let bidx = g * 16u + (e & 15u)
-        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
-        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(wsu[srow])
-        let sc = (wsu[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        let mn = (wsu[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cm2m_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let ttiles = (cnt + 127u) / 128u
-        var tix = reg.w
-        var ks = 0u
-        var k1 = pa.n
-        var ybase = 0u
-        if (pa.ksplit != 0u) {
-            let ptiles = ((pa.d + 127u) / 128u) * ttiles
-            ks = tix / ptiles
-            tix -= ks * ptiles
-            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
-            ybase = ks * (row0 + cnt) * pa.d
-        }
-        let k0 = ks * pa.ksplit
-        let xt = tix % ttiles
-        let wt = tix / ttiles
-        if (gl_LocalInvocationID.x == 0u) {
-            wg_blk0 = wblk0
-        }
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        barrier()
-        var a : coopmatWgA_f16_128x64
-        var b : coopmatWgB_f16_64x128
-        var acc : coopmatWgAcc_f16_128x128
-        let t0 = row0 + xt * 128u
-        let m0 = wt * 128u
-        if (m0 + 128u <= pa.d && xt * 128u + 128u <= cnt && (pa.n & 63u) == 0u) {
-            var fla : tensorLayout2D
-            tensorLayoutCreate(fla)
-            tensorLayoutSetBlockSize(fla, 1u, 256u)
-            tensorLayoutSetDimension(fla, pa.d, pa.n)
-            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
-            var flb : tensorLayout2D
-            tensorLayoutCreate(flb)
-            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
-            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            var flo : tensorLayout2D
-            tensorLayoutCreate(flo)
-            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
-            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
-            if (pa.ksplit == 0u) {
-                var k = 0u
-                for (_i in range(int(pa.n / 512u))) {
-                    for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                        acc = coopmatMulAdd(a, b, acc)
-                        k += 64u
-                    }
-                }
-                while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-                coopmatClamp(acc, -65504.0, 65504.0)
-                var accw : coopmatWgAcc_f32_128x128
-                coopmatConvert(accw, acc)
-                coopmatStoreTensor(accw, y, 0u, flo, t0, 128u, m0, 128u, tv)
-                return
-            }
-            var k = k0
-            for (_i in range(int((k1 - k0) / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x128
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, ybase, flo, t0, 128u, m0, 128u, tv)
-            return
-        }
-        var tla : tensorLayout2DPad
-        tensorLayoutCreate(tla)
-        tensorLayoutSetBlockSize(tla, 1u, 256u)
-        tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
-        var tlb : tensorLayout2DPad
-        tensorLayoutCreate(tlb)
-        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
-        tensorLayoutSetStride(tlb, pa.n, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
-        tensorLayoutSetStride(tlo, pa.d, 1u)
-        if (pa.ksplit == 0u) {
-            var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x128
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, 0u, tlo, t0, 128u, m0, 128u, tv)
-            return
-        }
-        var k = k0
-        for (_i in range(int((k1 - k0) / 512u))) {
-            for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-        }
-        while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-            acc = coopmatMulAdd(a, b, acc)
-            k += 64u
-        }
-        coopmatClamp(acc, -65504.0, 65504.0)
-        var accw : coopmatWgAcc_f32_128x128
-        coopmatConvert(accw, acc)
-        coopmatStoreTensor(accw, y, ybase, tlo, t0, 128u, m0, 128u, tv)
-    }
-}
-
-// the s-tile Q4_K sibling (BN=32) - the k4 decode on the expert-bucket geometry (see Q8Cm2SBatch)
-[vk_dispatch(name = "kq_batch_k4_cm2s_cls", grid = "wgs", params = "wgs : int64")]
-class K4Cm2SBatch : MoeCmBase {
-    @ssbo @binding = 0 @role = "weight" wq : array<VkK4Blk>
-    @ssbo @binding = 1 @role = "weight" wsu : array<uint>
-    @ssbo @binding = 3 xf16 : array<float16>
-    @ssbo @binding = 5 y : array<float>
-    @workgroup wg_blk0 : uint
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
-    def decode_k4(blk : VkK4Blk; bc, cib : uint2) : float16 {
-        let g = cib.y >> 5u
-        let e = cib.y & 31u
-        let bidx = g * 16u + (e & 15u)
-        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
-        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(wsu[srow])
-        let sc = (wsu[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        let mn = (wsu[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cm2s_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let ttiles = (cnt + 31u) / 32u
-        var tix = reg.w
-        var ks = 0u
-        var k1 = pa.n
-        var ybase = 0u
-        if (pa.ksplit != 0u) {
-            let ptiles = ((pa.d + 127u) / 128u) * ttiles
-            ks = tix / ptiles
-            tix -= ks * ptiles
-            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
-            ybase = ks * (row0 + cnt) * pa.d
-        }
-        let k0 = ks * pa.ksplit
-        let xt = tix % ttiles
-        let wt = tix / ttiles
-        if (gl_LocalInvocationID.x == 0u) {
-            wg_blk0 = wblk0
-        }
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        barrier()
-        var a : coopmatWgA_f16_128x64
-        var b : coopmatWgB_f16_64x32
-        var acc : coopmatWgAcc_f16_128x32
-        let t0 = row0 + xt * 32u
-        let m0 = wt * 128u
-        if (m0 + 128u <= pa.d && (pa.n & 63u) == 0u) {
-            var fla : tensorLayout2D
-            tensorLayoutCreate(fla)
-            tensorLayoutSetBlockSize(fla, 1u, 256u)
-            tensorLayoutSetDimension(fla, pa.d, pa.n)
-            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
-            var flb : tensorLayout2D
-            tensorLayoutCreate(flb)
-            tensorLayoutSetDimension(flb, row0 + ((cnt + 31u) & ~31u), pa.n)
-            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            var flo : tensorLayout2DPad
-            tensorLayoutCreate(flo)
-            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
-            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
-            if (pa.ksplit == 0u) {
-                var k = 0u
-                for (_i in range(int(pa.n / 512u))) {
-                    for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                        acc = coopmatMulAdd(a, b, acc)
-                        k += 64u
-                    }
-                }
-                while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-                coopmatClamp(acc, -65504.0, 65504.0)
-                var accw : coopmatWgAcc_f32_128x32
-                coopmatConvert(accw, acc)
-                coopmatStoreTensor(accw, y, 0u, flo, t0, 32u, m0, 128u, tv)
-                return
-            }
-            var k = k0
-            for (_i in range(int((k1 - k0) / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k4)
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x32
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, ybase, flo, t0, 32u, m0, 128u, tv)
-            return
-        }
-        var tla : tensorLayout2DPad
-        tensorLayoutCreate(tla)
-        tensorLayoutSetBlockSize(tla, 1u, 256u)
-        tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
-        var tlb : tensorLayout2DPad
-        tensorLayoutCreate(tlb)
-        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
-        tensorLayoutSetStride(tlb, pa.n, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
-        tensorLayoutSetStride(tlo, pa.d, 1u)
-        if (pa.ksplit == 0u) {
-            var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x32
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, 0u, tlo, t0, 32u, m0, 128u, tv)
-            return
-        }
-        var k = k0
-        for (_i in range(int((k1 - k0) / 512u))) {
-            for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-        }
-        while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k4)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-            acc = coopmatMulAdd(a, b, acc)
-            k += 64u
-        }
-        coopmatClamp(acc, -65504.0, 65504.0)
-        var accw : coopmatWgAcc_f32_128x32
-        coopmatConvert(accw, acc)
-        coopmatStoreTensor(accw, y, ybase, tlo, t0, 32u, m0, 128u, tv)
-    }
-}
-
-struct VkK6Blk {
-    ql : int16[64]   // one Q6_K superblock's 128 low-nibble bytes as 16-bit lanes
-    qh : int16[32]   // ... and its 64 high-2-bit bytes; scales (16 int8 + f16 d) live in wsu
-}
-
-// the l-tile Q6_K twin: 6-bit compose (nibble | qh 2 bits) - 32, per-16 signed sub-scale
-[vk_dispatch(name = "kq_batch_k6_cm2l_cls", grid = "wgs", params = "wgs : int64")]
-class K6Cm2LBatch : MoeCmBase {
-    @ssbo @binding = 0 @role = "weight" wq : array<VkK6Blk>       // Q6_K quant plane (192-byte superblocks)
-    @ssbo @binding = 1 @role = "weight" wsu : array<uint>         // scale plane: 5 words per superblock
-    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
-    @ssbo @binding = 5 y : array<float>
-    @workgroup wg_blk0 : uint                    // the region's SUPERBLOCK base, staged for the decode
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
-    def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
+    def decode(blk : VkK6Blk; bc, cib : uint2) : float16 {
         let e = cib.y
         let bu = e >> 5u
         let hh = (e >> 4u) & 1u
@@ -4790,502 +3964,92 @@ class K6Cm2LBatch : MoeCmBase {
         let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let sidx = e >> 4u
-        let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
-        let d = unpackHalf2x16(wsu[srow + 4u]).x
+        let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+        let d = unpackHalf2x16(ws[srow + 4u]).x
         return float16(d * float(sc) * float(q6))
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2l_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let ttiles = (cnt + 255u) / 256u
-        var tix = reg.w
-        var ks = 0u
-        var k1 = pa.n
-        var ybase = 0u
-        if (pa.ksplit != 0u) {
-            let ptiles = ((pa.d + 127u) / 128u) * ttiles
-            ks = tix / ptiles
-            tix -= ks * ptiles
-            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
-            ybase = ks * (row0 + cnt) * pa.d
-        }
-        let k0 = ks * pa.ksplit
-        let xt = tix % ttiles
-        let wt = tix / ttiles
-        if (gl_LocalInvocationID.x == 0u) {
-            wg_blk0 = wblk0
-        }
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        barrier()   // wg_blk0 visible before the first decode load
-        var a : coopmatWgA_f16_128x64
-        var b : coopmatWgB_f16_64x256
-        var acc : coopmatWgAcc_f16_128x256
-        let t0 = row0 + xt * 256u
-        let m0 = wt * 128u
-        if (m0 + 128u <= pa.d && xt * 256u + 256u <= cnt && (pa.n & 63u) == 0u) {
-            var fla : tensorLayout2D
-            tensorLayoutCreate(fla)
-            tensorLayoutSetBlockSize(fla, 1u, 256u)
-            tensorLayoutSetDimension(fla, pa.d, pa.n)
-            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
-            var flb : tensorLayout2D
-            tensorLayoutCreate(flb)
-            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
-            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            var flo : tensorLayout2D
-            tensorLayoutCreate(flo)
-            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
-            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
-            if (pa.ksplit == 0u) {
-                var k = 0u
-                for (_i in range(int(pa.n / 512u))) {
-                    for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
-                        acc = coopmatMulAdd(a, b, acc)
-                        k += 64u
-                    }
-                }
-                while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-                coopmatClamp(acc, -65504.0, 65504.0)
-                var accw : coopmatWgAcc_f32_128x256
-                coopmatConvert(accw, acc)
-                coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
-                return
-            }
-            var k = k0
-            for (_i in range(int((k1 - k0) / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x256
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, ybase, flo, t0, 256u, m0, 128u, tv)
-            return
-        }
-        // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
-        var tla : tensorLayout2DPad
-        tensorLayoutCreate(tla)
-        tensorLayoutSetBlockSize(tla, 1u, 256u)
-        tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
-        var tlb : tensorLayout2DPad
-        tensorLayoutCreate(tlb)
-        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
-        tensorLayoutSetStride(tlb, pa.n, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
-        tensorLayoutSetStride(tlo, pa.d, 1u)
-        if (pa.ksplit == 0u) {
-            var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x256
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, 0u, tlo, t0, 256u, m0, 128u, tv)
-            return
-        }
-        var k = k0
-        for (_i in range(int((k1 - k0) / 512u))) {
-            for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-        }
-        while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
-            acc = coopmatMulAdd(a, b, acc)
-            k += 64u
-        }
-        coopmatClamp(acc, -65504.0, 65504.0)
-        var accw : coopmatWgAcc_f32_128x256
-        coopmatConvert(accw, acc)
-        coopmatStoreTensor(accw, y, ybase, tlo, t0, 256u, m0, 128u, tv)
     }
 }
 
-// the m-tile Q6_K sibling (BN=128)
-[vk_dispatch(name = "kq_batch_k6_cm2m_cls", grid = "wgs", params = "wgs : int64")]
-class K6Cm2MBatch : MoeCmBase {
-    @ssbo @binding = 0 @role = "weight" wq : array<VkK6Blk>
-    @ssbo @binding = 1 @role = "weight" wsu : array<uint>
-    @ssbo @binding = 3 xf16 : array<float16>
-    @ssbo @binding = 5 y : array<float>
-    @workgroup wg_blk0 : uint
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
-    def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
-        let e = cib.y
-        let bu = e >> 5u
-        let hh = (e >> 4u) & 1u
-        let j = e & 15u
-        let lb = bu * 16u + j
-        let lo = uint(int(unpack8(blk.ql[int(lb >> 1u)])[int(lb & 1u)])) & 0xFFu
-        let qb = (bu >> 2u) * 32u + hh * 16u + j
-        let hby = uint(int(unpack8(blk.qh[int(qb >> 1u)])[int(qb & 1u)])) & 0xFFu
-        let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let sidx = e >> 4u
-        let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
-        let d = unpackHalf2x16(wsu[srow + 4u]).x
-        return float16(d * float(sc) * float(q6))
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2m_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let ttiles = (cnt + 127u) / 128u
-        var tix = reg.w
-        var ks = 0u
-        var k1 = pa.n
-        var ybase = 0u
-        if (pa.ksplit != 0u) {
-            let ptiles = ((pa.d + 127u) / 128u) * ttiles
-            ks = tix / ptiles
-            tix -= ks * ptiles
-            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
-            ybase = ks * (row0 + cnt) * pa.d
-        }
-        let k0 = ks * pa.ksplit
-        let xt = tix % ttiles
-        let wt = tix / ttiles
-        if (gl_LocalInvocationID.x == 0u) {
-            wg_blk0 = wblk0
-        }
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        barrier()
-        var a : coopmatWgA_f16_128x64
-        var b : coopmatWgB_f16_64x128
-        var acc : coopmatWgAcc_f16_128x128
-        let t0 = row0 + xt * 128u
-        let m0 = wt * 128u
-        if (m0 + 128u <= pa.d && xt * 128u + 128u <= cnt && (pa.n & 63u) == 0u) {
-            var fla : tensorLayout2D
-            tensorLayoutCreate(fla)
-            tensorLayoutSetBlockSize(fla, 1u, 256u)
-            tensorLayoutSetDimension(fla, pa.d, pa.n)
-            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
-            var flb : tensorLayout2D
-            tensorLayoutCreate(flb)
-            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
-            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            var flo : tensorLayout2D
-            tensorLayoutCreate(flo)
-            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
-            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
-            if (pa.ksplit == 0u) {
-                var k = 0u
-                for (_i in range(int(pa.n / 512u))) {
-                    for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                        acc = coopmatMulAdd(a, b, acc)
-                        k += 64u
-                    }
-                }
-                while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-                coopmatClamp(acc, -65504.0, 65504.0)
-                var accw : coopmatWgAcc_f32_128x128
-                coopmatConvert(accw, acc)
-                coopmatStoreTensor(accw, y, 0u, flo, t0, 128u, m0, 128u, tv)
-                return
-            }
-            var k = k0
-            for (_i in range(int((k1 - k0) / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x128
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, ybase, flo, t0, 128u, m0, 128u, tv)
-            return
-        }
-        var tla : tensorLayout2DPad
-        tensorLayoutCreate(tla)
-        tensorLayoutSetBlockSize(tla, 1u, 256u)
-        tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
-        var tlb : tensorLayout2DPad
-        tensorLayoutCreate(tlb)
-        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
-        tensorLayoutSetStride(tlb, pa.n, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
-        tensorLayoutSetStride(tlo, pa.d, 1u)
-        if (pa.ksplit == 0u) {
-            var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x128
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, 0u, tlo, t0, 128u, m0, 128u, tv)
-            return
-        }
-        var k = k0
-        for (_i in range(int((k1 - k0) / 512u))) {
-            for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-        }
-        while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
-            acc = coopmatMulAdd(a, b, acc)
-            k += 64u
-        }
-        coopmatClamp(acc, -65504.0, 65504.0)
-        var accw : coopmatWgAcc_f32_128x128
-        coopmatConvert(accw, acc)
-        coopmatStoreTensor(accw, y, ybase, tlo, t0, 128u, m0, 128u, tv)
-    }
+// the nine stamps: the three width columns of each format (the dispatcher keys on (fmt, tc))
+[vk_dispatch(name = "q8_batch_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q8Cm2LBatch : Q8Cm2T {
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+    typedef FLO = tensorLayout2D
 }
 
-// the s-tile Q6_K sibling (BN=32, see Q8Cm2SBatch)
-[vk_dispatch(name = "kq_batch_k6_cm2s_cls", grid = "wgs", params = "wgs : int64")]
-class K6Cm2SBatch : MoeCmBase {
-    @ssbo @binding = 0 @role = "weight" wq : array<VkK6Blk>
-    @ssbo @binding = 1 @role = "weight" wsu : array<uint>
-    @ssbo @binding = 3 xf16 : array<float16>
-    @ssbo @binding = 5 y : array<float>
-    @workgroup wg_blk0 : uint
+[vk_dispatch(name = "q8_batch_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q8Cm2MBatch : Q8Cm2T {
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
-    def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
-        let e = cib.y
-        let bu = e >> 5u
-        let hh = (e >> 4u) & 1u
-        let j = e & 15u
-        let lb = bu * 16u + j
-        let lo = uint(int(unpack8(blk.ql[int(lb >> 1u)])[int(lb & 1u)])) & 0xFFu
-        let qb = (bu >> 2u) * 32u + hh * 16u + j
-        let hby = uint(int(unpack8(blk.qh[int(qb >> 1u)])[int(qb & 1u)])) & 0xFFu
-        let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let sidx = e >> 4u
-        let sc = int(wsu[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
-        let d = unpackHalf2x16(wsu[srow + 4u]).x
-        return float16(d * float(sc) * float(q6))
-    }
+[vk_dispatch(name = "q8_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q8Cm2SBatch : Q8Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+    typedef FLO = tensorLayout2DPad
+}
 
-    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cm2s_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let ttiles = (cnt + 31u) / 32u
-        var tix = reg.w
-        var ks = 0u
-        var k1 = pa.n
-        var ybase = 0u
-        if (pa.ksplit != 0u) {
-            let ptiles = ((pa.d + 127u) / 128u) * ttiles
-            ks = tix / ptiles
-            tix -= ks * ptiles
-            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
-            ybase = ks * (row0 + cnt) * pa.d
-        }
-        let k0 = ks * pa.ksplit
-        let xt = tix % ttiles
-        let wt = tix / ttiles
-        if (gl_LocalInvocationID.x == 0u) {
-            wg_blk0 = wblk0
-        }
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        barrier()
-        var a : coopmatWgA_f16_128x64
-        var b : coopmatWgB_f16_64x32
-        var acc : coopmatWgAcc_f16_128x32
-        let t0 = row0 + xt * 32u
-        let m0 = wt * 128u
-        if (m0 + 128u <= pa.d && (pa.n & 63u) == 0u) {
-            var fla : tensorLayout2D
-            tensorLayoutCreate(fla)
-            tensorLayoutSetBlockSize(fla, 1u, 256u)
-            tensorLayoutSetDimension(fla, pa.d, pa.n)
-            tensorLayoutSetStride(fla, pa.n >> 8u, 1u)
-            var flb : tensorLayout2D
-            tensorLayoutCreate(flb)
-            tensorLayoutSetDimension(flb, row0 + ((cnt + 31u) & ~31u), pa.n)
-            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            var flo : tensorLayout2DPad
-            tensorLayoutCreate(flo)
-            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
-            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
-            if (pa.ksplit == 0u) {
-                var k = 0u
-                for (_i in range(int(pa.n / 512u))) {
-                    for [unroll] (_j in range(8)) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                        acc = coopmatMulAdd(a, b, acc)
-                        k += 64u
-                    }
-                }
-                while (k < pa.n) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-                coopmatClamp(acc, -65504.0, 65504.0)
-                var accw : coopmatWgAcc_f32_128x32
-                coopmatConvert(accw, acc)
-                coopmatStoreTensor(accw, y, 0u, flo, t0, 32u, m0, 128u, tv)
-                return
-            }
-            var k = k0
-            for (_i in range(int((k1 - k0) / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < k1) {
-                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_k6)
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, 32u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x32
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, ybase, flo, t0, 32u, m0, 128u, tv)
-            return
-        }
-        var tla : tensorLayout2DPad
-        tensorLayoutCreate(tla)
-        tensorLayoutSetBlockSize(tla, 1u, 256u)
-        tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n / 256u, 1u)
-        var tlb : tensorLayout2DPad
-        tensorLayoutCreate(tlb)
-        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
-        tensorLayoutSetStride(tlb, pa.n, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
-        tensorLayoutSetStride(tlo, pa.d, 1u)
-        if (pa.ksplit == 0u) {
-            var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-                    acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
-                }
-            }
-            while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-            coopmatClamp(acc, -65504.0, 65504.0)
-            var accw : coopmatWgAcc_f32_128x32
-            coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, 0u, tlo, t0, 32u, m0, 128u, tv)
-            return
-        }
-        var k = k0
-        for (_i in range(int((k1 - k0) / 512u))) {
-            for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-                acc = coopmatMulAdd(a, b, acc)
-                k += 64u
-            }
-        }
-        while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_k6)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 32u, k, 64u, tv)
-            acc = coopmatMulAdd(a, b, acc)
-            k += 64u
-        }
-        coopmatClamp(acc, -65504.0, 65504.0)
-        var accw : coopmatWgAcc_f32_128x32
-        coopmatConvert(accw, acc)
-        coopmatStoreTensor(accw, y, ybase, tlo, t0, 32u, m0, 128u, tv)
-    }
+[vk_dispatch(name = "kq_batch_k4_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K4Cm2LBatch : K4Cm2T {
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_k4_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K4Cm2MBatch : K4Cm2T {
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_k4_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K4Cm2SBatch : K4Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+    typedef FLO = tensorLayout2DPad
+}
+
+[vk_dispatch(name = "kq_batch_k6_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K6Cm2LBatch : K6Cm2T {
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_k6_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K6Cm2MBatch : K6Cm2T {
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_k6_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K6Cm2SBatch : K6Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+    typedef FLO = tensorLayout2DPad
 }
 
 // ===== the split-k reduce (sums the cm2 partial planes into y) =====
