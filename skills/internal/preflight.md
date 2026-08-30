@@ -17,6 +17,10 @@ Two gates mirror no CI lane:
 - **hash-refs** - a bare `#N` in `origin/master..HEAD` commit messages far below
   the repo's newest issue/PR number, which GitHub mislinks permanently once
   pushed (spelling: `skills/internal/make_pr.md` step 6). SKIPs without `gh`.
+- **review-md** - the `REVIEW.das` gates of every folder the diff touches, the walk
+  `utils/internal/review-md/main.das` runs (CI: the extended_checks `Run REVIEW.das gates`
+  step, which runs every gate). A checklist edit that breaks a gate's expectation - a
+  token the gate greps for, a routed file it counts - is red here, not on CI.
 
 `--full` is Release-only and fails immediately on a Debug host. Debug serves
 `--only`/`--skip` subset diagnosis only - never as a substitute when a Windows
