@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. **A Playwright spec (`*.spec.js`), wherever the diff puts it, answers to the
-`tests/playground/` checklist.**
+`tests/playground/` checklist.** A page is an `.html` or `.md` file under this folder, together
+with what the scripts it loads render into it.
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
 illustration - show only a command a run actually executed, producing the result the page
@@ -34,9 +35,14 @@ output that regenerates those tables.
 **A cell in `files/performance_engines.json` differing from the same family-and-lane cell in
 the `examples/benchmarks/sql/results.md` (repo root) tables is a defect.**
 
-**A benchmark number hand-carried into `benchmarks.html` is a defect - render the page only
-from the vendored dasProfile records, the `files/profile_results_<platform>.json` files
-`.github/workflows/pages.yml` (repo root) fetches from borisbat/dasProfile at deploy time.**
+**A benchmark number hand-carried into a page that renders dasProfile numbers is a defect -
+render every such number only from the vendored dasProfile records, the
+`files/profile_results_<platform>.json` files `.github/workflows/pages.yml` (repo root)
+fetches from borisbat/dasProfile at deploy time.**
+
+**A claim on a page about how a dasProfile number was captured - its statistic, its sample
+count, its spread - that the record the page renders does not itself carry is a defect -
+render the claim from the record or drop it.**
 
 **A second record file for data a dasProfile record already holds is a defect - read the
 dasProfile record.** Provenance - the `das_capture` and `ext_capture` stamps - travels in the

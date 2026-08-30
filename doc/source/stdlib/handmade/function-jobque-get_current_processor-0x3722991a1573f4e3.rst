@@ -1,1 +1,1 @@
-Returns the index of the logical processor the calling thread is running on right now, or -1 where the platform exposes none (macOS). Pair it with `set_current_thread_affinity` to keep a measuring thread on the core it started on.
+Returns the index of the logical processor the calling thread is running on right now - on Windows, within the thread's processor group - or -1 where the platform exposes none (macOS, Haiku, platforms without a processor index). Pair it with `set_current_thread_affinity` to keep a measuring thread on the core it started on.

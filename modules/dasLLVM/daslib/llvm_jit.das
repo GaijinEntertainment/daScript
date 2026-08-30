@@ -3220,7 +3220,6 @@ class public LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported *= type {describe(opType)}")
             }
         } elif (expr.op == "/" || expr.op == "%" || expr.op == "/=" || expr.op == "%=") {
-            // for integer division we check division by zero
             if (isNumeric(opType) && isNumeric(expr.left._type) && !option_no_division_check) {
                 if (!isExprIntNZ(expr.right)) {
                     check_divide_by_0(right, expr.at, opType, string(expr.op))

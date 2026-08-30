@@ -186,7 +186,7 @@
                 <div class="bm-seg" id="bm-view">
                     <button class="is-on" data-v="bars">bars</button><button data-v="table">table</button>
                 </div>
-                <span class="bm-hint" id="bm-hint">seconds · median of 5 samples, ± half the range · lower is better · click a column to sort</span>
+                <span class="bm-hint" id="bm-hint">seconds · lower is better · click a column to sort</span>
             </div>
 
             <div class="bm-summary" id="bm-summary"></div>
@@ -294,8 +294,8 @@
         Object.keys(tests).forEach(function (name) {
             var t = tests[name];
             var vals = lanes.map(function (l) { return t[l.key] != null ? t[l.key] : null; });
-            var halfRange = state.data[state.platform].halfRangeOverMedian[state.board][name] || {};
-            var halfRangeOverMedian = lanes.map(function (l) { return halfRange[l.key] != null ? halfRange[l.key] : null; });
+            var laneHalfRangeOverMedian = state.data[state.platform].halfRangeOverMedian[state.board][name] || {};
+            var halfRangeOverMedian = lanes.map(function (l) { return laneHalfRangeOverMedian[l.key] != null ? laneHalfRangeOverMedian[l.key] : null; });
             // a 0.0 lane is below the capture's timer resolution - never the row's baseline
             var best = Math.min.apply(null, vals.filter(function (v) { return v != null && v > 0; }));
             if (!isFinite(best)) best = null;
@@ -408,6 +408,9 @@
         }
         prov += " \u00b7 <a class='forge-link-amber' href='https://github.com/borisbat/dasProfile'>dasProfile</a>";
         document.getElementById("bm-prov").innerHTML = prov;
+        var stat = p.sampleCount ? "median of " + p.sampleCount + " samples, \u00b1 half the range"
+                 : (p.samplesSeen ? "median, \u00b1 half the sample range" : "");
+        document.getElementById("bm-hint").textContent = "seconds" + (stat ? " \u00b7 " + stat : "") + " \u00b7 lower is better \u00b7 click a column to sort";
     }
 
     function shortVersion(s) {
@@ -446,25 +449,30 @@
         var out = { cpu: cap.cpu, versions: cap.versions,
                     das_capture: cap.das_capture || cap.timestamp,
                     ext_capture: cap.ext_capture || cap.timestamp,
-                    das_version: (cap.versions || {}).daslang || "", sections: {}, halfRangeOverMedian: {} };
+                    das_version: (cap.versions || {}).daslang || "", sections: {}, halfRangeOverMedian: {}, sampleCount: null, samplesSeen: false };
+        var sampleCounts = {};
         ["Interpreted", "AOT or JIT"].forEach(function (sec) {
             var tests = {};
             var halfRangeOverMedian = {};
             Object.keys(cap[sec] || {}).forEach(function (t) {
                 var lanes = {};
-                var halfRange = {};
+                var laneHalfRangeOverMedian = {};
                 (cap[sec][t] || []).forEach(function (r) {
                     lanes[r.language] = r.time;
                     if (r.samples && r.samples.length > 1 && r.time > 0) {
-                        halfRange[r.language] = (Math.max.apply(null, r.samples) - Math.min.apply(null, r.samples)) / 2 / r.time;
+                        laneHalfRangeOverMedian[r.language] = (Math.max.apply(null, r.samples) - Math.min.apply(null, r.samples)) / 2 / r.time;
+                        sampleCounts[r.samples.length] = true;
                     }
                 });
                 tests[t] = lanes;
-                halfRangeOverMedian[t] = halfRange;
+                halfRangeOverMedian[t] = laneHalfRangeOverMedian;
             });
             out.sections[sec] = tests;
             out.halfRangeOverMedian[sec] = halfRangeOverMedian;
         });
+        var seen = Object.keys(sampleCounts);
+        out.samplesSeen = seen.length > 0;
+        out.sampleCount = seen.length === 1 ? Number(seen[0]) : null;
         return out;
     }
     // Same vendored records as files/forge.js's front-page cycler: pages.yml

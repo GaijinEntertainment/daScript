@@ -90,6 +90,24 @@ class T : Asserter {
     }
 }
 
+let private BENCH_UNROLL = 10
+let private BENCH_UNROLL_MIN_BATCH = 100 * BENCH_UNROLL
+
+struct private AllocSnapshot {
+    allocs : uint64
+    heap_bytes : uint64
+    string_allocs : uint64
+    string_heap_bytes : uint64
+}
+
+def private alloc_snapshot() : AllocSnapshot {
+    return AllocSnapshot(
+        allocs = heap_allocation_count(),
+        heap_bytes = heap_allocation_stats()[0],
+        string_allocs = string_heap_allocation_count(),
+        string_heap_bytes = string_heap_allocation_stats()[0])
+}
+
 class B : Asserter {
     name : string
     current_sub_name : string
@@ -97,6 +115,7 @@ class B : Asserter {
     finished : bool = false
 
     on_fail : lambda<(now : bool) : void>
+    //! called after the benchmark's first batch, so a benchmark that fails fast never announces its name
     on_start : lambda<(sub_name : string) : void>
     on_finished : lambda<(stats : BenchmarkRunStats) : void>
     on_log : lambda<(msg : string; at : LineInfo) : void>
@@ -366,13 +385,12 @@ def run(b : B?, name : string; chunk_size : int; op : block) {
 
 [arch(at="README.md#benchmark-measurement")]
 def private run_batch_ns(num_runs : int; op : block) : int64 {
-    let unroll_count = 10
-    if (num_runs >= 100 * unroll_count) {
-        let loop_runs = num_runs / unroll_count
+    if (num_runs >= BENCH_UNROLL_MIN_BATCH) {
+        let loop_runs = num_runs / BENCH_UNROLL
         let start = ref_time_ticks()
         for (_i in range(loop_runs)) {
             unroll() $ {
-                for (_ in range(unroll_count)) {
+                for (_ in range(BENCH_UNROLL)) {
                     op()
                 }
             }
@@ -394,32 +412,16 @@ def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
     let max_runs = 1_000_000_000l
     var num_runs = 1
     var time_total = 0l
-    var started = false
-    var heap_bytes_start = 0ul
-    var num_allocs_start = 0ul
-    var string_bytes_start = 0ul
-    var string_num_allocs_start = 0ul
-    var heap_bytes_end = 0ul
-    var num_allocs_end = 0ul
-    var string_bytes_end = 0ul
-    var string_num_allocs_end = 0ul
+    var name_announced = false
+    var before : AllocSnapshot
+    var after : AllocSnapshot
     while (true) {
-        heap_bytes_start = heap_allocation_stats()[0]
-        num_allocs_start = heap_allocation_count()
-        string_bytes_start = string_heap_allocation_stats()[0]
-        string_num_allocs_start = string_heap_allocation_count()
-
+        before = alloc_snapshot()
         time_total = run_batch_ns(num_runs, op)
-
-        heap_bytes_end = heap_allocation_stats()[0]
-        num_allocs_end = heap_allocation_count()
-        string_bytes_end = string_heap_allocation_stats()[0]
-        string_num_allocs_end = string_heap_allocation_count()
-
-        //! on_start runs after the first call: a benchmark that fails fast never prints its name
-        if (!started) {
+        after = alloc_snapshot()
+        if (!name_announced) {
             b.on_start(name)
-            started = true
+            name_announced = true
         }
         if (time_total >= budget_ns || int64(num_runs) >= max_runs) {
             break
@@ -429,8 +431,8 @@ def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
         next = min(next, 100l * int64(num_runs))
         next = max(next, int64(num_runs) + 1l)
         next = min(next, max_runs)
-        if (next >= 1000l) {
-            next = (next / 10l) * 10l
+        if (next >= int64(BENCH_UNROLL_MIN_BATCH)) {
+            next = (next / int64(BENCH_UNROLL)) * int64(BENCH_UNROLL)
         }
         num_runs = int(next)
     }
@@ -440,10 +442,10 @@ def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
         sub_name = name,
         n = num_runs,
         time_ns = time_total,
-        allocs = num_allocs_end - num_allocs_start,
-        heap_bytes = heap_bytes_end - heap_bytes_start,
-        string_allocs = string_num_allocs_end - string_num_allocs_start,
-        string_heap_bytes = string_bytes_end - string_bytes_start,
+        allocs = after.allocs - before.allocs,
+        heap_bytes = after.heap_bytes - before.heap_bytes,
+        string_allocs = after.string_allocs - before.string_allocs,
+        string_heap_bytes = after.string_heap_bytes - before.string_heap_bytes,
     )
 
     if (chunk_size > 1l) {

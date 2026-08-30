@@ -1,7 +1,13 @@
 options gen2
 require dastest/testing_boost
 require jobque
+require daslib/jobque_boost
 require math
+
+struct PinResult {
+    pinned_on : int
+    seen : int
+}
 
 [test]
 def test_current_thread_affinity(t : T?) {
@@ -9,22 +15,43 @@ def test_current_thread_affinity(t : T?) {
         let cpu = get_current_processor()
         t |> success(cpu >= -1, "index {cpu}")
     }
-    t |> run("a hard pin keeps the thread on that processor") @@(t : T?) {
-        let cpu = get_current_processor()
-        if (cpu < 0 || get_platform_name() != "windows") {
-            t |> skip("hard pins are verified where a new thread does not inherit the calling thread's mask")
+    t |> run("a negative index is ignored") @@(t : T?) {
+        set_current_thread_affinity(-1, true)
+        t |> success(get_current_processor() >= -1, "still running after a negative pin")
+    }
+    t |> run("a hard pin moves a dedicated thread to another processor") @@(t : T?) {
+        if (get_current_processor() < 0) {
+            t |> skip("{get_platform_name()}: no processor index to re-read")
             return
         }
-        set_current_thread_affinity(cpu, true)
-        var acc = 0
-        for (i in range(100000)) {
-            acc += i & 7
+        with_job_que() {
+            let processors = min(get_total_hw_threads(), 64)
+            if (processors < 2) {
+                t |> skip("one processor: nowhere to move")
+                return
+            }
+            with_channel(1) $(ch) {
+                new_thread() @() {
+                    let target = (get_current_processor() + 1) % processors
+                    set_current_thread_affinity(target, true)
+                    var acc = 0
+                    for (i in range(100000)) {
+                        acc += i & 7
+                    }
+                    feint("{acc}")
+                    let seen = get_current_processor()
+                    set_current_thread_affinity(target, false)
+                    ch |> push_clone(PinResult(pinned_on = target, seen = seen))
+                    ch |> notify_and_release
+                }
+                var pinned_on = -1
+                var seen = -2
+                ch |> for_each_clone() $(r : PinResult#) {
+                    pinned_on = r.pinned_on
+                    seen = r.seen
+                }
+                t |> equal(seen, pinned_on, "on {pinned_on} after a pinned loop")
+            }
         }
-        feint("{acc}")
-        t |> equal(get_current_processor(), cpu, "still on {cpu} after a pinned loop")
-    }
-    t |> run("the hint mode does not throw") @@(t : T?) {
-        set_current_thread_affinity(max(get_current_processor(), 0), false)
-        t |> success(true)
     }
 }

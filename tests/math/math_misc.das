@@ -101,6 +101,8 @@ def test_math_misc(t : T?) { // nolint:STYLE038 one flat assertion per math entr
     t |> equal(pow(0., 0.), 1.)
     t |> equal(pow(2., 2.), 4.)
     t |> equal(exp2(2.), 4.)
+    t |> success(exp2(129.) > 3e38, "exp2 past the float range is inf, got {exp2(129.)}")
+    t |> success(exp2(-126.) > 0., "exp2 at the smallest normal is not zero, got {exp2(-126.)}")
     t |> equal(log2(4.), 2.)
     t |> success(abs(exp(1.) - 2.718281828459045f) < 1e-6)
     t |> success(abs(log(2.718281828459045f) - 1.) < 1e-6)
