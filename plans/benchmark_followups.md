@@ -50,3 +50,9 @@ there lowers to `@llvm.exp`/libm or to its own `exp4` polynomial.
 overflow select tree that made it 1.12x scalar on znver2), clamped instead of guarded, inlines
 and vectorizes 8-wide - sub-ns per element in array loops against 2.7 for libm. As a scalar
 extern it is pointless (4.4 > 3.3 in the probe), which is what the benchmark row shows.
+
+Direction (2026-08-30): the AOT is slower on the M1 too, so the follow-up is an AOT cleanup with
+proper benchmarks - bind the CRT twins of every scalar math builtin in the dasTest module, where
+the test cycle is short (no core rebuild), compare side by side in all three tiers (AOT,
+interpreter, JIT), and keep the winners; `benchmarks/core/math/exp.das` and the two bound
+functions stay.
