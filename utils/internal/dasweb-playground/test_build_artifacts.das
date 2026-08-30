@@ -149,3 +149,58 @@ def test_stage_cleanup(t : T?) {
         }
     }
 }
+
+def private place_artifact(blobs : string; toolchain : string; hash : string) {
+    let stage = create_stage_dir(blobs)
+    fwrite(path_join(stage, "sample.wasm"), "bytes")
+    let files <- [ArtifactFile(name = "sample.wasm", sha256 = sha256_hex("bytes"))]
+    finalize_artifact(blobs, toolchain, hash, stage, files)
+}
+
+[test]
+def test_stale_toolchain_sweep(t : T?) {
+    with_temp_blobs() $(blobs) {
+        let stale_tc = "feed5678deadbeef000000000000000000000000"
+        place_artifact(blobs, TC, H1)
+        place_artifact(blobs, stale_tc, H1)
+        let stage = create_stage_dir(blobs)
+        let stray_file = path_join(blobs, "0badf00d0badf00d0badf00d0badf00d0badf00d")
+        fwrite(stray_file, "a file named like a toolchain id")
+        let now = int64(get_clock())
+        let later = now + STALE_TOOLCHAIN_GRACE_SECONDS + 1l
+        t |> run("the grace period is a day") @(tt : T?) {
+            tt |> equal(STALE_TOOLCHAIN_GRACE_SECONDS, 86400l)
+        }
+        t |> run("a stale toolchain inside the grace period stays") @(tt : T?) {
+            tt |> equal(sweep_stale_toolchains(blobs, TC, now), 0)
+            tt |> success(!empty(resolve_artifact_file(blobs, stale_tc, H1, "sample.wasm")), "still served")
+        }
+        t |> run("the trees on disk are the two toolchains, not tmp or the stray file") @(tt : T?) {
+            let on_disk <- toolchains_on_disk(blobs)
+            tt |> equal(length(on_disk), 2)
+            tt |> success(find_index(on_disk, TC) >= 0 && find_index(on_disk, stale_tc) >= 0, "both toolchains listed")
+        }
+        t |> run("past the grace period it goes; the current toolchain, blobs/tmp and a stray file stay") @(tt : T?) {
+            tt |> equal(sweep_stale_toolchains(blobs, TC, later), 1)
+            tt |> equal(length(toolchains_on_disk(blobs)), 1)
+            tt |> equal(resolve_artifact_file(blobs, stale_tc, H1, "sample.wasm"), "")
+            tt |> success(!empty(resolve_artifact_file(blobs, TC, H1, "sample.wasm")), "current toolchain intact")
+            tt |> success(stat(stage).is_valid, "stage root untouched")
+            tt |> success(stat(stray_file).is_valid, "a plain file is not a toolchain tree")
+        }
+        t |> run("no announced toolchain means nothing is swept") @(tt : T?) {
+            place_artifact(blobs, stale_tc, H1)
+            tt |> equal(sweep_stale_toolchains(blobs, "", later), 0)
+            tt |> success(!empty(resolve_artifact_file(blobs, stale_tc, H1, "sample.wasm")), "kept")
+        }
+    }
+}
+
+[test]
+def test_toolchain_sweep_cadence(t : T?) {
+    t |> run("a fresh process sweeps at once, then once per interval") @(tt : T?) {
+        tt |> success(toolchain_sweep_due(0l, 1000l), "first tick is due")
+        tt |> success(!toolchain_sweep_due(1000l, 1000l + TOOLCHAIN_SWEEP_INTERVAL_SECONDS - 1l), "inside the interval")
+        tt |> success(toolchain_sweep_due(1000l, 1000l + TOOLCHAIN_SWEEP_INTERVAL_SECONDS), "at the interval")
+    }
+}

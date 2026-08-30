@@ -2,6 +2,9 @@ options gen2
 
 require daslib/clargs
 require daslib/fio
+require daslib/strings_boost
+require strings
+require jobque
 
 // daslang MCP worktree bootstrap.
 //
@@ -72,11 +75,30 @@ def shell_unsafe(s : string) : bool {
 // flag only takes effect on the INITIAL configure — a build/ that already has a
 // CMakeCache keeps its cached OPENSSL_ROOT_DIR (wipe build/ to change it). This
 // tool targets fresh worktrees, so that's the common case.
+//! The cmake generator of the tree running this setup (`build/CMakeCache.txt` under
+//! `get_das_root()`), or "" when that tree has no configured build. A worktree configured
+//! with the platform default lands on Unix Makefiles, whose `cmake --build --parallel`
+//! is unbounded `make -j`; matching the source tree keeps a bootstrapped worktree on the
+//! generator the box already builds with.
+def source_tree_generator : string {
+    let cache = path_join(get_das_root(), path_join("build", "CMakeCache.txt"))
+    if (!fexist(cache)) return ""
+    let key = "CMAKE_GENERATOR:INTERNAL="
+    for (line in fread(cache) |> split("\n")) {
+        if (starts_with(line, key)) return strip(slice(line, length(key), length(line)))
+    }
+    return ""
+}
+
 def build_worktree(root, openssl_dir : string) : bool {
     let build_dir = path_join(root, "build")
     if (!fexist(path_join(build_dir, "CMakeCache.txt"))) {
-        print("Configuring CMake in {build_dir} ...\n")
         var cfg_cmd = "cmake -S \"{root}\" -B \"{build_dir}\" -DCMAKE_BUILD_TYPE=Release"
+        let gen = source_tree_generator()
+        if (!empty(gen) && !shell_unsafe(gen)) {
+            cfg_cmd += " -G \"{gen}\""
+        }
+        print("Configuring CMake in {build_dir} (generator: {empty(gen) ? "platform default" : gen}) ...\n")
         if (!empty(openssl_dir)) {
             cfg_cmd += " -DOPENSSL_ROOT_DIR=\"{to_generic_path(openssl_dir)}\""
         }
@@ -87,7 +109,7 @@ def build_worktree(root, openssl_dir : string) : bool {
         }
     }
     print("Building daslang (this can take a while) ...\n")
-    let rc = run_visible("cmake --build \"{build_dir}\" --target daslang --config Release")
+    let rc = run_visible("cmake --build \"{build_dir}\" --target daslang --config Release --parallel {get_total_hw_threads()}")
     if (rc != 0) {
         print("ERROR: building daslang failed (exit {rc})\n")
         return false
