@@ -645,12 +645,13 @@ def iq4xs_sc(ks : array<uint8> | #; kso, blk : int64) : int => rd_i8(ks, kso + 4
 //! k+16 — the disk pairing, kept verbatim by the transcode).
 def dequant_iq4xs_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
     let d = f16_to_f32(rd_u16(ks, kso))
+    let lut = iq4nl_lut()
     for (blk in range64(8l)) {
         let dl = d * float(iq4xs_sc(ks, kso, blk))
         for (l in range64(16l)) {
             let b = int(kq[kqo + blk * 16l + l])
-            dst[doff + blk * 32l + l] = dl * float(IQ4NL_LUT[b & 15])
-            dst[doff + blk * 32l + 16l + l] = dl * float(IQ4NL_LUT[b >> 4])
+            dst[doff + blk * 32l + l] = dl * float(lut[b & 15])
+            dst[doff + blk * 32l + 16l + l] = dl * float(lut[b >> 4])
         }
     }
 }

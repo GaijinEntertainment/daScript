@@ -66,3 +66,12 @@
   clause - a bump's diff also carries the LAWS.md entry recording the declared release; the
   declaration itself stays his call, on feel ("the intent was to bump due to major changes
   ... i go on feel on that one" - "4. agreee").
+
+- **2026-08-30** (`HOW_TO_ADD_A_FORMAT.md`, `CLAUDE.md`): Boris opened the HOW_TO document
+  series with this pilot - "document entire process on how to add new format, as well as all
+  the quirks which popped up. so that the followup arc can unquirk them (if need be)"; a
+  separate kernel per card "is fine, as long as its a similar template setup ... just another
+  cond"; the series continues with adding a model family, vision, audio, TTS. Linked from the
+  module's new `CLAUDE.md` and the root table. Arc ruling the same day: the community i-quants
+  are read as-is ("B for sure. we are not big enough for people to bother with our own fork"),
+  Qwen3.8-27B on a 16 GB card is the Vulkan arc's endgame.

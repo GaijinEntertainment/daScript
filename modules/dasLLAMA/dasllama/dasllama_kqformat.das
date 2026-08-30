@@ -72,7 +72,13 @@ let IQ4XS_QSB = 128l   // IQ4_XS quant plane: 128 nibble bytes, the disk k/k+16 
 let IQ4XS_SSB = 20l    // IQ4_XS scale plane: f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad — the k4 decoded-row shape
 
 //! The IQ4_NL / IQ4_XS nibble codebook: weight = scale x IQ4NL_LUT[nibble] (ggml's kvalues_iq4nl).
+//! Main-context use only (tests, oracles, the emitter's constant bake): a kernel that can run on a
+//! forked worker reads a module global as zeros - kernels take `iq4nl_lut()` as a local instead.
 let IQ4NL_LUT = fixed_array<int8>(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
+
+//! The same codebook as a per-call local (16 bytes on the caller's frame) - the form every
+//! worker-run kernel reads.
+def iq4nl_lut() : int8[16] => fixed_array<int8>(-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113)
 
 //! Quant-plane bytes per stride unit — the typed stride surface. The stride unit is one
 //! 256-weight superblock for the kq lattice and one 32-weight block for q51 (see kq_elems).

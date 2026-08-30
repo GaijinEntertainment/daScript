@@ -307,6 +307,7 @@ def q40_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp :
 def iq4xs_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let nsb = n / 256l
+    let lut = iq4nl_lut()
     unsafe {
         for (sbi in range64(nsb)) {
             let qb = sbi * 128l * mr
@@ -319,8 +320,8 @@ def iq4xs_grp_row_dot(kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp
                 for (j in range64(4l)) {
                     for (t in range64(4l)) {
                         let nib = int(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
-                        idot += int(IQ4NL_LUT[nib & 15]) * int(xqp[b * 32l + j * 4l + t])
-                        idot += int(IQ4NL_LUT[nib >> 4]) * int(xqp[b * 32l + 16l + j * 4l + t])
+                        idot += int(lut[nib & 15]) * int(xqp[b * 32l + j * 4l + t])
+                        idot += int(lut[nib >> 4]) * int(xqp[b * 32l + 16l + j * 4l + t])
                     }
                 }
                 let u = int(ksg[sb + 4l * mr + blk * mr + r])

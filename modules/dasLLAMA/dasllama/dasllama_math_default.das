@@ -552,6 +552,7 @@ def dot_q40q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp
 [unused_argument(xbsp)]
 def dot_iq4xs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
+    let lut = iq4nl_lut()
     unsafe {
         for (sb in range64(n / 256l)) {
             let kqo = sb * 128l
@@ -563,8 +564,8 @@ def dot_iq4xs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; 
                 var idot = 0
                 for (l in range64(16l)) {
                     let q = int(kqrow[kqo + blk * 16l + l])
-                    idot += int(IQ4NL_LUT[q & 15]) * int(xqp[ab + l])
-                    idot += int(IQ4NL_LUT[q >> 4]) * int(xqp[ab + 16l + l])
+                    idot += int(lut[q & 15]) * int(xqp[ab + l])
+                    idot += int(lut[q >> 4]) * int(xqp[ab + 16l + l])
                 }
                 let u = int(ksrow[kso + 4l + blk])
                 isum += (u < 128 ? u : u - 256) * idot
@@ -663,6 +664,7 @@ def private dequant_q40_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, n
 //! iq4xs grp row dequant: the k4 tiling + the k4 scale-row interleave (d, signed int8 sc, no
 //! min) — w = (d·sc)·IQ4NL_LUT[q].
 def private dequant_iq4xs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
+    let lut = iq4nl_lut()
     unsafe {
         for (sbi in range64(nsb)) {
             let qb = sbi * 128l * mr
@@ -675,8 +677,8 @@ def private dequant_iq4xs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr,
                 for (j in range64(4l)) {
                     for (t in range64(4l)) {
                         let nib = int(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
-                        dst[kb + j * 4l + t] = dl * float(IQ4NL_LUT[nib & 15])
-                        dst[kb + 16l + j * 4l + t] = dl * float(IQ4NL_LUT[nib >> 4])
+                        dst[kb + j * 4l + t] = dl * float(lut[nib & 15])
+                        dst[kb + 16l + j * 4l + t] = dl * float(lut[nib >> 4])
                     }
                 }
             }

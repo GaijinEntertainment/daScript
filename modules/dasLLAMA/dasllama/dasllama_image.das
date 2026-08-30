@@ -634,6 +634,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.kq_repack_mr5)
     arch |> serialize_raw(t.kq_repack_mr6)
     arch |> serialize_raw(t.kq_repack_mr40)
+    arch |> serialize_raw(t.kq_repack_mr44)
     arch |> serialize_raw(t.wcls_fmt)
     arch |> serialize_raw(t.emb_fmt)
     arch |> serialize_raw(t.ple_emb_fmt)
@@ -672,8 +673,8 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.mtp_headnorm_off)
 }
 
-// 66 serialized fields + 3 deliberate skips (blocks, image_map, image_bytes)
-let IMAGE_META_FIELDS = 66 + 3
+// 67 serialized fields + 3 deliberate skips (blocks, image_map, image_bytes)
+let IMAGE_META_FIELDS = 67 + 3
 
 //! Count of meta-carried fields of any struct: non-arrays plus string arrays (those cannot
 //! be raw planes — see serialize_strings). Pair with a per-type field-count constant to

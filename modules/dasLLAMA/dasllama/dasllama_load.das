@@ -2364,6 +2364,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     t.kq_repack_mr5 = active_kq_layout_mr(5)
                     t.kq_repack_mr6 = active_kq_layout_mr(6)
                     t.kq_repack_mr40 = active_kq_layout_mr(40)
+                    t.kq_repack_mr44 = active_kq_layout_mr(44)
                 }
             } else {
                 layout_repack_q8(t)
@@ -2380,7 +2381,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     t.kq_repack_mr5 = active_kq_layout_mr(5)
                     t.kq_repack_mr6 = active_kq_layout_mr(6)
                     t.kq_repack_mr40 = active_kq_layout_mr(40)
-                    to_log(LOG_INFO, "dasLLAMA: K-quant planes repacked to the '{active_kernel_backend()}' layouts (k4 grp{t.kq_repack_mr4}, k5 grp{t.kq_repack_mr5}, k6 grp{t.kq_repack_mr6}, q40 grp{t.kq_repack_mr40})\n")
+                    t.kq_repack_mr44 = active_kq_layout_mr(44)
+                    to_log(LOG_INFO, "dasLLAMA: K-quant planes repacked to the '{active_kernel_backend()}' layouts (k4 grp{t.kq_repack_mr4}, k5 grp{t.kq_repack_mr5}, k6 grp{t.kq_repack_mr6}, q40 grp{t.kq_repack_mr40}, iq4xs grp{t.kq_repack_mr44})\n")
                 }
             }
         }
