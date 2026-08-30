@@ -31,7 +31,7 @@ def measure_one(tr : Model; npos : int64) {
 def main {
     let env = g_env_harness.models_dir
     let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-    let path = path_join(mdir, "Qwen3-8B-BF16.gguf")
+    let path = path_join(mdir, "Qwen3-8B-BF16.gguf")   // nolint:LINT002,LINT019 — read only inside the das_metal static_if arm
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_mode(MetalMode.required)
         var tr <- load_model_cached(path, QuantMode.q8)

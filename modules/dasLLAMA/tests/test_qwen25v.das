@@ -13,7 +13,7 @@ require ?das_metal dasllama/dasllama_metal_tower   // the CPU gates pin the towe
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown - the twin-W leg re-arms crowned PSOs
 require dasllama/dasllama_common   // set_metal_tensor_crowns - the twin-W leg's crown pin
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
-require math
+require math   // nolint:STYLE030,LINT019 — used only inside the das_metal static_if arm; the no-metal lane sees it unused
 
 // Tier-1 qwen25v tower parity vs llama-mtmd-debug -p encode (the Qwen2.5-Omni window ViT).
 // Reference arm: the f32-widened mmproj, CPU, -fa off (qwen3vl-vision-oracle/mint_25o.sh).
@@ -173,7 +173,7 @@ def test_qwen25v_tier1_gpu(t : T?) {
 
 //! one layer of GPU noise measures ~2.6e-2 abs peak here (f16-operand GEMMs + the K=5120 merger
 //! on |~70| values) and a routing defect mixes quadrants at >= 1.0, so the bar is 0.1 abs
-def private shallow_routing_cell(t : T?; mm, name : string; wa : int64) {
+def private shallow_routing_cell(t : T?; mm, name : string; wa : int64) {   // nolint:LINT012,LINT019 — the whole body is the das_metal static_if arm; the no-metal lane sees every argument unused
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var inscope st <- stage_qwen25v_tower(mm)
         st.t.n_layer = 1l
