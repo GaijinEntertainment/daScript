@@ -173,6 +173,12 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
         k = new KqGemvIq4xs()
     } elif (fmt == int(KqFmt.k3)) {
         k = new KqGemvK3()
+    } elif (fmt == int(KqFmt.iq3s)) {
+        var ki = new KqGemvIq3s()
+        for (i in range(512)) {   // the CPU replay never runs the staging kernel head - fill the workgroup grid here
+            ki.gridw[i] = IQ3S_GRID[i]
+        }
+        k = ki
     } else {
         k = new KqGemvK6()
     }
@@ -274,6 +280,43 @@ def k3_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
                         bacc += float(l < 16 ? s0 : s1) * float(q) * float(byte_s8(xq, xsb * 256 + blk * 32 + l))
                     }
                     acc += xs[xsb] * dd * bacc
+                }
+            }
+            y[r * d + row] = acc
+        }
+    }
+    return <- y
+}
+
+// IQ3_S GEMV float oracle, INDEPENDENT of the class bit-math: w = d * (1 + 2s) * grid_byte *
+// sign straight off the plane bytes ([qs 64][qh 8][signs 32], the k4-shaped scale row), x off
+// the Q8_K bytes - the witness a wrong index/sign pick in the gather cannot pass
+def iq3s_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
+                           regions : array<uint>; n, d, nreg : int) : array<float> {
+    var y : array<float>
+    y |> resize(nreg * d)
+    let nsb = n / 256
+    for (r in range(nreg)) {
+        for (row in range(d)) {
+            let w0 = int(regions[r * 2]) + row * nsb
+            let x0 = int(regions[r * 2 + 1])
+            var acc = 0.0
+            for (s in range(nsb)) {
+                let sb = w0 + s
+                let xsb = x0 + s
+                let dd = half_at(ws, sb * 10)
+                for (blk in range(8)) {
+                    let sc = float(byte_s8(ws, sb * 20 + 4 + blk))   // the plane byte IS the signed (1 + 2s) sub-scale
+                    var bacc = 0.0
+                    for (e in range(32)) {
+                        let l = e / 8
+                        let hj = e % 8
+                        let qi = byte_u8(wq, sb * 104 + blk * 8 + 2 * l + hj / 4) | ((byte_u8(wq, sb * 104 + 64 + blk) << (hj < 4 ? 8 - 2 * l : 7 - 2 * l)) & 256)
+                        let g = float(int(IQ3S_GRID[qi] >> uint(8 * (hj % 4))) & 0xFF)
+                        let sgn = ((byte_u8(wq, sb * 104 + 72 + blk * 4 + l) >> hj) & 1) != 0 ? -1.0 : 1.0
+                        bacc += g * sgn * float(byte_s8(xq, xsb * 256 + blk * 32 + e))
+                    }
+                    acc += xs[xsb] * dd * sc * bacc
                 }
             }
             y[r * d + row] = acc

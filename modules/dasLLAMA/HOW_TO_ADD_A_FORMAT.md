@@ -448,9 +448,30 @@ llama.cpp b10660 clean-cpu): pp512 516.9 vs 104.9 (**4.93x** - the panel amortiz
 gather across the tile; their per-row kernel re-gathers per token), tg128 52.4 vs 57.0
 (0.92x - nothing amortizes at one token; the no-panel gemv spelling to close it is
 followup_general #61). Stamped e2e: 63/64 greedy ids (the flip is the FINAL token, the
-stamped-vs-reference near-tie class), gen 44 t/s. Vulkan, Metal: pending (pre-researched:
-the IQLUT axis on the cm2 template takes the 2 KB grid; threadgroup floats + the
-base-pointer 9th-bit trick on Metal).
+stamped-vs-reference near-tie class), gen 44 t/s.
+
+Vulkan (section 6, the first grid format on the tier): `vk_kq_schema_id` 8 -> 33; the 2 KB
+grid stages into `@workgroup uint[512]` once per kernel (llama.cpp's `init_iq_shmem` form) -
+the source is `iq3s_grid_word`, a per-index accessor over a fixed_array local (QUIRK 20's
+slow path, off the hot loop; a shader function cannot RETURN a fixed array), and the sign
+nibble expands arithmetically (`mask = ((nib * 0x00204081) & 0x01010101) * 255`, negate =
+`(g ^ mask) + m1`). `KqGemvIq3s : KqGemvBase` (26-word rows read as scalar uints - 104 B is
+not uint4-aligned; iq4xs's scale fold via `iq4_sc`); `KqBatchIq3s : KqBatchIq4xs` (the grid
+gather AT STAGE TIME per staged uint4; scale row and blk_fma inherited verbatim). TWO traps
+this walk found: a test family cell whose enc ladder lacks the new arm silently dispatches
+the ELSE format's pipeline over the new planes (fmt 8 ran the k6 tiles - 2200/2200 off with
+byte-stable garbage across "fix" rounds; add the enc arm to EVERY per-fmt ladder in the
+cell, not just ensure/strides); and `pf_f16_feed` admitting a format via `kq_sb` before its
+cm2 tile exists sent iq3s prefill through the cm2 dispatcher whose fall-through served the
+q8 tiles - garbage text at full speed. The feed now excludes iq3s until its tile lands and
+all three cm2 ladders `verify` on a non-q8 fall-through. The CPU replay of a class whose
+kernel stages workgroup state (the grid) must fill that state in `kq_cls_ref` - the replay
+never runs the kernel head. Gates: the suite 71/72 with the seven-format family cells and
+the iq3s float witness; the resident driver matches llama.cpp's greedy ids **64 of 64** at
+gen 262 t/s. Rows (5060 Ti vs llama.cpp b10660 Vulkan): tg128 288.5 vs 324.2 (0.89x), pp512
+6241 vs 17865 (0.35x - the quant feed; the cm2 tile on the IQLUT-axis template is the
+opening lever, exactly iq4xs/k3's pre-template gap class). Metal: pending (threadgroup
+floats + the base-pointer 9th-bit trick).
 
 ### Q3_K (the second format, 2026-08-30)
 

@@ -381,7 +381,7 @@ def private attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kb
 def test_vkd_kq_gemv_family(t0 : T?) {
     t0 |> run("kq GEMV class family == the CPU oracle (all 6 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_kq_gemv_k4_cls() && ensure_kq_gemv_q40_cls() && ensure_kq_gemv_k5_cls() && ensure_kq_gemv_k6_cls() && ensure_kq_gemv_iq4xs_cls() && ensure_kq_gemv_k3_cls())) {
+            if (!(ensure_kq_gemv_k4_cls() && ensure_kq_gemv_q40_cls() && ensure_kq_gemv_k5_cls() && ensure_kq_gemv_k6_cls() && ensure_kq_gemv_iq4xs_cls() && ensure_kq_gemv_k3_cls() && ensure_kq_gemv_iq3s_cls())) {
                 feint("no Vulkan device - skipping\n")
                 return
             }
@@ -389,14 +389,14 @@ def test_vkd_kq_gemv_family(t0 : T?) {
             let d = 3        // rows per region
             let nreg = 2
             let rows = nreg * d
-            let nfmt = 6
-            let fmts = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3))
-            let stride4s = fixed_array(8, 8, 10, 12, 8, 6)   // uint4s per superblock
+            let nfmt = 7
+            let fmts = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s))
+            let stride4s = fixed_array(32, 32, 40, 48, 32, 24, 26)   // uint WORDS per superblock (iq3s is not uint4-aligned)
             for (fi in range(nfmt)) {
                 let fmt = fmts[fi]
                 let stride4 = stride4s[fi]
                 let nwsb = rows * nsb                       // region r's weights at r*d*nsb
-                let wq_words = nwsb * stride4 * 4
+                let wq_words = nwsb * stride4
                 let ws_words_n = nwsb * 5
                 var wqh : array<uint>
                 var wsh : array<uint>
@@ -465,6 +465,8 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                         enc_kq_gemv_iq4xs_cls(raw2, h2, s_cls, pc, wgs)
                     } elif (fmt == int(KqFmt.k3)) {
                         enc_kq_gemv_k3_cls(raw2, h2, s_cls, pc, wgs)
+                    } elif (fmt == int(KqFmt.iq3s)) {
+                        enc_kq_gemv_iq3s_cls(raw2, h2, s_cls, pc, wgs)
                     } else {
                         enc_kq_gemv_k6_cls(raw2, h2, s_cls, pc, wgs)
                     }
@@ -487,6 +489,12 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                     var y_flt <- k3_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, 512, d, nreg)
                     let badf = mismatch_approx(y_ref, y_flt)
                     t |> success(badf == 0, "k3: the class bit-math matches the float dequant oracle ({badf} of {rows} rows off)")
+                    delete y_flt
+                }
+                if (fmt == int(KqFmt.iq3s)) {   // the grid/sign gather has an independent float witness
+                    var y_flt <- iq3s_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, 512, d, nreg)
+                    let badf = mismatch_approx(y_ref, y_flt)
+                    t |> success(badf == 0, "iq3s: the class bit-math matches the float dequant oracle ({badf} of {rows} rows off)")
                     delete y_flt
                 }
                 delete regs
@@ -1009,7 +1017,7 @@ def test_vkd_q8_batch_tile(t0 : T?) {
 def test_vkd_kq_batch_family(t0 : T?) {
     t0 |> run("kq batch tile class family == the CPU oracle (all 6 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_kq_batch_k4_cls() && ensure_kq_batch_q40_cls() && ensure_kq_batch_k5_cls() && ensure_kq_batch_k6_cls() && ensure_kq_batch_iq4xs_cls() && ensure_kq_batch_k3_cls())) {
+            if (!(ensure_kq_batch_k4_cls() && ensure_kq_batch_q40_cls() && ensure_kq_batch_k5_cls() && ensure_kq_batch_k6_cls() && ensure_kq_batch_iq4xs_cls() && ensure_kq_batch_k3_cls() && ensure_kq_batch_iq3s_cls())) {
                 feint("no Vulkan device - skipping\n")
                 return
             }
@@ -1024,9 +1032,9 @@ def test_vkd_kq_batch_family(t0 : T?) {
             let wgs1 = ((cnt1 + 31) / 32) * wtiles
             let wgs = wgs0 + wgs1
             let totsb = 2 * d * nsb   // superblocks across both regions
-            let nfmt = 6
-            let wstrides = fixed_array(32, 32, 40, 48, 32, 24)   // uint words per superblock: k4 q40 k5 k6 iq4xs k3
-            let pipes = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3))
+            let nfmt = 7
+            let wstrides = fixed_array(32, 32, 40, 48, 32, 24, 26)   // uint words per superblock: k4 q40 k5 k6 iq4xs k3 iq3s
+            let pipes = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s))
             for (fi in range(nfmt)) {
                 let fmt = pipes[fi]
                 let wstride = wstrides[fi]
@@ -1103,6 +1111,8 @@ def test_vkd_kq_batch_family(t0 : T?) {
                         enc_kq_batch_iq4xs_cls(raw2, h2, sc, pc, int64(wgs))
                     } elif (fmt == int(KqFmt.k3)) {
                         enc_kq_batch_k3_cls(raw2, h2, sc, pc, int64(wgs))
+                    } elif (fmt == int(KqFmt.iq3s)) {
+                        enc_kq_batch_iq3s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
                         enc_kq_batch_k6_cls(raw2, h2, sc, pc, int64(wgs))
                     }
