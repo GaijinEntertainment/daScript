@@ -7,8 +7,10 @@ doc: `CLAUDE.md` (repo root).
 sits in is reviewed with that tool's own `REVIEW.md`, where one exists, as well as with this
 checklist - not with the checklist of the directory it sits in. A file in a `utils/` library
 directory (`common/`) is reviewed with this checklist and with the checklist of every tool
-that requires it.** A tool's file OUTSIDE `utils/` answers to the checklist of the folder that
-contains it.
+that requires it.** A tool is a directory that owns one program - its entry point and the files
+only that program uses - under `utils/`, or outside `utils/` when `CMakeLists.txt` (beside this
+file) builds or ships it; a tool's file outside `utils/` answers to the checklist of the folder
+that contains it as well as to this one.
 
 **A diff that changes the consent wording in `watchdog/watchdog.py` answers to
 `modules/dasLLAMA/performance/REVIEW.md` (repo root) too.**

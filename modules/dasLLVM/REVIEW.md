@@ -7,8 +7,13 @@
   `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
   covers it.
 
-- **A change gated on a platform - a `get_platform_name()` test or a target-triple branch -
-  runs the module-owned suite on that platform.**
+- **A change gated on the host platform - a `get_platform_name()` test - runs the
+  module-owned suite on that platform.**
+
+- **A diff whose new behavior sits under a target-triple branch - one it adds or one already
+  there - states in its PR body the cross-compile (`write_exe`) for that target that exercised
+  the new behavior.** The suite runs on the host; a target-triple branch is checked only by
+  the artifact built for that target.
 
 - **A diff that adds work to, or moves work within, what `run_jit`
   (`daslib/llvm_jit_run.das`) executes - its own body or any callee - also prints an
@@ -40,10 +45,10 @@
   the checked-in corpus the test sweeps cannot show it.
 
 - **A diff introducing an override knob adds it to `ARCHITECTURE.md` sec.3's inventory in the
-  same change.** An override knob is readable from outside the code under review - an
-  environment variable, a command-line flag, or an exported runtime setter - and changes what
-  a run compiles, tunes, or emits beyond its defaults. `[tune]`-family annotation arguments
-  are declarations, not overrides.
+  same change.** An override knob is supplied at run time - an environment variable, a
+  command-line flag, or an exported runtime setter - and changes what a run compiles, tunes,
+  or emits beyond its defaults. Anything written in source - `[tune]`-family and `[hint]`
+  annotation arguments - is a declaration, not an override.
 
 - **A diff that adds an override knob, or gives one a new effect, also logs at least one line
   naming the knob where it takes effect.** An override that is set but changes nothing needs

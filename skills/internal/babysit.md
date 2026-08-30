@@ -56,10 +56,13 @@ matrix between rounds.
 6. Repeat until Section 0 holds; **only then** wait for CI green and merge.
 
 **Every push that changes a `.das` file since the last push runs the pre-push lint gate
-first**: `daslang utils/internal/preflight/main.das -- --only lint --lint-skip-exe-rail`
+first**: `daslang utils/internal/preflight/main.das -- --only lint,review-md --lint-skip-exe-rail`
 (rails and cost: `skills/internal/preflight.md`, the lint row). MCP `lint` on the file just
 edited is NOT this gate: this run lints every `.das` the branch changed against
-`origin/master`, exactly as CI does, so a clean single-file lint still pushes red.
+`origin/master`, exactly as CI does, so a clean single-file lint still pushes red. **A push
+that changes a `REVIEW*.md`, a `REVIEW.das`, or a file a gate reads runs `--only review-md`
+even with no `.das` in the diff** - the gates grep the checklists, and a re-worded rule that
+drops a token they look for is red only there.
 
 CI runs the whole time - watch it, don't block on it. Red early is a free signal: fix, push,
 re-request. Red after Copilot is dry: fix, then back into the loop. Green early means nothing

@@ -37,6 +37,15 @@ instrument anything, compile in anything, and emit any metadata we want.
 
 ## Roadmap
 
+### Crash fixture for `[hint(unsafe_division_check)]`
+
+The hint's ON state is observable only as a process death: a hinted `x / 0` dies with the CPU
+trap (`0xC0000094` on Windows, `SIGFPE` on Linux) where the un-hinted twin panics, and on
+ARM `sdiv` returns 0 with no trap at all. `tests/jit_tests/div_unsafe_hint.das` pins the
+results and that the hint does not leak into the next function; the death itself wants a
+subprocess fixture in the `dastest/tests/_isolated_fixture_crash/` shape with a per-platform
+expectation.
+
 ### One-process many-engine-compile SIGSEGV in IPSCCP (unreproduced, 2026-08-15)
 
 A single dastest process compiling all of `modules/dasLLAMA/tests` under `-jit` (the

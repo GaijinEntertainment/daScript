@@ -2769,7 +2769,7 @@ VECTORCALL VECMATH_FINLINE vec4f v_div_est(vec4f a, vec4f b) {return v_mul(a, v_
    vec4f fpart, expipart, expfpart;\
    x = v_min(x, v_splats( 129.00000f));\
    x = v_max(x, v_splats(-126.99999f));\
-   ipart = v_cvt_roundi(v_sub(x, V_C_HALF));\
+   ipart = v_cvt_roundi_ieee(v_sub(x, V_C_HALF));\
    fpart = v_sub(x, v_cvt_vec4f(ipart));\
    expipart = v_cast_vec4f(v_slli(v_addi(ipart, v_splatsi(127)), 23));\
 
@@ -2806,7 +2806,7 @@ VECTORCALL VECMATH_INLINE  vec4f v_exp2(vec4f x)
   vec4f fpart, expipart, expfpart;
   x = v_min(x, v_splats( 129.00000f));
   x = v_max(x, v_splats(-126.99999f));
-  ipart = v_cvt_roundi(v_sub(x, V_C_HALF_MINUS_EPS));
+  ipart = v_cvt_roundi_ieee(v_sub(x, V_C_HALF_MINUS_EPS));
   fpart = v_sub(x, v_cvt_vec4f(ipart));
   expipart = v_cast_vec4f(v_slli(v_addi(ipart, v_splatsi(127)), 23));
   expfpart = POLY5(fpart, 9.9999994e-1f, 6.9315308e-1f, 2.4015361e-1f, 5.5826318e-2f, 8.9893397e-3f, 1.8775767e-3f);

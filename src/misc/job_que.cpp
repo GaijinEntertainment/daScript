@@ -1347,6 +1347,10 @@ namespace das {
         // scheduler honors across blocks; the hint mode biases, the hard mode takes the top class
         pthread_set_qos_class_self_np(hard ? QOS_CLASS_USER_INTERACTIVE : QOS_CLASS_USER_INITIATED, 0);
     }
+
+    int GetCurrentProcessorIndex () {
+        return -1;
+    }
 }
 
 #elif defined(_MSC_VER)
@@ -1398,6 +1402,10 @@ namespace das {
         if ( hard ) SetThreadAffinityMask(GetCurrentThread(), 1ull << cpu);
         else SetThreadIdealProcessor(GetCurrentThread(), DWORD(cpu));
     }
+
+    int GetCurrentProcessorIndex () {
+        return int(GetCurrentProcessorNumber());
+    }
 }
 
 #elif defined(__linux__) || defined __HAIKU__
@@ -1426,7 +1434,7 @@ namespace das
     void SetCurrentThreadAffinityCpu ( int, bool ) {}
 #else
     void SetCurrentThreadAffinityCpu ( int cpu, bool hard ) {
-        if ( !hard ) return;   // linux has no soft "ideal CPU" hint — only the hard-mask mode pins
+        if ( !hard || cpu < 0 || cpu >= int(CPU_SETSIZE) ) return;   // linux has no soft "ideal CPU" hint - only the hard-mask mode pins; a negative cpu is GetCurrentProcessorIndex's unsupported value, and CPU_SET past CPU_SETSIZE writes off the set
         cpu_set_t cs;
         CPU_ZERO(&cs);
         CPU_SET(cpu, &cs);
@@ -1434,6 +1442,12 @@ namespace das
         // which bionic does not declare
         sched_setaffinity(0, sizeof(cs), &cs);
     }
+#endif
+
+#if defined(__HAIKU__)
+    int GetCurrentProcessorIndex () { return -1; }
+#else
+    int GetCurrentProcessorIndex () { return sched_getcpu(); }
 #endif
 }
 
@@ -1444,6 +1458,7 @@ namespace das
     void SetCurrentThreadName ( const string & ) {}
     void SetCurrentThreadPriority ( JobPriority ) {}
     void SetCurrentThreadAffinityCpu ( int, bool ) {}
+    int GetCurrentProcessorIndex () { return -1; }
 }
 
 #endif
