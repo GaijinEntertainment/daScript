@@ -8,7 +8,6 @@ assertion watches - the struct, offset, or file named in the pin's own assertion
 pin test (`*_pin.cpp`) asserts that a compiled-in layout, offset, or watched file set stays
 put.
 
-**A diff that narrows what `test_float2string.cpp` compares - fewer bit patterns, a
-tolerance in place of the byte compare, or a dropped `double2string` arm - is a defect.**
-That test is what holds `float2string` and `double2string` to fmt's `"{}"` spelling, which
-the msl/glsl goldens and the string corpus compare byte for byte.
+**A diff that weakens `test_float2string.cpp`'s byte-for-byte compare against fmt's `"{}"` -
+fewer patterns, looser comparison, or a dropped arm - is a defect.** That test holds
+`float2string`/`double2string` to the spelling the `tests/msl/` and `tests/glsl/` goldens pin.

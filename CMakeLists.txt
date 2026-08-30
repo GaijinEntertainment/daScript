@@ -1698,7 +1698,7 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/safebox.h
     include/daScript/misc/smart_ptr.h
     include/daScript/misc/float2string.h
-include/daScript/misc/string_writer.h
+    include/daScript/misc/string_writer.h
     include/daScript/misc/sysos.h
     include/daScript/misc/type_name.h
     include/daScript/misc/uric.h

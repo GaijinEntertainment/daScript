@@ -448,7 +448,7 @@ DAS_MOD_API void test_abi_lambda_and_function ( das::Lambda lambda, das::Func fn
 
 DAS_MOD_API bool testBindEnumFunction ( das::Context * context, das::LineInfoArg * at );
 
-//! CRT reference twins the scalar math benchmarks in benchmarks/core/math A/B against the builtins.
+//! CRT reference twins - benchmarks/core/math A/Bs these against the math builtins.
 inline float crt_expf ( float a ) { return expf(a); }
 inline float crt_exp2f ( float a ) { return exp2f(a); }
 inline float crt_logf ( float a ) { return logf(a); }

@@ -254,13 +254,13 @@ namespace das
     }
 
     char * das_lexical_cast_fp_f ( float x, Context * __context__, LineInfoArg * at ) {
-        char buffer[128];
+        char buffer[DAS_F2S_BUFFER_SIZE];
         auto result = float2string(buffer, x);
         *result = 0;
         return __context__->allocateString(buffer,uint32_t(result-buffer),at);
     }
     char * das_lexical_cast_fp_d ( double x, Context * __context__, LineInfoArg * at ) {
-        char buffer[128];
+        char buffer[DAS_F2S_BUFFER_SIZE];
         auto result = double2string(buffer, x);
         *result = 0;
         return __context__->allocateString(buffer,uint32_t(result-buffer),at);

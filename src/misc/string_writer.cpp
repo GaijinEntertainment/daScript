@@ -67,12 +67,12 @@ namespace das {
     StringWriter & StringWriter::operator << (const string & v)       { return v.length() ? writeStr(v.c_str(), v.length()) : *this; }
     StringWriter & StringWriter::operator << (float v) {
         if ( fixed ) return format("{:.9}", v);
-        char buf[64];
+        char buf[DAS_F2S_BUFFER_SIZE];
         return writeStr(buf, size_t(float2string(buf, v) - buf));
     }
     StringWriter & StringWriter::operator << (double v) {
         if ( fixed ) return format("{:.17}", v);
-        char buf[80];
+        char buf[DAS_F2S_BUFFER_SIZE];
         return writeStr(buf, size_t(double2string(buf, v) - buf));
     }
 

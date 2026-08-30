@@ -4,7 +4,6 @@
 
 #include "misc/include_fmt.h"
 
-#include <cmath>
 #include <cstring>
 
 // the digit and layout emitter below is borrowed from the Luau programming language
@@ -17,6 +16,12 @@ namespace das {
 
     static const char kDigitTable[] = "0001020304050607080910111213141516171819202122232425262728293031323334353637383940414243444546474849"
                                       "5051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899";
+
+    enum { kDigitRoom = 24, kOverreadSlack = 24 };
+
+    template <typename TT> struct F2SBits;
+    template <> struct F2SBits<float>  { typedef uint32_t U;  static const uint32_t expMask = 0x7f800000u; };
+    template <> struct F2SBits<double> { typedef uint64_t U;  static const uint64_t expMask = 0x7ff0000000000000ull; };
 
     static char * printunsignedrev ( char * end, uint64_t num ) {
         while ( num >= 10000 ) {
@@ -56,21 +61,27 @@ namespace das {
 
     template <typename TT>
     static __forceinline char * print_shortest ( char * buf, TT x ) {
-        if ( std::signbit(x) ) {
+        typedef typename F2SBits<TT>::U U;
+        const U expMask = F2SBits<TT>::expMask;
+        U bits;
+        memcpy(&bits, &x, sizeof(x));
+        const U signMask = U(U(1) << (sizeof(U) * 8 - 1));
+        if ( bits & signMask ) {
             *buf++ = '-';
-            x = -x;
+            bits &= ~signMask;
+            memcpy(&x, &bits, sizeof(x));
         }
-        if ( !std::isfinite(x) ) {
-            memcpy(buf, std::isnan(x) ? "nan" : "inf", 3);
+        if ( (bits & expMask) == expMask ) {
+            memcpy(buf, bits != expMask ? "nan" : "inf", 3);
             return buf + 3;
         }
-        if ( x == TT(0) ) {
+        if ( bits == 0 ) {
             *buf++ = '0';
             return buf;
         }
         auto dec = fmt::detail::dragonbox::to_decimal(x);
-        char decbuf[48];
-        char * decend = decbuf + 24;
+        char decbuf[kDigitRoom + kOverreadSlack];
+        char * decend = decbuf + kDigitRoom;
         char * digits = printunsignedrev(decend, uint64_t(dec.significand));
         int declen = int(decend - digits);
         int output_exp = dec.exponent + declen - 1;

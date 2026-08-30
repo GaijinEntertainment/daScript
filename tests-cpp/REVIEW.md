@@ -9,7 +9,6 @@ checklist as well as this one.**
 **A test that owns its own `CMakeLists.txt`, wherever the diff puts it, answers to the
 `big/` subfolder's checklist as well as this one.**
 
-**A diff adding or changing a test that returns early on a missing artifact - a file or
-binary the test needs that not every lane builds - says in the PR which lane runs it with
-that artifact present, naming the command.** A self-skipping test reports pass wherever the
-artifact is absent.
+**A diff adding or changing a test that skips or reports pass without running, under any
+condition not every lane meets - a missing file or binary, an unset environment variable -
+says in the PR which lane runs it for real, naming the command.**

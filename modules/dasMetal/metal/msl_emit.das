@@ -1010,11 +1010,11 @@ def private msl_uint_literal(v : uint) : string {
 // das prints integral floats bare ("{2f}" is "2"), and bare-int + suffix is not a valid MSL
 // literal; `suffix` is "f" for float and "h" for half (the das float16 literal's MSL spelling)
 def private msl_float_literal(var ctx : MslCtx; at : LineInfo; v : float; suffix : string) : string {
-    let s = "{v}"
-    if (s == "inf" || s == "-inf" || s == "nan" || s == "-nan") {
+    if (!is_finite(v)) {
         err(ctx, at, "non-finite float literal has no MSL form")
         return "0.0{suffix}"
     }
+    let s = "{v}"
     if ((s |> find(".")) < 0 && (s |> find("e")) < 0) {
         return "{s}.0{suffix}"
     }

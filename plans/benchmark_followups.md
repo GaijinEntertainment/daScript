@@ -66,3 +66,8 @@ shape itself: the `das_iterator<range>` machinery and the `rcp_est` lane round-t
 suspects, and neither shows on zen2 because MSVC's codegen was the bottleneck there. Wants its
 own probe on the M1 (the family-probe pattern, loop shapes instead of math). The zen2 dictionary
 JIT row swung +43% in the same capture - the known bimodal per-process lane, not a change.
+
+The switch leaves a scalar/vector split: scalar `log2` and `pow` are exact CRT while the
+`float4` arms keep the vecmath estimates (`v_log2_est_p5`, `v_pow`), so `float` and `float4`
+results diverge for those two. The JIT was already exact for the scalars; the vec4f arms are
+the follow-up if the divergence ever bites.
