@@ -307,3 +307,129 @@ def kq_gemm_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
         delete k
     }
 }
+
+// the four remaining kq formats' f16-feed GEMM references, over the same device forms the cm2
+// decode callbacks read (k5 = the k4 row plus the packed 5th-bit plane; q40 = 8 f16 d; iq4xs =
+// d + signed sub-scales + the iq4nl codebook; k3 = 2-bit lanes + hmask over the k6 scale row)
+def k5f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                      recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dm = unpackHalf2x16(wsu[sb * 5])
+                    for (g in range(8)) {
+                        let sc = float(int((wsu[sb * 5 + 1 + g / 4] >> uint((g % 4) * 8)) & 0xFFu))
+                        let mn = float(int((wsu[sb * 5 + 3 + g / 4] >> uint((g % 4) * 8)) & 0xFFu))
+                        for (e in range(32)) {
+                            let j = e % 16
+                            let h = e / 16
+                            let by = byte_u8(wq, sb * 160 + g * 16 + j)
+                            let hby = byte_u8(wq, sb * 160 + 128 + g * 4 + j / 4)
+                            let q = float(((by >> (h * 4)) & 0xF) | (((hby >> (j % 4 + h * 4)) & 1) << 4))
+                            let w = float(float16(dm.x * sc * q - dm.y * mn))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+def q40f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    for (g in range(8)) {
+                        let dp = unpackHalf2x16(wsu[sb * 5 + g / 2])
+                        let dv = g % 2 == 0 ? dp.x : dp.y
+                        for (e in range(32)) {
+                            let by = byte_u8(wq, sb * 128 + g * 16 + e % 16)
+                            let q = float((by >> ((e / 16) * 4)) & 0xF)
+                            let w = float(float16(dv * (q - 8.0)))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+def iq4xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    let lut = iq4nl_lut()
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    for (g in range(8)) {
+                        let sc = float(int(wsu[sb * 5 + 1 + g / 4] << uint((3 - g % 4) * 8)) >> 24)
+                        for (e in range(32)) {
+                            let by = byte_u8(wq, sb * 128 + g * 16 + e % 16)
+                            let q = (by >> ((e / 16) * 4)) & 0xF
+                            let w = float(float16(dv * sc * float(lut[q])))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+def k3f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                      recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dv = unpackHalf2x16(wsu[sb * 5 + 4]).x
+                    for (g in range(8)) {
+                        for (e in range(32)) {
+                            let sidx = g * 2 + e / 16
+                            let sc = float(int(wsu[sb * 5 + sidx / 4] << uint((3 - sidx % 4) * 8)) >> 24)
+                            let qby = byte_u8(wq, sb * 96 + (g / 4) * 32 + e)
+                            let hby = byte_u8(wq, sb * 96 + 64 + e)
+                            let q3 = float(((qby >> ((g % 4) * 2)) & 3) - (((hby >> g) & 1) == 0 ? 4 : 0))
+                            let w = float(float16(dv * sc * q3))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}

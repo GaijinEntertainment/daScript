@@ -185,6 +185,19 @@ admits q8/k4/k6 only (`pf_f16_feed`), q40 and k5 have no cm2 tile either, and
 `followup_vulkan.md` item 24 rules that new formats land on the one class template, not as
 three more hand-stamped bodies. IQ4_XS prefill rides the kq batch tile like q40 does.
 
+### 6b. The cm2 prefill tile - a decode method on the template
+
+On an NV_coopmat2 device the f16 feed serves every kq format through ONE tile template
+(`KqCm2BatchT`): a new format is a format template authoring `[spirv_decode] def decode` over
+the DEVICE forms (quants as the gather lays them out - k4/k5 re-paired k/k+16, q40/iq4xs/k3
+verbatim; scales the 20 B `KQ_DEV_SSB` row) plus three eight-line width stamps, arms in the
+`cm2_cls_ensure/set/enc` ladders, and `pf_f16_feed` admits it via `kq_sb` automatically. A
+codebook format raises the `IQLUT` axis - a gated `@workgroup` f16 table staged ahead of the
+tile loop (llama.cpp's `init_iq_shmem` form); never select codes out of a register vector per
+element inside a decode callback. Gate: a device-form CPU oracle (`<fmt>f16_gemm_oracle`) and
+an l/m/s cell in `tests/test_vulkan_kernels.das`. Payoff on the 1B: iq4xs pp512 5161 -> 15334,
+k3 5174 -> 14031 (0.90x / 0.80x llama.cpp's Vulkan, from 0.30x).
+
 ## 7. Metal - `dasllama_metal_kernels.das`, `_common`, `_prefill`, `_shapes`, `dasllama_layout.das`
 
 Done for IQ4_XS over ssh on the M1 (the tier compiles MSL and runs only there). The tier is
@@ -447,12 +460,12 @@ Against llama.cpp b10660 (`lcpp_bench`, das = the debug-jit instrument; zen2 = 1
 | tier | pp512 das / llama.cpp | tg128 das / llama.cpp |
 |---|---|---|
 | zen2 CPU | 543.6 / 310.8 (1.75x) | 66.4 / 65.1 (1.02x) |
-| 5060 Ti Vulkan | 5174 / 17509 (0.30x) | 372.8 / 349.1 (1.07x) |
+| 5060 Ti Vulkan | 14031 / 17509 (0.80x) | 374.5 / 349.1 (1.07x) |
 | M1 CPU | 524.6 / 223.5 (2.35x) | 127.3 / 110.6 (1.15x) |
 | M1 Metal | 3316 / 3219 (1.03x) | 200.9 / 193.0 (1.04x) |
 
-Decode is at or above llama.cpp on every tier; the Vulkan prefill gap is the missing cm2 tile
-(followup_vulkan item 24).
+Decode is at or above llama.cpp on every tier; the Vulkan prefill gap closed with the cm2
+tile (section 6b, 0.30x -> 0.80x).
 
 ### IQ4_XS (the pilot, 2026-08-30)
 
@@ -491,9 +504,10 @@ exe; zen2 = 16 threads, M1 = 8):
 | tier | pp512 das / llama.cpp | tg128 das / llama.cpp |
 |---|---|---|
 | zen2 CPU | 475.7 / 256.9 (1.85x) | 65.0 / 59.5 (1.09x) |
-| 5060 Ti Vulkan | 5161 / 17060 (0.30x) | 338.4 / 340.7 (0.99x) |
+| 5060 Ti Vulkan | 15334 / 17060 (0.90x) | 334.7 / 340.7 (0.98x) |
 | M1 CPU | 796.0 / 263.0 (3.03x) | 132.3 / 128.2 (1.03x) |
-| M1 Metal | 2953 / 3565 (0.83x) | 138.7 / 247.3 (0.56x) |
+| M1 Metal | 3612 / 3575 (1.01x) | 249.4 / 249.3 (1.01x) |
 
-The Vulkan prefill gap is the missing cm2 decode tile (followup_vulkan item 24: k4 on the same
-box does 13144, 0.67x); the Metal decode gap is the per-lane block map (followup_general #58).
+Both gaps closed 2026-08-30: the cm2 decode tile (section 6b) took Vulkan prefill past the k4
+control's 13144, and the threadgroup-LUT GEMV/mul_mm rework took Metal to parity on both axes;
+what remains anywhere is the tier-wide small-model prefill gap the k4 control shares.

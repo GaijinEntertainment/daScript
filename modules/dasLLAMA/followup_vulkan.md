@@ -451,7 +451,10 @@ module) is independent and can land any time - it is pure structure.
     formats with no cm2 tile prefill at 5161 (iq4xs) and 5174 (k3) t/s against k4's 13144 on
     the same box (llama.cpp 17060 / 17509 / 19719) while their decode sits at parity, so the
     template is also the lever that puts every new format on the tile path; k4's own 0.67x is
-    the 1B-shape tier gap, a separate item.
+    the 1B-shape tier gap, a separate item. DONE 2026-08-30 (the iquant arc): `KqCm2BatchT`
+    stamps all nine originals (suite + the Q4_K_M e2e row within noise), and k5/q40/iq4xs/k3
+    joined as format templates - twelve more stamps, iq4xs pp512 15334 (0.90x llama.cpp,
+    above the k4 control), k3 14031 (0.80x). Item 11's k5/q40 stamps landed with it.
 
 25. **Try `VK_NV_cooperative_vector` for decode GEMV on real hardware (Boris, 2026-08-28).**
     cm2 has no matrix-vector op - its seven feature bits are all tile-shaped, minimum tile 16 -

@@ -76,8 +76,11 @@ compiler pattern-matches only one spelling into that path: a 16-bit load (`int16
 members) followed by `unpack8(w)[i & 1u]` - a byte2 lane select - with sub-fields pulled out by
 shift and mask. A 32-bit word with a variable shift runs slower; an `unpack8` of a 32-bit word
 indexed by a runtime value (a byte4 dynamic select) drops the whole kernel off the block-load
-path, to about a third of the rate. Every cm2 decode - q8, Q4_K, Q6_K - is spelled the 16-bit
-way, which is why the block structs are `int16` arrays over the same bytes.
+path, to about a third of the rate. Every cm2 decode - q8 and the six kq superblock formats -
+is spelled the 16-bit way, which is why the block structs are `int16` arrays over the same
+bytes. The IQ4_XS codebook is the one runtime-indexed read a decode makes: it is staged into a
+16-entry `@workgroup` f16 table ahead of the tile loop (llama.cpp's `init_iq_shmem` form),
+never selected out of a register vector per element.
 
 ### 2.2l The cm2 tile pick and the coopmat default ladder {#cm2-tile-pick-and-default}
 
@@ -98,8 +101,8 @@ and clamps only the store, so every f16 plane the chain feeds it - the gathered 
 image and the hidden plane - is sized with 32 rows of slack past its last region
 (`ffn_cm2_chunk_rows`).
 
-**The f16 feed admits exactly three weight formats - q8, Q4_K and Q6_K** - the same set the cm2
-decode callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE generated class. The
+**The f16 feed admits q8 and every kq superblock format** (`kq_sb`) - the set the cm2 decode
+callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE stamped class. The
 prefill driver reaches them through one dispatcher per stage (`cm2_cls_ensure`, `cm2_cls_set`,
 `cm2_cls_enc`), all three keyed on the same `(fmt, ml)` pair, so the pipeline a role ensures,
 the set it binds and the kernel it encodes can never be three different classes. The decode
