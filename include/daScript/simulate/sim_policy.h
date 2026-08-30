@@ -253,11 +253,11 @@ namespace  das {
         static __forceinline int Floori ( float a, Context &, LineInfo * )          { return v_extract_xi(v_cvt_floori(v_set_x(a))); }
         static __forceinline int Ceili  ( float a, Context &, LineInfo * )          { return v_extract_xi(v_cvt_ceili(v_set_x(a))); }
 
-        static __forceinline float Exp   ( float a, Context &, LineInfo * )          { return v_extract_x(v_exp(v_set_x(a))); }
+        static __forceinline float Exp   ( float a, Context &, LineInfo * )          { return expf(a); }
         static __forceinline float Log   ( float a, Context &, LineInfo * )          { return v_extract_x(v_log(v_set_x(a))); }
-        static __forceinline float Exp2  ( float a, Context &, LineInfo * )          { return v_extract_x(v_exp2(v_set_x(a))); }
-        static __forceinline float Log2  ( float a, Context &, LineInfo * )          { return v_extract_x(v_log2_est_p5(v_set_x(a))); }
-        static __forceinline float Pow   ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_pow(v_set_x(a), v_set_x(b))); }
+        static __forceinline float Exp2  ( float a, Context &, LineInfo * )          { return exp2f(a); }
+        static __forceinline float Log2  ( float a, Context &, LineInfo * )          { return log2f(a); }
+        static __forceinline float Pow   ( float a, float b, Context &, LineInfo * ) { return powf(a, b); }
         static __forceinline float Rcp   ( float a, Context &, LineInfo * )          { return v_extract_x(v_rcp_x(v_set_x(a))); }
         static __forceinline float RcpEst( float a, Context &, LineInfo * )          { return v_extract_x(v_rcp_est_x(v_set_x(a))); }
 

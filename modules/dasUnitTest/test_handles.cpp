@@ -574,6 +574,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     lib.addBuiltInModule();
     addBuiltinDependency(lib, Module::require("math"));
     addEnumTest(lib);
+    addCrtMath(lib);
     // options
     options["unit_test"] = Type::tFloat;
     // constant
