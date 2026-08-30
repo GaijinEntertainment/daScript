@@ -172,17 +172,17 @@ let KQ_SAFE_SCALES = fixed_array(0.25, 0.5, 1.0, 0.125, 2.0, 0.75, 1.5, 0.375)
 
 // quant plane = hash bytes (any bit pattern is valid); scale plane K4/K5 = [d f16][dmin f16]
 // [12 packed 6-bit bytes] per superblock, K6 = [16B sub-scales] x nsb + f16 d tail, IQ4_XS (44) =
-// the same split form with [8 signed sub-scales in -31..31][8 zero] strips
+// the same split form with [8 signed sub-scales in -31..31][8 zero] strips, Q3_K (3) = the k6 form over 96B quants
 def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>) {
-    let qsb = fmt == 4 || fmt == 44 ? 128 : (fmt == 5 ? 160 : 192)
+    let qsb = fmt == 4 || fmt == 44 ? 128 : (fmt == 5 ? 160 : (fmt == 3 ? 96 : 192))
     kq |> resize(nsb * qsb)
     for (i in range(nsb * qsb)) {
         kq[i] = kq_hash_byte(i * 3 + fmt)
     }
-    if (fmt == 6 || fmt == 44) {
+    if (fmt == 6 || fmt == 44 || fmt == 3) {
         ks |> resize(nsb * 18)
         for (i in range(nsb * 16)) {
-            ks[i] = fmt == 6 ? kq_hash_byte(i * 7 + 13) : uint8(i % 16 < 8 ? int(kq_hash_byte(i * 7 + 13)) % 63 - 31 : 0)
+            ks[i] = fmt == 6 || fmt == 3 ? kq_hash_byte(i * 7 + 13) : uint8(i % 16 < 8 ? int(kq_hash_byte(i * 7 + 13)) % 63 - 31 : 0)
         }
         for (b in range(nsb)) {
             let dbits = f32_to_f16(KQ_SAFE_SCALES[b % 8])
@@ -247,6 +247,9 @@ def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wro
             dequant_k5_plane_superblock(kq, int64(sb * 160), ks, int64(sb * 16), wrow, int64(ib * 256))
         } elif (fmt == 44) {
             dequant_iq4xs_plane_superblock_at(kq, int64(sb * 128), ks, int64(sb * 16),
+                int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
+        } elif (fmt == 3) {
+            dequant_k3_plane_superblock_at(kq, int64(sb * 96), ks, int64(sb * 16),
                 int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
         } else {
             dequant_k6_plane_superblock_at(kq, int64(sb * 192), ks, int64(sb * 16),

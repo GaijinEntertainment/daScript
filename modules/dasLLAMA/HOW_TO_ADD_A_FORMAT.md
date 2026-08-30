@@ -412,7 +412,21 @@ six formats, `k3_gemv_float_oracle` as the witness. The device gather
 (`moe_gpu_gather_stack_kq`) gained k3 arms in both its grouped and tail-row branches - and the
 tail-row branch turned out to lack iq4xs arms too (QUIRK 19). `test_vulkan_kernels` 64/64;
 the 1B Q3_K_L on the resident driver matches llama.cpp's greedy ids for 51 of 64 tokens at gen
-284 t/s. Metal: pending.
+284 t/s.
+
+Metal: the k3 scale row IS the k6 form, so `metal_blob_scale_plane("k3s")` is the k6 split
+verbatim over `t.k3s`, `kq_scales_of` the k6 arm, `metal_blob_off_ok` the k6 rule; quants bind
+verbatim (96 B). Kernels are k6's twins with the compose: `MetalKqGemvK3` (k6's lane map - a
+lane's 4 elements of each of a half's 4 blocks share the qs bytes at shifts 0/2/4/6 and the
+hmask bits 4ip..4ip+3, exactly k6's `sums[0..3]` shape), `MetalKqMvK3T` B2/B4 + `MetalKqMvB8K3`
+(k6's slot map over 24 uints per superblock: qs 0..15, hmask 16..23), a `K3` arm in
+`MetalKqMulMmK45T` beside `SIXBIT` (the k4/k5/iq4xs arms re-nested once more - QUIRK 14). A
+local named `half3` is a reserved vector type name in daslang; the emitter reports it as a
+syntax error at the `let`. Ladders as iq4xs's; fixtures at fmt 3 reuse the k6 split-form fill,
+`kq_row_ref` via `dequant_k3_plane_superblock_at`. Gates on the M1 Max:
+`test_metal_gemv_kernels` 2/2, `test_metal_gemm_kernels` 2/2; the 1B Q3_K_L on the Metal tier
+(`k3_metal_probe.das`, the iq4xs probe with the model swapped) decodes a coherent story at gen 223
+t/s, taking the other side of the same token-15 near tie the CPU stamp took.
 
 ### IQ4_XS (the pilot, 2026-08-30)
 

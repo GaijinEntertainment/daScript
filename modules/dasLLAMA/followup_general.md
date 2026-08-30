@@ -731,3 +731,15 @@
     the existing templates, the LUT cost measured against a `constant` table and against a
     byte-pair decode on the M5, and `bench_metal_gemv_kernels` / `bench_metal_kq_mm_lab` rows
     for the format beside k4's.
+
+59. **Partial mint (Boris, 2026-08-30, for after the formats arc): "takes existing mint and
+    mints new kernels only. at least in debug-only mode."** Today a sidecar missing ANY demanded
+    kernel re-tunes the whole scope (the completeness rule), so every new `[tune]` family - one
+    per format in this arc - re-mints every application sidecar on the box on its next start,
+    minutes each (HOW_TO_ADD_A_FORMAT.md QUIRK 17), and the same rule keeps a stub-era
+    `"reference"` pin alive after the emitter lands (QUIRK 11). The partial mint keeps the
+    existing entries and races only the families the sidecar lacks (or names as reference),
+    validating the merged file as one. Debug-only is the acceptable first form: a
+    `DAS_TUNE_PARTIAL=1` (or `--tune-partial`) rail that the auto policy does not take, so a
+    shipped box still mints whole. Done = the rail exists, a fresh family on a minted box
+    costs one family's race, and the tuner's status line names the partial mint as such.
