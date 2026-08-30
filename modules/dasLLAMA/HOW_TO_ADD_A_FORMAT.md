@@ -468,10 +468,16 @@ all three cm2 ladders `verify` on a non-q8 fall-through. The CPU replay of a cla
 kernel stages workgroup state (the grid) must fill that state in `kq_cls_ref` - the replay
 never runs the kernel head. Gates: the suite 71/72 with the seven-format family cells and
 the iq3s float witness; the resident driver matches llama.cpp's greedy ids **64 of 64** at
-gen 262 t/s. Rows (5060 Ti vs llama.cpp b10660 Vulkan): tg128 288.5 vs 324.2 (0.89x), pp512
-6241 vs 17865 (0.35x - the quant feed; the cm2 tile on the IQLUT-axis template is the
-opening lever, exactly iq4xs/k3's pre-template gap class). Metal: pending (threadgroup
-floats + the base-pointer 9th-bit trick).
+gen 262 t/s. The cm2 tile followed in the same phase: an `IQ3GRID` gated axis on
+`KqCm2BatchT` stages the 2 KB grid into a `@workgroup uint[512]` before the tile loop, and
+`Iq3sCm2T`'s decode gathers per element over the 16-bit-lane block views (`VkIq3sBlk`:
+qs/qh/signs as int16 arrays) with iq4xs's scale fold; three width stamps, the dispatcher
+arms, and iq3s re-admitted to `pf_f16_feed`. The three tiles gate 0-off (89600 cells each);
+the e2e holds 63/64 on the f16 feed (the final-token near-tie; the quant feed ran 64/64).
+Rows (5060 Ti vs llama.cpp b10660 Vulkan): tg128 288.1 vs 324.2 (0.89x), pp512 12540 vs
+17865 (0.70x - AT the tier's shared 1B-shape class; the k4 control on this box is 0.67x),
+up from 6241 on the quant feed. Metal: pending (threadgroup floats + the base-pointer
+9th-bit trick).
 
 ### Q3_K (the second format, 2026-08-30)
 

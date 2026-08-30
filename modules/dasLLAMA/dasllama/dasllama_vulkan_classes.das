@@ -3863,6 +3863,12 @@ struct VkK5Blk {
     qh : int16[16]   // ... and its 32 packed 5th-bit bytes: byte g*4+q = bits of elems g*32+4q..+3 (lo) | +16.. (hi)
 }
 
+struct VkIq3sBlk {
+    qs : int16[32]   // one IQ3_S superblock's 64 grid-index bytes as 16-bit lanes
+    qh : int16[4]    // ... its 8 ninth-bit bytes
+    sg : int16[16]   // ... and its 32 sign bytes; scales (f16 d + 8 int8 (1 + 2s)) live in ws
+}
+
 struct VkK3Blk {
     qs : int16[32]   // one Q3_K superblock's 64 qs bytes, four 2-bit lanes each, verbatim disk order
     hm : int16[16]   // ... and its 32 hmask bytes; scales (16 int8 (sc-32) + f16 d) live in ws
@@ -3887,6 +3893,8 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant BLKW : uint = 256u                 // elements per weight block
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
     @workgroup @template_gate = IQLUT iq4lut : float16[16]   // kvalues_iq4nl as f16 (llama.cpp's init_iq_shmem form)
+    @template_constant IQ3GRID : bool = false             // stage the 2 KB iq3s grid into workgroup memory
+    @workgroup @template_gate = IQ3GRID iq3s_gridc : uint[512]
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
     def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
@@ -3923,6 +3931,11 @@ class template KqCm2BatchT : MoeCmBase {
                 let tbl = uint4(3215825025u, 4142587343u, 639175937u, 1901675829u)
                 iq4lut[li] = float16(float((int((tbl[int(li >> 2u)] >> ((li & 3u) * 8u)) & 255u) ^ 128) - 128))
             }
+        }
+        static_if (IQ3GRID) {
+            let gi = gl_LocalInvocationID.x
+            iq3s_gridc[gi] = iq3s_grid_word(int(gi))
+            iq3s_gridc[gi + 256u] = iq3s_grid_word(int(gi + 256u))
         }
         barrier()   // wg_blk0 (and the gated codebook) visible before the first decode load
         var a : coopmatWgA_f16_128x64
@@ -4195,6 +4208,32 @@ class template K3Cm2T : KqCm2BatchT {
     }
 }
 
+[ |> template_struct_instance]
+class template Iq3sCm2T : KqCm2BatchT {
+    typedef BLK = VkIq3sBlk
+    typedef ST = uint
+    override IQ3GRID = true
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkIq3sBlk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let g = e >> 5u
+        let r = e & 31u
+        let wj = r >> 2u
+        let qi = g * 8u + wj
+        let qb = uint(int(unpack8(blk.qs[int(qi >> 1u)])[int(qi & 1u)])) & 0xFFu
+        let qh = uint(int(unpack8(blk.qh[int(g >> 1u)])[int(g & 1u)])) & 0xFFu
+        let si = g * 4u + (r >> 3u)
+        let sgb = uint(int(unpack8(blk.sg[int(si >> 1u)])[int(si & 1u)])) & 0xFFu
+        let gw = iq3s_gridc[qb | ((qh << (8u - wj)) & 256u)]
+        let gb = float((gw >> ((r & 3u) * 8u)) & 0xFFu)
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let d = unpackHalf2x16(ws[srow]).x
+        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        return float16(d * float(sc) * (((sgb >> (((r >> 2u) & 1u) * 4u + (r & 3u))) & 1u) != 0u ? -gb : gb))
+    }
+}
+
 // the stamps: the three width columns of each format (the dispatcher keys on (fmt, tc))
 [vk_dispatch(name = "q8_batch_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2LBatch : Q8Cm2T {
@@ -4377,6 +4416,33 @@ class K3Cm2MBatch : K3Cm2T {
 
 [vk_dispatch(name = "kq_batch_k3_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K3Cm2SBatch : K3Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+    typedef FLO = tensorLayout2DPad
+}
+
+[vk_dispatch(name = "kq_batch_iq3s_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3sCm2LBatch : Iq3sCm2T {
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq3s_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3sCm2MBatch : Iq3sCm2T {
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq3s_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3sCm2SBatch : Iq3sCm2T {
     override BN = 32u
     override STILE = true
     typedef BT = coopmatWgB_f16_64x32

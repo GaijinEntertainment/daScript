@@ -325,6 +325,40 @@ def iq3s_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
+// IQ3_S f16-feed GEMM reference over the device form: grid gather + sign flip per element,
+// f16-rounded per weight like its siblings ([qs 64][qh 8][signs 32] rows, the k4-shaped
+// scale row with signed (1 + 2s) sub-scales).
+def iq3sf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                        recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nsb = n / 256
+    for (rr in range(nrec)) {
+        let wsb0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (s in range(nsb)) {
+                    let sb = wsb0 + c * nsb + s
+                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    for (g in range(8)) {
+                        let sc = float(int(wsu[sb * 5 + 1 + g / 4] << uint((3 - g % 4) * 8)) >> 24)
+                        for (e in range(32)) {
+                            let wj = e / 4
+                            let qi = byte_u8(wq, sb * 104 + g * 8 + wj) | ((byte_u8(wq, sb * 104 + 64 + g) << (8 - wj)) & 256)
+                            let gb = float(int(IQ3S_GRID[qi] >> uint(8 * (e % 4))) & 0xFF)
+                            let sbit = (byte_u8(wq, sb * 104 + 72 + g * 4 + e / 8) >> (((e / 4) % 2) * 4 + e % 4)) & 1
+                            let w = float(float16(dv * sc * (sbit != 0 ? -gb : gb)))
+                            acc += w * half_at(xf, (row0 + r) * n + s * 256 + g * 32 + e)
+                        }
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
 // kq batch GEMM oracle over region records — same blk_contrib per (row, col, block)
 def kq_gemm_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
                    recs : array<uint>; nrec, n, d : int; var y : array<float>) {
