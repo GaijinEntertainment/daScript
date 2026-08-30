@@ -743,3 +743,24 @@
     `DAS_TUNE_PARTIAL=1` (or `--tune-partial`) rail that the auto policy does not take, so a
     shipped box still mints whole. Done = the rail exists, a fresh family on a minted box
     costs one family's race, and the tuner's status line names the partial mint as such.
+
+60. **Retroactive llama.cpp CPU-kernel audit for the arc's earlier formats (Boris,
+    2026-08-30: "lets make sure we do for all new CPU kernels, and if we skipped for previous
+    ones - lets ledger towards the end of this arc").** The IQ3_S CPU arm is the first written
+    against llama.cpp's arch kernel (signs-on-activation, sllv index compose, scalar grid
+    loads beating hardware gather); IQ4_XS and Q3_K were written from the disk format alone.
+    Toward the end of the arc: read `ggml_vec_dot_iq4_xs_q8_K` and `ggml_vec_dot_q3_K_q8_K`
+    (x86 + arm), list every technique ours does not measure, land the missing ones as
+    `[tune_perm]` spellings and let the probe judge. Done = a per-format note naming what was
+    raced and what won, beside the existing bench rows.
+
+61. **IQ3_S CPU decode: race a no-panel gemv spelling (the 0.92x tail).** The stamped gemv
+    gathers each superblock into an alloca panel and then runs the vector dot - a store/load
+    round trip per superblock that a single token never amortizes; llama.cpp's per-row form
+    (grid words composed straight into vectors, signs applied to the ACTIVATION via
+    shuffle+cmpeq/xor-sub, magnitudes kept unsigned for maddubs) edges it 57.0 vs 52.4 tg128
+    on the zen2 (pp512 is ours 4.93x - the panel amortizes across the tile). The counter to
+    race as a [tune_perm]: compose the gathered words directly into the weight vectors
+    (insertelement per i32 lane, no panel), and/or the signs-on-activation form that drops
+    the abs+psign pair. Done = a gemv perm that takes tg128 at or past llama.cpp's, crowned
+    by the probe.

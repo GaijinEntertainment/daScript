@@ -87,3 +87,12 @@ the same day, on the Metal portion: "we have an option of ssh m1 ... go for it. 
 somehow. plus validates the how-to. and we'll ledger M5 pass on new kernels for later" - the M1
 is in the loop for every format from here, and performance work on the new Metal kernels is
 the ledgered M5 pass, not this arc.
+
+## 2026-08-30 - HOW_TO_ADD_A_FORMAT.md (section 4), followup_general.md (#60)
+
+Boris, on the IQ3_S emitter design after reading llama.cpp's AVX2 iq3_s kernel: "our CPU
+kernels typically faster - so if they map closer, perhaps worth looking at and doing side by
+side?" and then "lets make sure we do for all new CPU kernels, and if we skipped for previous
+ones - lets ledger towards the end of this arc." Every new format's CPU kernel work starts by
+reading llama.cpp's arch kernel and racing its techniques as tune perms; the formats that
+skipped this (IQ4_XS, Q3_K) get the retroactive audit at the end of the arc (#60).

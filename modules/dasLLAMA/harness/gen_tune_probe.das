@@ -763,7 +763,7 @@ def kq_layout_mrs(fmt : int64) : table<string; int> {
 def run_kq_tile(tile; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr : int64; var y : array<float>) {
     let ng = fx.d / mr
     verify(fx.ntok % 4l == 0l)
-    let packed = fx.fmt == 4l || fx.fmt == 40l || fx.fmt == 44l || fx.fmt == 3l || fx.fmt == 33l   // packed planes: the tile reads them directly
+    let packed = fx.fmt == 4l || fx.fmt == 40l || fx.fmt == 44l || fx.fmt == 3l   // packed planes: the tile reads them directly (iq3s unpacks its panel per group)
     var panel : array<uint8>
     if (!packed) {
         panel |> resize(int(mr * fx.nsb * 256l))
@@ -1245,6 +1245,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     var kfxs40 <- [ <- build_kq_fixture(40l, 256l, 32l, 8l), <- build_kq_fixture(40l, 768l, 32l, 8l), <- build_kq_fixture(40l, 2048l, 32l, 8l)]
     var kfxs44 <- [ <- build_kq_fixture(44l, 256l, 32l, 8l), <- build_kq_fixture(44l, 768l, 32l, 8l), <- build_kq_fixture(44l, 2048l, 32l, 8l)]
     var kfxs3 <- [ <- build_kq_fixture(3l, 256l, 32l, 8l), <- build_kq_fixture(3l, 768l, 32l, 8l), <- build_kq_fixture(3l, 2048l, 32l, 8l)]
+    var kfxs33 <- [ <- build_kq_fixture(33l, 256l, 32l, 8l), <- build_kq_fixture(33l, 768l, 32l, 8l), <- build_kq_fixture(33l, 2048l, 32l, 8l)]
     var vs <- q8q8_tile_gen_variants()
     var mrs <- variant_mrs()
     var wbs <- variant_wbias()
@@ -1371,6 +1372,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     allok = kq_test_family(40l, kfxs40) && allok
     allok = kq_test_family(44l, kfxs44) && allok
     allok = kq_test_family(3l, kfxs3) && allok
+    allok = kq_test_family(33l, kfxs33) && allok
     delete wtab
     delete mtab
     delete gtab
@@ -1388,6 +1390,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     delete kfxs40
     delete kfxs44
     delete kfxs3
+    delete kfxs33
     return allok
 }
 

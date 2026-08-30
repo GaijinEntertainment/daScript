@@ -4,6 +4,7 @@ options _dasllama_internal = true
 
 module dasllama_repack shared public
 
+require dasllama/dasllama_kqformat   // iq3s_grid - the panel unpack gathers through the codebook
 require dasllama/dasllama_lint public
 require dasllama/dasllama_math_default  // k4_sc_mn — the kq 6-bit sc/mn decoder (stays there: hot in the kq dots, auto-inline is same-module-only)
 
@@ -516,7 +517,55 @@ def repack_iq3s_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
 //! kqBytes stamps load verbatim). SWAR over uint64 lanes: k5 deposit uses an add-carry test
 //! ((x+0x7F)&0x80) to fold the high bit; k6 tops sit at a uniform shift per block.
 [hint(unsafe_range_check, noalias = kqg, noalias = dst)]
+//! iq3s panel unpack: the grid gather + sign apply, packed grp planes -> the byte-expanded
+//! signed panel. One grid word = 4 elements = ONE i32 store; the sign nibble expands through
+//! the mask table and negates byte-wise (magnitudes are odd 1..15 - no cross-byte carry).
+def unpack_iq3s_panel_grp(kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
+    let grid = iq3s_grid()
+    let smask = fixed_array<uint>(0x00000000u, 0x000000FFu, 0x0000FF00u, 0x0000FFFFu,
+                                  0x00FF0000u, 0x00FF00FFu, 0x00FFFF00u, 0x00FFFFFFu,
+                                  0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFF00FFFFu,
+                                  0xFFFF0000u, 0xFFFF00FFu, 0xFFFFFF00u, 0xFFFFFFFFu)
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 104l * mr
+            let ob = sbi * 256l * mr
+            for (r in range64(mr)) {
+                for (blk in range64(8l)) {
+                    let hp = 64l + blk
+                    let qh = int(kqg[qb + ((hp / 4l) * mr + r) * 4l + hp % 4l])
+                    for (l in range64(4l)) {
+                        let sp = 72l + blk * 4l + l
+                        let sgn = int(kqg[qb + ((sp / 4l) * mr + r) * 4l + sp % 4l])
+                        let q1p = blk * 8l + 2l * l
+                        let q2p = q1p + 1l
+                        let i1 = int(kqg[qb + ((q1p / 4l) * mr + r) * 4l + q1p % 4l]) | ((qh << int(8l - 2l * l)) & 256)
+                        let i2 = int(kqg[qb + ((q2p / 4l) * mr + r) * 4l + q2p % 4l]) | ((qh << int(7l - 2l * l)) & 256)
+                        let m1 = smask[sgn & 15]
+                        let m2 = smask[(sgn >> 4) & 15]
+                        let w1 = (grid[i1] ^ m1) + (m1 & 0x01010101u)
+                        let w2 = (grid[i2] ^ m2) + (m2 & 0x01010101u)
+                        // element e = l*8 + half*4 + t: e < 16 lands in the lo panel half, else hi
+                        let e1 = l * 8l
+                        let e2 = l * 8l + 4l
+                        let d1 = (e1 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e1 % 16l) / 4l) * mr + r) * 4l
+                        let d2 = (e2 < 16l ? 0l : 128l * mr) + ((blk * 4l + (e2 % 16l) / 4l) * mr + r) * 4l
+                        var wp1 = reinterpret<uint?>(dst + (ob + d1))
+                        var wp2 = reinterpret<uint?>(dst + (ob + d2))
+                        wp1[0] = w1
+                        wp2[0] = w2
+                    }
+                }
+            }
+        }
+    }
+}
+
 def unpack_kq_panel_grp(fmt : int64; kqg : uint8 const?; var dst : uint8?; mr, nsb : int64) {
+    if (fmt == 33l) {
+        unpack_iq3s_panel_grp(kqg, dst, mr, nsb)
+        return
+    }
     let LO4 = 0x0F0F0F0F0F0F0F0Ful
     let SEL = 0x0804020108040201ul   // LE lane t (0..3, twice) selects high-bit t
     let C7F = 0x7F7F7F7F7F7F7F7Ful

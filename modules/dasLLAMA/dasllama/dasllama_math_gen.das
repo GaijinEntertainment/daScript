@@ -657,7 +657,7 @@ def iq3sq8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?; xqp
     unsafe {
         for (t in range64(4l)) {
             for (r in range64(mr)) {
-                yp[(t0 + t) * d + g * mr + r] = iq3s_grp_row_dot(kqg, ksg, r, mr, xqp + (t0 + t) * n, xsp + (t0 + t) * (n / 256l), xbsp + (t0 + t) * (n / 16l), n)
+                yp[(t0 + t) * d + g * mr + r] = kq_grp_row_dot_b(33l, kqg, ksg, r, mr, xqp + (t0 + t) * n, xsp + (t0 + t) * (n / 256l), xbsp + (t0 + t) * (n / 16l), n)
             }
         }
     }
@@ -919,9 +919,9 @@ def private q51q8_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint8 cons
 
 
 
-//! kq_grp_row_dot's twin over a BYTE-EXPANDED panel (unpack_kq_panel_grp's output) — the k5/k6
-//! tile wrappers' reference body, bit-exact against the packed-plane dot. fmt picks the scale
-//! form only (5 = u8 sc/mn + d/dmin, 6 = signed per-16 sub-scales + d).
+//! kq_grp_row_dot's twin over a BYTE-EXPANDED panel (unpack_kq_panel_grp's output) - bit-exact
+//! against the packed-plane dot. fmt picks the scale form only: 5 = u8 sc/mn + d/dmin, 6 =
+//! signed per-16 sub-scales + d, 33 = SIGNED panel bytes x per-32 (1 + 2s) + d, no bsum term.
 def kq_grp_row_dot_b(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
     var acc = 0.0
     let nsb = n / 256l
@@ -938,13 +938,16 @@ def kq_grp_row_dot_b(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr 
                 var ihi = 0
                 for (j in range64(4l)) {
                     for (t in range64(4l)) {
-                        let qlo = int(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
-                        let qhi = int(kqg[qb + 128l * mr + ((blk * 4l + j) * mr + r) * 4l + t])
+                        let qlo = fmt == 33l ? int(int8(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])) : int(kqg[qb + ((blk * 4l + j) * mr + r) * 4l + t])
+                        let qhi = fmt == 33l ? int(int8(kqg[qb + 128l * mr + ((blk * 4l + j) * mr + r) * 4l + t])) : int(kqg[qb + 128l * mr + ((blk * 4l + j) * mr + r) * 4l + t])
                         ilo += qlo * int(xqp[b * 32l + j * 4l + t])
                         ihi += qhi * int(xqp[b * 32l + 16l + j * 4l + t])
                     }
                 }
-                if (fmt == 6l) {
+                if (fmt == 33l) {
+                    let sc = int(int8(ksg[sb + 4l * mr + blk * mr + r]))
+                    isum += sc * (ilo + ihi)
+                } elif (fmt == 6l) {
                     let s0 = int(int8(ksg[sb + 2l * blk * mr + r]))
                     let s1 = int(int8(ksg[sb + (2l * blk + 1l) * mr + r]))
                     isum += s0 * ilo + s1 * ihi
@@ -956,7 +959,10 @@ def kq_grp_row_dot_b(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr 
                     bsum += mn * (xbsp[b * 2l] + xbsp[b * 2l + 1l])
                 }
             }
-            if (fmt == 6l) {
+            if (fmt == 33l) {
+                let di = f16_to_f32(uint(ksg[sb + 2l * r]) | (uint(ksg[sb + 2l * r + 1l]) << 8u))
+                acc += float(isum) * (di * xsp[sbi])
+            } elif (fmt == 6l) {
                 let dk6 = f16_to_f32(uint(ksg[sb + 16l * mr + 2l * r]) | (uint(ksg[sb + 16l * mr + 2l * r + 1l]) << 8u))
                 acc += float(isum - 32 * bsum) * (dk6 * xsp[sbi])
             } else {
@@ -1553,7 +1559,7 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let nb16 = n / 16l
-    let packed = fmt == 4 || fmt == 40 || fmt == 44 || fmt == 3 || fmt == 33   // packed planes: the tile reads them directly
+    let packed = fmt == 4 || fmt == 40 || fmt == 44 || fmt == 3   // packed planes: the tile reads them directly (iq3s expands its grid gather into the panel)
     var scratch : array<uint8>
     if (!packed) {
         scratch |> resize(mr * nsb * 256l)
@@ -1584,7 +1590,7 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
                     } elif (fmt == 3) {
                         k3q8_tile_gen(myp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
                     } elif (fmt == 33) {
-                        iq3sq8_tile_gen(myp, kqg, ksg, xqp, xsp, xbsp, n, d, g, tk)
+                        iq3sq8_tile_gen(myp, scp, ksg, xqp, xsp, xbsp, n, d, g, tk)
                     } else {
                         k6q8_tile_gen(myp, scp, ksg, xqp, xsp, xbsp, n, d, g, tk)
                     }

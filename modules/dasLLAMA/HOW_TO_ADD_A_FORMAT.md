@@ -96,6 +96,11 @@ add the arm next to `q40`'s. The compiler does not find these - a missing arm fa
 
 ## 4. CPU kernels - `dasllama_math_default.das`, `dasllama_math_gen.das`, `dasllama_math.das`, `dasllama_repack.das`
 
+- **Read llama.cpp's CPU kernel for the format FIRST** - `ggml-cpu/arch/x86/quants.c`
+  `ggml_vec_dot_<fmt>_q8_K` (and the arm twin) in the local clone. Map each technique it uses
+  onto the lattice as its own `[tune_perm]` spelling where it fits; the probe IS the side-by-side
+  (perms race each other and the reference, per box). Our CPU kernels typically win - keep it
+  that way by never leaving one of their tricks unmeasured.
 - `dot_<fmt>_q8` - the portable disk-order row dot (exact integer inner sums, one float fold per
   superblock), `<fmt>_rows_kernel`, the `kq_gemv_kernel` arm, the `matmul_kq_groupn` arm.
 - `dequant_<fmt>_row_grp` - the grp<mr> row dequant (own helper; `dequant_kq_row_grp` dispatches).
@@ -396,6 +401,15 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    lookup, and belongs to followup_general #58. Unquirked: the SPIR-V emitter lowers a `let`
    fixed_array of literals to a constant-storage array, or a lint on a dynamically indexed
    fixed_array local inside a kernel class.
+21. **An emitter-arm edit does NOT invalidate the JIT DLL cache.** The registered code
+   generators (`dasllama_gemm_gen.das`) run at codegen time and their bodies do not fold into
+   the cached DLL's hash - after an emitter change, every `-jit` run that hits the cache
+   executes the OLD stamps with no signal (the iq3s gemv arm "failed" three fix rounds in a
+   row on byte-identical numbers before the cache-hit line gave it away; the hash was the same
+   0xa3a02e12... across every edit). After ANY emitter change: `rm -rf .jitted_scripts` (or
+   bump `LLVM_JIT_CODEGEN_VERSION`) before trusting a probe or bench. Unquirked: the cache
+   hash folds the generator bodies (plans/interpreter ledger has the sibling
+   `jit_dll_semantic_hash` item).
 
 ## Per-format notes
 
@@ -418,9 +432,25 @@ family minted `verdict=rejected` (QUIRK 16's shape) after the whole-scope re-tun
 and the reference bodies serve. End to end: `Llama-3.2-1B-Instruct-IQ3_M.gguf` (bartowski:
 IQ3_S x78 + Q4_K x34 + Q6_K embd) through `run.das` matches llama.cpp's greedy ids **64 of
 64** at gen 23 t/s - the first format to hold the whole comparison window token-for-token.
-JIT emitter, Vulkan, Metal: pending (the per-tier grid-placement answers are pre-researched:
-workgroup/threadgroup-staged table, the IQLUT axis on the cm2 template, threadgroup floats
-on Metal).
+JIT emitter (section 5, the first side-by-side under the llama.cpp-kernel rule): the TILE
+rides the panel route - `unpack_iq3s_panel_grp` gathers grid words + signs into the k5/k6
+byte-expanded panel per group (one i32 store per grid word, sign nibble through a 16-entry
+mask table, negate = `(w ^ m) + (m & 0x01010101)` - magnitudes are odd 1..15, no cross-byte
+carry) - and the GEMV gathers each superblock into an alloca panel via an emitted per-row
+loop (`emit_iq3s_gather`; grid + mask as private module constants); both then ride
+`emit_block_iq4xs`'s sign-trick lattice with panel loads in place of the nibble+LUT. Two
+finds along the way: `emit_slice` recorded SAVED block handles as phi incomings - a
+block-splitting emitter leaves the builder elsewhere, so back-edges were malformed (fixed:
+capture `LLVMGetInsertBlock` at the branch points); and QUIRK 21 ate three fix rounds.
+Probe test mode: every k33 perm ok (maddubs mr8 stamped, 1.9e-6); the tuner crowned
+`dot_maddubs_width256_mr8` at ~4.9x the reference body. Side by side on the zen2 (16t,
+llama.cpp b10660 clean-cpu): pp512 516.9 vs 104.9 (**4.93x** - the panel amortizes the
+gather across the tile; their per-row kernel re-gathers per token), tg128 52.4 vs 57.0
+(0.92x - nothing amortizes at one token; the no-panel gemv spelling to close it is
+followup_general #61). Stamped e2e: 63/64 greedy ids (the flip is the FINAL token, the
+stamped-vs-reference near-tie class), gen 44 t/s. Vulkan, Metal: pending (pre-researched:
+the IQLUT axis on the cm2 template takes the 2 KB grid; threadgroup floats + the
+base-pointer 9th-bit trick on Metal).
 
 ### Q3_K (the second format, 2026-08-30)
 
