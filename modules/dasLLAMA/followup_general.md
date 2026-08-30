@@ -551,12 +551,11 @@
     its own gate design). Done = either path serving the Omni-3B encode with a
     poison-discriminating tier-1 gate.
 
-45. **The `tests/msl/_fail_closed/` fixture list and `test_msl_fail_closed.das`'s
-    `check_rejects` calls are hand-synced (37 files, 37 calls, nothing checks).** A fixture
-    added without its needle assert (or an assert whose fixture was deleted) drifts silently.
-    Done = a `modules/dasMetal/REVIEW.das` gate cell (the module has none yet - this creates
-    it): every `_fail_closed/*.das` basename appears as a `check_rejects` argument and vice
-    versa - the list-A-equals-list-B shape.
+45. **RESOLVED (2026-08-30, the release-remint arc) - the fixture/assert sync is a
+    `modules/dasMetal/REVIEW.das` cell.** `check_fail_closed_sync` walks
+    `tests/msl/_fail_closed/*.das` and the `check_rejects` calls both directions; either
+    drift is a finding (negative-controlled both ways at landing). The module's REVIEW.das
+    already existed (the RP law) by the time this landed.
 
 46. **The `// clock: control` marker (dasllama REVIEW.md's ad-hoc-profiling split) has no
     mechanical check.** Done = a `REVIEW.das` cell or lint: every `ref_time_ticks()` /

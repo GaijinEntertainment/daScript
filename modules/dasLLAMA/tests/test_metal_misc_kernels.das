@@ -14,6 +14,9 @@ require ?das_metal _metal_kernel_common   // shared buf helpers + eyeball-dump c
 require ?das_metal _mtl_toy               // the [metal_dispatch] multi-kernel fixture
 require llvm/daslib/f16_cvt         // f32_to_f16 — packing the synthetic scale planes
 require math
+require daslib/fio                  // the lens tgmem gate's spawned compiles
+require strings
+require daslib/strings_boost
 
 // The decode-side elementwise/misc corpus vs direct CPU oracles on synthetic data: copy_row,
 // argmax (the CPU sampler's exact lowest-index tie-break, exercised with deliberate exact
@@ -1908,6 +1911,70 @@ def test_metal_misc_kernels(t : T?) {
             t |> equal(metal_log_leaks_if_any(), 0l)
         } else {
             feint("das_metal is not built on this platform; misc kernel checks skipped\n")
+        }
+    }
+}
+
+// a spawned one-class [metal_dispatch] program: @workgroup state, tgmem= present or absent
+def private spawn_wg_fixture(with_tgmem : bool; tag : string) : tuple<rc : int; out : string> {
+    let tgarg = with_tgmem ? "tgmem = \"wg_fixture_msl_tgmem\", " : ""
+    let src = join([
+        "options gen2",
+        "options _dasllama_internal = true",
+        "",
+        "require dasllama/dasllama_lint public",
+        "require das_metal",
+        "require metal/msl_shader",
+        "require dasllama/dasllama_metal_common",
+        "require dasllama/dasllama_metal_lens",
+        "",
+        "[metal_dispatch(name = \"enc_wg_fixture\", pso = \"g_wg_fixture_pso\", {tgarg}tg = 64, grid = \"n/64\", params = \"n : int64\")]",
+        "class WgFixture \{",
+        "    @ssbo @binding = 0 @role = \"write\" ys : array<float>",
+        "    @workgroup acc : float[64]",
+        "",
+        "    [metal_kernel(name = \"wg_fixture_msl\")]",
+        "    def kmain \{",
+        "        let i = gl_GlobalInvocationID.x",
+        "        acc[gl_LocalInvocationID.x] = 1.0",
+        "        ys[i] = acc[gl_LocalInvocationID.x]",
+        "    \}",
+        "\}",
+        "",
+        "var g_wg_fixture_pso : MetalComputePipeline?",
+        "",
+        "[export]",
+        "def main() \{",
+        "    print(\"ok\\n\")",
+        "\}"], "\n")
+    let dir_r = create_temp_directory_result("dasllama_lens_{tag}")
+    if (!(dir_r is value)) {
+        return (rc = -1, out = "temp dir failed")
+    }
+    let dir = unsafe(dir_r.value)
+    let path = path_join(dir, "prog.das")
+    if (!fwrite(path, src)) {
+        return (rc = -1, out = "fwrite failed")
+    }
+    let argv <- get_command_line_arguments()
+    let self = find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
+    var out : string
+    let rc = run_and_capture([self, "-compile-only", path], out, 120.0)
+    rmdir_rec_result(dir)
+    return (rc = rc, out = out)
+}
+
+[test]
+def test_lens_tgmem_gate(t : T?) {
+    t |> run("[metal_dispatch] on @workgroup state refuses to compile without tgmem=") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let bad = spawn_wg_fixture(false, "bad")
+            t |> success(bad.rc != 0, "the tgmem-less fixture must not compile")
+            t |> success(find(bad.out, "no tgmem=") >= 0, "the refusal names the gate: {bad.out}")
+            let good = spawn_wg_fixture(true, "ok")
+            t |> equal(0, good.rc, "the tgmem= twin compiles: {good.out}")
+        } else {
+            feint("das_metal is not built on this platform; lens tgmem gate skipped\n")
         }
     }
 }

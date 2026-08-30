@@ -50,6 +50,11 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
   Narrowing the file it scans weakens it. So does making its finding text stop naming what
   failed. `relaxed_precision = false` keeps the op off the tensor-unit fast path.
 
+- **Weakening `REVIEW.das`'s fail-closed sync check is a defect.** That check holds the
+  `tests/msl/_fail_closed/` fixture list and `test_msl_fail_closed.das`'s `check_rejects`
+  asserts equal both directions - a fixture without its assert leaves a rejection unpinned,
+  and a stranded assert is a rejection the emitter no longer makes.
+
 - **Never zero a cooperative tensor element by element before a `matmul2d` `run` accumulates
   into it - `get_destination_cooperative_tensor` already hands it back zeroed.** That walk
   forces every element into real storage before the accumulation loop, and that costs the op
