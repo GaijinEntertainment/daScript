@@ -576,6 +576,46 @@ def dot_iq4xs_q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; 
     return acc
 }
 
+//! Q3_K row dot off the DISK-ORDER planes: block b = 4h + j takes the 2-bit lane of qs byte
+//! h*32 + l at shift 2j plus hmask bit b of byte l (q in 0..7); k6's fold with the -4 offset:
+//! isum = sum sc16 * dot, bsum = sum sc16 * sum a16, then (isum - 4 * bsum) * d * xs per superblock.
+[hint(unsafe_range_check, noalias = kqrow, noalias = ksrow, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def dot_k3q8(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64) : float {
+    var acc = 0.0
+    unsafe {
+        for (sb in range64(n / 256l)) {
+            let kqo = sb * 96l
+            let kso = sb * 18l
+            let d = f16_to_f32(uint(ksrow[kso + 16l]) | (uint(ksrow[kso + 17l]) << 8u))
+            var isum = 0
+            var bsum = 0
+            for (blk in range64(8l)) {
+                let qb = kqo + (blk / 4l) * 32l
+                let hb = kqo + 64l
+                let sh = int((blk % 4l) * 2l)
+                let b = sb * 8l + blk
+                let ab = b * 32l
+                var i0 = 0
+                var i1 = 0
+                for (l in range64(16l)) {
+                    let q0 = ((int(kqrow[qb + l]) >> sh) & 3) | (((int(kqrow[hb + l]) >> int(blk)) & 1) << 2)
+                    let q1 = ((int(kqrow[qb + 16l + l]) >> sh) & 3) | (((int(kqrow[hb + 16l + l]) >> int(blk)) & 1) << 2)
+                    i0 += q0 * int(xqp[ab + l])
+                    i1 += q1 * int(xqp[ab + 16l + l])
+                }
+                let u0 = int(ksrow[kso + 2l * blk])
+                let u1 = int(ksrow[kso + 2l * blk + 1l])
+                let s0 = u0 < 128 ? u0 : u0 - 256
+                let s1 = u1 < 128 ? u1 : u1 - 256
+                isum += s0 * i0 + s1 * i1
+                bsum += s0 * xbsp[b * 2l] + s1 * xbsp[b * 2l + 1l]
+            }
+            acc += float(isum - 4 * bsum) * (d * xsp[sb])
+        }
+    }
+    return acc
+}
+
 // Row-range cores + full GEMVs per format. Not `private`: invoked through hoisted function
 // pointers from lifted worker lambdas (the fused chains) and the dispatch wrappers in common.
 def k4_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
@@ -623,6 +663,15 @@ def iq4xs_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; x
     }
 }
 
+def k3_rows_kernel(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
+    let nsb = n / 256l
+    unsafe {
+        for (i in range64(rb, re)) {
+            yp[i] = dot_k3q8(kqp + i * nsb * 96l, ksp + i * nsb * 18l, xqp, xsp, xbsp, n)
+        }
+    }
+}
+
 def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
     var myp = yp
     maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
@@ -634,6 +683,8 @@ def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp :
             q40_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         } elif (fmt == 44) {
             iq4xs_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
+        } elif (fmt == 3) {
+            k3_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         } else {
             k6_rows_kernel(myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
         }
@@ -686,6 +737,31 @@ def private dequant_iq4xs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr,
     }
 }
 
+//! k3 grp row dequant: the 2-bit lanes and hmask bits stay in place per (h, column) — w = (d * sc16) * (q - 4).
+def private dequant_k3_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
+    unsafe {
+        for (sbi in range64(nsb)) {
+            let qb = sbi * 96l * mr
+            let sb = sbi * 18l * mr
+            let d = f16_to_f32(uint(ksg[sb + 16l * mr + 2l * r]) | (uint(ksg[sb + 16l * mr + 2l * r + 1l]) << 8u))
+            for (blk in range64(8l)) {
+                let kb = sbi * 256l + blk * 32l
+                let h = blk / 4l
+                let sh = int((blk % 4l) * 2l)
+                let s0 = d * float(int(int8(ksg[sb + 2l * blk * mr + r])))
+                let s1 = d * float(int(int8(ksg[sb + (2l * blk + 1l) * mr + r])))
+                for (l4 in range64(8l)) {
+                    for (t in range64(4l)) {
+                        let q2 = (int(kqg[qb + ((h * 8l + l4) * mr + r) * 4l + t]) >> sh) & 3
+                        let hb = (int(kqg[qb + 64l * mr + (l4 * mr + r) * 4l + t]) >> int(blk)) & 1
+                        dst[kb + l4 * 4l + t] = (l4 < 4l ? s0 : s1) * float((q2 | (hb << 2)) - 4)
+                    }
+                }
+            }
+        }
+    }
+}
+
 //! Dequant one row off the grp<mr>-REPACKED K-quant planes (repack_k4/k5/k6_grp layout).
 //! kqg/ksg = row's GROUP plane base (group g = row/mr); r = row % mr.
 //! embed_row's kq_repacked path — per-token, so scalar is fine.
@@ -699,6 +775,10 @@ def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, m
     }
     if (fmt == 44l) {
         dequant_iq4xs_row_grp(kqg, ksg, r, mr, nsb, dst)
+        return
+    }
+    if (fmt == 3l) {
+        dequant_k3_row_grp(kqg, ksg, r, mr, nsb, dst)
         return
     }
     unsafe {
@@ -797,6 +877,8 @@ def matmul_kq_groupn(fmt : int; var y : array<float> | #; kq : array<uint8> | #;
                         myp[ii] = dot_q40q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     } elif (fmt == 44) {
                         myp[ii] = dot_iq4xs_q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
+                    } elif (fmt == 3) {
+                        myp[ii] = dot_k3q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     } else {
                         myp[ii] = dot_k6q8(kqp + sb * qsb, ksp + sb * ssb, xqp + xoff, xsp + xoff / 256l, xbsp + xoff / 16l, n)
                     }

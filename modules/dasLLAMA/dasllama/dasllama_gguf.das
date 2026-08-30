@@ -47,6 +47,7 @@ let GGML_TYPE_Q4_0 = 2
 let GGML_TYPE_Q5_0 = 6
 let GGML_TYPE_Q5_1 = 7
 let GGML_TYPE_Q8_0 = 8
+let GGML_TYPE_Q3_K = 11
 let GGML_TYPE_Q4_K = 12
 let GGML_TYPE_Q5_K = 13
 let GGML_TYPE_Q6_K = 14
@@ -738,6 +739,44 @@ def gguf_transcode_iq4xs(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
                             row[12l + i] = uint8(0)
                         }
                         bcopy(kqp + sb * IQ4XS_QSB, src + 8l, 128l)
+                    }
+                }
+            }
+        }
+    }
+}
+
+//! Transcode a Q3_K tensor into the k3 planes (see gguf_transcode_q4k; strides 96/18, exact): the
+//! 110B disk superblock splits into [qs][hmask] verbatim and the k6-shaped scale row with the 16
+//! packed 6-bit sub-scales DECODED to int8 (scale - 32) — transcode_q3k_superblock.
+def gguf_transcode_q3k(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    let ti = kq_transcode_check(m, name, GGML_TYPE_Q3_K, "Q3_K", src_off, expect_n)
+    let nb = expect_n / 256l
+    if (nb <= 0l) {
+        return
+    }
+    guard_dst(name, "k3 quant plane", (eloff / 256l) * K3_QSB, nb * K3_QSB, long_length(kq))
+    guard_dst(name, "k3 scale plane", (eloff / 256l) * K3_SSB, nb * K3_SSB, long_length(ks))
+    with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
+        let bo = tbase + (src_off / 256l) * 110l
+        unsafe {
+            let srcp = addr<uint8 const?>(bytes[bo])
+            var kqp = addr(kq[(eloff / 256l) * K3_QSB])
+            var ksp = addr(ks[(eloff / 256l) * K3_SSB])
+            maybe_parallel_for(0, int(nb), transcode_jobs(nb, 110l)) $(rb, re) {
+                unsafe {
+                    for (sb in range64(int64(rb), int64(re))) {
+                        let src = srcp + sb * 110l
+                        var row = ksp + sb * K3_SSB
+                        for (i in range64(16l)) {
+                            let lo = i < 8l ? int(src[96l + i]) & 15 : int(src[96l + i - 8l]) >> 4
+                            let hi = int(src[104l + i % 4l]) >> int(2l * (i / 4l))
+                            row[i] = uint8((lo | ((hi & 3) << 4)) - 32)
+                        }
+                        row[16l] = src[108l]
+                        row[17l] = src[109l]
+                        bcopy(kqp + sb * K3_QSB, src + 32l, 64l)
+                        bcopy(kqp + sb * K3_QSB + 64l, src, 32l)
                     }
                 }
             }

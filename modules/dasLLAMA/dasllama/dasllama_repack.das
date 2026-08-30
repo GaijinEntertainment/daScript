@@ -417,6 +417,54 @@ def repack_iq4xs_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     delete tq
     delete ts
 }
+
+//! k3 grp layout: the qs bytes as 16 four-byte columns ([h 0..1][8 l-groups]) x mr rows, then the
+//! hmask as 8 columns x mr rows at 64*mr — the 2-bit lanes and mask bits stay in place (the
+//! kernels shift per block); scales interleave as k6's row ([16 x mr int8][mr x f16 d]).
+def repack_k3_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
+    let nsb = n / 256l
+    let qrow = nsb * 96l
+    let srow = nsb * 18l
+    let ng = d / mr
+    var tq : array<uint8>
+    var ts : array<uint8>
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
+    unsafe {
+        var tqp = addr(tq[0])
+        var tsp = addr(ts[0])
+        memcpy(tqp, kq, d * qrow)
+        memcpy(tsp, ks, d * srow)
+        for (g in range64(ng)) {
+            for (sbi in range64(nsb)) {
+                let dq = g * mr * qrow + sbi * 96l * mr
+                let ds = g * mr * srow + sbi * 18l * mr
+                for (r in range64(mr)) {
+                    let sq = (g * mr + r) * qrow + sbi * 96l
+                    let ss = (g * mr + r) * srow + sbi * 18l
+                    for (c in range64(16l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + (c * mr + r) * 4l + t] = tqp[sq + c * 4l + t]
+                        }
+                    }
+                    for (c in range64(8l)) {
+                        for (t in range64(4l)) {
+                            kq[dq + 64l * mr + (c * mr + r) * 4l + t] = tqp[sq + 64l + c * 4l + t]
+                        }
+                    }
+                    for (idx in range64(16l)) {
+                        ks[ds + idx * mr + r] = tsp[ss + idx]
+                    }
+                    ks[ds + 16l * mr + 2l * r] = tsp[ss + 16l]
+                    ks[ds + 16l * mr + 2l * r + 1l] = tsp[ss + 17l]
+                }
+            }
+        }
+    }
+    delete tq
+    delete ts
+}
+
 // ===== grp<mr> panel unpack (the byte-expanded tile form the kq stamps load) =====
 
 //! Unpack ONE group's packed grp<mr> k5/k6 quant panel into the BYTE-EXPANDED tile form (wlo/whi

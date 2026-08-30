@@ -440,7 +440,7 @@ struct KqFixture {
 def kq_qsb(fmt : int64) : int64 => dasllama_gemm_schema::kq_qsb(int(fmt))
 def kq_ssb(fmt : int64) : int64 => dasllama_gemm_schema::kq_ssb(int(fmt))
 
-// the family's sidecar entry = its [tune] function name (the K-quants by bit width, q40/iq4xs by tag)
+// the family's sidecar entry = its [tune] function name (the K-quants by bit width - k3 included - q40/iq4xs by tag)
 def kq_tile_entry(fmt : int64) : string => fmt == 40l ? "q40q8_tile_gen" : (fmt == 44l ? "iq4xsq8_tile_gen" : "k{fmt}q8_tile_gen")
 
 // synthetic disk superblocks, varied per (row, superblock) so no two blocks repeat: any byte
@@ -486,6 +486,17 @@ def pack_kq_disk_block(fmt : int64; var blkb : array<uint8>; base : int) {
         for (i in range(128)) {
             blkb[8 + i] = uint8((base * 37 + i * 101 + 29) % 256)
         }
+    } elif (fmt == 3l) {
+        // 110B Q3_K disk block: 32 hmask, 64 qs, 12 packed 6-bit scales, f16 d — every byte pattern is legal
+        for (i in range(96)) {
+            blkb[i] = uint8((base * 37 + i * 101 + 29) % 256)
+        }
+        for (i in range(12)) {
+            blkb[96 + i] = uint8((base * 29 + i * 71 + 5) % 256)
+        }
+        let dbits = f32_to_f16(0.002 + 0.0001 * float(base % 13))
+        blkb[108] = uint8(dbits & 0xFF)
+        blkb[109] = uint8(dbits >> 8u)
     } elif (fmt == 4l) {
         pack_kq_scale_header(blkb, base)
         for (i in range(128)) {
@@ -524,6 +535,8 @@ def repack_kq_grp_fmt(fmt : int64; var kq : uint8?; var ks : uint8?; n, d, mr : 
         repack_q40_grp(kq, ks, n, d, mr)
     } elif (fmt == 44l) {
         repack_iq4xs_grp(kq, ks, n, d, mr)
+    } elif (fmt == 3l) {
+        repack_k3_grp(kq, ks, n, d, mr)
     } else {
         repack_k6_grp(kq, ks, n, d, mr)
     }
@@ -536,7 +549,7 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
     fx.kq |> resize(d * fx.nsb * qsb)
     fx.ks |> resize(d * fx.nsb * ssb)
     var blkb : array<uint8>
-    blkb |> resize(fmt == 4l || fmt == 40l ? 144l : (fmt == 5l ? 176l : (fmt == 44l ? 136l : 210l)))
+    blkb |> resize(fmt == 4l || fmt == 40l ? 144l : (fmt == 5l ? 176l : (fmt == 44l ? 136l : (fmt == 3l ? 110l : 210l))))
     for (r in range64(d)) {
         for (s in range64(fx.nsb)) {
             let base = int(r * 31l + s * 7l)
@@ -550,6 +563,8 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
                 transcode_q40_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
             } elif (fmt == 44l) {
                 transcode_iq4xs_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
+            } elif (fmt == 3l) {
+                transcode_q3k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
             } else {
                 transcode_q6k_superblock(blkb, 0l, fx.kq, sb * qsb, fx.ks, sb * ssb)
             }
@@ -587,8 +602,11 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
                         : (fmt == 44l
                             ? iq4xs_grp_row_dot(kqg, ksg, r, 4l,
                                 addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n)
-                            : kq_grp_row_dot(fmt, kqg, ksg, r, 4l,
-                                addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n)))
+                            : (fmt == 3l
+                                ? k3_grp_row_dot(kqg, ksg, r, 4l,
+                                    addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n)
+                                : kq_grp_row_dot(fmt, kqg, ksg, r, 4l,
+                                    addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n))))
                 }
             }
         }
@@ -612,6 +630,9 @@ def kq_tile_variants(fmt : int64) : array<tuple<string; KqTileFn>> {
     }
     if (fmt == 44l) {
         return <- iq4xsq8_tile_gen_variants()
+    }
+    if (fmt == 3l) {
+        return <- k3q8_tile_gen_variants()
     }
     return <- k6q8_tile_gen_variants()
 }
@@ -638,6 +659,12 @@ def kq_gemv_variants_by_suffix(fmt : int64) : table<string; KqRowsFn> {
         delete gvs
     } elif (fmt == 44l) {
         var gvs <- iq4xsq8_gemv_gen_variants()
+        for (v in gvs) {
+            tab[v._0] = v._1
+        }
+        delete gvs
+    } elif (fmt == 3l) {
+        var gvs <- k3q8_gemv_gen_variants()
         for (v in gvs) {
             tab[v._0] = v._1
         }
@@ -680,6 +707,12 @@ def kq_layout_mrs(fmt : int64) : table<string; int> {
             mrs[v._0] = invoke(v._1)
         }
         delete lvs
+    } elif (fmt == 3l) {
+        var lvs <- k3q8_layout_gen_variants()
+        for (v in lvs) {
+            mrs[v._0] = invoke(v._1)
+        }
+        delete lvs
     } else {
         var lvs <- k6q8_layout_gen_variants()
         for (v in lvs) {
@@ -697,7 +730,7 @@ def kq_layout_mrs(fmt : int64) : table<string; int> {
 def run_kq_tile(tile; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr : int64; var y : array<float>) {
     let ng = fx.d / mr
     verify(fx.ntok % 4l == 0l)
-    let packed = fx.fmt == 4l || fx.fmt == 40l || fx.fmt == 44l   // pure-nibble planes: the tile reads them directly
+    let packed = fx.fmt == 4l || fx.fmt == 40l || fx.fmt == 44l || fx.fmt == 3l   // packed planes: the tile reads them directly
     var panel : array<uint8>
     if (!packed) {
         panel |> resize(int(mr * fx.nsb * 256l))
@@ -1303,6 +1336,8 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     allok = kq_test_family(6l, kfxs6) && allok
     allok = kq_test_family(40l, kfxs40) && allok
     allok = kq_test_family(44l, kfxs44) && allok
+    // k3 joins this list with its emitter arm: a stub family fails every perm whose layout
+    // companion generates (planes at mr 8, the reference body at mr 4 - HOW_TO QUIRK 16)
     delete wtab
     delete mtab
     delete gtab
@@ -1761,7 +1796,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         print("aborting mid-run - no sidecar written\n")
         return false
     }
-    for (fmt in fixed_array(4l, 5l, 6l, 40l, 44l)) {
+    for (fmt in fixed_array(4l, 5l, 6l, 40l, 44l, 3l)) {
         interrupt_gate("k{fmt}q8_tile_gen")
         let kq_t0 = ref_time_ticks()
         let entry = kq_tile_entry(fmt)

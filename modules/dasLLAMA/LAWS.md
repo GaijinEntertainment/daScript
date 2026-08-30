@@ -75,3 +75,15 @@
   module's new `CLAUDE.md` and the root table. Arc ruling the same day: the community i-quants
   are read as-is ("B for sure. we are not big enough for people to bother with our own fork"),
   Qwen3.8-27B on a 16 GB card is the Vulkan arc's endgame.
+
+## 2026-08-30 - HOW_TO_ADD_A_FORMAT.md, followup_general.md (#58)
+
+Boris, on the IQ4_XS pilot's Metal section and QUIRKS 12-15: "this is exactly the kind of info
+we need for that document. once we're done with all formats - we'll unquirk all we can, but
+otherwise it'll be like step1-step2-step3 instruction - this is how to add format. like it
+should." The QUIRKS ledger stays open and honest through every format of the arc; the unquirk
+pass comes AFTER the last format lands, and the surviving document is the numbered walk. Earlier
+the same day, on the Metal portion: "we have an option of ssh m1 ... go for it. it feels right
+somehow. plus validates the how-to. and we'll ledger M5 pass on new kernels for later" - the M1
+is in the loop for every format from here, and performance work on the new Metal kernels is
+the ledgered M5 pass, not this arc.

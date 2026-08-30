@@ -13,7 +13,7 @@ module dasllama_kqformat shared public
 require dasllama/dasllama_lint public
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
-//! k4/k5/k6/q40/iq4xs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
+//! k4/k5/k6/q40/iq4xs/k3 = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
 //! planes. New members append — the int value is the device stack tag and the image plane id.
 enum KqFmt : uint8 {
     q8
@@ -23,18 +23,19 @@ enum KqFmt : uint8 {
     q40
     q51
     iq4xs
+    k3
 }
 
 //! The superblock-lattice formats (Q8_K-form activations, % 256 rows, repack + stamped kq
 //! kernels). q51 deliberately fails this: it rides per-32 planes with Q8_0-form activations —
 //! a `fmt != KqFmt.q8` test does not imply the kq lattice; branch on kq_sb where it does.
-def kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40 || f == KqFmt.iq4xs
+def kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40 || f == KqFmt.iq4xs || f == KqFmt.k3
 
 //! The same predicate over the int id space the GPU drivers carry per stack/plane.
-def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs)
+def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.k3)
 
 //! KqFmt -> the kernel/IR format id space — the ONE bridge between the enum and the int ids the
-//! generated kernels take as runtime params. Mnemonic ids: a K-quant is its bit width (4/5/6),
+//! generated kernels take as runtime params. Mnemonic ids: a K-quant is its bit width (3/4/5/6),
 //! Q4_0 is 40, an i-quant is bit width x 10 + a variant digit (IQ4_XS = 44). q8/q51 panic.
 def kq_schema_id(f : KqFmt) : int {
     if (f == KqFmt.k4) {
@@ -51,6 +52,9 @@ def kq_schema_id(f : KqFmt) : int {
     }
     if (f == KqFmt.iq4xs) {
         return 44
+    }
+    if (f == KqFmt.k3) {
+        return 3
     }
     panic("kq_schema_id: not a kq superblock format")
     return 0
@@ -70,6 +74,8 @@ let Q51_QB = 20l    // q5_1 quant plane PER 32-BLOCK: 16 nibble bytes (k/k+16 pa
 let Q51_SB = 4l     // q5_1 scale plane PER 32-BLOCK: f16 d + f16 m
 let IQ4XS_QSB = 128l   // IQ4_XS quant plane: 128 nibble bytes, the disk k/k+16 pairing (q40 tiling)
 let IQ4XS_SSB = 20l    // IQ4_XS scale plane: f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad — the k4 decoded-row shape
+let K3_QSB = 96l    // Q3_K quant plane: 64 qs bytes (four 2-bit lanes each) + 32 hmask bytes, verbatim disk order
+let K3_SSB = 18l    // Q3_K scale plane: 16 x int8 (6-bit scale - 32, decoded at transcode) + f16 d — the k6 row
 
 //! The IQ4_NL / IQ4_XS nibble codebook: weight = scale x IQ4NL_LUT[nibble] (ggml's kvalues_iq4nl).
 //! Main-context use only (tests, oracles, the emitter's constant bake): a kernel that can run on a
@@ -96,6 +102,9 @@ def kq_qsb(f : KqFmt) : int64 {
     if (f == KqFmt.q51) {
         return Q51_QB
     }
+    if (f == KqFmt.k3) {
+        return K3_QSB
+    }
     panic("kq_qsb: no plane stride for this format")
     return 0l
 }
@@ -105,7 +114,7 @@ def kq_ssb(f : KqFmt) : int64 {
     if (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.iq4xs) {
         return K4_SSB
     }
-    if (f == KqFmt.k6) {
+    if (f == KqFmt.k6 || f == KqFmt.k3) {
         return K6_SSB
     }
     if (f == KqFmt.q40) {

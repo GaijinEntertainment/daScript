@@ -663,6 +663,56 @@ def dequant_iq4xs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : a
     }
 }
 
+//! The 6-bit sub-scale i (0..15) of a Q3_K disk block off its 12 packed scale bytes at `so` —
+//! ggml's kmask unpack: low nibbles of bytes 0..7 carry scales 0..7, their high nibbles 8..15,
+//! bytes 8..11 carry every scale's top two bits at shift 2 * (i / 4).
+def q3k_scale6(bytes : array<uint8> | #; so, i : int64) : int {
+    let lo = i < 8l ? int(bytes[so + i]) & 15 : int(bytes[so + i - 8l]) >> 4
+    let hi = int(bytes[so + 8l + i % 4l]) >> int(2l * (i / 4l))
+    return lo | ((hi & 3) << 4)
+}
+
+//! Transcode one Q3_K superblock (110 bytes at `bo`: 32 hmask, 64 qs, 12 packed 6-bit scales,
+//! f16 d) into the k3 planes: [qs 64][hmask 32] verbatim to kq[kqo..+96), the 16 sub-scales
+//! DECODED to int8 (scale - 32) + the f16 d to ks[kso..+18) — the k6 row shape (exact).
+def transcode_q3k_superblock(bytes : array<uint8> | #; bo : int64; var kq : array<uint8>; kqo : int64; var ks : array<uint8>; kso : int64) {
+    for (i in range64(64l)) {
+        kq[kqo + i] = bytes[bo + 32l + i]
+    }
+    for (i in range64(32l)) {
+        kq[kqo + 64l + i] = bytes[bo + i]
+    }
+    for (i in range64(16l)) {
+        ks[kso + i] = uint8(q3k_scale6(bytes, bo + 96l, i) - 32)
+    }
+    ks[kso + 16l] = bytes[bo + 108l]
+    ks[kso + 17l] = bytes[bo + 109l]
+}
+
+//! Reference dequant of one k3-plane superblock: w = (d * sc16) * (q - 4) with q = the 2-bit lane
+//! of qs byte h*32 + l at shift 2j | hmask bit (4h + j) of byte l << 2, block 4h + j — ggml's
+//! own float order (dl = d * (scale - 32), then dl * (q3 - 4)).
+def dequant_k3_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_k3_plane_superblock_at(kq, kqo, ks, kso, kso + 16l, dst, doff)
+}
+
+//! The split-layout twin: `dso` names the f16 d halfword's byte offset independently of the
+//! 16-byte sub-scale strip at kso — the k6 split form a metal-blob model keeps.
+def dequant_k3_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso, dso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, dso))
+    for (blk in range64(8l)) {
+        let qb = kqo + (blk / 4l) * 32l
+        let sh = int((blk % 4l) * 2l)
+        let dl0 = d * float(rd_i8(ks, kso + 2l * blk))
+        let dl1 = d * float(rd_i8(ks, kso + 2l * blk + 1l))
+        for (l in range64(32l)) {
+            let q2 = (int(kq[qb + l]) >> sh) & 3
+            let hb = (int(kq[kqo + 64l + l]) >> int(blk)) & 1
+            dst[doff + blk * 32l + l] = (l < 16l ? dl0 : dl1) * float((q2 | (hb << 2)) - 4)
+        }
+    }
+}
+
 //! Transcode one Q5_1 disk block (24 bytes at `bo`: d f16, m f16, qh u32, 16 nibble bytes) into
 //! the q51 planes — verbatim splits, exact. The per-block array form the tests drive; the bulk
 //! loader (gguf_transcode_q51) runs the same split pointerized and threaded.

@@ -227,7 +227,7 @@ def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, row
 //! P3 trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
 //! trimmed, and FREE the big CPU weight families — the save then writes them as empty planes.
 //! Arena-only plans qualify (pure resident-driver dense); false = declined, nothing changed.
-def trim_model_planes(var t : Model) : bool {
+def trim_model_planes(var t : Model) : bool {   // nolint:STYLE038 — the flat per-format plane-trim ladder (one arm per KqFmt) is the honest shape
     if (empty(t.vkplan) || t.config.n_layer_nextn > 0l) {
         return false
     }
@@ -283,6 +283,11 @@ def trim_model_planes(var t : Model) : bool {
                 t.embs |> reserve_resize(nsb * IQ4XS_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.iq4xsq[sb0 * IQ4XS_QSB]), nsb * IQ4XS_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.iq4xss[sb0 * IQ4XS_SSB]), nsb * IQ4XS_SSB)
+            } elif (t.emb_fmt == KqFmt.k3) {
+                t.embq |> reserve_resize(nsb * K3_QSB)
+                t.embs |> reserve_resize(nsb * K3_SSB)
+                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k3q[sb0 * K3_QSB]), nsb * K3_QSB)
+                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k3s[sb0 * K3_SSB]), nsb * K3_SSB)
             } else {
                 to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{t.emb_fmt}' has no kq plane pair - declining\n")
                 return false
@@ -301,6 +306,10 @@ def trim_model_planes(var t : Model) : bool {
     delete t.k5s
     delete t.k6q
     delete t.k6s
+    delete t.iq4xsq
+    delete t.iq4xss
+    delete t.k3q
+    delete t.k3s
     delete t.q40q
     delete t.q40s
     delete t.q51q

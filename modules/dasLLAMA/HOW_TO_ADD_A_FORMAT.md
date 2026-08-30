@@ -343,8 +343,40 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    minutes minting `run.tune.json` (every family, the confirm pass included) before loading
    the model - the auto policy, working as designed, but a Mac session's first end-to-end
    "hang" is that mint. Watch `@tune begin/end` lines in the log.
+16. **A stub family fails the probe's test mode on every perm whose layout companion
+   generates.** `q8q8_layout` is shared and generates for any perm `perm_declines` admits, so
+   under `=> false` stubs the k3 family's `dot_maddubs_width256_mr8` perm repacked its planes
+   at mr 8 while the declined tile ran the reference body at `k3q8_layout_gen()` = 4 -
+   `maxdiff nan`. The lockstep between layout and tile declines IS `perm_declines`, which a
+   stub does not share. Keep a stub family out of the probe's TEST list (the tune-mode list is
+   fine: the race gates each perm and mints "reference"); it joins the test list with its
+   emitter arm. This is why iq4xs entered that list only in Phase B.
+17. **A new `[tune]` family re-tunes every application on its first start.** A sidecar with no
+   entry for a demanded kernel re-tunes the whole scope (the framework's completeness rule), so
+   `run.das` on the box spent minutes minting before the Q3_K_L load - and every other
+   sidecar on the box (`chat.das`, the harness probes) does the same on its next run. Budget
+   for it; do not read the first end-to-end wall time as a load-time regression.
 
 ## Per-format notes
+
+### Q3_K (the second format, 2026-08-30)
+
+Shape: 256-superblock, k6's scale structure exactly (16 per-16 signed sub-scales + f16 d, the
+18 B row) over a 3-bit quant composed from a 2-bit lane (byte h*32 + l of `qs`, shift 2j, block
+b = 4h + j) and an `hmask` bit (bit b of byte l), offset -4 folded like k6's -32. Disk block
+110 B: hmask[32], qs[64], 12 packed 6-bit scales, f16 d. Planes: quants `[qs 64][hmask 32]`
+verbatim (K3_QSB 96), the scale row DECODED at transcode (`q3k_scale6` = ggml's kmask unpack,
+stored as int8 scale - 32; K3_SSB 18). Ids: `KqFmt.k3` = 7, kernel id 3 (bit width), stream
+code 3. Kernels are k6's with a different compose: `dot_k3q8`, `k3_grp_row_dot`
+(`isum - 4 * bsum`), `repack_k3_grp` (the 2-bit lanes and mask bits stay in place as 4-byte
+columns x mr; k6's scale interleave). The tile reads the PACKED planes (`packed` includes 3) -
+no byte-expanded panel. Walk cost: one Python patch twinning every `iq4xs` arm of the pilot's
+CPU-slice commit (`63da7571e`) for k3 plus the hand-written codec/kernels/repack; the only
+misses the census found were two plane-byte accounting sums the pilot itself had skipped.
+Gates: `test_kqformat` 14/14, `test_kquant` 132/144 interpreted and 140/144 under `-jit`,
+the probe's tune-mode family (test mode waits for the emitter - QUIRK 16). End to end:
+`Llama-3.2-1B-Instruct-Q3_K_L.gguf` (bartowski: Q3_K x64 + Q5_K x48 + Q6_K embd) through `run.das` matches llama.cpp's greedy ids (`simple_ids.exe`, compared through `llama-tokenize --ids` on our text) for 52 of 64 tokens on the reference bodies, gen 22 t/s.
+JIT emitter, Vulkan, Metal: pending.
 
 ### IQ4_XS (the pilot, 2026-08-30)
 
