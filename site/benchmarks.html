@@ -59,6 +59,7 @@
   .bm-num.bm-best { color: var(--amber); font-weight: 600; }
   .bm-num.bm-das { background: rgba(232,161,58,0.035); }
   .bm-dim { color: var(--fg-faint); }
+  .bm-pm { color: var(--fg-faint); font-weight: 400; font-size: 10px; margin-left: 3px; }
   .bm-caption { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); margin-top: 18px; }
 
   .bm-cell-bar { display: block; height: 3px; margin-top: 4px; border-radius: 2px; background: var(--rule); position: relative; overflow: hidden; min-width: 64px; }
@@ -185,7 +186,7 @@
                 <div class="bm-seg" id="bm-view">
                     <button class="is-on" data-v="bars">bars</button><button data-v="table">table</button>
                 </div>
-                <span class="bm-hint" id="bm-hint">seconds · lower is better · click a column to sort</span>
+                <span class="bm-hint" id="bm-hint">seconds · median of 5 samples, ± half the range · lower is better · click a column to sort</span>
             </div>
 
             <div class="bm-summary" id="bm-summary"></div>
@@ -293,10 +294,12 @@
         Object.keys(tests).forEach(function (name) {
             var t = tests[name];
             var vals = lanes.map(function (l) { return t[l.key] != null ? t[l.key] : null; });
+            var sp = state.data[state.platform].spreads[state.board][name] || {};
+            var spreads = lanes.map(function (l) { return sp[l.key] != null ? sp[l.key] : null; });
             // a 0.0 lane is below the capture's timer resolution - never the row's baseline
             var best = Math.min.apply(null, vals.filter(function (v) { return v != null && v > 0; }));
             if (!isFinite(best)) best = null;
-            rows.push({ name: name, vals: vals, best: best });
+            rows.push({ name: name, vals: vals, best: best, spreads: spreads });
         });
         function cellFor(row, col) {
             if (col === 0) return row.name;
@@ -347,11 +350,12 @@
                 if (v === 0) { html += "<td class='bm-num bm-dim" + (das ? " bm-das" : "") + "' title='below timer resolution'>~0</td>"; return; }
                 var isBest = v === r.best;
                 var cls = "bm-num" + (isBest ? " bm-best" : "") + (das ? " bm-das" : "");
+                var pm = r.spreads[i] != null ? "<small class='bm-pm'>\u00b1" + (r.spreads[i] * 100).toFixed(0) + "%</small>" : "";
                 if (state.view === "table") {
-                    html += "<td class='" + cls + "'>" + fmt(v) + "</td>";
+                    html += "<td class='" + cls + "'>" + fmt(v) + pm + "</td>";
                 } else {
                     var w = r.best ? Math.max(3, 100 * r.best / v) : 3;  // longer = faster
-                    html += "<td class='" + cls + "'>" + fmt(v) +
+                    html += "<td class='" + cls + "'>" + fmt(v) + pm +
                         "<span class='bm-cell-bar'><i style='width:" + w.toFixed(1) + "%'></i></span></td>";
                 }
             });
@@ -442,15 +446,25 @@
         var out = { cpu: cap.cpu, versions: cap.versions,
                     das_capture: cap.das_capture || cap.timestamp,
                     ext_capture: cap.ext_capture || cap.timestamp,
-                    das_version: (cap.versions || {}).daslang || "", sections: {} };
+                    das_version: (cap.versions || {}).daslang || "", sections: {}, spreads: {} };
         ["Interpreted", "AOT or JIT"].forEach(function (sec) {
             var tests = {};
+            var spreads = {};
             Object.keys(cap[sec] || {}).forEach(function (t) {
                 var lanes = {};
-                (cap[sec][t] || []).forEach(function (r) { lanes[r.language] = r.time; });
+                var sp = {};
+                (cap[sec][t] || []).forEach(function (r) {
+                    lanes[r.language] = r.time;
+                    // half the sample range as a share of the median; absent on records without samples
+                    if (r.samples && r.samples.length > 1 && r.time > 0) {
+                        sp[r.language] = (Math.max.apply(null, r.samples) - Math.min.apply(null, r.samples)) / 2 / r.time;
+                    }
+                });
                 tests[t] = lanes;
+                spreads[t] = sp;
             });
             out.sections[sec] = tests;
+            out.spreads[sec] = spreads;
         });
         return out;
     }
