@@ -127,12 +127,32 @@ Gate: `test_kqformat` + `test_kquant` on the interpreter binary (the stubs' refe
 
 ## 5. The JIT emitter - `dasllama_gemm_gen.das`
 
-Untested for IQ4_XS at the time of writing (the decline stubs stand). What the emitter offers:
 `kq_tile_gen_impl(gc, fmt)` / `kq_gemv_gen_impl(gc, fmt)` are one emitter specialized on `fmt`
-at generation time; `emit_block_kqv2` carries the nibble unpack + integer fold for 4/5/6/40;
-`emit_block_mx4` carries the codebook path (`lut_lookup` = `tbl1` / `pshufb`, `dot_lane` with
-`abs_w` + `psign` for signed weights on the u8 x s8 ISAs). A codebook format is mx4's block
-with the kq scale fold.
+at generation time: the group walk, the slice/loop machinery (`emit_slice`) and the store
+epilogue are format-agnostic; only the block body and the primitives `setup_tile_emit` wires
+differ. IQ4_XS took:
+
+1. A block body, `emit_block_iq4xs`: `emit_block_mx4`'s nibble unpack + `lut_lookup` (`tbl1`
+   / `pshufb`, the codebook baked as a constant vector) + `dot_lane` with `abs_w` - the SIGNED
+   sign-trick lattice, because LUT weights are int8; `emit_block_kqv2`'s `kq_dot_lane` /
+   `kq_dot_mem` run the unsigned-nibble lattice and do not apply - then k4's fold with the min
+   term dropped: per block `iacc += sext(sc) * (idot_lo + idot_hi)`, per superblock
+   `f += iacc * (d * d8)`. Plane addressing is the repack's: nibbles at
+   `wb + ((blk*16 + j*4)*mr + qd*w8)`, `sc` at `sb + 4*mr + blk*mr + r`, `d` at `sb + 2*r`.
+2. `emit_one_block`: `te.kq == 44` routes to the new body ahead of the `te.kq != 0` arm.
+3. `setup_tile_emit(te, gc, p, needMx4 = fmt == 44)`: the mx4 primitive wiring is reused as
+   is; the LUT bake picks `iq4nl_lut()` over the e2m1 table on `te.kq == 44`.
+4. The two stubs become `=> kq_gemv_gen_impl(gc, 44)` / `kq_tile_gen_impl(gc, 44)`.
+5. No `perm_declines` change: the tbl1 rail already sits on every sdot perm (it is the mx4
+   companion's), and pshufb is implied by the x64 tiers.
+
+Gates, in order: `DAS_TUNE_MODE=test bin/Release/daslang.exe -jit harness/gen_tune_probe.das`
+(the family must be in BOTH of the probe's lists - QUIRK 2) gates every perm of the family's
+grid against the scalar oracle - a stamped perm reports its layout companion's `mr` (8 on this
+box) and a fast-math-sized maxdiff (1.5e-5), a declined one `mr=4` and maxdiff 0 (that is the
+reference body answering, not the emitter); then `test_kquant` under `-jit` (the tile-vs-GEMV
+gate is bit-exact by construction); then the end-to-end run - and read QUIRK 11 before
+trusting its numbers.
 
 ## 6. Vulkan - `dasllama_vulkan_classes.das`, `dasllama_vulkan_common.das`, `dasllama_vulkan_prefill.das`
 
@@ -175,9 +195,13 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    dequants, dots, repacks and calls the stubs through the same `fmt == 4/5/6/40` chains in
    five gates (28 arms for one format), and raises `_cyclomatic_complexity` /
    `_function_length` per format added. `harness/gen_tune_probe.das` repeats the shape (9
-   arms). Unquirked: per-format dispatch helpers in one `_kq_fixtures.das` shared by the test
-   and the harness (`kq_transcode_sb`, `kq_dequant_sb`, `kq_dot`, `kq_repack`, `kq_gemv_gen`,
-   `kq_tile_gen`), each a single ladder.
+   arms), and its test mode gates a hand list of families (the `kq_test_family(4l/5l/6l/40l)`
+   calls plus their fixture arrays) SEPARATE from the tune-mode family array - IQ4_XS sat in
+   the tune list and not the test list, so `GEN TUNE TEST OK` said nothing about it until the
+   call was added. Unquirked: per-format dispatch helpers in one `_kq_fixtures.das` shared by
+   the test and the harness (`kq_transcode_sb`, `kq_dequant_sb`, `kq_dot`, `kq_repack`,
+   `kq_gemv_gen`, `kq_tile_gen`), each a single ladder, and ONE family array both probe modes
+   walk.
 3. **The bake identity is hand-formatted.** `DlimCpuConfig` gains `kq_mr<id>`, and
    `dlim_identity` must ALSO append it to the identity string by hand - a field added without
    the string leaves two images with different repack interleaves keyed identically. Why: the
@@ -229,6 +253,17 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    dasllama file as broken (`get_total_perf_cores` missing). Trust only the worktree binary:
    `bin/Release/daslang.exe dastest/dastest.das -- --test <file>`. Run the session inside the
    worktree once it is bootstrapped.
+11. **A sidecar minted while the stubs declined pins the family to `"reference"`.** The app's
+   auto-policy tune ran during the first end-to-end (QUIRK 4's stubs in place), every perm of
+   `iq4xsq8_tile_gen` declined, and `examples/dasLLAMA/run.tune.json` recorded
+   `"iq4xsq8_tile_gen" : "reference"` - the framework's explicit-reference form, which forces
+   the original body. Sidecar staleness keys on the binary's mtime, and the emitter is `.das`
+   (JIT-compiled), so landing it invalidates nothing: the next run logs the same
+   `27 tune-stamped`, serves the reference body, and its text and t/s match the pre-emitter run
+   exactly - a "the emitter changed nothing" reading that is false. Re-mint with `-- --tune`
+   on the app (a whole-scope re-tune) or delete the sidecar. Unquirked: fold the family's
+   generator hash (the JIT DLL cache key already carries it) into the sidecar identity, so a
+   generator change reads as stale.
 
 ## Per-format notes
 
@@ -251,4 +286,9 @@ QUIRK 9 (the codebook global on workers). Method that found them: a Python oracl
 dequantizes rows straight from the GGUF bytes, a daslang probe calling `mm_at_kq_pre` on the
 same rows (run it UNDER the job queue), a layer bisect (`config.n_layers = L`, logits cosine
 against a sibling quant of the same model), and a dump of the image's group-0 plane bytes
-against the grp<mr> layout computed in Python. JIT emitter, Vulkan, Metal: pending.
+against the grp<mr> layout computed in Python. JIT emitter: `emit_block_iq4xs` (section 5);
+family gate 10/10 perms, live stamp on this box `dot_maddubs_width256_mr8` (mr 8, maxdiff
+1.5e-5), `test_kquant` 121/125 under `-jit`; after the sidecar re-mint (QUIRK 11) the 1B
+decodes at 59-60 t/s against 39 t/s on the reference body, same text. The body rides mx4's
+chunk-load + lane-splat dot path; `emit_block_kqv2`'s x64 `vpbroadcastd` / `madd16` chains are
+the untried next lever. Vulkan, Metal: pending.
