@@ -148,10 +148,40 @@ warms it outside the sandbox with one build of **each** mode, because the page r
 ```bash
 ./roll_toolchain.sh --dry-run     # print the plan, touch nothing
 ./roll_toolchain.sh               # roll to origin/master
+./roll_toolchain.sh --green       # roll to the newest master commit whose CI is green
 ```
 
 It refuses to start if the worktree has modified tracked files, and reports the old and new id.
 Verify afterwards with the browser leg of `utils/internal/dasweb-verify`, which drives the live site.
+
+**Nightly, gated on green.** A toolchain left behind master compiles every sample with old
+daslib and old emitters: a sample that runs in the interpreter and on the CI-built /examples
+cards can still hang in wasm mode, with nothing in the build to say why. `dasweb-buildd-roll.timer`
+runs the roll every night at 04:00 box time with `--green --if-changed`: `--green` walks
+`origin/master` newest-first and takes the first commit whose push-triggered `wasm_build`,
+`build`, `build_eastl` and `extended checks` workflows all passed and on which nothing else
+failed (an in-progress run is not proof); `--if-changed` makes a night with no new green commit
+a no-op, so the service is neither rebuilt nor restarted for nothing. That no-op needs both the
+worktree's HEAD and the `.dasweb-roll-complete` marker the script writes after its last step to
+name the target: a roll that dies after the checkout leaves HEAD at the target with nothing
+rebuilt, and the next night must finish it. The timer runs the copy installed under
+`/usr/local/sbin`, never the one inside the worktree it is about to move, so a change to the
+script is re-installed by hand. The unit runs as the box user, whose restart of the service must
+not prompt for a password:
+
+```bash
+echo 'boris ALL=(root) NOPASSWD: /bin/systemctl restart dasweb-buildd' | sudo tee /etc/sudoers.d/dasweb-buildd-roll
+sudo install -m 755 utils/internal/dasweb-buildd/roll_toolchain.sh /usr/local/sbin/dasweb-roll-toolchain.sh
+sudo install -m 644 utils/internal/dasweb-buildd/dasweb-buildd-roll.service \
+                    utils/internal/dasweb-buildd/dasweb-buildd-roll.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now dasweb-buildd-roll.timer
+systemctl list-timers dasweb-buildd-roll.timer      # next firing
+journalctl -u dasweb-buildd-roll.service -n 50      # last night's roll
+```
+
+`--green` reads the public Actions API unauthenticated (60 requests an hour; one per commit
+walked, at most 30) and needs `jq` on the box. `test_roll_toolchain.das` drives the green
+predicate through `--green-check <runs.json>`, one recorded run shape per branch of the rule.
 
 ## Tests
 

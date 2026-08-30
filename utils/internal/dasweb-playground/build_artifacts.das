@@ -129,6 +129,66 @@ def clear_stage_dirs(blobs_dir : string) {
     }
 }
 
+//! How long a stale toolchain's artifacts outlive their last write.
+let STALE_TOOLCHAIN_GRACE_SECONDS = 24l * 3600l
+
+//! How often the server looks for stale toolchains.
+let TOOLCHAIN_SWEEP_INTERVAL_SECONDS = 3600l
+
+def toolchain_sweep_due(last_sweep : int64; now : int64) : bool {
+    //! True once TOOLCHAIN_SWEEP_INTERVAL_SECONDS have passed since last_sweep;
+    //! a last_sweep of 0 is always due.
+    return last_sweep == 0l || now - last_sweep >= TOOLCHAIN_SWEEP_INTERVAL_SECONDS
+}
+
+def toolchains_on_disk(blobs_dir : string) : array<string> {
+    //! The toolchain ids that have an artifact tree under blobs/ right now.
+    var found : array<string>
+    if (empty(blobs_dir)) {
+        return <- found
+    }
+    dir(blobs_dir) $(name) {
+        if (is_valid_toolchain_id(name) && stat(path_join(blobs_dir, name)).is_dir) {
+            found |> push(name)
+        }
+    }
+    return <- found
+}
+
+def sweep_stale_toolchains(blobs_dir : string; current_toolchain : string; now : int64) : int {
+    //! Removes every blobs/<toolchain>/ tree other than current_toolchain whose
+    //! last write is older than STALE_TOOLCHAIN_GRACE_SECONDS, and nothing at
+    //! all when current_toolchain is empty. Returns how many trees are gone; a
+    //! tree the filesystem refused to remove is logged and not counted.
+    //! blobs/tmp and names that are not toolchain ids are never touched.
+    if (empty(blobs_dir) || empty(current_toolchain)) {
+        return 0
+    }
+    var candidates : array<string>
+    dir(blobs_dir) $(name) {
+        if (name != current_toolchain && is_valid_toolchain_id(name)) {
+            candidates |> push(name)
+        }
+    }
+    var removed = 0
+    for (name in candidates) {
+        let p = path_join(blobs_dir, name)
+        let st = stat(p)
+        if (!st.is_valid || !st.is_dir) continue
+        let age = now - int64(st.mtime)
+        if (age < STALE_TOOLCHAIN_GRACE_SECONDS) continue
+        if (!rmdir_rec(p) || stat(p).is_valid) {
+            logger_error("playground.artifacts", "stale toolchain artifacts not removed",
+                JV((toolchain = name, age_seconds = age)))
+            continue
+        }
+        logger_info("playground.artifacts", "stale toolchain artifacts removed",
+            JV((toolchain = name, age_seconds = age)))
+        removed ++
+    }
+    return removed
+}
+
 var private g_stage_counter = 0
 
 def create_stage_dir(blobs_dir : string) : string {

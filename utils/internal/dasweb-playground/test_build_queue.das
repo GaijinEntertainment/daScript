@@ -269,3 +269,35 @@ def test_queue_positions(t : T?) {
         }
     }
 }
+
+def private no_trees : array<string> {
+    var none : array<string>
+    return <- none
+}
+
+[test]
+def test_forget_stale_toolchain_jobs(t : T?) {
+    with_latest_sqlite(":memory:") $(db) {
+        let stale_tc = "feed5678deadbeef000000000000000000000000"
+        let h2 = "2222222222222222222222222222222222222222222222222222222222222222"
+        enqueue_build(db, H1, TC, BUILD_MODE_MODULE, 1000l)
+        enqueue_build(db, H1, stale_tc, BUILD_MODE_MODULE, 1000l)
+        enqueue_build(db, h2, stale_tc, BUILD_MODE_MODULE, 2000l)
+        t |> run("no announced toolchain purges nothing") @(tt : T?) {
+            tt |> equal(forget_stale_toolchain_jobs(db, "", no_trees(), 5000l), 0)
+        }
+        t |> run("a stale toolchain whose tree still stands keeps its rows") @(tt : T?) {
+            tt |> equal(forget_stale_toolchain_jobs(db, TC, [stale_tc], 5000l), 0)
+        }
+        t |> run("without a tree, only stale rows queued before the cutoff go") @(tt : T?) {
+            tt |> equal(forget_stale_toolchain_jobs(db, TC, no_trees(), 1500l), 1)
+            tt |> equal(forget_stale_toolchain_jobs(db, TC, no_trees(), 1500l), 0)
+            tt |> success(!enqueue_build(db, h2, stale_tc, BUILD_MODE_MODULE, 2500l).created, "the newer stale row is still there")
+            tt |> equal(forget_stale_toolchain_jobs(db, TC, no_trees(), 3000l), 1)
+        }
+        t |> run("the current toolchain keeps its rows; a purged sample re-enqueues fresh") @(tt : T?) {
+            tt |> success(!enqueue_build(db, H1, TC, BUILD_MODE_MODULE, 4000l).created, "current toolchain's job survives")
+            tt |> success(enqueue_build(db, H1, stale_tc, BUILD_MODE_MODULE, 4001l).created, "re-enqueues fresh")
+        }
+    }
+}

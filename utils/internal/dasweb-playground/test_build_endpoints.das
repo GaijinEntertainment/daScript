@@ -577,3 +577,31 @@ def test_large_artifact_serves_whole(t : T?) {
     remove(upload_src)
     rmdir_rec(blobs)
 }
+
+[test]
+def test_announce_retires_stale_toolchain(t : T?) {
+    var err = ""
+    let blobs = create_temp_directory("dasweb_ep_blobs_", err)
+    let stale_tc = "feed5678deadbeef000000000000000000000000"
+    let stale_tree = path_join(blobs, stale_tc)
+    mkdir_rec(path_join(stale_tree, "1111111111111111111111111111111111111111111111111111111111111111"))
+    fwrite(path_join(path_join(stale_tree, "1111111111111111111111111111111111111111111111111111111111111111"), "sample.wasm"), "old bytes")
+    let back_dated = set_mtime_result(stale_tree, mktime(2000, 1, 1, 0, 0, 0))
+    with_build_server(TEST_TOKEN, blobs) $(base_url) {
+        t |> run("a stale toolchain's tree is gone on the tick after the announce") @(tt : T?) {
+            tt |> success(!(back_dated is error), "back-dated the stale tree")
+            authed_post("{base_url}/api/build/toolchain", TC, TEST_TOKEN) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            var gone = false
+            for (_attempt in range(300)) {
+                gone = !stat(stale_tree).is_valid
+                if (gone) break
+                sleep(10u)
+            }
+            tt |> success(gone, "stale toolchain tree removed")
+            tt |> success(stat(blobs).is_valid, "blobs root untouched")
+        }
+    }
+    rmdir_rec(blobs)
+}
