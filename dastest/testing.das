@@ -4,7 +4,6 @@ options indenting = 4
 module testing shared
 
 require daslib/rtti
-require strings // to compare strings/das_strings
 require daslib/math_bits
 require math
 require daslib/unroll
@@ -365,58 +364,13 @@ def run(b : B?, name : string; chunk_size : int; op : block) {
 }
 
 
-def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
-    let min_runs = 1
-    let max_runs = 1_000_000_000
-
-    // The first run serves two purposes: it will
-    // find the appropriate N (num_runs) for the op,
-    // plus it allows a warmup before we start measuring it.
-    let run1_start = ref_time_ticks()
-    op()
-    let op1_time_ns = max(double(get_time_nsec(run1_start)), 1.0lf)
-
-    // Make on_start run after the first op execution.
-    // We don't want to print the benchmark name if it is
-    // going to fail fast.
-    b.on_start(name)
-
-    let op_time_approx = op1_time_ns / 1000000000.0lf // In seconds
-
-    let n_probe = int64(1.0lf / op_time_approx)
-    var num_runs = int(clamp(n_probe, int64(min_runs), int64(max_runs)))
-
-    // We will unroll fast-running (small) benchmarks
-    // to decrease the loop's own time contribution.
-    // A value of 5 gives good results, 10 should be very safe.
+def private run_batch(num_runs : int; op : block) : int64 {
+    //! Runs op num_runs times and returns the wall time in nanoseconds. A batch of 1000 or
+    //! more runs is unrolled ten-fold under one timer so the loop stays out of the number;
+    //! a shorter batch times every call, since the call dominates the loop there.
     let unroll_count = 10
-    let unroll_threshold = 100 * unroll_count
-
-    // Pre-compute all the stuff before the timer has started.
-    let do_unroll = num_runs > unroll_threshold
-    var loop_runs = num_runs
-    if (do_unroll) {
-        num_runs = int(round(float(num_runs) / float(unroll_count)) * float(unroll_count))
-        loop_runs = num_runs / unroll_count
-    }
-
-    // We could use a builtin profile() function here
-    // instead of doing loops in das directly.
-    // At any rate, the auto-inferred N (count) can be useful
-    // and even profile() can benefit from the unrolled statements.
-
-    let heap_stats_start = heap_allocation_stats()
-    let heap_bytes_start = heap_stats_start[0]
-    let num_allocs_start = heap_allocation_count()
-
-    let string_stats_start = string_heap_allocation_stats()
-    let string_bytes_start = string_stats_start[0]
-    let string_num_allocs_start = string_heap_allocation_count()
-
-    var time_total = 0l
-    if (do_unroll) {
-        // A fast/small benchmarking func - run the timers
-        // once, unroll the body to minimize the noise.
+    if (num_runs >= 100 * unroll_count) {
+        let loop_runs = num_runs / unroll_count
         let start = ref_time_ticks()
         for (_i in range(loop_runs)) {
             unroll() $ {
@@ -425,24 +379,66 @@ def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
                 }
             }
         }
-        time_total = get_time_nsec(start)
-    } else {
-        // A long-running benchmark that should not be unrolled.
-        // Its run time will not be dominated by the loop anyway.
-        for (_i in range(loop_runs)) {
-            let start = ref_time_ticks()
-            op()
-            time_total += get_time_nsec(start)
-        }
+        return get_time_nsec(start)
     }
+    var time_total = 0l
+    for (_i in range(num_runs)) {
+        let start = ref_time_ticks()
+        op()
+        time_total += get_time_nsec(start)
+    }
+    return time_total
+}
 
-    let heap_stats_end = heap_allocation_stats()
-    let heap_bytes_end = heap_stats_end[0]
-    let num_allocs_end = heap_allocation_count()
+def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
+    //! The first batch is one call - the warm-up and the calibration. Every batch that ends
+    //! under the budget grows the count from what that batch measured (1.2x the projection,
+    //! at most 100x, the way Go's testing.B does), so a tier that was cold on the first
+    //! call is measured warm; the batch that meets the budget is the one reported.
+    let budget_ns = 1_000_000_000l
+    let max_runs = 1_000_000_000l
+    var num_runs = 1
+    var time_total = 0l
+    var started = false
+    var heap_bytes_start = 0ul
+    var num_allocs_start = 0ul
+    var string_bytes_start = 0ul
+    var string_num_allocs_start = 0ul
+    var heap_bytes_end = 0ul
+    var num_allocs_end = 0ul
+    var string_bytes_end = 0ul
+    var string_num_allocs_end = 0ul
+    while (true) {
+        heap_bytes_start = heap_allocation_stats()[0]
+        num_allocs_start = heap_allocation_count()
+        string_bytes_start = string_heap_allocation_stats()[0]
+        string_num_allocs_start = string_heap_allocation_count()
 
-    let string_stats_end = string_heap_allocation_stats()
-    let string_bytes_end = string_stats_end[0]
-    let string_num_allocs_end = string_heap_allocation_count()
+        time_total = run_batch(num_runs, op)
+
+        heap_bytes_end = heap_allocation_stats()[0]
+        num_allocs_end = heap_allocation_count()
+        string_bytes_end = string_heap_allocation_stats()[0]
+        string_num_allocs_end = string_heap_allocation_count()
+
+        // on_start runs after the first call, so a benchmark that fails fast never prints its name
+        if (!started) {
+            b.on_start(name)
+            started = true
+        }
+        if (time_total >= budget_ns || int64(num_runs) >= max_runs) {
+            break
+        }
+        let per_run_ns = max(double(time_total) / double(num_runs), 1.0lf)
+        var next = int64(double(budget_ns) / per_run_ns * 1.2lf)
+        next = min(next, 100l * int64(num_runs))
+        next = max(next, int64(num_runs) + 1l)
+        next = min(next, max_runs)
+        if (next >= 1000l) {
+            next = (next / 10l) * 10l
+        }
+        num_runs = int(next)
+    }
 
     var stats = BenchmarkRunStats(
         name = b.name,

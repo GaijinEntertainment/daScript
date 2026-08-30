@@ -43,6 +43,8 @@ Running only **some** selected benchmarks (uses `vector_alloc` as a filtering pr
 - `--bench-format <format>`: Specifies the benchmark output format ("native", "go" or "json")
 - `--count <n>`: Run all benchmarks this number of times (useful for sample collection)
 
+`run` measures the way Go's `testing.B` does. The first batch is one call - the warm-up and the calibration. Every batch that finishes under the 1 s budget grows the count from what that batch measured (1.2x the projection, at most 100x per round), so a JIT that was cold on the first call is measured warm, and the batch that meets the budget is the one reported: `ns/op` is its wall time over its count. Batches of 1000 calls or more run ten-fold unrolled under a single timer. `--count` repeats the whole pass for sample collection; the `go` output format is what `benchstat` reads.
+
 Note that benchmarks will be executed only if all module tests have already passed. If you want to run benchmarks only, skipping the tests, consider using something like `--test-names none`.
 
 #### Internal arguments
